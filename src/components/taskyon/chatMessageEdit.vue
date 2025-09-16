@@ -8,7 +8,6 @@
         v-model="content"
         data-cy="chat-input"
         autogrow
-        autofocus
         borderless
         placeholder="Type your message..."
         :input-style="{ maxHeight: '300px' }"
@@ -30,7 +29,6 @@
         v-else
         v-model="content"
         autogrow
-        autofocus
         borderless
         placeholder="Type your message..."
         :input-style="{ maxHeight: '300px' }"

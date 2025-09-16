@@ -67,7 +67,7 @@
       <q-item-section side>
         <q-icon :name="matSearch"></q-icon>
       </q-item-section>
-      <q-item-section> Show similar tasks </q-item-section>
+      <q-item-section> Show similar messages </q-item-section>
     </q-item>
     <q-item
       v-if="task.content.type === 'message' && state.appConfiguration.expertMode"
@@ -94,7 +94,7 @@
       <q-item-section side>
         <q-icon :name="matCode"></q-icon>
       </q-item-section>
-      <q-item-section> Show detailed task view </q-item-section>
+      <q-item-section> Detailed view </q-item-section>
     </q-item>
     <q-item v-if="state.appConfiguration.expertMode" clickable :to="`/browser/${task.id}`">
       <q-item-section side>

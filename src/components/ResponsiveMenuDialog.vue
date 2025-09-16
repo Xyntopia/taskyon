@@ -5,10 +5,9 @@
     v-model="open"
     :auto-close="autoClose"
     :data-cy="dataCy"
-    :separate-close-popup="true"
-    :touch-position="false"
+    :separate-close-popup="false"
     :target="target"
-    no-parent-event
+    :no-parent-event="false"
     :context-menu="contextMenu"
   >
     <slot :close="close" />
@@ -36,10 +35,6 @@ defineOptions({ inheritAttrs: false })
 
 const open = defineModel<boolean>({ default: false })
 
-const close = () => {
-  open.value = false
-}
-
 defineProps<{
   maximized?: QDialog['maximized']
   dataCy?: string | undefined
@@ -47,4 +42,8 @@ defineProps<{
   target?: QMenu['target']
   contextMenu?: QMenu['contextMenu']
 }>()
+
+const close = () => {
+  open.value = false
+}
 </script>

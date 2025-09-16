@@ -13,18 +13,11 @@
     <div
       v-touch-hold="() => (showTaskMenu = true)"
       class="task-display"
-      @contextmenu="handleRightClick"
+      @contextmenu.stop="handleRightClick"
     >
-      <div class="task-menu-anchor">
-        <q-btn
-          class="task-menu-btn"
-          flat
-          color="secondary"
-          size="md"
-          :icon="matMoreHoriz"
-          @click.stop="showTaskMenu = !showTaskMenu"
-        >
-          <ResponsiveMenuDialog v-model="showTaskMenu" auto-close>
+      <div v-if="!$q.platform.is.mobile" class="task-menu-anchor">
+        <q-btn class="task-menu-btn" flat color="secondary" size="md" :icon="matMoreHoriz">
+          <q-menu>
             <TaskMenu
               class="task-buttons"
               :task="task"
@@ -36,9 +29,25 @@
               @download="showDownloadDlg = true"
               @share="showShareDlg = true"
             />
-          </ResponsiveMenuDialog>
+          </q-menu>
         </q-btn>
       </div>
+
+      <!-- Context menu - positioned at right-click location -->
+      <ResponsiveMenuDialog v-model="showTaskMenu" auto-close context-menu>
+        <TaskMenu
+          class="task-buttons"
+          :task="task"
+          @toggle-markdown="toggleMarkdown"
+          @create-new-conversation="createNewConversation"
+          @edit-task="editTask"
+          @toggle-message-debug="toggleMessageDebug"
+          @delete="deleteTask"
+          @download="showDownloadDlg = true"
+          @share="showShareDlg = true"
+        />
+      </ResponsiveMenuDialog>
+
       <!--task-header-->
       <div class="task-header">
         <!--task icon-->
@@ -98,6 +107,7 @@
         </q-tooltip>
       </div>
     </div>
+
     <!--task debugging-->
     <q-slide-transition class="debug-container">
       <div v-show="state.messageDebug[task.id]">
@@ -153,10 +163,11 @@ const tystate = useTaskyonStore()
 const expandMessageContent = ref<boolean>(false)
 const router = useRouter()
 
-//const tmButton = useTemplateRef('tmButton')
-const showTaskMenu = ref(false)
+// Separate refs for button menu and context menu
+const showTaskMenu = ref(false) // Menu triggered by right-click
 const showShareDlg = ref(false)
 const showDownloadDlg = ref(false)
+
 const taskMeta = tystate.getTaskMetaRef(task.id)
 const taskMetaNext = tystate.getTaskMetaRef(task.id)
 const taskCostMeta = computed(() =>
@@ -190,7 +201,7 @@ function handleRightClick(event: MouseEvent) {
   // Prevent the default context menu
   event.preventDefault()
 
-  // Example: Show your custom task menu
+  // Show context menu at right-click position
   showTaskMenu.value = true
 }
 
