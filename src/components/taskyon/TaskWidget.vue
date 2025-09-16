@@ -111,16 +111,19 @@
     :short="short"
   >
     <template #header> {{ task.content.data.split(' ').slice(0, 10).join(' ') }}... </template>
-    <tyMarkdown
-      v-if="state.taskWidgetState[task.id]?.markdownEnabled != false"
-      no-line-numbers
-      :src="task.content.data"
-      :use-iframe="true"
-      @iframe-ready="(el: HTMLIFrameElement) => onIframeMessage(el, task.id)"
-    />
-    <div v-else class="raw-markdown q-mb-md">
-      {{ task.content.data }}
-    </div>
+    <template #default="{ onLongpress }">
+      <tyMarkdown
+        v-if="state.taskWidgetState[task.id]?.markdownEnabled != false"
+        no-line-numbers
+        :src="task.content.data"
+        :use-iframe="true"
+        @iframe-ready="(el: HTMLIFrameElement) => onIframeMessage(el, task.id)"
+        @longpress="onLongpress()"
+      />
+      <div v-else class="raw-markdown q-mb-md">
+        {{ task.content.data }}
+      </div>
+    </template>
   </TaskField>
   <TaskField
     v-else-if="task.content.type === 'error'"

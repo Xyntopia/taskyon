@@ -598,6 +598,18 @@ export const generateIframeSrc = (
 
         window.addEventListener('load', sendSize);
         new ResizeObserver(sendSize).observe(contentEl);
+
+        // --- minimal long-press detection ---
+        let pressTimer;
+        contentEl.addEventListener('touchstart', () => {
+          pressTimer = setTimeout(() => {
+            window.parent.postMessage({ type: 'longpress' }, '*');
+          }, 600); // ms threshold for long press
+        });
+        contentEl.addEventListener('touchend', () => clearTimeout(pressTimer));
+        contentEl.addEventListener('touchmove', () => clearTimeout(pressTimer));
+
+
       </script>
     </body>
   </html>

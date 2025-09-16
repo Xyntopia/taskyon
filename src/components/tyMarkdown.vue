@@ -38,7 +38,10 @@ import { asyncComputed } from 'src/modules/vueUtils'
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 
 // inside your <script setup>
-const emit = defineEmits<{ (e: 'iframe-ready', el: HTMLIFrameElement): void }>()
+const emit = defineEmits<{
+  (e: 'iframe-ready', el: HTMLIFrameElement): void
+  (e: 'longpress', pos: { x: number; y: number }): void
+}>()
 
 watch(iframeRef, (el) => {
   if (el) emit('iframe-ready', el)
@@ -135,16 +138,7 @@ let lastHeight: number | null = null
 let resizeCount = 0
 const MAX_RESIZE_ATTEMPTS = 10
 
-function handleMessage(event: MessageEvent) {
-  const data = event.data as ResizeIframeMessage
-  if (
-    !iframeRef.value ||
-    event.source !== iframeRef.value.contentWindow ||
-    data?.type !== 'resizeIframe'
-  ) {
-    return
-  }
-
+function handleResize(data: ResizeIframeMessage) {
   pendingResize = {
     width: data.width,
     height: data.height,
@@ -190,6 +184,16 @@ function handleMessage(event: MessageEvent) {
 
     pendingResize = null
   }, 100)
+}
+
+function handleMessage(event: MessageEvent) {
+  if (!iframeRef.value || event.source !== iframeRef.value.contentWindow) return
+
+  if (event.data?.type === 'resizeIframe') handleResize(event.data as ResizeIframeMessage)
+
+  if (event.data?.type === 'longpress') {
+    emit('longpress', { x: event.data.x, y: event.data.y })
+  }
 }
 
 onUnmounted(() => {

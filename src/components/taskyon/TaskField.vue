@@ -70,7 +70,13 @@
       <q-slide-transition v-show="!short || expandMessageContent">
         <div>
           <!--expandable task content-->
-          <slot></slot>
+          <slot
+            :on-longpress="
+              () => {
+                showTaskMenu = true
+              }
+            "
+          ></slot>
         </div>
       </q-slide-transition>
       <!--task costs-->
@@ -235,7 +241,6 @@ function toggleMarkdown(id: string) {
 </script>
 
 <style lang="sass">
-
 .task-display
   position: relative
   display: flex
