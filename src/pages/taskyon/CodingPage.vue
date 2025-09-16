@@ -513,7 +513,7 @@ Only use the updateDocument tool if you are confident about the changes to make.
     },
     appConfiguration: {
       ...removeKeys(state.appConfiguration, ['chatSuggestions']),
-      guiMode: 'minChat',
+      guiMode: 'default',
       expertMode: true,
       showLogo: false,
       chatSuggestions: [],
