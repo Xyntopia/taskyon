@@ -12,7 +12,7 @@
     <!--Message Display-->
     <div class="task-display">
       <div v-if="!$q.platform.is.mobile" class="task-menu-anchor">
-        <q-btn class="task-menu-btn" flat color="secondary" size="md" :icon="matMoreHoriz">
+        <q-btn class="task-menu-btn" flat color="secondary" size="xl" dense :icon="matMoreHoriz">
           <q-menu>
             <TaskMenu
               class="task-buttons"
@@ -278,7 +278,7 @@ function toggleMarkdown(id: string) {
     opacity: 1
     transform: translateY(0) scale(1)
     background-color: rgba(white,.8)
-    box-shadow: 0px 0px 5px rgba($secondary,1.0)
+    //box-shadow: 0px 0px 5px rgba($secondary,1.0)
     animation: pop-in 160ms cubic-bezier(.17,.89,.32,1.27)
 
 .body--dark
