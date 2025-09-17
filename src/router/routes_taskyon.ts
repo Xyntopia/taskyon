@@ -163,14 +163,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           description: 'Manage files saved in Taskyon OPFS.',
         },
       },
-      {
+      /*{
         path: '/componenttests',
         component: () => import('pages/ComponentTests.vue'),
         meta: {
           title: 'Test Taskyon Components',
           description: 'Testing Taskyon Components.',
         },
-      },
+      },*/
     ],
   },
   // diagnostics should stay in its own page in order to be as independent as possible
