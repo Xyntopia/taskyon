@@ -48,7 +48,7 @@ export function startNewChat() {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function writeMessage(msg: string, cyc: Cypress.Chainable<any> | undefined = undefined) {
   const cyc2 = cyc ?? cy
-  cyc2.get('.create-tasks textarea').type(msg)
+  cyc2.get('.create-tasks textarea', { timeout: 10000 }).type(msg)
   cyc2.get('.create-tasks textarea').type('{enter}')
 }
 
