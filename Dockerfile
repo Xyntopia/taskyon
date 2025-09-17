@@ -138,4 +138,4 @@ FROM debug-builder AS https
 
 STOPSIGNAL SIGTERM
 EXPOSE 9000
-CMD ["yarn", "quasar", "serve", "--https", "-p 9000", "dist/spa/"]
+CMD ["yarn", "quasar", "serve", "--history", "--https", "-p 9000", "dist/spa/"]
