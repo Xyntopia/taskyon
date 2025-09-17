@@ -95,15 +95,12 @@ export const initCryptoSessionFromBrowser = async (
     cs = await cs.newSessionKey(wrappedSK)
   }
 
-  if (persist) {
-    // always store the created session key
-    const lastWrappedSK = await cs.exportSessionKey()
-    LocalStorage.setItem(sessionName, lastWrappedSK)
-  }
+  if (persist) await persistSession(cs)
 
   return cs
 }
 
+// persists a cryptosession to its corresponding local storage id..
 export const persistSession = async (cs: CryptoSession) => {
   const sessionName = await cs.getWrapperId()
   const lastWrappedSK = await cs.exportSessionKey()

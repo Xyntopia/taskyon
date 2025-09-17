@@ -285,6 +285,8 @@ export async function tyCore(
 
   const setNewSession = async (newCs: CryptoSession) => {
     cs = newCs
+    // we need to re-initialize our entire context in order to have access to key store, decrypted data
+    // etc with the new session...
     ctx = await ctxCreator(cs)
   }
 

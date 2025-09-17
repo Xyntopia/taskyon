@@ -21,7 +21,10 @@ import { setPrismTheme } from 'src/modules/markdownUtils '
 import type { AuthenticationOptions, TokenGetter } from 'src/modules/oauth'
 import { OAUTH_PROVIDERS, usePersistentOauth } from 'src/modules/oauth'
 import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
-import { initCryptoSessionFromBrowser } from 'src/modules/taskyon/browserCryptoSession'
+import {
+  initCryptoSessionFromBrowser,
+  persistSession,
+} from 'src/modules/taskyon/browserCryptoSession'
 import { availableModels } from 'src/modules/taskyon/chat'
 import type { Taskyon } from 'src/modules/taskyon/init'
 import { tyCore } from 'src/modules/taskyon/init'
@@ -619,8 +622,10 @@ const useSwitchCryptoSession = (
     return await cryptoKeyToBase64(ty.getCryptoSession().getDevicePublicKey())
   }
 
-  const setNewSession = async (cs: CryptoSession) => {
-    await (await taskyon).setNewSession(cs)
+  const setNewSession = async (cs: CryptoSession, persist = false) => {
+    const ty = await taskyon
+    await ty.setNewSession(cs)
+    if (persist) await persistSession(cs)
   }
 
   return {
