@@ -32,7 +32,7 @@
         :expert-mode="state.appConfiguration.expertMode"
         @on-size-change="scm.autoScroll"
       />
-      <div v-else-if="loadingChat">loading new chat!!</div>
+      <div v-else-if="loadingChat" class="text-h6 q-pa-xl">loading new chat!!</div>
       <!-- Welcome Message -->
       <div
         v-else
@@ -336,6 +336,7 @@ const scm = createScrollManager(taskThreadContainer, lockBottomScroll)
 
 watch(tystate.currentTask, () => {
   scm.autoScroll()
+  loadingChat.value = false
 })
 
 // Watch selectedTaskId and update URL query parameter
@@ -367,7 +368,7 @@ watch(
     if (route.query.t && route.query.t === state.llmSettings.selectedTaskId) return
     loadingChat.value = true
     await updateChatThread()
-    loadingChat.value = false
+    if (tystate.currentTask) loadingChat.value = false
   },
   { immediate: true },
 )
