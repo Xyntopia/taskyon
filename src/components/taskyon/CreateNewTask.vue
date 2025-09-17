@@ -25,7 +25,7 @@
       <chatMessageEdit
         v-if="!selectedTaskType"
         v-model="state.messageDraft"
-        :debounce="50"
+        :debounce="0"
         :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
         @execute-task="addNewTask"
