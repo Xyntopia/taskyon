@@ -112,7 +112,7 @@ export function accumulateStep(
             role: 'assistant',
             tool_calls: [],
           },
-          finish_reason: 'cancelled',
+          finish_reason: 'unknown',
           logprobs: null,
         } as ChatResponseType['choices'][0])
     const delta = chunkChoice0.delta
@@ -234,7 +234,7 @@ async function getClearErrorMessage(response: Response): Promise<string> {
 // calls OpenAI API compatible chatmodels
 export async function callLLM(
   request: {
-    payload: OpenAI.Chat.Completions.ChatCompletionCreateParams
+    payload: tyChatCompletion
     headers: Record<string, string>
     url: string
   },
@@ -334,27 +334,11 @@ export async function callLLM(
         // Process the buffered data and split at newlines (for each "data: ..." chunk)
         const lines = bufferedData.split('\n')
 
-        for (let i = 0; i < lines.length - 1; i++) {
-          const line = lines[i]!.trim()
+        const newChunks: ChatCompletionChunk[] = createChunks(lines)
 
-          // Only process lines starting with "data: "
-          if (line.startsWith('data: ')) {
-            const jsonString = line.replace(/^data: /, '').trim()
-
-            if (jsonString && jsonString !== '[DONE]') {
-              let jsonChunk: ChatCompletionChunk
-              try {
-                // Parse the current line into a JSON object
-                jsonChunk = JSON.parse(jsonString)
-              } catch (err) {
-                throw new Error(`Failed to parse chunk; ${jsonString}`, { cause: err })
-              }
-              chunks.push(jsonChunk)
-              // Call the callback function to process the chunk
-              contentCallBack(jsonChunk)
-            }
-          }
-        }
+        // Call the callback function to process the chunk
+        newChunks.forEach(contentCallBack)
+        chunks.push(...newChunks)
 
         // Keep the last partial chunk in the buffer for the next iteration
         bufferedData = lines[lines.length - 1]!
@@ -389,6 +373,51 @@ export async function callLLM(
   })
 }
 
+export type tyChatCompletion = OpenAI.ChatCompletionCreateParams & {
+  reasoning?: {
+    effort?: 'high' | 'medium' | 'low'
+    max_tokens?: number
+    exclude?: boolean
+    enabled?: boolean
+  }
+  provider?: {
+    order?: string[]
+    allow_fallbacks?: boolean // default: true
+    require_parameters?: boolean // default: false
+    data_collection?: 'allow' | 'deny' // default: "allow"
+    zdr?: boolean
+    only?: string[]
+    ignore?: string[]
+    quantizations?: string[]
+    sort?: 'price' | 'throughput'
+    max_price?: Record<string, number>
+  }
+}
+
+function createChunks(lines: string[]) {
+  const newChunks: ChatCompletionChunk[] = []
+  for (let i = 0; i < lines.length - 1; i++) {
+    const line = lines[i]!.trim()
+
+    // Only process lines starting with "data: "
+    if (line.startsWith('data: ')) {
+      const jsonString = line.replace(/^data: /, '').trim()
+
+      if (jsonString && jsonString !== '[DONE]') {
+        let jsonChunk: ChatCompletionChunk
+        try {
+          // Parse the current line into a JSON object
+          jsonChunk = JSON.parse(jsonString)
+        } catch (err) {
+          throw new Error(`Failed to parse chunk; ${jsonString}`, { cause: err })
+        }
+        newChunks.push(jsonChunk)
+      }
+    }
+  }
+  return newChunks
+}
+
 export async function createOpenAIRequest(
   apiKey: string,
   siteUrl: string,
@@ -404,14 +433,7 @@ export async function createOpenAIRequest(
     throw new Error('No AI model was selected for chat completion!')
   }
 
-  const payload: OpenAI.ChatCompletionCreateParams & {
-    reasoning?: {
-      effort?: 'high' | 'medium' | 'low'
-      max_tokens?: number
-      exclude?: boolean
-      enabled?: boolean
-    }
-  } = {
+  const payload: OpenAI.ChatCompletionCreateParams = {
     model: api.selectedModel,
     messages: chatMessages,
     response_format: schema
@@ -436,11 +458,12 @@ export async function createOpenAIRequest(
     // the following comes from openrouter
   }
   if (api.name == 'taskyon' || api.name == 'openrouter.ai') {
+    const tyPayload: tyChatCompletion = payload
     // TODO: check models capabilities...  problem right now is that we don't have the correct basURL
     //const models = await availableModels(api.baseURL, apiKey, headers, false)
     //if (models[api.selectedModel]?.supported_parameters?.includes('reasoning')) {
     // we can use reasoning with this model
-    payload.reasoning = {
+    tyPayload.reasoning = {
       // One of the following (not both):
       // Can be "high", "medium", or "low" (OpenAI-style)
       // for other APIs, we use max_tokens
@@ -452,18 +475,35 @@ export async function createOpenAIRequest(
       // Or enable reasoning with the default parameters:
       enabled: true, // Default: inferred from `effort` or `max_tokens`
     }
-  }
-  return {
-    headers,
-    payload,
-    url: `${api.baseURL}/chat/completions`,
-    // in case we have the openai api we need to wait for the thinking to finish
-    // so we are giving it a lot more time... (almost 5 minutes..)
-    // for openai we are not restricted to supabase edge servers, so
-    // we can choose any timeout that we want
-    // the 115*1000 ms come from the 120s timeout for taskyon.space in the free version..
-    timeout: api.name === 'taskyon' ? 115 * 1000 : 5 * 60 * 1000,
-  }
+    tyPayload.provider = {
+      //only: ['GMICloud'],
+      // TODO: we need to make this generic. and on certain errors, avoid specific providers...
+      // gives back "bad" results..
+      ignore: ['GMICloud'],
+    }
+    return {
+      headers,
+      payload: tyPayload,
+      url: `${api.baseURL}/chat/completions`,
+      // in case we have the openai api we need to wait for the thinking to finish
+      // so we are giving it a lot more time... (almost 5 minutes..)
+      // for openai we are not restricted to supabase edge servers, so
+      // we can choose any timeout that we want
+      // the 115*1000 ms come from the 120s timeout for taskyon.space in the free version..
+      timeout: api.name === 'taskyon' ? 115 * 1000 : 5 * 60 * 1000,
+    }
+  } else
+    return {
+      headers,
+      payload,
+      url: `${api.baseURL}/chat/completions`,
+      // in case we have the openai api we need to wait for the thinking to finish
+      // so we are giving it a lot more time... (almost 5 minutes..)
+      // for openai we are not restricted to supabase edge servers, so
+      // we can choose any timeout that we want
+      // the 115*1000 ms come from the 120s timeout for taskyon.space in the free version..
+      timeout: 5 * 60 * 1000,
+    }
 }
 
 export async function getTaskyonCosts(

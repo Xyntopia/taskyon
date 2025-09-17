@@ -64,6 +64,7 @@ export const ChatResponseType = z.object({
           'content_filter',
           'function_call',
           'cancelled',
+          'unknown',
         ]),
         logprobs: z.unknown().optional(),
         reasoning: z.string().optional(),
