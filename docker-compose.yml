@@ -21,6 +21,16 @@ services:
     #volumes:
     #  - ~/.cache/yarn:/app/.yarn-cache
 
+  taskyon-https:
+    image: xyntopia/taskyon:https
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: https
+    ports:
+      - '9000:9000'
+    restart: always
+
   llmapi:
     #image: localai/localai:latest-aio-cpu
     image: localai/localai:latest-cpu

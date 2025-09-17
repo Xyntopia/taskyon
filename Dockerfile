@@ -105,7 +105,7 @@ COPY --from=production-builder /app/dist/spa /usr/share/nginx/html
 RUN cp /etc/nginx/conf.d/template.conf /etc/nginx/conf.d/default.conf
 EXPOSE 9000
 STOPSIGNAL SIGTERM
-CMD ["nginx-debug", "-g", "daemon off;"]
+CMD ["nginx", "-g", "daemon off;"]
 
 # Debug serving stage
 FROM base-nginx AS debug
@@ -113,7 +113,7 @@ COPY --from=debug-builder /app/dist/spa /usr/share/nginx/html
 RUN cp /etc/nginx/conf.d/template.conf /etc/nginx/conf.d/default.conf
 EXPOSE 9000
 STOPSIGNAL SIGTERM
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["nginx-debug", "-g", "daemon off;"]
 
 
 # Stage 3: Serve the SSR application
@@ -131,3 +131,20 @@ EXPOSE 3000
 STOPSIGNAL SIGTERM
 # Start the SSR server
 CMD ["yarn", "start"]
+
+
+################# HTTPS serving stage for local/debug
+FROM base-nginx AS https
+COPY --from=production-builder /app/dist/spa /usr/share/nginx/html
+RUN mkdir -p /etc/nginx/ssl \
+    && openssl req -x509 -nodes -days 365 \
+        -subj "/CN=localhost" \
+        -newkey rsa:2048 \
+        -keyout /etc/nginx/ssl/nginx.key \
+        -out /etc/nginx/ssl/nginx.crt \
+    && cp /etc/nginx/conf.d/template.conf /etc/nginx/conf.d/default.conf \
+    && sed -i 's/listen 9000;/listen 443 ssl;/' /etc/nginx/conf.d/default.conf \
+    && sed -i '/root \/usr\/share\/nginx\/html;/a ssl_certificate /etc/nginx/ssl/nginx.crt;\nssl_certificate_key /etc/nginx/ssl/nginx.key;' /etc/nginx/conf.d/default.conf
+EXPOSE 443
+STOPSIGNAL SIGTERM
+CMD ["nginx", "-g", "daemon off;"]
