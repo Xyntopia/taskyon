@@ -18,7 +18,7 @@
         :scroll-target="taskThreadContainer"
         @resize="scm.autoScroll"
       />
-    -->
+      -->
 
       <!-- "Task" Display (.tasks-container & .task-container) -->
       <TaskChainViewer
@@ -55,11 +55,33 @@
       </div>
       <component :is="ResetButton" v-if="ResetButton" color="secondary" flat mode="all" />
     </div>
+    <!--Task Chat Control Buttons-->
+    <div style="height: 0px" class="relative-position">
+      <TaskControlButtons
+        class="absolute-bottom-right q-pa-xs"
+        :show-bottom-scroll-lock="!state.lockBottomScroll"
+        @scroll-to-thread-end="scm.scrollToBottom"
+      />
+    </div>
+    <!--Create new task area-->
+    <div class="col-auto row justify-center create-new-task-container self-stretch">
+      <CreateNewTask
+        v-if="tystate.selectedThread.value.length > 0"
+        :file-attachments="fileAttachments"
+        :entry-node="tystate.entryNode"
+        class="col q-pa-xs create-new-task"
+        :min-mode="state.minimalGui !== 'default'"
+        :expert-mode="state.appConfiguration.expertMode"
+        style="max-width: 48rem"
+      />
+    </div>
+    <!--STICK ELEMENTS AREA...-->
+
     <!--File Drop Zone Overlay-->
     <FileDropzone
       class="chat-drop-zone"
       no-buttons
-      drop-zone-target="#chat-area"
+      drop-zone-target=".q-page.chat-page"
       accept="*"
       @add-files="
         (newFiles: File[]) => {
@@ -145,25 +167,6 @@
         </transition-group>
       </div>
     </q-page-sticky>
-    <!--Create new task area-->
-    <div class="col-auto row justify-center create-new-task-container self-stretch">
-      <CreateNewTask
-        v-if="tystate.selectedThread.value.length > 0"
-        :file-attachments="fileAttachments"
-        :entry-node="tystate.entryNode"
-        class="col q-pa-xs create-new-task"
-        :min-mode="state.minimalGui !== 'default'"
-        :expert-mode="state.appConfiguration.expertMode"
-        style="max-width: 48rem"
-      />
-    </div>
-    <!--Task Chat Control Buttons-->
-    <q-page-sticky position="bottom-right" :offset="[10, bottomPadding + 5]">
-      <TaskControlButtons
-        :show-bottom-scroll-lock="!state.lockBottomScroll"
-        @scroll-to-thread-end="scm.scrollToBottom"
-      />
-    </q-page-sticky>
     <!-- Popup Messages -->
     <q-dialog v-model="showPopupMessage" persistent>
       <q-card class="q-pa-md">
@@ -231,7 +234,6 @@ const ResetButton = process.env.DEV
     )
   : undefined
 
-const bottomPadding = ref(100)
 const $q = useQuasar()
 const route = useRoute()
 const tystate = useTaskyonStore()
