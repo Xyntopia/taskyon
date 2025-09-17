@@ -1,96 +1,91 @@
 <!-- SqlQueryPage.vue -->
 <template>
-  <q-layout view="lHh LpR lfr">
-    <TaskyonHeader btn-size="md" />
-    <q-page-container>
-      <q-page class="row">
-        <!-- SQL Card -->
-        <q-card class="col q-ma-md" style="min-width: 200px">
-          <q-card-section>
-            <div class="text-h6">SQL Queries</div>
-            <div class="text-subtitle2">Tables in DB: {{ allTables }}</div>
-          </q-card-section>
+  <q-page class="row">
+    <!-- SQL Card -->
+    <q-card class="col q-ma-md" style="min-width: 200px">
+      <q-card-section>
+        <div class="text-h6">SQL Queries</div>
+        <div class="text-subtitle2">Tables in DB: {{ allTables }}</div>
+      </q-card-section>
 
-          <q-card-section>
-            <q-input
-              v-model="sqlQuery"
-              type="textarea"
-              rows="3"
-              autogrow
-              label="SQL Query"
-              placeholder="Enter SQL here"
-            />
-            <div class="row q-mt-md items-center q-gutter-sm">
-              <q-btn label="Run Query" color="primary" @click="executeQuery" />
-              <q-btn flat label="Add Sample Table" color="secondary" @click="addSampleTable" />
-            </div>
-          </q-card-section>
-
-          <q-card-section v-if="queryResult !== null">
-            <div class="row items-center justify-between">
-              <div class="text-h6 q-mb-sm">Results</div>
-              <q-btn-dropdown
-                color="primary"
-                size="sm"
-                :icon="matContentCopy"
-                label="Copy"
-                flat
-                dense
-                :dropdown-icon="matArrowDropDown"
-                class="q-mb-sm"
-              >
-                <q-list>
-                  <q-item v-close-popup clickable @click="copyJson">
-                    <q-item-section>Copy as JSON</q-item-section>
-                  </q-item>
-                  <q-item
-                    v-close-popup
-                    clickable
-                    :disable="!isTabularResult || !tableRows.length"
-                    @click="copyCsv"
-                  >
-                    <q-item-section>Copy as CSV</q-item-section>
-                  </q-item>
-                </q-list>
-              </q-btn-dropdown>
-            </div>
-            <q-tabs v-model="activeTab" dense class="q-mb-md">
-              <q-tab name="table" label="Table" :disable="!isTabularResult" />
-              <q-tab name="json" label="JSON" />
-            </q-tabs>
-
-            <div v-if="activeTab === 'table' && isTabularResult">
-              <q-table
-                :rows="tableRows"
-                :columns="tableColumns"
-                row-key="id"
-                dense
-                flat
-                bordered
-                :pagination="{ rowsPerPage: 10 }"
-                style="max-height: 300px"
-              />
-            </div>
-
-            <div v-else>
-              <pre style="max-height: 300px; overflow: auto">{{ formattedResult }}</pre>
-            </div>
-          </q-card-section>
-        </q-card>
-
-        <!-- Taskyon iframe -->
-        <div class="col" style="min-height: 0; min-width: 200px">
-          <iframe
-            id="taskyon"
-            title="Taskyon agent"
-            frameborder="0"
-            :src="`${taskyonUrl}?iframe=true`"
-            style="width: 100%; height: 99%"
-          ></iframe>
+      <q-card-section>
+        <q-input
+          v-model="sqlQuery"
+          type="textarea"
+          rows="3"
+          autogrow
+          label="SQL Query"
+          placeholder="Enter SQL here"
+        />
+        <div class="row q-mt-md items-center q-gutter-sm">
+          <q-btn label="Run Query" color="primary" @click="executeQuery" />
+          <q-btn flat label="Add Sample Table" color="secondary" @click="addSampleTable" />
         </div>
-      </q-page>
-    </q-page-container>
-  </q-layout>
+      </q-card-section>
+
+      <q-card-section v-if="queryResult !== null">
+        <div class="row items-center justify-between">
+          <div class="text-h6 q-mb-sm">Results</div>
+          <q-btn-dropdown
+            color="primary"
+            size="sm"
+            :icon="matContentCopy"
+            label="Copy"
+            flat
+            dense
+            :dropdown-icon="matArrowDropDown"
+            class="q-mb-sm"
+          >
+            <q-list>
+              <q-item v-close-popup clickable @click="copyJson">
+                <q-item-section>Copy as JSON</q-item-section>
+              </q-item>
+              <q-item
+                v-close-popup
+                clickable
+                :disable="!isTabularResult || !tableRows.length"
+                @click="copyCsv"
+              >
+                <q-item-section>Copy as CSV</q-item-section>
+              </q-item>
+            </q-list>
+          </q-btn-dropdown>
+        </div>
+        <q-tabs v-model="activeTab" dense class="q-mb-md">
+          <q-tab name="table" label="Table" :disable="!isTabularResult" />
+          <q-tab name="json" label="JSON" />
+        </q-tabs>
+
+        <div v-if="activeTab === 'table' && isTabularResult">
+          <q-table
+            :rows="tableRows"
+            :columns="tableColumns"
+            row-key="id"
+            dense
+            flat
+            bordered
+            :pagination="{ rowsPerPage: 10 }"
+            style="max-height: 300px"
+          />
+        </div>
+
+        <div v-else>
+          <pre style="max-height: 300px; overflow: auto">{{ formattedResult }}</pre>
+        </div>
+      </q-card-section>
+    </q-card>
+
+    <!-- Taskyon iframe -->
+    <div class="col" style="min-height: 0; min-width: 200px">
+      <iframe
+        id="taskyon"
+        title="Taskyon agent"
+        frameborder="0"
+        :src="`${taskyonUrl}?iframe=true&profile=sql`"
+        style="width: 100%; height: 99%"
+      ></iframe>
+    </div>
+  </q-page>
 </template>
 
 <script setup lang="ts">
@@ -106,12 +101,13 @@ import type { JSONSchema7 } from 'json-schema'
 
 import { copyToClipboard, Notify } from 'quasar'
 import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
-import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 import { initializeTaskyon } from '../../../packages/tyclient/src'
+import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 
 const taskyonUrl = window.location.origin
+const state = useAppStateStore()
 
 function copyJson() {
   copyToClipboard(formattedResult.value)
@@ -475,8 +471,9 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
       chatSuggestions: [gettingStarted],
       welcomeMsg: 'Ask taskyon for help on querying your database!',
     },
+    signatureOrKey: state.keys[state.llmSettings?.selectedApi || ''],
   }
-  void initializeTaskyon(tools, configuration)
+  void initializeTaskyon({ tools, configuration, name: 'sqlqueries', persist: true })
 })
 
 // Formatted JSON result for JSON view

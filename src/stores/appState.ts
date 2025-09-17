@@ -2,7 +2,7 @@
 // this makes it easy to integrate it with SSR for example...
 
 import { defineStore } from 'pinia'
-import { computed, reactive, toRefs, type Reactive, watch } from 'vue'
+import { computed, reactive, toRefs, type Reactive, watch, ref } from 'vue'
 import { type tyPublicKeyDraft, TyProfile } from 'src/modules/taskyon/types'
 import axios from 'axios'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
@@ -17,35 +17,35 @@ import {
 } from 'src/modules/utils'
 import { unref } from 'vue'
 import defaultSettings from 'src/assets/taskyon_settings.json'
+// TODO: remove, to make this file here faster...
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 import type { PartialDeep } from 'type-fest'
-import { initialStoredStateObj, storeName } from 'src/modules/ui/initialState'
+import { initialStoredStateObj, currentTyProfileName, urlConfig } from 'src/modules/ui/initialState'
 import type { FunctionCall } from '@taskyon/taskyon'
 
 interface TaskWidgetStateType {
   markdownEnabled: boolean
 }
 
-function clearBrowserStorage() {
-  LocalStorage.clear()
+function clearBrowserStorage(localStorageKeys?: string[]) {
+  if (localStorageKeys) localStorageKeys.forEach((key) => LocalStorage.removeItem(key))
+  else LocalStorage.clear()
   sessionStorage.clear()
   clearBrowserCaches()
   clearServiceWorkers()
   clearCookies()
 }
 
-// this is where we save all of our app settings.
-// its important to keep this simple and don't incude 3rd party libraries and other things
-// because we want to this to also work on tyServer and in a "minimal gui" setting.
-// So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
-export const useAppStateStore = defineStore(storeName, () => {
+function getInitialState() {
+  // load storable settings
   const res = TyProfile.safeParse(defaultSettings)
   if (!res.success) {
     throw new Error('The default settings provided do not work!', { cause: res.error.message })
   }
   const defaultStorableSettings = res.data
+
   // llmSettings & appConfiguration define the state of our app!
-  // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
+  // the rest of the state is either secret (keys) or temporary states which don't need to be saved
   const initialState = {
     ...defaultStorableSettings,
     keys: {} as Record<string, string>,
@@ -75,6 +75,7 @@ export const useAppStateStore = defineStore(storeName, () => {
     developerMode: false,
     useDevVersion: false,
     messageDebug: {} as Record<string, 'RAW' | 'MESSAGECONTENT' | 'RAWTASK' | 'ERROR' | undefined>, // whether message with ID should be open or not...
+
     // taskyon.space-specific section, TODO: move this somewhere else!
     keyDraft: {
       name: 'N/A',
@@ -89,7 +90,20 @@ export const useAppStateStore = defineStore(storeName, () => {
     modelFilter: '' as string | null,
     noGuiTests: true,
     detailedTests: false,
+
+    // persistentStorage (for some components which need to temporarily persist some informations...)
+    store: {} as Record<string, unknown>,
   }
+  return { initialState, defaultStorableSettings }
+}
+
+// this is where we save all of our app settings.
+// its important to keep this simple and don't incude 3rd party libraries and other things
+// because we want to this to also work on tyServer and in a "minimal gui" setting.
+// So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
+export const useAppStateStore = defineStore('ui-state', () => {
+  // configuration from the URL!
+  const { initialState, defaultStorableSettings } = getInitialState()
 
   const initialStoredStateObjTyped = initialStoredStateObj as
     | Partial<typeof initialState>
@@ -101,7 +115,7 @@ export const useAppStateStore = defineStore(storeName, () => {
     initialStoredStateObjTyped.version &&
     initialStoredStateObjTyped.version === initialState.version
   ) {
-    console.log(`load saved ${storeName} state!`)
+    console.log(`load saved ui state!`)
     const storedInitialState = deepMerge(initialState, initialStoredStateObjTyped, 'overwrite')
     stateRefs = reactive(storedInitialState)
   } else {
@@ -112,7 +126,7 @@ export const useAppStateStore = defineStore(storeName, () => {
         initialStoredStateObjTyped?.version || 'undefined'
       }) is not compatible with current version (${initialState.version}). Using default settings.`,
     )
-    clearBrowserStorage()
+    clearBrowserStorage([currentTyProfileName])
     stateRefs = reactive(initialState)
   }
 
@@ -123,7 +137,7 @@ export const useAppStateStore = defineStore(storeName, () => {
   watch(stateRefs, (newState) => {
     //console.log('saved store!!');
     if (saveToLocalStorage) {
-      LocalStorage.set(storeName, JSON.stringify(newState))
+      LocalStorage.set(currentTyProfileName, JSON.stringify(newState))
     }
   })
 
@@ -245,6 +259,8 @@ export const useAppStateStore = defineStore(storeName, () => {
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
   return {
+    isInIframe: urlConfig.isInIframe,
+    urlConfig: urlConfig,
     setSelectedTask: (taskId: string | null | undefined) => {
       console.log('set selected task:', taskId)
       stateRefs.llmSettings.selectedTaskId = taskId || undefined
@@ -257,5 +273,8 @@ export const useAppStateStore = defineStore(storeName, () => {
     tyPublicKey: computed(() => {
       return isTaskyonKey(stateRefs.keys.taskyon || '', false)
     }),
+    taskyonRunmode: ref<'waiting for connection' | 'standalone mode' | 'connected'>(
+      'standalone mode',
+    ),
   }
 })

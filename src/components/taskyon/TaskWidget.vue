@@ -111,16 +111,20 @@
     :short="short"
   >
     <template #header> {{ task.content.data.split(' ').slice(0, 10).join(' ') }}... </template>
-    <tyMarkdown
-      v-if="state.taskWidgetState[task.id]?.markdownEnabled != false"
-      no-line-numbers
-      :src="task.content.data"
-      :use-iframe="true"
-      @iframe-ready="(el: HTMLIFrameElement) => onIframeMessage(el, task.id)"
-    />
-    <div v-else class="raw-markdown q-mb-md">
-      {{ task.content.data }}
-    </div>
+    <template #default="{ showTaskMenu }">
+      <tyMarkdown
+        v-if="state.taskWidgetState[task.id]?.markdownEnabled != false"
+        no-line-numbers
+        :src="task.content.data"
+        :use-iframe="true"
+        @iframe-ready="(el: HTMLIFrameElement) => onIframeMessage(el, task.id)"
+        @if-longpress="showTaskMenu(true)"
+        @if-click="showTaskMenu(false)"
+      />
+      <div v-else class="raw-markdown q-mb-md">
+        {{ task.content.data }}
+      </div>
+    </template>
   </TaskField>
   <TaskField
     v-else-if="task.content.type === 'error'"
@@ -137,9 +141,17 @@
         use-iframe
       />
     </template>
-    <div class="text-negative">
-      <tyMarkdown :src="humanizeError(task.content.data)" no-line-numbers use-iframe />
-    </div>
+    <template #default="{ showTaskMenu }">
+      <div class="text-negative">
+        <tyMarkdown
+          :src="humanizeError(task.content.data)"
+          no-line-numbers
+          use-iframe
+          @if-longpress="showTaskMenu(true)"
+          @if-click="showTaskMenu(false)"
+        />
+      </div>
+    </template>
   </TaskField>
 </template>
 

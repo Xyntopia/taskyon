@@ -105,7 +105,7 @@ COPY --from=production-builder /app/dist/spa /usr/share/nginx/html
 RUN cp /etc/nginx/conf.d/template.conf /etc/nginx/conf.d/default.conf
 EXPOSE 9000
 STOPSIGNAL SIGTERM
-CMD ["nginx-debug", "-g", "daemon off;"]
+CMD ["nginx", "-g", "daemon off;"]
 
 # Debug serving stage
 FROM base-nginx AS debug
@@ -113,7 +113,7 @@ COPY --from=debug-builder /app/dist/spa /usr/share/nginx/html
 RUN cp /etc/nginx/conf.d/template.conf /etc/nginx/conf.d/default.conf
 EXPOSE 9000
 STOPSIGNAL SIGTERM
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["nginx-debug", "-g", "daemon off;"]
 
 
 # Stage 3: Serve the SSR application
@@ -131,3 +131,11 @@ EXPOSE 3000
 STOPSIGNAL SIGTERM
 # Start the SSR server
 CMD ["yarn", "start"]
+
+
+################# HTTPS serving stage for local/debug
+FROM debug-builder AS https
+
+STOPSIGNAL SIGTERM
+EXPOSE 9000
+CMD ["yarn", "quasar", "serve", "--https", "-p 9000", "dist/spa/"]

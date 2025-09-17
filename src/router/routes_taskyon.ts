@@ -119,8 +119,62 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         props: true,
         meta: { titel: 'Connect Taskyon', description: 'Connecting Taskyon to the network.' },
       },
+      {
+        path: 'editor',
+        component: () => import('pages/taskyon/CodingPage.vue'),
+        meta: {
+          title: 'Taskyon Code Editor',
+          description: 'Edit code together with AI',
+        },
+      },
+      {
+        path: '/sql',
+        component: () => import('pages/taskyon/SqlQueryPage.vue'),
+        meta: {
+          title: 'SQL debugging',
+          description: 'Do queries on taskyons databases using SQL',
+        },
+      },
+      {
+        path: '/tool',
+        component: () => import('src/pages/taskyon/ToolPage.vue'),
+        meta: { title: 'Tool Page', description: 'Use Individual Tool' },
+        props: true,
+      },
+      {
+        path: '/tool/:name',
+        component: () => import('src/pages/taskyon/ToolPage.vue'),
+        meta: { title: 'Tool Page', description: 'Use Individual Tool' },
+        props: true,
+      },
+      {
+        path: '/fm',
+        component: () => import('pages/FileManagerPage.vue'),
+        meta: {
+          title: 'File Manager',
+          description: 'Manage files saved in Taskyon OPFS.',
+        },
+      },
+      {
+        path: '/opfs',
+        component: () => import('pages/FileManagerPage.vue'),
+        meta: {
+          title: 'Taskyon File Manager',
+          description: 'Manage files saved in Taskyon OPFS.',
+        },
+      },
+      {
+        path: '/componenttests',
+        component: () => import('pages/ComponentTests.vue'),
+        meta: {
+          title: 'Test Taskyon Components',
+          description: 'Testing Taskyon Components.',
+        },
+      },
     ],
   },
+  // diagnostics should stay in its own page in order to be as independent as possible
+  // in case there are any errors in the rest of the app...
   {
     path: '/diagnostics',
     component: () => import('pages/taskyon/DiagnosticsPage.vue'),
@@ -130,31 +184,11 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     },
   },
   {
-    path: '/tool',
-    component: () => import('src/pages/taskyon/ToolPage.vue'),
-    meta: { title: 'Tool Page', description: 'Use Individual Tool' },
-    props: true,
-  },
-  {
-    path: '/tool/:name',
-    component: () => import('src/pages/taskyon/ToolPage.vue'),
-    meta: { title: 'Tool Page', description: 'Use Individual Tool' },
-    props: true,
-  },
-  {
     path: '/ipfsmonitor',
     component: () => import('pages/taskyon/IpfsStatusPage.vue'),
     meta: {
       title: 'IPFS status',
       description: 'Interplanetary file system status monitor',
-    },
-  },
-  {
-    path: '/sql',
-    component: () => import('pages/taskyon/SqlQueryPage.vue'),
-    meta: {
-      title: 'SQL debugging',
-      description: 'Do queries on taskyons databases using SQL',
     },
   },
   {
@@ -171,14 +205,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     meta: {
       title: 'Taskyon Client Test',
       description: 'We are testing taskyons client library here.',
-    },
-  },
-  {
-    path: '/opfs',
-    component: () => import('pages/FileManagerPage.vue'),
-    meta: {
-      title: 'Taskyon File Manager',
-      description: 'Manage files saved in Taskyon OPFS.',
     },
   },
 ]

@@ -13,10 +13,12 @@ const route = useRoute()
 
 if (process.env.DEV) {
   // Dynamically inject script src="http://localhost:8098" in DEV mode
+  // this can be used to debug for example remote taskyon isntances (e.g. in phone browser)
+  console.log('loading vue devtools!')
   onMounted(() => {
     const devScript = document.createElement('script')
     devScript.async = true
-    devScript.src = 'http://localhost:8098' // Adjust the URL if needed
+    devScript.src = `${window.location.origin}:8098` // Adjust the URL if needed
     document.head.appendChild(devScript)
   })
 }

@@ -1,7 +1,9 @@
-import { type ComputedRef, ref, watch, computed, toRefs, reactive } from 'vue'
+import { scroll } from 'quasar'
+import type { Ref } from 'vue'
+import { computed, type ComputedRef, reactive, ref, toRefs, watch } from 'vue'
 import type { ZodObject } from 'zod'
-import { convertZodToJsonSchemaCached } from './taskyon/types'
 import { z } from 'zod'
+import { convertZodToJsonSchemaCached } from './taskyon/types'
 
 export function asyncComputed<T>(
   getter: () => Promise<T>,
@@ -111,4 +113,66 @@ export function testBuildSlimView() {
   console.log('✔ updates propagate bi-directionally')
 
   console.log('✅ All tests passed!')
+}
+
+export function createScrollManager(
+  container: Ref<HTMLElement | undefined>,
+  lockScroll: Ref<boolean>,
+  bottomTolerancePx = 30,
+) {
+  const { setVerticalScrollPosition } = scroll
+
+  // --- Internal state ---
+  let rafId: number | null = null
+  const minUnlockOffset = 5 // px before we really unlock
+
+  // --- Core scroll ---
+  const scrollToBottom = (smooth = true) => {
+    if (!container.value) return
+    const el = container.value
+    const offset = el.scrollHeight - el.clientHeight
+
+    lockScroll.value = true
+
+    setVerticalScrollPosition(el, offset, smooth ? 100 : 0)
+  }
+
+  // --- Auto scroll scheduling (rAF based) ---
+  const requestAutoScroll = () => {
+    if (!lockScroll.value) return
+    if (rafId != null) cancelAnimationFrame(rafId)
+
+    rafId = requestAnimationFrame(() => {
+      rafId = null
+      // no smooth for auto scroll → prevents drift
+      scrollToBottom(false)
+    })
+  }
+
+  // --- Scroll listener ---
+  const onScroll = (details: { direction: string; position: { top: number } }) => {
+    const el = container.value
+    if (!el) return
+
+    const scrollEnd = el.scrollHeight - el.clientHeight
+    const diff = scrollEnd - details.position.top
+
+    if (details.direction === 'up' && diff > minUnlockOffset) lockScroll.value = false
+    else if (details.direction === 'down' && diff < bottomTolerancePx) lockScroll.value = true
+  }
+
+  // --- Public API ---
+  const cancel = () => {
+    if (rafId != null) {
+      cancelAnimationFrame(rafId)
+      rafId = null
+    }
+  }
+
+  return {
+    onScroll,
+    scrollToBottom, // manual call, smooth param preserved
+    autoScroll: requestAutoScroll, // scheduled auto scroll
+    cancel,
+  }
 }

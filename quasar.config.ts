@@ -258,6 +258,7 @@ export default defineConfig((ctx) => {
         // Add this for dropping console and debugger in production:
         viteConf.esbuild = viteConf.esbuild || {}
         // TODO: https://github.com/evanw/esbuild/issues/3656  only drop console.log/info
+        // TODO: write a custom logging library and then drop those calls as well
         viteConf.esbuild.drop = droplogging ? ['console', 'debugger'] : []
 
         // ********   configure pglite ********/
@@ -379,6 +380,8 @@ export default defineConfig((ctx) => {
     // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#devserver
     devServer: {
       // https: true
+      //vueDevtools: true,
+      https: true, // NECESSARY (alternative is type 'http')
       open: false, // opens browser window automatically
     },
 

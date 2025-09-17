@@ -49,6 +49,7 @@
         />
       </template>
     </q-tree>
+    <!--render the "normal" task view...-->
     <template v-else>
       <template v-for="(task, idx) in props.selectedThread" :key="task.id">
         <q-expansion-item
@@ -156,6 +157,10 @@ const lastWorkerEvent = computed(() => {
   return tystate.workerStreamLogs.at(-1)
 })
 
+const emit = defineEmits<{
+  (e: 'onSizeChange'): void
+}>()
+
 const props = defineProps<{
   selectedThread: TaskNode[]
   currentTask: TaskNode
@@ -183,6 +188,15 @@ watch(
     )
   },
   { immediate: true },
+)
+
+// emit onSizeChange events, if our thread changes!
+watch(
+  () => props.selectedThread.map((t) => t.id),
+  async () => {
+    await nextTick()
+    emit('onSizeChange')
+  },
 )
 
 const isProcessing = (id: string) => {
@@ -227,6 +241,7 @@ void tystate.chatCompletionStream
     const currentStream = streamingTracker.value.get(taskId)
     const updatedStream = accumulateStep(currentStream, chunk)
     streamingTracker.value.set(taskId, updatedStream)
+    emit('onSizeChange')
   })
   .then((unsubscribe) => (streamerUnsubscriber = unsubscribe))
 
@@ -405,3 +420,21 @@ function showTask(t: TaskNode) {
   return showExpert && showType && showInChat
 }
 </script>
+
+<style lang="sass">
+.task-container
+  position: relative
+
+  &:not(:has(.markdown-iframe))
+    .task-safety-icon
+      display: none
+
+  // TODO: show icon on the right if assistant, and left if user....
+  .task-safety-icon
+    position: absolute
+    top: -12px
+    right: 0px
+    width: 0.8em
+    height: 0.8em
+    z-index: 9
+</style>

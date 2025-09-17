@@ -40,7 +40,7 @@ import { guiTools } from 'src/modules/tools/GuiTools'
 import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
 import { useAppStateStore } from './appState'
-import { areWeInIframe, waitForIframeDuplexChannel } from './iframeClient'
+import { waitForIframeDuplexChannel } from './iframeClient'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -378,7 +378,13 @@ const connectModelHistory = (stateRefs: ReturnType<typeof useAppStateStore>) => 
   return {
     addModelToHistory,
     // Method to handle the updateBotName event
-    handleBotNameUpdate: ({ newName, newService }: { newName: string; newService?: string }) => {
+    handleBotNameUpdate: ({
+      newName,
+      newService,
+    }: {
+      newName: string
+      newService?: string | null
+    }) => {
       console.log('getting an api & bot update :)', newName, newService)
       if (newService) {
         stateRefs.llmSettings.selectedApi = newService
@@ -641,7 +647,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // pre-initialize our python webworker, because its very slow to startup :)
   void usePyodideWebworker().preInit()
 
-  // TODO: move this into our taskyon library...
   const entryNode = computed(() => {
     return (
       stateRefs.llmSettings.entryNode ??
@@ -733,15 +738,17 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
     /// -------   IFRAME operations --------
     // We load the iframe here with the iframe=true parameter to make test in cypress work!
-    const isInIframe = areWeInIframe()
     // set up iframe API and hook it up to our taskyon api
     //if ($q.platform.within.iframe) {
-    if (isInIframe) {
+    if (stateRefs.isInIframe) {
       console.log('taskon is in iframe!, waiting for message port!')
+      stateRefs.taskyonRunmode = 'waiting for connection'
       const iframePort = await waitForIframeDuplexChannel()
       // connect iframe API to internal GUI API which also connects to taskyon engine automatically.
       iframePort.connect(uiApiOutside)
       iframePort.send('taskyon connected!')
+      console.log('taskyon connected to iframe!')
+      stateRefs.taskyonRunmode = 'connected'
     }
     // ------------end of IFRAME operations-------
   })
@@ -984,7 +991,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   dynamicQuasarTheming(stateRefs)
 
-  // TODO: make all computed values readonly
   return {
     setNewSession,
     getSessionId,

@@ -108,7 +108,10 @@ const TyReadyMessage = z.object({ type: z.literal('taskyonReady') }).meta({
   description: 'simple message which signals, that our API is ready!',
 })
 
-export const BaseMessage = z.object({ origin: z.string().optional() })
+export const BaseMessage = z.object({
+  origin: z.string().optional(),
+  peerId: z.string().optional(),
+})
 
 const TyStatusMessage = z
   .object({

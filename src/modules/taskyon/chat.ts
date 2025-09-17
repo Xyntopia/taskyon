@@ -241,7 +241,7 @@ export async function callLLM(
   stream: boolean | undefined = false,
   contentCallBack: (chunk: ChatCompletionChunk | undefined) => void,
   stopSignal: AbortSignal,
-  timeoutMs: number = 10000, // Timeout in milliseconds for waiting for first streamed response
+  timeoutMs: number, // Timeout in milliseconds for waiting for first streamed response
   maxRetries: number = 3, // Maximum number of retry attempts
 ): Promise<ChatResponseType | undefined> {
   const accumulatedErrors: Set<string> = new Set()
@@ -254,7 +254,11 @@ export async function callLLM(
     // Propagate caller’s stopSignal into it…
     const onAbort = () => controller.abort(stopSignal.reason)
     stopSignal.addEventListener('abort', onAbort)
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+    let wasTimeoutSet = false
+    const timeoutId = setTimeout(() => {
+      wasTimeoutSet = true
+      controller.abort(new Error('Timeout waiting for first streamed chunk from AI'))
+    }, timeoutMs)
 
     let response: Response | undefined = undefined
     try {
@@ -280,7 +284,11 @@ export async function callLLM(
 
     if (!response) {
       console.error(`Attempt ${attempt} failed: No response received.`)
-      accumulatedErrors.add('Not able to get a response from AI!')
+      accumulatedErrors.add(
+        wasTimeoutSet
+          ? 'Waiting for an AI response for too long. AI might be working in the background?'
+          : 'Not able to get a response from AI!',
+      )
       continue
     } else if (!response.ok) {
       // Check for non-OK status codes and throw error
@@ -445,7 +453,17 @@ export async function createOpenAIRequest(
       enabled: true, // Default: inferred from `effort` or `max_tokens`
     }
   }
-  return { headers, payload, url: `${api.baseURL}/chat/completions` }
+  return {
+    headers,
+    payload,
+    url: `${api.baseURL}/chat/completions`,
+    // in case we have the openai api we need to wait for the thinking to finish
+    // so we are giving it a lot more time... (almost 5 minutes..)
+    // for openai we are not restricted to supabase edge servers, so
+    // we can choose any timeout that we want
+    // the 115*1000 ms come from the 120s timeout for taskyon.space in the free version..
+    timeout: api.name === 'taskyon' ? 115 * 1000 : 5 * 60 * 1000,
+  }
 }
 
 export async function getTaskyonCosts(

@@ -10,7 +10,40 @@
       <q-tooltip>This message is displayed in a secure sandbox</q-tooltip>
     </q-icon>
     <!--Message Display-->
-    <div class="task-display">
+    <div v-touch-hold="() => (showTaskMenu = true)" class="task-display">
+      <div v-if="!$q.platform.is.mobile" class="task-menu-anchor">
+        <q-btn class="task-menu-btn" flat color="secondary" size="xl" dense :icon="matMoreHoriz">
+          <q-menu ref="taskMenuRef" auto-close>
+            <TaskMenu
+              class="task-buttons"
+              :task="task"
+              @toggle-markdown="toggleMarkdown"
+              @create-new-conversation="createNewConversation"
+              @edit-task="editTask"
+              @toggle-message-debug="toggleMessageDebug"
+              @delete="deleteTask"
+              @download="showDownloadDlg = true"
+              @share="showShareDlg = true"
+            />
+          </q-menu>
+        </q-btn>
+      </div>
+
+      <!-- Context menu - positioned at right-click location -->
+      <ResponsiveMenuDialog v-if="!textSelected" v-model="showTaskMenu" auto-close context-menu>
+        <TaskMenu
+          class="task-buttons"
+          :task="task"
+          @toggle-markdown="toggleMarkdown"
+          @create-new-conversation="createNewConversation"
+          @edit-task="editTask"
+          @toggle-message-debug="toggleMessageDebug"
+          @delete="deleteTask"
+          @download="showDownloadDlg = true"
+          @share="showShareDlg = true"
+        />
+      </ResponsiveMenuDialog>
+
       <!--task-header-->
       <div class="task-header">
         <!--task icon-->
@@ -37,7 +70,16 @@
       <q-slide-transition v-show="!short || expandMessageContent">
         <div>
           <!--expandable task content-->
-          <slot></slot>
+          <slot
+            :show-task-menu="
+              (state: boolean) => {
+                showTaskMenu = state
+                if (!state) {
+                  taskMenu?.hide()
+                }
+              }
+            "
+          ></slot>
         </div>
       </q-slide-transition>
       <!--task costs-->
@@ -69,19 +111,8 @@
           <TokenUsage :task-meta="taskCostMeta" />
         </q-tooltip>
       </div>
-      <!--buttons-->
-      <TaskButtons
-        class="task-buttons"
-        :task="task"
-        @toggle-markdown="toggleMarkdown"
-        @create-new-conversation="createNewConversation"
-        @edit-task="editTask"
-        @toggle-message-debug="toggleMessageDebug"
-        @delete="deleteTask"
-        @download="showDownloadDlg = true"
-        @share="showShareDlg = true"
-      />
     </div>
+
     <!--task debugging-->
     <q-slide-transition class="debug-container">
       <div v-show="state.messageDebug[task.id]">
@@ -96,12 +127,13 @@
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
-import { computed, defineAsyncComponent, ref } from 'vue'
-import TaskButtons from './TaskButtons.vue'
+import { computed, defineAsyncComponent, ref, useTemplateRef } from 'vue'
+import TaskMenu from './TaskMenu.vue'
 import {
   matArrowDropDown,
   matArrowDropUp,
   matMonetizationOn,
+  matMoreHoriz,
   matShield,
 } from '@quasar/extras/material-icons'
 import { openrouterPricing } from 'src/modules/utils'
@@ -109,6 +141,9 @@ import { useAppStateStore } from 'src/stores/appState'
 import { useRouter } from 'vue-router'
 import TaskDebugTabs from './TaskDebugTabs.vue'
 import type { TaskNode } from '@taskyon/taskyon'
+import ResponsiveMenuDialog from '../ResponsiveMenuDialog.vue'
+import { useTextSelection } from '@vueuse/core'
+import { type QMenu } from 'quasar'
 
 const props = defineProps<{
   task: TaskNode
@@ -117,6 +152,10 @@ const props = defineProps<{
   short?: boolean | undefined
   showMeta: boolean | undefined
 }>()
+
+const taskMenu = useTemplateRef<QMenu>('taskMenuRef')
+const textSelectionState = useTextSelection()
+const textSelected = computed(() => textSelectionState.text.value.length > 0)
 
 const ShareDialogBtn = defineAsyncComponent(
   () =>
@@ -135,8 +174,11 @@ const tystate = useTaskyonStore()
 const expandMessageContent = ref<boolean>(false)
 const router = useRouter()
 
+//const tmButton = useTemplateRef('tmButton')
+const showTaskMenu = ref(false)
 const showShareDlg = ref(false)
 const showDownloadDlg = ref(false)
+
 const taskMeta = tystate.getTaskMetaRef(task.id)
 const taskMetaNext = tystate.getTaskMetaRef(task.id)
 const taskCostMeta = computed(() =>
@@ -202,3 +244,80 @@ function toggleMarkdown(id: string) {
   console.log(`markdown for ${id}`, state.taskWidgetState[id].markdownEnabled)
 }
 </script>
+
+<style lang="sass">
+.task-display
+  position: relative
+  display: flex
+  flex-direction: column
+
+  .task-menu-anchor
+    position: sticky
+    top: 20px
+    width: 100%
+    pointer-events: none
+    z-index: 100
+
+  .task-menu-btn
+    // Positioning
+    position: absolute
+    right: 0
+    top: 5px
+    pointer-events: auto
+
+    // Shape/visibility
+    opacity: .3
+    transform: translateY(-3px) scale(.94)
+    transition: opacity .2s ease, transform .2s cubic-bezier(.17,.89,.32,1.27), box-shadow .2s ease, filter .2s ease, background-color .2s ease
+
+    // Baseline ring + soft shadow (uses currentColor from Quasar's 'color' prop)
+    //box-shadow: 0px 0px 2px rgba($secondary,1.0)
+
+    // Slight glassy plate so it reads on busy backgrounds
+    // backdrop-filter: blur(6px)
+    // background-color: rgba($secondary,0.8)
+
+    &:focus-visible
+      outline: none
+
+
+  // Reveal on hover/focus with a pop
+  &:hover .task-menu-btn,
+  .task-menu-btn:hover,
+  .task-menu-btn:focus,
+  .task-menu-btn:focus-within
+    opacity: 1
+    transform: translateY(0) scale(1)
+    background-color: rgba(white,.8)
+    //box-shadow: 0px 0px 5px rgba($secondary,1.0)
+    animation: pop-in 160ms cubic-bezier(.17,.89,.32,1.27)
+
+.body--dark
+  .task-display
+    &:hover .task-menu-btn,
+    .task-menu-btn:hover,
+    .task-menu-btn:focus,
+    .task-menu-btn:focus-within
+      background-color: rgba($dark,.8)
+
+@keyframes pop-in
+  0%
+    transform: translateY(6px) scale(.88)
+    opacity: 0
+  60%
+    transform: translateY(-1px) scale(1.06)
+    opacity: 1
+  100%
+    transform: translateY(0) scale(1)
+
+@media (prefers-reduced-motion: reduce)
+  .task-menu-btn
+    transition: opacity .2s ease
+    transform: none
+  .task-display:hover .task-menu-btn,
+  .task-menu-btn:hover,
+  .task-menu-btn:focus,
+  .task-menu-btn:focus-within
+    animation: none
+    transform: none
+</style>

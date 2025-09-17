@@ -80,7 +80,14 @@ const selectedApi = defineModel<string | null>('selectedApi', {
 })
 const showVisionModels = ref(false)
 
-const emit = defineEmits(['updateBotName'])
+const emit = defineEmits<{
+  updateBotName: [
+    {
+      newName: string
+      newService?: string | null
+    },
+  ] // named tuple syntax
+}>()
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
