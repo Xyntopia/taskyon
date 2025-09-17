@@ -28,7 +28,7 @@ services:
       dockerfile: ./Dockerfile
       target: https
     ports:
-      - '9000:9000'
+      - '9443:443'
     restart: always
 
   llmapi:
