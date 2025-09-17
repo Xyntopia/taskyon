@@ -12,7 +12,7 @@
     <!--Message Display-->
     <div v-touch-hold="() => (showTaskMenu = true)" class="task-display">
       <div v-if="!$q.platform.is.mobile" class="task-menu-anchor">
-        <q-btn class="task-menu-btn" flat color="secondary" size="xl" dense :icon="matMoreHoriz">
+        <q-btn class="task-menu-btn" flat color="secondary" size="lg" dense :icon="matMoreHoriz">
           <q-menu ref="taskMenuRef" auto-close>
             <TaskMenu
               class="task-buttons"
