@@ -41,5 +41,5 @@ Cypress.Commands.add('selectllmmodel', (provider, modelId) => {
 
 Cypress.Commands.add('dataCy', { prevSubject: 'optional' }, (subject, value) => {
   const selector = `[data-cy="${value}"]`
-  return subject ? cy.wrap(subject).find(selector) : cy.get(selector)
+  return subject ? cy.wrap(subject).find(selector, { timeout: 30000 }) : cy.get(selector)
 })

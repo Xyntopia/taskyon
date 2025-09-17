@@ -25,12 +25,12 @@
     <template v-if="item.description">
       <InfoDialog class="lt-sm col-auto" :info-text="item.description" />
     </template>
-    <div class="col-grow row">
+    <div class="col-grow row" :data-cy="item.label">
       <div class="col" style="min-width: 200px; flex: 1 0 auto">
         <!--valueSlot-->
         <slot />
       </div>
-      <div v-if="item.description" class="gt-xs col-auto">
+      <div v-if="item.description" class="gt-xs col-auto obj-info">
         <InfoDialog :info-text="item.description" />
       </div>
       <div v-else style="width: 33.6px" />

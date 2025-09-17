@@ -35,8 +35,8 @@ describe('taskyon API', () => {
     cy.visit('/')
 
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
-    cy.contains('Expert Mode').next().click()
     //cy.dataCy('ai-settings').scrollTo('bottom').type('{esc}')
+    cy.dataCy('Expert Mode').get('.q-toggle').click()
     cy.dataCy('ai-settings').type('{esc}')
 
     // as of 20241007 this is the cheapest model which works with vision...
@@ -52,11 +52,9 @@ describe('taskyon API', () => {
     //.should('have.string', 'meta-llama/llama-3-70b-instruct');
     //.should('meta-llama/llama-3-70b-instruct');
 
-    cy.get('.create-new-task')
-      .dataCy('file-input')
-      .selectFile('./public/taskyon_social_preview.png', {
-        force: true,
-      })
+    cy.get('.create-tasks').dataCy('file-input').selectFile('./public/taskyon_social_preview.png', {
+      force: true,
+    })
 
     writeMessage('Whats in the picture?{enter}')
 

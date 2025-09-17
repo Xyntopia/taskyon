@@ -1,6 +1,6 @@
 <template>
   <!--Create new task area-->
-  <div style="position: relative">
+  <div style="position: relative" class="create-tasks">
     <!--Function Control-->
     <div v-if="selectedTaskType" class="text-caption text-center">
       <InfoDialog
@@ -119,6 +119,7 @@
           maximized
           auto-close
           data-cy-menu="ai-settings"
+          aria-label="quick ai settings"
         >
           <template #btnContent><q-tooltip> More AI Settings</q-tooltip></template>
           <div class="q-pa-sm">

@@ -82,6 +82,8 @@ describe('iframe integration', () => {
 the clientTest function? make sure, you display the exact string how it is displayed \
 (with/without whitespace etc…). Please use the exact tool I specified... \
 {enter}`
+    //getIframeBody().wait(10000).find('.msg-edit textarea').type(msg)
+    // getIframeBody().find('[data-cy="chat-input"]').type(msg)
     getIframeBody().dataCy('chat-input').type(msg)
     getIframeBody().dataCy('chat-input').type('{enter}')
 
