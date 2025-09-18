@@ -5,7 +5,7 @@
     <q-card class="col q-ma-md" style="min-width: 200px">
       <q-card-section>
         <div class="text-h6">SQL Queries</div>
-        <div class="text-subtitle2">Tables in DB: {{ allTables }}</div>
+        <div class="text-subtitle2">Tables in DB ({{ db?.name }}): {{ allTables }}</div>
       </q-card-section>
 
       <q-card-section>

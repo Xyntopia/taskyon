@@ -174,6 +174,7 @@ const dynamicContext =
     //#####################  INIT CTX ####################
     const sessionKeyId = await cs.getSessionId()
     const db = await getDatabase(sessionKeyId)
+    console.log('starting new session with id:', sessionKeyId)
     const taskManagerInstance = await useTyTaskManager(db, llmSettings.vectorizationModel)
     console.log('finished taskManager initialization')
     const secretStore = withSecretStore(
