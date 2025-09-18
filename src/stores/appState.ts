@@ -97,6 +97,18 @@ function getInitialState() {
   return { initialState, defaultStorableSettings }
 }
 
+const useSessionKey = () => {
+  const ephemeralX25519Key = ref<CryptoKey | null>(null)
+
+  return {
+    key: computed(() => ephemeralX25519Key.value),
+    setKey: (k: CryptoKey | null) => {
+      console.log('set new cryptokey!')
+      ephemeralX25519Key.value = k
+    },
+  }
+}
+
 // this is where we save all of our app settings.
 // its important to keep this simple and don't incude 3rd party libraries and other things
 // because we want to this to also work on tyServer and in a "minimal gui" setting.
@@ -104,6 +116,8 @@ function getInitialState() {
 export const useAppStateStore = defineStore('ui-state', () => {
   // configuration from the URL!
   const { initialState, defaultStorableSettings } = getInitialState()
+
+  const { key, setKey } = useSessionKey()
 
   const initialStoredStateObjTyped = initialStoredStateObj as
     | Partial<typeof initialState>
@@ -259,6 +273,8 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
   return {
+    key,
+    setKey,
     isInIframe: urlConfig.isInIframe,
     urlConfig: urlConfig,
     setSelectedTask: (taskId: string | null | undefined) => {
