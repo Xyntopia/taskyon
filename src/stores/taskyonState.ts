@@ -826,6 +826,22 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const { setNewSession, getSessionId, getDeviceId, newSessionFromGdrive, uploadSessionKey } =
     useSwitchCryptoSession(taskyon, gdp)
 
+  // switch user session on key change!
+  watch(
+    () => stateRefs.key,
+    async (newkey) => {
+      console.log('switch user session because of key change!')
+      const cs = await initCryptoSessionFromBrowser(
+        {
+          bindingKey: newkey ?? undefined,
+        },
+        true,
+      )
+      const ty = await taskyon
+      await ty.setNewSession(cs)
+    },
+  )
+
   // TODO: this is soo  ugly..  we need to do something about this...
   const connectMessageIframe = async (id: string, iframe: HTMLIFrameElement, origin?: string) => {
     const instance = await taskyon
