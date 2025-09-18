@@ -55,6 +55,17 @@ export async function createCryptoSession(options?: CryptoSessionOptions) {
     }
   }
 
+  // for security reasons, we eliminate the "mnemonic" from subsequent, derived sessions.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { mnemonic, ...oldOptions } = options ?? {}
+  const derive = (newOptions: CryptoSessionOptions) =>
+    createCryptoSession({
+      ...oldOptions,
+      deviceKeyPair: DK,
+      userKeyPair: UK,
+      ...newOptions,
+    })
+
   return {
     getSessionKey: () => SK,
     getDevicePublicKey: () => DK.publicKey,
@@ -64,12 +75,13 @@ export async function createCryptoSession(options?: CryptoSessionOptions) {
     exportSessionKey,
     getSessionId: () => keyFingerPrint(SK),
     getWrapperId: () => keyFingerPrint(kek),
-    derive: (options?: CryptoSessionOptions) =>
-      createCryptoSession({ wrappedSK, deviceKeyPair: DK, userKeyPair: UK, ...options }),
-    newSessionKey: (wrappedSK?: string) =>
-      createCryptoSession({ wrappedSK, deviceKeyPair: DK, userKeyPair: UK }),
+    derive,
+    newSessionKey: (wrappedSK?: string) => derive({ wrappedSK }),
     newDeviceKey: (deviceKeyPair?: CryptoKeyPair) =>
-      createCryptoSession({ deviceKeyPair, wrappedSK, userKeyPair: UK, unwrapper: kek }),
+      derive({
+        deviceKeyPair,
+        unwrapper: kek,
+      }),
   }
 }
 

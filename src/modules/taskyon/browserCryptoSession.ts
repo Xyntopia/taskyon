@@ -90,9 +90,11 @@ export const initCryptoSessionFromBrowser = async (
   const sessionName = await cs.getWrapperId()
   if (!options?.wrappedSK) {
     // now check if we stored a SK before:
-    const wrappedSK = LocalStorage.getItem(sessionName) as string | undefined
+    const wrappedSK = LocalStorage.getItem(sessionName)
     // if we stored it before, we need to set it in the cryptosession:
-    cs = await cs.newSessionKey(wrappedSK)
+    if (typeof wrappedSK === 'string') {
+      cs = await cs.newSessionKey(wrappedSK)
+    }
   }
 
   if (persist) await persistSession(cs)
