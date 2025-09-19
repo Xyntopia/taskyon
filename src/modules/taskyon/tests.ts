@@ -935,9 +935,9 @@ export const testSecretStore = async (secretStore: SecretStore) => {
 export async function testToolLista() {
   console.log('gather all available tools in a list!')
 
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
 
-  const allTools = (await tm.updateToolDefinitions()) ?? []
+  const allTools = (await ty.updateToolDefinitions()) ?? []
   return {
     'all tools': summarizeTools(Object.keys(allTools), allTools),
   }
@@ -1032,12 +1032,12 @@ export function testCreateDeepTansformer() {
 export const testChatCompletion = async () => {
   console.log('request a random secret from the store')
 
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
 
   const stopSignal = new AbortController().signal
 
   // Invoke the real tool
-  const { tool: chatCompletion } = await tm.getToolDefinition('chatCompletion')
+  const { tool: chatCompletion } = await ty.getToolDefinition('chatCompletion')
   let structuredResponse
   if (chatCompletion && 'function' in chatCompletion && chatCompletion.function !== undefined) {
     structuredResponse = await chatCompletion.function(
@@ -1312,16 +1312,16 @@ export async function testTaskIdHashing() {
 }
 
 export async function markdownGeneration() {
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
   // first load the chat as mardown
   const yamlContent = await getTextFile('/tests/test_conversation.yaml')
-  const lastLoadedTaskId = await tm.loadYamlConversation(yamlContent)
+  const lastLoadedTaskId = await ty.loadYamlConversation(yamlContent)
   //const newTaskId = await state.addMdTasks(markdownContent, undefined);
   // and delete this conversation again :)
   if (lastLoadedTaskId) {
-    const taskList = await tm.getTaskChain(lastLoadedTaskId)
+    const taskList = await ty.getTaskChain(lastLoadedTaskId)
     const markdown = chat2Md(taskList)
-    await tm.deleteTaskThread(lastLoadedTaskId)
+    await ty.deleteTaskThread(lastLoadedTaskId)
     return {
       markdown,
     }

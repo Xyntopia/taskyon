@@ -329,13 +329,19 @@ export async function tyCore(
         //       on taskManagerinstance..
         'addMdTaskChain',
         'loadYamlConversation',
+        'getToolDefinition',
+        'countTasks',
+        'countVecs',
+        'syncVectorIndexWithTasks',
+        'resetTaskVectors',
+        'filteredVectorSearch',
+        'searchSimilarTasks',
+        'filterSearch',
+        'findSiblingLeafTasks',
+        'deleteTaskThread',
       ],
     ),
     ...createProxyApi(() => ctx.secretStore, ['getSecret', 'setSecret', 'onNewSecret']),
-    // TODO: we need to make the following three functions thunks!
-    //       or even better:  maybe we manage to "flatten" our api?
-    //taskManagerInstance: () => ctx.taskManagerInstance,
-    //secretStore: () => ctx.secretStore,
     // TODO: not sure, if the iframeMultiPlexer should be a taskyon functionality?
     //       it seems very "GUI"-oriented... maybe simply sending a message on "outPort"
     //       would be sufficient?

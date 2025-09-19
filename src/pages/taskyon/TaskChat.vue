@@ -271,7 +271,7 @@ const openPopupMessage = (message: string) => {
 
 async function updateChatThread() {
   console.log('update chat thread')
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
   if (typeof route.query.gd === 'string') {
     state.lockBottomScroll = false
     const gdFileId = route.query.gd
@@ -280,7 +280,7 @@ async function updateChatThread() {
     invitedChat.value = true
     try {
       const markdownContent = await getTextFile(markdownUrl)
-      const newTaskId = await tm.addMdTaskChain(markdownContent)
+      const newTaskId = await ty.addMdTaskChain(markdownContent)
       state.setSelectedTask(newTaskId)
     } catch (error) {
       console.error('Error loading from Google Drive:', error)
@@ -296,7 +296,7 @@ async function updateChatThread() {
     if (markdownUrl) {
       state.lockBottomScroll = false
       const markdownContent = await getTextFile(markdownUrl)
-      const newTaskId = await tm.addMdTaskChain(markdownContent)
+      const newTaskId = await ty.addMdTaskChain(markdownContent)
       state.setSelectedTask(newTaskId)
     }
   } else if (route.params.filePath) {
@@ -306,10 +306,10 @@ async function updateChatThread() {
     let newTaskId: string | undefined
     try {
       const markdownContent = filePath ? await fetchMarkdown(folder || '', filePath) : undefined
-      newTaskId = await tm.addMdTaskChain(markdownContent)
+      newTaskId = await ty.addMdTaskChain(markdownContent)
     } catch {
       newTaskId = (
-        await tm.addPartialTask2Tree({
+        await ty.addPartialTask2Tree({
           content: {
             type: 'error',
             data: `# 404 - Markdown Not Found

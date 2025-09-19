@@ -231,8 +231,8 @@ function switchTool(toolName?: string) {
 }
 
 const allTools = asyncComputed(async () => {
-  const tm = await tystate.getTaskManager()
-  const tools = await tm.updateToolDefinitions()
+  const ty = await tystate.taskyon
+  const tools = await ty.updateToolDefinitions()
   return tools
 }, undefined)
 
@@ -244,12 +244,12 @@ const alphabeticalTools = computed(() => {
 
 const selectedTool = asyncComputed<InternalTool | undefined>(
   async () => {
-    const tm = await tystate.getTaskManager()
+    const ty = await tystate.taskyon
     if (name) {
-      const { tool } = await tm.getToolDefinition(name)
+      const { tool } = await ty.getToolDefinition(name)
       if (tool) return tool
       // otherwise check if name is actually a task id...
-      const toolDefTask = await tm.getTask(name)
+      const toolDefTask = await ty.getTask(name)
       if (toolDefTask?.content.type === 'tooldefinition') return toolDefTask.content.data
     }
     return undefined
@@ -302,8 +302,8 @@ const preliminaryTaskNode = asyncComputed<TaskNode | undefined>(async () => {
 }, undefined)
 
 async function addNewTask(task: partialTaskDraft) {
-  const tm = await tystate.getTaskManager()
-  const newTask = await tm.addPartialTask2Tree(task)
+  const ty = await tystate.taskyon
+  const newTask = await ty.addPartialTask2Tree(task)
   void router.push({
     params: { name: newTask.id },
   })
