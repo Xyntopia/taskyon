@@ -32,6 +32,10 @@ type ProxyApi<T, K extends readonly (keyof T)[]> = {
   [P in K[number]]: T[P] extends (...args: infer A) => infer R ? (...args: A) => R : () => T[P]
 }
 
+export const createProxyFunction = <F extends (...args: Parameters<F>) => ReturnType<F>>(
+  f: Thunk<F>,
+) => ((...args: Parameters<F>) => f()(...args)) as F
+
 export function createProxyApi<T extends object, const K extends readonly (keyof T)[]>(
   obj: Thunk<T>,
   names: K,
@@ -42,11 +46,7 @@ export function createProxyApi<T extends object, const K extends readonly (keyof
     const val = obj()[key]
     if (typeof val === 'function') {
       // Preserve `this` if the method uses it
-      api[key] = (...args: unknown[]) => {
-        const o = obj()
-        const fn = o[key] as unknown as (...a: unknown[]) => unknown
-        return fn.apply(o, args)
-      }
+      api[key] = (...args: unknown[]) => val(...args)
     } else {
       api[key] = () => obj()[key]
     }
