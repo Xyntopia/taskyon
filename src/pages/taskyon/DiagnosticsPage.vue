@@ -97,7 +97,7 @@ import {
 } from 'src/modules/taskyon/tests'
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
-import { chatThreadFromTaskId } from 'src/modules/tools/chatCompletionTool'
+import { convertTaskNodesToOpenAIChat } from 'src/modules/tools/chatCompletionTool'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import { onMounted } from 'vue'
 import { testCreateDeepTansformer } from 'src/modules/taskyon/tests'
@@ -136,8 +136,17 @@ async function completionMessage() {
     tyChat.taskIdChain = await ty.getTaskIdChain(state.llmSettings.selectedTaskId)
     const task = await ty.getTask(state.llmSettings.selectedTaskId)
     if (task) {
+      const taskChain = await ty.getTaskChain(task.id, true)
       const toolDefs = await ty.updateToolDefinitions(false)
-      const res = await chatThreadFromTaskId(ty, task.id, state.llmSettings, toolDefs)
+      const res = await convertTaskNodesToOpenAIChat(
+        taskChain,
+        // we are not testing files right now...
+        () => new Promise(() => null),
+        () => new Promise(() => undefined),
+        state.llmSettings.tryUsingVisionModels,
+        state.llmSettings.enableOpenAiTools,
+        toolDefs,
+      )
       tyChat.thread = res
     }
   }

@@ -542,7 +542,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
   const { lockItem, clearLocks } = lockMap('TaskLocks')
   const execWLock = withLock(lockItem)
   // add more enhanced, ty-specific functionality to our CRUD
-  const tyCrudVec = {
+  const taskDb = {
     ...tyCrud,
     get: async (id: string | number) =>
       await execWLock(async () => {
@@ -597,7 +597,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
   )
 
   async function countTasks() {
-    return (await tyCrudVec.listIds()).length
+    return (await taskDb.listIds()).length
   }
 
   function createCachedIdSearch(
@@ -671,20 +671,24 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
     },
   )
 
-  async function convertTaskIDs(taskIds: string[]) {
-    const taskList = await Promise.all(taskIds.map((tid) => tyCrudVec.get(tid)))
+  async function convertTaskIDs(taskIds: string[], ignoreMissing = false) {
+    const taskList = await Promise.all(taskIds.map((tid) => taskDb.get(tid)))
 
     // Check if any tasks are "null" or "undefined" and throw an error
-    taskList.forEach((task, index) => {
-      if (task === null || task === undefined) {
-        throw new Error(`Task at index ${index} is ${task === null ? 'null' : 'undefined'}`)
+    const filtered = taskList.filter((task, index) => {
+      const exists = task != null || task != undefined
+      if (!exists) {
+        const errmsg = `Task at index ${index} is ${task === null ? 'null' : 'undefined'}`
+        if (ignoreMissing) console.log(errmsg)
+        else throw new Error(errmsg)
       }
+      return exists
     })
-    return taskList as TaskNode[]
+    return filtered
   }
 
-  const getTaskChain = async (taskId: string): Promise<TaskNode[]> =>
-    await convertTaskIDs(await getTaskIdChain(taskId))
+  const getTaskChain = async (taskId: string, ignoreMissing = false): Promise<TaskNode[]> =>
+    await convertTaskIDs(await getTaskIdChain(taskId), ignoreMissing)
 
   // first, get all immediate children and then, for each of them get all their leaf siblings
   // then from each leaf sibling go backwards through prior & parent IDs to create
@@ -703,7 +707,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
 
   // Recursively builds a tree node for the given task id.
   async function buildTaskTreeNode(taskId: string, maxDepth: number): Promise<TaskTreeNode> {
-    const task = await tyCrudVec.get(taskId)
+    const task = await taskDb.get(taskId)
     if (!task) throw new Error(`Task ${taskId} not found`)
 
     const children: TaskTreeNode[][] = []
@@ -737,7 +741,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
             `Multiple siblings found for task ${currentId}. Using the latest created task.`,
           )
           const siblingArray = Array.from(siblingSet)
-          const siblingTasks = await Promise.all(siblingArray.map((id) => tyCrudVec.get(id)))
+          const siblingTasks = await Promise.all(siblingArray.map((id) => taskDb.get(id)))
           siblingTasks.sort((a, b) => (b?.created_at ?? 0) - (a?.created_at ?? 0))
           siblingTasks
             .slice(1)
@@ -781,7 +785,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
     const newMaxFollow = maxFollow - taskAndChildren.length
 
     // we don't get children from this task, only from prior ones...
-    const task = await tyCrudVec.get(taskId)
+    const task = await taskDb.get(taskId)
 
     // get prior task chain...
     if (task?.priorID && !(task.priorID === untilTaskID)) {
@@ -825,7 +829,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
     // TODO: also delete vectordb! (will be done automatically, once we transition to pglite)
     // TODO: manually re-initiailized taskyondb after remove...
     await resetTaskVectors()
-    await tyCrudVec.clear()
+    await taskDb.clear()
     await metaDb.clear()
     // we are doing the sleep here because some parts
     // of our app re-load the browser and that prevents the
@@ -840,7 +844,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
     let currentTaskId = leafId
 
     while (currentTaskId) {
-      const currentTask = await tyCrudVec.get(currentTaskId)
+      const currentTask = await taskDb.get(currentTaskId)
       if (!currentTask) break // Break if a task doesn't exist
 
       // Check if the parent task has more than one child
@@ -853,7 +857,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
       }
 
       // Delete the current task
-      void tyCrudVec.delete(currentTaskId)
+      void taskDb.delete(currentTaskId)
 
       if (currentTask.priorID) {
         // Move to the parent task
@@ -934,7 +938,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
 
     while (stack.length > 0) {
       const currentTaskId = stack.pop() || ''
-      const currentTask = await tyCrudVec.get(currentTaskId)
+      const currentTask = await taskDb.get(currentTaskId)
       if (!currentTask) continue
 
       const children = await searchNextSibling(currentTaskId)
@@ -954,7 +958,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
   async function getJsonTaskBackup() {
     // TODO: give this a callback so that we can save it in "chunks"
     console.log('exporting json backup db!')
-    const allNodes = await tyCrudVec.listAll()
+    const allNodes = await taskDb.listAll()
     return JSON.stringify(allNodes.map((r) => r.data))
   }
 
@@ -966,7 +970,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
         jsonObj.map(async (obj) => {
           const res = TaskNode.safeParse(obj)
           if (res.success) {
-            await tyCrudVec.add(res.data)
+            await taskDb.add(res.data)
           } else {
             console.warn('Could not add data:', res.data, res.error)
           }
@@ -982,7 +986,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
   // so when calling the function, we need to pre-select which type of task
   // we want to have.
   const addPartialTask2Tree = (task: partialTaskDraft) =>
-    tyCrudVec.add(task, { createMeta: 'missing', vectors: true })
+    taskDb.add(task, { createMeta: 'missing', vectors: true })
 
   async function addTaskChain(
     taskList: partialTaskDraft[],
@@ -1030,10 +1034,10 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
   const defaultMode = {
     addDefaultTools,
     getToolDefinition,
-    getTask: tyCrudVec.get,
-    deleteTask: tyCrudVec.delete,
+    getTask: taskDb.get,
+    deleteTask: taskDb.delete,
     searchTasks,
-    taskStream: tyCrudVec.liveStream,
+    taskStream: taskDb.liveStream,
     updateToolDefinitions,
     getJsonTaskBackup,
     addTaskBackup,
