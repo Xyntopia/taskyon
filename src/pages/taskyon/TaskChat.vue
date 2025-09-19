@@ -39,7 +39,7 @@
       <!-- Welcome Message -->
       <div
         v-else
-        class="column justify-center items-center q-pa-sm welcome"
+        class="column justify-center items-center q-pa-lg welcome"
         style="max-width: 600px"
       >
         <div class="welcome-message column items-center">
