@@ -352,6 +352,7 @@ export async function tyCore(
         //        to move them out of tycore and have them as seperate functions!
         'buildTaskTreeNode',
         'buildSiblingChain',
+        'deleteAllTasks',
       ],
     ),
     ...createProxyApi(
