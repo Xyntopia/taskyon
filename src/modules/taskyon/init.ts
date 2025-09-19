@@ -3,6 +3,7 @@ import { createCryptoSession, ToolBase } from '@taskyon/taskyon'
 import { dump } from 'js-yaml'
 import z from 'zod'
 import { encryptCompressObject } from '../../../packages/taskyon/src/utils/fileUtils'
+import { createProxyApi, createProxyFunction } from '../../../packages/taskyon/src/utils/objHelpers'
 import {
   createCombinedCrudWrapper,
   createMapCrudWrapper,
@@ -43,7 +44,6 @@ import type { TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
 import { runTaskWorker } from './taskWorker'
 import type { llmSettings } from './types'
-import { createProxyApi, createProxyFunction } from '../../../packages/taskyon/src/utils/objHelpers'
 
 function createApi(
   insidePort: Port<TaskyonMessage, TaskyonMessage>,
@@ -339,6 +339,9 @@ export async function tyCore(
         'filterSearch',
         'findSiblingLeafTasks',
         'deleteTaskThread',
+        'deleteTask',
+        'getOpfsUploadedFile',
+        'getFileMappingByUuid',
       ],
     ),
     ...createProxyApi(

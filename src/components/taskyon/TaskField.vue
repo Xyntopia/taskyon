@@ -125,10 +125,6 @@
 </template>
 
 <script setup lang="ts">
-import { useTaskyonStore } from 'stores/taskyonState'
-import TokenUsage from 'components/taskyon/TokenUsage.vue'
-import { computed, defineAsyncComponent, ref, useTemplateRef } from 'vue'
-import TaskMenu from './TaskMenu.vue'
 import {
   matArrowDropDown,
   matArrowDropUp,
@@ -136,14 +132,18 @@ import {
   matMoreHoriz,
   matShield,
 } from '@quasar/extras/material-icons'
+import type { TaskNode } from '@taskyon/taskyon'
+import { useTextSelection } from '@vueuse/core'
+import TokenUsage from 'components/taskyon/TokenUsage.vue'
+import { type QMenu } from 'quasar'
 import { openrouterPricing } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { computed, defineAsyncComponent, ref, useTemplateRef } from 'vue'
 import { useRouter } from 'vue-router'
-import TaskDebugTabs from './TaskDebugTabs.vue'
-import type { TaskNode } from '@taskyon/taskyon'
 import ResponsiveMenuDialog from '../ResponsiveMenuDialog.vue'
-import { useTextSelection } from '@vueuse/core'
-import { type QMenu } from 'quasar'
+import TaskDebugTabs from './TaskDebugTabs.vue'
+import TaskMenu from './TaskMenu.vue'
 
 const props = defineProps<{
   task: TaskNode
@@ -196,7 +196,7 @@ const humanReadableTaskCosts = computed(() => {
 })
 
 async function editTask(taskId: string) {
-  const task = await (await tystate.getTaskManager()).getTask(taskId)
+  const task = await (await tystate.taskyon).getTask(taskId)
   if (task?.content?.type === 'tooldefinition') {
     void router.push(`/tool/${task.id}`)
   } else {
@@ -206,15 +206,15 @@ async function editTask(taskId: string) {
 }
 
 async function deleteTask(taskId: string) {
-  const tm = await tystate.getTaskManager()
-  const task = await tm.getTask(taskId)
-  if (task) void tm.deleteTask(task.id)
+  const ty = await tystate.taskyon
+  const task = await ty.getTask(taskId)
+  if (task) void ty.deleteTask(task.id)
   state.setSelectedTask(task?.priorID || task?.parentID)
 }
 
 async function createNewConversation(taskId: string) {
   console.log('create new conversation...')
-  const task = await (await tystate.getTaskManager()).getTask(taskId)
+  const task = await (await tystate.taskyon).getTask(taskId)
   tystate.setContentDraftFromTask(task)
 
   // we simply need to tell our task manager that we don't have any task selected
