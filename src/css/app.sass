@@ -161,7 +161,7 @@ html.no-ptr
     position: relative
 
   /* keep it behind content */
-  body::before
+  body:not(.within-iframe)::before
     content: ''
     position: fixed
     inset: 0
