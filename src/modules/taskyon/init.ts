@@ -325,10 +325,11 @@ export async function tyCore(
         'metaUpsert',
         'metaLiveRead',
         'getTaskChain',
-        // TODO: md taskchain and yaml conversation might be better as "utility-functions?" without a dependency
+        // TODO: md taskchain and yaml loading might be better as "utility-functions?" without a dependency
         //       on taskManagerinstance..
         'addMdTaskChain',
         'loadYamlConversation',
+        'addTaskChain',
         'getToolDefinition',
         'countTasks',
         'countVecs',
@@ -342,6 +343,7 @@ export async function tyCore(
         'deleteTask',
         'getOpfsUploadedFile',
         'getFileMappingByUuid',
+        'addFiles',
       ],
     ),
     ...createProxyApi(

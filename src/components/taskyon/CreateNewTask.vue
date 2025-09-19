@@ -555,10 +555,10 @@ watchDebounced(
 
 // all our files are added to a "file task"
 async function createFileTask(files: File[]) {
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
 
   // first add files to our DB & save them, then get uuids for each file.
-  const fileUuids = await tm.addFiles(files)
+  const fileUuids = await ty.addFiles(files)
 
   if (fileUuids.length) {
     const task: partialTaskDraft = {
@@ -575,7 +575,7 @@ async function createFileTask(files: File[]) {
 
 async function addNewTask() {
   const kwdsPromise = getCurrentKeywordsWithTimeout(300)
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
   const fileTaskObj = await createFileTask(fileAttachments.value)
 
   // we are creating new taskchain accordig to what the user wants ;)
@@ -628,7 +628,7 @@ async function addNewTask() {
 
   const kwds = (await kwdsPromise) ?? currentKeywords.value
   if (kwds) newTaskChain.forEach((t) => (t.name = kwds))
-  const newTaskId = (await tm.addTaskChain(newTaskChain, state.llmSettings.selectedTaskId)).at(-1)
+  const newTaskId = (await ty.addTaskChain(newTaskChain, state.llmSettings.selectedTaskId)).at(-1)
 
   // push the last task to execution queue right away...
   if (newTaskId) {

@@ -42,8 +42,8 @@ type taskEntry = { id: string; name: string | undefined }
 const conversationThread = ref<taskEntry[]>([])
 
 async function updateToc(newTaskId: string) {
-  const tm = await tystate.getTaskManager()
-  const tasks = await tm.getTaskChain(newTaskId)
+  const ty = await tystate.taskyon
+  const tasks = await ty.getTaskChain(newTaskId)
   const toc = tasks
     .filter((t) => t?.name)
     .map((t) => {
