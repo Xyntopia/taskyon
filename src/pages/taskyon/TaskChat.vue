@@ -250,8 +250,8 @@ const showPassWordDialog = ref(false)
 const infoText = ref('get password')
 let resolveSecret: (secret: string) => void
 onMounted(async () => {
-  const sst = await tystate.getSecretStore()
-  void sst.onNewSecret(({ args: [{ id, secretName, message }], respond }) => {
+  const ty = await tystate.taskyon
+  void ty.onNewSecret(({ args: [{ id, secretName, message }], respond }) => {
     console.log('new secret request window', id, secretName)
     showPassWordDialog.value = true
     infoText.value =

@@ -1063,7 +1063,8 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
     addPartialTask2Tree,
     addTaskChain,
     addMdTaskChain,
-    metaDb,
+    getMeta: metaDb.get,
+    metaLiveRead: metaDb.readLive,
   }
 }
 export type TyTaskManager = Awaited<ReturnType<typeof useTyTaskManager>>

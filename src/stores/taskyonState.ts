@@ -407,7 +407,7 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
   const currentTask = ref<TaskNode | null>(null)
   const selectedThread = ref<TaskNode[]>([])
 
-  void taskyon.then(({ taskManagerInstance: tm }) => {
+  void taskyon.then((ty) => {
     const add2ChatHistory = async (
       task: TaskNode | null,
       id: string,
@@ -422,7 +422,7 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
         // we need to make sure, that our task is not already
         // the "parent" of another task in that case we only want the leaf task which is already present...
         for (const taskId of stateRefs.chatHistory) {
-          const otherTask = await tm.getTask(taskId)
+          const otherTask = await ty.getTask(taskId)
           if (otherTask?.priorID === id || otherTask?.parentID === id) return
         }
       } else if (msg === 'delete') {
@@ -452,7 +452,7 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
       if (!task) return
 
       // Remove any entries which are a parent of the current task (keeping only leaf IDs)
-      const currentTaskChain = (await tm.getTaskIdChain(task.id, 50)).slice(0, -1)
+      const currentTaskChain = (await ty.getTaskIdChain(task.id, 50)).slice(0, -1)
       stateRefs.chatHistory = stateRefs.chatHistory.filter(
         (t) => t !== task.priorID && t !== task.parentID && !currentTaskChain.includes(t),
         //(t) => t !== task.priorID && t !== task.parentID,
@@ -468,7 +468,7 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
       //       and we want to make sure to really include all tasks in the chathistory...
     }
 
-    tm.taskStream.subscribe(({ id, data: task }) => {
+    ty.taskStream.subscribe(({ id, data: task }) => {
       if (!task) {
         void add2ChatHistory(task, id.toString(), 'delete')
       }
@@ -485,9 +485,9 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
       async (newSelectedTask) => {
         // TODO: I don't remember why we need this delay here....
         if (newSelectedTask) {
-          currentTask.value = await tm.getTask(newSelectedTask)
-          const selectedThreadIDs = await tm.getTaskIdChain(newSelectedTask)
-          selectedThread.value = await tm.convertTaskIDs(selectedThreadIDs)
+          currentTask.value = await ty.getTask(newSelectedTask)
+          const selectedThreadIDs = await ty.getTaskIdChain(newSelectedTask)
+          selectedThread.value = await ty.convertTaskIDs(selectedThreadIDs)
         } else {
           currentTask.value = null
           selectedThread.value = []
@@ -513,7 +513,7 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
       () => stateRefs.llmSettings.selectedTaskId,
       async (selectedTask) => {
         if (selectedTask) {
-          const taskNode = await tm.getTask(selectedTask)
+          const taskNode = await ty.getTask(selectedTask)
           if (taskNode) void add2ChatHistory(taskNode, taskNode.id, 'existing')
         }
       },
@@ -530,15 +530,15 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
 function reactiveTools(taskyon: Promise<Taskyon>) {
   const allTools = ref<Record<string, InternalTool>>({})
 
-  void taskyon.then((TY) => {
+  void taskyon.then((ty) => {
     const updateTools = async () => {
-      allTools.value = await TY.taskManagerInstance.updateToolDefinitions(true)
+      allTools.value = await ty.updateToolDefinitions(true)
     }
     void updateTools()
 
     // if a new "default" tool was created update UI
     // TODO: can we move this into our init.ts? or does it make sense here?
-    TY.port.receive((msg) => {
+    ty.port.receive((msg) => {
       console.log('api out message!', msg)
       void match(msg).with(
         {
@@ -556,7 +556,7 @@ function reactiveTools(taskyon: Promise<Taskyon>) {
     })
 
     // if a new tool was created as a tasknode, update UI
-    TY.taskManagerInstance.taskStream.subscribe(
+    ty.taskStream.subscribe(
       (msg) =>
         void match(msg)
           .returnType<void>()
@@ -678,7 +678,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // services e.g. the engine to communicate to the outside.
   const { x: uiApiOutside, y: uiApiInside } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()
 
-  void taskyon.then(async (TY) => {
+  void taskyon.then(async (ty) => {
     //const taskStream = tyInit.taskManagerInstance.taskStream
     //syncToGdrive(taskStream, stateRefs.appConfiguration.gdriveDir)
 
@@ -713,13 +713,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         },
         task: async (msg) => {
           // TODO: replace by rpc call to outPort
-          const tn = await TY.taskManagerInstance.addPartialTask2Tree({
+          const tn = await ty.addPartialTask2Tree({
             ...msg.task,
             label: msg.origin ? [msg.origin] : undefined,
           })
           // push the last task to execution queue right away...
           if (msg.execute) {
-            TY.queueTask(tn.id)
+            ty.queueTask(tn.id)
           }
           if (msg.show) {
             stateRefs.setSelectedTask(tn.id)
@@ -730,14 +730,14 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       // simply send all other messages to our backend...
       (msg) => {
         const m = TaskyonMessage.safeParse(msg)
-        if (m.success) TY.port.send(m.data)
+        if (m.success) ty.port.send(m.data)
         else console.log('unknown message:', m.data)
       },
     )
     // we manually connect our send port to the api here, because
     // we are already intercepting incoming messages with the API above
     // TODO: we have to change this! we would like to
-    TY.port.receive(uiApiInside.send)
+    ty.port.receive(uiApiInside.send)
 
     console.log('checking if we are in an iframe!')
 
@@ -761,21 +761,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // make sure we always have an up-to-date list of tools
   const allTools = reactiveTools(taskyon)
 
-  // Access taskManagerInstance and addTask2Tree without redundant awaits
-  const getTaskManager = async () => (await taskyon)['taskManagerInstance']
-
-  const getSecretStore = async () => {
-    const instance = await taskyon
-    return instance['secretStore']
-  }
-
   // an oauth token getter function which persists secrets in our local secretstore!
   const getToken: TokenGetter = async (...args) => {
     const STORAGE_PREFIX = 'oauth:credentials:'
-    const sst = await getSecretStore()
+    const ty = await taskyon
     const tg = usePersistentOauth({
-      getSecret: async (name) => await sst.getSecret(STORAGE_PREFIX, name, false),
-      setSecret: async (name, data) => await sst.setSecret(STORAGE_PREFIX, name, data),
+      getSecret: async (name) => await ty.getSecret(STORAGE_PREFIX, name, false),
+      setSecret: async (name, data) => await ty.setSecret(STORAGE_PREFIX, name, data),
     })
     return await tg(...args)
   }
@@ -845,7 +837,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // TODO: this is soo  ugly..  we need to do something about this...
   const connectMessageIframe = async (id: string, iframe: HTMLIFrameElement, origin?: string) => {
     const instance = await taskyon
-    return instance['connectMessageIframe'](id, iframe, origin)
+    return instance.connectMessageIframe(id, iframe, origin)
   }
 
   // TODO: use the proxies below to replae the "getTaskmanager" and all of that..
@@ -989,8 +981,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   }
 
   const getMeta = async (id: string) => {
-    const tm = await getTaskManager()
-    const meta = tm.metaDb.get(id)
+    const tm = await taskyon
+    const meta = tm.getMeta(id)
     return meta
   }
 
@@ -998,8 +990,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     const taskMetaRef = ref<TaskNodeMeta>()
     let subscriptionUnsub: (() => void) | null = null
     if (taskId) {
-      void getTaskManager().then((tm) => {
-        subscriptionUnsub = tm.metaDb.readLive(taskId).subscribe(({ data }) => {
+      void taskyon.then((ty) => {
+        subscriptionUnsub = ty.metaLiveRead(taskId).subscribe(({ data }) => {
           taskMetaRef.value = data || undefined
         })
       })
@@ -1018,10 +1010,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     newSessionFromGdrive,
     uploadSessionKey,
     getToken,
-    getSecretStore,
     getTaskMetaRef,
     getMeta,
     getDeviceId,
+    taskyon,
     setNewContentDraft,
     setContentDraftFromTask,
     allTools: computed(() => allTools.value),
@@ -1031,7 +1023,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     currentTask,
     addModelToHistory,
     stopWorker,
-    getTaskManager,
     taskWorkerWaiting,
     lastActiveTaskId,
     lastTaskState,

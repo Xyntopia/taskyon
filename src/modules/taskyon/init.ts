@@ -43,7 +43,7 @@ import type { TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
 import { runTaskWorker } from './taskWorker'
 import type { llmSettings } from './types'
-import { createProxyApi } from '../../../packages/taskyon/src/utils/objHelpers'
+import { createProxyApi, createProxyFunction } from '../../../packages/taskyon/src/utils/objHelpers'
 
 function createApi(
   insidePort: Port<TaskyonMessage, TaskyonMessage>,
@@ -301,7 +301,7 @@ export async function tyCore(
   const chatCompletionStream = createStream<extractStreamType<typeof ctx.chatCompletionStream>>()
   const taskStream = createStream<extractStreamType<typeof ctx.taskManagerInstance.taskStream>>()
 
-  return {
+  const api = {
     // TODO: this is only an intermediate solution...
     //        * we need to connect/disconnect streams
     //        * we need to add functions that are nedded outside "directly" to the expoted functions
@@ -311,10 +311,9 @@ export async function tyCore(
     taskStream: taskStream.stream,
     workerStop: (message: string) => ctx.stopAllTasks(message),
     queueTask: (id: string) => ctx.queueTask(id),
-    // TODO: flatten the taskManager...
     // we are creating the proxyApi here so that from the outside every function always gets proxied
-    // to the most up-to-date taskmanager instance...
-    taskManagerInstance: createProxyApi(
+    // to the most up-to-date taskmanager instance... We are also flattening it at the same time!
+    ...createProxyApi(
       () => ctx.taskManagerInstance,
       [
         'getTask',
@@ -322,8 +321,11 @@ export async function tyCore(
         'convertTaskIDs',
         'updateToolDefinitions',
         'addPartialTask2Tree',
+        'getMeta',
+        'metaLiveRead',
       ],
     ),
+    ...createProxyApi(() => ctx.secretStore, ['getSecret', 'setSecret', 'onNewSecret']),
     // TODO: we need to make the following three functions thunks!
     //       or even better:  maybe we manage to "flatten" our api?
     //taskManagerInstance: () => ctx.taskManagerInstance,
@@ -332,12 +334,13 @@ export async function tyCore(
     //       it seems very "GUI"-oriented... maybe simply sending a message on "outPort"
     //       would be sufficient?
     //       eah iframeMultiplexer should be replaced with something that uses ports...
-    //connectMessageIframe: iframeMultiPlexer.attachIframe,
+    connectMessageIframe: createProxyFunction(() => iframeMultiPlexer.attachIframe),
 
     port: outsidePort,
     getCryptoSession: () => cs,
     setNewSession,
   }
+  return api
 }
 
 export type Taskyon = Awaited<ReturnType<typeof tyCore>>

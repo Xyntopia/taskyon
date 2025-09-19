@@ -115,8 +115,8 @@ const testFinished = ref(false)
 const infoText = ref('get password')
 let resolveSecret: (secret: string) => void
 onMounted(async () => {
-  const sst = await tystate.getSecretStore()
-  void sst.onNewSecret(({ args: [{ id, secretName }], respond }) => {
+  const ty = await tystate.taskyon
+  void ty.onNewSecret(({ args: [{ id, secretName }], respond }) => {
     if (state.noGuiTests) {
       respond('randomKey' + randomString(5))
       return
@@ -128,16 +128,16 @@ onMounted(async () => {
 })
 
 async function completionMessage() {
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
   const tyChat: Record<string, unknown> = {
     chatID: state.llmSettings.selectedTaskId,
   }
   if (state.llmSettings.selectedTaskId) {
-    tyChat.taskIdChain = await tm.getTaskIdChain(state.llmSettings.selectedTaskId)
-    const task = await (await tystate.getTaskManager()).getTask(state.llmSettings.selectedTaskId)
+    tyChat.taskIdChain = await ty.getTaskIdChain(state.llmSettings.selectedTaskId)
+    const task = await ty.getTask(state.llmSettings.selectedTaskId)
     if (task) {
-      const toolDefs = await tm.updateToolDefinitions(false)
-      const res = await chatThreadFromTaskId(tm, task.id, state.llmSettings, toolDefs)
+      const toolDefs = await ty.updateToolDefinitions(false)
+      const res = await chatThreadFromTaskId(ty, task.id, state.llmSettings, toolDefs)
       tyChat.thread = res
     }
   }
