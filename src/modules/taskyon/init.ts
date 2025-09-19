@@ -43,6 +43,7 @@ import type { TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
 import { runTaskWorker } from './taskWorker'
 import type { llmSettings } from './types'
+import { createProxyApi } from '../../../packages/taskyon/src/utils/objHelpers'
 
 function createApi(
   insidePort: Port<TaskyonMessage, TaskyonMessage>,
@@ -294,26 +295,45 @@ export async function tyCore(
     // re-connect all streams
     ctx.workerStream.subscribe(workerStream.emit)
     ctx.chatCompletionStream.subscribe(chatCompletionStream.emit)
+    ctx.taskManagerInstance.taskStream.subscribe(taskStream.emit)
   }
   const workerStream = createStream<extractStreamType<typeof ctx.workerStream>>()
   const chatCompletionStream = createStream<extractStreamType<typeof ctx.chatCompletionStream>>()
+  const taskStream = createStream<extractStreamType<typeof ctx.taskManagerInstance.taskStream>>()
 
   return {
     // TODO: this is only an intermediate solution...
     //        * we need to connect/disconnect streams
     //        * we need to add functions that are nedded outside "directly" to the expoted functions
     //        * we need to move all of these functions into a message port duplex API.
-    chatCompletionStream,
-    workerStream,
+    chatCompletionStream: chatCompletionStream.stream,
+    workerStream: workerStream.stream,
+    taskStream: taskStream.stream,
     workerStop: (message: string) => ctx.stopAllTasks(message),
     queueTask: (id: string) => ctx.queueTask(id),
+    // TODO: flatten the taskManager...
+    // we are creating the proxyApi here so that from the outside every function always gets proxied
+    // to the most up-to-date taskmanager instance...
+    taskManagerInstance: createProxyApi(
+      () => ctx.taskManagerInstance,
+      [
+        'getTask',
+        'getTaskIdChain',
+        'convertTaskIDs',
+        'updateToolDefinitions',
+        'addPartialTask2Tree',
+      ],
+    ),
+    // TODO: we need to make the following three functions thunks!
+    //       or even better:  maybe we manage to "flatten" our api?
     //taskManagerInstance: () => ctx.taskManagerInstance,
     //secretStore: () => ctx.secretStore,
     // TODO: not sure, if the iframeMultiPlexer should be a taskyon functionality?
     //       it seems very "GUI"-oriented... maybe simply sending a message on "outPort"
     //       would be sufficient?
     //       eah iframeMultiplexer should be replaced with something that uses ports...
-    connectMessageIframe: iframeMultiPlexer.attachIframe,
+    //connectMessageIframe: iframeMultiPlexer.attachIframe,
+
     port: outsidePort,
     getCryptoSession: () => cs,
     setNewSession,
