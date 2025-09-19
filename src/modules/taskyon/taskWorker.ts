@@ -1,11 +1,11 @@
-import type { TaskNodeMeta, TyTaskStreamData } from './types'
+import type { TyTaskStreamData } from './types'
 import { type llmSettings, getApiConfigCopy } from './types'
 import { type TyTaskManager } from './taskManager'
 import type { RemoteFunctionPort } from './tools'
 import { handleFunctionExecution } from './tools'
 import { createAsyncQueue, humanizeError, serializeForJson, sleep } from '../utils'
 import { createChatCompletionTask } from '../tools/chatCompletionTool'
-import type { CrudWrapper, SecretStore } from '../crudWrapper'
+import type { SecretStore } from '../crudWrapper'
 import type { TaskMessageStream } from '../frpBus'
 import { createMessagePortAdapter, createStream, filter } from '../frpBus'
 import { sha256UrlSafeHash } from '@taskyon/taskyon'
@@ -283,13 +283,9 @@ function createHandleError(
       stopAllTasks(`Too many errors occured, interrupting execution after ${errorCount} errors!`)
     }
 
-    const errorTaskChain = createErrorTaskChain(
-      error,
-      task,
-      selectedModel,
-      enableOpenAiTools,
-      taskManager.metaDb,
-    )
+    const errorTaskChain = createErrorTaskChain(error, task, selectedModel, enableOpenAiTools)
+    const debugInfo = createDebugInfoFromError(error)
+    void taskManager.metaUpsert(task.id, debugInfo, 'shallow_merge')
 
     // we are adding the error task chain as a subtaskchain with the parentID of this
     // particular task.
@@ -507,6 +503,20 @@ const setupRun = (
   }
 }
 
+function createDebugInfoFromError(error: unknown) {
+  const debugInfo = { error }
+
+  if (error instanceof Error) {
+    // preserve full debug info
+    debugInfo.error = {
+      message: error.message,
+      stack: error.stack,
+      cause: error.cause,
+    }
+  }
+  return debugInfo
+}
+
 export function runTaskWorker(
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
@@ -571,7 +581,6 @@ function createErrorTaskChain(
   task: TaskNode | null,
   analyzeErrorModel: string | undefined,
   llmTools: boolean,
-  debugDb: CrudWrapper<TaskNodeMeta>,
 ) {
   const errorTask: partialTaskDraft = {
     role: 'system',
@@ -579,21 +588,6 @@ function createErrorTaskChain(
       type: 'error',
       data: serializeForJson(error),
     },
-  }
-
-  const debugInfo = { error }
-
-  if (error instanceof Error && task) {
-    // preserve full debug info
-    debugInfo.error = {
-      message: error.message,
-      stack: error.stack,
-      cause: error.cause,
-    }
-  }
-
-  if (task?.id) {
-    void debugDb.upsert(task.id, debugInfo, 'shallow_merge')
   }
 
   return [

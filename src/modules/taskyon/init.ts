@@ -322,7 +322,13 @@ export async function tyCore(
         'updateToolDefinitions',
         'addPartialTask2Tree',
         'getMeta',
+        'metaUpsert',
         'metaLiveRead',
+        'getTaskChain',
+        // TODO: md taskchain and yaml conversation might be better as "utility-functions?" without a dependency
+        //       on taskManagerinstance..
+        'addMdTaskChain',
+        'loadYamlConversation',
       ],
     ),
     ...createProxyApi(() => ctx.secretStore, ['getSecret', 'setSecret', 'onNewSecret']),

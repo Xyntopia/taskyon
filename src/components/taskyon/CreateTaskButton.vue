@@ -15,9 +15,9 @@ const props = defineProps<{
 }>()
 
 const onAddTasks = async () => {
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
   try {
-    const newTaskId = await tm.addMdTaskChain(props.markdown)
+    const newTaskId = await ty.addMdTaskChain(props.markdown)
     state.setSelectedTask(newTaskId)
   } catch (error) {
     console.log('could not create taskchain from markdown!', error)

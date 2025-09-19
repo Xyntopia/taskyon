@@ -999,6 +999,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
     return addedTaskList
   }
 
+  // TODO: also move this outside of taskmanager!
   async function loadYamlConversation(input: File | string): Promise<string | undefined> {
     console.log('adding tasknodes & conversations from yaml input!')
 
@@ -1065,6 +1066,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
     addMdTaskChain,
     getMeta: metaDb.get,
     metaLiveRead: metaDb.readLive,
+    metaUpsert: metaDb.upsert,
   }
 }
 export type TyTaskManager = Awaited<ReturnType<typeof useTyTaskManager>>
