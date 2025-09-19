@@ -75,10 +75,10 @@ const secretList = ref<Record<string, Record<string, string>>>({})
 
 // extract your loader into its own function
 async function loadSecrets() {
-  const sst = await tystate.getSecretStore()
-  const ids = await sst.listSecretIds()
+  const ty = await tystate.taskyon
+  const ids = await ty.listSecretIds()
   const entries = await Promise.all(
-    ids.map(async (id) => [id.toString(), await sst.listSecrets(id)] as const),
+    ids.map(async (id) => [id.toString(), await ty.listSecrets(id)] as const),
   )
   secretList.value = Object.fromEntries(entries)
 }
@@ -86,32 +86,32 @@ async function loadSecrets() {
 onMounted(loadSecrets)
 
 const deleteSecrets = async (secretId: string, secretName: string) => {
-  const sst = await tystate.getSecretStore()
-  await sst.deleteSecret(secretId, secretName)
+  const ty = await tystate.taskyon
+  await ty.deleteSecret(secretId, secretName)
   // force re-render
   await loadSecrets()
 }
 
 const deleteAllSecrets = async (secretId: string) => {
-  const sst = await tystate.getSecretStore()
-  await sst.deleteAllFromId(secretId)
+  const ty = await tystate.taskyon
+  await ty.deleteAllFromId(secretId)
   await loadSecrets()
 }
 
 // only called on Enter or Save‑button
 const saveSecret = async (secretId: string, secretName: string) => {
   const newVal = secretList.value[secretId]![secretName]
-  const sst = await tystate.getSecretStore()
-  if (newVal) await sst.setSecret(secretId, secretName, newVal)
+  const ty = await tystate.taskyon
+  if (newVal) await ty.setSecret(secretId, secretName, newVal)
   // optional: refocus or toast here
   await loadSecrets()
 }
 
 const toolMap = asyncComputed(async () => {
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
   const tools: Record<string, string> = {}
   for (const c of Object.values(tystate.allTools)) {
-    const { tool, def } = await tm.getToolDefinition(c.name)
+    const { tool, def } = await ty.getToolDefinition(c.name)
     if (tool) {
       const id = await generateSecretId(def?.id, tool)
       tools[id] = def?.id ?? c.name

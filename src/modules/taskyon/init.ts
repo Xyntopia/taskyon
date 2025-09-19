@@ -341,7 +341,18 @@ export async function tyCore(
         'deleteTaskThread',
       ],
     ),
-    ...createProxyApi(() => ctx.secretStore, ['getSecret', 'setSecret', 'onNewSecret']),
+    ...createProxyApi(
+      () => ctx.secretStore,
+      [
+        'getSecret',
+        'setSecret',
+        'onNewSecret',
+        'listSecretIds',
+        'listSecrets',
+        'deleteSecret',
+        'deleteAllFromId',
+      ],
+    ),
     // TODO: not sure, if the iframeMultiPlexer should be a taskyon functionality?
     //       it seems very "GUI"-oriented... maybe simply sending a message on "outPort"
     //       would be sufficient?
