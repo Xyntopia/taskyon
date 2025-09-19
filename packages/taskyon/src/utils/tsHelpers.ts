@@ -44,3 +44,6 @@ export type AnyFunction<ReturnType> = (...args: any[]) => ReturnType
  * Type representing a thunk: a function that takes no arguments and returns T.
  */
 export type Thunk<T> = () => T
+
+// used to "hide" properties of a type to make it more readable..
+export type Identity<T> = T
