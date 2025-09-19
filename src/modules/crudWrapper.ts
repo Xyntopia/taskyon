@@ -150,6 +150,7 @@ export const withLiveStreams = <T>(
               unsubLive()
             }
           },
+          unsubscribeAll: liveForId.unsubscribeAll,
         }
       }
       return liveForId
