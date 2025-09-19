@@ -62,7 +62,7 @@
         >
       </q-btn>
     </div>
-    <q-separator />
+    <q-separator v-if="state.appConfiguration.expertMode" />
     <q-item v-if="state.appConfiguration.expertMode" clickable :to="`/taskmanager?t=${task.id}`">
       <q-item-section side>
         <q-icon :name="matSearch"></q-icon>
@@ -102,7 +102,7 @@
       </q-item-section>
       <q-item-section> Show task tree </q-item-section>
     </q-item>
-    <q-separator />
+    <q-separator v-if="state.appConfiguration.expertMode" />
     <div class="row justify-around" clickable @click="emit('download', task.id)">
       <q-btn class="col q-pa-sm" :icon="matDownload" flat @click="emit('download', task.id)">
         <q-tooltip :delay="0"> Download Task </q-tooltip>
