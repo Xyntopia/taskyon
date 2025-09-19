@@ -2,6 +2,9 @@ import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import {
   createCryptoSession,
   cryptoKeyToBase64,
+  decompressEncryptedObject,
+  deepCloneWJson,
+  encryptCompressObject,
   generateRandomEncryptionKey,
   generateSeedPhrase,
   ToolBase,
@@ -12,24 +15,18 @@ import type OpenAI from 'openai'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
-import { deepCloneWJson } from '../../../packages/taskyon/src/utils/objHelpers'
-import type { SecretStore } from '../crudWrapper'
-import {
-  decompressEncryptedObject,
-  encryptCompressObject,
-} from '../../../packages/taskyon/src/utils/fileUtils'
 import { useGdrive } from '../gdrive'
 import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
 import { getDatabase } from '../pglite.api'
 import { createDeepTransformer, normalizeFalsyValues, sleep } from '../utils'
 import { jsonSchemaToYamlString, zodToYamlString } from '../yamlUtils'
+import { initCryptoSessionFromBrowser } from './browserCryptoSession'
 import { useIpfs } from './ipfs'
 import { gDriveSyncPort } from './sync'
 import { createTaskNode } from './taskManager'
 import { chat2Md, getTextFile } from './taskUtils'
 import { craeteToolJsonSchema, summarizeTools } from './tools'
 import { useNlpWorker, usePyodideWebworker } from './webWorkerApi'
-import { initCryptoSessionFromBrowser } from './browserCryptoSession'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -909,20 +906,22 @@ export async function testGdriveZipRoundtrip() {
   }
 }
 
-export const testSecretStore = async (secretStore: SecretStore) => {
+export const testSecretStore = async () => {
   console.log('request a random secret from the store')
 
+  const ty = await tystate.taskyon
+
   const secretName = 'MYTESTTOKEN'
-  await secretStore.deleteSecret('diagnostics', secretName)
-  const MYTESTTOKEN = await secretStore.getSecret('diagnostics', secretName, true)
+  await ty.deleteSecret('diagnostics', secretName)
+  const MYTESTTOKEN = await ty.getSecret('diagnostics', secretName, true)
 
   // Generate a random string as the test secret
   const test_secret = Math.random().toString(36).slice(2) + Date.now().toString()
-  await secretStore.setSecret('diagnostics', secretName, test_secret)
-  const returned_secret = await secretStore.getSecret('diagnostics', secretName, true)
+  await ty.setSecret('diagnostics', secretName, test_secret)
+  const returned_secret = await ty.getSecret('diagnostics', secretName, true)
 
-  await secretStore.deleteSecret('diagnostics', 'unknown_secret')
-  const undefinedSecret = await secretStore.getSecret('diagnostics', 'unknown_secret', true)
+  await ty.deleteSecret('diagnostics', 'unknown_secret')
+  const undefinedSecret = await ty.getSecret('diagnostics', 'unknown_secret', true)
 
   return {
     MYTESTTOKEN,

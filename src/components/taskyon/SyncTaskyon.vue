@@ -380,8 +380,8 @@ const downloadSettings = (format: string) => {
 }
 
 async function onDownloadTaskyonData() {
-  const tm = await tystate.getTaskManager()
-  const jsonBackup = await tm.getJsonTaskBackup()
+  const ty = await tystate.taskyon
+  const jsonBackup = await ty.getJsonTaskBackup()
   console.log('downloading tasks in json format')
   const timestamp = new Date().toISOString()
   exportFile(`${timestamp}_taskyon_data.json`, jsonBackup, 'application/json')
@@ -394,8 +394,8 @@ async function onUploadTaskyonData(newFiles: File[]) {
 
   try {
     const fileContent = await file.text()
-    const tm = await tystate.getTaskManager()
-    await tm.addTaskBackup(fileContent)
+    const ty = await tystate.taskyon
+    await ty.addTaskBackup(fileContent)
     location.reload() // reload browser window to update app state...
   } catch (error) {
     console.error('Error processing file', error)

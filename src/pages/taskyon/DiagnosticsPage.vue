@@ -176,7 +176,7 @@ const tests = {
   'test crypto session': testCryptoSession,
   'task hashing': testTaskIdHashing,
   'test Pyodide': testPyodide,
-  'Test Secret Store': async () => testSecretStore(await tystate.getSecretStore()),
+  'Test Secret Store': testSecretStore,
   'test json schema to yam conversion': testJsonSchemaToYaml,
   'test build slim view': testBuildSlimView,
   'test openrouter websearch chatCompletion': testChatCompletion,

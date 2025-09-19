@@ -344,6 +344,14 @@ export async function tyCore(
         'getOpfsUploadedFile',
         'getFileMappingByUuid',
         'addFiles',
+        // TODO: also the following functionsnot sure, maybe we can generalize backup a bit more?
+        'getJsonTaskBackup',
+        'addTaskBackup',
+        // TODO:  what do these funcitons here do?
+        //        I think they bulid a treeview from tasks..  but it might make sense
+        //        to move them out of tycore and have them as seperate functions!
+        'buildTaskTreeNode',
+        'buildSiblingChain',
       ],
     ),
     ...createProxyApi(

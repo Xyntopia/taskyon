@@ -356,15 +356,15 @@ const tyChain2QTree = (taskChain: TaskTreeNode[][]) => {
 }
 
 const getQTree = async (taskID: string, justChildren = false) => {
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
 
-  const { task, children } = await tm.buildTaskTreeNode(taskID, 1)
+  const { task, children } = await ty.buildTaskTreeNode(taskID, 1)
 
   const childrenTrees = tyChain2QTree(children)
 
   if (justChildren) return childrenTrees
 
-  const siblings = await tm.buildSiblingChain(taskID, 1)
+  const siblings = await ty.buildSiblingChain(taskID, 1)
   const siblingNodes = tyList2QTree(siblings)
 
   const taskTree: taskTreeNodeType[] = [
