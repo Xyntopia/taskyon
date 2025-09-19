@@ -9,11 +9,12 @@ import {
   createPgLiteCrudWrapper,
   withSecretStore,
 } from '../crudWrapper'
-import type { IframeMultiPlexer, Port } from '../frpBus'
+import type { extractStreamType, IframeMultiPlexer, Port } from '../frpBus'
 import {
   createDuplexChannel,
   createIframeMux,
   createPortApi,
+  createStream,
   createTypeFilteredPort,
 } from '../frpBus'
 import { getDatabase } from '../pglite.api'
@@ -221,7 +222,7 @@ const dynamicContext =
     // taskyon should automatically pick up on this...
     console.log('starting taskyon worker')
     const { port: workerport } = createTypeFilteredPort(insidePort, ['functionResponse'])
-    const { workerStream, workerStop, queueTask } = runTaskWorker(
+    const { workerStream, stopAllTasks, queueTask } = runTaskWorker(
       llmSettings,
       taskManagerInstance,
       secretStore,
@@ -232,7 +233,7 @@ const dynamicContext =
     return {
       chatCompletionStream,
       workerStream,
-      workerStop,
+      stopAllTasks,
       queueTask,
       taskManagerInstance,
       secretStore,
@@ -289,10 +290,25 @@ export async function tyCore(
     // we need to re-initialize our entire context in order to have access to key store, decrypted data
     // etc with the new session...
     ctx = await ctxCreator(cs)
+
+    // re-connect all streams
+    ctx.workerStream.subscribe(workerStream.emit)
+    ctx.chatCompletionStream.subscribe(chatCompletionStream.emit)
   }
+  const workerStream = createStream<extractStreamType<typeof ctx.workerStream>>()
+  const chatCompletionStream = createStream<extractStreamType<typeof ctx.chatCompletionStream>>()
 
   return {
-    ...ctx,
+    // TODO: this is only an intermediate solution...
+    //        * we need to connect/disconnect streams
+    //        * we need to add functions that are nedded outside "directly" to the expoted functions
+    //        * we need to move all of these functions into a message port duplex API.
+    chatCompletionStream,
+    workerStream,
+    workerStop: (message: string) => ctx.stopAllTasks(message),
+    queueTask: (id: string) => ctx.queueTask(id),
+    //taskManagerInstance: () => ctx.taskManagerInstance,
+    //secretStore: () => ctx.secretStore,
     // TODO: not sure, if the iframeMultiPlexer should be a taskyon functionality?
     //       it seems very "GUI"-oriented... maybe simply sending a message on "outPort"
     //       would be sufficient?

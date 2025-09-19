@@ -561,7 +561,7 @@ export function runTaskWorker(
   }
   return {
     workerStream: taskProcessingStream.stream,
-    workerStop: stopAllTasks,
+    stopAllTasks,
     queueTask: externalQueueTask,
   }
 }
