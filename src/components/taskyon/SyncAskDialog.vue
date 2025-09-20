@@ -11,7 +11,7 @@
     <q-item>
       <q-item-section> Current Session ID: </q-item-section>
       <q-item-section>
-        <div class="text-weight-bolder text-h6">{{ tystate.sessionId?.slice(0, 5) }}</div>
+        <div class="text-weight-bolder text-h6">{{ state.sessionId?.slice(0, 5) }}</div>
       </q-item-section>
     </q-item>
     <q-item>
@@ -66,7 +66,7 @@
                   <div class="column items-center">
                     <div class="text-no-wrap">
                       Session ID:
-                      <span class="text-h6">{{ tystate.sessionId?.slice(0, 5) }}</span>
+                      <span class="text-h6">{{ state.sessionId?.slice(0, 5) }}</span>
                     </div>
                     <QrCode :data="generatedSharingLink" show-fullscreen />
                     <div class="row no-wrap items-center">

@@ -24,7 +24,7 @@ With Taskyon, your tasks are always **yours alone**.
         <q-item>
           <q-item-section>
             Device ID: {{ deviceStr?.['Device ID'] }} <br />
-            Session ID: {{ tystate.sessionId }}
+            Session ID: {{ state.sessionId }}
           </q-item-section>
         </q-item>
         <q-item v-if="false">
@@ -237,30 +237,30 @@ and verify the authenticity of messages sent by other users."
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import FileDropzone from 'components/FileDropzone.vue'
-import { copyToClipboard, exportFile, extend } from 'quasar'
-import { useTaskyonStore } from 'stores/taskyonState'
-import yaml from 'js-yaml'
-import { useGdrive } from 'src/modules/gdrive'
-import { deepMergeReactive } from 'src/modules/utils'
 import {
-  matSync,
-  matSave,
-  matDownload,
+  matContentCopy,
   matDeleteForever,
+  matDownload,
+  matSave,
+  matSync,
   matUpload,
   matWarning,
-  matContentCopy,
 } from '@quasar/extras/material-icons'
 import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
-import InfoDialog from '../InfoDialog.vue'
-import { keyPairFromMnemonic, generateSeedPhrase } from '@taskyon/taskyon'
-import { useAppStateStore } from 'src/stores/appState'
-import TyResetButton from './TyResetButton.vue'
+import { generateSeedPhrase, keyPairFromMnemonic } from '@taskyon/taskyon'
+import FileDropzone from 'components/FileDropzone.vue'
+import yaml from 'js-yaml'
+import { copyToClipboard, exportFile, extend } from 'quasar'
+import { useGdrive } from 'src/modules/gdrive'
 import { TyProfile } from 'src/modules/taskyon/types'
-import SyncAskDialog from './SyncAskDialog.vue'
+import { deepMergeReactive } from 'src/modules/utils'
 import { asyncComputed } from 'src/modules/vueUtils'
+import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { ref } from 'vue'
+import InfoDialog from '../InfoDialog.vue'
+import SyncAskDialog from './SyncAskDialog.vue'
+import TyResetButton from './TyResetButton.vue'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()

@@ -813,9 +813,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const { setNewSession, getDeviceId, newSessionFromGdrive, uploadSessionKey } =
     useSwitchCryptoSession(taskyon, gdp)
 
-  const sessionId = ref<string | null>(null)
   void taskyon.then(async (ty) => {
-    sessionId.value = await ty.getCryptoSession().getSessionId()
+    stateRefs.sessionId = await ty.getCryptoSession().getSessionId()
   })
 
   // switch user session on key change!
@@ -832,7 +831,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       const ty = await taskyon
       await ty.setNewSession(cs)
       // after we are finished switching, we can officially chang ethe session id...
-      sessionId.value = await cs.getSessionId()
+      stateRefs.sessionId = await cs.getSessionId()
     },
   )
 
@@ -1008,7 +1007,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   return {
     setNewSession,
-    sessionId: computed(() => sessionId.value),
     newSessionFromGdrive,
     uploadSessionKey,
     getToken,

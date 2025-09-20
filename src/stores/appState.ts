@@ -261,6 +261,10 @@ export const useAppStateStore = defineStore('ui-state', () => {
     return stateRefs.appConfiguration.guiMode
   })
 
+  // these are refs that we don't save:
+
+  const sessionId = ref<string | null>(null)
+
   // we do this funny next line, because our store is currently "reactive" which means
   // all scalars like strings, numbers etc..  ar actually non-reactive (vue reactive only converts
   // nested objects into reactive as well). So by doing "toRefs" we ensure that all values are reactive
@@ -273,6 +277,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
   return {
+    sessionId,
     bindingKey,
     setBindingKey,
     isInIframe: urlConfig.isInIframe,
