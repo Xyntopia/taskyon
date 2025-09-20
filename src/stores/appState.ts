@@ -74,6 +74,11 @@ function getInitialState() {
     // aware of different URLs etc...
     developerMode: false,
     useDevVersion: false,
+    // if true, taskyon store will wait until a binding key is provided
+    // this is persisted in local storage, so that on the next page reload
+    // taskyon will wait for the key before initializing taskyon code session
+    initWBindingKey: false,
+
     messageDebug: {} as Record<string, 'RAW' | 'MESSAGECONTENT' | 'RAWTASK' | 'ERROR' | undefined>, // whether message with ID should be open or not...
 
     // taskyon.space-specific section, TODO: move this somewhere else!
@@ -103,7 +108,7 @@ const useSessionKey = () => {
   return {
     bindingKey: computed(() => bindingKey.value),
     setBindingKey: (k: CryptoKey | null) => {
-      console.log('set new session bindingKey!', k ? 'add nwe key...' : 'delete key...')
+      console.log('set new session bindingKey!', k ? 'add new key...' : 'delete key...')
       bindingKey.value = k
     },
   }
@@ -116,8 +121,6 @@ const useSessionKey = () => {
 export const useAppStateStore = defineStore('ui-state', () => {
   // configuration from the URL!
   const { initialState, defaultStorableSettings } = getInitialState()
-
-  const { bindingKey, setBindingKey } = useSessionKey()
 
   const initialStoredStateObjTyped = initialStoredStateObj as
     | Partial<typeof initialState>
@@ -143,6 +146,12 @@ export const useAppStateStore = defineStore('ui-state', () => {
     clearBrowserStorage([currentTyProfileName])
     stateRefs = reactive(initialState)
   }
+
+  const { bindingKey, setBindingKey } = useSessionKey()
+
+  watch(bindingKey, () => {
+    stateRefs.initWBindingKey = bindingKey.value !== null
+  })
 
   // Flag that tells the persister to skip the next change
   let saveToLocalStorage = true

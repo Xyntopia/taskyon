@@ -44,6 +44,7 @@ import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
+import { until } from '@vueuse/core'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -639,6 +640,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // we use this here to confgure out taskyon logic
   const stateRefs = useAppStateStore()
 
+  // we are doing this here so that we can provide new suggestions on every
+  // page load
   stateRefs.appConfiguration.chatSuggestions = ChatSuggestions
 
   // callin ExecutionContext.interrupt();  cancels processing of current task
@@ -659,7 +662,26 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     )
   })
 
-  const taskyon = initCryptoSessionFromBrowser(undefined, true).then(async (cs) => {
+  // this means previously, we have loaded a session with a binding key.
+  // so we would like to wait a little bit, if we will get that same binding key...
+  const taskyon = (async () => {
+    if (stateRefs.initWBindingKey) {
+      console.log('waiting for session binding key to be set...')
+      const bindingKey = await until(() => stateRefs.bindingKey).toBeTruthy({ timeout: 5000 })
+      console.log('got session binding key!', bindingKey)
+      const initCs = initCryptoSessionFromBrowser(
+        {
+          bindingKey,
+        },
+        true,
+      )
+      return initCs
+    } else {
+      console.log('initializing session without binding key...')
+      const initCs = initCryptoSessionFromBrowser(undefined, true)
+      return initCs
+    }
+  })().then(async (cs) => {
     return await tyCore(stateRefs.llmSettings, stateRefs.keys, defineTyGuiTools(stateRefs), cs)
   })
 
@@ -821,7 +843,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   watch(
     () => stateRefs.bindingKey,
     async (newkey) => {
-      console.log('switch user session because of key change!')
       const cs = await initCryptoSessionFromBrowser(
         {
           bindingKey: newkey ?? undefined,
@@ -829,9 +850,14 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         true,
       )
       const ty = await taskyon
-      await ty.setNewSession(cs)
-      // after we are finished switching, we can officially chang ethe session id...
-      stateRefs.sessionId = await cs.getSessionId()
+      const newId = await cs.getSessionId()
+      const oldId = await ty.getCryptoSession().getSessionId()
+      if (newId !== oldId) {
+        console.log(`switch user session because of binding key change! ${oldId}->${newId}`)
+        await ty.setNewSession(cs)
+        // after we are finished switching, we can officially chang ethe session id...
+        stateRefs.sessionId = await cs.getSessionId()
+      }
     },
   )
 

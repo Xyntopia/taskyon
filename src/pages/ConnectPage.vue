@@ -8,7 +8,7 @@
         @click="downloadKeyFromGdrive(secret)"
       ></q-btn>
     </div>
-    <div v-else-if="incomingSessionId !== tystate.sessionId">
+    <div v-else-if="incomingSessionId !== state.sessionId">
       <icon :name="matWarning" />
       Before pressing the button below, confirm, that the previous device shows the following
       Session ID:
@@ -17,8 +17,8 @@
       If they are the same, you can proceed to connect!
       <q-btn flat label="Connect Device!" @click="setNewSessionKey" />
     </div>
-    <div v-else-if="incomingSessionId === tystate.sessionId">
-      Taskyon is now successfully connected to session {{ tystate.sessionId.slice(0, 5) }}.
+    <div v-else-if="incomingSessionId === state.sessionId">
+      Taskyon is now successfully connected to session {{ state.sessionId.slice(0, 5) }}.
     </div>
     <div v-else>something went wrong...</div>
     <div v-if="error">{{ error }}</div>
@@ -29,6 +29,7 @@
 import { matWarning } from '@quasar/extras/material-icons'
 import { type CryptoSession } from '@taskyon/taskyon'
 import { asyncComputed } from 'src/modules/vueUtils'
+import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
@@ -45,6 +46,7 @@ const incomingSessionId = asyncComputed(
 )
 
 const tystate = useTaskyonStore()
+const state = useAppStateStore()
 
 const route = useRoute()
 const secret = route.hash.slice(1)

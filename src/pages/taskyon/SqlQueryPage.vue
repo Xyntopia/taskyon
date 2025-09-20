@@ -105,11 +105,9 @@ import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 import { initializeTaskyon } from '../../../packages/tyclient/src'
 import { useAppStateStore } from 'src/stores/appState'
-import { useTaskyonStore } from 'src/stores/taskyonState'
 
 const taskyonUrl = window.location.origin
 const state = useAppStateStore()
-const tystate = useTaskyonStore()
 
 function copyJson() {
   copyToClipboard(formattedResult.value)
@@ -143,11 +141,11 @@ const db = ref<TyPGDB>()
 // we have to use watchEffect here, because a "computed" strips away private values
 // from a class and our db instance would become useless
 watchEffect(() => {
-  if (!tystate.sessionId) {
+  if (!state.sessionId) {
     db.value = undefined
     return
   }
-  void getDatabase(tystate.sessionId).then((database) => {
+  void getDatabase(state.sessionId).then((database) => {
     db.value = markRaw(database)
   })
 })

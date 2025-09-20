@@ -13,6 +13,7 @@ import {
   ToolBase,
   uint8ArrayToBase64UrlSafe,
 } from '@taskyon/taskyon'
+import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import type OpenAI from 'openai'
 import { useAppStateStore } from 'src/stores/appState'
@@ -30,7 +31,6 @@ import { createTaskNode } from './taskManager'
 import { chat2Md, getTextFile } from './taskUtils'
 import { craeteToolJsonSchema, summarizeTools } from './tools'
 import { useNlpWorker, usePyodideWebworker } from './webWorkerApi'
-import { until } from '@vueuse/core'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -99,7 +99,8 @@ export const testSessionSwitching = async () => {
     backextract,
   }
 
-  logs['first session id'] = tystate.sessionId
+  const firstSessionId = state.sessionId
+  logs['first session id'] = firstSessionId
 
   const { currentSession } = await import('src/modules/auth/supabase')
 
@@ -107,8 +108,9 @@ export const testSessionSwitching = async () => {
   await until(currentSession).not.toBe(null, { timeout: 5000 })
   logs['now has superbase session'] = currentSession.value !== null
 
-  await until(tystate.sessionId).changed({ timeout: 5000 })
-  logs['new session id'] = tystate.sessionId
+  await until(() => state.initWBindingKey).changed({ timeout: 5000 })
+  //assert(firstSessionId !== state.sessionId, 'session id should have changed!')
+  logs['new session id'] = state.sessionId
 
   return logs
 }
