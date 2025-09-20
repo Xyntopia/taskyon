@@ -820,7 +820,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // switch user session on key change!
   watch(
-    () => stateRefs.key,
+    () => stateRefs.bindingKey,
     async (newkey) => {
       console.log('switch user session because of key change!')
       const cs = await initCryptoSessionFromBrowser(

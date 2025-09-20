@@ -211,12 +211,26 @@ export async function unwrapWithSymmetricKey(
   )
 }
 
-export async function cryptoKeyToBase64(publicKey: CryptoKey): Promise<string> {
+export async function cryptoKeyToUint8(publicKey: CryptoKey) {
   const exported = await crypto.subtle.exportKey('raw', publicKey)
   // exported is ArrayBuffer (except JWK, but we don’t use it here)
-  const bytes = new Uint8Array(exported)
+  return new Uint8Array(exported)
+}
 
+export async function cryptoKeyToBase64(publicKey: CryptoKey): Promise<string> {
+  const bytes = await cryptoKeyToUint8(publicKey)
   return uint8ArrayToBase64UrlSafe(bytes.buffer) // your helper
+}
+
+export function base64ToPublixX25519(secret: string, extractable = false) {
+  const raw = base64UrlToUint8Array(secret) // your helper
+  return crypto.subtle.importKey(
+    'raw',
+    raw,
+    { name: 'X25519' }, // or the correct curve/algorithm
+    extractable, // extractable?
+    [],
+  )
 }
 
 // Auto-detect the crypto backend

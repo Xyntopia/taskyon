@@ -21,7 +21,7 @@ import defaultSettings from 'src/assets/taskyon_settings.json'
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 import type { PartialDeep } from 'type-fest'
 import { initialStoredStateObj, currentTyProfileName, urlConfig } from 'src/modules/ui/initialState'
-import type { FunctionCall } from '@taskyon/taskyon'
+import { type FunctionCall } from '@taskyon/taskyon'
 
 interface TaskWidgetStateType {
   markdownEnabled: boolean
@@ -98,13 +98,13 @@ function getInitialState() {
 }
 
 const useSessionKey = () => {
-  const ephemeralX25519Key = ref<CryptoKey | null>(null)
+  const bindingKey = ref<CryptoKey | null>(null)
 
   return {
-    key: computed(() => ephemeralX25519Key.value),
-    setKey: (k: CryptoKey | null) => {
-      console.log('set new cryptokey!')
-      ephemeralX25519Key.value = k
+    bindingKey: computed(() => bindingKey.value),
+    setBindingKey: (k: CryptoKey | null) => {
+      console.log('set new session bindingKey!', k ? 'add nwe key...' : 'delete key...')
+      bindingKey.value = k
     },
   }
 }
@@ -117,7 +117,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // configuration from the URL!
   const { initialState, defaultStorableSettings } = getInitialState()
 
-  const { key, setKey } = useSessionKey()
+  const { bindingKey, setBindingKey } = useSessionKey()
 
   const initialStoredStateObjTyped = initialStoredStateObj as
     | Partial<typeof initialState>
@@ -273,8 +273,8 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
   return {
-    key,
-    setKey,
+    bindingKey,
+    setBindingKey,
     isInIframe: urlConfig.isInIframe,
     urlConfig: urlConfig,
     setSelectedTask: (taskId: string | null | undefined) => {
