@@ -1,10 +1,13 @@
 import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import {
+  base64ToPublixX25519,
   createCryptoSession,
   cryptoKeyToBase64,
+  cryptoKeyToUint8,
   decompressEncryptedObject,
   deepCloneWJson,
   encryptCompressObject,
+  generateAssymetricKeyDeriver,
   generateRandomEncryptionKey,
   generateSeedPhrase,
   ToolBase,
@@ -27,6 +30,7 @@ import { createTaskNode } from './taskManager'
 import { chat2Md, getTextFile } from './taskUtils'
 import { craeteToolJsonSchema, summarizeTools } from './tools'
 import { useNlpWorker, usePyodideWebworker } from './webWorkerApi'
+import { until } from '@vueuse/core'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -76,6 +80,36 @@ type TestReport = {
     privateKeySecurityMaintained: boolean
     publicKeyAccessible: boolean
   }
+}
+
+export const testSessionSwitching = async () => {
+  const logs: Record<string, unknown> = {}
+  const keyPair = await generateAssymetricKeyDeriver()
+  const pkey = keyPair.publicKey
+  const publicBase64 = await cryptoKeyToBase64(pkey)
+
+  const backconvert = await base64ToPublixX25519(publicBase64, true)
+  const backextract = await cryptoKeyToBase64(backconvert)
+
+  assert(publicBase64 === backextract)
+
+  logs['session binding key storage (should all be the same)'] = {
+    public_uint8: uint8ArrayToBase64UrlSafe(await cryptoKeyToUint8(pkey)),
+    publicBase64,
+    backextract,
+  }
+
+  logs['first session id'] = await tystate.getSessionId()
+
+  const { currentSession } = await import('src/modules/auth/supabase')
+
+  logs['has superbase session'] = currentSession.value !== null
+  await until(currentSession).not.toBe(null, { timeout: 5000 })
+  logs['now has superbase session'] = currentSession.value !== null
+
+  logs['new session id'] = await tystate.getSessionId()
+
+  return logs
 }
 
 export const testIndexedDBKeyStorage = async (): Promise<TestReport> => {

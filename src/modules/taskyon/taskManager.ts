@@ -450,7 +450,7 @@ const withLock =
   less flexible...
 */
 export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: string) {
-  console.log('Initialize task manager.')
+  console.log('Initialize task manager with db:', taskyonDb.name)
 
   // because our tasks only have parent IDs defined, we keep a cache of
   // child IDs in order to be able to do faster tree traversals...

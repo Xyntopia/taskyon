@@ -176,9 +176,9 @@ const dynamicContext =
     //#####################  INIT CTX ####################
     const sessionKeyId = await cs.getSessionId()
     const db = await getDatabase(sessionKeyId)
-    console.log('starting new session with id:', sessionKeyId)
+    console.log('tycore starting new session with id:', sessionKeyId)
     const taskManagerInstance = await useTyTaskManager(db, llmSettings.vectorizationModel)
-    console.log('finished taskManager initialization')
+    console.log('tycore finished taskManager initialization')
     const secretStore = withSecretStore(
       createCombinedCrudWrapper([
         createMapCrudWrapper(new Map<string, EncryptedDataRow>()),
@@ -287,16 +287,19 @@ export async function tyCore(
   )
 
   const setNewSession = async (newCs: CryptoSession) => {
+    console.log('tycore setting new crypto session...')
     cs = newCs
     // we need to re-initialize our entire context in order to have access to key store, decrypted data
     // etc with the new session...
     ctx = await ctxCreator(cs)
 
     // re-connect all streams
+    console.log('tycore reconnecting streams to new context...')
     ctx.workerStream.subscribe(workerStream.emit)
     ctx.chatCompletionStream.subscribe(chatCompletionStream.emit)
     ctx.taskManagerInstance.taskStream.subscribe(taskStream.emit)
   }
+
   const workerStream = createStream<extractStreamType<typeof ctx.workerStream>>()
   const chatCompletionStream = createStream<extractStreamType<typeof ctx.chatCompletionStream>>()
   const taskStream = createStream<extractStreamType<typeof ctx.taskManagerInstance.taskStream>>()
