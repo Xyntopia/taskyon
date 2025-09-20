@@ -210,7 +210,7 @@ export function lruCache(size: number, ignoreIndices: number[] = []) {
 
       // Check for a cache hit.
       if (cache.has(key)) {
-        console.log('Cache hit:', key)
+        //console.log('Cache hit:', key)
         return cache.get(key) as ReturnType
       }
 
@@ -222,7 +222,7 @@ export function lruCache(size: number, ignoreIndices: number[] = []) {
       if (cache.size > size) {
         const oldestKey = Array.from(cache.keys())[0]!
         cache.delete(oldestKey)
-        console.log('Evicted:', oldestKey)
+        //console.log('Evicted:', oldestKey)
       }
 
       // Return the result.
@@ -258,10 +258,10 @@ export function timeLruCache<ReturnType>(
         const age = now - entry.timestamp
 
         if (age <= maxAge) {
-          console.log('Cache hit:', key)
+          //console.log('Cache hit:', key)
           return entry.value
         } else {
-          console.log('Cache expired:', key)
+          //console.log('Cache expired:', key)
           cache.delete(key) // Remove the expired entry.
         }
       }
@@ -391,10 +391,10 @@ export function asyncTimeLruCache(
         const age = now - entry.timestamp
 
         if (age <= maxAge) {
-          console.log('Cache hit:', key)
+          //console.log('Cache hit:', key)
           return entry.value
         } else {
-          console.log('Cache expired:', key)
+          //console.log('Cache expired:', key)
           if (lazyUpdate) {
             // Start updating the cache in the background
             Promise.resolve(fn(...args))
