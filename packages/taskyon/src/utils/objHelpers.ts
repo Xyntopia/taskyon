@@ -46,7 +46,12 @@ export function createProxyApi<T extends object, const K extends readonly (keyof
     const val = obj()[key]
     if (typeof val === 'function') {
       // Preserve `this` if the method uses it
-      api[key] = (...args: unknown[]) => val(...args)
+      api[key] = (...args: unknown[]) => {
+        // we have to load obj again here, because it might have changed
+        // thats why we have the proxy in the first place!
+        const f = obj()[key] as (...args: unknown[]) => unknown
+        return f(...args)
+      }
     } else {
       api[key] = () => obj()[key]
     }

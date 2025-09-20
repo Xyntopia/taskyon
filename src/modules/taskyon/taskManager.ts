@@ -546,6 +546,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
     ...tyCrud,
     get: async (id: string | number) =>
       await execWLock(async () => {
+        console.log('get task from db', taskyonDb.name)
         const task = await tyCrud.get(id)
         if (task) updateChildAndSiblingMap(task)
         return task

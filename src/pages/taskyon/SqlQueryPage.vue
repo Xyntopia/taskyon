@@ -89,7 +89,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watchEffect, markRaw } from 'vue'
+import type { TyPGDB } from 'src/modules/pglite.api'
 import { getDatabase } from 'src/modules/pglite.api'
 import { asyncComputed } from 'src/modules/vueUtils'
 
@@ -138,9 +139,18 @@ const sqlQuery = ref('SELECT * FROM sample_table;')
 const queryResult = ref<unknown>(null)
 let lastQuery: string | null = null
 const errorMessage = ref('')
-const db = asyncComputed(async () => {
-  return tystate.sessionId ? await getDatabase(tystate.sessionId) : undefined
-}, undefined)
+const db = ref<TyPGDB>()
+// we have to use watchEffect here, because a "computed" strips away private values
+// from a class and our db instance would become useless
+watchEffect(() => {
+  if (!tystate.sessionId) {
+    db.value = undefined
+    return
+  }
+  void getDatabase(tystate.sessionId).then((database) => {
+    db.value = markRaw(database)
+  })
+})
 
 // Table view state
 const isTabularResult = ref(false)
