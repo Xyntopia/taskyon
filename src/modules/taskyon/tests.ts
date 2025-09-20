@@ -99,7 +99,7 @@ export const testSessionSwitching = async () => {
     backextract,
   }
 
-  logs['first session id'] = await tystate.getSessionId()
+  logs['first session id'] = tystate.sessionId
 
   const { currentSession } = await import('src/modules/auth/supabase')
 
@@ -107,7 +107,8 @@ export const testSessionSwitching = async () => {
   await until(currentSession).not.toBe(null, { timeout: 5000 })
   logs['now has superbase session'] = currentSession.value !== null
 
-  logs['new session id'] = await tystate.getSessionId()
+  await until(tystate.sessionId).changed({ timeout: 5000 })
+  logs['new session id'] = tystate.sessionId
 
   return logs
 }

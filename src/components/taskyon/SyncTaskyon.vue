@@ -23,8 +23,8 @@ With Taskyon, your tasks are always **yours alone**.
       <q-expansion-item label="ID Management" expand-separator class="q-py-sm">
         <q-item>
           <q-item-section>
-            Device ID: {{ deviceStr?.['Device ID'] }} <br />Session ID:
-            {{ deviceStr?.['Session ID'] }}
+            Device ID: {{ deviceStr?.['Device ID'] }} <br />
+            Session ID: {{ tystate.sessionId }}
           </q-item-section>
         </q-item>
         <q-item v-if="false">
@@ -271,10 +271,7 @@ const pressedSeedPhraseCopyButton = ref(false)
 const seedPhrase = ref('')
 
 const deviceStr = asyncComputed(
-  async () => ({
-    'Device ID': await tystate.getDeviceId(),
-    'Session ID': await tystate.getSessionId(),
-  }),
+  async () => ({ 'Device ID': await tystate.getDeviceId() }),
   undefined,
 )
 

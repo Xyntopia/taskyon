@@ -216,7 +216,7 @@ const dynamicContext =
       createOAuthTool(secretStore),
     )
     taskManagerInstance.addDefaultTools(ToolList)
-    void taskManagerInstance.updateToolDefinitions()
+    await taskManagerInstance.updateToolDefinitions()
     //const { port: taskPort } = createZodPort(inPort, TaskWorkerMessage)
 
     // keys could porentially be reactive here, so in theory, when they change in the GUI,
@@ -286,6 +286,10 @@ export async function tyCore(
     () => cs,
   )
 
+  const workerStream = createStream<extractStreamType<typeof ctx.workerStream>>()
+  const chatCompletionStream = createStream<extractStreamType<typeof ctx.chatCompletionStream>>()
+  const taskStream = createStream<extractStreamType<typeof ctx.taskManagerInstance.taskStream>>()
+
   const setNewSession = async (newCs: CryptoSession) => {
     console.log('tycore setting new crypto session...')
     cs = newCs
@@ -294,15 +298,11 @@ export async function tyCore(
     ctx = await ctxCreator(cs)
 
     // re-connect all streams
-    console.log('tycore reconnecting streams to new context...')
     ctx.workerStream.subscribe(workerStream.emit)
     ctx.chatCompletionStream.subscribe(chatCompletionStream.emit)
     ctx.taskManagerInstance.taskStream.subscribe(taskStream.emit)
+    console.log('tycore finished initializing new session...')
   }
-
-  const workerStream = createStream<extractStreamType<typeof ctx.workerStream>>()
-  const chatCompletionStream = createStream<extractStreamType<typeof ctx.chatCompletionStream>>()
-  const taskStream = createStream<extractStreamType<typeof ctx.taskManagerInstance.taskStream>>()
 
   const api = {
     // TODO: this is only an intermediate solution...

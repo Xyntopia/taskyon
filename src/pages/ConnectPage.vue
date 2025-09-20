@@ -8,7 +8,7 @@
         @click="downloadKeyFromGdrive(secret)"
       ></q-btn>
     </div>
-    <div v-else-if="incomingSessionId !== existingSessionId">
+    <div v-else-if="incomingSessionId !== tystate.sessionId">
       <icon :name="matWarning" />
       Before pressing the button below, confirm, that the previous device shows the following
       Session ID:
@@ -17,8 +17,8 @@
       If they are the same, you can proceed to connect!
       <q-btn flat label="Connect Device!" @click="setNewSessionKey" />
     </div>
-    <div v-else-if="incomingSessionId === existingSessionId">
-      Taskyon is now successfully connected to session {{ existingSessionId?.slice(0, 5) }}.
+    <div v-else-if="incomingSessionId === tystate.sessionId">
+      Taskyon is now successfully connected to session {{ tystate.sessionId.slice(0, 5) }}.
     </div>
     <div v-else>something went wrong...</div>
     <div v-if="error">{{ error }}</div>
@@ -46,9 +46,6 @@ const incomingSessionId = asyncComputed(
 
 const tystate = useTaskyonStore()
 
-const existingSessionId = ref<string>()
-void tystate.getSessionId().then((id) => (existingSessionId.value = id))
-
 const route = useRoute()
 const secret = route.hash.slice(1)
 const error = ref<string>()
@@ -65,8 +62,6 @@ const setNewSessionKey = async () => {
   if (temporarySession.value) {
     await tystate.setNewSession(temporarySession.value, true)
   }
-  // recalculate new session id..
-  existingSessionId.value = await tystate.getSessionId()
 }
 
 //route.hash = ''

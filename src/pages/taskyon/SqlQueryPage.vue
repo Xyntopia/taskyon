@@ -89,8 +89,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, computed, onMounted } from 'vue'
-import { getDatabase, type TyPGDB } from 'src/modules/pglite.api'
+import { ref, computed, onMounted } from 'vue'
+import { getDatabase } from 'src/modules/pglite.api'
 import { asyncComputed } from 'src/modules/vueUtils'
 
 // Taskyon
@@ -108,6 +108,7 @@ import { useTaskyonStore } from 'src/stores/taskyonState'
 
 const taskyonUrl = window.location.origin
 const state = useAppStateStore()
+const tystate = useTaskyonStore()
 
 function copyJson() {
   copyToClipboard(formattedResult.value)
@@ -137,7 +138,9 @@ const sqlQuery = ref('SELECT * FROM sample_table;')
 const queryResult = ref<unknown>(null)
 let lastQuery: string | null = null
 const errorMessage = ref('')
-const db = shallowRef<TyPGDB>()
+const db = asyncComputed(async () => {
+  return tystate.sessionId ? await getDatabase(tystate.sessionId) : undefined
+}, undefined)
 
 // Table view state
 const isTabularResult = ref(false)
@@ -165,6 +168,7 @@ async function addSampleTable() {
 
 // List tables
 const allTables = asyncComputed(async () => {
+  console.log('all tables', db.value?.name)
   if (!db.value) return [] as string[]
   const res = await db.value.query(
     "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';",
@@ -382,10 +386,7 @@ FROM
 }
 
 // Mount: init DB and Taskyon tools (unchanged)
-onMounted(async () => {
-  const tystate = useTaskyonStore()
-  db.value = await getDatabase(await tystate.getSessionId())
-
+onMounted(() => {
   // Taskyon tools
   const tools = [
     createTool({
