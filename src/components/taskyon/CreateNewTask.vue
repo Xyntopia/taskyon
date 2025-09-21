@@ -122,7 +122,7 @@
           aria-label="quick ai settings"
         >
           <template #btnContent><q-tooltip> More AI Settings</q-tooltip></template>
-          <div class="q-pa-sm">
+          <div class="q-pa-sm" @click.stop>
             <ObjectTreeView
               v-model="slimSettings.reactiveView"
               :schema="slimSettings.jsonSchema"

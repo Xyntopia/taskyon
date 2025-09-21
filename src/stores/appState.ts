@@ -23,6 +23,7 @@ import type { PartialDeep } from 'type-fest'
 import {
   defaultProfileName,
   getCurrentProfileName,
+  getTaskyonUiProfile,
   initialStoredStateObj,
   switchCurrentProfilePointer,
   urlConfig,
@@ -282,10 +283,11 @@ export const useAppStateStore = defineStore('ui-state', () => {
       const profileName = `session_${newId}`
       // we don't need to save our old state, as it should have been persisted automatically
       switchCurrentProfilePointer(profileName)
-      // we also need to save our current state into the new profile!
     } else {
       switchCurrentProfilePointer(defaultProfileName)
     }
+    // re-load state with new profile!
+    Object.assign(stateRefs, getTaskyonUiProfile(getCurrentProfileName()))
   })
 
   // we do this funny next line, because our store is currently "reactive" which means
