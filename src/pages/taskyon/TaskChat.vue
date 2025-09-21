@@ -32,15 +32,15 @@
         :expert-mode="state.appConfiguration.expertMode"
         @on-size-change="scm.autoScroll"
       />
-      <div v-else-if="loadingChat" class="text-h6 q-pa-xl column">
-        loading new chat!!
-        <q-spinner-box color="secondary" size="2em" />
+      <div v-else-if="loadingChat" class="text-secondary text-h6 q-pa-xl column items-center">
+        loading chat
+        <q-spinner-comment color="q-ma-md" size="2em" />
       </div>
       <!-- Welcome Message -->
       <div
         v-else
         class="column justify-center items-center q-pa-lg welcome"
-        style="max-width: 600px"
+        style="max-width: 650px"
       >
         <div class="welcome-message column items-center">
           <GetStarted />

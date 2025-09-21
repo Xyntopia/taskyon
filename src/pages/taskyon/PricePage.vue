@@ -2,7 +2,7 @@
   <q-page padding>
     <q-card flat>
       <!-- ───────── Intro ───────── -->
-      <q-card-section>
+      <q-card-section class="taskyon-pricing">
         <q-expansion-item
           header-class="text-h6"
           label="Infos and pricing for all available Models."
