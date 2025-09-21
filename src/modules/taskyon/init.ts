@@ -290,6 +290,15 @@ export async function tyCore(
   const chatCompletionStream = createStream<extractStreamType<typeof ctx.chatCompletionStream>>()
   const taskStream = createStream<extractStreamType<typeof ctx.taskManagerInstance.taskStream>>()
 
+  const connectStreams = () => {
+    // re-connect all streams
+    ctx.workerStream.subscribe(workerStream.emit)
+    ctx.chatCompletionStream.subscribe(chatCompletionStream.emit)
+    ctx.taskManagerInstance.taskStream.subscribe(taskStream.emit)
+  }
+
+  connectStreams()
+
   const setNewSession = async (newCs: CryptoSession) => {
     console.log('tycore setting new crypto session...')
     cs = newCs
@@ -297,10 +306,8 @@ export async function tyCore(
     // etc with the new session...
     ctx = await ctxCreator(cs)
 
-    // re-connect all streams
-    ctx.workerStream.subscribe(workerStream.emit)
-    ctx.chatCompletionStream.subscribe(chatCompletionStream.emit)
-    ctx.taskManagerInstance.taskStream.subscribe(taskStream.emit)
+    connectStreams()
+
     console.log('tycore finished initializing new session...')
   }
 
