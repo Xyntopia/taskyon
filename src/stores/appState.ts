@@ -20,7 +20,13 @@ import defaultSettings from 'src/assets/taskyon_settings.json'
 // TODO: remove, to make this file here faster...
 import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 import type { PartialDeep } from 'type-fest'
-import { initialStoredStateObj, currentTyProfileName, urlConfig } from 'src/modules/ui/initialState'
+import {
+  defaultProfileName,
+  getCurrentProfileName,
+  initialStoredStateObj,
+  switchCurrentProfilePointer,
+  urlConfig,
+} from 'src/modules/ui/initialState'
 import { type FunctionCall } from '@taskyon/taskyon'
 
 interface TaskWidgetStateType {
@@ -143,15 +149,9 @@ export const useAppStateStore = defineStore('ui-state', () => {
         initialStoredStateObjTyped?.version || 'undefined'
       }) is not compatible with current version (${initialState.version}). Using default settings.`,
     )
-    clearBrowserStorage([currentTyProfileName])
+    clearBrowserStorage([getCurrentProfileName()])
     stateRefs = reactive(initialState)
   }
-
-  const { bindingKey, setBindingKey } = useSessionKey()
-
-  watch(bindingKey, () => {
-    stateRefs.initWBindingKey = bindingKey.value !== null
-  })
 
   // Flag that tells the persister to skip the next change
   let saveToLocalStorage = true
@@ -160,7 +160,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
   watch(stateRefs, (newState) => {
     //console.log('saved store!!');
     if (saveToLocalStorage) {
-      LocalStorage.set(currentTyProfileName, JSON.stringify(newState))
+      LocalStorage.set(getCurrentProfileName(), JSON.stringify(newState))
     }
   })
 
@@ -271,8 +271,22 @@ export const useAppStateStore = defineStore('ui-state', () => {
   })
 
   // these are refs that we don't save:
-
   const sessionId = ref<string | null>(null)
+  const { bindingKey, setBindingKey } = useSessionKey()
+  watch(bindingKey, () => {
+    stateRefs.initWBindingKey = bindingKey.value !== null
+  })
+  watch(sessionId, (newId) => {
+    console.log('switch Profile to new sessionId:', newId)
+    if (newId) {
+      const profileName = `session_${newId}`
+      // we don't need to save our old state, as it should have been persisted automatically
+      switchCurrentProfilePointer(profileName)
+      // we also need to save our current state into the new profile!
+    } else {
+      switchCurrentProfilePointer(defaultProfileName)
+    }
+  })
 
   // we do this funny next line, because our store is currently "reactive" which means
   // all scalars like strings, numbers etc..  ar actually non-reactive (vue reactive only converts

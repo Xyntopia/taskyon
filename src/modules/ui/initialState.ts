@@ -1,3 +1,4 @@
+//initialstate.ts
 import { LocalStorage } from 'quasar'
 import type { TyProfile } from 'src/modules/taskyon/types'
 import type { PartialDeep } from 'type-fest'
@@ -16,8 +17,14 @@ export function getUrlConfig() {
 
 export const urlConfig = getUrlConfig()
 
-export const currentTyProfileName = urlConfig.profile ?? 'currentState'
-console.log('load saved app state!')
+export const defaultProfileName = 'defaultProfile'
+const profilePointerKey = 'currentProfile'
+export const getCurrentProfileName = () =>
+  urlConfig.profile ?? LocalStorage.getItem(profilePointerKey) ?? defaultProfileName
+
+export const switchCurrentProfilePointer = (newProfileName: string) =>
+  LocalStorage.setItem(profilePointerKey, newProfileName)
+
 export const getStoredStateString = (name: string) => LocalStorage.getItem(name) as string
 
 export const getTaskyonUiProfile = (name: string) => {
@@ -26,4 +33,4 @@ export const getTaskyonUiProfile = (name: string) => {
   return stateObj
 }
 
-export const initialStoredStateObj = getTaskyonUiProfile(currentTyProfileName)
+export const initialStoredStateObj = getTaskyonUiProfile(getCurrentProfileName())
