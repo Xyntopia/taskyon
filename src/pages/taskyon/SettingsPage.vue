@@ -70,16 +70,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import LLMProviders from 'components/taskyon/LLMProviders.vue'
 import ObjectTreeView from 'components/ObjectTreeView.vue'
-import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'
-import { useRoute } from 'vue-router'
 import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
-import { useAppStateStore } from 'src/stores/appState'
-import { convertZodToJsonSchemaCached, TyProfile } from 'src/modules/taskyon/types'
-import PasswordManager from 'src/components/taskyon/PasswordManager.vue'
+import LLMProviders from 'components/taskyon/LLMProviders.vue'
+import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'
 import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
+import PasswordManager from 'src/components/taskyon/PasswordManager.vue'
+import { convertZodToJsonSchemaCached, TyProfile } from 'src/modules/taskyon/types'
+import { useAppStateStore } from 'src/stores/appState'
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 
 const route = useRoute()
 const state = useAppStateStore()
