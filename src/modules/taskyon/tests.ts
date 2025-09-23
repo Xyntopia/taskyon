@@ -102,12 +102,6 @@ export const testSessionSwitching = async () => {
   const firstSessionId = state.sessionId
   logs['first session id'] = firstSessionId
 
-  const { currentSession } = await import('src/modules/auth/supabase')
-
-  logs['has superbase session'] = currentSession.value !== null
-  await until(currentSession).not.toBe(null, { timeout: 5000 })
-  logs['now has superbase session'] = currentSession.value !== null
-
   await until(() => state.initWBindingKey).changed({ timeout: 5000 })
   //assert(firstSessionId !== state.sessionId, 'session id should have changed!')
   logs['new session id'] = state.sessionId

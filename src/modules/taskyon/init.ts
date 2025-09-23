@@ -10,7 +10,7 @@ import {
   createPgLiteCrudWrapper,
   withSecretStore,
 } from '../crudWrapper'
-import type { extractStreamType, IframeMultiPlexer, Port } from '../frpBus'
+import type { extractStreamType, IframeMultiPlexer, Port } from '@taskyon/taskyon'
 import {
   createDuplexChannel,
   createIframeMux,

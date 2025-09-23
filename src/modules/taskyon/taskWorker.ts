@@ -7,20 +7,13 @@ import {
   taskResult,
   type toolContext,
 } from '@taskyon/taskyon'
-import type { CrudWrapper, SecretStore } from '../crudWrapper'
+import type { SecretStore } from '../crudWrapper'
 import { createChatCompletionTask } from '../tools/chatCompletionTool'
 import { createAsyncQueue, humanizeError, serializeForJson, sleep } from '../utils'
 import { type TyTaskManager } from './taskManager'
 import type { RemoteFunctionPort } from './tools'
 import { handleFunctionExecution } from './tools'
-import { createAsyncQueue, humanizeError, serializeForJson, sleep } from '../utils'
-import { createChatCompletionTask } from '../tools/chatCompletionTool'
-import type { SecretStore } from '../crudWrapper'
-import type { TaskMessageStream } from '../frpBus'
-import { createMessagePortAdapter, createStream, filter } from '../frpBus'
-import { sha256UrlSafeHash } from '@taskyon/taskyon'
-import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
-import { taskResult, type toolContext } from '@taskyon/taskyon'
+import { getApiConfigCopy, type llmSettings, type TyTaskStreamData } from './types'
 
 export async function generateSecretId(
   taskId: string | undefined,
@@ -357,7 +350,7 @@ const createTaskProcessor = (
         return // early return, because this task is not a functioncall task
       }
 
-      // signal to the outside world that we are processing a task
+      // signal to the outside world that we sare processing a task
       // this signals to the GUI that this task is activly being processes.
       // this is for example important to signal which stream should be displayed and
       // which task to choose as the "leaf" of a chain.
