@@ -1,17 +1,4 @@
-// p2p.ts
-// check this link here for an example how to get this going:
-//
-// we are taking a lot of inspiration frm the follwoing examples:
-//
-//  https://github.com/libp2p/libp2p-webrtc-guide
-//  https://github.com/libp2p/universal-connectivity
-//  https://github.com/libp2p/go-libp2p/tree/master/examples/chat-with-rendezvous
-//  https://github.com/libp2p/js-libp2p/
-
-// TODO: support this: https://github.com/libp2p/js-libp2p/tree/main/packages/transport-webrtc
-//       more specifically:   webrtc-direct https://github.com/libp2p/js-libp2p/tree/main/packages/transport-webrtc#example---webrtc-direct
-
-import type { GossipSub } from '@chainsafe/libp2p-gossipsub'
+// universal-connectivity
 import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
@@ -19,7 +6,7 @@ import type { DelegatedRoutingV1HttpApiClient } from '@helia/delegated-routing-v
 import { createDelegatedRoutingV1HttpApiClient } from '@helia/delegated-routing-v1-http-api-client'
 import { circuitRelayTransport } from '@libp2p/circuit-relay-v2'
 import { identify } from '@libp2p/identify'
-import type { Connection, Message, PeerId, SignedMessage, Libp2p } from '@libp2p/interface'
+import type { Connection, Libp2p, Message, PeerId, SignedMessage } from '@libp2p/interface'
 import { enable, prefixLogger } from '@libp2p/logger'
 import { peerIdFromString } from '@libp2p/peer-id'
 import { ping } from '@libp2p/ping'
@@ -28,131 +15,49 @@ import { webRTC, webRTCDirect } from '@libp2p/webrtc'
 import { webSockets } from '@libp2p/websockets'
 import { webTransport } from '@libp2p/webtransport'
 import type { Multiaddr } from '@multiformats/multiaddr'
-import { multiaddr } from '@multiformats/multiaddr'
+import first from 'it-first'
 import { createLibp2p } from 'libp2p'
-import type { Port } from '../utils/frpBus'
-import { createDuplexChannel } from '../utils/frpBus'
+import { sha256 } from 'multiformats/hashes/sha2'
 import { BOOTSTRAP_PEER_IDS, CHAT_FILE_TOPIC, CHAT_TOPIC, PUBSUB_PEER_DISCOVERY } from './constants'
 import { directMessage } from './direct-message'
-import { getAddresses, getPeerDetails, getPeerTypes } from './p2putils'
-import { sha256 } from 'multiformats/hashes/sha2'
-import { first } from '../utils/objHelpers'
 
 const prefix = `ui`
 const logger = prefixLogger(prefix)
 const log = logger.forComponent('libp2p')
 
-export const bootstrapList = [
-  //'/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb',
-  //'/ip4/192.168.188.111/tcp/9111/ws/p2p/12D3KooWKkVyefXaxbCkvQfxctMrQtBrnxrbmWYv6oyHn5ibSbTq',
-  //'/ip4/213.199.53.86/tcp/9111/ws/p2p/12D3KooWEa5Fxzb7jrCMTdt4UGycyrCoM2NHLhQCYR1odRzjAx2c',
-  //'/dnsaddr/share.taskyon.space/tcp/9111/ws/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb',
-  '/ip4/213.199.53.86/tcp/9111/ws/p2p/12D3KooWSW1HFrSd2kwPzXBvVth5NJ4s3Ydf6VQ5CugPxqZU5Fa3',
-  //'/dnsaddr/share.taskyon.space/9111/ws/p2p/12D3KooWSW1HFrSd2kwPzXBvVth5NJ4s3Ydf6VQ5CugPxqZU5Fa3', //'/ip4/127.0.0.1/tcp/9111/ws',
-  //'/ip4/127.0.0.1/tcp/9111/ws/p2p/12D3KooWSW1HFrSd2kwPzXBvVth5NJ4s3Ydf6VQ5CugPxqZU5Fa3',
-  //'/ip4/127.0.0.1/tcp/9111/ws/p2p/12D3KooWSW1HFrSd2kwPzXBvVth5NJ4s3Ydf6VQ5CugPxqZU5Fa3',
-  //'/ip4/127.0.0.1/tcp/9111/ws/p2p/12D3KooWALpzWi4e1mwFEYTGaSJPqjZLfCXohFVXadcFrsRNm95b',
-]
+export async function startLibp2p() {
+  // enable verbose logging in browser console to view debug logs
+  enable('ui*,libp2p*,-libp2p:connection-manager*,-*:trace')
 
-// all libp2p debug logs
-//localStorage.setItem('debug', 'libp2p:*') // then refresh the page to ensure the libraries can read this when spinning up.
-// networking debug logs
-//localStorage.setItem('debug', 'libp2p:websockets,libp2p:webtransport,libp2p:kad-dht,libp2p:dialer')
-
-type P2PMessage = {
-  type: 'log'
-  message: unknown
-  topic?: string
-}
-
-// Types
-type PeerNetwork = {
-  start: () => Promise<void>
-  stop: () => Promise<void>
-  joinSubnet?: (secret: Uint8Array) => Promise<Subnet>
-  getPeerId: () => string | undefined
-  port: Port<P2PMessage, P2PMessage>
-}
-
-export type NodeInfo = {
-  peerCount: number
-  peerTypes: {
-    'Circuit Relay': number
-    WebRTC: number
-    'WebRTC Direct': number
-    WebSockets: number
-    'WebSockets (secure)': number
-    WebTransport: number
-    Other: number
-  }
-  nodeAddressCount: number
-  nodeAddresses: string[]
-  nodePeerDetails: {
-    nodeType: string[]
-    peerConnections: string[]
-  }[]
-}
-
-interface libp2pNetwork extends PeerNetwork {
-  connectWith: (addr: string) => Promise<unknown>
-  info: () => NodeInfo
-  enableLogging: (enableLogging: boolean) => void
-}
-
-type Subnet = {
-  publish: (msg: Uint8Array) => Promise<void>
-  onMessage: (cb: (from: string, msg: Uint8Array) => void) => void
-  getPeers: () => string[]
-}
-
-// TODO: add TCP/UDP port for when we run taskyon on a server!
-const createNode = async () => {
   const delegatedClient = createDelegatedRoutingV1HttpApiClient('https://delegated-ipfs.dev')
+
   const relayListenAddrs = await getRelayListenAddrs(delegatedClient)
   log('starting libp2p with relayListenAddrs: %o', relayListenAddrs)
 
-  return createLibp2p({
+  const libp2p = await createLibp2p({
     addresses: {
       listen: [
-        // 👇 Required to create circuit relay reservations in order to hole punch browser-to-browser WebRTC connections
-        //'/p2p-circuit',
         // 👇 Listen for webRTC connection
         '/webrtc',
         ...relayListenAddrs,
-        // '/ip4/0.0.0.0/tcp/9111/ws',
       ],
     },
     transports: [
-      webSockets(),
       webTransport(),
+      webSockets(),
+      webRTC(),
       // 👇 Required to estalbish connections with peers supporting WebRTC-direct, e.g. the Rust-peer
       webRTCDirect(),
-      /*webRTC({
-        rtcConfiguration: {
-          iceServers: [
-            {
-              urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'],
-            },
-          ],
-        },
-      }),*/
-      webRTC(),
+      // 👇 Required to create circuit relay reservations in order to hole punch browser-to-browser WebRTC connections
       circuitRelayTransport(),
     ],
     connectionEncrypters: [noise()],
-    // backup if we have a version mismatch: @ts-expect-error libp2p-yamux type mismatch
-    // right now we solve this issue by adding {"resolutions": { "@libp2p/interface": "2.11.0"}
-    // to our package.json. which makes libp2p use the correct yamu version.
     streamMuxers: [yamux()],
     connectionGater: {
-      // Allow private addresses for local testing
-      denyDialMultiaddr: () => false,
+      // eslint-disable-next-line @typescript-eslint/require-await
+      denyDialMultiaddr: async () => false,
     },
     peerDiscovery: [
-      /*bootstrap({
-        timeout: 1,
-        list: bootstrapList,
-      }),*/
       pubsubPeerDiscovery({
         interval: 10_000,
         topics: [PUBSUB_PEER_DISCOVERY],
@@ -169,110 +74,43 @@ const createNode = async () => {
       // This relies on the public delegated routing endpoint https://docs.ipfs.tech/concepts/public-utilities/#delegated-routing
       delegatedRouting: () => delegatedClient,
       identify: identify(),
-      //autoNat: autoNAT(),
+      // Custom protocol for direct messaging
       directMessage: directMessage(),
       ping: ping(),
     },
   })
-}
 
-// Factory function to create a PeerNetwork
-export const createPeerNetwork = async (): Promise<libp2pNetwork> => {
-  //enable('ui*,libp2p*,-libp2p:connection-manager*,-*:trace')
-  //enable('ui*,libp2p*')
-  enable('ui*,libp2p*,-libp2p:connection-manager*,-*:trace')
-
-  const enableLogging = (enableLogging: boolean) => {
-    log('enable logging', enableLogging)
-    //if (enableLogging) enable('*,*:debug')
-    //else disable()
+  if (!libp2p) {
+    throw new Error('Failed to create libp2p node')
   }
-  // enable logging by default..
-  enableLogging(true)
 
-  //const subnets: Record<string, Subnet> = {}
-  const node: Libp2p = await createNode()
-  const { x: inside, y: outside } = createDuplexChannel<P2PMessage, P2PMessage>()
+  libp2p.services.pubsub.subscribe(CHAT_TOPIC)
+  libp2p.services.pubsub.subscribe(CHAT_FILE_TOPIC)
 
-  //node.addEventListener('')
-
-  node.addEventListener(
-    'peer:discovery',
-    (evt) =>
-      // because a void return is expected we can't use the async function directly.....
-      void (async (evt) => {
-        const { multiaddrs, id } = evt.detail
-        // Encapsulate the peer ID to ensure dialing succeeds
-        // Should be removed once https://github.com/libp2p/js-libp2p/issues/3239 is resolved.
-        const maddrs = multiaddrs.map((ma) => ma.encapsulate(`/p2p/${id.toString()}`))
-        if (node.getConnections(id)?.length > 0) {
-          log(`Already connected to peer %s. Will not try dialling`, id)
-          return
-        }
-        console.log(
-          `Discovered new peer (${evt.detail.id.toString()}). Dialling:`,
-          maddrs.map((ma) => ma.toString()),
-        )
-
-        inside.send({
-          type: 'log',
-          message: evt.detail,
-          topic: 'peer:discovery',
-        })
-        await dialWebRTCMaddrs(node, multiaddrs)
-      })(evt),
-  )
-
-  // libp2p list of events:
-  // https://libp2p.github.io/js-libp2p/interfaces/_libp2p_interface.Libp2pEvents.html
-  node.addEventListener('peer:connect', (event) =>
-    inside.send({ type: 'log', message: event.detail, topic: 'peer:connect' }),
-  )
-  node.addEventListener('peer:disconnect', (event) =>
-    inside.send({ type: 'log', message: event.detail, topic: 'peer:disconnect' }),
-  )
-  node.addEventListener('self:peer:update', ({ detail: { peer } }) => {
+  libp2p.addEventListener('self:peer:update', ({ detail: { peer } }) => {
     const multiaddrs = peer.addresses.map(({ multiaddr }) => multiaddr)
-    // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-    log(`changed multiaddrs: peer ${peer.id.toString()} multiaddrs: ${multiaddrs}`)
+    log(`changed multiaddrs: peer ${peer.id.toString()} multiaddrs: ${JSON.stringify(multiaddrs)}`)
   })
 
-  const connectWith = async (addr: string) => {
-    const maddr = multiaddr(addr)
+  // 👇 explicitly dial peers discovered via pubsub
+  libp2p.addEventListener('peer:discovery', (event) => {
+    const { multiaddrs, id } = event.detail
 
-    return await node.dial(maddr)
-  }
+    if (libp2p.getConnections(id)?.length > 0) {
+      log(`Already connected to peer %s. Will not try dialling`, id)
+      return
+    }
 
-  const start = async () => {
-    await node.start()
-    inside.send({ type: 'log', message: `Peer started ${getPeerId()}` })
-    console.log('Peer started:', getPeerId())
-  }
-
-  const stop = async () => {
-    if (node) await node.stop()
-  }
-
-  const getPeerId = () => node?.peerId.toString() || undefined
-
-  const info = () => ({
-    peerCount: node.getConnections().length,
-    peerTypes: getPeerTypes(node),
-    nodeAddressCount: node.getMultiaddrs().length,
-    nodeAddresses: getAddresses(node),
-    nodePeerDetails: getPeerDetails(node),
+    void dialWebRTCMaddrs(libp2p, multiaddrs)
   })
 
-  ;(node.services.pubsub as GossipSub).subscribe(CHAT_TOPIC)
-  ;(node.services.pubsub as GossipSub).subscribe(CHAT_FILE_TOPIC)
-
-  return { start, stop, getPeerId, connectWith, enableLogging, info, port: outside }
+  return libp2p
 }
 
 // message IDs are used to dedupe inbound messages
 // every agent in network should use the same message id function
 // messages could be perceived as duplicate if this isnt added (as opposed to rust peer which has unique message ids)
-async function msgIdFnStrictNoSign(msg: Message): Promise<Uint8Array> {
+export async function msgIdFnStrictNoSign(msg: Message): Promise<Uint8Array> {
   const enc = new TextEncoder()
 
   const signedMessage = msg as SignedMessage
@@ -291,8 +129,8 @@ async function dialWebRTCMaddrs(libp2p: Libp2p, multiaddrs: Multiaddr[]): Promis
       log(`attempting to dial webrtc multiaddr: %o`, addr)
       await libp2p.dial(addr)
       return // if we succeed dialing the peer, no need to try another address
-    } catch (error) {
-      log.error(`failed to dial webrtc multiaddr: %o`, addr, error)
+    } catch {
+      log.error(`failed to dial webrtc multiaddr: %o`, addr)
     }
   }
 }

@@ -163,6 +163,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           description: 'Manage files saved in Taskyon OPFS.',
         },
       },
+      {
+        path: '/p2p',
+        component: () => import('pages/taskyon/Libp2pChat.vue'),
+        meta: {
+          title: 'p2p chat',
+          description: 'libp2p chat',
+        },
+      },
       /*{
         path: '/componenttests',
         component: () => import('pages/ComponentTests.vue'),
@@ -191,14 +199,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       description: 'Interplanetary file system status monitor',
     },
   },
-  {
+  /*{
     path: '/p2pmonitor',
     component: () => import('pages/taskyon/Libp2pStatusPage.vue'),
     meta: {
       title: 'p2p connection status',
       description: 'libp2p connection status monitor',
     },
-  },
+  },*/
   {
     path: '/clienttest',
     component: () => import('pages/TaskyonClientTest.vue'),
