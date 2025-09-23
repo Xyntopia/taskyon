@@ -49,6 +49,27 @@
               </q-list>
             </div>
           </q-expansion-item>
+          <q-expansion-item label="connections" expand-separator>
+            <div class="overflow-auto">
+              <q-list>
+                <q-item v-for="c in connections" :key="c.id">
+                  {{ c.id }}
+                  {{ c.remotePeer.toString() }}
+                  {{ c.remoteAddr.toString() }}
+                </q-item>
+              </q-list>
+            </div>
+          </q-expansion-item>
+          <q-expansion-item label="subscribers" expand-separator>
+            <div class="overflow-auto">
+              <q-list>
+                <q-item v-for="s in subscribers" :key="s.toString()">
+                  {{ s.toString() }}
+                </q-item>
+              </q-list>
+            </div>
+          </q-expansion-item>
+
           <q-expansion-item>
             {{ state }}
           </q-expansion-item>
@@ -106,6 +127,9 @@ import {
   getPeerDetails,
   getPeerTypes,
 } from '../../../packages/taskyon/src/p2p/p2putils'
+import type { Libp2p } from 'libp2p'
+import type { PeerId } from '@libp2p/interface'
+import { CHAT_TOPIC } from '../../../packages/taskyon/src/p2p/constants'
 
 const libp2pPromise = startLibp2p()
 const nw = asyncComputed(async () => libp2pPromise, undefined)
@@ -130,6 +154,23 @@ const info = computed(() => {
       nodePeerDetails: getPeerDetails(node),
     }
   } else return undefined
+})
+
+const connections = ref<ReturnType<Libp2p['getConnections']>>([])
+const subscribers = ref<PeerId[]>([])
+
+void libp2pPromise.then((n) => {
+  const onConnection = () => {
+    connections.value = n.getConnections()
+  }
+  onConnection()
+  n.addEventListener('connection:open', onConnection)
+  n.addEventListener('connection:close', onConnection)
+
+  const onSubscriptionChange = () => {
+    subscribers.value = n.services.pubsub.getSubscribers(CHAT_TOPIC)
+  }
+  n.services.pubsub.addEventListener('subscription-change', onSubscriptionChange)
 })
 
 // Methods
