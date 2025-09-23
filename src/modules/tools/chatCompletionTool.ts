@@ -96,10 +96,13 @@ export async function processChatTask(
   // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
   let openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
   if (lastTaskBeforeChatCompletion) {
-    openAIConversationThread = await chatThreadFromTaskId(
-      taskManager,
-      lastTaskBeforeChatCompletion.id,
-      llmSettings,
+    const taskChain = await taskManager.getTaskChain(lastTaskBeforeChatCompletion.id, true)
+    openAIConversationThread = await convertTaskNodesToOpenAIChat(
+      taskChain,
+      taskManager.getFileMappingByUuid,
+      taskManager.getOpfsUploadedFile,
+      llmSettings.tryUsingVisionModels,
+      llmSettings.enableOpenAiTools,
       toolDefs,
     )
   } else {
@@ -151,7 +154,8 @@ export async function processChatTask(
     streamTask,
     streamTracker, // track incoming streams...
     stopSignal,
-    10000, // Timeout in milliseconds for waiting for first streamed response
+    // we are using a pretty big timeout, bceause apparentl chat API from openAI needs thiw right now..
+    request.timeout, // Timeout in milliseconds for waiting for first streamed response
     3, // Maximum number of retry attempts
   )
 
@@ -191,39 +195,33 @@ function ensureToolResponses(messages: OpenAI.ChatCompletionMessageParam[]) {
 }
 
 // we use this function here in other spots as well...
-export async function chatThreadFromTaskId(
-  taskManager: TyTaskManager,
-  id: string,
-  llmSettings: {
-    tryUsingVisionModels: boolean
-    enableOpenAiTools: boolean
-  },
+export async function convertTaskNodesToOpenAIChat(
+  taskChain: TaskNode[],
+  getFileMapping: (uuid: string) => Promise<FileMapping | null>,
+  getUploadedFile: (uuid: string) => Promise<File | undefined>,
+  tryUsingVisionModels: boolean,
+  enableOpenAiTools: boolean,
   toolDefs: Record<string, ToolBase>,
 ) {
-  const taskIdChain = await taskManager.getTaskIdChain(id)
-  const openAIConversationThread = [] as OpenAI.ChatCompletionMessageParam[]
-
-  if (taskIdChain) {
-    // we are using the reverse, because we want to build the chain starting
-    // from the lsat message, so that we have to add e.g. function descriptions etc...
-    // only once..
-    for (const mId of taskIdChain) {
-      const task = await taskManager.getTask(mId)
-      if (task) {
-        const messages = await convertTaskNodeToOpenAIMessage(
+  const messages = (
+    await Promise.all(
+      taskChain.map((task) =>
+        convertTaskNodeToOpenAIMessage(
           task,
-          llmSettings.tryUsingVisionModels,
-          taskManager.getFileMappingByUuid,
-          taskManager.getOpfsUploadedFile,
-          llmSettings.enableOpenAiTools,
+          tryUsingVisionModels,
+          getFileMapping,
+          getUploadedFile,
+          enableOpenAiTools,
           toolDefs,
-        )
-        if (messages) openAIConversationThread.push(...messages)
-      }
-    }
-  }
+        ),
+      ),
+    )
+  )
+    .flat()
+    .filter<OpenAI.ChatCompletionMessageParam>((message) => message != undefined)
+
   // Inject any missing tool response messages (this happens, if our tools create a recursive task chain)
-  return ensureToolResponses(openAIConversationThread)
+  return ensureToolResponses(messages)
 }
 
 async function addTaskCostInformation(
@@ -825,13 +823,13 @@ export async function createChatCompletionTool(
           void addTaskCostInformation(chatCompletion, currentTask?.id, llmSettings, apiKeys).then(
             (newMeta) => {
               console.log('found new task costs:', newMeta)
-              void taskManager.metaDb.upsert(currentTask.id, newMeta, 'shallow_merge')
+              void taskManager.metaUpsert(currentTask.id, newMeta, 'shallow_merge')
             },
           )
         }
 
         metaInfo.rawOutput = { choice }
-        void taskManager.metaDb.upsert(currentTask.id, metaInfo, 'shallow_merge')
+        void taskManager.metaUpsert(currentTask.id, metaInfo, 'shallow_merge')
       }
 
       if (!choice)

@@ -2,11 +2,11 @@
   <codemirror
     v-model="content"
     placeholder="Code goes here..."
-    :style="{ height: '400px', overflow: 'hidden', background: 'white' }"
     indent-with-tab
     :line-wrapping="true"
     :tab-size="2"
     :extensions="extensions"
+    v-bind="$attrs"
   />
 </template>
 
@@ -20,12 +20,11 @@ import { Codemirror } from 'vue-codemirror'
 
 const content = defineModel<string>({
   required: true,
-  default: '', // Default to an empty string
+  default: '',
 })
 
 const $q = useQuasar()
 const extensions = computed(() => {
   return $q.dark.isActive ? [basicSetup, javascript(), oneDark] : [basicSetup, javascript()]
-  //return [];
 })
 </script>

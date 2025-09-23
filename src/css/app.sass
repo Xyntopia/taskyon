@@ -9,6 +9,23 @@ $primary: var(--q-primary-rgb)
 $app-bg-light: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(--q-secondary) 50%, white) 0% 0%, transparent 80% ), radial-gradient( ellipse at bottom left, color-mix(in oklch, var(--q-primary) 30%, white) 0%, transparent 70% )
 $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(--q-secondary) 50%, black) 0%, transparent 80% ), radial-gradient( ellipse at bottom left, color-mix(in oklch, var(--q-primary) 100%, black) 0%, black 80% )
 
+body.body--light
+  --button-color: rgb(#{$primary})
+  --button-color-rgb: var(--q-primary-rgb)
+  --background-color: white
+
+body.body--dark
+  --button-color: rgb(#{$secondary})
+  --button-color-rgb: var(--q-secondary-rgb)
+  --background-color: #{$dark}
+
+// this makes our app disable reload when overscrolling down
+// we simply need to dynamically attach no-ptr to base <html> tag if we want to disable
+// this behaviour..
+html.no-ptr
+  overscroll-behavior-y: contain // or none
+  /* optionally set overflow-y: auto; */
+
 @media screen
   .q-layout
     background-color: inherit
@@ -33,6 +50,7 @@ $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(
 
   ::-webkit-scrollbar
     width: 4px
+    height: 4px // <--- needed for horizontal
     //color: red
     background-color: dark
 
@@ -40,128 +58,38 @@ $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(
     background: inherit
 
   ::-webkit-scrollbar-thumb
-    background-color: rgb($secondary)
+    background-color: var(--button-color)
     border-radius: 20px
     border: transparent
 
-  // sizing of iframes etc...
-  #chat-area
-    display: flex
-    flex-direction: column
-    align-items: center
-
-    .tasks-container
-      width: min(100%, 800px)
-      display: flex
-      flex-direction: column
-      align-items: flex-start
-      max-width: 800px
-      min-width: 0
-      min-height: 0
-      padding: 15px 2px
-
-      .task-container
-        margin-bottom: 15px
-        padding-left: 5px
-        padding-right: 5px
-        border-radius: 5px
-        display: flex
-        flex-direction: column
-        min-width: 0
-        min-height: 0
-
-        //width: calc(100% - 20px)
-
-        // Only if there is an <iframe> child:
-        /* Cap width to (100% of parent – 20px margin). 
-         This ensures the iframe can grow up to the container’s full width minus the margin. */
-        &:has(.markdown-iframe)
-          width: calc(100% - 20px)
-
-        &.user
-          position: relative // anchor for ::before
-          align-self: flex-end
-          margin-left: 20px // reserve space for glow
-          padding-left: 10px
-
-          &::before
-            content: ""
-            position: absolute
-            left: -10px // move into the margin area
-            top: 2px
-            bottom: 2px
-            width: 3px
-            border-radius: 2px
-            //background: rgb($primary)
-            //box-shadow: 0 0 3px 3px rgba($primary, 0.6)
-
-        &:not(.user)
-          align-self: flex-start
-          margin-right: 20px
-
-        .task-display
-          display: inline-flex
-          flex-direction: column
-          align-items: auto
-
-          .task-header
-            display: flex
-            flex-flow: row nowrap
-            align-items: flex-start
-
-          iframe.markdown-iframe
-            display: block // so it behaves like a block-level box
-            max-width: 100% // never exceed parent’s width, but allow smaller
-            border: none
-            min-width: 100px
-            width: 100%
-            min-height: 20px
-
-          .ty-markdown
-            align-self: auto
-
   .task-container
-    position: relative
+    background-color: var(--background-color)
 
-    &:not(:has(.markdown-iframe))
-      .task-safety-icon
-        display: none
+    &.user
+      &::before
+        background: var(--button-color)
 
-    // TODO: show icon on the right if assistant, and left if user....
     .task-safety-icon
-      position: absolute
-      top: -12px
-      right: 0px
-      width: 0.8em
-      height: 0.8em
-      color: rgba($primary,0.3)
-      z-index: 9
+      color: var(--button-color)
+
+  // TODO: find out why...
+  // we need this, because somehow
+  // on firefox mobile android, the "var(--button-color)"
+  // doesn't work...
+  .body--dark
+    .task-container
+      &.user
+        &::before
+          background: rgb($secondary)
 
   .task-display
-    position: relative
-
-    // TODO: make message buttons somehow always appear on screen..  never be hidden..
     .task-buttons
+      border: 1px solid var(--button-color)
+      background: var(--background-color)
+      color: var(--button-color)
       border-radius: 5px
-      border: 1px solid rgb($primary)
-      z-index: 10
-      //border: 1px solid rgb($primary)
-      background: white
-      color: rgb($primary)
-      position: absolute
-      bottom: -20px // shift it 10px downward
-      //bottom: 0px
-      right: 0px
-      opacity: 0
-      transition: opacity 1s
-      display: flex
-      flex-wrap: nowrap
-      white-space: nowrap
 
-    &:hover
-      .task-buttons
-        opacity: 1
-
+  // TODO: move this into component..
   .scroll-area
     white-space: pre-wrap
     box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3)
@@ -171,51 +99,91 @@ $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(
     width: auto // Ensures it takes the necessary width up to its parent's maximum
     min-width: 100% // Ensures it stretches to at least the width of its parent
 
+  // TODO: not sure, if we need this...
   .debug-container
     padding-top: 5px
 
-  .create-new-task-container
-    z-index: 21
+  .create-new-task
     border-top-left-radius: 5px
     border-top-right-radius: 5px
     box-shadow: 0 0 2px 1px rgba($primary,0.1) // Adds an outer border with the primary color
-    backdrop-filter: blur(40px) brightness(1.0)
-    background-color: rgba(white, 0.1) // Adjust transparency as needed
+    //backdrop-filter: blur(40px) brightness(1.0)
+    background-color: rgba(white, 0.2) // Adjust transparency as needed
     border: 0.5px solid rgba(white, 0.5)
+    // background-color: rgba($primary, 0.3) // Adjust transparency as needed
+    border-bottom: none
+
     .ty-msg-edit
-      box-shadow: none
-      background-color: rgba(white, 0.5)
+      box-shadow: none !important
+      background-color: var(--background-color)
 
   .ty-msg-edit
     border-radius: 5px
     box-shadow: inset 0 0 10px white
+    &.q-field--float
+      background-color: var(--background-color)
+      box-shadow: none
 
-  // we use this as a workaround when the field is focused or contains text.
-  .ty-msg-edit.q-field--float
-    background-color: white
-
-  .announcements div
-    border-radius: 5px
+  .body--dark
+    .ty-msg-edit
+      box-shadow: inset 0 0 10px rgb($secondary)
+      &.q-field--float
+        box-shadow: none
 
   .not-in-key
     opacity: 0.5
 
   // the buttons with chat suggestions:
   .task-button
-    color: rgb($primary)
+    color: var(--button-color)
 
-  .body--dark .task-button
-    color: rgb($secondary)
+  .taskyon-control-button
+    background-color: rgba(var(--button-color-rgb),0.7)
+    color: white
 
-  // common settings for both:  dark & light  
-  body.body--light
+  .button-group
+    border: 1px solid rgb($primary)
+    display: inline-block
+    border-radius: 5px
+
+  .body--dark .button-group
+    border: 1px solid white
+
+  /*body
+   background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
+   background-size: cover // make sure we always cover entire viewport even if content is smaller
+   background-attachment: fixed // fix background to viewport
+   background-color: black
+
+  /* remove body fixed background and use a dedicated fixed layer */
+  body
+    background: none
+    position: relative
+
+  /* keep it behind content */
+  body:not(.within-iframe)::before
+    content: ''
+    position: fixed
+    inset: 0
+    z-index: -1
+    pointer-events: none
+    background: $app-bg-light // or $app-bg-light depending on theme
+    background-repeat: no-repeat
+    background-size: cover
+    background-attachment: scroll /* not needed but explicit */
+
+  body.body--light::before
     //background-color: white
     background: $app-bg-light
+    //color: black
+
+  body.body--dark::before
+    background-color: black !important
+    background: $app-bg-dark
+
+    // common settings for both:  dark & light  
+  body.body--light
     color: black
-    //  somehow we have to explicitly include this here with "body--light" otherwise it won't get recongized..
-    background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
-    background-size: cover // make sure we always cover entire viewport even if content is smaller
-    background-attachment: fixed // fix background to viewport
 
     .welcome-message-text
       filter: drop-shadow(0 0 5px white) drop-shadow(0 0 20px white)
@@ -229,10 +197,6 @@ $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(
         filter: drop-shadow(0 0 5px white)
       //background: radial-gradient(circle, $primary-light-dark 0%, $primary-light-dark 20%, $primary-light 70%)
 
-    .taskyon-control-button
-      background-color: rgba($primary,0.7)
-      color: white
-
     .q-header
       // this is for the text color :)
       color: rgb($primary)
@@ -241,70 +205,9 @@ $app-bg-dark: radial-gradient( ellipse at bottom right, color-mix(in oklch, var(
       // this is for the text color :)
       color: rgb($primary)
 
-    .button-group
-      display: inline-block
-      border: 1px solid rgb($primary) /* add white outline */
-      border-radius: 5px /* optional, to match the rounded-borders class */
-
-    .task-container
-      background-color: white
-      &.user
-        &::before
-          background: rgb($primary)
-
-  body.body--dark
-    background-color: black
-    background: $app-bg-dark
-    background-repeat: no-repeat // prevent background from repeating if content is larger than viewport
-    background-size: cover // make sure we always cover entire viewport even if content is smaller
-    background-attachment: fixed // fix background to viewport
-
-    .create-new-task-container
-      background-color: rgba($primary, 0.3) // Adjust transparency as needed
-      backdrop-filter: blur(40px) brightness(0.6)
-      border: 0.5px solid rgba(white, 0.1)
-      border-bottom: none
-      .ty-msg-edit
-        box-shadow: none
-        background-color: rgba($dark, 0.5)
-
-    .ty-msg-edit
-      box-shadow: inset 0 0 10px rgb($secondary)
-      color: rgb($secondary)
-
-    .ty-msg-edit.q-field--float
-      background-color: rgba($dark,1.0)
-      box-shadow: inset 0 0 5px rgb($primary)
-
-    .taskyon-control-button
-      background-color: rgba($secondary,0.7)
-
-    .task-safety-icon
-      color: rgba($secondary,0.3)
-
-    .task-buttons
-      background: $dark
-      color: rgb($secondary)
-
-    .button-group
-      display: inline-block
-      border: 1px solid white /* add white outline */
-      border-radius: 5px /* optional, to match the rounded-borders class */
-
-    .task-container
-      background-color: rgba($dark,1.0)
-
-      &.user
-        &::before
-          background: rgb($secondary)
-
-    .task-buttons
-      border-radius: 5px
-      border: 1px solid rgb($secondary)
-
-body.within-iframe
-  background-color: white !important
-  background: transparent !important
+  body.within-iframe
+    background-color: white !important
+    background: transparent !important
 
 @media print
   /* Hide everything initially */

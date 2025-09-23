@@ -8,7 +8,13 @@
       clear search index
       <q-tooltip>This will delete the search index completly</q-tooltip>
     </q-btn>
-    <q-btn flat :icon="mdiDatabase" label="Open SQL Search" to="/sql">
+    <q-btn
+      v-if="state.appConfiguration.expertMode"
+      flat
+      :icon="mdiDatabase"
+      label="Open SQL Search"
+      to="/sql"
+    >
       <q-tooltip>Expert users can use SQL queries on all taskyon data!</q-tooltip>
     </q-btn>
     <q-table
@@ -115,10 +121,12 @@ import { useRouter, useRoute } from 'vue-router'
 import { onMounted } from 'vue'
 import { type QTableProps } from 'quasar'
 import type { PartialDeep } from 'type-fest'
+import { useAppStateStore } from 'src/stores/appState'
 
 // TODO:  do some search caching ;) so that we can move faster back & forth between
 //        pages in the browser...
 
+const state = useAppStateStore()
 const route = useRoute()
 
 const defaultParams = {
@@ -161,35 +169,31 @@ const indexCount = ref<number | string>('N/A')
 const isSearching = ref(false)
 
 const updateCounts = () => {
-  void tystate.getTaskManager().then((tm) => {
-    void tm.countTasks().then((n) => (taskCount.value = n != undefined ? n : 'N/A'))
-    void tm.countVecs().then((n) => (indexCount.value = n != undefined ? n : 'N/A'))
+  void tystate.taskyon.then((ty) => {
+    void ty.countTasks().then((n) => (taskCount.value = n != undefined ? n : 'N/A'))
+    void ty.countVecs().then((n) => (indexCount.value = n != undefined ? n : 'N/A'))
   })
 }
 
 updateCounts()
 
 async function onUpdateSearchIndex() {
-  const taskManager = await tystate.getTaskManager()
-  if (taskManager) {
-    await taskManager.syncVectorIndexWithTasks((done, total) => {
-      syncProgress.value = done / total
-      syncProgressString.value = `${done}/${total}`
-      indexCount.value = done
-    })
-    syncProgressString.value = '*done*'
-  }
+  const ty = await tystate.taskyon
+  await ty.syncVectorIndexWithTasks((done, total) => {
+    syncProgress.value = done / total
+    syncProgressString.value = `${done}/${total}`
+    indexCount.value = done
+  })
+  syncProgressString.value = '*done*'
   updateCounts()
 }
 
 async function onResetSearchIndex() {
-  const taskManager = await tystate.getTaskManager()
-  if (taskManager) {
-    await taskManager.resetTaskVectors()
-    syncProgressString.value = '*done*'
-    syncProgress.value = 0.0
-    indexCount.value = 0
-  }
+  const ty = await tystate.taskyon
+  await ty.resetTaskVectors()
+  syncProgressString.value = '*done*'
+  syncProgress.value = 0.0
+  indexCount.value = 0
   updateCounts()
 }
 
@@ -197,7 +201,7 @@ async function fetchAndDisplayTasks() {
   console.log('get task data from IDs')
   for (const task of searchResults.value) {
     if (!taskDataMap.value[task.taskId]) {
-      const taskData = await tystate.getTaskManager().then((tm) => tm.getTask(task.taskId))
+      const taskData = await tystate.taskyon.then((ty) => ty.getTask(task.taskId))
       if (taskData) taskDataMap.value[task.taskId] = taskData
     }
   }
@@ -205,40 +209,38 @@ async function fetchAndDisplayTasks() {
 
 async function searchTasks(params: searchParams & { k: string }) {
   console.log('searching tasks:', params)
-  const taskManager = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
   //searchResults.value = await vectorStore.query(searchTerm, k)
-  if (taskManager) {
-    console.log('search for', params.q)
-    isSearching.value = true
-    const jsonfilter = params.ct
-      ? ({
-          content: {
-            type: params.ct,
-          },
-        } as PartialDeep<TaskNode>)
-      : undefined
+  console.log('search for', params.q)
+  isSearching.value = true
+  const jsonfilter = params.ct
+    ? ({
+        content: {
+          type: params.ct,
+        },
+      } as PartialDeep<TaskNode>)
+    : undefined
 
-    let result: {
-      taskId: string
-      distance: number
-    }[] = []
-    if (params.q) {
-      result = await taskManager.filteredVectorSearch(params.q, parseInt(params.k), jsonfilter)
-    } else if (params.t) {
-      const task = await taskManager.getTask(params.t)
-      if (task) {
-        result = await taskManager.searchSimilarTasks(task, parseInt(params.k))
-      }
-    } else {
-      result = await taskManager.filterSearch(parseInt(params.k), jsonfilter)
+  let result: {
+    taskId: string
+    distance: number
+  }[] = []
+  if (params.q) {
+    result = await ty.filteredVectorSearch(params.q, parseInt(params.k), jsonfilter)
+  } else if (params.t) {
+    const task = await ty.getTask(params.t)
+    if (task) {
+      result = await ty.searchSimilarTasks(task, parseInt(params.k))
     }
-    // Add score to each task
-    searchResults.value = result
-    taskCount.value = (await taskManager.countTasks()) || 'N/A'
-    isSearching.value = false
-
-    void fetchAndDisplayTasks()
+  } else {
+    result = await ty.filterSearch(parseInt(params.k), jsonfilter)
   }
+  // Add score to each task
+  searchResults.value = result
+  taskCount.value = (await ty.countTasks()) || 'N/A'
+  isSearching.value = false
+
+  void fetchAndDisplayTasks()
 }
 
 async function onSearchChange(params: searchParams, mode: 'similar' | 'query') {
@@ -284,8 +286,8 @@ const initialPagination = {
 }
 
 async function setConversation(taskId: string) {
-  const taskManager = await tystate.getTaskManager()
-  const leafTasks = await taskManager.findSiblingLeafTasks(taskId)
+  const ty = await tystate.taskyon
+  const leafTasks = await ty.findSiblingLeafTasks(taskId)
   console.log('set conversation to', leafTasks[0])
   void router.push({ path: 'chat', query: { t: leafTasks[0] } })
 }

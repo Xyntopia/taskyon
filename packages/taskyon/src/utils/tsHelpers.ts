@@ -39,3 +39,11 @@ export type WithRequired<T, K extends keyof T> = Omit<T, K> & {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyFunction<ReturnType> = (...args: any[]) => ReturnType
+
+/**
+ * Type representing a thunk: a function that takes no arguments and returns T.
+ */
+export type Thunk<T> = () => T
+
+// used to "hide" properties of a type to make it more readable..
+export type Identity<T> = T

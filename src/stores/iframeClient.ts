@@ -21,15 +21,6 @@ export async function waitForMessagePort(
   })
 }
 
-export function areWeInIframe() {
-  const searchParams = new URLSearchParams(window.location.search)
-  const isIframeParam = searchParams.get('iframe') === 'true'
-  console.log('we are in an iframe via param:', isIframeParam)
-  const isInIframe = window.self !== window.top || isIframeParam
-  console.log('we are in an iframe:', window.self !== window.top, isInIframe)
-  return isInIframe
-}
-
 export async function waitForIframeDuplexChannel() {
   const mport = await waitForMessagePort((ev) => {
     // Check if the message is from the parent window

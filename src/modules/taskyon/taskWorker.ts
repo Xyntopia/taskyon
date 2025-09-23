@@ -13,8 +13,14 @@ import { createAsyncQueue, humanizeError, serializeForJson, sleep } from '../uti
 import { type TyTaskManager } from './taskManager'
 import type { RemoteFunctionPort } from './tools'
 import { handleFunctionExecution } from './tools'
-import type { TaskNodeMeta, TyTaskStreamData } from './types'
-import { getApiConfigCopy, type llmSettings } from './types'
+import { createAsyncQueue, humanizeError, serializeForJson, sleep } from '../utils'
+import { createChatCompletionTask } from '../tools/chatCompletionTool'
+import type { SecretStore } from '../crudWrapper'
+import type { TaskMessageStream } from '../frpBus'
+import { createMessagePortAdapter, createStream, filter } from '../frpBus'
+import { sha256UrlSafeHash } from '@taskyon/taskyon'
+import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
+import { taskResult, type toolContext } from '@taskyon/taskyon'
 
 export async function generateSecretId(
   taskId: string | undefined,
@@ -287,13 +293,9 @@ function createHandleError(
       stopAllTasks(`Too many errors occured, interrupting execution after ${errorCount} errors!`)
     }
 
-    const errorTaskChain = createErrorTaskChain(
-      error,
-      task,
-      selectedModel,
-      enableOpenAiTools,
-      taskManager.metaDb,
-    )
+    const errorTaskChain = createErrorTaskChain(error, task, selectedModel, enableOpenAiTools)
+    const debugInfo = createDebugInfoFromError(error)
+    void taskManager.metaUpsert(task.id, debugInfo, 'shallow_merge')
 
     // we are adding the error task chain as a subtaskchain with the parentID of this
     // particular task.
@@ -511,6 +513,20 @@ const setupRun = (
   }
 }
 
+function createDebugInfoFromError(error: unknown) {
+  const debugInfo = { error }
+
+  if (error instanceof Error) {
+    // preserve full debug info
+    debugInfo.error = {
+      message: error.message,
+      stack: error.stack,
+      cause: error.cause,
+    }
+  }
+  return debugInfo
+}
+
 export function runTaskWorker(
   llmSettings: llmSettings,
   taskManager: TyTaskManager,
@@ -565,7 +581,7 @@ export function runTaskWorker(
   }
   return {
     workerStream: taskProcessingStream.stream,
-    workerStop: stopAllTasks,
+    stopAllTasks,
     queueTask: externalQueueTask,
   }
 }
@@ -575,7 +591,6 @@ function createErrorTaskChain(
   task: TaskNode | null,
   analyzeErrorModel: string | undefined,
   llmTools: boolean,
-  debugDb: CrudWrapper<TaskNodeMeta>,
 ) {
   const errorTask: partialTaskDraft = {
     role: 'system',
@@ -583,21 +598,6 @@ function createErrorTaskChain(
       type: 'error',
       data: serializeForJson(error),
     },
-  }
-
-  const debugInfo = { error }
-
-  if (error instanceof Error && task) {
-    // preserve full debug info
-    debugInfo.error = {
-      message: error.message,
-      stack: error.stack,
-      cause: error.cause,
-    }
-  }
-
-  if (task?.id) {
-    void debugDb.upsert(task.id, debugInfo, 'shallow_merge')
   }
 
   return [

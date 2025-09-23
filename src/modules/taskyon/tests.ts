@@ -1,29 +1,30 @@
 import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import {
+  base64ToPublixX25519,
   createCryptoSession,
   cryptoKeyToBase64,
-  forceDestroyCryptoSession,
+  cryptoKeyToUint8,
+  decompressEncryptedObject,
+  deepCloneWJson,
+  encryptCompressObject,
   generateAssymetricKeyDeriver,
+  generateRandomEncryptionKey,
   generateSeedPhrase,
   ToolBase,
   uint8ArrayToBase64UrlSafe,
 } from '@taskyon/taskyon'
+import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import type OpenAI from 'openai'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
-import { deepCloneWJson } from '../../../packages/taskyon/src/utils/objHelpers'
-import type { SecretStore } from '../crudWrapper'
-import {
-  decompressEncryptedObject,
-  encryptCompressObject,
-} from '../../../packages/taskyon/src/utils/fileUtils'
 import { useGdrive } from '../gdrive'
 import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
 import { getDatabase } from '../pglite.api'
 import { createDeepTransformer, normalizeFalsyValues, sleep } from '../utils'
 import { jsonSchemaToYamlString, zodToYamlString } from '../yamlUtils'
+import { initCryptoSessionFromBrowser } from './browserCryptoSession'
 import { useIpfs } from './ipfs'
 import { gDriveSyncPort } from './sync'
 import { createTaskNode } from './taskManager'
@@ -81,7 +82,40 @@ type TestReport = {
   }
 }
 
-export const restIndexedDBKeyStorage = async (): Promise<TestReport> => {
+export const testSessionSwitching = async () => {
+  const logs: Record<string, unknown> = {}
+  const keyPair = await generateAssymetricKeyDeriver()
+  const pkey = keyPair.publicKey
+  const publicBase64 = await cryptoKeyToBase64(pkey)
+
+  const backconvert = await base64ToPublixX25519(publicBase64, true)
+  const backextract = await cryptoKeyToBase64(backconvert)
+
+  assert(publicBase64 === backextract)
+
+  logs['session binding key storage (should all be the same)'] = {
+    public_uint8: uint8ArrayToBase64UrlSafe(await cryptoKeyToUint8(pkey)),
+    publicBase64,
+    backextract,
+  }
+
+  const firstSessionId = state.sessionId
+  logs['first session id'] = firstSessionId
+
+  const { currentSession } = await import('src/modules/auth/supabase')
+
+  logs['has superbase session'] = currentSession.value !== null
+  await until(currentSession).not.toBe(null, { timeout: 5000 })
+  logs['now has superbase session'] = currentSession.value !== null
+
+  await until(() => state.initWBindingKey).changed({ timeout: 5000 })
+  //assert(firstSessionId !== state.sessionId, 'session id should have changed!')
+  logs['new session id'] = state.sessionId
+
+  return logs
+}
+
+export const testIndexedDBKeyStorage = async (): Promise<TestReport> => {
   const DB = 'test_crypto_key_roundtrip'
   const STORE = 'keys'
   const KEY_NAME = 'deviceKeyPair'
@@ -354,13 +388,11 @@ export const restIndexedDBKeyStorage = async (): Promise<TestReport> => {
 //       both SK should work, but they look different as wrapped with different DKs
 export async function testCryptoSession() {
   const report: string[] = []
-  const accountId = 'test_account_123'
-  const accountId2 = 'test_account_321'
 
   const testMnemonic = generateSeedPhrase()
 
   // Clean up any existing databases first
-  await forceDestroyCryptoSession(accountId)
+  // await forceDestroyCryptoSession()
 
   // ===================================================================
   // Phase 1: Single Device Setup and Key Management
@@ -368,8 +400,8 @@ export async function testCryptoSession() {
   report.push('PHASE 1: Single device initialization and key management')
 
   // Create primary device session
-  const device1 = await createCryptoSession(accountId, { mnemonic: testMnemonic })
-  report.push('Device1 session created')
+  const device1 = await initCryptoSessionFromBrowser({ mnemonic: testMnemonic })
+  report.push('Device1 session ceate')
 
   // Validate initial keys
   const sessionKey1 = device1.getSessionKey()
@@ -377,18 +409,23 @@ export async function testCryptoSession() {
   report.push(`Device1 public key: ${JSON.stringify(devicePubKey1)}`)
 
   // Test session key regeneration
-  const device1_1 = await device1.derive({ newSK: true })
+  const device1_1 = await device1.newSessionKey()
   const newSessionKey = device1_1.getSessionKey()
   report.push('Session key regenerated')
 
   assert(
-    (await device1_1.id()) === (await device1.id()),
+    (await device1_1.deviceId()) === (await device1.deviceId()),
     "device ids shouldn't haven't changed and should be the same!",
+  )
+
+  assert(
+    (await device1_1.getSessionId()) !== (await device1.getSessionId()),
+    'session ids should change!',
   )
 
   // Test device key regeneration
   const originalDeviceKey = device1.getDevicePublicKey()
-  const device1_2 = await device1_1.derive({ newDK: true })
+  const device1_2 = await device1_1.newDeviceKey()
   const newDeviceKey = device1_2.getDevicePublicKey()
 
   // Verify device key changed
@@ -403,10 +440,8 @@ export async function testCryptoSession() {
   }
 
   // Test user key management
-  const userPubKey = (
-    await device1.derive({ newMnemonic: generateSeedPhrase() })
-  ).getUserPublicKey()
-  report.push(`User public key: ${await cryptoKeyToBase64(userPubKey)}`)
+  const userPubKey = (await device1.derive({ mnemonic: generateSeedPhrase() })).getUserPublicKey()
+  report.push(`User public key: ${await cryptoKeyToBase64(userPubKey.publicKey)}`)
 
   // ===================================================================
   // Phase 2: Key Sharing Between Devices
@@ -414,23 +449,24 @@ export async function testCryptoSession() {
   report.push('\nPHASE 2: Key sharing between devices')
 
   // Create exchange keys (simulate second device's key pair)
-  const exchangeKeyPair = await generateAssymetricKeyDeriver()
+  const exchangeKey = await generateRandomEncryptionKey(true)
   report.push('Exchange key pair generated')
 
   // Export wrapped session key from device1
-  const wrappedSessionKey = await device1.exportSessionKey(exchangeKeyPair)
+  const d1SKid = await device1.getSessionId()
+  const wrappedSessionKey = await device1.exportSessionKey(exchangeKey)
   report.push('Session key wrapped for sharing')
 
   // Create second device session
-  const device2 = await createCryptoSession(accountId2, {
-    wrapped: wrappedSessionKey,
-    unwrapper: exchangeKeyPair,
+  const device2 = await createCryptoSession({
+    wrappedSK: wrappedSessionKey,
+    unwrapper: exchangeKey,
   })
   report.push('Device2 session created')
   report.push('Wrapped session key imported to device2')
 
   // Validate session keys
-  const device2SessionKey = device2.getSessionKey()
+  const d2SKid = await device2.getSessionId()
   report.push('Device2 successfully accessed session key')
 
   // ===================================================================
@@ -438,38 +474,35 @@ export async function testCryptoSession() {
   // ===================================================================
   report.push('\nPHASE 3: Session destruction and cleanup')
 
-  // IMPORTANT: Close all sessions before attempting database deletion
-  await device1.destroy()
-  report.push('Device1 session closed')
-
-  await device2.destroy()
-  report.push('Device2 session closed')
-
-  // Now safely delete the database
-  await forceDestroyCryptoSession(accountId)
-  report.push('Database completely destroyed')
+  // TODO: we can not do this right now, because it would alter the currently active session
+  // id. So we are commenting this out for now...
+  //await deleteSession(device1)
 
   // Verify new session can be created after destruction
-  const newSession = await createCryptoSession(accountId)
+  const newSession = await createCryptoSession()
   newSession.getSessionKey()
   report.push('New session created after destruction')
 
-  // Clean up the test session too
-  await newSession.destroy()
+  assert(
+    (await newSession.getSessionId()) !== (await device1.getSessionId()),
+    'Sessions should be different now!!',
+  )
 
   return {
     logs: report,
     testMnemonic,
     sessionKey1,
     newSessionKey,
-    device2SessionKey,
+    device1_session_id: d1SKid,
+    device2_session_id: d2SKid,
     origKeyBytes,
     newKeyBytes,
     wrappedSessionKey,
-    id1: await device1.id(),
-    id1_1: await device1_1.id(),
-    id1_2: await device1_2.id(),
-    id2: await device2.id(),
+    id1: await device1.deviceId(),
+    id1_1: await device1_1.deviceId(),
+    id1_2: await device1_2.deviceId(),
+    id2: await device2.deviceId(),
+    SKAfterSKdelete: await newSession.getSessionId(),
     metrics: {
       deviceKeyRegenerated: origKeyBytes !== newKeyBytes,
       sessionKeyShared: !!wrappedSessionKey,
@@ -910,20 +943,22 @@ export async function testGdriveZipRoundtrip() {
   }
 }
 
-export const testSecretStore = (secretStore: SecretStore) => async () => {
+export const testSecretStore = async () => {
   console.log('request a random secret from the store')
 
+  const ty = await tystate.taskyon
+
   const secretName = 'MYTESTTOKEN'
-  await secretStore.deleteSecret('diagnostics', secretName)
-  const MYTESTTOKEN = await secretStore.getSecret('diagnostics', secretName, true)
+  await ty.deleteSecret('diagnostics', secretName)
+  const MYTESTTOKEN = await ty.getSecret('diagnostics', secretName, true)
 
   // Generate a random string as the test secret
   const test_secret = Math.random().toString(36).slice(2) + Date.now().toString()
-  await secretStore.setSecret('diagnostics', secretName, test_secret)
-  const returned_secret = await secretStore.getSecret('diagnostics', secretName, true)
+  await ty.setSecret('diagnostics', secretName, test_secret)
+  const returned_secret = await ty.getSecret('diagnostics', secretName, true)
 
-  await secretStore.deleteSecret('diagnostics', 'unknown_secret')
-  const undefinedSecret = await secretStore.getSecret('diagnostics', 'unknown_secret', true)
+  await ty.deleteSecret('diagnostics', 'unknown_secret')
+  const undefinedSecret = await ty.getSecret('diagnostics', 'unknown_secret', true)
 
   return {
     MYTESTTOKEN,
@@ -936,9 +971,9 @@ export const testSecretStore = (secretStore: SecretStore) => async () => {
 export async function testToolLista() {
   console.log('gather all available tools in a list!')
 
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
 
-  const allTools = (await tm.updateToolDefinitions()) ?? []
+  const allTools = (await ty.updateToolDefinitions()) ?? []
   return {
     'all tools': summarizeTools(Object.keys(allTools), allTools),
   }
@@ -1033,12 +1068,12 @@ export function testCreateDeepTansformer() {
 export const testChatCompletion = async () => {
   console.log('request a random secret from the store')
 
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
 
   const stopSignal = new AbortController().signal
 
   // Invoke the real tool
-  const { tool: chatCompletion } = await tm.getToolDefinition('chatCompletion')
+  const { tool: chatCompletion } = await ty.getToolDefinition('chatCompletion')
   let structuredResponse
   if (chatCompletion && 'function' in chatCompletion && chatCompletion.function !== undefined) {
     structuredResponse = await chatCompletion.function(
@@ -1313,16 +1348,16 @@ export async function testTaskIdHashing() {
 }
 
 export async function markdownGeneration() {
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
   // first load the chat as mardown
   const yamlContent = await getTextFile('/tests/test_conversation.yaml')
-  const lastLoadedTaskId = await tm.loadYamlConversation(yamlContent)
+  const lastLoadedTaskId = await ty.loadYamlConversation(yamlContent)
   //const newTaskId = await state.addMdTasks(markdownContent, undefined);
   // and delete this conversation again :)
   if (lastLoadedTaskId) {
-    const taskList = await tm.getTaskChain(lastLoadedTaskId)
+    const taskList = await ty.getTaskChain(lastLoadedTaskId)
     const markdown = chat2Md(taskList)
-    await tm.deleteTaskThread(lastLoadedTaskId)
+    await ty.deleteTaskThread(lastLoadedTaskId)
     return {
       markdown,
     }

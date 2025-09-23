@@ -70,26 +70,28 @@
         -->
   </div>
   <!-- named slot for full override; fallback is the menu with delegation -->
-  <q-menu v-if="enableMenu" ref="menu" auto-close>
-    <q-list @click="onDelegate">
-      <q-item clickable data-action="camera">
-        <q-item-section avatar><q-icon :name="matCameraAlt" /></q-item-section>
-        <q-item-section>Take Photo</q-item-section>
-      </q-item>
-      <q-item clickable data-action="file">
-        <q-item-section avatar><q-icon :name="matFileOpen" /></q-item-section>
-        <q-item-section>File Manager</q-item-section>
-      </q-item>
-      <q-item clickable data-action="dir">
-        <q-item-section avatar><q-icon :name="matFolderOpen" /></q-item-section>
-        <q-item-section>Select Directory</q-item-section>
-      </q-item>
-      <q-item v-if="enablePaste" clickable data-action="paste">
-        <q-item-section avatar><q-icon :name="matContentPaste" /></q-item-section>
-        <q-item-section>Paste from Clipboard</q-item-section>
-      </q-item>
-    </q-list>
-  </q-menu>
+  <q-popup-proxy v-if="enableMenu" ref="menu" auto-close breakpoint="600">
+    <q-card flat>
+      <q-list @click="onDelegate">
+        <q-item clickable data-action="camera">
+          <q-item-section avatar><q-icon :name="matCameraAlt" /></q-item-section>
+          <q-item-section>Take Photo</q-item-section>
+        </q-item>
+        <q-item clickable data-action="file">
+          <q-item-section avatar><q-icon :name="matFileOpen" /></q-item-section>
+          <q-item-section>File Manager</q-item-section>
+        </q-item>
+        <q-item clickable data-action="dir">
+          <q-item-section avatar><q-icon :name="matFolderOpen" /></q-item-section>
+          <q-item-section>Select Directory</q-item-section>
+        </q-item>
+        <q-item v-if="enablePaste" clickable data-action="paste">
+          <q-item-section avatar><q-icon :name="matContentPaste" /></q-item-section>
+          <q-item-section>Paste from Clipboard</q-item-section>
+        </q-item>
+      </q-list>
+    </q-card>
+  </q-popup-proxy>
   <!-- only render overlay when dragging over target, we are using "defer" to make sure, the target exists
      when rendering this component... -->
   <teleport v-if="dropZoneTarget" defer :to="dropZoneTarget">
@@ -115,7 +117,7 @@ import {
   matUpload,
   matUploadFile,
 } from '@quasar/extras/material-icons'
-import { QMenu } from 'quasar'
+import type { QMenu } from 'quasar'
 
 defineOptions({
   // we need inheritAttrs: false, because we have multiple root elements and explicitly

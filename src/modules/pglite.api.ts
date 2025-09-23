@@ -2,30 +2,38 @@ import { PGliteWorker } from '@electric-sql/pglite/worker'
 import type { LiveNamespace } from '@electric-sql/pglite/live'
 import { live } from '@electric-sql/pglite/live'
 
-export type TyPGDB = PGliteWorker & { live: LiveNamespace }
+export type TyPGDB = PGliteWorker & { live: LiveNamespace } & { name?: string }
 
-let pgInstance: TyPGDB | null = null
+const pgInstances = new Map<string, TyPGDB>()
 
 export const getDatabase: (name: string) => Promise<TyPGDB> = async (name) => {
-  if (!pgInstance) {
-    pgInstance = await PGliteWorker.create(
-      new Worker(new URL('./pglite.worker.ts', import.meta.url), {
-        type: 'module',
-      }),
-      {
-        dataDir: `idb://${name}0.1`,
-        meta: {
-          // additional metadata passed to `init`
-        },
-        // we can do this here instead of inside the worker, because it only uses the PGlite plugin interface
-        // https://pglite.dev/docs/multi-tab-worker#extension-support
-        extensions: {
-          live,
-        },
-      },
-    )
+  const existingDb = pgInstances.get(name)
+  if (existingDb) {
+    existingDb.name = name
+    return existingDb
   }
-  return pgInstance
+  console.log('get database', name)
+  const newInstance: TyPGDB = await PGliteWorker.create(
+    new Worker(new URL('./pglite.worker.ts', import.meta.url), {
+      type: 'module',
+    }),
+    {
+      //'memory://'  // if we want to use taskyon in memory-only (this might make sense on
+      // an ephemeral serve for example!)
+      dataDir: `idb://${name}0.1`,
+      meta: {
+        // additional metadata passed to `init`
+      },
+      // we can do this here instead of inside the worker, because it only uses the PGlite plugin interface
+      // https://pglite.dev/docs/multi-tab-worker#extension-support
+      extensions: {
+        live,
+      },
+    },
+  )
+  pgInstances.set(name, newInstance)
+  newInstance.name = name
+  return newInstance
 }
 
 export interface PgLiteOptions {

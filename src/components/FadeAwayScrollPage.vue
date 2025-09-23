@@ -1,5 +1,5 @@
 <template>
-  <q-page class="fade-scroll" :data-disabled="!enabled" :style="cssVars">
+  <q-page class="fade-scroll" :data-disabled="!enabled" :style="cssVars" v-bind="$attrs">
     <q-resize-observer :debounce="200" @resize="handleResize" />
     <q-scroll-observer :debounce="16" @scroll="handleScroll" />
     <slot />

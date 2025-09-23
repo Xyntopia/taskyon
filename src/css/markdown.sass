@@ -129,13 +129,6 @@ $primary: var(--q-primary-rgb)
     opacity: 0.85
     font-style: italic
 
-  img
-    max-width: 100%
-    height: auto
-    display: block
-    margin: 1rem auto
-    border-radius: 4px
-
   hr
     margin: 1rem 0
 
@@ -169,16 +162,13 @@ $primary: var(--q-primary-rgb)
     border-radius: 4px
     height: auto
     max-height: 80vh
-
     // Let images use natural size unless too big
     max-width: 100%
-    width: auto
 
     // If the image *is smaller* than the container, just use intrinsic size
     &[width], &[height]
       max-width: none
       height: auto
-      width: auto
 
     // Optional: prevent SVGs from expanding if they lack dimensions
     &:not([width]):not([height])

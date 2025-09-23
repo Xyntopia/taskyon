@@ -154,6 +154,7 @@ export const withLiveStreams = <T>(
               unsubLive()
             }
           },
+          unsubscribeAll: liveForId.unsubscribeAll,
         }
       }
       return liveForId
@@ -665,19 +666,26 @@ export const withSecretStore = (
 
   const encryptedCrud = withEncryption(base, publicRecoveryKey, getSessionKey)
   type SecretData = Record<string, string>
+
+  /**
+   * Stores or updates a secret for a given ID and secret name.
+   */
+  const setSecret = async (
+    id: string | number,
+    secretName: string,
+    secretData: string,
+  ): Promise<void> => {
+    // Get the existing secrets for the ID
+    const existingSecrets: SecretData =
+      ((await encryptedCrud.get(id, getSessionKey)) as SecretData) || {}
+    // Add or update the secret
+    existingSecrets[secretName] = secretData
+    // Save the updated secretss
+    await encryptedCrud.set(id, existingSecrets, getSessionKey)
+  }
+
   return {
-    /**
-     * Stores or updates a secret for a given ID and secret name.
-     */
-    async setSecret(id: string | number, secretName: string, secretData: string): Promise<void> {
-      // Get the existing secrets for the ID
-      const existingSecrets: SecretData =
-        ((await encryptedCrud.get(id, getSessionKey)) as SecretData) || {}
-      // Add or update the secret
-      existingSecrets[secretName] = secretData
-      // Save the updated secretss
-      await encryptedCrud.set(id, existingSecrets, getSessionKey)
-    },
+    setSecret,
 
     /**
      * Retrieves a secret by ID and secret name. If not found, requests a new secret.
@@ -700,7 +708,7 @@ export const withSecretStore = (
         const message = typeof askNew === 'string' ? askNew : undefined
         secret = await getNewKey({ id, secretName, message })
         console.log('received new secret:', id, secretName)
-        if (saveNew) await this.setSecret(id, secretName, secret)
+        if (saveNew) await setSecret(id, secretName, secret)
       }
       return secret
     },

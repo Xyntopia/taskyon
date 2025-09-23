@@ -27,18 +27,18 @@ By clicking on this button you can connect taskyon to openrouter.ai service.
 </template>
 
 <script lang="ts" setup>
-import { onMounted, computed } from 'vue'
-import { useTaskyonStore } from 'src/stores/taskyonState'
-import { useRoute } from 'vue-router'
-import InfoDialog from 'components/InfoDialog.vue'
 import { matKey } from '@quasar/extras/material-icons'
+import axios from 'axios'
+import InfoDialog from 'components/InfoDialog.vue'
+import { Notify } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
+import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 
-const tystate = useTaskyonStore()
 const state = useAppStateStore()
 const route = useRoute()
 
-const callbackUrl = window.location.origin // This will get the base URL of your application
+const callbackUrl = window.location.origin + '/settings/aiserviceprovider' // This will get the base URL of your application
 
 const authURL = computed(() => {
   console.log('get current URL')
@@ -50,11 +50,45 @@ function onGetOpenRouterKey() {
   window.location.href = authURL.value
 }
 
+function removeCodeFromUrl() {
+  if (window.history.pushState) {
+    const baseUrl = window.location.href.split('?')[0]
+    window.history.pushState({}, document.title, baseUrl)
+  }
+}
+
+let loadingKey = false
+async function getOpenRouterPKCEKey(code: string) {
+  if (loadingKey == false) {
+    console.log('start openai PKCE')
+    loadingKey = true
+    try {
+      const response = await axios.post<{ key: string }>('https://openrouter.ai/api/v1/auth/keys', {
+        code: code,
+      })
+      const data = response.data
+      console.log('downloaded key:', data.key)
+      if (data.key) {
+        Notify.create('API Key retrieved successfully')
+        state.keys['openrouter.ai'] = data.key
+        state.llmSettings.selectedApi = 'openrouter.ai'
+      } else {
+        Notify.create('Failed to retrieve API Key')
+      }
+    } catch (error) {
+      console.error('Error fetching API Key:', error)
+      Notify.create('Error occurred while fetching API Key')
+    }
+    removeCodeFromUrl() // Remove the 'code' from URL
+    loadingKey = false
+  }
+}
+
 async function checkForApiKey() {
   const code = route.query['code'] as string | undefined
   if (code) {
     console.log('found code in URL:', code)
-    await tystate.getOpenRouterPKCEKey(code)
+    await getOpenRouterPKCEKey(code)
   }
 }
 

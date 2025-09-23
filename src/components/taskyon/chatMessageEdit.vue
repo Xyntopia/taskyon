@@ -8,7 +8,6 @@
         v-model="content"
         data-cy="chat-input"
         autogrow
-        autofocus
         borderless
         placeholder="Type your message..."
         :input-style="{ maxHeight: '300px' }"
@@ -22,7 +21,7 @@
         <template #after>
           <slot name="bottom" btn-size="md">
             <q-btn flat :icon="matSend" @click="$emit('execute-task')">
-              <q-tooltip>Send ({{ props.useEnterToSend ? 'Enter' : 'Shift+Enter' }})</q-tooltip>
+              <q-tooltip>{{ sendToolTip }}</q-tooltip>
             </q-btn>
           </slot>
         </template> </q-input
@@ -30,7 +29,6 @@
         v-else
         v-model="content"
         autogrow
-        autofocus
         borderless
         placeholder="Type your message..."
         :input-style="{ maxHeight: '300px' }"
@@ -50,7 +48,7 @@
     <div v-if="!smallMode" class="bar bottom border-radius-inherit">
       <slot name="bottom" btn-size="sm">
         <q-btn flat size="sm" :icon="matSend" @click="$emit('execute-task')">
-          <q-tooltip>Send ({{ props.useEnterToSend ? 'Enter' : 'Shift+Enter' }})</q-tooltip>
+          <q-tooltip>{{ sendToolTip }}</q-tooltip>
         </q-btn>
       </slot>
     </div>
@@ -59,20 +57,35 @@
 
 <script setup lang="ts">
 import { matSend } from '@quasar/extras/material-icons'
+import { useQuasar } from 'quasar'
+import type { appConfiguration } from 'src/modules/taskyon/types'
 import { computed } from 'vue'
 import { ref } from 'vue'
 
+const $q = useQuasar()
 const h = ref(0)
 const w = ref(0)
 const heightLimitup = 65
 const heightLimitdown = 75
+const enterMode = computed(() =>
+  props.useEnterToSend === 'auto' ? ($q.platform.is.mobile ? 'off' : 'on') : props.useEnterToSend,
+)
+
+const sendToolTip = computed(
+  () =>
+    ({
+      on: 'Send (Enter)',
+      off: 'Send',
+      shift: 'Send (Shift+Enter)',
+    })[enterMode.value],
+)
 
 const content = defineModel<string | null | undefined>({
   required: true,
 })
 
 const props = defineProps<{
-  useEnterToSend: boolean
+  useEnterToSend: appConfiguration['useEnterToSend']
 }>()
 
 const emit = defineEmits<{
@@ -80,16 +93,24 @@ const emit = defineEmits<{
 }>()
 
 const checkKeyboardEvents = (event: KeyboardEvent) => {
-  if (props.useEnterToSend) {
-    if (!event.shiftKey && event.key === 'Enter') {
-      emit('execute-task')
-      event.preventDefault()
-    }
-  } else {
-    if (event.shiftKey && event.key === 'Enter') {
-      emit('execute-task')
-      event.preventDefault()
-    }
+  // Exit if not 'Enter' key or if sending is disabled
+  if (event.key !== 'Enter' || enterMode.value === 'off') {
+    return
+  }
+
+  // Map modes to their required 'shiftKey' state.
+  // 'auto' resolves to 'false' for mobile (simple Enter) and 'true' for desktop (Shift+Enter).
+  const shiftKeyRequirement = {
+    on: false,
+    shift: true,
+  }
+
+  // Check if the actual event's shiftKey matches the requirement for the current mode.
+  const shouldSend = shiftKeyRequirement[enterMode.value] === event.shiftKey
+
+  if (shouldSend) {
+    emit('execute-task')
+    event.preventDefault()
   }
 }
 

@@ -93,18 +93,19 @@ import {
   testMultipleArchiveUploadDownload,
   testTaskIdHashing,
   testCryptoSession,
-  restIndexedDBKeyStorage,
+  testIndexedDBKeyStorage,
+  testSessionSwitching,
 } from 'src/modules/taskyon/tests'
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
-import { chatThreadFromTaskId } from 'src/modules/tools/chatCompletionTool'
+import { convertTaskNodesToOpenAIChat } from 'src/modules/tools/chatCompletionTool'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import { onMounted } from 'vue'
 import { testCreateDeepTansformer } from 'src/modules/taskyon/tests'
 import { testGdriveUpload } from 'src/modules/taskyon/tests'
 import { testBuildSlimView } from 'src/modules/vueUtils'
 import { randomString } from '@taskyon/taskyon'
-import { getStoredStateString } from 'src/modules/ui/initialState'
+import { getCurrentProfileName, getStoredStateString } from 'src/modules/ui/initialState'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -115,8 +116,8 @@ const testFinished = ref(false)
 const infoText = ref('get password')
 let resolveSecret: (secret: string) => void
 onMounted(async () => {
-  const sst = await tystate.getSecretStore()
-  void sst.onNewSecret(({ args: [{ id, secretName }], respond }) => {
+  const ty = await tystate.taskyon
+  void ty.onNewSecret(({ args: [{ id, secretName }], respond }) => {
     if (state.noGuiTests) {
       respond('randomKey' + randomString(5))
       return
@@ -128,16 +129,25 @@ onMounted(async () => {
 })
 
 async function completionMessage() {
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
   const tyChat: Record<string, unknown> = {
     chatID: state.llmSettings.selectedTaskId,
   }
   if (state.llmSettings.selectedTaskId) {
-    tyChat.taskIdChain = await tm.getTaskIdChain(state.llmSettings.selectedTaskId)
-    const task = await (await tystate.getTaskManager()).getTask(state.llmSettings.selectedTaskId)
+    tyChat.taskIdChain = await ty.getTaskIdChain(state.llmSettings.selectedTaskId)
+    const task = await ty.getTask(state.llmSettings.selectedTaskId)
     if (task) {
-      const toolDefs = await tm.updateToolDefinitions(false)
-      const res = await chatThreadFromTaskId(tm, task.id, state.llmSettings, toolDefs)
+      const taskChain = await ty.getTaskChain(task.id, true)
+      const toolDefs = await ty.updateToolDefinitions(false)
+      const res = await convertTaskNodesToOpenAIChat(
+        taskChain,
+        // we are not testing files right now...
+        () => new Promise(() => null),
+        () => new Promise(() => undefined),
+        state.llmSettings.tryUsingVisionModels,
+        state.llmSettings.enableOpenAiTools,
+        toolDefs,
+      )
       tyChat.thread = res
     }
   }
@@ -172,11 +182,12 @@ async function runTest(name: string, testFunc: () => unknown, details = false) {
 }
 
 const tests = {
-  'test key indexeddb storage': restIndexedDBKeyStorage,
+  'test session switching': testSessionSwitching,
+  'test key indexeddb storage': testIndexedDBKeyStorage,
   'test crypto session': testCryptoSession,
   'task hashing': testTaskIdHashing,
   'test Pyodide': testPyodide,
-  'Test Secret Store': async () => testSecretStore(await tystate.getSecretStore()),
+  'Test Secret Store': testSecretStore,
   'test json schema to yam conversion': testJsonSchemaToYaml,
   'test build slim view': testBuildSlimView,
   'test openrouter websearch chatCompletion': testChatCompletion,
@@ -260,7 +271,8 @@ async function getData() {
         appConfiguration: state.appConfiguration,
       },
       taskyonStoreDiagnostics: {
-        SavedState: getStoredStateString(),
+        currentProfilePointer: getCurrentProfileName(),
+        SavedState: getStoredStateString(getCurrentProfileName()),
         CurrentState: state.getStateValues(),
       },
       CurrentChat: await completionMessage(),

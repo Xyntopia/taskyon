@@ -49,6 +49,7 @@
         />
       </template>
     </q-tree>
+    <!--render the "normal" task view...-->
     <template v-else>
       <template v-for="(task, idx) in props.selectedThread" :key="task.id">
         <q-expansion-item
@@ -154,6 +155,10 @@ const lastWorkerEvent = computed(() => {
   return tystate.workerStreamLogs.at(-1)
 })
 
+const emit = defineEmits<{
+  (e: 'onSizeChange'): void
+}>()
+
 const props = defineProps<{
   selectedThread: TaskNode[]
   currentTask: TaskNode
@@ -181,6 +186,15 @@ watch(
     )
   },
   { immediate: true },
+)
+
+// emit onSizeChange events, if our thread changes!
+watch(
+  () => props.selectedThread.map((t) => t.id),
+  async () => {
+    await nextTick()
+    emit('onSizeChange')
+  },
 )
 
 const isProcessing = (id: string) => {
@@ -225,6 +239,7 @@ void tystate.chatCompletionStream
     const currentStream = streamingTracker.value.get(taskId)
     const updatedStream = accumulateStep(currentStream, chunk)
     streamingTracker.value.set(taskId, updatedStream)
+    emit('onSizeChange')
   })
   .then((unsubscribe) => (streamerUnsubscriber = unsubscribe))
 
@@ -339,15 +354,15 @@ const tyChain2QTree = (taskChain: TaskTreeNode[][]) => {
 }
 
 const getQTree = async (taskID: string, justChildren = false) => {
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
 
-  const { task, children } = await tm.buildTaskTreeNode(taskID, 1)
+  const { task, children } = await ty.buildTaskTreeNode(taskID, 1)
 
   const childrenTrees = tyChain2QTree(children)
 
   if (justChildren) return childrenTrees
 
-  const siblings = await tm.buildSiblingChain(taskID, 1)
+  const siblings = await ty.buildSiblingChain(taskID, 1)
   const siblingNodes = tyList2QTree(siblings)
 
   const taskTree: taskTreeNodeType[] = [
@@ -403,3 +418,21 @@ function showTask(t: TaskNode) {
   return showExpert && showType && showInChat
 }
 </script>
+
+<style lang="sass">
+.task-container
+  position: relative
+
+  &:not(:has(.markdown-iframe))
+    .task-safety-icon
+      display: none
+
+  // TODO: show icon on the right if assistant, and left if user....
+  .task-safety-icon
+    position: absolute
+    top: -12px
+    right: 0px
+    width: 0.8em
+    height: 0.8em
+    z-index: 9
+</style>

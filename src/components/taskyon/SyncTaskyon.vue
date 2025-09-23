@@ -1,10 +1,9 @@
 <template>
   <q-list dense>
-    <template v-if="state.appConfiguration.expertMode">
-      <q-item-label header>
-        Task Synchronization
-        <InfoDialog
-          info-text="**Taskyon** makes it easy to **synchronize your tasks securely across all your devices**.
+    <q-item-label header>
+      Task Device Synchronization
+      <InfoDialog
+        info-text="**Taskyon** makes it easy to **synchronize your tasks securely across all your devices**.
 In addition, you can choose to connect with third-party cloud storage providers—like Google Drive—for seamless access everywhere.
 
 ---
@@ -15,20 +14,27 @@ In practice, this means that **only you** can read your data—**not** Taskyon�
 
 With Taskyon, your tasks are always **yours alone**.
 "
-        />
-      </q-item-label>
-      <q-item>
-        <SyncAskDialog />
-      </q-item>
-      <q-expansion-item label="ID Management" expand-separator default-opened class="q-py-sm">
+      />
+    </q-item-label>
+    <q-item>
+      <SyncAskDialog />
+    </q-item>
+    <template v-if="state.appConfiguration.expertMode">
+      <q-expansion-item label="ID Management" expand-separator class="q-py-sm">
+        <q-item>
+          <q-item-section>
+            Device ID: {{ deviceStr?.['Device ID'] }} <br />
+            Session ID: {{ state.sessionId }}
+          </q-item-section>
+        </q-item>
         <q-item v-if="false">
           <q-item-label caption>
-            Device ID
+            Current Peer ID: {{ 'N/A' }}
             <InfoDialog
-              info-text="Your Device ID is a unique identifier for this specific device.
+              info-text="Your Current Peer ID is a unique identifier for this specific device.
 It helps Taskyon distinguish between different devices you use, enabling secure
-synchronization and backup of your data. Device IDs are not shared with other
-users and are used only for internal management and security."
+synchronization and backup of your data. Peer IDs are ephemeral and shared with other
+users to securily exchange information. ou do not need to keep track of it."
             />
           </q-item-label>
           <q-item-label> </q-item-label>
@@ -139,120 +145,122 @@ and verify the authenticity of messages sent by other users."
       <q-item> </q-item>
       <q-separator spaced />-->
     </template>
-    <q-item-label header>Task Backup</q-item-label>
-    <q-item class="q-mb-lg">
-      <q-item-section>
-        <q-btn
-          :icon="matDownload"
-          flat
-          label="Save all Chats & Tasks"
-          @click="onDownloadTaskyonData"
-        >
-        </q-btn>
-      </q-item-section>
-      <q-item-section>
-        <FileDropzone disable-dropzone-border accept="*" @add-files="onUploadTaskyonData">
-          <q-btn :icon="matUpload" label="Upload Tasks from file" flat />
-        </FileDropzone>
-      </q-item-section>
-    </q-item>
-    <q-item>
-      <q-item-section>
-        <TyResetButton
-          :icon="matDeleteForever"
-          label="Delete Taskyon Chat Data"
-          color="red"
-          outline
-          mode="tasks"
-        >
-        </TyResetButton>
-      </q-item-section>
-    </q-item>
-    <q-separator spaced />
-    <q-item-label header>Taskyon Configuration Backup</q-item-label>
-    <q-item>
-      <q-item-section avatar>
-        <q-icon :name="matSave" size="md" />
-      </q-item-section>
-      <q-item-section>Download Settings:</q-item-section>
-      <div class="row q-gutter-xs">
-        <q-btn label="JSON" outline @click="downloadSettings('json')"></q-btn>
-        <q-btn label="YAML" outline @click="downloadSettings('yaml')"></q-btn>
-      </div>
-    </q-item>
-    <q-item>
-      <q-item-section avatar>
-        <q-icon :name="matUpload" size="md" />
-      </q-item-section>
-      <q-item-section>Upload Settings:</q-item-section>
-      <div class="row q-gutter-xs">
-        <FileDropzone disable-dropzone-border accept="*" @add-files="loadSettingsJson">
-          <q-btn outline class="fit">
-            JSON
-            <q-tooltip>Select Json file for upload!</q-tooltip>
+    <q-expansion-item label="Task Backup" expand-separator class="q-py-sm">
+      <q-item class="q-mb-lg">
+        <q-item-section>
+          <q-btn
+            :icon="matDownload"
+            flat
+            label="Save all Chats & Tasks"
+            @click="onDownloadTaskyonData"
+          >
           </q-btn>
-        </FileDropzone>
-        <FileDropzone disable-dropzone-border accept="*" @add-files="loadSettingsYaml">
-          <q-btn outline class="fit">
-            YAML
-            <q-tooltip>Select YAML file for upload!</q-tooltip>
+        </q-item-section>
+        <q-item-section>
+          <FileDropzone disable-dropzone-border accept="*" @add-files="onUploadTaskyonData">
+            <q-btn :icon="matUpload" label="Upload Tasks from file" flat />
+          </FileDropzone>
+        </q-item-section>
+      </q-item>
+      <q-item>
+        <q-item-section>
+          <TyResetButton
+            :icon="matDeleteForever"
+            label="Delete Taskyon Chat Data"
+            color="red"
+            outline
+            mode="tasks"
+          >
+          </TyResetButton>
+        </q-item-section>
+      </q-item>
+    </q-expansion-item>
+    <q-expansion-item label="Taskyon Configuration Backup" expand-separator class="q-py-sm">
+      <q-item>
+        <q-item-section avatar>
+          <q-icon :name="matSave" size="md" />
+        </q-item-section>
+        <q-item-section>Download Settings:</q-item-section>
+        <div class="row q-gutter-xs">
+          <q-btn label="JSON" outline @click="downloadSettings('json')"></q-btn>
+          <q-btn label="YAML" outline @click="downloadSettings('yaml')"></q-btn>
+        </div>
+      </q-item>
+      <q-item>
+        <q-item-section avatar>
+          <q-icon :name="matUpload" size="md" />
+        </q-item-section>
+        <q-item-section>Upload Settings:</q-item-section>
+        <div class="row q-gutter-xs">
+          <FileDropzone disable-dropzone-border accept="*" @add-files="loadSettingsJson">
+            <q-btn outline class="fit">
+              JSON
+              <q-tooltip>Select Json file for upload!</q-tooltip>
+            </q-btn>
+          </FileDropzone>
+          <FileDropzone disable-dropzone-border accept="*" @add-files="loadSettingsYaml">
+            <q-btn outline class="fit">
+              YAML
+              <q-tooltip>Select YAML file for upload!</q-tooltip>
+            </q-btn>
+          </FileDropzone>
+        </div>
+      </q-item>
+      <q-item class="q-pa-md q-gutter-sm">
+        <q-item-section avatar>
+          <q-icon size="md" :name="mdiGoogleDrive" />
+        </q-item-section>
+        <q-item-section> Export app & settings to gdrive: </q-item-section>
+        <div class="row q-gutter-xs">
+          <q-btn :icon="matSave" outline @click="onSyncGdrive">
+            <q-tooltip> Save configuration to gdrive</q-tooltip>
           </q-btn>
-        </FileDropzone>
-      </div>
-    </q-item>
-    <q-item class="q-pa-md q-gutter-sm">
-      <q-item-section avatar>
-        <q-icon size="md" :name="mdiGoogleDrive" />
-      </q-item-section>
-      <q-item-section> Export app & settings to gdrive: </q-item-section>
-      <div class="row q-gutter-xs">
-        <q-btn :icon="matSave" outline @click="onSyncGdrive">
-          <q-tooltip> Save configuration to gdrive</q-tooltip>
-        </q-btn>
-        <q-btn :icon="matSync" outline @click="onUpdateAppConfiguration">
-          <q-tooltip> Restore app configuration from gdrive</q-tooltip>
-        </q-btn>
-      </div>
-    </q-item>
-    <q-item>
-      <q-item-section>
-        <TyResetButton
-          :icon="matWarning"
-          label="Reset Taskyon Settings"
-          outline
-          class="q-my-md"
-          text-color="red"
-          mode="settings"
-        />
-      </q-item-section>
-    </q-item>
+          <q-btn :icon="matSync" outline @click="onUpdateAppConfiguration">
+            <q-tooltip> Restore app configuration from gdrive</q-tooltip>
+          </q-btn>
+        </div>
+      </q-item>
+      <q-item>
+        <q-item-section>
+          <TyResetButton
+            :icon="matWarning"
+            label="Reset Taskyon Settings"
+            outline
+            class="q-my-md"
+            text-color="red"
+            mode="settings"
+          />
+        </q-item-section>
+      </q-item>
+    </q-expansion-item>
   </q-list>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import FileDropzone from 'components/FileDropzone.vue'
-import { copyToClipboard, exportFile, extend } from 'quasar'
-import { useTaskyonStore } from 'stores/taskyonState'
-import yaml from 'js-yaml'
-import { useGdrive } from 'src/modules/gdrive'
-import { deepMergeReactive } from 'src/modules/utils'
 import {
-  matSync,
-  matSave,
-  matDownload,
+  matContentCopy,
   matDeleteForever,
+  matDownload,
+  matSave,
+  matSync,
   matUpload,
   matWarning,
-  matContentCopy,
 } from '@quasar/extras/material-icons'
 import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
-import InfoDialog from '../InfoDialog.vue'
-import { keyPairFromMnemonic, generateSeedPhrase } from '@taskyon/taskyon'
-import { useAppStateStore } from 'src/stores/appState'
-import TyResetButton from './TyResetButton.vue'
+import { generateSeedPhrase, keyPairFromMnemonic } from '@taskyon/taskyon'
+import FileDropzone from 'components/FileDropzone.vue'
+import yaml from 'js-yaml'
+import { copyToClipboard, exportFile, extend } from 'quasar'
+import { useGdrive } from 'src/modules/gdrive'
 import { TyProfile } from 'src/modules/taskyon/types'
+import { deepMergeReactive } from 'src/modules/utils'
+import { asyncComputed } from 'src/modules/vueUtils'
+import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { ref } from 'vue'
+import InfoDialog from '../InfoDialog.vue'
 import SyncAskDialog from './SyncAskDialog.vue'
+import TyResetButton from './TyResetButton.vue'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -261,6 +269,11 @@ const { saveObjToGdrive, loadObjFromGdrive } = useGdrive(tystate.getGdriveToken)
 const showSeedPhrase = ref(false)
 const pressedSeedPhraseCopyButton = ref(false)
 const seedPhrase = ref('')
+
+const deviceStr = asyncComputed(
+  async () => ({ 'Device ID': await tystate.getDeviceId() }),
+  undefined,
+)
 
 function onGenerateSeedPhrase() {
   console.log('generate user id...')
@@ -364,8 +377,8 @@ const downloadSettings = (format: string) => {
 }
 
 async function onDownloadTaskyonData() {
-  const tm = await tystate.getTaskManager()
-  const jsonBackup = await tm.getJsonTaskBackup()
+  const ty = await tystate.taskyon
+  const jsonBackup = await ty.getJsonTaskBackup()
   console.log('downloading tasks in json format')
   const timestamp = new Date().toISOString()
   exportFile(`${timestamp}_taskyon_data.json`, jsonBackup, 'application/json')
@@ -378,8 +391,8 @@ async function onUploadTaskyonData(newFiles: File[]) {
 
   try {
     const fileContent = await file.text()
-    const tm = await tystate.getTaskManager()
-    await tm.addTaskBackup(fileContent)
+    const ty = await tystate.taskyon
+    await ty.addTaskBackup(fileContent)
     location.reload() // reload browser window to update app state...
   } catch (error) {
     console.error('Error processing file', error)

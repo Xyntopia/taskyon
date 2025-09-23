@@ -598,6 +598,22 @@ export const generateIframeSrc = (
 
         window.addEventListener('load', sendSize);
         new ResizeObserver(sendSize).observe(contentEl);
+
+        // --- minimal long-press detection ---
+        let pressTimer;
+        contentEl.addEventListener('touchstart', () => {
+          pressTimer = setTimeout(() => {
+            window.parent.postMessage({ type: 'longpress' }, '*');
+          }, 600); // ms threshold for long press
+        });
+        contentEl.addEventListener('touchend', () => clearTimeout(pressTimer));
+        contentEl.addEventListener('touchmove', () => clearTimeout(pressTimer));
+
+        // Inside your-iframe-content.html
+        document.addEventListener('click', function(event) {
+            window.parent.postMessage({ type: 'iframeClick', x: event.clientX, y: event.clientY }, '*');
+        });
+
       </script>
     </body>
   </html>

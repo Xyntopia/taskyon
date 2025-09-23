@@ -81,7 +81,7 @@ const tools: ClientTool[] = [
   }),
 ]
 
-onMounted(() => void initializeTaskyon(tools, configuration))
+onMounted(() => void initializeTaskyon({ tools, configuration, name: 'taskyon client test' }))
 </script>
 
 <style lang="sass">

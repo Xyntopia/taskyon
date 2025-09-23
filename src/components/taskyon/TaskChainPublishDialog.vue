@@ -88,7 +88,15 @@ No one else can access or remove your files without your permission.`"
                   @click="shareViaSocialApps"
                 />
                 <div class="column items-center">
-                  <QrCode :data="taskyonShareLink" />
+                  <QrCode
+                    :data="taskyonShareLink"
+                    display-text="Scan this QR code to start a conversation with our AI assistant on Taskyon. This is a secure link to our official chat platform - simply scan and begin chatting!"
+                    logo-fallback-text="TY"
+                    show-fullscreen
+                    show-logo
+                    show-print
+                    logo-url="/taskyon_mono_opt.svg"
+                  />
                 </div>
                 <div>
                   <template
@@ -227,15 +235,15 @@ const hasTaskChanged = computed(() => {
 
 const selectedTaskList = asyncComputed(
   async () => {
-    const tm = await tystate.getTaskManager()
+    const ty = await tystate.taskyon
     if (single) {
       if (typeof taskOrId === 'string') {
-        const task = await tm.getTask(taskId.value)
+        const task = await ty.getTask(taskId.value)
         return task ? [task] : []
       }
       return [taskOrId]
     }
-    const taskList = await tm.getTaskChain(taskId.value)
+    const taskList = await ty.getTaskChain(taskId.value)
     return taskList
   },
   [],

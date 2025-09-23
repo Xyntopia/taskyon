@@ -122,8 +122,8 @@ const tystate = useTaskyonStore()
 const conversationIDs = ref<string[]>([])
 const nameMap = ref<Record<string, string>>({})
 
-void tystate.getTaskManager().then((tm) =>
-  tm.taskStream.subscribe((data) => {
+void tystate.taskyon.then((ty) =>
+  ty.taskStream.subscribe((data) => {
     // for every message from the stream, try to update our name map :)
     // console.log('update name', data.data)
     if (data.data?.name) nameMap.value[data.id] = data.data?.name
@@ -132,20 +132,21 @@ void tystate.getTaskManager().then((tm) =>
 
 let currentlyCalculating = false
 
+// TODO: this is probably a good idea to move this into "taskyon core"
 async function updateName(id: string) {
   console.log('update name...', id)
   const displayName = nameMap.value[id]
   if (displayName) return
-  const tm = await tystate.getTaskManager()
-  const task = await tm.getTask(id)
+  const ty = await tystate.taskyon
+  const task = await ty.getTask(id)
   if (!task) return
   let name = task?.name
   if (!name?.trim()) {
-    const taskMeta = await tm.metaDb.get('id')
+    const taskMeta = await ty.getMeta('id')
     name = taskMeta?.name
   }
   if (!name?.trim()) {
-    const taskChain = await tm.getTaskChain(id)
+    const taskChain = await ty.getTaskChain(id)
 
     // search if a previous task already has a name first
     for (let i = taskChain.length - 1; i >= 0; i--) {
@@ -166,7 +167,7 @@ async function updateName(id: string) {
   }
   if (name?.trim()) {
     nameMap.value[id] = name.trim()
-    void tm.metaDb.upsert(id, { name })
+    void ty.metaUpsert(id, { name })
   }
 }
 
@@ -192,14 +193,14 @@ const q = useQuasar()
 
 async function loadConversations(files: File[]) {
   console.log('load conversation from file', files)
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
   let last_loaded_id = undefined
   for (const file of files) {
     try {
       if (file.type === 'text/markdown') {
-        last_loaded_id = await tm.addMdTaskChain(await file.text())
+        last_loaded_id = await ty.addMdTaskChain(await file.text())
       } else if (file.type === 'application/yaml') {
-        last_loaded_id = await tm.loadYamlConversation(file)
+        last_loaded_id = await ty.loadYamlConversation(file)
       } else {
         throw new Error(`wrong file type: ${file.type}`)
       }

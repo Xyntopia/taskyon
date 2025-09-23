@@ -4,8 +4,8 @@
       <canvas ref="qrCanvas"></canvas>
 
       <!-- Action buttons -->
-      <div v-if="showButtons" class="action-buttons">
-        <button class="action-btn print-btn" @click.stop="printQR">
+      <div v-if="showButtons && (showPrint || showFullscreen)" class="action-buttons">
+        <button v-if="showPrint" class="action-btn print-btn" @click.stop="printQR">
           <svg
             width="16"
             height="16"
@@ -20,7 +20,11 @@
           </svg>
           Print
         </button>
-        <button class="action-btn fullscreen-btn" @click.stop="toggleFullscreen">
+        <button
+          v-if="showFullscreen"
+          class="action-btn fullscreen-btn"
+          @click.stop="toggleFullscreen"
+        >
           <svg
             width="16"
             height="16"
@@ -39,7 +43,11 @@
     </div>
 
     <!-- Fullscreen overlay -->
-    <div v-if="isFullscreen" class="fullscreen-overlay" @click.self="exitFullscreen">
+    <div
+      v-if="isFullscreen && showFullscreen"
+      class="fullscreen-overlay"
+      @click.self="exitFullscreen"
+    >
       <div class="fullscreen-content">
         <button class="close-btn" @click="exitFullscreen">
           <svg
@@ -59,11 +67,15 @@
           <canvas ref="fullscreenCanvas"></canvas>
         </div>
 
-        <div class="display-text">
+        <div v-if="displayText" class="display-text">
           <p>{{ displayText }}</p>
         </div>
 
-        <button class="action-btn print-btn fullscreen-print" @click="printFullscreen">
+        <button
+          v-if="showPrint"
+          class="action-btn print-btn fullscreen-print"
+          @click="printFullscreen"
+        >
           <svg
             width="16"
             height="16"
@@ -87,16 +99,29 @@
 import { ref, onMounted, nextTick, computed } from 'vue'
 import QRCode from 'qrcode'
 
-const { data } = defineProps<{
+const props = defineProps<{
   data: unknown
+  showLogo?: boolean
+  showPrint?: boolean
+  showFullscreen?: boolean
+  displayText?: string
+  logoUrl?: string
+  logoFallbackText?: string
 }>()
+
+// Set defaults for optional props
+const showLogo = computed(() => props.showLogo ?? true)
+const showPrint = computed(() => props.showPrint ?? true)
+const showFullscreen = computed(() => props.showFullscreen ?? true)
+const logoUrl = computed(() => props.logoUrl)
+const logoFallbackText = computed(() => props.logoFallbackText ?? 'T')
 
 // Reactive state
 const inputText = computed(() => {
-  if (typeof data === 'string') {
-    return data
+  if (typeof props.data === 'string') {
+    return props.data
   } else {
-    return JSON.stringify(data)
+    return JSON.stringify(props.data)
   }
 })
 const size = ref(200)
@@ -105,9 +130,6 @@ const qrCanvas = ref<HTMLCanvasElement | null>(null)
 const fullscreenCanvas = ref<HTMLCanvasElement | null>(null)
 const showButtons = ref(false)
 const isFullscreen = ref(false)
-const displayText = ref(
-  'Scan this QR code to start a conversation with our AI assistant on Taskyon. This is a secure link to our official chat platform - simply scan and begin chatting!',
-)
 
 // Generate QR code
 const generateQR = async () => {
@@ -126,12 +148,30 @@ const generateQR = async () => {
 
     void nextTick(() => {
       if (!qrCanvas.value || !qrCodeData.value) return
-      drawQRWithLogo(qrCanvas.value, qrCodeData.value, size.value)
+      if (showLogo.value) {
+        drawQRWithLogo(qrCanvas.value, qrCodeData.value, size.value)
+      } else {
+        drawPlainQR(qrCanvas.value, qrCodeData.value)
+      }
     })
   } catch (err) {
     console.error('QR generation failed:', err)
     qrCodeData.value = null
   }
+}
+
+// Draw plain QR without logo
+const drawPlainQR = (canvas: HTMLCanvasElement, qrDataUrl: string) => {
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const qrImg = new Image()
+  qrImg.onload = () => {
+    canvas.width = qrImg.width
+    canvas.height = qrImg.height
+    ctx.drawImage(qrImg, 0, 0)
+  }
+  qrImg.src = qrDataUrl
 }
 
 // Helper function to draw QR with logo overlay
@@ -198,7 +238,7 @@ const drawQRWithLogo = (canvas: HTMLCanvasElement, qrDataUrl: string, qrSize: nu
         // Restore canvas state
         ctx.restore()
       } else {
-        // Fallback: draw a simple "T" for Taskyon
+        // Fallback: draw a simple character for the logo
         drawFallbackLogo(ctx, logoX, logoY, logoSize)
       }
     })
@@ -208,8 +248,12 @@ const drawQRWithLogo = (canvas: HTMLCanvasElement, qrDataUrl: string, qrSize: nu
 
 // Function to load SVG logo and convert to data URL
 const loadSVGLogo = (callback: (img: HTMLImageElement | null) => void) => {
+  if (!logoUrl.value) {
+    callback(null)
+    return
+  }
   // Try to load the SVG logo
-  fetch('/taskyon_mono_opt.svg')
+  fetch(logoUrl.value)
     .then((response) => {
       if (!response.ok) throw new Error('SVG not found')
       return response.text()
@@ -243,28 +287,39 @@ const drawFallbackLogo = (ctx: CanvasRenderingContext2D, x: number, y: number, s
   ctx.font = `bold ${size * 0.6}px Arial, sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText('T', x + size / 2, y + size / 2)
+  ctx.fillText(logoFallbackText.value, x + size / 2, y + size / 2)
 }
 
 // Toggle action buttons visibility
 const toggleButtons = () => {
-  showButtons.value = !showButtons.value
+  // Only show buttons if at least one action is enabled
+  if (showPrint.value || showFullscreen.value) {
+    showButtons.value = !showButtons.value
+  }
 }
 
 // Print QR code
 const printQR = () => {
-  if (!qrCanvas.value) return
+  if (!qrCanvas.value || !showPrint.value) return
 
   const printWindow = window.open('', '_blank')
   if (!printWindow) return
 
-  // Get the canvas with logo as data URL
+  // Get the canvas with or without logo as data URL
   const canvasDataUrl = qrCanvas.value.toDataURL('image/png')
+
+  const displayTextSection = props.displayText
+    ? `
+    <div class="text-section">
+      <p class="text-content">${props.displayText}</p>
+    </div>
+  `
+    : ''
 
   printWindow.document.write(`
     <html>
       <head>
-        <title>Taskyon QR Code</title>
+        <title>QR Code</title>
         <style>
           body {
             margin: 0;
@@ -319,11 +374,9 @@ const printQR = () => {
       <body onload="window.print(); setTimeout(function(){ window.close(); }, 100);">
         <div class="print-container">
           <div class="qr-section">
-            <img src="${canvasDataUrl}" alt="Taskyon QR Code" />
+            <img src="${canvasDataUrl}" alt="QR Code" />
           </div>
-          <div class="text-section">
-            <p class="text-content">${displayText.value}</p>
-          </div>
+          ${displayTextSection}
         </div>
       </body>
     </html>
@@ -333,6 +386,8 @@ const printQR = () => {
 
 // Toggle fullscreen mode
 const toggleFullscreen = async () => {
+  if (!showFullscreen.value) return
+
   isFullscreen.value = true
   showButtons.value = false
 
@@ -349,7 +404,12 @@ const toggleFullscreen = async () => {
         light: '#ffffff',
       },
     })
-    drawQRWithLogo(fullscreenCanvas.value, fullscreenQR, 400)
+
+    if (showLogo.value) {
+      drawQRWithLogo(fullscreenCanvas.value, fullscreenQR, 400)
+    } else {
+      drawPlainQR(fullscreenCanvas.value, fullscreenQR)
+    }
   }
 }
 
@@ -360,18 +420,26 @@ const exitFullscreen = () => {
 
 // Print fullscreen with display text
 const printFullscreen = () => {
-  if (!fullscreenCanvas.value) return
+  if (!fullscreenCanvas.value || !showPrint.value) return
 
   const printWindow = window.open('', '_blank')
   if (!printWindow) return
 
-  // Get the fullscreen canvas with logo as data URL
+  // Get the fullscreen canvas with or without logo as data URL
   const canvasDataUrl = fullscreenCanvas.value.toDataURL('image/png')
+
+  const displayTextSection = props.displayText
+    ? `
+    <div class="text-section">
+      <p class="text-content">${props.displayText}</p>
+    </div>
+  `
+    : ''
 
   printWindow.document.write(`
     <html>
       <head>
-        <title>Taskyon QR Code</title>
+        <title>QR Code</title>
         <style>
           body {
             margin: 0;
@@ -426,11 +494,9 @@ const printFullscreen = () => {
       <body onload="window.print(); setTimeout(function(){ window.close(); }, 100);">
         <div class="print-container">
           <div class="qr-section">
-            <img src="${canvasDataUrl}" alt="Taskyon QR Code" />
+            <img src="${canvasDataUrl}" alt="QR Code" />
           </div>
-          <div class="text-section">
-            <p class="text-content">${displayText.value}</p>
-          </div>
+          ${displayTextSection}
         </div>
       </body>
     </html>
@@ -450,7 +516,6 @@ onMounted(generateQR)
 .qr-preview {
   position: relative;
   display: inline-block;
-  cursor: pointer;
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -463,6 +528,11 @@ onMounted(generateQR)
 
 .qr-preview canvas {
   display: block;
+}
+
+/* Only show cursor pointer if there are actions available */
+.qr-preview:has(.action-buttons) {
+  cursor: pointer;
 }
 
 .action-buttons {

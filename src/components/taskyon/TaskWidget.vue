@@ -111,16 +111,20 @@
     :short="short"
   >
     <template #header> {{ task.content.data.split(' ').slice(0, 10).join(' ') }}... </template>
-    <tyMarkdown
-      v-if="state.taskWidgetState[task.id]?.markdownEnabled != false"
-      no-line-numbers
-      :src="task.content.data"
-      :use-iframe="true"
-      @iframe-ready="(el: HTMLIFrameElement) => onIframeMessage(el, task.id)"
-    />
-    <div v-else class="raw-markdown q-mb-md">
-      {{ task.content.data }}
-    </div>
+    <template #default="{ showTaskMenu }">
+      <tyMarkdown
+        v-if="state.taskWidgetState[task.id]?.markdownEnabled != false"
+        no-line-numbers
+        :src="task.content.data"
+        :use-iframe="true"
+        @iframe-ready="(el: HTMLIFrameElement) => onIframeMessage(el, task.id)"
+        @if-longpress="showTaskMenu(true)"
+        @if-click="showTaskMenu(false)"
+      />
+      <div v-else class="raw-markdown q-mb-md">
+        {{ task.content.data }}
+      </div>
+    </template>
   </TaskField>
   <TaskField
     v-else-if="task.content.type === 'error'"
@@ -137,26 +141,34 @@
         use-iframe
       />
     </template>
-    <div class="text-negative">
-      <tyMarkdown :src="humanizeError(task.content.data)" no-line-numbers use-iframe />
-    </div>
+    <template #default="{ showTaskMenu }">
+      <div class="text-negative">
+        <tyMarkdown
+          :src="humanizeError(task.content.data)"
+          no-line-numbers
+          use-iframe
+          @if-longpress="showTaskMenu(true)"
+          @if-click="showTaskMenu(false)"
+        />
+      </div>
+    </template>
   </TaskField>
 </template>
 
 <script setup lang="ts">
-import { useTaskyonStore } from 'stores/taskyonState'
-import type { TaskNode } from '@taskyon/taskyon'
-import tyMarkdown from '../tyMarkdown.vue'
-import { ref } from 'vue'
-import { mdiDesktopTower, mdiFileDocument, mdiTools, mdiHeadCog } from '@quasar/extras/mdi-v6'
 import { matBuild, matCalculate, matPause, matWarning } from '@quasar/extras/material-icons'
-import FileBrowser from './FileBrowser.vue'
-import { useAppStateStore } from 'src/stores/appState'
-import { safeYamlDump } from 'src/modules/yamlUtils'
-import TaskField from './TaskField.vue'
+import { mdiDesktopTower, mdiFileDocument, mdiHeadCog, mdiTools } from '@quasar/extras/mdi-v6'
+import type { TaskNode } from '@taskyon/taskyon'
 import { dump } from 'js-yaml'
-import { humanizeError } from 'src/modules/utils'
 import type { FileMapping } from 'src/modules/taskyon/taskManager'
+import { humanizeError } from 'src/modules/utils'
+import { safeYamlDump } from 'src/modules/yamlUtils'
+import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { ref } from 'vue'
+import tyMarkdown from '../tyMarkdown.vue'
+import FileBrowser from './FileBrowser.vue'
+import TaskField from './TaskField.vue'
 
 const { task } = defineProps<{
   task: TaskNode
@@ -172,7 +184,7 @@ const state = useAppStateStore()
 const fileMappings = ref<FileMapping[]>([])
 async function getFile(uuid: string) {
   console.log('load image', uuid)
-  return (await tystate.getTaskManager()).getOpfsUploadedFile(uuid)
+  return (await tystate.taskyon).getOpfsUploadedFile(uuid)
 }
 
 const onIframeMessage = (el: HTMLIFrameElement, id: string) => {
@@ -182,8 +194,8 @@ const onIframeMessage = (el: HTMLIFrameElement, id: string) => {
 if (task.content.type === 'files') {
   console.log('get uploaded files')
   void (async (fileUuids: string[]) => {
-    const tm = await tystate.getTaskManager()
-    const fm = await Promise.all(fileUuids.map((uuid) => tm.getFileMappingByUuid(uuid)))
+    const ty = await tystate.taskyon
+    const fm = await Promise.all(fileUuids.map((uuid) => ty.getFileMappingByUuid(uuid)))
     fileMappings.value = fm.filter((x) => x != null)
     /*fileMappings.value = fm.map((x) => {
       const newfm = { ...x, xinfo: { uuid: x?.uuid } };

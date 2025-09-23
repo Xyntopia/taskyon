@@ -64,6 +64,7 @@ export const ChatResponseType = z.object({
           'content_filter',
           'function_call',
           'cancelled',
+          'unknown',
         ]),
         logprobs: z.unknown().optional(),
         reasoning: z.string().optional(),
@@ -568,11 +569,16 @@ export const appConfiguration = z.object({
       description:
         'A list of getting started templates which appear as buttons when no chat is selected.',
     }),
-  useEnterToSend: z.boolean().default(true).meta({
-    icon: matKeyboardReturn,
-    label: 'Use Enter to Send',
-    description: 'Determines, if enter will automatically send a message or rather shift-enter',
-  }),
+  useEnterToSend: z
+    .enum(['auto', 'on', 'off', 'shift'])
+    .default('auto')
+    .meta({
+      icon: matKeyboardReturn,
+      label: 'Use Enter to Send',
+      description: `Controls the behavior of the Enter key for sending messages.
+  "Auto" enables sending messages with Enter on desktop devices while disabling it on mobile devices.
+  Other options allow always enabling, always disabling, or requiring Shift+Enter to insert a new line.`,
+    }),
   guiMode: z.enum(['auto', 'iframe', 'default', 'minChat']).default('auto').meta({
     description: 'Sets whether we want to have a minimalist chat or the full app',
   }),
@@ -591,7 +597,7 @@ export const appConfiguration = z.object({
 export type appConfiguration = z.infer<typeof appConfiguration>
 
 export const TyProfile = z.object({
-  version: z.literal(19).meta({
+  version: z.literal(20).meta({
     description:
       'whenever the schema of the settings change, this number will get changed as well...',
   }),

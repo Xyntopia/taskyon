@@ -1,5 +1,5 @@
 {
-  "version": 19,
+  "version": 20,
   "appConfiguration": {
     "darkTheme": "auto",
     "showLogo": true,
@@ -10,7 +10,7 @@
     "expertMode": false,
     "showCosts": false,
     "gdriveDir": "taskyon",
-    "useEnterToSend": true,
+    "useEnterToSend": "auto",
     "guiMode": "auto",
     "primaryColor": "#2A3548",
     "secondaryColor": "#F78F3B"

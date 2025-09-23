@@ -1,4 +1,4 @@
-import type { RemoveUndefined } from './tsHelpers'
+import type { RemoveUndefined, Thunk } from './tsHelpers'
 
 export const removeKeys = <T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> => {
   return Object.fromEntries(
@@ -26,6 +26,38 @@ export function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = []
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
   return out
+}
+
+type ProxyApi<T, K extends readonly (keyof T)[]> = {
+  [P in K[number]]: T[P] extends (...args: infer A) => infer R ? (...args: A) => R : () => T[P]
+}
+
+export const createProxyFunction = <F extends (...args: Parameters<F>) => ReturnType<F>>(
+  f: Thunk<F>,
+) => ((...args: Parameters<F>) => f()(...args)) as F
+
+export function createProxyApi<T extends object, const K extends readonly (keyof T)[]>(
+  obj: Thunk<T>,
+  names: K,
+): ProxyApi<T, K> {
+  const api: Partial<Record<keyof T, unknown>> = {}
+
+  for (const key of names) {
+    const val = obj()[key]
+    if (typeof val === 'function') {
+      // Preserve `this` if the method uses it
+      api[key] = (...args: unknown[]) => {
+        // we have to load obj again here, because it might have changed
+        // thats why we have the proxy in the first place!
+        const f = obj()[key] as (...args: unknown[]) => unknown
+        return f(...args)
+      }
+    } else {
+      api[key] = () => obj()[key]
+    }
+  }
+
+  return api as ProxyApi<T, K>
 }
 
 export async function first<T>(source: AsyncIterable<T> | Iterable<T>): Promise<T | undefined> {

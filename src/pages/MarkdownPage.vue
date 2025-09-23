@@ -5,7 +5,7 @@
       <div>Path: {{ filePath }}</div>
     </div>
     <q-card flat class="q-pa-sm">
-      <ty-markdown v-if="markdownContent" :src="markdownContent" no-line-numbers />
+      <ty-markdown v-if="markdownContent" :src="markdownContent" no-line-numbers use-iframe />
     </q-card>
   </FadeAwayScrollPage>
 </template>

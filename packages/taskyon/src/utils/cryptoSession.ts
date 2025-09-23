@@ -7,165 +7,82 @@ import {
   keyPairFromMnemonic,
   generateAssymetricKeyDeriver,
   generateWrappedSessionKey,
-  unwrapSessionKey,
-  reWrapSessionKey,
+  unwrapKeySymmetric,
+  reWrapSessionKeySymmetric,
   deriveKek,
   cryptoKeyToBase64,
+  keyFingerPrint,
 } from './crypto'
 
-// ===================================================================================
-//  SIMPLIFIED INDEXEDDB OPERATIONS
-// ===================================================================================
-
-async function openDatabase(namespace: string): Promise<IDBDatabase> {
-  const dbName = `CryptoSession_${namespace}`
-
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(dbName, 1)
-
-    request.onupgradeneeded = () => {
-      const db = request.result
-      if (!db.objectStoreNames.contains('keys')) {
-        db.createObjectStore('keys')
-      }
-    }
-
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(new Error(request.error?.message || 'Database open failed'))
-  })
+export type CryptoSessionOptions = {
+  wrappedSK?: string | undefined
+  unwrapper?: CryptoKey | undefined
+  mnemonic?: string | undefined
+  userKeyPair?: CryptoKeyPair | undefined
+  deviceKeyPair?: CryptoKeyPair | undefined
+  bindingKey?: CryptoKey | undefined
 }
 
-async function getDeviceKey(namespace: string): Promise<CryptoKeyPair | undefined> {
-  const db = await openDatabase(namespace)
-
-  try {
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('keys', 'readonly')
-      const store = tx.objectStore('keys')
-      const request = store.get('deviceKeyPair')
-
-      request.onsuccess = () => resolve(request.result)
-      request.onerror = () =>
-        reject(new Error(request.error?.message || 'Failed to get device key'))
-    })
-  } finally {
-    db.close()
-  }
-}
-
-async function setDeviceKey(namespace: string, keyPair: CryptoKeyPair): Promise<void> {
-  const db = await openDatabase(namespace)
-
-  try {
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('keys', 'readwrite')
-      const store = tx.objectStore('keys')
-      const request = store.put(keyPair, 'deviceKeyPair')
-
-      request.onsuccess = () => resolve()
-      request.onerror = () =>
-        reject(new Error(request.error?.message || 'Failed to store device key'))
-    })
-  } finally {
-    db.close()
-  }
-}
-
-async function deleteDatabase(namespace: string): Promise<void> {
-  const dbName = `CryptoSession_${namespace}`
-
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.deleteDatabase(dbName)
-    request.onsuccess = () => resolve()
-    request.onerror = () => reject(new Error(request.error?.message || 'Database deletion failed'))
-    request.onblocked = () => reject(new Error('Database deletion blocked'))
-  })
-}
-
-type UserKeyPair = {
-  privateKey: CryptoKey
-  publicKey: CryptoKey
-  pkb64: string
-}
-
-type CryptoSessionOptions = {
-  wrapped?: string
-  unwrapper?: CryptoKeyPair
-  mnemonic?: string
-  userKeyPair?: UserKeyPair
-  newDK?: boolean
-}
-
-// TODO: pass an old crypto session and convert our wrapped keys and everything to the "new" session..
-
-export async function createCryptoSession(accountId: string, options?: CryptoSessionOptions) {
-  const storageNamespace = 'ty_ucs_' + accountId
-
+export async function createCryptoSession(options?: CryptoSessionOptions) {
   // Initialize or load device key pair
-  const existingDeviceKey = options?.newDK ? undefined : await getDeviceKey(storageNamespace)
-  let deviceKeyPair: CryptoKeyPair
+  const existingDeviceKey = options?.deviceKeyPair ?? undefined
+  let DK: CryptoKeyPair
   if (!existingDeviceKey) {
-    deviceKeyPair = await generateAssymetricKeyDeriver()
-    await setDeviceKey(storageNamespace, deviceKeyPair)
+    DK = await generateAssymetricKeyDeriver()
   } else {
-    deviceKeyPair = existingDeviceKey
+    DK = existingDeviceKey
   }
-  const kek = await deriveKek(deviceKeyPair.privateKey, deviceKeyPair.publicKey)
+  const kek = await deriveKek(DK.privateKey, options?.bindingKey ?? DK.publicKey)
 
   // Initialize session key (in memory only)
-  const wrappedSK = options?.wrapped
+  const wrappedSK = options?.wrappedSK
     ? options?.unwrapper
-      ? await reWrapSessionKey(
-          options.wrapped,
-          await deriveKek(options.unwrapper.privateKey, options.unwrapper.publicKey),
-          kek,
-        )
-      : options.wrapped
+      ? await reWrapSessionKeySymmetric(options.wrappedSK, options.unwrapper, kek)
+      : options.wrappedSK
     : await generateWrappedSessionKey(kek)
-  const SK = await unwrapSessionKey(wrappedSK, kek)
+  const SK = await unwrapKeySymmetric(wrappedSK, kek)
 
   // Initialize user key pair (in memory only)
-  const userKeyPair = options?.mnemonic
+  const UK = options?.mnemonic
     ? await keyPairFromMnemonic(options.mnemonic)
-    : options?.userKeyPair
+    : (options?.userKeyPair ?? DK)
 
-  const exportSessionKey = async (shareKey?: CryptoKeyPair) => {
+  const exportSessionKey = async (shareKey?: CryptoKey) => {
     if (shareKey) {
-      const shareKek = await deriveKek(shareKey.privateKey, shareKey.publicKey)
-      return await reWrapSessionKey(wrappedSK, kek, shareKek)
+      return await reWrapSessionKeySymmetric(wrappedSK, kek, shareKey)
     } else {
       return wrappedSK
     }
   }
 
+  // for security reasons, we eliminate the "mnemonic" from subsequent, derived sessions.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { mnemonic, ...oldOptions } = options ?? {}
+  const derive = (newOptions: CryptoSessionOptions) =>
+    createCryptoSession({
+      ...oldOptions,
+      deviceKeyPair: DK,
+      userKeyPair: UK,
+      ...newOptions,
+    })
+
   return {
     getSessionKey: () => SK,
-    getDevicePublicKey: () => deviceKeyPair.publicKey,
-    id: () => cryptoKeyToBase64(deviceKeyPair.publicKey),
-    getUserPublicKey: (): CryptoKey => {
-      if (!userKeyPair) throw new Error('User key pair not initialized')
-      return userKeyPair.publicKey
-    },
+    getDevicePublicKey: () => DK.publicKey,
+    deviceId: () => cryptoKeyToBase64(DK.publicKey),
+    getDeviceKey: () => DK,
+    getUserPublicKey: () => UK,
     exportSessionKey,
-    destroy: async () => await deleteDatabase(storageNamespace),
-    derive: (options?: { newSK?: boolean; newDK?: boolean; newMnemonic?: string }) => {
-      return createCryptoSession(accountId, {
-        ...(options?.newSK ? {} : { wrapped: wrappedSK }),
-        unwrapper: deviceKeyPair,
-        newDK: !!options?.newDK,
-        ...(userKeyPair ? { userKeyPair } : {}),
-        ...(options?.newMnemonic ? { mnemonic: options?.newMnemonic } : {}),
-      })
-    },
+    getSessionId: () => keyFingerPrint(SK),
+    getWrapperId: () => keyFingerPrint(kek),
+    derive,
+    newSessionKey: (wrappedSK?: string) => derive({ wrappedSK }),
+    newDeviceKey: (deviceKeyPair?: CryptoKeyPair) =>
+      derive({
+        deviceKeyPair,
+        unwrapper: kek,
+      }),
   }
 }
 
 export type CryptoSession = Awaited<ReturnType<typeof createCryptoSession>>
-
-/**
- * Completely deletes the crypto session database for an account
- */
-export async function forceDestroyCryptoSession(accountId: string): Promise<void> {
-  const storageNamespace = 'ty_ucs_' + accountId
-  await deleteDatabase(storageNamespace)
-}

@@ -2,6 +2,7 @@ import type { JSONSchema7 } from 'json-schema'
 // import type { JSONSchema } from 'json-schema-to-ts'
 // import type { ToolBase } from '../taskyon/types'
 import { createVectorStore } from '../crudWrapper'
+import type { TyPGDB } from '../pglite.api'
 import { getDatabase } from '../pglite.api'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 import { sha256UrlSafeHash } from '@taskyon/taskyon'
@@ -46,7 +47,7 @@ export const ragSearchTool = createTool({
   } as const satisfies JSONSchema7,
   function: async ({ searchText, k, sourceType, label }) => {
     if (sourceType === 'vectorStore') {
-      const { search } = await createVectorStore(await getDatabase('taskyon'), 'vectorStoreTool')
+      const { search } = await createVectorStore(await getDatabase('DEMODB'), 'vectorStoreTool')
 
       if (searchText) {
         const searchResults = await search(
@@ -109,54 +110,55 @@ export const ragSearchTool = createTool({
   },
 })
 
-export const ragAddTool = createTool({
-  name: 'ragAddTool',
-  description: `This tool can add content to the vector store. This tool can use any source of information and add it to the vector store.
+export const ragAddTool = (db: TyPGDB) =>
+  createTool({
+    name: 'ragAddTool',
+    description: `This tool can add content to the vector store. This tool can use any source of information and add it to the vector store.
   It is useful for use information sources with high relevance and add it to the vector store. You can use source types to
   make sure that the search uses specific sources.`,
-  parameters: {
-    type: 'object',
-    properties: {
-      inputType: {
-        type: 'string',
-        description: 'The type of source to add to the vector store.',
-        enum: ['web', 'userInput', 'localFile'],
-        default: 'userInput',
+    parameters: {
+      type: 'object',
+      properties: {
+        inputType: {
+          type: 'string',
+          description: 'The type of source to add to the vector store.',
+          enum: ['web', 'userInput', 'localFile'],
+          default: 'userInput',
+        },
+        saveText: {
+          type: 'string',
+          description:
+            'The string to be saved in the vector database if the input type is userInput.',
+        },
+        label: {
+          type: 'string',
+          description: 'The label for the string to be saved if the input type is userInput.',
+        },
+        url: {
+          type: 'string',
+          description:
+            'The URL of the webpage to read and add to the vector store if the input type is web.',
+        },
+        localFileName: {
+          type: 'string',
+          description:
+            'The name of the local file to add to the vector store if the input type is localFile.',
+        },
       },
-      saveText: {
-        type: 'string',
-        description:
-          'The string to be saved in the vector database if the input type is userInput.',
-      },
-      label: {
-        type: 'string',
-        description: 'The label for the string to be saved if the input type is userInput.',
-      },
-      url: {
-        type: 'string',
-        description:
-          'The URL of the webpage to read and add to the vector store if the input type is web.',
-      },
-      localFileName: {
-        type: 'string',
-        description:
-          'The name of the local file to add to the vector store if the input type is localFile.',
-      },
-    },
-    required: ['inputType'],
-  } as const satisfies JSONSchema7,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  function: async ({ inputType, saveText, label, url, localFileName }) => {
-    if (inputType === 'userInput') {
-      const id = await sha256UrlSafeHash(saveText)
-      const { upsert } = await createVectorStore(await getDatabase('taskyon'), 'vectorStoreTool')
-      if (saveText) {
-        await upsert(id, saveText, { label })
-        return { message: 'Data saved successfully' }
+      required: ['inputType'],
+    } as const satisfies JSONSchema7,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    function: async ({ inputType, saveText, label, url, localFileName }) => {
+      if (inputType === 'userInput') {
+        const id = await sha256UrlSafeHash(saveText)
+        const { upsert } = await createVectorStore(db, 'vectorStoreTool')
+        if (saveText) {
+          await upsert(id, saveText, { label })
+          return { message: 'Data saved successfully' }
+        }
+        throw new Error('saveText parameter must be provided')
       }
-      throw new Error('saveText parameter must be provided')
-    }
 
-    throw new Error('Invalid input type')
-  },
-})
+      throw new Error('Invalid input type')
+    },
+  })

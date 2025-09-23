@@ -12,6 +12,7 @@ export type Unsubscribe = () => void
 
 export interface syncStream<T> {
   subscribe(this: void, observer: Observer<T>): Unsubscribe
+  unsubscribeAll(this: void): void
 }
 
 // we have a separate stream declaration here because we want to
@@ -35,6 +36,9 @@ export function createStream<T>(): frpBus<T> {
           if (index > -1) observers.splice(index, 1)
         }
       },
+      unsubscribeAll: () => {
+        observers.length = 0
+      },
     },
     emit: (value) => {
       // Create a copy to avoid issues if observers unsubscribe during iteration
@@ -42,6 +46,9 @@ export function createStream<T>(): frpBus<T> {
     },
   }
 }
+
+// extract stream type frm existing stream
+export type extractStreamType<Type> = Type extends Stream<infer X> ? X : never
 
 export type Port<Tx, Rx> = {
   send: frpBus<Tx>['emit']
@@ -304,6 +311,10 @@ export function requireSubscribers<T>(source: Stream<T>, min: number = 1): Strea
         subscriberCount--
         void Promise.resolve(unsubscribe).then((resolvedUnsubscribe) => resolvedUnsubscribe())
       }
+    },
+    unsubscribeAll: () => {
+      stream.unsubscribeAll()
+      subscriberCount = 0
     },
   }
 }
@@ -570,3 +581,7 @@ export function createIframeMux<I extends string | number | symbol = string>(swe
 
   return { all$, send, attachIframe, detachId, gc, destroy }
 }
+
+export type IframeMultiPlexer<I extends string | number | symbol = string> = ReturnType<
+  typeof createIframeMux<I>
+>

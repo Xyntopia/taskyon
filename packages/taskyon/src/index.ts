@@ -15,6 +15,8 @@ export * from './utils/cryptoSession'
 export * from './utils/encrypt'
 export * from './utils/frpBus'
 export { createPeerNetwork } from './p2p/libp2p'
+export * from './utils/fileUtils'
+export * from './utils/objHelpers'
 
 /**
  * Represents the context passed to tools within the Taskyon system.
