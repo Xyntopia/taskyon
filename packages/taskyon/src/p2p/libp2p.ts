@@ -6,7 +6,7 @@ import type { DelegatedRoutingV1HttpApiClient } from '@helia/delegated-routing-v
 import { createDelegatedRoutingV1HttpApiClient } from '@helia/delegated-routing-v1-http-api-client'
 import { circuitRelayTransport } from '@libp2p/circuit-relay-v2'
 import { identify } from '@libp2p/identify'
-import type { Connection, Libp2p, Message, PeerId, SignedMessage } from '@libp2p/interface'
+import type { Libp2p, Message, PeerId, SignedMessage } from '@libp2p/interface'
 import { enable, prefixLogger } from '@libp2p/logger'
 import { peerIdFromString } from '@libp2p/peer-id'
 import { ping } from '@libp2p/ping'
@@ -88,8 +88,8 @@ export async function startLibp2p() {
   libp2p.services.pubsub.subscribe(CHAT_FILE_TOPIC)
 
   libp2p.addEventListener('self:peer:update', ({ detail: { peer } }) => {
-    const multiaddrs = peer.addresses.map(({ multiaddr }) => multiaddr)
-    log(`changed multiaddrs: peer ${peer.id.toString()} multiaddrs: ${JSON.stringify(multiaddrs)}`)
+    const multiaddrs = peer.addresses.map(({ multiaddr }) => multiaddr.toString())
+    log(`changed multiaddrs: peer ${peer.id.toString()} multiaddrs: `, multiaddrs)
   })
 
   // 👇 explicitly dial peers discovered via pubsub
@@ -184,9 +184,3 @@ async function getRelayListenAddrs(client: DelegatedRoutingV1HttpApiClient): Pro
 // Constructs a multiaddr string representing the circuit relay v2 listen address for a relayed connection to the given peer.
 const getRelayListenAddr = (maddr: Multiaddr, peer: PeerId): string =>
   `${maddr.toString()}/p2p/${peer.toString()}/p2p-circuit`
-
-export const getFormattedConnections = (connections: Connection[]) =>
-  connections.map((conn) => ({
-    peerId: conn.remotePeer,
-    protocols: [...new Set(conn.remoteAddr.protoNames())],
-  }))

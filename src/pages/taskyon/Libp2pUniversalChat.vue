@@ -1,8 +1,25 @@
 <template>
   <q-page class="q-pa-md">
     <q-card class="q-ma-md">
+      <div>
+        this example comes from here:
+        <a
+          href="https://github.com/libp2p/universal-connectivity"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          libp2p/universal-connectivity
+        </a>
+        <a
+          href="https://universal-connectivity.on-fleek.app/"
+          target="_blank"
+          rel="noopener noreferrer"
+          >demo</a
+        >
+      </div>
       <q-card-section>
         <div class="text-h4 text-primary q-mb-md">WebRTC Connectivity with js-libp2p</div>
+        <q-btn flat label="connect" @click="p2p.start()" />
 
         <!-- Statistics Section -->
         <!--TODO: <q-list dense class="q-mb-md">
@@ -25,7 +42,7 @@
         <!-- Node Section -->
         <div class="q-mb-lg">
           <div class="text-h5 text-primary q-mb-sm">Node Info</div>
-          Address: {{ peerId }}
+          Address: {{ info.id }}
           <div>
             peer types:
             <pre>{{ safeYamlDump(info?.peerTypes) }}</pre>
@@ -52,7 +69,7 @@
           <q-expansion-item label="connections" expand-separator>
             <div class="overflow-auto">
               <q-list>
-                <q-item v-for="c in connections" :key="c.id">
+                <q-item v-for="c in info.connections" :key="c.id">
                   {{ c.id }}
                   {{ c.remotePeer.toString() }}
                   {{ c.remoteAddr.toString() }}
@@ -63,15 +80,11 @@
           <q-expansion-item label="subscribers" expand-separator>
             <div class="overflow-auto">
               <q-list>
-                <q-item v-for="s in subscribers" :key="s.toString()">
+                <q-item v-for="s in info.subscribers" :key="s.toString()">
                   {{ s.toString() }}
                 </q-item>
               </q-list>
             </div>
-          </q-expansion-item>
-
-          <q-expansion-item>
-            {{ state }}
           </q-expansion-item>
         </div>
 
@@ -116,13 +129,11 @@
 </template>
 
 <script setup lang="ts">
-import type { PeerId } from '@libp2p/interface'
+import type { Connection, PeerId } from '@libp2p/interface'
 import { multiaddr } from '@multiformats/multiaddr'
-import { startLibp2p } from '@taskyon/taskyon'
-import type { Libp2p } from 'libp2p'
-import { asyncComputed } from 'src/modules/vueUtils'
+import { createStream, startLibp2p } from '@taskyon/taskyon'
 import { safeYamlDump } from 'src/modules/yamlUtils'
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { CHAT_TOPIC } from '../../../packages/taskyon/src/p2p/constants'
 import { log } from '../../../packages/taskyon/src/p2p/libp2p'
 import {
@@ -131,38 +142,77 @@ import {
   getPeerTypes,
 } from '../../../packages/taskyon/src/p2p/p2putils'
 
-const libp2pPromise = startLibp2p()
-const nw = asyncComputed(async () => libp2pPromise, undefined)
+type P2pNodeInfo = {
+  id: string
+  peerCount: number
+  peerTypes: ReturnType<typeof getPeerTypes>
+  nodeAddressCount: number
+  nodeAddresses: string[]
+  nodePeerDetails: ReturnType<typeof getPeerDetails>
+  connections: Connection[]
+  subscribers: PeerId[]
+}
 
-// Reactive data
-const multiaddrInput = ref('')
-const output = ref('')
-const state = computed(() => {
-  return safeYamlDump(nw.value)
-}, undefined)
+type P2PMessage = {
+  type: 'log'
+  message: unknown
+  topic?: string
+}
 
-const peerId = computed(() => nw.value?.peerId.toString())
+const createNode = () => {
+  let libp2pP: ReturnType<typeof startLibp2p> | null = null
+  let info: Partial<P2pNodeInfo> = {}
+  const { emit, stream } = createStream<Partial<P2pNodeInfo>>()
+  const activityStream = createStream<P2PMessage>()
+  const getPeerId = async () => (await libp2pP)?.peerId.toString()
 
-const useP2pInfo = () => {
-  const node = nw.value
-  let initialInfo: {
-    peerCount: number
-    peerTypes: ReturnType<typeof getPeerTypes>
-    nodeAddressCount: number
-    nodeAddresses: string[]
-    nodePeerDetails: ReturnType<typeof getPeerDetails>
+  const updateInfo = (newInfo: Partial<P2pNodeInfo>) => {
+    info = { ...info, ...newInfo }
+    emit(info)
   }
-  if (node) {
-    initialInfo = {
-      peerCount: node.getConnections().length,
-      peerTypes: getPeerTypes(node),
-      nodeAddressCount: node.getMultiaddrs().length,
-      nodeAddresses: getAddresses(node),
-      nodePeerDetails: getPeerDetails(node),
-    }
-  } else return undefined
 
-  /*useEffect(() => {
+  const init = async () => {
+    libp2pP = startLibp2p()
+    const n = await libp2pP
+    void getPeerId().then((id) => {
+      if (id) info.id = id
+    })
+
+    const syncInfo = () =>
+      updateInfo({
+        peerCount: n.getConnections().length,
+        peerTypes: getPeerTypes(n),
+        nodeAddressCount: n.getMultiaddrs().length,
+        nodeAddresses: getAddresses(n),
+        nodePeerDetails: getPeerDetails(n),
+      })
+    syncInfo()
+
+    const onConnection = () => {
+      updateInfo({ connections: n.getConnections() })
+      syncInfo()
+    }
+    onConnection()
+    const onSubscriptionChange = () => {
+      updateInfo({ subscribers: n.services.pubsub.getSubscribers(CHAT_TOPIC) })
+      syncInfo()
+    }
+    onSubscriptionChange()
+
+    n.addEventListener('connection:open', onConnection)
+    n.addEventListener('connection:close', onConnection)
+    n.addEventListener('self:peer:update', ({ detail: { peer } }) => {
+      activityStream.emit({ type: 'log', message: `peer updated: ${peer.id.toString()}` })
+      updateInfo({ peerTypes: getPeerTypes(n), nodePeerDetails: getPeerDetails(n) })
+    })
+    n.addEventListener('peer:discovery', (event) => {
+      const peer = event.detail
+      activityStream.emit({ type: 'log', message: `discovered peer: ${peer.id.toString()}` })
+      updateInfo({ peerCount: n.getConnections().length, peerTypes: getPeerTypes(n) })
+    })
+    n.services.pubsub.addEventListener('subscription-change', onSubscriptionChange)
+
+    /*useEffect(() => {
     const init = async () => {
       if (await libp2p.peerStore.has(peer)) {
         const p = await libp2p.peerStore.get(peer)
@@ -170,58 +220,76 @@ const useP2pInfo = () => {
           setIdentified(true)
         }
       }
-    }
+    }*/
+  }
 
-    init()
-  }, [libp2p.peerStore, peer])*/
+  /*export const getFormattedConnections = (connections: Connection[]) =>
+    connections.map((conn) => ({
+      peerId: conn.remotePeer,
+      protocols: [...new Set(conn.remoteAddr.protoNames())],
+    }))*/
 
-  const info = ref(initialInfo)
-  return info
+  return {
+    init,
+    id: getPeerId,
+    start: async () => {
+      await init()
+      activityStream.emit({ type: 'log', message: `Peer started ${await getPeerId()}` })
+    },
+    stream,
+    activityStream: activityStream.stream,
+    connectToPeer: async (addr: string) => {
+      const maddr = multiaddr(addr)
+      log(`dialling: %a`, multiaddr.toString())
+      // Implement peer connection logic
+      let connection
+      try {
+        const p2p = await libp2pP
+        if (!p2p) return
+        connection = await p2p?.dial(maddr)
+        if (connection)
+          log(
+            'connected to %p on %a',
+            connection.remotePeer.toString(),
+            connection.remoteAddr.toString(),
+          )
+        activityStream.emit({
+          type: 'log',
+          message: `Connected to: ${safeYamlDump(connection)}`,
+          topic: CHAT_TOPIC,
+        })
+        updateInfo({ connections: p2p.getConnections() })
+        //connection = await nw.state.value?.connectWith(addr)
+      } catch (e) {
+        console.error(e)
+        connection = 'error on connection'
+      }
+    },
+  }
 }
 
-const info = useP2pInfo()
-
-const connections = ref<ReturnType<Libp2p['getConnections']>>([])
-const subscribers = ref<PeerId[]>([])
-
-void libp2pPromise.then((n) => {
-  const onConnection = () => {
-    connections.value = n.getConnections()
-  }
-  onConnection()
-  n.addEventListener('connection:open', onConnection)
-  n.addEventListener('connection:close', onConnection)
-
-  const onSubscriptionChange = () => {
-    subscribers.value = n.services.pubsub.getSubscribers(CHAT_TOPIC)
-  }
-  n.services.pubsub.addEventListener('subscription-change', onSubscriptionChange)
+const p2p = createNode()
+const info = ref<Partial<P2pNodeInfo>>({})
+p2p.stream.subscribe((infoUpdate) => {
+  info.value = { ...info.value, ...infoUpdate }
 })
 
 // Methods
 const connecting = ref(false)
+const multiaddrInput = ref('')
 const connectToPeer = async (addr: string) => {
-  const maddr = multiaddr(addr)
-  log(`dialling: %a`, multiaddr.toString())
-  // Implement peer connection logic
-  let connection
   connecting.value = true
-  try {
-    connection = await nw.value?.dial(maddr)
-    if (connection)
-      log(
-        'connected to %p on %a',
-        connection.remotePeer.toString(),
-        connection.remoteAddr.toString(),
-      )
-    //connection = await nw.state.value?.connectWith(addr)
-  } catch (e) {
-    console.error(e)
-    connection = 'error on connection'
-  }
-  console.log('connected...', connection)
+  await p2p.connectToPeer(addr)
   connecting.value = false
 }
+const output = ref('')
+const addToOutput = (message: string) => {
+  const timestamp = new Date().toISOString()
+  output.value += `[${timestamp}] ${message}\n`
+}
+p2p.activityStream.subscribe((msg) => {
+  addToOutput(safeYamlDump(msg))
+})
 
 // Lifecycle
 /*onMounted(async () => {
