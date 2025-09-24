@@ -118,7 +118,7 @@ import { useAsyncState, useIntervalFn } from '@vueuse/core'
 import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import { safeYamlDump } from 'src/modules/yamlUtils'
 import { ref, onMounted } from 'vue'
-import type { NodeInfo } from '../../../packages/taskyon/src/p2p/libp2p'
+import type { NodeInfo } from '../../../packages/taskyon/src/p2p/libp2p.bk'
 
 const nwpromise = createPeerNetwork()
 
