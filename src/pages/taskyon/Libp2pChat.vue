@@ -88,22 +88,20 @@
                 dense
               />
             </div>
-            <!--
-                <div class="col-auto">
-                  <q-btn
-                    color="positive"
-                    label="Connect"
-                    :loading="connecting"
-                    @click="connectToPeer(multiaddrInput)"
-                  />
-                  <q-btn
-                    color="positive"
-                    label="Connect To local relay"
-                    :loading="connecting"
-                    @click="connectToPeer('/ip4/127.0.0.1/tcp/9111/ws')"
-                  />
-                </div>
-              -->
+            <div class="col-auto">
+              <q-btn
+                color="positive"
+                label="Connect"
+                :loading="connecting"
+                @click="connectToPeer(multiaddrInput)"
+              />
+              <q-btn
+                color="positive"
+                label="Connect To local relay"
+                :loading="connecting"
+                @click="connectToPeer('/ip4/127.0.0.1/tcp/9111/ws')"
+              />
+            </div>
           </div>
         </div>
 
@@ -118,18 +116,20 @@
 </template>
 
 <script setup lang="ts">
+import type { PeerId } from '@libp2p/interface'
+import { multiaddr } from '@multiformats/multiaddr'
 import { startLibp2p } from '@taskyon/taskyon'
+import type { Libp2p } from 'libp2p'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { safeYamlDump } from 'src/modules/yamlUtils'
 import { computed, ref } from 'vue'
+import { CHAT_TOPIC } from '../../../packages/taskyon/src/p2p/constants'
+import { log } from '../../../packages/taskyon/src/p2p/libp2p'
 import {
   getAddresses,
   getPeerDetails,
   getPeerTypes,
 } from '../../../packages/taskyon/src/p2p/p2putils'
-import type { Libp2p } from 'libp2p'
-import type { PeerId } from '@libp2p/interface'
-import { CHAT_TOPIC } from '../../../packages/taskyon/src/p2p/constants'
 
 const libp2pPromise = startLibp2p()
 const nw = asyncComputed(async () => libp2pPromise, undefined)
@@ -143,10 +143,17 @@ const state = computed(() => {
 
 const peerId = computed(() => nw.value?.peerId.toString())
 
-const info = computed(() => {
+const useP2pInfo = () => {
   const node = nw.value
+  let initialInfo: {
+    peerCount: number
+    peerTypes: ReturnType<typeof getPeerTypes>
+    nodeAddressCount: number
+    nodeAddresses: string[]
+    nodePeerDetails: ReturnType<typeof getPeerDetails>
+  }
   if (node) {
-    return {
+    initialInfo = {
       peerCount: node.getConnections().length,
       peerTypes: getPeerTypes(node),
       nodeAddressCount: node.getMultiaddrs().length,
@@ -154,7 +161,25 @@ const info = computed(() => {
       nodePeerDetails: getPeerDetails(node),
     }
   } else return undefined
-})
+
+  /*useEffect(() => {
+    const init = async () => {
+      if (await libp2p.peerStore.has(peer)) {
+        const p = await libp2p.peerStore.get(peer)
+        if (p.protocols.length > 0) {
+          setIdentified(true)
+        }
+      }
+    }
+
+    init()
+  }, [libp2p.peerStore, peer])*/
+
+  const info = ref(initialInfo)
+  return info
+}
+
+const info = useP2pInfo()
 
 const connections = ref<ReturnType<Libp2p['getConnections']>>([])
 const subscribers = ref<PeerId[]>([])
@@ -174,28 +199,29 @@ void libp2pPromise.then((n) => {
 })
 
 // Methods
-/*const enableLogging = (enable: boolean) => {
-  // Implement libp2p logging enable logic
-  nw.state.value?.enableLogging(enable)
-  addToOutput(`Logging enabled: ${enable}`)
-}*/
-
-/*const connectToPeer = async (addr: string) => {
+const connecting = ref(false)
+const connectToPeer = async (addr: string) => {
+  const maddr = multiaddr(addr)
+  log(`dialling: %a`, multiaddr.toString())
   // Implement peer connection logic
-  addToOutput(`Attempting to connect to: ${addr}`)
-
   let connection
   connecting.value = true
   try {
-    connection = await nw.state.value?.connectWith(addr)
+    connection = await nw.value?.dial(maddr)
+    if (connection)
+      log(
+        'connected to %p on %a',
+        connection.remotePeer.toString(),
+        connection.remoteAddr.toString(),
+      )
+    //connection = await nw.state.value?.connectWith(addr)
   } catch (e) {
     console.error(e)
     connection = 'error on connection'
   }
+  console.log('connected...', connection)
   connecting.value = false
-
-  addToOutput(`Connected to: ${safeYamlDump(connection)}`)
-}*/
+}
 
 // Lifecycle
 /*onMounted(async () => {
