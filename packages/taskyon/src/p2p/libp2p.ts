@@ -94,6 +94,7 @@ export async function startLibp2p() {
 
   // 👇 explicitly dial peers discovered via pubsub
   libp2p.addEventListener('peer:discovery', (event) => {
+    console.log('peer discovered', event)
     const { multiaddrs, id } = event.detail
 
     if (libp2p.getConnections(id)?.length > 0) {
