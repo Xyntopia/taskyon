@@ -50,28 +50,15 @@
       </template>
     </q-tree>
     <!--render the "normal" task view...-->
-    <template v-else>
-      <template v-for="(task, idx) in props.selectedThread" :key="task.id">
-        <q-expansion-item
-          v-if="reasoning.get(task.id)"
-          label="reasoning"
-          dense
-          class="text-caption"
-        >
-          <tyMarkdown :src="reasoning.get(task.id)!" />
-        </q-expansion-item>
-        <Task
-          v-if="showAllTasks || showTask(task)"
-          :id="task.id"
-          :class="[task.role, task.content.type]"
-          :task="task"
-          :previous-task="props.selectedThread[idx - 1]"
-          :next-task="props.selectedThread[idx + 1]"
-          :is-working="isProcessing(task.id)"
-          :show-meta="!!showIds"
-        />
-      </template>
-    </template>
+    <SimpleChatView
+      v-else
+      :show-all-tasks="showAllTasks"
+      :reasoning="reasoning"
+      :is-processing="isProcessing"
+      :show-ids="showIds"
+      :selected-thread="selectedThread"
+      :expert-mode="expertMode"
+    />
     <!--Render tasks which are in progress-->
     <div class="task-logs q-py-sm">
       <template
@@ -147,6 +134,7 @@ import { asyncComputed } from 'src/modules/vueUtils'
 import { safeYamlDump } from 'src/modules/yamlUtils'
 import { getReasoning, useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import SimpleChatView from './SimpleChatView.vue'
 
 const tystate = useTaskyonStore()
 const showLogs = ref(false)
@@ -404,18 +392,6 @@ async function onLazyLoad({
   const subTaskTree = await getQTree(key, true)
 
   done(subTaskTree)
-}
-
-function showTask(t: TaskNode) {
-  //console.log('showTask')
-  // in our settings we should be able to specify which tasktypes to hide!
-  let showInChat = true
-  if (t.content.type === 'functioncall') {
-    showInChat = !tystate.allTools[t.content.data.name]?.renderOptions?.hideChat
-  }
-  const showType = !['return'].includes(t.content.type)
-  const showExpert = t.content.type === 'structured' ? props.expertMode : true
-  return showExpert && showType && showInChat
 }
 </script>
 

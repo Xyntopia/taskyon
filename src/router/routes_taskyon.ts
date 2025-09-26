@@ -172,7 +172,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         },
       },
       {
-        path: '/p2pmonitos',
+        path: '/p2pmonitor',
         component: () => import('pages/taskyon/Libp2pStatusPage.vue'),
         meta: {
           title: 'p2p chat',
