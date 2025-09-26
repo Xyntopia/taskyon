@@ -64,6 +64,7 @@ export class DirectMessage extends TypedEventEmitter<DirectMessageEvents> implem
   async afterStart(): Promise<void> {
     await this.components.registrar.handle(
       DIRECT_MESSAGE_PROTOCOL,
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
       async ({ stream, connection }) => {
         await this.receive(stream, connection)
       },

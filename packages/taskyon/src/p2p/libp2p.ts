@@ -88,8 +88,9 @@ export async function startLibp2p() {
   libp2p.services.pubsub.subscribe(CHAT_FILE_TOPIC)
 
   libp2p.addEventListener('self:peer:update', ({ detail: { peer } }) => {
-    const multiaddrs = peer.addresses.map(({ multiaddr }) => multiaddr.toString())
-    log(`changed multiaddrs: peer ${peer.id.toString()} multiaddrs: `, multiaddrs)
+    const multiaddrs = peer.addresses.map(({ multiaddr }) => multiaddr)
+    // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+    log(`changed multiaddrs: peer ${peer.id.toString()} multiaddrs: ${multiaddrs}`)
   })
 
   // 👇 explicitly dial peers discovered via pubsub
@@ -102,7 +103,7 @@ export async function startLibp2p() {
       return
     }
 
-    void dialWebRTCMaddrs(libp2p, multiaddrs, id)
+    void dialWebRTCMaddrs(libp2p, multiaddrs)
   })
 
   return libp2p
@@ -120,36 +121,27 @@ export async function msgIdFnStrictNoSign(msg: Message): Promise<Uint8Array> {
 }
 
 // Function which dials one maddr at a time to avoid establishing multiple connections to the same peer
-async function dialWebRTCMaddrs(
-  libp2p: Libp2p,
-  multiaddrs: Multiaddr[],
-  id: PeerId,
-): Promise<void> {
+async function dialWebRTCMaddrs(libp2p: Libp2p, multiaddrs: Multiaddr[]): Promise<void> {
   // Filter webrtc (browser-to-browser) multiaddrs
   const webRTCMadrs = multiaddrs.filter((maddr) => maddr.protoNames().includes('webrtc'))
-  log(
-    `dialling WebRTC multiaddrs: %o`,
-    webRTCMadrs.map((a) => a.toString()),
-  )
+  log(`dialling WebRTC multiaddrs: %o`, webRTCMadrs)
 
   for (const addr of webRTCMadrs) {
-    const full = addr.encapsulate(`/p2p/${id.toString()}`)
-    log(`attempting to dial full addr: ${full.toString()}`)
     try {
-      log(`attempting to dial webrtc multiaddr: %o`, full.toString())
-      await libp2p.dial(full)
+      log(`attempting to dial webrtc multiaddr: %o`, addr)
+      await libp2p.dial(addr)
       return // if we succeed dialing the peer, no need to try another address
-    } catch {
-      log.error(`failed to dial webrtc multiaddr: %o`, full.toString())
+    } catch (error) {
+      log.error(`failed to dial webrtc multiaddr: %o`, addr, error)
     }
   }
 }
 
 export const connectToMultiaddr = (libp2p: Libp2p) => async (multiaddr: Multiaddr) => {
-  log(`dialling: %a`, multiaddr.toString())
+  log(`dialling: %a`, multiaddr)
   try {
     const conn = await libp2p.dial(multiaddr)
-    log('connected to %p on %a', conn.remotePeer.toString(), conn.remoteAddr.toString())
+    log('connected to %p on %a', conn.remotePeer, conn.remoteAddr)
     return conn
   } catch (e) {
     console.error(e)
