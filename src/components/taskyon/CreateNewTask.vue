@@ -28,7 +28,7 @@
         :debounce="0"
         :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
-        @execute-task="addNewTask"
+        @execute-task="addNewTask(p2pTopic)"
       >
         <template #left="{ btnSize }">
           <div v-if="minMode">
@@ -112,33 +112,7 @@
           </q-btn>
         </FileDropzone>
         <!--Taskyon features-->
-        <ResponsiveMenuDialogBtn
-          dense
-          flat
-          :icon="matMoreHoriz"
-          maximized
-          auto-close
-          data-cy-menu="ai-settings"
-          aria-label="quick ai settings"
-        >
-          <template #btnContent><q-tooltip> More AI Settings</q-tooltip></template>
-          <div class="q-pa-sm" @click.stop>
-            <ObjectTreeView
-              v-model="slimSettings.reactiveView"
-              :schema="slimSettings.jsonSchema"
-              dense
-            />
-          </div>
-          <q-card-actions class="float-right">
-            <q-btn
-              v-if="expertMode"
-              flat
-              to="/settings/agent%20config"
-              label="Full list of settings"
-            />
-            <q-btn v-close-popup flat label="Ok" />
-          </q-card-actions>
-        </ResponsiveMenuDialogBtn>
+        <SimpleSettingsDialog />
         <!--Select Tools-->
         <ResponsiveMenuDialogBtn
           v-if="expertMode || selectedTaskType"
@@ -218,7 +192,7 @@
         class="col-auto q-px-md row no-wrap items-center"
         @click.stop
       >
-        <q-btn flat :icon-right="matSend" @click="addNewTask">
+        <q-btn flat :icon-right="matSend" @click="addNewTask(p2pTopic)">
           <q-tooltip>Execute Task</q-tooltip>
         </q-btn>
       </div>
@@ -231,7 +205,6 @@ import {
   matAttachment,
   matBuild,
   matChat,
-  matMoreHoriz,
   matSend,
   matUploadFile,
 } from '@quasar/extras/material-icons'
@@ -241,10 +214,8 @@ import { partialTaskDraft } from '@taskyon/taskyon'
 import { watchThrottled } from '@vueuse/core'
 import { QSelect } from 'quasar'
 import { generateTaskKeyWords } from 'src/modules/taskyon/taskUtils'
-import { appConfiguration, llmSettings } from 'src/modules/taskyon/types'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { deepCopy } from 'src/modules/utils'
-import { buildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, onMounted, ref } from 'vue'
@@ -254,15 +225,25 @@ import ObjectTreeView from '../ObjectTreeView.vue'
 import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
 import chatMessageEdit from './chatMessageEdit.vue'
 import ChooseModelDialog from './ChooseModelDialog.vue'
+import SimpleSettingsDialog from './SimpleSettingsDialog.vue'
 // import { watchThrottled } from '@vueuse/core'
 // use idel mechanism to calculate all kinds of stuff here :=)
 //import { useIdle } from '@vueuse/core'
 
-const { expertMode = false, entryNode } = defineProps<{
+const {
+  expertMode = false,
+  entryNode,
+  addToTaskyon,
+} = defineProps<{
   entryNode?: partialTaskDraft
   minMode?: boolean
   expertMode?: boolean
-  userChat?: boolean
+  p2pTopic?: string // the p2p network that we want to send the task to
+  addToTaskyon?: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'addTasks', t: partialTaskDraft[]): void
 }>()
 
 const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
@@ -282,34 +263,6 @@ onMounted(() => {
     [],
   ).then(() => (keywordExtractorReady.value = true))
 })
-
-//const selectedTaskTypeVar = ref<string>('testasdad')
-
-const em = computed(() => state.appConfiguration.expertMode)
-
-const slimSettings = computed(() =>
-  buildSlimView(
-    {
-      obj: state.appConfiguration,
-      schema: appConfiguration,
-      pickKeys: ['expertMode'],
-    },
-    {
-      obj: state.llmSettings,
-      schema: llmSettings,
-      pickKeys: [
-        ...(em.value
-          ? ['enableToolChooser', 'enableOpenAiTools', 'tryUsingVisionModels', 'useBasePrompt']
-          : []),
-      ],
-    },
-    {
-      obj: state.appConfiguration,
-      schema: appConfiguration,
-      pickKeys: ['primaryColor', 'secondaryColor'],
-    },
-  ),
-)
 
 // we initialize our taskDraft with the state of this window!
 
@@ -388,7 +341,6 @@ const getCurrentKeywords = async () => {
 }
 
 // add taskchain to taskManager
-
 async function getCurrentKeywordsWithTimeout(timeoutMs = 200) {
   const kwds = await Promise.race([
     getCurrentKeywords(),
@@ -414,51 +366,6 @@ watchThrottled(
   { immediate: true, throttle: 2000 },
 )
 
-//const { estimateChatTokens } = useNlpWorker()
-
-// TODO:   our token estimation needs to become much better ^^
-// TODO:   e.g. add prompts to our task :)
-/*const estimatedTokens = ref<number>(0)
-watchDebounced(
-  [() => currentTaskDraft.value.content, () => state.llmSettings.selectedTaskId],
-  async () => {
-    console.log('calculate tokens...')
-    let taskTokens = 0
-    if (state.llmSettings.selectedTaskId) {
-      const tm = await tystate.getTaskManager()
-      // we are getting quiet a few tasks here  in order to catch at least one chatCompletion task...
-      const chain = await tm.getTaskIdChain(state.llmSettings.selectedTaskId, 15)
-
-      // Assume the task with the last available token count is the relevant one
-      for (const taskId of chain) {
-        const taskMeta = await tm.debugDb.get(taskId)
-        taskTokens = taskMeta?.taskTokens ?? 0
-        if (taskTokens === 0) {
-          taskTokens =
-            (taskMeta?.estimatedTokens?.promptTokens ?? 0) +
-            (taskMeta?.estimatedTokens?.resultTokens ?? 0)
-        }
-        if (taskTokens != 0) break
-      }
-    }
-
-    // we need to deepCopy both ref values, so that we can send them to the thread!!
-    const estimated = await estimateChatTokens(
-      deepCopy(currentnewTask.value.content),
-      // we don't do the next one, as we are already taking the actual prompt tokens
-      // from a  previous task
-      [] as ChatCompletionMessageParam[],
-      deepCopy(toolCollection.value),
-    )
-
-    const newTokens = Object.values(estimated || {}).reduce((pn, cn) => (pn ?? 0) + (cn ?? 0), 0)
-
-    // Tokenize the message
-    estimatedTokens.value = taskTokens + (newTokens ?? 0)
-  },
-  { debounce: 3000, maxWait: 5000, immediate: true },
-)*/
-
 // all our files are added to a "file task"
 async function createFileTask(files: File[]) {
   const ty = await tystate.taskyon
@@ -479,9 +386,11 @@ async function createFileTask(files: File[]) {
   return undefined
 }
 
-async function addNewTask() {
+async function addNewTask(p2pTopic?: string) {
+  console.log('pubishing on topic:', p2pTopic)
   const kwdsPromise = getCurrentKeywordsWithTimeout(300)
   const ty = await tystate.taskyon
+
   const fileTaskObj = await createFileTask(fileAttachments.value)
 
   // we are creating new taskchain accordig to what the user wants ;)
@@ -534,19 +443,25 @@ async function addNewTask() {
 
   const kwds = (await kwdsPromise) ?? currentKeywords.value
   if (kwds) newTaskChain.forEach((t) => (t.name = kwds))
-  const newTaskId = (await ty.addTaskChain(newTaskChain, state.llmSettings.selectedTaskId)).at(-1)
 
-  // push the last task to execution queue right away...
-  if (newTaskId) {
-    void tystate.addToProcessQueue(newTaskId.id)
+  // only add to taskyon, if
+  if (addToTaskyon) {
+    const newTaskId = (await ty.addTaskChain(newTaskChain, state.llmSettings.selectedTaskId)).at(-1)
+
+    // push the last task to execution queue right away...
+    if (newTaskId) {
+      void tystate.addToProcessQueue(newTaskId.id)
+    }
+
+    state.setSelectedTask(newTaskId?.id)
   }
-
-  state.setSelectedTask(newTaskId?.id)
 
   // and empty out the contents for the next chat message :)
   if (currentnewTask.value.role === 'user') {
     tystate.setNewContentDraft({ type: 'message', data: '' })
   }
+
+  emit('addTasks', newTaskChain)
 }
 
 function attachFileToDraft(newFiles: File[]) {
