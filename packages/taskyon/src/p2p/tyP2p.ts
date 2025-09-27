@@ -1,10 +1,19 @@
-import type { Connection, PeerId } from '@libp2p/interface'
+import type { Connection, Message, PeerId } from '@libp2p/interface'
 import { multiaddr } from '@multiformats/multiaddr'
 import { createStream } from '@taskyon/taskyon'
 import { safeYamlDump } from 'src/modules/yamlUtils'
-import { CHAT_TOPIC } from './constants'
+import {
+  CHAT_FILE_TOPIC,
+  CHAT_TOPIC,
+  FILE_EXCHANGE_PROTOCOL,
+  PUBSUB_PEER_DISCOVERY,
+} from './constants'
+import type { libP2pNode } from './libp2p'
 import { log, startLibp2p } from './libp2p'
 import { getAddresses, getPeerDetails, getPeerTypes } from './p2putils'
+import * as lp from 'it-length-prefixed'
+import { pipe } from 'it-pipe'
+import map from 'it-map'
 
 export type P2pNodeInfo = {
   id: string
@@ -23,8 +32,27 @@ export type P2PMessage = {
   topic?: string
 }
 
+export interface ChatMessage {
+  msgId: string
+  msg: string
+  fileObjectUrl: string | undefined
+  peerId: string
+  read: boolean
+  receivedAt: number
+}
+
+export interface ChatFile {
+  id: string
+  body: Uint8Array
+  sender: string
+}
+
+export interface DirectMessages {
+  [peerId: string]: ChatMessage[]
+}
+
 export const createNode = () => {
-  let libp2pP: ReturnType<typeof startLibp2p> | null = null
+  let libp2pP: Promise<libP2pNode> | null = null
   let info: Partial<P2pNodeInfo> = {}
   const { emit, stream } = createStream<Partial<P2pNodeInfo>>()
   const activityStream = createStream<P2PMessage>()
@@ -34,6 +62,8 @@ export const createNode = () => {
     info = { ...info, ...newInfo }
     emit(info)
   }
+
+  const ctx = {} as { sendPublicMessage?: (input: string) => Promise<void> }
 
   const init = async () => {
     libp2pP = startLibp2p()
@@ -85,33 +115,20 @@ export const createNode = () => {
         }
       }
     }*/
+
+    const { sendPublicMessage } = useUniversalChat(n)
+
+    ctx.sendPublicMessage = sendPublicMessage
   }
 
   /*export const getFormattedConnections = (connections: Connection[]) =>
     connections.map((conn) => ({
       peerId: conn.remotePeer,
       protocols: [...new Set(conn.remoteAddr.protoNames())],
-    }))*/
-
-  const sendPublicMessage = async (input: string) => {
-    if (!libp2pP) throw new Error('Libp2p not initialized')
-    const libp2p = await libp2pP
-    if (input === '') return
-
-    log(
-      `peers in gossip for topic ${CHAT_TOPIC}:`,
-      libp2p.services.pubsub.getSubscribers(CHAT_TOPIC).toString(),
-    )
-
-    const res = await libp2p.services.pubsub.publish(CHAT_TOPIC, new TextEncoder().encode(input))
-    log(
-      'sent message to: ',
-      res.recipients.map((peerId) => peerId.toString()),
-    )
-  }
+  }))*/
 
   return {
-    init,
+    sendPublicMessage: (input: string) => ctx.sendPublicMessage?.(input),
     id: getPeerId,
     start: async () => {
       await init()
@@ -120,7 +137,6 @@ export const createNode = () => {
     stream,
     getInfo: () => info,
     activityStream: activityStream.stream,
-    sendPublicMessage,
     connectToPeer: async (addr: string) => {
       const maddr = multiaddr(addr)
       log(`dialling: %a`, multiaddr.toString())
@@ -149,6 +165,132 @@ export const createNode = () => {
       }
     },
   }
+}
+
+const useUniversalChat = (libp2p: libP2pNode) => {
+  const messageHistory: ChatMessage[] = []
+  const sendPublicMessage = async (input: string) => {
+    if (input === '') return
+
+    log(
+      `peers in gossip for topic ${CHAT_TOPIC}:`,
+      libp2p.services.pubsub.getSubscribers(CHAT_TOPIC).toString(),
+    )
+
+    const res = await libp2p.services.pubsub.publish(CHAT_TOPIC, new TextEncoder().encode(input))
+    log(
+      'sent message to: ',
+      res.recipients.map((peerId) => peerId.toString()),
+    )
+  }
+
+  const messageCB = (evt: CustomEvent<Message>) => {
+    // FIXME: Why does 'from' not exist on type 'Message'?
+    const { topic, data } = evt.detail
+
+    switch (topic) {
+      case CHAT_TOPIC: {
+        chatMessageCB(evt, topic, data)
+        break
+      }
+      case CHAT_FILE_TOPIC: {
+        void chatFileMessageCB(evt, topic, data)
+        break
+      }
+      case PUBSUB_PEER_DISCOVERY: {
+        break
+      }
+      default: {
+        console.error(`Unexpected event %o on gossipsub topic: ${topic}`, evt)
+      }
+    }
+  }
+
+  const chatMessageCB = (evt: CustomEvent<Message>, topic: string, data: Uint8Array) => {
+    const msg = new TextDecoder().decode(data)
+    log(`chat message received: ${topic}: ${msg}`)
+
+    // Append signed messages, otherwise discard
+    if (evt.detail.type === 'signed') {
+      messageHistory.push({
+        msgId: crypto.randomUUID(),
+        msg,
+        fileObjectUrl: undefined,
+        peerId: evt.detail.from.toString(),
+        read: false,
+        receivedAt: Date.now(),
+      })
+    }
+  }
+
+  const chatFileMessageCB = async (evt: CustomEvent<Message>, topic: string, data: Uint8Array) => {
+    const newChatFileMessage = (id: string, body: Uint8Array) => {
+      return `File: ${id} (${body.length} bytes)`
+    }
+    const fileId = new TextDecoder().decode(data)
+
+    // if the message isn't signed, discard it.
+    if (evt.detail.type !== 'signed') {
+      return
+    }
+    const senderPeerId = evt.detail.from
+
+    try {
+      const stream = await libp2p.dialProtocol(senderPeerId, FILE_EXCHANGE_PROTOCOL)
+      await pipe(
+        [new TextEncoder().encode(fileId)],
+        (source) => lp.encode(source),
+        stream,
+        (source) => lp.decode(source),
+        async function (source) {
+          for await (const data of source) {
+            const body: Uint8Array = data.subarray()
+            log(`chat file message request_response: response received: size:${body.length}`)
+
+            messageHistory.push({
+              msgId: crypto.randomUUID(),
+              msg: newChatFileMessage(fileId, body),
+              fileObjectUrl: window.URL.createObjectURL(new Blob([new Uint8Array(body)])),
+              peerId: senderPeerId.toString(),
+              read: false,
+              receivedAt: Date.now(),
+            })
+          }
+        },
+      )
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  // TODO: hook this up to a custom messagebus?
+  libp2p.services.pubsub.addEventListener('message', messageCB)
+  const files = new Map<string, ChatFile>()
+  void libp2p.handle(FILE_EXCHANGE_PROTOCOL, ({ stream }) => {
+    void pipe(
+      stream.source,
+      (source) => lp.decode(source),
+      (source) =>
+        map(source, (msg) => {
+          const fileId = new TextDecoder().decode(msg.subarray())
+          const file = files.get(fileId)!
+          return file.body
+        }),
+      (source) => lp.encode(source),
+      stream.sink,
+    )
+  })
+
+  // TODO: on exit/cleanup
+  /*return () => {
+      ;(async () => {
+        // Cleanup handlers 👇
+        libp2p.services.pubsub.removeEventListener('message', messageCB)
+        await libp2p.unhandle(FILE_EXCHANGE_PROTOCOL)
+      })()
+    }*/
+
+  return { sendPublicMessage }
 }
 
 let activeNode: ReturnType<typeof createNode> | null = null

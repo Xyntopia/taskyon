@@ -109,6 +109,8 @@ export async function startLibp2p() {
   return libp2p
 }
 
+export type libP2pNode = Awaited<ReturnType<typeof startLibp2p>>
+
 // message IDs are used to dedupe inbound messages
 // every agent in network should use the same message id function
 // messages could be perceived as duplicate if this isnt added (as opposed to rust peer which has unique message ids)
