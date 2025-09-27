@@ -128,8 +128,9 @@ import { ref } from 'vue'
 
 const { p2p } = defineProps<{ p2p: ReturnType<typeof getActiveP2pNode> }>()
 
-const info = ref<Partial<P2pNodeInfo>>({})
+const info = ref<Partial<P2pNodeInfo>>(p2p.getInfo())
 p2p.stream.subscribe((infoUpdate) => {
+  console.log('infoUpdate', infoUpdate)
   info.value = { ...info.value, ...infoUpdate }
 })
 
@@ -147,6 +148,7 @@ const addToOutput = (message: string) => {
   output.value += `[${timestamp}] ${message}\n`
 }
 p2p.activityStream.subscribe((msg) => {
+  console.log('activityStream msg', msg)
   addToOutput(safeYamlDump(msg))
 })
 

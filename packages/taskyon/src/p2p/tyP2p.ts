@@ -118,6 +118,7 @@ export const createNode = () => {
       activityStream.emit({ type: 'log', message: `Peer started ${await getPeerId()}` })
     },
     stream,
+    getInfo: () => info,
     activityStream: activityStream.stream,
     sendPublicMessage,
     connectToPeer: async (addr: string) => {
