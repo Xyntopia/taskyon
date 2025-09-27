@@ -93,6 +93,23 @@ export const createNode = () => {
       protocols: [...new Set(conn.remoteAddr.protoNames())],
     }))*/
 
+  const sendPublicMessage = async (input: string) => {
+    if (!libp2pP) throw new Error('Libp2p not initialized')
+    const libp2p = await libp2pP
+    if (input === '') return
+
+    log(
+      `peers in gossip for topic ${CHAT_TOPIC}:`,
+      libp2p.services.pubsub.getSubscribers(CHAT_TOPIC).toString(),
+    )
+
+    const res = await libp2p.services.pubsub.publish(CHAT_TOPIC, new TextEncoder().encode(input))
+    log(
+      'sent message to: ',
+      res.recipients.map((peerId) => peerId.toString()),
+    )
+  }
+
   return {
     init,
     id: getPeerId,
@@ -102,6 +119,7 @@ export const createNode = () => {
     },
     stream,
     activityStream: activityStream.stream,
+    sendPublicMessage,
     connectToPeer: async (addr: string) => {
       const maddr = multiaddr(addr)
       log(`dialling: %a`, multiaddr.toString())

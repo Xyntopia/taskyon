@@ -122,11 +122,12 @@
 </template>
 
 <script setup lang="ts">
-import { getActiveP2pNode, type P2pNodeInfo } from '@taskyon/taskyon'
+import { type getActiveP2pNode, type P2pNodeInfo } from '@taskyon/taskyon'
 import { safeYamlDump } from 'src/modules/yamlUtils'
 import { ref } from 'vue'
 
-const p2p = getActiveP2pNode()
+const { p2p } = defineProps<{ p2p: ReturnType<typeof getActiveP2pNode> }>()
+
 const info = ref<Partial<P2pNodeInfo>>({})
 p2p.stream.subscribe((infoUpdate) => {
   info.value = { ...info.value, ...infoUpdate }
