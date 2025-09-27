@@ -413,7 +413,7 @@ async function addNewTask(p2pTopic?: string) {
   newTaskChain.push({ ...currentnewTask.value })
 
   if (currentnewTask.value.content.type === 'message') {
-    if (state.llmSettings.enableToolChooser && entryNode) {
+    if (entryNode) {
       const chooseTask = deepCopy(entryNode)
       newTaskChain.push(chooseTask)
     }
