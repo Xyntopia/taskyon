@@ -1,4 +1,12 @@
-// universal-connectivity
+// libp2p.ts
+// check this link here for an example how to get this going:
+//
+// we are taking a lot of inspiration frm the follwoing examples:
+//
+//  https://github.com/libp2p/libp2p-webrtc-guide
+//  https://github.com/libp2p/universal-connectivity
+//  https://github.com/libp2p/go-libp2p/tree/master/examples/chat-with-rendezvous
+//  https://github.com/libp2p/js-libp2p/
 import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
