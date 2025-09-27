@@ -1,6 +1,6 @@
 <template>
-  <q-page class="q-pa-md">
-    <q-card class="q-ma-md">
+  <q-page class="q-pa-md q-gutter-sm">
+    <q-card>
       <q-btn flat label="status" @click="showStatus = true">
         <q-dialog v-model="showStatus">
           <q-card>
@@ -20,15 +20,15 @@
         <div>{{ msg.peerId }}:</div>
         <div>{{ msg.msg }}</div>
       </div>
-      <CreateNewTask
-        :file-attachments="[]"
-        class="col q-pa-xs create-new-task"
-        min-mode
-        style="max-width: 48rem"
-        p2p-chat
-        @add-tasks="addTasks"
-      />
     </q-card>
+    <CreateNewTask
+      :file-attachments="[]"
+      class="col q-pa-xs create-new-task"
+      min-mode
+      style="max-width: 48rem"
+      p2p-chat
+      @add-tasks="addTasks"
+    />
   </q-page>
 </template>
 
@@ -38,6 +38,7 @@ import { getActiveP2pNode } from '@taskyon/taskyon'
 import Libp2pStatus from 'components/taskyon/Libp2pStatus.vue'
 import CreateNewTask from 'src/components/taskyon/CreateNewTask.vue'
 import SimpleChatView from 'src/components/taskyon/SimpleChatView.vue'
+import { createTaskNode } from 'src/modules/taskyon/taskManager'
 import { safeYamlDump } from 'src/modules/yamlUtils'
 import { onMounted, ref } from 'vue'
 
@@ -61,9 +62,18 @@ p2p.activityStream.subscribe((msg) => {
 
 async function addTasks(taskChain: partialTaskDraft[]) {
   for (const t of taskChain) {
-    if (t.content.type === 'message') {
-      console.log('sending to public chat:', t)
-      await p2p.sendPublicMessage(t.content.data)
+    console.log('sending to public chat:', t)
+    const tn = await createTaskNode(t)
+    if (tn.content.type === 'message') {
+      msgs.value.push({
+        msgId: tn.id,
+        msg: tn.content.data,
+        fileObjectUrl: undefined,
+        peerId: (await p2p.id()) ?? 'none',
+        read: true,
+        receivedAt: Date.now(),
+      })
+      await p2p.sendPublicMessage(tn.content.data)
     }
   }
 }
