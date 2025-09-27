@@ -5,12 +5,7 @@ import * as lp from 'it-length-prefixed'
 import map from 'it-map'
 import { pipe } from 'it-pipe'
 import { safeYamlDump } from 'src/modules/yamlUtils'
-import {
-  CHAT_FILE_TOPIC,
-  CHAT_TOPIC,
-  FILE_EXCHANGE_PROTOCOL,
-  PUBSUB_PEER_DISCOVERY,
-} from './constants'
+import { CHAT_FILE_TOPIC, FILE_EXCHANGE_PROTOCOL, PUBSUB_PEER_DISCOVERY } from './constants'
 import type { libP2pNode } from './libp2p'
 import { log, startLibp2p } from './libp2p'
 import { getAddresses, getPeerDetails, getPeerTypes } from './p2putils'
@@ -51,6 +46,8 @@ export interface DirectMessages {
   [peerId: string]: ChatMessage[]
 }
 
+type p2pOptions = { chatTopic: string }
+
 export const createNode = () => {
   let libp2pP: Promise<libP2pNode> | null = null
   let info: Partial<P2pNodeInfo> = {}
@@ -65,7 +62,7 @@ export const createNode = () => {
 
   let ctx = null as Awaited<ReturnType<typeof init>> | null
 
-  const init = async () => {
+  const init = async (options: p2pOptions) => {
     libp2pP = startLibp2p()
     const n = await libp2pP
     void getPeerId().then((id) => {
@@ -88,7 +85,7 @@ export const createNode = () => {
     }
     onConnection()
     const onSubscriptionChange = () => {
-      updateInfo({ subscribers: n.services.pubsub.getSubscribers(CHAT_TOPIC) })
+      updateInfo({ subscribers: n.services.pubsub.getSubscribers(options.chatTopic) })
       syncInfo()
     }
     onSubscriptionChange()
@@ -116,7 +113,7 @@ export const createNode = () => {
       }
     }*/
 
-    return { ...useUniversalChat(n) }
+    return { ...useUniversalChat(n, options.chatTopic) }
   }
 
   /*export const getFormattedConnections = (connections: Connection[]) =>
@@ -131,8 +128,8 @@ export const createNode = () => {
     sendPublicMessage: (input: string) => ctx?.sendPublicMessage(input),
     id: getPeerId,
     messageStream: messageStream.stream,
-    start: async () => {
-      ctx = await init()
+    start: async (options: p2pOptions) => {
+      ctx = await init(options)
       ctx.messageStream.stream.subscribe(messageStream.emit)
       activityStream.emit({ type: 'log', message: `Peer started ${await getPeerId()}` })
     },
@@ -157,7 +154,6 @@ export const createNode = () => {
         activityStream.emit({
           type: 'log',
           message: `Connected to: ${safeYamlDump(connection)}`,
-          topic: CHAT_TOPIC,
         })
         updateInfo({ connections: p2p.getConnections() })
         //connection = await nw.state.value?.connectWith(addr)
@@ -169,17 +165,20 @@ export const createNode = () => {
   }
 }
 
-const useUniversalChat = (libp2p: libP2pNode) => {
+const useUniversalChat = (libp2p: libP2pNode, chatTopic: string) => {
+  libp2p.services.pubsub.subscribe(chatTopic)
+  libp2p.services.pubsub.subscribe(CHAT_FILE_TOPIC)
+
   const messageStream = createStream<ChatMessage>()
   const sendPublicMessage = async (input: string) => {
     if (input === '') return
 
     log(
-      `peers in gossip for topic ${CHAT_TOPIC}:`,
-      libp2p.services.pubsub.getSubscribers(CHAT_TOPIC).toString(),
+      `peers in gossip for topic ${chatTopic}:`,
+      libp2p.services.pubsub.getSubscribers(chatTopic).toString(),
     )
 
-    const res = await libp2p.services.pubsub.publish(CHAT_TOPIC, new TextEncoder().encode(input))
+    const res = await libp2p.services.pubsub.publish(chatTopic, new TextEncoder().encode(input))
     log(
       'sent message to: ',
       res.recipients.map((peerId) => peerId.toString()),
@@ -191,7 +190,7 @@ const useUniversalChat = (libp2p: libP2pNode) => {
     const { topic, data } = evt.detail
 
     switch (topic) {
-      case CHAT_TOPIC: {
+      case chatTopic: {
         chatMessageCB(evt, topic, data)
         break
       }

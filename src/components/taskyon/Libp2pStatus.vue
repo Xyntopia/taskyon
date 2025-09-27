@@ -1,21 +1,7 @@
 <template>
-  <div>
-    this example comes from here:
-    <a
-      href="https://github.com/libp2p/universal-connectivity"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      libp2p/universal-connectivity
-    </a>
-    <a href="https://universal-connectivity.on-fleek.app/" target="_blank" rel="noopener noreferrer"
-      >demo</a
-    >
-  </div>
   <q-card-section>
     <div class="text-h4 text-primary q-mb-md">WebRTC Connectivity with js-libp2p</div>
-    <q-btn flat label="connect" @click="p2p.start()" />
-
+    <!---btn flat label="connect" @click="p2p.start({})" />-->
     <!-- Statistics Section -->
     <!--TODO: <q-list dense class="q-mb-md">
           <q-item>

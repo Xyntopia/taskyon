@@ -26,7 +26,7 @@ import type { Multiaddr } from '@multiformats/multiaddr'
 import first from 'it-first'
 import { createLibp2p } from 'libp2p'
 import { sha256 } from 'multiformats/hashes/sha2'
-import { BOOTSTRAP_PEER_IDS, CHAT_FILE_TOPIC, CHAT_TOPIC, PUBSUB_PEER_DISCOVERY } from './constants'
+import { BOOTSTRAP_PEER_IDS, PUBSUB_PEER_DISCOVERY } from './constants'
 import { directMessage } from './direct-message'
 
 const prefix = `ui`
@@ -91,9 +91,6 @@ export async function startLibp2p() {
   if (!libp2p) {
     throw new Error('Failed to create libp2p node')
   }
-
-  libp2p.services.pubsub.subscribe(CHAT_TOPIC)
-  libp2p.services.pubsub.subscribe(CHAT_FILE_TOPIC)
 
   libp2p.addEventListener('self:peer:update', ({ detail: { peer } }) => {
     const multiaddrs = peer.addresses.map(({ multiaddr }) => multiaddr)

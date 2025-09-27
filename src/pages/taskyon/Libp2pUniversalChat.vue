@@ -1,6 +1,14 @@
 <template>
   <q-page class="q-pa-md q-gutter-sm">
     <q-card>
+      <q-toggle v-model="testWUniversalConnectivity" label="test w universal connectivity app" />
+      <InfoDialog
+        info-text="Taskyon can communicate with this app:
+[github/libp2p/universal-connectivity](https://github.com/libp2p/universal-connectivity).
+
+And by using the toggle, you can communicate with this app here: this example comes from
+here: [universal-connectivity](https://universal-connectivity.on-fleek.app/)"
+      />
       <q-btn flat label="status" @click="showStatus = true">
         <q-dialog v-model="showStatus">
           <q-card>
@@ -8,6 +16,7 @@
           </q-card>
         </q-dialog>
       </q-btn>
+      <div>Peer ID: {{ peerID }}</div>
       <div>chat:</div>
       <SimpleChatView
         :selected-thread="[]"
@@ -41,10 +50,15 @@ import SimpleChatView from 'src/components/taskyon/SimpleChatView.vue'
 import { createTaskNode } from 'src/modules/taskyon/taskManager'
 import { safeYamlDump } from 'src/modules/yamlUtils'
 import { onMounted, ref } from 'vue'
+import { CHAT_TOPIC } from '../../../packages/taskyon/src/p2p/constants'
+import InfoDialog from 'src/components/InfoDialog.vue'
 
 const showStatus = ref(false)
+const peerID = ref('none')
 const msgs = ref<ChatMessage[]>([])
 const p2p = getActiveP2pNode()
+const testWUniversalConnectivity = ref(false)
+const taskyonUniversalChatTopic = ref('taskyon-simple-chat')
 
 p2p.messageStream.subscribe((msg) => {
   msgs.value.push(msg)
@@ -78,7 +92,10 @@ async function addTasks(taskChain: partialTaskDraft[]) {
   }
 }
 
-onMounted(() => {
-  void p2p.start()
+onMounted(async () => {
+  await p2p.start({
+    chatTopic: testWUniversalConnectivity.value ? CHAT_TOPIC : taskyonUniversalChatTopic.value,
+  })
+  peerID.value = (await p2p.id()) || 'none'
 })
 </script>
