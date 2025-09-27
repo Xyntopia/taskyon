@@ -1,6 +1,9 @@
 import type { Connection, Message, PeerId } from '@libp2p/interface'
 import { multiaddr } from '@multiformats/multiaddr'
 import { createStream } from '@taskyon/taskyon'
+import * as lp from 'it-length-prefixed'
+import map from 'it-map'
+import { pipe } from 'it-pipe'
 import { safeYamlDump } from 'src/modules/yamlUtils'
 import {
   CHAT_FILE_TOPIC,
@@ -11,9 +14,6 @@ import {
 import type { libP2pNode } from './libp2p'
 import { log, startLibp2p } from './libp2p'
 import { getAddresses, getPeerDetails, getPeerTypes } from './p2putils'
-import * as lp from 'it-length-prefixed'
-import { pipe } from 'it-pipe'
-import map from 'it-map'
 
 export type P2pNodeInfo = {
   id: string
@@ -63,7 +63,7 @@ export const createNode = () => {
     emit(info)
   }
 
-  const ctx = {} as { sendPublicMessage?: (input: string) => Promise<void> }
+  let ctx = null as Awaited<ReturnType<typeof init>> | null
 
   const init = async () => {
     libp2pP = startLibp2p()
@@ -116,9 +116,7 @@ export const createNode = () => {
       }
     }*/
 
-    const { sendPublicMessage } = useUniversalChat(n)
-
-    ctx.sendPublicMessage = sendPublicMessage
+    return { ...useUniversalChat(n) }
   }
 
   /*export const getFormattedConnections = (connections: Connection[]) =>
@@ -127,11 +125,15 @@ export const createNode = () => {
       protocols: [...new Set(conn.remoteAddr.protoNames())],
   }))*/
 
+  const messageStream = createStream<ChatMessage>()
+
   return {
-    sendPublicMessage: (input: string) => ctx.sendPublicMessage?.(input),
+    sendPublicMessage: (input: string) => ctx?.sendPublicMessage(input),
     id: getPeerId,
+    messageStream: messageStream.stream,
     start: async () => {
-      await init()
+      ctx = await init()
+      ctx.messageStream.stream.subscribe(messageStream.emit)
       activityStream.emit({ type: 'log', message: `Peer started ${await getPeerId()}` })
     },
     stream,
@@ -168,7 +170,7 @@ export const createNode = () => {
 }
 
 const useUniversalChat = (libp2p: libP2pNode) => {
-  const messageHistory: ChatMessage[] = []
+  const messageStream = createStream<ChatMessage>()
   const sendPublicMessage = async (input: string) => {
     if (input === '') return
 
@@ -212,7 +214,7 @@ const useUniversalChat = (libp2p: libP2pNode) => {
 
     // Append signed messages, otherwise discard
     if (evt.detail.type === 'signed') {
-      messageHistory.push({
+      messageStream.emit({
         msgId: crypto.randomUUID(),
         msg,
         fileObjectUrl: undefined,
@@ -247,7 +249,7 @@ const useUniversalChat = (libp2p: libP2pNode) => {
             const body: Uint8Array = data.subarray()
             log(`chat file message request_response: response received: size:${body.length}`)
 
-            messageHistory.push({
+            messageStream.emit({
               msgId: crypto.randomUUID(),
               msg: newChatFileMessage(fileId, body),
               fileObjectUrl: window.URL.createObjectURL(new Blob([new Uint8Array(body)])),
@@ -290,7 +292,7 @@ const useUniversalChat = (libp2p: libP2pNode) => {
       })()
     }*/
 
-  return { sendPublicMessage }
+  return { sendPublicMessage, messageStream }
 }
 
 let activeNode: ReturnType<typeof createNode> | null = null

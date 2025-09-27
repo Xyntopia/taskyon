@@ -16,12 +16,17 @@
         :show-ids="false"
         :show-all-tasks="false"
       />
+      <div v-for="msg in msgs" :key="msg.msgId">
+        <div>{{ msg.peerId }}:</div>
+        <div>{{ msg.msg }}</div>
+      </div>
       <q-btn label="send" @click="p2p.sendPublicMessage(`${new Date().toLocaleDateString()}`)" />
     </q-card>
   </q-page>
 </template>
 
 <script setup lang="ts">
+import type { ChatMessage } from '@taskyon/taskyon'
 import { getActiveP2pNode } from '@taskyon/taskyon'
 import Libp2pStatus from 'components/taskyon/Libp2pStatus.vue'
 import SimpleChatView from 'src/components/taskyon/SimpleChatView.vue'
@@ -29,8 +34,12 @@ import { safeYamlDump } from 'src/modules/yamlUtils'
 import { onMounted, ref } from 'vue'
 
 const showStatus = ref(false)
-
+const msgs = ref<ChatMessage[]>([])
 const p2p = getActiveP2pNode()
+
+p2p.messageStream.subscribe((msg) => {
+  msgs.value.push(msg)
+})
 
 // Methods
 const output = ref('')
