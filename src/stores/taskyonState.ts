@@ -42,6 +42,7 @@ import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
+import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -648,15 +649,17 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   void usePyodideWebworker().preInit()
 
   const entryNode = computed(() => {
-    return (
-      stateRefs.llmSettings.entryNode ??
-      toolCall({
-        name: 'chooseTool',
-        arguments: {
-          llmTools: stateRefs.llmSettings.enableOpenAiTools,
-        },
-      })
-    )
+    return (stateRefs.llmSettings.entryNode ?? stateRefs.llmSettings.enableToolChooser)
+      ? toolCall({
+          name: 'chooseTool',
+          arguments: {
+            llmTools: stateRefs.llmSettings.enableOpenAiTools,
+          },
+        })
+      : createChatCompletionTask({
+          model: currentModelId.value,
+          goal: 'SimpleCompletion',
+        })
   })
 
   // this means previously, we have loaded a session with a binding key.

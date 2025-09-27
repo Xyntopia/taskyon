@@ -214,7 +214,6 @@ import { partialTaskDraft } from '@taskyon/taskyon'
 import { watchThrottled } from '@vueuse/core'
 import { QSelect } from 'quasar'
 import { generateTaskKeyWords } from 'src/modules/taskyon/taskUtils'
-import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { deepCopy } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
@@ -386,6 +385,8 @@ async function createFileTask(files: File[]) {
   return undefined
 }
 
+// TODO: move this "up", it would be better to have the task creation be purely
+//       event based and more configurable...
 async function addNewTask(p2pTopic?: string) {
   console.log('pubishing on topic:', p2pTopic)
   const kwdsPromise = getCurrentKeywordsWithTimeout(300)
@@ -415,14 +416,6 @@ async function addNewTask(p2pTopic?: string) {
     if (state.llmSettings.enableToolChooser && entryNode) {
       const chooseTask = deepCopy(entryNode)
       newTaskChain.push(chooseTask)
-      console.log('adding message completion task:', currentnewTask.value.content.data)
-    } else {
-      const completionTask = createChatCompletionTask({
-        model: tystate.currentModelId,
-        goal: 'SimpleCompletion',
-      })
-      newTaskChain.push(completionTask)
-      console.log('adding message completion task:', currentnewTask.value.content.data)
     }
   }
 
