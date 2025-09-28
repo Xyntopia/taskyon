@@ -23,7 +23,10 @@ import { useGdrive } from '../gdrive'
 import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
 import { getDatabase } from '../pglite.api'
 import { createDeepTransformer, normalizeFalsyValues, sleep } from '../utils'
-import { jsonSchemaToYamlString, zodToYamlString } from '../yamlUtils'
+import {
+  jsonSchemaToYamlString,
+  zodToYamlString,
+} from '../../../packages/taskyon/src/utils/yamlUtils'
 import { initCryptoSessionFromBrowser } from './browserCryptoSession'
 import { useIpfs } from './ipfs'
 import { gDriveSyncPort } from './sync'

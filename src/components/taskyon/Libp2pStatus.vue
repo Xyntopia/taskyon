@@ -109,7 +109,7 @@
 
 <script setup lang="ts">
 import { type getActiveP2pNode, type P2pNodeInfo } from '@taskyon/taskyon'
-import { safeYamlDump } from 'src/modules/yamlUtils'
+import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
 import { ref } from 'vue'
 
 const { p2p } = defineProps<{ p2p: ReturnType<typeof getActiveP2pNode> }>()

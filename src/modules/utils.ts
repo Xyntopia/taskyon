@@ -1,7 +1,7 @@
 //import equal from 'fast-deep-equal/es6';
 import { deepEqual } from 'fast-equals'
 import { Buffer } from 'buffer'
-import { safeYamlDump } from './yamlUtils'
+import { safeYamlDump } from '../../packages/taskyon/src/utils/yamlUtils'
 import type { AnyFunction } from '../../packages/taskyon/src/utils/tsHelpers'
 
 export function copyToClipboard(text: string) {

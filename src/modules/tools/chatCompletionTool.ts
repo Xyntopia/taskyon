@@ -39,7 +39,7 @@ import { z } from 'zod'
 import { mapFunctionNames } from '../taskyon/tools'
 import type { ChatResponseType, OpenRouterGenerationInfo, TaskNodeMeta } from '../taskyon/types'
 import { getApiConfigCopy, getCurrentModel, type llmSettings } from '../taskyon/types'
-import { safeYamlDump } from '../yamlUtils'
+import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
 
 function generateOpenAIToolDeclarations(
   allowedTools: string[],
