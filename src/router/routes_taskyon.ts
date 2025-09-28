@@ -199,14 +199,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       description: 'Error & Diagnostics display',
     },
   },
-  {
-    path: '/ipfsmonitor',
-    component: () => import('pages/taskyon/IpfsStatusPage.vue'),
-    meta: {
-      title: 'IPFS status',
-      description: 'Interplanetary file system status monitor',
-    },
-  },
   /*{
     path: '/p2pmonitor',
     component: () => import('pages/taskyon/Libp2pStatusPage.vue'),
