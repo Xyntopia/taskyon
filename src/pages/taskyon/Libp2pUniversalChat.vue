@@ -49,9 +49,10 @@ import CreateNewTask from 'src/components/taskyon/CreateNewTask.vue'
 import SimpleChatView from 'src/components/taskyon/SimpleChatView.vue'
 import { createTaskNode } from 'src/modules/taskyon/taskManager'
 import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { CHAT_TOPIC } from '../../../packages/taskyon/src/p2p/constants'
 import InfoDialog from 'src/components/InfoDialog.vue'
+import { syncRefsWithLocalStorage } from 'src/modules/saveState'
 
 const showStatus = ref(false)
 const peerID = ref('none')
@@ -59,6 +60,12 @@ const msgs = ref<ChatMessage[]>([])
 const p2p = getActiveP2pNode()
 const testWUniversalConnectivity = ref(false)
 const taskyonUniversalChatTopic = ref('taskyon-simple-chat')
+
+syncRefsWithLocalStorage('libp2pchat', { testWUniversalConnectivity, taskyonUniversalChatTopic })
+
+watch(testWUniversalConnectivity, async (val) => {
+  await p2p.start({ chatTopic: val ? CHAT_TOPIC : taskyonUniversalChatTopic.value })
+})
 
 p2p.messageStream.subscribe((msg) => {
   msgs.value.push(msg)
