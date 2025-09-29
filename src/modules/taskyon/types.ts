@@ -647,6 +647,7 @@ export type tyPublicKeyDraft = z.infer<typeof tyPublicKeyDraft>
 export const tyPublicApiKeyObject = tyPublicKeyDraft.extend({
   iat: z.number().meta({
     description: 'Time at which the key was issued.',
+    format: 'timestamp',
   }),
   auid: z.string().meta({
     description: 'anonymous User ID for billing purposes.',

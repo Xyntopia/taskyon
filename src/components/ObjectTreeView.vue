@@ -195,6 +195,36 @@
         </q-input>
       </FieldView>
     </template>
+    <template #body-timestamp="prop">
+      <FieldView
+        :show-label="separateLabels"
+        :item="prop.node"
+        reset
+        @reset="updateValue(prop.node.path, prop.node.default)"
+      >
+        <!-- split date + time inputs -->
+        <div class="row q-col-gutter-sm">
+          <q-input
+            filled
+            dense
+            type="date"
+            :model-value="formatDate(prop.node.value)"
+            @update:model-value="
+              (val) => updateDateTime(prop.node.path, val ? String(val) : null, null)
+            "
+          />
+          <q-input
+            filled
+            dense
+            type="time"
+            :model-value="formatTime(prop.node.value)"
+            @update:model-value="
+              (val) => updateDateTime(prop.node.path, null, val ? String(val) : null)
+            "
+          />
+        </div>
+      </FieldView>
+    </template>
   </q-tree>
   <div v-else>no input data!</div>
 </template>
@@ -281,9 +311,11 @@ const transformToTreeNodes = (
     const isUndef = value === undefined || value === null
     const runtimeType = subschema?.enum
       ? 'enum'
-      : subschema?.format === 'color'
-        ? 'color'
-        : (subschema?.type ?? (Array.isArray(value) ? 'array' : typeof value))
+      : subschema?.format === 'timestamp'
+        ? 'timestamp'
+        : subschema?.format === 'color'
+          ? 'color'
+          : (subschema?.type ?? (Array.isArray(value) ? 'array' : typeof value))
 
     // TODO: what do we do if schemaType is an array?
     switch (runtimeType) {
@@ -296,6 +328,14 @@ const transformToTreeNodes = (
           value: actualVal,
           options: subschema!.enum as Array<string | number>,
           body: 'enum',
+        }
+      }
+      case 'timestamp': {
+        const ts = isUndef ? (subschema!.default ?? Date.now()) : (value as number)
+        return {
+          ...base,
+          value: ts,
+          body: 'timestamp',
         }
       }
       case 'color': {
@@ -384,6 +424,25 @@ const nodeTree = computed(() => {
     return []
   }
 })
+
+const formatDate = (ts?: number) => (ts ? new Date(ts).toISOString().slice(0, 10) : '')
+
+const formatTime = (ts?: number) => (ts ? new Date(ts).toISOString().slice(11, 16) : '')
+
+const updateDateTime = (path: string[], date: string | null, time: string | null) => {
+  const ts = modelValue.value ? (modelValue.value[path.at(-1)!] as number) : Date.now()
+  const d = new Date(ts || Date.now())
+  if (date) {
+    const [y = 1970, m = 1, day = 1] = date.split('-').map(Number)
+    d.setFullYear(y, m - 1, day)
+  }
+  if (time) {
+    const [h = 0, min = 0] = time.split(':').map(Number)
+    d.setHours(h, min)
+  }
+
+  updateValue(path, d.getTime())
+}
 </script>
 
 <style lang="sass">
