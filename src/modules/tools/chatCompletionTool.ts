@@ -756,15 +756,19 @@ export async function createChatCompletionTool(
     ) => {
       const tools = allowedTools ?? []
       const currentSettings = llmSettings()
-      const usellmTools = llmTools ?? currentSettings.enableOpenAiTools
-
-      const selectedModel = model ?? getCurrentModel(currentSettings)
-      console.log('calling chat completion tool...', selectedModel, goal, llmTools)
-      // the current task doesn't *have* to exist. We can also works solely with prompts...
-      const currentTask = context.taskChain.at(-1)
       if (!currentSettings.selectedApi) {
         throw new Error('No API selected!')
       }
+      const api = currentSettings.llmApis[currentSettings.selectedApi]
+      if (!api) {
+        throw new Error(`api doesn't exist! ${currentSettings.selectedApi || 'no api selected!'}`)
+      }
+
+      const usellmTools = llmTools ?? currentSettings.enableOpenAiTools
+      const selectedModel = model ?? getCurrentModel(api)
+      console.log('calling chat completion tool...', selectedModel, goal, llmTools)
+      // the current task doesn't *have* to exist. We can also works solely with prompts...
+      const currentTask = context.taskChain.at(-1)
 
       const toolDefs = await taskManager.updateToolDefinitions(true)
 
@@ -787,11 +791,6 @@ export async function createChatCompletionTool(
           // otherwise we might want to repeat the actual tool call with different parameters!
           allowedToolsFromError = [lastTaskBeforeError.content.data.name]
         }
-      }
-
-      const api = currentSettings.llmApis[currentSettings.selectedApi]
-      if (!api) {
-        throw new Error(`api doesn't exist! ${currentSettings.selectedApi || 'no api selected!'}`)
       }
 
       const { chatCompletion, metaInfo: chatInfo } = await processChatTask(
@@ -840,7 +839,6 @@ export async function createChatCompletionTool(
 
           // TODO: remove "configuration" here and get the information from the tasks function call parameters
           //       this would require us to have "defaultsettings" implemented...
-          const api = currentSettings.llmApis[currentSettings.selectedApi]
           if (api)
             void addTaskCostInformation(
               chatCompletion,

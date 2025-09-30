@@ -18,7 +18,7 @@
         fill-input
         input-debounce="0"
         v-bind="$attrs"
-        :display-value="botName"
+        :display-value="botName || ''"
         @update:model-value="onModelSelect"
         @filter="
           (val: string, update: updateCallBack, abort: () => void) =>
@@ -60,20 +60,11 @@ import { levenshteinDistance } from 'src/modules/string_utils'
 import ToggleButton from '../ToggleButton.vue'
 import { useAppStateStore } from 'src/stores/appState'
 
-defineProps({
-  botName: {
-    type: String,
-    required: true,
-  },
-  modelList: {
-    type: Boolean,
-    default: false,
-  },
-  selectApi: {
-    type: Boolean,
-    default: false,
-  },
-})
+defineProps<{
+  botName: string | null
+  modelList?: boolean
+  selectApi?: boolean
+}>()
 
 const selectedApi = defineModel<string | null>('selectedApi', {
   required: true,

@@ -649,17 +649,20 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   void usePyodideWebworker().preInit()
 
   const entryNode = computed(() => {
-    return (stateRefs.llmSettings.entryNode ?? stateRefs.llmSettings.enableToolChooser)
-      ? toolCall({
-          name: 'chooseTool',
-          arguments: {
-            llmTools: stateRefs.llmSettings.enableOpenAiTools,
-          },
-        })
-      : createChatCompletionTask({
-          model: currentModelId.value,
-          goal: 'SimpleCompletion',
-        })
+    if (currentModelId.value) {
+      return (stateRefs.llmSettings.entryNode ?? stateRefs.llmSettings.enableToolChooser)
+        ? toolCall({
+            name: 'chooseTool',
+            arguments: {
+              llmTools: stateRefs.llmSettings.enableOpenAiTools,
+            },
+          })
+        : createChatCompletionTask({
+            model: currentModelId.value,
+            goal: 'SimpleCompletion',
+          })
+    }
+    return undefined
   })
 
   // this means previously, we have loaded a session with a binding key.
@@ -937,11 +940,14 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // Computed property to determine the currently selected bot name
   const currentModelId = computed(() => {
-    return getCurrentModel(stateRefs.llmSettings)
+    const selected = stateRefs.llmSettings.selectedApi
+    if (selected && stateRefs.llmSettings.llmApis[selected])
+      return getCurrentModel(stateRefs.llmSettings.llmApis[selected])
+    return null
   })
 
   const currentModel = computed(() => {
-    return llmModelsInternal.value[currentModelId.value]
+    return currentModelId.value ? llmModelsInternal.value[currentModelId.value] : null
   })
 
   function setNewContentDraft(content: TaskNode['content'] | undefined) {

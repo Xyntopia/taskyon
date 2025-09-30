@@ -664,14 +664,8 @@ export function getApiConfig(llmSettings: llmSettings) {
   }
 }
 
-export function getCurrentModel(llmSettings: llmSettings) {
-  const api = getApiConfig(llmSettings)
-  if (api) {
-    const modelName =
-      api.selectedModel || api.defaultModel || api.models?.free || 'No model selected!'
-    return modelName
-  }
-  return 'No model selected!'
+export function getCurrentModel(api: apiConfig) {
+  return api.selectedModel || api.defaultModel || api.models?.free || 'No model selected!'
 }
 
 export interface TyTaskStreamData {

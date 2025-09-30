@@ -212,7 +212,7 @@ import { symOutlinedCancel } from '@quasar/extras/material-symbols-outlined'
 import { mdiFunctionVariant, mdiToolbox } from '@quasar/extras/mdi-v6'
 import { partialTaskDraft } from '@taskyon/taskyon'
 import { watchThrottled } from '@vueuse/core'
-import { QSelect } from 'quasar'
+import { QSelect, useQuasar } from 'quasar'
 import { generateTaskKeyWords } from 'src/modules/taskyon/taskUtils'
 import { deepCopy } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
@@ -234,7 +234,7 @@ const {
   entryNode,
   addToTaskyon,
 } = defineProps<{
-  entryNode?: partialTaskDraft
+  entryNode?: partialTaskDraft | undefined
   minMode?: boolean
   expertMode?: boolean
   p2pTopic?: string // the p2p network that we want to send the task to
@@ -385,6 +385,8 @@ async function createFileTask(files: File[]) {
   return undefined
 }
 
+const $q = useQuasar()
+
 // TODO: move this "up", it would be better to have the task creation be purely
 //       event based and more configurable...
 async function addNewTask(p2pTopic?: string) {
@@ -416,6 +418,10 @@ async function addNewTask(p2pTopic?: string) {
     if (entryNode) {
       const chooseTask = deepCopy(entryNode)
       newTaskChain.push(chooseTask)
+    } else {
+      $q.notify(
+        "We can can not complete the Chat because we don't have a correct model or provider selected",
+      )
     }
   }
 
