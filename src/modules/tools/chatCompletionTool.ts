@@ -114,7 +114,8 @@ export async function processChatTask(
     toolDefs,
     llmTools,
     llmTools, // we turn on/off native structured & tools ith the same setting here!
-    llmSettings,
+    llmSettings.useBasePrompt,
+    llmSettings.taskChatTemplates,
     openAIConversationThread,
     prompts,
     allowedTools,

@@ -146,17 +146,15 @@ export function addPrompts(
   toolCollection: Record<string, ToolBase>,
   enableOpenAiTools: boolean,
   nativeStructuredResponse: boolean,
-  options: {
-    useBasePrompt: boolean
-    taskChatTemplates: {
-      basePrompt: string
-      evaluate: string
-      instruction: string
-      tools: string
-      task: string
-      schemaReminder: string
-      toolResult: string
-    }
+  useBasePrompt: boolean,
+  taskChatTemplates: {
+    basePrompt: string
+    evaluate: string
+    instruction: string
+    tools: string
+    task: string
+    schemaReminder: string
+    toolResult: string
   },
   openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   prompts: string[],
@@ -188,8 +186,8 @@ export function addPrompts(
   const appendSystemMessage: string[] = []
 
   // we always prepend our "fancy" prompt, if we use "native" tools...
-  if ((goal === 'SimpleCompletion' && options.useBasePrompt) || enableOpenAiTools) {
-    prependMessagesList.unshift(options.taskChatTemplates.basePrompt)
+  if ((goal === 'SimpleCompletion' && useBasePrompt) || enableOpenAiTools) {
+    prependMessagesList.unshift(taskChatTemplates.basePrompt)
 
     if (!enableOpenAiTools) {
       const calledFunctions = getAllFunctionsInOpenAiConversation(modifiedOpenAIConversationThread)
@@ -207,10 +205,7 @@ export function addPrompts(
   if (goal && goal !== 'SimpleCompletion') {
     // only add tools, if we don#t use the native API already
     if (!enableOpenAiTools) {
-      appendMessagesList.push(
-        options.taskChatTemplates.instruction,
-        options.taskChatTemplates.tools,
-      )
+      appendMessagesList.push(taskChatTemplates.instruction, taskChatTemplates.tools)
       // send instructions only if there aren't any custom prompts...
       if (prompts.length === 0) {
         // Remove the last message from openAIConversationThread
@@ -218,22 +213,22 @@ export function addPrompts(
         // where we have wrapped the original message...
         modifiedOpenAIConversationThread.pop()
         if (goal === 'AnalyzeError') {
-          appendMessagesList.push(options.taskChatTemplates.evaluate)
+          appendMessagesList.push(taskChatTemplates.evaluate)
         } else if (goal === 'ChooseTool') {
-          appendMessagesList.push(options.taskChatTemplates.task)
+          appendMessagesList.push(taskChatTemplates.task)
         } else if (goal === 'AnalyzeToolResult') {
-          appendMessagesList.push(options.taskChatTemplates.toolResult)
+          appendMessagesList.push(taskChatTemplates.toolResult)
         }
       }
     }
     // put custom prompts between general instruction, tool lists and
     // the schema enforcer
     appendMessagesList.push(...prompts)
-    if (!enableOpenAiTools) appendSystemMessage.push(options.taskChatTemplates.schemaReminder)
+    if (!enableOpenAiTools) appendSystemMessage.push(taskChatTemplates.schemaReminder)
   } else {
     appendMessagesList.push(...prompts)
     if (schema && !nativeStructuredResponse) {
-      appendSystemMessage.push(options.taskChatTemplates.schemaReminder)
+      appendSystemMessage.push(taskChatTemplates.schemaReminder)
     }
   }
 
