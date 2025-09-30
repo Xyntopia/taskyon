@@ -38,7 +38,12 @@ import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
 import { z } from 'zod'
 import { mapFunctionNames } from '../taskyon/tools'
-import type { ChatResponseType, OpenRouterGenerationInfo, TaskNodeMeta } from '../taskyon/types'
+import type {
+  apiConfig,
+  ChatResponseType,
+  OpenRouterGenerationInfo,
+  TaskNodeMeta,
+} from '../taskyon/types'
 import { getApiConfigCopy, getCurrentModel, type llmSettings } from '../taskyon/types'
 import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
 
@@ -228,37 +233,44 @@ export async function convertTaskNodesToOpenAIChat(
 async function addTaskCostInformation(
   chatResponse: ChatResponseType | undefined,
   taskId: string,
-  llmSettings: llmSettings,
+  selectedApi: string | null,
+  siteUrl: string,
   apiKeys: { [key: string]: string },
+  anonymousTaskyonKey: string,
+  api: apiConfig | undefined,
 ): Promise<TaskNodeMeta> {
   let generationInfo: OpenRouterGenerationInfo | undefined
-  const apiKey = llmSettings.selectedApi ? apiKeys[llmSettings.selectedApi] : undefined
+  const apiKey = selectedApi ? apiKeys[selectedApi] : undefined
 
   // TODO: it might be a good idea to simply replace this with a tasknode ;)
-  if (chatResponse && llmSettings.selectedApi === 'openrouter.ai' && apiKey) {
+  if (chatResponse && selectedApi === 'openrouter.ai' && apiKey) {
     console.log('getting openrouter generation info')
     await sleep(10000)
     generationInfo = await getOpenRouterGenerationInfo(
       chatResponse.id,
-      generateHeaders(apiKey, llmSettings.siteUrl, llmSettings.selectedApi || ''),
+      generateHeaders(apiKey, siteUrl, selectedApi || ''),
     )
   } else if (
     chatResponse &&
-    llmSettings.selectedApi === 'taskyon' &&
+    selectedApi === 'taskyon' &&
     !chatResponse.model.endsWith(':free') &&
     apiKey &&
-    !isTaskyonKey(apiKey, false)
+    !isTaskyonKey(apiKey, false) &&
+    api
   ) {
-    // TODO: remove "configuration" here and get the information from the tasks function call parameters
-    const api = getApiConfigCopy(llmSettings, llmSettings.selectedApi)
-    if (api) {
-      console.log('getting taskyon generation info')
-      // our backend tries to get the finished costs
-      // after ~4000ms, so we wait for 6000 here...
-      await sleep(6000)
-      generationInfo = await getTaskyonCosts(llmSettings, apiKey, api, chatResponse.id, taskId)
-      console.log('taskyon generation info:', generationInfo)
-    }
+    console.log('getting taskyon generation info')
+    // our backend tries to get the finished costs
+    // after ~4000ms, so we wait for 6000 here...
+    await sleep(6000)
+    generationInfo = await getTaskyonCosts(
+      siteUrl,
+      anonymousTaskyonKey,
+      apiKey,
+      api,
+      chatResponse.id,
+      taskId,
+    )
+    console.log('taskyon generation info:', generationInfo)
   }
   if (generationInfo?.native_tokens_completion && generationInfo.native_tokens_prompt) {
     // we get the useage data very often in an asynchronous form.
@@ -822,15 +834,22 @@ export async function createChatCompletionTool(
           // we run this asynchronously, because it fetches data in the
           // background and we don't want to wait here...
 
-          void addTaskCostInformation(
-            chatCompletion,
-            currentTask?.id,
-            currentSettings,
-            apiKeys(),
-          ).then((newMeta) => {
-            console.log('found new task costs:', newMeta)
-            void taskManager.metaUpsert(currentTask.id, newMeta, 'shallow_merge')
-          })
+          // TODO: remove "configuration" here and get the information from the tasks function call parameters
+          //       this would require us to have "defaultsettings" implemented...
+          const api = getApiConfigCopy(currentSettings, currentSettings.selectedApi)
+          if (api)
+            void addTaskCostInformation(
+              chatCompletion,
+              currentTask?.id,
+              currentSettings.selectedApi,
+              currentSettings.siteUrl,
+              apiKeys(),
+              currentSettings.llmApis['taskyon']?.defaultHeaders?.apiKey ?? '',
+              api,
+            ).then((newMeta) => {
+              console.log('found new task costs:', newMeta)
+              void taskManager.metaUpsert(currentTask.id, newMeta, 'shallow_merge')
+            })
         }
 
         metaInfo.rawOutput = { choice }

@@ -1,16 +1,16 @@
-import type { OpenRouterGenerationInfo, Model, llmSettings, OpenAIMessage } from './types'
+import type { OpenRouterGenerationInfo, Model, OpenAIMessage, apiConfig } from './types'
 import type OpenAI from 'openai'
 import { sleep, asyncTimeLruCache } from '../utils'
 import { ChatResponseType } from './types'
 import { charHash } from '@taskyon/taskyon'
 
-export function generateHeaders(apiSecret: string, siteUrl: string, selectedApi: string) {
+export function generateHeaders(Bearer: string, siteUrl: string, selectedApi: string) {
   let headers: Record<string, string> = {
     'Content-Type': 'application/json',
   }
 
-  if (apiSecret && !(selectedApi === 'taskyon' && apiSecret === 'anonymous')) {
-    headers.Authorization = `Bearer ${apiSecret}`
+  if (Bearer && !(selectedApi === 'taskyon' && Bearer === 'anonymous')) {
+    headers.Authorization = `Bearer ${Bearer}`
   }
 
   if (selectedApi == 'openrouter.ai') {
@@ -507,15 +507,16 @@ export async function createOpenAIRequest(
 }
 
 export async function getTaskyonCosts(
-  llmSettings: llmSettings,
+  siteUrl: string, // to add an indicator to the request which app/site this request is coming from
+  anonymousTaskyonKey: string,
   apiKey: string,
-  api: llmSettings['llmApis'][0],
+  api: apiConfig,
   completionId: string,
   taskid: string,
 ) {
   const headers = {
-    ...llmSettings.llmApis['taskyon']?.defaultHeaders,
-    ...generateHeaders(apiKey, llmSettings.siteUrl, api.name),
+    ...(api.name === 'taskyon' ? { apiKey: anonymousTaskyonKey } : {}),
+    ...generateHeaders(apiKey, siteUrl, api.name),
   }
   const baseUrl = new URL(api.baseURL).origin
   console.log('get generation info from ', baseUrl)
