@@ -75,24 +75,17 @@ export async function processChatTask(
   allowedTools: string[],
   toolDefs: Record<string, ToolBase>,
   llmTools: boolean,
-  selectedModel: string,
   llmSettings: {
     tryUsingVisionModels: boolean
-    enableOpenAiTools: boolean
     useBasePrompt: boolean
     taskChatTemplates: Parameters<typeof addPrompts>[4]
   },
   // can we get rid of taskManager here in order to make our task more functional :)?
   taskManager: TyTaskManager,
-  stopSignal: AbortSignal,
-  api: apiConfig,
-  apiKey: string,
   lastTaskBeforeChatCompletion: TaskNode | undefined,
-  streamTracker: (chunk: ChatCompletionChunk | undefined) => void,
   prompts: string[],
   goal?: Goals,
   schema?: Record<string, unknown>,
-  siteUrl?: string,
 ) {
   //TODO: we can create more things here like giving it context form other tasks, lookup
   //      main objective, previous tasks etc....
@@ -106,7 +99,7 @@ export async function processChatTask(
       taskManager.getFileMappingByUuid,
       taskManager.getOpfsUploadedFile,
       llmSettings.tryUsingVisionModels,
-      llmSettings.enableOpenAiTools,
+      llmTools,
       toolDefs,
     )
   } else {
@@ -133,15 +126,29 @@ export async function processChatTask(
     ...msgs.appendMessages,
   ]
 
+  if (openAIConversationThread.length <= 0) {
+    throw new Error('We were not able to convert our tasks into an AI-compatible format!')
+  }
+
   let tools: OpenAI.ChatCompletionTool[] = []
   if (llmTools) {
     tools = generateOpenAIToolDeclarations(allowedTools || [], toolDefs)
   }
 
-  if (openAIConversationThread.length <= 0) {
-    throw new Error('We were not able to convert our tasks into an AI-compatible format!')
-  }
+  return { openAIConversationThread, tools, msgs: msgs ?? {} }
+}
 
+async function llmRequest(
+  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  tools: OpenAI.ChatCompletionTool[],
+  selectedModel: string,
+  stopSignal: AbortSignal,
+  api: apiConfig,
+  apiKey: string,
+  streamTracker: (chunk: ChatCompletionChunk | undefined) => void,
+  schema?: Record<string, unknown>,
+  siteUrl?: string,
+) {
   const streamTask = true
   const request = await createOpenAIRequest(
     apiKey,
@@ -162,7 +169,7 @@ export async function processChatTask(
     3, // Maximum number of retry attempts
   )
 
-  return { chatCompletion, metaInfo: { openAIConversationThread, msgs: msgs ?? {} } }
+  return chatCompletion
 }
 
 // Ensures that every assistant.tool_calls is paired with a role:"tool" message.
@@ -795,27 +802,33 @@ export async function createChatCompletionTool(
         }
       }
 
-      const { chatCompletion, metaInfo: chatInfo } = await processChatTask(
+      // can we get rid of taskManager here in order to make our task more functional :)?
+      const chatInfo = await processChatTask(
         [...tools, ...allowedToolsFromError],
         toolDefs,
         usellmTools,
-        selectedModel,
         {
-          enableOpenAiTools: currentSettings.enableOpenAiTools,
           taskChatTemplates: currentSettings.taskChatTemplates,
           tryUsingVisionModels: currentSettings.tryUsingVisionModels,
           useBasePrompt: currentSettings.useBasePrompt,
         },
         taskManager,
+        lastTaskBeforeChatCompletion,
+        prompts ?? [],
+        goal,
+        schema,
+      )
+
+      const chatCompletion = await llmRequest(
+        chatInfo.openAIConversationThread,
+        chatInfo.tools,
+        selectedModel,
         context.stopSignal,
         api,
         apiKey,
-        lastTaskBeforeChatCompletion,
         (chunk) => {
           chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
         },
-        prompts ?? [],
-        goal,
         schema,
         currentSettings.siteUrl,
       )
