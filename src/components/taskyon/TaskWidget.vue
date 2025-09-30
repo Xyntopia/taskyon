@@ -135,11 +135,9 @@
     short
   >
     <template #header>
-      <tyMarkdown
-        :src="`Error: ${humanizeError(task.content.data).split(' ').slice(0, 10).join(' ')}...`"
-        no-line-numbers
-        use-iframe
-      />
+      <div class="text-negative">
+        {{ `Error: ${humanizeError(task.content.data).split(' ').slice(0, 10).join(' ')}...` }}
+      </div>
     </template>
     <template #default="{ showTaskMenu }">
       <div class="text-negative">

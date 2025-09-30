@@ -9,10 +9,13 @@
     <q-icon :name="matShield" class="task-safety-icon">
       <q-tooltip>This message is displayed in a secure sandbox</q-tooltip>
     </q-icon>
-    <!--Message Display-->
+    <!--Task Display-->
     <div v-touch-hold="() => (showTaskMenu = true)" class="task-display">
-      <div v-if="!$q.platform.is.mobile" class="task-menu-anchor">
-        <q-btn class="task-menu-btn" flat color="secondary" size="lg" dense :icon="matMoreHoriz">
+      <div
+        v-if="!$q.platform.is.mobile"
+        :class="[expandMessageContent || !short ? 'task-menu-anchor' : '']"
+      >
+        <q-btn class="task-menu-btn" flat color="secondary" size="md" dense :icon="matMoreHoriz">
           <q-menu ref="taskMenuRef" auto-close>
             <TaskMenu
               class="task-buttons"
@@ -258,13 +261,14 @@ function toggleMarkdown(id: string) {
     pointer-events: none
     z-index: 100
 
-  .task-menu-btn
-    // Positioning
-    position: absolute
-    right: 0
-    top: 5px
-    pointer-events: auto
+    .task-menu-btn
+      // Positioning
+      position: absolute
+      right: 0
+      top: 5px
+      pointer-events: auto
 
+  .task-menu-btn
     // Shape/visibility
     opacity: .3
     transform: translateY(-3px) scale(.94)
