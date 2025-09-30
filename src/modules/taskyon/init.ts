@@ -20,7 +20,7 @@ import {
 } from '../../../packages/taskyon/src/utils/frpBus'
 import { getDatabase } from '../pglite.api'
 import { createOAuthTool } from '../tools/authTools'
-import { createChatCompletionTool } from '../tools/chatCompletionTool'
+import { createChatCompletionTask, createChatCompletionTool } from '../tools/chatCompletionTool'
 import { devTools } from '../tools/devTools'
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
@@ -224,11 +224,19 @@ const dynamicContext =
     console.log('starting taskyon worker')
     const { port: workerport } = createTypeFilteredPort(insidePort, ['functionResponse'])
     const { workerStream, stopAllTasks, queueTask } = runTaskWorker(
-      llmSettings(),
       taskManagerInstance,
       secretStore,
       iframeMultiPlexer.all$,
       workerport,
+      llmSettings().maxAutonomousTasks,
+      createChatCompletionTask({
+        goal: 'AnalyzeToolResult',
+        llmTools: llmSettings().enableOpenAiTools,
+      }),
+      createChatCompletionTask({
+        goal: 'AnalyzeError',
+        llmTools: llmSettings().enableOpenAiTools,
+      }),
     )
     //##################### END INIT CTX #################
     return {

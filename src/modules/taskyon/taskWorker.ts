@@ -8,12 +8,11 @@ import {
   type toolContext,
 } from '@taskyon/taskyon'
 import type { SecretStore } from '../crudWrapper'
-import { createChatCompletionTask } from '../tools/chatCompletionTool'
 import { createAsyncQueue, humanizeError, serializeForJson, sleep } from '../utils'
 import { type TyTaskManager } from './taskManager'
 import type { RemoteFunctionPort } from './tools'
 import { handleFunctionExecution } from './tools'
-import { getApiConfigCopy, type llmSettings, type TyTaskStreamData } from './types'
+import { type TyTaskStreamData } from './types'
 
 export async function generateSecretId(
   taskId: string | undefined,
@@ -80,11 +79,7 @@ async function safeExecuteTask(
   }
 }
 
-function parseResultForTaskChains(
-  funcR: unknown,
-  analyzeModel: string | undefined,
-  llmTools: boolean,
-): partialTaskDraft[][] {
+function parseResultForTaskChains(funcR: unknown) {
   if (taskResult.safeParse(funcR).success) {
     console.log('new tasks were created:', funcR)
     // we have to do this funny workaround with typescript because
@@ -92,31 +87,6 @@ function parseResultForTaskChains(
     // of the second task in a taskchain... after parsing. so we're
     // simply using the original...
     const newTasks = (funcR as taskResult).taskChainList
-    return newTasks
-  } else {
-    // TODO: Not really sure, what to do with the task processor... . It might be
-    //       a good idea, to have this as its a tool in its own right.
-    //       this way we could develop different kinds of function processors and
-    //       probably also simply make the code more consistent...
-    if (!analyzeModel)
-      throw new Error('We need to select a model in order to analyze the result of our task!!')
-
-    // TODO: maybe move this into chatCompletion?
-    //       I am not sure, if that makes sense, because we don't know yet what kind of result a tool produces...
-    const newTasks: partialTaskDraft[][] = [
-      [
-        {
-          role: 'system',
-          content: { type: 'toolresult', data: funcR },
-        },
-        createChatCompletionTask({
-          model: analyzeModel,
-          goal: 'AnalyzeToolResult',
-          llmTools,
-        }),
-      ],
-    ]
-    console.log('function returning generic result', funcR)
     return newTasks
   }
 }
@@ -275,9 +245,8 @@ function createHandleError(
   return async (
     error: unknown,
     task: TaskNode,
-    selectedModel: string | undefined,
     maxAutonomousTasks: number,
-    enableOpenAiTools: boolean,
+    errorhandlerTask: partialTaskDraft,
   ) => {
     errorCount += 1
     if (errorCount >= maxAutonomousTasks) {
@@ -286,15 +255,27 @@ function createHandleError(
       stopAllTasks(`Too many errors occured, interrupting execution after ${errorCount} errors!`)
     }
 
-    const errorTaskChain = createErrorTaskChain(error, task, selectedModel, enableOpenAiTools)
     const debugInfo = createDebugInfoFromError(error)
     void taskManager.metaUpsert(task.id, debugInfo, 'shallow_merge')
 
     // we are adding the error task chain as a subtaskchain with the parentID of this
     // particular task.
-    const errorTaskId = (await taskManager.addTaskChain(errorTaskChain, undefined, task.id)).at(
-      -1,
-    )?.id
+    const errorTaskId = (
+      await taskManager.addTaskChain(
+        [
+          {
+            role: 'system',
+            content: {
+              type: 'error',
+              data: serializeForJson(error),
+            },
+          },
+          errorhandlerTask,
+        ],
+        undefined,
+        task.id,
+      )
+    ).at(-1)?.id // get lasttask id so that we can query it for execution!
 
     // interrupt execution if interrupted flag is shown!
     // this makes sure that results are still saved, even if we stop any
@@ -322,7 +303,12 @@ const createTaskProcessor = (
   const handleError = createHandleError(stopAllTasks, taskManager, currentTaskCtrl, queueTask)
   const { isTaskFinished, setTaskFinished } = createTaskTracker(taskManager)
 
-  return async (taskId: string, llmSettings: llmSettings) => {
+  return async (
+    taskId: string,
+    maxAutonomousTasks: number,
+    defaultTask: partialTaskDraft,
+    errorHandlerTask: partialTaskDraft,
+  ) => {
     const task = await taskManager.getTask(taskId)
     if (task && !currentTaskCtrl.signal.aborted) {
       // make sure we know from outside that the worker is active...
@@ -356,10 +342,6 @@ const createTaskProcessor = (
       // which task to choose as the "leaf" of a chain.
       streamEmit({ stage: 'processing', task })
 
-      // TODO: try to get rid of all the llmSettings functionality here..   this should only be relevant for chatCompletion which
-      //       is now a tool! :)
-      if (!llmSettings.selectedApi) throw new Error('No AI API selected!!')
-      const selectedModel = getApiConfigCopy(llmSettings, llmSettings.selectedApi)?.selectedModel
       let newTasks: TaskNode[][] = []
       try {
         const funcR = await safeExecuteTask(
@@ -375,11 +357,16 @@ const createTaskProcessor = (
         // a lists of tasks. If thats the case we return
         // those for continuation, otherwise
         // we create a generic task result.
-        const partialTasks = parseResultForTaskChains(
-          funcR,
-          selectedModel,
-          llmSettings.enableOpenAiTools,
-        )
+        // TODO: maybe remove "defaultTask" from here and put it into our entrynode in some sort of way?
+        const partialTasks = parseResultForTaskChains(funcR) ?? [
+          [
+            {
+              role: 'system',
+              content: { type: 'toolresult', data: funcR },
+            },
+            defaultTask,
+          ],
+        ]
 
         // we can immediatly persist all of our tasks here to the taskManager, as
         // they're immutable and won't change anymore..
@@ -418,13 +405,7 @@ const createTaskProcessor = (
       } catch (error) {
         streamEmit({ stage: 'error', taskId: task.id, info: humanizeError(error) })
         console.error('Error processing task:', error, task)
-        await handleError(
-          error,
-          task,
-          selectedModel,
-          llmSettings.maxAutonomousTasks,
-          llmSettings.enableOpenAiTools,
-        )
+        await handleError(error, task, maxAutonomousTasks, errorHandlerTask)
         // TODO: run this taskWorker in a separate worker js/browser thread!
       }
       taskOutOfLoop(task.id)
@@ -447,7 +428,6 @@ const createTaskProcessor = (
 const setupRun = (
   streamEmit: (value: TyTaskStreamData) => void,
   stopAllTasks: (message: string) => void,
-  llmSettings: llmSettings,
   taskManager: TyTaskManager,
   secretStore: SecretStore,
   taskMessageStream: TaskMessageStream,
@@ -479,7 +459,11 @@ const setupRun = (
     duplexPort,
   )
 
-  const run = async () => {
+  const run = async (
+    maxAutonomousTasks: number,
+    defaultTask: partialTaskDraft,
+    errorTask: partialTaskDraft,
+  ) => {
     console.log('starting task worker run...')
     while (!currentTaskCtrl.signal.aborted) {
       if (getTasksInProgress() <= 0) {
@@ -492,7 +476,7 @@ const setupRun = (
         streamEmit({ stage: 'aborted' })
         break
       }
-      void asyncProcessTask(taskId, llmSettings)
+      void asyncProcessTask(taskId, maxAutonomousTasks, defaultTask, errorTask)
     }
     processTasksQueue.clear()
     allTasksFinished()
@@ -521,13 +505,15 @@ function createDebugInfoFromError(error: unknown) {
 }
 
 export function runTaskWorker(
-  llmSettings: llmSettings,
   taskManager: TyTaskManager,
   secretStore: SecretStore,
   // task message stream is used in order to give message tasks the ability to communicate to
   // tool call tasks (e.g. a button click)
   taskMessageStream: TaskMessageStream,
   duplexPort: RemoteFunctionPort,
+  maxAutonomousTasks: number,
+  defaultTask: partialTaskDraft,
+  errorTask: partialTaskDraft,
 ) {
   console.log('starting task worker listener...')
 
@@ -558,7 +544,6 @@ export function runTaskWorker(
       } = setupRun(
         taskProcessingStream.emit,
         stopAllTasks,
-        llmSettings,
         taskManager,
         secretStore,
         taskMessageStream,
@@ -568,7 +553,7 @@ export function runTaskWorker(
       queueTask = newQueueTask
       console.log('restarting task worker run...')
 
-      void run()
+      void run(maxAutonomousTasks, defaultTask, errorTask)
     }
     queueTask(id)
   }
@@ -577,32 +562,4 @@ export function runTaskWorker(
     stopAllTasks,
     queueTask: externalQueueTask,
   }
-}
-
-function createErrorTaskChain(
-  error: unknown,
-  task: TaskNode | null,
-  analyzeErrorModel: string | undefined,
-  llmTools: boolean,
-) {
-  const errorTask: partialTaskDraft = {
-    role: 'system',
-    content: {
-      type: 'error',
-      data: serializeForJson(error),
-    },
-  }
-
-  return [
-    errorTask,
-    ...(analyzeErrorModel
-      ? [
-          createChatCompletionTask({
-            model: analyzeErrorModel,
-            goal: 'AnalyzeError',
-            llmTools,
-          }),
-        ]
-      : []),
-  ]
 }
