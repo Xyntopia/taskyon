@@ -1,6 +1,5 @@
 import type { Connection, Message, PeerId } from '@libp2p/interface'
 import { multiaddr } from '@multiformats/multiaddr'
-import { createStream } from '@taskyon/taskyon'
 import * as lp from 'it-length-prefixed'
 import map from 'it-map'
 import { pipe } from 'it-pipe'
@@ -9,6 +8,7 @@ import { CHAT_FILE_TOPIC, FILE_EXCHANGE_PROTOCOL, PUBSUB_PEER_DISCOVERY } from '
 import type { libP2pNode } from './libp2p'
 import { log, startLibp2p } from './libp2p'
 import { getAddresses, getPeerDetails, getPeerTypes } from './p2putils'
+import { createStream } from '../utils/frpBus'
 
 export type P2pNodeInfo = {
   id: string
