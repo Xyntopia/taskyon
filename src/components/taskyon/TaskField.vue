@@ -11,27 +11,6 @@
     </q-icon>
     <!--Task Display-->
     <div v-touch-hold="() => (showTaskMenu = true)" class="task-display">
-      <div
-        v-if="!$q.platform.is.mobile"
-        :class="[expandMessageContent || !short ? 'task-menu-anchor' : '']"
-      >
-        <q-btn class="task-menu-btn" flat color="secondary" size="md" dense :icon="matMoreHoriz">
-          <q-menu ref="taskMenuRef" auto-close>
-            <TaskMenu
-              class="task-buttons"
-              :task="task"
-              @toggle-markdown="toggleMarkdown"
-              @create-new-conversation="createNewConversation"
-              @edit-task="editTask"
-              @toggle-message-debug="toggleMessageDebug"
-              @delete="deleteTask"
-              @download="showDownloadDlg = true"
-              @share="showShareDlg = true"
-            />
-          </q-menu>
-        </q-btn>
-      </div>
-
       <!-- Context menu - positioned at right-click location -->
       <ResponsiveMenuDialog v-if="!textSelected" v-model="showTaskMenu" auto-close context-menu>
         <TaskMenu
@@ -48,18 +27,18 @@
       </ResponsiveMenuDialog>
 
       <!--task-header-->
-      <div class="task-header">
+      <div v-if="short" class="row col task-header">
         <!--task icon-->
         <div v-if="icon" class="col-auto self-center q-pr-sm">
           <q-icon :name="icon" :color="iconColor" size="sm" />
         </div>
         <q-btn
-          v-if="short"
           flat
           dense
           :icon-right="expandMessageContent ? matArrowDropUp : matArrowDropDown"
           no-caps
           style="width: 100%"
+          class="col"
           @click="expandMessageContent = !expandMessageContent"
         >
           <!--task header-->
@@ -68,7 +47,58 @@
             <slot name="header"></slot>
           </div>
         </q-btn>
+        <q-btn
+          v-if="!expandMessageContent"
+          class="task-menu-btn"
+          flat
+          color="secondary"
+          size="md"
+          dense
+          :icon="matMoreHoriz"
+        >
+          <q-menu ref="taskMenuRef" auto-close>
+            <TaskMenu
+              class="task-buttons"
+              :task="task"
+              @toggle-markdown="toggleMarkdown"
+              @create-new-conversation="createNewConversation"
+              @edit-task="editTask"
+              @toggle-message-debug="toggleMessageDebug"
+              @delete="deleteTask"
+              @download="showDownloadDlg = true"
+              @share="showShareDlg = true"
+            />
+          </q-menu>
+        </q-btn>
       </div>
+
+      <!--Context Menu Button-->
+      <div v-if="!short || expandMessageContent" class="task-menu-anchor">
+        <q-btn
+          v-if="!$q.platform.is.mobile"
+          class="task-menu-btn"
+          flat
+          color="secondary"
+          size="md"
+          dense
+          :icon="matMoreHoriz"
+        >
+          <q-menu ref="taskMenuRef" auto-close>
+            <TaskMenu
+              class="task-buttons"
+              :task="task"
+              @toggle-markdown="toggleMarkdown"
+              @create-new-conversation="createNewConversation"
+              @edit-task="editTask"
+              @toggle-message-debug="toggleMessageDebug"
+              @delete="deleteTask"
+              @download="showDownloadDlg = true"
+              @share="showShareDlg = true"
+            />
+          </q-menu>
+        </q-btn>
+      </div>
+
       <!--task content-->
       <q-slide-transition v-show="!short || expandMessageContent">
         <div>
@@ -250,6 +280,16 @@ function toggleMarkdown(id: string) {
 
 <style lang="sass">
 .task-display
+  display: inline-flex
+  flex-direction: column
+  align-items: auto
+
+  .task-header
+    display: flex
+    flex-flow: row nowrap
+    align-items: flex-start
+
+.task-display
   position: relative
   display: flex
   flex-direction: column
@@ -267,6 +307,7 @@ function toggleMarkdown(id: string) {
       right: 0
       top: 5px
       pointer-events: auto
+
 
   .task-menu-btn
     // Shape/visibility

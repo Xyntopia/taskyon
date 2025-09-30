@@ -453,14 +453,4 @@ onBeforeUnmount(() => {
       &:not(.user)
         align-self: flex-start
         margin-right: 20px
-
-      .task-display
-        display: inline-flex
-        flex-direction: column
-        align-items: auto
-
-        .task-header
-          display: flex
-          flex-flow: row nowrap
-          align-items: flex-start
 </style>
