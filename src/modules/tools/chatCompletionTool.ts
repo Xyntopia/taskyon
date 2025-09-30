@@ -762,18 +762,26 @@ export async function createChatCompletionTool(
       context: toolContext,
     ) => {
       const tools = allowedTools ?? []
-      const currentSettings = llmSettings()
-      if (!currentSettings.selectedApi) {
+      const {
+        useBasePrompt,
+        selectedApi,
+        llmApis,
+        enableOpenAiTools,
+        taskChatTemplates,
+        tryUsingVisionModels,
+        siteUrl,
+      } = llmSettings()
+      if (!selectedApi) {
         throw new Error('No API selected!')
       }
-      const api = currentSettings.llmApis[currentSettings.selectedApi]
+      const api = llmApis[selectedApi]
       if (!api) {
-        throw new Error(`api doesn't exist! ${currentSettings.selectedApi || 'no api selected!'}`)
+        throw new Error(`api doesn't exist! ${selectedApi || 'no api selected!'}`)
       }
-      const apiKey = currentSettings.selectedApi ? apiKeys(currentSettings.selectedApi) : undefined
+      const apiKey = selectedApi ? apiKeys(selectedApi) : undefined
       if (!apiKey) throw new Error('We need to define an API key to process our chat Task!')
 
-      const usellmTools = llmTools ?? currentSettings.enableOpenAiTools
+      const usellmTools = llmTools ?? enableOpenAiTools
       const selectedModel = model ?? getCurrentModel(api)
       console.log('calling chat completion tool...', selectedModel, goal, llmTools)
       // the current task doesn't *have* to exist. We can also works solely with prompts...
@@ -808,9 +816,9 @@ export async function createChatCompletionTool(
         toolDefs,
         usellmTools,
         {
-          taskChatTemplates: currentSettings.taskChatTemplates,
-          tryUsingVisionModels: currentSettings.tryUsingVisionModels,
-          useBasePrompt: currentSettings.useBasePrompt,
+          taskChatTemplates: taskChatTemplates,
+          tryUsingVisionModels: tryUsingVisionModels,
+          useBasePrompt: useBasePrompt,
         },
         taskManager,
         lastTaskBeforeChatCompletion,
@@ -830,7 +838,7 @@ export async function createChatCompletionTool(
           chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
         },
         schema,
-        currentSettings.siteUrl,
+        siteUrl,
       )
 
       // parse the response into our own type ...
@@ -864,10 +872,10 @@ export async function createChatCompletionTool(
             void addTaskCostInformation(
               chatCompletion,
               currentTask?.id,
-              currentSettings.selectedApi,
-              currentSettings.siteUrl,
+              selectedApi,
+              siteUrl,
               apiKey,
-              currentSettings.llmApis['taskyon']?.defaultHeaders?.apiKey ?? '',
+              llmApis['taskyon']?.defaultHeaders?.apiKey ?? '',
               api,
             ).then((newMeta) => {
               console.log('found new task costs:', newMeta)
