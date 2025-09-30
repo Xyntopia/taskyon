@@ -1,6 +1,5 @@
 import type OpenAI from 'openai'
 import { z } from 'zod'
-import { deepCopy } from '../utils'
 import {
   mdiAlphabeticalVariant,
   mdiAutoFix,
@@ -662,13 +661,6 @@ export const tyPublicApiKeyObject = tyPublicKeyDraft.extend({
 export function getApiConfig(llmSettings: llmSettings) {
   if (llmSettings.selectedApi) {
     return llmSettings.llmApis[llmSettings.selectedApi]
-  }
-}
-export function getApiConfigCopy(llmSettings: llmSettings, apiName?: string) {
-  const searchName = apiName || llmSettings.selectedApi
-  if (searchName) {
-    const api = llmSettings.llmApis[searchName]
-    return deepCopy(api)
   }
 }
 
