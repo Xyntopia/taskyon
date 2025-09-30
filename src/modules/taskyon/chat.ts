@@ -4,7 +4,7 @@ import { sleep, asyncTimeLruCache } from '../utils'
 import { ChatResponseType } from './types'
 import { charHash } from '@taskyon/taskyon'
 
-export function generateHeaders(Bearer: string, siteUrl: string, selectedApi: string) {
+export function generateHeaders(Bearer: string, selectedApi: string, siteUrl?: string) {
   let headers: Record<string, string> = {
     'Content-Type': 'application/json',
   }
@@ -16,8 +16,12 @@ export function generateHeaders(Bearer: string, siteUrl: string, selectedApi: st
   if (selectedApi == 'openrouter.ai') {
     headers = {
       ...headers,
-      'HTTP-Referer': `${siteUrl}`, // To identify your app. Can be set to localhost for testing
-      'X-Title': `${siteUrl}`, // Optional. Shows on openrouter.ai
+      ...(siteUrl
+        ? {
+            'HTTP-Referer': `${siteUrl}`, // To identify your app. Can be set to localhost for testing
+            'X-Title': `${siteUrl}`, // Optional. Shows on openrouter.ai
+          }
+        : {}),
     }
   }
 
@@ -420,21 +424,21 @@ function createChunks(lines: string[]) {
 
 export async function createOpenAIRequest(
   apiKey: string,
-  siteUrl: string,
-  api: { selectedModel: string; streamSupport: boolean; baseURL: string; name: string },
+  config: { selectedModel: string; streamSupport: boolean; baseURL: string; name: string },
   chatMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   schema: Record<string, unknown> | undefined,
   stream: boolean,
   functions: OpenAI.Chat.Completions.ChatCompletionTool[],
+  siteUrl?: string,
   maxSchemaIdLength: number = 9, // max length of the schema id (default is 9, because e.g. mistral has that limit)
 ) {
-  const headers: Record<string, string> = generateHeaders(apiKey, siteUrl, api.name)
-  if (!api.selectedModel) {
+  const headers: Record<string, string> = generateHeaders(apiKey, config.name, siteUrl)
+  if (!config.selectedModel) {
     throw new Error('No AI model was selected for chat completion!')
   }
 
   const payload: OpenAI.ChatCompletionCreateParams = {
-    model: api.selectedModel,
+    model: config.selectedModel,
     messages: chatMessages,
     response_format: schema
       ? {
@@ -451,13 +455,13 @@ export async function createOpenAIRequest(
       : { type: 'text' },
     user: 'taskyon',
     //temperature: 0.0, // deprecated for gpt-5
-    stream: stream && api.streamSupport,
+    stream: stream && config.streamSupport,
     stream_options: { include_usage: true },
     n: 1,
     ...(functions.length > 0 && { tools: functions, tool_choice: 'auto' }),
     // the following comes from openrouter
   }
-  if (api.name == 'taskyon' || api.name == 'openrouter.ai') {
+  if (config.name == 'taskyon' || config.name == 'openrouter.ai') {
     const tyPayload: tyChatCompletion = payload
     // TODO: check models capabilities...  problem right now is that we don't have the correct basURL
     //const models = await availableModels(api.baseURL, apiKey, headers, false)
@@ -484,19 +488,19 @@ export async function createOpenAIRequest(
     return {
       headers,
       payload: tyPayload,
-      url: `${api.baseURL}/chat/completions`,
+      url: `${config.baseURL}/chat/completions`,
       // in case we have the openai api we need to wait for the thinking to finish
       // so we are giving it a lot more time... (almost 5 minutes..)
       // for openai we are not restricted to supabase edge servers, so
       // we can choose any timeout that we want
       // the 115*1000 ms come from the 120s timeout for taskyon.space in the free version..
-      timeout: api.name === 'taskyon' ? 115 * 1000 : 5 * 60 * 1000,
+      timeout: config.name === 'taskyon' ? 115 * 1000 : 5 * 60 * 1000,
     }
   } else
     return {
       headers,
       payload,
-      url: `${api.baseURL}/chat/completions`,
+      url: `${config.baseURL}/chat/completions`,
       // in case we have the openai api we need to wait for the thinking to finish
       // so we are giving it a lot more time... (almost 5 minutes..)
       // for openai we are not restricted to supabase edge servers, so
@@ -516,7 +520,7 @@ export async function getTaskyonCosts(
 ) {
   const headers = {
     ...(api.name === 'taskyon' ? { apiKey: anonymousTaskyonKey } : {}),
-    ...generateHeaders(apiKey, siteUrl, api.name),
+    ...generateHeaders(apiKey, api.name, siteUrl),
   }
   const baseUrl = new URL(api.baseURL).origin
   console.log('get generation info from ', baseUrl)

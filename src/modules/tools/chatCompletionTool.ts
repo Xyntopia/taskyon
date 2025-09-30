@@ -70,27 +70,30 @@ function generateOpenAIToolDeclarations(
 // TODO: for configuration & allowedTools it would be good if we could add
 // this from a "default" Configuration? And then have them as function parameters?
 // t.configuration = finishedTask.configuration
-
 // TODO: refactor & clean up this function ;)
 export async function processChatTask(
   allowedTools: string[],
   toolDefs: Record<string, ToolBase>,
   llmTools: boolean,
-  configuration: { model: string; chatApi: string },
-  llmSettings: llmSettings,
+  selectedModel: string,
+  llmSettings: {
+    tryUsingVisionModels: boolean
+    enableOpenAiTools: boolean
+    useBasePrompt: boolean
+    taskChatTemplates: Parameters<typeof addPrompts>[4]
+  },
   // can we get rid of taskManager here in order to make our task more functional :)?
   taskManager: TyTaskManager,
   stopSignal: AbortSignal,
   api: apiConfig,
-  apiKeys: { [key: string]: string },
+  apiKey: string,
   lastTaskBeforeChatCompletion: TaskNode | undefined,
   streamTracker: (chunk: ChatCompletionChunk | undefined) => void,
   prompts: string[],
   goal?: Goals,
   schema?: Record<string, unknown>,
+  siteUrl?: string,
 ) {
-  const apiKey = llmSettings.selectedApi ? apiKeys[llmSettings.selectedApi] : undefined
-  if (!apiKey) throw new Error('We need to define an API key to process our chat Task!')
   //TODO: we can create more things here like giving it context form other tasks, lookup
   //      main objective, previous tasks etc....
   //      actualy: this would be great for a new tool ;)
@@ -142,14 +145,12 @@ export async function processChatTask(
   const streamTask = true
   const request = await createOpenAIRequest(
     apiKey,
-    llmSettings.siteUrl,
-    // we do the following, because "api" is required by our callLLM function.
-    // TODO: explicitly get the api as a parameter in this function vs implicitly getting it form llmsettings...
-    { ...api, selectedModel: configuration.model },
+    { ...api, selectedModel },
     openAIConversationThread,
     schema,
     streamTask, // for now, we always want to stream our task...
     tools,
+    siteUrl,
   )
   const chatCompletion = await callLLM(
     request,
@@ -231,26 +232,23 @@ async function addTaskCostInformation(
   taskId: string,
   selectedApi: string | null,
   siteUrl: string,
-  apiKeys: { [key: string]: string },
+  apiKey: string,
   anonymousTaskyonKey: string,
   api: apiConfig | undefined,
 ): Promise<TaskNodeMeta> {
   let generationInfo: OpenRouterGenerationInfo | undefined
-  const apiKey = selectedApi ? apiKeys[selectedApi] : undefined
-
   // TODO: it might be a good idea to simply replace this with a tasknode ;)
-  if (chatResponse && selectedApi === 'openrouter.ai' && apiKey) {
+  if (chatResponse && selectedApi === 'openrouter.ai') {
     console.log('getting openrouter generation info')
     await sleep(10000)
     generationInfo = await getOpenRouterGenerationInfo(
       chatResponse.id,
-      generateHeaders(apiKey, siteUrl, selectedApi || ''),
+      generateHeaders(apiKey, selectedApi || '', siteUrl),
     )
   } else if (
     chatResponse &&
     selectedApi === 'taskyon' &&
     !chatResponse.model.endsWith(':free') &&
-    apiKey &&
     !isTaskyonKey(apiKey, false) &&
     api
   ) {
@@ -685,7 +683,7 @@ async function convertFilesToOpenAIImageContent(
 export async function createChatCompletionTool(
   llmSettings: Thunk<llmSettings>,
   taskManager: TyTaskManager,
-  apiKeys: Thunk<{ [key: string]: string }>,
+  apiKeys: (keyName: string) => string | undefined,
 ) {
   const Ajv = await import(
     /* webpackPrefetch: true */
@@ -715,7 +713,8 @@ export async function createChatCompletionTool(
       properties: {
         model: {
           type: 'string',
-          description: 'The name of the model to use for the completion.',
+          description:
+            'The name of the model to use for the completion. Optional, will choose default model if not provided',
         },
         goal: {
           enum: ['SimpleCompletion', 'AnalyzeError', 'ChooseTool', 'AnalyzeToolResult'],
@@ -764,6 +763,8 @@ export async function createChatCompletionTool(
       if (!api) {
         throw new Error(`api doesn't exist! ${currentSettings.selectedApi || 'no api selected!'}`)
       }
+      const apiKey = currentSettings.selectedApi ? apiKeys(currentSettings.selectedApi) : undefined
+      if (!apiKey) throw new Error('We need to define an API key to process our chat Task!')
 
       const usellmTools = llmTools ?? currentSettings.enableOpenAiTools
       const selectedModel = model ?? getCurrentModel(api)
@@ -798,12 +799,17 @@ export async function createChatCompletionTool(
         [...tools, ...allowedToolsFromError],
         toolDefs,
         usellmTools,
-        { model: selectedModel, chatApi: currentSettings.selectedApi },
-        currentSettings,
+        selectedModel,
+        {
+          enableOpenAiTools: currentSettings.enableOpenAiTools,
+          taskChatTemplates: currentSettings.taskChatTemplates,
+          tryUsingVisionModels: currentSettings.tryUsingVisionModels,
+          useBasePrompt: currentSettings.useBasePrompt,
+        },
         taskManager,
         context.stopSignal,
         api,
-        apiKeys(),
+        apiKey,
         lastTaskBeforeChatCompletion,
         (chunk) => {
           chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
@@ -811,6 +817,7 @@ export async function createChatCompletionTool(
         prompts ?? [],
         goal,
         schema,
+        currentSettings.siteUrl,
       )
 
       // parse the response into our own type ...
@@ -846,7 +853,7 @@ export async function createChatCompletionTool(
               currentTask?.id,
               currentSettings.selectedApi,
               currentSettings.siteUrl,
-              apiKeys(),
+              apiKey,
               currentSettings.llmApis['taskyon']?.defaultHeaders?.apiKey ?? '',
               api,
             ).then((newMeta) => {

@@ -205,7 +205,7 @@ const dynamicContext =
     const { chatCompletion, stream: chatCompletionStream } = await createChatCompletionTool(
       llmSettings,
       taskManagerInstance,
-      apiKeys,
+      (keyName: string) => apiKeys()[keyName],
     )
     ToolList.push(
       localVectorStore(db),
