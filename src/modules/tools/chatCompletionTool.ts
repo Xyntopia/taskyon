@@ -44,7 +44,7 @@ import type {
   OpenRouterGenerationInfo,
   TaskNodeMeta,
 } from '../taskyon/types'
-import { getApiConfigCopy, getCurrentModel, type llmSettings } from '../taskyon/types'
+import { getCurrentModel, type llmSettings } from '../taskyon/types'
 import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
 
 function generateOpenAIToolDeclarations(
@@ -81,6 +81,7 @@ export async function processChatTask(
   // can we get rid of taskManager here in order to make our task more functional :)?
   taskManager: TyTaskManager,
   stopSignal: AbortSignal,
+  api: apiConfig,
   apiKeys: { [key: string]: string },
   lastTaskBeforeChatCompletion: TaskNode | undefined,
   streamTracker: (chunk: ChatCompletionChunk | undefined) => void,
@@ -88,14 +89,8 @@ export async function processChatTask(
   goal?: Goals,
   schema?: Record<string, unknown>,
 ) {
-  //TODO: this code is duplicated, can we do this better?
-  const api = getApiConfigCopy(llmSettings, configuration.chatApi)
   const apiKey = llmSettings.selectedApi ? apiKeys[llmSettings.selectedApi] : undefined
   if (!apiKey) throw new Error('We need to define an API key to process our chat Task!')
-
-  if (!api) {
-    throw new Error(`api doesn't exist! ${llmSettings.selectedApi || 'no api selected!'}`)
-  }
   //TODO: we can create more things here like giving it context form other tasks, lookup
   //      main objective, previous tasks etc....
   //      actualy: this would be great for a new tool ;)
@@ -761,6 +756,8 @@ export async function createChatCompletionTool(
     ) => {
       const tools = allowedTools ?? []
       const currentSettings = llmSettings()
+      const usellmTools = llmTools ?? currentSettings.enableOpenAiTools
+
       const selectedModel = model ?? getCurrentModel(currentSettings)
       console.log('calling chat completion tool...', selectedModel, goal, llmTools)
       // the current task doesn't *have* to exist. We can also works solely with prompts...
@@ -791,14 +788,21 @@ export async function createChatCompletionTool(
           allowedToolsFromError = [lastTaskBeforeError.content.data.name]
         }
       }
+
+      const api = currentSettings.llmApis[currentSettings.selectedApi]
+      if (!api) {
+        throw new Error(`api doesn't exist! ${currentSettings.selectedApi || 'no api selected!'}`)
+      }
+
       const { chatCompletion, metaInfo: chatInfo } = await processChatTask(
         [...tools, ...allowedToolsFromError],
         toolDefs,
-        !!llmTools,
+        usellmTools,
         { model: selectedModel, chatApi: currentSettings.selectedApi },
         currentSettings,
         taskManager,
         context.stopSignal,
+        api,
         apiKeys(),
         lastTaskBeforeChatCompletion,
         (chunk) => {
@@ -836,7 +840,7 @@ export async function createChatCompletionTool(
 
           // TODO: remove "configuration" here and get the information from the tasks function call parameters
           //       this would require us to have "defaultsettings" implemented...
-          const api = getApiConfigCopy(currentSettings, currentSettings.selectedApi)
+          const api = currentSettings.llmApis[currentSettings.selectedApi]
           if (api)
             void addTaskCostInformation(
               chatCompletion,
@@ -896,7 +900,7 @@ export async function createChatCompletionTool(
         choice,
         allowedTools,
         selectedModel,
-        !!llmTools,
+        usellmTools,
         toolDefs,
         prompts,
       )
