@@ -165,8 +165,8 @@ const staticContext = () => {
 
 const dynamicContext =
   (
-    llmSettings: llmSettings,
-    apiKeys: { [key: string]: string },
+    llmSettings: Thunk<llmSettings>,
+    apiKeys: Thunk<{ [key: string]: string }>,
     ToolList: InternalTool[],
     insidePort: Port<TaskyonMessage, TaskyonMessage>,
     iframeMultiPlexer: IframeMultiPlexer,
@@ -177,7 +177,7 @@ const dynamicContext =
     const sessionKeyId = await cs.getSessionId()
     const db = await getDatabase(sessionKeyId)
     console.log('tycore starting new session with id:', sessionKeyId)
-    const taskManagerInstance = await useTyTaskManager(db, llmSettings.vectorizationModel)
+    const taskManagerInstance = await useTyTaskManager(db, llmSettings().vectorizationModel)
     console.log('tycore finished taskManager initialization')
     const secretStore = withSecretStore(
       createCombinedCrudWrapper([
@@ -224,7 +224,7 @@ const dynamicContext =
     console.log('starting taskyon worker')
     const { port: workerport } = createTypeFilteredPort(insidePort, ['functionResponse'])
     const { workerStream, stopAllTasks, queueTask } = runTaskWorker(
-      llmSettings,
+      llmSettings(),
       taskManagerInstance,
       secretStore,
       iframeMultiPlexer.all$,
@@ -243,8 +243,8 @@ const dynamicContext =
 
 export async function tyCore(
   // TODO: we want to save some settings "internally" and not in the GUI...
-  llmSettings: llmSettings,
-  apiKeys: { [key: string]: string },
+  llmSettings: Thunk<llmSettings>,
+  apiKeys: Thunk<{ [key: string]: string }>,
   // with the Environment Tools we can provide a list of tools as closures which have access
   // to the environment in which taskyon is running (through closure variables
   // of this environment inside the tool).
@@ -252,7 +252,7 @@ export async function tyCore(
   // this way we can give taskyon access and the ability to read & change the environment
   // it is running in.
   EnvironmentTools: InternalTool[],
-  cryptoSession?: CryptoSession,
+  initialCryptoSession?: CryptoSession,
 ) {
   // TODO: make webpack automatically add all tool files from /tools/*
 
@@ -260,7 +260,7 @@ export async function tyCore(
 
   // TODO: encapsulate this into a "createCtx" function
   //       which also handles the initilaization of ctx..
-  let cs = cryptoSession ?? (await createCryptoSession())
+  let cs = initialCryptoSession ?? (await createCryptoSession())
 
   // dynamic context needs to be-recreated whenever our session changes!
   // TODO: in order to improve performance, its probably a good idea to move

@@ -82,6 +82,7 @@ import ModelSelection from './ModelSelection.vue'
 import { toRefs } from 'vue'
 import InfoDialog from '../InfoDialog.vue'
 import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
+import ApiSelect from './ApiSelect.vue'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()

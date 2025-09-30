@@ -28,6 +28,7 @@ import type {
   FunctionArguments,
   partialTaskDraft,
   TaskNode,
+  Thunk,
   ToolBase,
   toolContext,
 } from '@taskyon/taskyon'
@@ -674,9 +675,9 @@ async function convertFilesToOpenAIImageContent(
 }
 
 export async function createChatCompletionTool(
-  llmSettings: llmSettings,
+  llmSettings: Thunk<llmSettings>,
   taskManager: TyTaskManager,
-  apiKeys: { [key: string]: string },
+  apiKeys: Thunk<{ [key: string]: string }>,
 ) {
   const Ajv = await import(
     /* webpackPrefetch: true */
@@ -747,11 +748,12 @@ export async function createChatCompletionTool(
       context: toolContext,
     ) => {
       const tools = allowedTools ?? []
-      const selectedModel = model ?? getCurrentModel(llmSettings)
+      const currentSettings = llmSettings()
+      const selectedModel = model ?? getCurrentModel(currentSettings)
       console.log('calling chat completion tool...', selectedModel, goal, llmTools)
       // the current task doesn't *have* to exist. We can also works solely with prompts...
       const currentTask = context.taskChain.at(-1)
-      if (!llmSettings.selectedApi) {
+      if (!currentSettings.selectedApi) {
         throw new Error('No API selected!')
       }
 
@@ -781,11 +783,11 @@ export async function createChatCompletionTool(
         [...tools, ...allowedToolsFromError],
         toolDefs,
         !!llmTools,
-        { model: selectedModel, chatApi: llmSettings.selectedApi },
-        llmSettings,
+        { model: selectedModel, chatApi: currentSettings.selectedApi },
+        currentSettings,
         taskManager,
         context.stopSignal,
-        apiKeys,
+        apiKeys(),
         lastTaskBeforeChatCompletion,
         (chunk) => {
           chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
@@ -820,12 +822,15 @@ export async function createChatCompletionTool(
           // we run this asynchronously, because it fetches data in the
           // background and we don't want to wait here...
 
-          void addTaskCostInformation(chatCompletion, currentTask?.id, llmSettings, apiKeys).then(
-            (newMeta) => {
-              console.log('found new task costs:', newMeta)
-              void taskManager.metaUpsert(currentTask.id, newMeta, 'shallow_merge')
-            },
-          )
+          void addTaskCostInformation(
+            chatCompletion,
+            currentTask?.id,
+            currentSettings,
+            apiKeys(),
+          ).then((newMeta) => {
+            console.log('found new task costs:', newMeta)
+            void taskManager.metaUpsert(currentTask.id, newMeta, 'shallow_merge')
+          })
         }
 
         metaInfo.rawOutput = { choice }
