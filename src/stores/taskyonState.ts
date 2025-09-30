@@ -682,7 +682,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       return initCs
     }
   })().then(async (cs) => {
-    return await tyCore(stateRefs.llmSettings, stateRefs.keys, defineTyGuiTools(stateRefs), cs)
+    return await tyCore(
+      () => stateRefs.llmSettings,
+      () => stateRefs.keys,
+      defineTyGuiTools(stateRefs),
+      cs,
+    )
   })
 
   const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
@@ -836,7 +841,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     useSwitchCryptoSession(taskyon, gdp)
 
   void taskyon.then(async (ty) => {
-    stateRefs.sessionId = await ty.getCryptoSession().getSessionId()
+    stateRefs.setSessionId(await ty.getCryptoSession().getSessionId())
   })
 
   // switch user session on key change!
@@ -856,7 +861,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         console.log(`switch user session because of binding key change! ${oldId}->${newId}`)
         await ty.setNewSession(cs)
         // after we are finished switching, we can officially chang ethe session id...
-        stateRefs.sessionId = await cs.getSessionId()
+        stateRefs.setSessionId(await cs.getSessionId())
       }
     },
   )

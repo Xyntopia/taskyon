@@ -277,7 +277,10 @@ export const useAppStateStore = defineStore('ui-state', () => {
   watch(bindingKey, () => {
     stateRefs.initWBindingKey = bindingKey.value !== null
   })
-  watch(sessionId, (newId) => {
+
+  const setSessionId = (newId: string) => {
+    if (newId === sessionId.value) return
+    sessionId.value = newId
     console.log('switch Profile to new sessionId:', newId)
     if (newId) {
       const profileName = `session_${newId}`
@@ -288,7 +291,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
     }
     // re-load state with new profile!
     Object.assign(stateRefs, getTaskyonUiProfile(getCurrentProfileName()))
-  })
+  }
 
   // we do this funny next line, because our store is currently "reactive" which means
   // all scalars like strings, numbers etc..  ar actually non-reactive (vue reactive only converts
@@ -302,7 +305,8 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
   return {
-    sessionId,
+    sessionId: computed(() => sessionId.value),
+    setSessionId,
     bindingKey,
     setBindingKey,
     isInIframe: urlConfig.isInIframe,
