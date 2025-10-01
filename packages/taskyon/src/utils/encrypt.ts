@@ -39,18 +39,20 @@ const deriveRowKey = async (key: CryptoKey, info: string | number) => {
 export const EncryptedDataRow = z.object({
   iv: z.string(),
   ciphertext: z.string(),
-  pk: z.string(),
   wrk: z.string().describe('wrapped row key'),
-  wrkr: z.string().describe('wrapped row key recovery'),
+  // optional recovery
+  pk: z.string().optional(),
+  wrkr: z.string().optional().describe('wrapped row key recovery'),
 })
 export type EncryptedDataRow = z.infer<typeof EncryptedDataRow>
 
 export const EncryptedDataRowMixed = z.object({
   iv: z.instanceof(Uint8Array),
   ciphertext: z.instanceof(Uint8Array),
-  pk: z.string(),
   wrk: z.string().describe('wrapped row key'),
-  wrkr: z.string().describe('wrapped row key recovery'),
+  // optional recovery
+  pk: z.string().optional(),
+  wrkr: z.string().optional().describe('wrapped row key recovery'),
 })
 export type EncryptedDataRowMixed = z.infer<typeof EncryptedDataRowMixed>
 
@@ -107,14 +109,14 @@ async function encryptData(
 export async function encryptDataFile(
   data: BufferSource,
   info: string | number,
-  publicRecoveryKey: AskCryptoKey,
+  publicRecoveryKey: AskCryptoKey | undefined,
   getSessionKey: AskCryptoKey,
 ): Promise<EncryptedDataRow>
 
 export async function encryptDataFile(
   data: BufferSource,
   info: string | number,
-  publicRecoveryKey: AskCryptoKey,
+  publicRecoveryKey: AskCryptoKey | undefined,
   getSessionKey: AskCryptoKey,
   base64: true,
 ): Promise<EncryptedDataRow>
@@ -122,7 +124,7 @@ export async function encryptDataFile(
 export async function encryptDataFile(
   data: BufferSource,
   info: string | number,
-  publicRecoveryKey: AskCryptoKey,
+  publicRecoveryKey: AskCryptoKey | undefined,
   getSessionKey: AskCryptoKey,
   base64: false,
 ): Promise<EncryptedDataRowMixed>
@@ -131,7 +133,7 @@ export async function encryptDataFile(
   data: BufferSource,
   info: string | number, // we need the info in order to derive the key with some additional noise
   // this should be a public key that can be used to encrypt the tool key
-  publicRecoveryKey: AskCryptoKey,
+  publicRecoveryKey: AskCryptoKey | undefined,
   // and this is the session key provider. This is used to encryp the tool key
   // this way we never have to use the private recovery key anywhere. Except if we
   // want to recover the data...
@@ -146,15 +148,19 @@ export async function encryptDataFile(
   const rowKey = await generateRandomEncryptionKey(false, true)
   const wrappedRK = await wrapWithSymetricKey(sk, rowKey)
 
-  // Encrypt the tool key using the recovery public key
-  // derive a random ephemeral X25519 key in order to wrap the key
-  // we will throw away the pruvate part of it after encryption.
-  const ephemeralX25519 = await generateAssymetricKeyDeriver()
-  const kekWrapper = await deriveKek(ephemeralX25519.privateKey, await publicRecoveryKey())
-  const wrappedRkRecovery = await wrapWithSymetricKey(kekWrapper, rowKey)
-  // we also need tp save the public ephemeral key in order to recover the row-key with the recovery
-  // key.
-  const pk = await cryptoKeyToBase64(ephemeralX25519.publicKey)
+  const recovery: { wrkr?: string; pk?: string } = {}
+  if (publicRecoveryKey) {
+    // Encrypt the tool key using the recovery public key
+    // derive a random ephemeral X25519 key in order to wrap the key
+    // we will throw away the pruvate part of it after encryption.
+    const ephemeralX25519 = await generateAssymetricKeyDeriver()
+
+    const kekWrapper = await deriveKek(ephemeralX25519.privateKey, await publicRecoveryKey())
+    recovery.wrkr = await wrapWithSymetricKey(kekWrapper, rowKey)
+    // we also need tp save the public ephemeral key in order to recover the row-key with the recovery
+    // key.
+    recovery.pk = await cryptoKeyToBase64(ephemeralX25519.publicKey)
+  }
 
   // Encrypt the data using the tool key
   if (base64) {
@@ -162,18 +168,16 @@ export async function encryptDataFile(
     return {
       iv,
       ciphertext,
-      pk,
       wrk: wrappedRK,
-      wrkr: wrappedRkRecovery,
+      ...recovery,
     } as EncryptedDataRow
   } else {
     const { iv, ciphertext } = await encryptData(rowKey, data, info, false)
     return {
       iv,
       ciphertext,
-      pk,
       wrk: wrappedRK,
-      wrkr: wrappedRkRecovery,
+      ...recovery,
     } as EncryptedDataRowMixed
   }
 }

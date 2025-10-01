@@ -602,7 +602,7 @@ export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWr
 
 export function withEncryption(
   base: CrudWrapper<EncryptedDataRow>,
-  publicRecoveryKey: AskCryptoKey,
+  publicRecoveryKey?: AskCryptoKey,
   getSessionKey?: AskCryptoKey,
 ) {
   return {
@@ -652,7 +652,7 @@ export function withEncryption(
  */
 export const withSecretStore = (
   base: CrudWrapper<EncryptedDataRow>,
-  publicRecoveryKey: () => Promise<CryptoKey> | CryptoKey,
+  publicRecoveryKey: (() => Promise<CryptoKey> | CryptoKey) | undefined,
   askTimeoutMs = 100000,
 ) => {
   const { emitFunc: getSessionKey, stream: askSessionKeyStream } = streamProcedureCall<
