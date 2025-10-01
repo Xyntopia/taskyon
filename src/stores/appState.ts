@@ -25,6 +25,7 @@ import {
   getCurrentProfileName,
   getTaskyonUiProfile,
   initialStoredStateObj,
+  setTaskyonUiProfile,
   switchCurrentProfilePointer,
   urlConfig,
 } from 'src/modules/ui/initialState'
@@ -161,7 +162,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
   watch(stateRefs, (newState) => {
     //console.log('saved store!!');
     if (saveToLocalStorage) {
-      LocalStorage.set(getCurrentProfileName(), JSON.stringify(newState))
+      setTaskyonUiProfile(getCurrentProfileName(), newState)
     }
   })
 
@@ -283,9 +284,8 @@ export const useAppStateStore = defineStore('ui-state', () => {
     sessionId.value = newId
     console.log('switch Profile to new sessionId:', newId)
     if (newId) {
-      const profileName = `session_${newId}`
       // we don't need to save our old state, as it should have been persisted automatically
-      switchCurrentProfilePointer(profileName)
+      switchCurrentProfilePointer(newId)
     } else {
       switchCurrentProfilePointer(defaultProfileName)
     }

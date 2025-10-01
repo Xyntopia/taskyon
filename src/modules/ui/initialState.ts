@@ -19,13 +19,19 @@ export const urlConfig = getUrlConfig()
 
 export const defaultProfileName = 'defaultProfile'
 const profilePointerKey = 'currentProfile'
+const profileName = (name: string) => `session_${name}`
+
 export const getCurrentProfileName = () =>
   urlConfig.profile ?? LocalStorage.getItem(profilePointerKey) ?? defaultProfileName
 
-export const switchCurrentProfilePointer = (newProfileName: string) =>
-  LocalStorage.setItem(profilePointerKey, newProfileName)
+export const switchCurrentProfilePointer = (newProfileId: string) =>
+  LocalStorage.setItem(profilePointerKey, newProfileId)
 
-export const getStoredStateString = (name: string) => LocalStorage.getItem(name) as string
+export const setTaskyonUiProfile = (name: string, newState: PartialDeep<TyProfile>) =>
+  LocalStorage.set(profileName(name), JSON.stringify(newState))
+
+export const getStoredStateString = (name: string) =>
+  LocalStorage.getItem(profileName(name)) as string
 
 export const getTaskyonUiProfile = (name: string) => {
   const stateString = getStoredStateString(name)
