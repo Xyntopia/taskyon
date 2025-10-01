@@ -202,6 +202,7 @@ const dynamicContext =
     // regenerated for each session
     // TODO: we should get rid of this and supply an instanc eof the taskManager insider the tool
     // function itself if it is a "normal" function...
+    // TODO: get rid of llmSettings completly!
     const { chatCompletion, stream: chatCompletionStream } = await createChatCompletionTool(
       llmSettings,
       taskManagerInstance,
@@ -251,6 +252,7 @@ const dynamicContext =
 
 export async function tyCore(
   // TODO: we want to save some settings "internally" and not in the GUI...
+  //       but then....   we als want taskyon to be as "stateless" as possible..
   llmSettings: Thunk<llmSettings>,
   apiKeys: Thunk<{ [key: string]: string }>,
   // with the Environment Tools we can provide a list of tools as closures which have access
