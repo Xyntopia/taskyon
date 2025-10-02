@@ -43,6 +43,7 @@ import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
+import { asyncComputed } from 'src/modules/vueUtils'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -112,20 +113,22 @@ export function asyncProxy<T extends object>(initializer: () => Promise<T>): Asy
 
 async function updateLlmModels(
   llmSettings: TyProfile['llmSettings'],
-  keys: Record<string, string>,
+  getApiKey: (name: string) => Promise<string | null>,
 ) {
   console.log('downloading models...')
   const api = getApiConfig(llmSettings)
   if (api) {
     // and also get a "fresh" list of models from the server...
     let baseURL = api.baseURL + api.routes.models
-    let key = keys[api?.name] || ''
     const taskyonApi = llmSettings.llmApis['taskyon']
+    let key: string
     // we are doing this, because openrouter currently
-    // blocks access from browser origins through CORS.
+    // blocks access to models from browser origins through CORS restrictions.
     if (taskyonApi && api.name === 'openrouter.ai') {
       baseURL = taskyonApi.baseURL + '/models_openrouter'
-      key = keys.taskyon || keys[api?.name] || ''
+      key = (await getApiKey('taskyon')) || (await getApiKey(api?.name)) || ''
+    } else {
+      key = (await getApiKey(api.name)) || ''
     }
     try {
       const res = await availableModels(baseURL, key, api.defaultHeaders ?? {})
@@ -369,7 +372,81 @@ function defineTyGuiTools(stateRefs: ReturnType<typeof useAppStateStore>): Inter
   ]
 }
 
-const connectModelHistory = (stateRefs: ReturnType<typeof useAppStateStore>) => {
+export const AiProvideKeyStoreName = 'AiProviderKey'
+
+const useApiManagement = (
+  stateRefs: ReturnType<typeof useAppStateStore>,
+  taskyon: Promise<Taskyon>,
+) => {
+  const llmModelsInternal = ref<Record<string, Model>>({})
+
+  const updateModelList = async () => {
+    const api = getApiConfig(stateRefs.llmSettings)
+    // try to set our recommended models if there isn't any default or anything!
+    if (api && !api.selectedModel) {
+      stateRefs.llmSettings.llmApis['taskyon']!.selectedModel = api.models?.free
+    }
+    await updateLlmModels(stateRefs.llmSettings, getProviderApiKey).then(
+      (m) => (llmModelsInternal.value = m),
+    )
+  }
+
+  const setProviderApiKey = async (name: string, value?: string) => {
+    const ty = await taskyon
+    if (!value) {
+      await ty.deleteSecret(AiProvideKeyStoreName, name)
+    } else {
+      await ty.setSecret(AiProvideKeyStoreName, name, value)
+    }
+    await ty.updateChatCompletionApiKey(name, value)
+    await updateModelList()
+  }
+
+  const getProviderApiKey = async (name: string) => {
+    const ty = await taskyon
+    return await ty.getSecret(AiProvideKeyStoreName, name, false, false)
+  }
+
+  const noAiService = asyncComputed(
+    async () =>
+      !(
+        stateRefs.llmSettings.selectedApi &&
+        (await getProviderApiKey(stateRefs.llmSettings.selectedApi))
+      ),
+    true,
+  )
+
+  // make sure we update our model list whenever anything changes for our
+  // endpoints...
+  watch([() => stateRefs.llmSettings.selectedApi, stateRefs.llmSettings.llmApis], updateModelList, {
+    immediate: true,
+  })
+
+  const allowedLLMModels = computed<string[] | undefined>(() => {
+    if (stateRefs.llmSettings.selectedApi === 'taskyon') {
+      // if we have a taskyon key defined only display the models allowed for that key...
+      if (stateRefs.tyPublicKey?.model && stateRefs.tyPublicKey.model.length > 0) {
+        if (!stateRefs.tyPublicKey.model.includes('*')) {
+          const models = stateRefs.tyPublicKey.model
+          return models
+        }
+      }
+    }
+    return undefined
+  })
+
+  // Computed property to determine the currently selected bot name
+  const currentModelId = computed(() => {
+    const selected = stateRefs.llmSettings.selectedApi
+    if (selected && stateRefs.llmSettings.llmApis[selected])
+      return getCurrentModel(stateRefs.llmSettings.llmApis[selected])
+    return null
+  })
+
+  const currentModel = computed(() => {
+    return currentModelId.value ? llmModelsInternal.value[currentModelId.value] : null
+  })
+
   const addModelToHistory = (model: string) => {
     if (stateRefs.modelHistory.length >= 5) {
       stateRefs.modelHistory.shift() // remove oldest element
@@ -378,6 +455,13 @@ const connectModelHistory = (stateRefs: ReturnType<typeof useAppStateStore>) => 
   }
 
   return {
+    currentModelId,
+    llmModelsInternal,
+    allowedLLMModels,
+    currentModel,
+    noAiService,
+    setProviderApiKey,
+    getProviderApiKey,
     addModelToHistory,
     // Method to handle the updateBotName event
     handleBotNameUpdate: ({
@@ -685,16 +769,21 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       return initCs
     }
   })().then(async (cs) => {
-    return await tyCore(
-      () => stateRefs.llmSettings,
-      () => stateRefs.keys,
-      defineTyGuiTools(stateRefs),
-      cs,
-    )
+    return await tyCore(() => stateRefs.llmSettings, defineTyGuiTools(stateRefs), cs)
   })
 
   const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
-  const { addModelToHistory, handleBotNameUpdate } = connectModelHistory(stateRefs)
+  const {
+    addModelToHistory,
+    handleBotNameUpdate,
+    currentModelId,
+    setProviderApiKey,
+    getProviderApiKey,
+    llmModelsInternal,
+    allowedLLMModels,
+    currentModel,
+    noAiService,
+  } = useApiManagement(stateRefs, taskyon)
 
   // iApiOutside is the port to the "outside" of taskyon UI. It is the port used to
   // communicate towards the taskyon engine. iApiInside communicates to the outside of taskyon.
@@ -715,7 +804,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       uiApiInside,
       TaskyonMessage,
       {
-        configurationMessage: (msg) => {
+        configurationMessage: async (msg) => {
           const newConfig = msg.conf
           console.log('setting our configuration')
           stateRefs.overRideSettings(newConfig, !!msg.persist)
@@ -727,7 +816,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
             // parent app.
             const newKey = newConfig.signatureOrKey
             if (typeof newKey === 'string') {
-              stateRefs.keys[stateRefs.llmSettings.selectedApi] = newKey
+              await setProviderApiKey(stateRefs.llmSettings.selectedApi, newKey)
             } else {
               console.warn('Provided signatureOrKey is not a string:', newKey)
             }
@@ -905,51 +994,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return instance['chatCompletionStream']
   })
 
-  const llmModelsInternal = ref<Record<string, Model>>({})
-  // make sure we update our model list whenever anything changes for our
-  // endpoints...
-  watch(
-    [() => stateRefs.llmSettings.selectedApi, stateRefs.keys, stateRefs.llmSettings.llmApis],
-    () => {
-      const api = getApiConfig(stateRefs.llmSettings)
-      // try to set our recommended models if there isn't any default or anything!
-      if (api && !api.selectedModel) {
-        stateRefs.llmSettings.llmApis['taskyon']!.selectedModel = api.models?.free
-      }
-      void updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then(
-        (m) => (llmModelsInternal.value = m),
-      )
-    },
-    {
-      immediate: true,
-    },
-  )
-
-  const allowedLLMModels = computed<string[] | undefined>(() => {
-    if (stateRefs.llmSettings.selectedApi === 'taskyon') {
-      // if we have a taskyon key defined only display the models allowed for that key...
-      if (stateRefs.tyPublicKey?.model && stateRefs.tyPublicKey.model.length > 0) {
-        if (!stateRefs.tyPublicKey.model.includes('*')) {
-          const models = stateRefs.tyPublicKey.model
-          return models
-        }
-      }
-    }
-    return undefined
-  })
-
-  // Computed property to determine the currently selected bot name
-  const currentModelId = computed(() => {
-    const selected = stateRefs.llmSettings.selectedApi
-    if (selected && stateRefs.llmSettings.llmApis[selected])
-      return getCurrentModel(stateRefs.llmSettings.llmApis[selected])
-    return null
-  })
-
-  const currentModel = computed(() => {
-    return currentModelId.value ? llmModelsInternal.value[currentModelId.value] : null
-  })
-
   function setNewContentDraft(content: TaskNode['content'] | undefined) {
     if (content?.type === 'message') {
       stateRefs.messageDraft = content.data || ''
@@ -1076,5 +1120,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     api: uiApiOutside,
     gdp,
     getGdriveToken,
+    setProviderApiKey,
+    getProviderApiKey,
+    noAiService,
   }
 }) // this state stores all information which
