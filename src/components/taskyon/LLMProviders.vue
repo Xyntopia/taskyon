@@ -53,24 +53,11 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
             >
             ):
           </div>
-          <div>
-            <SecretInput
-              v-for="apiName of Object.keys(state.llmSettings.llmApis)"
-              :key="apiName"
-              placeholder="Add API key here!"
-              filled
-              :model-value="state.keys[apiName] || ''"
-              :label="`${apiName} API key`"
-              @update:model-value="
-                (value) => {
-                  console.log('switch key', value)
-                  state.keys[apiName] = value || ''
-                }
-              "
-            >
-            </SecretInput>
-          </div>
+          <div>Old method was here... with a list of secret inputs!</div>
         </q-card-section>
+
+        <PasswordManager copybtn :only-this-key="AiProvideKeyStoreName" />
+
         <q-expansion-item
           v-if="expertModeOn"
           class="q-pa-sm"
@@ -175,18 +162,21 @@ import tykeyobj from 'src/assets/taskyon_free_key.json'
 import { useAppStateStore } from 'src/stores/appState'
 import InfoDialog from '../InfoDialog.vue'
 import JsonInput from '../JsonInput.vue'
-import SecretInput from '../SecretInput.vue'
 import TyMarkdown from '../tyMarkdown.vue'
 import ApiSelect from './ApiSelect.vue'
 import OpenRouterPKCE from './OpenRouterPKCE.vue'
+import PasswordManager from './PasswordManager.vue'
+import { AiProvideKeyStoreName, useTaskyonStore } from 'src/stores/taskyonState'
+import { freeKeyName } from 'src/modules/tools/chatCompletionTool'
 
 const state = useAppStateStore()
+const tystate = useTaskyonStore()
 const $q = useQuasar()
 
 const expertModeOn = defineModel<boolean>('expertModeOn', { default: false })
 
-function initFreeMode() {
+async function initFreeMode() {
   state.llmSettings.selectedApi = 'taskyon'
-  state.keys['taskyon'] = tykeyobj.freeKey
+  await tystate.setProviderApiKey(freeKeyName, tykeyobj.freeKey)
 }
 </script>
