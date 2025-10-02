@@ -22,11 +22,6 @@
         "name": "taskyon",
         "baseURL": "https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/api",
         "defaultModel": "meta-llama/llama-3.2-90b-vision-instruct",
-        "models": {
-          "free": "meta-llama/llama-3.3-70b-instruct",
-          "chat": "meta-llama/llama-3.2-90b-vision-instruct",
-          "instruction": "meta-llama/llama-3.2-90b-vision-instruct"
-        },
         "streamSupport": true,
         "defaultHeaders": {
           "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpY3lucnBsZGl4dHJkZGdxbnBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwNzgxMTYsImV4cCI6MjAxNTY1NDExNn0.EwuXaxbRPvSZNlce3E_FjylLFrxSMV3tbz8JHR8GuJI"
@@ -39,7 +34,7 @@
       "openai": {
         "name": "openai",
         "baseURL": "https://api.openai.com/v1/",
-        "defaultModel": "gpt-4.1",
+        "defaultModel": "gpt-5-mini",
         "streamSupport": true,
         "routes": {
           "chatCompletion": "/chat/completions",
