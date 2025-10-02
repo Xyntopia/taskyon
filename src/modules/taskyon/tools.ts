@@ -6,13 +6,12 @@ import type {
   Port,
   toolContext,
 } from '@taskyon/taskyon'
-import { ToolBase } from '@taskyon/taskyon'
+import { jsonSchemaToYamlString, ToolBase } from '@taskyon/taskyon'
 import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
 import Ajv from 'ajv'
 import { produce } from 'immer'
 import type { JSONSchema7, JSONSchema7Object } from 'json-schema'
 import { bigIntToString } from '../utils'
-import { jsonSchemaToYamlString } from '../../../packages/taskyon/src/utils/yamlUtils'
 import { RemoteFunctionCall, RemoteFunctionResponse } from './apiTypes'
 import { executeCodeInIframe } from './iframeWorker'
 import { convertZodToJsonSchemaCached } from './types'

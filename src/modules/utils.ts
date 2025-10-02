@@ -4,15 +4,16 @@ import { Buffer } from 'buffer'
 import { safeYamlDump } from '../../packages/taskyon/src/utils/yamlUtils'
 import type { AnyFunction } from '../../packages/taskyon/src/utils/tsHelpers'
 
-export function copyToClipboard(text: string) {
-  navigator.clipboard
-    .writeText(text)
-    .then(() => {
-      console.log('Copied to clipboard')
-    })
-    .catch((err) => {
-      console.error('Error in copying text: ', err)
-    })
+export function copyToClipboard(text: string | undefined) {
+  if (text)
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        console.log('Copied to clipboard')
+      })
+      .catch((err) => {
+        console.error('Error in copying text: ', err)
+      })
 }
 
 /**

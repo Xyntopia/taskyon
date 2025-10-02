@@ -17,6 +17,7 @@ export * from './utils/frpBus'
 export * from './p2p/tyP2p'
 export * from './utils/fileUtils'
 export * from './utils/objHelpers'
+export * from './utils/yamlUtils'
 
 /**
  * Represents the context passed to tools within the Taskyon system.
