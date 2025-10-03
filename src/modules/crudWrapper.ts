@@ -602,37 +602,29 @@ export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWr
 
 export function withEncryption(
   base: CrudWrapper<EncryptedDataRow>,
+  getSessionKey: AskCryptoKey,
   publicRecoveryKey?: AskCryptoKey,
-  getSessionKey?: AskCryptoKey,
 ) {
   return {
     ...base,
-    async set(id: string | number, data: unknown, askSession?: AskCryptoKey): Promise<void> {
-      if (!askSession && !getSessionKey) {
-        throw new Error('No session key provider (askSession or getSessionKey) was provided.')
-      }
-
+    async set(id: string | number, data: unknown): Promise<void> {
       const encData = await encryptDataFile(
         // we need to make this more efficient!   JSON.stringify is not always the best option...
         new TextEncoder().encode(JSON.stringify(data)),
         id, // we need the id in order to derive the key
         publicRecoveryKey,
-        askSession ?? getSessionKey!, // we can do this, because we chec this earlier...
+        getSessionKey, // we can do this, because we chec this earlier...
       )
       // Store the encrypted data row
       await base.set(id, encData)
     },
 
-    async get(id: string | number, askSession?: AskCryptoKey): Promise<unknown> {
+    async get(id: string | number): Promise<unknown> {
       // Retrieve the encrypted data row
       const encData = await base.get(id)
       if (!encData) return null
 
-      if (!askSession && !getSessionKey) {
-        throw new Error('No session key provider (askSession or getSessionKey) was provided.')
-      }
-
-      const data = await decryptDataFile(encData, id, askSession ?? getSessionKey!)
+      const data = await decryptDataFile(encData, id, getSessionKey)
 
       const result = JSON.parse(new TextDecoder().decode(data))
 
@@ -653,18 +645,15 @@ export function withEncryption(
 export const withSecretStore = (
   base: CrudWrapper<EncryptedDataRow>,
   publicRecoveryKey: (() => Promise<CryptoKey> | CryptoKey) | undefined,
+  askSessionKey: AskCryptoKey,
   askTimeoutMs = 100000,
 ) => {
-  const { emitFunc: getSessionKey, stream: askSessionKeyStream } = streamProcedureCall<
-    [],
-    CryptoKey
-  >(askTimeoutMs)
   const { emitFunc: getNewKey, stream: askNewKeyStream } = streamProcedureCall<
     [{ id: string | number; secretName: string; message?: string | undefined }],
     string
   >(askTimeoutMs)
 
-  const encryptedCrud = withEncryption(base, publicRecoveryKey, getSessionKey)
+  const encryptedCrud = withEncryption(base, askSessionKey, publicRecoveryKey)
   type SecretData = Record<string, string>
 
   /**
@@ -675,13 +664,13 @@ export const withSecretStore = (
     secretName: string,
     secretData: string,
   ): Promise<void> => {
+    console.log('set new secret:', id, secretName)
     // Get the existing secrets for the ID
-    const existingSecrets: SecretData =
-      ((await encryptedCrud.get(id, getSessionKey)) as SecretData) || {}
+    const existingSecrets: SecretData = ((await encryptedCrud.get(id)) as SecretData) || {}
     // Add or update the secret
     existingSecrets[secretName] = secretData
     // Save the updated secretss
-    await encryptedCrud.set(id, existingSecrets, getSessionKey)
+    await encryptedCrud.set(id, existingSecrets)
   }
 
   return {
@@ -700,7 +689,7 @@ export const withSecretStore = (
       // forceNew: boolean,
     ): Promise<string | null> {
       // Get the existing secrets for the ID
-      const existingSecrets = (await encryptedCrud.get(id, getSessionKey)) as SecretData
+      const existingSecrets = (await encryptedCrud.get(id)) as SecretData
       // Return the specific secret if it exists
       let secret = existingSecrets ? existingSecrets[secretName] || null : null
 
@@ -718,12 +707,12 @@ export const withSecretStore = (
      */
     async deleteSecret(id: string | number, secretName: string): Promise<void> {
       // Get the existing secrets for the ID
-      const existingSecrets = (await encryptedCrud.get(id, getSessionKey)) as SecretData
+      const existingSecrets = (await encryptedCrud.get(id)) as SecretData
       if (existingSecrets && secretName in existingSecrets) {
         // Delete the specific secret
         delete existingSecrets[secretName]
         // Save the updated secrets
-        await encryptedCrud.set(id, existingSecrets, getSessionKey)
+        await encryptedCrud.set(id, existingSecrets)
         if (Object.keys(existingSecrets).length == 0) {
           await encryptedCrud.delete(id)
         }
@@ -740,7 +729,7 @@ export const withSecretStore = (
      */
     async listSecrets(id: string | number): Promise<Record<string, string>> {
       // Get all secrets for the ID
-      return ((await encryptedCrud.get(id, getSessionKey)) as SecretData) || {}
+      return ((await encryptedCrud.get(id)) as SecretData) || {}
     },
 
     listSecretIds: async (): Promise<(string | number)[]> => {
@@ -754,9 +743,7 @@ export const withSecretStore = (
       await encryptedCrud.clear()
     },
 
-    onSessionKey: (...args: Parameters<typeof askSessionKeyStream.subscribe>) =>
-      askSessionKeyStream.subscribe(...args),
-    onNewSecret: (...args: Parameters<typeof askNewKeyStream.subscribe>) =>
+    onAskNewSecret: (...args: Parameters<typeof askNewKeyStream.subscribe>) =>
       askNewKeyStream.subscribe(...args),
   }
 }
