@@ -407,10 +407,14 @@ const useApiManagement = (
       const apiK = await getProviderApiKey(stateRefs.llmSettings.selectedApi)
       noAiService.value = apiK == null
     } else noAiService.value = true
+    const ty = await taskyon
+    const keys = Object.keys(await ty.listSecrets(AiProvideKeyStoreName))
+    availableKeys.value = keys
   }
   void updateAiService()
 
   const setProviderApiKey = async (name: string, value?: string, setAppState = true) => {
+    console.log('set new provider key:', name)
     const ty = await taskyon
     if (!value) {
       await ty.deleteSecret(AiProvideKeyStoreName, name)
@@ -421,7 +425,6 @@ const useApiManagement = (
     await updateModelList()
     await updateAiService()
     lastUpdatedProviderKey.value = name
-    availableKeys.value = Object.keys(ty.listSecrets(AiProvideKeyStoreName))
     if (name === 'taskyon' && stateRefs.activeTaskyonToken != value && setAppState)
       stateRefs.setActiveApiToken(value)
   }
@@ -440,9 +443,10 @@ const useApiManagement = (
   )
 
   const providerDefs = computed(() => Object.keys(stateRefs.llmSettings.llmApis))
-
   const availableProviders = computed(() => {
-    return Array.from(new Set(availableKeys.value).intersection(new Set(providerDefs.value)))
+    console.log('update available providers!')
+    //return Array.from(new Set(availableKeys.value).intersection(new Set(providerDefs.value)))
+    return availableKeys.value
   })
 
   // make sure we update our model list whenever anything changes for our
@@ -497,6 +501,8 @@ const useApiManagement = (
     currentModel,
     usingTaskyonKey,
     availableProviders,
+    availableKeys,
+    providerDefs,
     noAiService: computed(() => noAiService.value),
     setProviderApiKey,
     lastUpdatedProviderKey: computed(() => lastUpdatedProviderKey.value),

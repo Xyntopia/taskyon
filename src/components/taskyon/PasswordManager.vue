@@ -75,6 +75,7 @@
             :to="'/tool/' + toolMap.t[secretId]"
           />
           <q-btn
+            v-if="deleteAllBtn"
             flat
             color="negative"
             label="delete all"
@@ -102,6 +103,7 @@ const { onlyThisKey } = defineProps<{
   title?: string
   copybtn?: boolean
   onlyThisKey?: string
+  deleteAllBtn?: boolean
 }>()
 
 const tystate = useTaskyonStore()
@@ -133,6 +135,10 @@ async function loadSecrets() {
   }
   loadingSecrets.value = false
 }
+
+defineExpose({
+  reloadSecrets: loadSecrets,
+})
 
 onMounted(loadSecrets)
 

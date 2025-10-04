@@ -37,7 +37,12 @@
           <SyncTaskyon style="max-width: 600px" />
         </q-tab-panel>
         <q-tab-panel name="secrets" :class="tabPanelClass">
-          <PasswordManager copybtn title="Taskyon Password Manager" style="max-width: 600px" />
+          <PasswordManager
+            copybtn
+            delete-all-btn
+            title="Taskyon Password Manager"
+            style="max-width: 600px"
+          />
         </q-tab-panel>
         <q-tab-panel name="agent config" :class="tabPanelClass">
           <div>All of the Agent configuration</div>
