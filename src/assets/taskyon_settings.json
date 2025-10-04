@@ -1,5 +1,5 @@
 {
-  "version": 20,
+  "version": 21,
   "appConfiguration": {
     "darkTheme": "auto",
     "showLogo": true,
@@ -20,45 +20,55 @@
     "llmApis": {
       "taskyon": {
         "name": "taskyon",
-        "baseURL": "https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/api",
+        "baseURL": "https://sicynrpldixtrddgqnpm.supabase.co",
         "defaultModel": "meta-llama/llama-3.2-90b-vision-instruct",
         "streamSupport": true,
         "defaultHeaders": {
           "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpY3lucnBsZGl4dHJkZGdxbnBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwNzgxMTYsImV4cCI6MjAxNTY1NDExNn0.EwuXaxbRPvSZNlce3E_FjylLFrxSMV3tbz8JHR8GuJI"
         },
         "routes": {
-          "chatCompletion": "/chat/completions",
-          "models": "/models"
+          "chatCompletion": "/functions/v1/api/chat/completions",
+          "models": "/functions/v1/api/models"
+        }
+      },
+      "huggingface.co": {
+        "name": "huggingface.co",
+        "baseURL": "https://router.huggingface.co/",
+        "defaultModel": "meta-llama/llama-3.2-90b-vision-instruct",
+        "streamSupport": true,
+        "routes": {
+          "chatCompletion": "/v1/chat/completions",
+          "models": "https://huggingface.co/api/models"
         }
       },
       "openai": {
         "name": "openai",
-        "baseURL": "https://api.openai.com/v1/",
+        "baseURL": "https://api.openai.com",
         "defaultModel": "gpt-5-mini",
         "streamSupport": true,
         "routes": {
-          "chatCompletion": "/chat/completions",
-          "models": "/models"
+          "chatCompletion": "/v1/chat/completions",
+          "models": "/v1/models"
         }
       },
       "openrouter.ai": {
         "name": "openrouter.ai",
-        "baseURL": "https://openrouter.ai/api/v1",
+        "baseURL": "https://openrouter.ai",
         "defaultModel": "meta-llama/llama-3.2-90b-vision-instruct",
         "streamSupport": true,
         "routes": {
-          "chatCompletion": "/chat/completions",
-          "models": "/models"
+          "chatCompletion": "/api/v1/chat/completions",
+          "models": "/api/v1/models"
         }
       },
       "local": {
         "name": "local LLM server",
-        "baseURL": "http://localhost:8080/v1",
+        "baseURL": "http://localhost:8080",
         "defaultModel": "qwen3-4b",
         "streamSupport": true,
         "routes": {
-          "chatCompletion": "/chat/completions",
-          "models": "/models"
+          "chatCompletion": "/v1/chat/completions",
+          "models": "/v1/models"
         }
       }
     },

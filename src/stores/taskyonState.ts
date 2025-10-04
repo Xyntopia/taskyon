@@ -111,6 +111,12 @@ export function asyncProxy<T extends object>(initializer: () => Promise<T>): Asy
   ) as Asyncify<T>
 }
 
+function joinUrl(base: string, route: string): string {
+  // ensure base has trailing slash for correct relative resolution
+  if (!base.endsWith('/')) base += '/'
+  return new URL(route, base).toString()
+}
+
 async function updateLlmModels(
   llmSettings: TyProfile['llmSettings'],
   getApiKey: (name: string) => Promise<string | null>,
@@ -119,7 +125,13 @@ async function updateLlmModels(
   const api = getApiConfig(llmSettings)
   if (api) {
     // and also get a "fresh" list of models from the server...
-    let baseURL = api.baseURL + api.routes.models
+    let baseURL: string
+    try {
+      baseURL = joinUrl(api.baseURL, api.routes.models)
+    } catch (err) {
+      console.warn('Invalid model URL', err)
+      return {}
+    }
     const taskyonApi = llmSettings.llmApis['taskyon']
     let key: string
     // we are doing this, because openrouter currently

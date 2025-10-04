@@ -299,7 +299,7 @@ export interface TopProvider {
 // ───────────────────────────────── Model ──────────────────────────────────
 export interface Model {
   /** primary identifier */ id: string
-  /** canonical OpenRouter slug */ canonical_slug?: string // ← new :contentReference[oaicite:2]{index=2}
+  /** canonical >OpenRouter slug */ canonical_slug?: string
   hugging_face_id?: string | null
   name?: string
   description?: string
@@ -311,14 +311,26 @@ export interface Model {
   top_provider?: TopProvider
 
   per_request_limits?: { prompt_tokens: string; completion_tokens: string } | null
-  supported_parameters?: SupportedParameter[] // ← new :contentReference[oaicite:3]{index=3}
+  supported_parameters?: SupportedParameter[]
 
-  // ── legacy OpenAI‑style fields (present in older APIs, harmless here) ──
+  // ── legacy OpenAI‑style fields ──
   object?: string
   owned_by?: string
   permission?: Permission[]
   root?: string
   parent?: string | null
+
+  // ── optional fields from second API ──
+  _id?: string
+  likes?: number
+  trendingScore?: number
+  private?: boolean
+  downloads?: number
+  tags?: string[]
+  pipeline_tag?: string
+  library_name?: string
+  createdAt?: string
+  modelId?: string
 }
 
 const apiConfig = z
@@ -596,7 +608,7 @@ export const appConfiguration = z.object({
 export type appConfiguration = z.infer<typeof appConfiguration>
 
 export const TyProfile = z.object({
-  version: z.literal(20).meta({
+  version: z.literal(21).meta({
     description:
       'whenever the schema of the settings change, this number will get changed as well...',
   }),

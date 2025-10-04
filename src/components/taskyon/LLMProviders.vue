@@ -128,7 +128,6 @@ or with an llm proxy such as this one:  https://github.com/BerriAI/liteLLM-proxy
   "
         />
       </div>
-      <OpenRouterPKCE class="q-py-md" />
       <q-expansion-item label="Retrieve Keys from other AI services">
         <q-item-label header>
           Manually configure & retrieve API keys (Setup a local, privacy-presevering server, a

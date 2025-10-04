@@ -596,10 +596,11 @@ const availableModelsTmp = async (
     }
 
     // Parse the JSON response
-    const data = (await response.json()) as { data: Model[] }
+    const raw = (await response.json()) as { data?: Array<Model> } | Array<Model>
+    const data = 'data' in raw && raw.data[0]?.id ? raw.data : (raw as Array<Model>)
 
     // Return the list of models directly
-    const models = data.data.reduce<Record<string, Model>>((acc, m) => {
+    const models = data.reduce<Record<string, Model>>((acc, m) => {
       acc[m.id] = m
       return acc
     }, {})

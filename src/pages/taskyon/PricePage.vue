@@ -328,10 +328,17 @@ const columns: QTableProps['columns'] = [
     name: 'created',
     label: 'creation date',
     align: 'right',
-    field: (row: Row) => row.created,
+    field: (row: Row) => row.created ?? row.createdAt,
     sortable: true,
     sort: floatSorter,
-    format: (v: number) => new Date(v * 1000).toISOString().slice(0, 10), // yyyy-mm-dd
+    format: (v: number | string) => {
+      try {
+        const date = typeof v === 'number' ? new Date(v * 1000) : new Date(v)
+        return date.toISOString().slice(0, 10)
+      } catch {
+        return v
+      }
+    },
   },
   {
     name: 'prompt_price',
