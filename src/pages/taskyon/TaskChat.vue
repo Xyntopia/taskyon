@@ -181,7 +181,6 @@
       :info-text="infoText"
       @ok="resolveSecret"
     />
-    {{ tystate.entryNode }}
   </FadeAwayScrollPage>
 </template>
 
