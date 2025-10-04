@@ -9,7 +9,6 @@
         color="secondary"
         options-dense
         label="Select LLM Model for answering/solving the task."
-        :icon="matSmartToy"
         :options="filteredOptions"
         emit-value
         :model-value="botName"
@@ -29,11 +28,11 @@
       >
         <template #prepend>
           <q-icon
-            v-if="state.llmSettings.selectedApi === 'taskyon' && state.tyPublicKey"
+            v-if="state.llmSettings.selectedApi === 'taskyon' && tystate.usingTaskyonKey"
             :name="mdiKeyLink"
           >
             <q-tooltip
-              >Only models allowed from taskyon key: {{ state.tyPublicKey.name }}</q-tooltip
+              >Only models allowed from taskyon key: {{ tystate.usingTaskyonKey }}</q-tooltip
             >
           </q-icon>
         </template>
@@ -52,13 +51,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useTaskyonStore } from 'stores/taskyonState'
-import { matSmartToy, matVisibility } from '@quasar/extras/material-icons'
+import { matVisibility } from '@quasar/extras/material-icons'
 import { mdiKeyLink } from '@quasar/extras/mdi-v6'
 import { levenshteinDistance } from 'src/modules/string_utils'
-import ToggleButton from '../ToggleButton.vue'
 import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { computed, ref } from 'vue'
+import ToggleButton from '../ToggleButton.vue'
 
 defineProps<{
   botName: string | null

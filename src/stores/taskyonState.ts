@@ -28,6 +28,7 @@ import type { Taskyon } from 'src/modules/taskyon/init'
 import { tyCore } from 'src/modules/taskyon/init'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
 import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
+import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 import type { ChatResponseType, TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
 import {
   getApiConfig,
@@ -37,13 +38,12 @@ import {
   type TyProfile,
 } from 'src/modules/taskyon/types'
 import { usePyodideWebworker } from 'src/modules/taskyon/webWorkerApi'
+import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { guiTools } from 'src/modules/tools/GuiTools'
 import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
-import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
-import { asyncComputed } from 'src/modules/vueUtils'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -379,6 +379,17 @@ const useApiManagement = (
   taskyon: Promise<Taskyon>,
 ) => {
   const llmModelsInternal = ref<Record<string, Model>>({})
+  // we need this in order to reactivly see if something changed..
+  const lastUpdatedProviderKey = ref<string>()
+  const availableKeys = ref<string[]>()
+  const noAiService = ref<boolean | null>(null)
+  const usingTaskyonKey = ref<string | boolean | undefined>()
+  const allowedLLMModels = ref<string[]>()
+
+  const getProviderApiKey = async (name: string) => {
+    const ty = await taskyon
+    return await ty.getSecret(AiProvideKeyStoreName, name, false, false)
+  }
 
   const updateModelList = async () => {
     const api = getApiConfig(stateRefs.llmSettings)
@@ -391,7 +402,15 @@ const useApiManagement = (
     )
   }
 
-  const setProviderApiKey = async (name: string, value?: string) => {
+  const updateAiService = async () => {
+    if (stateRefs.llmSettings.selectedApi) {
+      const apiK = await getProviderApiKey(stateRefs.llmSettings.selectedApi)
+      noAiService.value = apiK == null
+    } else noAiService.value = true
+  }
+  void updateAiService()
+
+  const setProviderApiKey = async (name: string, value?: string, setAppState = true) => {
     const ty = await taskyon
     if (!value) {
       await ty.deleteSecret(AiProvideKeyStoreName, name)
@@ -400,21 +419,31 @@ const useApiManagement = (
     }
     await ty.updateChatCompletionApiKey(name, value)
     await updateModelList()
+    await updateAiService()
+    lastUpdatedProviderKey.value = name
+    availableKeys.value = Object.keys(ty.listSecrets(AiProvideKeyStoreName))
+    if (name === 'taskyon' && stateRefs.activeTaskyonToken != value && setAppState)
+      stateRefs.setActiveApiToken(value)
   }
-
-  const getProviderApiKey = async (name: string) => {
-    const ty = await taskyon
-    return await ty.getSecret(AiProvideKeyStoreName, name, false, false)
-  }
-
-  const noAiService = asyncComputed(
-    async () =>
-      !(
-        stateRefs.llmSettings.selectedApi &&
-        (await getProviderApiKey(stateRefs.llmSettings.selectedApi))
-      ),
-    true,
+  watch(
+    () => stateRefs.activeTaskyonToken,
+    async (newToken, oldToken) => {
+      console.log('activeToken taskyon has changed!', { newToken, oldToken })
+      if (newToken !== oldToken) {
+        // TODO: we are creating a cyclic dependency here which we are only preventing through some hacky measures..
+        // the reason we are doing this is because we want taskyon to initialize fast and let other 3rd paty authentication tools
+        // set keys fast..
+        await setProviderApiKey('taskyon', newToken, false)
+      }
+    },
+    { immediate: true },
   )
+
+  const providerDefs = computed(() => Object.keys(stateRefs.llmSettings.llmApis))
+
+  const availableProviders = computed(() => {
+    return Array.from(new Set(availableKeys.value).intersection(new Set(providerDefs.value)))
+  })
 
   // make sure we update our model list whenever anything changes for our
   // endpoints...
@@ -422,18 +451,26 @@ const useApiManagement = (
     immediate: true,
   })
 
-  const allowedLLMModels = computed<string[] | undefined>(() => {
-    if (stateRefs.llmSettings.selectedApi === 'taskyon') {
-      // if we have a taskyon key defined only display the models allowed for that key...
-      if (stateRefs.tyPublicKey?.model && stateRefs.tyPublicKey.model.length > 0) {
-        if (!stateRefs.tyPublicKey.model.includes('*')) {
-          const models = stateRefs.tyPublicKey.model
-          return models
+  watch(
+    [() => stateRefs.activeTaskyonToken, () => stateRefs.llmSettings.selectedApi],
+    ([tok, api]) => {
+      if (api === 'taskyon') {
+        console.log('check if we are using free taskyon key!')
+        // if we have a taskyon key defined only display the models allowed for that key...
+        const key = isTaskyonKey(tok ?? undefined, false)
+        if (key) {
+          usingTaskyonKey.value = key.name ?? true
+          if (key.model && key.model.length > 0 && !key.model.includes('*')) {
+            allowedLLMModels.value = key.model
+          }
+          return
         }
       }
-    }
-    return undefined
-  })
+      allowedLLMModels.value = undefined
+      usingTaskyonKey.value = false
+    },
+    { immediate: true },
+  )
 
   // Computed property to determine the currently selected bot name
   const currentModelId = computed(() => {
@@ -456,11 +493,13 @@ const useApiManagement = (
 
   return {
     currentModelId,
-    llmModelsInternal,
     allowedLLMModels,
     currentModel,
-    noAiService,
+    usingTaskyonKey,
+    availableProviders,
+    noAiService: computed(() => noAiService.value),
     setProviderApiKey,
+    lastUpdatedProviderKey: computed(() => lastUpdatedProviderKey.value),
     getProviderApiKey,
     addModelToHistory,
     // Method to handle the updateBotName event
@@ -481,6 +520,7 @@ const useApiManagement = (
       }
       addModelToHistory(newName)
     },
+    llmModels: computed(() => llmModelsInternal.value),
   }
 }
 
@@ -733,7 +773,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   void usePyodideWebworker().preInit()
 
   const entryNode = computed(() => {
-    if (currentModelId.value) {
+    if (apiKeyManagement.currentModelId.value) {
       return (stateRefs.llmSettings.entryNode ?? stateRefs.llmSettings.enableToolChooser)
         ? toolCall({
             name: 'chooseTool',
@@ -742,7 +782,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
             },
           })
         : createChatCompletionTask({
-            model: currentModelId.value,
+            model: apiKeyManagement.currentModelId.value,
             goal: 'SimpleCompletion',
           })
     }
@@ -773,17 +813,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   })
 
   const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
-  const {
-    addModelToHistory,
-    handleBotNameUpdate,
-    currentModelId,
-    setProviderApiKey,
-    getProviderApiKey,
-    llmModelsInternal,
-    allowedLLMModels,
-    currentModel,
-    noAiService,
-  } = useApiManagement(stateRefs, taskyon)
+  const apiKeyManagement = useApiManagement(stateRefs, taskyon)
 
   // iApiOutside is the port to the "outside" of taskyon UI. It is the port used to
   // communicate towards the taskyon engine. iApiInside communicates to the outside of taskyon.
@@ -816,7 +846,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
             // parent app.
             const newKey = newConfig.signatureOrKey
             if (typeof newKey === 'string') {
-              await setProviderApiKey(stateRefs.llmSettings.selectedApi, newKey)
+              await apiKeyManagement.setProviderApiKey(stateRefs.llmSettings.selectedApi, newKey)
             } else {
               console.warn('Provided signatureOrKey is not a string:', newKey)
             }
@@ -1086,7 +1116,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   dynamicQuasarTheming(stateRefs)
 
+  const tyready = ref(false)
+  void taskyon.then(() => {
+    tyready.value = true
+  })
+
   return {
+    tyready: computed(() => tyready),
     setNewSession,
     newSessionFromGdrive,
     uploadSessionKey,
@@ -1102,7 +1138,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     taskContentDraft,
     selectedThread,
     currentTask,
-    addModelToHistory,
+    ...apiKeyManagement,
     stopWorker,
     taskWorkerWaiting,
     lastActiveTaskId,
@@ -1110,18 +1146,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     workerStreamLogs,
     addToProcessQueue,
     chatCompletionStream,
-    llmModels: computed(() => llmModelsInternal.value),
-    allowedLLMModels,
-    currentModelId,
-    currentModel,
-    handleBotNameUpdate,
     connectMessageIframe,
     entryNode,
     api: uiApiOutside,
     gdp,
     getGdriveToken,
-    setProviderApiKey,
-    getProviderApiKey,
-    noAiService,
   }
 }) // this state stores all information which

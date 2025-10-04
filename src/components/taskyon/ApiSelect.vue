@@ -1,5 +1,6 @@
 <template>
   <div class="row items-center">
+    <!--Show only Providers for which we have an actual key!-->
     <q-select
       v-model="model"
       emit-value
@@ -7,7 +8,7 @@
       color="secondary"
       dense
       label="Provider"
-      :options="Object.keys(state.llmSettings.llmApis).filter((apiName) => state.keys[apiName])"
+      :options="tystate.availableProviders"
     >
     </q-select>
     <q-btn
@@ -27,12 +28,13 @@
 
 <script setup lang="ts">
 import { matElectricalServices, matSettings } from '@quasar/extras/material-icons'
-import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'src/stores/taskyonState'
 
 const model = defineModel<string | null>()
 
 defineProps<{
   moreSettings?: boolean
 }>()
-const state = useAppStateStore()
+
+const tystate = useTaskyonStore()
 </script>

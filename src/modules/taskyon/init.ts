@@ -20,7 +20,11 @@ import {
 } from '../../../packages/taskyon/src/utils/frpBus'
 import { getDatabase } from '../pglite.api'
 import { createOAuthTool } from '../tools/authTools'
-import { createChatCompletionTask, createChatCompletionTool } from '../tools/chatCompletionTool'
+import {
+  chatCompletionToolName,
+  createChatCompletionTask,
+  createChatCompletionTool,
+} from '../tools/chatCompletionTool'
 import { devTools } from '../tools/devTools'
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
@@ -42,7 +46,7 @@ import { appDevTools } from '../tools/webAppDev'
 import { TaskyonMessage } from './apiTypes'
 import type { TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
-import { runTaskWorker } from './taskWorker'
+import { generateSecretId, runTaskWorker } from './taskWorker'
 import type { llmSettings } from './types'
 
 function createApi(
@@ -166,7 +170,6 @@ const staticContext = () => {
 const dynamicContext =
   (
     llmSettings: Thunk<llmSettings>,
-    apiKeys: Thunk<{ [key: string]: string }>,
     ToolList: InternalTool[],
     insidePort: Port<TaskyonMessage, TaskyonMessage>,
     iframeMultiPlexer: IframeMultiPlexer,
@@ -187,17 +190,12 @@ const dynamicContext =
         }),
       ]),
       () => cs.getUserPublicKey().publicKey,
+      () => {
+        console.log('importing fixed key for secretStore...')
+        return cs.getSessionKey()
+      },
     )
-    // connect secretStore to cryptoSession
-    // TODO: we are not sure, if the sessionKeyStream makes sense here...
-    //       we pass the database to the secretstore anyways and the session key is bound
-    //       to the database.
-    //       it if the session key changes....   so we might just pass it with the context.
-    secretStore.onSessionKey(({ respond }) => {
-      console.log('importing fixed key for secretStore...')
-      const key = cs.getSessionKey()
-      respond(key)
-    })
+
     // add tools which have access to the taskManagerInstance itself and need to be
     // regenerated for each session
     // TODO: we should get rid of this and supply an instanc eof the taskManager insider the tool
@@ -206,8 +204,8 @@ const dynamicContext =
     const { chatCompletion, stream: chatCompletionStream } = await createChatCompletionTool(
       llmSettings,
       taskManagerInstance,
-      (keyName: string) => apiKeys()[keyName],
     )
+
     ToolList.push(
       localVectorStore(db),
       chatCompletion,
@@ -254,7 +252,6 @@ export async function tyCore(
   // TODO: we want to save some settings "internally" and not in the GUI...
   //       but then....   we als want taskyon to be as "stateless" as possible..
   llmSettings: Thunk<llmSettings>,
-  apiKeys: Thunk<{ [key: string]: string }>,
   // with the Environment Tools we can provide a list of tools as closures which have access
   // to the environment in which taskyon is running (through closure variables
   // of this environment inside the tool).
@@ -277,7 +274,6 @@ export async function tyCore(
   //       more of the dynamic context into the static context..
   const ctxCreator = dynamicContext(
     llmSettings,
-    apiKeys,
     [...EnvironmentTools, ...ToolList],
     insidePort,
     iframeMultiPlexer,
@@ -331,6 +327,16 @@ export async function tyCore(
     taskStream: taskStream.stream,
     workerStop: (message: string) => ctx.stopAllTasks(message),
     queueTask: (id: string) => ctx.queueTask(id),
+    // updating and getting ApiKeys for chat completion has a special
+    // treatment here, because we need it very often in our UI
+    updateChatCompletionApiKey: async (key: string, value?: string) => {
+      const { tool, def } = await ctx.taskManagerInstance.getToolDefinition(chatCompletionToolName)
+      if (tool) {
+        const toolId = await generateSecretId(def?.id, tool)
+        if (!value) await ctx.secretStore.deleteSecret(toolId, key)
+        else await ctx.secretStore.setSecret(toolId, key, value)
+      }
+    },
     // we are creating the proxyApi here so that from the outside every function always gets proxied
     // to the most up-to-date taskmanager instance... We are also flattening it at the same time!
     ...createProxyApi(
@@ -380,7 +386,7 @@ export async function tyCore(
       [
         'getSecret',
         'setSecret',
-        'onNewSecret',
+        'onAskNewSecret',
         'listSecretIds',
         'listSecrets',
         'deleteSecret',

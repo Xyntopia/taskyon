@@ -1,11 +1,11 @@
 // this store simply defines the state of our app witout any logic or background tasks etc,,,
 // this makes it easy to integrate it with SSR for example...
 
-import { defineStore } from 'pinia'
-import { computed, reactive, toRefs, type Reactive, watch, ref } from 'vue'
-import { type tyPublicKeyDraft, TyProfile } from 'src/modules/taskyon/types'
 import axios from 'axios'
+import { defineStore } from 'pinia'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
+import defaultSettings from 'src/assets/taskyon_settings.json'
+import { type tyPublicKeyDraft, TyProfile } from 'src/modules/taskyon/types'
 import type { MergeOptions } from 'src/modules/utils'
 import {
   clearBrowserCaches,
@@ -15,11 +15,9 @@ import {
   deepMergeReactive,
   sleep,
 } from 'src/modules/utils'
-import { unref } from 'vue'
-import defaultSettings from 'src/assets/taskyon_settings.json'
+import { type Reactive, computed, reactive, ref, toRefs, unref, watch } from 'vue'
 // TODO: remove, to make this file here faster...
-import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
-import type { PartialDeep } from 'type-fest'
+import { type FunctionCall } from '@taskyon/taskyon'
 import {
   defaultProfileName,
   getCurrentProfileName,
@@ -29,7 +27,8 @@ import {
   switchCurrentProfilePointer,
   urlConfig,
 } from 'src/modules/ui/initialState'
-import { type FunctionCall } from '@taskyon/taskyon'
+import type { PartialDeep } from 'type-fest'
+import freeKey from 'assets/taskyon_free_key.json'
 
 interface TaskWidgetStateType {
   markdownEnabled: boolean
@@ -56,7 +55,6 @@ function getInitialState() {
   // the rest of the state is either secret (keys) or temporary states which don't need to be saved
   const initialState = {
     ...defaultStorableSettings,
-    keys: {} as Record<string, string>,
     // app State which should be part of the configuration
     // the things below should only represent transitional states
     // which have no relevance in the actual configuration of the app.
@@ -82,10 +80,14 @@ function getInitialState() {
     // aware of different URLs etc...
     developerMode: false,
     useDevVersion: false,
+
+    //////  the following speeds up initialization for taskyon :)
     // if true, taskyon store will wait until a binding key is provided
     // this is persisted in local storage, so that on the next page reload
     // taskyon will wait for the key before initializing taskyon code session
     initWBindingKey: false,
+    // TODO:
+    initWSession: undefined as string | undefined,
 
     messageDebug: {} as Record<string, 'RAW' | 'MESSAGECONTENT' | 'RAWTASK' | 'ERROR' | undefined>, // whether message with ID should be open or not...
 
@@ -110,6 +112,52 @@ function getInitialState() {
   return { initialState, defaultStorableSettings }
 }
 
+type initialState = ReturnType<typeof getInitialState>['initialState']
+
+function loadConfigurationFile(initialState: initialState, stateRefs: Reactive<initialState>) {
+  void axios
+    .get<
+      | {
+          version?: number
+          llmSettings: typeof initialState.llmSettings
+          appConfiguration: typeof initialState.appConfiguration
+        }
+      | undefined
+    >(stateRefs.appConfiguration.appConfigurationUrl)
+    .then((jsonconfig) => {
+      const config = jsonconfig.data
+      // TODO: we need to do much better parsing here...  possibly with zod to make sure
+      //       we get back correct configuration versions etc..
+      if (config) {
+        const isVersionCompatible = config.version && config.version === initialState.version
+
+        if (isVersionCompatible) {
+          // we only want to load the initial configuration the first time we are loading the page...
+          console.log('merge dynamic app config', jsonconfig.data)
+
+          // if this is *not* an initial load, we only add "new" values that can be found in the configuration.
+          const mergeStrategy: MergeOptions = stateRefs.initialLoad
+            ? {
+                arrays: 'overwrite',
+                objects: 'overwrite',
+                primitives: 'preserve',
+              }
+            : { arrays: 'concat', objects: 'merge', typeMismatch: 'target', primitives: 'preserve' }
+          deepMergeReactive(stateRefs.appConfiguration, config.appConfiguration, mergeStrategy)
+          deepMergeReactive(stateRefs.llmSettings, config.llmSettings, mergeStrategy)
+        } else {
+          console.warn(
+            `Config version (${config.version || 'undefined'}) is not compatible with current version (${initialState.version}). Skipping dynamic config merge.`,
+          )
+        }
+        stateRefs.initialLoad = false
+      }
+    })
+    .catch((error) => {
+      console.error('Failed to load dynamic app config:', error)
+    })
+}
+
 const useSessionKey = () => {
   const bindingKey = ref<CryptoKey | null>(null)
 
@@ -122,19 +170,10 @@ const useSessionKey = () => {
   }
 }
 
-// this is where we save all of our app settings.
-// its important to keep this simple and don't incude 3rd party libraries and other things
-// because we want to this to also work on tyServer and in a "minimal gui" setting.
-// So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
-export const useAppStateStore = defineStore('ui-state', () => {
-  // configuration from the URL!
-  const { initialState, defaultStorableSettings } = getInitialState()
+const saveAndLoadState = (initialState: initialState) => {
+  const initialStoredStateObjTyped = initialStoredStateObj as Partial<initialState> | undefined
 
-  const initialStoredStateObjTyped = initialStoredStateObj as
-    | Partial<typeof initialState>
-    | undefined
-
-  let stateRefs: Reactive<typeof initialState>
+  let stateRefs: Reactive<initialState>
   if (
     initialStoredStateObjTyped &&
     initialStoredStateObjTyped.version &&
@@ -170,7 +209,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
     stateRefs.llmSettings.userId = 'unknown'
   }
 
-  function overrideSettings(newConfig: PartialDeep<TyProfile>, persist: boolean = false) {
+  function overRideSettings(newConfig: PartialDeep<TyProfile>, persist: boolean = false) {
     saveToLocalStorage = persist
     if (newConfig.llmSettings) {
       // TODO: make sure, this function is only temporary and doesn't overwrite our actual llmSettings...
@@ -182,66 +221,25 @@ export const useAppStateStore = defineStore('ui-state', () => {
     if (newConfig.toolchainConfig) {
       deepMergeReactive(stateRefs.toolchainConfig, newConfig.toolchainConfig)
     }
-    // and also set a possible signature as the api key!
-    if (stateRefs.llmSettings.selectedApi && newConfig.signatureOrKey) {
-      // we only set the API key, if it was provided by the
-      // parent app.
-      const newKey = newConfig.signatureOrKey
-      if (typeof newKey === 'string') {
-        stateRefs.keys[stateRefs.llmSettings.selectedApi] = newKey
-      } else {
-        console.warn('Provided signatureOrKey is not a string:', newKey)
-      }
-    }
   }
+
+  return { overRideSettings, stateRefs }
+}
+
+// this is where we save all of our app settings.
+// its important to keep this simple and don't incude 3rd party libraries and other things
+// because we want to this to also work on tyServer and in a "minimal gui" setting.
+// So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
+export const useAppStateStore = defineStore('ui-state', () => {
+  // configuration from the URL!
+  const { initialState, defaultStorableSettings } = getInitialState()
+  const { overRideSettings, stateRefs } = saveAndLoadState(initialState)
 
   // this file could potentially be replaced in kubernetes or docker using a configmap!
   // that way we can configure our webapp even if its already compiled...
   // this is done asynchrounously, because we want to be able to dynamically
   // change our config without having to recompile taskyon.
-  void axios
-    .get<
-      | {
-          version?: number
-          llmSettings: typeof initialState.llmSettings
-          appConfiguration: typeof initialState.appConfiguration
-        }
-      | undefined
-    >(stateRefs.appConfiguration.appConfigurationUrl)
-    .then((jsonconfig) => {
-      const config = jsonconfig.data
-      // TODO: we need to do much better parsing here...  possibly with zod to make sure
-      //       we get back correct configuration versions etc..
-      if (config) {
-        const isVersionCompatible = config.version && config.version === initialState.version
-
-        if (isVersionCompatible) {
-          // we only want to load the initial configuration the first time we are loading the page...
-          console.log('merge dynamic app config', jsonconfig.data)
-
-          // if this is *not* an initial load, we only add "new" values that can be found in the configuration.
-          const mergeStrategy: MergeOptions = stateRefs.initialLoad
-            ? {
-                arrays: 'overwrite',
-                objects: 'overwrite',
-                primitives: 'preserve',
-              }
-            : { arrays: 'concat', objects: 'merge', typeMismatch: 'target', primitives: 'preserve' }
-          deepMergeReactive(stateRefs.appConfiguration, config.appConfiguration, mergeStrategy)
-          deepMergeReactive(stateRefs.llmSettings, config.llmSettings, mergeStrategy)
-        } else {
-          console.warn(
-            `Config version (${
-              config.version || 'undefined'
-            }) is not compatible with current version (${initialState.version}). Skipping dynamic config merge.`,
-          )
-        }
-        stateRefs.initialLoad = false
-      }
-    })
-    .catch((error) => {
-      console.error('Failed to load dynamic app config:', error)
-    })
+  loadConfigurationFile(initialState, stateRefs)
 
   // TODO: check if we can do this maybe a bit more elegant using pinia functions?  like using "clear" or something like that?
   function $reset() {
@@ -301,14 +299,32 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // we do the toRefs operation, so we simply reassign the same type "stateRefs" to it again which seems to work...
   const allRefs = toRefs(stateRefs) as unknown as typeof stateRefs
 
+  // TODO:
+  // this flag can be set by other parts of the app in order to signal the desired mode.
+  // other parts of taskyon UI will watch this flag and configure themselves accordingly.
+  // we are doing it this way, because we need this as early as possibel to prevent flicker
+  // but some parts of our app e.g. tycors and the secret store need a long time for initialization
+  // we don't save this variable on purpose, because we used it to present tokens to othe parts of the app...
+  const activeTaskyonToken = ref<string>()
+  const usingFreeTaskyonKey = computed(() => {
+    console.log('using free taskyon key:', activeTaskyonToken.value === freeKey.freeKey)
+    return activeTaskyonToken.value === freeKey.freeKey
+  })
+
   // it is *SUPERIMPORTANT*  that we ONLY return computed refs & functions in the store EXCEPT
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
   return {
+    usingFreeTaskyonKey,
     sessionId: computed(() => sessionId.value),
     setSessionId,
     bindingKey,
     setBindingKey,
+    activeTaskyonToken: computed(() => activeTaskyonToken.value),
+    setActiveApiToken: (tok: string | undefined) => {
+      console.log('set new active token secret', tok)
+      activeTaskyonToken.value = tok
+    },
     isInIframe: urlConfig.isInIframe,
     urlConfig: urlConfig,
     setSelectedTask: (taskId: string | null | undefined) => {
@@ -316,13 +332,10 @@ export const useAppStateStore = defineStore('ui-state', () => {
       stateRefs.llmSettings.selectedTaskId = taskId || undefined
     },
     ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
-    overRideSettings: overrideSettings,
+    overRideSettings,
     getStateValues: () => unref(allRefs),
     $reset,
     minimalGui,
-    tyPublicKey: computed(() => {
-      return isTaskyonKey(stateRefs.keys.taskyon || '', false)
-    }),
     taskyonRunmode: ref<'waiting for connection' | 'standalone mode' | 'connected'>(
       'standalone mode',
     ),

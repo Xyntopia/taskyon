@@ -117,7 +117,7 @@ const infoText = ref('get password')
 let resolveSecret: (secret: string) => void
 onMounted(async () => {
   const ty = await tystate.taskyon
-  void ty.onNewSecret(({ args: [{ id, secretName }], respond }) => {
+  void ty.onAskNewSecret(({ args: [{ id, secretName }], respond }) => {
     if (state.noGuiTests) {
       respond('randomKey' + randomString(5))
       return

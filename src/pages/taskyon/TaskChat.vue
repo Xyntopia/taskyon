@@ -116,7 +116,7 @@
           leave-active-class="animated slow fadeOut"
         >
           <!--Need to install a chat service-->
-          <div v-if="noAiService" class="col text-secondary bg-primary">
+          <div v-if="tystate.noAiService === true" class="col text-secondary bg-primary">
             <div class="row items-center q-pa-sm">
               <q-icon
                 class="col-auto q-pr-md"
@@ -199,7 +199,7 @@ import { fetchMarkdown, getTextFile } from 'src/modules/taskyon/taskUtils'
 import { sleep } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue'
 import { createScrollManager } from 'src/modules/vueUtils'
@@ -253,7 +253,7 @@ const infoText = ref('get password')
 let resolveSecret: (secret: string) => void
 onMounted(async () => {
   const ty = await tystate.taskyon
-  void ty.onNewSecret(({ args: [{ id, secretName, message }], respond }) => {
+  void ty.onAskNewSecret(({ args: [{ id, secretName, message }], respond }) => {
     console.log('new secret request window', id, secretName)
     showPassWordDialog.value = true
     infoText.value =
@@ -261,10 +261,6 @@ onMounted(async () => {
     resolveSecret = respond
   })
 })
-
-const noAiService = computed(
-  () => !(state.llmSettings.selectedApi && state.keys[state.llmSettings.selectedApi]),
-)
 
 const openPopupMessage = (message: string) => {
   popupMessage.value = message

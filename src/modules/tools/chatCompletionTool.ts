@@ -687,10 +687,12 @@ async function convertFilesToOpenAIImageContent(
   return imageContent
 }
 
+export const chatCompletionToolName = 'chatCompletion'
+export const freeKeyName = 'taskyon'
+
 export async function createChatCompletionTool(
   llmSettings: Thunk<llmSettings>,
   taskManager: TyTaskManager,
-  apiKeys: (keyName: string) => string | undefined,
 ) {
   const Ajv = await import(
     /* webpackPrefetch: true */
@@ -712,7 +714,7 @@ export async function createChatCompletionTool(
   conversation prompts. Useful for generating natural language responses in a chat setting.
   It will convert the chain pointed to by the previous Task (priorID) into openAI compatible message
   list and generate a response`,
-    name: 'chatCompletion',
+    name: chatCompletionToolName,
     renderOptions: { hideChat: true, hideLlm: true },
     parameters: {
       type: 'object',
@@ -778,8 +780,11 @@ export async function createChatCompletionTool(
       if (!api) {
         throw new Error(`api doesn't exist! ${selectedApi || 'no api selected!'}`)
       }
-      const apiKey = selectedApi ? apiKeys(selectedApi) : undefined
-      if (!apiKey) throw new Error('We need to define an API key to process our chat Task!')
+
+      // maybe ask for the llm api secrets in the future?
+      const apiKey = await context.getSecret(selectedApi, false, false)
+      if (!apiKey || typeof apiKey !== 'string')
+        throw new Error('We need to define an API key to process our chat Task!')
 
       const usellmTools = llmTools ?? enableOpenAiTools
       const selectedModel = model ?? getCurrentModel(api)

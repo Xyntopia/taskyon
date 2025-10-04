@@ -36,36 +36,29 @@
           <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
         </q-item>
         <q-separator />
-        <div class="text-info column items-center">
-          <div>
-            <q-item class="row items-center">
-              <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
-              <ModelSelection
-                v-model:selected-api="selectedApi"
-                class="col"
-                :bot-name="tystate.currentModelId"
-                :model-list="state.appConfiguration.expertMode"
-                :select-api="state.appConfiguration.expertMode"
-                @update-bot-name="
-                  (bot) => {
-                    tystate.handleBotNameUpdate(bot)
-                    close()
-                  }
-                "
-              ></ModelSelection>
-            </q-item>
-          </div>
-          <InfoDialog
-            v-if="tystate.currentModelId && tystate.currentModel?.description"
-            :round="false"
-            class="fit"
-            square
-            :dense="false"
-            label="Info about current model"
-            no-caps
-            :info-text="tystate.currentModel?.description || ''"
-          />
-        </div>
+        <ModelSelection
+          v-model:selected-api="selectedApi"
+          class="q-px-xs self-stretch"
+          :bot-name="tystate.currentModelId"
+          :model-list="state.appConfiguration.expertMode"
+          :select-api="state.appConfiguration.expertMode"
+          @update-bot-name="
+            (bot) => {
+              tystate.handleBotNameUpdate(bot)
+              close()
+            }
+          "
+        ></ModelSelection>
+        <InfoDialog
+          v-if="tystate.currentModelId && tystate.currentModel?.description"
+          :round="false"
+          class="fit text-info"
+          square
+          :dense="false"
+          label="Info about current model"
+          no-caps
+          :info-text="tystate.currentModel?.description || ''"
+        />
       </q-list>
       <q-card-actions v-if="$q.platform.is.mobile" class="float-right">
         <q-btn v-close-popup flat label="Ok" />

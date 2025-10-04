@@ -32,10 +32,12 @@ import axios from 'axios'
 import InfoDialog from 'components/InfoDialog.vue'
 import { Notify } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 
 const state = useAppStateStore()
+const tysstate = useTaskyonStore()
 const route = useRoute()
 
 const callbackUrl = window.location.origin + '/settings/aiserviceprovider' // This will get the base URL of your application
@@ -45,8 +47,8 @@ const authURL = computed(() => {
   return `https://openrouter.ai/auth?callback_url=${encodeURIComponent(callbackUrl)}`
 })
 
-function onGetOpenRouterKey() {
-  delete state.keys['openrouter.ai']
+async function onGetOpenRouterKey() {
+  await tysstate.setProviderApiKey('openrouter.ai')
   window.location.href = authURL.value
 }
 
@@ -70,7 +72,7 @@ async function getOpenRouterPKCEKey(code: string) {
       console.log('downloaded key:', data.key)
       if (data.key) {
         Notify.create('API Key retrieved successfully')
-        state.keys['openrouter.ai'] = data.key
+        await tysstate.setProviderApiKey('openrouter.ai', data.key)
         state.llmSettings.selectedApi = 'openrouter.ai'
       } else {
         Notify.create('Failed to retrieve API Key')
