@@ -1,18 +1,34 @@
 <template>
   <q-layout view="lHh LpR lfr">
     <TaskyonHeader
+      v-if="guiM === 'iframe'"
       v-model:drawer-open="drawerOpen"
-      :mode="minMode"
-      :btn-size="btnSize"
-      chat-buttons
+      btn-size="xs"
+      new-chat
+      mini-toolbar
+      min-mode
+      hide-menu
+      no-chat-button-border
     />
+    <TaskyonHeader
+      v-else-if="guiM === 'minChat'"
+      v-model:drawer-open="drawerOpen"
+      new-chat
+      mini-toolbar
+      back-to-chat
+      hide-menu
+      hide-right-side
+      no-chat-button-border
+    />
+    <TaskyonHeader v-else v-model:drawer-open="drawerOpen" new-chat back-to-chat />
+
     <q-drawer
       v-if="state"
       v-model="drawerOpen"
-      :show-if-above="!minMode"
+      :show-if-above="guiM !== 'iframe'"
       persistent
       :width="250"
-      :breakpoint="minMode ? 5000 : 800"
+      :breakpoint="guiM !== 'iframe' ? 5000 : 800"
     >
       <ChatSidebar />
     </q-drawer>
@@ -61,14 +77,5 @@ const ChatSidebar = defineAsyncComponent(
 
 const state = useAppStateStore()
 
-const minMode = computed<'minChat' | 'minimal' | undefined>(() => {
-  return state.minimalGui === 'default'
-    ? undefined
-    : state.minimalGui === 'iframe'
-      ? 'minimal'
-      : 'minChat'
-})
-const btnSize = computed(() => {
-  return minMode.value ? 'xs' : 'md'
-})
+const guiM = computed(() => state.minimalGui)
 </script>

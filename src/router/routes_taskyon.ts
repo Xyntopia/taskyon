@@ -96,14 +96,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         component: () => import('pages/DocumentationIndex.vue'),
         meta: { title: 'Documentation', description: 'Taskyon Documentation' },
       },
-      {
-        path: 'fm',
-        component: () => import('pages/FileManagerPage.vue'),
-        meta: {
-          title: 'File Manager',
-          description: 'Manage files saved in Taskyon OPFS.',
-        },
-      },
       // mdRoutes should have our normal taskyon layout thats why we put them in here :)
       ...mdRoutes,
       ...universalTyRoutes,

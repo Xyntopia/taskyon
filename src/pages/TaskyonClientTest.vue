@@ -48,7 +48,7 @@ const configuration: partialTyConfiguration = {
     secondaryColor: '#0ff',
     // we are using "default" GUI mode for debugging purposes!, in production, change this to "iframe"
     // or leave it out :)
-    guiMode: 'default',
+    guiMode: 'auto',
   },
 }
 
