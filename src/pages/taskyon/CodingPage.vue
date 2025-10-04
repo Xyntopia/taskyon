@@ -520,7 +520,7 @@ Only use the updateDocument tool if you are confident about the changes to make.
       welcomeMsg:
         'Hi! I can help you edit documents. I can see the current content with line numbers and make precise line-based edits.',
     },
-    signatureOrKey: state.keys[state.llmSettings?.selectedApi || ''],
+    signatureOrKey: state.activeTaskyonToken,
   }
 
   void initializeTaskyon({ tools, configuration, name: 'codingpage', persist: true })

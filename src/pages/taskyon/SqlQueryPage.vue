@@ -480,7 +480,7 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
       chatSuggestions: [gettingStarted],
       welcomeMsg: 'Ask taskyon for help on querying your database!',
     },
-    signatureOrKey: state.keys[state.llmSettings?.selectedApi || ''],
+    signatureOrKey: state.activeTaskyonToken,
   }
   void initializeTaskyon({ tools, configuration, name: 'sqlqueries', persist: true })
 })
