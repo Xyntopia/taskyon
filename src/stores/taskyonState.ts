@@ -6,6 +6,7 @@ import {
   cryptoKeyToBase64,
   deriveKeyFromPwd,
   filter,
+  joinUrl,
   randomString,
   TaskNode,
   toolCall,
@@ -109,12 +110,6 @@ export function asyncProxy<T extends object>(initializer: () => Promise<T>): Asy
       },
     },
   ) as Asyncify<T>
-}
-
-function joinUrl(base: string, route: string): string {
-  // ensure base has trailing slash for correct relative resolution
-  if (!base.endsWith('/')) base += '/'
-  return new URL(route, base).toString()
 }
 
 async function updateLlmModels(

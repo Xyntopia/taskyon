@@ -32,7 +32,14 @@ import type {
   ToolBase,
   toolContext,
 } from '@taskyon/taskyon'
-import { charHash, createStream, createTool, FunctionCall, makeTaskResult } from '@taskyon/taskyon'
+import {
+  charHash,
+  createStream,
+  createTool,
+  FunctionCall,
+  joinUrl,
+  makeTaskResult,
+} from '@taskyon/taskyon'
 import type { AnySchema } from 'ajv'
 import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
@@ -152,7 +159,7 @@ async function llmRequest(
   const streamTask = true
   const request = await createOpenAIRequest(
     apiKey,
-    { ...api, selectedModel },
+    { ...api, selectedModel, endpoint: joinUrl(api.baseURL, api.routes.chatCompletion) },
     openAIConversationThread,
     schema,
     streamTask, // for now, we always want to stream our task...

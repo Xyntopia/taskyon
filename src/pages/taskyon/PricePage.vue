@@ -368,7 +368,7 @@ const columns: QTableProps['columns'] = [
     name: 'modality',
     label: 'Modality',
     align: 'center',
-    field: (row: Row) => row.architecture?.modality ?? 'N/A',
+    field: (row: Row) => row.architecture?.modality ?? row.pipeline_tag ?? 'N/A',
     sortable: true,
   },
   {

@@ -424,7 +424,7 @@ function createChunks(lines: string[]) {
 
 export async function createOpenAIRequest(
   apiKey: string,
-  config: { selectedModel: string; streamSupport: boolean; baseURL: string; name: string },
+  config: { selectedModel: string; streamSupport: boolean; endpoint: string; name: string },
   chatMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   schema: Record<string, unknown> | undefined,
   stream: boolean,
@@ -488,7 +488,7 @@ export async function createOpenAIRequest(
     return {
       headers,
       payload: tyPayload,
-      url: `${config.baseURL}/chat/completions`,
+      url: config.endpoint,
       // in case we have the openai api we need to wait for the thinking to finish
       // so we are giving it a lot more time... (almost 5 minutes..)
       // for openai we are not restricted to supabase edge servers, so
@@ -500,7 +500,7 @@ export async function createOpenAIRequest(
     return {
       headers,
       payload,
-      url: `${config.baseURL}/chat/completions`,
+      url: config.endpoint,
       // in case we have the openai api we need to wait for the thinking to finish
       // so we are giving it a lot more time... (almost 5 minutes..)
       // for openai we are not restricted to supabase edge servers, so
