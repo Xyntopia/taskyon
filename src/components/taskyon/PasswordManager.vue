@@ -12,8 +12,19 @@
 `"
     />
     <q-list dense separator>
+      <template v-if="loadingSecrets">
+        <q-item v-for="n in 5" :key="n">
+          <q-item-section style="width: 300px">
+            <q-skeleton type="rect" />
+          </q-item-section>
+          <div class="row">
+            <q-skeleton type="QBtn" />
+            <q-skeleton type="QBtn" />
+          </div>
+        </q-item>
+      </template>
       <div
-        v-if="onlyThisKey && Object.keys(secretList[onlyThisKey] || {}).length == 0"
+        v-else-if="onlyThisKey && Object.keys(secretList[onlyThisKey] || {}).length == 0"
         class="text-negative"
       >
         There are no keys listed under {{ onlyThisKey }} in our Secret Store!
@@ -42,12 +53,14 @@
             <q-btn
               v-if="copybtn"
               flat
+              dense
               :icon="matContentCopy"
               @click="copyToClipboard(secretList[secretId]![secretName])"
             />
-            <q-btn flat :icon="matSave" @click="saveSecret(secretId, secretName)" />
+            <q-btn flat dense :icon="matSave" @click="saveSecret(secretId, secretName)" />
             <q-btn
               flat
+              dense
               color="negative"
               :icon="matDeleteForever"
               @click="deleteSecrets(secretId, secretName)"
@@ -74,16 +87,16 @@
 </template>
 
 <script setup lang="ts">
-import { useTaskyonStore } from 'src/stores/taskyonState'
-import SecretInput from '../SecretInput.vue'
 import { matContentCopy, matDeleteForever, matSave } from '@quasar/extras/material-icons'
-import { onMounted, ref } from 'vue'
-import { asyncComputed } from 'src/modules/vueUtils'
-import { generateSecretId } from 'src/modules/taskyon/taskWorker'
-import InfoDialog from '../InfoDialog.vue'
-import { copyToClipboard } from 'src/modules/utils'
 import { mdiTools } from '@quasar/extras/mdi-v6'
-import { watch } from 'vue'
+import { Dialog } from 'quasar'
+import { generateSecretId } from 'src/modules/taskyon/taskWorker'
+import { copyToClipboard } from 'src/modules/utils'
+import { asyncComputed } from 'src/modules/vueUtils'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import { onMounted, ref, watch } from 'vue'
+import InfoDialog from '../InfoDialog.vue'
+import SecretInput from '../SecretInput.vue'
 
 const { onlyThisKey } = defineProps<{
   title?: string
@@ -93,9 +106,11 @@ const { onlyThisKey } = defineProps<{
 
 const tystate = useTaskyonStore()
 const secretList = ref<Record<string, Record<string, string>>>({})
+const loadingSecrets = ref<boolean>(false)
 
 // extract your loader into its own function
 async function loadSecrets() {
+  loadingSecrets.value = true
   const ty = await tystate.taskyon
   if (onlyThisKey) {
     console.log('load secrets!', toolMap.value)
@@ -116,22 +131,34 @@ async function loadSecrets() {
     )
     secretList.value = Object.fromEntries(entries)
   }
+  loadingSecrets.value = false
 }
 
 onMounted(loadSecrets)
 
-const deleteSecrets = async (secretId: string, secretName: string) => {
-  const ty = await tystate.taskyon
-  await ty.deleteSecret(secretId, secretName)
-  // force re-render
-  await loadSecrets()
-}
+const ensureUserOk = (message: string, action: () => void) =>
+  Dialog.create({ message, cancel: true, ok: true }).onOk(action)
 
-const deleteAllSecrets = async (secretId: string) => {
-  const ty = await tystate.taskyon
-  await ty.deleteAllFromId(secretId)
-  await loadSecrets()
-}
+const deleteSecrets = (secretId: string, secretName: string) =>
+  ensureUserOk(
+    `Are you sure, you want to delete this secret (${secretName})?`,
+    () =>
+      void tystate.taskyon.then(async (ty) => {
+        await ty.deleteSecret(secretId, secretName)
+        // force re-render
+        await loadSecrets()
+      }),
+  )
+
+const deleteAllSecrets = (secretId: string) =>
+  ensureUserOk(
+    `Are you sure, you want to delete all ${secretId} secrets?`,
+    () =>
+      void tystate.taskyon.then(async (ty) => {
+        await ty.deleteAllFromId(secretId)
+        await loadSecrets()
+      }),
+  )
 
 // only called on Enter or Save‑button
 const saveSecret = async (secretId: string, secretName: string) => {
