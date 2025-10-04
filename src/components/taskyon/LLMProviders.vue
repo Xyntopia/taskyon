@@ -157,21 +157,20 @@ insert into the settings below."
 
 <script setup lang="ts">
 import { matEdit } from '@quasar/extras/material-icons'
-import { useQuasar } from 'quasar'
 import tykeyobj from 'src/assets/taskyon_free_key.json'
+
+import { freeKeyName } from 'src/modules/tools/chatCompletionTool'
 import { useAppStateStore } from 'src/stores/appState'
+import { AiProvideKeyStoreName, useTaskyonStore } from 'src/stores/taskyonState'
 import InfoDialog from '../InfoDialog.vue'
 import JsonInput from '../JsonInput.vue'
 import TyMarkdown from '../tyMarkdown.vue'
 import ApiSelect from './ApiSelect.vue'
 import OpenRouterPKCE from './OpenRouterPKCE.vue'
 import PasswordManager from './PasswordManager.vue'
-import { AiProvideKeyStoreName, useTaskyonStore } from 'src/stores/taskyonState'
-import { freeKeyName } from 'src/modules/tools/chatCompletionTool'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
-const $q = useQuasar()
 
 const expertModeOn = defineModel<boolean>('expertModeOn', { default: false })
 
