@@ -186,7 +186,6 @@ import { AiProvideKeyStoreName, useTaskyonStore } from 'src/stores/taskyonState'
 import InfoDialog from '../InfoDialog.vue'
 import JsonInput from '../JsonInput.vue'
 import TyMarkdown from '../tyMarkdown.vue'
-import OpenRouterPKCE from './OpenRouterPKCE.vue'
 // TODO: separate user from supabase and only update the "user" from supabase...
 //       this way we can make this component independent from supabase.
 import { useQuasar } from 'quasar'
