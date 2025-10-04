@@ -31,7 +31,11 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
           https://taskyon.space API for testing purposes & development.
         </InfoDialog>
       </div>
-      <div class="q-pa">OR</div>
+      <div v-if="tystate.availableProviders" class="text-italic">or</div>
+      <div v-if="tystate.availableProviders" class="row items-center q-gutter-sm">
+        <div>Choose a configured API:</div>
+        <ApiSelect v-model="state.llmSettings.selectedApi" class="col-auto" />
+      </div>
     </div>
     <q-expansion-item class="transparent">
       <template #header>
@@ -192,6 +196,7 @@ import { useQuasar } from 'quasar'
 import { ref, useTemplateRef } from 'vue'
 import DialogButton from '../DialogButton.vue'
 import SecretInput from '../SecretInput.vue'
+import ApiSelect from './ApiSelect.vue'
 import PasswordManager from './PasswordManager.vue'
 
 const state = useAppStateStore()
