@@ -49,7 +49,7 @@
           :file-attachments="fileAttachments"
           :entry-node="tystate.entryNode"
           class="q-pa-md col self-stretch"
-          :min-mode="state.minimalGui !== 'default'"
+          :min-mode="state.minimalGui === 'iframe'"
           :expert-mode="state.appConfiguration.expertMode"
           add-to-taskyon
         />
@@ -71,7 +71,7 @@
         :file-attachments="fileAttachments"
         :entry-node="tystate.entryNode"
         class="col q-pa-xs create-new-task"
-        :min-mode="state.minimalGui !== 'default'"
+        :min-mode="state.minimalGui === 'iframe'"
         :expert-mode="state.appConfiguration.expertMode"
         style="max-width: 48rem"
         add-to-taskyon
