@@ -19,7 +19,6 @@
         @resize="scm.autoScroll"
       />
       -->
-
       <!-- "Task" Display (.tasks-container & .task-container) -->
       <TaskChainViewer
         v-if="tystate.selectedThread.value.length > 0 && tystate.currentTask.value"
@@ -182,6 +181,7 @@
       :info-text="infoText"
       @ok="resolveSecret"
     />
+    {{ tystate.entryNode }}
   </FadeAwayScrollPage>
 </template>
 

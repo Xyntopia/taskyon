@@ -84,7 +84,7 @@
     </div>
     <q-separator v-if="state.minimalGui === 'default'" spaced />
     <!-- Settings Area -->
-    <q-item v-if="state.appConfiguration.expertMode && state.minimalGui === 'default'" class="fit">
+    <q-item v-if="state.appConfiguration.expertMode" class="fit">
       <div class="row">
         <div>
           <q-btn

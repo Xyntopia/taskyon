@@ -785,23 +785,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // pre-initialize our python webworker, because its very slow to startup :)
   void usePyodideWebworker().preInit()
 
-  const entryNode = computed(() => {
-    if (apiKeyManagement.currentModelId.value) {
-      return (stateRefs.llmSettings.entryNode ?? stateRefs.llmSettings.enableToolChooser)
-        ? toolCall({
-            name: 'chooseTool',
-            arguments: {
-              llmTools: stateRefs.llmSettings.enableOpenAiTools,
-            },
-          })
-        : createChatCompletionTask({
-            model: apiKeyManagement.currentModelId.value,
-            goal: 'SimpleCompletion',
-          })
-    }
-    return undefined
-  })
-
   // this means previously, we have loaded a session with a binding key.
   // so we would like to wait a little bit, if we will get that same binding key...
   const taskyon = (async () => {
@@ -1128,6 +1111,24 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   }
 
   dynamicQuasarTheming(stateRefs)
+
+  const entryNode = computed(
+    () =>
+      stateRefs.llmSettings.entryNode ??
+      (stateRefs.llmSettings.enableToolChooser
+        ? toolCall({
+            name: 'chooseTool',
+            arguments: {
+              llmTools: stateRefs.llmSettings.enableOpenAiTools,
+            },
+          })
+        : apiKeyManagement.currentModelId.value
+          ? createChatCompletionTask({
+              model: apiKeyManagement.currentModelId.value,
+              goal: 'SimpleCompletion',
+            })
+          : undefined),
+  )
 
   const tyready = ref(false)
   void taskyon.then(() => {
