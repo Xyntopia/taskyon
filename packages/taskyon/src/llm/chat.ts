@@ -1,10 +1,10 @@
 import type OpenAI from 'openai'
-import { sleep } from 'openai/core.mjs'
 import type { Model } from 'openai/resources/models.mjs'
 import type { apiConfig, OpenAIMessage, OpenRouterGenerationInfo } from '../types/chatCompletion'
 import { ChatResponseType } from '../types/chatCompletion'
 import { asyncTimeLruCache } from '../utils/caching'
 import { charHash } from '../utils/crypto'
+import { sleep } from '../utils/asyncUtils'
 
 export function generateHeaders(Bearer: string, selectedApi: string, siteUrl?: string) {
   let headers: Record<string, string> = {
@@ -161,8 +161,10 @@ export function accumulateStep(
       }
       // entry.idx // I assume this is an old entry...we don't use it anymore..
       entry.id += tc.id || ''
-      entry.function.name += tc.function?.name || ''
-      entry.function.arguments += tc.function?.arguments || ''
+      if ('function' in entry) {
+        entry.function.name += tc.function?.name || ''
+        entry.function.arguments += tc.function?.arguments || ''
+      }
       toolCallsMap[index] = entry
     }
     if (Object.keys(toolCallsMap).length > 0) {
@@ -379,7 +381,7 @@ export async function callLLM(
   })
 }
 
-export type tyChatCompletion = OpenAI.ChatCompletionCreateParams & {
+type tyChatCompletion = OpenAI.ChatCompletionCreateParams & {
   reasoning?: {
     effort?: 'high' | 'medium' | 'low'
     max_tokens?: number
@@ -398,6 +400,12 @@ export type tyChatCompletion = OpenAI.ChatCompletionCreateParams & {
     sort?: 'price' | 'throughput'
     max_price?: Record<string, number>
   }
+  plugins?: {
+    id: 'web'
+    engine?: 'native' | 'exa' | undefined
+    max_results?: number // Defaults to 5
+    search_prompt?: string
+  }[]
 }
 
 function createChunks(lines: string[]) {
@@ -424,13 +432,19 @@ function createChunks(lines: string[]) {
   return newChunks
 }
 
-export async function createOpenAIRequest(
+export type WebSearchOptions = {
+  maxResults: number
+  searchContextSize: 'low' | 'high' | 'medium'
+}
+
+export async function createChatCompletionRequest(
   apiKey: string,
   config: { selectedModel: string; streamSupport: boolean; endpoint: string; name: string },
   chatMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   schema: Record<string, unknown> | undefined,
   stream: boolean,
   functions: OpenAI.Chat.Completions.ChatCompletionTool[],
+  webSearch?: WebSearchOptions,
   siteUrl?: string,
   maxSchemaIdLength: number = 9, // max length of the schema id (default is 9, because e.g. mistral has that limit)
 ) {
@@ -459,6 +473,7 @@ export async function createOpenAIRequest(
     //temperature: 0.0, // deprecated for gpt-5
     stream: stream && config.streamSupport,
     stream_options: { include_usage: true },
+    store: false,
     n: 1,
     ...(functions.length > 0 && { tools: functions, tool_choice: 'auto' }),
     // the following comes from openrouter
@@ -486,6 +501,26 @@ export async function createOpenAIRequest(
       // TODO: we need to make this generic. and on certain errors, avoid specific providers...
       // gives back "bad" results..
       ignore: ['GMICloud'],
+    }
+    if (webSearch?.maxResults) {
+      tyPayload.plugins = [
+        {
+          id: 'web',
+          engine: 'exa', // Optional: "native", "exa", or undefined
+          max_results: webSearch.maxResults, // Defaults to 5
+          /*docs from: https://openrouter.ai/docs/features/web-search
+          A web search was conducted on `date`. Incorporate the following web search results into your response.
+
+          IMPORTANT: Cite them using markdown links named using the domain of the source.
+          Example: [nytimes.com](https://nytimes.com/some-page).
+        */
+          //search_prompt: 'Some relevant web results:', // See default below
+        },
+      ]
+      tyPayload.web_search_options = {
+        search_context_size: webSearch.searchContextSize,
+        //TODO: user_location:
+      }
     }
     return {
       headers,

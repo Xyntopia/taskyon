@@ -7,11 +7,18 @@ export const OpenAIMessage = z.object({
   //finish_reason: z.enum(['length', 'function_call', 'tool_calls', 'stop', 'content_filter']),
   tool_calls: z
     .array(
-      z.object({
-        function: z.object({ arguments: z.string(), name: z.string() }),
-        type: z.literal('function'),
-        id: z.string(),
-      }),
+      z.union([
+        z.object({
+          function: z.object({ arguments: z.string(), name: z.string() }),
+          type: z.literal('function'),
+          id: z.string(),
+        }),
+        z.object({
+          id: z.string(),
+          type: z.string(), // e.g. "custom"
+          // custom tool calls may have extra fields like "name" or "parameters"
+        }),
+      ]),
     )
     .optional(),
   name: z.string().optional(),

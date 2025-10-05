@@ -4,15 +4,14 @@ import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
 import { isEmpty } from 'lodash'
 import type OpenAI from 'openai'
-import { sleep } from 'openai/core.mjs'
 import { z } from 'zod'
 import type { TyTaskManager } from '../core/taskManager'
 import { mapFunctionNames } from '../core/tools'
 import { isTaskyonKey } from '../core/tyCrypto'
-import type { ChatCompletionChunk } from '../llm/chat'
+import type { ChatCompletionChunk, WebSearchOptions } from '../llm/chat'
 import {
   callLLM,
-  createOpenAIRequest,
+  createChatCompletionRequest,
   generateHeaders,
   getOpenRouterGenerationInfo,
   getTaskyonCosts,
@@ -46,6 +45,7 @@ import {
 import type { Thunk } from '../utils/tsHelpers'
 import { useNlpWorker } from '../utils/webWorkerApi'
 import { safeYamlDump } from '../utils/yamlUtils'
+import { sleep } from '../utils/asyncUtils'
 
 function generateOpenAIToolDeclarations(
   allowedTools: string[],
@@ -148,15 +148,17 @@ async function llmRequest(
   streamTracker: (chunk: ChatCompletionChunk | undefined) => void,
   schema?: Record<string, unknown>,
   siteUrl?: string,
+  webSearch?: WebSearchOptions,
 ) {
   const streamTask = true
-  const request = await createOpenAIRequest(
+  const request = await createChatCompletionRequest(
     apiKey,
     { ...api, selectedModel, endpoint: joinUrl(api.baseURL, api.routes.chatCompletion) },
     openAIConversationThread,
     schema,
     streamTask, // for now, we always want to stream our task...
     tools,
+    webSearch,
     siteUrl,
   )
   const chatCompletion = await callLLM(
@@ -532,6 +534,8 @@ export function extractOpenAIFunctions(
     // we convert the object into our own FunctionCall and afterwards parse it, to make
     // sure it really worked...
     let fargs: FunctionArguments = {}
+    if (!('function' in toolCall))
+      throw new Error("toolCall doesn't contain a function", { cause: toolCall })
     try {
       fargs = JSON.parse(toolCall.function.arguments)
     } catch (error) {

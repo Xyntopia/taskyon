@@ -1,6 +1,5 @@
 import { produce } from 'immer'
 import { load } from 'js-yaml'
-import { sleep } from 'openai/core.mjs'
 import type { PartialDeep } from 'type-fest'
 import z from 'zod'
 import type { TaskNodeMeta } from '../types/chatCompletion'
@@ -8,7 +7,7 @@ import type { FileMapping, TaskNodeType, TaskTreeNode } from '../types/node'
 import { TaskNode, partialTaskDraft } from '../types/node'
 import type { InternalTool } from '../types/toolApi'
 import { ToolBase } from '../types/tools'
-import { lockMap } from '../utils/asyncUtils'
+import { lockMap, sleep } from '../utils/asyncUtils'
 import {
   createCombinedCrudWrapper,
   createMapCrudWrapper,

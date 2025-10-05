@@ -272,10 +272,13 @@ watch(
 )
 
 const currentFunctionStream = computed(() => {
-  if (props.currentTask)
-    return streamingTracker.value.get(props.currentTask.id)?.choices?.[0]?.message?.tool_calls?.[0]
-      ?.function
-  else return undefined
+  if (props.currentTask) {
+    const currentFunctionCall = streamingTracker.value.get(props.currentTask.id)?.choices?.[0]
+      ?.message?.tool_calls?.[0]
+    if (currentFunctionCall && 'function' in currentFunctionCall)
+      return currentFunctionCall.function
+  }
+  return undefined
 })
 
 interface taskTreeNodeType {
