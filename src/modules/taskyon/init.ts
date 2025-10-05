@@ -9,7 +9,7 @@ import {
   createMapCrudWrapper,
   createPgLiteCrudWrapper,
   withSecretStore,
-} from '../crudWrapper'
+} from '../../../packages/taskyon/src/utils/crudWrapper'
 import type { extractStreamType, IframeMultiPlexer, Port } from '@taskyon/taskyon'
 import {
   createDuplexChannel,

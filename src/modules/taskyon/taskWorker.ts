@@ -14,7 +14,7 @@ import {
   taskResult,
   type toolContext,
 } from '@taskyon/taskyon'
-import type { SecretStore } from '../crudWrapper'
+import type { SecretStore } from '../../../packages/taskyon/src/utils/crudWrapper'
 import { createAsyncQueue, humanizeError, serializeForJson } from '../utils'
 import { type TyTaskManager } from './taskManager'
 import type { TyTaskStreamData } from './types'

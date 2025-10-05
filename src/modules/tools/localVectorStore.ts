@@ -1,6 +1,6 @@
 import { createTool, sha256UrlSafeHash } from '@taskyon/taskyon'
 import type { JSONSchema7 } from 'json-schema'
-import { createVectorStore } from '../crudWrapper'
+import { createVectorStore } from '../../../packages/taskyon/src/utils/crudWrapper'
 import type { TyPGDB } from '../../../packages/taskyon/src/utils/pglite.api'
 
 // TODO: make it possible to add "unique" identifiers as labels, so that

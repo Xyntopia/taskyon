@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
 // import type { JSONSchema } from 'json-schema-to-ts'
 // import type { ToolBase } from '../taskyon/types'
-import { createVectorStore } from '../crudWrapper'
+import { createVectorStore } from '../../../packages/taskyon/src/utils/crudWrapper'
 import type { TyPGDB } from '../../../packages/taskyon/src/utils/pglite.api'
 import { getDatabase } from '../../../packages/taskyon/src/utils/pglite.api'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'

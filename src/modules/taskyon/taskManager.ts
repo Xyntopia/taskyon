@@ -26,7 +26,7 @@ import {
   createVectorStore,
   withImmutable,
   withLiveStreams,
-} from '../crudWrapper'
+} from '../../../packages/taskyon/src/utils/crudWrapper'
 
 /**
  *
