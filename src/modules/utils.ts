@@ -164,45 +164,6 @@ export function timeLruCache<ReturnType>(
   }
 }
 
-/**
- * Make anything JSON-serialisable.
- * – Preserves Error details (name, message, stack, cause, enumerables)
- * – Breaks cycles (→ "[Circular]")
- * – Stringifies BigInt / functions / symbols
- * – Returns a *plain* value, not a string.
- *
- * Drop-in replacement for the longer `serializeForJson`.
- */
-export function serializeForJson(value: unknown): unknown {
-  const seen = new WeakSet<object>()
-
-  const replacer = (_key: string, val: unknown): unknown => {
-    /* BigInt → string ---------------------------------------------------- */
-    if (typeof val === 'bigint') return val.toString()
-
-    /* Functions / symbols ---------------------------------------------- */
-    if (typeof val === 'function') return `[Function ${val.name || 'anonymous'}]`
-    if (typeof val === 'symbol') return val.toString()
-
-    /* Error objects ----------------------------------------------------- */
-    if (val instanceof Error) {
-      const { name, message, stack, cause, ...rest } = val
-      return { name, message, stack, cause, ...rest }
-    }
-
-    /* Circular refs ----------------------------------------------------- */
-    if (typeof val === 'object' && val !== null) {
-      if (seen.has(val)) return '[Circular]'
-      seen.add(val)
-    }
-
-    return val // leave everything else as-is
-  }
-
-  // stringify → parse to end up with plain JSON-safe data
-  return JSON.parse(JSON.stringify(value, replacer))
-}
-
 // TODO: add a small test to this :)
 // asyncLruCache.ts
 export function asyncLruCache(size: number, ignoreIndices: number[] = []) {
@@ -491,76 +452,6 @@ function mergeArrays(
   }
   return a
 }
-
-export function createAsyncQueue<T>() {
-  let queue: T[] = []
-  let resolveWaitingPop: ((value: T) => void) | undefined
-
-  function push(item: T) {
-    queue.push(item)
-    if (resolveWaitingPop) {
-      const shiftedItem = queue.shift()
-      if (shiftedItem !== undefined) {
-        resolveWaitingPop(shiftedItem)
-      }
-      resolveWaitingPop = undefined
-    }
-  }
-
-  function count() {
-    return queue.length
-  }
-
-  function pop(signal?: AbortSignal): Promise<T> {
-    // if there’s already an item, just return it immediately
-    const shiftedItem = queue.shift()
-    if (shiftedItem !== undefined) {
-      return Promise.resolve(shiftedItem)
-    }
-
-    // otherwise we wait, but allow aborting
-    return new Promise<T>((resolve, reject) => {
-      // if already aborted
-      if (signal?.aborted) {
-        return reject(new DOMException('Pop aborted', 'AbortError'))
-      }
-
-      // cleanup helper
-      const cleanup = () => {
-        // only clear if it’s still our resolver
-        if (resolveWaitingPop === onValue) {
-          resolveWaitingPop = undefined
-        }
-        signal?.removeEventListener('abort', onAbort)
-      }
-
-      const onValue = (value: T) => {
-        cleanup()
-        resolve(value)
-      }
-
-      const onAbort = () => {
-        cleanup()
-        console.log('aborting async queue pop')
-        reject(new DOMException('Pop aborted', 'AbortError'))
-      }
-
-      // install our resolver
-      resolveWaitingPop = onValue
-      // listen for abort
-      signal?.addEventListener('abort', onAbort, { once: true })
-    })
-  }
-
-  function clear() {
-    const oldQueue = queue
-    queue = []
-    return oldQueue
-  }
-
-  return { push, pop, count, clear }
-}
-export type AsyncQueue<T> = ReturnType<typeof createAsyncQueue<T>>
 
 export function createLruCache<K, V>(maxSize: number) {
   const map = new Map<K, V>()

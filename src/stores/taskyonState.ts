@@ -6,6 +6,7 @@ import type {
   Model,
   Port,
   TaskNodeMeta,
+  TyTaskStreamData,
 } from '@taskyon/taskyon'
 import {
   availableModels,
@@ -41,12 +42,11 @@ import {
 import type { Taskyon } from 'src/modules/taskyon/init'
 import { tyCore } from 'src/modules/taskyon/init'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
-import type { TyTaskStreamData } from 'src/modules/taskyon/types'
 import { getApiConfig, type TyProfile } from 'src/modules/taskyon/types'
-import { createChatCompletionTask } from '../../packages/taskyon/src/tools/chatCompletionTool'
 import { guiTools } from 'src/modules/tools/GuiTools'
 import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
+import { createChatCompletionTask } from '../../packages/taskyon/src/tools/chatCompletionTool'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
 

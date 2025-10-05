@@ -1,24 +1,33 @@
-import type {
-  partialTaskDraft,
-  RemoteFunctionPort,
-  TaskMessageStream,
-  TaskNode,
-} from '@taskyon/taskyon'
-import {
-  createMessagePortAdapter,
-  createStream,
-  filter,
-  handleFunctionExecution,
-  humanizeError,
-  sha256UrlSafeHash,
-  sleep,
-  taskResult,
-  type toolContext,
-} from '@taskyon/taskyon'
-import { type TyTaskManager } from '../../../packages/taskyon/src/core/taskManager'
-import type { SecretStore } from '../../../packages/taskyon/src/utils/crudWrapper'
-import { createAsyncQueue, serializeForJson } from '../utils'
-import type { TyTaskStreamData } from './types'
+import type { TaskNode, partialTaskDraft } from '../types/node'
+import type { toolContext } from '../types/toolApi'
+import { taskResult } from '../types/toolApi'
+import { createAsyncQueue, sleep } from '../utils/asyncUtils'
+import type { SecretStore } from '../utils/crudWrapper'
+import { sha256UrlSafeHash } from '../utils/crypto'
+import { humanizeError } from '../utils/error'
+import type { TaskMessageStream } from '../utils/frpBus'
+import { createMessagePortAdapter, createStream, filter } from '../utils/frpBus'
+import { serializeForJson } from '../utils/objHelpers'
+import { type TyTaskManager } from './taskManager'
+import type { RemoteFunctionPort } from './tools'
+import { handleFunctionExecution } from './tools'
+
+export interface TyTaskStreamData {
+  info?: string
+  task?: TaskNode | null | undefined
+  taskId?: string | null | undefined
+  // "all finished" means the task has been processes AND all its subtasks have been finished..
+  stage:
+    | 'in loop' // task is put it the loop in order to check if it has subtasks
+    | 'processing' // means, the task enters the loop of processing
+    | 'processed'
+    | 'error'
+    | 'waiting'
+    | 'subtasks'
+    | 'all finished'
+    | 'aborted'
+    | 'queued'
+}
 
 export async function generateSecretId(
   taskId: string | undefined,

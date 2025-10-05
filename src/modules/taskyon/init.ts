@@ -54,7 +54,7 @@ import { useFullSmallTools } from '../tools/usefulSmallTools'
 import { wfcGenerator } from '../tools/wavefunctioncollapse'
 import { appDevTools } from '../tools/webAppDev'
 import { TaskyonMessage } from './apiTypes'
-import { generateSecretId, runTaskWorker } from './taskWorker'
+import { generateSecretId, runTaskWorker } from '../../../packages/taskyon/src/core/taskWorker'
 
 function createApi(
   insidePort: Port<TaskyonMessage, TaskyonMessage>,

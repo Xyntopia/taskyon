@@ -294,3 +294,42 @@ export function isEmpty(obj: object): boolean {
 
   return true
 }
+
+/**
+ * Make anything JSON-serialisable.
+ * – Preserves Error details (name, message, stack, cause, enumerables)
+ * – Breaks cycles (→ "[Circular]")
+ * – Stringifies BigInt / functions / symbols
+ * – Returns a *plain* value, not a string.
+ *
+ * Drop-in replacement for the longer `serializeForJson`.
+ */
+export function serializeForJson(value: unknown): unknown {
+  const seen = new WeakSet<object>()
+
+  const replacer = (_key: string, val: unknown): unknown => {
+    /* BigInt → string ---------------------------------------------------- */
+    if (typeof val === 'bigint') return val.toString()
+
+    /* Functions / symbols ---------------------------------------------- */
+    if (typeof val === 'function') return `[Function ${val.name || 'anonymous'}]`
+    if (typeof val === 'symbol') return val.toString()
+
+    /* Error objects ----------------------------------------------------- */
+    if (val instanceof Error) {
+      const { name, message, stack, cause, ...rest } = val
+      return { name, message, stack, cause, ...rest }
+    }
+
+    /* Circular refs ----------------------------------------------------- */
+    if (typeof val === 'object' && val !== null) {
+      if (seen.has(val)) return '[Circular]'
+      seen.add(val)
+    }
+
+    return val // leave everything else as-is
+  }
+
+  // stringify → parse to end up with plain JSON-safe data
+  return JSON.parse(JSON.stringify(value, replacer))
+}

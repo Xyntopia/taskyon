@@ -1,6 +1,5 @@
 import { matKeyboardReturn } from '@quasar/extras/material-icons'
 import { mdiProfessionalHexagon } from '@quasar/extras/mdi-v6'
-import type { TaskNode } from '@taskyon/taskyon'
 import { llmSettings, partialTaskDraft, TyToolchainConfig } from '@taskyon/taskyon'
 import { z } from 'zod'
 
@@ -148,23 +147,6 @@ This could for example mean to provide different service providers or different 
 LLM models and other settings for tools.
 `)
 export type TyProfile = z.infer<typeof TyProfile>
-
-export interface TyTaskStreamData {
-  info?: string
-  task?: TaskNode | null | undefined
-  taskId?: string | null | undefined
-  // "all finished" means the task has been processes AND all its subtasks have been finished..
-  stage:
-    | 'in loop' // task is put it the loop in order to check if it has subtasks
-    | 'processing' // means, the task enters the loop of processing
-    | 'processed'
-    | 'error'
-    | 'waiting'
-    | 'subtasks'
-    | 'all finished'
-    | 'aborted'
-    | 'queued'
-}
 
 export const OAuthCredentials = z.object({
   type: z.enum(['oauth-credentials']),
