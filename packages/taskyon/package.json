@@ -7,6 +7,12 @@
   "exports": {
     ".": {
       "import": "./src/index.ts"
+    },
+    "./tools": {
+      "import": "./src/tools/index.ts"
+    },
+    "./tools/*": {
+      "import": "./src/tools/*.ts"
     }
   },
   "scripts": {

@@ -1,7 +1,6 @@
 // sync.ts
-import { createDuplexChannel, createPortApi } from '@taskyon/taskyon'
+import { createDuplexChannel, createPortApi, TyP2P } from '@taskyon/taskyon'
 import { useGdrive } from '../gdrive'
-import { TyP2P } from './apiTypes'
 
 // TODO: generalize this to all kinds of cloud storages / peers
 // TODO: add some kind of way how to identify gdrive and other things as "clients" in the system

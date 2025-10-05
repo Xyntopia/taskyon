@@ -1,8 +1,8 @@
 // we can compile this file to js to js using "yarn build:lib"
 
-import type { ClientTool } from '@taskyon/taskyon'
+import type { ClientTool, TaskyonMessage } from '@taskyon/taskyon'
+import type { partialTyConfiguration, TaskyonGuiMessage } from 'src/modules/taskyon/apiTypes'
 export { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
-import type { partialTyConfiguration, TaskyonMessage } from 'src/modules/taskyon/apiTypes'
 
 function safeClone<T>(data: T): T {
   try {
@@ -124,7 +124,7 @@ export async function initializeTaskyon(options: {
   if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
     console.log('make sure, we can ')
     const tyApi = await waitForApiChannel(taskyon)
-    const send = (msg: TaskyonMessage) => {
+    const send = (msg: TaskyonGuiMessage) => {
       console.log('tyclient sending', msg)
       tyApi.postMessage(safeClone(msg))
     }

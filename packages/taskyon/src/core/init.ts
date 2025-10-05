@@ -11,30 +11,12 @@ import type {
 import { createCryptoSession, ToolBase } from '@taskyon/taskyon'
 import { dump } from 'js-yaml'
 import z from 'zod'
-import type { TyTaskManager } from '../../../packages/taskyon/src/core/taskManager'
-import { useTyTaskManager } from '../../../packages/taskyon/src/core/taskManager'
-import {
-  createCombinedCrudWrapper,
-  createMapCrudWrapper,
-  createPgLiteCrudWrapper,
-  withSecretStore,
-} from '../../../packages/taskyon/src/utils/crudWrapper'
-import { encryptCompressObject } from '../../../packages/taskyon/src/utils/fileUtils'
-import {
-  createDuplexChannel,
-  createIframeMux,
-  createPortApi,
-  createStream,
-  createTypeFilteredPort,
-} from '../../../packages/taskyon/src/utils/frpBus'
-import { createProxyApi, createProxyFunction } from '../../../packages/taskyon/src/utils/objHelpers'
-import { getDatabase } from '../../../packages/taskyon/src/utils/pglite.api'
 import { createOAuthTool } from '../tools/authTools'
 import {
   chatCompletionToolName,
   createChatCompletionTask,
   createChatCompletionTool,
-} from '../../../packages/taskyon/src/tools/chatCompletionTool'
+} from '../tools/chatCompletionTool'
 import { devTools } from '../tools/devTools'
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
@@ -53,8 +35,26 @@ import {
 import { useFullSmallTools } from '../tools/usefulSmallTools'
 import { wfcGenerator } from '../tools/wavefunctioncollapse'
 import { appDevTools } from '../tools/webAppDev'
-import { TaskyonMessage } from './apiTypes'
-import { generateSecretId, runTaskWorker } from '../../../packages/taskyon/src/core/taskWorker'
+import { TaskyonMessage } from '../types/apiTypes'
+import {
+  createCombinedCrudWrapper,
+  createMapCrudWrapper,
+  createPgLiteCrudWrapper,
+  withSecretStore,
+} from '../utils/crudWrapper'
+import { encryptCompressObject } from '../utils/fileUtils'
+import {
+  createDuplexChannel,
+  createIframeMux,
+  createPortApi,
+  createStream,
+  createTypeFilteredPort,
+} from '../utils/frpBus'
+import { createProxyApi, createProxyFunction } from '../utils/objHelpers'
+import { getDatabase } from '../utils/pglite.api'
+import type { TyTaskManager } from './taskManager'
+import { useTyTaskManager } from './taskManager'
+import { generateSecretId, runTaskWorker } from './taskWorker'
 
 function createApi(
   insidePort: Port<TaskyonMessage, TaskyonMessage>,

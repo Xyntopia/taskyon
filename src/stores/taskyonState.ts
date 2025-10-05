@@ -24,6 +24,7 @@ import {
   llmSettings,
   randomString,
   TaskNode,
+  TaskyonMessage,
   toolCall,
   usePyodideWebworker,
 } from '@taskyon/taskyon'
@@ -35,17 +36,17 @@ import { useGdrive } from 'src/modules/gdrive'
 import { setPrismTheme } from 'src/modules/markdownUtils '
 import type { AuthenticationOptions, TokenGetter } from 'src/modules/oauth'
 import { OAUTH_PROVIDERS, usePersistentOauth } from 'src/modules/oauth'
-import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
+import { TaskyonGuiMessage } from 'src/modules/taskyon/apiTypes'
 import {
   initCryptoSessionFromBrowser,
   persistSession,
 } from 'src/modules/taskyon/browserCryptoSession'
-import type { Taskyon } from 'src/modules/taskyon/init'
-import { tyCore } from 'src/modules/taskyon/init'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
 import { getApiConfig, type TyProfile } from 'src/modules/taskyon/types'
 import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
+import type { Taskyon } from '../../packages/taskyon/src/core/init'
+import { tyCore } from '../../packages/taskyon/src/core/init'
 import { guiTools } from '../modules/taskyon/GuiTools'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
@@ -274,7 +275,7 @@ You can select them in the "Chat Settings" section in the message input window.
 
 function connectGdriveSync(
   directory: string,
-  tyPort: Port<TaskyonMessage, TaskyonMessage>,
+  tyPort: Port<TaskyonGuiMessage, TaskyonGuiMessage>,
   getGdriveToken: () => Promise<string>,
 ) {
   const gdriveErrors = ref<unknown[]>([])
@@ -820,7 +821,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // For example the iframe is connected to iApiOutside because
   // it lives outside the taskyon logic. iApiInside is used by our internal
   // services e.g. the engine to communicate to the outside.
-  const { x: uiApiOutside, y: uiApiInside } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()
+  const { x: uiApiOutside, y: uiApiInside } = createDuplexChannel<
+    TaskyonGuiMessage,
+    TaskyonGuiMessage
+  >()
 
   void taskyon.then(async (ty) => {
     //const taskStream = tyInit.taskManagerInstance.taskStream
@@ -832,7 +836,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     //       and also change the types of inside/outside ports...
     createPortApi(
       uiApiInside,
-      TaskyonMessage,
+      TaskyonGuiMessage,
       {
         configurationMessage: async (msg) => {
           const newConfig = msg.conf
