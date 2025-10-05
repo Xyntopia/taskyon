@@ -87,3 +87,28 @@ export function saveEncryptedDataRow(encData: EncryptedDataRow, filename: string
   const file = new File([blob], filename + '.enc.json')
   return file
 }
+
+export async function fileToBase64(file: File): Promise<string> {
+  console.log('convert file to base 64', file)
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        // TODO: it used to be like this and work:  no idea, why this is suddenly not alowd anymore, with
+        // this error:
+        //   840:28  error  'reader.result' may use Object's default stringification format ('[object Object]') when stringified  @typescript-eslint/no-base-to-string
+        //const base64String = reader.result?.toString().split(',')[1]
+        const base64String = reader.result.split(',')[1]
+        if (base64String) {
+          resolve(base64String)
+        } else {
+          reject(new Error('Failed to convert file to base64'))
+        }
+      }
+    }
+    reader.onerror = () => {
+      reject(new Error('FileReader error'))
+    }
+  })
+}

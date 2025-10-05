@@ -195,3 +195,102 @@ export function deepCopy<T>(item: T): T {
   // If item is of a type not handled above, return it as is
   return item
 }
+
+export const createDeepTransformer = ({
+  // Default keyFn gets the original key (string|number|symbol) and its current value
+  keyFn = (k) => k,
+  // Default valueFn can replace any node; non-objects stop recursion
+  valueFn = (v) => v,
+}: {
+  keyFn?: (key: string | number | symbol, val: unknown) => string | number | symbol
+  valueFn?: <T>(val: T) => unknown
+} = {}) => {
+  const transform = (node: unknown): unknown => {
+    // 1) allow valueFn to replace entire node
+    const v1 = valueFn(node)
+
+    // 2) stop if primitive / null
+    if (v1 == null || typeof v1 !== 'object') return v1
+
+    // 3a) arrays
+    if (Array.isArray(v1)) {
+      return v1.map(transform)
+    }
+    // 3b) maps
+    if (v1 instanceof Map) {
+      const m = new Map()
+      v1.forEach((val, key) => {
+        const nk = keyFn(key, val)
+        m.set(nk, transform(val))
+      })
+      return m
+    }
+    // 3c) sets
+    if (v1 instanceof Set) {
+      return new Set(Array.from(v1).map(transform))
+    }
+    // 3d) plain objects
+    const out: Record<string | number | symbol, unknown> = {}
+    for (const [rawKey, val] of Object.entries(v1 as Record<string, unknown>)) {
+      const nk = keyFn(rawKey, val)
+      out[nk] = transform(val)
+    }
+    return out
+  }
+
+  return transform
+}
+
+// Define the set of "falsy" values
+const falsyValues: Set<unknown> = new Set([
+  'no',
+  'n/a',
+  'na',
+  'nan',
+  'n',
+  'false',
+  false,
+  '0',
+  0,
+  '{}',
+  {},
+  'null',
+  null,
+  'undefined',
+  undefined,
+  'disabled',
+])
+
+// this function "normalizes" boolean-like input this makes our llm structured
+// response parsing more robust.
+// TODO: can we use zods "stringbool" for this? https://v4.zod.dev/api#stringbool
+export const normalizeFalsyValues = (normalizer: unknown = false): ((node: unknown) => unknown) =>
+  createDeepTransformer({
+    valueFn: (value) => {
+      if (typeof value === 'string') {
+        const lowerCaseValue = value.toLowerCase()
+        if (falsyValues.has(lowerCaseValue)) {
+          return normalizer // Normalize falsy values to "undefined"
+        }
+      } else if (typeof value === 'boolean') {
+        return value ? value : normalizer // Convert boolean false to "undefined"
+      } else if (falsyValues.has(value)) {
+        return normalizer // Convert null, undefined, or falsy values
+      }
+      return value // Return unchanged if no conversion needed
+    },
+  })
+
+export function pickProperties(obj: object, keys: string[]) {
+  return Object.fromEntries(Object.entries(obj).filter(([key]) => keys.includes(key)))
+}
+
+export function isEmpty(obj: object): boolean {
+  for (const prop in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, prop)) {
+      return false
+    }
+  }
+
+  return true
+}

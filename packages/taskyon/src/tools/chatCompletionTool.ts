@@ -1,57 +1,51 @@
+import type { AnySchema } from 'ajv'
 import { load } from 'js-yaml'
+import type { JSONSchema7 } from 'json-schema'
+import type { FromSchema } from 'json-schema-to-ts'
+import { isEmpty } from 'lodash'
 import type OpenAI from 'openai'
-import type { TyTaskManager } from '../../../packages/taskyon/src/core/taskManager'
-import type { ChatCompletionChunk } from '../../../packages/taskyon/src/llm/chat'
+import { sleep } from 'openai/core.mjs'
+import { z } from 'zod'
+import type { TyTaskManager } from '../core/taskManager'
+import { mapFunctionNames } from '../core/tools'
+import { isTaskyonKey } from '../core/tyCrypto'
+import type { ChatCompletionChunk } from '../llm/chat'
 import {
   callLLM,
   createOpenAIRequest,
   generateHeaders,
   getOpenRouterGenerationInfo,
   getTaskyonCosts,
-} from '../../../packages/taskyon/src/llm/chat'
-import type { Goals } from '../../../packages/taskyon/src/llm/promptCreation'
-import { addPrompts } from '../../../packages/taskyon/src/llm/promptCreation'
-import { isTaskyonKey } from '../../../packages/taskyon/src/core/tyCrypto'
-import { useNlpWorker } from '../../../packages/taskyon/src/utils/webWorkerApi'
-import {
-  createDeepTransformer,
-  fileToBase64,
-  humanizeError,
-  isEmpty,
-  normalizeFalsyValues,
-  pickProperties,
-} from '../utils'
-//import type { JSONSchema7Type as JsonSchema } from 'json-schema'
+} from '../llm/chat'
+import type { Goals } from '../llm/promptCreation'
+import { addPrompts } from '../llm/promptCreation'
 import type {
   apiConfig,
   ChatResponseType,
-  FileMapping,
-  FunctionArguments,
   OpenRouterGenerationInfo,
-  partialTaskDraft,
-  TaskNode,
   TaskNodeMeta,
-  Thunk,
-  ToolBase,
-  toolContext,
-} from '@taskyon/taskyon'
+} from '../types/chatCompletion'
+import { getCurrentModel } from '../types/chatCompletion'
+import type { FileMapping, partialTaskDraft, TaskNode } from '../types/node'
+import type { llmSettings } from '../types/profiles'
+import type { toolContext } from '../types/toolApi'
+import { createTool, makeTaskResult } from '../types/toolApi'
+import type { FunctionArguments, ToolBase } from '../types/tools'
+import { FunctionCall } from '../types/tools'
+import { charHash } from '../utils/crypto'
+import { humanizeError } from '../utils/error'
+import { fileToBase64 } from '../utils/fileUtils'
+import { createStream } from '../utils/frpBus'
+import { joinUrl } from '../utils/httpUtils'
 import {
-  charHash,
-  createStream,
-  createTool,
+  createDeepTransformer,
   deepCopy,
-  FunctionCall,
-  joinUrl,
-  makeTaskResult,
-  mapFunctionNames,
-  safeYamlDump,
-  sleep,
-} from '@taskyon/taskyon'
-import type { AnySchema } from 'ajv'
-import type { JSONSchema7 } from 'json-schema'
-import type { FromSchema } from 'json-schema-to-ts'
-import { z } from 'zod'
-import { getCurrentModel, type llmSettings } from '../taskyon/types'
+  normalizeFalsyValues,
+  pickProperties,
+} from '../utils/objHelpers'
+import type { Thunk } from '../utils/tsHelpers'
+import { useNlpWorker } from '../utils/webWorkerApi'
+import { safeYamlDump } from '../utils/yamlUtils'
 
 function generateOpenAIToolDeclarations(
   allowedTools: string[],
@@ -694,7 +688,6 @@ async function convertFilesToOpenAIImageContent(
 }
 
 export const chatCompletionToolName = 'chatCompletion'
-export const freeKeyName = 'taskyon'
 
 export async function createChatCompletionTool(
   llmSettings: Thunk<llmSettings>,

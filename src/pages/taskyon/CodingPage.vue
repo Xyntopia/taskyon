@@ -97,21 +97,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { copyToClipboard, Notify } from 'quasar'
-import { matNavigateBefore, matNavigateNext, matContentCopy } from '@quasar/extras/material-icons'
-import CodeEditor from 'src/components/CodeEditor.vue'
-
-// Taskyon imports
-import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
-import type { JSONSchema7 } from 'json-schema'
-import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
-import { initializeTaskyon } from '../../../packages/tyclient/src'
-import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
-import { useAppStateStore } from 'src/stores/appState'
-import { watchThrottled } from '@vueuse/core'
+import { matContentCopy, matNavigateBefore, matNavigateNext } from '@quasar/extras/material-icons'
 import { mdiNewBox, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
-import { removeKeys } from '../../../packages/taskyon/src/utils/objHelpers'
+import {
+  createChatCompletionTask,
+  createTool,
+  makeTaskResult,
+  removeKeys,
+  toolCall,
+} from '@taskyon/taskyon'
+import { watchThrottled } from '@vueuse/core'
+import type { JSONSchema7 } from 'json-schema'
+import { copyToClipboard, Notify } from 'quasar'
+import CodeEditor from 'src/components/CodeEditor.vue'
+import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
+import { useAppStateStore } from 'src/stores/appState'
+import { computed, onMounted, ref } from 'vue'
+import { initializeTaskyon } from '../../../packages/tyclient/src'
 
 const state = useAppStateStore()
 

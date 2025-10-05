@@ -192,7 +192,6 @@ insert into the settings below."
 <script setup lang="ts">
 import { matEdit } from '@quasar/extras/material-icons'
 import { freeKey } from 'src/assets/taskyon_free_key.json'
-import { freeKeyName } from 'src/modules/tools/chatCompletionTool'
 import { useAppStateStore } from 'src/stores/appState'
 import { AiProvideKeyStoreName, useTaskyonStore } from 'src/stores/taskyonState'
 import InfoDialog from '../InfoDialog.vue'
@@ -216,7 +215,7 @@ const expertModeOn = defineModel<boolean>('expertModeOn', { default: false })
 
 async function initFreeMode() {
   state.llmSettings.selectedApi = 'taskyon'
-  await tystate.setProviderApiKey(freeKeyName, freeKey)
+  await tystate.setProviderApiKey('taskyon', freeKey)
 }
 
 const currentNewPassword = ref<string>()

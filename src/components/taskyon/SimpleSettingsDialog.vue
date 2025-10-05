@@ -21,12 +21,13 @@
 
 <script setup lang="ts">
 import { matMoreHoriz } from '@quasar/extras/material-icons'
-import { appConfiguration, llmSettings } from 'src/modules/taskyon/types'
+import { appConfiguration } from 'src/modules/taskyon/types'
 import { buildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { computed } from 'vue'
 import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
 import ObjectTreeView from '../ObjectTreeView.vue'
+import { llmSettings } from '@taskyon/taskyon'
 
 const state = useAppStateStore()
 

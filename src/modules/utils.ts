@@ -1,6 +1,5 @@
 //import equal from 'fast-deep-equal/es6';
 import type { AnyFunction, CacheEntry } from '@taskyon/taskyon'
-import { safeYamlDump } from '@taskyon/taskyon'
 
 export function copyToClipboard(text: string | undefined) {
   if (text)
@@ -12,113 +11,6 @@ export function copyToClipboard(text: string | undefined) {
       .catch((err) => {
         console.error('Error in copying text: ', err)
       })
-}
-
-/**
- * Convert any thrown value into a short, customer-friendly string.
- *
- * Priority: message → HTTP hints → meta fields → one-level cause.
- * Handles Array-style causes (e.g. ["403 Forbidden: …"]) by promoting
- * them to the top of the output.
- * Designed for production UI logs (no stack traces, YAML only).
- */
-export function humanizeError(errorInput: unknown): string {
-  const seenObjects = new WeakSet<object>()
-  const lines: string[] = []
-
-  /* ---------- helpers --------------------------------------------------- */
-  const toYaml = (val: unknown): string =>
-    typeof val === 'string' ? val : safeYamlDump(val).trim()
-
-  const append = (line: unknown): void => {
-    if (typeof line === 'string' && line.trim() && !lines.includes(line.trim())) {
-      lines.push(line.trim())
-    }
-  }
-
-  const appendArray = (arr: unknown[]): void => {
-    for (const element of arr) append(element)
-  }
-
-  /* ---------- main walker ----------------------------------------------- */
-  const traverse = (value: unknown, level = 0): void => {
-    if (value == null) return
-
-    const valueType = typeof value
-
-    // primitives (string | number | boolean | bigint | symbol)
-    if (valueType !== 'object' && valueType !== 'function') {
-      append(toYaml(value))
-      return
-    }
-
-    // avoid infinite recursion
-    if (seenObjects.has(value as object)) return
-    seenObjects.add(value as object)
-
-    // arrays: treat each entry as its own message
-    if (Array.isArray(value)) {
-      appendArray(value)
-      return
-    }
-
-    const obj = value as Record<string, unknown>
-
-    /* #1 message fields */
-    const message =
-      typeof obj.message === 'string'
-        ? obj.message
-        : typeof obj.msg === 'string'
-          ? obj.msg
-          : undefined
-    if (message) append(message)
-
-    /* #2 HTTP hints */
-    if (typeof obj.status === 'number') {
-      const statusText =
-        typeof obj.statusText === 'string' && obj.statusText ? ` ${obj.statusText}` : ''
-      append(`${obj.status}${statusText}`)
-    }
-    if (typeof obj.url === 'string' && obj.url) append(`URL: ${obj.url}`)
-
-    /* #3 data/body helpers */
-    const dataCandidate =
-      (typeof obj.response === 'object' && obj.response
-        ? (obj.response as Record<string, unknown>).data
-        : undefined) ??
-      obj.data ??
-      (obj as { body?: unknown }).body ??
-      (obj as { responseBody?: unknown }).responseBody
-    if (dataCandidate !== undefined)
-      append(`Data: ${toYaml(dataCandidate)}`)
-
-      /* #4 meta fields */
-    ;(['code', 'errno', 'name'] as const).forEach((key) => {
-      const val = obj[key]
-      if (typeof val === 'string' && val) append(`${key}=${val}`)
-    })
-
-    /* #5 cause (descend one level) */
-    if (level === 0) {
-      const causeKeys = ['cause', 'originalError', 'inner', 'error'] as const
-      for (const key of causeKeys) {
-        const causeVal = obj[key]
-        if (causeVal === undefined) continue
-
-        // Promote array causes so they’re shown first
-        if (Array.isArray(causeVal)) {
-          appendArray(causeVal)
-        } else {
-          append('Caused by →')
-          traverse(causeVal, level + 1)
-        }
-        break // handle only the first found cause
-      }
-    }
-  }
-
-  traverse(errorInput)
-  return lines.join('\n')
 }
 
 export async function copyPngToClipboard(png: Uint8Array) {
@@ -726,95 +618,6 @@ export function createLruCache<K, V>(maxSize: number) {
 // Define the LRU cache type
 export type LruCache<K, V> = ReturnType<typeof createLruCache<K, V>>
 
-export const createDeepTransformer = ({
-  // Default keyFn gets the original key (string|number|symbol) and its current value
-  keyFn = (k) => k,
-  // Default valueFn can replace any node; non-objects stop recursion
-  valueFn = (v) => v,
-}: {
-  keyFn?: (key: string | number | symbol, val: unknown) => string | number | symbol
-  valueFn?: <T>(val: T) => unknown
-} = {}) => {
-  const transform = (node: unknown): unknown => {
-    // 1) allow valueFn to replace entire node
-    const v1 = valueFn(node)
-
-    // 2) stop if primitive / null
-    if (v1 == null || typeof v1 !== 'object') return v1
-
-    // 3a) arrays
-    if (Array.isArray(v1)) {
-      return v1.map(transform)
-    }
-    // 3b) maps
-    if (v1 instanceof Map) {
-      const m = new Map()
-      v1.forEach((val, key) => {
-        const nk = keyFn(key, val)
-        m.set(nk, transform(val))
-      })
-      return m
-    }
-    // 3c) sets
-    if (v1 instanceof Set) {
-      return new Set(Array.from(v1).map(transform))
-    }
-    // 3d) plain objects
-    const out: Record<string | number | symbol, unknown> = {}
-    for (const [rawKey, val] of Object.entries(v1 as Record<string, unknown>)) {
-      const nk = keyFn(rawKey, val)
-      out[nk] = transform(val)
-    }
-    return out
-  }
-
-  return transform
-}
-
-// Define the set of "falsy" values
-const falsyValues: Set<unknown> = new Set([
-  'no',
-  'n/a',
-  'na',
-  'nan',
-  'n',
-  'false',
-  false,
-  '0',
-  0,
-  '{}',
-  {},
-  'null',
-  null,
-  'undefined',
-  undefined,
-  'disabled',
-])
-
-// this function "normalizes" boolean-like input this makes our llm structured
-// response parsing more robust.
-// TODO: can we use zods "stringbool" for this? https://v4.zod.dev/api#stringbool
-export const normalizeFalsyValues = (normalizer: unknown = false): ((node: unknown) => unknown) =>
-  createDeepTransformer({
-    valueFn: (value) => {
-      if (typeof value === 'string') {
-        const lowerCaseValue = value.toLowerCase()
-        if (falsyValues.has(lowerCaseValue)) {
-          return normalizer // Normalize falsy values to "undefined"
-        }
-      } else if (typeof value === 'boolean') {
-        return value ? value : normalizer // Convert boolean false to "undefined"
-      } else if (falsyValues.has(value)) {
-        return normalizer // Convert null, undefined, or falsy values
-      }
-      return value // Return unchanged if no conversion needed
-    },
-  })
-
-export function pickProperties(obj: object, keys: string[]) {
-  return Object.fromEntries(Object.entries(obj).filter(([key]) => keys.includes(key)))
-}
-
 export function makeSerializable(value: unknown, depth = 5): unknown {
   if (depth <= 0) {
     return '[Max Depth Reached]' // Return a placeholder when the max depth is reached
@@ -904,41 +707,6 @@ export function clearCookies() {
     const name = cookie.split('=')[0]!.trim()
     document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`
   })
-}
-
-export async function fileToBase64(file: File): Promise<string> {
-  console.log('convert file to base 64', file)
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
-        // TODO: it used to be like this and work:  no idea, why this is suddenly not alowd anymore, with
-        // this error:
-        //   840:28  error  'reader.result' may use Object's default stringification format ('[object Object]') when stringified  @typescript-eslint/no-base-to-string
-        //const base64String = reader.result?.toString().split(',')[1]
-        const base64String = reader.result.split(',')[1]
-        if (base64String) {
-          resolve(base64String)
-        } else {
-          reject(new Error('Failed to convert file to base64'))
-        }
-      }
-    }
-    reader.onerror = () => {
-      reject(new Error('FileReader error'))
-    }
-  })
-}
-
-export function isEmpty(obj: object): boolean {
-  for (const prop in obj) {
-    if (Object.prototype.hasOwnProperty.call(obj, prop)) {
-      return false
-    }
-  }
-
-  return true
 }
 
 export const getEnvironmentInfo = () => {

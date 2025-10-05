@@ -98,13 +98,12 @@ import {
 } from 'src/modules/taskyon/tests'
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
-import { convertTaskNodesToOpenAIChat } from 'src/modules/tools/chatCompletionTool'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import { onMounted } from 'vue'
 import { testCreateDeepTansformer } from 'src/modules/taskyon/tests'
 import { testGdriveUpload } from 'src/modules/taskyon/tests'
 import { testBuildSlimView } from 'src/modules/vueUtils'
-import { randomString } from '@taskyon/taskyon'
+import { convertTaskNodesToOpenAIChat, randomString } from '@taskyon/taskyon'
 import { getCurrentProfileName, getStoredStateString } from 'src/modules/ui/initialState'
 
 const tystate = useTaskyonStore()

@@ -285,3 +285,7 @@ export const apiConfig = z
     description: 'Definition of an OpenAI Compatible API.',
   })
 export type apiConfig = z.infer<typeof apiConfig>
+
+export function getCurrentModel(api: apiConfig) {
+  return api.selectedModel || api.defaultModel || api.models?.free || 'No model selected!'
+}

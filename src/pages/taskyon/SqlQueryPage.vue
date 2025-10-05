@@ -89,22 +89,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watchEffect, markRaw } from 'vue'
-import type { TyPGDB } from '../../../packages/taskyon/src/utils/pglite.api'
-import { getDatabase } from '../../../packages/taskyon/src/utils/pglite.api'
-import { asyncComputed } from 'src/modules/vueUtils'
-
-// Taskyon
-import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
-import { dump } from 'js-yaml'
-import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
-import type { JSONSchema7 } from 'json-schema'
-
-import { copyToClipboard, Notify } from 'quasar'
 import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
-import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
-import { initializeTaskyon } from '../../../packages/tyclient/src'
+import type { TyPGDB } from '@taskyon/taskyon'
+import {
+  createChatCompletionTask,
+  createTool,
+  getDatabase,
+  makeTaskResult,
+  toolCall,
+} from '@taskyon/taskyon'
+import { dump } from 'js-yaml'
+import type { JSONSchema7 } from 'json-schema'
+import { copyToClipboard, Notify } from 'quasar'
+import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
+import { asyncComputed } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
+import { computed, markRaw, onMounted, ref, watchEffect } from 'vue'
+import { initializeTaskyon } from '../../../packages/tyclient/src'
 
 const taskyonUrl = window.location.origin
 const state = useAppStateStore()

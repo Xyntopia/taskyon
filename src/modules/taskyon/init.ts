@@ -1,16 +1,25 @@
-import type { CryptoSession, EncryptedDataRow, InternalTool, Thunk } from '@taskyon/taskyon'
+import type {
+  CryptoSession,
+  EncryptedDataRow,
+  extractStreamType,
+  IframeMultiPlexer,
+  InternalTool,
+  llmSettings,
+  Port,
+  Thunk,
+} from '@taskyon/taskyon'
 import { createCryptoSession, ToolBase } from '@taskyon/taskyon'
 import { dump } from 'js-yaml'
 import z from 'zod'
-import { encryptCompressObject } from '../../../packages/taskyon/src/utils/fileUtils'
-import { createProxyApi, createProxyFunction } from '../../../packages/taskyon/src/utils/objHelpers'
+import type { TyTaskManager } from '../../../packages/taskyon/src/core/taskManager'
+import { useTyTaskManager } from '../../../packages/taskyon/src/core/taskManager'
 import {
   createCombinedCrudWrapper,
   createMapCrudWrapper,
   createPgLiteCrudWrapper,
   withSecretStore,
 } from '../../../packages/taskyon/src/utils/crudWrapper'
-import type { extractStreamType, IframeMultiPlexer, Port } from '@taskyon/taskyon'
+import { encryptCompressObject } from '../../../packages/taskyon/src/utils/fileUtils'
 import {
   createDuplexChannel,
   createIframeMux,
@@ -18,13 +27,14 @@ import {
   createStream,
   createTypeFilteredPort,
 } from '../../../packages/taskyon/src/utils/frpBus'
+import { createProxyApi, createProxyFunction } from '../../../packages/taskyon/src/utils/objHelpers'
 import { getDatabase } from '../../../packages/taskyon/src/utils/pglite.api'
 import { createOAuthTool } from '../tools/authTools'
 import {
   chatCompletionToolName,
   createChatCompletionTask,
   createChatCompletionTool,
-} from '../tools/chatCompletionTool'
+} from '../../../packages/taskyon/src/tools/chatCompletionTool'
 import { devTools } from '../tools/devTools'
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
@@ -44,10 +54,7 @@ import { useFullSmallTools } from '../tools/usefulSmallTools'
 import { wfcGenerator } from '../tools/wavefunctioncollapse'
 import { appDevTools } from '../tools/webAppDev'
 import { TaskyonMessage } from './apiTypes'
-import type { TyTaskManager } from '../../../packages/taskyon/src/core/taskManager'
-import { useTyTaskManager } from '../../../packages/taskyon/src/core/taskManager'
 import { generateSecretId, runTaskWorker } from './taskWorker'
-import type { llmSettings } from './types'
 
 function createApi(
   insidePort: Port<TaskyonMessage, TaskyonMessage>,
