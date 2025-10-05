@@ -1,7 +1,7 @@
 import { createTool, makeTaskResult, toolCall, type taskResult } from '@taskyon/taskyon'
 import { craeteToolJsonSchema } from '../../../packages/taskyon/src/core/tools'
 import { createChatCompletionTask } from './chatCompletionTool'
-import { type TyTaskManager } from '../taskyon/taskManager'
+import { type TyTaskManager } from '../../../packages/taskyon/src/core/taskManager'
 import { match, P } from 'ts-pattern'
 import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
 import type { JSONSchema7 } from 'json-schema'

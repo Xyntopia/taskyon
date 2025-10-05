@@ -156,11 +156,9 @@
 <script setup lang="ts">
 import { matBuild, matCalculate, matPause, matWarning } from '@quasar/extras/material-icons'
 import { mdiDesktopTower, mdiFileDocument, mdiHeadCog, mdiTools } from '@quasar/extras/mdi-v6'
-import type { TaskNode } from '@taskyon/taskyon'
+import { safeYamlDump, type FileMapping, type TaskNode } from '@taskyon/taskyon'
 import { dump } from 'js-yaml'
-import type { FileMapping } from 'src/modules/taskyon/taskManager'
 import { humanizeError } from 'src/modules/utils'
-import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { ref } from 'vue'

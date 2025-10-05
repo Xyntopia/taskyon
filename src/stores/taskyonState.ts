@@ -8,6 +8,7 @@ import type {
   TaskNodeMeta,
 } from '@taskyon/taskyon'
 import {
+  availableModels,
   createDuplexChannel,
   createPortApi,
   createTypeFilteredPort,
@@ -15,10 +16,12 @@ import {
   deriveKeyFromPwd,
   filter,
   getDefaultParametersForTool,
+  isTaskyonKey,
   joinUrl,
   randomString,
   TaskNode,
   toolCall,
+  usePyodideWebworker,
 } from '@taskyon/taskyon'
 import { until } from '@vueuse/core'
 import { defineStore } from 'pinia'
@@ -33,11 +36,9 @@ import {
   initCryptoSessionFromBrowser,
   persistSession,
 } from 'src/modules/taskyon/browserCryptoSession'
-import { availableModels } from '../../packages/taskyon/src/llm/chat'
 import type { Taskyon } from 'src/modules/taskyon/init'
 import { tyCore } from 'src/modules/taskyon/init'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
-import { isTaskyonKey } from '../../packages/taskyon/src/utils/tyCrypto'
 import type { TyTaskStreamData } from 'src/modules/taskyon/types'
 import {
   getApiConfig,
@@ -49,7 +50,6 @@ import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { guiTools } from 'src/modules/tools/GuiTools'
 import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
-import { usePyodideWebworker } from '../../packages/taskyon/src/utils/webWorkerApi'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
 

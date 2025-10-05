@@ -1,5 +1,6 @@
 import { load } from 'js-yaml'
 import type OpenAI from 'openai'
+import type { TyTaskManager } from '../../../packages/taskyon/src/core/taskManager'
 import type { ChatCompletionChunk } from '../../../packages/taskyon/src/llm/chat'
 import {
   callLLM,
@@ -10,9 +11,8 @@ import {
 } from '../../../packages/taskyon/src/llm/chat'
 import type { Goals } from '../../../packages/taskyon/src/llm/promptCreation'
 import { addPrompts } from '../../../packages/taskyon/src/llm/promptCreation'
-import { isTaskyonKey } from '../../../packages/taskyon/src/utils/tyCrypto'
+import { isTaskyonKey } from '../../../packages/taskyon/src/core/tyCrypto'
 import { useNlpWorker } from '../../../packages/taskyon/src/utils/webWorkerApi'
-import type { FileMapping, TyTaskManager } from '../taskyon/taskManager'
 import {
   createDeepTransformer,
   fileToBase64,
@@ -25,6 +25,7 @@ import {
 import type {
   apiConfig,
   ChatResponseType,
+  FileMapping,
   FunctionArguments,
   OpenRouterGenerationInfo,
   partialTaskDraft,

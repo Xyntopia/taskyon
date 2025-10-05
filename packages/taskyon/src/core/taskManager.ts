@@ -1,24 +1,14 @@
-import type { InternalTool, OptionalSome, TaskNodeType } from '@taskyon/taskyon'
-import {
-  lockMap,
-  partialTaskDraft,
-  sha256UrlSafeHash,
-  sleep,
-  TaskNode,
-  ToolBase,
-  urlSafeBase64Uuid,
-} from '@taskyon/taskyon'
 import { produce } from 'immer'
 import { load } from 'js-yaml'
-import { processMarkdown } from '../../../packages/taskyon/src/core/taskUtils'
+import { sleep } from 'openai/core.mjs'
 import type { PartialDeep } from 'type-fest'
 import z from 'zod'
-import type { TaskNodeMeta } from '../../../packages/taskyon/src/types/chatCompletion'
-import {
-  openUserUploadedFile,
-  saveUserUploadedFileToOpfs,
-} from '../../../packages/taskyon/src/utils/OPFS'
-import type { TyPGDB } from '../../../packages/taskyon/src/utils/pglite.api'
+import type { TaskNodeMeta } from '../types/chatCompletion'
+import type { FileMapping, TaskNodeType, TaskTreeNode } from '../types/node'
+import { TaskNode, partialTaskDraft } from '../types/node'
+import type { InternalTool } from '../types/toolApi'
+import { ToolBase } from '../types/tools'
+import { lockMap } from '../utils/asyncUtils'
 import {
   createCombinedCrudWrapper,
   createMapCrudWrapper,
@@ -26,7 +16,12 @@ import {
   createVectorStore,
   withImmutable,
   withLiveStreams,
-} from '../../../packages/taskyon/src/utils/crudWrapper'
+} from '../utils/crudWrapper'
+import { sha256UrlSafeHash, urlSafeBase64Uuid } from '../utils/crypto'
+import { openUserUploadedFile, saveUserUploadedFileToOpfs } from '../utils/OPFS'
+import type { TyPGDB } from '../utils/pglite.api'
+import type { OptionalSome } from '../utils/tsHelpers'
+import { processMarkdown } from './taskUtils'
 
 /**
  *
@@ -123,20 +118,6 @@ export const createTaskNode = async (
   const newTask = addTaskNodeMeta(options, task)
   const nt = ensureValidTaskId(newTask)
   return nt
-}
-
-export type FileMapping = {
-  uuid: string
-  name?: string
-  // filename in opfs
-  opfs?: string
-  openAIFileId?: string
-  // we can give each file several labels which helps has to put them into different categories
-  // such as tools, different projects, etc...
-  labels?: string[]
-  // TODO: we're not sure if we need a file path?
-  fileType: string
-  fileData?: string
 }
 
 async function useFileManager(db: TyPGDB) {
@@ -419,11 +400,6 @@ export function createToolIndex(getTask: (id: string | number) => Promise<TaskNo
     getToolDefinition,
     updateToolIndex,
   }
-}
-
-export interface TaskTreeNode {
-  task: TaskNode
-  children: TaskTreeNode[][]
 }
 
 // we use this in order to lock tasks!

@@ -1,6 +1,6 @@
 import type { JSONSchema7 } from 'json-schema'
 import { createTool } from '@taskyon/taskyon'
-import type { TyTaskManager } from '../taskyon/taskManager'
+import type { TyTaskManager } from '../../../packages/taskyon/src/core/taskManager'
 import { taskTypeOptions } from '@taskyon/taskyon'
 
 // TODO: provide a link to the search page from the result!

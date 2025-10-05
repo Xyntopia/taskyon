@@ -29,7 +29,7 @@
 import { ref } from 'vue'
 import { dump } from 'js-yaml'
 import { watch } from 'vue'
-import type { FileMapping } from 'src/modules/taskyon/taskManager'
+import type { FileMapping } from '@taskyon/taskyon'
 
 // Store the props in a variable for easy access
 const props = defineProps<{

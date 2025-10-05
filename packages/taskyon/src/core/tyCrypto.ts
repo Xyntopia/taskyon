@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { parseJwt } from '@taskyon/taskyon'
+import { parseJwt } from '../utils/crypto'
 
 export const tyPublicKeyDraft = z.object({
   name: z

@@ -16,7 +16,7 @@ import {
 } from '@taskyon/taskyon'
 import type { SecretStore } from '../../../packages/taskyon/src/utils/crudWrapper'
 import { createAsyncQueue, humanizeError, serializeForJson } from '../utils'
-import { type TyTaskManager } from './taskManager'
+import { type TyTaskManager } from '../../../packages/taskyon/src/core/taskManager'
 import type { TyTaskStreamData } from './types'
 
 export async function generateSecretId(

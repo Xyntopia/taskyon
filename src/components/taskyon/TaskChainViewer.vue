@@ -124,12 +124,10 @@
 
 <script setup lang="ts">
 import { matArrowDropDown } from '@quasar/extras/material-icons'
-import type { ChatResponseType } from '@taskyon/taskyon'
-import { safeYamlDump, type TaskNode, type Unsubscribe } from '@taskyon/taskyon'
+import type { ChatResponseType, TaskTreeNode } from '@taskyon/taskyon'
+import { accumulateStep, safeYamlDump, type TaskNode, type Unsubscribe } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
-import { accumulateStep } from '../../../packages/taskyon/src/llm/chat'
-import { type TaskTreeNode } from 'src/modules/taskyon/taskManager'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { getReasoning, useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'

@@ -135,3 +135,22 @@ type ToolResultNode = TaskNodeType<"toolresult">
 */
 
 export type TaskGetter = (input: string) => Promise<TaskNode | null>
+
+export type FileMapping = {
+  uuid: string
+  name?: string
+  // filename in opfs
+  opfs?: string
+  openAIFileId?: string
+  // we can give each file several labels which helps has to put them into different categories
+  // such as tools, different projects, etc...
+  labels?: string[]
+  // TODO: we're not sure if we need a file path?
+  fileType: string
+  fileData?: string
+}
+
+export interface TaskTreeNode {
+  task: TaskNode
+  children: TaskTreeNode[][]
+}

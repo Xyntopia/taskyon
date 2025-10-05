@@ -145,15 +145,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent, ref, watch } from 'vue'
-import ObjectTreeView from 'src/components/ObjectTreeView.vue'
-import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
 import { matAdd, matContentCopy, matSave, matSearch } from '@quasar/extras/material-icons'
-import { useTaskyonStore } from 'src/stores/taskyonState'
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { asyncComputed } from 'src/modules/vueUtils'
-import { craeteToolJsonSchema } from '../../../packages/taskyon/src/core/tools'
 import {
   mdiCodeJson,
   mdiFormTextbox,
@@ -163,13 +155,18 @@ import {
   mdiMagicStaff,
   mdiToolbox,
 } from '@quasar/extras/mdi-v6'
-import JsonInput from 'src/components/JsonInput.vue'
+import type { InternalTool, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
+import { createTaskNode, ToolBase } from '@taskyon/taskyon'
 import { copyToClipboard } from 'quasar'
+import JsonInput from 'src/components/JsonInput.vue'
+import ObjectTreeView from 'src/components/ObjectTreeView.vue'
 import TaskChainPublishDialog from 'src/components/taskyon/TaskChainPublishDialog.vue'
-import { ToolBase } from '@taskyon/taskyon'
-import type { InternalTool } from '@taskyon/taskyon'
-import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
-import { createTaskNode } from 'src/modules/taskyon/taskManager'
+import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
+import { asyncComputed } from 'src/modules/vueUtils'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { craeteToolJsonSchema } from '../../../packages/taskyon/src/core/tools'
 
 const { name } = defineProps<{ name?: string }>()
 
