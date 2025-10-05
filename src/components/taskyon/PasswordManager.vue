@@ -63,7 +63,7 @@
               dense
               color="negative"
               :icon="matDeleteForever"
-              @click="deleteSecrets(secretId, secretName)"
+              @click="deleteSecret(secretId, secretName)"
             ></q-btn>
           </q-item>
         </q-expansion-item>
@@ -110,6 +110,10 @@ const tystate = useTaskyonStore()
 const secretList = ref<Record<string, Record<string, string>>>({})
 const loadingSecrets = ref<boolean>(false)
 
+const emit = defineEmits<{
+  (e: 'delete', group: string, name: string): void
+}>()
+
 // extract your loader into its own function
 async function loadSecrets() {
   loadingSecrets.value = true
@@ -145,12 +149,13 @@ onMounted(loadSecrets)
 const ensureUserOk = (message: string, action: () => void) =>
   Dialog.create({ message, cancel: true, ok: true }).onOk(action)
 
-const deleteSecrets = (secretId: string, secretName: string) =>
+const deleteSecret = (secretId: string, secretName: string) =>
   ensureUserOk(
     `Are you sure, you want to delete this secret (${secretName})?`,
     () =>
       void tystate.taskyon.then(async (ty) => {
         await ty.deleteSecret(secretId, secretName)
+        emit('delete', secretId, secretName)
         // force re-render
         await loadSecrets()
       }),

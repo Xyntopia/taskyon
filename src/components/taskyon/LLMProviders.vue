@@ -47,7 +47,16 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
           You can setup your own OpenAI-compatible server and connect to it or use other services:
         </q-card-section>
 
-        <PasswordManager ref="passwords" copybtn :only-this-key="AiProvideKeyStoreName" />
+        <PasswordManager
+          ref="passwords"
+          copybtn
+          :only-this-key="AiProvideKeyStoreName"
+          @delete="
+            (group, name) => {
+              tystate.setProviderApiKey(name)
+            }
+          "
+        />
 
         <q-card-section>
           <div>
