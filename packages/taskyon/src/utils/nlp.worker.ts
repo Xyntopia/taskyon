@@ -1,8 +1,9 @@
-import type { TaskNode, ToolBase } from '@taskyon/taskyon'
 import { expose } from 'comlink'
 import type OpenAI from 'openai'
 import { mapFunctionNames } from '../core/tools'
 import type { OpenAIMessage, TaskNodeMeta } from '../types/chatCompletion'
+import type { TaskNode } from '../types/node'
+import type { ToolBase } from '../types/tools'
 import { getVector, loadModel, loadTokenizer } from './nlp'
 
 //import { getEncoding } from 'js-tiktoken';

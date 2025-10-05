@@ -3,7 +3,6 @@
  * e.g. python, a worker to do NLP tasks etc..
  *
  */
-
 import type { NlpWorkerInterface } from './nlp.worker'
 import { wrap } from 'comlink'
 import { type pythonWorker } from './pyodide.worker'

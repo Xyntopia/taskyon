@@ -1,13 +1,11 @@
-import type { AskCryptoKey, EncryptedDataRow, Stream, TaskNode } from '@taskyon/taskyon'
-import {
-  createStream,
-  decryptDataFile,
-  deepMerge,
-  encryptDataFile,
-  filter,
-  streamProcedureCall,
-} from '@taskyon/taskyon'
 import type { PartialDeep } from 'type-fest'
+import type { TaskNode } from '../types/node'
+import type { AskCryptoKey } from './crypto'
+import type { EncryptedDataRow } from './encrypt'
+import { decryptDataFile, encryptDataFile } from './encrypt'
+import type { Stream } from './frpBus'
+import { createStream, filter, streamProcedureCall } from './frpBus'
+import { deepMerge } from './objHelpers'
 import type { PgLiteOptions } from './pglite.api'
 import { createVecPgLiteTable, type TyPGDB } from './pglite.api'
 import { useNlpWorker } from './webWorkerApi'
