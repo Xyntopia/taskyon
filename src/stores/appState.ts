@@ -5,7 +5,7 @@ import axios from 'axios'
 import { defineStore } from 'pinia'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
 import defaultSettings from 'src/assets/taskyon_settings.json'
-import { type tyPublicKeyDraft, TyProfile } from 'src/modules/taskyon/types'
+import { TyProfile, type tyPublicKeyDraft } from 'src/modules/taskyon/types'
 import type { MergeOptions } from 'src/modules/utils'
 import {
   clearBrowserCaches,
@@ -13,11 +13,10 @@ import {
   clearServiceWorkers,
   deepMerge,
   deepMergeReactive,
-  sleep,
 } from 'src/modules/utils'
-import { type Reactive, computed, reactive, ref, toRefs, unref, watch } from 'vue'
+import { computed, reactive, ref, toRefs, unref, watch, type Reactive } from 'vue'
 // TODO: remove, to make this file here faster...
-import { type FunctionCall } from '@taskyon/taskyon'
+import { sleep, type FunctionCall } from '@taskyon/taskyon'
 import {
   defaultProfileName,
   getCurrentProfileName,
@@ -28,7 +27,7 @@ import {
   urlConfig,
 } from 'src/modules/ui/initialState'
 import type { PartialDeep } from 'type-fest'
-import freeKey from 'assets/taskyon_free_key.json'
+import { freeKey } from 'assets/taskyon_free_key.json'
 
 interface TaskWidgetStateType {
   markdownEnabled: boolean
@@ -307,8 +306,8 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // we don't save this variable on purpose, because we used it to present tokens to othe parts of the app...
   const activeTaskyonToken = ref<string>()
   const usingFreeTaskyonKey = computed(() => {
-    console.log('using free taskyon key:', activeTaskyonToken.value === freeKey.freeKey)
-    return activeTaskyonToken.value === freeKey.freeKey
+    console.log('using free taskyon key:', activeTaskyonToken.value === freeKey)
+    return activeTaskyonToken.value === freeKey
   })
 
   // it is *SUPERIMPORTANT*  that we ONLY return computed refs & functions in the store EXCEPT

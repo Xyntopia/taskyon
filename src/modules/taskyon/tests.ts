@@ -10,6 +10,7 @@ import {
   generateAssymetricKeyDeriver,
   generateRandomEncryptionKey,
   generateSeedPhrase,
+  sleep,
   ToolBase,
   uint8ArrayToBase64UrlSafe,
 } from '@taskyon/taskyon'
@@ -26,12 +27,12 @@ import {
 import { useGdrive } from '../gdrive'
 import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
 import { getDatabase } from '../pglite.api'
-import { createDeepTransformer, normalizeFalsyValues, sleep } from '../utils'
+import { createDeepTransformer, normalizeFalsyValues } from '../utils'
 import { initCryptoSessionFromBrowser } from './browserCryptoSession'
 import { gDriveSyncPort } from './sync'
 import { createTaskNode } from './taskManager'
 import { chat2Md, getTextFile } from './taskUtils'
-import { craeteToolJsonSchema, summarizeTools } from './tools'
+import { craeteToolJsonSchema, summarizeTools } from '../../../packages/taskyon/src/core/tools'
 import { useNlpWorker, usePyodideWebworker } from './webWorkerApi'
 
 const tystate = useTaskyonStore()

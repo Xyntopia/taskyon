@@ -173,11 +173,6 @@ export function humanReadablePrice(price: number | string | undefined, digits: n
   }
 }
 
-// Async sleep function
-export function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
 /**
  * Creates a higher-order function for caching the results of another function, using a Least Recently Used (LRU) policy.
  *
@@ -1051,45 +1046,6 @@ export function createLruCache<K, V>(maxSize: number) {
 
 // Define the LRU cache type
 export type LruCache<K, V> = ReturnType<typeof createLruCache<K, V>>
-
-export function bigIntToString(obj: unknown): unknown {
-  if (obj === null) {
-    return obj
-  }
-
-  if (typeof obj === 'bigint') {
-    return obj.toString()
-  }
-
-  if (obj instanceof Map) {
-    const result: { [key: string]: unknown } = {}
-    obj.forEach((value, key) => {
-      result[key] = bigIntToString(value)
-    })
-    return result
-  }
-
-  if (obj instanceof Set) {
-    return Array.from(obj).map((item) => bigIntToString(item))
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map((item) => bigIntToString(item))
-  }
-
-  // this need to be called at the end, becaise Set and Map are also object
-  if (typeof obj === 'object') {
-    const result: { [key: string]: unknown } = {}
-    for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        result[key] = bigIntToString((obj as Record<string, unknown>)[key])
-      }
-    }
-    return result
-  }
-
-  return obj
-}
 
 export const createDeepTransformer = ({
   // Default keyFn gets the original key (string|number|symbol) and its current value

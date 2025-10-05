@@ -2,7 +2,7 @@ import { expose } from 'comlink'
 import { getVector, loadModel, loadTokenizer } from './nlp'
 import type OpenAI from 'openai'
 import type { OpenAIMessage, TaskNodeMeta } from './types'
-import { mapFunctionNames } from './tools'
+import { mapFunctionNames } from '../../../packages/taskyon/src/core/tools'
 import type { TaskNode, ToolBase } from '@taskyon/taskyon'
 
 //import { getEncoding } from 'js-tiktoken';

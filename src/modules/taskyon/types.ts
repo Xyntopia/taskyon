@@ -697,9 +697,6 @@ export interface TyTaskStreamData {
     | 'queued'
 }
 
-//export const convertZodToJsonSchemaCached = lruCache(100)(zodToJsonSchema)
-export const convertZodToJsonSchemaCached = z.toJSONSchema
-
 export const OAuthCredentials = z.object({
   type: z.enum(['oauth-credentials']),
   access_token: z.string(),

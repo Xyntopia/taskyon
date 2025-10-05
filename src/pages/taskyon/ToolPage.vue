@@ -153,7 +153,7 @@ import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { asyncComputed } from 'src/modules/vueUtils'
-import { craeteToolJsonSchema } from 'src/modules/taskyon/tools'
+import { craeteToolJsonSchema } from '../../../packages/taskyon/src/core/tools'
 import {
   mdiCodeJson,
   mdiFormTextbox,

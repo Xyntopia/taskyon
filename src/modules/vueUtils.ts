@@ -1,9 +1,9 @@
+import { convertZodToJsonSchemaCached } from '@taskyon/taskyon'
 import { scroll } from 'quasar'
 import type { Ref } from 'vue'
 import { computed, type ComputedRef, reactive, ref, toRefs, watch } from 'vue'
 import type { ZodObject } from 'zod'
 import { z } from 'zod'
-import { convertZodToJsonSchemaCached } from './taskyon/types'
 
 export function asyncComputed<T>(
   getter: () => Promise<T>,

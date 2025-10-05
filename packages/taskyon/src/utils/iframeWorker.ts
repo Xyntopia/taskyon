@@ -1,7 +1,7 @@
 import z from 'zod'
-import { sleep } from '../utils'
-import type { toolContext } from '@taskyon/taskyon'
-import { taskMarker } from '@taskyon/taskyon'
+import { sleep } from './asyncUtils'
+import type { toolContext } from '../types/toolApi'
+import { taskMarker } from '../types/tools'
 
 // Store iframes by a hash id derived from the code
 const iframes = new Map<string, HTMLIFrameElement>()

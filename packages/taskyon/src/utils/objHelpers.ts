@@ -66,3 +66,42 @@ export async function first<T>(source: AsyncIterable<T> | Iterable<T>): Promise<
   }
   return undefined
 }
+
+export function bigIntToString(obj: unknown): unknown {
+  if (obj === null) {
+    return obj
+  }
+
+  if (typeof obj === 'bigint') {
+    return obj.toString()
+  }
+
+  if (obj instanceof Map) {
+    const result: { [key: string]: unknown } = {}
+    obj.forEach((value, key) => {
+      result[key] = bigIntToString(value)
+    })
+    return result
+  }
+
+  if (obj instanceof Set) {
+    return Array.from(obj).map((item) => bigIntToString(item))
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => bigIntToString(item))
+  }
+
+  // this need to be called at the end, becaise Set and Map are also object
+  if (typeof obj === 'object') {
+    const result: { [key: string]: unknown } = {}
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        result[key] = bigIntToString((obj as Record<string, unknown>)[key])
+      }
+    }
+    return result
+  }
+
+  return obj
+}

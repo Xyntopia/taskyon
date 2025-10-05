@@ -195,7 +195,6 @@ import FileDropzone from 'src/components/FileDropzone.vue'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import ToggleButton from 'src/components/ToggleButton.vue'
 import { fetchMarkdown, getTextFile } from 'src/modules/taskyon/taskUtils'
-import { sleep } from 'src/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -203,6 +202,7 @@ import { useRoute } from 'vue-router'
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue'
 import { createScrollManager } from 'src/modules/vueUtils'
 import { storeToRefs } from 'pinia'
+import { sleep } from '@taskyon/taskyon'
 
 // we are re-creating the following meta tag dynamically here just for the chat page!
 // <!-- Viewport Meta in order to make window size shrink on mobile when keyboard pops up! -->

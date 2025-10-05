@@ -111,8 +111,8 @@ import { useAppStateStore } from 'src/stores/appState'
 import { useQuasar } from 'quasar'
 import { useRoute } from 'vue-router'
 import { generateTaskKeyWords } from 'src/modules/taskyon/taskUtils'
-import { sleep } from 'src/modules/utils'
 import { watchThrottled } from '@vueuse/core'
+import { sleep } from '@taskyon/taskyon'
 
 const $route = useRoute()
 const $q = useQuasar()

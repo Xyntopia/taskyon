@@ -28,8 +28,7 @@ import { availableModels } from 'src/modules/taskyon/chat'
 import type { Taskyon } from 'src/modules/taskyon/init'
 import { tyCore } from 'src/modules/taskyon/init'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
-import { getDefaultParametersForTool } from 'src/modules/taskyon/tools'
-import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
+import { getDefaultParametersForTool } from '../../packages/taskyon/src/core/tools'
 import type { ChatResponseType, TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
 import {
   getApiConfig,
@@ -45,6 +44,7 @@ import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
+import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
