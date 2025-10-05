@@ -1106,7 +1106,7 @@ export const testChatCompletion = async () => {
       },
       {
         taskChain: [],
-        getSecret: () => Promise.resolve('test'),
+        getSecret: (name) => tystate.getProviderApiKey(name),
         setSecret: () => {
           console.log('set test secret')
           return Promise.resolve()
