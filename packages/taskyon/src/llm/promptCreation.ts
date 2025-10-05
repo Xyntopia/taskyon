@@ -1,9 +1,9 @@
-import { summarizeTools } from '../core/tools'
-import { safeYamlDump, zodToYamlString } from '../utils/yamlUtils'
 import type OpenAI from 'openai'
 import { z } from 'zod'
-import type { ToolBase } from '@taskyon/taskyon'
-import { FunctionCall } from '@taskyon/taskyon'
+import { summarizeTools } from '../core/tools'
+import type { ToolBase } from '../types/tools'
+import { FunctionCall } from '../types/tools'
+import { safeYamlDump, zodToYamlString } from '../utils/yamlUtils'
 
 const answer = z.string()
 const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullable()
