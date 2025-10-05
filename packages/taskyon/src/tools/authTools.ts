@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
-import type { SecretStore } from '../../../packages/taskyon/src/utils/crudWrapper'
+import type { SecretStore } from '../utils/crudWrapper'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
-import { authenticateWithPopup } from '../oauth'
+import { authenticateWithPopup } from '../../../../src/modules/oauth'
 
 declare global {
   interface Window {

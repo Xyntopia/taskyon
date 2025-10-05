@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
 import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
-import { OAUTH_PROVIDERS, useRefreshTokenIfExpired } from '../oauth'
-import type { OAuthCredentials } from '../taskyon/types'
+import { OAUTH_PROVIDERS, useRefreshTokenIfExpired } from '../../../../src/modules/oauth'
+import type { OAuthCredentials } from '../../../../src/modules/taskyon/types'
 
 const getGitlabInfo = createTool({
   name: 'getGitlabInfo',

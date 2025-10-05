@@ -10,6 +10,7 @@ import type {
 } from '@taskyon/taskyon'
 import {
   availableModels,
+  createChatCompletionTask,
   createDuplexChannel,
   createPortApi,
   createTypeFilteredPort,
@@ -43,10 +44,9 @@ import type { Taskyon } from 'src/modules/taskyon/init'
 import { tyCore } from 'src/modules/taskyon/init'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
 import { getApiConfig, type TyProfile } from 'src/modules/taskyon/types'
-import { guiTools } from 'src/modules/tools/GuiTools'
 import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
-import { createChatCompletionTask } from '../../packages/taskyon/src/tools/chatCompletionTool'
+import { guiTools } from '../modules/taskyon/GuiTools'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
 
