@@ -101,18 +101,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useTaskyonStore } from 'stores/taskyonState'
-import FileDropzone from 'components/FileDropzone.vue'
-import { matSearch, matFileUpload, matAutorenew } from '@quasar/extras/material-icons'
+import { matAutorenew, matFileUpload, matSearch } from '@quasar/extras/material-icons'
 import { mdiForumPlus, mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
-import TaskChainMenu from './TaskChainMenu.vue'
-import { useAppStateStore } from 'src/stores/appState'
-import { useQuasar } from 'quasar'
-import { useRoute } from 'vue-router'
-import { generateTaskKeyWords } from '../../../packages/taskyon/src/core/taskUtils'
+import { generateTaskKeyWords, sleep } from '@taskyon/taskyon'
 import { watchThrottled } from '@vueuse/core'
-import { sleep } from '@taskyon/taskyon'
+import FileDropzone from 'components/FileDropzone.vue'
+import { useQuasar } from 'quasar'
+import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { ref } from 'vue'
+import { useRoute } from 'vue-router'
+import TaskChainMenu from './TaskChainMenu.vue'
 
 const $route = useRoute()
 const $q = useQuasar()

@@ -11,11 +11,11 @@
 </template>
 
 <script setup lang="ts">
+import { fetchMarkdown } from '@taskyon/taskyon'
 import TyMarkdown from 'components/tyMarkdown.vue'
 import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
-import { fetchMarkdown } from '../../packages/taskyon/src/core/taskUtils'
-import { ref, onMounted, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 const router = useRouter()
 const route = useRoute()

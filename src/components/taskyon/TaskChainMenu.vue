@@ -22,11 +22,11 @@
 </template>
 
 <script setup lang="ts">
-import { matDownloadForOffline, matDelete, matMoreHoriz } from '@quasar/extras/material-icons'
-import { useTaskyonStore } from 'stores/taskyonState'
+import { matDelete, matDownloadForOffline, matMoreHoriz } from '@quasar/extras/material-icons'
+import { chatToYaml } from '@taskyon/taskyon'
 import { exportFile } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
-import { chatToYaml } from '../../../packages/taskyon/src/core/taskUtils'
+import { useTaskyonStore } from 'stores/taskyonState'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()

@@ -1,8 +1,11 @@
 import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import {
   base64ToPublixX25519,
+  chat2Md,
+  craeteToolJsonSchema,
   createCryptoSession,
   createDeepTransformer,
+  createTaskNode,
   cryptoKeyToBase64,
   cryptoKeyToUint8,
   decompressEncryptedObject,
@@ -11,10 +14,17 @@ import {
   generateAssymetricKeyDeriver,
   generateRandomEncryptionKey,
   generateSeedPhrase,
+  getDatabase,
+  getTextFile,
+  jsonSchemaToYamlString,
   normalizeFalsyValues,
   sleep,
+  summarizeTools,
   ToolBase,
   uint8ArrayToBase64UrlSafe,
+  useNlpWorker,
+  usePyodideWebworker,
+  zodToYamlString,
 } from '@taskyon/taskyon'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
@@ -22,15 +32,6 @@ import type OpenAI from 'openai'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
-import { createTaskNode } from '../../../packages/taskyon/src/core/taskManager'
-import { chat2Md, getTextFile } from '../../../packages/taskyon/src/core/taskUtils'
-import { craeteToolJsonSchema, summarizeTools } from '../../../packages/taskyon/src/core/tools'
-import { getDatabase } from '../../../packages/taskyon/src/utils/pglite.api'
-import { useNlpWorker, usePyodideWebworker } from '../../../packages/taskyon/src/utils/webWorkerApi'
-import {
-  jsonSchemaToYamlString,
-  zodToYamlString,
-} from '../../../packages/taskyon/src/utils/yamlUtils'
 import { useGdrive } from '../gdrive'
 import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
 import { initCryptoSessionFromBrowser } from './browserCryptoSession'

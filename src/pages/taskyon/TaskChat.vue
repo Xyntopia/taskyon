@@ -186,23 +186,22 @@
 
 <script setup lang="ts">
 import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
+import { fetchMarkdown, getTextFile, sleep } from '@taskyon/taskyon'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
 import GetStarted from 'components/taskyon/GetStarted.vue'
 import TaskChainViewer from 'components/taskyon/TaskChainViewer.vue'
+import { storeToRefs } from 'pinia'
 import { useMeta, useQuasar } from 'quasar'
 import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import ToggleButton from 'src/components/ToggleButton.vue'
-import { fetchMarkdown, getTextFile } from '../../../packages/taskyon/src/core/taskUtils'
+import { createScrollManager } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue'
-import { createScrollManager } from 'src/modules/vueUtils'
-import { storeToRefs } from 'pinia'
-import { sleep } from '@taskyon/taskyon'
 
 // we are re-creating the following meta tag dynamically here just for the chat page!
 // <!-- Viewport Meta in order to make window size shrink on mobile when keyboard pops up! -->
