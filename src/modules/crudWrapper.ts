@@ -2,6 +2,7 @@ import type { AskCryptoKey, EncryptedDataRow, Stream, TaskNode } from '@taskyon/
 import {
   createStream,
   decryptDataFile,
+  deepMerge,
   encryptDataFile,
   filter,
   streamProcedureCall,
@@ -10,7 +11,6 @@ import type { PartialDeep } from 'type-fest'
 import type { PgLiteOptions } from '../../packages/taskyon/src/utils/pglite.api'
 import { createVecPgLiteTable, type TyPGDB } from '../../packages/taskyon/src/utils/pglite.api'
 import { useNlpWorker } from '../../packages/taskyon/src/utils/webWorkerApi'
-import { deepMerge } from './utils'
 
 type Row<T> = {
   [key: string]: unknown

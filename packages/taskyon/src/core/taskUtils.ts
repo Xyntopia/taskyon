@@ -1,10 +1,10 @@
-import type { TaskNode } from '@taskyon/taskyon'
-import { partialTaskDraft } from '@taskyon/taskyon'
-import { deepCopy } from '../utils'
-import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
+import { safeYamlDump } from '../utils/yamlUtils'
 import { load } from 'js-yaml'
-import { usePyodideWebworker } from '../../../packages/taskyon/src/utils/webWorkerApi'
+import { usePyodideWebworker } from '../utils/webWorkerApi'
 import { match, P } from 'ts-pattern'
+import type { TaskNode } from '../types/node'
+import { partialTaskDraft } from '../types/node'
+import { deepCopy } from '../utils/objHelpers'
 
 export function findAllFilesInTasks(taskList: TaskNode[]): string[] {
   const fileSet = new Set<string>()

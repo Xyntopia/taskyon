@@ -26,7 +26,7 @@ import { matDownloadForOffline, matDelete, matMoreHoriz } from '@quasar/extras/m
 import { useTaskyonStore } from 'stores/taskyonState'
 import { exportFile } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
-import { chatToYaml } from 'src/modules/taskyon/taskUtils'
+import { chatToYaml } from '../../../packages/taskyon/src/core/taskUtils'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()

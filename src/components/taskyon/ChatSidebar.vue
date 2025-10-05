@@ -110,7 +110,7 @@ import TaskChainMenu from './TaskChainMenu.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { useQuasar } from 'quasar'
 import { useRoute } from 'vue-router'
-import { generateTaskKeyWords } from 'src/modules/taskyon/taskUtils'
+import { generateTaskKeyWords } from '../../../packages/taskyon/src/core/taskUtils'
 import { watchThrottled } from '@vueuse/core'
 import { sleep } from '@taskyon/taskyon'
 

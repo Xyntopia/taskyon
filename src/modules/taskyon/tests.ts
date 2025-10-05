@@ -31,7 +31,7 @@ import { createDeepTransformer, normalizeFalsyValues } from '../utils'
 import { initCryptoSessionFromBrowser } from './browserCryptoSession'
 import { gDriveSyncPort } from './sync'
 import { createTaskNode } from './taskManager'
-import { chat2Md, getTextFile } from './taskUtils'
+import { chat2Md, getTextFile } from '../../../packages/taskyon/src/core/taskUtils'
 import { craeteToolJsonSchema, summarizeTools } from '../../../packages/taskyon/src/core/tools'
 import { useNlpWorker, usePyodideWebworker } from '../../../packages/taskyon/src/utils/webWorkerApi'
 

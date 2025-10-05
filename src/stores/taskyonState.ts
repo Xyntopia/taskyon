@@ -37,7 +37,7 @@ import { availableModels } from '../../packages/taskyon/src/llm/chat'
 import type { Taskyon } from 'src/modules/taskyon/init'
 import { tyCore } from 'src/modules/taskyon/init'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
-import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
+import { isTaskyonKey } from '../../packages/taskyon/src/utils/tyCrypto'
 import type { TyTaskStreamData } from 'src/modules/taskyon/types'
 import {
   getApiConfig,

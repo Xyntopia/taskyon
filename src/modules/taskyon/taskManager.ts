@@ -10,7 +10,7 @@ import {
 } from '@taskyon/taskyon'
 import { produce } from 'immer'
 import { load } from 'js-yaml'
-import { processMarkdown } from 'src/modules/taskyon/taskUtils'
+import { processMarkdown } from '../../../packages/taskyon/src/core/taskUtils'
 import type { PartialDeep } from 'type-fest'
 import z from 'zod'
 import type { TaskNodeMeta } from '../../../packages/taskyon/src/types/chatCompletion'

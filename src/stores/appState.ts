@@ -5,18 +5,19 @@ import axios from 'axios'
 import { defineStore } from 'pinia'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
 import defaultSettings from 'src/assets/taskyon_settings.json'
-import { TyProfile, type tyPublicKeyDraft } from 'src/modules/taskyon/types'
+import { TyProfile } from 'src/modules/taskyon/types'
 import type { MergeOptions } from 'src/modules/utils'
 import {
   clearBrowserCaches,
   clearCookies,
   clearServiceWorkers,
-  deepMerge,
   deepMergeReactive,
 } from 'src/modules/utils'
 import { computed, reactive, ref, toRefs, unref, watch, type Reactive } from 'vue'
 // TODO: remove, to make this file here faster...
-import { sleep, type FunctionCall } from '@taskyon/taskyon'
+import type { tyPublicKeyDraft } from '@taskyon/taskyon'
+import { deepMerge, sleep, type FunctionCall } from '@taskyon/taskyon'
+import { freeKey } from 'assets/taskyon_free_key.json'
 import {
   defaultProfileName,
   getCurrentProfileName,
@@ -27,7 +28,6 @@ import {
   urlConfig,
 } from 'src/modules/ui/initialState'
 import type { PartialDeep } from 'type-fest'
-import { freeKey } from 'assets/taskyon_free_key.json'
 
 interface TaskWidgetStateType {
   markdownEnabled: boolean

@@ -42,6 +42,12 @@ export const taskTemplateTypes = {
   })*/
 }
 
+export function getApiConfig(llmSettings: llmSettings) {
+  if (llmSettings.selectedApi) {
+    return llmSettings.llmApis[llmSettings.selectedApi]
+  }
+}
+
 export const llmSettings = z.object({
   userId: z.string().nullish().optional().meta({
     description:
@@ -288,57 +294,6 @@ This could for example mean to provide different service providers or different 
 LLM models and other settings for tools.
 `)
 export type TyProfile = z.infer<typeof TyProfile>
-
-export const tyPublicKeyDraft = z.object({
-  name: z
-    .string()
-    .meta({
-      description: 'Name of the key.',
-    })
-    .optional(),
-  maxc: z
-    .number()
-    .meta({
-      description: 'Maximum allowed credits in this key',
-    })
-    .optional(),
-  cpi: z.number().meta({
-    description: 'Credit refill per inteval',
-  }),
-  rti: z.number().meta({
-    description: 'Refill time interval in minutes',
-  }),
-  model: z
-    .string()
-    .array()
-    .meta({
-      description: 'List of models which are allowed with this key.',
-    })
-    .optional(),
-})
-
-export type tyPublicKeyDraft = z.infer<typeof tyPublicKeyDraft>
-
-export const tyPublicApiKeyObject = tyPublicKeyDraft.extend({
-  iat: z.number().meta({
-    description: 'Time at which the key was issued.',
-    format: 'timestamp',
-  }),
-  auid: z.string().meta({
-    description: 'anonymous User ID for billing purposes.',
-  }),
-  v: z.number().meta({
-    description: 'Key version',
-  }),
-  iss: z.string().meta({
-    description: 'The Issuer of the API key.',
-  }),
-})
-export function getApiConfig(llmSettings: llmSettings) {
-  if (llmSettings.selectedApi) {
-    return llmSettings.llmApis[llmSettings.selectedApi]
-  }
-}
 
 export function getCurrentModel(api: apiConfig) {
   return api.selectedModel || api.defaultModel || api.models?.free || 'No model selected!'
