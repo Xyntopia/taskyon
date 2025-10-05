@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool } from '@taskyon/taskyon'
+import { createTool } from '../types/toolApi'
 
 const openMeteoWeatherTool = createTool({
   description: 'A tool that fetches weather data using the Open-Meteo API.',

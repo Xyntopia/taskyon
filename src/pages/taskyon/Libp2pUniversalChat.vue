@@ -43,16 +43,13 @@ here: [universal-connectivity](https://universal-connectivity.on-fleek.app/)"
 
 <script setup lang="ts">
 import type { ChatMessage, partialTaskDraft } from '@taskyon/taskyon'
-import { getActiveP2pNode } from '@taskyon/taskyon'
+import { CHAT_TOPIC, createTaskNode, getActiveP2pNode, safeYamlDump } from '@taskyon/taskyon'
 import Libp2pStatus from 'components/taskyon/Libp2pStatus.vue'
+import InfoDialog from 'src/components/InfoDialog.vue'
 import CreateNewTask from 'src/components/taskyon/CreateNewTask.vue'
 import SimpleChatView from 'src/components/taskyon/SimpleChatView.vue'
-import { createTaskNode } from '../../../packages/taskyon/src/core/taskManager'
-import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
-import { onMounted, ref, watch } from 'vue'
-import { CHAT_TOPIC } from '../../../packages/taskyon/src/p2p/constants'
-import InfoDialog from 'src/components/InfoDialog.vue'
 import { syncRefsWithLocalStorage } from 'src/modules/saveState'
+import { onMounted, ref, watch } from 'vue'
 
 const showStatus = ref(false)
 const peerID = ref('none')

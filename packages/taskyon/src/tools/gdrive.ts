@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, makeTaskResult } from '@taskyon/taskyon'
 import { useGdrive } from 'src/modules/gdrive' // Import the gdrive module
-import { OAUTH_PROVIDERS, usePersistentOauth } from '../../../../src/modules/oauth'
+import { OAUTH_PROVIDERS, usePersistentOauth } from '../utils/oauth'
+import { createTool, makeTaskResult } from '../types/toolApi'
 
 /*const googleDriveTool = createTool({
   description: 'A tool that saves/loads files from Google Drive using OAuth2 within the iframe',

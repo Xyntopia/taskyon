@@ -60,12 +60,12 @@ import { useTaskyonStore } from 'src/stores/taskyonState'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
 import ObjectTreeView from 'components/ObjectTreeView.vue'
 import UnderConstructionHint from 'components/UnderConstructionHint.vue'
-import { addPrompts } from '../../../packages/taskyon/src/llm/promptCreation'
 import TaskChainViewer from 'components/taskyon/TaskChainViewer.vue'
 import { mdiMagicStaff } from '@quasar/extras/mdi-v6'
 import CreateTaskButton from 'components/taskyon/CreateTaskButton.vue'
 import { dump } from 'js-yaml'
 import { useAppStateStore } from 'src/stores/appState'
+import { addPrompts } from '@taskyon/taskyon'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()

@@ -147,15 +147,3 @@ This could for example mean to provide different service providers or different 
 LLM models and other settings for tools.
 `)
 export type TyProfile = z.infer<typeof TyProfile>
-
-export const OAuthCredentials = z.object({
-  type: z.enum(['oauth-credentials']),
-  access_token: z.string(),
-  refresh_token: z.string().optional(),
-  service: z.string(), // or z.string().url() if you want URL validation
-  token_type: z.string().optional(),
-  expires_in: z.number().optional(),
-  created_at: z.number(), // or z.date().transform(d => d.getTime()) if you parse a Date
-})
-
-export type OAuthCredentials = z.infer<typeof OAuthCredentials>

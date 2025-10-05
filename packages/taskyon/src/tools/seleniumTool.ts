@@ -1,5 +1,5 @@
-import type { InternalTool } from '@taskyon/taskyon'
 import axios from 'axios'
+import { createTool } from '../types/toolApi'
 
 type SeleniumState = {
   value: {
@@ -111,7 +111,7 @@ async function fetchPageContent(sessionId: string) {
   return pageSourceResponse.data.value
 }
 
-export const seleniumBrowser: InternalTool = {
+export const seleniumBrowser = createTool({
   function: (async ({ url }: { url: string }) => {
     console.log(`Browsing to ${url}...`)
 
@@ -149,4 +149,4 @@ docker run -p 4444:4444 -p 7900:7900 --shm-size="2g" -e SE_OPTS="--allow-cors tr
     },
     required: ['url'],
   },
-}
+})

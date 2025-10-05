@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool } from '@taskyon/taskyon'
 import type { TyTaskManager } from '../core/taskManager'
-import { taskTypeOptions } from '@taskyon/taskyon'
+import { taskTypeOptions } from '../types/node'
+import { createTool } from '../types/toolApi'
 
 // TODO: provide a link to the search page from the result!
 export const taskSearcher = (taskManager: TyTaskManager) =>

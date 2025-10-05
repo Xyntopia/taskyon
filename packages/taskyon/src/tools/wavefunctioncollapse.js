@@ -1,7 +1,7 @@
-import { createTool, makeTaskResult } from '@taskyon/taskyon'
 // wafefunctioncollapse doesn't have any typescript types that come with it
 // thats why we are using a pure js function here...
 // import * as wfc from 'wavefunctioncollapse'
+import { createTool, makeTaskResult } from '../types/toolApi'
 
 export const wfcGenerator = createTool({
   name: 'wfcGenerator',

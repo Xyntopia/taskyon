@@ -1,6 +1,7 @@
-import { partialTaskDraft, ToolBase } from '@taskyon/taskyon'
 import { z } from 'zod'
 import { RemoteFunctionCall, RemoteFunctionResponse } from './messages'
+import { partialTaskDraft } from './node'
+import { ToolBase } from './tools'
 
 export const EncryptedTasks = z.object({
   type: z.literal('addTasks'),

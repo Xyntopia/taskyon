@@ -1,5 +1,6 @@
 import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import {
+  authenticateWithPopup,
   base64ToPublixX25519,
   chat2Md,
   craeteToolJsonSchema,
@@ -18,6 +19,7 @@ import {
   getTextFile,
   jsonSchemaToYamlString,
   normalizeFalsyValues,
+  OAUTH_PROVIDERS,
   sleep,
   summarizeTools,
   ToolBase,
@@ -33,7 +35,6 @@ import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
 import { useGdrive } from '../gdrive'
-import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
 import { initCryptoSessionFromBrowser } from './browserCryptoSession'
 import { gDriveSyncPort } from './sync'
 

@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool } from '@taskyon/taskyon'
+import { createTool } from '../types/toolApi'
 
 const jinaMarkdownReader = createTool({
   description: 'A tool that reads websites as markdown using the jina ai reader.',

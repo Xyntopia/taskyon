@@ -1,11 +1,14 @@
 import type {
   Asyncify,
+  AuthenticationOptions,
   ChatResponseType,
   CryptoSession,
   InternalTool,
   Model,
   Port,
   TaskNodeMeta,
+  Taskyon,
+  TokenGetter,
   TyTaskStreamData,
 } from '@taskyon/taskyon'
 import {
@@ -22,10 +25,13 @@ import {
   isTaskyonKey,
   joinUrl,
   llmSettings,
+  OAUTH_PROVIDERS,
   randomString,
   TaskNode,
   TaskyonMessage,
   toolCall,
+  tyCore,
+  usePersistentOauth,
   usePyodideWebworker,
 } from '@taskyon/taskyon'
 import { until } from '@vueuse/core'
@@ -34,8 +40,6 @@ import { useQuasar } from 'quasar' // load dynamically! :)
 import { setColors } from 'src/boot/brand-colors'
 import { useGdrive } from 'src/modules/gdrive'
 import { setPrismTheme } from 'src/modules/markdownUtils '
-import type { AuthenticationOptions, TokenGetter } from 'src/modules/oauth'
-import { OAUTH_PROVIDERS, usePersistentOauth } from 'src/modules/oauth'
 import { TaskyonGuiMessage } from 'src/modules/taskyon/apiTypes'
 import {
   initCryptoSessionFromBrowser,
@@ -45,8 +49,6 @@ import { gDriveSyncPort } from 'src/modules/taskyon/sync'
 import { getApiConfig, type TyProfile } from 'src/modules/taskyon/types'
 import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
-import type { Taskyon } from '../../packages/taskyon/src/core/init'
-import { tyCore } from '../../packages/taskyon/src/core/init'
 import { guiTools } from '../modules/taskyon/GuiTools'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'

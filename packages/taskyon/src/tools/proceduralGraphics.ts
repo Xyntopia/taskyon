@@ -1,5 +1,5 @@
-import { createTool } from '@taskyon/taskyon'
 import type { JSONSchema7 } from 'json-schema'
+import { createTool } from '../types/toolApi'
 
 const proceduralTreeGenerator = createTool({
   description:

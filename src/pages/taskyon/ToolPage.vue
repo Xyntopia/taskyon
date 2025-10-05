@@ -156,7 +156,7 @@ import {
   mdiToolbox,
 } from '@quasar/extras/mdi-v6'
 import type { InternalTool, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
-import { createTaskNode, ToolBase } from '@taskyon/taskyon'
+import { craeteToolJsonSchema, createTaskNode, ToolBase } from '@taskyon/taskyon'
 import { copyToClipboard } from 'quasar'
 import JsonInput from 'src/components/JsonInput.vue'
 import ObjectTreeView from 'src/components/ObjectTreeView.vue'
@@ -166,7 +166,6 @@ import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { craeteToolJsonSchema } from '../../../packages/taskyon/src/core/tools'
 
 const { name } = defineProps<{ name?: string }>()
 

@@ -4,8 +4,8 @@ import type { JSONSchema7 } from 'json-schema'
 import { createVectorStore } from '../utils/crudWrapper'
 import type { TyPGDB } from '../utils/pglite.api'
 import { getDatabase } from '../utils/pglite.api'
-import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
-import { sha256UrlSafeHash } from '@taskyon/taskyon'
+import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
+import { sha256UrlSafeHash } from '../utils/crypto'
 // import { smallHelperTools } from './helperCollection'
 
 // const jinaTool = smallHelperTools.find(

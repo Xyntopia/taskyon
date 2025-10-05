@@ -1,6 +1,6 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, makeTaskResult } from '@taskyon/taskyon'
 import { convertFileToText } from 'src/modules/loadFiles'
+import { createTool, makeTaskResult } from '../types/toolApi'
 
 /**
  * Tool that provides Origin Private File System (OPFS) integration for local file storage
