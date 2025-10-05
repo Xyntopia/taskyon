@@ -181,6 +181,7 @@ async function runTest(name: string, testFunc: () => unknown, details = false) {
 }
 
 const tests = {
+  'test taskyon chatCompletion websearch': testChatCompletion,
   'test session switching': testSessionSwitching,
   'test key indexeddb storage': testIndexedDBKeyStorage,
   'test crypto session': testCryptoSession,
@@ -189,7 +190,6 @@ const tests = {
   'Test Secret Store': testSecretStore,
   'test json schema to yam conversion': testJsonSchemaToYaml,
   'test build slim view': testBuildSlimView,
-  'test openrouter websearch chatCompletion': testChatCompletion,
   'test createDeeptransformer': testCreateDeepTansformer,
   'test chatCompletion tool': testChatCompletion,
   'environment info': getEnvironmentInfo,

@@ -1065,6 +1065,18 @@ export function testCreateDeepTansformer() {
   }
 }
 
+export const testChatCompletionWebSearch = async () => {
+  console.log('do a websearch using chatCompletion')
+
+  const ty = await tystate.taskyon
+
+  const stopSignal = new AbortController().signal
+
+  return {
+    webSearchResponse,
+  }
+}
+
 export const testChatCompletion = async () => {
   console.log('request a random secret from the store')
 
