@@ -90,8 +90,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watchEffect, markRaw } from 'vue'
-import type { TyPGDB } from 'src/modules/pglite.api'
-import { getDatabase } from 'src/modules/pglite.api'
+import type { TyPGDB } from '../../../packages/taskyon/src/utils/pglite.api'
+import { getDatabase } from '../../../packages/taskyon/src/utils/pglite.api'
 import { asyncComputed } from 'src/modules/vueUtils'
 
 // Taskyon

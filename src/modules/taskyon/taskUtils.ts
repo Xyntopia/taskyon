@@ -3,7 +3,7 @@ import { partialTaskDraft } from '@taskyon/taskyon'
 import { deepCopy } from '../utils'
 import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
 import { load } from 'js-yaml'
-import { usePyodideWebworker } from './webWorkerApi'
+import { usePyodideWebworker } from '../../../packages/taskyon/src/utils/webWorkerApi'
 import { match, P } from 'ts-pattern'
 
 export function findAllFilesInTasks(taskList: TaskNode[]): string[] {

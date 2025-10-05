@@ -18,7 +18,7 @@ import {
   createStream,
   createTypeFilteredPort,
 } from '../../../packages/taskyon/src/utils/frpBus'
-import { getDatabase } from '../pglite.api'
+import { getDatabase } from '../../../packages/taskyon/src/utils/pglite.api'
 import { createOAuthTool } from '../tools/authTools'
 import {
   chatCompletionToolName,

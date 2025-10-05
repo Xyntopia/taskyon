@@ -1,4 +1,5 @@
 import z from 'zod'
+import type { Expand } from '../utils/tsHelpers'
 import { FunctionCall, ToolBase } from './tools'
 
 const MessageContent = z.object({ type: z.literal('message'), data: z.string() })
@@ -96,3 +97,41 @@ export const taskTypeOptions = TaskContent.options.map((opt) => {
   // each option is a ZodObject with a `type` literal
   return opt.shape.type._zod.def.values[0]!
 })
+
+// TODO: the goal should be to slowly replace this state by the "result of the task"
+//       E.g. when a task had an error, this would be represented in the task result as an "error"
+const TaskState = z.enum(['Open', 'Queued', 'In Progress', 'Completed', 'Cancelled', 'Error'])
+  .describe(`The task state indicates on what is happening with the task: for example
+it shows whether a task flow is seen as "completed" or whether its waiting
+to be further processed... E.g. there could be a task with no results, which stil counts as "completed"`)
+export type TaskState = z.infer<typeof TaskState>
+
+// Now pull out the tooldefinition variant and fully expand it:
+/*type ToolDefinitionNode = ExpandRecursively<
+  Omit<TaskNode, 'content'> & {
+    content: Extract<TaskNode['content'], { type: 'tooldefinition' }>
+  }
+>*/
+
+/*type ToolDefinitionNode = TaskNode extends { content: infer C }
+  ? C extends { type: 'tooldefinition' }
+    ? Expand<Omit<TaskNode, 'content'> & { content: C }>
+    : never
+  : never*/
+
+// 2. Generic extractor by content.type
+export type TaskNodeType<K extends TaskNode['content']['type']> = TaskNode extends {
+  content: infer C
+}
+  ? C extends { type: K }
+    ? Expand<Omit<TaskNode, 'content'> & { content: C }>
+    : never
+  : never
+/*
+// 3. Example usages
+type ToolDefNode    = TaskNodeType<"tooldefinition">
+type MessageNode    = TaskNodeType<"message">
+type ToolResultNode = TaskNodeType<"toolresult">
+*/
+
+export type TaskGetter = (input: string) => Promise<TaskNode | null>

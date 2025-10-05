@@ -1,7 +1,7 @@
+import { expose } from 'comlink'
 import { loadPyodide, type PyodideInterface, version } from 'pyodide'
 import type { PythonScriptResult } from './pyodide'
 import { executeScript } from './pyodide'
-import { expose } from 'comlink'
 
 //declare const self: ServiceWorkerGlobalScope
 

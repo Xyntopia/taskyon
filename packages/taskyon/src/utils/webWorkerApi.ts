@@ -6,7 +6,7 @@
 
 import type { NlpWorkerInterface } from './nlp.worker'
 import { wrap } from 'comlink'
-import { type pythonWorker } from '../pyodide.worker'
+import { type pythonWorker } from './pyodide.worker'
 
 let nlpWorker: NlpWorkerInterface | null = null
 
@@ -53,7 +53,7 @@ export function usePyodideWebworker() {
           /* webpackMode: "lazy" */
           /* webpackFetchPriority: "low" */
           /* webpackIgnore: "true" */
-          new URL('../pyodide.worker.ts', import.meta.url),
+          new URL('./pyodide.worker.ts', import.meta.url),
           { type: 'module' },
         ),
       )

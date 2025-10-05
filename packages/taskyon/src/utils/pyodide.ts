@@ -1,6 +1,6 @@
 //import { loadPyodide, PyodideInterface } from 'pyodide';
 import type { PyodideInterface } from 'pyodide'
-import { Lock } from './utils'
+import { Lock } from './asyncUtils'
 
 /*function loadScript(src: string): Promise<void> {
   // Specify 'void' if the promise doesn't return a value

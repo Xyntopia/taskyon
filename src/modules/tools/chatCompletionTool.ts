@@ -12,7 +12,7 @@ import type { Goals } from '../taskyon/promptCreation'
 import { addPrompts } from '../taskyon/promptCreation'
 import type { FileMapping, TyTaskManager } from '../taskyon/taskManager'
 import { isTaskyonKey } from '../taskyon/tyCrypto'
-import { useNlpWorker } from '../taskyon/webWorkerApi'
+import { useNlpWorker } from '../../../packages/taskyon/src/utils/webWorkerApi'
 import {
   createDeepTransformer,
   deepCopy,
@@ -24,9 +24,12 @@ import {
 } from '../utils'
 //import type { JSONSchema7Type as JsonSchema } from 'json-schema'
 import type {
+  ChatResponseType,
   FunctionArguments,
+  OpenRouterGenerationInfo,
   partialTaskDraft,
   TaskNode,
+  TaskNodeMeta,
   Thunk,
   ToolBase,
   toolContext,
@@ -46,12 +49,7 @@ import type { AnySchema } from 'ajv'
 import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
 import { z } from 'zod'
-import type {
-  apiConfig,
-  ChatResponseType,
-  OpenRouterGenerationInfo,
-  TaskNodeMeta,
-} from '../taskyon/types'
+import type { apiConfig } from '../taskyon/types'
 import { getCurrentModel, type llmSettings } from '../taskyon/types'
 
 function generateOpenAIToolDeclarations(

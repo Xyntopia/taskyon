@@ -1,4 +1,11 @@
-import type { Asyncify, CryptoSession, InternalTool, Port } from '@taskyon/taskyon'
+import type {
+  Asyncify,
+  ChatResponseType,
+  CryptoSession,
+  InternalTool,
+  Port,
+  TaskNodeMeta,
+} from '@taskyon/taskyon'
 import {
   createDuplexChannel,
   createPortApi,
@@ -6,6 +13,7 @@ import {
   cryptoKeyToBase64,
   deriveKeyFromPwd,
   filter,
+  getDefaultParametersForTool,
   joinUrl,
   randomString,
   TaskNode,
@@ -28,8 +36,8 @@ import { availableModels } from 'src/modules/taskyon/chat'
 import type { Taskyon } from 'src/modules/taskyon/init'
 import { tyCore } from 'src/modules/taskyon/init'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
-import { getDefaultParametersForTool } from '../../packages/taskyon/src/core/tools'
-import type { ChatResponseType, TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
+import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
+import type { TyTaskStreamData } from 'src/modules/taskyon/types'
 import {
   getApiConfig,
   getCurrentModel,
@@ -37,14 +45,13 @@ import {
   type Model,
   type TyProfile,
 } from 'src/modules/taskyon/types'
-import { usePyodideWebworker } from 'src/modules/taskyon/webWorkerApi'
+import { usePyodideWebworker } from '../../packages/taskyon/src/utils/webWorkerApi'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { guiTools } from 'src/modules/tools/GuiTools'
 import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
-import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods

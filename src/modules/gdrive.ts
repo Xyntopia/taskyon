@@ -3,8 +3,9 @@
  * Docs: https://developers.google.com/drive/api/reference/rest/v3
  */
 
+import { lockMap } from '@taskyon/taskyon'
 import axios from 'axios'
-import { asyncLruCache, lockMap } from 'src/modules/utils'
+import { asyncLruCache } from 'src/modules/utils'
 
 type gDriveFile = {
   id: string

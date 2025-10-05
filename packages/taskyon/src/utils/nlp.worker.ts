@@ -1,9 +1,9 @@
-import { expose } from 'comlink'
-import { getVector, loadModel, loadTokenizer } from './nlp'
-import type OpenAI from 'openai'
-import type { OpenAIMessage, TaskNodeMeta } from './types'
-import { mapFunctionNames } from '../../../packages/taskyon/src/core/tools'
 import type { TaskNode, ToolBase } from '@taskyon/taskyon'
+import { expose } from 'comlink'
+import type OpenAI from 'openai'
+import { mapFunctionNames } from '../core/tools'
+import type { OpenAIMessage, TaskNodeMeta } from '../types/chatCompletion'
+import { getVector, loadModel, loadTokenizer } from './nlp'
 
 //import { getEncoding } from 'js-tiktoken';
 async function loadTikTokenEncoder() {

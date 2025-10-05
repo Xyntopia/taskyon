@@ -1,6 +1,6 @@
 import { createTool } from '@taskyon/taskyon'
-import type { PythonScriptResult } from '../pyodide'
-import { usePyodideWebworker } from '../taskyon/webWorkerApi'
+import type { PythonScriptResult } from '../../../packages/taskyon/src/utils/pyodide'
+import { usePyodideWebworker } from '../../../packages/taskyon/src/utils/webWorkerApi'
 import type { JSONSchema7 } from 'json-schema'
 
 const { asyncRunPython } = usePyodideWebworker()

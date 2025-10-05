@@ -87,13 +87,10 @@
 </template>
 
 <script setup lang="ts">
-import { useTaskyonStore } from 'stores/taskyonState'
-import type { ChatResponseType } from 'src/modules/taskyon/types'
-import { type OpenAIMessage } from 'src/modules/taskyon/types'
-import { computed } from 'vue'
+import type { ChatResponseType, OpenAIMessage, TaskNode } from '@taskyon/taskyon'
 import { useAppStateStore } from 'src/stores/appState'
-import { onUnmounted } from 'vue'
-import type { TaskNode } from '@taskyon/taskyon'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { computed, onUnmounted } from 'vue'
 
 const props = defineProps<{
   task: TaskNode

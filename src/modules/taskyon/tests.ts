@@ -26,14 +26,14 @@ import {
 } from '../../../packages/taskyon/src/utils/yamlUtils'
 import { useGdrive } from '../gdrive'
 import { authenticateWithPopup, OAUTH_PROVIDERS } from '../oauth'
-import { getDatabase } from '../pglite.api'
+import { getDatabase } from '../../../packages/taskyon/src/utils/pglite.api'
 import { createDeepTransformer, normalizeFalsyValues } from '../utils'
 import { initCryptoSessionFromBrowser } from './browserCryptoSession'
 import { gDriveSyncPort } from './sync'
 import { createTaskNode } from './taskManager'
 import { chat2Md, getTextFile } from './taskUtils'
 import { craeteToolJsonSchema, summarizeTools } from '../../../packages/taskyon/src/core/tools'
-import { useNlpWorker, usePyodideWebworker } from './webWorkerApi'
+import { useNlpWorker, usePyodideWebworker } from '../../../packages/taskyon/src/utils/webWorkerApi'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
