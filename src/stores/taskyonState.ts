@@ -3,6 +3,7 @@ import type {
   ChatResponseType,
   CryptoSession,
   InternalTool,
+  Model,
   Port,
   TaskNodeMeta,
 } from '@taskyon/taskyon'
@@ -32,7 +33,7 @@ import {
   initCryptoSessionFromBrowser,
   persistSession,
 } from 'src/modules/taskyon/browserCryptoSession'
-import { availableModels } from 'src/modules/taskyon/chat'
+import { availableModels } from '../../packages/taskyon/src/llm/chat'
 import type { Taskyon } from 'src/modules/taskyon/init'
 import { tyCore } from 'src/modules/taskyon/init'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
@@ -42,14 +43,13 @@ import {
   getApiConfig,
   getCurrentModel,
   llmSettings,
-  type Model,
   type TyProfile,
 } from 'src/modules/taskyon/types'
-import { usePyodideWebworker } from '../../packages/taskyon/src/utils/webWorkerApi'
 import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
 import { guiTools } from 'src/modules/tools/GuiTools'
 import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
+import { usePyodideWebworker } from '../../packages/taskyon/src/utils/webWorkerApi'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
 

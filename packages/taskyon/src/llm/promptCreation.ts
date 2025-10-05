@@ -1,5 +1,5 @@
-import { summarizeTools } from '../../../packages/taskyon/src/core/tools'
-import { safeYamlDump, zodToYamlString } from '../../../packages/taskyon/src/utils/yamlUtils'
+import { summarizeTools } from '../core/tools'
+import { safeYamlDump, zodToYamlString } from '../utils/yamlUtils'
 import type OpenAI from 'openai'
 import { z } from 'zod'
 import type { ToolBase } from '@taskyon/taskyon'

@@ -1,8 +1,7 @@
-import type OpenAI from 'openai'
-import { asyncTimeLruCache } from '../utils'
-import type { OpenAIMessage, OpenRouterGenerationInfo } from '@taskyon/taskyon'
+import type { apiConfig, Model, OpenAIMessage, OpenRouterGenerationInfo } from '@taskyon/taskyon'
 import { charHash, ChatResponseType, sleep } from '@taskyon/taskyon'
-import type { apiConfig, Model } from './types'
+import type OpenAI from 'openai'
+import { asyncTimeLruCache } from '../../../../src/modules/utils'
 
 export function generateHeaders(Bearer: string, selectedApi: string, siteUrl?: string) {
   let headers: Record<string, string> = {

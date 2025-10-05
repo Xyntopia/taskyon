@@ -230,7 +230,7 @@ import ApiSelect from 'components/taskyon/ApiSelect.vue'
 import ObjectTreeView from 'src/components/ObjectTreeView.vue'
 
 import { humanReadablePrice, openrouterPricing } from 'src/modules/utils'
-import type { Model } from 'src/modules/taskyon/types'
+import type { Model } from '@taskyon/taskyon'
 
 /* ─────────── Local constants ─────────── */
 const pricingOptions = ['$/token', 'pages/0.01$', '$/million tokens'] as const

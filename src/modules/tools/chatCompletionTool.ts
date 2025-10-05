@@ -1,18 +1,18 @@
 import { load } from 'js-yaml'
 import type OpenAI from 'openai'
-import type { ChatCompletionChunk } from '../taskyon/chat'
+import { useNlpWorker } from '../../../packages/taskyon/src/utils/webWorkerApi'
+import type { ChatCompletionChunk } from '../../../packages/taskyon/src/llm/chat'
 import {
   callLLM,
   createOpenAIRequest,
   generateHeaders,
   getOpenRouterGenerationInfo,
   getTaskyonCosts,
-} from '../taskyon/chat'
-import type { Goals } from '../taskyon/promptCreation'
-import { addPrompts } from '../taskyon/promptCreation'
+} from '../../../packages/taskyon/src/llm/chat'
+import type { Goals } from '../../../packages/taskyon/src/llm/promptCreation'
+import { addPrompts } from '../../../packages/taskyon/src/llm/promptCreation'
 import type { FileMapping, TyTaskManager } from '../taskyon/taskManager'
 import { isTaskyonKey } from '../taskyon/tyCrypto'
-import { useNlpWorker } from '../../../packages/taskyon/src/utils/webWorkerApi'
 import {
   createDeepTransformer,
   deepCopy,
@@ -24,6 +24,7 @@ import {
 } from '../utils'
 //import type { JSONSchema7Type as JsonSchema } from 'json-schema'
 import type {
+  apiConfig,
   ChatResponseType,
   FunctionArguments,
   OpenRouterGenerationInfo,
@@ -49,7 +50,6 @@ import type { AnySchema } from 'ajv'
 import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
 import { z } from 'zod'
-import type { apiConfig } from '../taskyon/types'
 import { getCurrentModel, type llmSettings } from '../taskyon/types'
 
 function generateOpenAIToolDeclarations(
