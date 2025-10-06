@@ -207,6 +207,55 @@ export function createTypeFilteredPort<
   )
 }
 
+export const waitForMsg = async <T, F extends T>(
+  subscribe: (obs: Observer<T>) => Unsubscribe,
+  predicate: (m: T) => m is F,
+  opts?: { timeoutMs?: number; signal?: AbortSignal },
+): Promise<F> => {
+  return new Promise<F>((resolve, reject) => {
+    if (opts?.signal?.aborted) {
+      const err = new Error('Aborted')
+      err.name = 'AbortError'
+      reject(err)
+      return
+    }
+
+    let done = false
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    let unsub: Unsubscribe = () => {}
+
+    const finish = (err?: Error, value?: F) => {
+      //  this is simply there to prevent double resolving if e.g. multiple message arrive very quickly or timeout and stopsignal arrive at the same time etc...
+      if (done) return
+      done = true
+      unsub()
+      clearTimeout(timeout)
+      opts?.signal?.removeEventListener('abort', onAbort)
+      if (err) reject(err)
+      else resolve(value!) // we know that value always exists when no err so we add "!"
+    }
+
+    const onAbort = () => {
+      const err = new Error('Aborted')
+      err.name = 'AbortError'
+      finish(err)
+    }
+
+    opts?.signal?.addEventListener('abort', onAbort)
+    if (opts?.timeoutMs) timeout = setTimeout(() => finish(new Error('Timeout')), opts.timeoutMs)
+
+    const observer = (value: T) => {
+      try {
+        if (predicate(value)) finish(undefined, value)
+      } catch (e) {
+        finish(new Error('Error on waiting', { cause: e }))
+      }
+    }
+
+    unsub = subscribe(observer)
+  })
+}
+
 /** Generic message → handler router (sync or async) */
 export function createPortApi<
   R,
