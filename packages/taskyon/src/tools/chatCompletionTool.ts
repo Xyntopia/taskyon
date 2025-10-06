@@ -467,7 +467,7 @@ function generateFollowUpTasksFromResult(
         content: { type: 'functioncall', data: functionCall[0] },
       },
     ]
-  } else if (goal === 'SimpleCompletion' || llmTools) {
+  } else if (goal === 'SimpleCompletion' || goal === 'WebSearch' || llmTools) {
     // if we don't need to call a tool, we simply generate a normal message...
     // the same is true, if we have enabled native llmTools. In this case
     // we either got a function back already (functionCall[0]) or we
@@ -729,7 +729,13 @@ export async function createChatCompletionTool(
             'The name of the model to use for the completion. Optional, will choose default model if not provided',
         },
         goal: {
-          enum: ['SimpleCompletion', 'AnalyzeError', 'ChooseTool', 'AnalyzeToolResult'],
+          enum: [
+            'SimpleCompletion',
+            'AnalyzeError',
+            'ChooseTool',
+            'AnalyzeToolResult',
+            'WebSearch',
+          ],
           description:
             'Optional Parameter to define the goal of the chat completion. If not set, the goal is dynamically inferred from the input.',
         },
@@ -847,6 +853,10 @@ export async function createChatCompletionTool(
         },
         schema,
         siteUrl,
+        {
+          maxResults: 5,
+          searchContextSize: 'medium',
+        },
       )
 
       // parse the response into our own type ...
@@ -955,7 +965,7 @@ type ChatCompletionArgs = Omit<chatCompletionParams, 'schema'> & {
   schema?: JSONSchema7 & Record<string, unknown>
 }
 
-export function createChatCompletionTask(args?: ChatCompletionArgs): partialTaskDraft {
+export function createChatCompletionTask(args: ChatCompletionArgs): partialTaskDraft {
   return {
     role: 'function',
     content: {

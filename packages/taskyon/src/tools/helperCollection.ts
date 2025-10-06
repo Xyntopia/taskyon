@@ -29,7 +29,7 @@ const jinaMarkdownReader = createTool({
 
 // TODO: add more functionality from here:   https://r.jina.ai/docs
 // TODO: add a state how many tokesn we have left over :)
-const jinaSearch = createTool({
+export const jinaSearch = createTool({
   description: 'A tool that searches using the Jina AI search API.',
   longDescription:
     'This tool uses the Jina AI search API to perform searches and retrieve results.',
@@ -339,4 +339,4 @@ const notification = createTool({
   }`,
 })
 
-export const smallHelperTools = [jinaMarkdownReader, jinaSearch, clock, location, notification]
+export const smallHelperTools = [jinaMarkdownReader, clock, location, notification]
