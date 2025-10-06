@@ -2,7 +2,27 @@ import z from 'zod'
 import type { Expand } from '../utils/tsHelpers'
 import { FunctionCall, ToolBase } from './tools'
 
-const MessageContent = z.object({ type: z.literal('message'), data: z.string() })
+export const Annotation = z.object({
+  type: z.literal('url_citation'),
+  url_citation: z
+    .object({
+      end_index: z.number(),
+      start_index: z.number(),
+      title: z.string(),
+      url: z.string(),
+      content: z.string(),
+    })
+    .partial()
+    .optional(),
+})
+
+export type Annotation = z.infer<typeof Annotation>
+
+const MessageContent = z.object({
+  type: z.literal('message'),
+  data: z.string(),
+  ann: Annotation.array().optional(),
+})
 const StructuredContent = z.object({
   type: z.literal('structured'),
   data: z.unknown(),

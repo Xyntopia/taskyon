@@ -1,6 +1,7 @@
 import type OpenAI from 'openai'
 import z from 'zod'
 import { assertType } from '../utils/tsHelpers'
+import { Annotation } from './node'
 
 export const OpenAIMessage = z.object({
   content: z.string().nullish(),
@@ -50,8 +51,9 @@ export const ChatResponseType = z.object({
           'cancelled',
           'unknown',
         ]),
-        logprobs: z.unknown().optional(),
+        annotations: Annotation.array().optional(),
         reasoning: z.string().optional(),
+        logprobs: z.unknown().optional(),
       }),
     )
     .default([]),

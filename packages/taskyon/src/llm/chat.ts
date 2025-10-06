@@ -65,6 +65,17 @@ export type ChatCompletionChunk = {
         format?: string
         index?: number
       }>
+
+      annotations?: Array<{
+        type: 'url_citation'
+        url_citation: {
+          end_index?: number
+          start_index?: number
+          title: string
+          url: string
+          content: string
+        }
+      }>
     }
     finish_reason?: 'stop' | 'length' | 'content_filter' | 'tool_calls' | 'function_call' | null
     native_finish_reason?: string | null // vendor-specific
@@ -132,6 +143,10 @@ export function accumulateStep(
     }
     if (delta.reasoning) {
       choice.reasoning = (choice.reasoning || '') + delta.reasoning
+    }
+    if (delta.annotations) {
+      choice.annotations = choice.annotations ?? []
+      choice.annotations.push(...delta.annotations)
     }
 
     if (chunkChoice0.finish_reason) {
