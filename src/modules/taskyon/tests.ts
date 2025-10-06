@@ -4,6 +4,7 @@ import {
   base64ToPublixX25519,
   chat2Md,
   craeteToolJsonSchema,
+  createChatCompletionTask,
   createCryptoSession,
   createDeepTransformer,
   createTaskNode,
@@ -12,6 +13,7 @@ import {
   decompressEncryptedObject,
   deepCloneWJson,
   encryptCompressObject,
+  ensureValidTaskId,
   generateAssymetricKeyDeriver,
   generateRandomEncryptionKey,
   generateSeedPhrase,
@@ -26,6 +28,7 @@ import {
   uint8ArrayToBase64UrlSafe,
   useNlpWorker,
   usePyodideWebworker,
+  waitForMsg,
   zodToYamlString,
 } from '@taskyon/taskyon'
 import { until } from '@vueuse/core'
@@ -1068,11 +1071,52 @@ export function testCreateDeepTansformer() {
 export const testChatCompletionWebSearch = async () => {
   console.log('do a websearch using chatCompletion')
 
-  const ty = await tystate.taskyon
+  const ensureValidIds = async (tasks: partialTaskDraft[][]) => {
+    const flattened: TaskNode[] = []
+    for (const tl of tasks) {
+      let lastTaskId: string | undefined = undefined
+      for (const t of tl) {
+        const task = await ensureValidTaskId({ ...t, priorID: lastTaskId })
+        lastTaskId = task.id
+        flattened.push(task)
+      }
+    }
+    return flattened
+  }
 
-  const stopSignal = new AbortController().signal
+  const tasks = await ensureValidIds([
+    [
+      {
+        role: 'user',
+        content: { type: 'message', data: 'hi!..   can you please search for for "taskyon" is?' },
+      },
+      createChatCompletionTask({
+        goal: 'WebSearch',
+        model: 'google/gemini-2.5-flash-lite',
+      }),
+    ],
+  ])
+
+  tystate.api.send({
+    type: 'tasks',
+    tasks: tasks,
+    execute: true,
+    show: true, // we want to show this task in our GUI as a succesful test
+    origin: 'Taskyon Diagnostics',
+  })
+
+  const msg = await waitForMsg(
+    tystate.api.receive,
+    (m): m is { type: 'taskCreated'; task: TaskNode } =>
+      m.type === 'taskCreated' && !!m.task && m.task?.parentID === tasks.at(-1)?.id,
+    { timeoutMs: 100000 },
+  )
+
+  const webSearchResponse = msg.task.content.data
 
   return {
+    tasks,
+    msg,
     webSearchResponse,
   }
 }
