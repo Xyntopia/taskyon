@@ -3,6 +3,7 @@ import {
   mdiAlphabeticalVariant,
   mdiAutoFix,
   mdiFunctionVariant,
+  mdiSearchWeb,
   mdiTools,
 } from '@quasar/extras/mdi-v6'
 import z from 'zod'
@@ -10,10 +11,17 @@ import { apiConfig } from './chatCompletion'
 import { partialTaskDraft } from './node'
 
 // TODO: rename llmSettings to "tyOptions"
+// TODO: move most of this into "tool Profiles"
 export const llmSettings = z.object({
   userId: z.string().nullish().optional().meta({
     description:
       'a (public) cryptographic user id which is used to identify the user in different chats',
+  }),
+  allowWebSearch: z.boolean().optional().default(true).meta({
+    description:
+      'Allow web search for chat Completion. This can be turned off for enhanced security.',
+    icon: mdiSearchWeb,
+    label: 'Web Search',
   }),
   secretPublicKey: z.string().nullish().optional().meta({
     description: 'A (public) cryptographic key which is used to encrypt secrets',

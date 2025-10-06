@@ -230,55 +230,64 @@ Finally, it creates a chat completion task with the selected tools in the allowe
     parameters: {
       type: 'object',
       properties: {
+        useTools: {
+          type: 'boolean',
+          description:
+            'Optional. Set to true if we want to use tools, otherwise we will do a simple chat completion.',
+          default: false,
+        },
         llmTools: {
           type: 'boolean',
           description: `Optional Parameter. If set to true, we will make use of taskyons
 tool Selection capabilities, otherwise we will use an openai compatible tool api`,
           default: true,
         },
+        webSearch: {
+          type: 'boolean',
+          description:
+            'Optional Parameter. If set to true taskyon will attempt to use the native web search abilities from various LLM providers.',
+        },
       },
     } as const,
-    function: async ({ llmTools }, { taskChain }) => {
-      console.log('choose tool!')
+    function: async ({ llmTools, webSearch, useTools }, { taskChain }) => {
+      const pattern = { ...taskChain.at(-2), webSearch, useTools }
+      console.log('choose tool!', pattern)
       // use pattern matching on the last task
-      const result = await match(taskChain.at(-2))
+      const result = await match(pattern)
         .returnType<taskResult | Promise<taskResult>>()
+        // if we only have a simple user message with no tools, alwa
         .with(
+          { content: { type: 'message', data: P.string }, webSearch: true, useTools: P.any },
           {
-            content: {
-              type: 'structured',
-              data: {
-                reasoning_steps: P.optional(P._),
-                choice: P.union('no', P.array('no')),
-              },
-            },
+            content: { type: 'message', data: P.string },
+            webSearch: P.any,
+            useTools: P.not(true),
           },
-          () => {
-            console.log('2. No tools required, just return a simple completion task')
-            return makeTaskResult([
-              [
-                createChatCompletionTask({
-                  goal: 'SimpleCompletion',
-                  llmTools,
-                }),
-              ],
-            ])
+          ({ webSearch }) => {
+            const goal = webSearch ? 'WebSearch' : 'SimpleCompletion'
+            console.log('Do a simple direct chatCOmpletion query!', { goal })
+            // TODO: in the case useTools are enabled, maybe afterwards add another tool Chooser?
+            return makeTaskResult(createChatCompletionTask({ goal }))
           },
         )
         // any other string...
-        .with({ content: { type: 'message', data: P.string } }, async () => {
-          console.log('1. Retrieve all tools and create a short list (only name and description).')
-          const allTools = await taskManager.updateToolDefinitions(true)
-          const toolList = Object.values(allTools).map((t) => ({
-            name: t.name,
-            description: t.description,
-          }))
-          const toolNum = 3
-          return makeTaskResult([
-            [
-              createChatCompletionTask({
-                prompts: [
-                  `Here is list of all the tools which are available to you:
+        .with(
+          { content: { type: 'message', data: P.string }, webSearch: P.not(true), useTools: true },
+          async () => {
+            console.log(
+              '1. Retrieve all tools and create a short list (only name and description).',
+            )
+            const allTools = await taskManager.updateToolDefinitions(true)
+            const toolList = Object.values(allTools).map((t) => ({
+              name: t.name,
+              description: t.description,
+            }))
+            const toolNum = 3
+            return makeTaskResult([
+              [
+                createChatCompletionTask({
+                  prompts: [
+                    `Here is list of all the tools which are available to you:
 
 ${safeYamlDump(toolList)}
 
@@ -292,48 +301,66 @@ Examples are:
 - ... and more! make sure to think about it!
 
 If you are sure that none of the tools are relevant, your choice should be simple string "no".`,
-                ],
-                llmTools,
-                schema: {
-                  type: 'object',
-                  properties: {
-                    reasoning_steps: {
-                      type: 'array',
-                      items: {
-                        type: 'string',
+                  ],
+                  llmTools,
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      reasoning_steps: {
+                        type: 'array',
+                        items: {
+                          type: 'string',
+                        },
+                        description: 'The reasoning steps leading to the final conclusion.',
                       },
-                      description: 'The reasoning steps leading to the final conclusion.',
-                    },
-                    choice: {
-                      anyOf: [
-                        {
-                          enum: ['no'],
-                          description:
-                            'If you are sure no tools are required for an answer, choose "no" as an answer instead of a list!',
-                        },
-                        {
-                          type: 'array',
-                          description: 'List of tool names you think might be relevant',
-                          items: {
-                            type: 'string',
+                      choice: {
+                        anyOf: [
+                          {
+                            enum: ['no'],
+                            description:
+                              'If you are sure no tools are required for an answer, choose "no" as an answer instead of a list!',
                           },
-                          // we are not using this, in order to make our tool more robust...
-                          // sometimes, the LLM will select fewer tools than we expect
-                          //minItems: toolNum,
-                          // TODO: in chatGPT "strict" mode, maxItems will not work...
-                          //maxItems: toolNum, // we always leave this here though in order to prevent too many tools being shown in the next step...
-                        },
-                      ],
+                          {
+                            type: 'array',
+                            description: 'List of tool names you think might be relevant',
+                            items: {
+                              type: 'string',
+                            },
+                            // we are not using this, in order to make our tool more robust...
+                            // sometimes, the LLM will select fewer tools than we expect
+                            //minItems: toolNum,
+                            // TODO: in chatGPT "strict" mode, maxItems will not work...
+                            //maxItems: toolNum, // we always leave this here though in order to prevent too many tools being shown in the next step...
+                          },
+                        ],
+                      },
                     },
+                    additionalProperties: false,
+                    required: ['reasoning_steps', 'choice'],
                   },
-                  additionalProperties: false,
-                  required: ['reasoning_steps', 'choice'],
-                },
-              }),
-              toolCall({ name: 'chooseTool', arguments: { llmTools } }),
-            ],
-          ])
-        })
+                }),
+                toolCall({ name: 'chooseTool', arguments: { llmTools } }),
+              ],
+            ])
+          },
+        )
+        .with(
+          {
+            content: {
+              type: 'structured',
+              data: {
+                reasoning_steps: P.optional(P._),
+                choice: P.union('no', P.array('no')),
+              },
+            },
+            useTools: P.any,
+            webSearch: P.any,
+          },
+          () => {
+            console.log('2. No tools required, just return a simple completion task')
+            return makeTaskResult([[createChatCompletionTask({ goal: 'SimpleCompletion' })]])
+          },
+        )
         .with(
           {
             content: {
@@ -343,6 +370,8 @@ If you are sure that none of the tools are relevant, your choice should be simpl
                 choice: P.select(P.array(P.string)),
               },
             },
+            useTools: P.any,
+            webSearch: P.any,
           },
           (choice) => {
             const filteredChoice = choice.filter((tool) => tool !== 'no')
@@ -358,11 +387,13 @@ If you are sure that none of the tools are relevant, your choice should be simpl
             ])
           },
         )
+        //.exhaustive()
         .otherwise(() => {
           throw new Error(
             'we need a preceding message task in order to proceed with this function!',
           )
         })
+
       return result
     },
   })

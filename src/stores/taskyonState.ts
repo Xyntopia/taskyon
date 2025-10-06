@@ -13,7 +13,6 @@ import type {
 } from '@taskyon/taskyon'
 import {
   availableModels,
-  createChatCompletionTask,
   createDuplexChannel,
   createPortApi,
   createTypeFilteredPort,
@@ -1120,19 +1119,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const entryNode = computed(
     () =>
       stateRefs.llmSettings.entryNode ??
-      (stateRefs.llmSettings.enableToolChooser
-        ? toolCall({
-            name: 'chooseTool',
-            arguments: {
-              llmTools: stateRefs.llmSettings.enableOpenAiTools,
-            },
-          })
-        : apiKeyManagement.currentModelId.value
-          ? createChatCompletionTask({
-              model: apiKeyManagement.currentModelId.value,
-              goal: 'SimpleCompletion',
-            })
-          : undefined),
+      toolCall({
+        name: 'chooseTool',
+        arguments: {},
+      }),
   )
 
   const tyready = ref(false)

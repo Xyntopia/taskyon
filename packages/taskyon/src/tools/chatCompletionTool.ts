@@ -853,10 +853,12 @@ export async function createChatCompletionTool(
         },
         schema,
         siteUrl,
-        {
-          maxResults: 5,
-          searchContextSize: 'medium',
-        },
+        goal === 'WebSearch'
+          ? {
+              maxResults: 5,
+              searchContextSize: 'medium',
+            }
+          : undefined,
       )
 
       // parse the response into our own type ...

@@ -19,11 +19,17 @@
           <slot name="left" btn-size="md" />
         </template>
         <template #after>
-          <slot name="bottom" btn-size="md">
-            <q-btn flat :icon="matSend" @click="$emit('execute-task')">
-              <q-tooltip>{{ sendToolTip }}</q-tooltip>
-            </q-btn>
-          </slot>
+          <q-btn flat :icon="matSend" @click="$emit('execute-task')">
+            <q-tooltip>{{ sendToolTip }}</q-tooltip>
+          </q-btn>
+          <q-btn
+            v-if="showWebSearch"
+            flat
+            :icon="mdiSearchWeb"
+            @click="$emit('execute-web-search')"
+          >
+            <q-tooltip> Use web search </q-tooltip>
+          </q-btn>
         </template> </q-input
       ><q-input
         v-else
@@ -46,17 +52,25 @@
       <slot name="top" btn-size="sm" />
     </div>
     <div v-if="!smallMode" class="bar bottom border-radius-inherit">
-      <slot name="bottom" btn-size="sm">
-        <q-btn flat size="sm" :icon="matSend" @click="$emit('execute-task')">
-          <q-tooltip>{{ sendToolTip }}</q-tooltip>
-        </q-btn>
-      </slot>
+      <q-btn flat size="sm" :icon="matSend" @click="$emit('execute-task')">
+        <q-tooltip>{{ sendToolTip }}</q-tooltip>
+      </q-btn>
+      <q-btn
+        v-if="showWebSearch"
+        flat
+        size="sm"
+        :icon="mdiSearchWeb"
+        @click="$emit('execute-web-search')"
+      >
+        <q-tooltip> <q-tooltip> Use web search </q-tooltip> </q-tooltip>
+      </q-btn>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { matSend } from '@quasar/extras/material-icons'
+import { mdiSearchWeb } from '@quasar/extras/mdi-v6'
 import { useQuasar } from 'quasar'
 import type { appConfiguration } from 'src/modules/taskyon/types'
 import { computed } from 'vue'
@@ -86,10 +100,12 @@ const content = defineModel<string | null | undefined>({
 
 const props = defineProps<{
   useEnterToSend: appConfiguration['useEnterToSend']
+  showWebSearch?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'execute-task'): void
+  (e: 'execute-web-search'): void
 }>()
 
 const checkKeyboardEvents = (event: KeyboardEvent) => {

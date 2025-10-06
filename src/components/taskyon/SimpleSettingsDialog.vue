@@ -45,8 +45,14 @@ const slimSettings = computed(() =>
       schema: llmSettings,
       pickKeys: [
         ...(em.value
-          ? ['enableToolChooser', 'enableOpenAiTools', 'tryUsingVisionModels', 'useBasePrompt']
-          : []),
+          ? [
+              'allowWebSearch',
+              'enableToolChooser',
+              'enableOpenAiTools',
+              'tryUsingVisionModels',
+              'useBasePrompt',
+            ]
+          : ['allowWebSearch']),
       ],
     },
     {

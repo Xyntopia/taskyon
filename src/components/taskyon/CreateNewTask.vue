@@ -28,7 +28,9 @@
         :debounce="0"
         :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
+        :show-web-search="state.llmSettings.allowWebSearch"
         @execute-task="addNewTask(p2pTopic)"
+        @execute-web-search="addNewTask(p2pTopic, true)"
       >
         <template #left="{ btnSize }">
           <div v-if="minMode">
@@ -387,7 +389,7 @@ const $q = useQuasar()
 
 // TODO: move this "up", it would be better to have the task creation be purely
 //       event based and more configurable...
-async function addNewTask(p2pTopic?: string) {
+async function addNewTask(p2pTopic?: string, webSearch?: boolean) {
   console.log('pubishing on topic:', p2pTopic)
   const kwdsPromise = getCurrentKeywordsWithTimeout(300)
   const ty = await tystate.taskyon
@@ -415,6 +417,15 @@ async function addNewTask(p2pTopic?: string) {
   if (currentnewTask.value.content.type === 'message') {
     if (entryNode) {
       const chooseTask = deepCopy(entryNode)
+      if (chooseTask.content.type === 'functioncall') {
+        // in the future, we should make this "dynamic" and automatically add the relevant buttons
+        // from our entry node to the task creation area!
+        chooseTask.content.data.arguments = {
+          ...(webSearch ? { webSearch: true } : {}),
+          ...(state.llmSettings.enableToolChooser ? { useTools: true } : {}),
+          ...(state.llmSettings.enableOpenAiTools ? { llmTools: true } : {}),
+        }
+      }
       newTaskChain.push(chooseTask)
     } else {
       $q.notify(
