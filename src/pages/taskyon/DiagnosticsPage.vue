@@ -96,6 +96,7 @@ import {
   testIndexedDBKeyStorage,
   testSessionSwitching,
   testChatCompletionWebSearch,
+  testMetaDb,
 } from 'src/modules/taskyon/tests'
 import { useAppStateStore } from 'src/stores/appState'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
@@ -182,6 +183,7 @@ async function runTest(name: string, testFunc: () => unknown, details = false) {
 }
 
 const tests = {
+  'test meta database': testMetaDb,
   'test taskyon chatCompletion websearch': testChatCompletionWebSearch,
   'test session switching': testSessionSwitching,
   'test key indexeddb storage': testIndexedDBKeyStorage,
