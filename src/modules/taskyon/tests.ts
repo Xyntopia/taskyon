@@ -13,7 +13,7 @@ import {
   decompressEncryptedObject,
   deepCloneWJson,
   encryptCompressObject,
-  ensureValidTaskId,
+  ensureValidIds,
   generateAssymetricKeyDeriver,
   generateRandomEncryptionKey,
   generateSeedPhrase,
@@ -1070,19 +1070,6 @@ export function testCreateDeepTansformer() {
 
 export const testChatCompletionWebSearch = async () => {
   console.log('do a websearch using chatCompletion')
-
-  const ensureValidIds = async (tasks: partialTaskDraft[][]) => {
-    const flattened: TaskNode[] = []
-    for (const tl of tasks) {
-      let lastTaskId: string | undefined = undefined
-      for (const t of tl) {
-        const task = await ensureValidTaskId({ ...t, priorID: lastTaskId })
-        lastTaskId = task.id
-        flattened.push(task)
-      }
-    }
-    return flattened
-  }
 
   const tasks = await ensureValidIds([
     [
