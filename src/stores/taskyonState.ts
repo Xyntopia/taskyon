@@ -19,6 +19,7 @@ import {
   createTypeFilteredPort,
   cryptoKeyToBase64,
   deriveKeyFromPwd,
+  ensureValidTaskId,
   filter,
   getCurrentModel,
   getDefaultParametersForTool,
@@ -862,18 +863,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           //tyInit.outPort.send(msg)
         },
         task: async (msg) => {
-          // TODO: replace by rpc call to outPort
-          const tn = await ty.addPartialTask2Tree({
-            ...msg.task,
-            label: msg.origin ? [msg.origin] : undefined,
-          })
           // push the last task to execution queue right away...
-          if (msg.execute) {
-            ty.queueTask(tn.id)
-          }
+          const tn = await ensureValidTaskId(msg.task)
           if (msg.show) {
             stateRefs.setSelectedTask(tn.id)
           }
+          ty.port.send(msg)
           // we don't forward this message to outPort, because we 've already processed everything relevant here..
         },
       },

@@ -1,8 +1,11 @@
 import { z } from 'zod'
 import { RemoteFunctionCall, RemoteFunctionResponse } from './messages'
-import { partialTaskDraft } from './node'
+import { partialTaskDraft, TaskNode } from './node'
 import { ToolBase } from './tools'
 
+// TODO: most of the messages here should have an equivalent encrypted version!
+
+// TODO: merge this with "taskCreated" message!
 export const EncryptedTasks = z.object({
   type: z.literal('addTasks'),
   data: z.instanceof(Uint8Array<ArrayBuffer>) as z.ZodType<Uint8Array<ArrayBuffer>>,
@@ -17,8 +20,10 @@ export const RequestTask = z.object({
 
 export const TaskCreated = z.object({
   type: z.literal('taskCreated'),
-  ids: z.array(z.string()),
-  info: z.string(),
+  task: TaskNode.optional(),
+  // TODO: add optional encrypted task!
+  ids: z.array(z.string()).optional(),
+  info: z.string().optional(),
 })
 
 const TaskMessage = z
@@ -43,6 +48,18 @@ const TaskMessage = z
     description:
       'With this message type we can send tasks to taskyon from outside, e.g. a parent to a taskyon iframe',
   })
+
+// merge this with "TaskMessage"
+const TaskChainMessage = z.object({
+  type: z.literal('tasks').meta({
+    description: 'Field to indicate what kind of a message we have here.',
+  }),
+  execute: z.boolean().default(false),
+  tasks: partialTaskDraft.array(),
+  show: z.boolean().default(false).meta({
+    description: 'select the last task in the GUI',
+  }),
+})
 
 const FunctionDescriptionMessage = ToolBase.extend({
   type: z.literal('functionDescription').meta({
@@ -88,6 +105,7 @@ export const TaskyonMessage = z.discriminatedUnion('type', [
   // TODO: can we unify the task message with the SyncApi?
   ...TyBusMessage.options,
   z.object({ ...BaseMessage.shape, ...TaskMessage.shape }),
+  z.object({ ...BaseMessage.shape, ...TaskChainMessage.shape }),
   z.object({ ...BaseMessage.shape, ...FunctionDescriptionMessage.shape }),
   z.object({ ...BaseMessage.shape, ...TyReadyMessage.shape }),
 ])

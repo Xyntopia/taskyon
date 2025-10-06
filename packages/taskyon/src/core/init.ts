@@ -58,6 +58,7 @@ function createApi(
   taskManagerInstance: Thunk<TyTaskManager>,
   queueTask: (id: string) => void,
   cs: Thunk<CryptoSession>,
+  sendEncryptedTasks?: Thunk<boolean>,
 ) {
   createPortApi(
     insidePort,
@@ -66,12 +67,27 @@ function createApi(
       task: async (msg) => {
         const tn = await taskManagerInstance().addPartialTask2Tree({
           ...msg.task,
-          label: msg.origin ? [msg.origin] : undefined,
+          //label: msg.origin ? [msg.origin] : undefined,
         })
         // push the last task to execution queue right away...
         if (msg.execute) {
           queueTask(tn.id)
         }
+      },
+      tasks: async (msg) => {
+        console.log('received tasks:', msg)
+        const ts = await Promise.all(
+          msg.tasks.map(
+            async (t) =>
+              await taskManagerInstance().addPartialTask2Tree({
+                ...t,
+                //label: msg.origin ? [msg.origin] : undefined,
+              }),
+          ),
+        )
+        console.log('executing tasks', ts)
+        // push the last task to execution queue right away...
+        if (msg.execute) ts.forEach((t) => queueTask(t.id))
       },
       functionDescription: (msg) => {
         const newFunc: ToolBase = msg
@@ -103,23 +119,27 @@ function createApi(
     // if tasks is not null, it was freshly created
     // TODO: only trigger upload on certain task events...
     if (task) {
-      const archiveName = `${id}.tyt`
+      insidePort.send({ type: 'taskCreated', task })
 
-      // compress objects "locally" (for the test)
-      const packed = await encryptCompressObject(
-        task,
-        archiveName,
-        () => cs().getUserPublicKey()?.publicKey,
-        () => cs().getSessionKey(),
-      )
-      console.log('created encrypted task file...', id)
+      if (sendEncryptedTasks?.()) {
+        const archiveName = `${id}.tyt`
 
-      insidePort.send({
-        type: 'addTasks',
-        data: packed,
-        info: archiveName,
-        ids: [String(id)],
-      })
+        // compress objects "locally" (for the test)
+        const packed = await encryptCompressObject(
+          task,
+          archiveName,
+          () => cs().getUserPublicKey()?.publicKey,
+          () => cs().getSessionKey(),
+        )
+        console.log('created encrypted task file...', id)
+
+        insidePort.send({
+          type: 'addTasks',
+          data: packed,
+          info: archiveName,
+          ids: [String(id)],
+        })
+      }
     }
   })
 }

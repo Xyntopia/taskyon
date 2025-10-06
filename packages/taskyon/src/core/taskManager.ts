@@ -78,7 +78,7 @@ async function taskContentHash(
   return { hash, normalized }
 }
 
-async function ensureValidTaskId(task: partialTaskDraft): Promise<TaskNode> {
+export async function ensureValidTaskId(task: partialTaskDraft): Promise<TaskNode> {
   const { hash, normalized } = await taskContentHash(task)
   if (task.id && hash != task.id) {
     throw new Error(
@@ -113,10 +113,13 @@ export const createTaskNode = async (
     createMeta?: 'missing' | 'overwrite' | undefined
   } = { createMeta: 'missing' },
 ): Promise<TaskNode> => {
-  // TODO: add task signature and other metadata here as well
-  const newTask = addTaskNodeMeta(options, task)
-  const nt = ensureValidTaskId(newTask)
-  return nt
+  // if task already has an id, do nothing and only ensure, that the id is valid!
+  if (!task.id) {
+    // TODO: add task signature and other metadata here as well
+    const newTask = addTaskNodeMeta(options, task)
+    return ensureValidTaskId(newTask)
+  }
+  return ensureValidTaskId(task)
 }
 
 async function useFileManager(db: TyPGDB) {

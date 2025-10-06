@@ -9,6 +9,7 @@ import z from 'zod'
 import { apiConfig } from './chatCompletion'
 import { partialTaskDraft } from './node'
 
+// TODO: rename llmSettings to "tyOptions"
 export const llmSettings = z.object({
   userId: z.string().nullish().optional().meta({
     description:
