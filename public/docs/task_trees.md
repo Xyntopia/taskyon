@@ -1,10 +1,10 @@
-# Taskyon Whitepaper: Immutable TaskNodes in a Dynamic TaskTree
+# Immutable TaskNodes in a Dynamic TaskTree
 
 ## 1. Introduction
 
 Taskyon is a distributed system designed to manage and execute tasks in a **peer-to-peer environment** using a **TaskTree** structure. Inspired by dependency graphs, workflow engines, and call stacks, Taskyon breaks complex tasks into manageable sub-tasks that can be executed sequentially or in parallel. Each task is represented as an immutable **TaskNode**, ensuring cryptographic integrity and content-addressability while allowing for **dynamic orchestration** using Large Language Models (LLMs).
 
-This whitepaper outlines Taskyon’s architecture, cryptographic guarantees, and how LLMs influence TaskTree evolution.
+This document outlines Taskyon's architecture, cryptographic guarantees, implementation details, and how LLMs influence TaskTree evolution.
 
 ## 2. Architectural Overview
 
@@ -15,13 +15,22 @@ This whitepaper outlines Taskyon’s architecture, cryptographic guarantees, and
 
 ### TaskTree Structure
 
+Taskyon implements task trees using immutable `TaskNode` entities connected through two types of relationships:
+
+1. **`parentID`**: Links to the parent task that created this subtask (hierarchical relationship)
+2. **`priorID`**: Links to the previous task in the same chain (sequential dependency)
+
+The system maintains caches to efficiently traverse these relationships in both directions.
+
+#### Core Structural Concepts
+
 - **Hierarchical and Sequential Links:** TaskNodes reference their **parentID** (denoting hierarchical relationships) and **priorID** (capturing sequential dependencies). This linkage forms a structured TaskTree where tasks build upon each other.
 - **Subtasks and Results:** New tasks are appended as child TaskNodes, preserving context while keeping each node immutable.
 - **Task Execution and Propagation:** Task results propagate upwards in the tree, similar to function return values in programming. This is done through a tree flattening operation.
 
 #### Task Chain Processing and Parallelization
 
-Taskyon’s execution model distinguishes between sequential processing within a single task chain and parallel execution across independent chains. Key aspects include:
+Taskyon's execution model distinguishes between sequential processing within a single task chain and parallel execution across independent chains. Key aspects include:
 
 - **Sequential Processing within Chains:**  
   Tasks within a single chain are processed one after another—each task consumes the output of its predecessor, ensuring a coherent, step-by-step evolution of state. Each task within a sequential chain has to wait to be processed until all subtasks of the previous chains have returned (produce a "return" task).
@@ -30,8 +39,7 @@ Taskyon’s execution model distinguishes between sequential processing within a
   While individual chains maintain sequential execution, distinct chains (or subchains spawned by function tasks) can be processed concurrently, optimizing overall throughput.
 
 - **Parent-Child Relationships and Sibling Tasks:**
-
-  - Tasks returned from a `functionTask` automatically inherit the originating task’s `parentID` and are counted as subtasks.
+  - Tasks returned from a `functionTask` automatically inherit the originating task's `parentID` and are counted as subtasks.
   - User-initiated tasks (e.g. a chatResponse) are added as siblings to the selected leaf "sibling" task within a specific chat/taskchain.
   - Furthermore, all tasks within a function-generated chain are considered siblings, preserving a flat hierarchy within that chain.
   - While Siblings can be added at later stages, "children" will always stay the same, as we are not allowed to add more generated "subtasks" at a later stage. This is important, as we use the number of leaf tasks which indicate subtask finish to determine whether we can continue with sibling tasks.
@@ -47,7 +55,41 @@ Taskyon’s execution model distinguishes between sequential processing within a
   - Configurable options can be provided to `chatCompletion` so that, in situations like debugging errors, detailed rendering is enabled, whereas in task planning only top-level information is presented.
   - we determine the correct sequence of messages through parentIds & priorIds.
 
-## 3. Data Structures
+## 3. Task Completion Detection
+
+The core logic for determining if a task is finished is implemented in the `isTaskFinished` function. The algorithm works as follows:
+
+### For `functioncall` tasks
+
+Checks if all subtasks are finished by calling `areAllSubtasksFinished`
+
+### For `return` tasks
+
+Always considered finished (they signal completion)
+
+### For other tasks
+
+Recursively checks if the prior task (`priorID`) is finished
+
+### Subtask Completion Logic
+
+The `areAllSubtasksFinished` function checks completion by:
+
+- Finding all direct children of the task
+- Getting the leaf tasks of each child chain
+- Checking if each leaf task is finished recursively
+
+### Continuation Logic
+
+Before processing a task, the task worker checks if the prior task is finished. If the prior task isn't finished, the current task is pushed back onto the queue and waits (sleeps for 500ms) before retrying.
+
+After executing a task, new tasks are queued for processing. The system also optimizes by marking tasks as finished when their result chains contain no `functioncall` tasks.
+
+### Performance Optimizations
+
+The system uses caching (`isFinishedCache`) to avoid repeatedly checking the same tasks. The design ensures that tasks within a chain execute sequentially while allowing parallel execution across independent chains. The immutability of `TaskNode` entities means that once created, they cannot be modified, which simplifies the completion tracking logic.
+
+## 4. Data Structures
 
 ### TaskNode Structure
 
@@ -59,7 +101,7 @@ Each TaskNode contains:
 
 #### Example JSON Representation
 
-This is a rough outline. Newer version of taskyon might have updated this structue already.
+This is a rough outline. Newer version of taskyon might have updated this structure already.
 
 ```json
 {
@@ -80,14 +122,22 @@ This is a rough outline. Newer version of taskyon might have updated this struct
 }
 ```
 
----
+### Internal Data Structures
 
-## 4. Cryptographic Signatures and Access Control
+The system maintains several map structures for efficient traversal:
+
+- **nextSiblingMap**: Maps tasks to their next siblings
+- **parentToChildMap**: Maps parent tasks to all their children
+- **immediateChildrenMap**: Maps tasks to their immediate children
+
+These caches enable bidirectional traversal of the task tree without modifying the immutable TaskNodes.
+
+## 5. Cryptographic Signatures and Access Control
 
 ### Signature Mechanics
 
-- **Signing Process:** TaskNodes are signed by the creator’s private key, covering the content, parent linkage, and editor ID.
-- **Verification:** Peers validate the signature against the editor’s public key, ensuring authenticity and preventing tampering.
+- **Signing Process:** TaskNodes are signed by the creator's private key, covering the content, parent linkage, and editor ID.
+- **Verification:** Peers validate the signature against the editor's public key, ensuring authenticity and preventing tampering.
 
 ### Enforcing ACLs
 
@@ -111,7 +161,7 @@ Instead of mutable metadata, Taskyon treats metadata as immutable. Permission ch
   When processing a TaskNode, clients:
   1. Validate the signature of the current node.
   2. Traverse the chain to resolve the effective ACL (or use cached state for efficiency).
-  3. Confirm the editor’s public key is authorized under the latest ACL.
+  3. Confirm the editor's public key is authorized under the latest ACL.
 
 #### Pros & Cons
 
@@ -126,9 +176,7 @@ Instead of mutable metadata, Taskyon treats metadata as immutable. Permission ch
 - **Chain Traversal Overhead:** Clients must resolve permissions by walking the TaskTree (mitigated by caching).
 - **Branch Merging Complexity:** Conflicting permission updates in parallel branches require resolution rules (e.g., "latest timestamp wins").
 
----
-
-## 5. Dynamic Task Orchestration with LLMs (Excerpt)
+## 6. Dynamic Task Orchestration with LLMs
 
 ### LLM-Driven TaskTree Evolution
 
@@ -143,13 +191,15 @@ Taskyon integrates LLMs to dynamically generate and manage task trees:
 - **Task Replayability:** Task trees can be recorded for reproducibility. Taskyon can condense the trees into
   new functions/tools in order to speed up subsequent repetitions.
 - **Freezing Defined Processes:** Some branches can be locked while others remain flexible, enabling structured yet adaptable workflows.
-- **LLM as a Programming Model:** Since tasks can invoke arbitrary functions (e.g., executing Python code or processing files), Taskyon effectively enables **LLM-driven programming** within its task execution model. Taskyon is effectivly "spontanously" generating new code during the execution of a program.
+- **LLM as a Programming Model:** Since tasks can invoke arbitrary functions (e.g., executing Python code or processing files), Taskyon effectively enables **LLM-driven programming** within its task execution model. Taskyon is effectively "spontaneously" generating new code during the execution of a program.
 
-## 6. Integration with Additional Project Data
+## 7. Integration with Additional Project Data
 
 - **File References:** TaskNodes can reference external files using content-addressed storage.
 - **Unified Exchange:** TaskNodes bundle immutable content and metadata for seamless peer-to-peer exchange.
 
-## 7. Conclusion
+## 8. Conclusion
 
-Taskyon combines immutable, cryptographically secure TaskNodes with LLM-driven task orchestration. By leveraging content-addressability, ACL-based access control, and immutable metadata, it ensures a **distributed, conflict-resistant, and dynamically evolving** task management system. This unique combination positions Taskyon as a robust platform for secure, scalable, and AI-enhanced workflows.
+Taskyon combines immutable, cryptographically secure TaskNodes with LLM-driven task orchestration. By leveraging content-addressability, ACL-based access control, and immutable metadata, it ensures a **distributed, conflict-resistant, and dynamically evolving** task management system.
+
+The implementation uses sophisticated caching and traversal strategies to efficiently determine task completion status while maintaining the integrity guarantees of immutable data structures. This unique combination positions Taskyon as a robust platform for secure, scalable, and AI-enhanced workflows that can execute both sequentially and in parallel while maintaining cryptographic verifiability.
