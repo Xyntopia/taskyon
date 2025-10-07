@@ -45,7 +45,7 @@ const pythonWorker = {
     let result: PythonScriptResult
 
     if (params) {
-      console.log('execute python script with params')
+      //console.log('execute python script with params')
       const tmp = await executeScript(pyodide, script, false)
       if (tmp) {
         const func = tmp.result as (...args: unknown[]) => {
@@ -57,7 +57,7 @@ const pythonWorker = {
         result = { stdout: '', result: undefined }
       }
     } else {
-      console.log('execute python script without params')
+      //console.log('execute python script without params')
       result = await executeScript(pyodide, script)
     }
 

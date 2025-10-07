@@ -70,7 +70,7 @@ export function usePyodideWebworker() {
   }
 
   const asyncRunPython = async (script: string, params?: unknown[]) => {
-    console.log('calling python webworker')
+    //console.log('calling python webworker')
     const pythonWorker = await getPythonWorker()
     return await pythonWorker.runPythonScript(script, params)
   }

@@ -215,7 +215,7 @@ const dynamicContext =
       ]),
       () => cs.getUserPublicKey().publicKey,
       () => {
-        console.log('importing fixed key for secretStore...')
+        //console.log('importing fixed key for secretStore...')
         return cs.getSessionKey()
       },
     )
