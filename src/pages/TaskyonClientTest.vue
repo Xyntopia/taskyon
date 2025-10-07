@@ -12,22 +12,34 @@
     </div>
     <div class="col-6">
       <div>Function Call Output</div>
-      <div id="output">{{ functionResult }}</div>
+      <q-btn outline label="Execute Client Test Function" @click="startClientTest" />
+      <div class="q-pa-lg">function result: {{ functionResult }}</div>
+      <div class="q-pa-lg">received async result. {{}}</div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { ClientTool } from '@taskyon/taskyon'
-import { createTool } from '@taskyon/taskyon'
-import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { ref } from 'vue'
 import { onMounted } from 'vue'
-import { initializeTaskyon } from '../../packages/tyclient/src'
+import type {
+  partialTyConfiguration,
+  ClientTool,
+  TyClient,
+  partialTaskDraft,
+} from '../../packages/tyclient/src'
+import {
+  initializeTaskyon,
+  createTool,
+  createChatCompletionTask,
+} from '../../packages/tyclient/src'
+import type { TaskNode } from '../../packages/tyclient/dist/tyclient'
 
 const taskyonUrl = window.location.origin
 
 const functionResult = ref<string>()
+const tyclient = ref<TyClient>()
+const taskResult = ref<TaskNode>()
 
 // Configuration
 const configuration: partialTyConfiguration = {
@@ -81,7 +93,28 @@ const tools: ClientTool[] = [
   }),
 ]
 
-onMounted(() => void initializeTaskyon({ tools, configuration, name: 'taskyon client test' }))
+onMounted(async () => {
+  tyclient.value = await initializeTaskyon({ tools, configuration, name: 'taskyon client test' })
+})
+
+async function startClientTest() {
+  const tasks: partialTaskDraft[][] = [
+    [
+      {
+        role: 'assistant',
+        content: { type: 'message', data: 'We are strating to test the client!' },
+      },
+      {
+        role: 'user',
+        content: { type: 'message', data: 'Awesome! now can you add two strings for me?' },
+      },
+      createChatCompletionTask({ goal: 'ChooseTool' }),
+    ],
+  ]
+  const res = await tyclient.value?.processTasks(tasks)
+
+  taskResult.value = res?.task
+}
 </script>
 
 <style lang="sass">

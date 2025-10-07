@@ -1,8 +1,23 @@
 // we can compile this file to js to js using "yarn build:lib"
 
-import type { ClientTool, TaskyonMessage } from '@taskyon/taskyon'
+import type { partialTaskDraft } from '@taskyon/taskyon'
+import {
+  createDuplexChannel,
+  MessageChannelBridge,
+  processTasks,
+  type ClientTool,
+  type TaskyonMessage,
+} from '@taskyon/taskyon'
 import type { partialTyConfiguration, TaskyonGuiMessage } from 'src/modules/taskyon/apiTypes'
-export { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
+export {
+  createChatCompletionTask,
+  createTool,
+  makeTaskResult,
+  type partialTaskDraft,
+  processTasks,
+  toolCall,
+} from '@taskyon/taskyon'
+export type { ClientTool, partialTyConfiguration, TaskyonGuiMessage, TaskyonMessage }
 
 function safeClone<T>(data: T): T {
   try {
@@ -120,10 +135,12 @@ export async function initializeTaskyon(options: {
   const taskyon = document.getElementById('taskyon') as HTMLIFrameElement
 
   const controller = new AbortController()
+  const { x: port, y } = createDuplexChannel<TaskyonGuiMessage, TaskyonGuiMessage>()
 
   if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
     console.log('make sure, we can ')
     const tyApi = await waitForApiChannel(taskyon)
+    MessageChannelBridge(y, tyApi)
     const send = (msg: TaskyonGuiMessage) => {
       console.log('tyclient sending', msg)
       tyApi.postMessage(safeClone(msg))
@@ -151,4 +168,11 @@ export async function initializeTaskyon(options: {
       }
     })
   }
+
+  return {
+    processTasks: async (tasks: partialTaskDraft[][]) => await processTasks(port, tasks),
+    port,
+  }
 }
+
+export type TyClient = Awaited<ReturnType<typeof initializeTaskyon>>
