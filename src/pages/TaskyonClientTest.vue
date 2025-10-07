@@ -118,9 +118,9 @@ async function startClientTest() {
       createChatCompletionTask({ goal: 'ChooseTool', allowedTools: ['clientTest'] }),
     ],
   ]
-  const unsub = tyclient.value?.port.receive((msg) => {
+  /*const unsub = tyclient.value?.port.receive((msg) => {
     console.log('client received message from iframe:', msg)
-  })
+  })*/
   try {
     const res = await tyclient.value?.processTasks(tasks, { timeoutMs: 50000 })
     taskResult.value = res
@@ -129,7 +129,7 @@ async function startClientTest() {
     console.error('client process task resulted in error:', error)
     taskResult.value = 'error!'
   }
-  unsub?.()
+  //unsub?.()
 }
 </script>
 

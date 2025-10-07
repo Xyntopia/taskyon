@@ -86,7 +86,11 @@ export function createStream<T>(): frpBus<T> {
       }
 
       opts?.signal?.addEventListener('abort', onAbort)
-      if (opts?.timeoutMs) timeout = setTimeout(() => finish(new Error('Timeout')), opts.timeoutMs)
+      if (opts?.timeoutMs)
+        timeout = setTimeout(
+          () => finish(new Error(`Timeout after ${opts.timeoutMs}ms`)),
+          opts.timeoutMs,
+        )
 
       const observer = (value: T) => finish(undefined, value)
       unsub = stream(observer)

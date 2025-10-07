@@ -1,7 +1,7 @@
 import { ensureValidIds } from '../core/taskManager'
 import type { TaskyonMessage } from '../types/apiTypes'
-import type { partialTaskDraft, TaskNode } from '../types/node'
-import { waitForMsg, type Port } from '../utils/frpBus'
+import type { partialTaskDraft } from '../types/node'
+import { type Port } from '../utils/frpBus'
 
 export type processTasksOpts = { timeoutMs?: number; signal?: AbortSignal }
 
@@ -18,12 +18,21 @@ export const processTasks =
       origin: 'Taskyon Diagnostics',
     })
 
-    const msg = await waitForMsg(
-      tyPort.receive,
-      (m): m is { type: 'taskCreated'; task: TaskNode } =>
-        m.type === 'taskCreated' && 'task' in m && m.task?.parentID === tasks.at(-1)?.id,
-      opts,
-    )
+    const subTasks = new Set<string>()
 
-    return msg
+    type ByType<K extends TaskyonMessage['type']> = Extract<TaskyonMessage, { type: K }>
+
+    // filter for all subtasks
+    const subTasksCreated = tyPort.receive
+      .narrow((m): m is ByType<'taskCreated'> & { task: { id: string } } => {
+        return m.type === 'taskCreated' && 'task' in m && !!m.task?.id && subTasks.has(m.task?.id)
+      })
+      .map((msg) => msg.task)
+    const unsub1 = subTasksCreated((t) => {
+      subTasks.add(t?.id)
+    })
+    const lastMsg = await subTasksCreated.filter((t) => t.content.type === 'message').wait(opts)
+
+    unsub1()
+    return lastMsg
   }
