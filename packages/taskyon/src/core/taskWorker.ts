@@ -6,7 +6,7 @@ import type { SecretStore } from '../utils/crudWrapper'
 import { sha256UrlSafeHash } from '../utils/crypto'
 import { humanizeError } from '../utils/error'
 import type { TaskMessageStream } from '../utils/frpBus'
-import { createMessagePortAdapter, createStream, filter } from '../utils/frpBus'
+import { createMessagePortAdapter, createStream } from '../utils/frpBus'
 import { serializeForJson } from '../utils/objHelpers'
 import { type TyTaskManager } from './taskManager'
 import type { RemoteFunctionPort } from './tools'
@@ -56,7 +56,7 @@ async function safeExecuteTask(
       const taskChain = await taskManager.getTaskChain(task.id)
       const toolId = await generateSecretId(def?.id, tool)
       // only allow immediate prior or parent tasks to send messages for now...
-      const filteredStream = filter(taskMessageStream, (msg) => {
+      const filteredStream = taskMessageStream.filter((msg) => {
         return msg.id === task.parentID || msg.id === task.priorID
       })
       const msgPortAdapter = createMessagePortAdapter(filteredStream)

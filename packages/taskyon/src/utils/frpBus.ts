@@ -1,5 +1,5 @@
 // frpBus.ts
-import type { z, ZodType } from 'zod'
+import type { z } from 'zod'
 
 /**
  * Functional Reactive Programming (FRP) Bus
@@ -322,27 +322,6 @@ export function createPortApi<
     })
   })
 }
-
-// Operator: filter values based on a predicate
-export function filter<A>(source: Stream<A>, predicate: (value: A) => boolean): Stream<A> {
-  const { stream, emit } = createStream<A>()
-  void source((value) => {
-    if (predicate(value)) {
-      emit(value)
-    }
-  })
-  return stream
-}
-
-// make sure we filter for a specific type using Zod schema
-export const zodFilter = <T>(source: Stream<unknown>, schema: ZodType<T>) =>
-  filter(source as Stream<T>, (value): value is T => {
-    const result = schema.safeParse(value)
-    if (!result.success) {
-      return false
-    }
-    return true
-  })
 
 /**
  * Merges streams of different types into a single stream emitting a union type.
