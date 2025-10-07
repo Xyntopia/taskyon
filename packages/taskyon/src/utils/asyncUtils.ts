@@ -171,3 +171,34 @@ export function createAsyncQueue<T>() {
   return { push, pop, count, clear }
 }
 export type AsyncQueue<T> = ReturnType<typeof createAsyncQueue<T>>
+
+// ---------- keyedLock.ts ----------
+type Key = string | number
+
+export class KeyedMutex {
+  private chains = new Map<Key, Promise<void>>()
+
+  // Run fn exclusively for this key. Different keys run concurrently.
+  async runExclusive<T>(key: Key, fn: () => Promise<T> | T): Promise<T> {
+    const prev = this.chains.get(key) ?? Promise.resolve()
+    let release!: () => void
+    const next = new Promise<void>((resolve) => (release = resolve))
+    // Chain: current becomes prev.then(() => next)
+    this.chains.set(
+      key,
+      prev.then(() => next),
+    )
+    // Wait our turn
+    await prev
+    try {
+      return await fn()
+    } finally {
+      release()
+      // Optional: best-effort cleanup to prevent unbounded key growth.
+      // We don't know if someone already chained after us; leave entry as is.
+      // In practice this is fine; if needed, add periodic cleanup.
+    }
+  }
+}
+
+export type Locker = <R>(id: string | number, fn: () => Promise<R> | R) => Promise<R>

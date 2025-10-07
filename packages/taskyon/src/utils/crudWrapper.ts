@@ -1,5 +1,6 @@
 import type { PartialDeep } from 'type-fest'
 import type { TaskNode } from '../types/node'
+import { KeyedMutex } from './asyncUtils'
 import type { AskCryptoKey } from './crypto'
 import type { EncryptedDataRow } from './encrypt'
 import { decryptDataFile, encryptDataFile } from './encrypt'
@@ -86,6 +87,50 @@ export function withImmutable<T, B extends CrudWrapper<T>>(
   }
 
   return out
+}
+
+export function withKeyLockings<T, B>(
+  base: B & CrudWrapper<T>,
+  opts?: { lockGets?: boolean; blockDuringClear?: boolean },
+): B & CrudWrapper<T> {
+  const mutex = new KeyedMutex()
+  let clearBarrier: Promise<void> | null = null
+  let resolveBarrier: (() => void) | null = null
+
+  const waitBarrier = async () => {
+    if (!opts?.blockDuringClear) return
+    const b = clearBarrier
+    if (b) await b
+  }
+
+  const lock = async <R>(id: string | number, fn: () => Promise<R>) => {
+    await waitBarrier()
+    return mutex.runExclusive(id, fn)
+  }
+
+  const out: CrudWrapper<T> = {
+    ...base,
+    set: (id, data) => lock(id, () => base.set(id, data)),
+    upsert: (id, data, strategy) => lock(id, () => base.upsert(id, data, strategy)),
+    delete: (id) => lock(id, () => base.delete(id)),
+    get: (id) =>
+      opts?.lockGets ? lock(id, () => base.get(id)) : waitBarrier().then(() => base.get(id)),
+    clear: async () => {
+      if (!opts?.blockDuringClear) return base.clear()
+      if (!clearBarrier) {
+        clearBarrier = new Promise<void>((res) => (resolveBarrier = res))
+      }
+      try {
+        await base.clear()
+      } finally {
+        resolveBarrier?.()
+        resolveBarrier = null
+        clearBarrier = null
+      }
+    },
+  }
+
+  return out as B & CrudWrapper<T>
 }
 
 /**
