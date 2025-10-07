@@ -1173,6 +1173,7 @@ export const testMetaDb = async () => {
   const ty = await tystate.taskyon
   const id = 'meta_diagnostics_test'
   await ty.metaUpsert(id, { name: 'lets test!' }, 'shallow_merge')
+  await ty.metaUpsert(id, {}, 'shallow_merge')
   await ty.metaUpsert(
     id,
     { summary: 'this should normally work! and be added to the name!' },

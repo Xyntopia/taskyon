@@ -14,6 +14,7 @@ import {
   createPgLiteCrudWrapper,
   createVectorStore,
   withImmutable,
+  withKeyLockings,
   withLiveStreams,
 } from '../utils/crudWrapper'
 import { sha256UrlSafeHash, urlSafeBase64Uuid } from '../utils/crypto'
@@ -587,13 +588,15 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
   }
 
   // we are using mapWrapper first, because it is the fastest
-  const metaDb = withLiveStreams(
-    createCombinedCrudWrapper([
-      createMapCrudWrapper(new Map<string, TaskNodeMeta>()),
-      await createPgLiteCrudWrapper<TaskNodeMeta>(taskyonDb, {
-        tableName: 'metaDb',
-      }),
-    ]),
+  const metaDb = withKeyLockings(
+    withLiveStreams(
+      createCombinedCrudWrapper([
+        createMapCrudWrapper<TaskNodeMeta>(new Map<string, TaskNodeMeta>()),
+        await createPgLiteCrudWrapper<TaskNodeMeta>(taskyonDb, {
+          tableName: 'metaDb',
+        }),
+      ]),
+    ),
   )
 
   async function countTasks() {

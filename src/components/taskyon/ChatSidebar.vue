@@ -166,7 +166,7 @@ async function updateName(id: string) {
   }
   if (name?.trim()) {
     nameMap.value[id] = name.trim()
-    void ty.metaUpsert(id, { name })
+    void ty.metaUpsert(id, { name }, 'shallow_merge')
   }
 }
 
