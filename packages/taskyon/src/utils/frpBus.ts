@@ -186,24 +186,23 @@ export function createPortFilter<pTx, pRx, cTx extends pTx, cRx extends pRx>(
 export function createTypeFilteredPort<
   pTx, // Parent Transmit type
   pRx extends { type: string }, // Parent Receive type (the superset union)
-  T extends readonly pRx['type'][], // An array of keys from the union's 'type' property
+  K extends pRx['type'], // An array of keys from the union's 'type' property
 >(
   parent: Port<pTx, pRx>,
-  allowedTypes: T,
-): { port: Port<pTx, Extract<pRx, { type: T[number] }>>; destroy: () => void } {
+  allowedTypes: readonly K[],
+): { port: Port<pTx, Extract<pRx, { type: K }>>; destroy: () => void } {
   // Use a Set for efficient O(1) lookups inside the guard.
   const typeSet = new Set(allowedTypes)
 
   // Define the new, narrower child message type using TypeScript's Extract utility.
   // This extracts all members from the `pRx` union whose `type` property matches one
   // of the strings in the `allowedTypes` array (`T[number]`).
-  type cRx = Extract<pRx, { type: T[number] }>
-
+  type cRx = Extract<pRx, { type: K }>
   // Reuse the generic filtered-port helper with a custom type guard.
   return createPortFilter(
     parent,
     (msg): msg is pTx => true,
-    (msg): msg is cRx => typeSet.has(msg.type),
+    (msg): msg is cRx => typeSet.has(msg.type as K),
   )
 }
 
