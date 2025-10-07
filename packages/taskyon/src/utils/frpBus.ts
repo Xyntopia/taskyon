@@ -46,7 +46,7 @@ export function createStream<T>(): frpBus<T> {
   stream.narrow = <U extends T>(pred: (m: T) => m is U) => {
     const newStream = createStream<U>()
     /*const unsub = */ stream((v) => {
-      if (pred(v)) void newStream.emit(v)
+      if (pred(v)) newStream.emit(v)
     })
     return newStream.stream
   }

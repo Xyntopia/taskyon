@@ -18,21 +18,34 @@ export const processTasks =
       origin: 'Taskyon Diagnostics',
     })
 
-    const subTasks = new Set<string>()
+    const initialIds = tasks.map((t) => t.id)
+    const subTasks = new Set<string>(initialIds)
 
     type ByType<K extends TaskyonMessage['type']> = Extract<TaskyonMessage, { type: K }>
 
     // filter for all subtasks
     const subTasksCreated = tyPort.receive
       .narrow((m): m is ByType<'taskCreated'> & { task: { id: string } } => {
-        return m.type === 'taskCreated' && 'task' in m && !!m.task?.id && subTasks.has(m.task?.id)
+        console.log('api received', m)
+        /*const valid =
+          m.type === 'taskCreated' && 'task' in m && !!m.task?.id && subTasks.has(m.task?.parentID)*/
+        //console.log(valid)
+        if (
+          m.type === 'taskCreated' &&
+          'task' in m &&
+          !!m.task?.id &&
+          !!m.task?.parentID &&
+          subTasks.has(m.task?.parentID)
+        ) {
+          subTasks.add(m.task?.id)
+          return true
+        }
+        return false
       })
       .map((msg) => msg.task)
-    const unsub1 = subTasksCreated((t) => {
-      subTasks.add(t?.id)
-    })
-    const lastMsg = await subTasksCreated.filter((t) => t.content.type === 'message').wait(opts)
-
-    unsub1()
+    const lastMsgStr = subTasksCreated.filter((t) => t.content.type === 'message')
+    const unsub = lastMsgStr((m) => console.log('api received last message:', m))
+    const lastMsg = await lastMsgStr.wait(opts)
+    unsub()
     return lastMsg
   }
