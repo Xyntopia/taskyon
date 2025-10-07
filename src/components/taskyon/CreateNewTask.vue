@@ -349,7 +349,7 @@ async function getCurrentKeywordsWithTimeout(timeoutMs = 200) {
       }, timeoutMs),
     ),
   ])
-  console.log(`Keyword Timeout? ${kwds === null ? true : false}`)
+  //console.log(`Keyword Timeout? ${kwds === null ? true : false}`)
   return kwds
 }
 
