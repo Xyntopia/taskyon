@@ -21,7 +21,6 @@ import {
   cryptoKeyToBase64,
   deriveKeyFromPwd,
   ensureValidTaskId,
-  filter,
   getCurrentModel,
   getDefaultParametersForTool,
   isTaskyonKey,
@@ -193,8 +192,7 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
       }
     })
 
-    filter(
-      workerStream,
+    workerStream.filter(
       (data) =>
         data.stage === 'processing' ||
         data.stage === 'processed' ||
