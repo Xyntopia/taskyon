@@ -35,8 +35,8 @@ export async function waitForIframeDuplexChannel() {
     //console.log('Message from unknown origin:', event.origin, event)
   })
   // create a channel from the mport:
-  const iframeChannel = createDuplexChannel<TaskyonGuiMessage, unknown>()
+  const { x, y } = createDuplexChannel<TaskyonGuiMessage, unknown>()
   // connect the MessageChannel to our UI API
-  MessageChannelBridge(iframeChannel.x, mport)
-  return iframeChannel.y
+  MessageChannelBridge(x, mport)
+  return y
 }
