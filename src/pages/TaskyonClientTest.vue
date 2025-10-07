@@ -5,7 +5,7 @@
       <iframe
         id="taskyon"
         frameborder="0"
-        :src="`${taskyonUrl}?iframe=true`"
+        :src="`${taskyonUrl}?iframe=true&profile=test`"
         width="100%"
         height="500px"
       ></iframe>
@@ -34,6 +34,7 @@ import {
   createChatCompletionTask,
 } from '../../packages/tyclient/src'
 import type { TaskNode } from '../../packages/tyclient/dist/tyclient'
+import { freeKey } from 'src/assets/taskyon_free_key.json'
 
 const taskyonUrl = window.location.origin
 
@@ -47,21 +48,23 @@ const configuration: partialTyConfiguration = {
     selectedApi: 'taskyon',
     enableOpenAiTools: false,
     enableToolChooser: true,
-    /*llmApis: {
+    llmApis: {
       taskyon: {
-        selectedModel: 'meta-llama/llama-3.1-8b-instruct',
+        selectedModel: 'meta-llama/llama-3.3-70b-instruct',
       },
-    },*/
+    },
   },
   appConfiguration: {
     expertMode: true,
-    darkTheme: true,
+    darkTheme: false,
     primaryColor: '#f00',
-    secondaryColor: '#0ff',
+    secondaryColor: '#f0f',
     // we are using "default" GUI mode for debugging purposes!, in production, change this to "iframe"
     // or leave it out :)
-    guiMode: 'auto',
+    guiMode: 'minChat',
   },
+
+  signatureOrKey: freeKey,
 }
 
 // Tool Definitions
@@ -106,9 +109,12 @@ async function startClientTest() {
       },
       {
         role: 'user',
-        content: { type: 'message', data: 'Awesome! now can you add two strings for me?' },
+        content: {
+          type: 'message',
+          data: 'Awesome! now can you add two strings for me? PLease use the clientTest tool!',
+        },
       },
-      createChatCompletionTask({ goal: 'ChooseTool' }),
+      createChatCompletionTask({ goal: 'ChooseTool', allowedTools: ['clientTest'] }),
     ],
   ]
   const res = await tyclient.value?.processTasks(tasks)
@@ -119,5 +125,9 @@ async function startClientTest() {
 
 <style lang="sass">
 body
-  background: grey !important
+  background-color: $green-1 !important
+
+body::before
+  content: none !important
+  background: none !important
 </style>
