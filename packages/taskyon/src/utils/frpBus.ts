@@ -1,5 +1,4 @@
 // frpBus.ts
-
 import type { z, ZodType } from 'zod'
 
 /**
@@ -13,7 +12,10 @@ export type Unsubscribe = () => void
 // callable subscribe function with operator props
 export type Subscribe<T> = {
   (observer: Observer<T>): Unsubscribe
-  filter(predicate: (value: T) => boolean): Subscribe<T>
+  // filter(predicate: (value: T) => boolean): Subscribe<T>
+  // type-predicate filter → narrows downstream type
+  filter<U extends T>(predicate: (value: T) => value is U): Subscribe<U>
+
   //map<U>(fn: (value: T) => U): Subscribe<U>
   // add more as needed
 }
@@ -33,15 +35,13 @@ export type frpBus<T> = {
 export function makeSubscribe<T>(register: (obs: Observer<T>) => Unsubscribe): Subscribe<T> {
   const sub = ((obs: Observer<T>) => register(obs)) as Subscribe<T>
 
-  sub.filter = (pred: (value: T) => boolean): Subscribe<T> =>
-    makeSubscribe<T>((obs) =>
+  //predicate: (m: T) => m is F,
+  sub.filter = <U extends T>(pred: (m: T) => m is U) =>
+    makeSubscribe<U>((obs) =>
       sub((v) => {
         if (pred(v)) void obs(v)
       }),
     )
-
-  /*sub.map = <U>(fn: (value: T) => U): Subscribe<U> =>
-    makeSubscribe<U>((obs) => sub((v) => obs(fn(v))))*/
 
   return sub
 }
