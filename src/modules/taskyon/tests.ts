@@ -1085,7 +1085,7 @@ export const testChatCompletionWebSearch = async () => {
 
   const result = await processTasks(tystate.api)(taskList, { timeoutMs: 20000 })
 
-  const webSearchResponse = result.task.content.data
+  const webSearchResponse = result.content.data
 
   return {
     taskList,

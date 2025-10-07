@@ -123,7 +123,7 @@ async function startClientTest() {
   })
   try {
     const res = await tyclient.value?.processTasks(tasks, { timeoutMs: 50000 })
-    taskResult.value = res?.task
+    taskResult.value = res
     console.log('client received result:')
   } catch (error) {
     console.error('client process task resulted in error:', error)

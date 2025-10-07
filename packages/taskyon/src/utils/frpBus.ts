@@ -14,29 +14,14 @@ export interface Stream<T> {
   unsubscribeAll(this: void): void
   filter(this: void, predicate: (value: T) => boolean): Stream<T>
   narrow<U extends T>(this: void, predicate: (value: T) => value is U): Stream<U>
-  //map<V>(fn: (value: T) => V): Stream<V>
+  map<V>(this: void, fn: (value: T) => V): Stream<V>
+  wait(this: void, opts: { timeoutMs?: number; signal?: AbortSignal }): Promise<T>
 }
 
 export type frpBus<T> = {
   stream: Stream<T>
   emit: <U extends T>(value: U) => void
 }
-
-/*export function makeSubscribe<T>(register: (obs: Observer<T>) => Unsubscribe): Subscribe<T> {
-  const sub = ((obs: Observer<T>) => register(obs)) as Subscribe<T>
-
-  //predicate: (m: T) => m is F,
-  sub.filter = <U extends T>(pred: (m: T) => m is U) => {
-    const newStream = createStream<U>()
-    makeSubscribe<U>((obs) =>
-      sub((v) => {
-        if (pred(v)) void obs(v)
-      }),
-    )
-  }
-
-  return sub
-}*/
 
 // Creates a simple stream with an "emit" function
 export function createStream<T>(): frpBus<T> {
@@ -65,7 +50,47 @@ export function createStream<T>(): frpBus<T> {
     })
     return newStream.stream
   }
+  stream.map = <V>(fn: (value: T) => V): Stream<V> => {
+    const newStream = createStream<V>()
+    stream((v) => newStream.emit(fn(v)))
+    return newStream.stream
+  }
   stream.filter = stream.narrow<T>
+  stream.wait = ((opts) =>
+    new Promise<T>((resolve, reject) => {
+      if (opts?.signal?.aborted) {
+        const err = new Error('Aborted')
+        err.name = 'AbortError'
+        reject(err)
+        return
+      }
+
+      let done = false
+      let timeout: ReturnType<typeof setTimeout> | undefined
+      let unsub: Unsubscribe = () => {}
+
+      const finish = (err?: Error, value?: T) => {
+        if (done) return
+        done = true
+        unsub()
+        clearTimeout(timeout)
+        opts?.signal?.removeEventListener('abort', onAbort)
+        if (err) reject(err)
+        else resolve(value!)
+      }
+
+      const onAbort = () => {
+        const err = new Error('Aborted')
+        err.name = 'AbortError'
+        finish(err)
+      }
+
+      opts?.signal?.addEventListener('abort', onAbort)
+      if (opts?.timeoutMs) timeout = setTimeout(() => finish(new Error('Timeout')), opts.timeoutMs)
+
+      const observer = (value: T) => finish(undefined, value)
+      unsub = stream(observer)
+    })) as Stream<T>['wait']
 
   return {
     stream,
@@ -234,55 +259,6 @@ export function createTypeFilteredPort<
   )
 }
 
-export const waitForMsg = async <T, F extends T>(
-  subscribe: (obs: Observer<T>) => Unsubscribe,
-  predicate: (m: T) => m is F,
-  opts?: { timeoutMs?: number; signal?: AbortSignal },
-): Promise<F> => {
-  return new Promise<F>((resolve, reject) => {
-    if (opts?.signal?.aborted) {
-      const err = new Error('Aborted')
-      err.name = 'AbortError'
-      reject(err)
-      return
-    }
-
-    let done = false
-    let timeout: ReturnType<typeof setTimeout> | undefined
-    let unsub: Unsubscribe = () => {}
-
-    const finish = (err?: Error, value?: F) => {
-      //  this is simply there to prevent double resolving if e.g. multiple message arrive very quickly or timeout and stopsignal arrive at the same time etc...
-      if (done) return
-      done = true
-      unsub()
-      clearTimeout(timeout)
-      opts?.signal?.removeEventListener('abort', onAbort)
-      if (err) reject(err)
-      else resolve(value!) // we know that value always exists when no err so we add "!"
-    }
-
-    const onAbort = () => {
-      const err = new Error('Aborted')
-      err.name = 'AbortError'
-      finish(err)
-    }
-
-    opts?.signal?.addEventListener('abort', onAbort)
-    if (opts?.timeoutMs) timeout = setTimeout(() => finish(new Error('Timeout')), opts.timeoutMs)
-
-    const observer = (value: T) => {
-      try {
-        if (predicate(value)) finish(undefined, value)
-      } catch (e) {
-        finish(new Error('Error on waiting', { cause: e }))
-      }
-    }
-
-    unsub = subscribe(observer)
-  })
-}
-
 /** Generic message → handler router (sync or async) */
 export function createPortApi<
   R,
@@ -365,6 +341,8 @@ export function requireSubscribers<T>(source: Stream<T>, min: number = 1): Strea
   }
   subscribe.narrow = stream.narrow
   subscribe.filter = stream.narrow<T>
+  subscribe.wait = stream.wait
+  subscribe.map = stream.map
 
   return subscribe
 }
