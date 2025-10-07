@@ -5,7 +5,7 @@ import type { AskCryptoKey } from './crypto'
 import type { EncryptedDataRow } from './encrypt'
 import { decryptDataFile, encryptDataFile } from './encrypt'
 import type { Stream } from './frpBus'
-import { createStream, filter, makeSubscribe, streamProcedureCall } from './frpBus'
+import { createStream, streamProcedureCall } from './frpBus'
 import { deepMerge } from './objHelpers'
 import type { PgLiteOptions } from './pglite.api'
 import { createVecPgLiteTable, type TyPGDB } from './pglite.api'
@@ -148,14 +148,15 @@ export function withKeyLockings<T, B>(
  *   - `readLive(id, emitCurrent?)`: Subscribes to live updates for a specific item. Optionally emits the current value immediately.
  *   - `liveStream`: Subscribes to all live CRUD events as `{ id, data }` objects.
  */
+type StreamData<T> = { id: string | number; data: T | null }
 export const withLiveStreams = <T>(
   base: CrudWrapper<T>,
 ): CrudWrapper<T> & {
-  readLive: (id: string | number) => Stream<{ id: string | number; data: T | null }>
-  liveStream: Stream<{ id: string | number; data: T | null }>
+  readLive: (id: string | number) => Stream<StreamData<T>>
+  liveStream: Stream<StreamData<T>>
 } => {
   // Create a stream of events with a payload: { id, data }
-  const { stream: liveStream, emit } = createStream<{ id: string | number; data: T | null }>()
+  const { stream: liveStream, emit } = createStream<StreamData<T>>()
 
   return {
     ...base,
@@ -177,30 +178,9 @@ export const withLiveStreams = <T>(
       await base.clear()
       // Optionally, you could notify subscribers here if desired.
     },
-    readLive: (id: string | number, emitCurrent: boolean = true) => {
-      const liveForId = filter(liveStream, (event) => event.id === id)
-      if (emitCurrent) {
-        return {
-          subscribe: makeSubscribe((observer) => {
-            // Immediately subscribe to the live stream
-            const unsubLive = liveForId.subscribe(observer)
-            let cancelled = false
-            // Asynchronously fetch the current value and emit when ready
-            void base.get(id).then((current) => {
-              if (!cancelled) {
-                //console.log('emitting current', current)
-                void observer({ id, data: current })
-              }
-            })
-            return () => {
-              cancelled = true
-              unsubLive()
-            }
-          }),
-          unsubscribeAll: liveForId.unsubscribeAll,
-        }
-      }
-      return liveForId
+    readLive: (id: string | number) => {
+      const stream = liveStream.filter((event) => event.id === id)
+      return stream
     },
     liveStream,
   }
@@ -786,8 +766,7 @@ export const withSecretStore = (
       await encryptedCrud.clear()
     },
 
-    onAskNewSecret: (...args: Parameters<typeof askNewKeyStream.subscribe>) =>
-      askNewKeyStream.subscribe(...args),
+    onAskNewSecret: (...args: Parameters<typeof askNewKeyStream>) => askNewKeyStream(...args),
   }
 }
 

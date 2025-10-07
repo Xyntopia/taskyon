@@ -122,7 +122,7 @@ const conversationIDs = ref<string[]>([])
 const nameMap = ref<Record<string, string>>({})
 
 void tystate.taskyon.then((ty) =>
-  ty.taskStream.subscribe((data) => {
+  ty.taskStream((data) => {
     // for every message from the stream, try to update our name map :)
     // console.log('update name', data.data)
     if (data.data?.name) nameMap.value[data.id] = data.data?.name

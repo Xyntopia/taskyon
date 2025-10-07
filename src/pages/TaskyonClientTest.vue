@@ -15,7 +15,7 @@
       <q-btn outline label="Execute Client Test Function" @click="startClientTest" />
       <div class="q-pa-lg">function result: {{ functionResult }}</div>
       <pre class="q-pa-lg" style="max-width: 500px; white-space: pre-wrap; word-break: break-word">
-received async result. {{ JSON.stringify(taskResult, undefined, 2) }}</pre
+        received async result. {{ JSON.stringify(taskResult, undefined, 2) }}</pre
       >
     </div>
   </div>

@@ -115,7 +115,7 @@ function createApi(
   )
 
   // send events...
-  taskManagerInstance().taskStream.subscribe(async ({ data: task, id }) => {
+  taskManagerInstance().taskStream(async ({ data: task, id }) => {
     // if tasks is not null, it was freshly created
     // TODO: only trigger upload on certain task events...
     if (task) {
@@ -322,9 +322,9 @@ export async function tyCore(
 
   const connectStreams = () => {
     // re-connect all streams
-    ctx.workerStream.subscribe(workerStream.emit)
-    ctx.chatCompletionStream.subscribe(chatCompletionStream.emit)
-    ctx.taskManagerInstance.taskStream.subscribe(taskStream.emit)
+    ctx.workerStream(workerStream.emit)
+    ctx.chatCompletionStream(chatCompletionStream.emit)
+    ctx.taskManagerInstance.taskStream(taskStream.emit)
   }
 
   connectStreams()

@@ -1,6 +1,7 @@
 import type {
   Asyncify,
   AuthenticationOptions,
+  ChatCompletionChunk,
   ChatResponseType,
   CryptoSession,
   InternalTool,
@@ -15,6 +16,7 @@ import {
   availableModels,
   createDuplexChannel,
   createPortApi,
+  createStream,
   createTypeFilteredPort,
   cryptoKeyToBase64,
   deriveKeyFromPwd,
@@ -164,12 +166,12 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
   const lastTaskState = ref(new Map<string, TyTaskStreamData['stage']>())
 
   void taskyon.then(({ workerStream }) => {
-    void workerStream.subscribe((data) => {
+    void workerStream((data) => {
       if (data.stage === 'all finished') taskWorkerWaiting.value = true
       else if (data.stage === 'processing') taskWorkerWaiting.value = false
     })
 
-    void workerStream.subscribe((data) => {
+    void workerStream((data) => {
       console.log(`worker: ${data.stage}, ${data.taskId || data.task?.id}`)
       if (['all finished', 'processing', 'processed', 'error', 'aborted'].includes(data.stage)) {
         workerStreamLogs.value.push({ ...data, timestamp: new Date() })
@@ -180,7 +182,7 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
       }
     })
 
-    void workerStream.subscribe((data) => {
+    void workerStream((data) => {
       const id = data.task?.id || data.taskId
       if (id) {
         lastTaskState.value.set(id, data.stage)
@@ -198,7 +200,7 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
         data.stage === 'processed' ||
         data.stage === 'error' ||
         (data.stage === 'aborted' && !!(data.taskId || data.task?.id)),
-    ).subscribe((data) => {
+    )((data) => {
       // TODO: add last task to GUI by checking if our current selected task now has this child...
       lastActiveTaskId.value = data.task?.id || data.taskId || null
     })
@@ -611,7 +613,7 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
       //       and we want to make sure to really include all tasks in the chathistory...
     }
 
-    ty.taskStream.subscribe(({ id, data: task }) => {
+    ty.taskStream(({ id, data: task }) => {
       if (!task) {
         void add2ChatHistory(task, id.toString(), 'delete')
       }
@@ -699,7 +701,7 @@ function reactiveTools(taskyon: Promise<Taskyon>) {
     })
 
     // if a new tool was created as a tasknode, update UI
-    ty.taskStream.subscribe(
+    ty.taskStream(
       (msg) =>
         void match(msg)
           .returnType<void>()
@@ -1020,10 +1022,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     instance.workerStop(reason)
   }
 
-  const chatCompletionStream = asyncProxy(async () => {
-    const instance = await taskyon
-    return instance['chatCompletionStream']
-  })
+  const { stream: chatCompletionStream, emit: chatCompletionConnector } = createStream<{
+    taskId: string
+    chunk: ChatCompletionChunk | undefined
+  }>()
+  // connect taskyon to this stream as soon as it is initialized...
+  void taskyon.then((ty) => ty.chatCompletionStream(chatCompletionConnector))
 
   function setNewContentDraft(content: TaskNode['content'] | undefined) {
     if (content?.type === 'message') {
@@ -1104,7 +1108,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     let subscriptionUnsub: (() => void) | null = null
     if (taskId) {
       void taskyon.then((ty) => {
-        subscriptionUnsub = ty.metaLiveRead(taskId).subscribe(({ data }) => {
+        subscriptionUnsub = ty.metaLiveRead(taskId)(({ data }) => {
           taskMetaRef.value = data || undefined
         })
       })

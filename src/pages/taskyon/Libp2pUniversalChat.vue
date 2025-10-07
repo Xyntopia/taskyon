@@ -64,7 +64,7 @@ watch(testWUniversalConnectivity, async (val) => {
   await p2p.start({ chatTopic: val ? CHAT_TOPIC : taskyonUniversalChatTopic.value })
 })
 
-p2p.messageStream.subscribe((msg) => {
+p2p.messageStream((msg) => {
   msgs.value.push(msg)
 })
 
@@ -74,7 +74,7 @@ const addToOutput = (message: string) => {
   const timestamp = new Date().toISOString()
   output.value += `[${timestamp}] ${message}\n`
 }
-p2p.activityStream.subscribe((msg) => {
+p2p.activityStream((msg) => {
   addToOutput(safeYamlDump(msg))
 })
 

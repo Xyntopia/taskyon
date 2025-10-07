@@ -9,20 +9,12 @@ import type { z, ZodType } from 'zod'
 export type Observer<T> = (value: T) => void | Promise<void>
 export type Unsubscribe = () => void
 
-// callable subscribe function with operator props
-export type Subscribe<T> = {
-  (observer: Observer<T>): Unsubscribe
-  // filter(predicate: (value: T) => boolean): Subscribe<T>
-  // type-predicate filter → narrows downstream type
-  filter<U extends T>(predicate: (value: T) => value is U): Subscribe<U>
-
-  //map<U>(fn: (value: T) => U): Subscribe<U>
-  // add more as needed
-}
-
 export interface Stream<T> {
-  subscribe: Subscribe<T>
+  (observer: Observer<T>): Unsubscribe
   unsubscribeAll(this: void): void
+  filter(this: void, predicate: (value: T) => boolean): Stream<T>
+  narrow<U extends T>(this: void, predicate: (value: T) => value is U): Stream<U>
+  //map<V>(fn: (value: T) => V): Stream<V>
 }
 
 export type frpBus<T> = {
@@ -30,27 +22,27 @@ export type frpBus<T> = {
   emit: <U extends T>(value: U) => void
 }
 
-// ---- subscribe factory ----------------------------------------------------
-
-export function makeSubscribe<T>(register: (obs: Observer<T>) => Unsubscribe): Subscribe<T> {
+/*export function makeSubscribe<T>(register: (obs: Observer<T>) => Unsubscribe): Subscribe<T> {
   const sub = ((obs: Observer<T>) => register(obs)) as Subscribe<T>
 
   //predicate: (m: T) => m is F,
-  sub.filter = <U extends T>(pred: (m: T) => m is U) =>
+  sub.filter = <U extends T>(pred: (m: T) => m is U) => {
+    const newStream = createStream<U>()
     makeSubscribe<U>((obs) =>
       sub((v) => {
         if (pred(v)) void obs(v)
       }),
     )
+  }
 
   return sub
-}
+}*/
 
 // Creates a simple stream with an "emit" function
-export function createStream<T>(): { stream: Stream<T>; emit: (v: T) => void } {
+export function createStream<T>(): frpBus<T> {
   const observers: Observer<T>[] = []
 
-  const register = (observer: Observer<T>): Unsubscribe => {
+  const stream = (observer: Observer<T>): Unsubscribe => {
     observers.push(observer)
     return () => {
       const idx = observers.indexOf(observer)
@@ -58,15 +50,25 @@ export function createStream<T>(): { stream: Stream<T>; emit: (v: T) => void } {
     }
   }
 
-  const subscribe = makeSubscribe(register)
+  stream.unsubscribeAll = () => {
+    observers.length = 0
+  }
+
+  // TODO: if we use a filter like that... how can we make sure, that we unsubscribe from the original
+  //       stream, if we unsubscrbe from the new stream (unsub)? we might want to have multiple
+  //       streams subscribing on the filtered, so we can't jsut do it from the last "unsub" in the chain...
+  //       maybe add an "unsubchain" or something like that?
+  stream.narrow = <U extends T>(pred: (m: T) => m is U) => {
+    const newStream = createStream<U>()
+    /*const unsub = */ stream((v) => {
+      if (pred(v)) void newStream.emit(v)
+    })
+    return newStream.stream
+  }
+  stream.filter = stream.narrow<T>
 
   return {
-    stream: {
-      subscribe,
-      unsubscribeAll: () => {
-        observers.length = 0
-      },
-    },
+    stream,
     emit: (v: T) => {
       ;[...observers].forEach((o) => void o(v))
     },
@@ -78,7 +80,7 @@ export type extractStreamType<Type> = Type extends Stream<infer X> ? X : never
 
 export type Port<Tx, Rx = Tx> = {
   send: frpBus<Tx>['emit']
-  receive: frpBus<Rx>['stream']['subscribe']
+  receive: frpBus<Rx>['stream']
   // stricter connect signature: intersection forces compile-time failure when constraints don't hold
   connect: <Tx, Rx extends oTx, oTx, oRx extends Tx>(
     this: Port<Tx, Rx>,
@@ -101,7 +103,7 @@ const connectChannels = <Tx, Rx, oTx, oRx>(x: Port<Tx, Rx>, y: Port<oTx, oRx>): 
 
 const makePort = <Tx, Rx = Tx>(
   send: frpBus<Tx>['emit'],
-  receive: frpBus<Rx>['stream']['subscribe'],
+  receive: frpBus<Rx>['stream'],
 ): Port<Tx, Rx> => {
   const self: Port<Tx, Rx> = {
     send,
@@ -115,8 +117,8 @@ export const createChannelsFromStreams = <Str1, Str2 = Str1>(
   outS: frpBus<Str1>,
   inS: frpBus<Str2>,
 ): DuplexChannel<Str1, Str2> => ({
-  x: makePort(outS.emit, inS.stream.subscribe),
-  y: makePort(inS.emit, outS.stream.subscribe),
+  x: makePort(outS.emit, inS.stream),
+  y: makePort(inS.emit, outS.stream),
 })
 
 export const createDuplexChannel = <Str1, Str2 = Str1>(): DuplexChannel<Str1, Str2> =>
@@ -321,17 +323,10 @@ export function createPortApi<
   })
 }
 
-// Operator: transform each value from the source stream
-export function map<A, B>(source: Stream<A>, fn: (value: A) => B): Stream<B> {
-  const { stream, emit } = createStream<B>()
-  void source.subscribe((value) => emit(fn(value)))
-  return stream
-}
-
 // Operator: filter values based on a predicate
 export function filter<A>(source: Stream<A>, predicate: (value: A) => boolean): Stream<A> {
   const { stream, emit } = createStream<A>()
-  void source.subscribe((value) => {
+  void source((value) => {
     if (predicate(value)) {
       emit(value)
     }
@@ -359,7 +354,7 @@ export function merge<T extends unknown[]>(
   const { stream, emit } = createStream<T[number]>()
 
   sources.forEach((source) => {
-    void source.subscribe((value) => emit(value)) // Full type safety
+    void source((value) => emit(value)) // Full type safety
   })
 
   return stream
@@ -370,27 +365,29 @@ export function requireSubscribers<T>(source: Stream<T>, min: number = 1): Strea
   let subscriberCount = 0
 
   // Subscribe to the source stream
-  void source.subscribe((value) => {
+  void source((value) => {
     if (subscriberCount < min) {
       throw new Error(`Not enough subscribers: got ${subscriberCount}, need at least ${min}`)
     }
     emit(value)
   })
 
-  return {
-    subscribe: makeSubscribe((observer) => {
-      subscriberCount++
-      const unsubscribe = stream.subscribe(observer)
-      return () => {
-        subscriberCount--
-        void Promise.resolve(unsubscribe).then((resolvedUnsubscribe) => resolvedUnsubscribe())
-      }
-    }),
-    unsubscribeAll: () => {
-      stream.unsubscribeAll()
-      subscriberCount = 0
-    },
+  const subscribe = (observer: Observer<T>) => {
+    subscriberCount++
+    const unsubscribe = stream(observer)
+    return () => {
+      subscriberCount--
+      void Promise.resolve(unsubscribe).then((resolvedUnsubscribe) => resolvedUnsubscribe())
+    }
   }
+  subscribe.unsubscribeAll = () => {
+    stream.unsubscribeAll()
+    subscriberCount = 0
+  }
+  subscribe.narrow = stream.narrow
+  subscribe.filter = stream.narrow<T>
+
+  return subscribe
 }
 
 export function streamProcedureCall<T extends unknown[], R>(timeoutMs?: number) {
@@ -458,7 +455,7 @@ export function createMessagePortBridge<T>(): PortBridge<T> {
   port2.addEventListener('message', onMsg)
 
   // Forward stream values out to the external side
-  const unsub: Unsubscribe | Promise<Unsubscribe> = stream.subscribe((v) => {
+  const unsub: Unsubscribe | Promise<Unsubscribe> = stream((v) => {
     // Structured clone is required; assume T is cloneable.
     port2.postMessage(v)
   })
@@ -479,7 +476,7 @@ export function createMessagePortAdapter<T>(stream: Stream<T>) {
   // Internal (hidden) side
   port2.start()
   // Forward stream values out to the external side
-  const unsub: Unsubscribe = stream.subscribe((v) => {
+  const unsub: Unsubscribe = stream((v) => {
     // Structured clone is required; assume T is cloneable.
     port2.postMessage(v)
   })

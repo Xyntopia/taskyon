@@ -130,7 +130,7 @@ export const createNode = () => {
     messageStream: messageStream.stream,
     start: async (options: p2pOptions) => {
       ctx = await init(options)
-      ctx.messageStream.stream.subscribe(messageStream.emit)
+      ctx.messageStream.stream(messageStream.emit)
       activityStream.emit({ type: 'log', message: `Peer started ${await getPeerId()}` })
     },
     stream,

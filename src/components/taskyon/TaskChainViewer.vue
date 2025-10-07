@@ -125,7 +125,7 @@
 <script setup lang="ts">
 import { matArrowDropDown } from '@quasar/extras/material-icons'
 import type { ChatResponseType, TaskTreeNode } from '@taskyon/taskyon'
-import { accumulateStep, safeYamlDump, type TaskNode, type Unsubscribe } from '@taskyon/taskyon'
+import { accumulateStep, safeYamlDump, type TaskNode } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
@@ -190,8 +190,6 @@ const isProcessing = (id: string) => {
 
 const streamingTracker = ref<Map<string, ChatResponseType>>(new Map())
 
-let streamerUnsubscriber: Unsubscribe
-
 function formatTimeStamp(timestamp: string | number | Date): string {
   const date = new Date(timestamp)
   const now = new Date()
@@ -218,15 +216,13 @@ function formatTimeStamp(timestamp: string | number | Date): string {
   }
 }
 
-void tystate.chatCompletionStream
-  .subscribe(({ taskId, chunk }) => {
-    if (!chunk) return
-    const currentStream = streamingTracker.value.get(taskId)
-    const updatedStream = accumulateStep(currentStream, chunk)
-    streamingTracker.value.set(taskId, updatedStream)
-    emit('onSizeChange')
-  })
-  .then((unsubscribe) => (streamerUnsubscriber = unsubscribe))
+const streamerUnsubscriber = tystate.chatCompletionStream(({ taskId, chunk }) => {
+  if (!chunk) return
+  const currentStream = streamingTracker.value.get(taskId)
+  const updatedStream = accumulateStep(currentStream, chunk)
+  streamingTracker.value.set(taskId, updatedStream)
+  emit('onSizeChange')
+})
 
 onBeforeUnmount(() => {
   streamerUnsubscriber()
