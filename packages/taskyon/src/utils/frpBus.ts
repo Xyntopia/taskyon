@@ -50,7 +50,7 @@ export function createStream<T>(): frpBus<T> {
 // extract stream type frm existing stream
 export type extractStreamType<Type> = Type extends Stream<infer X> ? X : never
 
-export type Port<Tx, Rx> = {
+export type Port<Tx, Rx = Tx> = {
   send: frpBus<Tx>['emit']
   receive: frpBus<Rx>['stream']['subscribe']
   // stricter connect signature: intersection forces compile-time failure when constraints don't hold
