@@ -836,6 +836,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // taskyon engine!
     // TODO: red-define this as a middleware where we can intercept certain messages
     //       and also change the types of inside/outside ports...
+    uiApiInside.receive((msg) => console.log('received message on UI port!', msg))
     createPortApi(
       uiApiInside,
       TaskyonGuiMessage,

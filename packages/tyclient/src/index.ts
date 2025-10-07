@@ -113,16 +113,19 @@ export async function initializeTaskyon(options: {
   const taskyon = document.getElementById('taskyon') as HTMLIFrameElement
 
   const controller = new AbortController()
-  const { x: port, y: tyApi } = createDuplexChannel<TaskyonGuiMessage, TaskyonGuiMessage>()
+  const { x: clientSidePort, y: towardsIframe } = createDuplexChannel<
+    TaskyonGuiMessage,
+    TaskyonGuiMessage
+  >()
 
   if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
     console.log('make sure, we can ')
     // TODO: detect disconnect and reconnect!
     const iframeMessagePort = await waitForApiChannel(taskyon)
-    MessageChannelBridge(tyApi, iframeMessagePort)
+    MessageChannelBridge(towardsIframe, iframeMessagePort)
     const send = (msg: TaskyonGuiMessage) => {
       console.log('tyclient sending', msg)
-      tyApi.send(safeClone(msg))
+      clientSidePort.send(safeClone(msg))
     }
 
     console.log('tyclient send our configuration!')
@@ -145,21 +148,26 @@ export async function initializeTaskyon(options: {
     })
 
     console.log('tyclient set up function listener!')
-    createPortApi(tyApi, TaskyonGuiMessage, {
-      functionCall: async (msg) => {
-        const tool = toolMap[msg.functionName]
-        if (tool) {
-          const res = await handleFunctionExecution(msg.arguments ?? {}, tool, controller.signal)
-          send({ type: 'functionResponse', functionName: tool.name, response: res })
-          console.log('tyclient tool send functionResponse to iframe', res, tool)
-        }
+    createPortApi(
+      clientSidePort,
+      TaskyonGuiMessage,
+      {
+        functionCall: async (msg) => {
+          const tool = toolMap[msg.functionName]
+          if (tool) {
+            const res = await handleFunctionExecution(msg.arguments ?? {}, tool, controller.signal)
+            send({ type: 'functionResponse', functionName: tool.name, response: res })
+            console.log('tyclient tool send functionResponse to iframe', res, tool)
+          }
+        },
       },
-    })
+      (msg) => console.log('tyclient received message', msg),
+    )
   }
 
   return {
-    processTasks: processTasks(port),
-    port,
+    processTasks: processTasks(clientSidePort),
+    port: clientSidePort,
   }
 }
 
