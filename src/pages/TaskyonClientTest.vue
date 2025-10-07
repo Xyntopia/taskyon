@@ -14,7 +14,9 @@
       <div>Function Call Output</div>
       <q-btn outline label="Execute Client Test Function" @click="startClientTest" />
       <div class="q-pa-lg">function result: {{ functionResult }}</div>
-      <div class="q-pa-lg">received async result. {{}}</div>
+      <pre class="q-pa-lg">
+received async result. {{ JSON.stringify(taskResult, undefined, 2) }}</pre
+      >
     </div>
   </div>
 </template>
@@ -33,14 +35,13 @@ import {
   createTool,
   createChatCompletionTask,
 } from '../../packages/tyclient/src'
-import type { TaskNode } from '../../packages/tyclient/dist/tyclient'
 import { freeKey } from 'src/assets/taskyon_free_key.json'
 
 const taskyonUrl = window.location.origin
 
 const functionResult = ref<string>()
 const tyclient = ref<TyClient>()
-const taskResult = ref<TaskNode>()
+const taskResult = ref<unknown>()
 
 // Configuration
 const configuration: partialTyConfiguration = {
@@ -88,7 +89,7 @@ const tools: ClientTool[] = [
       additionalProperties: false,
     } as const,
     function: (data) => {
-      console.log('Received function call with data:', data)
+      console.log('client received function call with data:', data)
       const result = `${data.parameter1}${data.parameter2}`
       functionResult.value = result
       return result
@@ -117,9 +118,18 @@ async function startClientTest() {
       createChatCompletionTask({ goal: 'ChooseTool', allowedTools: ['clientTest'] }),
     ],
   ]
-  const res = await tyclient.value?.processTasks(tasks)
-
-  taskResult.value = res?.task
+  const unsub = tyclient.value?.port.receive((msg) => {
+    console.log('client received message from iframe:', msg)
+  })
+  try {
+    const res = await tyclient.value?.processTasks(tasks, { timeoutMs: 50000 })
+    taskResult.value = res?.task
+    console.log('client received result:')
+  } catch (error) {
+    console.error('client process task resulted in error:', error)
+    taskResult.value = 'error!'
+  }
+  unsub?.()
 }
 </script>
 

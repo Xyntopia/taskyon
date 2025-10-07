@@ -1,21 +1,23 @@
 // we can compile this file to js to js using "yarn build:lib"
 
-import type { partialTaskDraft } from '@taskyon/taskyon'
+import type { FunctionCall } from '@taskyon/taskyon'
 import {
   createDuplexChannel,
+  createPortApi,
   MessageChannelBridge,
   processTasks,
   type ClientTool,
   type TaskyonMessage,
 } from '@taskyon/taskyon'
-import type { partialTyConfiguration, TaskyonGuiMessage } from 'src/modules/taskyon/apiTypes'
+import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
+import { TaskyonGuiMessage } from 'src/modules/taskyon/apiTypes'
 export {
   createChatCompletionTask,
   createTool,
   makeTaskResult,
-  type partialTaskDraft,
   processTasks,
   toolCall,
+  type partialTaskDraft,
 } from '@taskyon/taskyon'
 export type { ClientTool, partialTyConfiguration, TaskyonGuiMessage, TaskyonMessage }
 
@@ -71,32 +73,13 @@ const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
   })
 }
 
-const handleFunctionExecutionRequest = (
-  tools: Record<string, ClientTool>,
-  sendTyMessage: (message: TaskyonMessage) => void | undefined,
-  stopSignal: AbortSignal,
-) =>
-  async function (
-    event: MessageEvent<{ type: string; arguments: unknown; functionName: string }>,
-  ): Promise<void> {
-    console.log('tyclient received message:', event)
-    // Handle function call
-    const tool = tools[event.data.functionName]
-    if (tool && event.data && event.data.type === 'functionCall') {
-      //if the message comes from taskyon, we can be sure that its the correct type.
-      await handleFunctionExecution(event, tool, sendTyMessage, stopSignal)
-    }
-  }
-
 async function handleFunctionExecution(
-  event: MessageEvent<{ type: string; arguments: unknown }>,
+  args: FunctionCall['arguments'],
   tool: ClientTool,
-  sendTyMessage: (message: TaskyonMessage) => void | undefined,
   stopSignal: AbortSignal,
 ) {
-  const data = event.data
   // with this we make sure, that we can also handle async functions :)
-  const result = await tool.function(data.arguments, {
+  const result = await tool.function(args, {
     taskChain: [],
     getSecret: (name) => {
       console.log('tyclient get secret name', name)
@@ -111,12 +94,7 @@ async function handleFunctionExecution(
     toolId: 'N/A',
   })
 
-  // Send response to iframe
-  sendTyMessage({
-    type: 'functionResponse',
-    functionName: tool.name,
-    response: result,
-  })
+  return result
 }
 
 export async function initializeTaskyon(options: {
@@ -135,15 +113,16 @@ export async function initializeTaskyon(options: {
   const taskyon = document.getElementById('taskyon') as HTMLIFrameElement
 
   const controller = new AbortController()
-  const { x: port, y } = createDuplexChannel<TaskyonGuiMessage, TaskyonGuiMessage>()
+  const { x: port, y: tyApi } = createDuplexChannel<TaskyonGuiMessage, TaskyonGuiMessage>()
 
   if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
     console.log('make sure, we can ')
-    const tyApi = await waitForApiChannel(taskyon)
-    MessageChannelBridge(y, tyApi)
+    // TODO: detect disconnect and reconnect!
+    const iframeMessagePort = await waitForApiChannel(taskyon)
+    MessageChannelBridge(tyApi, iframeMessagePort)
     const send = (msg: TaskyonGuiMessage) => {
       console.log('tyclient sending', msg)
-      tyApi.postMessage(safeClone(msg))
+      tyApi.send(safeClone(msg))
     }
 
     console.log('tyclient send our configuration!')
@@ -154,6 +133,7 @@ export async function initializeTaskyon(options: {
       origin: window.location.origin,
       peerId: options?.name,
     })
+
     console.log('tyclient sending our functions!')
     options.tools.forEach((t) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -162,15 +142,23 @@ export async function initializeTaskyon(options: {
         type: 'functionDescription',
         ...fdescr,
       })
-      console.log('tyclient set up function listener!')
-      tyApi.onmessage = (event) => {
-        void handleFunctionExecutionRequest(toolMap, send, controller.signal)(event)
-      }
+    })
+
+    console.log('tyclient set up function listener!')
+    createPortApi(tyApi, TaskyonGuiMessage, {
+      functionCall: async (msg) => {
+        const tool = toolMap[msg.functionName]
+        if (tool) {
+          const res = await handleFunctionExecution(msg.arguments ?? {}, tool, controller.signal)
+          send({ type: 'functionResponse', functionName: tool.name, response: res })
+          console.log('tyclient tool send functionResponse to iframe', res, tool)
+        }
+      },
     })
   }
 
   return {
-    processTasks: async (tasks: partialTaskDraft[][]) => await processTasks(port, tasks),
+    processTasks: processTasks(port),
     port,
   }
 }
