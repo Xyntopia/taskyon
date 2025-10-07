@@ -10,39 +10,65 @@ import type { z, ZodType } from 'zod'
 export type Observer<T> = (value: T) => void | Promise<void>
 export type Unsubscribe = () => void
 
-export interface syncStream<T> {
-  subscribe(this: void, observer: Observer<T>): Unsubscribe
-  unsubscribeAll(this: void): void
+// callable subscribe function with operator props
+export type Subscribe<T> = {
+  (observer: Observer<T>): Unsubscribe
+  filter(predicate: (value: T) => boolean): Subscribe<T>
+  //map<U>(fn: (value: T) => U): Subscribe<U>
+  // add more as needed
 }
 
-// we have a separate stream declaration here because we want to
-// add async streams later on. and we can do this here as a union.
-export type Stream<T> = syncStream<T>
+export interface Stream<T> {
+  subscribe: Subscribe<T>
+  unsubscribeAll(this: void): void
+}
 
 export type frpBus<T> = {
   stream: Stream<T>
   emit: <U extends T>(value: U) => void
 }
 
+// ---- subscribe factory ----------------------------------------------------
+
+export function makeSubscribe<T>(register: (obs: Observer<T>) => Unsubscribe): Subscribe<T> {
+  const sub = ((obs: Observer<T>) => register(obs)) as Subscribe<T>
+
+  sub.filter = (pred: (value: T) => boolean): Subscribe<T> =>
+    makeSubscribe<T>((obs) =>
+      sub((v) => {
+        if (pred(v)) void obs(v)
+      }),
+    )
+
+  /*sub.map = <U>(fn: (value: T) => U): Subscribe<U> =>
+    makeSubscribe<U>((obs) => sub((v) => obs(fn(v))))*/
+
+  return sub
+}
+
 // Creates a simple stream with an "emit" function
-export function createStream<T>(): frpBus<T> {
+export function createStream<T>(): { stream: Stream<T>; emit: (v: T) => void } {
   const observers: Observer<T>[] = []
+
+  const register = (observer: Observer<T>): Unsubscribe => {
+    observers.push(observer)
+    return () => {
+      const idx = observers.indexOf(observer)
+      if (idx >= 0) observers.splice(idx, 1)
+    }
+  }
+
+  const subscribe = makeSubscribe(register)
+
   return {
     stream: {
-      subscribe: (observer) => {
-        observers.push(observer)
-        return () => {
-          const index = observers.indexOf(observer)
-          if (index > -1) observers.splice(index, 1)
-        }
-      },
+      subscribe,
       unsubscribeAll: () => {
         observers.length = 0
       },
     },
-    emit: (value) => {
-      // Create a copy to avoid issues if observers unsubscribe during iteration
-      ;[...observers].forEach((observer) => void observer(value))
+    emit: (v: T) => {
+      ;[...observers].forEach((o) => void o(v))
     },
   }
 }
@@ -89,8 +115,8 @@ export const createChannelsFromStreams = <Str1, Str2 = Str1>(
   outS: frpBus<Str1>,
   inS: frpBus<Str2>,
 ): DuplexChannel<Str1, Str2> => ({
-  x: makePort(outS.emit, (o) => inS.stream.subscribe(o)),
-  y: makePort(inS.emit, (o) => outS.stream.subscribe(o)),
+  x: makePort(outS.emit, inS.stream.subscribe),
+  y: makePort(inS.emit, outS.stream.subscribe),
 })
 
 export const createDuplexChannel = <Str1, Str2 = Str1>(): DuplexChannel<Str1, Str2> =>
@@ -182,7 +208,7 @@ export function createPortFilter<pTx, pRx, cTx extends pTx, cRx extends pRx>(
   return { port: filtered, destroy }
 }
 
-// lets through messages which are ina  list of types...
+// lets through messages which are in a  list of types...
 export function createTypeFilteredPort<
   pTx, // Parent Transmit type
   pRx extends { type: string }, // Parent Receive type (the superset union)
@@ -352,14 +378,14 @@ export function requireSubscribers<T>(source: Stream<T>, min: number = 1): Strea
   })
 
   return {
-    subscribe: (observer: Observer<T>): Unsubscribe => {
+    subscribe: makeSubscribe((observer) => {
       subscriberCount++
       const unsubscribe = stream.subscribe(observer)
       return () => {
         subscriberCount--
         void Promise.resolve(unsubscribe).then((resolvedUnsubscribe) => resolvedUnsubscribe())
       }
-    },
+    }),
     unsubscribeAll: () => {
       stream.unsubscribeAll()
       subscriberCount = 0

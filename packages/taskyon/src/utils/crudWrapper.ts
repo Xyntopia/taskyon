@@ -5,7 +5,7 @@ import type { AskCryptoKey } from './crypto'
 import type { EncryptedDataRow } from './encrypt'
 import { decryptDataFile, encryptDataFile } from './encrypt'
 import type { Stream } from './frpBus'
-import { createStream, filter, streamProcedureCall } from './frpBus'
+import { createStream, filter, makeSubscribe, streamProcedureCall } from './frpBus'
 import { deepMerge } from './objHelpers'
 import type { PgLiteOptions } from './pglite.api'
 import { createVecPgLiteTable, type TyPGDB } from './pglite.api'
@@ -181,7 +181,7 @@ export const withLiveStreams = <T>(
       const liveForId = filter(liveStream, (event) => event.id === id)
       if (emitCurrent) {
         return {
-          subscribe(observer) {
+          subscribe: makeSubscribe((observer) => {
             // Immediately subscribe to the live stream
             const unsubLive = liveForId.subscribe(observer)
             let cancelled = false
@@ -196,7 +196,7 @@ export const withLiveStreams = <T>(
               cancelled = true
               unsubLive()
             }
-          },
+          }),
           unsubscribeAll: liveForId.unsubscribeAll,
         }
       }
