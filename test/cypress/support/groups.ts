@@ -60,8 +60,10 @@ export function addAIServices() {
   //cy.get('.q-btn').contains('AI service provider se', { matchCase: false }).click()
   cy.contains('Add API keys').click()
   // check in our keepass to get the relevant json.
-  cy.contains('openai API key').type(Cypress.env().openai_api_key)
-  cy.contains('openrouter.ai API key').type(Cypress.env().openrouter_api_key)
+  cy.contains('openai').click()
+  cy.dataCy('add-openai').type(Cypress.env().openai_api_key + '{enter}')
+  cy.contains('openrouter.ai').click()
+  cy.dataCy('add-openrouter.ai').type(Cypress.env().openrouter_api_key + '{enter}')
 }
 
 export function useFreeTaskyon() {

@@ -27,6 +27,9 @@ describe('taskyon API', () => {
     });*/
   })
   it('should be able to interact with taskyon API', () => {
+    cy.contains('Welcome!', { timeout: 10000 })
+    //cy.contains('Ai Service Provide')
+    cy.wait(3000) // we are waiting, so that our passwords are able to load in the background
     // enable task cost display & expert mode...
     addAIServices()
 
@@ -36,11 +39,11 @@ describe('taskyon API', () => {
 
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
     //cy.dataCy('ai-settings').scrollTo('bottom').type('{esc}')
-    cy.dataCy('Expert Mode').get('.q-toggle').click()
+    cy.dataCy('Expert Mode').find('.q-toggle').click()
     cy.dataCy('ai-settings').type('{esc}')
 
     // as of 20241007 this is the cheapest model which works with vision...
-    const visionModelID = 'google/gemini-flash-1.5-8b'
+    const visionModelID = 'google/gemini-2.5-flash-lite'
 
     selectllmmodel('openai')
     selectllmmodel('openrouter.ai', visionModelID)
