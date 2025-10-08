@@ -22,6 +22,7 @@ import {
   normalizeFalsyValues,
   OAUTH_PROVIDERS,
   processTasks,
+  removeKeys,
   sleep,
   summarizeTools,
   ToolBase,
@@ -1357,12 +1358,17 @@ export async function testTaskIdHashing() {
   const strippedTask = await createTaskNode(cloneTask, { createMeta: 'missing' })
   assert(strippedTask.id === fullTask.id, 'strippedTask should be the same as "fullTask" !!!')
 
+  const noIdTask = removeKeys(fullTask, ['id'])
   await sleep(10) // sleeping for ms to make sure we have different creation times
-  const ft2 = await createTaskNode(fullTask, { createMeta: 'missing' })
+  const ft2 = await createTaskNode(noIdTask, { createMeta: 'missing' })
   await sleep(10) // sleeping for ms to make sure we have different creation times
-  const ft3 = await createTaskNode(fullTask)
+  const ft3 = await createTaskNode(noIdTask)
   await sleep(10) // sleeping for ms to make sure we have different creation times
-  const err1 = await shouldProduceError(() => createTaskNode(fullTask, { createMeta: 'overwrite' }))
+  // we remove the keys in the next example in order to be able to overwrite metadata
+  const updatedTask = await createTaskNode(noIdTask, { createMeta: 'overwrite' })
+  const err1 = await shouldProduceError(() =>
+    createTaskNode({ ...updatedTask, id: fullTask.id }, { createMeta: 'overwrite' }),
+  )
   await sleep(10) // sleeping for ms to make sure we have different creation times
   const ft4 = await createTaskNode(testTask, { createMeta: 'missing' })
 
@@ -1371,14 +1377,14 @@ export async function testTaskIdHashing() {
   assert(fullTask.id !== ft4.id, 'ft4 should not match fullTask')
 
   // ---- Now shuffle key order ----
-  const shuffledTask = shuffleKeys(fullTask)
+  const shuffledTask = removeKeys(shuffleKeys(fullTask), ['id'])
   await sleep(10) // sleeping for ms to make sure we have different creation times
   const sft2 = await createTaskNode(shuffledTask, { createMeta: 'missing' })
   await sleep(10) // sleeping for ms to make sure we have different creation times
   const sft3 = await createTaskNode(shuffledTask)
   await sleep(10) // sleeping for ms to make sure we have different creation times
   const err3 = await shouldProduceError(() =>
-    createTaskNode(shuffledTask, { createMeta: 'overwrite' }),
+    createTaskNode({ ...shuffledTask, id: ft4.id }, { createMeta: 'overwrite' }),
   )
 
   assert(fullTask.id === sft2.id, 'shuffled ft2 should match')
