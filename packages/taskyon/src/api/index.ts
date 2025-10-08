@@ -1,4 +1,4 @@
-import { ensureValidIds } from '../core/taskManager'
+import { forgeTaskChain } from '../core/taskManager'
 import type { TaskyonMessage } from '../types/apiTypes'
 import type { partialTaskDraft } from '../types/node'
 import { type Port } from '../utils/frpBus'
@@ -8,7 +8,7 @@ export type processTasksOpts = { timeoutMs?: number; signal?: AbortSignal }
 export const processTasks =
   <T extends { type: string }>(tyPort: Port<T | TaskyonMessage>) =>
   async (taskList: partialTaskDraft[][], opts: processTasksOpts) => {
-    const tasks = await ensureValidIds(taskList)
+    const tasks = await forgeTaskChain(taskList)
 
     tyPort.send({
       type: 'tasks',
