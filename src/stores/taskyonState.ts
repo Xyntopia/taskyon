@@ -493,8 +493,11 @@ const useApiManagement = (
   // Computed property to determine the currently selected bot name
   const currentModelId = computed(() => {
     const selected = stateRefs.llmSettings.selectedApi
-    if (selected && stateRefs.llmSettings.llmApis[selected])
-      return getCurrentModel(stateRefs.llmSettings.llmApis[selected])
+    if (selected && stateRefs.llmSettings.llmApis[selected]) {
+      const cm = getCurrentModel(stateRefs.llmSettings.llmApis[selected])
+      if (allowedLLMModels.value?.includes(cm)) return cm
+      else return allowedLLMModels.value?.[0] ?? null
+    }
     return null
   })
 
