@@ -140,7 +140,7 @@ async function updateLlmModels(
     // we are doing this, because openrouter currently
     // blocks access to models from browser origins through CORS restrictions.
     if (taskyonApi && api.name === 'openrouter.ai') {
-      baseURL = taskyonApi.baseURL + '/models_openrouter'
+      baseURL = taskyonApi.baseURL + '/functions/v1/api/models_openrouter'
       key = (await getApiKey('taskyon')) || (await getApiKey(api?.name)) || ''
     } else {
       key = (await getApiKey(api.name)) || ''
