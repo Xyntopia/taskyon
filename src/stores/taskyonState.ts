@@ -405,6 +405,31 @@ const useApiManagement = (
     return await ty.getSecret(AiProvideKeyStoreName, name, false, false)
   }
 
+  const addModelToHistory = (model: string) => {
+    if (stateRefs.modelHistory.length >= 5) {
+      stateRefs.modelHistory.shift() // remove oldest element
+    }
+    stateRefs.modelHistory.push(model)
+  }
+
+  const updateModelAndApi = ({
+    newName,
+    newService,
+  }: {
+    newName: string
+    newService?: string | null
+  }) => {
+    console.log('getting an api & bot update :)', newName, newService)
+    if (newService) {
+      stateRefs.llmSettings.selectedApi = newService
+    }
+    const api = getApiConfig(stateRefs.llmSettings)
+    if (api) {
+      api.selectedModel = newName
+    }
+    addModelToHistory(newName)
+  }
+
   const updateModelList = async () => {
     const api = getApiConfig(stateRefs.llmSettings)
     // try to set our recommended models if there isn't any default or anything!
@@ -451,6 +476,7 @@ const useApiManagement = (
         // the reason we are doing this is because we want taskyon to initialize fast and let other 3rd paty authentication tools
         // set keys fast..
         await setProviderApiKey('taskyon', newToken, false)
+        selectValidModel()
       }
     },
     { immediate: true },
@@ -469,6 +495,22 @@ const useApiManagement = (
     immediate: true,
   })
 
+  function getSelectedModel() {
+    const selected = stateRefs.llmSettings.selectedApi
+    if (selected) {
+      const api = stateRefs.llmSettings.llmApis[selected]
+      if (api) {
+        return getCurrentModel(api)
+      }
+    }
+  }
+
+  function selectValidModel() {
+    const cm = getSelectedModel()
+    if (cm && allowedLLMModels.value?.includes(cm)) return
+    else updateModelAndApi({ newName: allowedLLMModels.value?.[0] ?? 'no valid models found!' })
+  }
+
   watch(
     [() => stateRefs.activeTaskyonToken, () => stateRefs.llmSettings.selectedApi],
     ([tok, api]) => {
@@ -486,31 +528,17 @@ const useApiManagement = (
       }
       allowedLLMModels.value = undefined
       usingTaskyonKey.value = false
+      selectValidModel()
     },
     { immediate: true },
   )
 
   // Computed property to determine the currently selected bot name
-  const currentModelId = computed(() => {
-    const selected = stateRefs.llmSettings.selectedApi
-    if (selected && stateRefs.llmSettings.llmApis[selected]) {
-      const cm = getCurrentModel(stateRefs.llmSettings.llmApis[selected])
-      if (allowedLLMModels.value?.includes(cm)) return cm
-      else return allowedLLMModels.value?.[0] ?? null
-    }
-    return null
-  })
+  const currentModelId = computed(getSelectedModel)
 
   const currentModel = computed(() => {
     return currentModelId.value ? llmModelsInternal.value[currentModelId.value] : null
   })
-
-  const addModelToHistory = (model: string) => {
-    if (stateRefs.modelHistory.length >= 5) {
-      stateRefs.modelHistory.shift() // remove oldest element
-    }
-    stateRefs.modelHistory.push(model)
-  }
 
   return {
     currentModelId,
@@ -526,23 +554,7 @@ const useApiManagement = (
     getProviderApiKey,
     addModelToHistory,
     // Method to handle the updateBotName event
-    handleBotNameUpdate: ({
-      newName,
-      newService,
-    }: {
-      newName: string
-      newService?: string | null
-    }) => {
-      console.log('getting an api & bot update :)', newName, newService)
-      if (newService) {
-        stateRefs.llmSettings.selectedApi = newService
-      }
-      const api = getApiConfig(stateRefs.llmSettings)
-      if (api) {
-        api.selectedModel = newName
-      }
-      addModelToHistory(newName)
-    },
+    handleBotNameUpdate: updateModelAndApi,
     llmModels: computed(() => llmModelsInternal.value),
   }
 }

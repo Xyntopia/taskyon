@@ -39,7 +39,7 @@
         <ModelSelection
           v-model:selected-api="selectedApi"
           class="q-px-xs self-stretch"
-          :bot-name="tystate.currentModelId"
+          :bot-name="tystate.currentModelId ?? 'no valid model selected...'"
           :model-list="state.appConfiguration.expertMode"
           :select-api="state.appConfiguration.expertMode"
           @update-bot-name="
@@ -48,7 +48,7 @@
               close()
             }
           "
-        ></ModelSelection>
+        />
         <InfoDialog
           v-if="tystate.currentModelId && tystate.currentModel?.description"
           :round="false"
