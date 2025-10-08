@@ -441,6 +441,12 @@ const useApiManagement = (
     )
   }
 
+  function selectValidModel() {
+    const cm = getSelectedModel()
+    if (cm && allowedLLMModels.value?.includes(cm)) return
+    else updateModelAndApi({ newName: allowedLLMModels.value?.[0] ?? 'no valid models found!' })
+  }
+
   const updateAiService = async () => {
     if (stateRefs.llmSettings.selectedApi) {
       const apiK = await getProviderApiKey(stateRefs.llmSettings.selectedApi)
@@ -451,6 +457,23 @@ const useApiManagement = (
     availableKeys.value = keys
   }
   void updateAiService()
+
+  function updateAllowedModels(api: string | null, tok: string | undefined) {
+    if (api === 'taskyon') {
+      console.log('check if we are using free taskyon key!')
+      // if we have a taskyon key defined only display the models allowed for that key...
+      const key = isTaskyonKey(tok ?? undefined, false)
+      if (key) {
+        usingTaskyonKey.value = key.name ?? true
+        if (key.model && key.model.length > 0 && !key.model.includes('*')) {
+          allowedLLMModels.value = key.model
+        }
+        return
+      }
+    }
+    allowedLLMModels.value = undefined
+    usingTaskyonKey.value = false
+  }
 
   const setProviderApiKey = async (name: string, value?: string, setAppState = true) => {
     console.log('set new provider key:', name)
@@ -464,9 +487,13 @@ const useApiManagement = (
     await updateModelList()
     await updateAiService()
     lastUpdatedProviderKey.value = name
-    if (name === 'taskyon' && stateRefs.activeTaskyonToken != value && setAppState)
+    if (name === 'taskyon' && stateRefs.activeTaskyonToken != value && setAppState) {
       stateRefs.setActiveApiToken(value)
+    }
+    updateAllowedModels(name, value)
+    selectValidModel()
   }
+
   watch(
     () => stateRefs.activeTaskyonToken,
     async (newToken, oldToken) => {
@@ -476,7 +503,6 @@ const useApiManagement = (
         // the reason we are doing this is because we want taskyon to initialize fast and let other 3rd paty authentication tools
         // set keys fast..
         await setProviderApiKey('taskyon', newToken, false)
-        selectValidModel()
       }
     },
     { immediate: true },
@@ -505,29 +531,10 @@ const useApiManagement = (
     }
   }
 
-  function selectValidModel() {
-    const cm = getSelectedModel()
-    if (cm && allowedLLMModels.value?.includes(cm)) return
-    else updateModelAndApi({ newName: allowedLLMModels.value?.[0] ?? 'no valid models found!' })
-  }
-
   watch(
     [() => stateRefs.activeTaskyonToken, () => stateRefs.llmSettings.selectedApi],
     ([tok, api]) => {
-      if (api === 'taskyon') {
-        console.log('check if we are using free taskyon key!')
-        // if we have a taskyon key defined only display the models allowed for that key...
-        const key = isTaskyonKey(tok ?? undefined, false)
-        if (key) {
-          usingTaskyonKey.value = key.name ?? true
-          if (key.model && key.model.length > 0 && !key.model.includes('*')) {
-            allowedLLMModels.value = key.model
-          }
-          return
-        }
-      }
-      allowedLLMModels.value = undefined
-      usingTaskyonKey.value = false
+      updateAllowedModels(api, tok)
       selectValidModel()
     },
     { immediate: true },
