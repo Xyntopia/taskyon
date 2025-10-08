@@ -3,7 +3,7 @@
     <slot name="btn"></slot>
   </q-btn>
   <q-dialog v-model="showDialog" auto-close>
-    <slot></slot>
+    <slot :close="() => (showDialog = false)"></slot>
   </q-dialog>
 </template>
 

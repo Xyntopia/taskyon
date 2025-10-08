@@ -70,24 +70,32 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
           <div class="row justify-around q-pa-md">
             <template v-for="api in state.llmSettings.llmApis" :key="api.name">
               <DialogButton outline :label="api.name">
-                <q-card>
-                  <q-card-section>
-                    Add new Api Key for:
-                    <span class="text-weight-bolder">{{ api.name }}</span>
-                  </q-card-section>
-                  <q-card-section @click.stop>
-                    <SecretInput
-                      v-model="currentNewPassword"
-                      :label="api.name"
-                      filled
-                      @keyup.enter="addNewPw(api.name, currentNewPassword)"
-                    />
-                  </q-card-section>
-                  <q-card-actions align="evenly">
-                    <q-btn flat label="Cancel" />
-                    <q-btn flat label="OK" @click="addNewPw(api.name, currentNewPassword)" />
-                  </q-card-actions>
-                </q-card>
+                <template #default="{ close }">
+                  <q-card>
+                    <q-card-section>
+                      Add new Api Key for:
+                      <span class="text-weight-bolder">{{ api.name }}</span>
+                    </q-card-section>
+                    <q-card-section @click.stop>
+                      <SecretInput
+                        v-model="currentNewPassword"
+                        :label="api.name + ' key'"
+                        filled
+                        :data-cy="'add-' + api.name"
+                        @keyup.enter="
+                          () => {
+                            addNewPw(api.name, currentNewPassword)
+                            close()
+                          }
+                        "
+                      />
+                    </q-card-section>
+                    <q-card-actions align="evenly">
+                      <q-btn flat label="Cancel" />
+                      <q-btn flat label="OK" @click="addNewPw(api.name, currentNewPassword)" />
+                    </q-card-actions>
+                  </q-card>
+                </template>
               </DialogButton>
             </template>
           </div>
