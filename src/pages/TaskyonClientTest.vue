@@ -13,9 +13,15 @@
     <div class="col-6">
       <div>Function Call Output</div>
       <q-btn outline label="Execute Client Test Function" @click="startClientTest" />
-      <div class="q-pa-lg">function result: {{ functionResult }}</div>
-      <pre class="q-pa-lg" style="max-width: 500px; white-space: pre-wrap; word-break: break-word">
-        received async result. {{ JSON.stringify(taskResult, undefined, 2) }}</pre
+      <div id="output" class="q-pa-lg">function result: {{ functionResult }}</div>
+      received async result.
+      <pre
+        v-if="taskResult"
+        data-cy="task-result"
+        class="q-pa-lg"
+        style="max-width: 500px; white-space: pre-wrap; word-break: break-word"
+      >
+        {{ JSON.stringify(taskResult, undefined, 2) }}</pre
       >
     </div>
   </div>
@@ -112,7 +118,7 @@ async function startClientTest() {
         role: 'user',
         content: {
           type: 'message',
-          data: 'Awesome! now can you add two strings for me? PLease use the clientTest tool!',
+          data: 'Awesome! now can you add these two strings for me:  “cypress” and “test function”? PLease use the clientTest tool!',
         },
       },
       createChatCompletionTask({ goal: 'ChooseTool', allowedTools: ['clientTest'] }),

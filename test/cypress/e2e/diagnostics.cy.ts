@@ -26,6 +26,10 @@ describe('run diagnostics', () => {
     });*/
   })
   it('fast testing of a few taskyon operations', () => {
+    cy.contains('Welcome!', { timeout: 10000 })
+    //cy.contains('Ai Service Provide')
+    cy.wait(3000) // we are waiting, so that our passwords are able to load in the background
+
     addAIServices()
     cy.get('.q-btn').contains('Use free Taskyon', { matchCase: false }).click()
 
