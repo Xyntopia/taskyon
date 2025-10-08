@@ -93,7 +93,7 @@ export async function processChatTask(
   // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
   let openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
   if (lastTaskBeforeChatCompletion) {
-    const taskChain = await taskManager.getTaskChain(lastTaskBeforeChatCompletion.id, true)
+    const taskChain = await taskManager.getTaskChain(lastTaskBeforeChatCompletion.id)
     openAIConversationThread = await convertTaskNodesToOpenAIChat(
       taskChain,
       taskManager.getFileMappingByUuid,

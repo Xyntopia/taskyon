@@ -138,7 +138,7 @@ async function completionMessage() {
     tyChat.taskIdChain = await ty.getTaskIdChain(state.llmSettings.selectedTaskId)
     const task = await ty.getTask(state.llmSettings.selectedTaskId)
     if (task) {
-      const taskChain = await ty.getTaskChain(task.id, true)
+      const taskChain = await ty.getTaskChain(task.id)
       const toolDefs = await ty.updateToolDefinitions(false)
       const res = await convertTaskNodesToOpenAIChat(
         taskChain,

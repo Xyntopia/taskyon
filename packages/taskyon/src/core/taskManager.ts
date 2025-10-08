@@ -674,24 +674,28 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
     },
   )
 
-  async function convertTaskIDs(taskIds: string[], ignoreMissing = false) {
-    const taskList = await Promise.all(taskIds.map((tid) => taskDb.get(tid)))
+  async function convertTaskIDs(taskIds: string[]) {
+    const taskList = await Promise.all(
+      taskIds.map(async (tid) => {
+        const t = await taskDb.get(tid)
+        if (t != null || t != undefined) return t
+        console.log('no acces to task:', tid)
+        return {
+          role: 'system',
+          content: {
+            type: 'error',
+            data: `We can not access Task #${tid}`,
+          },
+        } as TaskNode
+      }),
+    )
 
-    // Check if any tasks are "null" or "undefined" and throw an error
-    const filtered = taskList.filter((task, index) => {
-      const exists = task != null || task != undefined
-      if (!exists) {
-        const errmsg = `Task at index ${index} is ${task === null ? 'null' : 'undefined'}`
-        if (ignoreMissing) console.log(errmsg)
-        else throw new Error(errmsg)
-      }
-      return exists
-    })
-    return filtered
+    // Check if any tasks are "null" or "undefined" and add an error task
+    return taskList
   }
 
-  const getTaskChain = async (taskId: string, ignoreMissing = false): Promise<TaskNode[]> =>
-    await convertTaskIDs(await getTaskIdChain(taskId), ignoreMissing)
+  const getTaskChain = async (taskId: string): Promise<TaskNode[]> =>
+    await convertTaskIDs(await getTaskIdChain(taskId))
 
   // first, get all immediate children and then, for each of them get all their leaf siblings
   // then from each leaf sibling go backwards through prior & parent IDs to create
