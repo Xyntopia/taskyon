@@ -19,7 +19,6 @@ import type { tyPublicKeyDraft } from '@taskyon/taskyon'
 import { deepMerge, sleep, type FunctionCall } from '@taskyon/taskyon'
 import { freeKey } from 'assets/taskyon_free_key.json'
 import {
-  defaultProfileName,
   getCurrentProfileName,
   getTaskyonUiProfile,
   initialStoredStateObj,
@@ -189,7 +188,8 @@ const saveAndLoadState = (initialState: initialState) => {
         initialStoredStateObjTyped?.version || 'undefined'
       }) is not compatible with current version (${initialState.version}). Using default settings.`,
     )
-    clearBrowserStorage([getCurrentProfileName()])
+    const pname = getCurrentProfileName()
+    if (pname) clearBrowserStorage([pname])
     stateRefs = reactive(initialState)
   }
 
@@ -199,8 +199,9 @@ const saveAndLoadState = (initialState: initialState) => {
   // store the state on every change!! :)
   watch(stateRefs, (newState) => {
     //console.log('saved store!!');
-    if (saveToLocalStorage) {
-      setTaskyonUiProfile(getCurrentProfileName(), newState)
+    const pname = getCurrentProfileName()
+    if (saveToLocalStorage && pname) {
+      setTaskyonUiProfile(pname, newState)
     }
   })
 
@@ -276,6 +277,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
     stateRefs.initWBindingKey = bindingKey.value !== null
   })
 
+  // our sessions only get saved once we have a legitimate session key!
   const setSessionId = (newId: string) => {
     if (newId === sessionId.value) return
     sessionId.value = newId
@@ -283,8 +285,6 @@ export const useAppStateStore = defineStore('ui-state', () => {
     if (newId) {
       // we don't need to save our old state, as it should have been persisted automatically
       switchCurrentProfilePointer(newId)
-    } else {
-      switchCurrentProfilePointer(defaultProfileName)
     }
     // re-load state with new profile!
     Object.assign(stateRefs, getTaskyonUiProfile(getCurrentProfileName()))

@@ -251,6 +251,7 @@ async function generateReport(details = false, noGui = true) {
 }
 
 async function getData() {
+  const currentProfilePointer = getCurrentProfileName()
   return dump(
     {
       browserInfo: {
@@ -273,8 +274,8 @@ async function getData() {
         appConfiguration: state.appConfiguration,
       },
       taskyonStoreDiagnostics: {
-        currentProfilePointer: getCurrentProfileName(),
-        SavedState: getStoredStateString(getCurrentProfileName()),
+        currentProfilePointer,
+        SavedState: currentProfilePointer ? getStoredStateString(currentProfilePointer) : 'N/A',
         CurrentState: state.getStateValues(),
       },
       CurrentChat: await completionMessage(),

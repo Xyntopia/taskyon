@@ -73,6 +73,7 @@ async function setDeviceKey(namespace: string, keyPair: CryptoKeyPair): Promise<
   })
 }*/
 
+const wrappedKeyPrefix = 'sk_'
 const storageNamespace = 'ty_device_key'
 // in the browser we can permanently store the inital device key safely
 // in indexeddb! We also store wrapped Session Keys safely in localstorage
@@ -90,7 +91,7 @@ export const initCryptoSessionFromBrowser = async (
   const sessionName = await cs.getWrapperId()
   if (!options?.wrappedSK) {
     // now check if we stored a SK before:
-    const wrappedSK = LocalStorage.getItem(sessionName)
+    const wrappedSK = LocalStorage.getItem(wrappedKeyPrefix + sessionName)
     // if we stored it before, we need to set it in the cryptosession:
     if (typeof wrappedSK === 'string') {
       cs = await cs.newSessionKey(wrappedSK)
@@ -106,7 +107,7 @@ export const initCryptoSessionFromBrowser = async (
 export const persistSession = async (cs: CryptoSession) => {
   const sessionName = await cs.getWrapperId()
   const lastWrappedSK = await cs.exportSessionKey()
-  LocalStorage.setItem(sessionName, lastWrappedSK)
+  LocalStorage.setItem(wrappedKeyPrefix + sessionName, lastWrappedSK)
 }
 
 export const deleteSession = async (session: CryptoSession) => {

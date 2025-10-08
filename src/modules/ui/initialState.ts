@@ -17,12 +17,11 @@ export function getUrlConfig() {
 
 export const urlConfig = getUrlConfig()
 
-export const defaultProfileName = 'defaultProfile'
 const profilePointerKey = 'currentProfile'
 const profileName = (name: string) => `session_${name}`
 
 export const getCurrentProfileName = () =>
-  urlConfig.profile ?? LocalStorage.getItem(profilePointerKey) ?? defaultProfileName
+  urlConfig.profile ?? LocalStorage.getItem(profilePointerKey)
 
 export const switchCurrentProfilePointer = (newProfileId: string) =>
   LocalStorage.setItem(profilePointerKey, newProfileId)
@@ -33,7 +32,8 @@ export const setTaskyonUiProfile = (name: string, newState: PartialDeep<TyProfil
 export const getStoredStateString = (name: string) =>
   LocalStorage.getItem(profileName(name)) as string
 
-export const getTaskyonUiProfile = (name: string) => {
+export const getTaskyonUiProfile = (name: string | null) => {
+  if (!name) return
   const stateString = getStoredStateString(name)
   const stateObj = JSON.parse(stateString) as PartialDeep<TyProfile> | undefined
   return stateObj
