@@ -15,7 +15,7 @@ import {
 } from 'src/modules/utils'
 import { computed, reactive, ref, toRefs, unref, watch, type Reactive } from 'vue'
 // TODO: remove, to make this file here faster...
-import type { tyPublicKeyDraft } from '@taskyon/taskyon'
+import type { KeyString, tyPublicKeyDraft } from '@taskyon/taskyon'
 import { deepMerge, sleep, type FunctionCall } from '@taskyon/taskyon'
 import { freeKey } from 'assets/taskyon_free_key.json'
 import {
@@ -304,7 +304,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // we are doing it this way, because we need this as early as possibel to prevent flicker
   // but some parts of our app e.g. tycors and the secret store need a long time for initialization
   // we don't save this variable on purpose, because we used it to present tokens to othe parts of the app...
-  const activeTaskyonToken = ref<string>()
+  const activeTaskyonToken = ref<KeyString>()
   const usingFreeTaskyonKey = computed(() => {
     console.log('using free taskyon key:', activeTaskyonToken.value === freeKey)
     return activeTaskyonToken.value === freeKey
@@ -320,8 +320,8 @@ export const useAppStateStore = defineStore('ui-state', () => {
     bindingKey,
     setBindingKey,
     activeTaskyonToken: computed(() => activeTaskyonToken.value),
-    setActiveApiToken: (tok: string | undefined) => {
-      console.log('set new active token secret', tok)
+    setActiveApiToken: (tok: KeyString | undefined) => {
+      console.log('set new active token secret', tok?.slice(-5))
       activeTaskyonToken.value = tok
     },
     isInIframe: urlConfig.isInIframe,

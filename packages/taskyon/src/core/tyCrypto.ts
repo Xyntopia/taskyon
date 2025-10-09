@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { parseJwt } from '../utils/crypto'
 
+export type KeyString = string & { __brand: 'KeyString' }
+
 export const tyPublicKeyDraft = z.object({
   name: z
     .string()
@@ -49,7 +51,7 @@ export const tyPublicApiKeyObject = tyPublicKeyDraft.extend({
 
 // This doesn't verify the key, only looks if its contents are valid!
 type tyPublicApiKeyObject = z.infer<typeof tyPublicApiKeyObject>
-export function isTaskyonKey(key: string | undefined, boolean: true): boolean
+export function isTaskyonKey(key: string | undefined, boolean?: true): boolean
 export function isTaskyonKey(
   key: string | undefined,
   boolean: false,

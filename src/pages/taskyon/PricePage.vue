@@ -136,7 +136,7 @@ For in in-depth comparison check out webpages like the following
                 "
                 flat
                 label="select this model"
-                @click="tystate.handleBotNameUpdate({ newName: props.row.id })"
+                @click="tystate.updateModelAndApi({ newName: props.row.id })"
               />
               <q-tooltip :delay="500"> id: {{ props.row.id }} </q-tooltip>
             </div>

@@ -53,7 +53,7 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
           :only-this-key="AiProvideKeyStoreName"
           @delete="
             (group, name) => {
-              tystate.setProviderApiKey(name)
+              tystate.setProviderApiKey(name, undefined)
             }
           "
         />
@@ -213,6 +213,7 @@ import DialogButton from '../DialogButton.vue'
 import SecretInput from '../SecretInput.vue'
 import ApiSelect from './ApiSelect.vue'
 import PasswordManager from './PasswordManager.vue'
+import type { KeyString } from '@taskyon/taskyon'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
@@ -223,12 +224,12 @@ const expertModeOn = defineModel<boolean>('expertModeOn', { default: false })
 
 async function initFreeMode() {
   state.llmSettings.selectedApi = 'taskyon'
-  await tystate.setProviderApiKey('taskyon', freeKey)
+  await tystate.setProviderApiKey('taskyon', freeKey as KeyString)
 }
 
 const currentNewPassword = ref<string>()
 const addNewPw = async (name: string, newPw: string | undefined) => {
-  await tystate.setProviderApiKey(name, newPw)
+  await tystate.setProviderApiKey(name, newPw as KeyString)
   await passwords.value?.reloadSecrets()
   currentNewPassword.value = ''
 }

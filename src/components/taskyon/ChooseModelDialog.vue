@@ -31,7 +31,7 @@
           :key="m"
           v-close-popup
           clickable
-          @click="tystate.handleBotNameUpdate({ newName: m })"
+          @click="tystate.updateModelAndApi({ newName: m })"
         >
           <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
         </q-item>
@@ -44,7 +44,7 @@
           :select-api="state.appConfiguration.expertMode"
           @update-bot-name="
             (bot) => {
-              tystate.handleBotNameUpdate(bot)
+              tystate.updateModelAndApi(bot)
               close()
             }
           "

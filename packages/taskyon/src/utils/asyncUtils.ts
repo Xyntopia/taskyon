@@ -63,6 +63,23 @@ export class Lock {
   }
 }
 
+// Wraps a function so it can only run one instance at a time
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function exclusive<F extends (...args: any) => any>(fn: F): F {
+  const lock = new Lock()
+
+  const wrapped = (async (...args: Parameters<F>): Promise<ReturnType<F>> => {
+    const release = await lock.lock()
+    try {
+      return await fn(...args)
+    } finally {
+      release()
+    }
+  }) as F
+
+  return wrapped
+}
+
 export function lockMap(name: string = 'item') {
   const locks = new Map<string | number, Lock>()
 
