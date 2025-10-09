@@ -444,7 +444,7 @@ const useApiManagement = (
   function selectValidModel() {
     const cm = getSelectedModel()
     if (cm && allowedLLMModels.value?.includes(cm)) return
-    else updateModelAndApi({ newName: allowedLLMModels.value?.[0] ?? 'no valid models found!' })
+    else if (cm) updateModelAndApi({ newName: allowedLLMModels.value?.[0] ?? cm })
   }
 
   const updateAiService = async () => {
@@ -476,7 +476,7 @@ const useApiManagement = (
   }
 
   const setProviderApiKey = async (name: string, value?: string, setAppState = true) => {
-    console.log('set new provider key:', name)
+    console.log('set new provider key:', name, value?.slice(0, 5))
     const ty = await taskyon
     if (!value) {
       await ty.deleteSecret(AiProvideKeyStoreName, name)
