@@ -10,6 +10,7 @@ import type {
   Port,
   TaskNodeMeta,
   Taskyon,
+  Thunk,
   TokenGetter,
   TyTaskStreamData,
 } from '@taskyon/taskyon'
@@ -392,7 +393,7 @@ export const AiProvideKeyStoreName = 'AiProviderKey'
 
 const useApiManagement = (
   stateRefs: ReturnType<typeof useAppStateStore>,
-  taskyon: Promise<Taskyon>,
+  taskyon: Thunk<Promise<Taskyon>>,
 ) => {
   const llmModelsInternal = ref<Record<string, Model>>({})
   // we need this in order to reactivly see if something changed..
@@ -403,7 +404,7 @@ const useApiManagement = (
   const allowedLLMModels = ref<string[]>()
 
   const getProviderApiKey = async (name: string): Promise<KeyString | null> => {
-    const ty = await taskyon
+    const ty = await taskyon()
     return (await ty.getSecret(AiProvideKeyStoreName, name, false, false)) as KeyString | null
   }
 
@@ -461,7 +462,7 @@ const useApiManagement = (
       const apiK = await getProviderApiKey(stateRefs.llmSettings.selectedApi)
       noAiService.value = apiK == null
     } else noAiService.value = true
-    const ty = await taskyon
+    const ty = await taskyon()
     const keys = Object.keys(await ty.listSecrets(AiProvideKeyStoreName))
     availableKeys.value = keys as KeyString[]
   }
@@ -491,7 +492,7 @@ const useApiManagement = (
     async (name: string, value: KeyString | undefined, setAppState = true) => {
       console.log('set new provider key:', name, value?.slice(-5))
       updateAllowedModels(stateRefs.llmSettings.selectedApi, value)
-      const ty = await taskyon
+      const ty = await taskyon()
       if (!value) {
         await ty.deleteSecret(AiProvideKeyStoreName, name)
       } else {
@@ -510,7 +511,7 @@ const useApiManagement = (
 
   // make sure, that we check our secretStore right after initialization if we hae stored any keys in
   // there (especially ifits a taskyon key) and then use those!
-  void taskyon.then(async () => {
+  void taskyon().then(async () => {
     const provider = stateRefs.llmSettings.selectedApi
     const key = await getProviderApiKey(provider || 'taskyon')
     console.log('setting key after secretstore initialization', key)
@@ -862,7 +863,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   })
 
   const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
-  const apiKeyManagement = useApiManagement(stateRefs, taskyon)
+  const apiKeyManagement = useApiManagement(stateRefs, () => taskyon)
 
   // iApiOutside is the port to the "outside" of taskyon UI. It is the port used to
   // communicate towards the taskyon engine. iApiInside communicates to the outside of taskyon.

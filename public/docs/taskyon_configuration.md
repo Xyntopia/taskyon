@@ -1,6 +1,6 @@
 # Taskyon Configuration Documentation
 
-Taskyon is a powerful tool that can be configured to meet the needs of various applications. In this documentation, we will cover the different aspects of Taskyon configuration, including the GUI, iframe integration, and configuration options.
+Taskyon can be configured to meet the needs of various applications. In this documentation, we will cover the different aspects of Taskyon configuration, including the GUI, iframe integration, and configuration options.
 
 ### GUI Configuration
 
