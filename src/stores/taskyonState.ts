@@ -401,7 +401,7 @@ const useApiManagement = (
   const availableKeys = ref<KeyString[]>()
   const noAiService = ref<boolean | null>(null)
   const usingTaskyonKey = ref<string | boolean | undefined>()
-  const allowedLLMModels = ref<string[]>()
+  const tyKeyAllowedModels = ref<string[]>()
 
   const getProviderApiKey = async (name: string): Promise<KeyString | null> => {
     const ty = await taskyon()
@@ -422,7 +422,6 @@ const useApiManagement = (
     newName: string
     newService?: string | null
   }) => {
-    console.log('getting an api & bot update :)', newName, newService)
     if (newService) {
       stateRefs.llmSettings.selectedApi = newService
     }
@@ -430,16 +429,17 @@ const useApiManagement = (
     if (api) {
       api.selectedModel = newName
     }
+    console.log('getting an api & bot update', {
+      'new name': newName,
+      'new service': newService,
+      'old name': api?.selectedModel,
+      'old service': api?.name,
+    })
     addModelToHistory(newName)
   }
 
   const updateModelList = async () => {
     console.log(' update model list!')
-    const api = getApiConfig(stateRefs.llmSettings)
-    // try to set our recommended models if there isn't any default or anything!
-    if (api && !api.selectedModel) {
-      stateRefs.llmSettings.llmApis['taskyon']!.selectedModel = api.models?.free
-    }
     await updateLlmModels(stateRefs.llmSettings, getProviderApiKey).then(
       (m) => (llmModelsInternal.value = m),
     )
@@ -448,12 +448,12 @@ const useApiManagement = (
   function selectValidModel() {
     const cm = getSelectedModel()
     console.log('currently selected model', cm)
-    if (cm && allowedLLMModels.value?.includes(cm)) {
-      console.log('currrent model is in allowed list!', cm, allowedLLMModels.value)
+    if (cm && tyKeyAllowedModels.value?.includes(cm)) {
+      console.log('currrent model is in allowed list!', cm, tyKeyAllowedModels.value)
       return
     } else if (cm) {
-      console.log('currently selected model is not in allowed list', allowedLLMModels.value, cm)
-      updateModelAndApi({ newName: allowedLLMModels.value?.[0] ?? cm })
+      console.log('currently selected model is not in allowed list', tyKeyAllowedModels.value, cm)
+      updateModelAndApi({ newName: tyKeyAllowedModels.value?.[0] ?? cm })
     }
   }
 
@@ -466,7 +466,6 @@ const useApiManagement = (
     const keys = Object.keys(await ty.listSecrets(AiProvideKeyStoreName))
     availableKeys.value = keys as KeyString[]
   }
-  void updateAiService()
 
   function updateAllowedModels(api: string | null, tok: string | undefined) {
     if (api === 'taskyon') {
@@ -478,13 +477,13 @@ const useApiManagement = (
         usingTaskyonKey.value = key.name ?? true
         if (key.model && key.model.length > 0 && !key.model.includes('*')) {
           console.log('update allowed models!', key.model)
-          allowedLLMModels.value = key.model
+          tyKeyAllowedModels.value = key.model
         }
         return
       }
     }
     console.log('removing allowed models!', { api, tok })
-    allowedLLMModels.value = undefined
+    tyKeyAllowedModels.value = undefined
     usingTaskyonKey.value = false
   }
 
@@ -509,6 +508,32 @@ const useApiManagement = (
     },
   )
 
+  const providerDefs = computed(() => Object.keys(stateRefs.llmSettings.llmApis))
+  const availableProviders = computed(() => {
+    console.log('update available key providers!')
+    //return Array.from(new Set(availableKeys.value).intersection(new Set(providerDefs.value)))
+    return availableKeys.value
+  })
+
+  function getSelectedModel() {
+    const selected = stateRefs.llmSettings.selectedApi
+    if (selected) {
+      const api = stateRefs.llmSettings.llmApis[selected]
+      if (api) {
+        return getCurrentModel(api)
+      }
+    }
+  }
+
+  // Computed property to determine the currently selected bot name
+  const currentModelId = computed(getSelectedModel)
+
+  const currentModel = computed(() => {
+    return currentModelId.value ? llmModelsInternal.value[currentModelId.value] : null
+  })
+
+  //////   INITIALIZATION
+
   // make sure, that we check our secretStore right after initialization if we hae stored any keys in
   // there (especially ifits a taskyon key) and then use those!
   void taskyon().then(async () => {
@@ -520,6 +545,10 @@ const useApiManagement = (
       await setProviderApiKey('taskyon', key)
     }
   })
+
+  void updateAiService()
+
+  //////   WATCHERS & INITIALIZATION
 
   watch(
     () => stateRefs.activeTaskyonToken,
@@ -535,29 +564,6 @@ const useApiManagement = (
     { immediate: true },
   )
 
-  const providerDefs = computed(() => Object.keys(stateRefs.llmSettings.llmApis))
-  const availableProviders = computed(() => {
-    console.log('update available key providers!')
-    //return Array.from(new Set(availableKeys.value).intersection(new Set(providerDefs.value)))
-    return availableKeys.value
-  })
-
-  // make sure we update our model list whenever anything changes for our
-  // endpoints...
-  watch([() => stateRefs.llmSettings.selectedApi, stateRefs.llmSettings.llmApis], updateModelList, {
-    immediate: true,
-  })
-
-  function getSelectedModel() {
-    const selected = stateRefs.llmSettings.selectedApi
-    if (selected) {
-      const api = stateRefs.llmSettings.llmApis[selected]
-      if (api) {
-        return getCurrentModel(api)
-      }
-    }
-  }
-
   watch(
     [() => stateRefs.activeTaskyonToken, () => stateRefs.llmSettings.selectedApi],
     ([tok, api]) => {
@@ -567,16 +573,15 @@ const useApiManagement = (
     { immediate: true },
   )
 
-  // Computed property to determine the currently selected bot name
-  const currentModelId = computed(getSelectedModel)
-
-  const currentModel = computed(() => {
-    return currentModelId.value ? llmModelsInternal.value[currentModelId.value] : null
+  // make sure we update our model list whenever anything changes for our
+  // endpoints...
+  watch([() => stateRefs.llmSettings.selectedApi, stateRefs.llmSettings.llmApis], updateModelList, {
+    immediate: true,
   })
 
   return {
     currentModelId,
-    allowedLLMModels: computed(() => allowedLLMModels.value),
+    allowedLLMModels: computed(() => tyKeyAllowedModels.value),
     currentModel,
     usingTaskyonKey: computed(() => usingTaskyonKey.value),
     availableProviders,
@@ -862,6 +867,28 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return await tyCore(() => stateRefs.llmSettings, defineTyGuiTools(stateRefs), cs)
   })
 
+  // switch user session on key change!
+  watch(
+    () => stateRefs.bindingKey,
+    async (newkey) => {
+      const cs = await initCryptoSessionFromBrowser(
+        {
+          bindingKey: newkey ?? undefined,
+        },
+        true,
+      )
+      const ty = await taskyon
+      const newId = await cs.getSessionId()
+      const oldId = await ty.getCryptoSession().getSessionId()
+      if (newId !== oldId) {
+        console.log(`switch user session because of binding key change! ${oldId}->${newId}`)
+        await ty.setNewSession(cs)
+        // after we are finished switching, we can officially chang ethe session id...
+        stateRefs.setSessionId(await cs.getSessionId())
+      }
+    },
+  )
+
   const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
   const apiKeyManagement = useApiManagement(stateRefs, () => taskyon)
 
@@ -1013,28 +1040,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   void taskyon.then(async (ty) => {
     stateRefs.setSessionId(await ty.getCryptoSession().getSessionId())
   })
-
-  // switch user session on key change!
-  watch(
-    () => stateRefs.bindingKey,
-    async (newkey) => {
-      const cs = await initCryptoSessionFromBrowser(
-        {
-          bindingKey: newkey ?? undefined,
-        },
-        true,
-      )
-      const ty = await taskyon
-      const newId = await cs.getSessionId()
-      const oldId = await ty.getCryptoSession().getSessionId()
-      if (newId !== oldId) {
-        console.log(`switch user session because of binding key change! ${oldId}->${newId}`)
-        await ty.setNewSession(cs)
-        // after we are finished switching, we can officially chang ethe session id...
-        stateRefs.setSessionId(await cs.getSessionId())
-      }
-    },
-  )
 
   // TODO: this is soo  ugly..  we need to do something about this...
   const connectMessageIframe = async (id: string, iframe: HTMLIFrameElement, origin?: string) => {
