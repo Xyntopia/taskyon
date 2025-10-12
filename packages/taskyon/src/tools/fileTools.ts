@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { convertFileToText } from 'src/modules/loadFiles'
+import { convertFileToText } from '../utils/loadFiles'
 import { createTool, makeTaskResult } from '../types/toolApi'
 
 /**
