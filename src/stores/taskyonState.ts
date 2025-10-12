@@ -545,6 +545,9 @@ const useApiManagement = (
     if (newKey && (key === freeKey || !isTaskyonKey(key ?? undefined))) {
       key = newKey
     } else if (!isTaskyonKey(key ?? undefined)) {
+      // if there is no key, or if there is an oauth token, but no Taskyon key.
+      // this could for example happen, if we log out. In this
+      // case we want the taskyon key of that session to be reverted back to a "free" key.
       key = freeKey as KeyString
     } // in all other cases, we simply leave the taskyon key "as is"
     await setProviderApiKey('taskyon', key!) // can force (!) key here, because we check if it exists with isTaskyonKey
@@ -565,16 +568,14 @@ const useApiManagement = (
   watch(
     [() => stateRefs.authToken, () => stateRefs.sessionId],
     async ([newAuthToken, newSessionId], [oldAuthToken, oldSessionId]) => {
-      if (newAuthToken) {
-        console.log('updating taskyon after session/key change!', {
-          newAuthToken,
-          oldAuthToken,
-          newSessionId,
-          oldSessionId,
-        })
+      console.log('updating taskyon after session/key change!', {
+        newAuthToken,
+        oldAuthToken,
+        newSessionId,
+        oldSessionId,
+      })
 
-        await updateTyKeyStates(newAuthToken)
-      }
+      await updateTyKeyStates(newAuthToken)
     },
   )
 
