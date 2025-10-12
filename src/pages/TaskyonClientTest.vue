@@ -141,7 +141,7 @@ async function startClientTest() {
 
 <style lang="sass">
 body
-  background-color: $green-8 !important
+  background-color: $green-4 !important
 
 body::before
   content: none !important
