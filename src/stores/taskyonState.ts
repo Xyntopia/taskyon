@@ -39,6 +39,7 @@ import {
   usePyodideWebworker,
 } from '@taskyon/taskyon'
 import { until } from '@vueuse/core'
+import { freeKey } from 'assets/taskyon_free_key.json'
 import { defineStore } from 'pinia'
 import { useQuasar } from 'quasar' // load dynamically! :)
 import { setColors } from 'src/boot/brand-colors'
@@ -51,12 +52,12 @@ import {
 } from 'src/modules/taskyon/browserCryptoSession'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
 import { getApiConfig, type TyProfile } from 'src/modules/taskyon/types'
+import { asyncComputed } from 'src/modules/vueUtils'
 import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
 import { guiTools } from '../modules/taskyon/GuiTools'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
-import { asyncComputed } from 'src/modules/vueUtils'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -494,31 +495,23 @@ const useApiManagement = (
     }
   }
 
-  const updateAvailableKeys = async () => {
+  const setProviderApiKey = exclusive(async (name: string, value: KeyString | undefined) => {
+    console.log('set new provider key:', name, value?.slice(-5))
     const ty = await taskyon()
+    if (!value) {
+      await ty.deleteSecret(AiProvideKeyStoreName, name)
+      await ty.updateChatCompletionApiKey(name, undefined)
+    } else {
+      await ty.setSecret(AiProvideKeyStoreName, name, value)
+      await ty.updateChatCompletionApiKey(name, value)
+    }
     const keys = Object.keys(await ty.listSecrets(AiProvideKeyStoreName))
     availableKeys.value = keys as KeyString[]
-  }
-
-  const setProviderApiKey = exclusive(
-    async (name: string, value: KeyString | undefined, setAppState = true) => {
-      console.log('set new provider key:', name, value?.slice(-5))
-      const ty = await taskyon()
-      if (!value) {
-        await ty.deleteSecret(AiProvideKeyStoreName, name)
-        await ty.updateChatCompletionApiKey(name, undefined)
-      } else {
-        await ty.setSecret(AiProvideKeyStoreName, name, value)
-        await ty.updateChatCompletionApiKey(name, value)
-      }
-      await updateModelList()
-      await updateAvailableKeys()
-      if (name === 'taskyon' && stateRefs.activeTaskyonToken != value && setAppState) {
-        stateRefs.setActiveApiToken(value)
-      }
-      selectValidModel()
-    },
-  )
+    if (name === 'taskyon') {
+      stateRefs.setActiveApiToken(value)
+    }
+    selectValidModel()
+  })
 
   ///////////   computed properties
 
@@ -543,46 +536,70 @@ const useApiManagement = (
     } else return true
   }, true)
 
+  const updateKeyStates = async (newKey?: KeyString) => {
+    const provider = stateRefs.llmSettings.selectedApi
+    let key = await getProviderApiKey(provider || 'taskyon')
+    if (newKey && (key === freeKey || key == null)) {
+      key = newKey
+    } else if (key == null) {
+      key = freeKey as KeyString
+    } // else leave "key" as it is! :)
+    if (key && isTaskyonKey(key)) {
+      console.log('setting key', key)
+      await setProviderApiKey('taskyon', key)
+    }
+  }
+
   //////   INITIALIZATION
 
   // make sure, that we check our secretStore right after initialization if we hae stored any keys in
   // there (especially ifits a taskyon key) and then use those!
   void taskyon().then(async () => {
-    const provider = stateRefs.llmSettings.selectedApi
-    const key = await getProviderApiKey(provider || 'taskyon')
-    console.log('setting key after secretstore initialization', key)
-    if (key && isTaskyonKey(key)) {
-      await setProviderApiKey('taskyon', key)
-    }
+    console.log('setting key after secretstore initialization')
+    await updateKeyStates()
   })
 
   //////   WATCHERS & INITIALIZATION
 
-  // TODO: also add updatesfor stateRefs.llmSettings.llmApis, stateRefs.llmSettings.selectedApi etc..
-  watch([() => stateRefs.activeTaskyonToken], async ([newToken], [oldToken]) => {
-    if (newToken !== oldToken) {
-      console.log('activeToken taskyon key has changed!', { newToken, oldToken })
-      // TODO: we are creating a cyclic dependency here which we are only preventing through some hacky measures..
-      // the reason we are doing this is because we want taskyon to initialize fast and let other 3rd paty authentication tools
-      // set keys fast..
-      await setProviderApiKey('taskyon', newToken, false)
-    }
-  })
+  // this simply watches if we get a 3rd paty oauth token from somewhere...
+  watch(
+    [() => stateRefs.authToken, () => stateRefs.sessionId],
+    async ([newAuthToken, newSessionId], [oldAuthToken, oldSessionId]) => {
+      if (newAuthToken) {
+        console.log('activeToken taskyon key has changed!', {
+          newAuthToken,
+          oldAuthToken,
+          newSessionId,
+          oldSessionId,
+        })
+
+        await updateKeyStates(newAuthToken)
+      }
+    },
+  )
 
   // make sure we update our model list whenever anything changes for our
   // endpoints...
-  watch([() => stateRefs.llmSettings.selectedApi, stateRefs.llmSettings.llmApis], updateModelList, {
-    immediate: true,
-  })
+  watch(
+    [
+      () => stateRefs.llmSettings.selectedApi,
+      () => stateRefs.llmSettings.llmApis,
+      () => stateRefs.activeTaskyonToken,
+    ],
+    updateModelList,
+    {
+      immediate: true,
+    },
+  )
 
   return {
     currentModelId,
-    allowedLLMModels: computed(() => tyKeyAllowedModels.value),
+    tyKeyAllowedModels,
     currentModel,
-    usingTaskyonKey: computed(() => usingTaskyonKey.value),
+    usingTaskyonKey,
     availableProviders,
     providerDefs,
-    noAiService: computed(() => noAiService.value),
+    noAiService,
     setProviderApiKey,
     getProviderApiKey,
     // Method to handle the updateBotName event

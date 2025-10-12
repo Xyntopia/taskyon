@@ -310,11 +310,14 @@ export const useAppStateStore = defineStore('ui-state', () => {
     return activeTaskyonToken.value === freeKey
   })
 
+  const authToken = ref<KeyString>()
+
   // it is *SUPERIMPORTANT*  that we ONLY return computed refs & functions in the store EXCEPT
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
   return {
     usingFreeTaskyonKey,
+    authToken,
     sessionId: computed(() => sessionId.value),
     setSessionId,
     bindingKey,

@@ -304,13 +304,13 @@ const downloadModels = () =>
 /* ─────────── Data preparation ─────────── */
 const filteredTableData = computed(() => {
   const allAllowed =
-    tystate.allowedLLMModels === undefined || tystate.allowedLLMModels.includes('*')
+    tystate.tyKeyAllowedModels === undefined || tystate.tyKeyAllowedModels.includes('*')
 
   return Object.values(tystate.llmModels)
     .filter((m) => m.name || m.id)
     .map((m) => ({
       ...m,
-      inKey: allAllowed ? undefined : (tystate.allowedLLMModels?.includes(m.id) ?? false),
+      inKey: allAllowed ? undefined : (tystate.tyKeyAllowedModels?.includes(m.id) ?? false),
     }))
     .filter((m) => !onlyAllowed.value || (m.inKey ?? true))
 })
