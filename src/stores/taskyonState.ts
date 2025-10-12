@@ -550,7 +550,7 @@ const useApiManagement = (
       // case we want the taskyon key of that session to be reverted back to a "free" key.
       key = freeKey as KeyString
     } // in all other cases, we simply leave the taskyon key "as is"
-    await setProviderApiKey('taskyon', key!) // can force (!) key here, because we check if it exists with isTaskyonKey
+    await setProviderApiKey('taskyon', key ?? undefined) // can force (!) key here, because we check if it exists with isTaskyonKey
   }
 
   //////   INITIALIZATION
