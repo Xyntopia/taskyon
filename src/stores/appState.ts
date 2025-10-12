@@ -273,9 +273,13 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // these are refs that we don't save:
   const sessionId = ref<string | null>(null)
   const { bindingKey, setBindingKey } = useSessionKey()
-  watch(bindingKey, () => {
-    stateRefs.initWBindingKey = bindingKey.value !== null
-  })
+  watch(
+    bindingKey,
+    () => {
+      stateRefs.initWBindingKey = bindingKey.value !== null
+    },
+    { immediate: true },
+  )
 
   // our sessions only get saved once we have a legitimate session key!
   const setSessionId = (newId: string) => {

@@ -483,7 +483,7 @@ const useApiManagement = (
     return undefined
   })
 
-  function selectValidModel() {
+  /*function selectValidModel() {
     const cm = getSelectedModel()
     console.log('currently selected model', cm)
     if (cm && tyKeyAllowedModels.value?.includes(cm)) {
@@ -493,7 +493,7 @@ const useApiManagement = (
       console.log('currently selected model is not in allowed list', tyKeyAllowedModels.value, cm)
       updateModelAndApi({ newName: tyKeyAllowedModels.value?.[0] ?? cm })
     }
-  }
+  }*/
 
   const setProviderApiKey = exclusive(async (name: string, value: KeyString | undefined) => {
     console.log('set new provider key:', name, value?.slice(-5))
@@ -510,7 +510,7 @@ const useApiManagement = (
     if (name === 'taskyon') {
       stateRefs.setActiveApiToken(value)
     }
-    selectValidModel()
+    //selectValidModel()
   })
 
   ///////////   computed properties
@@ -536,18 +536,18 @@ const useApiManagement = (
     } else return true
   }, true)
 
-  const updateKeyStates = async (newKey?: KeyString) => {
-    const provider = stateRefs.llmSettings.selectedApi
-    let key = await getProviderApiKey(provider || 'taskyon')
-    if (newKey && (key === freeKey || key == null)) {
+  const updateTyKeyStates = async (newKey?: KeyString) => {
+    console.log('updating key states', { newKey })
+
+    // we only need to update taskyon here, because taskyon can also use oauth tokens!
+    // the other keys simply stay "the same"
+    let key = await getProviderApiKey('taskyon')
+    if (newKey && (key === freeKey || !isTaskyonKey(key ?? undefined))) {
       key = newKey
-    } else if (key == null) {
+    } else if (!isTaskyonKey(key ?? undefined)) {
       key = freeKey as KeyString
-    } // else leave "key" as it is! :)
-    if (key && isTaskyonKey(key)) {
-      console.log('setting key', key)
-      await setProviderApiKey('taskyon', key)
-    }
+    } // in all other cases, we simply leave the taskyon key "as is"
+    await setProviderApiKey('taskyon', key!) // can force (!) key here, because we check if it exists with isTaskyonKey
   }
 
   //////   INITIALIZATION
@@ -556,7 +556,7 @@ const useApiManagement = (
   // there (especially ifits a taskyon key) and then use those!
   void taskyon().then(async () => {
     console.log('setting key after secretstore initialization')
-    await updateKeyStates()
+    await updateTyKeyStates(stateRefs.authToken)
   })
 
   //////   WATCHERS & INITIALIZATION
@@ -566,14 +566,14 @@ const useApiManagement = (
     [() => stateRefs.authToken, () => stateRefs.sessionId],
     async ([newAuthToken, newSessionId], [oldAuthToken, oldSessionId]) => {
       if (newAuthToken) {
-        console.log('activeToken taskyon key has changed!', {
+        console.log('updating taskyon after session/key change!', {
           newAuthToken,
           oldAuthToken,
           newSessionId,
           oldSessionId,
         })
 
-        await updateKeyStates(newAuthToken)
+        await updateTyKeyStates(newAuthToken)
       }
     },
   )

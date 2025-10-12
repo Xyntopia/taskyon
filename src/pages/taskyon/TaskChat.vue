@@ -115,7 +115,10 @@
           leave-active-class="animated slow fadeOut"
         >
           <!--Need to install a chat service-->
-          <div v-if="tystate.noAiService === true" class="col text-secondary bg-primary">
+          <div
+            v-if="tystate.noAiService === true && delayedTrue"
+            class="col text-secondary bg-primary"
+          >
             <div class="row items-center q-pa-sm">
               <q-icon
                 class="col-auto q-pr-md"
@@ -220,6 +223,14 @@ const props = defineProps<{ detailed?: boolean; treeBrowser?: boolean; rootTaskI
 const showAllTasks = ref<boolean>(props.detailed)
 const showHierarchy = ref(false)
 const loadingChat = ref(false)
+const delayedTrue = ref(false)
+
+function activateAfter(ms: number) {
+  delayedTrue.value = false
+  setTimeout(() => {
+    delayedTrue.value = true
+  }, ms)
+}
 
 const ResetButton = process.env.DEV
   ? defineAsyncComponent(
@@ -338,6 +349,7 @@ const scm = createScrollManager(taskThreadContainer, lockBottomScroll)
 watch(tystate.currentTask, () => {
   scm.autoScroll()
   loadingChat.value = false
+  activateAfter(1000)
 })
 
 // Watch selectedTaskId and update URL query parameter
