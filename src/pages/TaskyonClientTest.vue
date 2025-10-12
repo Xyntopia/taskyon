@@ -11,6 +11,7 @@
       ></iframe>
     </div>
     <div class="col-6">
+      <q-toggle v-model="dev" label="switch between taskyon.space <-> dev versions" />
       <div>Function Call Output</div>
       <q-btn outline label="Execute Client Test Function" @click="startClientTest" />
       <div id="output" class="q-pa-lg">function result: {{ functionResult }}</div>
@@ -28,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onMounted } from 'vue'
 import type {
   partialTyConfiguration,
@@ -43,7 +44,8 @@ import {
 } from '../../packages/tyclient/src'
 import { freeKey } from 'src/assets/taskyon_free_key.json'
 
-const taskyonUrl = window.location.origin
+const dev = ref(true)
+const taskyonUrl = computed(() => (dev.value ? window.location.origin : 'https://taskyon.space'))
 
 const functionResult = ref<string>()
 const tyclient = ref<TyClient>()
@@ -63,7 +65,9 @@ const configuration: partialTyConfiguration = {
   },
   appConfiguration: {
     expertMode: true,
-    darkTheme: false,
+    showLogo: false,
+    chatSuggestions: [],
+    darkTheme: true,
     primaryColor: '#f00',
     secondaryColor: '#f0f',
     // we are using "default" GUI mode for debugging purposes!, in production, change this to "iframe"

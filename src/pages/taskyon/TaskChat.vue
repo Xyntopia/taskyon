@@ -38,8 +38,8 @@
       <!-- Welcome Message -->
       <div
         v-else
-        class="column justify-center items-center q-pa-lg welcome"
-        style="max-width: 650px"
+        class="full-height column justify-center items-center q-pa-sm welcome"
+        style="max-width: 600px"
       >
         <div class="welcome-message column items-center">
           <GetStarted />
@@ -47,7 +47,7 @@
         <CreateNewTask
           :file-attachments="fileAttachments"
           :entry-node="tystate.entryNode"
-          class="q-pa-md col self-stretch"
+          class="q-pa-md col-auto self-stretch"
           :min-mode="state.minimalGui === 'iframe'"
           :expert-mode="state.appConfiguration.expertMode"
           add-to-taskyon
