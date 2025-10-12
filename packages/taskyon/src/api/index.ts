@@ -4,9 +4,19 @@ import { forgeTaskChain } from '../core/createTasks'
 import type { chatCompletionParams } from '../tools/chatCompletionTool'
 import type { TaskyonMessage } from '../types/apiTypes'
 import type { partialTaskDraft } from '../types/node'
-import { toolCall } from '../types/toolApi'
+import { toolCall, createTool, makeTaskResult } from '../types/toolApi'
 import { type Port } from '../utils/frpBus'
 
+export type { FunctionCall } from '../types/tools'
+export type { ClientTool } from '../types/toolApi'
+export {
+  createDuplexChannel, // utils/frpbus
+  createPortApi, // utis/frpbus
+  MessageChannelBridge, // utils/frpbus
+} from '../utils/frpBus'
+
+export { createTool, makeTaskResult, toolCall }
+export type { Port, TaskyonMessage, partialTaskDraft }
 export type processTasksOpts = { timeoutMs?: number; signal?: AbortSignal }
 
 export const createChatCompletionTask = (args: chatCompletionParams) =>

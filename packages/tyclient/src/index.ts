@@ -1,18 +1,17 @@
 // we can compile this file to js to js using "yarn build:lib"
 
-import type { FunctionCall, Port } from '@taskyon/taskyon'
+import type { FunctionCall, Port } from '@taskyon/taskyon/api'
 import {
   // from frp bux with only very few dependencies
-  createDuplexChannel, // utils/frpbus
-  createPortApi, // utis/frpbus
+  createDuplexChannel, // utis/frpbus
   MessageChannelBridge, // utils/frpbus
 
   // "processTasks" currently has the following dependencies:
   // - immer
-  processTasks,
-  TaskyonMessage, // types/apiTypes
-  type ClientTool, // types/apiTypes
-} from '@taskyon/taskyon'
+  processTasks, // types/apiTypes
+  type ClientTool,
+  type TaskyonMessage,
+} from '@taskyon/taskyon/api'
 // TODO: move this into some other part as well..  maybe into "GUI" types or somthing like that?
 import type {
   partialTyConfiguration,
@@ -24,8 +23,8 @@ export {
   makeTaskResult, // toolApi
   processTasks, // api/index, types/apiTypes
   toolCall, // toolApi
-  type partialTaskDraft, // node.ts, tools.ts
-} from '@taskyon/taskyon'
+  type partialTaskDraft,
+} from '@taskyon/taskyon/api'
 export type { ClientTool, partialTyConfiguration, TaskyonGuiMessage, TaskyonMessage }
 
 function safeClone<T>(data: T): T {
@@ -160,21 +159,16 @@ export async function initializeTaskyon(options: {
     })
 
     console.log('tyclient set up function listener!')
-    createPortApi(
-      clientSidePort,
-      TaskyonMessage,
-      {
-        functionCall: async (msg) => {
-          const tool = toolMap[msg.functionName]
-          if (tool) {
-            const res = await handleFunctionExecution(msg.arguments ?? {}, tool, controller.signal)
-            send({ type: 'functionResponse', functionName: tool.name, response: res })
-            console.log('tyclient tool send functionResponse to iframe', res, tool)
-          }
-        },
-      },
-      (msg) => console.log('tyclient received message', msg),
-    )
+
+    clientSidePort.receive((msg) => console.log('tyclient received message', msg))
+    clientSidePort.receive.narrow((msg) => msg.type === 'functionCall')(async (msg) => {
+      const tool = toolMap[msg.functionName]
+      if (tool) {
+        const res = await handleFunctionExecution(msg.arguments ?? {}, tool, controller.signal)
+        send({ type: 'functionResponse', functionName: tool.name, response: res })
+        console.log('tyclient tool send functionResponse to iframe', res, tool)
+      }
+    })
   }
 
   return {

@@ -16,6 +16,9 @@
     },
     "./db": {
       "import": "./src/db.ts"
+    },
+    "./api": {
+      "import": "./src/api/index.ts"
     }
   },
   "scripts": {
