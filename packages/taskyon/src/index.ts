@@ -14,7 +14,13 @@ export * from './p2p/tyP2p'
 export { convertTaskNodesToOpenAIChat } from './tools/chatCompletionTool'
 export { BaseMessage, TaskyonMessage, TyP2P } from './types/apiTypes'
 export * from './types/chatCompletion'
-export { partialTaskDraft } from './types/node'
+export {
+  partialTaskDraft,
+  TaskNode,
+  TaskContent,
+  type FileMapping,
+  type TaskTreeNode,
+} from './types/node'
 export * from './types/profiles'
 export * from './types/toolApi'
 export * from './types/tools'
