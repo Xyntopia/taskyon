@@ -1,4 +1,4 @@
-import { forgeTaskChain } from '../core/taskManager'
+import { forgeTaskChain } from '../core/createTasks'
 import type { TaskyonMessage } from '../types/apiTypes'
 import type { partialTaskDraft } from '../types/node'
 import { type Port } from '../utils/frpBus'

@@ -9,8 +9,11 @@ import {
   type ClientTool,
   type TaskyonMessage,
 } from '@taskyon/taskyon'
-import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
-import { TaskyonGuiMessage } from 'src/modules/taskyon/apiTypes'
+// TODO: move this into some other part as well..  maybe into "GUI" types or somthing like that?
+import {
+  TaskyonGuiMessage,
+  type partialTyConfiguration,
+} from '../../../src/modules/taskyon/apiTypes'
 export {
   createChatCompletionTask,
   createTool,

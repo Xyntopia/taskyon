@@ -776,6 +776,7 @@ export async function createChatCompletionTool(
       { model, goal, llmTools, allowedTools, prompts, schema },
       context: toolContext,
     ) => {
+      //////////   INITIALIZATION
       const tools = allowedTools ?? []
       const {
         useBasePrompt,
@@ -807,6 +808,8 @@ export async function createChatCompletionTool(
 
       const toolDefs = await taskManager.updateToolDefinitions(true)
 
+      //////////// END INITIALIZATION
+
       // refactor this below and make it all explicit, without passing llmSettings...
       // now add goal-specific prompts...
       const lastTaskBeforeChatCompletion = context.taskChain.at(-2)
@@ -828,7 +831,7 @@ export async function createChatCompletionTool(
         }
       }
 
-      // can we get rid of taskManager here in order to make our task more functional :)?
+      // TODO: can we get rid of taskManager here in order to make our task more functional :)?
       const chatInfo = await processChatTask(
         [...tools, ...allowedToolsFromError],
         toolDefs,
