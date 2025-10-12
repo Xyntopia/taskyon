@@ -325,7 +325,6 @@ export const useAppStateStore = defineStore('ui-state', () => {
       activeTaskyonToken.value = tok
     },
     isInIframe: urlConfig.isInIframe,
-    urlConfig: urlConfig,
     setSelectedTask: (taskId: string | null | undefined) => {
       console.log('set selected task:', taskId)
       stateRefs.llmSettings.selectedTaskId = taskId || undefined

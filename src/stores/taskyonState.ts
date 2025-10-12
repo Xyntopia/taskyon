@@ -56,6 +56,7 @@ import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue
 import { guiTools } from '../modules/taskyon/GuiTools'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
+import { asyncComputed } from 'src/modules/vueUtils'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -397,17 +398,31 @@ const useApiManagement = (
 ) => {
   const llmModelsInternal = ref<Record<string, Model>>({})
   // we need this in order to reactivly see if something changed..
-  const lastUpdatedProviderKey = ref<string>()
   const availableKeys = ref<KeyString[]>()
-  const noAiService = ref<boolean | null>(null)
-  const usingTaskyonKey = ref<string | boolean | undefined>()
-  const tyKeyAllowedModels = ref<string[]>()
 
   const getProviderApiKey = async (name: string): Promise<KeyString | null> => {
     const ty = await taskyon()
     return (await ty.getSecret(AiProvideKeyStoreName, name, false, false)) as KeyString | null
   }
 
+  function getSelectedModel() {
+    const selected = stateRefs.llmSettings.selectedApi
+    if (selected) {
+      const api = stateRefs.llmSettings.llmApis[selected]
+      if (api) {
+        return getCurrentModel(api)
+      }
+    }
+  }
+
+  const updateModelList = async () => {
+    console.log(' update model list!')
+    await updateLlmModels(stateRefs.llmSettings, getProviderApiKey).then(
+      (m) => (llmModelsInternal.value = m),
+    )
+  }
+
+  // TODO: add apis to model history as well!
   const addModelToHistory = (model: string) => {
     if (stateRefs.modelHistory.length >= 5) {
       stateRefs.modelHistory.shift() // remove oldest element
@@ -438,12 +453,34 @@ const useApiManagement = (
     addModelToHistory(newName)
   }
 
-  const updateModelList = async () => {
-    console.log(' update model list!')
-    await updateLlmModels(stateRefs.llmSettings, getProviderApiKey).then(
-      (m) => (llmModelsInternal.value = m),
-    )
-  }
+  const taskyonKey = computed(() => {
+    const api = stateRefs.llmSettings.selectedApi
+    if (api === 'taskyon') {
+      console.log('check if we are using a taskyon key!')
+      // if we have a taskyon key defined only display the models allowed for that key..
+      const key = isTaskyonKey(stateRefs.activeTaskyonToken ?? undefined, false)
+      if (key) {
+        console.log('yes, using a taskyon key', key.name)
+        return key
+      }
+    }
+    return undefined
+  })
+
+  const usingTaskyonKey = computed(() =>
+    taskyonKey.value ? (taskyonKey.value.name ?? true) : false,
+  )
+
+  const tyKeyAllowedModels = computed(() => {
+    const key = taskyonKey.value
+    if (key) {
+      if (key.model && key.model.length > 0 && !key.model.includes('*')) {
+        console.log('update allowed models!', key.model)
+        return key.model
+      }
+    }
+    return undefined
+  })
 
   function selectValidModel() {
     const cm = getSelectedModel()
@@ -457,56 +494,33 @@ const useApiManagement = (
     }
   }
 
-  const updateAiService = async () => {
-    if (stateRefs.llmSettings.selectedApi) {
-      const apiK = await getProviderApiKey(stateRefs.llmSettings.selectedApi)
-      noAiService.value = apiK == null
-    } else noAiService.value = true
+  const updateAvailableKeys = async () => {
     const ty = await taskyon()
     const keys = Object.keys(await ty.listSecrets(AiProvideKeyStoreName))
     availableKeys.value = keys as KeyString[]
   }
 
-  function updateAllowedModels(api: string | null, tok: string | undefined) {
-    if (api === 'taskyon') {
-      console.log('check if we are using a taskyon key!')
-      // if we have a taskyon key defined only display the models allowed for that key...
-      const key = isTaskyonKey(tok ?? undefined, false)
-      if (key) {
-        console.log('yes, using a taskyon key', key.name)
-        usingTaskyonKey.value = key.name ?? true
-        if (key.model && key.model.length > 0 && !key.model.includes('*')) {
-          console.log('update allowed models!', key.model)
-          tyKeyAllowedModels.value = key.model
-        }
-        return
-      }
-    }
-    console.log('removing allowed models!', { api, tok })
-    tyKeyAllowedModels.value = undefined
-    usingTaskyonKey.value = false
-  }
-
   const setProviderApiKey = exclusive(
     async (name: string, value: KeyString | undefined, setAppState = true) => {
       console.log('set new provider key:', name, value?.slice(-5))
-      updateAllowedModels(stateRefs.llmSettings.selectedApi, value)
       const ty = await taskyon()
       if (!value) {
         await ty.deleteSecret(AiProvideKeyStoreName, name)
+        await ty.updateChatCompletionApiKey(name, undefined)
       } else {
         await ty.setSecret(AiProvideKeyStoreName, name, value)
+        await ty.updateChatCompletionApiKey(name, value)
       }
-      await ty.updateChatCompletionApiKey(name, value)
       await updateModelList()
-      await updateAiService()
-      lastUpdatedProviderKey.value = name
+      await updateAvailableKeys()
       if (name === 'taskyon' && stateRefs.activeTaskyonToken != value && setAppState) {
         stateRefs.setActiveApiToken(value)
       }
       selectValidModel()
     },
   )
+
+  ///////////   computed properties
 
   const providerDefs = computed(() => Object.keys(stateRefs.llmSettings.llmApis))
   const availableProviders = computed(() => {
@@ -515,22 +529,19 @@ const useApiManagement = (
     return availableKeys.value
   })
 
-  function getSelectedModel() {
-    const selected = stateRefs.llmSettings.selectedApi
-    if (selected) {
-      const api = stateRefs.llmSettings.llmApis[selected]
-      if (api) {
-        return getCurrentModel(api)
-      }
-    }
-  }
-
   // Computed property to determine the currently selected bot name
   const currentModelId = computed(getSelectedModel)
 
   const currentModel = computed(() => {
     return currentModelId.value ? llmModelsInternal.value[currentModelId.value] : null
   })
+
+  const noAiService = asyncComputed(async () => {
+    if (stateRefs.llmSettings.selectedApi) {
+      const apiK = await getProviderApiKey(stateRefs.llmSettings.selectedApi)
+      return apiK == null
+    } else return true
+  }, true)
 
   //////   INITIALIZATION
 
@@ -541,37 +552,22 @@ const useApiManagement = (
     const key = await getProviderApiKey(provider || 'taskyon')
     console.log('setting key after secretstore initialization', key)
     if (key && isTaskyonKey(key)) {
-      updateAllowedModels(stateRefs.llmSettings.selectedApi, key)
       await setProviderApiKey('taskyon', key)
     }
   })
 
-  void updateAiService()
-
   //////   WATCHERS & INITIALIZATION
 
-  watch(
-    () => stateRefs.activeTaskyonToken,
-    async (newToken, oldToken) => {
-      if (newToken !== oldToken) {
-        console.log('activeToken taskyon key has changed!', { newToken, oldToken })
-        // TODO: we are creating a cyclic dependency here which we are only preventing through some hacky measures..
-        // the reason we are doing this is because we want taskyon to initialize fast and let other 3rd paty authentication tools
-        // set keys fast..
-        await setProviderApiKey('taskyon', newToken, false)
-      }
-    },
-    { immediate: true },
-  )
-
-  watch(
-    [() => stateRefs.activeTaskyonToken, () => stateRefs.llmSettings.selectedApi],
-    ([tok, api]) => {
-      updateAllowedModels(api, tok)
-      selectValidModel()
-    },
-    { immediate: true },
-  )
+  // TODO: also add updatesfor stateRefs.llmSettings.llmApis, stateRefs.llmSettings.selectedApi etc..
+  watch([() => stateRefs.activeTaskyonToken], async ([newToken], [oldToken]) => {
+    if (newToken !== oldToken) {
+      console.log('activeToken taskyon key has changed!', { newToken, oldToken })
+      // TODO: we are creating a cyclic dependency here which we are only preventing through some hacky measures..
+      // the reason we are doing this is because we want taskyon to initialize fast and let other 3rd paty authentication tools
+      // set keys fast..
+      await setProviderApiKey('taskyon', newToken, false)
+    }
+  })
 
   // make sure we update our model list whenever anything changes for our
   // endpoints...
@@ -588,7 +584,6 @@ const useApiManagement = (
     providerDefs,
     noAiService: computed(() => noAiService.value),
     setProviderApiKey,
-    lastUpdatedProviderKey: computed(() => lastUpdatedProviderKey.value),
     getProviderApiKey,
     // Method to handle the updateBotName event
     updateModelAndApi,
