@@ -1,9 +1,9 @@
 import { getPublicKeyAsync } from '@noble/ed25519'
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39'
 import { wordlist as englishWordlist } from '@scure/bip39/wordlists/english'
-import { base64UrlToUint8Array, uint8ArrayToBase64UrlSafe } from './encoding'
 import { Buffer } from 'buffer'
 import { v1 as uuidv1 } from 'uuid'
+import { base64UrlToUint8Array, uint8ArrayToBase64UrlSafe } from './encoding'
 
 export function parseJwt(token: string | undefined): Record<string, unknown> | undefined {
   if (token) {
@@ -236,15 +236,6 @@ export function base64ToPublixX25519(secret: string, extractable = false) {
 // Auto-detect the crypto backend
 export function detectCryptoBackend() {
   return typeof window !== 'undefined' && window.crypto && window.crypto.subtle ? 'web' : 'js'
-}
-
-export async function sha256UrlSafeHash(obj: unknown) {
-  const json = JSON.stringify(obj)
-  const encoder = new TextEncoder()
-  const data = encoder.encode(json)
-
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  return uint8ArrayToBase64UrlSafe(hashBuffer)
 }
 
 export function randomString(

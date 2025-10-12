@@ -90,14 +90,9 @@
 
 <script setup lang="ts">
 import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
-import type { TyPGDB } from '@taskyon/taskyon'
-import {
-  createChatCompletionTask,
-  createTool,
-  getDatabase,
-  makeTaskResult,
-  toolCall,
-} from '@taskyon/taskyon'
+import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
+import type { TyPGDB } from '@taskyon/taskyon/db'
+import { getDatabase } from '@taskyon/taskyon/db'
 import { dump } from 'js-yaml'
 import type { JSONSchema7 } from 'json-schema'
 import { copyToClipboard, Notify } from 'quasar'

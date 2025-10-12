@@ -63,8 +63,8 @@ export function createTool<T, SCHEMA extends Readonly<JSONSchema>, PARAMS = From
 
 // TODO: automatically type the FunctionCall correctly using the
 //       json definition from a tool :)
-export function toolCall(
-  f: FunctionCall,
+export function toolCall<T extends FunctionCall['arguments']>(
+  f: { arguments: T } & FunctionCall,
 ): partialTaskDraft & { content: { type: 'functioncall'; data: FunctionCall } } {
   return {
     role: 'function',

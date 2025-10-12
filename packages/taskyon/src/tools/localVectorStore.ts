@@ -1,8 +1,8 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createVectorStore } from '../utils/crudWrapper'
-import type { TyPGDB } from '../utils/pglite.api'
 import { createTool } from '../types/toolApi'
-import { sha256UrlSafeHash } from '../utils/crypto'
+import { createVectorStore } from '../utils/crudWrapper'
+import { sha256UrlSafeHash } from '../utils/encoding'
+import type { TyPGDB } from '../utils/pglite.api'
 
 // TODO: make it possible to add "unique" identifiers as labels, so that
 //       we can save text which was add from a task and use the task id as the UID

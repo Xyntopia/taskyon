@@ -7,7 +7,7 @@ import type { taskResult } from '../types/toolApi'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import { ToolBase } from '../types/tools'
 import { safeYamlDump } from '../utils/yamlUtils'
-import { createChatCompletionTask } from './chatCompletionTool'
+import { createChatCompletionTask } from '../api'
 
 export const createToolSearcher = (taskManager: TyTaskManager) =>
   createTool({

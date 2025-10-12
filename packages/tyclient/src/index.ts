@@ -2,25 +2,29 @@
 
 import type { FunctionCall, Port } from '@taskyon/taskyon'
 import {
-  createDuplexChannel,
-  createPortApi,
-  MessageChannelBridge,
+  // from frp bux with only very few dependencies
+  createDuplexChannel, // utils/frpbus
+  createPortApi, // utis/frpbus
+  MessageChannelBridge, // utils/frpbus
+
+  // "processTasks" currently has the following dependencies:
+  // - immer
   processTasks,
-  type ClientTool,
-  type TaskyonMessage,
+  TaskyonMessage, // types/apiTypes
+  type ClientTool, // types/apiTypes
 } from '@taskyon/taskyon'
 // TODO: move this into some other part as well..  maybe into "GUI" types or somthing like that?
-import {
+import type {
+  partialTyConfiguration,
   TaskyonGuiMessage,
-  type partialTyConfiguration,
 } from '../../../src/modules/taskyon/apiTypes'
 export {
   createChatCompletionTask,
-  createTool,
-  makeTaskResult,
-  processTasks,
-  toolCall,
-  type partialTaskDraft,
+  createTool, // toolApi
+  makeTaskResult, // toolApi
+  processTasks, // api/index, types/apiTypes
+  toolCall, // toolApi
+  type partialTaskDraft, // node.ts, tools.ts
 } from '@taskyon/taskyon'
 export type { ClientTool, partialTyConfiguration, TaskyonGuiMessage, TaskyonMessage }
 
@@ -158,7 +162,7 @@ export async function initializeTaskyon(options: {
     console.log('tyclient set up function listener!')
     createPortApi(
       clientSidePort,
-      TaskyonGuiMessage,
+      TaskyonMessage,
       {
         functionCall: async (msg) => {
           const tool = toolMap[msg.functionName]

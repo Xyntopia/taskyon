@@ -16,7 +16,6 @@ import {
   generateAssymetricKeyDeriver,
   generateRandomEncryptionKey,
   generateSeedPhrase,
-  getDatabase,
   getTextFile,
   jsonSchemaToYamlString,
   normalizeFalsyValues,
@@ -31,6 +30,7 @@ import {
   usePyodideWebworker,
   zodToYamlString,
 } from '@taskyon/taskyon'
+import { getDatabase } from '@taskyon/taskyon/db'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import type OpenAI from 'openai'

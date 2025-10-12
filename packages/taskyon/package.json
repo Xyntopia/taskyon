@@ -13,6 +13,9 @@
     },
     "./tools/*": {
       "import": "./src/tools/*.ts"
+    },
+    "./db": {
+      "import": "./src/db.ts"
     }
   },
   "scripts": {

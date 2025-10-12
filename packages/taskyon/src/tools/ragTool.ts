@@ -1,11 +1,11 @@
 import type { JSONSchema7 } from 'json-schema'
 // import type { JSONSchema } from 'json-schema-to-ts'
 // import type { ToolBase } from '../taskyon/types'
+import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import { createVectorStore } from '../utils/crudWrapper'
+import { sha256UrlSafeHash } from '../utils/encoding'
 import type { TyPGDB } from '../utils/pglite.api'
 import { getDatabase } from '../utils/pglite.api'
-import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
-import { sha256UrlSafeHash } from '../utils/crypto'
 // import { smallHelperTools } from './helperCollection'
 
 // const jinaTool = smallHelperTools.find(

@@ -26,3 +26,12 @@ export function base64UrlToUint8Array(base64UrlString: unknown): Uint8Array<Arra
   // re-wrap ensures it's `ArrayBuffer`, not `ArrayBufferLike`
   return new Uint8Array(arr)
 }
+
+export async function sha256UrlSafeHash(obj: unknown) {
+  const json = JSON.stringify(obj)
+  const encoder = new TextEncoder()
+  const data = encoder.encode(json)
+
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  return uint8ArrayToBase64UrlSafe(hashBuffer)
+}

@@ -28,7 +28,7 @@ import { getCurrentModel } from '../types/chatCompletion'
 import type { FileMapping, partialTaskDraft, TaskNode } from '../types/node'
 import type { llmSettings } from '../types/profiles'
 import type { toolContext } from '../types/toolApi'
-import { createTool, makeTaskResult } from '../types/toolApi'
+import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import type { FunctionArguments, ToolBase } from '../types/tools'
 import { FunctionCall } from '../types/tools'
 import { charHash } from '../utils/crypto'
@@ -512,10 +512,13 @@ function generateFollowUpTasksFromResult(
     } else {
       console.log('no more tools to call, finalize the result :)')
       newTasks.push(
-        createChatCompletionTask({
-          prompts: prompts || [],
-          model: chatModel,
-          goal: 'SimpleCompletion',
+        toolCall<chatCompletionParams>({
+          name: 'chatCompletion',
+          arguments: {
+            prompts: prompts || [],
+            model: chatModel,
+            goal: 'SimpleCompletion',
+          },
         }),
       )
     }
@@ -966,25 +969,10 @@ export async function createChatCompletionTool(
   return { chatCompletion, stream: chatCompletionStream.stream }
 }
 
-type chatCompletionParams = FromSchema<
+export type chatCompletionParams = FromSchema<
   Awaited<ReturnType<typeof createChatCompletionTool>>['chatCompletion']['parameters']
 >
 
-type ChatCompletionArgs = Omit<chatCompletionParams, 'schema'> & {
+export type ChatCompletionArgs = Omit<chatCompletionParams, 'schema'> & {
   schema?: JSONSchema7 & Record<string, unknown>
 }
-
-export function createChatCompletionTask(args: ChatCompletionArgs): partialTaskDraft {
-  return {
-    role: 'function',
-    content: {
-      type: 'functioncall',
-      data: {
-        name: 'chatCompletion',
-        arguments: args ?? {},
-      },
-    },
-  }
-}
-
-export type chatCompletionTool = ReturnType<typeof createChatCompletionTool>

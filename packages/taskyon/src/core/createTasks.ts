@@ -2,7 +2,7 @@ import { produce } from 'immer'
 import type z from 'zod'
 import type { partialTaskDraft } from '../types/node'
 import { TaskNode } from '../types/node'
-import { sha256UrlSafeHash } from '../utils/crypto'
+import { sha256UrlSafeHash } from '../utils/encoding'
 
 const TaskWithoutId = TaskNode.omit({ id: true }).strip()
 export type TaskWithoutId = z.infer<typeof TaskWithoutId>

@@ -1,9 +1,16 @@
+// TODO: we want to reduce dependencies to this file here!
+// TODO: maybe move the "Api" into its own package?
 import { forgeTaskChain } from '../core/createTasks'
+import type { chatCompletionParams } from '../tools/chatCompletionTool'
 import type { TaskyonMessage } from '../types/apiTypes'
 import type { partialTaskDraft } from '../types/node'
+import { toolCall } from '../types/toolApi'
 import { type Port } from '../utils/frpBus'
 
 export type processTasksOpts = { timeoutMs?: number; signal?: AbortSignal }
+
+export const createChatCompletionTask = (args: chatCompletionParams) =>
+  toolCall<chatCompletionParams>({ name: 'chatCompletion', arguments: args })
 
 export const processTasks =
   <T extends { type: string }>(tyPort: Port<T | TaskyonMessage>) =>

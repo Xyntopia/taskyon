@@ -1,11 +1,8 @@
 import { dump } from 'js-yaml'
 import z from 'zod'
 import { createOAuthTool } from '../tools/authTools'
-import {
-  chatCompletionToolName,
-  createChatCompletionTask,
-  createChatCompletionTool,
-} from '../tools/chatCompletionTool'
+import type { ChatCompletionArgs } from '../tools/chatCompletionTool'
+import { chatCompletionToolName, createChatCompletionTool } from '../tools/chatCompletionTool'
 import { devTools } from '../tools/devTools'
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
@@ -26,7 +23,7 @@ import { wfcGenerator } from '../tools/wavefunctioncollapse'
 import { appDevTools } from '../tools/webAppDev'
 import { TaskyonMessage } from '../types/apiTypes'
 import type { llmSettings } from '../types/profiles'
-import type { InternalTool } from '../types/toolApi'
+import { toolCall, type InternalTool } from '../types/toolApi'
 import { ToolBase } from '../types/tools'
 import {
   createCombinedCrudWrapper,
@@ -252,13 +249,19 @@ const dynamicContext =
       iframeMultiPlexer.all$,
       workerport,
       llmSettings().maxAutonomousTasks,
-      createChatCompletionTask({
-        goal: 'AnalyzeToolResult',
-        llmTools: llmSettings().enableOpenAiTools,
+      toolCall<ChatCompletionArgs>({
+        name: 'chatCompletion',
+        arguments: {
+          goal: 'AnalyzeToolResult',
+          llmTools: llmSettings().enableOpenAiTools,
+        },
       }),
-      createChatCompletionTask({
-        goal: 'AnalyzeError',
-        llmTools: llmSettings().enableOpenAiTools,
+      toolCall<ChatCompletionArgs>({
+        name: 'chatCompletion',
+        arguments: {
+          goal: 'AnalyzeError',
+          llmTools: llmSettings().enableOpenAiTools,
+        },
       }),
     )
     //##################### END INIT CTX #################
