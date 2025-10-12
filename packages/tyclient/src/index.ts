@@ -1,6 +1,6 @@
 // we can compile this file to js to js using "yarn build:lib"
 
-import type { FunctionCall } from '@taskyon/taskyon'
+import type { FunctionCall, Port } from '@taskyon/taskyon'
 import {
   createDuplexChannel,
   createPortApi,
@@ -97,12 +97,17 @@ async function handleFunctionExecution(
   return result
 }
 
+export interface TyClient {
+  processTasks: ReturnType<typeof processTasks>
+  port: Port<TaskyonGuiMessage, TaskyonGuiMessage>
+}
+
 export async function initializeTaskyon(options: {
   name?: string
   persist?: boolean
   tools: ClientTool[]
   configuration: partialTyConfiguration
-}) {
+}): Promise<TyClient> {
   console.log('initialize taskyon tyclient...')
 
   const toolMap = options.tools.reduce<Record<string, ClientTool>>((p, c) => {
@@ -170,5 +175,3 @@ export async function initializeTaskyon(options: {
     port: clientSidePort,
   }
 }
-
-export type TyClient = Awaited<ReturnType<typeof initializeTaskyon>>
