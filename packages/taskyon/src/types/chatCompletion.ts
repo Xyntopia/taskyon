@@ -20,7 +20,10 @@ export const OpenAIMessage = z.object({
       ]),
     )
     .optional(),
-  name: z.string(),
+  name: z
+    .string()
+    .optional()
+    .describe('Optional name to differentiate between different participants of same role.'),
   role: z.enum(['system', 'user', 'assistant', 'function', 'tool', 'developer']),
 }) // we are allowing additional properties here, because different providers sometimes returns additional properties
 export type OpenAIMessage = z.infer<typeof OpenAIMessage>

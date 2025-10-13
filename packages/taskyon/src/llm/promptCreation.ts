@@ -1,6 +1,6 @@
-import type OpenAI from 'openai'
 import { z } from 'zod'
 import { summarizeTools } from '../core/tools'
+import type { OpenAIMessage } from '../types/chatCompletion'
 import type { ToolBase } from '../types/tools'
 import { FunctionCall } from '../types/tools'
 import { safeYamlDump, zodToYamlString } from '../utils/yamlUtils'
@@ -89,30 +89,33 @@ function substituteStringVariables(variables: Record<string, string>, content: s
 
 // gets all the function calls in an openai conversation and makes a list from that :)
 function getAllFunctionsInOpenAiConversation(
-  modifiedOpenAIConversationThread: readonly OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-) {
-  return modifiedOpenAIConversationThread.reduce(
-    (p, c) =>
-      typeof c.content === 'string'
-        ? c.role === 'function'
-          ? p.add(c.name)
-          : c.role === 'tool'
-            ? p.add(c.tool_call_id)
-            : p
-        : p,
-    new Set<string>(),
-  )
+  modifiedOpenAIConversationThread: readonly OpenAIMessage[],
+): Set<string> {
+  return modifiedOpenAIConversationThread.reduce((acc, msg) => {
+    if (msg.role === 'function' && msg.name) {
+      acc.add(msg.name)
+    }
+
+    if ((msg.role === 'tool' || msg.role === 'assistant') && msg.tool_calls) {
+      for (const tc of msg.tool_calls) {
+        if ('function' in tc) {
+          acc.add(tc.function.name)
+        } else {
+          acc.add(tc.id)
+        }
+      }
+    }
+
+    return acc
+  }, new Set<string>())
 }
 
 const string2OpenAiMessage =
   (variables: Record<string, string>) => (role: string) => (msgList: string[]) =>
-    msgList.map(
-      (prompt) =>
-        ({
-          role,
-          content: substituteStringVariables(variables, prompt),
-        }) as OpenAI.ChatCompletionMessageParam,
-    )
+    msgList.map((prompt) => ({
+      role,
+      content: substituteStringVariables(variables, prompt),
+    }))
 
 function calculateCompletionVariables(
   allowedTools: string[],
@@ -161,7 +164,7 @@ export function addPrompts(
     schemaReminder: string
     toolResult: string
   },
-  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  openAIConversationThread: OpenAIMessage[],
   prompts: string[],
   allowedTools: string[],
   lastMessage: unknown,

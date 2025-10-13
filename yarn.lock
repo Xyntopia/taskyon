@@ -11726,10 +11726,10 @@ open@^9.1.0:
     is-inside-container "^1.0.0"
     is-wsl "^2.2.0"
 
-openai@^6.1.0:
-  version "6.1.0"
-  resolved "https://registry.yarnpkg.com/openai/-/openai-6.1.0.tgz#12919340f9813dae674bd2dfbb04c0989b3ef26d"
-  integrity sha512-5sqb1wK67HoVgGlsPwcH2bUbkg66nnoIYKoyV9zi5pZPqh7EWlmSrSDjAh4O5jaIg/0rIlcDKBtWvZBuacmGZg==
+openai@^6.3.0:
+  version "6.3.0"
+  resolved "https://registry.yarnpkg.com/openai/-/openai-6.3.0.tgz#6cc21208a096ca204e359afa9a8897e7bb03c2a5"
+  integrity sha512-E6vOGtZvdcb4yXQ5jXvDlUG599OhIkb/GjBLZXS+qk0HF+PJReIldEc9hM8Ft81vn+N6dRdFRb7BZNK8bbvXrw==
 
 option@~0.2.1:
   version "0.2.4"
