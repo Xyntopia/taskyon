@@ -1,7 +1,7 @@
+import { BaseMessage, TaskyonMessage } from '@taskyon/taskyon/api'
 import type { PartialDeep } from 'type-fest'
 import { z } from 'zod'
 import { TyProfile } from './types'
-import { TaskyonMessage, BaseMessage } from '@taskyon/taskyon'
 
 export type partialTyConfiguration = PartialDeep<TyProfile>
 

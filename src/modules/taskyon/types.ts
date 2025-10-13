@@ -1,6 +1,6 @@
 import { matKeyboardReturn } from '@quasar/extras/material-icons'
 import { mdiProfessionalHexagon } from '@quasar/extras/mdi-v6'
-import { llmSettings, partialTaskDraft, TyToolchainConfig } from '@taskyon/taskyon'
+import { llmSettings, partialTaskDraft, TyToolchainConfig } from '@taskyon/taskyon/api'
 import { z } from 'zod'
 
 export const taskTemplateTypes = {
