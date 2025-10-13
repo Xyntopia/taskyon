@@ -1,5 +1,4 @@
 import { expose } from 'comlink'
-import type OpenAI from 'openai'
 import { mapFunctionNames } from '../core/tools'
 import type { OpenAIMessage, TaskNodeMeta } from '../types/chatCompletion'
 import type { TaskNode } from '../types/node'
@@ -26,13 +25,7 @@ export async function countStringTokens(txt: string) {
   return content.length
 }
 
-async function countChatTokens(
-  chatMessages: (
-    | OpenAIMessage
-    | OpenAI.ChatCompletionMessage
-    | OpenAI.ChatCompletionMessageParam
-  )[],
-) {
+async function countChatTokens(chatMessages: OpenAIMessage[]) {
   let totalTokens = 0
   for (const message of chatMessages) {
     if (message.content && typeof message.content == 'string') {
@@ -80,7 +73,7 @@ const nlpWorker = {
 
   estimateChatTokens: async (
     content: TaskNode['content'],
-    chat: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    chat: OpenAIMessage[],
     tools: Record<string, ToolBase>,
     allowedTools?: string[],
     chatResult?: string,
