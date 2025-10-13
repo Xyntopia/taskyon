@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "target": "esnext",
     "module": "esnext",
     "moduleResolution": "bundler",
     "verbatimModuleSyntax": false,
@@ -14,13 +15,15 @@
     // "rootDir": ".",
 
     // or, if you prefer explicit multi-root:
-    "rootDirs": ["./", "../taskyon"],
+    "rootDirs": ["./"],
 
     "paths": {
-      "src/*": ["../../src/*"],
-      "@taskyon/taskyon": ["../taskyon/src/index.ts"],
-      "@taskyon/taskyon/*": ["../taskyon/src/*"]
-    }
-  },
-  "include": ["src/**/*", "../taskyon/src/**/*"]
+      //"src/*": ["../../src/*"],
+      //"@taskyon/taskyon": ["../taskyon/src/index.ts"],
+      "@taskyon/taskyon/api": ["../taskyon/src/api/index.ts"]
+    },
+
+    "lib": ["esnext", "dom", "dom.iterable", "dom.asynciterable"],
+    "types": []
+  }
 }
