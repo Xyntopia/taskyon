@@ -1,4 +1,4 @@
-import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
+import type { OpenAIMessage, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import {
   authenticateWithPopup,
   base64ToPublixX25519,
@@ -33,7 +33,6 @@ import {
 import { getDatabase } from '@taskyon/taskyon/db'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
-import type OpenAI from 'openai'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
@@ -1226,7 +1225,7 @@ const mockTask: TaskNode = {
   content: { type: 'message', data: 'Sample content for task node' },
 }
 
-const mockChatMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+const mockChatMessages: OpenAIMessage[] = [
   { role: 'user', content: 'Hello, how are you?' },
   { role: 'assistant', content: "I'm good, thank you!" },
 ]
