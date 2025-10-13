@@ -3,15 +3,16 @@ import { defineConfig } from 'vite'
 import path from 'path'
 import esbuild from 'esbuild'
 //import dts from 'unplugin-dts/vite' // no advatnage currently over the native vite-plugin-dts
-import dtsBundleGenerator from 'unplugin-dts-bundle-generator/vite'
-// import dts from 'vite-plugin-dts'
+//import dtsBundleGenerator from 'unplugin-dts-bundle-generator/vite'
+//import dts from 'vite-plugin-dts'
+//import dts from 'rollup-plugin-dts'
 
 const libPath = path.resolve(__dirname, './src/index.ts')
 console.log('building', libPath)
 
 export default defineConfig({
   plugins: [
-    dtsBundleGenerator({
+    /*dtsBundleGenerator({
       fileName: 'tyclient.d.ts',
 
       // ► 1.  Libraries – inline Zod, leave Vue as import
@@ -32,7 +33,7 @@ export default defineConfig({
         preferredConfigPath: path.resolve(__dirname, './tsconfig.dts.json'),
         // skipTypeCheck: true, // uncomment if you already run `tsc --noEmit`
       },
-    }),
+    }),*/
     /*dts({
       insertTypesEntry: true,
       include: ['src/modules/'],
@@ -69,7 +70,7 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true, // Cleans old files before build
     rollupOptions: {
-      external: ['vue'], // externalize dependencies
+      external: ['vue', 'type-fest'], // externalize dependencies
       output: [
         {
           format: 'es',
@@ -95,6 +96,9 @@ export default defineConfig({
           ],
         },
       ],
+      /*plugins: [
+        dts({ respectExternal: true }), // leaves externals like undici-types alone
+      ],*/
     },
   },
 })

@@ -2,12 +2,12 @@
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
 
 import { defineConfig } from '#q-app/wrappers'
-import { fileURLToPath } from 'node:url'
-import type { NormalizedOutputOptions, OutputBundle } from 'rollup'
 import { execSync } from 'child_process'
-import { dirname, join } from 'path'
-import { viteStaticCopy } from 'vite-plugin-static-copy'
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'path'
+import type { Plugin } from 'vite'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
 // --- helper to copy pyodide runtime ---
 function viteStaticCopyPyodide() {
   const pyodideDir = dirname(fileURLToPath(import.meta.resolve('pyodide')))
@@ -62,10 +62,10 @@ const DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid'
 console.log('compile app: ', APPNAME, DESCRIPTION)
 
 // Custom plugin to adjust sourcemaps and add banner comment
-function sourcemapBannerPlugin() {
+function sourcemapBannerPlugin(): Plugin {
   return {
     name: 'sourcemap-banner-plugin',
-    generateBundle(_options: NormalizedOutputOptions, bundle: OutputBundle) {
+    generateBundle(this, options, bundle) {
       // Update JS chunks: remove auto sourcemap comment and add our banner
       for (const fileName in bundle) {
         const chunk = bundle[fileName]!

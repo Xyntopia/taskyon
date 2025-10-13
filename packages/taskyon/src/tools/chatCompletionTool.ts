@@ -307,6 +307,8 @@ async function saveTokenUsage(
       taskTokens: chatResponse.usage.total_tokens,
     }
   }
+
+  const choice = chatResponse.choices[0]
   // doing deepcopy here, because we're communicating to a worker
   // and need to make sure to dereference values (e.g. if they're vue reactive objects)
   costInfo.estimatedTokens = await estimateChatTokens(
@@ -314,7 +316,7 @@ async function saveTokenUsage(
     openAIConversationThread,
     toolDefs,
     deepCopy(allowedTools) || [],
-    chatResponse.choices[0]!.message.content ?? '',
+    typeof choice?.message.content === 'string' ? choice.message.content : '',
   )
   return costInfo
 }

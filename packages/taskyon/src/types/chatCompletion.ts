@@ -13,6 +13,7 @@ export const OpenAIMessage = z.object({
           id: z.string(),
         }),
         z.object({
+          custom: z.object({ input: z.string, name: z.string() }),
           id: z.string(),
           type: z.string(), // e.g. "custom"
           // custom tool calls may have extra fields like "name" or "parameters"
@@ -20,11 +21,12 @@ export const OpenAIMessage = z.object({
       ]),
     )
     .optional(),
+  refusal: z.string().nullish(),
+  audio: z.unknown().optional(),
   name: z
     .string()
     .optional()
     .describe('Optional name to differentiate between different participants of same role.'),
-  tool_call_id: z.string().optional(),
   role: z.enum(['system', 'user', 'assistant', 'function', 'tool', 'developer']),
 }) // we are allowing additional properties here, because different providers sometimes returns additional properties
 export type OpenAIMessage = z.infer<typeof OpenAIMessage>
@@ -53,6 +55,7 @@ export const ChatResponseType = z.object({
           'cancelled',
           'unknown',
         ]),
+        // TODO: move annotations into message!
         annotations: Annotation.array().optional(),
         reasoning: z.string().optional(),
         logprobs: z.unknown().optional(),

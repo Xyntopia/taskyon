@@ -1,9 +1,9 @@
 import { z } from 'zod'
 import { summarizeTools } from '../core/tools'
-import type { OpenAIMessage } from '../types/chatCompletion'
 import type { ToolBase } from '../types/tools'
 import { FunctionCall } from '../types/tools'
 import { safeYamlDump, zodToYamlString } from '../utils/yamlUtils'
+import type OpenAI from 'openai'
 
 const answer = z.string()
 const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullable()
@@ -89,21 +89,22 @@ function substituteStringVariables(variables: Record<string, string>, content: s
 
 // gets all the function calls in an openai conversation and makes a list from that :)
 function getAllFunctionsInOpenAiConversation(
-  modifiedOpenAIConversationThread: readonly OpenAIMessage[],
+  modifiedOpenAIConversationThread: readonly OpenAI.ChatCompletionMessageParam[],
 ): Set<string> {
   return modifiedOpenAIConversationThread.reduce((acc, msg) => {
     if (msg.role === 'function' && msg.name) {
       acc.add(msg.name)
     }
 
-    if ((msg.role === 'tool' || msg.role === 'assistant') && msg.tool_calls) {
+    if (msg.role === 'assistant' && 'tool_calls' in msg && msg.tool_calls) {
       for (const tc of msg.tool_calls) {
-        if ('function' in tc) {
-          acc.add(tc.function.name)
-        } else {
-          acc.add(tc.id)
-        }
+        acc.add('function' in tc ? tc.function.name : tc.id)
       }
+    }
+
+    if (msg.role === 'tool' && msg.tool_call_id) {
+      // tool messages don’t have tool_calls, just ids
+      acc.add(msg.tool_call_id)
     }
 
     return acc
@@ -115,7 +116,7 @@ const string2OpenAiMessage =
     msgList.map((prompt) => ({
       role,
       content: substituteStringVariables(variables, prompt),
-    }))
+    })) as OpenAI.ChatCompletionMessageParam[]
 
 function calculateCompletionVariables(
   allowedTools: string[],
@@ -164,7 +165,7 @@ export function addPrompts(
     schemaReminder: string
     toolResult: string
   },
-  openAIConversationThread: OpenAIMessage[],
+  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   prompts: string[],
   allowedTools: string[],
   lastMessage: unknown,

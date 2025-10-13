@@ -1,6 +1,6 @@
 import { expose } from 'comlink'
 import { mapFunctionNames } from '../core/tools'
-import type { OpenAIMessage, TaskNodeMeta } from '../types/chatCompletion'
+import type { TaskNodeMeta } from '../types/chatCompletion'
 import type { TaskNode } from '../types/node'
 import type { ToolBase } from '../types/tools'
 import { getVector, loadModel, loadTokenizer } from './nlp'
@@ -25,7 +25,9 @@ export async function countStringTokens(txt: string) {
   return content.length
 }
 
-async function countChatTokens(chatMessages: OpenAIMessage[]) {
+type CountableMessage = object & { content?: unknown }
+
+async function countChatTokens(chatMessages: CountableMessage[]) {
   let totalTokens = 0
   for (const message of chatMessages) {
     if (message.content && typeof message.content == 'string') {
@@ -73,7 +75,7 @@ const nlpWorker = {
 
   estimateChatTokens: async (
     content: TaskNode['content'],
-    chat: OpenAIMessage[],
+    chat: CountableMessage[],
     tools: Record<string, ToolBase>,
     allowedTools?: string[],
     chatResult?: string,
