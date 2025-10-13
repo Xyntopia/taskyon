@@ -86,6 +86,9 @@
         v-for="file in fileAttachments"
         :key="file.name"
         removable
+        dense
+        color="secondary"
+        text-color="white"
         :icon="matUploadFile"
         @remove="removeFileFromDraft(file)"
       >
@@ -331,7 +334,7 @@ const currentnewTask = computed(() => {
   return partialTaskDraft.parse(task) // we can do this, because we defined the "role"
 })
 
-const getCurrentKeywords = async () => {
+const getCurrentKeyword = async () => {
   const startTime = performance.now()
   const kwd = (await generateTaskKeyWords(currentnewTask.value, tystate.selectedThread.value))[0]
   const endTime = performance.now()
@@ -340,17 +343,21 @@ const getCurrentKeywords = async () => {
 }
 
 // add taskchain to taskManager
-async function getCurrentKeywordsWithTimeout(timeoutMs = 200) {
-  const kwds = await Promise.race([
-    getCurrentKeywords(),
-    new Promise<null>((resolve) =>
-      setTimeout(() => {
-        resolve(null)
-      }, timeoutMs),
-    ),
-  ])
+async function getCurrentKeywordsWithTimeout(timeoutMs = 200): Promise<string | undefined | null> {
+  try {
+    const kwd = await Promise.race([
+      getCurrentKeyword(),
+      new Promise<null>((resolve) =>
+        setTimeout(() => {
+          resolve(null)
+        }, timeoutMs),
+      ),
+    ])
+    return kwd
+  } catch (err) {
+    console.log('Error generating keywords!', err)
+  }
   //console.log(`Keyword Timeout? ${kwds === null ? true : false}`)
-  return kwds
 }
 
 //const { idle, lastActive } = useIdle(2000) // 5 min
