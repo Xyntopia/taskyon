@@ -1,16 +1,15 @@
 import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
 import Ajv from 'ajv'
-import { produce } from 'immer'
 import type { JSONSchema7, JSONSchema7Object } from 'json-schema'
 import { RemoteFunctionCall, RemoteFunctionResponse } from '../types/messages'
+import type { InternalTool, toolContext } from '../types/toolApi'
 import type { FunctionArguments, FunctionCall, ParamType } from '../types/tools'
 import { ToolBase } from '../types/tools'
 import type { Port } from '../utils/frpBus'
 import { executeCodeInIframe } from '../utils/iframeWorker'
+import { bigIntToString } from '../utils/objHelpers'
 import { convertZodToJsonSchemaCached } from '../utils/schema'
 import { jsonSchemaToYamlString } from '../utils/yamlUtils'
-import { bigIntToString } from '../utils/objHelpers'
-import type { InternalTool, toolContext } from '../types/toolApi'
 
 export type RemoteFunctionPort = Port<RemoteFunctionCall, RemoteFunctionResponse>
 
@@ -140,14 +139,13 @@ export async function handleFunctionExecution(
   let funcR: unknown
   const toolDefaultParams = await createWithDefaults(tool.parameters)
   // mix in with explicit parameters
-  const execFunc = produce(func, (draft) => {
-    if (typeof func.arguments === 'object' && func.arguments !== null) {
-      draft.arguments = {
-        ...toolDefaultParams,
-        ...func.arguments,
-      } as FunctionArguments
-    }
-  })
+  const execFunc: FunctionCall = {
+    ...func,
+    arguments: {
+      ...(toolDefaultParams as Record<string, ParamType>),
+      ...func.arguments,
+    },
+  }
 
   console.log(toolDefaultParams)
   if (tool.function) {

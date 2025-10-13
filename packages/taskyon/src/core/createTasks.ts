@@ -1,4 +1,3 @@
-import { produce } from 'immer'
 import type z from 'zod'
 import type { partialTaskDraft } from '../types/node'
 import { TaskNode } from '../types/node'
@@ -7,13 +6,19 @@ import { sha256UrlSafeHash } from '../utils/encoding'
 const TaskWithoutId = TaskNode.omit({ id: true }).strip()
 export type TaskWithoutId = z.infer<typeof TaskWithoutId>
 
-function normalizeObj<T>(task: T) {
-  const nt = produce(task, (newTask) => {
-    // this will usually remove "undefined" values..
-    return JSON.parse(JSON.stringify(newTask))
-  })
-  // TODO: ensure alphabetical order?
-  return nt
+function normalizeObj<T extends Record<string, unknown>>(task: T): T {
+  // deep clone plain JSON-compatible values
+  const clone: T = JSON.parse(JSON.stringify(task))
+
+  // enforce alphabetical key order
+  const sorted = Object.keys(clone)
+    .sort()
+    .reduce((acc, key) => {
+      acc[key as keyof T] = clone[key as keyof T]
+      return acc
+    }, {} as T)
+
+  return sorted
 }
 
 async function taskContentHash(
@@ -38,15 +43,12 @@ async function taskContentHash(
 
 export async function ensureValidTaskId(task: partialTaskDraft): Promise<TaskNode> {
   const { hash, normalized } = await taskContentHash(task)
-  if (task.id && hash != task.id) {
+  if (task.id && hash !== task.id) {
     throw new Error(
       `Not able to create new task as id doesn't match content. Expected: ${hash} got: ${task.id}.`,
     )
   }
-  const rt = produce(normalized as TaskNode, (t) => {
-    t.id = hash
-  })
-  return rt
+  return { ...normalized, id: hash } as TaskNode
 }
 
 // the following function can be used to calculate Ids for an entire
@@ -67,16 +69,14 @@ export const forgeTaskChain = async (tasks: partialTaskDraft[][]) => {
 function addTaskNodeMeta(
   options: { createMeta?: 'missing' | 'overwrite' | undefined },
   task: partialTaskDraft,
-) {
-  // TODO: add signatures, task ACL, etc here...
-  const next = produce(task, (newTask) => {
-    if (options.createMeta == 'overwrite') {
-      newTask.created_at = Date.now()
-    }
-    if (options.createMeta !== undefined) {
-      if (!newTask.created_at) newTask.created_at = Date.now()
-    }
-  })
+): partialTaskDraft {
+  const next = { ...task }
+  if (options.createMeta === 'overwrite') {
+    next.created_at = Date.now()
+  }
+  if (options.createMeta !== undefined && !next.created_at) {
+    next.created_at = Date.now()
+  }
   return next
 }
 
