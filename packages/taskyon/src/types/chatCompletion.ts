@@ -1,6 +1,4 @@
-import type OpenAI from 'openai'
 import z from 'zod'
-import { assertType } from '../utils/tsHelpers'
 import { Annotation } from './node'
 
 export const OpenAIMessage = z.object({
@@ -22,7 +20,7 @@ export const OpenAIMessage = z.object({
       ]),
     )
     .optional(),
-  name: z.string().optional(),
+  name: z.string(),
   role: z.enum(['system', 'user', 'assistant', 'function', 'tool', 'developer']),
 }) // we are allowing additional properties here, because different providers sometimes returns additional properties
 export type OpenAIMessage = z.infer<typeof OpenAIMessage>
@@ -83,11 +81,6 @@ export const ChatResponseType = z.object({
     .optional(),
 })
 export type ChatResponseType = z.infer<typeof ChatResponseType>
-
-// Use the function to trigger type checking
-// This will cause TypeScript to report an error if the types don't match
-//assertType<ChatResponseType>({} as SimplifyDeep<OpenAI.ChatCompletion>)
-assertType<ChatResponseType>({} as OpenAI.ChatCompletion)
 
 export interface OpenRouterGenerationInfo {
   id: string

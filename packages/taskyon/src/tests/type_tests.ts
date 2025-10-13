@@ -1,6 +1,9 @@
 // type_tests.ts
+import type OpenAI from 'openai'
 import type { TaskyonMessage } from '../types/apiTypes'
+import type { ChatResponseType } from '../types/chatCompletion'
 import { createDuplexChannel } from '../utils/frpBus'
+import { assertType } from '../utils/tsHelpers'
 
 /* ───────────────── SET-UP SOME PORTS ────────────────── */
 
@@ -152,3 +155,10 @@ const A = createDuplexChannel<TaskyonMessage, unknown>()
 const B = createDuplexChannel<TaskyonMessage, unknown>()
 
 A.y.connect(B.x)
+
+////   OpenAI tests
+
+// Use the function to trigger type checking
+// This will cause TypeScript to report an error if the types don't match
+//assertType<ChatResponseType>({} as SimplifyDeep<OpenAI.ChatCompletion>)
+assertType<ChatResponseType>({} as OpenAI.ChatCompletion)
