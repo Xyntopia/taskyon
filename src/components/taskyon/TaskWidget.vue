@@ -7,14 +7,19 @@
     icon-color="info"
     :show-meta="showMeta"
   >
-    <FileBrowser
-      v-if="getFile"
-      :file-mappings="fileMappings"
-      :expert-mode="state.appConfiguration.expertMode"
-      preview
-      :preview-size="100"
-      :get-file="getFile"
-    />
+    <div class="row items-center">
+      <FileBrowser
+        v-if="getFile"
+        :file-mappings="fileMappings"
+        :expert-mode="state.appConfiguration.expertMode"
+        preview
+        :preview-size="100"
+        :get-file="getFile"
+      />
+      <q-btn v-if="state.appConfiguration.expertMode" flat size="sm" :icon="mdiFolder" :to="`/fm`">
+        <q-tooltip> Open File Manager </q-tooltip>
+      </q-btn>
+    </div>
   </TaskField>
   <TaskField
     v-else-if="task.content.type === 'return'"
@@ -155,7 +160,13 @@
 
 <script setup lang="ts">
 import { matBuild, matCalculate, matPause, matWarning } from '@quasar/extras/material-icons'
-import { mdiDesktopTower, mdiFileDocument, mdiHeadCog, mdiTools } from '@quasar/extras/mdi-v6'
+import {
+  mdiDesktopTower,
+  mdiFileDocument,
+  mdiFolder,
+  mdiHeadCog,
+  mdiTools,
+} from '@quasar/extras/mdi-v6'
 import { humanizeError, safeYamlDump, type FileMapping, type TaskNode } from '@taskyon/taskyon'
 import { dump } from 'js-yaml'
 import { useAppStateStore } from 'src/stores/appState'
