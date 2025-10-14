@@ -703,7 +703,7 @@ async function makeFilesAiReadable(
     if (!fm) continue
     const name = fm.name || fm.opfs || 'unknown'
     const lower = name.toLowerCase()
-    const file: File | undefined = await getFile(fm.uuid)
+    const file: File | undefined = await getFile(fm.id)
     if (!file) continue
 
     // Images

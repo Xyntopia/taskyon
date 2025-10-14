@@ -16,12 +16,11 @@ import {
   withKeyLockings,
   withLiveStreams,
 } from '../utils/crudWrapper'
-import { urlSafeBase64Uuid } from '../utils/crypto'
+import { sha256UrlSafeHashFromFile } from '../utils/encoding'
 import { openUserUploadedFile, saveUserUploadedFileToOpfs } from '../utils/OPFS'
 import type { TyPGDB } from '../utils/pglite.api'
-import type { OptionalSome } from '../utils/tsHelpers'
-import { processMarkdown } from './taskUtils'
 import { createTaskNode } from './createTasks'
+import { processMarkdown } from './taskUtils'
 
 /**
  *
@@ -52,41 +51,28 @@ async function useFileManager(db: TyPGDB) {
     tableName: 'filemapping',
   })
 
-  async function addFiles(newFiles: File[]) {
+  const fileMemory = new Map<string, File>()
+
+  async function addFiles(newFiles: File[], storage: 'memory' | 'opfs') {
     console.log('add files to our chat!')
 
-    //first, upload file into our OPFS file system:
-    const opfsMapping = await saveUserUploadedFileToOpfs(newFiles)
-
     // Collect UUIDs from added files
-    const uuids = []
-    for (const [fileIdx, file] of newFiles.entries()) {
-      const uuid = await addFileToDb({
-        ...(opfsMapping[fileIdx] ? { opfs: opfsMapping[fileIdx] } : {}),
+    const ids = []
+    for (const file of newFiles) {
+      const id = await sha256UrlSafeHashFromFile(file)
+      //first, upload file into our OPFS file system:
+      const opfsPath = storage === 'opfs' ? await saveUserUploadedFileToOpfs(file) : undefined
+      if (storage === 'memory') fileMemory.set(id, file)
+      await fileTable.set(id, {
+        id,
+        ...(opfsPath ? { opfs: opfsPath } : {}),
         name: file.name,
-        fileType: file.type,
+        type: file.type,
+        size: file.size,
       })
-      if (uuid) {
-        uuids.push(uuid)
-      }
+      ids.push(id)
     }
-    return uuids
-  }
-
-  // TODO: make sure, we add the correct file type here!
-  async function addFileToDb(fileMapping: OptionalSome<FileMapping, 'uuid'>) {
-    const uuidFileMapping: FileMapping = {
-      // TODO: replace this with a content Hash as well!
-      uuid: urlSafeBase64Uuid(),
-      ...fileMapping,
-    }
-
-    await fileTable.set(uuidFileMapping.uuid, uuidFileMapping)
-    return uuidFileMapping.uuid
-  }
-
-  async function bulkUpsertFiles(filemappings: OptionalSome<FileMapping, 'uuid'>[]) {
-    return await Promise.all(filemappings.map(async (fm) => addFileToDb(fm)))
+    return ids
   }
 
   async function getFileMappingByUuid(uuid: string): Promise<FileMapping | null> {
@@ -129,9 +115,9 @@ async function useFileManager(db: TyPGDB) {
             const newfile = new File(
               [file],
               file.name,
-              firstFile.fileType
+              firstFile.type
                 ? {
-                    type: firstFile.fileType,
+                    type: firstFile.type,
                   }
                 : {},
             )
@@ -149,9 +135,7 @@ async function useFileManager(db: TyPGDB) {
 
   return {
     addFiles,
-    addFile: addFileToDb,
     searchFiles,
-    bulkUpsertFiles,
     getFileMappingByUuid,
     getOpfsUploadedFile,
     getFileByName,

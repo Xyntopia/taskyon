@@ -15,45 +15,38 @@ async function getRoot() {
 const userUploadOpfsDir = 'user_uploads'
 
 export async function saveUserUploadedFileToOpfs(
-  newFiles: File[], // string is an id e.g. the uuid of our file!
-): Promise<{ [key: number]: string }> {
-  console.log('save file to OPFS', newFiles)
-  if (!newFiles.length) return {}
-
+  file: File, // string is an id e.g. the uuid of our file!
+): Promise<string | undefined> {
+  console.log('save file to OPFS', file)
   const storageRoot = await getRoot()
-  const filenameMapping: { [key: string]: string } = {}
 
   if (storageRoot) {
-    for (const [fileId, file] of newFiles.entries()) {
-      const newSubDir = await storageRoot.getDirectoryHandle(userUploadOpfsDir, {
-        create: true,
-      })
+    const newSubDir = await storageRoot.getDirectoryHandle(userUploadOpfsDir, {
+      create: true,
+    })
 
-      let newFileName = file.name
-      let fileExists = await checkFileExists(newSubDir, newFileName)
-      let counter = 1
+    let newFileName = file.name
+    let fileExists = await checkFileExists(newSubDir, newFileName)
+    let counter = 1
 
-      while (fileExists) {
-        newFileName = addSuffixToFile(file.name, counter)
-        fileExists = await checkFileExists(newSubDir, newFileName)
-        counter++
-      }
+    while (fileExists) {
+      newFileName = addSuffixToFile(file.name, counter)
+      fileExists = await checkFileExists(newSubDir, newFileName)
+      counter++
+    }
 
-      const newFile = await newSubDir.getFileHandle(newFileName, {
-        create: true,
-      })
+    const newFile = await newSubDir.getFileHandle(newFileName, {
+      create: true,
+    })
 
-      const wtr = await newFile.createWritable()
-      try {
-        await wtr.write(await file.arrayBuffer())
-        filenameMapping[fileId] = `${newSubDir.name}/${newFileName}` // Map the original filename to the new filename
-      } finally {
-        await wtr.close()
-      }
+    const wtr = await newFile.createWritable()
+    try {
+      await wtr.write(await file.arrayBuffer())
+      return `${newSubDir.name}/${newFileName}` // Map the original filename to the new filename
+    } finally {
+      await wtr.close()
     }
   }
-
-  return filenameMapping // Return the mapping object
 }
 
 async function checkFileExists(

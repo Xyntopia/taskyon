@@ -377,7 +377,7 @@ async function createFileTask(files: File[]) {
   const ty = await tystate.taskyon
 
   // first add files to our DB & save them, then get uuids for each file.
-  const fileUuids = await ty.addFiles(files)
+  const fileUuids = await ty.addFiles(files, 'opfs')
 
   if (fileUuids.length) {
     const task: partialTaskDraft = {

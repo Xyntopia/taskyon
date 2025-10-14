@@ -1,11 +1,11 @@
 <template>
   <q-list>
-    <q-item v-for="file in fileMappings" :key="file.uuid">
+    <q-item v-for="file in fileMappings" :key="file.id">
       <!-- Image preview, loaded asynchronously -->
-      <q-item-section v-if="preview && previews[file.uuid] !== '__fallback__'">
+      <q-item-section v-if="preview && previews[file.id] !== '__fallback__'">
         <q-img
-          v-if="previews[file.uuid]"
-          :src="previews[file.uuid]"
+          v-if="previews[file.id]"
+          :src="previews[file.id]"
           :style="{ width: previewSize + 'px', height: previewSize + 'px' }"
         />
         <q-skeleton v-else :width="previewSize + 'px'" :height="previewSize + 'px'" />
@@ -18,7 +18,7 @@
       <q-tooltip v-if="expertMode" :delay="500">
         <p class="text-bold">uploaded file:</p>
         <p style="white-space: pre-wrap">
-          {{ dump({ uuid: file.uuid, name: file.name }) }}
+          {{ dump({ uuid: file.id, name: file.name }) }}
         </p>
       </q-tooltip>
     </q-item>
@@ -71,15 +71,15 @@ const createScaledImage = async (file: File, maxSize = props.previewSize) => {
 
 const loadAllPreviews = async () => {
   const previewPromises = props.fileMappings.map(async (file) => {
-    if (file?.uuid) {
-      const previewFile = await props.getFile(file.uuid)
+    if (file?.id) {
+      const previewFile = await props.getFile(file.id)
       if (previewFile) {
         // If the file isn’t an image, mark as fallback
         if (!previewFile.type.startsWith('image/')) {
-          previews.value[file.uuid] = '__fallback__'
+          previews.value[file.id] = '__fallback__'
         } else {
           const scaledPreview = await createScaledImage(previewFile)
-          previews.value[file.uuid] = scaledPreview
+          previews.value[file.id] = scaledPreview
         }
       }
     }
