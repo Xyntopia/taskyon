@@ -10,20 +10,25 @@
         height="500px"
       ></iframe>
     </div>
-    <div class="col-6">
-      <q-toggle v-model="dev" label="switch between taskyon.space <-> dev versions" />
-      <div>Function Call Output</div>
-      <q-btn outline label="Execute Client Test Function" @click="startClientTest" />
-      <div id="output" class="q-pa-lg">function result: {{ functionResult }}</div>
-      received async result.
-      <pre
-        v-if="taskResult"
-        data-cy="task-result"
-        class="q-pa-lg"
-        style="max-width: 500px; white-space: pre-wrap; word-break: break-word"
-      >
+    <div class="row">
+      <div class="col-6">
+        <q-toggle v-model="dev" label="switch between taskyon.space <-> dev versions" />
+        <div>Function Call Output</div>
+        <q-btn outline label="Execute Client Test Function" @click="startClientTest" />
+        <div id="output" class="q-pa-lg">function result: {{ functionResult }}</div>
+        received async result.
+        <pre
+          v-if="taskResult"
+          data-cy="task-result"
+          class="q-pa-lg"
+          style="max-width: 500px; white-space: pre-wrap; word-break: break-word"
+        >
         {{ JSON.stringify(taskResult, undefined, 2) }}</pre
-      >
+        >
+      </div>
+      <div>
+        <q-btn outline label="Test file upload and reading" @click="startFileUpload" />
+      </div>
     </div>
   </div>
 </template>
@@ -140,6 +145,22 @@ async function startClientTest() {
     taskResult.value = 'error!'
   }
   //unsub?.()
+}
+
+async function urlToFile(url: string, filename?: string): Promise<File> {
+  const res = await fetch(url)
+
+  // auto-detect MIME type from response headers
+  const mimeType = res.headers.get('Content-Type') ?? 'application/octet-stream'
+
+  const blob = await res.blob()
+  return new File([blob], filename ?? url.split('/').pop() ?? 'file', { type: mimeType })
+}
+
+async function startFileUpload() {
+  const testPdf = await urlToFile('/tests/product_specs_long.pdf')
+  const id = await tyclient.value?.sendFile(testPdf)
+  console.log('finished sending file!', id)
 }
 </script>
 

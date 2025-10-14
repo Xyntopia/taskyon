@@ -17,6 +17,7 @@ import type {
   partialTyConfiguration,
   TaskyonGuiMessage,
 } from '../../../src/modules/taskyon/apiTypes'
+import { sendFile } from '../../taskyon/src/types/apiTypes'
 export {
   createChatCompletionTask,
   createTool, // toolApi
@@ -106,6 +107,7 @@ async function handleFunctionExecution(
 export interface TyClient {
   processTasks: ReturnType<typeof processTasks>
   port: Port<TaskyonGuiMessage, TaskyonGuiMessage>
+  sendFile: (file: File) => Promise<string>
 }
 
 export async function initializeTaskyon(options: {
@@ -174,5 +176,6 @@ export async function initializeTaskyon(options: {
   return {
     processTasks: processTasks(clientSidePort),
     port: clientSidePort,
+    sendFile: (file: File) => sendFile(clientSidePort.send)(file),
   }
 }
