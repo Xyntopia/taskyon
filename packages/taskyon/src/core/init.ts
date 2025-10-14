@@ -398,7 +398,7 @@ export async function tyCore(
         'findSiblingLeafTasks',
         'deleteTaskThread',
         'deleteTask',
-        'getOpfsUploadedFile',
+        'getUploadedFile',
         'getFileMappingByUuid',
         'addFiles',
         // TODO: also the following functionsnot sure, maybe we can generalize backup a bit more?

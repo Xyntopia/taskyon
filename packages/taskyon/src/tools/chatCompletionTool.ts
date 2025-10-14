@@ -97,7 +97,7 @@ export async function processChatTask(
     openAIConversationThread = await convertTaskNodesToOpenAIChat(
       taskChain,
       taskManager.getFileMappingByUuid,
-      taskManager.getOpfsUploadedFile,
+      taskManager.getUploadedFile,
       llmSettings.tryUsingVisionModels,
       llmTools,
       toolDefs,
@@ -655,7 +655,7 @@ async function convertTaskNodeToOpenAIMessage(
 
     const sysMessage: OpenAI.ChatCompletionMessageParam = {
       role: 'system',
-      content: `user uploaded files to opfs:\n${fileNames}`,
+      content: `User uploaded files:\n${fileNames}`,
     }
 
     const fileContent = await makeFilesAiReadable(fileMappings, getUploadedFile, useVisionModels)

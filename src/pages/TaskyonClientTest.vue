@@ -159,8 +159,33 @@ async function urlToFile(url: string, filename?: string): Promise<File> {
 
 async function startFileUpload() {
   const testPdf = await urlToFile('/tests/product_specs_long.pdf')
-  const id = await tyclient.value?.sendFile(testPdf)
+  if (!tyclient.value) return
+
+  const id = await tyclient.value.sendFile(testPdf)
   console.log('finished sending file!', id)
+
+  // now we can send
+  const res = await tyclient.value?.processTasks(
+    [
+      [
+        {
+          role: 'system',
+          content: { type: 'files', data: [id] },
+        },
+        {
+          role: 'user',
+          content: {
+            type: 'message',
+            data: 'The user uploaded a pdf file, can you show me whats in it?',
+          },
+        },
+        createChatCompletionTask({ goal: 'SimpleCompletion' }),
+      ],
+    ],
+    { timeoutMs: 50000 },
+  )
+  taskResult.value = res
+  console.log('client received result:')
 }
 </script>
 

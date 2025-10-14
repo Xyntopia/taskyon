@@ -194,9 +194,9 @@ const tystate = useTaskyonStore()
 
 const state = useAppStateStore()
 const fileMappings = ref<FileMapping[]>([])
-async function getFile(uuid: string) {
-  console.log('load image', uuid)
-  return (await tystate.taskyon).getOpfsUploadedFile(uuid)
+async function getFile(id: string) {
+  console.log('load image', id)
+  return (await tystate.taskyon).getUploadedFile(id)
 }
 
 const onIframeMessage = (el: HTMLIFrameElement, id: string) => {

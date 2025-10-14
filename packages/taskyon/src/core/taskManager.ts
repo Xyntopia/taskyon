@@ -90,8 +90,11 @@ async function useFileManager(db: TyPGDB) {
   // find out more here:  https://rxdb.info/rx-query.html
   const searchFiles = fileTable.find
 
-  async function getOpfsUploadedFile(uuid: string): Promise<File | undefined> {
-    const fileMap = await getFileMappingByUuid(uuid)
+  async function getUploadedFile(id: string): Promise<File | undefined> {
+    const memoryFile = fileMemory.get(id)
+    if (memoryFile) return memoryFile
+
+    const fileMap = await getFileMappingByUuid(id)
     if (fileMap?.opfs) {
       const file = openUserUploadedFile(fileMap.opfs)
       return file
@@ -137,7 +140,7 @@ async function useFileManager(db: TyPGDB) {
     addFiles,
     searchFiles,
     getFileMappingByUuid,
-    getOpfsUploadedFile,
+    getUploadedFile,
     getFileByName,
   }
 }
