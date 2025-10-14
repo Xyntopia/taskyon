@@ -39,25 +39,96 @@ async function read_docx(file: File) {
   return result.value
 }
 
-/*async function detect_file_type(file: File) {
-  import { WASMagic } from 'wasmagic';
-  const magic = await WASMagic.create();
+function detectByExtension(file: File): string | undefined {
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  switch (ext) {
+    case 'md':
+      return 'text/markdown'
+    case 'csv':
+      return 'text/csv'
+    case 'tsv':
+      return 'text/tab-separated-values'
+    case 'json':
+      return 'application/json'
+    case 'xml':
+      return 'application/xml'
+    case 'html':
+      return 'text/html'
+    case 'yaml':
+    case 'yml':
+      return 'text/yaml'
+    case 'js':
+    case 'mjs':
+    case 'cjs':
+      return 'application/javascript'
+    case 'ts':
+      return 'text/typescript'
+    case 'css':
+      return 'text/css'
+    case 'svg':
+      return 'image/svg+xml'
+    case 'rtf':
+      return 'application/rtf'
+    case 'pdf':
+      return 'application/pdf'
+    case 'docx':
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  }
+}
+
+/*async function detectFileType(file: File): Promise<string | undefined> {
+  if (file.type && file.type !== 'application/octet-stream') {
+    return file.type
+  }
+
+  // Dynamically import wasmagic only when needed
+  const { WASMagic } = await import('wasmagic')
+
+  const magic = await WASMagic.create(wasmUrl)
+
+  const buf = new Uint8Array(await file.arrayBuffer())
+  const mime = magic.detect(buf)
+
+  return mime
 }*/
 
 export async function convertFileToText(file: File) {
-  console.log('load file: ' + file.type)
-  switch (file.type) {
+  let mime = file.type
+  if (!mime || mime === 'application/octet-stream' || mime === 'text/plain') {
+    mime = detectByExtension(file) || mime
+  }
+
+  console.log(`detected mime: ${mime} for ${file.name}`)
+
+  switch (mime) {
     case 'application/pdf':
       return await read_pdf(file)
+
     case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
       return await read_docx(file)
-    default:
-      /*const txt = file.text();
-      return txt;*/
-      if (file.type.startsWith('text')) {
-        return file.text()
-      }
+
+    // easy text formats
+    case 'application/json':
+    case 'application/xml':
+    case 'text/xml':
+    case 'text/html':
+    case 'text/markdown':
+    case 'text/csv':
+    case 'text/tab-separated-values':
+    case 'text/yaml':
+    case 'application/x-yaml':
+    case 'application/javascript':
+    case 'text/javascript':
+    case 'text/typescript':
+    case 'text/css':
+    case 'image/svg+xml':
+    case 'application/rtf':
+      return await file.text()
   }
-  console.error("we don't know this file type!", file)
-  throw new Error(`unknown file type: ${file.type} from ${file.name}`)
+
+  if (mime?.startsWith('text/')) {
+    return await file.text()
+  }
+
+  throw new Error(`Unsupported file type: ${mime} from ${file.name}`)
 }

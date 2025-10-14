@@ -15406,6 +15406,11 @@ walkdir@^0.4.1:
   resolved "https://registry.yarnpkg.com/walkdir/-/walkdir-0.4.1.tgz#dc119f83f4421df52e3061e514228a2db20afa39"
   integrity sha512-3eBwRyEln6E1MSzcxcVpQIhRG8Q1jLvEqRmCZqS3dsfXEDR/AhOF4d+jHg1qvDCpYaVRZjENPQyrVxAkQqxPgQ==
 
+wasmagic@^1.0.3:
+  version "1.0.3"
+  resolved "https://registry.yarnpkg.com/wasmagic/-/wasmagic-1.0.3.tgz#3e8af67eccbe9ddab495e9cf5ea5016c8335546d"
+  integrity sha512-jSqpaRwklJYVSR35k2OuMy988B/FdYKMz975lQyphzIQO/15EKr3fZI8963HsH7aqcMtaFHu/8bSCTQXJ+gqlg==
+
 watskeburt@^4.2.3:
   version "4.2.3"
   resolved "https://registry.yarnpkg.com/watskeburt/-/watskeburt-4.2.3.tgz#fc830280f466e201b55c517024aaf3aad2f5121e"
