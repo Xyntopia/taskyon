@@ -2,19 +2,31 @@ import z from 'zod'
 import type { Expand } from '../utils/tsHelpers'
 import { FunctionCall, ToolBase } from './tools'
 
-export const Annotation = z.object({
-  type: z.literal('url_citation'),
-  url_citation: z
-    .object({
-      end_index: z.number(),
-      start_index: z.number(),
-      title: z.string(),
-      url: z.string(),
-      content: z.string(),
-    })
-    .partial()
-    .optional(),
-})
+export const Annotation = z.union([
+  z.object({
+    type: z.literal('url_citation'),
+    url_citation: z
+      .object({
+        end_index: z.number(),
+        start_index: z.number(),
+        title: z.string(),
+        url: z.string(),
+        content: z.string(),
+      })
+      .partial()
+      .optional(),
+  }),
+  z.object({
+    type: z.literal('file'),
+    content: z
+      .object({
+        text: z.string(),
+        type: z.string(),
+      })
+      .array()
+      .optional(),
+  }),
+])
 
 export type Annotation = z.infer<typeof Annotation>
 

@@ -62,6 +62,7 @@ const configuration: partialTyConfiguration = {
     selectedApi: 'taskyon',
     enableOpenAiTools: false,
     enableToolChooser: true,
+    tryUsingVisionModels: false,
     llmApis: {
       taskyon: {
         selectedModel: 'meta-llama/llama-3.3-70b-instruct',
