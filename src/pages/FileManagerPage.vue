@@ -49,6 +49,15 @@
                 :icon="matContentCopy"
                 @click.stop="copyPath(node)"
               />
+              <q-btn
+                v-if="node.kind === 'file'"
+                dense
+                flat
+                round
+                color="negative"
+                :icon="matDelete"
+                @click.stop="deleteFile(node)"
+              />
             </div>
           </template>
         </q-tree>
@@ -58,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { matContentCopy, matDownload, matFolder } from '@quasar/extras/material-icons'
+import { matContentCopy, matDelete, matDownload, matFolder } from '@quasar/extras/material-icons'
 import { mdiFile } from '@quasar/extras/mdi-v6'
 import type { QTreeNode } from 'quasar'
 import FileDropzone from 'src/components/FileDropzone.vue'
@@ -266,6 +275,33 @@ async function copyPath(node: TreeNode) {
     console.log('[copyPath] copied', node.path)
   } catch (err) {
     console.error('[copyPath] failed:', err)
+  }
+}
+
+async function deleteFile(node: TreeNode) {
+  try {
+    // derive parent path
+    const segments = node.path.split('/')
+    const fileName = segments.pop()
+    const parentPath = segments.join('/')
+
+    let parent: DirHandle = await navigator.storage.getDirectory()
+    if (parentPath) {
+      const parts = parentPath.split('/')
+      for (const p of parts) {
+        parent = (await parent.getDirectoryHandle(p)) as DirHandle
+      }
+    }
+
+    if (fileName) {
+      await parent.removeEntry(fileName)
+      console.log('[deleteFile] removed', node.path)
+    }
+
+    // rebuild root so UI updates
+    await buildRoot()
+  } catch (err) {
+    console.error('[deleteFile] failed:', err)
   }
 }
 
