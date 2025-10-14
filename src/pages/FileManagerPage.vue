@@ -15,7 +15,16 @@
       <q-separator />
 
       <q-card-section>
-        <q-tree :nodes="treeData" node-key="id" accordion dense @lazy-load="handleLazyLoad">
+        <q-tree
+          v-model:selected="selectedNodeId"
+          v-model:expanded="expandedNodeIds"
+          :nodes="treeData"
+          node-key="id"
+          accordion
+          dense
+          selected-color="secondary"
+          @lazy-load="handleLazyLoad"
+        >
           <template #default-header="{ node }">
             <div class="row items-center no-wrap cursor-pointer" @click="onNodeClick(node)">
               <q-icon :name="node.icon" class="q-mr-sm" />
@@ -51,7 +60,64 @@ import { mdiFile } from '@quasar/extras/mdi-v6'
 import type { QTreeNode } from 'quasar'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import InfoDialog from 'src/components/InfoDialog.vue'
-import { nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+
+const props = defineProps<{
+  initialPath?: string | string[]
+}>()
+
+const normalizedPath = computed(() => {
+  if (!props.initialPath) return ''
+  return Array.isArray(props.initialPath)
+    ? props.initialPath.filter(Boolean).join('/')
+    : props.initialPath
+})
+
+const selectedNodeId = ref<string | null>(null)
+const expandedNodeIds = ref<string[]>([])
+
+onMounted(async () => await buildRoot())
+
+watch(
+  normalizedPath,
+  async (path) => {
+    if (path) await openPath(path)
+  },
+  { immediate: true },
+)
+
+async function openPath(path: string) {
+  const segments = path.split('/').filter(Boolean)
+  let currentNodes = treeData.value
+  let current: TreeNode | undefined
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]
+    current = currentNodes.find((n) => n.id.endsWith(seg))
+    if (!current) {
+      console.warn('[openPath] segment not found:', seg)
+      return
+    }
+
+    if (current.kind === 'directory') {
+      if (current.lazy) {
+        const children = await dirHandleToNodes(current.handle as DirHandle, current.path)
+        current.children = children
+        current.lazy = false
+      }
+      // expand it in the UI
+      if (!expandedNodeIds.value.includes(current.id)) {
+        expandedNodeIds.value.push(current.id)
+      }
+      currentNodes = (current.children ?? []) as TreeNode[]
+    } else {
+      // select the file
+      if (i === segments.length - 1) {
+        selectedNodeId.value = current.id
+      }
+    }
+  }
+}
 
 /* ---------- helpers ---------- */
 

@@ -140,8 +140,9 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         props: true,
       },
       {
-        path: '/fm',
+        path: '/fm/:pathMatch(.*)*',
         component: () => import('pages/FileManagerPage.vue'),
+        props: (route) => ({ initialPath: route.params.pathMatch }),
         meta: {
           title: 'File Manager',
           description: 'Manage files saved in Taskyon OPFS.',
