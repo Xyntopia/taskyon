@@ -3,6 +3,7 @@
 import { forgeTaskChain } from '../core/createTasks'
 import type { chatCompletionParams } from '../tools/chatCompletionTool'
 import type { TaskyonMessage } from '../types/apiTypes'
+import type { TaskNode } from '../types/node'
 import { partialTaskDraft } from '../types/node'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import { type Port } from '../utils/frpBus'
@@ -20,7 +21,11 @@ export {
 
 export { createTool, makeTaskResult, toolCall, partialTaskDraft }
 export type { Port }
-export type processTasksOpts = { timeoutMs?: number; signal?: AbortSignal }
+export type processTasksOpts = {
+  timeoutMs?: number
+  signal?: AbortSignal
+  quitCondition?: (t: TaskNode) => boolean
+}
 
 export const createChatCompletionTask = (args: chatCompletionParams) =>
   toolCall<chatCompletionParams>({ name: 'chatCompletion', arguments: args })
@@ -61,9 +66,14 @@ export const processTasks =
         return false
       })
       .map((msg) => msg.task)
-    const lastMsgStr = subTasksCreated.filter((t) => t.content.type === 'message')
-    const unsub = lastMsgStr((m) => console.log('api received last message:', m))
-    const lastMsg = await lastMsgStr.wait(opts)
+
+    const condition = opts.quitCondition
+      ? subTasksCreated.filter(opts.quitCondition)
+      : subTasksCreated.filter((t) => t.content.type === 'message')
+
+    const unsub = condition((m) => console.log('received matching message on port:', m))
+    const lastMsg = await condition.wait(opts)
+    console.log('finished processin all tasks!')
     unsub()
     return lastMsg
   }

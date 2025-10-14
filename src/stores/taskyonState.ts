@@ -58,6 +58,7 @@ import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue
 import { guiTools } from '../modules/taskyon/GuiTools'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
+import { sendFile } from '../../packages/taskyon/src/types/apiTypes'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -1200,6 +1201,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   return {
     tyready: computed(() => tyready),
+    addFile: (file: File) => sendFile(uiApiOutside.send)(file),
     setNewSession,
     newSessionFromGdrive,
     uploadSessionKey,

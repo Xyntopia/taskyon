@@ -28,6 +28,7 @@ import {
   summarizeTools,
   ToolBase,
   uint8ArrayToBase64UrlSafe,
+  urlToFile,
   useNlpWorker,
   usePyodideWebworker,
   zodToYamlString,
@@ -1155,6 +1156,56 @@ export const testChatCompletion = async () => {
 
   return {
     structuredResponse,
+  }
+}
+
+export const testFileUpload = async () => {
+  const testPdf = await urlToFile('/tests/product_specs_long.pdf')
+
+  const id = await tystate.addFile(testPdf)
+  console.log('finished sending file!', id)
+
+  const tasks: partialTaskDraft[] = [
+    {
+      role: 'system',
+      content: { type: 'files', data: [id] },
+    },
+    createChatCompletionTask({
+      prompts: ['The user just uploaded a file, can you extract the data below?'],
+      schema: {
+        type: 'object',
+        properties: {
+          weight: {
+            type: 'string',
+            description: 'the weight of the product',
+          },
+          price: { type: 'string', description: 'The price of the product.' },
+        },
+        additionalProperties: false,
+        required: ['weight', 'price'],
+      },
+    }),
+  ]
+
+  tystate.api.receive((msg) => {
+    console.log('upload file test received message', msg)
+  })
+
+  const taskResult = await processTasks(tystate.api)([tasks], {
+    quitCondition: (t) => t.content.type === 'structured',
+    timeoutMs: 20000,
+  })
+
+  const res = taskResult.content.data as { weight?: string; price?: string }
+
+  assert(res.price === '$349', 'wrong price')
+  assert(res.weight === '2.3 kg', 'wrong weight')
+
+  console.log('client received result:')
+  return {
+    tasks,
+    taskResult,
+    res,
   }
 }
 

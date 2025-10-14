@@ -84,6 +84,7 @@ import {
   testCreateDeepTansformer,
   testCryptoSession,
   testEstimateChatTokens,
+  testFileUpload,
   testGdriveUpload,
   testGdriveZipRoundtrip,
   testIndexedDBKeyStorage,
@@ -156,6 +157,7 @@ async function runTest(name: string, testFunc: () => unknown, details = false) {
 }
 
 const tests = {
+  'test file upload': testFileUpload,
   'test meta database': testMetaDb,
   'test taskyon chatCompletion websearch': testChatCompletionWebSearch,
   'test session switching': testSessionSwitching,
