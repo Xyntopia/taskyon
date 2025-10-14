@@ -71,6 +71,7 @@ export function cleanWebpageEnhanced(htmlString: string): string {
   // Return the cleaned HTML as a string
   return doc.body.innerHTML
 }
+
 export function deepCleanWebpage(htmlString: string): string {
   // Parse the HTML string into a DOM object
   const parser: DOMParser = new DOMParser()
