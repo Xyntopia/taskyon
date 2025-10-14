@@ -68,45 +68,44 @@
 </template>
 
 <script setup lang="ts">
-import { useTaskyonStore } from 'stores/taskyonState'
-import { ref } from 'vue'
-import { exportFile } from 'quasar'
-import { dump } from 'js-yaml'
-import { copyToClipboard, getEnvironmentInfo } from 'src/modules/utils'
 import { matContentCopy } from '@quasar/extras/material-icons'
+import { randomString } from '@taskyon/taskyon'
+import { dump } from 'js-yaml'
+import { exportFile } from 'quasar'
+import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
+import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
 import {
+  getData,
   markdownGeneration,
+  oauthTests,
+  testArchiveUploadDownload,
+  testChatCompletion,
+  testChatCompletionWebSearch,
+  testCreateDeepTansformer,
+  testCryptoSession,
   testEstimateChatTokens,
+  testGdriveUpload,
+  testGdriveZipRoundtrip,
+  testIndexedDBKeyStorage,
+  testJsonSchemas,
+  testJsonSchemaToYaml,
+  testMetaDb,
+  testMultipleArchiveUploadDownload,
   testPGLite,
+  testPyodide,
+  testSecretStore,
+  testSessionSwitching,
+  testTaskIdHashing,
+  testToolLista,
   testTransformersPipeline,
   testVectorizerInitialization,
   testVectorizeText,
-  testChatCompletion,
-  testJsonSchemas,
-  testToolLista,
-  testJsonSchemaToYaml,
-  testSecretStore,
-  testGdriveZipRoundtrip,
-  testPyodide,
-  oauthTests,
-  testArchiveUploadDownload,
-  testMultipleArchiveUploadDownload,
-  testTaskIdHashing,
-  testCryptoSession,
-  testIndexedDBKeyStorage,
-  testSessionSwitching,
-  testChatCompletionWebSearch,
-  testMetaDb,
 } from 'src/modules/taskyon/tests'
-import { useAppStateStore } from 'src/stores/appState'
-import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
-import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
-import { onMounted } from 'vue'
-import { testCreateDeepTansformer } from 'src/modules/taskyon/tests'
-import { testGdriveUpload } from 'src/modules/taskyon/tests'
+import { copyToClipboard, getEnvironmentInfo } from 'src/modules/utils'
 import { testBuildSlimView } from 'src/modules/vueUtils'
-import { convertTaskNodesToOpenAIChat, randomString } from '@taskyon/taskyon'
-import { getCurrentProfileName, getStoredStateString } from 'src/modules/ui/initialState'
+import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { onMounted, ref } from 'vue'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -128,32 +127,6 @@ onMounted(async () => {
     resolveSecret = respond
   })
 })
-
-async function completionMessage() {
-  const ty = await tystate.taskyon
-  const tyChat: Record<string, unknown> = {
-    chatID: state.llmSettings.selectedTaskId,
-  }
-  if (state.llmSettings.selectedTaskId) {
-    tyChat.taskIdChain = await ty.getTaskIdChain(state.llmSettings.selectedTaskId)
-    const task = await ty.getTask(state.llmSettings.selectedTaskId)
-    if (task) {
-      const taskChain = await ty.getTaskChain(task.id)
-      const toolDefs = await ty.updateToolDefinitions(false)
-      const res = await convertTaskNodesToOpenAIChat(
-        taskChain,
-        // we are not testing files right now...
-        () => new Promise(() => null),
-        () => new Promise(() => undefined),
-        state.llmSettings.tryUsingVisionModels,
-        state.llmSettings.enableOpenAiTools,
-        toolDefs,
-      )
-      tyChat.thread = res
-    }
-  }
-  return tyChat
-}
 
 async function runTest(name: string, testFunc: () => unknown, details = false) {
   const result: Record<string, unknown> = {}
@@ -250,40 +223,6 @@ async function generateReport(details = false, noGui = true) {
   else await runTests({ ...tests, ...guiTests }, details)
 }
 
-async function getData() {
-  const currentProfilePointer = getCurrentProfileName()
-  return dump(
-    {
-      browserInfo: {
-        userAgent: navigator.userAgent,
-        platform: navigator.platform,
-        language: navigator.language,
-        appName: navigator.appName,
-        appVersion: navigator.appVersion,
-        vendor: navigator.vendor,
-        'crypto.subtle': crypto.subtle ? 'available' : 'not available',
-      },
-      windowInfo: {
-        innerWidth: window.innerWidth,
-        innerHeight: window.innerHeight,
-        screenWidth: window.screen.width,
-        screenHeight: window.screen.height,
-        colorDepth: window.screen.colorDepth,
-      },
-      appInfo: {
-        appConfiguration: state.appConfiguration,
-      },
-      taskyonStoreDiagnostics: {
-        currentProfilePointer,
-        SavedState: currentProfilePointer ? getStoredStateString(currentProfilePointer) : 'N/A',
-        CurrentState: state.getStateValues(),
-      },
-      CurrentChat: await completionMessage(),
-    },
-    { skipInvalid: true },
-  )
-}
-
 function downloadReport() {
   const fileName = 'taskyon_diagnostics_report.yaml'
   const fileContent = JSON.stringify(diagnostics.value)
@@ -291,8 +230,6 @@ function downloadReport() {
 
   exportFile(fileName, fileContent, mimeType)
 }
-
-void completionMessage()
 
 //const stateView = {...state}
 </script>

@@ -3,6 +3,7 @@ import {
   authenticateWithPopup,
   base64ToPublixX25519,
   chat2Md,
+  convertTaskNodesToOpenAIChat,
   craeteToolJsonSchema,
   createChatCompletionTask,
   createCryptoSession,
@@ -22,6 +23,7 @@ import {
   OAUTH_PROVIDERS,
   processTasks,
   removeKeys,
+  safeYamlDump,
   sleep,
   summarizeTools,
   ToolBase,
@@ -39,6 +41,7 @@ import z from 'zod'
 import { useGdrive } from '../gdrive'
 import { initCryptoSessionFromBrowser } from './browserCryptoSession'
 import { gDriveSyncPort } from './sync'
+import { getCurrentProfileName, getStoredStateString } from '../ui/initialState'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -1466,4 +1469,61 @@ ${out}
 
   console.log('✅ test passed')
   return { out }
+}
+
+export async function getData() {
+  async function completionMessage() {
+    const ty = await tystate.taskyon
+    const tyChat: Record<string, unknown> = {
+      chatID: state.llmSettings.selectedTaskId,
+    }
+    if (state.llmSettings.selectedTaskId) {
+      tyChat.taskIdChain = await ty.getTaskIdChain(state.llmSettings.selectedTaskId)
+      const task = await ty.getTask(state.llmSettings.selectedTaskId)
+      if (task) {
+        const taskChain = await ty.getTaskChain(task.id)
+        const toolDefs = await ty.updateToolDefinitions(false)
+        const res = await convertTaskNodesToOpenAIChat(
+          taskChain,
+          // we are not testing files right now...
+          () => new Promise(() => null),
+          () => new Promise(() => undefined),
+          state.llmSettings.tryUsingVisionModels,
+          state.llmSettings.enableOpenAiTools,
+          toolDefs,
+        )
+        tyChat.thread = res
+      }
+    }
+    return tyChat
+  }
+
+  const currentProfilePointer = getCurrentProfileName()
+  return safeYamlDump({
+    browserInfo: {
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      language: navigator.language,
+      appName: navigator.appName,
+      appVersion: navigator.appVersion,
+      vendor: navigator.vendor,
+      'crypto.subtle': crypto.subtle ? 'available' : 'not available',
+    },
+    windowInfo: {
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      screenWidth: window.screen.width,
+      screenHeight: window.screen.height,
+      colorDepth: window.screen.colorDepth,
+    },
+    appInfo: {
+      appConfiguration: state.appConfiguration,
+    },
+    taskyonStoreDiagnostics: {
+      currentProfilePointer,
+      SavedState: currentProfilePointer ? getStoredStateString(currentProfilePointer) : 'N/A',
+      CurrentState: state.getStateValues(),
+    },
+    CurrentChat: await completionMessage(),
+  })
 }
