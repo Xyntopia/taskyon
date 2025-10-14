@@ -446,7 +446,7 @@ const updateDateTime = (path: string[], date: string | null, time: string | null
 }
 </script>
 
-<style lang="sass">
+<style scoped lang="sass">
 .q-tree--dense .q-tree__node--child
     padding-left: 0
 </style>
