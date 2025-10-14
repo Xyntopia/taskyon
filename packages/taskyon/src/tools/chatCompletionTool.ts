@@ -31,9 +31,9 @@ import type { toolContext } from '../types/toolApi'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import type { FunctionArguments, ToolBase } from '../types/tools'
 import { FunctionCall } from '../types/tools'
+import { sleep } from '../utils/asyncUtils'
 import { charHash } from '../utils/crypto'
 import { humanizeError } from '../utils/error'
-import { fileToBase64 } from '../utils/fileUtils'
 import { createStream } from '../utils/frpBus'
 import { joinUrl } from '../utils/httpUtils'
 import {
@@ -45,7 +45,6 @@ import {
 import type { Thunk } from '../utils/tsHelpers'
 import { useNlpWorker } from '../utils/webWorkerApi'
 import { safeYamlDump } from '../utils/yamlUtils'
-import { sleep } from '../utils/asyncUtils'
 
 function generateOpenAIToolDeclarations(
   allowedTools: string[],
@@ -652,52 +651,104 @@ async function convertTaskNodeToOpenAIMessage(
     const fileNames = fileMappings
       .map((fm) => '- ' + (fm?.opfs || fm?.name || 'unknown'))
       .join('\n')
-    const message: OpenAI.ChatCompletionMessageParam = {
+
+    const sysMessage: OpenAI.ChatCompletionMessageParam = {
       role: 'system',
       content: `user uploaded files to opfs:\n${fileNames}`,
     }
 
     if (useVisionModels) {
-      // build data strings for all of our images in order to send them to vision...
-      const imageContent: OpenAI.ChatCompletionUserMessageParam['content'] =
-        await convertFilesToOpenAIImageContent(fileMappings, getUploadedFile)
-
-      const imageMessage: OpenAI.ChatCompletionMessageParam = {
+      const fileContent = await convertFilesToOpenAIContent(fileMappings, getUploadedFile)
+      const userMessage: OpenAI.ChatCompletionMessageParam = {
         role: 'user',
-        content: imageContent,
+        content: fileContent,
       }
-      return [message, imageMessage]
+      return [sysMessage, userMessage]
     }
-    return [message]
+    return [sysMessage]
   }
 }
 
-async function convertFilesToOpenAIImageContent(
+// TODO:  move this into utils file utils and merge with our old function...
+async function fileToBase64(file: File): Promise<string> {
+  const buf = await file.arrayBuffer()
+  let binary = ''
+  const bytes = new Uint8Array(buf)
+  const chunkSize = 0x8000
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+  }
+
+  const base64 = btoa(binary)
+
+  // 🔒 Sanity check: OpenAI spec wants *raw* base64, not "data:...;base64,"
+  if (base64.startsWith('data:')) {
+    throw new Error('fileToBase64 returned a data URL, expected raw base64 only')
+  }
+
+  return base64
+}
+
+async function convertFilesToOpenAIContent(
   fileMappings: (FileMapping | null)[],
   getFile: (uuid: string) => Promise<File | undefined>,
-) {
-  const imageContent: OpenAI.ChatCompletionUserMessageParam['content'] = []
+): Promise<OpenAI.Chat.Completions.ChatCompletionContentPart[]> {
+  const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = []
+
   for (const fm of fileMappings) {
-    if (fm) {
-      const name = fm?.name || fm?.opfs || 'unknown'
-      if (name.endsWith('png') || name.endsWith('jpg')) {
-        const file: File | undefined = await getFile(fm.uuid)
-        if (file) {
-          const base64Image = await fileToBase64(file)
-          const msgContent: OpenAI.Chat.Completions.ChatCompletionContentPartImage = {
-            type: 'image_url',
-            //TODO: enable "real" image urls from another webpage ....
-            image_url: {
-              url: `data:image/jpeg;base64,${base64Image}`,
-              detail: 'auto',
-            },
-          }
-          imageContent.push(msgContent)
-        }
-      }
+    if (!fm) continue
+    const name = fm.name || fm.opfs || 'unknown'
+    const lower = name.toLowerCase()
+    const file: File | undefined = await getFile(fm.uuid)
+    if (!file) continue
+
+    // Images
+    if (/\.(png|jpe?g|gif|webp)$/i.test(lower)) {
+      const base64 = await fileToBase64(file)
+      content.push({
+        type: 'image_url',
+        image_url: {
+          url: `data:${file.type};base64,${base64}`,
+          detail: 'auto',
+        },
+      })
+    }
+
+    // Audio (OpenAI spec requires base64 + format)
+    else if (/\.(wav|mp3)$/i.test(lower)) {
+      const base64 = await fileToBase64(file)
+      const format = lower.endsWith('wav') ? 'wav' : 'mp3'
+      content.push({
+        type: 'input_audio',
+        input_audio: {
+          data: base64,
+          format,
+        },
+      })
+    }
+
+    // PDF files
+    else if (/\.pdf$/i.test(lower)) {
+      const base64 = await fileToBase64(file)
+      const mime = file.type || 'application/pdf'
+      content.push({
+        type: 'file',
+        file: {
+          file_data: `data:${mime};base64,${base64}`, // ✅ OpenAI expects full data URL
+          filename: name,
+        },
+      })
+    }
+
+    // Unsupported file types (skip or handle differently)
+    else {
+      console.warn(`Skipping unsupported file type for OpenAI: ${name}`)
+      // Or throw if you want stricter behavior
     }
   }
-  return imageContent
+
+  return content
 }
 
 export const chatCompletionToolName = 'chatCompletion'
