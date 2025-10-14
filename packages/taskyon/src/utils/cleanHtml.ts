@@ -40,6 +40,14 @@ export const CLEAN_PRESETS = {
   } satisfies CleanOptions,
 } as const
 
+/**
+ * Cleans an HTML string according to the given options.
+ * - Removes scripts/styles/comments
+ * - Drops unwanted/empty elements
+ * - Optionally prunes nodes without meaningful text
+ * - Strips or whitelists attributes
+ * - Can heuristically focus on main content
+ */
 export function cleanWebpage(htmlString: string, options: CleanOptions = {}): string {
   const opts: Required<CleanOptions> = {
     keepTags: options.keepTags ?? null,
@@ -133,10 +141,14 @@ export function cleanWebpage(htmlString: string, options: CleanOptions = {}): st
   return root.innerHTML
 }
 
+/** Shortcut: cleans webpage using the "enhanced" preset
+ * (keeps common text tags, allows some attributes). */
 export function cleanWebpageEnhanced(htmlString: string): string {
   return cleanWebpage(htmlString, CLEAN_PRESETS.enhanced)
 }
 
+/** Shortcut: aggressively cleans webpage using the
+ * "deep" preset (drops almost all tags/attributes). */
 export function deepCleanWebpage(htmlString: string): string {
   return cleanWebpage(htmlString, CLEAN_PRESETS.deep)
 }

@@ -36,6 +36,7 @@ import { charHash } from '../utils/crypto'
 import { humanizeError } from '../utils/error'
 import { createStream } from '../utils/frpBus'
 import { joinUrl } from '../utils/httpUtils'
+import { convertFileToText } from '../utils/loadFiles'
 import {
   createDeepTransformer,
   deepCopy,
@@ -657,14 +658,16 @@ async function convertTaskNodeToOpenAIMessage(
       content: `user uploaded files to opfs:\n${fileNames}`,
     }
 
-    if (useVisionModels) {
-      const fileContent = await convertFilesToOpenAIContent(fileMappings, getUploadedFile)
+    const fileContent = await makeFilesAiReadable(fileMappings, getUploadedFile, useVisionModels)
+
+    if (fileContent.length > 0) {
       const userMessage: OpenAI.ChatCompletionMessageParam = {
         role: 'user',
         content: fileContent,
       }
       return [sysMessage, userMessage]
     }
+
     return [sysMessage]
   }
 }
@@ -690,12 +693,12 @@ async function fileToBase64(file: File): Promise<string> {
   return base64
 }
 
-async function convertFilesToOpenAIContent(
+async function makeFilesAiReadable(
   fileMappings: (FileMapping | null)[],
   getFile: (uuid: string) => Promise<File | undefined>,
+  nativeModelProcessing: boolean,
 ): Promise<OpenAI.Chat.Completions.ChatCompletionContentPart[]> {
-  const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = []
-
+  const fileContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = []
   for (const fm of fileMappings) {
     if (!fm) continue
     const name = fm.name || fm.opfs || 'unknown'
@@ -704,9 +707,9 @@ async function convertFilesToOpenAIContent(
     if (!file) continue
 
     // Images
-    if (/\.(png|jpe?g|gif|webp)$/i.test(lower)) {
+    if (/\.(png|jpe?g|gif|webp)$/i.test(lower) && nativeModelProcessing) {
       const base64 = await fileToBase64(file)
-      content.push({
+      fileContent.push({
         type: 'image_url',
         image_url: {
           url: `data:${file.type};base64,${base64}`,
@@ -716,10 +719,10 @@ async function convertFilesToOpenAIContent(
     }
 
     // Audio (OpenAI spec requires base64 + format)
-    else if (/\.(wav|mp3)$/i.test(lower)) {
+    else if (/\.(wav|mp3)$/i.test(lower) && nativeModelProcessing) {
       const base64 = await fileToBase64(file)
       const format = lower.endsWith('wav') ? 'wav' : 'mp3'
-      content.push({
+      fileContent.push({
         type: 'input_audio',
         input_audio: {
           data: base64,
@@ -729,10 +732,10 @@ async function convertFilesToOpenAIContent(
     }
 
     // PDF files
-    else if (/\.pdf$/i.test(lower)) {
+    else if (/\.pdf$/i.test(lower) && nativeModelProcessing) {
       const base64 = await fileToBase64(file)
       const mime = file.type || 'application/pdf'
-      content.push({
+      fileContent.push({
         type: 'file',
         file: {
           file_data: `data:${mime};base64,${base64}`, // ✅ OpenAI expects full data URL
@@ -743,12 +746,24 @@ async function convertFilesToOpenAIContent(
 
     // Unsupported file types (skip or handle differently)
     else {
-      console.warn(`Skipping unsupported file type for OpenAI: ${name}`)
-      // Or throw if you want stricter behavior
+      try {
+        const text = await convertFileToText(file)
+
+        fileContent.push({
+          type: 'text',
+          text: `Contents of file: ${name}\n\n` + "'''" + text + "'''",
+        })
+      } catch (err) {
+        fileContent.push({
+          type: 'text',
+          text: `Skipping unsupported file type: ${name}`,
+        })
+        console.warn(`Skipping unsupported file type for OpenAI: ${name}`, err)
+        // Or throw if you want stricter behavior
+      }
     }
   }
-
-  return content
+  return fileContent
 }
 
 export const chatCompletionToolName = 'chatCompletion'
