@@ -15,16 +15,23 @@
       <q-separator />
 
       <q-card-section>
-        <q-tree
-          :nodes="treeData"
-          node-key="id"
-          accordion
-          dense
-          selected-color="primary"
-          no-nodes-label="No files to show!"
-          @lazy-load="handleLazyLoad"
-          @update:selected="onSelect"
-        />
+        <q-tree :nodes="treeData" node-key="id" accordion dense @lazy-load="handleLazyLoad">
+          <template #default-header="{ node }">
+            <div class="row items-center no-wrap cursor-pointer" @click="onNodeClick(node)">
+              <q-icon :name="node.icon" class="q-mr-sm" />
+              <div class="ellipsis">{{ node.label }}</div>
+              <q-space />
+              <q-btn
+                v-if="node.kind === 'file'"
+                dense
+                flat
+                round
+                :icon="matDownload"
+                @click.stop="downloadFile(node)"
+              />
+            </div>
+          </template>
+        </q-tree>
       </q-card-section>
     </q-card>
   </q-page>
@@ -35,7 +42,7 @@ import { ref, onMounted, nextTick } from 'vue'
 import { uid } from 'quasar'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import type { QTreeNode } from 'quasar'
-import { matFolder } from '@quasar/extras/material-icons'
+import { matDownload, matFolder } from '@quasar/extras/material-icons'
 import { mdiFile } from '@quasar/extras/mdi-v6'
 import InfoDialog from 'src/components/InfoDialog.vue'
 
@@ -146,25 +153,19 @@ async function handleLazyLoad({
 
 /* ---------- click selection ---------- */
 
-async function onSelect(ids: string[]) {
-  const id = ids[0]
-  if (!id) return
-  console.log('[onSelect] Clicked node id=', id)
+async function onNodeClick(node: TreeNode) {
+  if (node.kind === 'directory') return // let expand/collapse happen
+  await downloadFile(node)
+}
 
-  // depth-first search for the clicked node
-  const stack: TreeNode[] = [...treeData.value]
-  while (stack.length) {
-    const n = stack.pop()!
-    if (n.id === id) {
-      console.log('  ├─ Node found:', n)
-      if (n.kind === 'file') {
-        const file = await (n.handle as FileSystemFileHandle).getFile()
-        console.log(`▼ FILE CONTENT (${n.label}) ▼\n${await file.text()}\n▲ END FILE ▲`)
-      }
-      break
-    }
-    if (n.children) stack.push(...(n.children as TreeNode[]))
-  }
+async function downloadFile(node: TreeNode) {
+  const file = await (node.handle as FileSystemFileHandle).getFile()
+  const url = URL.createObjectURL(file)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = file.name
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 /* ---------- uploads ---------- */
