@@ -16,7 +16,13 @@
         :preview-size="100"
         :get-file="getFile"
       />
-      <q-btn v-if="state.appConfiguration.expertMode" flat size="sm" :icon="mdiFolder" :to="`/fm`">
+      <q-btn
+        v-if="state.appConfiguration.expertMode"
+        flat
+        size="sm"
+        :icon="mdiFolder"
+        :to="`/fm/${fileMappings[0]?.opfs}`"
+      >
         <q-tooltip> Open File Manager </q-tooltip>
       </q-btn>
     </div>
