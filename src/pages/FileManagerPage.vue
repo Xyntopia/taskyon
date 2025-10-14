@@ -29,6 +29,14 @@
                 :icon="matDownload"
                 @click.stop="downloadFile(node)"
               />
+              <q-btn
+                v-if="node.kind === 'file'"
+                dense
+                flat
+                round
+                :icon="matContentCopy"
+                @click.stop="copyPath(node)"
+              />
             </div>
           </template>
         </q-tree>
@@ -38,13 +46,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
-import { uid } from 'quasar'
-import FileDropzone from 'src/components/FileDropzone.vue'
-import type { QTreeNode } from 'quasar'
-import { matDownload, matFolder } from '@quasar/extras/material-icons'
+import { matContentCopy, matDownload, matFolder } from '@quasar/extras/material-icons'
 import { mdiFile } from '@quasar/extras/mdi-v6'
+import type { QTreeNode } from 'quasar'
+import FileDropzone from 'src/components/FileDropzone.vue'
 import InfoDialog from 'src/components/InfoDialog.vue'
+import { nextTick, onMounted, ref } from 'vue'
 
 /* ---------- helpers ---------- */
 
@@ -66,6 +73,7 @@ interface TreeNode extends QTreeNode {
   handle: FileSystemHandle
   kind: 'file' | 'directory'
   size?: number
+  path: string
 }
 
 /* ---------- state ---------- */
@@ -74,29 +82,32 @@ const treeData = ref<TreeNode[]>([])
 
 /* ---------- directory → nodes ---------- */
 
-async function dirHandleToNodes(dir: DirHandle): Promise<TreeNode[]> {
+async function dirHandleToNodes(dir: DirHandle, parentPath = ''): Promise<TreeNode[]> {
   console.log('[dirHandleToNodes] Reading directory', dir)
   const out: TreeNode[] = []
   for await (const [name, handle] of dir.entries()) {
     console.log('  ├─ found', name, 'kind=', handle.kind)
+    const fullPath = parentPath ? `${parentPath}/${name}` : name
     if (handle.kind === 'file') {
       const file = await handle.getFile()
       out.push({
-        id: uid(),
+        id: fullPath, // use path as stable id
         label: `${name} · ${formatSize(file.size)}`,
         icon: mdiFile,
         kind: 'file',
         size: file.size,
         handle,
+        path: fullPath, // <── keep for copy
       })
     } else {
       out.push({
-        id: uid(),
+        id: fullPath,
         label: name,
         icon: matFolder,
         kind: 'directory',
         handle,
-        lazy: true, // let QTree know it should invoke @lazy-load
+        lazy: true,
+        path: fullPath,
       })
     }
   }
@@ -116,7 +127,7 @@ async function dirHandleToNodes(dir: DirHandle): Promise<TreeNode[]> {
 async function buildRoot() {
   console.log('[buildRoot] Fetching OPFS root')
   const root: DirHandle = await navigator.storage.getDirectory()
-  treeData.value = await dirHandleToNodes(root)
+  treeData.value = await dirHandleToNodes(root, '')
   /* Force refresh in case Quasar cached the array reference */
   await nextTick()
   console.log('[buildRoot] Root built; nodes =', treeData.value.length)
@@ -135,7 +146,7 @@ async function handleLazyLoad({
   // 1️⃣  use node.lazy as the decisive flag
   if (node.kind === 'directory' && node.lazy) {
     try {
-      const children = await dirHandleToNodes(node.handle as DirHandle)
+      const children = await dirHandleToNodes(node.handle as DirHandle, node.path)
 
       // update the node so later clicks can find the files
       node.children = children
@@ -166,6 +177,15 @@ async function downloadFile(node: TreeNode) {
   a.download = file.name
   a.click()
   URL.revokeObjectURL(url)
+}
+
+async function copyPath(node: TreeNode) {
+  try {
+    await navigator.clipboard.writeText(node.path)
+    console.log('[copyPath] copied', node.path)
+  } catch (err) {
+    console.error('[copyPath] failed:', err)
+  }
 }
 
 /* ---------- uploads ---------- */
