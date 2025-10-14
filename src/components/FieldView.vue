@@ -26,7 +26,7 @@
       <InfoDialog class="lt-sm col-auto" :info-text="item.description" />
     </template>
     <div class="col-grow row" :data-cy="item.label">
-      <div class="col" style="min-width: 200px; flex: 1 0 auto">
+      <div class="col" style="flex: 1 0 auto">
         <!--valueSlot-->
         <slot />
       </div>

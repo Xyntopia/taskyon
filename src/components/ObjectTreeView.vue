@@ -171,6 +171,7 @@
           hide-hint
           :model-value="prop.node.value"
           :rules="['anyColor']"
+          style="max-width: 100px"
           @update:model-value="(val: string | number | null) => updateValue(prop.node.path, val)"
         >
           <template #append>
