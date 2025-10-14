@@ -17,11 +17,11 @@
         :get-file="getFile"
       />
       <q-btn
-        v-if="state.appConfiguration.expertMode"
+        v-if="state.appConfiguration.expertMode && fileMappings[0]?.opfs"
         flat
         size="sm"
         :icon="mdiFolder"
-        :to="`/fm/${fileMappings[0]?.opfs}`"
+        :to="`/fm/${fileMappings[0].opfs}`"
       >
         <q-tooltip> Open File Manager </q-tooltip>
       </q-btn>
