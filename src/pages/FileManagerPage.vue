@@ -16,7 +16,6 @@
 
       <q-card-section>
         <q-tree
-          v-model:selected="selectedNodeId"
           v-model:expanded="expandedNodeIds"
           :nodes="treeData"
           node-key="id"
@@ -26,7 +25,11 @@
           @lazy-load="handleLazyLoad"
         >
           <template #default-header="{ node }">
-            <div class="row items-center no-wrap cursor-pointer" @click="onNodeClick(node)">
+            <div
+              class="row items-center no-wrap cursor-pointer"
+              :class="{ 'highlighted-leaf': node.id === selectedNodeId }"
+              @click="onNodeClick(node)"
+            >
               <q-icon :name="node.icon" class="q-mr-sm" />
               <div class="ellipsis">{{ node.label }}</div>
               <q-space />
@@ -73,29 +76,45 @@ const normalizedPath = computed(() => {
     : props.initialPath
 })
 
+/* ---------- state ---------- */
+
+const treeData = ref<TreeNode[]>([])
 const selectedNodeId = ref<string | null>(null)
 const expandedNodeIds = ref<string[]>([])
 
-onMounted(async () => await buildRoot())
+watch(normalizedPath, async (path) => {
+  if (path && treeData.value.length > 0) {
+    await openPath(path)
+  }
+})
 
-watch(
-  normalizedPath,
-  async (path) => {
-    if (path) await openPath(path)
-  },
-  { immediate: true },
-)
+onMounted(async () => {
+  await buildRoot()
+  if (normalizedPath.value) {
+    await openPath(normalizedPath.value)
+  }
+})
 
 async function openPath(path: string) {
   const segments = path.split('/').filter(Boolean)
   let currentNodes = treeData.value
   let current: TreeNode | undefined
 
+  console.log(
+    '[openPath] path=',
+    path,
+    'segments=',
+    segments,
+    'root IDs=',
+    treeData.value.map((n) => n.id),
+  )
+
   for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i]
-    current = currentNodes.find((n) => n.id.endsWith(seg))
+    const segPath = segments.slice(0, i + 1).join('/')
+    current = currentNodes.find((n) => n.id === segPath)
+
     if (!current) {
-      console.warn('[openPath] segment not found:', seg)
+      console.warn('[openPath] segment not found:', segPath)
       return
     }
 
@@ -105,15 +124,15 @@ async function openPath(path: string) {
         current.children = children
         current.lazy = false
       }
-      // expand it in the UI
       if (!expandedNodeIds.value.includes(current.id)) {
         expandedNodeIds.value.push(current.id)
       }
       currentNodes = (current.children ?? []) as TreeNode[]
     } else {
-      // select the file
       if (i === segments.length - 1) {
+        console.log('[openPath] normalizedPath', path, '→ selecting', current?.id)
         selectedNodeId.value = current.id
+        console.log('[openPath] selected leaf', current.id)
       }
     }
   }
@@ -141,10 +160,6 @@ interface TreeNode extends QTreeNode {
   size?: number
   path: string
 }
-
-/* ---------- state ---------- */
-
-const treeData = ref<TreeNode[]>([])
 
 /* ---------- directory → nodes ---------- */
 
@@ -269,6 +284,12 @@ async function addFiles(files: File[]) {
 }
 
 /* ---------- bootstrap ---------- */
-
-onMounted(buildRoot)
 </script>
+
+<style scoped>
+.highlighted-leaf {
+  background: var(--q-secondary);
+  color: white;
+  border-radius: 4px;
+}
+</style>
