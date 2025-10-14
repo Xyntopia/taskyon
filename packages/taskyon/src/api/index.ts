@@ -6,6 +6,7 @@ import type { TaskyonMessage } from '../types/apiTypes'
 import { partialTaskDraft } from '../types/node'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import { type Port } from '../utils/frpBus'
+import type { ByType } from '../utils/tsHelpers'
 
 export { llmSettings, TyToolchainConfig } from '../types/profiles'
 export { BaseMessage, TyP2P, TaskyonMessage } from '../types/apiTypes'
@@ -40,11 +41,9 @@ export const processTasks =
     const initialIds = tasks.map((t) => t.id)
     const subTasks = new Set<string>(initialIds)
 
-    type ByType<K extends TaskyonMessage['type']> = Extract<TaskyonMessage, { type: K }>
-
     // filter for all subtasks
     const subTasksCreated = tyPort.receive
-      .narrow((m): m is ByType<'taskCreated'> & { task: { id: string } } => {
+      .narrow((m): m is ByType<'taskCreated', TaskyonMessage> & { task: { id: string } } => {
         console.log('api received', m)
         /*const valid =
           m.type === 'taskCreated' && 'task' in m && !!m.task?.id && subTasks.has(m.task?.parentID)*/

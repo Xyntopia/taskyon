@@ -47,3 +47,5 @@ export type Thunk<T> = () => T
 
 // used to "hide" properties of a type to make it more readable..
 export type Identity<T> = T
+
+export type ByType<K extends T['type'], T extends { type: string }> = Extract<T, { type: K }>
