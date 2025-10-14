@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { sha256UrlSafeHashFromFile } from '../utils/encoding'
+import type { ByType } from '../utils/tsHelpers'
 import { RemoteFunctionCall, RemoteFunctionResponse } from './messages'
 import { partialTaskDraft, TaskNode } from './node'
 import { ToolBase } from './tools'
@@ -92,6 +94,18 @@ export const TaskWorkerMessage = z.discriminatedUnion('type', [
 ])
 export type TaskWorkerMessage = z.infer<typeof TaskWorkerMessage>
 
+// File message
+export const FileMessage = z.object({
+  type: z.literal('file'),
+  id: z.string(),
+  name: z.string(),
+  mime: z.string(),
+  size: z.number(),
+  store: z.enum(['memory', 'opfs']).optional(),
+  file: z.file(), // only supported over MessageChannel for now
+})
+export type FileMessage = z.infer<typeof FileMessage>
+
 export const TyP2P = z.discriminatedUnion('type', [EncryptedTasks, RequestTask, TaskCreated])
 export type TyP2P = z.infer<typeof TyP2P>
 
@@ -108,6 +122,7 @@ export const TaskyonMessage = z.discriminatedUnion('type', [
   z.object({ ...BaseMessage.shape, ...TaskChainMessage.shape }),
   z.object({ ...BaseMessage.shape, ...FunctionDescriptionMessage.shape }),
   z.object({ ...BaseMessage.shape, ...TyReadyMessage.shape }),
+  z.object({ ...BaseMessage.shape, ...FileMessage.shape }),
 ])
 
 // If you want to map them to { label, value } for q-select:
@@ -118,3 +133,17 @@ export const TaskyonMessage = z.discriminatedUnion('type', [
 
 export type TaskyonMessage = z.infer<typeof TaskyonMessage>
 export type messageTypes = TaskyonMessage['type']
+
+export const sendFile =
+  (send: (msg: ByType<'file', TaskyonMessage>) => void) => async (file: File) => {
+    const id = await sha256UrlSafeHashFromFile(file)
+    send({
+      type: 'file',
+      id,
+      name: file.name,
+      mime: file.type,
+      size: file.size,
+      file,
+    })
+    return id
+  }

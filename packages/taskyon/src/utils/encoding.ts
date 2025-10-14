@@ -35,3 +35,9 @@ export async function sha256UrlSafeHash(obj: unknown) {
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
   return uint8ArrayToBase64UrlSafe(hashBuffer)
 }
+
+export async function sha256UrlSafeHashFromFile(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer()
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
+  return uint8ArrayToBase64UrlSafe(hashBuffer)
+}
