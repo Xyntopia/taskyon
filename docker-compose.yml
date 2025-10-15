@@ -82,8 +82,8 @@ services:
   tauri:
     build:
       context: .
-      dockerfile: Dockerfile.tauri
-      target: artifacts
+      dockerfile: ./Dockerfile
+      target: export
     volumes:
       - ./dist-desktop:/out
     # no ports needed; this just produces files

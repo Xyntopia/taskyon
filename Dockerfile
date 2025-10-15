@@ -41,6 +41,9 @@ FROM prepare AS production-builder
 # this should build the app inside the folder /app/dist/spa
 RUN ls -la && yarn quasar prepare && yarn build
 
+# ───────────────────────────────────────────────────────
+# build debug build
+# ───────────────────────────────────────────────────────
 
 FROM prepare AS debug-builder
 
@@ -139,3 +142,78 @@ FROM debug-builder AS https
 STOPSIGNAL SIGTERM
 EXPOSE 9000
 CMD ["yarn", "quasar", "serve", "--history", "--https", "-p 9000", "dist/spa/"]
+
+#########################################################
+# ───────────────────────────────────────────────────────
+# Bundle with Tauri for desktop
+# ───────────────────────────────────────────────────────
+FROM production-builder AS tauri-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install native build tools, GTK/WebKit2 and full EGL/GL + X11 support
+RUN apt-get update && \
+    apt-get install -y \
+      build-essential \
+      cmake \
+      python3 \
+      make \
+      g++ \
+      # TODO:  remove the old versions/pinning once the issue with the latest version is resolved
+      #        it was causing a blank screen of taskyon with the error:  
+      #        Could not create default EGL display: EGL_BAD_PARAMETER. Aborting... 
+      # libwebkit2gtk-4.1-dev=2.44.0-2 \
+      # libjavascriptcoregtk-4.1-dev=2.44.0-2 && \
+      libwebkit2gtk-4.0-dev \
+      libjavascriptcoregtk-4.0-dev \
+      libgtk-3-dev \
+      libglib2.0-dev pkg-config \
+      libayatana-appindicator3-dev \
+      libxdo-dev \
+      librsvg2-dev \
+      libssl-dev \
+      # graphics/runtime libs:
+      libgl1-mesa-dev \
+      libegl1-mesa-dev \
+      libgl1-mesa-dri \
+      libdrm2 \
+      libgbm1 \
+      libx11-dev \
+      libxrandr-dev \
+      libxss-dev \
+      libxcomposite-dev \
+      libxcursor-dev \
+      libxdamage-dev \
+      libxi-dev \
+      libdbus-1-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# this is only for debuggin to confirm we have the correct libraries...
+RUN find / -name glib-2.0.pc 2>/dev/null
+ENV PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+RUN pkg-config --libs --cflags glib-2.0
+
+# Install Rust toolchain non‑interactively and source its env immediately
+# 1) Mount caches at /tmp/…  
+# 2) Install rustup into them  
+# 3) Copy into real home dirs
+RUN --mount=type=cache,target=/tmp/cargo-home \
+    --mount=type=cache,target=/tmp/rustup-home \
+    CARGO_HOME=/tmp/cargo-home RUSTUP_HOME=/tmp/rustup-home \
+      curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf \
+      | sh -s -- -y \
+    && cp -a /tmp/cargo-home /root/.cargo \
+    && cp -a /tmp/rustup-home /root/.rustup
+
+# Make sure cargo/bin stays on PATH for every subsequent RUN
+ENV PATH="/root/.cargo/bin:${PATH}"
+ENV HOME="/root"
+
+# Build the Tauri bundle
+RUN yarn tauri build
+
+# ───────────────────────────────────────────────────────
+# Extract Tauri 
+# ───────────────────────────────────────────────────────
+FROM scratch AS export
+COPY --from=tauri-builder /app/src-tauri/target/release/ /bundle
