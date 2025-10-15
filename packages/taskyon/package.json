@@ -2,7 +2,7 @@
   "name": "@taskyon/taskyon",
   "private": true,
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.5.0",
   "sideEffects": false,
   "exports": {
     ".": {

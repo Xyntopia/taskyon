@@ -1,6 +1,6 @@
 {
   "name": "@taskyon/tyclient",
-  "version": "0.4.6",
+  "version": "0.5.0",
   "license": "MIT",
   "main": "./dist/tyclient.js",
   "module": "./dist/tyclient.mjs",
