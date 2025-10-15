@@ -17,6 +17,9 @@
     >
       <q-tooltip>Expert users can use SQL queries on all taskyon data!</q-tooltip>
     </q-btn>
+    <q-btn flat :icon="mdiFolderMultiple" label="File Manager" to="/fm">
+      <q-tooltip>Open File Manager to see all stored files in taskyon.</q-tooltip>
+    </q-btn>
     <q-table
       style="font-size: 0.8em"
       wrap-cells
@@ -114,6 +117,7 @@ import {
   mdiApproximatelyEqual,
   mdiDatabase,
   mdiDatabaseRemove,
+  mdiFolderMultiple,
   mdiForum,
   mdiRefresh,
 } from '@quasar/extras/mdi-v6'
