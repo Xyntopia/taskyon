@@ -50,7 +50,6 @@
     "@scure/bip39": "^1.5.0",
     "@sqlite.org/sqlite-wasm": "^3.44.0-build1",
     "@supabase/supabase-js": "^2.39.0",
-    "@taskyon/taskyon": "^0.0.1",
     "@tauri-apps/api": "^2.6.0",
     "@vueuse/core": "^10.10.0",
     "axios": "^1.12.2",
