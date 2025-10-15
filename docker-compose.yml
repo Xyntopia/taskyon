@@ -86,8 +86,6 @@ services:
       target: export
     volumes:
       - ./dist-desktop:/out
-    # no ports needed; this just produces files
-    command: /bin/true
 
   relay:
     image: xyntopia/taskyon-relay:latest

@@ -159,13 +159,9 @@ RUN apt-get update && \
       python3 \
       make \
       g++ \
-      # TODO:  remove the old versions/pinning once the issue with the latest version is resolved
-      #        it was causing a blank screen of taskyon with the error:  
-      #        Could not create default EGL display: EGL_BAD_PARAMETER. Aborting... 
-      # libwebkit2gtk-4.1-dev=2.44.0-2 \
-      # libjavascriptcoregtk-4.1-dev=2.44.0-2 && \
-      libwebkit2gtk-4.0-dev \
-      libjavascriptcoregtk-4.0-dev \
+      libwebkit2gtk-4.1-dev \
+      libjavascriptcoregtk-4.1-dev \
+      libsoup-3.0-dev \
       libgtk-3-dev \
       libglib2.0-dev pkg-config \
       libayatana-appindicator3-dev \
@@ -188,8 +184,9 @@ RUN apt-get update && \
       libdbus-1-dev && \
     rm -rf /var/lib/apt/lists/*
 
+
 # this is only for debuggin to confirm we have the correct libraries...
-RUN find / -name glib-2.0.pc 2>/dev/null
+#RUN find / -name glib-2.0.pc 2>/dev/null
 ENV PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
 RUN pkg-config --libs --cflags glib-2.0
 
@@ -215,5 +212,7 @@ RUN yarn tauri build
 # ───────────────────────────────────────────────────────
 # Extract Tauri 
 # ───────────────────────────────────────────────────────
-FROM scratch AS export
-COPY --from=tauri-builder /app/src-tauri/target/release/ /bundle
+# FROM scratch AS export # we can't do this, because we need the "copy" command
+FROM busybox AS export
+COPY --from=tauri-builder /app/src-tauri/target/release/bundle/ /bundle
+CMD cp -rv /bundle/* /out/
