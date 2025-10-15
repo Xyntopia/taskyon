@@ -15,35 +15,36 @@ export const simpleDialogSchema = {
   properties: {
     /* Explicit selector so even “tiny” models know what to build */
     variant: {
+      type: 'string',
       enum: ['prompt', 'options'],
       description:
-        'variant - Specifies the dialog type to render. This property is required and determines which additional properties are expected. ',
+        'Specifies the dialog type to render. Determines which additional properties are expected.',
     },
 
     /* Common fields */
     title: { type: 'string' },
     message: { type: 'string' },
 
-    /* Prompt variant ---------------------------------------------- */
+    /* Prompt variant */
     prompt: {
       type: 'object',
       additionalProperties: true,
       properties: {
         model: { type: 'string' },
-        type: { enum: ['text', 'number'] },
+        type: { type: 'string', enum: ['text', 'number'] },
         min: { type: 'number' },
         max: { type: 'number' },
         step: { type: 'number' },
       },
     },
 
-    /* Options variant --------------------------------------------- */
+    /* Options variant */
     options: {
       type: 'object',
       additionalProperties: true,
       required: ['items'],
       properties: {
-        type: { enum: ['radio', 'checkbox', 'toggle'] }, // ''
+        type: { type: 'string', enum: ['radio', 'checkbox', 'toggle'] },
         items: {
           type: 'array',
           items: {
@@ -52,8 +53,7 @@ export const simpleDialogSchema = {
             required: ['label', 'value'],
             properties: {
               label: { type: 'string' },
-              value: { anyOf: [{ type: 'string' }, { type: 'number' }] },
-              //color: { type: 'string' },
+              value: { type: ['string', 'number'] }, // ✅ replaced anyOf with simple union
             },
           },
         },
@@ -63,23 +63,9 @@ export const simpleDialogSchema = {
     /* ---- Buttons ------------------------------------------------- */
     /* Strings here override Quasar’s default labels.
        We DON’T expose the full QBtn prop object: the AI won’t style. */
-    ok: { anyOf: [{ type: 'boolean' }, { type: 'string' }] },
-    cancel: { anyOf: [{ type: 'boolean' }, { type: 'string' }] },
+    ok: { type: ['boolean', 'string'] }, // ✅ replaced anyOf
+    cancel: { type: ['boolean', 'string'] }, // ✅ replaced anyOf
   },
-
-  /* Enforce one-of without deleting props so schema stays simple */
-  oneOf: [
-    {
-      properties: { variant: { const: 'prompt' } },
-      required: ['prompt'],
-      not: { required: ['options'] },
-    },
-    {
-      properties: { variant: { const: 'options' } },
-      required: ['options'],
-      not: { required: ['prompt'] },
-    },
-  ],
 
   /* ---- Behaviour toggles -------------------------------------- */
   // persistent: { type: 'boolean' }, // AI may need modal locks
