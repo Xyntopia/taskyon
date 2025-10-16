@@ -104,7 +104,7 @@ simple chatCompletion for non-tool calls.
       offIcon: matVisibilityOff,
       label: 'Vision',
       description: `Toggle Vision ON/OFF. If a model supports vision, we
-will send the model uploaded images and pdf files.`,
+will send the model attached images and pdf files..`,
     }),
   taskChatTemplates: z
     .object({
