@@ -1173,6 +1173,7 @@ export const testFileUpload = async () => {
     createChatCompletionTask({
       prompts: ['The user just uploaded a file, can you extract the data below?'],
       verbosity: 'high',
+      reasoning_effort: 'low',
       //reasoning_effort: undefined,
       model: 'google/gemini-2.5-flash-lite',
       schema: {

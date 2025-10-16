@@ -25,11 +25,14 @@ export type processTasksOpts = {
   timeoutMs?: number
   signal?: AbortSignal
   quitCondition?: (t: TaskNode) => boolean
+  show?: boolean
 }
 
 export const createChatCompletionTask = (args: chatCompletionParams) =>
   toolCall<chatCompletionParams>({ name: 'chatCompletion', arguments: args })
 
+// we make the opts mandatory on purpose so that poeple thing about
+// some sort of quitcondition.
 export const processTasks =
   <T extends { type: string }>(tyPort: Port<T | TaskyonMessage>) =>
   async (taskList: partialTaskDraft[][], opts: processTasksOpts) => {
@@ -39,7 +42,7 @@ export const processTasks =
       type: 'tasks',
       tasks: tasks,
       execute: true,
-      show: true, // we want to show this task in our GUI as a succesful test
+      show: opts.show ?? true, // we want to show this task in our GUI as a succesful test
       origin: 'Taskyon Diagnostics',
     })
 
