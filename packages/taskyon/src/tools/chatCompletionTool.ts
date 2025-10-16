@@ -70,7 +70,6 @@ function generateOpenAIToolDeclarations(
 // TODO: for configuration & allowedTools it would be good if we could add
 // this from a "default" Configuration? And then have them as function parameters?
 // t.configuration = finishedTask.configuration
-// TODO: refactor & clean up this function ;)
 export async function processChatTask(
   allowedTools: string[],
   toolDefs: Record<string, ToolBase>,
@@ -149,6 +148,8 @@ async function llmRequest(
   schema?: Record<string, unknown>,
   siteUrl?: string,
   webSearch?: WebSearchOptions,
+  reasoning_effort?: 'low' | 'high' | 'medium',
+  verbosity?: OpenAI.ChatCompletionCreateParams['verbosity'],
 ) {
   const streamTask = true
   const request = await createChatCompletionRequest(
@@ -159,6 +160,8 @@ async function llmRequest(
     streamTask, // for now, we always want to stream our task...
     tools,
     webSearch,
+    reasoning_effort,
+    verbosity,
     siteUrl,
   )
   const chatCompletion = await callLLM(
@@ -841,13 +844,21 @@ export async function createChatCompletionTool(
             'A json schema object which we can use to generate a specific response and parse it.',
           additionalProperties: true,
         },
+        reasoning_effort: {
+          enum: ['low', 'high', 'medium'],
+          description: 'How many reasoning tokens should models with reasonin capability use?',
+        },
+        verbosity: {
+          type: 'string',
+          enum: ['low', 'high', 'medium'],
+          description: 'how verbose should the reponse be?',
+        },
       },
     } as const satisfies JSONSchema7,
-    function: async (
-      { model, goal, llmTools, allowedTools, prompts, schema },
-      context: toolContext,
-    ) => {
+    function: async (opts, context: toolContext) => {
       //////////   INITIALIZATION
+      const { model, goal, llmTools, allowedTools, prompts, schema, reasoning_effort, verbosity } =
+        opts
       const tools = allowedTools ?? []
       const {
         useBasePrompt,
@@ -937,6 +948,8 @@ export async function createChatCompletionTool(
               searchContextSize: 'medium',
             }
           : undefined,
+        reasoning_effort,
+        verbosity,
       )
 
       // parse the response into our own type ...
@@ -982,6 +995,7 @@ export async function createChatCompletionTool(
         }
 
         metaInfo.rawOutput = { choice }
+        console.log('saving task metadata', metaInfo)
         void taskManager.metaUpsert(currentTask.id, metaInfo, 'shallow_merge')
       }
 

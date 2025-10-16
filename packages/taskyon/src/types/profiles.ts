@@ -96,13 +96,16 @@ simple chatCompletion for non-tool calls.
   formulas and generally make the chat a little more fancy than just plain
   text. You can check/change the base prompt in the settings...`,
     }),
-  tryUsingVisionModels: z.boolean().default(true).meta({
-    icon: matVisibility,
-    offIcon: matVisibilityOff,
-    label: 'Vision',
-    description:
-      'Toggle Vision ON/OFF. If a model supports vision, we will try to use that for uploaded images',
-  }),
+  tryUsingVisionModels: z
+    .boolean()
+    .default(true)
+    .meta({
+      icon: matVisibility,
+      offIcon: matVisibilityOff,
+      label: 'Vision',
+      description: `Toggle Vision ON/OFF. If a model supports vision, we
+will send the model uploaded images and pdf files.`,
+    }),
   taskChatTemplates: z
     .object({
       basePrompt: z.string().meta({

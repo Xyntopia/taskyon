@@ -415,12 +415,20 @@ type tyChatCompletion = OpenAI.ChatCompletionCreateParams & {
     sort?: 'price' | 'throughput'
     max_price?: Record<string, number>
   }
-  plugins?: {
-    id: 'web'
-    engine?: 'native' | 'exa' | undefined
-    max_results?: number // Defaults to 5
-    search_prompt?: string
-  }[]
+  plugins?: (
+    | {
+        id: 'web'
+        engine?: 'native' | 'exa' | undefined
+        max_results?: number // Defaults to 5
+        search_prompt?: string
+      }
+    | {
+        id: 'file-parser'
+        pdf: {
+          engine: 'native' | 'pdf-text' | 'mistral-ocr'
+        }
+      }
+  )[]
 }
 
 function createChunks(lines: string[]) {
@@ -460,6 +468,8 @@ export async function createChatCompletionRequest(
   stream: boolean,
   functions: OpenAI.Chat.Completions.ChatCompletionTool[],
   webSearch?: WebSearchOptions,
+  reasoning_effort?: 'low' | 'high' | 'medium',
+  verbosity?: OpenAI.ChatCompletionCreateParams['verbosity'],
   siteUrl?: string,
   maxSchemaIdLength: number = 9, // max length of the schema id (default is 9, because e.g. mistral has that limit)
 ) {
@@ -485,10 +495,12 @@ export async function createChatCompletionRequest(
         }
       : { type: 'text' },
     user: 'taskyon',
+
     //temperature: 0.0, // deprecated for gpt-5
     stream: stream && config.streamSupport,
     stream_options: { include_usage: true },
     store: false,
+    ...(verbosity ? { verbosity } : {}),
     n: 1,
     ...(functions.length > 0 && { tools: functions, tool_choice: 'auto' }),
     // the following comes from openrouter
@@ -499,18 +511,19 @@ export async function createChatCompletionRequest(
     //const models = await availableModels(api.baseURL, apiKey, headers, false)
     //if (models[api.selectedModel]?.supported_parameters?.includes('reasoning')) {
     // we can use reasoning with this model
-    tyPayload.reasoning = {
-      // One of the following (not both):
-      // Can be "high", "medium", or "low" (OpenAI-style)
-      // for other APIs, we use max_tokens
-      effort: 'low',
-      // max tokens can only be used if we don't use "effort"
-      // max_tokens: 2000, // Specific token limit (Anthropic-style)
-      // Optional: Default is false. All models support this.
-      exclude: false, // Set to true to exclude reasoning tokens from response
-      // Or enable reasoning with the default parameters:
-      enabled: true, // Default: inferred from `effort` or `max_tokens`
-    }
+    if (reasoning_effort)
+      tyPayload.reasoning = {
+        // One of the following (not both):
+        // Can be "high", "medium", or "low" (OpenAI-style)
+        // for other APIs, we use max_tokens
+        effort: reasoning_effort,
+        // max tokens can only be used if we don't use "effort"
+        // max_tokens: 2000, // Specific token limit (Anthropic-style)
+        // Optional: Default is false. All models support this.
+        exclude: false, // Set to true to exclude reasoning tokens from response
+        // Or enable reasoning with the default parameters:
+        // enabled: true, // Default: inferred from `effort` or `max_tokens`
+      }
     tyPayload.provider = {
       //only: ['GMICloud'],
       // TODO: we need to make this generic. and on certain errors, avoid specific providers...
@@ -531,6 +544,12 @@ export async function createChatCompletionRequest(
         */
           //search_prompt: 'Some relevant web results:', // See default below
         },
+        {
+          id: 'file-parser',
+          pdf: {
+            engine: 'native',
+          },
+        },
       ]
       tyPayload.web_search_options = {
         search_context_size: webSearch.searchContextSize,
@@ -547,6 +566,24 @@ export async function createChatCompletionRequest(
       // we can choose any timeout that we want
       // the 115*1000 ms come from the 120s timeout for taskyon.space in the free version..
       timeout: config.name === 'taskyon' ? 115 * 1000 : 5 * 60 * 1000,
+    }
+  } else if (config.name === 'openai') {
+    if (webSearch)
+      payload.web_search_options = {
+        search_context_size: webSearch.searchContextSize,
+      }
+    payload.reasoning_effort = reasoning_effort ?? 'minimal'
+
+    return {
+      headers,
+      payload,
+      url: config.endpoint,
+      // in case we have the openai api we need to wait for the thinking to finish
+      // so we are giving it a lot more time... (almost 5 minutes..)
+      // for openai we are not restricted to supabase edge servers, so
+      // we can choose any timeout that we want
+      // the 115*1000 ms come from the 120s timeout for taskyon.space in the free version..
+      timeout: 5 * 60 * 1000,
     }
   } else
     return {

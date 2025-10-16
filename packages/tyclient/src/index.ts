@@ -45,7 +45,7 @@ const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
 
       const channel = new MessageChannel()
       const targetOrigin = new URL(iframe.src, location.href).origin || '*' // '' for about:blank/file:
-      console.log('tyclient establishing iframe communication to', targetOrigin)
+      //console.log('tyclient establishing iframe communication to', targetOrigin)
 
       // self‑destructing listener – removed automatically after it fires once
       const handleFirst: (ev: MessageEvent) => void = (ev) => {
