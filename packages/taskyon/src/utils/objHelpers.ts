@@ -241,6 +241,87 @@ export const createDeepTransformer = ({
   return transform
 }
 
+export function makeTruncateTransformer<T>(
+  maxLen: number,
+  mode: 'truncate' | 'remove' | 'replace' = 'truncate',
+  placeholder = '[truncated]',
+): (obj: T) => T {
+  return createDeepTransformer({
+    valueFn: (val) => {
+      if (typeof val === 'string' && val.length > maxLen) {
+        if (mode === 'truncate') {
+          return (val.slice(0, maxLen) + placeholder) as typeof val
+        }
+        if (mode === 'replace') {
+          return placeholder as typeof val
+        }
+        if (mode === 'remove') {
+          return undefined
+        }
+      }
+      return val
+    },
+  }) as (obj: T) => T
+}
+
+export function createDotPathTransformer(
+  rules: Record<string, (currentValue: unknown) => unknown>,
+) {
+  return function <T>(obj: T): T {
+    const clone: T = structuredClone(obj)
+
+    const applyAtPath = (root: unknown, path: string[], fn: (val: unknown) => unknown): void => {
+      if (path.length === 0) return
+      const [head, ...rest] = path
+      if (head == null) return
+
+      if (Array.isArray(root)) {
+        if (head === '*') {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          root.forEach((item, _idx) => applyAtPath(item, rest, fn))
+        } else {
+          const idx = Number(head)
+          if (!Number.isNaN(idx) && idx in root) {
+            if (rest.length === 0) {
+              const newVal = fn(root[idx])
+              if (newVal === undefined) {
+                root.splice(idx, 1)
+              } else {
+                root[idx] = newVal
+              }
+            } else {
+              applyAtPath(root[idx], rest, fn)
+            }
+          }
+        }
+        return
+      }
+
+      if (root && typeof root === 'object') {
+        const record = root as Record<string, unknown>
+        if (head in record) {
+          if (rest.length === 0) {
+            const newVal = fn(record[head])
+            if (newVal === undefined) {
+              delete record[head]
+            } else {
+              record[head] = newVal
+            }
+          } else {
+            applyAtPath(record[head], rest, fn)
+          }
+        }
+      }
+    }
+
+    for (const [path, fn] of Object.entries(rules)) {
+      applyAtPath(clone as unknown, path.split('.'), fn)
+    }
+
+    return clone
+  }
+}
+
 // Define the set of "falsy" values
 const falsyValues: Set<unknown> = new Set([
   'no',

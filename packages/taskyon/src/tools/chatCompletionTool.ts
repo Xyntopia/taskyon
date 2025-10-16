@@ -39,6 +39,7 @@ import { joinUrl } from '../utils/httpUtils'
 import { convertFileToText } from '../utils/loadFiles'
 import {
   createDeepTransformer,
+  createDotPathTransformer,
   deepCopy,
   normalizeFalsyValues,
   pickProperties,
@@ -973,8 +974,17 @@ export async function createChatCompletionTool(
 
       // get token usage for this task..
       if (currentTask && lastTaskBeforeChatCompletion) {
+        // need to make sure, that we remove audio, image and file data here!
+        const truncatedMsgs = createDotPathTransformer({
+          'modifiedOpenAIConversationThread.*.content.*.file.file_data': () =>
+            '[[file_data omitted]]',
+          'modifiedOpenAIConversationThread.*.content.*.image_url.url': () =>
+            '[[image_url omitted]]',
+          'modifiedOpenAIConversationThread.*.content.*.input_audio.data': () =>
+            '[[input_audio omitted]]',
+        })(chatInfo.msgs)
         let metaInfo: TaskNodeMeta = {
-          taskPrompt: chatInfo.msgs,
+          taskPrompt: truncatedMsgs,
           tools: chatInfo.tools,
           rawOutput: chatCompletion,
         }
