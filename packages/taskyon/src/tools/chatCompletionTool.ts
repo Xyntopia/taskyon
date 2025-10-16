@@ -853,13 +853,15 @@ export async function createChatCompletionTool(
           enum: ['low', 'high', 'medium'],
           description: 'how verbose should the reponse be?',
         },
+        use_multimodal: {
+          type: 'boolean',
+          description:
+            'Allow models to use their vision/audio document undestanding capabilities if their are any files in the prompt.',
+        },
       },
     } as const satisfies JSONSchema7,
     function: async (opts, context: toolContext) => {
       //////////   INITIALIZATION
-      const { model, goal, llmTools, allowedTools, prompts, schema, reasoning_effort, verbosity } =
-        opts
-      const tools = allowedTools ?? []
       const {
         useBasePrompt,
         selectedApi,
@@ -869,6 +871,20 @@ export async function createChatCompletionTool(
         tryUsingVisionModels,
         siteUrl,
       } = llmSettings()
+      const {
+        model,
+        goal,
+        llmTools,
+        allowedTools,
+        prompts,
+        schema,
+        reasoning_effort,
+        verbosity,
+        // if we don't set it, choose the default setting...
+        use_multimodal = tryUsingVisionModels,
+      } = opts
+      const tools = allowedTools ?? []
+
       if (!selectedApi) {
         throw new Error('No API selected!')
       }
@@ -920,7 +936,7 @@ export async function createChatCompletionTool(
         usellmTools,
         {
           taskChatTemplates: taskChatTemplates,
-          tryUsingVisionModels: tryUsingVisionModels,
+          tryUsingVisionModels: use_multimodal,
           useBasePrompt: useBasePrompt,
         },
         taskManager,
@@ -958,7 +974,8 @@ export async function createChatCompletionTool(
       // get token usage for this task..
       if (currentTask && lastTaskBeforeChatCompletion) {
         let metaInfo: TaskNodeMeta = {
-          taskPrompt: chatInfo,
+          taskPrompt: chatInfo.msgs,
+          tools: chatInfo.tools,
           rawOutput: chatCompletion,
         }
         if (chatCompletion) {

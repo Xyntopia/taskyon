@@ -140,6 +140,9 @@ export const TaskNodeMeta = z
     taskPrompt: z.record(z.string(), z.unknown()).optional().meta({
       description: 'add any prompts that were used for a task...',
     }),
+    tools: z.unknown().array().optional().meta({
+      description: 'any tools from our chat, that we allowed!',
+    }),
   })
   .partial()
 
