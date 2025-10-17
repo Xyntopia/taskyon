@@ -167,7 +167,7 @@ import {
   matWarning,
   matClose,
 } from '@quasar/extras/material-icons'
-import { copyToClipboard, exportFile } from 'quasar'
+import { copyToClipboard, exportFile, useQuasar } from 'quasar'
 import { ref, computed, watch } from 'vue'
 import {
   symOutlinedDriveExport,
@@ -345,6 +345,8 @@ function onExportChatYaml(taskList: TaskNode[]) {
   }
 }
 
+const $q = useQuasar()
+
 function shareViaSocialApps() {
   if (navigator.share && gdriveLink.value) {
     navigator
@@ -353,9 +355,21 @@ function shareViaSocialApps() {
         text: 'Check out this chat!',
         url: taskyonShareLink.value,
       })
-      .catch((error) => console.error('Error sharing:', error))
+      .catch((error) =>
+        $q.notify({
+          message: 'Error sharing: ' + JSON.stringify(error),
+          position: 'center',
+          type: 'negative',
+          closeBtn: true,
+          timeout: 0,
+        }),
+      )
   } else {
-    alert('Sharing not supported on this device.')
+    $q.notify({
+      message: 'Sharing not supported on this device.',
+      position: 'center',
+      type: 'negative',
+    })
   }
 }
 </script>
