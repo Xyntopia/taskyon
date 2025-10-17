@@ -105,75 +105,6 @@
         </ToggleButton>
       </div>
     </q-page-sticky>
-    <!-- Announcements -->
-    <q-page-sticky position="top" :offset="[0, 0]" expand style="z-index: 20">
-      <div
-        class="column q-gutter-md q-mt-lg items-center text-secondary announcements rounded-borders"
-        style="max-width: 600px"
-      >
-        <transition-group
-          appear
-          :duration="3000"
-          enter-active-class="animated fadeIn"
-          leave-active-class="animated slow fadeOut"
-        >
-          <!--Need to install a chat service-->
-          <div
-            v-if="tystate.noAiService === true && delayedTrue"
-            class="col text-secondary bg-primary"
-          >
-            <div class="row items-center q-pa-sm">
-              <q-icon
-                class="col-auto q-pr-md"
-                size="2rem"
-                name="svguse:/taskyon_mono_opt.svg#taskyon"
-                :color="$q.dark.isActive ? 'primary' : 'secondary'"
-              ></q-icon>
-              <div class="col">
-                You currently have not activated any AI service provider with a chat completion API.
-                For full functionality you should do that here:
-              </div>
-            </div>
-            <q-btn
-              flat
-              class="fit"
-              label="AI Service Provider Settings"
-              to="/settings/aiserviceprovider"
-            />
-          </div>
-          <!--chat share welcome message-->
-          <div
-            v-if="tystate.selectedThread.value.length > 0 && invitedChat"
-            class="col introduction-message bg-primary column"
-          >
-            <div class="row items-center q-pa-sm">
-              <q-icon
-                class="col-auto q-pr-md"
-                size="2rem"
-                name="svguse:/taskyon_mono_opt.svg#taskyon"
-                :color="$q.dark.isActive ? 'primary' : 'secondary'"
-              ></q-icon>
-              <div class="col">You've been invited to read this chat!</div>
-            </div>
-            <q-btn
-              class="text-center fit"
-              square
-              flat
-              label="Ok"
-              color="secondary"
-              @click="invitedChat = false"
-            />
-          </div>
-          <!--gdrive loader-->
-          <div v-if="loadingFromGdrive" class="col q-pa-sm bg-primary">
-            <q-spinner-box color="secondary" size="3rem" class="q-mr-md" />
-            <span class="text-subtitle2 text-secondary">
-              Loading your shared conversation. Thank you for your patience...
-            </span>
-          </div>
-        </transition-group>
-      </div>
-    </q-page-sticky>
     <!-- Popup Messages -->
     <q-dialog v-model="showPopupMessage" persistent>
       <q-card class="q-pa-md">
@@ -197,7 +128,7 @@ import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
 import GetStarted from 'components/taskyon/GetStarted.vue'
 import TaskChainViewer from 'components/taskyon/TaskChainViewer.vue'
 import { storeToRefs } from 'pinia'
-import { useMeta, useQuasar } from 'quasar'
+import { QSpinnerBox, useMeta, useQuasar } from 'quasar'
 import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
@@ -205,7 +136,7 @@ import ToggleButton from 'src/components/ToggleButton.vue'
 import { createScrollManager } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
-import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue'
 
@@ -227,6 +158,7 @@ const showAllTasks = ref<boolean>(props.detailed)
 const showHierarchy = ref(false)
 const loadingChat = ref(false)
 const delayedTrue = ref(false)
+let dismissloading: ReturnType<typeof $q.notify> | undefined = undefined
 
 function activateAfter(ms: number) {
   delayedTrue.value = false
@@ -300,6 +232,7 @@ async function updateChatThread() {
     } finally {
       await sleep(2000)
       loadingFromGdrive.value = false
+      dismissloading?.()
     }
   } else if (typeof route.query.url === 'string') {
     const markdownUrl = route.query.url ? new URL(route.query.url) : undefined
@@ -406,6 +339,72 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   document.documentElement.classList.remove('no-ptr')
+})
+
+let ison = false
+watchEffect(() => {
+  if (tystate.noAiService === true && delayedTrue.value && !ison) {
+    ison = true
+    $q.notify({
+      message: `You currently have not activated any AI service provider with a chat completion API.
+For full functionality you should do that here:`,
+      color: 'primary',
+      icon: 'svguse:/taskyon_mono_opt.svg#taskyon',
+      iconColor: 'secondary',
+      iconSize: '2rem',
+      position: 'top',
+      timeout: 0,
+      actions: [
+        {
+          label: 'AI Service Provider Settings',
+          to: '/settings/aiserviceprovider',
+          color: 'secondary',
+        },
+        {
+          label: 'Dismiss',
+          color: 'info',
+        },
+      ],
+      onDismiss() {
+        ison = false
+      },
+    })
+  }
+})
+
+let chatison: ReturnType<typeof $q.notify> | undefined = undefined
+watchEffect(() => {
+  if (tystate.selectedThread.value.length > 0 && invitedChat.value && !chatison) {
+    chatison = $q.notify({
+      message: `You've been invited to read this chat!`,
+      color: 'primary',
+      icon: 'svguse:/taskyon_mono_opt.svg#taskyon',
+      iconColor: 'secondary',
+      iconSize: '2rem',
+      position: 'top',
+      actions: [
+        {
+          label: 'Ok',
+          color: 'white',
+        },
+      ],
+      onDismiss() {
+        chatison = undefined
+      },
+    })
+  }
+})
+
+watchEffect(() => {
+  if (loadingFromGdrive.value)
+    dismissloading = $q.notify({
+      message: `Loading your shared conversation. Thank you for your patience...`,
+      color: 'primary',
+      position: 'top',
+      spinner: QSpinnerBox,
+      spinnerSize: '2rem',
+      spinnerColor: 'secondary',
+    })
 })
 </script>
 
