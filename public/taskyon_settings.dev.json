@@ -27,7 +27,7 @@
         },
         "streamSupport": true,
         "defaultHeaders": {
-          "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpY3lucnBsZGl4dHJkZGdxbnBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwNzgxMTYsImV4cCI6MjAxNTY1NDExNn0.EwuXaxbRPvSZNlce3E_FjylLFrxSMV3tbz8JHR8GuJI"
+          "apiKey": "sb_publishable_WrQ1aIRvl9BrMtpMQ9TocQ_JN7I9kJm"
         },
         "routes": {
           "chatCompletion": "/chat/completions",
