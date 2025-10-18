@@ -67,7 +67,7 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
             >
             ):
           </div>
-          <div class="row justify-around q-pa-md">
+          <div class="row justify-around q-gutter-sm q-pa-md">
             <template v-for="api in state.llmSettings.llmApis" :key="api.name">
               <DialogButton outline :label="api.name">
                 <template #default="{ close }">
