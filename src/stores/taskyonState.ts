@@ -12,6 +12,7 @@ import type {
   Taskyon,
   Thunk,
   TokenGetter,
+  tyPublicApiKeyObject,
   TyTaskStreamData,
 } from '@taskyon/taskyon'
 import {
@@ -473,28 +474,19 @@ const useApiManagement = (
     taskyonKey.value ? (taskyonKey.value.name ?? true) : false,
   )
 
-  const tyKeyAllowedModels = computed(() => {
-    const key = taskyonKey.value
-    if (key) {
-      if (key.model && key.model.length > 0 && !key.model.includes('*')) {
-        console.log('update allowed models!', key.model)
-        return key.model
-      }
+  function getKeyModels(key: tyPublicApiKeyObject) {
+    if (key.model && key.model.length > 0 && !key.model.includes('*')) {
+      console.log('update allowed models!', key.model)
+      return key.model
     }
     return undefined
-  })
+  }
 
-  /*function selectValidModel() {
-    const cm = getSelectedModel()
-    console.log('currently selected model', cm)
-    if (cm && tyKeyAllowedModels.value?.includes(cm)) {
-      console.log('currrent model is in allowed list!', cm, tyKeyAllowedModels.value)
-      return
-    } else if (cm) {
-      console.log('currently selected model is not in allowed list', tyKeyAllowedModels.value, cm)
-      updateModelAndApi({ newName: tyKeyAllowedModels.value?.[0] ?? cm })
-    }
-  }*/
+  const tyKeyAllowedModels = computed(() => {
+    const key = taskyonKey.value
+    if (!key) return undefined
+    return getKeyModels(key)
+  })
 
   const setProviderApiKey = exclusive(async (name: string, value: KeyString | undefined) => {
     console.log('set new provider key:', name, value?.slice(-5))
@@ -531,27 +523,46 @@ const useApiManagement = (
   })
 
   const noAiService = asyncComputed(async () => {
+    console.log('check if Ai service exists!')
     if (stateRefs.llmSettings.selectedApi) {
       const apiK = await getProviderApiKey(stateRefs.llmSettings.selectedApi)
       return apiK == null
     } else return true
   }, true)
 
+  function getValidModel(key: tyPublicApiKeyObject) {
+    const cm = getSelectedModel()
+    console.log('currently selected model', cm)
+    const keyModels = getKeyModels(key)
+    if (cm && keyModels?.includes(cm)) {
+      console.log('currrent model is already in allowed list!', cm, tyKeyAllowedModels.value)
+    } else if (cm) {
+      console.log('currently selected model is not in allowed list', tyKeyAllowedModels.value, cm)
+      return keyModels?.[0] ?? cm
+    }
+  }
+
   const updateTyKeyStates = async (newKey?: KeyString) => {
     console.log('updating key states', { newKey })
 
     // we only need to update taskyon here, because taskyon can also use oauth tokens!
     // the other keys simply stay "the same"
-    let key = await getProviderApiKey('taskyon')
-    if (newKey && (key === freeKey || !isTaskyonKey(key ?? undefined))) {
-      key = newKey
-    } else if (!isTaskyonKey(key ?? undefined)) {
+    let keystr = await getProviderApiKey('taskyon')
+    const tyKeyObj = isTaskyonKey(keystr ?? undefined, false)
+    if (newKey && (keystr === freeKey || !tyKeyObj)) {
+      keystr = newKey
+    } else if (!tyKeyObj) {
       // if there is no key, or if there is an oauth token, but no Taskyon key.
       // this could for example happen, if we log out. In this
       // case we want the taskyon key of that session to be reverted back to a "free" key.
-      key = freeKey as KeyString
+      keystr = freeKey as KeyString
     } // in all other cases, we simply leave the taskyon key "as is"
-    await setProviderApiKey('taskyon', key ?? undefined) // can force (!) key here, because we check if it exists with isTaskyonKey
+    await setProviderApiKey('taskyon', keystr ?? undefined) // can force (!) key here, because we check if it exists with isTaskyonKey
+    const newKeyObj = isTaskyonKey(keystr ?? undefined, false)
+    if (newKeyObj) {
+      const model = getValidModel(newKeyObj)
+      if (model) updateModelAndApi({ newName: model })
+    }
   }
 
   //////   INITIALIZATION

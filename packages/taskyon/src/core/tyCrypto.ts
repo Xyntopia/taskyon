@@ -50,7 +50,7 @@ export const tyPublicApiKeyObject = tyPublicKeyDraft.extend({
 })
 
 // This doesn't verify the key, only looks if its contents are valid!
-type tyPublicApiKeyObject = z.infer<typeof tyPublicApiKeyObject>
+export type tyPublicApiKeyObject = z.infer<typeof tyPublicApiKeyObject>
 export function isTaskyonKey(key: string | undefined, boolean?: true): boolean
 export function isTaskyonKey(
   key: string | undefined,

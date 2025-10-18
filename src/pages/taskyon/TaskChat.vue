@@ -343,7 +343,12 @@ onBeforeUnmount(() => {
 
 let ison = false
 watchEffect(() => {
-  if (tystate.noAiService === true && delayedTrue.value && !ison) {
+  if (
+    tystate.availableProviders?.length === 0 &&
+    tystate.noAiService === true &&
+    delayedTrue.value &&
+    !ison
+  ) {
     ison = true
     $q.notify({
       message: `You currently have not activated any AI service provider with a chat completion API.
