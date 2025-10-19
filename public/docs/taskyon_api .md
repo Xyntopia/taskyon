@@ -2,6 +2,9 @@
 
 **Tools, Task Results, and Task Processing**
 
+TODO: add the api for our chatCompletion tool...
+TODO: add taskyon client description (initialization, config, tools)
+
 ---
 
 ## 1. Core Concepts
@@ -142,8 +145,6 @@ return makeTaskResult([
 ---
 
 ## 4. Task Processing
-
-TODO: add taskyon client description (initialization, config, tools)
 
 ### 4.1 Overview
 
