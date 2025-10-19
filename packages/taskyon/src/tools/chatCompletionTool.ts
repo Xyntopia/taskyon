@@ -859,6 +859,11 @@ export async function createChatCompletionTool(
           description:
             'Allow models to use their vision/audio document undestanding capabilities if their are any files in the prompt.',
         },
+        contextSize: {
+          type: 'integer',
+          description:
+            '[Optional] How many of the peceding tasks are going to be used for the chatCompletion?',
+        },
       },
     } as const satisfies JSONSchema7,
     function: async (opts, context: toolContext) => {
