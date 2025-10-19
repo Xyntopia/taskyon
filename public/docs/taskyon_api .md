@@ -6,17 +6,17 @@
 
 ## 1. Core Concepts
 
-Taskyon runs on a **task chain execution model**:
+Taskyon uses a **task chain execution model**:
 
 - Tools generate tasks
 - Tasks run sequentially or in parallel
-- The system continues until no function tasks remain
+- Processing continues until no function tasks remain
 
-Three key concepts:
+Key concepts:
 
-1. **Tools** – definitions of callable functions
-2. **makeTaskResult** – standard way to return new tasks
-3. **Task Processing** – the worker + external API that execute and monitor tasks
+1. **Tools** – callable definitions
+2. **makeTaskResult** – return format for new tasks
+3. **Task Processing** – high-level API (`processTasks`) that runs and monitors chains
 
 ---
 
@@ -24,24 +24,24 @@ Three key concepts:
 
 ### 2.1 Definition
 
-A **Tool** is a callable function (from LLM or manually). Defined by `ToolBase` schema:
+A Tool is a callable function, defined by the `ToolBase` schema:
 
-- `name` – function name (`/^[a-zA-Z0-9_-]+$/`)
-- `description` – short LLM-friendly explanation
+- `name` – must match `/^[a-zA-Z0-9_-]+$/`
+- `description` – short LLM-friendly string
 - `longDescription?` – optional extended help
 - `parameters` – JSON Schema (required)
-- `code?` – sandboxed JavaScript
-- `function?` – privileged internal JS function
-- `renderOptions?` – UI hints (e.g., `hideChat`, `hideLlm`)
+- `code?` – sandboxed JavaScript implementation
+- `function?` – internal function (privileged, full system access)
+- `renderOptions?` – UI hints (e.g. `hideChat`, `hideLlm`)
 
 ### 2.2 Creation
 
-Use `createTool` to register:
+Use `createTool`:
 
 ```ts
 export const myTool = createTool({
   name: 'example',
-  description: 'Does something',
+  description: 'Does something useful',
   parameters: {
     /* JSON Schema */
   },
@@ -53,19 +53,19 @@ export const myTool = createTool({
 
 ### 2.3 Execution Context
 
-Every tool receives a `toolContext` object:
+Every tool receives a `toolContext`:
 
-- `taskChain`: current TaskNode chain
+- `taskChain` – TaskNode[] for current chain
 - `getSecret(name, askNew, saveNew?)` / `setSecret(name, value)`
-- `stopSignal`: `AbortSignal` for cancellation
-- `toolId`: unique per tool instance
-- `messagePort?`: optional channel for duplex communication
+- `stopSignal` – AbortSignal for cancellation
+- `toolId` – unique ID for this tool instance
+- `messagePort?` – optional channel for duplex communication
 
 ### 2.4 Execution Modes
 
-1. **Internal Function** – direct JS, full system access
-2. **Sandboxed Code** – run inside isolated iframe
-3. **Remote Function** – forwarded via `postMessage`
+- **Internal Function** – direct JS call
+- **Sandboxed Code** – executed in iframe
+- **Remote Function** – forwarded via `postMessage`
 
 ---
 
@@ -73,7 +73,7 @@ Every tool receives a `toolContext` object:
 
 ### 3.1 Purpose
 
-Wraps new tasks into a `taskResult` object that Taskyon recognizes.
+Wraps tasks in a recognized structure so Taskyon continues execution.
 
 ### 3.2 Signature
 
@@ -83,22 +83,13 @@ makeTaskResult(tasks: partialTaskDraft | partialTaskDraft[] | partialTaskDraft[]
 
 Input formats:
 
-- Single task (`partialTaskDraft`)
-- 1D array = sequential chain
-- 2D array = multiple parallel chains
+- Single task → one `partialTaskDraft`
+- 1D array → sequential chain
+- 2D array → parallel chains
 
-### 3.3 Return Value
+### 3.3 Usage Patterns
 
-```ts
-{
-  taskResultMarker: "*TY_TASKRESULT*",
-  taskChainList: partialTaskDraft[][]
-}
-```
-
-### 3.4 Usage Patterns
-
-- **Simple message**
+- **Message**
 
 ```ts
 return makeTaskResult([[{ role: 'assistant', content: { type: 'message', data: 'Hello' } }]])
@@ -112,7 +103,7 @@ return makeTaskResult([
 ])
 ```
 
-- **Sequential chain**
+- **Sequential**
 
 ```ts
 return makeTaskResult([
@@ -124,16 +115,18 @@ return makeTaskResult([
 ])
 ```
 
-- **Parallel chains**
+- **Parallel**
 
 ```ts
 return makeTaskResult([
-  [task1, task2], // runs sequentially
-  [task3, task4], // runs in parallel
+  [task1, task2],
+  [task3, task4],
 ])
 ```
 
-- **Re-entry pattern**
+- **Re-entry**
+
+If a tool 'sameTool' wants to call itself recursivly it can do this:
 
 ```ts
 return makeTaskResult([
@@ -144,65 +137,72 @@ return makeTaskResult([
 ])
 ```
 
-> **Note**: If a tool returns a plain value (not `makeTaskResult`), Taskyon auto-wraps it in a `toolresult` + `chatCompletion`.
+> If you return a plain value (not wrapped in `makeTaskResult`), Taskyon auto-wraps it in a `toolresult` and adds a `chatCompletion` step.
 
 ---
 
 ## 4. Task Processing
 
-### 4.1 Two Layers
+TODO: add taskyon client description (initialization, config, tools)
 
-1. **Internal**: `runTaskWorker` – queue-based execution engine
-2. **External**: `processTasks` – higher-level API for submitting + monitoring tasks
+### 4.1 Overview
+
+Task processing has two parts:
+
+- **High-level API** – `processTasks`, used by external code
+- **Execution Engine** – ensures correct order, parallelism, and task chain continuation
 
 ### 4.2 processTasks API
 
+`processTasks` is already initialized with a port when used with a client. Use it directly:
+
 ```ts
-const process = processTasks(tyPort)
-const result = await process(taskList, opts)
+const result = await tyclient.process(taskList, opts)
 ```
 
-- **`tyPort`** – port for task submission
-- **`taskList`** – 2D array of parallel chains
-- **`opts`** – options:
+**Parameters**:
+
+- `taskList` – 2D array of parallel task chains
+- `opts`:
   - `timeoutMs?` – max wait
-  - `signal?` – abort signal
-  - `quitCondition?` – function `(t:TaskNode)=>boolean`
-  - `show?` – show in GUI (default true)
+  - `signal?` – AbortSignal for cancellation
+  - `quitCondition?` – `(t:TaskNode)=>boolean` custom matcher
+  - `show?` – whether to display in GUI (default true)
 
-**Steps**:
+**Execution Flow**:
 
-1. Convert drafts → TaskNodes (`forgeTaskChain`)
-2. Submit tasks to port
-3. Track all subtasks via `taskCreated` events
-4. Wait until quitCondition (default: first `message`)
-5. Return matching TaskNode
+1. Drafts → full TaskNodes (`forgeTaskChain`)
+2. Tasks submitted for execution
+3. Subtasks tracked via `taskCreated` events
+4. Wait until quitCondition is satisfied
+5. Return the matching TaskNode
 
-### 4.3 Examples
+### 4.3 Usage Examples
 
-- Wait for message:
+- **Wait for message**
 
 ```ts
 await process(
   [
     [
-      { role: 'user', content: { type: 'message', data: 'Hi' } },
-      toolCall({ name: 'chatCompletion' }),
+      { role: 'user', content: { type: 'message', data: 'Hello' } },
+      toolCall({ name: 'chatCompletion', arguments: { prompts: ['Respond'] } }),
     ],
   ],
   { timeoutMs: 30000 },
 )
 ```
 
-- Wait for tool result:
+- **Wait for tool result**
 
 ```ts
-await process([[toolCall({ name: 'myTool' })]], {
+await process([[toolCall({ name: 'myTool', arguments: { query: 'test' } })]], {
   quitCondition: (t) => t.content.type === 'toolresult' && t.content.data?.status === 'complete',
+  timeoutMs: 60000,
 })
 ```
 
-- Parallel chains:
+- **Parallel chains**
 
 ```ts
 await process([[toolCall({ name: 'tool1' })], [toolCall({ name: 'tool2' })]], {
@@ -213,7 +213,7 @@ await process([[toolCall({ name: 'tool1' })], [toolCall({ name: 'tool2' })]], {
 
 ---
 
-## 5. Internal Task Worker (runTaskWorker)
+## 5. How Taskyon Processes Tasks
 
 ### 5.1 Flow (simplified)
 
@@ -235,27 +235,24 @@ J -- No --> K[Chain complete]
 ### 5.2 Rules
 
 - Only `functioncall` tasks are executed
-- Tasks wait for `priorID` before running
-- Function task is finished when all its child chains have no function tasks
-- Parallel = same `parentID`, sequential = linked `priorID`
-- Worker runs until queue empty or aborted
-
-### 5.3 Error Handling
-
-Errors produce `error` tasks + optional ChatCompletion analysis.
+- Each task waits for its `priorID` chain to finish
+- A task is complete when all its subtasks have no more function calls
+- Tasks with same `parentID` run in parallel; tasks linked with `priorID` run sequentially
+- Processing continues until the queue is empty or explicitly stopped
+- Errors create `error` tasks, optionally analyzed by a ChatCompletion step
 
 ---
 
 ## 6. Task Content Types
 
-- `message` – user/assistant messages
-- `functioncall` – tool invocation
-- `toolresult` – tool output
+- `message` – text
+- `functioncall` – tool call
+- `toolresult` – result of tool execution
 - `tooldefinition` – tool registration
 - `error` – error info
 - `structured` – structured data
-- `files` – file refs
-- `return` – chain termination
+- `files` – file references
+- `return` – termination marker
 
 ---
 
@@ -264,7 +261,7 @@ Errors produce `error` tasks + optional ChatCompletion analysis.
 ```ts
 export const exampleTool = createTool({
   name: 'exampleTool',
-  description: 'Demo tool',
+  description: 'Demonstrates sequential and parallel patterns',
   parameters: {
     type: 'object',
     properties: { query: { type: 'string' }, parallel: { type: 'boolean', default: false } },
@@ -295,15 +292,15 @@ export const exampleTool = createTool({
 
 ## 8. Relationships
 
-- `priorID` – sequential link in same chain
-- `parentID` – parent/child link for spawned subtasks
-- Same `parentID` = parallel execution
+- `priorID` – sequential link in chain
+- `parentID` – parent-child link for subtasks
+- Same `parentID` → parallel execution
 
 ---
 
-## 9. Notes for Developers & LLMs
+## 9. Developer Notes
 
-- Plain return values are auto-analyzed via ChatCompletion
-- Use `makeTaskResult` for precise control over task flow
-- Keep chains small; system enforces ordering via `priorID`/`parentID`
-- Errors automatically create analysis subtasks
+- Returning plain values triggers auto-analysis via ChatCompletion
+- Use `makeTaskResult` for fine-grained control of flow
+- Errors spawn `error` tasks + optional analysis
+- Keep chains concise; execution order guaranteed by `priorID` / `parentID`
