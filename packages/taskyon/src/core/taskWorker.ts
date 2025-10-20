@@ -231,12 +231,12 @@ function workerLoggingHelper(streamEmit: (value: TyTaskStreamData) => void) {
     tasksInProgress = new Set<string>()
     streamEmit({ stage: 'all finished' })
   }
-  const taskOutOfLoop = (taskId: string) => {
+  const taskOutOfLoop = (taskId: string, toolName?: string) => {
     tasksInProgress.delete(taskId)
     streamEmit({
       stage: 'processed',
       taskId,
-      info: `Tasks in queue: ${tasksInProgress.size.toString()}`,
+      info: `${toolName ? toolName + ', ' : ''}queue: ${tasksInProgress.size.toString()}`,
     })
     if (tasksInProgress.size === 0) allTasksFinished()
   }
@@ -308,7 +308,7 @@ const createTaskProcessor = (
   queueTask: (id: string) => void,
   currentTaskCtrl: AbortController,
   taskisInLoop: (taskId: string) => void,
-  taskOutOfLoop: (taskId: string) => void,
+  taskOutOfLoop: (taskId: string, toolName?: string) => void,
   stopAllTasks: (message: string) => void,
   secretStore: SecretStore,
   taskMessageStream: TaskMessageStream,
@@ -347,7 +347,7 @@ const createTaskProcessor = (
       // we also don't need to add the task as the "last" task in the GUI
       // because they will automatically be called as soon as the
       if (task.content.type !== 'functioncall') {
-        taskOutOfLoop(task.id)
+        taskOutOfLoop(task.id, 't/' + task.content.type)
         return // early return, because this task is not a functioncall task
       }
 
@@ -423,7 +423,7 @@ const createTaskProcessor = (
         await handleError(error, task, maxAutonomousTasks, errorHandlerTask)
         // TODO: run this taskWorker in a separate worker js/browser thread!
       }
-      taskOutOfLoop(task.id)
+      taskOutOfLoop(task.id, task.content.data.name)
       if (currentTaskCtrl.signal.aborted) {
         // if the task was aborted, we want to make sure, that we can see the leaf task.
         // usually, this would automatically happen in the taskWorker loop, because
