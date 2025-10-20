@@ -3,7 +3,7 @@
 import { forgeTaskChain } from '../core/createTasks'
 import type { chatCompletionParams } from '../tools/chatCompletionTool'
 import type { TaskyonMessage } from '../types/apiTypes'
-import type { TaskNode } from '../types/node'
+import type { TaskContentType, TaskNode } from '../types/node'
 import { partialTaskDraft } from '../types/node'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import { type Port } from '../utils/frpBus'
@@ -24,7 +24,7 @@ export type { Port }
 export type processTasksOpts = {
   timeoutMs?: number
   signal?: AbortSignal
-  quitCondition?: (t: TaskNode) => boolean
+  quitCondition?: ((t: TaskNode) => boolean) | TaskContentType
   show?: boolean
 }
 
@@ -43,7 +43,7 @@ export const processTasks =
       tasks: tasks,
       execute: true,
       show: opts.show ?? true, // we want to show this task in our GUI as a succesful test
-      origin: 'Taskyon Diagnostics',
+      origin: window.origin,
     })
 
     const initialIds = tasks.map((t) => t.id)
@@ -70,13 +70,17 @@ export const processTasks =
       })
       .map((msg) => msg.task)
 
-    const condition = opts.quitCondition
-      ? subTasksCreated.filter(opts.quitCondition)
-      : subTasksCreated.filter((t) => t.content.type === 'message')
+    if (opts.quitCondition) {
+      const condition =
+        typeof opts.quitCondition === 'string'
+          ? subTasksCreated.filter((t) => t.content.type === opts.quitCondition)
+          : subTasksCreated.filter(opts.quitCondition)
 
-    const unsub = condition((m) => console.log('received matching message on port:', m))
-    const lastMsg = await condition.wait(opts)
-    console.log('finished processin all tasks!')
-    unsub()
-    return lastMsg
+      const unsub = condition((m) => console.log('received matching message on port:', m))
+      const lastMsg = await condition.wait(opts)
+      console.log('finished processin all tasks!')
+      unsub()
+      return { lastMsg }
+    }
+    return { subTasksCreated }
   }
