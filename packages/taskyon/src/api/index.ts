@@ -9,8 +9,8 @@ import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import { type Port } from '../utils/frpBus'
 import type { ByType } from '../utils/tsHelpers'
 
+export { BaseMessage, TaskyonMessage, TyP2P } from '../types/apiTypes'
 export { llmSettings, TyToolchainConfig } from '../types/profiles'
-export { BaseMessage, TyP2P, TaskyonMessage } from '../types/apiTypes'
 export type { ClientTool } from '../types/toolApi'
 export type { FunctionCall } from '../types/tools'
 export {
@@ -19,21 +19,18 @@ export {
   MessageChannelBridge,
 } from '../utils/frpBus'
 
-export { createTool, makeTaskResult, toolCall, partialTaskDraft }
+export { createTool, makeTaskResult, partialTaskDraft, toolCall }
 export type { Port }
 export type processTasksOpts = {
   timeoutMs?: number
   signal?: AbortSignal
-  quitCondition?: ((t: TaskNode) => boolean) | TaskContentType
   show?: boolean
 }
 
 export const createChatCompletionTask = (args: chatCompletionParams) =>
   toolCall<chatCompletionParams>({ name: 'chatCompletion', arguments: args })
 
-// we make the opts mandatory on purpose so that poeple thing about
-// some sort of quitcondition.
-export const processTasks =
+const sendTasks =
   <T extends { type: string }>(tyPort: Port<T | TaskyonMessage>) =>
   async (taskList: partialTaskDraft[][], opts: processTasksOpts) => {
     const tasks = await forgeTaskChain(taskList)
@@ -70,17 +67,28 @@ export const processTasks =
       })
       .map((msg) => msg.task)
 
-    if (opts.quitCondition) {
-      const condition =
-        typeof opts.quitCondition === 'string'
-          ? subTasksCreated.filter((t) => t.content.type === opts.quitCondition)
-          : subTasksCreated.filter(opts.quitCondition)
-
-      const unsub = condition((m) => console.log('received matching message on port:', m))
-      const lastMsg = await condition.wait(opts)
-      console.log('finished processin all tasks!')
-      unsub()
-      return { lastMsg }
-    }
-    return { subTasksCreated }
+    return { initialIds, subTasksCreated }
   }
+
+// we make the opts mandatory on purpose so that poeple thing about
+// some sort of quitcondition.
+export const processTasks = <T extends { type: string }>(tyPort: Port<T | TaskyonMessage>) => {
+  const send = sendTasks<T>(tyPort)
+  return async (
+    taskList: partialTaskDraft[][],
+    quitCondition: ((t: TaskNode) => boolean) | TaskContentType,
+    opts: processTasksOpts,
+  ) => {
+    const { subTasksCreated } = await send(taskList, opts)
+    const condition =
+      typeof quitCondition === 'string'
+        ? subTasksCreated.filter((t) => t.content.type === quitCondition)
+        : subTasksCreated.filter(quitCondition)
+
+    const unsub = condition((m) => console.log('received matching message on port:', m))
+    const lastMsg = await condition.wait(opts)
+    console.log('finished processin all tasks!')
+    unsub()
+    return lastMsg
+  }
+}

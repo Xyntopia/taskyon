@@ -1087,7 +1087,7 @@ export const testChatCompletionWebSearch = async () => {
     ],
   ]
 
-  const result = await processTasks(tystate.api)(taskList, { timeoutMs: 20000 })
+  const result = await processTasks(tystate.api)(taskList, 'message', { timeoutMs: 20000 })
 
   const webSearchResponse = result.content.data
 
@@ -1195,10 +1195,7 @@ export const testFileUpload = async () => {
     console.log('upload file test received message', msg)
   })
 
-  const taskResult = await processTasks(tystate.api)([tasks], {
-    quitCondition: (t) => t.content.type === 'structured',
-    timeoutMs: 20000,
-  })
+  const taskResult = await processTasks(tystate.api)([tasks], 'structured', { timeoutMs: 20000 })
 
   const res = taskResult.content.data as { weight?: string; price?: string }
 

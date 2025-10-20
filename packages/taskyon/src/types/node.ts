@@ -74,6 +74,7 @@ export const TaskContent = z.union([
 ])
 
 export type TaskContent = z.infer<typeof TaskContent>
+export type TaskContentType = TaskContent extends { type: infer T } ? T : never
 
 export const TaskNode = z.object({
   // TODO: get rid of "role"  and put it into chatCompletion only...
