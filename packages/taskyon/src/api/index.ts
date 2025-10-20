@@ -30,7 +30,7 @@ export type processTasksOpts = {
 export const createChatCompletionTask = (args: chatCompletionParams) =>
   toolCall<chatCompletionParams>({ name: 'chatCompletion', arguments: args })
 
-const sendTasks =
+export const sendTasks =
   <T extends { type: string }>(tyPort: Port<T | TaskyonMessage>) =>
   async (taskList: partialTaskDraft[][], opts: processTasksOpts) => {
     const tasks = await forgeTaskChain(taskList)
@@ -47,7 +47,7 @@ const sendTasks =
     const subTasks = new Set<string>(initialIds)
 
     // filter for all subtasks
-    const subTasksCreated = tyPort.receive
+    const subTaskStream = tyPort.receive
       .narrow((m): m is ByType<'taskCreated', TaskyonMessage> & { task: { id: string } } => {
         console.log('api received', m)
         /*const valid =
@@ -67,7 +67,7 @@ const sendTasks =
       })
       .map((msg) => msg.task)
 
-    return { initialIds, subTasksCreated }
+    return { initialIds, subTaskStream }
   }
 
 // we make the opts mandatory on purpose so that poeple thing about
@@ -76,14 +76,16 @@ export const processTasks = <T extends { type: string }>(tyPort: Port<T | Taskyo
   const send = sendTasks<T>(tyPort)
   return async (
     taskList: partialTaskDraft[][],
-    quitCondition: ((t: TaskNode) => boolean) | TaskContentType,
+    quitCondition: ((t: TaskNode) => boolean) | TaskContentType | TaskContentType[],
     opts: processTasksOpts,
   ) => {
-    const { subTasksCreated } = await send(taskList, opts)
+    const { subTaskStream } = await send(taskList, opts)
     const condition =
       typeof quitCondition === 'string'
-        ? subTasksCreated.filter((t) => t.content.type === quitCondition)
-        : subTasksCreated.filter(quitCondition)
+        ? subTaskStream.filter((t) => t.content.type === quitCondition)
+        : typeof quitCondition === 'object' && Array.isArray(quitCondition)
+          ? subTaskStream.filter((t) => quitCondition.includes(t.content.type))
+          : subTaskStream.filter(quitCondition)
 
     const unsub = condition((m) => console.log('received matching message on port:', m))
     const lastMsg = await condition.wait(opts)

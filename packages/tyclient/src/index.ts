@@ -1,6 +1,7 @@
 // we can compile this file to js to js using "yarn build:lib"
 
 import type { FunctionCall, Port } from '@taskyon/taskyon/api'
+import { sendTasks } from '@taskyon/taskyon/api'
 import {
   // from frp bux with only very few dependencies
   createDuplexChannel, // utis/frpbus
@@ -105,7 +106,8 @@ async function handleFunctionExecution(
 }
 
 export interface TyClient {
-  processTasks: ReturnType<typeof processTasks>
+  sendTasks: ReturnType<typeof sendTasks>
+  waitForTaskResult: ReturnType<typeof processTasks>
   port: Port<TaskyonGuiMessage, TaskyonGuiMessage>
   sendFile: (file: File) => Promise<string>
 }
@@ -174,7 +176,8 @@ export async function initializeTaskyon(options: {
   }
 
   return {
-    processTasks: processTasks(clientSidePort),
+    sendTasks: sendTasks(clientSidePort),
+    waitForTaskResult: processTasks(clientSidePort),
     port: clientSidePort,
     sendFile: (file: File) => sendFile(clientSidePort.send)(file),
   }

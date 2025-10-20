@@ -138,7 +138,7 @@ async function startClientTest() {
     console.log('client received message from iframe:', msg)
   })*/
   try {
-    const res = await tyclient.value?.processTasks(tasks, 'message', { timeoutMs: 50000 })
+    const res = await tyclient.value?.waitForTaskResult(tasks, 'message', { timeoutMs: 50000 })
     taskResult.value = res
     console.log('client received result:')
   } catch (error) {
@@ -166,7 +166,7 @@ async function startFileUpload() {
   console.log('finished sending file!', id)
 
   // now we can send
-  const res = await tyclient.value?.processTasks(
+  const res = await tyclient.value?.waitForTaskResult(
     [
       [
         {
