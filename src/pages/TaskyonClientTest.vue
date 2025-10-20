@@ -138,7 +138,7 @@ async function startClientTest() {
     console.log('client received message from iframe:', msg)
   })*/
   try {
-    const res = await tyclient.value?.processTasks(tasks, { timeoutMs: 50000 })
+    const res = await tyclient.value?.processTasks(tasks, 'message', { timeoutMs: 50000 })
     taskResult.value = res
     console.log('client received result:')
   } catch (error) {
@@ -183,6 +183,7 @@ async function startFileUpload() {
         createChatCompletionTask({ goal: 'SimpleCompletion' }),
       ],
     ],
+    'message',
     { timeoutMs: 50000 },
   )
   taskResult.value = res
