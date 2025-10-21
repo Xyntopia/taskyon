@@ -1,3 +1,4 @@
+// pyodide.ts
 //import { loadPyodide, PyodideInterface } from 'pyodide';
 import type { PyodideInterface } from 'pyodide'
 import { Lock } from './asyncUtils'

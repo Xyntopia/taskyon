@@ -1,3 +1,4 @@
+//pyodide.worker.ts
 import { expose } from 'comlink'
 import { loadPyodide, type PyodideInterface, version } from 'pyodide'
 import type { PythonScriptResult } from './pyodide'
