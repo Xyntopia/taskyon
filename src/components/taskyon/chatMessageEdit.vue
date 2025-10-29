@@ -4,10 +4,10 @@
     <div>
       <!-- Edit chat messages -->
       <q-input
-        v-if="smallMode"
         v-model="content"
         data-cy="chat-input"
         autogrow
+        type="textarea"
         borderless
         placeholder="Type your message..."
         :input-style="{ maxHeight: '300px' }"
@@ -16,32 +16,26 @@
         @keyup="checkKeyboardEvents"
       >
         <template #before>
-          <slot name="left" btn-size="md" />
+          <div v-show="smallMode">
+            <slot name="left" btn-size="md" />
+          </div>
         </template>
-        <template #after>
-          <q-btn flat :icon="matSend" @click="$emit('execute-task')">
-            <q-tooltip>{{ sendToolTip }}</q-tooltip>
-          </q-btn>
-          <q-btn
-            v-if="showWebSearch"
-            flat
-            :icon="mdiSearchWeb"
-            @click="$emit('execute-web-search')"
-          >
-            <q-tooltip> Use web search </q-tooltip>
-          </q-btn>
-        </template> </q-input
-      ><q-input
-        v-else
-        v-model="content"
-        autogrow
-        borderless
-        placeholder="Type your message..."
-        :input-style="{ maxHeight: '300px' }"
-        :class="['q-px-sm', content?.length ? 'q-pt-sm' : '', 'q-pb-md']"
-        v-bind="$attrs"
-        @keyup="checkKeyboardEvents"
-      />
+        <template v-if="smallMode" #after>
+          <div v-show="smallMode">
+            <q-btn flat :icon="matSend" @click="$emit('execute-task')">
+              <q-tooltip>{{ sendToolTip }}</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="showWebSearch"
+              flat
+              :icon="mdiSearchWeb"
+              @click="$emit('execute-web-search')"
+            >
+              <q-tooltip> Use web search </q-tooltip>
+            </q-btn>
+          </div>
+        </template>
+      </q-input>
       <q-resize-observer @resize="onResize" />
     </div>
     <div v-if="!smallMode" class="left bar border-radius-inherit">
@@ -73,14 +67,10 @@ import { matSend } from '@quasar/extras/material-icons'
 import { mdiSearchWeb } from '@quasar/extras/mdi-v6'
 import { useQuasar } from 'quasar'
 import type { appConfiguration } from 'src/modules/taskyon/types'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount } from 'vue'
 import { ref } from 'vue'
 
 const $q = useQuasar()
-const h = ref(0)
-const w = ref(0)
-const heightLimitup = 65
-const heightLimitdown = 75
 const enterMode = computed(() =>
   props.useEnterToSend === 'auto' ? ($q.platform.is.mobile ? 'off' : 'on') : props.useEnterToSend,
 )
@@ -130,16 +120,37 @@ const checkKeyboardEvents = (event: KeyboardEvent) => {
   }
 }
 
+const SMALL_TO_LARGE = 80
+const LARGE_TO_SMALL = 60
+
+const h = ref(0)
+const w = ref(0)
+const smallMode = ref(true)
+
+// type-safe RAF handle (no `any`)
+let resizeRaf: number | null = null
+
 const onResize = ({ height, width }: { height: number; width: number }) => {
   h.value = height
   w.value = width
+
+  if (resizeRaf !== null) {
+    cancelAnimationFrame(resizeRaf)
+    resizeRaf = null
+  }
+  resizeRaf = requestAnimationFrame(() => {
+    // true hysteresis
+    if (smallMode.value) {
+      if (height >= SMALL_TO_LARGE) smallMode.value = false
+    } else {
+      if (height <= LARGE_TO_SMALL) smallMode.value = true
+    }
+    resizeRaf = null
+  })
 }
 
-const smallMode = computed<boolean>((previousSmall) => {
-  if (previousSmall) {
-    return h.value < heightLimitup
-  }
-  return h.value < heightLimitdown
+onBeforeUnmount(() => {
+  if (resizeRaf !== null) cancelAnimationFrame(resizeRaf)
 })
 </script>
 
