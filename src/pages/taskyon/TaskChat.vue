@@ -44,7 +44,7 @@
         class="full-height column justify-center items-center q-pa-sm welcome"
         style="max-width: 600px"
       >
-        <div class="welcome-message column items-center">
+        <div class="welcome-message column col items-center scroll overflow-auto no-wrap">
           <GetStarted />
         </div>
         <CreateNewTask

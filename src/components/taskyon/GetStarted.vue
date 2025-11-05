@@ -1,5 +1,5 @@
 <template>
-  <div class="text-h6 col-auto column items-center">
+  <div class="text-h6 col-auto column items-center no-wrap">
     <!-- eslint-disable vue/no-v-html -->
     <div
       v-if="state.appConfiguration.showLogo"
@@ -53,3 +53,47 @@ import logoSvg from 'src/assets/taskyon_logo_complex_animated.svg?raw'
 
 const state = useAppStateStore()
 </script>
+
+<style scoped>
+/* --- base layout --- */
+.welcome-message-text {
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+
+.svg-container,
+.task-button {
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+
+/* smooth fade before hiding */
+@media (max-height: 630px) {
+  .task-button {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+/* fully remove from layout */
+@media (max-height: 610px) {
+  .task-button {
+    display: none !important;
+  }
+}
+
+/* fade + collapse logo */
+@media (max-height: 470px) {
+  .svg-container {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+@media (max-height: 450px) {
+  .svg-container {
+    display: none !important;
+  }
+}
+</style>
