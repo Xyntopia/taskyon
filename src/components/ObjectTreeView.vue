@@ -247,6 +247,7 @@ const {
   debounce = 100,
   schema,
   descriptionsAsLabels = false,
+  hideMissing = false, // NEW
 } = defineProps<{
   readOnly?: boolean
   inputFieldBehavior?: 'auto' | 'textarea' | 'autogrow'
@@ -254,6 +255,7 @@ const {
   debounce?: number
   schema?: JSONSchema7 | z.core.JSONSchema.BaseSchema | undefined
   descriptionsAsLabels?: boolean
+  hideMissing?: boolean // NEW
 }>()
 
 const modelValue = defineModel<Record<string, unknown> | undefined>({
@@ -290,7 +292,11 @@ const transformToTreeNodes = (
         })
       | undefined,
     path: string[],
-  ): QTreeNode => {
+  ): QTreeNode | null => {
+    if (hideMissing && (value === undefined || value === null)) {
+      return null
+    }
+
     const newPath = [...path, key]
 
     const label =
@@ -318,12 +324,10 @@ const transformToTreeNodes = (
           ? 'color'
           : (subschema?.type ?? (Array.isArray(value) ? 'array' : typeof value))
 
-    // TODO: what do we do if schemaType is an array?
     switch (runtimeType) {
       case 'enum': {
-        // pick default if none set
+        // pick default if none set (but if hideMissing, we already skipped null/undefined)
         const actualVal = isUndef ? (subschema!.default ?? subschema!.enum![0]) : value
-
         return {
           ...base,
           value: actualVal,
@@ -340,9 +344,7 @@ const transformToTreeNodes = (
         }
       }
       case 'color': {
-        // pick default if none set
         const actualVal = isUndef ? (subschema!.default ?? '#000000') : value
-
         return {
           ...base,
           value: actualVal as string,
@@ -350,24 +352,41 @@ const transformToTreeNodes = (
         }
       }
       case 'object': {
-        // if undefined or not actually an object, start with {}
-        const childObj = !isUndef && typeof value === 'object' && !Array.isArray(value) ? value : {}
+        // If value is not a proper object, treat as empty object
+        const childObj =
+          !isUndef && typeof value === 'object' && !Array.isArray(value)
+            ? (value as Record<string, unknown>)
+            : {}
+
+        // Build children
+        const children = transformToTreeNodes(childObj, subschema, newPath)
+
+        // NEW: if hideMissing and there are no children to show, omit this node entirely
+        if (hideMissing && children.length === 0) {
+          return null
+        }
+
         return {
           ...base,
           value: null,
-          children: transformToTreeNodes(childObj as Record<string, unknown>, subschema, newPath),
+          children,
           header: 'object',
         }
       }
-      case 'array':
-        // unspecified arrays show the list widget, value may be `undefined` or an actual array
+      case 'array': {
+        // When hideMissing is on, an undefined array would have been skipped above.
+        // If we got here, it's either an actual array or a defined value.
+        const arrVal = isUndef ? [] : (value as unknown[])
+        // NEW: if hideMissing and array is empty, we can choose to show empty arrays,
+        // but if you also want to hide empty arrays, uncomment the next block:
+        // if (hideMissing && arrVal.length === 0) return null
         return {
           ...base,
-          value: isUndef ? [] : (value as unknown[]),
+          value: arrVal,
           body: 'list',
         }
+      }
       case 'string': {
-        // pick between 'string' (single-line) vs 'text' (textarea) in one spot
         const actualVal = isUndef ? '' : (value as string)
         const isSingleLine =
           actualVal.length < 100 && !actualVal.includes('\n') && inputFieldBehavior !== 'textarea'
@@ -383,14 +402,7 @@ const transformToTreeNodes = (
           value: !!value,
           body: 'boolean',
         }
-      case 'number': {
-        const numVal = isUndef ? undefined : (value as number)
-        return {
-          ...base,
-          value: numVal,
-          body: 'number',
-        }
-      }
+      case 'number':
       case 'integer': {
         const numVal = isUndef ? undefined : (value as number)
         return {
@@ -410,12 +422,28 @@ const transformToTreeNodes = (
   }
 
   if (schema?.type === 'object' && schema.properties) {
-    return Object.entries(schema.properties).map(([key, subschema]) =>
-      mapEntry(key, obj[key], subschema as JSONSchema7, keyPath),
+    return (
+      Object.entries(schema.properties)
+        // NEW: when hideMissing, only include keys that exist on the object and are not null/undefined
+        .filter(([key]) => {
+          if (!hideMissing) return true
+          const v = obj[key]
+          return v !== undefined && v !== null
+        })
+        .map(([key, subschema]) => mapEntry(key, obj[key], subschema as JSONSchema7, keyPath))
+        // NEW: mapEntry can return null; filter those out
+        .filter((n): n is QTreeNode => n !== null)
     )
   }
 
-  return Object.entries(obj).map(([key, value]) => mapEntry(key, value, undefined, keyPath))
+  // No schema: we only have actual entries from the object.
+  return (
+    Object.entries(obj)
+      // NEW: when hideMissing, filter null/undefined values too
+      .filter(([, value]) => !hideMissing || (value !== undefined && value !== null))
+      .map(([key, value]) => mapEntry(key, value, undefined, keyPath))
+      .filter((n): n is QTreeNode => n !== null)
+  )
 }
 
 const nodeTree = computed(() => {
