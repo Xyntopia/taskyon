@@ -1,11 +1,12 @@
 <template>
-  <q-page>
-    <q-toolbar>
+  <FadeAwayScrollPage>
+    <q-toolbar class="q-pt-md">
       <q-tabs v-model="selectedTab" class="col-auto" dense no-caps>
         <q-route-tab
           to="/settings/aiserviceprovider"
           label="AI Service Provider"
           name="aiserviceprovider"
+          data-cy="aiserviceprovider"
         />
         <q-route-tab to="/settings/profile" label="Profile & Backup" name="profile" />
         <q-route-tab to="/settings/secrets" label="Secrets" name="secrets" />
@@ -36,7 +37,12 @@
           <SyncTaskyon style="max-width: 600px" />
         </q-tab-panel>
         <q-tab-panel name="secrets" :class="tabPanelClass">
-          <PasswordManager style="max-width: 600px" />
+          <PasswordManager
+            copybtn
+            delete-all-btn
+            title="Taskyon Password Manager"
+            style="max-width: 600px"
+          />
         </q-tab-panel>
         <q-tab-panel name="agent config" :class="tabPanelClass">
           <div>All of the Agent configuration</div>
@@ -65,19 +71,21 @@
         </q-tab-panel>
       </q-tab-panels>
     </q-card>
-  </q-page>
+  </FadeAwayScrollPage>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import LLMProviders from 'components/taskyon/LLMProviders.vue'
+import { convertZodToJsonSchemaCached } from '@taskyon/taskyon'
 import ObjectTreeView from 'components/ObjectTreeView.vue'
-import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'
-import { useRoute } from 'vue-router'
 import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
-import { useAppStateStore } from 'src/stores/appState'
-import { convertZodToJsonSchemaCached, TyProfile } from 'src/modules/taskyon/types'
+import LLMProviders from 'components/taskyon/LLMProviders.vue'
+import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'
+import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 import PasswordManager from 'src/components/taskyon/PasswordManager.vue'
+import { TyProfile } from 'src/modules/taskyon/types'
+import { useAppStateStore } from 'src/stores/appState'
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 
 const route = useRoute()
 const state = useAppStateStore()

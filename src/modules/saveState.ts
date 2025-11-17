@@ -1,60 +1,43 @@
-import type { UnwrapRef } from 'vue';
-import { watch, ref } from 'vue'
+import type { Ref } from 'vue'
+import { computed, watch } from 'vue'
 
-// localStorage.ts
-
-/**
- * Loads a state from localStorage using a specified key.
- *
- * @template T - The type of the state.
- * @param {string} key - The key under which the state is stored in localStorage.
- * @returns {T | null} - The state, parsed from JSON, or null if no state was found.
- */
-function loadState<T>(key: string): T | null {
-  const raw = localStorage.getItem(key)
-  return raw ? (JSON.parse(raw) as T) : null
-}
-
-/**
- * Saves a state to localStorage under a specified key.
- *
- * @template T - The type of the state.
- * @param {string} key - The key under which to store the state in localStorage.
- * @param {T} state - The state to store.
- */
-function saveState<T>(key: string, state: T): void {
-  localStorage.setItem(key, JSON.stringify(state))
-}
-
-/**
- * Makes a state reactive and automatically saves and loads it from localStorage.
- *
- * @template T - The type of the state.
- * @param {string} key - The key under which to store and retrieve the state in localStorage.
- * @param {T} initialState - The initial state, to be used if no state is currently stored in localStorage.
- * @returns {Ref<UnwrapRef<T>>} - A reactive reference to the state.
- */
-export function syncStateWLocalStorage<T>(key: string, initialState: T) {
-  console.log('loading state!')
-  const savedState = loadState<T>(key)
-  const state = ref(initialState)
-  if (savedState != null) {
-    const newState = {
-      ...initialState,
-      ...savedState,
+export function syncRefsWithLocalStorage(key: string, refs: Record<string, Ref<unknown>>) {
+  // Load saved state if available
+  const savedRaw = localStorage.getItem(key)
+  if (savedRaw) {
+    try {
+      const saved = JSON.parse(savedRaw)
+      for (const k in refs) {
+        if (k in saved) {
+          // assign saved value to the ref
+          refs[k]!.value = saved[k as keyof typeof saved]
+        }
+      }
+    } catch {
+      /* ignore parse errors */
     }
-    state.value = newState as UnwrapRef<T>
   }
 
-  watch(
-    () => state,
-    (newValue) => {
-      saveState(key, newValue.value)
-    },
-    {
-      deep: true,
-    },
-  )
+  // Wrap the refs into a computed POJO of plain values.
+  // This computed *depends* on each ref.value, so it updates when any ref changes.
+  const wrapped = computed(() => {
+    const out: Record<string, unknown> = {}
+    for (const k in refs) {
+      out[k] = refs[k]!.value
+    }
+    return out
+  })
 
-  return state
+  // Watch the computed wrapper and persist the plain object to localStorage.
+  watch(
+    wrapped,
+    (newVals) => {
+      try {
+        localStorage.setItem(key, JSON.stringify(newVals))
+      } catch (e) {
+        console.error('Failed to save state to localStorage', e)
+      }
+    },
+    { deep: true },
+  )
 }

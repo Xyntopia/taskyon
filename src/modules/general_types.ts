@@ -1,26 +1,26 @@
-import { signData, verifySignature } from './crypto_js'
+import { signData, uint8ArrayToBase64UrlSafe, verifySignature } from '@taskyon/taskyon'
 import type { Request } from 'express'
 
 // Utility to serialize data for signing
-function serializeForSigning(url: string, body?: unknown): Uint8Array {
+function serializeForSigning(url: string, body?: unknown): Uint8Array<ArrayBuffer> {
   const serialized = body ? JSON.stringify({ url, body }) : JSON.stringify({ url })
   return new TextEncoder().encode(serialized)
 }
 
 // Sign a request (URL + optional body)
 export async function signRequest(
-  privateKey: string,
+  privateKey: CryptoKeyPair['privateKey'],
   url: string,
   body?: unknown,
-): Promise<string> {
+) {
   const serializedData = serializeForSigning(url, body)
   return await signData(serializedData, privateKey)
 }
 
 // Verify a request signature (URL + optional body)
 export async function verifyRequest(
-  signature: string,
-  publicKey: string,
+  signature: Uint8Array<ArrayBuffer>,
+  publicKey: CryptoKeyPair['publicKey'],
   url: string,
   body?: unknown,
 ): Promise<boolean> {
@@ -34,8 +34,8 @@ export async function createSignedFetchRequest(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   body: unknown,
   jwtToken: string,
-  publicKey: string,
-  privateKey: string,
+  publicKey: CryptoKeyPair['publicKey'],
+  privateKey: CryptoKeyPair['privateKey'],
 ): Promise<Response> {
   // Sign the URL and body
   const signature = await signRequest(privateKey, url, body)
@@ -45,7 +45,7 @@ export async function createSignedFetchRequest(
     Authorization: `Bearer ${jwtToken}`,
     'content-type': 'application/json',
     'x-public-key': publicKey,
-    'x-signature': signature,
+    'x-signature': uint8ArrayToBase64UrlSafe(signature),
   }
 
   const init: Record<string, unknown> = {
@@ -71,7 +71,9 @@ export async function verifyExpressRequest(req: Request): Promise<boolean> {
     return false
   }
 
+  const serialized = serializeForSigning(url)
+
   // Verify the URL and body using the provided signature and public key
   const serializedBody = method === 'GET' ? undefined : body
-  return await verifyRequest(url, serializedBody, signature, publicKey)
+  return await verifyRequest(serialized, serializedBody, signature, publicKey)
 }

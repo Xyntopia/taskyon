@@ -1,46 +1,151 @@
 <!-- FileManagerPage.vue – DEBUG INSTRUMENTED -->
 <template>
-  <q-layout>
-    <q-page-container>
-      <q-page padding>
-        <FileDropzone class="q-mb-md" enable-paste @add-files="addFiles" />
+  <q-page padding>
+    <FileDropzone class="q-mb-md" enable-paste @add-files="addFiles" />
 
-        <q-card>
-          <q-card-section>
-            <div class="text-h6">
-              Taskyon File Browser
-              <InfoDialog
-                info-text="This browser shows all files that taskyon saved in its OPFS file system and can interact with!"
+    <q-card>
+      <q-card-section>
+        <div class="text-h6">
+          Taskyon File Browser
+          <InfoDialog
+            info-text="This browser shows all files that taskyon saved in its [OPFS](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system) file system and can interact with!"
+          />
+        </div>
+      </q-card-section>
+      <q-separator />
+
+      <q-card-section>
+        <q-tree
+          v-model:expanded="expandedNodeIds"
+          :nodes="treeData"
+          node-key="id"
+          accordion
+          dense
+          selected-color="secondary"
+          @lazy-load="handleLazyLoad"
+        >
+          <template #default-header="{ node }">
+            <div
+              class="row items-center no-wrap cursor-pointer"
+              :class="{ 'highlighted-leaf': node.id === selectedNodeId }"
+              @click="onNodeClick(node)"
+            >
+              <q-icon :name="node.icon" class="q-mr-sm" />
+              <div class="ellipsis">{{ node.label }}</div>
+              <q-space />
+              <q-btn
+                v-if="node.kind === 'file'"
+                dense
+                flat
+                round
+                :icon="matDownload"
+                @click.stop="downloadFile(node)"
+              />
+              <q-btn
+                v-if="node.kind === 'file'"
+                dense
+                flat
+                round
+                :icon="matContentCopy"
+                @click.stop="copyPath(node)"
+              />
+              <q-btn
+                v-if="node.kind === 'file'"
+                dense
+                flat
+                round
+                color="negative"
+                :icon="matDelete"
+                @click.stop="deleteFile(node)"
               />
             </div>
-          </q-card-section>
-          <q-separator />
-
-          <q-card-section>
-            <q-tree
-              :nodes="treeData"
-              node-key="id"
-              accordion
-              dense
-              selected-color="primary"
-              @lazy-load="handleLazyLoad"
-              @update:selected="onSelect"
-            />
-          </q-card-section>
-        </q-card>
-      </q-page>
-    </q-page-container>
-  </q-layout>
+          </template>
+        </q-tree>
+      </q-card-section>
+    </q-card>
+  </q-page>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
-import { uid } from 'quasar'
-import FileDropzone from 'src/components/FileDropzone.vue'
-import type { QTreeNode } from 'quasar'
-import { matFolder } from '@quasar/extras/material-icons'
+import { matContentCopy, matDelete, matDownload, matFolder } from '@quasar/extras/material-icons'
 import { mdiFile } from '@quasar/extras/mdi-v6'
+import type { QTreeNode } from 'quasar'
+import FileDropzone from 'src/components/FileDropzone.vue'
 import InfoDialog from 'src/components/InfoDialog.vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+
+const props = defineProps<{
+  initialPath?: string | string[]
+}>()
+
+const normalizedPath = computed(() => {
+  if (!props.initialPath) return ''
+  return Array.isArray(props.initialPath)
+    ? props.initialPath.filter(Boolean).join('/')
+    : props.initialPath
+})
+
+/* ---------- state ---------- */
+
+const treeData = ref<TreeNode[]>([])
+const selectedNodeId = ref<string | null>(null)
+const expandedNodeIds = ref<string[]>([])
+
+watch(normalizedPath, async (path) => {
+  if (path && treeData.value.length > 0) {
+    await openPath(path)
+  }
+})
+
+onMounted(async () => {
+  await buildRoot()
+  if (normalizedPath.value) {
+    await openPath(normalizedPath.value)
+  }
+})
+
+async function openPath(path: string) {
+  const segments = path.split('/').filter(Boolean)
+  let currentNodes = treeData.value
+  let current: TreeNode | undefined
+
+  console.log(
+    '[openPath] path=',
+    path,
+    'segments=',
+    segments,
+    'root IDs=',
+    treeData.value.map((n) => n.id),
+  )
+
+  for (let i = 0; i < segments.length; i++) {
+    const segPath = segments.slice(0, i + 1).join('/')
+    current = currentNodes.find((n) => n.id === segPath)
+
+    if (!current) {
+      console.warn('[openPath] segment not found:', segPath)
+      return
+    }
+
+    if (current.kind === 'directory') {
+      if (current.lazy) {
+        const children = await dirHandleToNodes(current.handle as DirHandle, current.path)
+        current.children = children
+        current.lazy = false
+      }
+      if (!expandedNodeIds.value.includes(current.id)) {
+        expandedNodeIds.value.push(current.id)
+      }
+      currentNodes = (current.children ?? []) as TreeNode[]
+    } else {
+      if (i === segments.length - 1) {
+        console.log('[openPath] normalizedPath', path, '→ selecting', current?.id)
+        selectedNodeId.value = current.id
+        console.log('[openPath] selected leaf', current.id)
+      }
+    }
+  }
+}
 
 /* ---------- helpers ---------- */
 
@@ -62,37 +167,37 @@ interface TreeNode extends QTreeNode {
   handle: FileSystemHandle
   kind: 'file' | 'directory'
   size?: number
+  path: string
 }
-
-/* ---------- state ---------- */
-
-const treeData = ref<TreeNode[]>([])
 
 /* ---------- directory → nodes ---------- */
 
-async function dirHandleToNodes(dir: DirHandle): Promise<TreeNode[]> {
+async function dirHandleToNodes(dir: DirHandle, parentPath = ''): Promise<TreeNode[]> {
   console.log('[dirHandleToNodes] Reading directory', dir)
   const out: TreeNode[] = []
   for await (const [name, handle] of dir.entries()) {
     console.log('  ├─ found', name, 'kind=', handle.kind)
+    const fullPath = parentPath ? `${parentPath}/${name}` : name
     if (handle.kind === 'file') {
       const file = await handle.getFile()
       out.push({
-        id: uid(),
+        id: fullPath, // use path as stable id
         label: `${name} · ${formatSize(file.size)}`,
         icon: mdiFile,
         kind: 'file',
         size: file.size,
         handle,
+        path: fullPath, // <── keep for copy
       })
     } else {
       out.push({
-        id: uid(),
+        id: fullPath,
         label: name,
         icon: matFolder,
         kind: 'directory',
         handle,
-        lazy: true, // let QTree know it should invoke @lazy-load
+        lazy: true,
+        path: fullPath,
       })
     }
   }
@@ -112,7 +217,7 @@ async function dirHandleToNodes(dir: DirHandle): Promise<TreeNode[]> {
 async function buildRoot() {
   console.log('[buildRoot] Fetching OPFS root')
   const root: DirHandle = await navigator.storage.getDirectory()
-  treeData.value = await dirHandleToNodes(root)
+  treeData.value = await dirHandleToNodes(root, '')
   /* Force refresh in case Quasar cached the array reference */
   await nextTick()
   console.log('[buildRoot] Root built; nodes =', treeData.value.length)
@@ -131,7 +236,7 @@ async function handleLazyLoad({
   // 1️⃣  use node.lazy as the decisive flag
   if (node.kind === 'directory' && node.lazy) {
     try {
-      const children = await dirHandleToNodes(node.handle as DirHandle)
+      const children = await dirHandleToNodes(node.handle as DirHandle, node.path)
 
       // update the node so later clicks can find the files
       node.children = children
@@ -149,24 +254,54 @@ async function handleLazyLoad({
 
 /* ---------- click selection ---------- */
 
-async function onSelect(ids: string[]) {
-  const id = ids[0]
-  if (!id) return
-  console.log('[onSelect] Clicked node id=', id)
+async function onNodeClick(node: TreeNode) {
+  if (node.kind === 'directory') return // let expand/collapse happen
+  await downloadFile(node)
+}
 
-  // depth-first search for the clicked node
-  const stack: TreeNode[] = [...treeData.value]
-  while (stack.length) {
-    const n = stack.pop()!
-    if (n.id === id) {
-      console.log('  ├─ Node found:', n)
-      if (n.kind === 'file') {
-        const file = await (n.handle as FileSystemFileHandle).getFile()
-        console.log(`▼ FILE CONTENT (${n.label}) ▼\n${await file.text()}\n▲ END FILE ▲`)
+async function downloadFile(node: TreeNode) {
+  const file = await (node.handle as FileSystemFileHandle).getFile()
+  const url = URL.createObjectURL(file)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = file.name
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+async function copyPath(node: TreeNode) {
+  try {
+    await navigator.clipboard.writeText(node.path)
+    console.log('[copyPath] copied', node.path)
+  } catch (err) {
+    console.error('[copyPath] failed:', err)
+  }
+}
+
+async function deleteFile(node: TreeNode) {
+  try {
+    // derive parent path
+    const segments = node.path.split('/')
+    const fileName = segments.pop()
+    const parentPath = segments.join('/')
+
+    let parent: DirHandle = await navigator.storage.getDirectory()
+    if (parentPath) {
+      const parts = parentPath.split('/')
+      for (const p of parts) {
+        parent = (await parent.getDirectoryHandle(p)) as DirHandle
       }
-      break
     }
-    if (n.children) stack.push(...(n.children as TreeNode[]))
+
+    if (fileName) {
+      await parent.removeEntry(fileName)
+      console.log('[deleteFile] removed', node.path)
+    }
+
+    // rebuild root so UI updates
+    await buildRoot()
+  } catch (err) {
+    console.error('[deleteFile] failed:', err)
   }
 }
 
@@ -185,6 +320,12 @@ async function addFiles(files: File[]) {
 }
 
 /* ---------- bootstrap ---------- */
-
-onMounted(buildRoot)
 </script>
+
+<style scoped>
+.highlighted-leaf {
+  background: var(--q-secondary);
+  color: white;
+  border-radius: 4px;
+}
+</style>

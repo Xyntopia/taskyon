@@ -102,6 +102,89 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     ],
   },
   {
+    path: '/',
+    component: () => import('layouts/EmptyLayout.vue'),
+    children: [
+      {
+        path: 'connect/:method',
+        component: () => import('pages/ConnectPage.vue'),
+        props: true,
+        meta: { titel: 'Connect Taskyon', description: 'Connecting Taskyon to the network.' },
+      },
+      {
+        path: 'editor',
+        component: () => import('pages/taskyon/CodingPage.vue'),
+        meta: {
+          title: 'Taskyon Code Editor',
+          description: 'Edit code together with AI',
+        },
+      },
+      {
+        path: '/sql',
+        component: () => import('pages/taskyon/SqlQueryPage.vue'),
+        meta: {
+          title: 'SQL debugging',
+          description: 'Do queries on taskyons databases using SQL',
+        },
+      },
+      {
+        path: '/tool',
+        component: () => import('src/pages/taskyon/ToolPage.vue'),
+        meta: { title: 'Tool Page', description: 'Use Individual Tool' },
+        props: true,
+      },
+      {
+        path: '/tool/:name',
+        component: () => import('src/pages/taskyon/ToolPage.vue'),
+        meta: { title: 'Tool Page', description: 'Use Individual Tool' },
+        props: true,
+      },
+      {
+        path: '/fm/:pathMatch(.*)*',
+        component: () => import('pages/FileManagerPage.vue'),
+        props: (route) => ({ initialPath: route.params.pathMatch }),
+        meta: {
+          title: 'File Manager',
+          description: 'Manage files saved in Taskyon OPFS.',
+        },
+      },
+      {
+        path: '/opfs',
+        component: () => import('pages/FileManagerPage.vue'),
+        meta: {
+          title: 'Taskyon File Manager',
+          description: 'Manage files saved in Taskyon OPFS.',
+        },
+      },
+      {
+        path: '/p2p',
+        component: () => import('pages/taskyon/Libp2pUniversalChat.vue'),
+        meta: {
+          title: 'p2p chat',
+          description: 'libp2p chat',
+        },
+      },
+      {
+        path: '/p2pmonitor',
+        component: () => import('pages/taskyon/Libp2pStatusPage.vue'),
+        meta: {
+          title: 'p2p chat',
+          description: 'libp2p chat',
+        },
+      },
+      /*{
+        path: '/componenttests',
+        component: () => import('pages/ComponentTests.vue'),
+        meta: {
+          title: 'Test Taskyon Components',
+          description: 'Testing Taskyon Components.',
+        },
+      },*/
+    ],
+  },
+  // diagnostics should stay in its own page in order to be as independent as possible
+  // in case there are any errors in the rest of the app...
+  {
     path: '/diagnostics',
     component: () => import('pages/taskyon/DiagnosticsPage.vue'),
     meta: {
@@ -109,50 +192,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       description: 'Error & Diagnostics display',
     },
   },
-  {
-    path: '/tool',
-    component: () => import('src/pages/taskyon/ToolPage.vue'),
-    meta: { title: 'Tool Page', description: 'Use Individual Tool' },
-    props: true,
-  },
-  {
-    path: '/tool/:name',
-    component: () => import('src/pages/taskyon/ToolPage.vue'),
-    meta: { title: 'Tool Page', description: 'Use Individual Tool' },
-    props: true,
-  },
-  {
-    path: '/ipfsmonitor',
-    component: () => import('pages/taskyon/IpfsStatusPage.vue'),
-    meta: {
-      title: 'IPFS status',
-      description: 'Interplanetary file system status monitor',
-    },
-  },
-  {
-    path: '/fm',
-    component: () => import('pages/FileManagerPage.vue'),
-    meta: {
-      title: 'File Manager',
-      description: 'Manage files saved in Taskyon OPFS.',
-    },
-  },
-  {
-    path: '/sql',
-    component: () => import('pages/taskyon/SqlQueryPage.vue'),
-    meta: {
-      title: 'SQL debugging',
-      description: 'Do queries on taskyons databases using SQL',
-    },
-  },
-  {
+  /*{
     path: '/p2pmonitor',
     component: () => import('pages/taskyon/Libp2pStatusPage.vue'),
     meta: {
       title: 'p2p connection status',
       description: 'libp2p connection status monitor',
     },
-  },
+  },*/
   {
     path: '/clienttest',
     component: () => import('pages/TaskyonClientTest.vue'),
@@ -161,26 +208,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       description: 'We are testing taskyons client library here.',
     },
   },
-  {
-    path: '/opfs',
-    component: () => import('pages/FileManagerPage.vue'),
-    meta: {
-      title: 'Taskyon File Manager',
-      description: 'Manage files saved in Taskyon OPFS.',
-    },
-  },
 ]
 
 export const routes: RouteRecordRaw[] = [
   ...taskyonRoutes,
   {
     // we are making sure to only load urls without any extensions here...
-    path: '/oauth/:phase',
+    path: '/oauth/return',
     component: () => import('pages/auth/AuthFlow.vue'),
-    props: (route) => ({
-      query: route.query,
-      phase: route.params.phase,
-    }),
   },
   // Always leave this as last one,
   // but you can also remove it

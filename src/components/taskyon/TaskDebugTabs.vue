@@ -56,6 +56,14 @@
           >
           </textarea>
         </template>
+        <div></div>
+        <div class="text-caption">reasoning:</div>
+        <textarea
+          :value="taskReason"
+          readonly
+          wrap="soft"
+          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
+        />
         <div class="text-caption">finished completion:</div>
         <textarea
           :value="taskChoice || null"
@@ -79,12 +87,10 @@
 </template>
 
 <script setup lang="ts">
-import { useTaskyonStore } from 'stores/taskyonState'
-import type { ChatResponseType, TaskNode } from 'src/modules/taskyon/types'
-import { type OpenAIMessage } from 'src/modules/taskyon/types'
-import { computed } from 'vue'
+import type { ChatResponseType, OpenAIMessage, TaskNode } from '@taskyon/taskyon'
 import { useAppStateStore } from 'src/stores/appState'
-import { onUnmounted } from 'vue'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { computed, onUnmounted } from 'vue'
 
 const props = defineProps<{
   task: TaskNode
@@ -107,6 +113,17 @@ const taskChoice = computed(() => {
       .content
   } catch {
     return '<no chatcompletion output avaailable>'
+  }
+})
+
+const taskReason = computed(() => {
+  try {
+    return (
+      (taskMeta.value?.rawOutput as { choice: ChatResponseType['choices'][0] }).choice?.reasoning ||
+      '<no reasoning output available>'
+    )
+  } catch {
+    return '<no reasoning output available>'
   }
 })
 </script>

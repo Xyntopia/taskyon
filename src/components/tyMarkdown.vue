@@ -38,7 +38,11 @@ import { asyncComputed } from 'src/modules/vueUtils'
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 
 // inside your <script setup>
-const emit = defineEmits<{ (e: 'iframe-ready', el: HTMLIFrameElement): void }>()
+const emit = defineEmits<{
+  (e: 'iframe-ready', el: HTMLIFrameElement): void
+  (e: 'ifLongpress', pos: { x: number; y: number }): void
+  (e: 'ifClick', pos: { x: number; y: number }): void
+}>()
 
 watch(iframeRef, (el) => {
   if (el) emit('iframe-ready', el)
@@ -76,6 +80,7 @@ const renderedHtml = asyncComputed(async () => {
       /(^|\n)\s*:::/, // custom containers (like :::note)
     ].some((pattern) => pattern.test(raw))
 
+  if (!useIframe) return await md2Html(raw, $q.dark.isActive, false)
   return isPureHtml ? raw : await md2Html(raw, $q.dark.isActive, true)
 }, 'rendering ...')
 
@@ -86,10 +91,16 @@ const iframeHtml = computed<string | undefined>(() => {
 
   const parentStyle = window.getComputedStyle(document.body)
   const fontFamily = parentStyle.fontFamily || 'Roboto, sans-serif'
+  const fontSize = parentStyle.fontSize || '16px'
   // For dark mode, override parent's color to white.
   const textColor = $q.dark.isActive ? 'white' : parentStyle.color || 'inherit'
 
-  const inlineStyle = `<style>body { font-family: ${fontFamily}; color: ${textColor}; }</style>`
+  const inlineStyle = `<style>body
+  {
+    font-family: ${fontFamily};
+    color: ${textColor};
+    font-size: ${fontSize};
+  }</style>`
 
   const linkTags = ($q.dark.isActive ? tyMdCssUrls.dark : tyMdCssUrls.light)
     .map((href) => `<link rel="stylesheet" href="${href}">`)
@@ -128,16 +139,7 @@ let lastHeight: number | null = null
 let resizeCount = 0
 const MAX_RESIZE_ATTEMPTS = 10
 
-function handleMessage(event: MessageEvent) {
-  const data = event.data as ResizeIframeMessage
-  if (
-    !iframeRef.value ||
-    event.source !== iframeRef.value.contentWindow ||
-    data?.type !== 'resizeIframe'
-  ) {
-    return
-  }
-
+function handleResize(data: ResizeIframeMessage) {
   pendingResize = {
     width: data.width,
     height: data.height,
@@ -185,6 +187,20 @@ function handleMessage(event: MessageEvent) {
   }, 100)
 }
 
+function handleMessage(event: MessageEvent) {
+  if (!iframeRef.value || event.source !== iframeRef.value.contentWindow) return
+
+  if (event.data?.type === 'resizeIframe') handleResize(event.data as ResizeIframeMessage)
+
+  if (event.data?.type === 'longpress') {
+    emit('ifLongpress', { x: event.data.x, y: event.data.y })
+  }
+
+  if (event.data?.type === 'iframeClick') {
+    emit('ifClick', { x: event.data.x, y: event.data.y })
+  }
+}
+
 onUnmounted(() => {
   window.removeEventListener('message', handleMessage)
 })
@@ -193,3 +209,16 @@ onMounted(() => {
   window.addEventListener('message', handleMessage)
 })
 </script>
+
+<style scoped lang="sass">
+iframe.markdown-iframe
+  display: block // so it behaves like a block-level box
+  max-width: 100% // never exceed parent’s width, but allow smaller
+  border: none
+  min-width: 100px
+  width: 100%
+  min-height: 20px
+
+.ty-markdown
+  align-self: auto
+</style>

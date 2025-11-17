@@ -1,54 +1,58 @@
 // this store simply defines the state of our app witout any logic or background tasks etc,,,
 // this makes it easy to integrate it with SSR for example...
 
-import { defineStore } from 'pinia'
-import { computed, reactive, toRefs, type Reactive, watch } from 'vue'
-import type { FunctionCall } from 'src/modules/taskyon/types'
-import { type tyPublicKeyDraft, TyProfile } from 'src/modules/taskyon/types'
 import axios from 'axios'
+import { defineStore } from 'pinia'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
+import defaultSettings from 'src/assets/taskyon_settings.json'
+import { TyProfile } from 'src/modules/taskyon/types'
+import type { MergeOptions } from 'src/modules/utils'
 import {
   clearBrowserCaches,
   clearCookies,
   clearServiceWorkers,
-  deepMerge,
   deepMergeReactive,
-  sleep,
 } from 'src/modules/utils'
-import { unref } from 'vue'
-import defaultSettings from 'src/assets/taskyon_settings.json'
-import { generateAssymetricRandomNewKey } from 'src/modules/crypto_js'
-import { isTaskyonKey } from 'src/modules/taskyon/tyCrypto'
+import { computed, reactive, ref, toRefs, unref, watch, type Reactive } from 'vue'
+// TODO: remove, to make this file here faster...
+import type { KeyString, tyPublicKeyDraft } from '@taskyon/taskyon'
+import { deepMerge, sleep, type FunctionCall } from '@taskyon/taskyon'
+import { freeKey } from 'assets/taskyon_free_key.json'
+import {
+  getCurrentProfileName,
+  getTaskyonUiProfile,
+  initialStoredStateObj,
+  setTaskyonUiProfile,
+  switchCurrentProfilePointer,
+  urlConfig,
+} from 'src/modules/ui/initialState'
 import type { PartialDeep } from 'type-fest'
-import { initialStoredStateObj, storeName } from 'src/modules/ui/initialState'
 
 interface TaskWidgetStateType {
   markdownEnabled: boolean
 }
 
-function clearBrowserStorage() {
-  LocalStorage.clear()
+function clearBrowserStorage(localStorageKeys?: string[]) {
+  if (localStorageKeys) localStorageKeys.forEach((key) => LocalStorage.removeItem(key))
+  else LocalStorage.clear()
   sessionStorage.clear()
   clearBrowserCaches()
   clearServiceWorkers()
   clearCookies()
 }
 
-// this is where we save all of our app settings.
-// its important to keep this simple and don't incude 3rd party libraries and othe things
-// because we want to this to also work on tyServer and in a "minimal gui" setting.
-// So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
-export const useAppStateStore = defineStore(storeName, () => {
+function getInitialState() {
+  // load storable settings
   const res = TyProfile.safeParse(defaultSettings)
   if (!res.success) {
     throw new Error('The default settings provided do not work!', { cause: res.error.message })
   }
   const defaultStorableSettings = res.data
+
   // llmSettings & appConfiguration define the state of our app!
-  // the rest of the state is eithr secret (keys) or temporary states which don't need to be saved
+  // the rest of the state is either secret (keys) or temporary states which don't need to be saved
   const initialState = {
     ...defaultStorableSettings,
-    keys: {} as Record<string, string>,
     // app State which should be part of the configuration
     // the things below should only represent transitional states
     // which have no relevance in the actual configuration of the app.
@@ -67,14 +71,24 @@ export const useAppStateStore = defineStore(storeName, () => {
     createTaskType: {
       type: 'message',
     } as { type: 'message' } | { type: 'functioncall'; name: FunctionCall['name'] }, // the type of task we are currently working on
-    messageDraft: '' as string,
+    messageDraft: '' as string | undefined,
     // we use this here to store the different types of task drafts that we were working on.
     draftParameters: {} as Record<FunctionCall['name'], FunctionCall['arguments']>,
     // can be used to exchange certain keys and make taskyon
     // aware of different URLs etc...
     developerMode: false,
     useDevVersion: false,
+
+    //////  the following speeds up initialization for taskyon :)
+    // if true, taskyon store will wait until a binding key is provided
+    // this is persisted in local storage, so that on the next page reload
+    // taskyon will wait for the key before initializing taskyon code session
+    initWBindingKey: false,
+    // TODO:
+    initWSession: undefined as string | undefined,
+
     messageDebug: {} as Record<string, 'RAW' | 'MESSAGECONTENT' | 'RAWTASK' | 'ERROR' | undefined>, // whether message with ID should be open or not...
+
     // taskyon.space-specific section, TODO: move this somewhere else!
     keyDraft: {
       name: 'N/A',
@@ -87,76 +101,18 @@ export const useAppStateStore = defineStore(storeName, () => {
     // this makes it easier to come back to a filtered list for model
     // selection
     modelFilter: '' as string | null,
+    noGuiTests: true,
+    detailedTests: false,
+
+    // persistentStorage (for some components which need to temporarily persist some informations...)
+    store: {} as Record<string, unknown>,
   }
+  return { initialState, defaultStorableSettings }
+}
 
-  const initialStoredStateObjTyped = initialStoredStateObj as
-    | Partial<typeof initialState>
-    | undefined
+type initialState = ReturnType<typeof getInitialState>['initialState']
 
-  let stateRefs: Reactive<typeof initialState>
-  if (
-    initialStoredStateObjTyped &&
-    initialStoredStateObjTyped.version &&
-    initialStoredStateObjTyped.version === initialState.version
-  ) {
-    console.log(`load saved ${storeName} state!`)
-    const storedInitialState = deepMerge(initialState, initialStoredStateObjTyped, 'overwrite')
-    stateRefs = reactive(storedInitialState)
-  } else {
-    // TODO: pop up a dialog where we inform the user about this!!
-    console.warn(
-      `Stored settings version (${
-        initialStoredStateObjTyped?.version || 'undefined'
-      }) is not compatible with current version (${initialState.version}). Using default settings.`,
-    )
-    clearBrowserStorage()
-    stateRefs = reactive(initialState)
-  }
-
-  // Flag that tells the persister to skip the next change
-  let saveToLocalStorage = true
-
-  // store the state on every change!! :)
-  watch(stateRefs, (newState) => {
-    //console.log('saved store!!');
-    if (saveToLocalStorage) {
-      LocalStorage.set(storeName, JSON.stringify(newState))
-    }
-  })
-
-  if (stateRefs.initialLoad) {
-    void generateAssymetricRandomNewKey().then((r) => (stateRefs.llmSettings.userId = r.publicKey))
-  }
-
-  function overrideSettings(newConfig: PartialDeep<TyProfile>, persist: boolean = false) {
-    saveToLocalStorage = persist
-    if (newConfig.llmSettings) {
-      // TODO: make sure, this function is only temporary and doesn't overwrite our actual llmSettings...
-      deepMergeReactive(stateRefs.llmSettings, newConfig.llmSettings, 'overwrite')
-    }
-    if (newConfig.appConfiguration) {
-      deepMergeReactive(stateRefs.appConfiguration, newConfig.appConfiguration, 'overwrite')
-    }
-    if (newConfig.toolchainConfig) {
-      deepMergeReactive(stateRefs.toolchainConfig, newConfig.toolchainConfig, 'overwrite')
-    }
-    // and also set a possible signature as the api key!
-    if (stateRefs.llmSettings.selectedApi && newConfig.signatureOrKey) {
-      // we only set the API key, if it was provided by the
-      // parent app.
-      const newKey = newConfig.signatureOrKey
-      if (typeof newKey === 'string') {
-        stateRefs.keys[stateRefs.llmSettings.selectedApi] = newKey
-      } else {
-        console.warn('Provided signatureOrKey is not a string:', newKey)
-      }
-    }
-  }
-
-  // this file could potentially be replaced in kubernetes or docker using a configmap!
-  // that way we can configure our webapp even if its already compiled...
-  // this is done asynchrounously, because we want to be able to dynamically
-  // change our config without having to recompile taskyon.
+function loadConfigurationFile(initialState: initialState, stateRefs: Reactive<initialState>) {
   void axios
     .get<
       | {
@@ -178,14 +134,18 @@ export const useAppStateStore = defineStore(storeName, () => {
           console.log('merge dynamic app config', jsonconfig.data)
 
           // if this is *not* an initial load, we only add "new" values that can be found in the configuration.
-          const mergeStrategy = stateRefs.initialLoad ? 'overwrite' : 'additive'
+          const mergeStrategy: MergeOptions = stateRefs.initialLoad
+            ? {
+                arrays: 'overwrite',
+                objects: 'overwrite',
+                primitives: 'preserve',
+              }
+            : { arrays: 'concat', objects: 'merge', typeMismatch: 'target', primitives: 'preserve' }
           deepMergeReactive(stateRefs.appConfiguration, config.appConfiguration, mergeStrategy)
           deepMergeReactive(stateRefs.llmSettings, config.llmSettings, mergeStrategy)
         } else {
           console.warn(
-            `Config version (${
-              config.version || 'undefined'
-            }) is not compatible with current version (${initialState.version}). Skipping dynamic config merge.`,
+            `Config version (${config.version || 'undefined'}) is not compatible with current version (${initialState.version}). Skipping dynamic config merge.`,
           )
         }
         stateRefs.initialLoad = false
@@ -194,6 +154,92 @@ export const useAppStateStore = defineStore(storeName, () => {
     .catch((error) => {
       console.error('Failed to load dynamic app config:', error)
     })
+}
+
+const useSessionKey = () => {
+  const bindingKey = ref<CryptoKey | null>(null)
+
+  return {
+    bindingKey: computed(() => bindingKey.value),
+    setBindingKey: (k: CryptoKey | null) => {
+      console.log('set new session bindingKey!', k ? 'add new key...' : 'delete key...')
+      bindingKey.value = k
+    },
+  }
+}
+
+const saveAndLoadState = (initialState: initialState) => {
+  const initialStoredStateObjTyped = initialStoredStateObj as Partial<initialState> | undefined
+
+  let stateRefs: Reactive<initialState>
+  if (
+    initialStoredStateObjTyped &&
+    initialStoredStateObjTyped.version &&
+    initialStoredStateObjTyped.version === initialState.version
+  ) {
+    console.log(`load saved ui state!`)
+    const storedInitialState = deepMerge(initialState, initialStoredStateObjTyped, 'overwrite')
+    stateRefs = reactive(storedInitialState)
+  } else {
+    // TODO: pop up a dialog or a separate migration page where we
+    //       inform the user about this and ask them what to do about it...
+    console.warn(
+      `Stored settings version (${
+        initialStoredStateObjTyped?.version || 'undefined'
+      }) is not compatible with current version (${initialState.version}). Using default settings.`,
+    )
+    const pname = getCurrentProfileName()
+    if (pname) clearBrowserStorage([pname])
+    stateRefs = reactive(initialState)
+  }
+
+  // Flag that tells the persister to skip the next change
+  let saveToLocalStorage = true
+
+  // store the state on every change!! :)
+  watch(stateRefs, (newState) => {
+    //console.log('saved store!!');
+    const pname = getCurrentProfileName()
+    if (saveToLocalStorage && pname) {
+      setTaskyonUiProfile(pname, newState)
+    }
+  })
+
+  if (stateRefs.initialLoad) {
+    stateRefs.llmSettings.userId = 'unknown'
+  }
+
+  function overRideSettings(newConfig: PartialDeep<TyProfile>, persist: boolean = false) {
+    saveToLocalStorage = persist
+    if (newConfig.llmSettings) {
+      // TODO: make sure, this function is only temporary and doesn't overwrite our actual llmSettings...
+      deepMergeReactive(stateRefs.llmSettings, newConfig.llmSettings)
+    }
+    if (newConfig.appConfiguration) {
+      deepMergeReactive(stateRefs.appConfiguration, newConfig.appConfiguration)
+    }
+    if (newConfig.toolchainConfig) {
+      deepMergeReactive(stateRefs.toolchainConfig, newConfig.toolchainConfig)
+    }
+  }
+
+  return { overRideSettings, stateRefs }
+}
+
+// this is where we save all of our app settings.
+// its important to keep this simple and don't incude 3rd party libraries and other things
+// because we want to this to also work on tyServer and in a "minimal gui" setting.
+// So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
+export const useAppStateStore = defineStore('ui-state', () => {
+  // configuration from the URL!
+  const { initialState, defaultStorableSettings } = getInitialState()
+  const { overRideSettings, stateRefs } = saveAndLoadState(initialState)
+
+  // this file could potentially be replaced in kubernetes or docker using a configmap!
+  // that way we can configure our webapp even if its already compiled...
+  // this is done asynchrounously, because we want to be able to dynamically
+  // change our config without having to recompile taskyon.
+  loadConfigurationFile(initialState, stateRefs)
 
   // TODO: check if we can do this maybe a bit more elegant using pinia functions?  like using "clear" or something like that?
   function $reset() {
@@ -217,21 +263,36 @@ export const useAppStateStore = defineStore(storeName, () => {
     immediate: true,
   })
 
-  const minimalGui = computed(() => {
-    let mode = false
-    switch (stateRefs.appConfiguration.guiMode) {
-      case 'default':
-        mode = false
-        break
-      case 'iframe':
-        mode = true
-        break
-      case 'auto':
-        mode = $q.platform.within.iframe
-        break
+  const minimalGui = computed<Exclude<typeof stateRefs.appConfiguration.guiMode, 'auto'>>(() => {
+    if (stateRefs.appConfiguration.guiMode === 'auto') {
+      return $q.platform.within.iframe ? 'iframe' : 'default'
     }
-    return mode
+    return stateRefs.appConfiguration.guiMode
   })
+
+  // these are refs that we don't save:
+  const sessionId = ref<string | null>(null)
+  const { bindingKey, setBindingKey } = useSessionKey()
+  watch(
+    bindingKey,
+    () => {
+      stateRefs.initWBindingKey = bindingKey.value !== null
+    },
+    { immediate: true },
+  )
+
+  // our sessions only get saved once we have a legitimate session key!
+  const setSessionId = (newId: string) => {
+    if (newId === sessionId.value) return
+    sessionId.value = newId
+    console.log('switch Profile to new sessionId:', newId)
+    if (newId) {
+      // we don't need to save our old state, as it should have been persisted automatically
+      switchCurrentProfilePointer(newId)
+    }
+    // re-load state with new profile!
+    Object.assign(stateRefs, getTaskyonUiProfile(getCurrentProfileName()))
+  }
 
   // we do this funny next line, because our store is currently "reactive" which means
   // all scalars like strings, numbers etc..  ar actually non-reactive (vue reactive only converts
@@ -241,21 +302,47 @@ export const useAppStateStore = defineStore(storeName, () => {
   // we do the toRefs operation, so we simply reassign the same type "stateRefs" to it again which seems to work...
   const allRefs = toRefs(stateRefs) as unknown as typeof stateRefs
 
+  // TODO:
+  // this flag can be set by other parts of the app in order to signal the desired mode.
+  // other parts of taskyon UI will watch this flag and configure themselves accordingly.
+  // we are doing it this way, because we need this as early as possibel to prevent flicker
+  // but some parts of our app e.g. tycors and the secret store need a long time for initialization
+  // we don't save this variable on purpose, because we used it to present tokens to othe parts of the app...
+  const activeTaskyonToken = ref<KeyString>()
+  const usingFreeTaskyonKey = computed(() => {
+    console.log('using free taskyon key:', activeTaskyonToken.value === freeKey)
+    return activeTaskyonToken.value === freeKey
+  })
+
+  const authToken = ref<KeyString>()
+
   // it is *SUPERIMPORTANT*  that we ONLY return computed refs & functions in the store EXCEPT
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
   return {
+    usingFreeTaskyonKey,
+    authToken,
+    sessionId: computed(() => sessionId.value),
+    setSessionId,
+    bindingKey,
+    setBindingKey,
+    activeTaskyonToken: computed(() => activeTaskyonToken.value),
+    setActiveApiToken: (tok: KeyString | undefined) => {
+      console.log('set new active token secret', tok?.slice(-5))
+      activeTaskyonToken.value = tok
+    },
+    isInIframe: urlConfig.isInIframe,
     setSelectedTask: (taskId: string | null | undefined) => {
       console.log('set selected task:', taskId)
       stateRefs.llmSettings.selectedTaskId = taskId || undefined
     },
     ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
-    overRideSettings: overrideSettings,
+    overRideSettings,
     getStateValues: () => unref(allRefs),
     $reset,
     minimalGui,
-    tyPublicKey: computed(() => {
-      return isTaskyonKey(stateRefs.keys.taskyon || '', false)
-    }),
+    taskyonRunmode: ref<'waiting for connection' | 'standalone mode' | 'connected'>(
+      'standalone mode',
+    ),
   }
 })

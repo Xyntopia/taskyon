@@ -1,17 +1,14 @@
 <template>
-  <q-layout view="lHh LpR lfr">
-    <q-page-container>
-      <q-page class="q-pa-md q-gutter-sm">
-        <div class="text-h5">IPFS Node Status</div>
-        <q-btn outline label="return to chat" to="/" />
-        <q-btn outline label="send message" @click="sendMessage()" />
-      </q-page>
-    </q-page-container>
-  </q-layout>
+  <q-page class="q-pa-md">
+    <q-card class="q-ma-md">
+      <Libp2pStatus :p2p="p2p" />
+    </q-card>
+  </q-page>
 </template>
 
 <script setup lang="ts">
-function sendMessage() {
-  console.log('send message to server....')
-}
+import { getActiveP2pNode } from '@taskyon/taskyon'
+import Libp2pStatus from 'src/components/taskyon/Libp2pStatus.vue'
+
+const p2p = getActiveP2pNode()
 </script>

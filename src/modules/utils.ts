@@ -1,125 +1,16 @@
 //import equal from 'fast-deep-equal/es6';
-import { deepEqual } from 'fast-equals'
-import { Buffer } from 'buffer'
-import { safeYamlDump } from './yamlUtils'
-import type { AnyFunction } from './taskyon/tsHelpers'
+import type { AnyFunction, CacheEntry } from '@taskyon/taskyon'
 
-export function copyToClipboard(text: string) {
-  navigator.clipboard
-    .writeText(text)
-    .then(() => {
-      console.log('Copied to clipboard')
-    })
-    .catch((err) => {
-      console.error('Error in copying text: ', err)
-    })
-}
-
-/**
- * Convert any thrown value into a short, customer-friendly string.
- *
- * Priority: message → HTTP hints → meta fields → one-level cause.
- * Handles Array-style causes (e.g. ["403 Forbidden: …"]) by promoting
- * them to the top of the output.
- * Designed for production UI logs (no stack traces, YAML only).
- */
-export function humanizeError(errorInput: unknown): string {
-  const seenObjects = new WeakSet<object>()
-  const lines: string[] = []
-
-  /* ---------- helpers --------------------------------------------------- */
-  const toYaml = (val: unknown): string =>
-    typeof val === 'string' ? val : safeYamlDump(val).trim()
-
-  const append = (line: unknown): void => {
-    if (typeof line === 'string' && line.trim() && !lines.includes(line.trim())) {
-      lines.push(line.trim())
-    }
-  }
-
-  const appendArray = (arr: unknown[]): void => {
-    for (const element of arr) append(element)
-  }
-
-  /* ---------- main walker ----------------------------------------------- */
-  const traverse = (value: unknown, level = 0): void => {
-    if (value == null) return
-
-    const valueType = typeof value
-
-    // primitives (string | number | boolean | bigint | symbol)
-    if (valueType !== 'object' && valueType !== 'function') {
-      append(toYaml(value))
-      return
-    }
-
-    // avoid infinite recursion
-    if (seenObjects.has(value as object)) return
-    seenObjects.add(value as object)
-
-    // arrays: treat each entry as its own message
-    if (Array.isArray(value)) {
-      appendArray(value)
-      return
-    }
-
-    const obj = value as Record<string, unknown>
-
-    /* #1 message fields */
-    const message =
-      typeof obj.message === 'string'
-        ? obj.message
-        : typeof obj.msg === 'string'
-          ? obj.msg
-          : undefined
-    if (message) append(message)
-
-    /* #2 HTTP hints */
-    if (typeof obj.status === 'number') {
-      const statusText =
-        typeof obj.statusText === 'string' && obj.statusText ? ` ${obj.statusText}` : ''
-      append(`${obj.status}${statusText}`)
-    }
-    if (typeof obj.url === 'string' && obj.url) append(`URL: ${obj.url}`)
-
-    /* #3 data/body helpers */
-    const dataCandidate =
-      (typeof obj.response === 'object' && obj.response
-        ? (obj.response as Record<string, unknown>).data
-        : undefined) ??
-      obj.data ??
-      (obj as { body?: unknown }).body ??
-      (obj as { responseBody?: unknown }).responseBody
-    if (dataCandidate !== undefined)
-      append(`Data: ${toYaml(dataCandidate)}`)
-
-      /* #4 meta fields */
-    ;(['code', 'errno', 'name'] as const).forEach((key) => {
-      const val = obj[key]
-      if (typeof val === 'string' && val) append(`${key}=${val}`)
-    })
-
-    /* #5 cause (descend one level) */
-    if (level === 0) {
-      const causeKeys = ['cause', 'originalError', 'inner', 'error'] as const
-      for (const key of causeKeys) {
-        const causeVal = obj[key]
-        if (causeVal === undefined) continue
-
-        // Promote array causes so they’re shown first
-        if (Array.isArray(causeVal)) {
-          appendArray(causeVal)
-        } else {
-          append('Caused by →')
-          traverse(causeVal, level + 1)
-        }
-        break // handle only the first found cause
-      }
-    }
-  }
-
-  traverse(errorInput)
-  return lines.join('\n')
+export function copyToClipboard(text: string | undefined) {
+  if (text)
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        console.log('Copied to clipboard')
+      })
+      .catch((err) => {
+        console.error('Error in copying text: ', err)
+      })
 }
 
 export async function copyPngToClipboard(png: Uint8Array) {
@@ -172,11 +63,6 @@ export function humanReadablePrice(price: number | string | undefined, digits: n
   }
 }
 
-// Async sleep function
-export function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
 /**
  * Creates a higher-order function for caching the results of another function, using a Least Recently Used (LRU) policy.
  *
@@ -210,7 +96,7 @@ export function lruCache(size: number, ignoreIndices: number[] = []) {
 
       // Check for a cache hit.
       if (cache.has(key)) {
-        console.log('Cache hit:', key)
+        //console.log('Cache hit:', key)
         return cache.get(key) as ReturnType
       }
 
@@ -222,18 +108,13 @@ export function lruCache(size: number, ignoreIndices: number[] = []) {
       if (cache.size > size) {
         const oldestKey = Array.from(cache.keys())[0]!
         cache.delete(oldestKey)
-        console.log('Evicted:', oldestKey)
+        //console.log('Evicted:', oldestKey)
       }
 
       // Return the result.
       return result
     }
   }
-}
-
-type CacheEntry<ReturnType> = {
-  value: ReturnType
-  timestamp: number
 }
 
 export function timeLruCache<ReturnType>(
@@ -258,10 +139,10 @@ export function timeLruCache<ReturnType>(
         const age = now - entry.timestamp
 
         if (age <= maxAge) {
-          console.log('Cache hit:', key)
+          //console.log('Cache hit:', key)
           return entry.value
         } else {
-          console.log('Cache expired:', key)
+          //console.log('Cache expired:', key)
           cache.delete(key) // Remove the expired entry.
         }
       }
@@ -283,532 +164,294 @@ export function timeLruCache<ReturnType>(
   }
 }
 
-// Helper function for in-memory storage
-const createMemoryStorage = () => {
-  const memoryStorage = new Map<string, string>()
-  return {
-    setItem: memoryStorage.set.bind(memoryStorage),
-    getItem: (key: string) => memoryStorage.get(key) || null,
-  }
-}
-
-/**
- * Make anything JSON-serialisable.
- * – Preserves Error details (name, message, stack, cause, enumerables)
- * – Breaks cycles (→ "[Circular]")
- * – Stringifies BigInt / functions / symbols
- * – Returns a *plain* value, not a string.
- *
- * Drop-in replacement for the longer `serializeForJson`.
- */
-export function serializeForJson(value: unknown): unknown {
-  const seen = new WeakSet<object>()
-
-  const replacer = (_key: string, val: unknown): unknown => {
-    /* BigInt → string ---------------------------------------------------- */
-    if (typeof val === 'bigint') return val.toString()
-
-    /* Functions / symbols ---------------------------------------------- */
-    if (typeof val === 'function') return `[Function ${val.name || 'anonymous'}]`
-    if (typeof val === 'symbol') return val.toString()
-
-    /* Error objects ----------------------------------------------------- */
-    if (val instanceof Error) {
-      const { name, message, stack, cause, ...rest } = val
-      return { name, message, stack, cause, ...rest }
-    }
-
-    /* Circular refs ----------------------------------------------------- */
-    if (typeof val === 'object' && val !== null) {
-      if (seen.has(val)) return '[Circular]'
-      seen.add(val)
-    }
-
-    return val // leave everything else as-is
-  }
-
-  // stringify → parse to end up with plain JSON-safe data
-  return JSON.parse(JSON.stringify(value, replacer))
-}
-
-// Dynamically assign the storage methods
-const storage =
-  process.env.MODE === 'ssr' || typeof localStorage === 'undefined'
-    ? createMemoryStorage()
-    : localStorage
-
-// The cache for storing function call results.
-function saveToLocalStorage<ReturnType>(key: string, cache: Map<string, CacheEntry<ReturnType>>) {
-  const serializedCache = JSON.stringify(Array.from(cache.entries()))
-  storage.setItem(key, serializedCache)
-}
-
-function loadFromLocalStorage<ReturnType>(key: string): Map<string, CacheEntry<ReturnType>> {
-  const serializedCache = storage.getItem(key)
-  if (serializedCache) {
-    const parsedCache = JSON.parse(serializedCache) as [string, CacheEntry<ReturnType>][]
-    return new Map(parsedCache)
-  }
-  return new Map()
-}
-
-export function asyncTimeLruCache(
-  size: number,
-  maxAge: number, // Maximum age in milliseconds
-  useLocalStorage = false,
-  storageKey = 'asyncTimeLruCache',
-  lazyUpdate = false,
-  ignoreIndices: number[] = [],
-) {
-  return <F extends (...args: Parameters<F>) => ReturnType<F> | Promise<ReturnType<F>>>(fn: F) => {
-    const cache = useLocalStorage
-      ? loadFromLocalStorage<ReturnType<F>>(storageKey)
-      : new Map<string, CacheEntry<ReturnType<F>>>()
-
-    const updateCache = (key: string, result: ReturnType<F>, now: number) => {
-      cache.set(key, { value: result, timestamp: now })
-      // Check the cache size and evict the least recently used item if necessary.
-      if (cache.size > size) {
-        const oldestKey = Array.from(cache.keys())[0]!
-        cache.delete(oldestKey)
-        console.log('Evicted:', oldestKey)
-      }
-      if (useLocalStorage) {
-        saveToLocalStorage(storageKey, cache)
-      }
-    }
-
-    return async (...args: Parameters<F> & unknown[]): Promise<ReturnType<F>> => {
-      // Generate a cache key, ignoring specified arguments.
-      const keyArgs = args.filter((_, index) => !ignoreIndices.includes(index))
-      const key = JSON.stringify(keyArgs)
-
-      const now = Date.now()
-
-      // Check for a cache hit.
-      const entry = cache.get(key)
-      if (entry) {
-        const age = now - entry.timestamp
-
-        if (age <= maxAge) {
-          console.log('Cache hit:', key)
-          return entry.value
-        } else {
-          console.log('Cache expired:', key)
-          if (lazyUpdate) {
-            // Start updating the cache in the background
-            Promise.resolve(fn(...args))
-              .then((result: ReturnType<F>) => updateCache(key, result, now))
-              .catch(console.error)
-            // Return the stale value
-            return entry.value
-          }
-        }
-      }
-
-      // Call the original function and cache the result if lazyUpdate is false or cache miss occurs.
-      const result = await fn(...args)
-      updateCache(key, result, now)
-
-      // Return the result.
-      return result
-    }
-  }
-}
-
+// TODO: add a small test to this :)
+// asyncLruCache.ts
 export function asyncLruCache(size: number, ignoreIndices: number[] = []) {
-  return <TArgs extends unknown[], R>(
-    fn: (...args: TArgs) => R | Promise<R>,
-  ): ((...args: TArgs) => Promise<R>) => {
+  return <TArgs extends unknown[], R>(fn: (...args: TArgs) => R | Promise<R>) => {
     const cache = new Map<string, R>()
+    const inFlight = new Map<string, Promise<R>>()
 
-    return async (...args: TArgs): Promise<R> => {
-      // build a key, skipping any ignored positions
+    const makeKey = (args: TArgs) => {
       const keyArgs = args.filter((_, i) => !ignoreIndices.includes(i))
-      const key = JSON.stringify(keyArgs)
-
-      if (cache.has(key)) {
-        console.log('Cache hit:', key)
-        return cache.get(key)! // R
-      }
-
-      // await will normalize Promise<R> → R or just give you R if it's sync
-      const result = (await fn(...args)) as R
-      cache.set(key, result)
-
-      if (cache.size > size) {
-        const oldestKey = cache.keys().next().value!
-        cache.delete(oldestKey)
-        console.log('Evicted:', oldestKey)
-      }
-
-      return result
+      return JSON.stringify(keyArgs)
     }
-  }
-}
 
-export class Lock {
-  //TODO: the function which is returned to resolve the promise
-  //      should be a callable object and automatically resolve
-  //      when it is destroyed for example when running out of scope
-  //      in a function...
-  private _promise: Promise<void> | null = null
-
-  /**
-   * Acquires the lock if available. Returns a `release` function to be called
-   * when done. Waits if the lock is already held.
-   *
-   * !!!!IMPORTANT!!!!  it is very important that when a lock is acquired all functions
-   * until the lock is released are either synchronous or awaited. Otherwise
-   * it is possible that the unlock happens before some of the code is finished...
-   *
-   * @returns {Promise<() => void>} A function to release the lock.
-   * @example
-   * const release = await lock.lock();
-   * try { ...critical section... } finally { release(); }
-   *
-   *
-   *
-   */
-  async lock(): Promise<() => void> {
-    let outerResolve: () => void
-    if (!this._promise) {
-      this._promise = new Promise<void>((resolve) => {
-        outerResolve = () => {
-          //console.log('unlock!')
-          resolve()
+    const wrapper = async (...args: TArgs): Promise<R> => {
+      const key = makeKey(args)
+      if (cache.has(key)) return cache.get(key)!
+      if (inFlight.has(key)) return inFlight.get(key)!
+      const p = (async () => {
+        try {
+          const v = (await fn(...args)) as R
+          cache.set(key, v)
+          if (cache.size > size) {
+            const oldestKey = cache.keys().next().value!
+            cache.delete(oldestKey)
+          }
+          return v
+        } finally {
+          inFlight.delete(key)
         }
-      })
+      })()
+      inFlight.set(key, p)
+      return p
+    }
 
-      return () => {
-        if (outerResolve) {
-          outerResolve()
-          this._promise = null
-        }
+    wrapper.clearCache = () => {
+      cache.clear()
+      inFlight.clear()
+    }
+    wrapper.invalidate = (...args: TArgs) => {
+      const key = makeKey(args)
+      cache.delete(key)
+      inFlight.delete(key)
+    }
+
+    return wrapper
+  }
+}
+
+// Deep, in-place, strategy-driven merge for Vue3-style reactive objects.
+// Focus: readability & control with a small option surface.
+
+type ArrayStrategy =
+  | 'overwrite'
+  | 'byIndex'
+  | 'concat'
+  | 'prepend'
+  | { kind: 'unionBy'; key: string }
+  | { kind: 'mergeBy'; key: string }
+
+type ObjectStrategy = 'merge' | 'overwrite'
+type PrimitiveStrategy = 'overwrite' | 'preserve' | 'preferDefined'
+type TypeMismatch = 'source' | 'target' | 'error'
+
+export type MergeOptions = {
+  arrays?: ArrayStrategy
+  objects?: ObjectStrategy
+  primitives?: PrimitiveStrategy
+  typeMismatch?: TypeMismatch
+  cloneOnOverwrite?: boolean
+  resolveConflict?: (ctx: {
+    path: string
+    key: string
+    targetVal: unknown
+    sourceVal: unknown
+  }) => unknown
+}
+
+const DEFAULTS: Required<
+  Pick<MergeOptions, 'arrays' | 'objects' | 'primitives' | 'typeMismatch' | 'cloneOnOverwrite'>
+> = {
+  arrays: 'overwrite',
+  objects: 'merge',
+  primitives: 'overwrite',
+  typeMismatch: 'source',
+  cloneOnOverwrite: true,
+}
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+
+const cloneShallow = <T>(v: T, enable: boolean): T => {
+  if (!enable) return v
+  if (Array.isArray(v)) return v.slice() as T
+  if (isPlainObject(v)) return { ...v }
+  return v
+}
+
+/**
+ * Deeply merges two plain objects in-place, with fine-grained control over how arrays,
+ * objects, and primitives are combined.
+ *
+ * This function mutates `target` reactively (safe for Vue 3 proxies) and supports
+ * multiple merge strategies for different value types. Useful when you need
+ * predictable merging rules instead of generic "deep merge everything" behavior.
+ *
+ * ## Strategies
+ * - **Arrays** (`arrays`):
+ *    - `'overwrite'` — replace the entire array reference  (default).
+ *    - `'byIndex'`   — merge arrays index-by-index.
+ *    - `'concat'`    — append all items from source to target.
+ *    - `'prepend'`   — prepend all items from source to target.
+ *    - `{ kind: 'unionBy', key }` — concatenate arrays and deduplicate by object property `key`.
+ *    - `{ kind: 'mergeBy', key }` — merge objects in arrays matching on property `key`.
+ *
+ * - **Objects** (`objects`):
+ *    - `'merge'` — recursively merge properties (default).
+ *    - `'overwrite'` — replace object reference entirely.
+ *
+ * - **Primitives** (`primitives`):
+ *    - `'overwrite'` — replace value from source (default).
+ *    - `'preserve'` — keep target value, ignore source.
+ *    - `'preferDefined'` — replace only if source is not `undefined`.
+ *
+ * - **Type Mismatches** (`typeMismatch`):
+ *    - `'source'` — replace with source value (default).
+ *    - `'target'` — keep target value.
+ *    - `'error'`  — throw on mismatched types.
+ *
+ * - **Cloning** (`cloneOnOverwrite`):
+ *    - `true` — shallow-clone arrays/objects when overwriting (default).
+ *    - `false` — re-use references directly.
+ *
+ * - **Conflict Hook** (`resolveConflict`):
+ *    - `(ctx) => unknown` — custom resolution for specific keys/paths; return `undefined`
+ *      to fall back to strategy logic.
+ *
+ * @template A - Type of target object
+ * @template B - Type of source object
+ * @param target - The object to merge into (will be mutated).
+ * @param source - The object to merge from.
+ * @param opts - MergeOptions controlling per-type merge behavior.
+ * @returns The merged `target` object (typed as `A & B`).
+ * @throws If either argument is not a plain object, or on type mismatch when `typeMismatch` is `'error'`.
+ *
+ * @example
+ * // Overwrite arrays, merge objects, overwrite primitives
+ * deepMergeReactive(a, b, { arrays: 'overwrite', objects: 'merge', primitives: 'overwrite' })
+ *
+ * @example
+ * // Merge arrays by 'id', keep target value on mismatches
+ * deepMergeReactive(a, b, { arrays: { kind: 'mergeBy', key: 'id' }, typeMismatch: 'target' })
+ */
+export function deepMergeReactive<
+  A extends Record<string, unknown>,
+  B extends Record<string, unknown>,
+>(target: A, source: B, opts: MergeOptions = {}): A & B {
+  if (!isPlainObject(target) || !isPlainObject(source)) {
+    throw new Error('Both arguments must be plain objects.')
+  }
+  mergeObject(target, source, { ...DEFAULTS, ...opts }, '')
+  return target as A & B
+}
+
+function mergeObject(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+  o: Required<typeof DEFAULTS> & MergeOptions,
+  path: string,
+) {
+  for (const [key, sVal] of Object.entries(source)) {
+    const tVal = target[key]
+    const here = path ? `${path}.${key}` : key
+
+    // Custom resolver first
+    if (o.resolveConflict) {
+      const decided = o.resolveConflict({ path: here, key, targetVal: tVal, sourceVal: sVal })
+      if (decided !== undefined) {
+        target[key] = decided
+        continue
       }
-    } else {
-      //console.log('waiting for unlock to relock')
-      await this._promise // Wait for the lock to be released
-      return this.lock() // Re-attempt to acquire the lock
     }
-  }
 
-  /**
-   * Waits until the lock is released without acquiring it.
-   *
-   * @returns {Promise<void>} Resolves when the lock is free.
-   * @example
-   * await lock.waitForUnlock();
-   */
-  async waitForUnlock(): Promise<void> {
-    if (this._promise) {
-      await this._promise
+    const tArr = Array.isArray(tVal),
+      sArr = Array.isArray(sVal)
+    const tObj = isPlainObject(tVal),
+      sObj = isPlainObject(sVal)
+
+    if (tVal === undefined) {
+      target[key] = cloneShallow(sVal, o.cloneOnOverwrite)
+      continue
     }
+
+    // Arrays first
+    if (tArr && sArr) {
+      target[key] = mergeArrays(tVal as unknown[], sVal as unknown[], o, here)
+      continue
+    }
+
+    // Plain objects next
+    if (tObj && sObj) {
+      if ((o.objects ?? DEFAULTS.objects) === 'merge') {
+        mergeObject(tVal, sVal, o, here)
+      } else {
+        target[key] = cloneShallow(sVal, o.cloneOnOverwrite)
+      }
+      continue
+    }
+
+    // Both primitives
+    if (!tArr && !sArr && !tObj && !sObj) {
+      const p = o.primitives ?? DEFAULTS.primitives
+      target[key] =
+        p === 'preserve' ? tVal : p === 'preferDefined' ? (sVal === undefined ? tVal : sVal) : sVal // overwrite
+      continue
+    }
+
+    // Type mismatch
+    const mm = o.typeMismatch ?? DEFAULTS.typeMismatch
+    if (mm === 'source') target[key] = cloneShallow(sVal, o.cloneOnOverwrite)
+    else if (mm === 'target') {
+      /* keep tVal */
+    } else throw new Error(`Type mismatch at ${here}`)
   }
 }
 
-export function lockMap(name: string = 'item') {
-  const locks = new Map<string | number, Lock>()
+function mergeArrays(
+  a: unknown[],
+  b: unknown[],
+  o: Required<typeof DEFAULTS> & MergeOptions,
+  path: string,
+): unknown[] {
+  const strat = o.arrays ?? DEFAULTS.arrays
 
-  // Lock am item and returns a function closure which can be used to unlock it again...
-  async function lockItem(id: string | number) {
-    let lock = locks.get(id)
-    if (!lock) {
-      lock = new Lock()
-      locks.set(id, lock)
+  if (strat === 'overwrite') return o.cloneOnOverwrite ? b.slice() : b
+  if (strat === 'concat') return a.concat(b)
+  if (strat === 'prepend') return b.concat(a)
+
+  if (typeof strat === 'object' && strat.kind === 'unionBy') {
+    const seen = new Set<unknown>()
+    const out: unknown[] = []
+    for (const it of a.concat(b)) {
+      const id = isPlainObject(it) ? it[strat.key] : it
+      if (!seen.has(id)) {
+        seen.add(id)
+        out.push(it)
+      }
     }
-    //console.log(`getting lock for ${name}:`, id)
-    const unlock = await lock.lock()
-    //console.log(`acquired lock for ${name}`, id)
-    return () => {
-      //console.log(`unlock ${name}!`, id)
-      unlock()
-      locks.delete(id) // Delete the lock from the map after unlocking
-    }
+    a.splice(0, a.length, ...out)
+    return a
   }
 
-  // this function simply waits for an item to be unlocked, but doesn't
-  // acquire a lock itself...
-  async function waitForItemUnlock(id: string | number) {
-    const lock = locks.get(id)
-    if (lock) {
-      // TODO: why is this called so often??
-      //console.log('wait for unlock!');
-      await lock.waitForUnlock()
+  if (typeof strat === 'object' && strat.kind === 'mergeBy') {
+    const idx = new Map<unknown, number>()
+    for (let i = 0; i < a.length; i++) {
+      const it = a[i]
+      if (isPlainObject(it)) idx.set(it[strat.key], i)
     }
-  }
-
-  function clearLocks() {
-    locks.clear()
-    console.log(`All ${name} locks have been cleared`)
-  }
-
-  return { lockItem, waitForItemUnlock, clearLocks }
-}
-
-/**
- * Checks if the given item is an object (excluding null and arrays).
- *
- * @param item - The item to check.
- * @returns True if the item is an object, false otherwise.
- */
-function isObject(item: unknown): item is Record<string, unknown> {
-  return item !== null && typeof item === 'object' && !Array.isArray(item)
-}
-
-/**
- * Creates a new array that is a union of the elements in arr1 and arr2.
- * Duplicates are removed so that the resulting array contains only unique elements.
- *
- * @param arr1 - The first array.
- * @param arr2 - The second array.
- * @returns A new array with unique elements from both input arrays.
- */
-function unionArrays(arr1: unknown[], arr2: unknown[]) {
-  const combined = arr1.concat(arr2)
-  return combined.filter(
-    (item, index) => combined.findIndex((obj) => deepEqual(obj, item)) === index,
-  )
-}
-
-/**
- * Deeply merges two objects.
- * For objects, it recursively merges their properties.
- * For arrays, it either overwrites (obj1's array is replaced by obj2's) or
- * performs a union (combines arrays without duplicates) based on the strategy specified.
- *
- * @param obj1 - The first object to merge.
- * @param obj2 - The second object to merge.
- * @param arrayMergeStrategy - The strategy for merging arrays: 'overwrite' or 'union'. Defaults to 'overwrite'.
- * @returns The deeply merged object.
- */
-export function deepMerge<A, B>(
-  obj1: A,
-  obj2: B,
-  arrayMergeStrategy: 'overwrite' | 'union' = 'overwrite',
-): A & B {
-  const output: Record<string, unknown> = Object.assign({}, obj1) // Start with a shallow copy of obj1
-  if (isObject(obj1) && isObject(obj2)) {
-    Object.keys(obj2).forEach((key) => {
-      const obj2Value = obj2[key]
-      const obj1Value = obj1[key]
-      if (Array.isArray(obj1Value) && Array.isArray(obj2Value)) {
-        output[key] = arrayMergeStrategy === 'union' ? unionArrays(obj1Value, obj2Value) : obj2Value
-      } else if (isObject(obj2Value)) {
-        if (isObject(obj1Value)) {
-          // Recursively call deepMerge only if both obj1[key] and obj2[key] are objects
-          output[key] = deepMerge(obj1Value, obj2Value, arrayMergeStrategy)
+    for (const s of b) {
+      if (isPlainObject(s)) {
+        const k = s[strat.key]
+        const pos = idx.get(k)
+        if (pos != null && isPlainObject(a[pos])) {
+          mergeObject(a[pos], s, o, `${path}[${pos}]`)
         } else {
-          // If obj1[key] is not an object, simply assign obj2[key]
-          output[key] = obj2Value
+          a.push(cloneShallow(s, o.cloneOnOverwrite))
         }
       } else {
-        // For non-object properties, overwrite with the value from obj2
-        output[key] = obj2Value
+        a.push(cloneShallow(s, o.cloneOnOverwrite))
       }
-    })
-  }
-  return output as A & B
-}
-
-/**
- * Deeply merges two objects reactively.
- * Unlike `deepMerge`, this function modifies `obj1` directly, providing a reactive merge.
- * Supports 'overwrite' and 'additive' strategies for non-object properties.
- *
- * @param obj1 - The first object to merge (will be modified).
- * @param obj2 - The second object to merge.
- * @param mergeStrategy - The strategy for merging: 'overwrite' or 'additive'.
- * @returns The deeply merged object.
- * @throws If either argument is not an object.
- */
-export function deepMergeReactive<A, B>(
-  obj1: A,
-  obj2: B,
-  mergeStrategy: 'overwrite' | 'additive',
-): A & B {
-  if (!isObject(obj1) || !isObject(obj2)) {
-    throw new Error('Both arguments must be objects.')
-  }
-
-  const obj1AsRecord = obj1 as unknown as Record<string, unknown>
-
-  for (const [key, obj2Value] of Object.entries(obj2)) {
-    const obj1Value = obj1AsRecord[key]
-    if (!(key in obj1AsRecord)) {
-      obj1AsRecord[key] = obj2Value
-    } else if (isObject(obj2Value) && isObject(obj1Value)) {
-      deepMergeReactive(obj1Value, obj2Value, mergeStrategy)
-    } else if (Array.isArray(obj2Value) && Array.isArray(obj1Value)) {
-      obj1AsRecord[key] = mergeArraysReactive(obj1Value, obj2Value, mergeStrategy)
-    } else if (mergeStrategy === 'overwrite') {
-      // if the key exists, and one of the objects isn't an array or object
-      // In 'overwrite' mode, assign non-object values directly
-      // as we iterate through obj2, we know this value always exists...
-      obj1AsRecord[key] = obj2Value
     }
+    return a
   }
 
-  return obj1AsRecord as A & B
+  // byIndex (default)
+  const max = Math.max(a.length, b.length)
+  for (let i = 0; i < max; i++) {
+    const v1 = a[i],
+      v2 = b[i]
+    if (v2 === undefined) continue
+    const tArr = Array.isArray(v1),
+      sArr = Array.isArray(v2)
+    const tObj = isPlainObject(v1),
+      sObj = isPlainObject(v2)
+    if (tArr && sArr) a[i] = mergeArrays(v1 as unknown[], v2 as unknown[], o, `${path}[${i}]`)
+    else if (tObj && sObj) mergeObject(v1, v2, o, `${path}[${i}]`)
+    else a[i] = v2
+  }
+  return a
 }
-
-/**
- * Merges two reactive arrays based on the specified strategy.
- * Elements are merged element-wise with support for 'overwrite' and 'additive' strategies.
- *
- * @param arr1 - The first array.
- * @param arr2 - The second array.
- * @param mergeStrategy - The strategy for merging: 'overwrite' or 'additive'.
- * @returns The merged array.
- */
-function mergeArraysReactive(
-  arr1: unknown[],
-  arr2: unknown[],
-  mergeStrategy: 'overwrite' | 'additive',
-): unknown[] {
-  for (let i = 0; i < arr1.length || i < arr2.length; i++) {
-    const element1 = arr1[i]
-    const element2 = arr2[i]
-
-    if (isObject(element1) && isObject(element2)) {
-      arr1[i] = deepMergeReactive(element1, element2, mergeStrategy)
-    } else if (Array.isArray(element1) && Array.isArray(element2)) {
-      arr1[i] = mergeArraysReactive(element1 as unknown[], element2 as unknown[], mergeStrategy)
-    } else if (element1 === undefined && element2 !== undefined) {
-      arr1.push(element2)
-    } else if (element2 !== undefined && mergeStrategy === 'overwrite') {
-      arr1[i] = element2
-    }
-  }
-
-  return arr1
-}
-
-export function deepCopy<T>(item: T): T {
-  if (item === null || typeof item !== 'object') {
-    // Primitive value (including null and undefined): return as is
-    return item
-  }
-
-  if (Array.isArray(item)) {
-    // Array: create a new array and recursively copy each element
-    return item.map((element) => deepCopy(element) as unknown) as unknown as T
-  }
-
-  if (isObject(item)) {
-    // Object (excluding arrays): create a new object and recursively copy each property
-    const copy = {} as Record<string, unknown>
-    Object.keys(item).forEach((key) => {
-      copy[key] = deepCopy(item[key])
-    })
-    return copy as T
-  }
-
-  // If item is of a type not handled above, return it as is
-  return item
-}
-
-/*function uuidToBigInt(uuid: string) {
-  // Remove dashes and decode hex to a Buffer
-  const buffer = Buffer.from(uuid.replace(/-/g, ''), 'hex');
-
-  let bigint = BigInt(0);
-
-  // Iterate over each byte in the buffer and shift it into the BigInt
-  for (const byte of buffer) {
-    bigint = (bigint << BigInt(8)) + BigInt(byte);
-  }
-
-  return bigint;
-}*/
-
-export function base64UrlEncode(str: string): string {
-  return Buffer.from(str)
-    .toString('base64') // Convert to base64
-    .replace(/\+/g, '-') // Convert '+' to '-'
-    .replace(/\//g, '_') // Convert '/' to '_'
-    .replace(/=/g, '') // Remove padding '='
-}
-
-export function base64UrlDecode(str: string): string {
-  // Add removed '=' padding back
-  str = str.padEnd(str.length + ((4 - (str.length % 4)) % 4), '=')
-
-  // Convert URL-safe characters back to original
-  str = str.replace(/-/g, '+').replace(/_/g, '/')
-
-  return Buffer.from(str, 'base64').toString()
-}
-
-export function createAsyncQueue<T>() {
-  let queue: T[] = []
-  let resolveWaitingPop: ((value: T) => void) | undefined
-
-  function push(item: T) {
-    queue.push(item)
-    if (resolveWaitingPop) {
-      const shiftedItem = queue.shift()
-      if (shiftedItem !== undefined) {
-        resolveWaitingPop(shiftedItem)
-      }
-      resolveWaitingPop = undefined
-    }
-  }
-
-  function count() {
-    return queue.length
-  }
-
-  function pop(signal?: AbortSignal): Promise<T> {
-    // if there’s already an item, just return it immediately
-    const shiftedItem = queue.shift()
-    if (shiftedItem !== undefined) {
-      return Promise.resolve(shiftedItem)
-    }
-
-    // otherwise we wait, but allow aborting
-    return new Promise<T>((resolve, reject) => {
-      // if already aborted
-      if (signal?.aborted) {
-        return reject(new DOMException('Pop aborted', 'AbortError'))
-      }
-
-      // cleanup helper
-      const cleanup = () => {
-        // only clear if it’s still our resolver
-        if (resolveWaitingPop === onValue) {
-          resolveWaitingPop = undefined
-        }
-        signal?.removeEventListener('abort', onAbort)
-      }
-
-      const onValue = (value: T) => {
-        cleanup()
-        resolve(value)
-      }
-
-      const onAbort = () => {
-        cleanup()
-        console.log('aborting async queue pop')
-        reject(new DOMException('Pop aborted', 'AbortError'))
-      }
-
-      // install our resolver
-      resolveWaitingPop = onValue
-      // listen for abort
-      signal?.addEventListener('abort', onAbort, { once: true })
-    })
-  }
-
-  function clear() {
-    const oldQueue = queue
-    queue = []
-    return oldQueue
-  }
-
-  return { push, pop, count, clear }
-}
-export type AsyncQueue<T> = ReturnType<typeof createAsyncQueue<T>>
 
 export function createLruCache<K, V>(maxSize: number) {
   const map = new Map<K, V>()
@@ -865,134 +508,6 @@ export function createLruCache<K, V>(maxSize: number) {
 
 // Define the LRU cache type
 export type LruCache<K, V> = ReturnType<typeof createLruCache<K, V>>
-
-export function bigIntToString(obj: unknown): unknown {
-  if (obj === null) {
-    return obj
-  }
-
-  if (typeof obj === 'bigint') {
-    return obj.toString()
-  }
-
-  if (obj instanceof Map) {
-    const result: { [key: string]: unknown } = {}
-    obj.forEach((value, key) => {
-      result[key] = bigIntToString(value)
-    })
-    return result
-  }
-
-  if (obj instanceof Set) {
-    return Array.from(obj).map((item) => bigIntToString(item))
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map((item) => bigIntToString(item))
-  }
-
-  // this need to be called at the end, becaise Set and Map are also object
-  if (typeof obj === 'object') {
-    const result: { [key: string]: unknown } = {}
-    for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        result[key] = bigIntToString((obj as Record<string, unknown>)[key])
-      }
-    }
-    return result
-  }
-
-  return obj
-}
-
-export const createDeepTransformer = ({
-  // Default keyFn gets the original key (string|number|symbol) and its current value
-  keyFn = (k) => k,
-  // Default valueFn can replace any node; non-objects stop recursion
-  valueFn = (v) => v,
-}: {
-  keyFn?: (key: string | number | symbol, val: unknown) => string | number | symbol
-  valueFn?: <T>(val: T) => unknown
-} = {}) => {
-  const transform = (node: unknown): unknown => {
-    // 1) allow valueFn to replace entire node
-    const v1 = valueFn(node)
-
-    // 2) stop if primitive / null
-    if (v1 == null || typeof v1 !== 'object') return v1
-
-    // 3a) arrays
-    if (Array.isArray(v1)) {
-      return v1.map(transform)
-    }
-    // 3b) maps
-    if (v1 instanceof Map) {
-      const m = new Map()
-      v1.forEach((val, key) => {
-        const nk = keyFn(key, val)
-        m.set(nk, transform(val))
-      })
-      return m
-    }
-    // 3c) sets
-    if (v1 instanceof Set) {
-      return new Set(Array.from(v1).map(transform))
-    }
-    // 3d) plain objects
-    const out: Record<string | number | symbol, unknown> = {}
-    for (const [rawKey, val] of Object.entries(v1 as Record<string, unknown>)) {
-      const nk = keyFn(rawKey, val)
-      out[nk] = transform(val)
-    }
-    return out
-  }
-
-  return transform
-}
-
-// Define the set of "falsy" values
-const falsyValues: Set<unknown> = new Set([
-  'no',
-  'n/a',
-  'na',
-  'nan',
-  'n',
-  'false',
-  false,
-  '0',
-  0,
-  '{}',
-  {},
-  'null',
-  null,
-  'undefined',
-  undefined,
-  'disabled',
-])
-
-// this function "normalizes" boolean-like input this makes our llm structured
-// response parsing more robust.
-// TODO: can we use zods "stringbool" for this? https://v4.zod.dev/api#stringbool
-export const normalizeFalsyValues = (normalizer: unknown = false): ((node: unknown) => unknown) =>
-  createDeepTransformer({
-    valueFn: (value) => {
-      if (typeof value === 'string') {
-        const lowerCaseValue = value.toLowerCase()
-        if (falsyValues.has(lowerCaseValue)) {
-          return normalizer // Normalize falsy values to "undefined"
-        }
-      } else if (typeof value === 'boolean') {
-        return value ? value : normalizer // Convert boolean false to "undefined"
-      } else if (falsyValues.has(value)) {
-        return normalizer // Convert null, undefined, or falsy values
-      }
-      return value // Return unchanged if no conversion needed
-    },
-  })
-
-export function pickProperties(obj: object, keys: string[]) {
-  return Object.fromEntries(Object.entries(obj).filter(([key]) => keys.includes(key)))
-}
 
 export function makeSerializable(value: unknown, depth = 5): unknown {
   if (depth <= 0) {
@@ -1083,41 +598,6 @@ export function clearCookies() {
     const name = cookie.split('=')[0]!.trim()
     document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`
   })
-}
-
-export async function fileToBase64(file: File): Promise<string> {
-  console.log('convert file to base 64', file)
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
-        // TODO: it used to be like this and work:  no idea, why this is suddenly not alowd anymore, with
-        // this error:
-        //   840:28  error  'reader.result' may use Object's default stringification format ('[object Object]') when stringified  @typescript-eslint/no-base-to-string
-        //const base64String = reader.result?.toString().split(',')[1]
-        const base64String = reader.result.split(',')[1]
-        if (base64String) {
-          resolve(base64String)
-        } else {
-          reject(new Error('Failed to convert file to base64'))
-        }
-      }
-    }
-    reader.onerror = () => {
-      reject(new Error('FileReader error'))
-    }
-  })
-}
-
-export function isEmpty(obj: object): boolean {
-  for (const prop in obj) {
-    if (Object.prototype.hasOwnProperty.call(obj, prop)) {
-      return false
-    }
-  }
-
-  return true
 }
 
 export const getEnvironmentInfo = () => {

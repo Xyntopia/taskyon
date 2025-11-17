@@ -1,20 +1,21 @@
 <template>
-  <q-page class="q-pa-xs">
+  <FadeAwayScrollPage class="q-pa-xs">
     <div v-if="route.query.debug !== undefined">
       <div>Folder: {{ folder }}</div>
       <div>Path: {{ filePath }}</div>
     </div>
     <q-card flat class="q-pa-sm">
-      <ty-markdown v-if="markdownContent" :src="markdownContent" no-line-numbers />
+      <ty-markdown v-if="markdownContent" :src="markdownContent" no-line-numbers use-iframe />
     </q-card>
-  </q-page>
+  </FadeAwayScrollPage>
 </template>
 
 <script setup lang="ts">
+import { fetchMarkdown } from '@taskyon/taskyon'
 import TyMarkdown from 'components/tyMarkdown.vue'
-import { fetchMarkdown } from 'src/modules/taskyon/taskUtils'
-import { ref, onMounted, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
+import { onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 const router = useRouter()
 const route = useRoute()

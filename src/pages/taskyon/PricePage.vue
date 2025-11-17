@@ -2,18 +2,28 @@
   <q-page padding>
     <q-card flat>
       <!-- ───────── Intro ───────── -->
-      <q-card-section>
-        <ty-markdown
-          class="pricing-page-intro"
-          :src="`
-##  Infos and pricing for all available Models.
-
+      <q-card-section class="taskyon-pricing">
+        <q-expansion-item
+          header-class="text-h6"
+          label="Infos and pricing for all available Models."
+        >
+          <ty-markdown
+            class="pricing-page-intro"
+            :src="`
 List of all of our currently available models in ${state.llmSettings.selectedApi} and their prices.
 The selected AI provider has to provide price information through an API in order to show them
-on this list. *Dynamic* means that the backend changes the prices based on the input (E.g. by automatically
-selecting different models).
+on this list.
+
+For in in-depth comparison check out webpages like the following
+
+- [artificialanalysis](https://artificialanalysis.ai/leaderboards/models?deprecation=current)
+- [vellum.ai](https://www.vellum.ai/llm-leaderboard?utm_source=google&utm_medium=organic)
+- [llm-stats.com](https://llm-stats.com/)
+- [lmarena.ai](https://lmarena.ai/leaderboard)
+- ... and many more [search](https://www.google.com/search?q=AI+model+rankings)
 `"
-        />
+          />
+        </q-expansion-item>
         <ApiSelect v-model="state.llmSettings.selectedApi" />
       </q-card-section>
 
@@ -126,7 +136,7 @@ selecting different models).
                 "
                 flat
                 label="select this model"
-                @click="tystate.handleBotNameUpdate({ newName: props.row.id })"
+                @click="tystate.updateModelAndApi({ newName: props.row.id })"
               />
               <q-tooltip :delay="500"> id: {{ props.row.id }} </q-tooltip>
             </div>
@@ -220,7 +230,7 @@ import ApiSelect from 'components/taskyon/ApiSelect.vue'
 import ObjectTreeView from 'src/components/ObjectTreeView.vue'
 
 import { humanReadablePrice, openrouterPricing } from 'src/modules/utils'
-import type { Model } from 'src/modules/taskyon/types'
+import type { Model } from '@taskyon/taskyon'
 
 /* ─────────── Local constants ─────────── */
 const pricingOptions = ['$/token', 'pages/0.01$', '$/million tokens'] as const
@@ -294,13 +304,13 @@ const downloadModels = () =>
 /* ─────────── Data preparation ─────────── */
 const filteredTableData = computed(() => {
   const allAllowed =
-    tystate.allowedLLMModels === undefined || tystate.allowedLLMModels.includes('*')
+    tystate.tyKeyAllowedModels === undefined || tystate.tyKeyAllowedModels.includes('*')
 
   return Object.values(tystate.llmModels)
     .filter((m) => m.name || m.id)
     .map((m) => ({
       ...m,
-      inKey: allAllowed ? undefined : (tystate.allowedLLMModels?.includes(m.id) ?? false),
+      inKey: allAllowed ? undefined : (tystate.tyKeyAllowedModels?.includes(m.id) ?? false),
     }))
     .filter((m) => !onlyAllowed.value || (m.inKey ?? true))
 })
@@ -318,10 +328,17 @@ const columns: QTableProps['columns'] = [
     name: 'created',
     label: 'creation date',
     align: 'right',
-    field: (row: Row) => row.created,
+    field: (row: Row) => row.created ?? row.createdAt,
     sortable: true,
     sort: floatSorter,
-    format: (v: number) => new Date(v * 1000).toISOString().slice(0, 10), // yyyy-mm-dd
+    format: (v: number | string) => {
+      try {
+        const date = typeof v === 'number' ? new Date(v * 1000) : new Date(v)
+        return date.toISOString().slice(0, 10)
+      } catch {
+        return v
+      }
+    },
   },
   {
     name: 'prompt_price',
@@ -351,7 +368,7 @@ const columns: QTableProps['columns'] = [
     name: 'modality',
     label: 'Modality',
     align: 'center',
-    field: (row: Row) => row.architecture?.modality ?? 'N/A',
+    field: (row: Row) => row.architecture?.modality ?? row.pipeline_tag ?? 'N/A',
     sortable: true,
   },
   {

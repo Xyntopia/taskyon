@@ -1,168 +1,151 @@
 <template>
-  <q-layout view="hHh lpR lFr">
-    <TaskyonHeader :min-mode="false" btn-size="md" />
-    <!--<q-drawer v-model="drawerOpen" show-if-above persistent behaviour="desktop" :width="250">
+  <!--<q-drawer v-model="drawerOpen" show-if-above persistent behaviour="desktop" :width="250">
       <CreateNewTask class="q-pa-xs" expert-mode />
       <ObjectTreeView :model-value="functionArgs" />
     </q-drawer>-->
-    <q-page-container>
-      <UnderConstructionHint />
-      <q-page padding>
-        <div class="row">
-          <q-select
-            class="col"
-            use-input
-            dense
-            hide-selected
-            fill-input
-            options-dense
-            input-debounce="0"
-            borderless
-            color="secondary"
-            :model-value="selectedTool?.name"
-            :options="filteredToolCollection"
-            :label="selectedTool ? 'selected Tool' : 'Select Tool'"
-            behavior="default"
-            @filter="filterFn"
-            @update:model-value="switchTool"
+  <UnderConstructionHint />
+  <q-page padding>
+    <div class="row">
+      <q-select
+        class="col"
+        use-input
+        dense
+        hide-selected
+        fill-input
+        options-dense
+        input-debounce="0"
+        borderless
+        color="secondary"
+        :model-value="selectedTool?.name"
+        :options="filteredToolCollection"
+        :label="selectedTool ? 'selected Tool' : 'Select Tool'"
+        behavior="default"
+        @filter="filterFn"
+        @update:model-value="switchTool"
+      >
+        <template #before>
+          <q-icon :name="mdiToolbox" />
+        </template>
+      </q-select>
+      <q-btn flat dense label="New Tool" @click="switchTool()" />
+    </div>
+    <q-separator class="q-my-md" />
+    <div v-if="selectedTool || !name" class="column q-gutter-sm">
+      <div>
+        <TaskChainPublishDialog
+          v-if="preliminaryTaskNode"
+          buttons
+          download
+          flat
+          share
+          single
+          :task-or-id="preliminaryTaskNode"
+        >
+          <template #tt-cp-btn> <div class="q-px-sm">Copy Tool as Markdown</div></template>
+          <template #tt-share-btn> <div class="q-px-sm">Share Tool Online</div></template>
+        </TaskChainPublishDialog>
+        <q-btn
+          flat
+          :icon="matSearch"
+          label="Search for similar tools"
+          :to="`/taskmanager?k=10&ct=tooldefinition&q=${JSON.stringify(selectedTool)}`"
+        />
+        <q-btn flat label="Secrets" :icon="mdiKeyChain" to="/settings/secrets" />
+        <div class="row items-center">
+          <q-btn
+            class="col-auto"
+            :disable="!isValidTool"
+            :color="isValidTool ? 'positive' : 'negative'"
+            :icon="matSave"
+            label="save tool"
+            @click="
+              () => {
+                if (preliminaryTaskNode) addNewTask(preliminaryTaskNode)
+              }
+            "
+            ><q-tooltip>{{
+              isValidTool
+                ? 'Save tool inside our tasktree.'
+                : 'Only Valid tools can be saved, check the definition for errors!'
+            }}</q-tooltip></q-btn
           >
-            <template #before>
-              <q-icon :name="mdiToolbox" />
-            </template>
-          </q-select>
-          <q-btn flat dense label="New Tool" @click="switchTool()" />
+          <div v-if="!isValidTool" class="col">
+            The tool definition contains errors:
+            <div class="q-pa-sm text-negative">{{ toolParser }}</div>
+          </div>
         </div>
-        <q-separator class="q-my-md" />
-        <div v-if="selectedTool || !name" class="column q-gutter-sm">
-          <div>
-            <TaskChainPublishDialog
-              v-if="preliminaryTaskNode"
-              buttons
-              download
-              flat
-              share
-              single
-              :task-or-id="preliminaryTaskNode"
-            >
-              <template #tt-cp-btn> <div class="q-px-sm">Copy Tool as Markdown</div></template>
-              <template #tt-share-btn> <div class="q-px-sm">Share Tool Online</div></template>
-            </TaskChainPublishDialog>
-            <q-btn
-              flat
-              :icon="matSearch"
-              label="Search for similar tools"
-              :to="`/taskmanager?k=10&ct=tooldefinition&q=${JSON.stringify(selectedTool)}`"
-            />
-            <q-btn flat label="Secrets" :icon="mdiKeyChain" to="/settings/secrets" />
-            <div class="row items-center">
+      </div>
+      <q-input v-model="toolDraft.name" dense filled label="New Tool Name" />
+      <div class="row">
+        <q-tabs v-model="selectedTab" class="col-auto" dense no-caps vertical>
+          <q-tab name="code" :icon="mdiLanguageJavascript" label="tool code" />
+          <q-tab name="configure" :icon="mdiFormTextbox" label="tool configuration" />
+          <q-tab name="definition" :icon="mdiCodeJson" label="tool definition" />
+        </q-tabs>
+        <q-tab-panels :model-value="selectedTab" animated swipeable infinite class="col">
+          <q-tab-panel name="code">
+            <div v-if="selectedTool && selectedTool.function" class="q-pa-lg text-negative">
+              The currently selected Tool is a Taskyon-internal tool with a "function" property and
+              can not be edited here. You can however replace it with your own tool with the same
+              name.
+            </div>
+            <div v-if="toolDraft.code" class="column">
               <q-btn
-                class="col-auto"
-                :disable="!isValidTool"
-                :color="isValidTool ? 'positive' : 'negative'"
-                :icon="matSave"
-                label="save tool"
-                @click="
-                  () => {
-                    if (preliminaryTaskNode) addNewTask(preliminaryTaskNode)
-                  }
-                "
-                ><q-tooltip>{{
-                  isValidTool
-                    ? 'Save tool inside our tasktree.'
-                    : 'Only Valid tools can be saved, check the definition for errors!'
-                }}</q-tooltip></q-btn
-              >
-              <div v-if="!isValidTool" class="col">
-                The tool definition contains errors:
-                <div class="q-pa-sm text-negative">{{ toolParser }}</div>
-              </div>
+                class="self-end"
+                flat
+                dense
+                :icon="matContentCopy"
+                label="copy as js string"
+                @click="copyAsJsString(toolDraft.code)"
+              />
+              <CodeEditor v-model="toolDraft.code" />
             </div>
-          </div>
-          <q-input v-model="toolDraft.name" dense filled label="New Tool Name" />
-          <div class="row">
-            <q-tabs v-model="selectedTab" class="col-auto" dense no-caps vertical>
-              <q-tab name="code" :icon="mdiLanguageJavascript" label="tool code" />
-              <q-tab name="configure" :icon="mdiFormTextbox" label="tool configuration" />
-              <q-tab name="definition" :icon="mdiCodeJson" label="tool definition" />
-            </q-tabs>
-            <q-tab-panels :model-value="selectedTab" animated swipeable infinite class="col">
-              <q-tab-panel name="code">
-                <div v-if="selectedTool && selectedTool.function" class="q-pa-lg text-negative">
-                  The currently selected Tool is a Taskyon-internal tool with a "function" property
-                  and can not be edited here. You can however replace it with your own tool with the
-                  same name.
-                </div>
-                <div v-if="toolDraft.code" class="column">
-                  <q-btn
-                    class="self-end"
-                    flat
-                    dense
-                    :icon="matContentCopy"
-                    label="copy as js string"
-                    @click="copyAsJsString(toolDraft.code)"
-                  />
-                  <CodeEditor v-model="toolDraft.code" />
-                </div>
-                <div v-else>
-                  This tool dosn't contain any code. It might be a taskyon-internal tool, an
-                  external tool defined on a parent webpage or from an MCP server.
-                  <q-btn
-                    label="Add tool code"
-                    :icon="matAdd"
-                    @click="() => (toolDraft.code = freshTool.code)"
-                  />
-                </div>
-              </q-tab-panel>
-              <q-tab-panel name="configure">
-                <ObjectTreeView :model-value="toolDraft" :schema="toolJsonSchema" />
-              </q-tab-panel>
-              <q-tab-panel name="definition" class="column">
-                <JsonInput v-model="toolDraft" filled auto-save />
-              </q-tab-panel>
-            </q-tab-panels>
-          </div>
+            <div v-else>
+              This tool dosn't contain any code. It might be a taskyon-internal tool, an external
+              tool defined on a parent webpage or from an MCP server.
+              <q-btn
+                label="Add tool code"
+                :icon="matAdd"
+                @click="() => (toolDraft.code = freshTool.code)"
+              />
+            </div>
+          </q-tab-panel>
+          <q-tab-panel name="configure">
+            <ObjectTreeView :model-value="toolDraft" :schema="toolJsonSchema" />
+          </q-tab-panel>
+          <q-tab-panel name="definition" class="column">
+            <JsonInput v-model="toolDraft" filled auto-save />
+          </q-tab-panel>
+        </q-tab-panels>
+      </div>
+    </div>
+    <div v-else>
+      The selected tool "{{ name }}" is not available for editing. Please select one of the
+      following tools or:
+      <q-btn flat class="q-ma-sm" :to="{ path: '/tool' }">
+        <div>
+          create a new tool.
+          <q-icon :name="mdiMagicStaff" />
+          <q-icon :name="mdiFunctionVariant" />
         </div>
-        <div v-else>
-          The selected tool "{{ name }}" is not available for editing. Please select one of the
-          following tools or:
-          <q-btn flat class="q-ma-sm" :to="{ path: '/tool' }">
-            <div>
-              create a new tool.
-              <q-icon :name="mdiMagicStaff" />
-              <q-icon :name="mdiFunctionVariant" />
-            </div>
-          </q-btn>
+      </q-btn>
 
-          <div v-if="alphabeticalTools" class="column q-mt-sm">
-            <q-btn
-              v-for="t in alphabeticalTools"
-              :key="t.name"
-              dense
-              flat
-              :to="{ path: `/tool/${t.name}` }"
-              >{{ t.name }}</q-btn
-            >
-          </div>
-        </div>
-      </q-page>
-    </q-page-container>
-  </q-layout>
+      <div v-if="alphabeticalTools" class="column q-mt-sm">
+        <q-btn
+          v-for="t in alphabeticalTools"
+          :key="t.name"
+          dense
+          flat
+          :to="{ path: `/tool/${t.name}` }"
+          >{{ t.name }}</q-btn
+        >
+      </div>
+    </div>
+  </q-page>
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent, ref, watch } from 'vue'
-import TaskyonHeader from '../../components/taskyon/TaskyonHeader.vue'
-import ObjectTreeView from 'src/components/ObjectTreeView.vue'
-import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
 import { matAdd, matContentCopy, matSave, matSearch } from '@quasar/extras/material-icons'
-import { useTaskyonStore } from 'src/stores/taskyonState'
-import type { partialTaskDraft, TaskNode } from 'src/modules/taskyon/types'
-import { ToolBase } from 'src/modules/taskyon/types'
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { asyncComputed } from 'src/modules/vueUtils'
-import type { InternalTool } from 'src/modules/taskyon/tools'
-import { craeteToolJsonSchema } from 'src/modules/taskyon/tools'
 import {
   mdiCodeJson,
   mdiFormTextbox,
@@ -172,10 +155,17 @@ import {
   mdiMagicStaff,
   mdiToolbox,
 } from '@quasar/extras/mdi-v6'
-import JsonInput from 'src/components/JsonInput.vue'
+import type { InternalTool, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
+import { craeteToolJsonSchema, createTaskNode, ToolBase } from '@taskyon/taskyon'
 import { copyToClipboard } from 'quasar'
+import JsonInput from 'src/components/JsonInput.vue'
+import ObjectTreeView from 'src/components/ObjectTreeView.vue'
 import TaskChainPublishDialog from 'src/components/taskyon/TaskChainPublishDialog.vue'
-import { createTaskNode } from 'src/modules/taskyon/taskManager'
+import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
+import { asyncComputed } from 'src/modules/vueUtils'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 
 const { name } = defineProps<{ name?: string }>()
 
@@ -237,8 +227,8 @@ function switchTool(toolName?: string) {
 }
 
 const allTools = asyncComputed(async () => {
-  const tm = await tystate.getTaskManager()
-  const tools = await tm.updateToolDefinitions()
+  const ty = await tystate.taskyon
+  const tools = await ty.updateToolDefinitions()
   return tools
 }, undefined)
 
@@ -250,12 +240,12 @@ const alphabeticalTools = computed(() => {
 
 const selectedTool = asyncComputed<InternalTool | undefined>(
   async () => {
-    const tm = await tystate.getTaskManager()
+    const ty = await tystate.taskyon
     if (name) {
-      const { tool } = await tm.getToolDefinition(name)
+      const { tool } = await ty.getToolDefinition(name)
       if (tool) return tool
       // otherwise check if name is actually a task id...
-      const toolDefTask = await tm.getTask(name)
+      const toolDefTask = await ty.getTask(name)
       if (toolDefTask?.content.type === 'tooldefinition') return toolDefTask.content.data
     }
     return undefined
@@ -308,8 +298,8 @@ const preliminaryTaskNode = asyncComputed<TaskNode | undefined>(async () => {
 }, undefined)
 
 async function addNewTask(task: partialTaskDraft) {
-  const tm = await tystate.getTaskManager()
-  const newTask = await tm.addPartialTask2Tree(task, undefined, undefined)
+  const ty = await tystate.taskyon
+  const newTask = await ty.addPartialTask2Tree(task)
   void router.push({
     params: { name: newTask.id },
   })

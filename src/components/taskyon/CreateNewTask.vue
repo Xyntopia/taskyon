@@ -1,6 +1,6 @@
 <template>
   <!--Create new task area-->
-  <div class="create-new-task message-area-parent" style="position: relative">
+  <div style="position: relative" class="create-tasks">
     <!--Function Control-->
     <div v-if="selectedTaskType" class="text-caption text-center">
       <InfoDialog
@@ -25,10 +25,42 @@
       <chatMessageEdit
         v-if="!selectedTaskType"
         v-model="state.messageDraft"
-        class="text-body1 ty-msg-edit"
+        :debounce="0"
+        :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
-        @execute-task="addNewTask"
-      />
+        :show-web-search="state.llmSettings.allowWebSearch"
+        @execute-task="addNewTask(p2pTopic)"
+        @execute-web-search="addNewTask(p2pTopic, true)"
+      >
+        <template #left="{ btnSize }">
+          <div v-if="minMode">
+            <FileDropzone
+              class="col fit row items-center q-px-xs"
+              accept="*"
+              enable-menu
+              enable-paste
+              disable-dropzone-border
+              aria-label="attachFileToDraft"
+              @add-files="attachFileToDraft"
+            >
+              <q-btn dense flat :size="btnSize">
+                <q-icon :name="matAttachment" />
+                <q-tooltip>Attach file or image to message</q-tooltip>
+              </q-btn>
+            </FileDropzone>
+          </div>
+        </template>
+        <template #top="{ btnSize }">
+          <q-btn
+            v-if="(state.messageDraft?.length ?? 0) > 0"
+            flat
+            dense
+            :size="btnSize"
+            :icon="symOutlinedCancel"
+            @click="state.messageDraft = ''"
+          ></q-btn>
+        </template>
+      </chatMessageEdit>
       <!--If we want to edit any pre-defined functions we can do that here...-->
       <div v-else-if="selectedTaskType" class="row">
         <ObjectTreeView
@@ -54,6 +86,9 @@
         v-for="file in fileAttachments"
         :key="file.name"
         removable
+        dense
+        color="secondary"
+        text-color="white"
         :icon="matUploadFile"
         @remove="removeFileFromDraft(file)"
       >
@@ -63,27 +98,8 @@
         <q-tooltip :delay="0.5">{{ `${file.name}` }}</q-tooltip>
       </q-chip>
     </div>
-    <!--Minimal Mode Buttons-->
-    <div
-      v-if="minMode"
-      class="sticky-dropzone"
-      style="position: absolute; top: 0; left: 0px; transform: translateY(-110%); z-index: 100"
-    >
-      <FileDropzone
-        class="col-auto"
-        accept="*"
-        disable-dropzone-border
-        aria-label="attachFileToDraft"
-        @add-files="attachFileToDraft"
-      >
-        <q-btn dense round size="md" class="fit taskyon-control-button" flat>
-          <q-icon :name="matAttachment" />
-          <q-tooltip>Attach file or image to message</q-tooltip>
-        </q-btn>
-      </FileDropzone>
-    </div>
     <!--Task Creation State-->
-    <div v-else class="q-px-sm q-pt-xs row justify-between items-center">
+    <div v-if="!minMode" class="q-px-sm q-pt-xs row justify-between items-center">
       <div class="col-auto row">
         <!--attach files...-->
         <FileDropzone
@@ -101,248 +117,154 @@
           </q-btn>
         </FileDropzone>
         <!--Taskyon features-->
-        <q-btn dense flat :icon="matMoreHoriz" aria-label="quick ai settings">
-          <q-tooltip>More AI Settings</q-tooltip>
-          <q-menu fit data-cy="ai-settings">
-            <div class="q-py-md">
-              <ObjectTreeView
-                v-model="slimSettings.reactiveView"
-                :schema="slimSettings.jsonSchema"
-                dense
-              />
-            </div>
-            <q-card-actions class="float-right">
-              <q-btn
-                v-if="expertMode"
-                flat
-                to="/settings/agent%20config"
-                label="Full list of settings"
-              />
-              <q-btn v-close-popup flat label="Ok" />
-            </q-card-actions>
-          </q-menu>
-        </q-btn>
+        <SimpleSettingsDialog />
         <!--Select Tools-->
-        <div v-if="expertMode || selectedTaskType" @click.stop>
-          <q-btn data-cy="tool-btn" flat dense :icon="mdiFunctionVariant">
-            <q-menu ref="toolMenu" auto-close>
-              <q-list dense>
-                <q-item v-if="!selectedTaskType" clickable to="/tool" class="q-mb-md">
-                  <q-item-section avatar>
-                    <q-icon :name="mdiToolbox"></q-icon>
-                  </q-item-section>
-                  <q-item-section> Open Tool Manager </q-item-section>
-                </q-item>
-                <q-item>
-                  <q-item-section class="text-caption">
-                    Search for a tool you want to use..</q-item-section
-                  >
-                  <q-item-section side>
-                    <InfoDialog
-                      info-text="You can use tools here directly and change their parameters to your liking"
-                    />
-                  </q-item-section>
-                </q-item>
-                <q-item class="row">
-                  <q-item-section @click.stop>
-                    <q-select
-                      class="col"
-                      use-input
-                      dense
-                      standout
-                      hide-selected
-                      fill-input
-                      options-dense
-                      input-debounce="0"
-                      color="secondary"
-                      :model-value="selectedTaskType"
-                      :options="filteredToolCollection"
-                      @filter="filterFn"
-                      @update:model-value="
-                        (val) => {
-                          tystate.switchTaskType(val)
-                          toolMenu?.hide()
-                        }
-                      "
-                    >
-                    </q-select>
-                  </q-item-section>
-                </q-item>
-                <q-item
-                  v-if="selectedTaskType"
-                  class="q-mt-md"
-                  clickable
-                  @click="() => tystate.switchTaskType(undefined)"
+        <ResponsiveMenuDialogBtn
+          v-if="expertMode || selectedTaskType"
+          dense
+          flat
+          :icon="mdiFunctionVariant"
+          maximized
+          data-cy="tool-btn"
+          auto-close
+        >
+          <template #default="{ close }">
+            <q-list dense>
+              <q-item v-if="!selectedTaskType" clickable to="/tool" class="q-mb-md">
+                <q-item-section avatar>
+                  <q-icon :name="mdiToolbox"></q-icon>
+                </q-item-section>
+                <q-item-section> Open Tool Manager </q-item-section>
+              </q-item>
+              <q-item>
+                <q-item-section class="text-caption">
+                  Search for a tool you want to use..</q-item-section
                 >
-                  <q-item-section avatar>
-                    <q-icon :name="matChat"></q-icon>
-                  </q-item-section>
-                  <q-item-section> Select Simple Chat </q-item-section>
-                </q-item>
-              </q-list>
-            </q-menu>
-          </q-btn>
-        </div>
-      </div>
-      <!--
-          <div v-else-if="expertMode">
-            <q-btn dense flat :icon="mdiFunctionVariant" @click="" />
-          </div>
-        -->
-      <!--Choose Model-->
-      <div class="col-auto model-history">
-        <q-btn flat dense size="sm" no-caps @click.stop>
-          <q-icon :name="matSmartToy" />
-          <div data-cy="model-id" class="q-pl-xs ellipsis">
-            {{ `${tystate.currentModelId}` }}
-          </div>
-          <div class="text-weight-thin gt-xs">/{{ state.llmSettings.selectedApi }}</div>
-          <q-menu data-cy="model-selection" fit color="secondary">
-            <q-list dense style="min-width: 100px">
-              <div class="row">
-                <q-btn square flat :icon="matSmartToy" label="Model List" to="/pricing" />
-                <ApiSelect v-model="state.llmSettings.selectedApi" more-settings />
-              </div>
-              <q-separator />
-              <q-item-label header>Previously selected AI models!</q-item-label>
-              <q-item v-if="state.modelHistory.length === 0" v-close-popup>
-                No other models were selected yet!
+                <q-item-section side>
+                  <InfoDialog
+                    info-text="You can use tools here directly and change their parameters to your liking"
+                  />
+                </q-item-section>
+              </q-item>
+              <q-item class="row">
+                <q-item-section @click.stop>
+                  <q-select
+                    class="col"
+                    use-input
+                    dense
+                    standout
+                    hide-selected
+                    fill-input
+                    options-dense
+                    input-debounce="0"
+                    color="secondary"
+                    :model-value="selectedTaskType"
+                    :options="filteredToolCollection"
+                    @filter="filterFn"
+                    @update:model-value="
+                      (val) => {
+                        tystate.switchTaskType(val)
+                        close()
+                      }
+                    "
+                  >
+                  </q-select>
+                </q-item-section>
               </q-item>
               <q-item
-                v-for="(m, idx) in state.modelHistory"
-                :key="m"
-                v-close-popup
+                v-if="selectedTaskType"
+                class="q-mt-md"
                 clickable
-                @click="tystate.handleBotNameUpdate({ newName: m })"
+                @click="() => tystate.switchTaskType(undefined)"
               >
-                <q-item-section>{{ state.modelHistory.length - idx }}: {{ m }}</q-item-section>
+                <q-item-section avatar>
+                  <q-icon :name="matChat"></q-icon>
+                </q-item-section>
+                <q-item-section> Select Simple Chat </q-item-section>
               </q-item>
-              <q-separator />
-              <div class="text-info column items-center">
-                <div>
-                  <q-item class="row items-center">
-                    <q-icon :name="matSmartToy" size="sm" class="q-pr-md"></q-icon>
-                    <ModelSelection
-                      v-model:selected-api="selectedApi"
-                      class="col"
-                      :bot-name="tystate.currentModelId"
-                      :model-list="expertMode"
-                      :select-api="expertMode"
-                      @update-bot-name="tystate.handleBotNameUpdate"
-                    ></ModelSelection>
-                  </q-item>
-                </div>
-                <InfoDialog
-                  v-if="tystate.currentModelId && tystate.currentModel?.description"
-                  :round="false"
-                  class="fit"
-                  square
-                  :dense="false"
-                  label="Info about current model"
-                  no-caps
-                  :info-text="tystate.currentModel?.description || ''"
-                />
-              </div>
             </q-list>
-          </q-menu>
-        </q-btn>
+            <q-card-actions v-if="$q.platform.is.mobile" class="float-right">
+              <q-btn v-close-popup flat label="Ok" />
+            </q-card-actions>
+          </template>
+        </ResponsiveMenuDialogBtn>
       </div>
+      <!--Choose Model-->
+      <ChooseModelDialog />
       <!--Tool task execution-->
       <div
         v-if="expertMode && selectedTaskType"
         class="col-auto q-px-md row no-wrap items-center"
         @click.stop
       >
-        <q-btn flat :icon-right="matSend" @click="addNewTask()">
+        <q-btn flat :icon-right="matSend" @click="addNewTask(p2pTopic)">
           <q-tooltip>Execute Task</q-tooltip>
         </q-btn>
       </div>
-      <!-- deactivate token estimation for now, because
-           when using agents this is way too hard to estimate.
-          <template v-if="tystate.currentModelId && expertMode && false">
-            <div class="gt-xs">
-              {{ `t/c: ${estimatedTokens}/${tystate.currentModel?.context_length}` }}
-              <q-tooltip :delay="1000" class="q-gutter-sm">
-                <div>
-                  [approximate number of tokens in prompt] / [max number of tokens which AI can
-                  understand]
-                </div>
-                <div>Tokens are roughly similar to syllables.</div>
-              </q-tooltip>
-            </div>
-            <div class="lt-sm">{{ `t/c: ${estimatedTokens}` }}</div>
-          </template>-->
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRefs } from 'vue'
-import { partialTaskDraft } from 'src/modules/taskyon/types'
-import { llmSettings, appConfiguration } from 'src/modules/taskyon/types'
-import { useTaskyonStore } from 'stores/taskyonState'
-import ModelSelection from 'components/taskyon/ModelSelection.vue'
-import ObjectTreeView from '../ObjectTreeView.vue'
-import chatMessageEdit from './chatMessageEdit.vue'
-import InfoDialog from '../InfoDialog.vue'
 import {
-  matUploadFile,
-  matChat,
-  matSmartToy,
-  matMoreHoriz,
-  matSend,
-  matBuild,
   matAttachment,
+  matBuild,
+  matChat,
+  matSend,
+  matUploadFile,
 } from '@quasar/extras/material-icons'
-import { useAppStateStore } from 'src/stores/appState'
-import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
-import { buildSlimView } from 'src/modules/vueUtils'
-import FileDropzone from '../FileDropzone.vue'
-import { QSelect } from 'quasar'
-import { deepCopy } from 'src/modules/utils'
+import { symOutlinedCancel } from '@quasar/extras/material-symbols-outlined'
 import { mdiFunctionVariant, mdiToolbox } from '@quasar/extras/mdi-v6'
-import ApiSelect from './ApiSelect.vue'
+import { deepCopy, generateTaskKeyWords, partialTaskDraft } from '@taskyon/taskyon'
+import { watchThrottled } from '@vueuse/core'
+import { QSelect, useQuasar } from 'quasar'
+import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { computed, onMounted, ref } from 'vue'
+import FileDropzone from '../FileDropzone.vue'
+import InfoDialog from '../InfoDialog.vue'
+import ObjectTreeView from '../ObjectTreeView.vue'
+import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
+import chatMessageEdit from './chatMessageEdit.vue'
+import ChooseModelDialog from './ChooseModelDialog.vue'
+import SimpleSettingsDialog from './SimpleSettingsDialog.vue'
+// import { watchThrottled } from '@vueuse/core'
+// use idel mechanism to calculate all kinds of stuff here :=)
+//import { useIdle } from '@vueuse/core'
 
-const { expertMode = false, entryNode } = defineProps<{
-  entryNode: partialTaskDraft
+const {
+  expertMode = false,
+  entryNode,
+  addToTaskyon,
+} = defineProps<{
+  entryNode?: partialTaskDraft | undefined
   minMode?: boolean
   expertMode?: boolean
+  p2pTopic?: string // the p2p network that we want to send the task to
+  addToTaskyon?: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'addTasks', t: partialTaskDraft[]): void
 }>()
 
 const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
 
-const toolMenu = ref()
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
-const { selectedApi } = toRefs(state.llmSettings)
 
-//const selectedTaskTypeVar = ref<string>('testasdad')
+const keywordExtractorReady = ref(false)
 
-const em = computed(() => state.appConfiguration.expertMode)
-
-const slimSettings = computed(() =>
-  buildSlimView(
-    {
-      obj: state.appConfiguration,
-      schema: appConfiguration,
-      pickKeys: ['expertMode'],
+onMounted(() => {
+  // pre-load our python-based keyword function!
+  void generateTaskKeyWords(
+    currentnewTask.value ?? {
+      role: 'system',
+      content: { type: 'message', data: 'test' },
     },
-    {
-      obj: state.llmSettings,
-      schema: llmSettings,
-      pickKeys: [
-        ...(em.value
-          ? ['enableToolChooser', 'enableOpenAiTools', 'tryUsingVisionModels', 'useBasePrompt']
-          : []),
-      ],
-    },
-    {
-      obj: state.appConfiguration,
-      schema: appConfiguration,
-      pickKeys: ['useEnterToSend', 'primaryColor', 'secondaryColor'],
-    },
-  ),
-)
+    [],
+  ).then(() => (keywordExtractorReady.value = true))
+})
 
 // we initialize our taskDraft with the state of this window!
 
@@ -402,7 +324,7 @@ const currentnewTask = computed(() => {
       task.role = 'user'
       task.content = {
         type: 'message',
-        data: state.messageDraft.trim(),
+        data: state.messageDraft?.trim() ?? '',
       }
     } else {
       console.error('we currently only support function calls and messages as task types!')
@@ -412,57 +334,50 @@ const currentnewTask = computed(() => {
   return partialTaskDraft.parse(task) // we can do this, because we defined the "role"
 })
 
-//const { estimateChatTokens } = useNlpWorker()
+const getCurrentKeyword = async () => {
+  const startTime = performance.now()
+  const kwd = (await generateTaskKeyWords(currentnewTask.value, tystate.selectedThread.value))[0]
+  const endTime = performance.now()
+  console.log(`Keyword creation took ${endTime - startTime} ms.`)
+  return kwd
+}
 
-// TODO:   our token estimation needs to become much better ^^
-// TODO:   e.g. add prompts to our task :)
-/*const estimatedTokens = ref<number>(0)
-watchDebounced(
-  [() => currentTaskDraft.value.content, () => state.llmSettings.selectedTaskId],
+// add taskchain to taskManager
+async function getCurrentKeywordsWithTimeout(timeoutMs = 200): Promise<string | undefined | null> {
+  try {
+    const kwd = await Promise.race([
+      getCurrentKeyword(),
+      new Promise<null>((resolve) =>
+        setTimeout(() => {
+          resolve(null)
+        }, timeoutMs),
+      ),
+    ])
+    return kwd
+  } catch (err) {
+    console.log('Error generating keywords!', err)
+  }
+  //console.log(`Keyword Timeout? ${kwds === null ? true : false}`)
+}
+
+//const { idle, lastActive } = useIdle(2000) // 5 min
+const currentKeywords = ref<string>()
+watchThrottled(
+  tystate.selectedThread,
   async () => {
-    console.log('calculate tokens...')
-    let taskTokens = 0
-    if (state.llmSettings.selectedTaskId) {
-      const tm = await tystate.getTaskManager()
-      // we are getting quiet a few tasks here  in order to catch at least one chatCompletion task...
-      const chain = await tm.getTaskIdChain(state.llmSettings.selectedTaskId, 15)
-
-      // Assume the task with the last available token count is the relevant one
-      for (const taskId of chain) {
-        const taskMeta = await tm.debugDb.get(taskId)
-        taskTokens = taskMeta?.taskTokens ?? 0
-        if (taskTokens === 0) {
-          taskTokens =
-            (taskMeta?.estimatedTokens?.promptTokens ?? 0) +
-            (taskMeta?.estimatedTokens?.resultTokens ?? 0)
-        }
-        if (taskTokens != 0) break
-      }
-    }
-
-    // we need to deepCopy both ref values, so that we can send them to the thread!!
-    const estimated = await estimateChatTokens(
-      deepCopy(currentnewTask.value.content),
-      // we don't do the next one, as we are already taking the actual prompt tokens
-      // from a  previous task
-      [] as ChatCompletionMessageParam[],
-      deepCopy(toolCollection.value),
-    )
-
-    const newTokens = Object.values(estimated || {}).reduce((pn, cn) => (pn ?? 0) + (cn ?? 0), 0)
-
-    // Tokenize the message
-    estimatedTokens.value = taskTokens + (newTokens ?? 0)
+    // calculate keywords here with much biggger timeout!
+    const kwds = await getCurrentKeywordsWithTimeout(2000)
+    if (kwds) currentKeywords.value = kwds
   },
-  { debounce: 3000, maxWait: 5000, immediate: true },
-)*/
+  { immediate: true, throttle: 2000 },
+)
 
 // all our files are added to a "file task"
 async function createFileTask(files: File[]) {
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
 
   // first add files to our DB & save them, then get uuids for each file.
-  const fileUuids = await tm.addFiles(files)
+  const fileUuids = await ty.addFiles(files, 'opfs')
 
   if (fileUuids.length) {
     const task: partialTaskDraft = {
@@ -477,8 +392,15 @@ async function createFileTask(files: File[]) {
   return undefined
 }
 
-async function addNewTask(execute = true) {
-  const tm = await tystate.getTaskManager()
+const $q = useQuasar()
+
+// TODO: move this "up", it would be better to have the task creation be purely
+//       event based and more configurable...
+async function addNewTask(p2pTopic?: string, webSearch?: boolean) {
+  console.log('pubishing on topic:', p2pTopic)
+  const kwdsPromise = getCurrentKeywordsWithTimeout(300)
+  const ty = await tystate.taskyon
+
   const fileTaskObj = await createFileTask(fileAttachments.value)
 
   // we are creating new taskchain accordig to what the user wants ;)
@@ -493,24 +415,29 @@ async function addNewTask(execute = true) {
 
   // execute: if true, we immediatly queue the task for execution in the taskManager
   //          otherwise, it won't get executed but simply saved into the tree
-  console.log('adding new task, execute?', execute)
+  console.log('adding new task...')
   if (!currentnewTask.value) throw new Error('No task to add!')
 
   // we are doing the ... to make sure we don't change the original, reactive object
   newTaskChain.push({ ...currentnewTask.value })
 
   if (currentnewTask.value.content.type === 'message') {
-    if (state.llmSettings.enableToolChooser) {
+    if (entryNode) {
       const chooseTask = deepCopy(entryNode)
+      if (chooseTask.content.type === 'functioncall') {
+        // in the future, we should make this "dynamic" and automatically add the relevant buttons
+        // from our entry node to the task creation area!
+        chooseTask.content.data.arguments = {
+          ...(webSearch ? { webSearch: true } : {}),
+          ...(state.llmSettings.enableToolChooser ? { useTools: true } : {}),
+          ...(state.llmSettings.enableOpenAiTools ? { llmTools: true } : {}),
+        }
+      }
       newTaskChain.push(chooseTask)
-      console.log('adding message completion task:', currentnewTask.value.content.data)
     } else {
-      const completionTask = createChatCompletionTask({
-        model: tystate.currentModelId,
-        goal: 'SimpleCompletion',
-      })
-      newTaskChain.push(completionTask)
-      console.log('adding message completion task:', currentnewTask.value.content.data)
+      $q.notify(
+        "We can can not complete the Chat because we don't have a correct model or provider selected",
+      )
     }
   }
 
@@ -529,20 +456,27 @@ async function addNewTask(execute = true) {
     })
   }
 
-  // add taskchain to taskManager
-  const newTaskId = (await tm.addTaskChain(newTaskChain, state.llmSettings.selectedTaskId)).at(-1)
+  const kwds = (await kwdsPromise) ?? currentKeywords.value
+  if (kwds) newTaskChain.forEach((t) => (t.name = kwds))
 
-  // push the last task to execution queue right away...
-  if (execute && newTaskId) {
-    void tystate.addToProcessQueue(newTaskId.id)
+  // only add to taskyon, if
+  if (addToTaskyon) {
+    const newTaskId = (await ty.addTaskChain(newTaskChain, state.llmSettings.selectedTaskId)).at(-1)
+
+    // push the last task to execution queue right away...
+    if (newTaskId) {
+      void tystate.addToProcessQueue(newTaskId.id)
+    }
+
+    state.setSelectedTask(newTaskId?.id)
   }
-
-  state.setSelectedTask(newTaskId?.id)
 
   // and empty out the contents for the next chat message :)
   if (currentnewTask.value.role === 'user') {
     tystate.setNewContentDraft({ type: 'message', data: '' })
   }
+
+  emit('addTasks', newTaskChain)
 }
 
 function attachFileToDraft(newFiles: File[]) {
@@ -568,19 +502,5 @@ const removeFileFromDraft = (file: File) => {
   flex: 1 1 0; /* grow:1, shrink:1, basis:0 */
   min-width: 0; /* allow it to shrink below its content width */
   width: 100%;
-}
-
-.sticky-dropzone {
-  position: absolute;
-  top: 0;
-  left: 8px;
-  transform: translateY(-100%);
-  z-index: 100;
-  display: none;
-}
-
-/* Show dropzone if *any* child inside .message-area-parent is focused */
-.message-area-parent:focus-within .sticky-dropzone {
-  display: block;
 }
 </style>

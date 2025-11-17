@@ -21,6 +21,6 @@
 import { matVisibility, matVisibilityOff } from '@quasar/extras/material-icons'
 import { ref } from 'vue'
 
-const model = defineModel<string>()
+const model = defineModel<string | undefined>()
 const isPwd = ref(true)
 </script>

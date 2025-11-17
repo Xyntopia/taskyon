@@ -1,8 +1,8 @@
 <template>
   <q-header class="column">
     <component
-      :is="!minMode ? QToolbar : 'div'"
-      :class="minMode ? 'q-gutter-xs row q-px-sm' : 'q-gutter-xs'"
+      :is="!miniToolbar ? QToolbar : 'div'"
+      :class="miniToolbar ? 'q-gutter-xs row q-px-sm' : 'q-gutter-xs'"
     >
       <q-btn
         v-if="drawerOpen !== undefined"
@@ -15,7 +15,7 @@
         class="q-mr-lg"
         @click="drawerOpen = !drawerOpen"
       />
-      <div v-if="state" :class="[minMode ? '' : 'button-group']">
+      <div v-if="state && !noChatButtons" :class="[noChatButtonBorder ? '' : 'button-group']">
         <q-btn
           v-if="!minMode"
           flat
@@ -28,7 +28,7 @@
           <q-tooltip>Search Conversations</q-tooltip>
         </q-btn>
         <q-btn
-          v-if="!minMode"
+          v-if="backToChat"
           flat
           dense
           :icon="mdiForum"
@@ -38,13 +38,19 @@
           ><q-tooltip>Go to Chat</q-tooltip>
         </q-btn>
         <q-btn
+          v-if="newChat"
           flat
           dense
           :icon="mdiForumPlus"
           :size="btnSize"
           to="/"
           aria-label="start new chat"
-          @click="state.llmSettings.selectedTaskId = undefined"
+          @click="
+            () => {
+              state.llmSettings.selectedTaskId = undefined
+              state.createTaskType.type = 'message'
+            }
+          "
           ><q-tooltip>Create New Chat</q-tooltip>
         </q-btn>
       </div>
@@ -86,18 +92,23 @@
       >
         <q-tooltip> Open Taskyon Documentation </q-tooltip>
       </q-btn>
-      <q-separator v-if="!minMode" class="desktop-only" vertical></q-separator>
+      <q-separator
+        v-if="!minMode && (!hideMenu || !hideRightSide)"
+        class="desktop-only"
+        vertical
+      ></q-separator>
       <q-btn
-        v-if="!minMode"
+        v-if="!hideMenu"
         id="ty-space-menu"
         round
         flat
         dense
+        :size="btnSize"
         icon="svguse:/taskyon_mono_opt.svg#taskyon"
       >
         <q-menu>
           <q-list dense>
-            <q-item :size="btnSize" to="/settings">
+            <q-item :size="btnSize" to="/settings" data-cy="open-settings">
               <q-item-section avatar>
                 <q-icon :name="matSettings" />
               </q-item-section>
@@ -179,10 +190,10 @@
         </q-menu>
       </q-btn>
       <q-btn
-        v-else
+        v-else-if="!hideRightSide"
         flat
         dense
-        size="xs"
+        :size="btnSize"
         icon-right="svguse:/taskyon_mono_opt.svg#taskyon"
         no-caps
         href="https://taskyon.space"
@@ -196,8 +207,6 @@
 </template>
 
 <script setup lang="ts">
-import DarkModeButton from 'components/DarkModeButton.vue'
-import { defineAsyncComponent } from 'vue'
 import { matHelpOutline, matMenu, matSearch, matSettings } from '@quasar/extras/material-icons'
 import {
   mdiForum,
@@ -207,18 +216,27 @@ import {
   mdiInformationVariant,
   mdiWrench,
 } from '@quasar/extras/mdi-v6'
-import { useAppStateStore } from 'src/stores/appState'
-import { ref } from 'vue'
+import DarkModeButton from 'components/DarkModeButton.vue'
 import { QToolbar } from 'quasar'
 import { getEnvironmentInfo } from 'src/modules/utils'
+import { useAppStateStore } from 'src/stores/appState'
+import { defineAsyncComponent, ref } from 'vue'
 
 const state = useAppStateStore()
 const showAboutDialog = ref(false)
 
-defineProps<{
+const { btnSize = 'md' } = defineProps<{
   minMode?: boolean
-  btnSize: 'xs' | 'md' | 'sm' | 'lg' | 'xl'
+  btnSize?: 'xs' | 'md' | 'sm' | 'lg' | 'xl'
+  noChatButtons?: boolean
+  miniToolbar?: boolean
+  noChatButtonBorder?: boolean
+  hideRightSide?: boolean
+  hideMenu?: boolean
+  backToChat?: boolean
+  newChat?: boolean
 }>()
+
 const drawerOpen = defineModel<boolean | undefined>('drawerOpen', {
   required: false,
   default: undefined,

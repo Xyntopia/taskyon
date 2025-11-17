@@ -1,66 +1,201 @@
 <template>
-  <!--edit chat messages-->
-  <q-input
-    v-model.trim="content"
-    data-cy="chat-input"
-    autogrow
-    autofocus
-    borderless
-    color="secondary"
-    placeholder="Type your message..."
-    clearable
-    input-style="max-height: 300px"
-    v-bind="$attrs"
-    @keyup="checkKeyboardEvents"
-  >
-    <template #append>
-      <q-btn
-        flat
-        dense
-        round
-        :icon="matSend"
-        :color="$q.dark.isActive ? 'white' : 'dark'"
-        @click="$emit('execute-task')"
+  <div class="msg-edit rounded-borders">
+    <!--{{ smallMode }} {{ h }}-->
+    <div>
+      <!-- Edit chat messages -->
+      <q-input
+        v-model="content"
+        data-cy="chat-input"
+        autogrow
+        type="textarea"
+        borderless
+        placeholder="Type your message..."
+        :input-style="{ maxHeight: '300px' }"
+        :class="['q-px-sm', content?.length ? 'q-pt-sm' : '']"
+        v-bind="$attrs"
+        @keyup="checkKeyboardEvents"
       >
-        <q-tooltip>
-          Press to send or alternatively send with &lt;shift&gt; + &lt;enter&gt;
-        </q-tooltip>
+        <template #before>
+          <div v-show="smallMode">
+            <slot name="left" btn-size="md" />
+          </div>
+        </template>
+        <template v-if="smallMode" #after>
+          <div v-show="smallMode">
+            <q-btn flat :icon="matSend" @click="$emit('execute-task')">
+              <q-tooltip>{{ sendToolTip }}</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="showWebSearch"
+              flat
+              :icon="mdiSearchWeb"
+              @click="$emit('execute-web-search')"
+            >
+              <q-tooltip> Use web search </q-tooltip>
+            </q-btn>
+          </div>
+        </template>
+      </q-input>
+      <q-resize-observer @resize="onResize" />
+    </div>
+    <div v-if="!smallMode" class="left bar border-radius-inherit">
+      <slot name="left" btn-size="sm"> </slot>
+    </div>
+    <!-- One positioned container that holds both toolbars -->
+    <div class="bar top border-radius-inherit">
+      <slot name="top" btn-size="sm" />
+    </div>
+    <div v-if="!smallMode" class="bar bottom border-radius-inherit">
+      <q-btn flat size="sm" :icon="matSend" @click="$emit('execute-task')">
+        <q-tooltip>{{ sendToolTip }}</q-tooltip>
       </q-btn>
-    </template>
-  </q-input>
+      <q-btn
+        v-if="showWebSearch"
+        flat
+        size="sm"
+        :icon="mdiSearchWeb"
+        @click="$emit('execute-web-search')"
+      >
+        <q-tooltip> <q-tooltip> Use web search </q-tooltip> </q-tooltip>
+      </q-btn>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { matSend } from '@quasar/extras/material-icons'
+import { mdiSearchWeb } from '@quasar/extras/mdi-v6'
+import { useQuasar } from 'quasar'
+import type { appConfiguration } from 'src/modules/taskyon/types'
+import { computed, onBeforeUnmount } from 'vue'
+import { ref } from 'vue'
+
+const $q = useQuasar()
+const enterMode = computed(() =>
+  props.useEnterToSend === 'auto' ? ($q.platform.is.mobile ? 'off' : 'on') : props.useEnterToSend,
+)
+
+const sendToolTip = computed(
+  () =>
+    ({
+      on: 'Send (Enter)',
+      off: 'Send',
+      shift: 'Send (Shift+Enter)',
+    })[enterMode.value],
+)
 
 const content = defineModel<string | null | undefined>({
   required: true,
 })
 
 const props = defineProps<{
-  useEnterToSend: boolean
+  useEnterToSend: appConfiguration['useEnterToSend']
+  showWebSearch?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'execute-task'): void
+  (e: 'execute-web-search'): void
 }>()
 
 const checkKeyboardEvents = (event: KeyboardEvent) => {
-  //console.log('pressed key in message edit...', event.key)
-  if (props.useEnterToSend) {
-    if (!event.shiftKey && event.key === 'Enter') {
-      emit('execute-task')
-      // Prevent a new line from being added to the input (optional)
-      event.preventDefault()
-    }
-    // otherwise it'll simply be the default action and inserting a newline :)
-  } else {
-    if (event.shiftKey && event.key === 'Enter') {
-      emit('execute-task')
-      // Prevent a new line from being added to the input (optional)
-      event.preventDefault()
-    }
-    // otherwise it'll simply be the default action and inserting a newline :)
+  // Exit if not 'Enter' key or if sending is disabled
+  if (event.key !== 'Enter' || enterMode.value === 'off') {
+    return
+  }
+
+  // Map modes to their required 'shiftKey' state.
+  // 'auto' resolves to 'false' for mobile (simple Enter) and 'true' for desktop (Shift+Enter).
+  const shiftKeyRequirement = {
+    on: false,
+    shift: true,
+  }
+
+  // Check if the actual event's shiftKey matches the requirement for the current mode.
+  const shouldSend = shiftKeyRequirement[enterMode.value] === event.shiftKey
+
+  if (shouldSend) {
+    emit('execute-task')
+    event.preventDefault()
   }
 }
+
+const SMALL_TO_LARGE = 80
+const LARGE_TO_SMALL = 60
+
+const h = ref(0)
+const w = ref(0)
+const smallMode = ref(true)
+
+// type-safe RAF handle (no `any`)
+let resizeRaf: number | null = null
+
+const onResize = ({ height, width }: { height: number; width: number }) => {
+  h.value = height
+  w.value = width
+
+  if (resizeRaf !== null) {
+    cancelAnimationFrame(resizeRaf)
+    resizeRaf = null
+  }
+  resizeRaf = requestAnimationFrame(() => {
+    // true hysteresis
+    if (smallMode.value) {
+      if (height >= SMALL_TO_LARGE) smallMode.value = false
+    } else {
+      if (height <= LARGE_TO_SMALL) smallMode.value = true
+    }
+    resizeRaf = null
+  })
+}
+
+onBeforeUnmount(() => {
+  if (resizeRaf !== null) cancelAnimationFrame(resizeRaf)
+})
 </script>
+
+<style scoped lang="scss">
+/* container */
+.msg-edit {
+  position: relative;
+}
+
+.left {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+
+  pointer-events: none; // don't block typing
+}
+
+.bottom {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+
+  pointer-events: none; // don't block typing
+}
+
+.top {
+  position: absolute;
+  top: 0;
+  right: 0;
+
+  pointer-events: none; // don't block typing
+}
+
+div.bar {
+  /* restore clicks for inner controls */
+  pointer-events: auto;
+
+  background-color: rgba(white, 0);
+  opacity: 1;
+  backdrop-filter: blur(1px);
+  // Safari support
+  -webkit-backdrop-filter: blur(1px);
+}
+
+.body--dark div.bar {
+  background-color: rgba($dark, 0);
+}
+</style>

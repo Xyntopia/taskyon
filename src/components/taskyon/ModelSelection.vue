@@ -9,7 +9,6 @@
         color="secondary"
         options-dense
         label="Select LLM Model for answering/solving the task."
-        :icon="matSmartToy"
         :options="filteredOptions"
         emit-value
         :model-value="botName"
@@ -18,7 +17,7 @@
         fill-input
         input-debounce="0"
         v-bind="$attrs"
-        :display-value="botName"
+        :display-value="botName || ''"
         @update:model-value="onModelSelect"
         @filter="
           (val: string, update: updateCallBack, abort: () => void) =>
@@ -29,11 +28,11 @@
       >
         <template #prepend>
           <q-icon
-            v-if="state.llmSettings.selectedApi === 'taskyon' && state.tyPublicKey"
+            v-if="state.llmSettings.selectedApi === 'taskyon' && tystate.usingTaskyonKey"
             :name="mdiKeyLink"
           >
             <q-tooltip
-              >Only models allowed from taskyon key: {{ state.tyPublicKey.name }}</q-tooltip
+              >Only models allowed from taskyon key: {{ tystate.usingTaskyonKey }}</q-tooltip
             >
           </q-icon>
         </template>
@@ -52,35 +51,33 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useTaskyonStore } from 'stores/taskyonState'
-import { matSmartToy, matVisibility } from '@quasar/extras/material-icons'
+import { matVisibility } from '@quasar/extras/material-icons'
 import { mdiKeyLink } from '@quasar/extras/mdi-v6'
 import { levenshteinDistance } from 'src/modules/string_utils'
-import ToggleButton from '../ToggleButton.vue'
 import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'stores/taskyonState'
+import { computed, ref } from 'vue'
+import ToggleButton from '../ToggleButton.vue'
 
-defineProps({
-  botName: {
-    type: String,
-    required: true,
-  },
-  modelList: {
-    type: Boolean,
-    default: false,
-  },
-  selectApi: {
-    type: Boolean,
-    default: false,
-  },
-})
+defineProps<{
+  botName: string | null
+  modelList?: boolean
+  selectApi?: boolean
+}>()
 
 const selectedApi = defineModel<string | null>('selectedApi', {
   required: true,
 })
 const showVisionModels = ref(false)
 
-const emit = defineEmits(['updateBotName'])
+const emit = defineEmits<{
+  updateBotName: [
+    {
+      newName: string
+      newService?: string | null
+    },
+  ] // named tuple syntax
+}>()
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -100,8 +97,10 @@ const modelOptions = computed(() => {
     return options
   } else {
     let llmModels = Object.values(tystate.llmModels)
-    if (tystate.allowedLLMModels) {
-      llmModels = llmModels.filter((m) => (m.id ? tystate.allowedLLMModels?.includes(m.id) : false))
+    if (tystate.tyKeyAllowedModels) {
+      llmModels = llmModels.filter((m) =>
+        m.id ? tystate.tyKeyAllowedModels?.includes(m.id) : false,
+      )
     }
     if (showVisionModels.value) {
       llmModels = llmModels.filter((m) => m.architecture?.modality === 'text+image->text')

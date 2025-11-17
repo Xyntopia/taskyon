@@ -3,7 +3,6 @@
   content:
     type: message
     data: test
-  id: 8teOhC9Rh4INJSg5lsJodpNsOU4NeMzuE6Y2t-sr8Eg
   created_at: 1752878693862
 - role: function
   name: chooseTool
@@ -13,8 +12,6 @@
       name: chooseTool
       arguments:
         llmTools: false
-  priorID: 8teOhC9Rh4INJSg5lsJodpNsOU4NeMzuE6Y2t-sr8Eg
-  id: SXP4ey10f3ywd3Wjq-MMNDFUg_qTHehzZyjo3t150CE
   created_at: 1752878693900
 - role: function
   name: test
@@ -159,8 +156,6 @@
           required:
             - reasoning_steps
             - choice
-  parentID: SXP4ey10f3ywd3Wjq-MMNDFUg_qTHehzZyjo3t150CE
-  id: lZlxKURMTIXHR4O-fs7u6kn4aRCMetqTDhOE4Chx91M
   created_at: 1752878694187
 - role: assistant
   name: test
@@ -178,8 +173,6 @@
         - This would be a suitable solution for the task.
       choice:
         - animatedClock
-  parentID: lZlxKURMTIXHR4O-fs7u6kn4aRCMetqTDhOE4Chx91M
-  id: Upa4Wa3x1ZCMBG1XUrA3mlWyjtNziu6BP4l-1TFnSEc
   created_at: 1752878699308
 - role: function
   name: chooseTool
@@ -189,9 +182,6 @@
       name: chooseTool
       arguments:
         llmTools: false
-  parentID: SXP4ey10f3ywd3Wjq-MMNDFUg_qTHehzZyjo3t150CE
-  priorID: lZlxKURMTIXHR4O-fs7u6kn4aRCMetqTDhOE4Chx91M
-  id: CfdgMWP280lXM2MGXEETIcptWlxo9rJHNdmnrcXrt2k
   created_at: 1752878694309
 - role: function
   name: test
@@ -206,8 +196,6 @@
         allowedTools:
           - animatedClock
         llmTools: false
-  parentID: CfdgMWP280lXM2MGXEETIcptWlxo9rJHNdmnrcXrt2k
-  id: 6_VdhaypvlCUP4SDQzxp0UCQXyPLJxhH7EcI8gzme5w
   created_at: 1752878699605
 - role: assistant
   name: test
@@ -220,8 +208,6 @@
       command:
         name: ''
         arguments: {}
-  parentID: 6_VdhaypvlCUP4SDQzxp0UCQXyPLJxhH7EcI8gzme5w
-  id: CYbftmu--fv9X01lnlNxv3gQYb5AJ5hYpklO0Gw7dTY
   created_at: 1752878702474
 - role: function
   name: test
@@ -232,9 +218,6 @@
       arguments:
         model: meta-llama/llama-3.2-11b-vision-instruct
         goal: SimpleCompletion
-  parentID: 6_VdhaypvlCUP4SDQzxp0UCQXyPLJxhH7EcI8gzme5w
-  priorID: CYbftmu--fv9X01lnlNxv3gQYb5AJ5hYpklO0Gw7dTY
-  id: SvH8R5YQ5kpLzhxdKDGLAwdYVaoNT9LZHBqIV08drrM
   created_at: 1752878702489
 - role: assistant
   name: Taskyon
@@ -243,15 +226,10 @@
     data: >-
       **Taskyon** is ready to assist you. What task or question would you like
       to tackle?
-  parentID: SvH8R5YQ5kpLzhxdKDGLAwdYVaoNT9LZHBqIV08drrM
-  id: VW4Rz_HkuhXAr7JnhM8O9qVkO_PQPVkI7FvLUCbOQ38
   created_at: 1752878705233
 - role: system
   name: Taskyon
   content:
     type: return
     data: assistant answered
-  parentID: SvH8R5YQ5kpLzhxdKDGLAwdYVaoNT9LZHBqIV08drrM
-  priorID: VW4Rz_HkuhXAr7JnhM8O9qVkO_PQPVkI7FvLUCbOQ38
-  id: q2vJLLPVg4Kzqd15YCjheHr88ZDbV27tCWmyGdeK7-0
   created_at: 1752878705242

@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1.4
+FROM node:22-slim AS builder
+
+WORKDIR /app
+
+# set a cache folder
+ENV YARN_CACHE_FOLDER=/tmp/.yarn-cache
+
+# copy manifests first
+COPY package.json yarn.lock ./
+COPY packages/relay/package.json ./packages/relay/package.json
+COPY packages/taskyon ./packages/taskyon
+
+# install dependencies with cache mount
+RUN --mount=type=cache,target=$YARN_CACHE_FOLDER \
+    yarn install --production --frozen-lockfile --ignore-workspace-root-check --cwd packages/relay
+
+COPY packages/relay/ ./packages/relay/
+
+# ---- runtime ----
+FROM node:22-slim
+WORKDIR /app
+
+# copy only the built file
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages/relay/relay.js ./relay.js
+
+CMD ["node", "relay.js"]

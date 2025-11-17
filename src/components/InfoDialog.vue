@@ -1,20 +1,18 @@
 <template>
-  <q-btn flat dense round :icon="matHelpOutline" v-bind="$attrs" @click.stop="showInfo = true" />
-  <q-dialog v-model="showInfo">
+  <DialogButton flat dense round :icon="matHelpOutline" v-bind="$attrs">
     <q-card>
       <q-card-section>
         <TyMarkdown v-if="infoText" :src="infoText" />
         <slot></slot>
       </q-card-section>
     </q-card>
-  </q-dialog>
+  </DialogButton>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-const showInfo = ref(false)
 import { matHelpOutline } from '@quasar/extras/material-icons'
 import TyMarkdown from './tyMarkdown.vue'
+import DialogButton from './DialogButton.vue'
 defineProps({
   infoText: {
     type: String,

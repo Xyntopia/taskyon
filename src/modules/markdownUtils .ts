@@ -202,11 +202,11 @@ export function createMultiButtonPlugin(
 
     return `
       <div class="code-block-with-btns" id="${blockId}">
-        ${htmlWithId}
         <div class="code-buttons">
-          ${btnsHtml}
           <span class="langlabel">${lang}</span>
+          ${btnsHtml}
         </div>
+        ${htmlWithId}
       </div>
     `
   })
@@ -504,14 +504,17 @@ export const md2Html = async (src: string, darkMode = false, allowHtml = false) 
   const env = {}
   const tokens = md.parse(src, env)
   const htmlBlocks: string[] = []
-  tokens.forEach((token) => {
-    if (token.type === 'html_block') {
-      // push ⟶ same content but with leading spaces removed on every line
-      const dedented = token.content.replace(/^[ \t]+/gm, '') // ← one‑liner
-      const i = htmlBlocks.push(dedented) - 1
-      token.content = placeholder(i)
-    }
-  })
+
+  if (allowHtml) {
+    tokens.forEach((token) => {
+      if (token.type === 'html_block') {
+        // push ⟶ same content but with leading spaces removed on every line
+        const dedented = token.content.replace(/^[ \t]+/gm, '') // ← one‑liner
+        const i = htmlBlocks.push(dedented) - 1
+        token.content = placeholder(i)
+      }
+    })
+  }
 
   // 3) Render tokens back to HTML
   const interim = md.renderer.render(tokens, md.options, env)
@@ -595,6 +598,22 @@ export const generateIframeSrc = (
 
         window.addEventListener('load', sendSize);
         new ResizeObserver(sendSize).observe(contentEl);
+
+        // --- minimal long-press detection ---
+        let pressTimer;
+        contentEl.addEventListener('touchstart', () => {
+          pressTimer = setTimeout(() => {
+            window.parent.postMessage({ type: 'longpress' }, '*');
+          }, 600); // ms threshold for long press
+        });
+        contentEl.addEventListener('touchend', () => clearTimeout(pressTimer));
+        contentEl.addEventListener('touchmove', () => clearTimeout(pressTimer));
+
+        // Inside your-iframe-content.html
+        document.addEventListener('click', function(event) {
+            window.parent.postMessage({ type: 'iframeClick', x: event.clientX, y: event.clientY }, '*');
+        });
+
       </script>
     </body>
   </html>

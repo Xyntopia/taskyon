@@ -26,6 +26,10 @@ describe('run diagnostics', () => {
     });*/
   })
   it('fast testing of a few taskyon operations', () => {
+    cy.contains('Welcome!', { timeout: 10000 })
+    //cy.contains('Ai Service Provide')
+    cy.wait(3000) // we are waiting, so that our passwords are able to load in the background
+
     addAIServices()
     cy.get('.q-btn').contains('Use free Taskyon', { matchCase: false }).click()
 
@@ -35,7 +39,7 @@ describe('run diagnostics', () => {
     cy.contains('About').click()
     cy.contains('Diagnostics').click()
 
-    cy.contains('Generate Diagnostics Report').click()
+    cy.dataCy('run-tests').click()
 
     cy.get(`[data-cy="test-finished"]`, { timeout: 60000 }).contains('Test Finished')
 
@@ -56,5 +60,6 @@ describe('run diagnostics', () => {
         expect(okCount, 'OKs > min').to.be.greaterThan(minOk)
         expect(/error/i.test(txt), 'no “Error” present').to.be.false
       })
+    cy.screenshot('diagnostics report', { overwrite: true })
   })
 })

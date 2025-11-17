@@ -55,23 +55,23 @@ $primary: var(--q-primary-rgb)
       overflow-x: auto // optional: scroll when it still overflows */
 
   .code-block-with-btns
-    position: relative
-
     .langlabel
       font-size: .75em
       opacity: .6
-      display: flex
-      align-items: center
 
-    div.code-buttons
-      position: absolute
-      top: -5px
-      transform: translateY(-100%)
-      right: 8px
+    .code-buttons
       display: flex
       align-items: center
-      background: inherit
-      gap: 4px
+      flex-wrap: nowrap; /* keep in one row */
+      gap: .5rem; /* spacing between buttons */
+      //padding: .25rem .5rem
+
+      & .langlabel
+        margin-right: auto; /* push the buttons to the right */
+
+      & button
+        margin-left: .25rem; /* buttons sit next to each other */
+        white-space: nowrap
 
   button
     text-transform: uppercase
@@ -86,7 +86,7 @@ $primary: var(--q-primary-rgb)
     border-radius: 0.25rem
     cursor: pointer
     transition: background 0.2s ease
-    z-index: 10
+    //z-index: 10
 
     &:hover
       background: rgba($secondary, 0.05)
@@ -129,13 +129,6 @@ $primary: var(--q-primary-rgb)
     opacity: 0.85
     font-style: italic
 
-  img
-    max-width: 100%
-    height: auto
-    display: block
-    margin: 1rem auto
-    border-radius: 4px
-
   hr
     margin: 1rem 0
 
@@ -169,16 +162,13 @@ $primary: var(--q-primary-rgb)
     border-radius: 4px
     height: auto
     max-height: 80vh
-
     // Let images use natural size unless too big
     max-width: 100%
-    width: auto
 
     // If the image *is smaller* than the container, just use intrinsic size
     &[width], &[height]
       max-width: none
       height: auto
-      width: auto
 
     // Optional: prevent SVGs from expanding if they lack dimensions
     &:not([width]):not([height])

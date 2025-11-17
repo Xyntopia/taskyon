@@ -1,23 +1,32 @@
 {
-  "name": "tyclient",
-  "version": "0.4.2",
+  "name": "@taskyon/tyclient",
+  "version": "0.5.1",
   "license": "MIT",
-  "main": "dist/tyclient.umd.js",
-  "module": "dist/tyclient.es.js",
-  "types": ".dist/tyclient.d.ts",
+  "main": "./dist/tyclient.js",
+  "module": "./dist/tyclient.mjs",
+  "types": "./dist/tyclient.d.ts",
   "exports": {
     ".": {
       "types": "./dist/tyclient.d.ts",
-      "import": "./dist/tyclient.es.js",
-      "require": "./dist/tyclient.umd.js"
+      "import": "./dist/tyclient.mjs",
+      "require": "./dist/tyclient.js"
     }
   },
   "files": [
     "dist/**/*"
   ],
-  "peerDependencies": {},
+  "sideEffects": false,
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/json-schema": "^7.0.15",
+    "tsup": "^8.5.0",
+    "type-fest": "^4.30.1"
+  },
   "scripts": {
-    "build": "vite build --config vite.lib.config.ts",
-    "prepack": "yarn run build"
+    "build": "tsup",
+    "build:vite:notworking": "vite build --config vite.lib.config.ts",
+    "prepack": "yarn build"
   }
 }

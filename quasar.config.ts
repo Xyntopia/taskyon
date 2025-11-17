@@ -2,12 +2,36 @@
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
 
 import { defineConfig } from '#q-app/wrappers'
-import { fileURLToPath } from 'node:url'
-import type { NormalizedOutputOptions, OutputBundle } from 'rollup'
-import path from 'path'
-import fs from 'fs'
 import { execSync } from 'child_process'
-import { analyzer } from 'vite-bundle-analyzer'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'path'
+import type { Plugin } from 'vite'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
+// --- helper to copy pyodide runtime ---
+function viteStaticCopyPyodide() {
+  const pyodideDir = dirname(fileURLToPath(import.meta.resolve('pyodide')))
+  const pyodidePkg = JSON.parse(readFileSync(join(pyodideDir, 'package.json'), 'utf-8'))
+  const pyodideVersion = pyodidePkg.version
+  console.log('Detected Pyodide version:', pyodideVersion)
+
+  /*const micropipDir = fileURLToPath(
+    new URL('./vendor/pyodide-wheels/micropip-*.whl', import.meta.url),
+  )*/
+
+  return viteStaticCopy({
+    targets: [
+      {
+        src: [join(pyodideDir, '*')],
+        dest: 'assets/pyodide',
+      },
+      /*{
+        src: [micropipDir],
+        dest: 'assets/pyodide',
+      },*/
+    ],
+  })
+}
 
 function getGitCommitHash() {
   try {
@@ -37,37 +61,11 @@ const DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid'
 
 console.log('compile app: ', APPNAME, DESCRIPTION)
 
-// Function to copy multiple files
-function copyFiles(fileList: { src: string; dest: string }[]) {
-  fileList.forEach((file) => {
-    const srcPath = path.resolve(__dirname, file.src)
-    const destPath = path.resolve(__dirname, file.dest)
-
-    if (fs.existsSync(srcPath)) {
-      fs.copyFileSync(srcPath, destPath)
-      console.log(`Copied ${file.src} to ${file.dest}`)
-    } else {
-      console.error(`${file.src} not found`)
-    }
-  })
-}
-
-const filesToCopy = [
-  {
-    src: 'src/assets/taskyon_settings.json',
-    dest: 'public/taskyon_settings.json',
-  },
-  {
-    src: 'README.md',
-    dest: 'public/docs/README.md',
-  },
-]
-
 // Custom plugin to adjust sourcemaps and add banner comment
-function sourcemapBannerPlugin() {
+function sourcemapBannerPlugin(): Plugin {
   return {
     name: 'sourcemap-banner-plugin',
-    generateBundle(_options: NormalizedOutputOptions, bundle: OutputBundle) {
+    generateBundle(this, options, bundle) {
       // Update JS chunks: remove auto sourcemap comment and add our banner
       for (const fileName in bundle) {
         const chunk = bundle[fileName]!
@@ -97,9 +95,9 @@ function sourcemapBannerPlugin() {
 }
 
 export default defineConfig((ctx) => {
-  if (ctx.prod) {
+  /*if (ctx.prod) {
     copyFiles(filesToCopy)
-  }
+  }*/
 
   const droplogging = ctx.prod && process.env.LOGGING !== 'true'
   console.log('drop logging:', droplogging)
@@ -149,11 +147,52 @@ export default defineConfig((ctx) => {
       },
 
       typescript: {
-        strict: true, // (recommended) enables strict settings for TypeScript
-        vueShim: true, // required when using ESLint with type-checked rules, will generate a shim file for `*.vue` files
-        extendTsConfig(/*tsConfig*/) {
-          // You can use this hook to extend tsConfig dynamically
-          // For basic use cases, you can still update the usual tsconfig.json file to override some settings
+        strict: true,
+        vueShim: true,
+        extendTsConfig(ts) {
+          // 1) Narrow Quasar's very broad include so vue-tsc doesn't crawl packages/**
+          ts.include?.push(
+            './../packages/taskyon/src/**/*',
+            //'./**/*.d.ts',
+            //'../src',
+            //'../src/**/*.vue',
+            //'../env.d.ts',
+            //'../.quasar/**/*.d.ts',
+          )
+
+          // for some reason, adding references here doesn't work very well...
+          //ts.files = []
+          //ts.references = [{ path: './packages/taskyon' }, { path: './packages/tyclient' }]
+
+          // // Be explicit about exclusions (prevents TS6305 looking into dist or packages)
+          ts.exclude = [
+            ...(ts.exclude ?? []),
+            './../dist-desktop',
+            './../src-tauri',
+            //'./../packages/**', // <- key bit: keep workspace packages out
+          ]
+
+          // // 2) Keep the 'app' alias but scope it to the app, not the entire repo
+          // // (prevents auto-imports like 'app/packages/taskyon/...'; still allows 'app/src/...').
+          // ts.compilerOptions ??= {}
+          // ts.compilerOptions.moduleResolution = 'bundler' // good with Vite + ESM
+          // ts.compilerOptions.paths ??= {}
+
+          // // leave 'app' (root) if you use it; just tighten the wildcard
+          // if (ts.compilerOptions.paths['app/*']) {
+          //   ts.compilerOptions.paths['app/*'] = ['../src/*']
+          // }
+          // // (optional) you can also remove it completely:
+          delete ts.compilerOptions?.paths['app']
+          delete ts.compilerOptions?.paths['app/*']
+
+          // we can't do this, because we want everything to be under
+          // @ŧaskyon/taskyon package :)
+          /*if (ts.compilerOptions?.paths) {
+            ts.compilerOptions.paths.taskyon = ['./../packages/taskyon/src']
+            ts.compilerOptions.paths['taskyon/*'] = ['./../packages/taskyon/src/*']
+          }*/
+          return ts
         },
       },
 
@@ -218,6 +257,7 @@ export default defineConfig((ctx) => {
         // Add this for dropping console and debugger in production:
         viteConf.esbuild = viteConf.esbuild || {}
         // TODO: https://github.com/evanw/esbuild/issues/3656  only drop console.log/info
+        // TODO: write a custom logging library and then drop those calls as well
         viteConf.esbuild.drop = droplogging ? ['console', 'debugger'] : []
 
         // ********   configure pglite ********/
@@ -225,8 +265,25 @@ export default defineConfig((ctx) => {
         // Extend the Vite configuration to exclude dependencies from optimization
         viteConf.optimizeDeps = {
           ...viteConf.optimizeDeps,
-          exclude: ['@electric-sql/pglite'], // replace 'some-library' with the module you want to exclude
+          exclude: [...(viteConf.optimizeDeps?.exclude ?? []), '@electric-sql/pglite', 'pyodide'],
         }
+
+        viteConf.plugins = [
+          viteConf.plugins,
+          ...viteStaticCopyPyodide(),
+          viteStaticCopy({
+            targets: [
+              {
+                src: 'src/assets/taskyon_settings.json',
+                dest: '.', // Will be placed in the root of the output dir ('public')
+              },
+              {
+                src: 'README.md',
+                dest: 'docs', // Will be placed in 'public/docs'
+              },
+            ],
+          }),
+        ]
 
         // Optional: Exclude from Rollup build as well
         viteConf.build = {
@@ -266,15 +323,24 @@ export default defineConfig((ctx) => {
       vitePlugins: [
         // Only apply this plugin in production when sourcemaps are enabled
         ...(ctx.prod ? [sourcemapBannerPlugin()] : []),
-
+        {
+          name: 'disable-sri-for-pyodide',
+          transformIndexHtml(html) {
+            return html.replace(
+              /(<script[^>]+src="[^"]*pyodide[^"]*"[^>]+)integrity="[^"]+"([^>]*>)/g,
+              '$1$2',
+            )
+          },
+        },
         // https://www.npmjs.com/package/vite-bundle-analyzer
-        analyzer({
+        // TODO: re-enable this!
+        /*analyzer({
           openAnalyzer: true, // Automatically open the analyzer UI in your browser
           summary: true, // Set to true if you prefer just a summary
           fileName: '../analyze_report',
           analyzerMode: 'static', // we use static here so that it also works in a CI setting.
           // Other options can go here if needed.
-        }),
+        }),*/
         [
           '@intlify/unplugin-vue-i18n/vite',
           {
@@ -297,7 +363,12 @@ export default defineConfig((ctx) => {
           {
             vueTsc: true,
             eslint: {
-              lintCommand: 'eslint -c ./eslint.config.js "./src*/**/*.{ts,js,mjs,cjs,vue}"',
+              lintCommand: [
+                'eslint',
+                '-c ./eslint.config.js',
+                '"./src/**/*.{ts,js,mjs,cjs,vue}"',
+                '"./packages/*/src/**/*.{ts,js,mjs,cjs,vue}"',
+              ].join(' '),
               useFlatConfig: true,
             },
           },
@@ -309,6 +380,8 @@ export default defineConfig((ctx) => {
     // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#devserver
     devServer: {
       // https: true
+      //vueDevtools: true,
+      https: true, // NECESSARY (alternative is type 'http')
       open: false, // opens browser window automatically
     },
 

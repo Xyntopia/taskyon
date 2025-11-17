@@ -2,7 +2,7 @@
   <div class="column q-gutter-xs task-control-buttons">
     <div class="col-auto">
       <q-btn
-        v-if="!state.lockBottomScroll"
+        v-if="showBottomScrollLock"
         fab-mini
         class="taskyon-control-button"
         :icon="matKeyboardDoubleArrowDown"
@@ -30,10 +30,12 @@
 <script setup lang="ts">
 import { useTaskyonStore } from 'stores/taskyonState'
 import { matKeyboardDoubleArrowDown, matStop } from '@quasar/extras/material-icons'
-import { useAppStateStore } from 'src/stores/appState'
 
 const tystate = useTaskyonStore()
-const state = useAppStateStore()
+
+defineProps<{
+  showBottomScrollLock: boolean
+}>()
 
 defineEmits<{
   scrollToThreadEnd: []

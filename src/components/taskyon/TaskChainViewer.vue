@@ -20,7 +20,7 @@
             prop.node.task.role,
             Object.keys(prop.node.task.content)[0],
           ]"
-          :show-id="!!showIds"
+          :show-meta="!!showIds"
           @click.stop
         />
         <div v-else class="text-bold">{{ prop.node.taskid.slice(0, 12) }}</div>
@@ -44,44 +44,50 @@
             prop.node.task.role,
             Object.keys(prop.node.task.content)[0],
           ]"
-          :show-id="!!showIds"
+          :show-meta="!!showIds"
           @click.stop
         />
       </template>
     </q-tree>
-    <template v-else>
-      <template v-for="(task, idx) in props.selectedThread" :key="task.id">
-        <Task
-          v-if="showAllTasks || showTask(task)"
-          :id="task.id"
-          :class="[task.role, task.content.type]"
-          :task="task"
-          :previous-task="props.selectedThread[idx - 1]"
-          :next-task="props.selectedThread[idx + 1]"
-          :is-working="
-            !!tystate.lastTaskState.get(task.id) &&
-            tystate.lastTaskState.get(task.id) !== 'processed'
-          "
-          :show-id="!!showIds"
-        />
-      </template>
-    </template>
+    <!--render the "normal" task view...-->
+    <SimpleChatView
+      v-else
+      :show-all-tasks="showAllTasks"
+      :reasoning="reasoning"
+      :is-processing="isProcessing"
+      :show-ids="showIds"
+      :selected-thread="selectedThread"
+      :expert-mode="expertMode"
+    />
     <!--Render tasks which are in progress-->
     <div class="task-logs q-py-sm">
-      <q-card
+      <template
         v-if="
-          !!tystate.lastTaskState.get(currentTask.id) &&
-          tystate.lastTaskState.get(currentTask.id) !== 'processed'
+          currentMessageStream?.length === 0 &&
+          currentThinkingStream &&
+          currentThinkingStream.length > 0
         "
-        class="row"
-        flat
       >
+        <div class="text-caption">THINKING:</div>
+        <div
+          ref="thinkingContainer"
+          style="font-size: 0.8rem; max-height: 300px; overflow-y: auto"
+          @scroll="handleUserScroll"
+        >
+          <tyMarkdown
+            no-line-numbers
+            no-mermaid
+            :src="currentThinkingStream /*?.split('\n').slice(-30).join('\n')*/"
+            class="text-caption"
+          />
+        </div>
+      </template>
+      <q-card v-if="isProcessing(currentTask.id)" class="row" flat>
         <div class="col">
           <tyMarkdown
             v-if="currentMessageStream"
             no-line-numbers
             no-mermaid
-            :use-iframe="false"
             :src="currentMessageStream || ''"
           />
           <div>
@@ -117,18 +123,15 @@
 </template>
 
 <script setup lang="ts">
-import type { ChatResponseType, TaskNode } from 'src/modules/taskyon/types'
+import { matArrowDropDown } from '@quasar/extras/material-icons'
+import type { ChatResponseType, TaskTreeNode } from '@taskyon/taskyon'
+import { accumulateStep, safeYamlDump, type TaskNode } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
-import { useTaskyonStore } from 'src/stores/taskyonState'
-import { computed, onBeforeUnmount } from 'vue'
-import { ref } from 'vue'
-import { type TaskTreeNode } from 'src/modules/taskyon/taskManager'
-import type { Unsubscribe } from 'src/modules/frpBus'
-import { matArrowDropDown } from '@quasar/extras/material-icons'
-import { accumulateStep } from 'src/modules/taskyon/chat'
-import { safeYamlDump } from 'src/modules/yamlUtils'
+import { getReasoning, useTaskyonStore } from 'src/stores/taskyonState'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import SimpleChatView from './SimpleChatView.vue'
 
 const tystate = useTaskyonStore()
 const showLogs = ref(false)
@@ -136,6 +139,10 @@ const showLogs = ref(false)
 const lastWorkerEvent = computed(() => {
   return tystate.workerStreamLogs.at(-1)
 })
+
+const emit = defineEmits<{
+  (e: 'onSizeChange'): void
+}>()
 
 const props = defineProps<{
   selectedThread: TaskNode[]
@@ -147,9 +154,41 @@ const props = defineProps<{
   expertMode?: boolean
 }>()
 
-const streamingTracker = ref<Map<string, ChatResponseType>>(new Map())
+const reasoning = ref(new Map<string, string>())
+watch(
+  () => props.currentTask.id,
+  () => {
+    console.log('re-calculate reason lists!')
+    reasoning.value.clear()
+    void Promise.all(
+      props.selectedThread.map(async (t) => {
+        const meta = await tystate.getMeta(t.id)
+        if (meta) {
+          const reason = getReasoning(meta)
+          if (reason) reasoning.value.set(t.id, reason)
+        }
+      }),
+    )
+  },
+  { immediate: true },
+)
 
-let streamerUnsubscriber: Unsubscribe
+// emit onSizeChange events, if our thread changes!
+watch(
+  () => props.selectedThread.map((t) => t.id),
+  async () => {
+    await nextTick()
+    emit('onSizeChange')
+  },
+)
+
+const isProcessing = (id: string) => {
+  const lts = tystate.lastTaskState.get(id)
+  if (lts) return lts !== 'processed' && lts !== 'all finished' && lts !== 'aborted'
+  else return false
+}
+
+const streamingTracker = ref<Map<string, ChatResponseType>>(new Map())
 
 function formatTimeStamp(timestamp: string | number | Date): string {
   const date = new Date(timestamp)
@@ -177,14 +216,13 @@ function formatTimeStamp(timestamp: string | number | Date): string {
   }
 }
 
-void tystate.chatCompletionStream
-  .subscribe(({ taskId, chunk }) => {
-    if (!chunk) return
-    const currentStream = streamingTracker.value.get(taskId)
-    const updatedStream = accumulateStep(currentStream, chunk)
-    streamingTracker.value.set(taskId, updatedStream)
-  })
-  .then((unsubscribe) => (streamerUnsubscriber = unsubscribe))
+const streamerUnsubscriber = tystate.chatCompletionStream(({ taskId, chunk }) => {
+  if (!chunk) return
+  const currentStream = streamingTracker.value.get(taskId)
+  const updatedStream = accumulateStep(currentStream, chunk)
+  streamingTracker.value.set(taskId, updatedStream)
+  emit('onSizeChange')
+})
 
 onBeforeUnmount(() => {
   streamerUnsubscriber()
@@ -196,11 +234,47 @@ const currentMessageStream = computed(() => {
   else return undefined
 })
 
+const currentThinkingStream = computed(() => {
+  if (props.currentTask) {
+    return streamingTracker.value.get(props.currentTask.id)?.choices?.[0]?.reasoning || ''
+  } else return undefined
+})
+
+const thinkingContainer = ref<HTMLElement>()
+const shouldAutoScroll = ref(true)
+const handleUserScroll = () => {
+  if (!thinkingContainer.value) return
+
+  const { scrollTop, scrollHeight, clientHeight } = thinkingContainer.value
+  const isAtBottom = scrollTop + clientHeight >= scrollHeight - 20 // 20px tolerance
+
+  // If user scrolled away from bottom, disable auto-scroll
+  // If user scrolled back to bottom, re-enable auto-scroll
+  shouldAutoScroll.value = isAtBottom
+}
+
+watch(
+  () => currentThinkingStream.value,
+  async () => {
+    // This will run whenever currentThinkingStream changes
+    if (currentThinkingStream.value && shouldAutoScroll.value) {
+      await nextTick()
+      if (thinkingContainer.value) {
+        //console.log('scrolling!!', thinkingContainer.value.scrollHeight)
+        thinkingContainer.value.scrollTop = thinkingContainer.value.scrollHeight
+      }
+    }
+  },
+)
+
 const currentFunctionStream = computed(() => {
-  if (props.currentTask)
-    return streamingTracker.value.get(props.currentTask.id)?.choices?.[0]?.message?.tool_calls?.[0]
-      ?.function
-  else return undefined
+  if (props.currentTask) {
+    const currentFunctionCall = streamingTracker.value.get(props.currentTask.id)?.choices?.[0]
+      ?.message?.tool_calls?.[0]
+    if (currentFunctionCall && 'function' in currentFunctionCall)
+      return currentFunctionCall.function
+  }
+  return undefined
 })
 
 interface taskTreeNodeType {
@@ -264,15 +338,15 @@ const tyChain2QTree = (taskChain: TaskTreeNode[][]) => {
 }
 
 const getQTree = async (taskID: string, justChildren = false) => {
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
 
-  const { task, children } = await tm.buildTaskTreeNode(taskID, 1)
+  const { task, children } = await ty.buildTaskTreeNode(taskID, 1)
 
   const childrenTrees = tyChain2QTree(children)
 
   if (justChildren) return childrenTrees
 
-  const siblings = await tm.buildSiblingChain(taskID, 1)
+  const siblings = await ty.buildSiblingChain(taskID, 1)
   const siblingNodes = tyList2QTree(siblings)
 
   const taskTree: taskTreeNodeType[] = [
@@ -315,24 +389,22 @@ async function onLazyLoad({
 
   done(subTaskTree)
 }
-
-// TODO: move this "one layer up" :)
-const toolList = asyncComputed(async () => {
-  const tm = await tystate.getTaskManager()
-  const toolList = await tm.updateToolDefinitions()
-  return toolList
-}, undefined)
-
-function showTask(t: TaskNode) {
-  //console.log('showTask')
-  const noHideLabel = !(t.label ? t.label.includes('hide') : false) // TODO: hide tasks based on level as well :)
-  let showInChat = true
-  if (t.content.type === 'functioncall') {
-    if (toolList.value) showInChat = !toolList.value[t.content.data.name]?.renderOptions?.hideChat
-    else if (t.content.data.name === 'chatCompletion') showInChat = false
-  }
-  const showType = !['return'].includes(t.content.type)
-  const showExpert = t.content.type === 'structured' ? props.expertMode : true
-  return showExpert && showType && showInChat && noHideLabel
-}
 </script>
+
+<style lang="sass">
+.task-container
+  position: relative
+
+  &:not(:has(.markdown-iframe))
+    .task-safety-icon
+      display: none
+
+  // TODO: show icon on the right if assistant, and left if user....
+  .task-safety-icon
+    position: absolute
+    top: -12px
+    right: 0px
+    width: 0.8em
+    height: 0.8em
+    z-index: 9
+</style>

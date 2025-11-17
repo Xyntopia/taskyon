@@ -15,7 +15,8 @@ describe('Sharing functionality', () => {
 
     useFreeTaskyon()
 
-    writeMessage('Hello world! I want to share this with everyone!')
+    cy.wait(1000)
+    writeMessage('Hello world! how are you?')
 
     getLastAssistantMessage().should('exist')
 

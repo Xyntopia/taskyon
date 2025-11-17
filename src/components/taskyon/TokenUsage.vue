@@ -71,8 +71,8 @@
 </template>
 
 <script setup lang="ts">
+import type { TaskNodeMeta } from '@taskyon/taskyon'
 import type { PropType } from 'vue'
-import type { TaskNodeMeta } from 'src/modules/taskyon/types'
 
 defineProps({
   taskMeta: {

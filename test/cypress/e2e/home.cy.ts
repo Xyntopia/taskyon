@@ -41,9 +41,9 @@ describe('test taskyon startpage', () => {
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
 
     // enable task cost display & expert mode...
-    cy.contains('Expert Mode').next().click()
-    cy.contains('Use Tools').next().click()
-    cy.contains('Use Tools').next().next().click()
+    cy.dataCy('Expert Mode').find('.q-toggle').click()
+    cy.dataCy('Use Tools').find('.q-toggle').click()
+    cy.dataCy('Use Tools').find('.obj-info').click()
     cy.contains('Enable the standard tool chooser.').type('{esc}')
     cy.get('.q-btn').contains('Ok').click()
 

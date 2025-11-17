@@ -21,6 +21,16 @@ services:
     #volumes:
     #  - ~/.cache/yarn:/app/.yarn-cache
 
+  taskyon-https:
+    image: xyntopia/taskyon:https
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: https
+    ports:
+      - '9000:9000'
+    restart: always
+
   llmapi:
     #image: localai/localai:latest-aio-cpu
     image: localai/localai:latest-cpu
@@ -72,9 +82,20 @@ services:
   tauri:
     build:
       context: .
-      dockerfile: Dockerfile.tauri
-      target: artifacts
+      dockerfile: ./Dockerfile
+      target: export
     volumes:
       - ./dist-desktop:/out
-    # no ports needed; this just produces files
-    command: /bin/true
+
+  relay:
+    image: xyntopia/taskyon-relay:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.relay
+    container_name: taskyon-relay
+    # restart: unless-stopped
+    ports:
+      - '9111:9111' # websockets
+      - '9112:9112' # libp2p tcp
+    #volumes:
+    #  - relay-data:/app/packages/relay/data # persist peerId, config, logs

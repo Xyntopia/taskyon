@@ -1,36 +1,65 @@
-import { defineStore } from 'pinia'
-import { watch, computed, ref } from 'vue'
-import type { TaskNodeMeta, TyTaskStreamData } from 'src/modules/taskyon/types'
+import type {
+  Asyncify,
+  AuthenticationOptions,
+  ChatCompletionChunk,
+  ChatResponseType,
+  CryptoSession,
+  InternalTool,
+  KeyString,
+  Model,
+  Port,
+  TaskNodeMeta,
+  Taskyon,
+  Thunk,
+  TokenGetter,
+  tyPublicApiKeyObject,
+  TyTaskStreamData,
+} from '@taskyon/taskyon'
 import {
-  type Model,
-  TaskNode,
-  getCurrentModel,
-  llmSettings,
-  type TyProfile,
-} from 'src/modules/taskyon/types'
-import axios from 'axios' // TODO: replace with fetch
-import { Notify } from 'quasar' // load dynamically! :)
-import { useQuasar } from 'quasar'
-import { getApiConfig } from 'src/modules/taskyon/types'
-import { initTaskyon } from 'src/modules/taskyon/init'
-import { availableModels } from 'src/modules/taskyon/chat'
-import { getDefaultParametersForTool, toolCall, type InternalTool } from 'src/modules/taskyon/tools'
-import { useAppStateStore } from './appState'
-import {
+  availableModels,
   createDuplexChannel,
   createPortApi,
-  filter,
-  MessageChannelBridge,
-} from 'src/modules/frpBus'
-import { generateRsaOaepPair } from 'src/modules/crypto_webcrypto'
+  createStream,
+  createTypeFilteredPort,
+  cryptoKeyToBase64,
+  deriveKeyFromPwd,
+  ensureValidTaskId,
+  exclusive,
+  getCurrentModel,
+  getDefaultParametersForTool,
+  isTaskyonKey,
+  joinUrl,
+  llmSettings,
+  OAUTH_PROVIDERS,
+  randomString,
+  TaskNode,
+  TaskyonMessage,
+  toolCall,
+  tyCore,
+  usePersistentOauth,
+  usePyodideWebworker,
+} from '@taskyon/taskyon'
+import { until } from '@vueuse/core'
+import { freeKey } from 'assets/taskyon_free_key.json'
+import { defineStore } from 'pinia'
+import { useQuasar } from 'quasar' // load dynamically! :)
 import { setColors } from 'src/boot/brand-colors'
+import { useGdrive } from 'src/modules/gdrive'
 import { setPrismTheme } from 'src/modules/markdownUtils '
-import { onScopeDispose } from 'vue'
-import { waitForMessagePort } from 'src/modules/taskyon/iframeWorker'
-import { guiTools } from 'src/modules/tools/GuiTools'
-import { TaskyonMessage } from 'src/modules/taskyon/apiTypes'
+import { TaskyonGuiMessage } from 'src/modules/taskyon/apiTypes'
+import {
+  initCryptoSessionFromBrowser,
+  persistSession,
+} from 'src/modules/taskyon/browserCryptoSession'
+import { gDriveSyncPort } from 'src/modules/taskyon/sync'
+import { getApiConfig, type TyProfile } from 'src/modules/taskyon/types'
+import { asyncComputed } from 'src/modules/vueUtils'
 import { match, P } from 'ts-pattern'
-import type { Asyncify } from 'src/modules/taskyon/tsHelpers'
+import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
+import { guiTools } from '../modules/taskyon/GuiTools'
+import { useAppStateStore } from './appState'
+import { waitForIframeDuplexChannel } from './iframeClient'
+import { sendFile } from '../../packages/taskyon/src/types/apiTypes'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -65,6 +94,14 @@ function maybeAwait<T>(value: T | Promise<T>): Promise<T> {
   return Promise.resolve(value)
 }
 
+export function getReasoning(meta: TaskNodeMeta | undefined) {
+  return (
+    meta?.rawOutput as {
+      choice?: ChatResponseType['choices'][0]
+    }
+  )?.choice?.reasoning
+}
+
 export function asyncProxy<T extends object>(initializer: () => Promise<T>): Asyncify<T> {
   const instancePromise = initializer()
 
@@ -90,29 +127,30 @@ export function asyncProxy<T extends object>(initializer: () => Promise<T>): Asy
   ) as Asyncify<T>
 }
 
-function removeCodeFromUrl() {
-  if (window.history.pushState) {
-    const baseUrl = window.location.href.split('?')[0]
-    window.history.pushState({}, document.title, baseUrl)
-  }
-}
-
 async function updateLlmModels(
   llmSettings: TyProfile['llmSettings'],
-  keys: Record<string, string>,
+  getApiKey: (name: string) => Promise<string | null>,
 ) {
   console.log('downloading models...')
   const api = getApiConfig(llmSettings)
   if (api) {
     // and also get a "fresh" list of models from the server...
-    let baseURL = api.baseURL + api.routes.models
-    let key = keys[api?.name] || ''
+    let baseURL: string
+    try {
+      baseURL = joinUrl(api.baseURL, api.routes.models)
+    } catch (err) {
+      console.warn('Invalid model URL', err)
+      return {}
+    }
     const taskyonApi = llmSettings.llmApis['taskyon']
+    let key: string
     // we are doing this, because openrouter currently
-    // blocks access from browser origins through CORS.
+    // blocks access to models from browser origins through CORS restrictions.
     if (taskyonApi && api.name === 'openrouter.ai') {
-      baseURL = taskyonApi.baseURL + '/models_openrouter'
-      key = keys.taskyon || keys[api?.name] || ''
+      baseURL = taskyonApi.baseURL + '/functions/v1/api/models_openrouter'
+      key = (await getApiKey('taskyon')) || (await getApiKey(api?.name)) || ''
+    } else {
+      key = (await getApiKey(api.name)) || ''
     }
     try {
       const res = await availableModels(baseURL, key, api.defaultHeaders ?? {})
@@ -126,222 +164,602 @@ async function updateLlmModels(
   }
 }
 
-export const useTaskyonStore = defineStore('taskyonControl', () => {
-  console.log('loading taskyon store!')
+function connectWorkerStream(taskyon: Promise<Taskyon>) {
+  const taskWorkerWaiting = ref(true)
+  const workerStreamLogs = ref<(TyTaskStreamData & { timestamp: Date })[]>([])
+  const maxLogRows = 50
+  const lastActiveTaskId = ref<string | null>(null)
+  const lastTaskState = ref(new Map<string, TyTaskStreamData['stage']>())
 
+  void taskyon.then(({ workerStream }) => {
+    void workerStream((data) => {
+      if (data.stage === 'all finished') taskWorkerWaiting.value = true
+      else if (data.stage === 'processing') taskWorkerWaiting.value = false
+    })
+
+    void workerStream((data) => {
+      console.log(`worker: ${data.stage}, ${data.taskId || data.task?.id}`)
+      if (['all finished', 'processing', 'processed', 'error', 'aborted'].includes(data.stage)) {
+        workerStreamLogs.value.push({ ...data, timestamp: new Date() })
+        // Ensure the log doesn't exceed the maximum number of rows
+        if (workerStreamLogs.value.length > maxLogRows) {
+          workerStreamLogs.value.shift() // Remove the oldest entry
+        }
+      }
+    })
+
+    void workerStream((data) => {
+      const id = data.task?.id || data.taskId
+      if (id) {
+        lastTaskState.value.set(id, data.stage)
+        if (data.stage === 'processed') {
+          // we don't need the task anymore once we're done processing with it :)
+          lastTaskState.value.delete(id)
+        }
+      }
+    })
+
+    workerStream.filter(
+      (data) =>
+        data.stage === 'processing' ||
+        data.stage === 'processed' ||
+        data.stage === 'error' ||
+        (data.stage === 'aborted' && !!(data.taskId || data.task?.id)),
+    )((data) => {
+      // TODO: add last task to GUI by checking if our current selected task now has this child...
+      lastActiveTaskId.value = data.task?.id || data.taskId || null
+    })
+  })
+
+  return {
+    taskWorkerWaiting: readonly(taskWorkerWaiting),
+    lastActiveTaskId: readonly(lastActiveTaskId),
+    workerStreamLogs: readonly(workerStreamLogs),
+    lastTaskState: readonly(lastTaskState),
+  }
+}
+
+function dynamicQuasarTheming(stateRefs: ReturnType<typeof useAppStateStore>) {
   const $q = useQuasar()
-
-  // load our store with all the settings
-  // we use this here to confgure out taskyon logic
-  const stateRefs = useAppStateStore()
+  watch(
+    () => $q.dark.isActive,
+    (newState) => setPrismTheme(newState),
+  )
 
   watch(
-    () => stateRefs.llmSettings.selectedApi,
-    (newValue) => {
-      console.log('api switch detected', newValue)
+    [
+      () => stateRefs.appConfiguration.primaryColor,
+      () => stateRefs.appConfiguration.secondaryColor,
+    ],
+    ([primary, secondary]) => {
+      console.log('Set new brand colors!!', primary, secondary)
+      setColors(primary, secondary)
+    },
+  )
+}
+
+const ChatSuggestions = [
+  {
+    url: '/chat/docs/conversations/features_intro',
+    label: 'Showcase Taskyons features',
+  },
+  {
+    url: '/chat/tyClientExamples/simpleExampleTutorial',
+    label: 'How do I integrate taskyon into my own webpage?',
+  },
+  {
+    md: `
+<!--taskyon
+name: Currently recommended models
+role: "user"
+label: ["discard"]
+-->
+
+Which models do you currently recommend?
+
+---
+<!--taskyon
+name: Currently recommended models
+role: "assistant"
+label: ["discard"]
+-->
+
+Some AI models to get you started with:
+
+  - meta-llama/llama-3.2-90b-vision-instruct: much cheaper than GPT4o and best for most tasks (including coding) and if you want to use "tools"
+  - openai/gpt-4o: visual tasks and if you need to work in languages other than english
+  - meta-llama/llama-3.2-11b-vision-instruct:  a very good "free" model
+  - checkout the entire list of models and descriptions [here](https://taskyon.space/pricing)!
+
+You can select them in the "Chat Settings" section in the message input window.
+`,
+    label: 'Show currently recommend models',
+  },
+  // TODO:
+  //'How do I execute python code?',
+  //'how about testing out javascript? e.g. create some widgets on the fly...',
+  //'What are AI tools?',
+  //'How do I integrate Taskyon into my webpage?',
+]
+
+function connectGdriveSync(
+  directory: string,
+  tyPort: Port<TaskyonGuiMessage, TaskyonGuiMessage>,
+  getGdriveToken: () => Promise<string>,
+) {
+  const gdriveErrors = ref<unknown[]>([])
+  const gds = gDriveSyncPort(directory + '/taskyon_sync', getGdriveToken, (error) => {
+    console.error('gdrive error:', error)
+    gdriveErrors.value.push(error)
+  })
+  //gds.connect(TY.port)
+  //gds.receive(tyPort.send)
+
+  const { port: subset } = createTypeFilteredPort(tyPort, [
+    'taskCreated',
+    'addTasks',
+    'requestTask',
+  ] as const)
+
+  const portDisconnect = ref<(() => void) | false>(false)
+
+  async function attemptConnect() {
+    if (portDisconnect.value) throw new Error('Port is already connected...')
+    console.log('connect gdrive!')
+    // test if we can get a token
+    // make sure, we get a gdrive token! before trying to connect!
+    await getGdriveToken()
+    portDisconnect.value = gds.connect(subset)
+  }
+
+  function disconnect() {
+    if (!portDisconnect.value) {
+      console.log('port is already disconnected')
+      return
+    }
+    console.log('disconnect drive!')
+    portDisconnect.value()
+    portDisconnect.value = false
+  }
+
+  const gd = useGdrive(getGdriveToken)
+  const keyDir = 'taskyon/provision'
+  const uploadWrappedSessionKey = async (key: string, id: string) => {
+    return await gd.uploadFileArchiveWMeta(keyDir, new File([key], id, { type: 'text/plain' }), [
+      id,
+    ])
+  }
+
+  const downloadWrappedSessionKey = async (id: string) => {
+    console.warn('key is currently not deleted!!')
+    const keyFile = await gd.downloadArchiveFile(keyDir, id, true)
+    // TODO: also delete the directory!
+    if (!keyFile) throw new Error("Key does't exist!")
+
+    const key = await keyFile.text()
+    return key
+  }
+
+  const clearAllKeys = () => gd.deleteDirectoryRecursive(keyDir)
+
+  return {
+    gdriveConnected: computed(() => !!portDisconnect.value),
+    gdriveErrors: readonly(gdriveErrors),
+    attemptConnect,
+    disconnect,
+    uploadWrappedSessionKey,
+    downloadWrappedSessionKey,
+    clearAllKeys,
+  }
+}
+
+function defineTyGuiTools(stateRefs: ReturnType<typeof useAppStateStore>): InternalTool[] {
+  return [
+    ...guiTools,
+    {
+      function: ({ newPrompts }: { newPrompts: { [key: string]: string } }) => {
+        console.log('Modifying prompts in llmSettings...')
+        const newPromptsMerged = {
+          ...stateRefs.llmSettings.taskChatTemplates,
+          ...newPrompts,
+        }
+        const result = llmSettings.shape.taskChatTemplates.strict().safeParse(newPromptsMerged)
+        if (result.success) {
+          stateRefs.llmSettings.taskChatTemplates = result.data
+          console.log('Prompts modified:', stateRefs.llmSettings.taskChatTemplates)
+        } else {
+          return `It was not possible to add prompts for ${JSON.stringify(Object.keys(newPrompts))} to
+  ${JSON.stringify(Object.keys(stateRefs.llmSettings.taskChatTemplates))}. Did you use the wrong
+  keys and are they all defined as string?`
+        }
+      },
+      description: 'Modify the current prompts in llmSettings',
+      longDescription:
+        'This tool allows you to modify the current prompts in llmSettings. You can provide a new set of prompts as an object, where each key is the prompt name and the value is the new prompt content.',
+      name: 'modifyPrompts',
+      parameters: {
+        type: 'object',
+        properties: {
+          newPrompts: {
+            type: 'object',
+            description:
+              'An object containing the new prompts, where each key is the prompt name and the value is the new prompt content.',
+            default: '',
+          },
+        },
+        required: ['newPrompts'],
+      },
+    },
+  ]
+}
+
+export const AiProvideKeyStoreName = 'AiProviderKey'
+
+const useApiManagement = (
+  stateRefs: ReturnType<typeof useAppStateStore>,
+  taskyon: Thunk<Promise<Taskyon>>,
+) => {
+  const llmModelsInternal = ref<Record<string, Model>>({})
+  // we need this in order to reactivly see if something changed..
+  const availableKeys = ref<KeyString[]>()
+
+  const getProviderApiKey = async (name: string): Promise<KeyString | null> => {
+    const ty = await taskyon()
+    return (await ty.getSecret(AiProvideKeyStoreName, name, false, false)) as KeyString | null
+  }
+
+  function getSelectedModel() {
+    const selected = stateRefs.llmSettings.selectedApi
+    if (selected) {
+      const api = stateRefs.llmSettings.llmApis[selected]
+      if (api) {
+        return getCurrentModel(api)
+      }
+    }
+  }
+
+  const updateModelList = async () => {
+    console.log(' update model list!')
+    await updateLlmModels(stateRefs.llmSettings, getProviderApiKey).then(
+      (m) => (llmModelsInternal.value = m),
+    )
+  }
+
+  // TODO: add apis to model history as well!
+  const addModelToHistory = (model: string) => {
+    if (stateRefs.modelHistory.length >= 5) {
+      stateRefs.modelHistory.shift() // remove oldest element
+    }
+    stateRefs.modelHistory.push(model)
+  }
+
+  const updateModelAndApi = ({
+    newName,
+    newService,
+  }: {
+    newName: string
+    newService?: string | null
+  }) => {
+    if (newService) {
+      stateRefs.llmSettings.selectedApi = newService
+    }
+    const api = getApiConfig(stateRefs.llmSettings)
+    if (api) {
+      api.selectedModel = newName
+    }
+    console.log('getting an api & bot update', {
+      'new name': newName,
+      'new service': newService,
+      'old name': api?.selectedModel,
+      'old service': api?.name,
+    })
+    addModelToHistory(newName)
+  }
+
+  const taskyonKey = computed(() => {
+    const api = stateRefs.llmSettings.selectedApi
+    if (api === 'taskyon') {
+      console.log('check if we are using a taskyon key!')
+      // if we have a taskyon key defined only display the models allowed for that key..
+      const key = isTaskyonKey(stateRefs.activeTaskyonToken ?? undefined, false)
+      if (key) {
+        console.log('yes, using a taskyon key', key.name)
+        return key
+      }
+    }
+    return undefined
+  })
+
+  const usingTaskyonKey = computed(() =>
+    taskyonKey.value ? (taskyonKey.value.name ?? true) : false,
+  )
+
+  function getKeyModels(key: tyPublicApiKeyObject) {
+    if (key.model && key.model.length > 0 && !key.model.includes('*')) {
+      console.log('update allowed models!', key.model)
+      return key.model
+    }
+    return undefined
+  }
+
+  const tyKeyAllowedModels = computed(() => {
+    const key = taskyonKey.value
+    if (!key) return undefined
+    return getKeyModels(key)
+  })
+
+  const setProviderApiKey = exclusive(async (name: string, value: KeyString | undefined) => {
+    console.log('set new provider key:', name, value?.slice(-5))
+    const ty = await taskyon()
+    if (!value) {
+      await ty.deleteSecret(AiProvideKeyStoreName, name)
+      await ty.updateChatCompletionApiKey(name, undefined)
+    } else {
+      await ty.setSecret(AiProvideKeyStoreName, name, value)
+      await ty.updateChatCompletionApiKey(name, value)
+    }
+    const keys = Object.keys(await ty.listSecrets(AiProvideKeyStoreName))
+    availableKeys.value = keys as KeyString[]
+    if (name === 'taskyon') {
+      stateRefs.setActiveApiToken(value)
+    }
+    //selectValidModel()
+  })
+
+  ///////////   computed properties
+
+  const providerDefs = computed(() => Object.keys(stateRefs.llmSettings.llmApis))
+  const availableProviders = computed(() => {
+    console.log('update available key providers!')
+    //return Array.from(new Set(availableKeys.value).intersection(new Set(providerDefs.value)))
+    return availableKeys.value
+  })
+
+  // Computed property to determine the currently selected bot name
+  const currentModelId = computed(getSelectedModel)
+
+  const currentModel = computed(() => {
+    return currentModelId.value ? llmModelsInternal.value[currentModelId.value] : null
+  })
+
+  const noAiService = asyncComputed(async () => {
+    console.log('check if Ai service exists!')
+    if (stateRefs.llmSettings.selectedApi) {
+      const apiK = await getProviderApiKey(stateRefs.llmSettings.selectedApi)
+      return apiK == null
+    } else return true
+  }, true)
+
+  function getValidModel(key: tyPublicApiKeyObject) {
+    const cm = getSelectedModel()
+    console.log('currently selected model', cm)
+    const keyModels = getKeyModels(key)
+    if (cm && keyModels?.includes(cm)) {
+      console.log('currrent model is already in allowed list!', cm, tyKeyAllowedModels.value)
+    } else if (cm) {
+      console.log('currently selected model is not in allowed list', tyKeyAllowedModels.value, cm)
+      return keyModels?.[0] ?? cm
+    }
+  }
+
+  const updateTyKeyStates = async (newKey?: KeyString) => {
+    console.log('updating key states', { newKey })
+
+    // we only need to update taskyon here, because taskyon can also use oauth tokens!
+    // the other keys simply stay "the same"
+    let keystr = await getProviderApiKey('taskyon')
+    const tyKeyObj = isTaskyonKey(keystr ?? undefined, false)
+    if (newKey && (keystr === freeKey || !tyKeyObj)) {
+      keystr = newKey
+    } else if (!tyKeyObj) {
+      // if there is no key, or if there is an oauth token, but no Taskyon key.
+      // this could for example happen, if we log out. In this
+      // case we want the taskyon key of that session to be reverted back to a "free" key.
+      keystr = freeKey as KeyString
+    } // in all other cases, we simply leave the taskyon key "as is"
+    await setProviderApiKey('taskyon', keystr ?? undefined) // can force (!) key here, because we check if it exists with isTaskyonKey
+    const newKeyObj = isTaskyonKey(keystr ?? undefined, false)
+    if (newKeyObj) {
+      const model = getValidModel(newKeyObj)
+      if (model) updateModelAndApi({ newName: model })
+    }
+  }
+
+  //////   INITIALIZATION
+
+  // make sure, that we check our secretStore right after initialization if we hae stored any keys in
+  // there (especially ifits a taskyon key) and then use those!
+  void taskyon().then(async () => {
+    console.log('setting key after secretstore initialization')
+    await updateTyKeyStates(stateRefs.authToken)
+  })
+
+  //////   WATCHERS & INITIALIZATION
+
+  // this simply watches if we get a 3rd paty oauth token from somewhere...
+  watch(
+    [() => stateRefs.authToken, () => stateRefs.sessionId],
+    async ([newAuthToken, newSessionId], [oldAuthToken, oldSessionId]) => {
+      console.log('updating taskyon after session/key change!', {
+        newAuthToken,
+        oldAuthToken,
+        newSessionId,
+        oldSessionId,
+      })
+
+      await updateTyKeyStates(newAuthToken)
     },
   )
 
-  let loadingKey = false
-  async function getOpenRouterPKCEKey(code: string) {
-    if (loadingKey == false) {
-      console.log('start openai PKCE')
-      loadingKey = true
-      try {
-        const response = await axios.post<{ key: string }>(
-          'https://openrouter.ai/api/v1/auth/keys',
-          {
-            code: code,
-          },
-        )
-        const data = response.data
-        console.log('downloaded key:', data.key)
-        if (data.key) {
-          Notify.create('API Key retrieved successfully')
-          stateRefs.keys['openrouter.ai'] = data.key
-          stateRefs.llmSettings.selectedApi = 'openrouter.ai'
-        } else {
-          Notify.create('Failed to retrieve API Key')
-        }
-      } catch (error) {
-        console.error('Error fetching API Key:', error)
-        Notify.create('Error occurred while fetching API Key')
+  // make sure we update our model list whenever anything changes for our
+  // endpoints...
+  watch(
+    [
+      () => stateRefs.llmSettings.selectedApi,
+      () => stateRefs.llmSettings.llmApis,
+      () => stateRefs.activeTaskyonToken,
+    ],
+    updateModelList,
+    {
+      immediate: true,
+    },
+  )
+
+  return {
+    currentModelId,
+    tyKeyAllowedModels,
+    currentModel,
+    usingTaskyonKey,
+    availableProviders,
+    providerDefs,
+    noAiService,
+    setProviderApiKey,
+    getProviderApiKey,
+    // Method to handle the updateBotName event
+    updateModelAndApi,
+    llmModels: computed(() => llmModelsInternal.value),
+  }
+}
+
+function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof useAppStateStore>) {
+  // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
+  // we want to oad them gradually into our UI
+  const currentTask = ref<TaskNode | null>(null)
+  const selectedThread = ref<TaskNode[]>([])
+
+  void taskyon.then((ty) => {
+    const add2ChatHistory = async (
+      task: TaskNode | null,
+      id: string,
+      msg: 'existing' | 'update' | 'delete' | 'deleteAll',
+    ) => {
+      console.log('update task history!!', id, msg)
+      if (id === stateRefs.chatHistory[0]) {
+        return
       }
-      removeCodeFromUrl() // Remove the 'code' from URL
-      loadingKey = false
+
+      if (msg === 'update') {
+        // we need to make sure, that our task is not already
+        // the "parent" of another task in that case we only want the leaf task which is already present...
+        for (const taskId of stateRefs.chatHistory) {
+          const otherTask = await ty.getTask(taskId)
+          if (otherTask?.priorID === id || otherTask?.parentID === id) return
+        }
+      } else if (msg === 'delete') {
+        // Filter out the deleted task ID
+        stateRefs.chatHistory = stateRefs.chatHistory.filter((t) => t !== id)
+        return
+      } else if (msg === 'deleteAll') {
+        // Clear history
+        stateRefs.chatHistory = []
+        return
+      }
+
+      // Check if the task already exists in the history
+      if (!stateRefs.chatHistory.includes(id)) {
+        // Add the task to the front of the list if it doesn't exist
+        stateRefs.chatHistory.unshift(id)
+      }
+
+      // Remove task.id if it exists, then unshift to front (avoids duplication)
+      // we do this every time something gets added to the history
+      // we are not doin this anymore, because it gets too confusing for poeple ;)
+      /*stateRefs.chatHistory = [
+      task.id,
+      ...stateRefs.chatHistory.filter((t) => t !== task.id),
+    ];*/
+
+      if (!task) return
+
+      // Remove any entries which are a parent of the current task (keeping only leaf IDs)
+      const currentTaskChain = (await ty.getTaskIdChain(task.id, 50)).slice(0, -1)
+      stateRefs.chatHistory = stateRefs.chatHistory.filter(
+        (t) => t !== task.priorID && t !== task.parentID && !currentTaskChain.includes(t),
+        //(t) => t !== task.priorID && t !== task.parentID,
+      )
+
+      // Enforce a maximum size of 50
+      if (stateRefs.chatHistory.length > 50) {
+        stateRefs.chatHistory.length = 50 // Trims excess elements from the end
+      }
+
+      // and sort all tasks according to their timestamp :)
+      // TODO: we can't do this right now, because the task timestamp is optional
+      //       and we want to make sure to really include all tasks in the chathistory...
     }
-  }
 
-  function defineTyGuiTools(): InternalTool[] {
-    return [
-      ...guiTools,
-      {
-        function: ({ newPrompts }: { newPrompts: { [key: string]: string } }) => {
-          console.log('Modifying prompts in llmSettings...')
-          const newPromptsMerged = {
-            ...stateRefs.llmSettings.taskChatTemplates,
-            ...newPrompts,
-          }
-          const result = llmSettings.shape.taskChatTemplates.strict().safeParse(newPromptsMerged)
-          if (result.success) {
-            stateRefs.llmSettings.taskChatTemplates = result.data
-            console.log('Prompts modified:', stateRefs.llmSettings.taskChatTemplates)
-          } else {
-            return `It was not possible to add prompts for ${JSON.stringify(Object.keys(newPrompts))} to
-  ${JSON.stringify(Object.keys(stateRefs.llmSettings.taskChatTemplates))}. Did you use the wrong
-  keys and are they all defined as string?`
-          }
-        },
-        description: 'Modify the current prompts in llmSettings',
-        longDescription:
-          'This tool allows you to modify the current prompts in llmSettings. You can provide a new set of prompts as an object, where each key is the prompt name and the value is the new prompt content.',
-        name: 'modifyPrompts',
-        parameters: {
-          type: 'object',
-          properties: {
-            newPrompts: {
-              type: 'object',
-              description:
-                'An object containing the new prompts, where each key is the prompt name and the value is the new prompt content.',
-              default: '',
-            },
-          },
-          required: ['newPrompts'],
-        },
+    ty.taskStream(({ id, data: task }) => {
+      if (!task) {
+        void add2ChatHistory(task, id.toString(), 'delete')
+      }
+      if (currentTask.value?.id === id) {
+        // console.log('update current task...', task)
+        currentTask.value = task
+      }
+    })
+
+    // this needs to be a watch, because we're updating this variable from other sources as well...
+    // TODO: make this a readonly property...
+    watch(
+      () => stateRefs.llmSettings.selectedTaskId,
+      async (newSelectedTask) => {
+        // TODO: I don't remember why we need this delay here....
+        if (newSelectedTask) {
+          currentTask.value = await ty.getTask(newSelectedTask)
+          const selectedThreadIDs = await ty.getTaskIdChain(newSelectedTask)
+          selectedThread.value = await ty.convertTaskIDs(selectedThreadIDs)
+        } else {
+          currentTask.value = null
+          selectedThread.value = []
+        }
       },
-    ]
-  }
+      {
+        immediate: true,
+      },
+    )
 
-  // callin ExecutionContext.interrupt();  cancels processing of current task
-  console.log('initialize taskyon')
+    // also make sure, that we update the history with the currently selected chat when initializing...
+    // TODO: this here is a porblem, because "currentTask" gets updated asynchrouously..
+    watch(
+      currentTask,
+      (newValue) => {
+        if (newValue) void add2ChatHistory(newValue, newValue.id, 'update')
+      },
+      { once: true },
+    )
 
-  // TODO: move this into our taskyon library...
-  const entryNode = computed(() => {
-    return (
-      stateRefs.llmSettings.entryNode ??
-      toolCall({
-        name: 'chooseTool',
-        arguments: {
-          llmTools: stateRefs.llmSettings.enableOpenAiTools,
-        },
-      })
+    // also update chat history if we switch between tasks...
+    watch(
+      () => stateRefs.llmSettings.selectedTaskId,
+      async (selectedTask) => {
+        if (selectedTask) {
+          const taskNode = await ty.getTask(selectedTask)
+          if (taskNode) void add2ChatHistory(taskNode, taskNode.id, 'existing')
+        }
+      },
+      { immediate: true },
     )
   })
 
-  const { x: iApiIn, y: iApiOut } = createDuplexChannel<TaskyonMessage, unknown>()
+  return {
+    selectedThread: computed(() => selectedThread),
+    currentTask: computed(() => currentTask),
+  }
+}
 
-  const initTaskyonPromise = (async () => {
-    const tyInit = await initTaskyon(
-      stateRefs.llmSettings,
-      stateRefs.keys,
-      defineTyGuiTools(),
-      // TODO: right now, we're simply generating a reandom keypair for every launch
-      //       so recovery is currenty impossible. We would like to give te user the ability
-      //       to save this recovery key somewhere else in order to be able to recover their passwords.
-      async () => (await generateRsaOaepPair()).publicKey,
-    )
-
-    // add an API for taskyon GUI and make sure "unused" messages are routed through to the
-    // taskyon engine!
-    createPortApi(
-      iApiOut,
-      TaskyonMessage,
-      {
-        configurationMessage: (msg) => {
-          const newConfig = msg.conf
-          console.log('setting our configuration')
-          stateRefs.overRideSettings(newConfig, !!msg.persist)
-          // let taskyon do more configurations
-
-          // and also set a possible signature as the api key!
-          if (stateRefs.llmSettings.selectedApi && newConfig.signatureOrKey) {
-            // we only set the API key, if it was provided by the
-            // parent app.
-            const newKey = newConfig.signatureOrKey
-            if (typeof newKey === 'string') {
-              stateRefs.keys[stateRefs.llmSettings.selectedApi] = newKey
-            } else {
-              console.warn('Provided signatureOrKey is not a string:', newKey)
-            }
-          }
-
-          // TODO:  set taskyon-relevant settings in the "backend"
-          //tyInit.outPort.send(msg)
-        },
-        task: async (msg) => {
-          // TODO: replace by rpc call to outPort
-          const tn = await tyInit.taskManagerInstance.addPartialTask2Tree(
-            { ...msg.task, label: msg.origin ? [msg.origin] : undefined },
-            undefined,
-            undefined,
-          )
-          // push the last task to execution queue right away...
-          if (msg.execute) {
-            tyInit.queueTask(tn.id)
-          }
-          if (msg.show) {
-            stateRefs.setSelectedTask(tn.id)
-          }
-          // we don't forward this message to outPort, because we 've already processed everything relevant here..
-        },
-      },
-      // simply send all other messages to our backend...
-      (msg) => tyInit.outPort.send(msg),
-    )
-    // we manually connect our send port to the api here, because
-    // we are already intercepting incoming messages with the API above
-    tyInit.outPort.receive(iApiOut.send)
-    console.log('checking if we are in an iframe!')
-
-    /// -------   iframe operations --------
-    // We load the iframe here with the iframe=true parameter to make test in cypress work!
-    const searchParams = new URLSearchParams(window.location.search)
-    const isIframeParam = searchParams.get('iframe') === 'true'
-    console.log('we are in an iframe via param:', isIframeParam)
-    const isInIframe = window.self !== window.top || isIframeParam
-    console.log('we are in an iframe:', window.self !== window.top, isInIframe)
-    // set up iframe API and hook it up to our taskyon api
-    //if ($q.platform.within.iframe) {
-    if (isInIframe) {
-      console.log('taskon is in iframe!, waiting for message port!')
-      const mport = await waitForMessagePort((ev) => {
-        // Check if the message is from the parent window
-        return ev.source === window.parent && ev.data?.type === 'initPort'
-        // Optionally, check the origin if you know what it should be
-        // For example, if you expect messages only from 'https://example.com'
-        /*if (event.origin === 'https://example.com') {
-                  console.log('Request from parent:', event.data);
-                } else {
-                  console.error('Message from unknown origin:', event.origin);
-                }*/
-        //console.log('Message from unknown origin:', event.origin, event)
-      })
-      // create a channel from the mport:
-      const iframeChannel = createDuplexChannel<TaskyonMessage, unknown>()
-      // connect the MessageChannel to our UI API
-      MessageChannelBridge(iframeChannel.x, mport)
-
-      // connect iframe API to internal GUI API which also connects to taskyon engine automatically.
-      iframeChannel.y.connect(iApiIn)
-      mport.postMessage('taskyon connected!')
-    }
-    return tyInit
-  })()
-
-  // Access taskManagerInstance and addTask2Tree without redundant awaits
-  const getTaskManager = async () => (await initTaskyonPromise)['taskManagerInstance']
-
-  // make sure we always have an up-to-date list of tools
+function reactiveTools(taskyon: Promise<Taskyon>) {
   const allTools = ref<Record<string, InternalTool>>({})
-  void getTaskManager().then((tm) => {
+
+  void taskyon.then((ty) => {
     const updateTools = async () => {
-      allTools.value = await (await getTaskManager()).updateToolDefinitions(true)
+      allTools.value = await ty.updateToolDefinitions(true)
     }
     void updateTools()
 
     // if a new "default" tool was created update UI
-    iApiIn.receive((msg) => {
-      console.log('api Aout message!', msg)
+    // TODO: can we move this into our init.ts? or does it make sense here?
+    ty.port.receive((msg) => {
+      console.log('api out message!', msg)
       void match(msg).with(
         {
           type: 'status',
@@ -356,8 +774,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         },
       )
     })
+
     // if a new tool was created as a tasknode, update UI
-    tm.taskStream.subscribe(
+    ty.taskStream(
       (msg) =>
         void match(msg)
           .returnType<void>()
@@ -379,37 +798,279 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           ),
     )
   })
+  return allTools
+}
 
-  const secretStore = asyncProxy(async () => {
-    const instance = await initTaskyonPromise
-    return instance['secretStore']
-  })
+const useSwitchCryptoSession = (
+  taskyon: Promise<Taskyon>,
+  gdp: Promise<ReturnType<typeof connectGdriveSync>>,
+) => {
+  // TODO: somehow use a better id here?  maybe we could use the id from our taskyon login?
+  const shareKeyId = 'taskyonShareKeyID'
+  // we use a fixed salt right now, because we never save the key ...
+  const salt = new TextEncoder().encode('taskyonSalt')
+  async function uploadSessionKey() {
+    const ty = await taskyon
+    const cs = ty.getCryptoSession()
 
-  const connectMessageIframe = async (id: string, iframe: HTMLIFrameElement, origin?: string) => {
-    const instance = await initTaskyonPromise
-    return instance['connectMessageIframe'](id, iframe, origin)
+    const sharingSecret = randomString()
+    const sharingKey = await deriveKeyFromPwd(sharingSecret, salt, true)
+    const sharedSK = await cs.exportSessionKey(sharingKey)
+
+    const gd = await gdp
+    await gd.uploadWrappedSessionKey(sharedSK, shareKeyId)
+    return sharingSecret
   }
 
-  // Use a fixed key for demo purposes (not secure for production!)
-  const fixedKeyBytes = new Uint8Array([
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-    27, 28, 29, 30, 31, 32,
-  ]) // 32 bytes = 256 bits
+  async function newSessionFromGdrive(sharingSecret: string) {
+    const gd = await gdp
+    const key = await gd.downloadWrappedSessionKey(shareKeyId)
+    // TODO: delete directory and file after downloading secret!!
+    console.warn('we need to delete the directory and secret!!')
+    const sharingKey = await deriveKeyFromPwd(sharingSecret, salt, true)
+    const ty = await taskyon
+    return await ty.getCryptoSession().derive({ wrappedSK: key, unwrapper: sharingKey })
+  }
 
-  void secretStore.onSessionKey(async ({ respond }) => {
-    console.log('importing fixed key for secretStore...')
-    // Import the fixed key as an AES-GCM CryptoKey
-    // this means our secretStore is "de-facto" non encrypted
-    // TODO: generate a good session key by either using passKey or a password.
-    const key = await window.crypto.subtle.importKey(
-      'raw',
-      fixedKeyBytes,
-      { name: 'AES-GCM' },
-      true,
-      ['encrypt', 'decrypt'],
-    )
-    respond(key)
+  async function getDeviceId() {
+    const ty = await taskyon
+    return await cryptoKeyToBase64(ty.getCryptoSession().getDevicePublicKey())
+  }
+
+  const setNewSession = async (cs: CryptoSession, persist = false) => {
+    console.log('switching to new crypto session...', await cs.getSessionId())
+    const ty = await taskyon
+    await ty.setNewSession(cs)
+    if (persist) await persistSession(cs)
+  }
+
+  return {
+    setNewSession,
+    getDeviceId,
+    newSessionFromGdrive,
+    uploadSessionKey,
+  }
+}
+
+export const useTaskyonStore = defineStore('taskyonControl', () => {
+  console.log('loading taskyon store!')
+
+  // load our store with all the settings
+  // we use this here to confgure out taskyon logic
+  const stateRefs = useAppStateStore()
+
+  // we are doing this here so that we can provide new suggestions on every
+  // page load
+  stateRefs.appConfiguration.chatSuggestions = ChatSuggestions
+
+  // callin ExecutionContext.interrupt();  cancels processing of current task
+  console.log('initialize taskyon')
+
+  // pre-initialize our python webworker, because its very slow to startup :)
+  void usePyodideWebworker().preInit()
+
+  // this means previously, we have loaded a session with a binding key.
+  // so we would like to wait a little bit, if we will get that same binding key...
+  const taskyon = (async () => {
+    if (stateRefs.initWBindingKey) {
+      console.log('waiting for session binding key to be set...')
+      const bindingKey = await until(() => stateRefs.bindingKey).toBeTruthy({ timeout: 5000 })
+      console.log('got session binding key!', bindingKey)
+      const initCs = initCryptoSessionFromBrowser(
+        {
+          bindingKey,
+        },
+        true,
+      )
+      return initCs
+    } else {
+      console.log('initializing session without binding key...')
+      const initCs = initCryptoSessionFromBrowser(undefined, true)
+      return initCs
+    }
+  })().then(async (cs) => {
+    return await tyCore(() => stateRefs.llmSettings, defineTyGuiTools(stateRefs), cs)
   })
+
+  // switch user session on key change!
+  watch(
+    () => stateRefs.bindingKey,
+    async (newkey) => {
+      const cs = await initCryptoSessionFromBrowser(
+        {
+          bindingKey: newkey ?? undefined,
+        },
+        true,
+      )
+      const ty = await taskyon
+      const newId = await cs.getSessionId()
+      const oldId = await ty.getCryptoSession().getSessionId()
+      if (newId !== oldId) {
+        console.log(`switch user session because of binding key change! ${oldId}->${newId}`)
+        await ty.setNewSession(cs)
+        // after we are finished switching, we can officially chang ethe session id...
+        stateRefs.setSessionId(await cs.getSessionId())
+      }
+    },
+  )
+
+  const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
+  const apiKeyManagement = useApiManagement(stateRefs, () => taskyon)
+
+  // iApiOutside is the port to the "outside" of taskyon UI. It is the port used to
+  // communicate towards the taskyon engine. iApiInside communicates to the outside of taskyon.
+  // For example the iframe is connected to iApiOutside because
+  // it lives outside the taskyon logic. iApiInside is used by our internal
+  // services e.g. the engine to communicate to the outside.
+  const { x: uiApiOutside, y: uiApiInside } = createDuplexChannel<
+    TaskyonGuiMessage,
+    TaskyonGuiMessage
+  >()
+
+  void taskyon.then(async (ty) => {
+    //const taskStream = tyInit.taskManagerInstance.taskStream
+    //syncToGdrive(taskStream, stateRefs.appConfiguration.gdriveDir)
+
+    // add an API for taskyon GUI and make sure "unused" messages are routed through to the
+    // taskyon engine!
+    // TODO: red-define this as a middleware where we can intercept certain messages
+    //       and also change the types of inside/outside ports...
+    uiApiInside.receive((msg) => console.log('received message on UI port!', msg))
+    createPortApi(
+      uiApiInside,
+      TaskyonGuiMessage,
+      {
+        configurationMessage: async (msg) => {
+          const newConfig = msg.conf
+          console.log('setting our configuration')
+          stateRefs.overRideSettings(newConfig, !!msg.persist)
+          // let taskyon do more configurations
+
+          // and also set a possible signature as the api key!
+          if (stateRefs.llmSettings.selectedApi && newConfig.signatureOrKey) {
+            // we only set the API key, if it was provided by the
+            // parent app.
+            const newKey = newConfig.signatureOrKey as KeyString
+            if (typeof newKey === 'string') {
+              await apiKeyManagement.setProviderApiKey(stateRefs.llmSettings.selectedApi, newKey)
+            } else {
+              console.warn('Provided signatureOrKey is not a string:', newKey)
+            }
+          }
+
+          // TODO:  set taskyon-relevant settings in the "backend"
+          //tyInit.outPort.send(msg)
+        },
+        task: async (msg) => {
+          // push the last task to execution queue right away...
+          const tn = await ensureValidTaskId(msg.task)
+          if (msg.show) {
+            stateRefs.setSelectedTask(tn.id)
+          }
+          ty.port.send(msg)
+          // we don't forward this message to outPort, because we 've already processed everything relevant here..
+        },
+      },
+      // simply send all other messages to our backend...
+      (msg) => {
+        const m = TaskyonMessage.safeParse(msg)
+        if (m.success) ty.port.send(m.data)
+        else console.log('unknown message:', m.data)
+      },
+    )
+    // we manually connect our send port to the api here, because
+    // we are already intercepting incoming messages with the API above
+    // TODO: we have to change this! we would like to
+    ty.port.receive(uiApiInside.send)
+
+    console.log('checking if we are in an iframe!')
+
+    /// -------   IFRAME operations --------
+    // We load the iframe here with the iframe=true parameter to make test in cypress work!
+    // set up iframe API and hook it up to our taskyon api
+    //if ($q.platform.within.iframe) {
+    if (stateRefs.isInIframe) {
+      console.log('taskon is in iframe!, waiting for message port!')
+      stateRefs.taskyonRunmode = 'waiting for connection'
+      const iframePort = await waitForIframeDuplexChannel()
+      // connect iframe API to internal GUI API which also connects to taskyon engine automatically.
+      iframePort.connect(uiApiOutside)
+      iframePort.send('taskyon connected!')
+      console.log('taskyon connected to iframe!')
+      stateRefs.taskyonRunmode = 'connected'
+    }
+    // ------------end of IFRAME operations-------
+  })
+
+  // make sure we always have an up-to-date list of tools
+  const allTools = reactiveTools(taskyon)
+
+  // an oauth token getter function which persists secrets in our local secretstore!
+  const getToken: TokenGetter = async (...args) => {
+    const STORAGE_PREFIX = 'oauth:credentials:'
+    const ty = await taskyon
+    const tg = usePersistentOauth({
+      getSecret: async (name) => await ty.getSecret(STORAGE_PREFIX, name, false),
+      setSecret: async (name, data) => await ty.setSecret(STORAGE_PREFIX, name, data),
+    })
+    return await tg(...args)
+  }
+
+  const gdriveConnected = ref(false)
+  const gdriveErrors = ref<unknown[]>([])
+
+  async function getGdriveToken(options?: AuthenticationOptions) {
+    const creds = await getToken(
+      'google',
+      {
+        oauthURL: OAUTH_PROVIDERS.google.authUrl,
+        clientId: OAUTH_PROVIDERS.google.clientId,
+        scope: OAUTH_PROVIDERS.google.scope,
+      },
+      undefined,
+      options,
+    )
+    return creds.access_token
+  }
+
+  const gdp = taskyon.then((ty) => {
+    // in GUI applications we can connect gdrive for synchronization purposes!
+    // we don't need any password or anything here, because
+    // gdrive receives already encrypted tasks from our taskyon engine...
+    const gdp = connectGdriveSync(stateRefs.appConfiguration.gdriveDir, ty.port, getGdriveToken)
+
+    // Update your reactive refs when the connection is established
+    watchEffect(() => {
+      console.log('gdrive connection state changed:', gdp.gdriveConnected.value)
+      gdriveConnected.value = gdp.gdriveConnected.value
+      gdriveErrors.value = [...gdp.gdriveErrors.value]
+    })
+
+    watch(
+      () => stateRefs.appConfiguration.enableGdriveSync,
+      async (enable) => {
+        if (enable) {
+          await gdp.attemptConnect()
+        } else gdp.disconnect()
+      },
+      { immediate: true },
+    )
+
+    return gdp
+  })
+
+  const { setNewSession, getDeviceId, newSessionFromGdrive, uploadSessionKey } =
+    useSwitchCryptoSession(taskyon, gdp)
+
+  void taskyon.then(async (ty) => {
+    stateRefs.setSessionId(await ty.getCryptoSession().getSessionId())
+  })
+
+  // TODO: this is soo  ugly..  we need to do something about this...
+  const connectMessageIframe = async (id: string, iframe: HTMLIFrameElement, origin?: string) => {
+    const instance = await taskyon
+    return instance.connectMessageIframe(id, iframe, origin)
+  }
 
   // TODO: use the proxies below to replae the "getTaskmanager" and all of that..
   /*const taskManager = asyncProxy(async () => {
@@ -418,277 +1079,30 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   })*/
 
   async function addToProcessQueue(taskId: string) {
-    ;(await initTaskyonPromise).queueTask(taskId)
+    ;(await taskyon).queueTask(taskId)
   }
 
-  const workerStream = asyncProxy(async () => {
-    const instance = await initTaskyonPromise
-    return instance['workerStream']
+  const { taskWorkerWaiting, lastActiveTaskId, lastTaskState, workerStreamLogs } =
+    connectWorkerStream(taskyon)
+
+  watch(lastActiveTaskId, (newTaskId) => {
+    if (newTaskId) {
+      stateRefs.setSelectedTask(newTaskId)
+    }
   })
 
   const stopWorker = async (reason: string) => {
     console.log('stopping worker with reason:', reason)
-    const instance = await initTaskyonPromise
+    const instance = await taskyon
     instance.workerStop(reason)
   }
 
-  const chatCompletionStream = asyncProxy(async () => {
-    const instance = await initTaskyonPromise
-    return instance['chatCompletionStream']
-  })
-
-  const workerStreamLogs = ref<(TyTaskStreamData & { timestamp: Date })[]>([])
-  const maxLogRows = 50
-  void workerStream.subscribe((data) => {
-    console.log(`worker: ${data.stage}, ${data.taskId || data.task?.id}`)
-    if (['all finished', 'processing', 'processed', 'error'].includes(data.stage)) {
-      workerStreamLogs.value.push({ ...data, timestamp: new Date() })
-      // Ensure the log doesn't exceed the maximum number of rows
-      if (workerStreamLogs.value.length > maxLogRows) {
-        workerStreamLogs.value.shift() // Remove the oldest entry
-      }
-    }
-  })
-
-  const lastTaskState = ref(new Map<string, TyTaskStreamData['stage']>())
-  void workerStream.subscribe((data) => {
-    const id = data.task?.id || data.taskId
-    if (id) {
-      lastTaskState.value.set(id, data.stage)
-      if (data.stage === 'processed') {
-        // we don't need the task anymore once we're done processing with it :)
-        lastTaskState.value.delete(id)
-      }
-    }
-  })
-
-  void initTaskyonPromise.then(({ workerStream }) => {
-    filter(
-      workerStream,
-      (data) =>
-        data.stage === 'processing' ||
-        data.stage === 'processed' ||
-        data.stage === 'error' ||
-        (data.stage === 'aborted' && !!(data.taskId || data.task?.id)),
-    ).subscribe((data) => {
-      // TODO: add last task to GUI by checking if our current selected task now has this child...
-      stateRefs.setSelectedTask(data.task?.id || data.taskId || null)
-    })
-  })
-
-  void workerStream.subscribe((data) => {
-    if (data.stage === 'all finished') taskWorkerWaiting.value = true
-    else if (data.stage === 'processing') taskWorkerWaiting.value = false
-  })
-
-  void getTaskManager().then((tm) => {
-    tm.taskStream.subscribe(({ id, data: task }) => {
-      if (!task) {
-        void add2ChatHistory(task, id.toString(), 'delete')
-      }
-      if (currentTask.value?.id === id) {
-        // console.log('update current task...', task)
-        currentTask.value = task
-      }
-    })
-  })
-
-  const add2ChatHistory = async (
-    task: TaskNode | null,
-    id: string,
-    msg: 'existing' | 'update' | 'delete' | 'deleteAll',
-  ) => {
-    console.log('update task history!!', id, msg)
-    if (id === stateRefs.chatHistory[0]) {
-      return
-    }
-    const tm = await getTaskManager()
-
-    if (msg === 'update') {
-      // we need to make sure, that our task is not already
-      // the "parent" of another task in that case we only want the leaf task which is already present...
-      for (const taskId of stateRefs.chatHistory) {
-        const otherTask = await tm.getTask(taskId)
-        if (otherTask?.priorID === id || otherTask?.parentID === id) return
-      }
-    } else if (msg === 'delete') {
-      // Filter out the deleted task ID
-      stateRefs.chatHistory = stateRefs.chatHistory.filter((t) => t !== id)
-      return
-    } else if (msg === 'deleteAll') {
-      // Clear history
-      stateRefs.chatHistory = []
-      return
-    }
-
-    // Check if the task already exists in the history
-    if (!stateRefs.chatHistory.includes(id)) {
-      // Add the task to the front of the list if it doesn't exist
-      stateRefs.chatHistory.unshift(id)
-    }
-
-    // Remove task.id if it exists, then unshift to front (avoids duplication)
-    // we do this every time something gets added to the history
-    // we are not doin this anymore, because it gets too confusing for poeple ;)
-    /*stateRefs.chatHistory = [
-      task.id,
-      ...stateRefs.chatHistory.filter((t) => t !== task.id),
-    ];*/
-
-    if (!task) return
-
-    // Remove any entries which are a parent of the current task (keeping only leaf IDs)
-    const currentTaskChain = (await tm.getTaskIdChain(task.id, 50)).slice(0, -1)
-    stateRefs.chatHistory = stateRefs.chatHistory.filter(
-      (t) => t !== task.priorID && t !== task.parentID && !currentTaskChain.includes(t),
-      //(t) => t !== task.priorID && t !== task.parentID,
-    )
-
-    // Enforce a maximum size of 50
-    if (stateRefs.chatHistory.length > 50) {
-      stateRefs.chatHistory.length = 50 // Trims excess elements from the end
-    }
-
-    // and sort all tasks according to their timestamp :)
-    // TODO: we can't do this right now, because the task timestamp is optional
-    //       and we want to make sure to really include all tasks in the chathistory...
-  }
-
-  // also update chat history if we switch between tasks...
-  watch(
-    () => stateRefs.llmSettings.selectedTaskId,
-    async (selectedTask) => {
-      const tm = await getTaskManager()
-      if (selectedTask) {
-        const taskNode = await tm.getTask(selectedTask)
-        if (taskNode) void add2ChatHistory(taskNode, taskNode.id, 'existing')
-      }
-    },
-    { immediate: true },
-  )
-
-  function addModelToHistory(model: string) {
-    if (stateRefs.modelHistory.length >= 5) {
-      stateRefs.modelHistory.shift() // remove oldest element
-    }
-    stateRefs.modelHistory.push(model)
-  }
-
-  const llmModelsInternal = ref<Record<string, Model>>({})
-  // make sure we update our model list whenever anything changes for our
-  // endpoints...
-  watch(
-    [() => stateRefs.llmSettings.selectedApi, stateRefs.keys, stateRefs.llmSettings.llmApis],
-    () => {
-      const api = getApiConfig(stateRefs.llmSettings)
-      // try to set our recommended models if there isn't any default or anything!
-      if (api && !api.selectedModel) {
-        stateRefs.llmSettings.llmApis['taskyon']!.selectedModel = api.models?.free
-      }
-      void updateLlmModels(stateRefs.llmSettings, stateRefs.keys).then(
-        (m) => (llmModelsInternal.value = m),
-      )
-    },
-    {
-      immediate: true,
-    },
-  )
-
-  const allowedLLMModels = computed<string[] | undefined>(() => {
-    if (stateRefs.llmSettings.selectedApi === 'taskyon') {
-      // if we have a taskyon key defined only display the models allowed for that key...
-      if (stateRefs.tyPublicKey?.model && stateRefs.tyPublicKey.model.length > 0) {
-        if (!stateRefs.tyPublicKey.model.includes('*')) {
-          const models = stateRefs.tyPublicKey.model
-          return models
-        }
-      }
-    }
-    return undefined
-  })
-
-  watch(
-    [
-      () => stateRefs.appConfiguration.primaryColor,
-      () => stateRefs.appConfiguration.secondaryColor,
-    ],
-    ([primary, secondary]) => {
-      console.log('Set new brand colors!!', primary, secondary)
-      setColors(primary, secondary)
-    },
-  )
-
-  // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
-  // we want to oad them gradually into our UI
-  const taskWorkerWaiting = ref(true)
-  const currentTask = ref<TaskNode | null>(null)
-  const selectedThread = ref<TaskNode[]>([])
-  const selectedThreadIDs = ref<string[]>([])
-
-  // this needs to be a watch, because we're updating this variable from other sources as well...
-  // TODO: make this a readonly property...
-  watch(
-    () => stateRefs.llmSettings.selectedTaskId,
-    async (newSelectedTask) => {
-      // TODO: I don't remember why we need this delay here....
-      if (newSelectedTask) {
-        const TM = await getTaskManager()
-        currentTask.value = await TM.getTask(newSelectedTask)
-        selectedThreadIDs.value = await TM.getTaskIdChain(newSelectedTask)
-        selectedThread.value = await TM.convertTaskIDs(selectedThreadIDs.value)
-      } else {
-        currentTask.value = null
-        selectedThread.value = []
-        selectedThreadIDs.value = []
-      }
-    },
-    {
-      immediate: true,
-    },
-  )
-
-  // also make sure, that we update the history with the currently selected chat when initializing...
-  // TODO: this here is a porblem, because "currentTask" gets updated asynchrouously..
-  watch(
-    currentTask,
-    (newValue) => {
-      if (newValue) void add2ChatHistory(newValue, newValue.id, 'update')
-    },
-    { once: true },
-  )
-
-  // Computed property to determine the currently selected bot name
-  const currentModelId = computed(() => {
-    return getCurrentModel(stateRefs.llmSettings)
-  })
-
-  const currentModel = computed(() => {
-    return llmModelsInternal.value[currentModelId.value]
-  })
-
-  // Method to handle the updateBotName event
-  const handleBotNameUpdate = ({
-    newName,
-    newService,
-  }: {
-    newName: string
-    newService?: string
-  }) => {
-    console.log('getting an api & bot update :)', newName, newService)
-    if (newService) {
-      stateRefs.llmSettings.selectedApi = newService
-    }
-    const api = getApiConfig(stateRefs.llmSettings)
-    if (api) {
-      api.selectedModel = newName
-    }
-    addModelToHistory(newName)
-  }
-
-  watch(
-    () => $q.dark.isActive,
-    (newState) => setPrismTheme(newState),
-  )
+  const { stream: chatCompletionStream, emit: chatCompletionConnector } = createStream<{
+    taskId: string
+    chunk: ChatCompletionChunk | undefined
+  }>()
+  // connect taskyon to this stream as soon as it is initialized...
+  void taskyon.then((ty) => ty.chatCompletionStream(chatCompletionConnector))
 
   function setNewContentDraft(content: TaskNode['content'] | undefined) {
     if (content?.type === 'message') {
@@ -758,12 +1172,18 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     }
   }
 
+  const getMeta = async (id: string) => {
+    const tm = await taskyon
+    const meta = tm.getMeta(id)
+    return meta
+  }
+
   function getTaskMetaRef(taskId: string | undefined) {
     const taskMetaRef = ref<TaskNodeMeta>()
     let subscriptionUnsub: (() => void) | null = null
     if (taskId) {
-      void getTaskManager().then((tm) => {
-        subscriptionUnsub = tm.debugDb.readLive(taskId).subscribe(({ data }) => {
+      void taskyon.then((ty) => {
+        subscriptionUnsub = ty.metaLiveRead(taskId)(({ data }) => {
           taskMetaRef.value = data || undefined
         })
       })
@@ -774,33 +1194,52 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return computed(() => taskMetaRef.value)
   }
 
+  dynamicQuasarTheming(stateRefs)
+
+  const entryNode = computed(
+    () =>
+      stateRefs.llmSettings.entryNode ??
+      toolCall({
+        name: 'chooseTool',
+        arguments: {},
+      }),
+  )
+
+  const tyready = ref(false)
+  void taskyon.then(() => {
+    tyready.value = true
+  })
+
   return {
-    secretStore,
+    tyready: computed(() => tyready),
+    addFile: (file: File) => sendFile(uiApiOutside.send)(file),
+    setNewSession,
+    newSessionFromGdrive,
+    uploadSessionKey,
+    getToken,
     getTaskMetaRef,
+    getMeta,
+    getDeviceId,
+    taskyon,
     setNewContentDraft,
     setContentDraftFromTask,
     allTools: computed(() => allTools.value),
     switchTaskType,
     taskContentDraft,
-    selectedThread: computed(() => selectedThread),
-    taskWorkerWaiting: computed(() => taskWorkerWaiting.value),
-    currentTask: computed(() => currentTask),
-    getOpenRouterPKCEKey,
-    addModelToHistory,
+    selectedThread,
+    currentTask,
+    ...apiKeyManagement,
     stopWorker,
-    getTaskManager,
+    taskWorkerWaiting,
+    lastActiveTaskId,
     lastTaskState,
     workerStreamLogs,
     addToProcessQueue,
     chatCompletionStream,
-    llmModels: computed(() => llmModelsInternal.value),
-    allowedLLMModels,
-    currentModelId,
-    currentModel,
-    handleBotNameUpdate,
     connectMessageIframe,
     entryNode,
-    api: iApiIn,
+    api: uiApiOutside,
+    gdp,
+    getGdriveToken,
   }
 }) // this state stores all information which
-// should be stored e.g. in browser LocalStorage

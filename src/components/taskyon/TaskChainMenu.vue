@@ -22,11 +22,11 @@
 </template>
 
 <script setup lang="ts">
-import { matDownloadForOffline, matDelete, matMoreHoriz } from '@quasar/extras/material-icons'
-import { useTaskyonStore } from 'stores/taskyonState'
+import { matDelete, matDownloadForOffline, matMoreHoriz } from '@quasar/extras/material-icons'
+import { chatToYaml } from '@taskyon/taskyon'
 import { exportFile } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
-import { chatToYaml } from 'src/modules/taskyon/taskUtils'
+import { useTaskyonStore } from 'stores/taskyonState'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -37,18 +37,18 @@ defineProps<{
 
 async function onDeleteThread(conversationId: string) {
   console.log('deleting thread!!', conversationId)
-  const tm = await tystate.getTaskManager()
+  const ty = await tystate.taskyon
   state.setSelectedTask(undefined)
-  await tm.deleteTaskThread(conversationId)
+  await ty.deleteTaskThread(conversationId)
   state.chatHistory = state.chatHistory.filter((id) => id != conversationId)
 }
 
 async function onDownloadChat(conversationId: string) {
   console.log('download thread!!', conversationId)
-  const tm = await tystate.getTaskManager()
-  const task = await tm.getTask(conversationId)
+  const ty = await tystate.taskyon
+  const task = await ty.getTask(conversationId)
   if (task) {
-    const taskList = await tm.getTaskChain(conversationId)
+    const taskList = await ty.getTaskChain(conversationId)
     const taskThreadYaml = chatToYaml(taskList)
     if (taskThreadYaml) {
       const fileName = `tyn-${task.name || ''}.yaml`

@@ -48,16 +48,22 @@ export function startNewChat() {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function writeMessage(msg: string, cyc: Cypress.Chainable<any> | undefined = undefined) {
   const cyc2 = cyc ?? cy
-  cyc2.get('.create-new-task textarea').type(msg)
-  cyc2.get('.create-new-task textarea').type('{enter}')
+  cyc2.get('.create-tasks textarea', { timeout: 10000 }).type(msg)
+  cyc2.get('.create-tasks textarea').type('{enter}')
 }
 
 export function addAIServices() {
-  cy.get('.q-btn').contains('AI service provider se', { matchCase: false }).click()
+  cy.get('#ty-space-menu').click()
+  cy.dataCy('open-settings').click()
+  cy.dataCy('aiserviceprovider').click()
+
+  //cy.get('.q-btn').contains('AI service provider se', { matchCase: false }).click()
   cy.contains('Add API keys').click()
   // check in our keepass to get the relevant json.
-  cy.contains('openai API key').type(Cypress.env().openai_api_key)
-  cy.contains('openrouter.ai API key').type(Cypress.env().openrouter_api_key)
+  cy.contains('openai').click()
+  cy.dataCy('add-openai').type(Cypress.env().openai_api_key + '{enter}')
+  cy.contains('openrouter.ai').click()
+  cy.dataCy('add-openrouter.ai').type(Cypress.env().openrouter_api_key + '{enter}')
 }
 
 export function useFreeTaskyon() {

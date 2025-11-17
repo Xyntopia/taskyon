@@ -49,9 +49,12 @@ describe('iframe integration', () => {
   }
 
   it('Should be able to create a tool and use it through the iframe', () => {
-    cy.visit('/clienttest') //.wait(10000);
-
+    cy.visit('/clienttest')
     clearIframeStorage()
+
+    // choose free model in iframe
+    getIframeBody().find('.q-btn').contains('AI service provider se', { matchCase: false }).click()
+    getIframeBody().find('.q-btn').contains('Use free Taskyon', { matchCase: false }).click()
 
     cy.reload()
 
@@ -72,21 +75,39 @@ describe('iframe integration', () => {
       */
 
     //getIframeBody().find('button[aria-label="Open Sidebar"]').click();
-    getIframeBody().click()
+    /*getIframeBody().click()
 
     // our string here looks a little funny, because we want to make sure, to prevent newlines!!
     const msg = `Can you add the two strings: “cypress” and “test function” for me using \
 the clientTest function? make sure, you display the exact string how it is displayed \
 (with/without whitespace etc…). Please use the exact tool I specified... \
 {enter}`
+    //getIframeBody().wait(10000).find('.msg-edit textarea').type(msg)
+    // getIframeBody().find('[data-cy="chat-input"]').type(msg)
     getIframeBody().dataCy('chat-input').type(msg)
-    getIframeBody().dataCy('chat-input').type('{enter}')
+    getIframeBody().dataCy('chat-input').type('{enter}')*/
+
+    getIframeBody().contains('Welcome!', { timeout: 10000 })
+    getIframeBody().click()
+
+    cy.wait(2000) // wait another two seconds for taskyon to settle...
+    cy.contains('Execute Client').click()
 
     cy.get('#output').contains('cypresstest function', { timeout: 60000 })
 
     getIframeBody().contains('Result').click()
     getIframeBody().find('.toolresult').contains('cypresstest functio').should('exist')
 
+    cy.dataCy('task-result', { timeout: 30000 })
+      .invoke('text')
+      .then((text) => {
+        const jsonPart = text.slice(text.indexOf('{')).trim()
+        console.log(jsonPart)
+        const obj = JSON.parse(jsonPart)
+
+        expect(obj).to.have.property('role', 'assistant')
+        expect(obj).to.have.nested.property('content.type', 'message')
+      })
     cy.screenshot('iframe_integration', { overwrite: true })
 
     // TODO: make sure we are in minimal mode and all the other stuff required for embedded taskyon

@@ -1,116 +1,109 @@
 <!-- SqlQueryPage.vue -->
 <template>
-  <q-layout view="lHh LpR lfr">
-    <TaskyonHeader btn-size="md" />
-    <q-page-container>
-      <q-page class="row">
-        <!-- SQL Card -->
-        <q-card class="col q-ma-md">
-          <q-card-section>
-            <div class="text-h6">SQL Queries</div>
-            <div class="text-subtitle2">Tables in DB: {{ allTables }}</div>
-          </q-card-section>
+  <q-page class="row">
+    <!-- SQL Card -->
+    <q-card class="col q-ma-md" style="min-width: 200px">
+      <q-card-section>
+        <div class="text-h6">SQL Queries</div>
+        <div class="text-subtitle2">Tables in DB ({{ db?.name }}): {{ allTables }}</div>
+      </q-card-section>
 
-          <q-card-section>
-            <q-input
-              v-model="sqlQuery"
-              type="textarea"
-              rows="3"
-              autogrow
-              label="SQL Query"
-              placeholder="Enter SQL here"
-            />
-            <div class="row q-mt-md items-center q-gutter-sm">
-              <q-btn label="Run Query" color="primary" @click="executeQuery" />
-              <q-btn flat label="Add Sample Table" color="secondary" @click="addSampleTable" />
-            </div>
-          </q-card-section>
-
-          <q-card-section v-if="queryResult !== null">
-            <div class="row items-center justify-between">
-              <div class="text-h6 q-mb-sm">Results</div>
-              <q-btn-dropdown
-                color="primary"
-                size="sm"
-                :icon="matContentCopy"
-                label="Copy"
-                flat
-                dense
-                :dropdown-icon="matArrowDropDown"
-                class="q-mb-sm"
-              >
-                <q-list>
-                  <q-item v-close-popup clickable @click="copyJson">
-                    <q-item-section>Copy as JSON</q-item-section>
-                  </q-item>
-                  <q-item
-                    v-close-popup
-                    clickable
-                    :disable="!isTabularResult || !tableRows.length"
-                    @click="copyCsv"
-                  >
-                    <q-item-section>Copy as CSV</q-item-section>
-                  </q-item>
-                </q-list>
-              </q-btn-dropdown>
-            </div>
-            <q-tabs v-model="activeTab" dense class="q-mb-md">
-              <q-tab name="table" label="Table" :disable="!isTabularResult" />
-              <q-tab name="json" label="JSON" />
-            </q-tabs>
-
-            <div v-if="activeTab === 'table' && isTabularResult">
-              <q-table
-                :rows="tableRows"
-                :columns="tableColumns"
-                row-key="id"
-                dense
-                flat
-                bordered
-                :pagination="{ rowsPerPage: 10 }"
-                style="max-height: 300px"
-              />
-            </div>
-
-            <div v-else>
-              <pre style="max-height: 300px; overflow: auto">{{ formattedResult }}</pre>
-            </div>
-          </q-card-section>
-        </q-card>
-
-        <!-- Taskyon iframe -->
-        <div class="col" style="min-height: 0">
-          <iframe
-            id="taskyon"
-            title="Taskyon agent"
-            frameborder="0"
-            :src="`${taskyonUrl}?iframe=true`"
-            style="width: 100%; height: 99%"
-          ></iframe>
+      <q-card-section>
+        <q-input
+          v-model="sqlQuery"
+          type="textarea"
+          rows="3"
+          autogrow
+          label="SQL Query"
+          placeholder="Enter SQL here"
+        />
+        <div class="row q-mt-md items-center q-gutter-sm">
+          <q-btn label="Run Query" color="primary" @click="executeQuery" />
+          <q-btn flat label="Add Sample Table" color="secondary" @click="addSampleTable" />
         </div>
-      </q-page>
-    </q-page-container>
-  </q-layout>
+      </q-card-section>
+
+      <q-card-section v-if="queryResult !== null">
+        <div class="row items-center justify-between">
+          <div class="text-h6 q-mb-sm">Results</div>
+          <q-btn-dropdown
+            color="primary"
+            size="sm"
+            :icon="matContentCopy"
+            label="Copy"
+            flat
+            dense
+            :dropdown-icon="matArrowDropDown"
+            class="q-mb-sm"
+          >
+            <q-list>
+              <q-item v-close-popup clickable @click="copyJson">
+                <q-item-section>Copy as JSON</q-item-section>
+              </q-item>
+              <q-item
+                v-close-popup
+                clickable
+                :disable="!isTabularResult || !tableRows.length"
+                @click="copyCsv"
+              >
+                <q-item-section>Copy as CSV</q-item-section>
+              </q-item>
+            </q-list>
+          </q-btn-dropdown>
+        </div>
+        <q-tabs v-model="activeTab" dense class="q-mb-md">
+          <q-tab name="table" label="Table" :disable="!isTabularResult" />
+          <q-tab name="json" label="JSON" />
+        </q-tabs>
+
+        <div v-if="activeTab === 'table' && isTabularResult">
+          <q-table
+            :rows="tableRows"
+            :columns="tableColumns"
+            row-key="id"
+            dense
+            flat
+            bordered
+            :pagination="{ rowsPerPage: 10 }"
+            style="max-height: 300px"
+          />
+        </div>
+
+        <div v-else>
+          <pre style="max-height: 300px; overflow: auto">{{ formattedResult }}</pre>
+        </div>
+      </q-card-section>
+    </q-card>
+
+    <!-- Taskyon iframe -->
+    <div class="col" style="min-height: 0; min-width: 200px">
+      <iframe
+        id="taskyon"
+        title="Taskyon agent"
+        frameborder="0"
+        :src="`${taskyonUrl}?iframe=true&profile=sql`"
+        style="width: 100%; height: 99%"
+      ></iframe>
+    </div>
+  </q-page>
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, computed, onMounted } from 'vue'
-import { getDatabase, type TyPGDB } from 'src/modules/pglite.api'
-import { asyncComputed } from 'src/modules/vueUtils'
-
-// Taskyon
-import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
-import { createTool, makeTaskResult, toolCall } from 'src/modules/taskyon/tools'
-import { initializeTaskyon } from 'app/packages/tyclient/src/tyClient'
-import { dump } from 'js-yaml'
-import { createChatCompletionTask } from 'src/modules/tools/chatCompletionTool'
-import type { JSONSchema7 } from 'json-schema'
-
-import { copyToClipboard, Notify } from 'quasar'
 import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
-import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
+import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
+import type { TyPGDB } from '@taskyon/taskyon/db'
+import { getDatabase } from '@taskyon/taskyon/db'
+import { dump } from 'js-yaml'
+import type { JSONSchema7 } from 'json-schema'
+import { copyToClipboard, Notify } from 'quasar'
+import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
+import { asyncComputed } from 'src/modules/vueUtils'
+import { useAppStateStore } from 'src/stores/appState'
+import { computed, markRaw, onMounted, ref, watchEffect } from 'vue'
+import { initializeTaskyon } from '../../../packages/tyclient/src'
 
 const taskyonUrl = window.location.origin
+const state = useAppStateStore()
 
 function copyJson() {
   copyToClipboard(formattedResult.value)
@@ -140,7 +133,18 @@ const sqlQuery = ref('SELECT * FROM sample_table;')
 const queryResult = ref<unknown>(null)
 let lastQuery: string | null = null
 const errorMessage = ref('')
-const db = shallowRef<TyPGDB>()
+const db = ref<TyPGDB>()
+// we have to use watchEffect here, because a "computed" strips away private values
+// from a class and our db instance would become useless
+watchEffect(() => {
+  if (!state.sessionId) {
+    db.value = undefined
+    return
+  }
+  void getDatabase(state.sessionId).then((database) => {
+    db.value = markRaw(database)
+  })
+})
 
 // Table view state
 const isTabularResult = ref(false)
@@ -168,6 +172,7 @@ async function addSampleTable() {
 
 // List tables
 const allTables = asyncComputed(async () => {
+  console.log('all tables', db.value?.name)
   if (!db.value) return [] as string[]
   const res = await db.value.query(
     "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';",
@@ -251,10 +256,141 @@ FROM (
 ) t;
 `
 
-// Mount: init DB and Taskyon tools (unchanged)
-onMounted(async () => {
-  db.value = await getDatabase('taskyon')
+const gettingStarted = {
+  label: 'Example: Ask for stored data in debug table',
+  md: `
+<!--taskyon
+role: user
+name: debug table
 
+-->
+
+What data is stored in our debug table? can you get the keys from the json in the data column?
+
+---
+
+<!--taskyon
+role: assistant
+name: debug table
+content:
+  type: structured
+  data: >
+    Do we have to use a tool?: true
+
+    describe your thoughts: The user wants to retrieve nested keys from the JSON
+    data in the 'debugdb' table. To do this, I need to use a recursive CTE
+    (Common Table Expression) to traverse the JSON structure. The \`jsonb_each\`
+    function can be used to extract key-value pairs from a JSON object, and
+    \`jsonb_object_keys\` can extract keys. I will use a recursive CTE to iterate
+    through the JSON and extract all keys, including nested ones.
+
+    use tool: true
+
+    which tool: setSqlQuery
+
+    command:
+      name: setSqlQuery
+      arguments:
+        sql: |-
+          WITH RECURSIVE extract_keys AS (
+              SELECT
+                  key,
+                  value
+              FROM
+                  debugdb,
+                  jsonb_each(data) AS kv
+              UNION ALL
+              SELECT
+                  (k.key || '.' || nk.key)::text,
+                  nk.value
+              FROM
+                  extract_keys AS k,
+                  jsonb_each(k.value) AS nk
+              WHERE
+                  jsonb_typeof(k.value) = 'object'
+          )
+          SELECT DISTINCT
+              key
+          FROM
+              extract_keys;
+parentID: aL0p70ca71SxefZethav_udZV__5d7TQqhymj7bcVrM
+
+-->
+
+---
+
+<!--taskyon
+role: function
+name: debug table
+content:
+  type: functioncall
+  data:
+    name: setSqlQuery
+    arguments:
+      sql: |-
+        WITH RECURSIVE extract_keys AS (
+            SELECT
+                key,
+                value
+            FROM
+                debugdb,
+                jsonb_each(data) AS kv
+            UNION ALL
+            SELECT
+                (k.key || '.' || nk.key)::text,
+                nk.value
+            FROM
+                extract_keys AS k,
+                jsonb_each(k.value) AS nk
+            WHERE
+                jsonb_typeof(k.value) = 'object'
+        )
+        SELECT DISTINCT
+            key
+        FROM
+            extract_keys;
+parentID: aL0p70ca71SxefZethav_udZV__5d7TQqhymj7bcVrM
+
+-->
+
+---
+
+<!--taskyon
+role: assistant
+name: SELECT DISTINCT key
+parentID: GliNrcck0EvDEHOq_5KO8LU1X0gt6Bpf3xVWiI-v4X4
+
+-->
+
+The SQL query has been updated to:
+\`\`\`sql
+WITH RECURSIVE extract_keys AS (
+    SELECT
+        key,
+        value
+    FROM
+        debugdb,
+        jsonb_each(data) AS kv
+    UNION ALL
+    SELECT
+        (k.key || '.' || nk.key)::text,
+        nk.value
+    FROM
+        extract_keys AS k,
+        jsonb_each(k.value) AS nk
+    WHERE
+        jsonb_typeof(k.value) = 'object'
+)
+SELECT DISTINCT
+    key
+FROM
+    extract_keys;
+\`\`\`
+        `,
+}
+
+// Mount: init DB and Taskyon tools (unchanged)
+onMounted(() => {
   // Taskyon tools
   const tools = [
     createTool({
@@ -334,9 +470,15 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
       enableToolChooser: true,
       entryNode: toolCall({ name: 'setSqlQuery', arguments: {} }),
     },
-    appConfiguration: { guiMode: 'auto' },
+    appConfiguration: {
+      guiMode: 'minChat',
+      showLogo: false,
+      chatSuggestions: [gettingStarted],
+      welcomeMsg: 'Ask taskyon for help on querying your database!',
+    },
+    signatureOrKey: state.activeTaskyonToken,
   }
-  void initializeTaskyon(tools, configuration)
+  void initializeTaskyon({ tools, configuration, name: 'sqlqueries', persist: true })
 })
 
 // Formatted JSON result for JSON view

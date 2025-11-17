@@ -19,13 +19,13 @@ describe('Tool Tests', () => {
 
     //cy.get('[aria-label="Open Sidebar"]').click();
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
-    cy.contains('Expert Mode').next().click()
+    cy.dataCy('Expert Mode').find('.q-toggle').click()
     cy.get('.q-btn').contains('Ok').click()
 
     cy.dataCy('tool-btn').click()
     cy.get('.q-menu').contains('Manager').click()
     // check if codemirror editor was already loaded..
-    cy.get('.cm-content').should('exist')
+    cy.get('.cm-content', { timeout: 10000 }).should('exist')
 
     cy.get('.q-btn').contains('save tool').click()
 
