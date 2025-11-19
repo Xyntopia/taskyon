@@ -62,12 +62,12 @@
           #mesa
           #libdrm
           cargo-tauri
-          # rustup
+          rustup # needed for adding new targets e.g. wasm-bindgen!
+          wasm-pack # we can use this to package rust code for webassembly
           # add rust toolchain
           rustc
-          rustfmt # needed in order to compile rumoca 
+          rustfmt # needed in order to compile rumoca
           cargo
-
 
           # for cypress e2e testing
           glib
@@ -91,7 +91,7 @@
           xorg.libxcb
           libxkbcommon
           #xorg
-          mesa 
+          mesa
           libgbm # for libgbm
           expat
         ];
@@ -158,7 +158,7 @@
           # and thats why we're commenting it out...
           #PKG_CONFIG_PATH = "${glib.dev}/lib/pkgconfig:${libsoup_3.dev}/lib/pkgconfig:${webkitgtk_4_1.dev}/lib/pkgconfig:${at-spi2-atk.dev}/lib/pkgconfig:${gtk3.dev}/lib/pkgconfig:${gdk-pixbuf.dev}/lib/pkgconfig:${cairo.dev}/lib/pkgconfig:${pango.dev}/lib/pkgconfig:${harfbuzz.dev}/lib/pkgconfig";
           # propagatedBuildInputs = libraries;  # your GTK/WebKit/etc libs
-          
+
           shellHook = ''
             # python poetry related stuff
             unset SOURCE_DATE_EPOCH
