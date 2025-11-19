@@ -12,6 +12,7 @@
     "primaryColor": "#2A3548",
     "secondaryColor": "#F78F3B"
   },
+  "toolchainConfig": {},
   "llmSettings": {
     "llmApis": {
       "taskyon": {
