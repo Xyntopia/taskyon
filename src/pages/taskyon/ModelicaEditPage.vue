@@ -87,7 +87,7 @@
       <template #avatar>
         <q-icon
           :name="
-            statusType === 'error' ? 'error' : statusType === 'success' ? 'check_circle' : 'info'
+            statusType === 'error' ? matError : statusType === 'success' ? matCheckCircle : matInfo
           "
         />
       </template>
@@ -96,7 +96,7 @@
 
     <q-card>
       <q-card-section>
-        <div class="text-h6"><q-icon name="output" /> Output</div>
+        <div class="text-h6"><q-icon :name="matOutput" /> Output</div>
       </q-card-section>
       <q-card-section>
         <q-input
@@ -119,9 +119,13 @@
 import { ref, onMounted } from 'vue'
 import type * as WasmTypes from '../../../packages/rumoca/wasm/pkg/rumoca_wasm'
 import {
+  matCheckCircle,
   matCode,
   matDelete,
   matDescription,
+  matError,
+  matInfo,
+  matOutput,
   matPlayArrow,
   matRocketLaunch,
 } from '@quasar/extras/material-icons'
@@ -144,7 +148,15 @@ const loadWasm = async () => {
     // Import the WASM module from your pkg directory
     // Adjust the path based on your project structure
     const wasmModule = await import('../../../packages/rumoca/wasm/pkg/rumoca_wasm')
-    wasmModule.start()
+
+    // Initialize the WASM module - this returns InitOutput
+    const initOutput = await wasmModule.default()
+
+    // Call the start function from the InitOutput
+    if (initOutput && initOutput.start) {
+      initOutput.start()
+    }
+
     wasm.value = wasmModule
     wasmLoaded.value = true
     statusMessage.value = 'WASM module loaded successfully! Ready to compile.'
