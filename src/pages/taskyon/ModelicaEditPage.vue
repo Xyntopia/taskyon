@@ -216,7 +216,7 @@ const clearAll = () => {
   statusMessage.value = ''
 }
 
-const loadExample = () => {
+const loadExample = async () => {
   modelicaSource.value = `model SimpleCircuit
   Real voltage;
   Real current;
@@ -226,17 +226,7 @@ equation
   voltage = 5.0;
 end SimpleCircuit;`
 
-  templateSource.value = `# Generated Model: {{ model_name }}
-
-Variables:
-{% for var in variables %}
-- {{ var.name }}: {{ var.type }}
-{% endfor %}
-
-Equations:
-{% for eq in equations %}
-{{ loop.index }}. {{ eq }}
-{% endfor %}`
+  templateSource.value = await fetch('./modelica/javascript.jinja').then((r) => r.text())
 
   statusMessage.value = 'Example loaded!'
   statusType.value = 'success'
