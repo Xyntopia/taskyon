@@ -3,8 +3,11 @@ import { sleep } from './asyncUtils'
 import type { toolContext } from '../types/toolApi'
 import { taskMarker } from '../types/tools'
 
-// Store iframe + its dedicated MessagePort by toolId
+// Store iframe + its dedicated MessagePort by toolId / id
 const iframes = new Map<string, { iframe: HTMLIFrameElement; port: MessagePort }>()
+
+// Small helper for JSON-based deep cloning to keep payloads structured-clone-safe
+const deepClone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 
 // TODO: can we use iframebridge here?
 
@@ -198,22 +201,43 @@ const finalMessageSchema = z.object({
 })
 const portMessageSchema = z.union([rpcMessageSchema, finalMessageSchema])
 
-// Main executor
-export async function executeCodeInIframe(
-  code: string,
-  args: { params: unknown; context: toolContext },
-  sourceURL = 'sandboxed-code.js',
-  stopSignal: AbortSignal,
-) {
-  const rpcs = ['getSecret', 'setSecret'] as const
+// ---------- CORE EXECUTION PRIMITIVE ----------
 
-  const toolId = args.context.toolId
-  let iframeEntry = iframes.get(toolId)
+interface ExecuteInIframeCoreOptions<C, R> {
+  id: string
+  code: string
+  args: { params: unknown; context: C }
+  sourceURL?: string
+  stopSignal: AbortSignal
+  preparePayload: (input: {
+    code: string
+    args: { params: unknown; context: C }
+    sourceURL: string
+  }) => { payload: unknown; transfer: Transferable[] }
+  handleMessage: (input: {
+    event: MessageEvent
+    port: MessagePort
+    resolve: (value: R) => void
+    reject: (reason: unknown) => void
+  }) => void | Promise<void>
+}
+
+/**
+ * Core, reusable iframe execution function.
+ * All DOM / Map side-effects are contained here; message semantics are injected via hooks.
+ */
+async function executeInIframeCore<C = unknown, R = unknown>(
+  options: ExecuteInIframeCoreOptions<C, R>,
+): Promise<R> {
+  const { id, code, args, stopSignal, preparePayload, handleMessage } = options
+  const sourceURL = options.sourceURL ?? 'sandboxed-code.js'
+
+  let iframeEntry = iframes.get(id)
 
   // Lazy initialize iframe + control port
   if (!iframeEntry || interrupted) {
-    iframeEntry = await createSandboxedIframe(toolId)
-    iframes.set(toolId, iframeEntry)
+    iframeEntry = await createSandboxedIframe(id)
+    iframes.set(id, iframeEntry)
     interrupted = false
     // Add a delay to ensure iframe is fully ready. Its ok, because we normally do this only once here...
     await sleep(100)
@@ -221,10 +245,132 @@ export async function executeCodeInIframe(
 
   const { port } = iframeEntry
 
-  return new Promise((resolve, reject) => {
-    // Handler for messages coming from the iframe over the persistent control port
-    const onMessage = async (ev: MessageEvent) => {
-      const msg = portMessageSchema.parse(ev.data)
+  return new Promise<R>((resolve, reject) => {
+    const onMessage = (event: MessageEvent) => {
+      Promise.resolve(
+        handleMessage({
+          event,
+          port,
+          resolve,
+          reject,
+        }),
+      ).catch(reject)
+    }
+
+    // Wire up the handler for this execution.
+    // Assumption: only one active execution per iframe/id at a time.
+    port.onmessage = onMessage
+    port.start()
+
+    const { payload, transfer } = preparePayload({ code, args, sourceURL })
+
+    // Send the work request to the iframe
+    port.postMessage(payload, transfer)
+
+    const onAbort = () => {
+      console.log('Interrupting iframe execution for', id)
+      interruptExecution(id)
+      reject(new Error('Execution interrupted', { cause: stopSignal.reason }))
+    }
+
+    if (stopSignal.aborted) {
+      onAbort()
+      return
+    }
+
+    stopSignal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+// ---------- SIMPLE PUBLIC API ----------
+
+/**
+ * Simple iframe executor:
+ *  - caller provides `id` manually
+ *  - no toolContext, no RPC handling, no extra ports
+ */
+export function executeCodeInIframeSimple<R = unknown>(
+  id: string,
+  code: string,
+  args: { params: unknown; context?: unknown } = { params: undefined, context: {} },
+  sourceURL = 'sandboxed-code.js',
+  stopSignal: AbortSignal,
+): Promise<R> {
+  const context = args.context ?? {}
+
+  return executeInIframeCore<typeof context, R>({
+    id,
+    code,
+    args: { params: args.params, context },
+    sourceURL,
+    stopSignal,
+    preparePayload: ({ code, args, sourceURL }) => {
+      const payload = deepClone({
+        code,
+        args,
+        sourceURL,
+        // No RPCs for the simple API
+        rpcs: [] as string[],
+      })
+      const transfer: Transferable[] = []
+      return { payload, transfer }
+    },
+    handleMessage: ({ event, port, resolve, reject }) => {
+      const msg = finalMessageSchema.parse(event.data)
+      // Keep the control port open for future executions, just detach the handler
+      port.onmessage = null
+      if (msg.error) {
+        reject(new Error(msg.error))
+      } else {
+        resolve(msg.result as R)
+      }
+    },
+  })
+}
+
+// ---------- TOOL-AWARE PUBLIC API ----------
+
+/**
+ * Tool-aware executor: same semantics as the original `executeCodeInIframe`,
+ * now implemented on top of `executeInIframeCore`.
+ */
+export function executeCodeInIframe(
+  code: string,
+  args: { params: unknown; context: toolContext },
+  sourceURL = 'sandboxed-code.js',
+  stopSignal: AbortSignal,
+) {
+  const rpcs = ['getSecret', 'setSecret'] as const
+
+  const { toolId, taskChain, messagePort } = args.context
+
+  // For the iframe, we only pass taskChain + toolId as context.
+  // Other toolContext functions are only used on the host side for RPC handling.
+  const iframeContext = { taskChain, toolId }
+
+  return executeInIframeCore<typeof iframeContext, unknown>({
+    id: toolId,
+    code,
+    args: { params: args.params, context: iframeContext },
+    sourceURL,
+    stopSignal,
+    preparePayload: ({ code, args, sourceURL }) => {
+      const payload = deepClone({
+        code,
+        args,
+        sourceURL,
+        rpcs,
+      })
+
+      const transfer: Transferable[] = []
+      if (messagePort) {
+        transfer.push(messagePort)
+      }
+
+      return { payload, transfer }
+    },
+    handleMessage: async ({ event, port, resolve, reject }) => {
+      const msg = portMessageSchema.parse(event.data)
 
       // 3) RPC calls during iframe task execution..
       if ('type' in msg && (rpcs as readonly string[]).includes(msg.type)) {
@@ -232,7 +378,7 @@ export async function executeCodeInIframe(
         const fn = args.context[fnName] as (..._args: unknown[]) => unknown
 
         // Use the transferred port for this RPC call
-        const rpcPort = ev.ports && ev.ports[0]
+        const rpcPort = event.ports && event.ports[0]
         if (!rpcPort) {
           // Defensive: If no port, send error back on main port
           port.postMessage({
@@ -266,50 +412,12 @@ export async function executeCodeInIframe(
       if ('result' in msg || 'error' in msg) {
         // We keep the control port open for future executions, just detach the handler
         port.onmessage = null
-        if (msg.error) reject(new Error(msg.error))
-        else resolve(msg.result)
+        if (msg.error) {
+          reject(new Error(msg.error))
+        } else {
+          resolve(msg.result)
+        }
       }
-    }
-
-    // Wire up the handler for this execution.
-    // Assumption: only one active execution per iframe/toolId at a time.
-    port.onmessage = onMessage
-    port.start()
-
-    // 2) send code + (optional) extra port to iframe over the persistent control port
-    const payload = JSON.parse(
-      JSON.stringify({
-        code,
-        args: {
-          params: args.params,
-          context: { taskChain: args.context.taskChain, toolId },
-        },
-        sourceURL,
-        rpcs,
-      }),
-    )
-
-    const transfer: Transferable[] = []
-    if (args.context.messagePort) {
-      transfer.push(args.context.messagePort)
-    }
-
-    // Send the work request to the iframe
-    // iframe.contentWindow // sanity check (can be removed if not needed)
-    port.postMessage(payload, transfer)
-
-    // 3) wire up abort
-    const onAbort = () => {
-      console.log('Interrupting iframe execution for', toolId)
-      interruptExecution(toolId)
-      reject(new Error('Execution interrupted', { cause: stopSignal.reason }))
-    }
-
-    if (stopSignal.aborted) {
-      onAbort()
-      return
-    }
-
-    stopSignal.addEventListener('abort', onAbort, { once: true })
+    },
   })
 }
