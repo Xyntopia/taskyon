@@ -3,7 +3,7 @@ import { sleep } from './asyncUtils'
 import type { toolContext } from '../types/toolApi'
 import { taskMarker } from '../types/tools'
 
-// Store iframe + its dedicated MessagePort by toolId / id
+// Store iframe + its dedicated MessagePort by id / toolId
 const iframes = new Map<string, { iframe: HTMLIFrameElement; port: MessagePort }>()
 
 // Small helper for JSON-based deep cloning to keep payloads structured-clone-safe
@@ -23,120 +23,55 @@ async function createSandboxedIframe(
   document.body.appendChild(iframe)
 
   try {
-    // Inject a small runner that:
-    //  1. Creates a MessageChannel
-    //  2. Sends one port to the parent as "ready"
-    //  3. Listens on the other port for work (code execution requests)
+    // Minimal runner:
+    //  - set up a dedicated control channel to the parent
+    //  - expose controlPort & optional extra messagePort on window
+    //  - expect { code, params, sourceURL } messages
+    //  - execute userFn(...params) and post { result } or { error }
     iframe.srcdoc = `
 <script>
-  // core RPC maker over dedicated channel:
-  const makeChannelInvoker = (port, reqType) => (...args) => {
-    const chan = new MessageChannel()
-    return new Promise((resolve, reject) => {
-      chan.port1.onmessage = (e) => {
-        const msg = e.data
-        if (msg && msg.type === 'error') {
-          reject(new Error(msg.error || 'Unknown RPC error'))
-        } else if (msg && msg.type === 'result') {
-          resolve(msg.value)
-        } else {
-          reject(new Error('Unexpected RPC response: ' + JSON.stringify(msg)))
-        }
-        chan.port1.close()
-      }
-      port.postMessage(
-        { type: reqType, args },
-        [chan.port2]
-      )
-    })
-  }
-
-  // TODO: automatically add these functions from a central spot in
-  //       our codebase, so that we don't have to maintain them here...
-  function toolCall(f) {
-    return {
-      role: 'function',
-      name: f.name,
-      content: {
-        type: 'functioncall',
-        data: f,
-      },
-    }
-  }
-
-  function makeTaskResult(tasks) {
-    return {
-      taskResultMarker: "${taskMarker}",
-      taskChainList: tasks,
-    }
-  }
-
-  function createChatCompletionTask(args) {
-    return {
-      role: 'function',
-      content: {
-        type: 'functioncall',
-        data: {
-          name: 'chatCompletion',
-          arguments: args ?? {},
-        },
-      },
-    }
-  }
-
   // Each iframe has its own persistent control channel to the parent
   const controlChannel = new MessageChannel()
   const controlPort = controlChannel.port1
   controlPort.start()
 
+  // Expose control port and id for advanced/tool use
+  // window.__taskyonControlPort = controlPort
   window.toolId = "${id}"
 
   // Listen on the controlPort for "execute code" messages from the parent
   controlPort.onmessage = async (e) => {
-    // If the parent sends an extra MessagePort (e.g. for streaming),
-    // it will arrive here as e.ports[0]
-    const messagePort = e.ports && e.ports[0] ? e.ports[0] : null
+    // Optional extra MessagePort (e.g., for streaming)
+    const extraPort = e.ports && e.ports[0] ? e.ports[0] : null
+    // TODO: get rid of this and only use it as an argument to the user function?
+    if (extraPort) {
+      window.__taskyonMessagePort = extraPort
+    }
 
-    const { code, args: { params, context }, rpcs, sourceURL } = e.data
+    const data = e.data || {}
+    const code = data.code
+    const params = Array.isArray(data.params) ? data.params : []
+    const sourceURL = data.sourceURL || 'sandboxed-code.js'
 
-    // we need to re-instantiate our rpcs on every function call
-    // as they rely on specific message channels
-    // this is partially done for security reasons. But it also makes
-    // our functions dynamic in the sense that we can define new
-    // rpc calls for every tool execution...
-    const rpcdefs = rpcs.reduce((p, c) => {
-      p[c] = makeChannelInvoker(controlPort, c)
-      return p
-    }, {})
+    if (!code) return
 
-    if (code) {
-      try {
-        const ctx = {
-          ...context,
-          ...rpcdefs,
-          messagePort,
-          // Placeholder for stop signal it isn't needed in the iframe worker as we
-          // can simply destroy the iframe from the parent...
-          stopSignal: new AbortController().signal,
-        }
-        const func = new Function(
-          "params",
-          "context",
-          "return (" + code + ")(params, context)\\n//# sourceURL=" + sourceURL
-        )
-        // TODO: add an optional debugger to the function itself
-        // debugger;
-        const result = await func(params, ctx)
-        // Post the result back to the parent window via the control port
-        controlPort.postMessage({ result })
-      } catch (err) {
-        controlPort.postMessage({ error: err?.message || String(err) })
-      }
+    try {
+      const fn = new Function(
+        "params",
+        "const userFn = (" + code + ");" +
+        "return userFn(...params);\\n" +
+        "//# sourceURL=" + sourceURL
+      )
+      const result = await fn(params)
+      controlPort.postMessage({ result })
+    } catch (err) {
+      const message = err && err.message ? err.message : String(err)
+      controlPort.postMessage({ error: message })
     }
   }
 
-  // signal readiness immediately and transfer the parent's end of the control channel
-  window.parent.postMessage({ ready: true }, '*', [controlChannel.port2])
+  // Signal readiness and transfer the parent's end of the control channel
+  window.parent.postMessage({ ready: true }, "*", [controlChannel.port2])
   // debugger;
   //# sourceURL=iframeWorker${id.slice(0, 5)}.js
 </script>`
@@ -203,17 +138,16 @@ const portMessageSchema = z.union([rpcMessageSchema, finalMessageSchema])
 
 // ---------- CORE EXECUTION PRIMITIVE ----------
 
-interface ExecuteInIframeCoreOptions<C, R> {
+interface ExecuteInIframeCoreOptions<R> {
   id: string
   code: string
-  args: { params: unknown; context: C }
+  params: unknown[]
   sourceURL?: string
   stopSignal: AbortSignal
-  preparePayload: (input: {
-    code: string
-    args: { params: unknown; context: C }
-    sourceURL: string
-  }) => { payload: unknown; transfer: Transferable[] }
+  preparePayload: (input: { code: string; params: unknown[]; sourceURL: string }) => {
+    payload: unknown
+    transfer: Transferable[]
+  }
   handleMessage: (input: {
     event: MessageEvent
     port: MessagePort
@@ -226,10 +160,10 @@ interface ExecuteInIframeCoreOptions<C, R> {
  * Core, reusable iframe execution function.
  * All DOM / Map side-effects are contained here; message semantics are injected via hooks.
  */
-async function executeInIframeCore<C = unknown, R = unknown>(
-  options: ExecuteInIframeCoreOptions<C, R>,
+async function executeInIframeCore<R = unknown>(
+  options: ExecuteInIframeCoreOptions<R>,
 ): Promise<R> {
-  const { id, code, args, stopSignal, preparePayload, handleMessage } = options
+  const { id, code, params, stopSignal, preparePayload, handleMessage } = options
   const sourceURL = options.sourceURL ?? 'sandboxed-code.js'
 
   let iframeEntry = iframes.get(id)
@@ -262,7 +196,7 @@ async function executeInIframeCore<C = unknown, R = unknown>(
     port.onmessage = onMessage
     port.start()
 
-    const { payload, transfer } = preparePayload({ code, args, sourceURL })
+    const { payload, transfer } = preparePayload({ code, params, sourceURL })
 
     // Send the work request to the iframe
     port.postMessage(payload, transfer)
@@ -284,33 +218,47 @@ async function executeInIframeCore<C = unknown, R = unknown>(
 
 // ---------- SIMPLE PUBLIC API ----------
 
+interface ExecuteCodeInIframeSimpleOptions {
+  id: string
+  code: string // user function as a string: e.g. `(a, b, ctx) => { ... }`
+  sourceURL?: string
+  stopSignal: AbortSignal
+}
+
 /**
  * Simple iframe executor:
  *  - caller provides `id` manually
  *  - no toolContext, no RPC handling, no extra ports
+ *  - accepts a variadic list of arguments, passed *positionally* to the user function.
+ *
+ * Example:
+ *   const code = `(a, b, ctx, c) => { ... }`
+ *   const result = await executeCodeInIframeSimple(
+ *     { id: 'my-id', code, sourceURL: 'my-src.js', stopSignal },
+ *     1, 2, { some: 'context' }, 3,
+ *   )
+ *
+ * Inside the iframe:
+ *   params === [1, 2, { some: 'context' }, 3]
+ *   userFn(...params) is called, so a=1, b=2, ctx={...}, c=3
  */
 export function executeCodeInIframeSimple<R = unknown>(
-  id: string,
-  code: string,
-  args: { params: unknown; context?: unknown } = { params: undefined, context: {} },
-  sourceURL = 'sandboxed-code.js',
-  stopSignal: AbortSignal,
+  options: ExecuteCodeInIframeSimpleOptions,
+  ...args: unknown[]
 ): Promise<R> {
-  const context = args.context ?? {}
+  const { id, code, sourceURL = 'sandboxed-code.js', stopSignal } = options
 
-  return executeInIframeCore<typeof context, R>({
+  return executeInIframeCore<R>({
     id,
     code,
-    args: { params: args.params, context },
+    params: args, // positional arguments for userFn(...params) in the iframe
     sourceURL,
     stopSignal,
-    preparePayload: ({ code, args, sourceURL }) => {
+    preparePayload: ({ code, params, sourceURL }) => {
       const payload = deepClone({
         code,
-        args,
+        params,
         sourceURL,
-        // No RPCs for the simple API
-        rpcs: [] as string[],
       })
       const transfer: Transferable[] = []
       return { payload, transfer }
@@ -328,11 +276,13 @@ export function executeCodeInIframeSimple<R = unknown>(
   })
 }
 
-// ---------- TOOL-AWARE PUBLIC API ----------
+// ---------- TOOL-AWARE PUBLIC API (ORIGINAL BEHAVIOR) ----------
 
 /**
- * Tool-aware executor: same semantics as the original `executeCodeInIframe`,
- * now implemented on top of `executeInIframeCore`.
+ * Tool-aware executor: same external semantics as the original `executeCodeInIframe`.
+ * Internally, it:
+ *  - wraps the user function with tool/RPC helpers
+ *  - calls the minimal iframe runner via `executeInIframeCore`
  */
 export function executeCodeInIframe(
   code: string,
@@ -344,22 +294,107 @@ export function executeCodeInIframe(
 
   const { toolId, taskChain, messagePort } = args.context
 
-  // For the iframe, we only pass taskChain + toolId as context.
-  // Other toolContext functions are only used on the host side for RPC handling.
-  const iframeContext = { taskChain, toolId }
+  // Base context that is clone-safe (no ports, no functions)
+  const baseContext = { taskChain, toolId }
 
-  return executeInIframeCore<typeof iframeContext, unknown>({
+  // Wrap user code with tool/RPC/context functionality.
+  // The final function signature in the iframe is:
+  //   (params, baseContext) => userFn(params, ctx)
+  // where ctx = { ...baseContext, ...rpcContext, messagePort }
+  const wrappedCode = `
+    (function () {
+      const userFn = ${code};
+
+      const makeChannelInvoker = (reqType) => (...fnArgs) => {
+        const chan = new MessageChannel();
+        return new Promise((resolve, reject) => {
+          chan.port1.onmessage = (e) => {
+            const msg = e.data;
+            if (msg && msg.type === 'error') {
+              reject(new Error(msg.error || 'Unknown RPC error'));
+            } else if (msg && msg.type === 'result') {
+              resolve(msg.value);
+            } else {
+              reject(new Error('Unexpected RPC response: ' + JSON.stringify(msg)));
+            }
+            chan.port1.close();
+          };
+          if (!window.__taskyonControlPort) {
+            reject(new Error('RPC control port not available'));
+            return;
+          }
+          window.__taskyonControlPort.postMessage(
+            { type: reqType, args: fnArgs },
+            [chan.port2]
+          );
+        });
+      };
+
+      function toolCall(f) {
+        return {
+          role: 'function',
+          name: f.name,
+          content: {
+            type: 'functioncall',
+            data: f,
+          },
+        };
+      }
+
+      function makeTaskResult(tasks) {
+        return {
+          taskResultMarker: "${taskMarker}",
+          taskChainList: tasks,
+        };
+      }
+
+      function createChatCompletionTask(args) {
+        return {
+          role: 'function',
+          content: {
+            type: 'functioncall',
+            data: {
+              name: 'chatCompletion',
+              arguments: args ?? {},
+            },
+          },
+        };
+      }
+
+      const rpcContext = {
+        getSecret: makeChannelInvoker('getSecret'),
+        setSecret: makeChannelInvoker('setSecret'),
+      };
+
+      return async function (params, baseContext) {
+        const ctx = {
+          ...(baseContext || {}),
+          ...rpcContext,
+          // messagePort is provided via the extra transferable port and exposed by the runner
+          messagePort: window.__taskyonMessagePort || null,
+          toolCall,
+          makeTaskResult,
+          createChatCompletionTask,
+        };
+        return userFn(params, ctx);
+      };
+    })()
+  `
+
+  return executeInIframeCore<unknown>({
     id: toolId,
-    code,
-    args: { params: args.params, context: iframeContext },
+    code: wrappedCode,
+    // The runner will call userFn(...params) where:
+    //   params[0] === original params
+    //   params[1] === baseContext
+    params: [args.params, baseContext],
     sourceURL,
     stopSignal,
-    preparePayload: ({ code, args, sourceURL }) => {
+    preparePayload: ({ code, params, sourceURL }) => {
       const payload = deepClone({
         code,
-        args,
+        params,
         sourceURL,
-        rpcs,
       })
 
       const transfer: Transferable[] = []
@@ -372,7 +407,7 @@ export function executeCodeInIframe(
     handleMessage: async ({ event, port, resolve, reject }) => {
       const msg = portMessageSchema.parse(event.data)
 
-      // 3) RPC calls during iframe task execution..
+      // RPC calls during iframe task execution
       if ('type' in msg && (rpcs as readonly string[]).includes(msg.type)) {
         const fnName = msg.type as keyof toolContext
         const fn = args.context[fnName] as (..._args: unknown[]) => unknown
@@ -408,7 +443,7 @@ export function executeCodeInIframe(
         return
       }
 
-      // 4) Final sandbox result
+      // Final sandbox result
       if ('result' in msg || 'error' in msg) {
         // We keep the control port open for future executions, just detach the handler
         port.onmessage = null
