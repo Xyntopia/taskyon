@@ -132,6 +132,7 @@ export async function handleFunctionExecution(
   tool: InternalTool,
   stopSignal: AbortSignal, // add this to our duplexPort!!
   context: toolContext,
+  // TODO: use the duplexPort for remote functions also for our "local" iframeworker execution?....
   duplexPort: RemoteFunctionPort,
 ): Promise<unknown> {
   // TODO: test here, if tool parameters are correct according to json schema
