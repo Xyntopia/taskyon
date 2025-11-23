@@ -315,14 +315,20 @@ const clearAll = () => {
 }
 
 const loadExample = async () => {
-  modelicaSource.value = `model SimpleCircuit
-  Real voltage;
-  Real current;
-  parameter Real resistance = 10;
+  modelicaSource.value = `model BouncingBall "The 'classic' bouncing ball model"
+  parameter Real e=0.8 "Coefficient of restitution";
+  parameter Real h0=1.0 "Initial height";
+  Real h = 1.0 "Height";
+  Real v "Velocity";
+  Real z;
 equation
-  voltage = current * resistance;
-  voltage = 5.0;
-end SimpleCircuit;`
+  z = 2*h + v;
+  v = der(h);
+  der(v) = -9.81;
+  when h<0 then
+    reinit(v, -e*pre(v));
+  end when;
+end BouncingBall;`
 
   templateSource.value = await fetch('./modelica/javascript.jinja').then((r) => r.text())
 
