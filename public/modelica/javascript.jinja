@@ -68,9 +68,9 @@ class Model {
     // - f_x_dot: (t, x, m, u, p, c) -> xdot vector
     // - f_y:     (t, x, m, u, p, c) -> y vector
     // - f_c:     (t, x) -> c conditions
-    // - events:  zero crossing functions zc_k(t, x)
+    // - events:  zero crossing functions zc_k(t, x, m, u, p, c)
 
-    // Assume the template emits explicit expressions for xdot and y (no solver).
+    // Explicit expressions for xdot and y (no symbolic solver).
     this.f_x_dot = (t, x, m, u, p, c) => {
       // Provide named accessors
       const X = this._mkAccessor(x, this.xIndex);
@@ -80,9 +80,7 @@ class Model {
       const C = this._mkAccessor(c, this.cIndex);
       const CP = this._mkAccessor(this.cp0_, this.cpIndex); // constant params (if needed)
 
-      // Compute xdot components
-      // The generator should emit an array literal with each component
-      // matching x_dotNames ordering.
+      // Compute xdot components (in x_dotNames order)
       return [
         {%- for eq in dae.explicit_x_dot %}
         {{ render_expression_js(eq) }}{{ "," if not loop.last }}
@@ -105,6 +103,7 @@ class Model {
     };
 
     // Conditions fc(t, x) -> tuple/array
+    // Currently only depends on x; extend signature if needed.
     this.f_c = (t, x) => {
       const X = this._mkAccessor(x, this.xIndex);
       return [
@@ -114,18 +113,26 @@ class Model {
       ];
     };
 
-    // Zero-crossings
+    // Zero-crossings: zc_k(t, x, m, u, p, c) -> scalar
     this.events = [
       {%- for key, val in dae.fc | items %}
-      (t, x) => {{ render_zero_crossing_js(val) }}{{ "," if not loop.last }}
-      {%- endfor -%}
+      (t, x, m, u, p, c) => {
+        const X  = this._mkAccessor(x, this.xIndex);
+        const M  = this._mkAccessor(m, this.mIndex);
+        const U  = this._mkAccessor(u, this.uIndex);
+        const P  = this._mkAccessor(p, this.pIndex);
+        const C  = this._mkAccessor(c, this.cIndex);
+        const CP = this._mkAccessor(this.cp0_, this.cpIndex);
+        return {{ render_zero_crossing_js(val) }};
+      }{{ "," if not loop.last }}
+      {%- endfor %}
     ];
 
     // Event callbacks / resets: fr
     // Each fr_k returns new x after event.
     this.eventCallbacks = {
       {%- for key, val in dae.fr | items %}
-      {{ loop.index0 }}: (t, x, p) => {
+      {{ loop.index0 }}: (t, x, p, m, u, c) => {
         // Provide "pre" and "current" X for assignment semantics
         const preX = x.slice();
         let _x = x.slice();
@@ -133,7 +140,16 @@ class Model {
         let {{ name }} = _x[this.xIndex.{{ name }}];
         let pre_{{ name }} = preX[this.xIndex.{{ name }}];
         {%- endfor %}
+
+        // Access parameters/inputs/conditions in reset expressions if needed
+        const P  = this._mkAccessor(p, this.pIndex);
+        const M  = this._mkAccessor(m, this.mIndex);
+        const U  = this._mkAccessor(u, this.uIndex);
+        const C  = this._mkAccessor(c, this.cIndex);
+        const CP = this._mkAccessor(this.cp0_, this.cpIndex);
+
         {{ render_statement_js(val) }};
+
         // writeback updated state vars in name order
         {%- for name, comp in dae.x | items %}
         _x[this.xIndex.{{ name }}] = {{ name }};
@@ -143,14 +159,14 @@ class Model {
       {%- endfor %}
     };
 
-    // Prepare indices for vectors
+    // Prepare indices for vectors (rebuild name->index maps from Names)
     this._finalizeIndices();
 
     this.solved = true;
   }
 
   _finalizeIndices() {
-    // Build reverse name->index maps for x/m/u/p/c/...
+    // Build reverse name->index maps for u/p/c/cp/x/m/y/z
     this._mkIndex = (names) => {
       const map = {};
       names.forEach((n, i) => (map[n] = i));
@@ -168,8 +184,7 @@ class Model {
   }
 
   _mkAccessor(arr, indexMap) {
-    // returns a function-like object: V('name') -> arr[idx], plus direct props
-    // e.g., V.name
+    // returns a simple object: V.name -> arr[idx]
     const proxy = {};
     for (const k in indexMap) {
       const i = indexMap[k];
@@ -199,8 +214,8 @@ class Model {
     const z0 = zc(t0, x0);
     const x1 = this.rk4Step(t0, x0, dt, (t, x) => fXdot(t, x));
     const z1 = zc(t0 + dt, x1);
-    if (z0 === 0) return t0; // already on event
-    if (z0 * z1 > 0) return null; // no crossing
+    if (z0 === 0) return t0;        // already on event
+    if (z0 * z1 > 0) return null;  // no crossing
 
     // Bisection
     let aT = t0, aX = x0.slice(), aZ = z0;
@@ -228,7 +243,6 @@ class Model {
   // f_u: function(t) -> array u
   simulate(t0, tf, dt, options = {}) {
     if (!this.solved) {
-      // already set in constructor
       this.solved = true;
     }
 
@@ -262,11 +276,7 @@ class Model {
       let eventTime = null;
 
       for (let i = 0; i < this.events.length; i++) {
-        const zc = (ti, xi) => {
-          // zero crossing uses internal definitions that may rely on x at ti
-          const X = xi; // pass through
-          return this.events[i](ti, xi);
-        };
+        const zc = (ti, xi) => this.events[i](ti, xi, m, u, p, c);
         const te = this.findEventTime(t, x, dt, zc, fXdot);
         if (te !== null) {
           eventTriggered = true;
@@ -287,7 +297,7 @@ class Model {
 
         // Apply reset if callback exists
         if (this.eventCallbacks[eventIndex]) {
-          x = this.eventCallbacks[eventIndex](t, x, p);
+          x = this.eventCallbacks[eventIndex](t, x, p, m, u, c);
           eventCount++;
         }
 
@@ -334,22 +344,20 @@ class Model {
   _clone(a) { return a.slice(); }
 }
 
-// ========== Rendering helpers ==========
-
-// Expressions
+// ========== Rendering helpers (template-time) ==========
 {%- endmacro -%}
 
-{%- macro render_expression_js(expr) -%}
+{%- macro render_expression_js(expr, ctx="expr") -%}
     {%- if "Terminal" in expr -%}
         {{- render_terminal_js(expr.Terminal) -}}
     {%- elif "FunctionCall" in expr -%}
-        {{- render_function_js(expr.FunctionCall) -}}
+        {{- render_function_js(expr.FunctionCall, ctx) -}}
     {%- elif "ComponentReference" in expr -%}
-        {{- render_component_reference_js(expr.ComponentReference) -}}
+        {{- render_component_reference_js(expr.ComponentReference, ctx) -}}
     {%- elif "Binary" in expr -%}
-        {{- render_binary_js(expr.Binary) -}}
+        {{- render_binary_js(expr.Binary, ctx) -}}
     {%- elif "Unary" in expr -%}
-        {{- render_unary_js(expr.Unary) -}}
+        {{- render_unary_js(expr.Unary, ctx) -}}
     {%- else -%}
         (function(){ throw new Error("UNHANDLED EXPRESSION: {{ expr | pprint | replace('\n',' ') }}"); })()
     {%- endif -%}
@@ -369,7 +377,7 @@ class Model {
 
 {%- macro render_statement_js(stmt) -%}
     {%- if "Assignment" in stmt -%}
-        {{- render_component_reference_js(stmt.Assignment.comp) -}} = {{ render_expression_js(stmt.Assignment.value) }}
+        {{- render_component_reference_js(stmt.Assignment.comp, "reset") -}} = {{ render_expression_js(stmt.Assignment.value, "reset") }}
     {%- else -%}
         (function(){ throw new Error("UNHANDLED RESET STATEMENT: {{ stmt | pprint | replace('\n',' ') }}"); })()
     {%- endif -%}
@@ -393,44 +401,67 @@ class Model {
     {%- endif -%}
 {%- endmacro -%}
 
-{%- macro render_binary_js(expr) -%}
-    ( {{ render_expression_js(expr.lhs) }} 
+{%- macro render_binary_js(expr, ctx="expr") -%}
+    ( {{ render_expression_js(expr.lhs, ctx) }} 
       {%- if "Add" in expr.op -%}+{% elif "Sub" in expr.op -%}-{% elif "Mul" in expr.op -%}*{% elif "Div" in expr.op -%}/{% elif "Lt" in expr.op -%}<{% elif "Gt" in expr.op -%}>{% else -%}
       {{ " /* UNHANDLED OP */ " }}
       {%- endif -%}
-      {{ render_expression_js(expr.rhs) }} )
+      {{ render_expression_js(expr.rhs, ctx) }} )
 {%- endmacro -%}
 
-{%- macro render_unary_js(expr) -%}
+{%- macro render_unary_js(expr, ctx="expr") -%}
     {%- if "Minus" in expr.op -%}
-        ( - ( {{ render_expression_js(expr.rhs) }} ) )
+        ( - ( {{ render_expression_js(expr.rhs, ctx) }} ) )
     {%- else -%}
         (function(){ throw new Error("UNHANDLED OP: {{ expr.op | pprint }}"); })()
     {%- endif -%}
 {%- endmacro -%}
 
-{%- macro render_component_reference_js(comp) -%}
-    {# Map component references to JS access:
-       - For state: X.name or x[idx]? We provide accessor earlier using _mkAccessor
-       - In expressions we’ll refer using namespaces: X., U., P., C., M., CP., etc.
-       - The generator must know which namespace to use; your IR likely encodes this.
-       For simplicity, assume names are bare and you’ve already mapped in render_expression_js
-       to X.name/U.name/etc. If your IR only has identifiers, you need a symbol table.
+{%- macro render_component_reference_js(comp, ctx="expr") -%}
+    {# Map component references to JS access.
+       ctx = "expr"  -> use accessors X./U./P./C./M./CP. for model variables.
+       ctx = "reset" -> states as local scalars, params via P., others bare.
     #}
-    {%- for part in comp.parts -%}
-        {{ part.ident.text }}{% if not loop.last %}.{% endif %}
-    {%- endfor -%}
+    {%- set base = comp.parts[0].ident.text -%}
+
+    {%- if ctx == "reset" -%}
+        {# In reset context, we operate on local state scalars (h, v, pre_h, ...).
+           Parameters still come from P., everything else stays bare. #}
+        {%- if base in dae.p -%}
+            P.{{ base }}
+        {%- else -%}
+            {{ base }}
+        {%- endif -%}
+    {%- else -%}
+        {# Normal expression context: use accessor namespaces. #}
+        {%- if base in dae.x -%}
+            X.{{ base }}
+        {%- elif base in dae.u -%}
+            U.{{ base }}
+        {%- elif base in dae.p -%}
+            P.{{ base }}
+        {%- elif base in dae.c -%}
+            C.{{ base }}
+        {%- elif base in dae.m -%}
+            M.{{ base }}
+        {%- elif base in dae.cp -%}
+            CP.{{ base }}
+        {%- else -%}
+            {{ base }}   {# fall back: pre_*, local temps, etc. #}
+        {%- endif -%}
+    {%- endif -%}
 {%- endmacro -%}
 
-{%- macro render_function_js(func) -%}
-    {# Map standard math functions #}
-    {%- set fname = render_component_reference_js(func.comp) -%}
-    {%- if fname in ["sin", "cos", "tan", "sqrt", "abs", "exp", "log", "pow"] -%}
-        Math.{{ fname }}({% for arg in func.args %}{{ render_expression_js(arg) }}{% if not loop.last %}, {% endif %}{% endfor %})
+{%- macro render_function_js(func, ctx="expr") -%}
+    {%- set fname = render_component_reference_js(func.comp, ctx) -%}
+    {%- if fname in ["Math.sin", "Math.cos", "Math.tan", "Math.sqrt", "Math.abs", "Math.exp", "Math.log", "Math.pow"] -%}
+        {{ fname }}({% for arg in func.args %}{{ render_expression_js(arg, ctx) }}{% if not loop.last %}, {% endif %}{% endfor %})
+    {%- elif fname in ["sin", "cos", "tan", "sqrt", "abs", "exp", "log", "pow"] -%}
+        Math.{{ fname }}({% for arg in func.args %}{{ render_expression_js(arg, ctx) }}{% if not loop.last %}, {% endif %}{% endfor %})
     {%- elif fname == "min" -%}
-        Math.min({% for arg in func.args %}{{ render_expression_js(arg) }}{% if not loop.last %}, {% endif %}{% endfor %})
+        Math.min({% for arg in func.args %}{{ render_expression_js(arg, ctx) }}{% if not loop.last %}, {% endif %}{% endfor %})
     {%- elif fname == "max" -%}
-        Math.max({% for arg in func.args %}{{ render_expression_js(arg) }}{% if not loop.last %}, {% endif %}{% endfor %})
+        Math.max({% for arg in func.args %}{{ render_expression_js(arg, ctx) }}{% if not loop.last %}, {% endif %}{% endfor %})
     {%- else -%}
         (function(){ throw new Error("UNHANDLED FUNCTION: {{ fname }}"); })()
     {%- endif -%}
