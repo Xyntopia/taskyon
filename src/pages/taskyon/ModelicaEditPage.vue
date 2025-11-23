@@ -356,7 +356,7 @@ const buildIframeCode = (compiledJs: string): string => {
   //  - creates a Model instance
   //  - runs a simulation
   //  - returns plain JSON-ish object (safe for postMessage / ObjectTreeView)
-  return `
+  const wrapped = `
     (params, context) => {
       "use strict";
       ${compiledJs}
@@ -395,6 +395,11 @@ const buildIframeCode = (compiledJs: string): string => {
       };
     }
   `
+
+  // sourceURL helps DevTools show a named script. If you want real mappings,
+  // I can produce a proper source-map and inline it (base64) — tell me and I'll
+  // generate a sourcemap that maps the compiled JS into the wrapper.
+  return wrapped + `\n//# sourceURL=rumoca-generated.js\n`
 }
 
 // ---------- Run in sandboxed iframe ----------
