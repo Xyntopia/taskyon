@@ -177,7 +177,7 @@
           </q-card-section>
 
           <q-card-section v-if="executionResult">
-            <object-tree-view :value="executionResult" />
+            <ObjectTreeView v-model="executionResult" />
           </q-card-section>
 
           <q-card-section v-else-if="!executionError">
@@ -206,6 +206,7 @@ import {
   matRocketLaunch,
 } from '@quasar/extras/material-icons'
 import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
+import ObjectTreeView from 'src/components/ObjectTreeView.vue'
 
 type StatusType = 'loading' | 'success' | 'error' | ''
 type WasmModule = typeof WasmTypes
@@ -226,7 +227,7 @@ const simT0 = ref(0)
 const simTf = ref(5)
 const simDt = ref(0.1)
 
-const executionResult = ref<unknown>(null)
+const executionResult = ref<Record<string, unknown>>({})
 const executionError = ref<string | null>(null)
 const running = ref(false)
 const abortController = ref<AbortController | null>(null)
@@ -267,7 +268,7 @@ const compile = () => {
   jsSource.value = ''
   statusMessage.value = 'Compiling...'
   statusType.value = 'loading'
-  executionResult.value = null
+  executionResult.value = {}
   executionError.value = null
 
   try {
@@ -309,7 +310,7 @@ const clearAll = () => {
   output.value = ''
   jsSource.value = ''
   statusMessage.value = ''
-  executionResult.value = null
+  executionResult.value = {}
   executionError.value = null
 }
 
@@ -404,7 +405,7 @@ const buildIframeCode = (compiledJs: string): string => {
 
 // ---------- Run in sandboxed iframe ----------
 const runInSandbox = async () => {
-  executionResult.value = null
+  executionResult.value = {}
   executionError.value = null
 
   if (!jsSource.value) {
@@ -444,6 +445,14 @@ const runInSandbox = async () => {
       context,
     )
 
+    const isRecord = (v: unknown): v is Record<string, unknown> =>
+      typeof v === 'object' && v !== null && !Array.isArray(v)
+
+    if (!isRecord(result)) {
+      executionError.value = 'Execution returned invalid result: expected an object.'
+      console.error('Invalid execution result:', result)
+      return
+    }
     executionResult.value = result
   } catch (error) {
     if ((error as Error).name === 'AbortError') {
