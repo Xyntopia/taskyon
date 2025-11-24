@@ -70,36 +70,48 @@ class Model {
     // - f_c:     (t, x) -> c conditions
     // - events:  zero crossing functions zc_k(t, x, m, u, p, c)
 
-    // Explicit expressions for xdot and y (no symbolic solver).
+    // Explicit expressions for xdot (no symbolic solver).
     this.f_x_dot = (t, x, m, u, p, c) => {
       // Provide named accessors
-      const X = this._mkAccessor(x, this.xIndex);
-      const M = this._mkAccessor(m, this.mIndex);
-      const U = this._mkAccessor(u, this.uIndex);
-      const P = this._mkAccessor(p, this.pIndex);
-      const C = this._mkAccessor(c, this.cIndex);
+      const X  = this._mkAccessor(x, this.xIndex);
+      const M  = this._mkAccessor(m, this.mIndex);
+      const U  = this._mkAccessor(u, this.uIndex);
+      const P  = this._mkAccessor(p, this.pIndex);
+      const C  = this._mkAccessor(c, this.cIndex);
       const CP = this._mkAccessor(this.cp0_, this.cpIndex); // constant params (if needed)
 
       // Compute xdot components (in x_dotNames order)
+      {% if dae.explicit_x_dot and dae.explicit_x_dot|length > 0 %}
       return [
-        {%- for eq in dae.explicit_x_dot %}
+        {%- for eq in dae.explicit_x_dot -%}
         {{ render_expression_js(eq) }}{{ "," if not loop.last }}
-        {%- endfor %}
+        {%- endfor -%}
       ];
+      {% else %}
+      // No explicit ODE system available for this model.
+      // Failing loudly is better than silently returning NaNs.
+      throw new Error("Rumoca JS: dae.explicit_x_dot is empty; cannot build f_x_dot.");
+      {% endif %}
     };
 
     this.f_y = (t, x, m, u, p, c) => {
-      const X = this._mkAccessor(x, this.xIndex);
-      const M = this._mkAccessor(m, this.mIndex);
-      const U = this._mkAccessor(u, this.uIndex);
-      const P = this._mkAccessor(p, this.pIndex);
-      const C = this._mkAccessor(c, this.cIndex);
+      const X  = this._mkAccessor(x, this.xIndex);
+      const M  = this._mkAccessor(m, this.mIndex);
+      const U  = this._mkAccessor(u, this.uIndex);
+      const P  = this._mkAccessor(p, this.pIndex);
+      const C  = this._mkAccessor(c, this.cIndex);
       const CP = this._mkAccessor(this.cp0_, this.cpIndex);
+
+      {% if dae.explicit_y and dae.explicit_y|length > 0 %}
       return [
-        {%- for eq in dae.explicit_y %}
+        {%- for eq in dae.explicit_y -%}
         {{ render_expression_js(eq) }}{{ "," if not loop.last }}
-        {%- endfor %}
+        {%- endfor -%}
       ];
+      {% else %}
+      // No explicit outputs defined: return a zero vector of the right length.
+      return new Array(this.yNames.length).fill(0.0);
+      {% endif %}
     };
 
     // Conditions fc(t, x) -> tuple/array
