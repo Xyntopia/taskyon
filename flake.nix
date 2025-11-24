@@ -181,7 +181,7 @@
               set +a
             fi
 
-            export PATH="$(pwd)/node_modules/.bin:$PATH"
+            export PATH="$(pwd)/node_modules/.bin:$PATH:$HOME/.cargo/bin"
 
             export LD_LIBRARY_PATH=${
               pkgs.lib.makeLibraryPath libraries
