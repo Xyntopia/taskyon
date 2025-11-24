@@ -16,6 +16,8 @@
       <FieldView
         :item="prop.node"
         show-label
+        :copy="copyBtn"
+        @copy="copyNodeValue(prop.node.path)"
         @reset="updateValue(prop.node.path, prop.node.default)"
       />
     </template>
@@ -24,6 +26,8 @@
         :show-label="separateLabels"
         reset
         :item="prop.node"
+        :copy="copyBtn"
+        @copy="copyNodeValue(prop.node.path)"
         @reset="updateValue(prop.node.path, prop.node.default)"
       >
         <InfoDialog label="This field can’t be changed right now." :round="false" :icon="matInfo">
@@ -36,6 +40,8 @@
         :show-label="separateLabels"
         :item="prop.node"
         reset
+        :copy="copyBtn"
+        @copy="copyNodeValue(prop.node.path)"
         @reset="updateValue(prop.node.path, prop.node.default)"
       >
         <q-input
@@ -55,6 +61,8 @@
         :show-label="separateLabels"
         :item="prop.node"
         reset
+        :copy="copyBtn"
+        @copy="copyNodeValue(prop.node.path)"
         @reset="updateValue(prop.node.path, prop.node.default)"
       >
         <json-input
@@ -73,6 +81,8 @@
         :show-label="separateLabels"
         :item="prop.node"
         reset
+        :copy="copyBtn"
+        @copy="copyNodeValue(prop.node.path)"
         @reset="updateValue(prop.node.path, prop.node.default)"
       >
         <q-input
@@ -94,6 +104,8 @@
         :show-label="separateLabels"
         :item="prop.node"
         reset
+        :copy="copyBtn"
+        @copy="copyNodeValue(prop.node.path)"
         @reset="updateValue(prop.node.path, prop.node.default)"
       >
         <q-chip
@@ -122,6 +134,8 @@
         :show-label="separateLabels"
         :item="prop.node"
         reset
+        :copy="copyBtn"
+        @copy="copyNodeValue(prop.node.path)"
         @reset="updateValue(prop.node.path, prop.node.default)"
       >
         <q-input
@@ -142,6 +156,8 @@
         :show-label="separateLabels"
         :item="prop.node"
         reset
+        :copy="copyBtn"
+        @copy="copyNodeValue(prop.node.path)"
         @reset="updateValue(prop.node.path, prop.node.default)"
       >
         <q-select
@@ -161,6 +177,8 @@
         :show-label="separateLabels"
         :item="prop.node"
         reset
+        :copy="copyBtn"
+        @copy="copyNodeValue(prop.node.path)"
         @reset="updateValue(prop.node.path, prop.node.default)"
       >
         <q-input
@@ -201,6 +219,8 @@
         :show-label="separateLabels"
         :item="prop.node"
         reset
+        :copy="copyBtn"
+        @copy="copyNodeValue(prop.node.path)"
         @reset="updateValue(prop.node.path, prop.node.default)"
       >
         <!-- split date + time inputs -->
@@ -239,6 +259,7 @@ import type { JSONSchema7 } from 'json-schema'
 import type z from 'zod'
 import FieldView from './FieldView.vue'
 import { matInfo } from '@quasar/extras/material-icons'
+import { copyToClipboard } from 'src/modules/utils'
 
 const {
   readOnly = false,
@@ -247,7 +268,8 @@ const {
   debounce = 100,
   schema,
   descriptionsAsLabels = false,
-  hideMissing = false, // NEW
+  hideMissing = false,
+  copyBtn = false,
 } = defineProps<{
   readOnly?: boolean
   inputFieldBehavior?: 'auto' | 'textarea' | 'autogrow'
@@ -255,7 +277,8 @@ const {
   debounce?: number
   schema?: JSONSchema7 | z.core.JSONSchema.BaseSchema | undefined
   descriptionsAsLabels?: boolean
-  hideMissing?: boolean // NEW
+  hideMissing?: boolean
+  copyBtn?: boolean
 }>()
 
 const modelValue = defineModel<Record<string, unknown> | undefined>({
@@ -471,6 +494,23 @@ const updateDateTime = (path: string[], date: string | null, time: string | null
   }
 
   updateValue(path, d.getTime())
+}
+
+const copyNodeValue = (path: string[]) => {
+  if (!modelValue.value) return
+
+  let target: unknown = modelValue.value
+  for (const key of path) {
+    if (target == null || typeof target !== 'object') {
+      break
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    target = (target as any)[key]
+  }
+
+  // You can decide how to handle undefined; here we still stringify it
+  const json = JSON.stringify(target, null, 2)
+  copyToClipboard(json)
 }
 </script>
 
