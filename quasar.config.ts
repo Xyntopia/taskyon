@@ -321,7 +321,13 @@ export default defineConfig((ctx) => {
       // viteVuePluginOptions: {},
 
       vitePlugins: [
+        // the 'vite-plugin-wasm' and 'vite-plugin-top-level-await' plugins are necessary
+        // to make wasm packages work which were built with wasm-pack / wasm-bindgen
+        // top-level-await is needed, because wasm-pack generates async init functions
+        // to load the wasm binary which we would also like to use in older browsers which don't
+        // support top-level-await natively.
         ['vite-plugin-wasm'],
+        ['vite-plugin-top-level-await'],
         // Only apply this plugin in production when sourcemaps are enabled
         ...(ctx.prod ? [sourcemapBannerPlugin()] : []),
         {
