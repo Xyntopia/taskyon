@@ -321,6 +321,7 @@ export default defineConfig((ctx) => {
       // viteVuePluginOptions: {},
 
       vitePlugins: [
+        ['vite-plugin-wasm'],
         // Only apply this plugin in production when sourcemaps are enabled
         ...(ctx.prod ? [sourcemapBannerPlugin()] : []),
         {

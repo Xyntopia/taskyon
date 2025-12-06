@@ -193,7 +193,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import type * as WasmTypes from '../../../packages/rumoca/wasm/pkg/rumoca_wasm'
+import type * as WasmTypes from 'rumoca-wasm'
 import {
   matCheckCircle,
   matCode,
@@ -233,14 +233,13 @@ const running = ref(false)
 const abortController = ref<AbortController | null>(null)
 
 // ---------- WASM loading ----------
+
+// src/wasm/rumoca.ts
+
 const loadWasm = async () => {
   try {
-    const wasmModule = await import('../../../packages/rumoca/wasm/pkg/rumoca_wasm')
-    const initOutput = await wasmModule.default()
-    if (initOutput && initOutput.start) {
-      initOutput.start()
-    }
-
+    //const wasmModule = await import('../../../packages/rumoca/wasm/pkg/rumoca_wasm')
+    const wasmModule = await import('rumoca-wasm')
     wasm.value = wasmModule
     wasmLoaded.value = true
     statusMessage.value = 'WASM module loaded successfully! Ready to compile.'
