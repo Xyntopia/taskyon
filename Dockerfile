@@ -67,6 +67,8 @@ server {
     #server_name localhost; # all hostnames
 
     root /usr/share/nginx/html;
+    index index.html;
+    charset utf-8;
 
     add_header X-Frame-Options "SAMEORIGIN";
     add_header X-XSS-Protection "1; mode=block";
@@ -75,17 +77,20 @@ server {
     # Cache-Control header (1 hour minimum for all assets)
     add_header Cache-Control "public, max-age=3600, immutable" always;
 
-    index index.html;
-
-    charset utf-8;
-
+    # SPA history mode: try static file, then directory, then fall back to index.html
     location / {
         try_files $uri $uri/ /index.html;
+    }
 
-        # Optional: Longer caching for versioned static assets
-        # location ~* \.\w{8}\.(css|js)$ {
-        #     add_header Cache-Control "public, max-age=31536000, immutable" always;
-        # }
+    # Optional: Longer caching for versioned static assets
+    # location ~* \.\w{8}\.(css|js)$ {
+    #     add_header Cache-Control "public, max-age=31536000, immutable" always;
+    # }
+
+    # Send *all* 403/404s to index.html as 200 so the SPA router can handle them
+    error_page 403 404 =200 /index.html;
+    location = /index.html {
+        # this uses the same root as above
     }
 
     location = /robots.txt  { access_log off; log_not_found off; }
@@ -96,6 +101,7 @@ server {
     #access_log off;
     #error_log  /var/log/nginx/error.log error;
 
+    # Deny access to hidden files except .well-known
     location ~ /\.(?!well-known).* {
         deny all;
     }
