@@ -208,6 +208,12 @@ import {
 import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
 import ObjectTreeView from 'src/components/ObjectTreeView.vue'
 
+const jinjaTemplateUrls = import.meta.glob('app/public/modelica/*.jinja', {
+  query: '?raw', // get the file content
+  import: 'default',
+  eager: false, // lazy-load each file when used
+})
+
 type StatusType = 'loading' | 'success' | 'error' | ''
 type WasmModule = typeof WasmTypes
 
@@ -329,7 +335,10 @@ equation
   end when;
 end BouncingBall;`
 
-  templateSource.value = await fetch('./modelica/javascript.jinja').then((r) => r.text())
+  // select first example template
+  const exampleTemplate = (await Object.values(jinjaTemplateUrls)[0]?.()) as string
+
+  templateSource.value = exampleTemplate || ''
 
   statusMessage.value = 'Example loaded!'
   statusType.value = 'success'
