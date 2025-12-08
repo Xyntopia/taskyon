@@ -166,6 +166,21 @@
                       {{ name }}: {{ value }}
                     </div>
                   </q-card-section>
+                  <q-card-section>
+                    <p>
+                      “This application uses <strong>Rumoca</strong>, a Modelica compiler written in
+                      Rust compiled to WebAssembly. Rumoca is licensed under the Apache‑2.0
+                      License.”
+                    </p>
+                    <p style="font-size: 0.8em; color: var(--q-color-info‑text)">
+                      Rumoca — “A Modelica compiler written in Rust” (© 2024–2025 Condie, Woodbury,
+                      Goppert, Andersson & contributors). See
+                      <a href="https://github.com/condie‑etc/rumoca" target="_blank"
+                        >https://github.com/…/rumoca</a
+                      >
+                      and the included Apache‑2.0 license for details.
+                    </p>
+                  </q-card-section>
                 </q-card>
               </q-dialog>
             </q-item>
