@@ -387,7 +387,7 @@ equation
 end BouncingBall;`
 
   // select first example template
-  const exampleTemplate = (await Object.values(jinjaTemplateUrls)[0]?.()) as string
+  const exampleTemplate = (await Object.values(jinjaTemplateUrls)[1]?.()) as string
 
   templateSource.value = exampleTemplate || ''
 
