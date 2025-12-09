@@ -252,11 +252,20 @@ const loadWasm = async () => {
       await wasmModule.default(rumocaWasmUrl)
     }
 
-    // Initialize Rayon thread pool (single-thread to avoid extra workers)
-    /*if ('wasm_init' in wasmModule && typeof wasmModule.wasm_init === 'function') {
-      // Use 1 thread to minimize requirements (no extra workers)
-      await wasmModule.wasm_init(1)
-    }*/
+    // 2) Try to initialize Rayon thread pool, but do NOT treat failure as fatal
+    if ('wasm_init' in wasmModule && typeof wasmModule.wasm_init === 'function') {
+      try {
+        // Using 1 thread here; but even this may try to create workers,
+        // so we just swallow errors and fall back to single-threaded behavior.
+        await wasmModule.wasm_init(1)
+      } catch (e) {
+        console.warn(
+          'Rumoca wasm_init (thread pool) failed – continuing in single-threaded mode:',
+          e,
+        )
+        // IMPORTANT: do not rethrow – we want the rest of the module to still be usable.
+      }
+    }
 
     wasm.value = wasmModule as WasmModule
     wasmLoaded.value = true
