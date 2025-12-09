@@ -55,15 +55,6 @@
     <q-card class="q-mb-md">
       <q-card-section>
         <div class="row q-gutter-sm items-center">
-          <q-btn
-            color="primary"
-            :icon="matPlayArrow"
-            :label="loading ? 'Compiling...' : 'Compile'"
-            :loading="loading"
-            :disable="!wasmLoaded"
-            @click="compile"
-          />
-
           <q-btn color="grey-7" :icon="matDelete" label="Clear All" outline @click="clearAll" />
 
           <q-btn
@@ -192,7 +183,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import type * as WasmTypes from 'rumoca'
 import {
   matCheckCircle,
@@ -284,7 +275,7 @@ const loadWasm = async () => {
 // ---------- Compile Modelica → JS via new API ----------
 // 1. compile_to_json(source, modelName) → JSON string
 // 2. render_template(daeJson, template) → rendered string (JS in your case)
-const compile = () => {
+watch([modelicaSource, templateSource], () => {
   if (!modelicaSource.value || !templateSource.value) {
     statusMessage.value = 'Please provide both Modelica source and template'
     statusType.value = 'error'
@@ -357,7 +348,7 @@ const compile = () => {
   } finally {
     loading.value = false
   }
-}
+})
 
 // ---------- Simple helpers ----------
 const clearAll = () => {
