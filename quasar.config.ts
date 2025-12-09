@@ -169,6 +169,7 @@ export default defineConfig((ctx) => {
             ...(ts.exclude ?? []),
             './../dist-desktop',
             './../src-tauri',
+            './../packages/rumoca',
             //'./../packages/**', // <- key bit: keep workspace packages out
           ]
 

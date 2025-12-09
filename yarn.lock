@@ -13343,9 +13343,9 @@ route-cache@^0.5.0:
     debug "3.1.0"
     lru-cache "4.0.1"
 
-"rumoca-wasm@http://assets.taskyon.space/rumoca-0.7.22.tgz":
+"rumoca@http://assets.taskyon.space/rumoca-0.7.22.tgz":
   version "0.7.22"
-  resolved "http://assets.taskyon.space/rumoca-0.7.22.tgz#b28644730f636e6c2826b921d971ce3179b726c6"
+  resolved "http://assets.taskyon.space/rumoca-0.7.22.tgz#64d19ee023fd68669af4dacaac9a2ccb4063e2ef"
 
 run-applescript@^5.0.0:
   version "5.0.0"

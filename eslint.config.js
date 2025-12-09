@@ -15,7 +15,7 @@ export default defineConfigWithVueTs(
      *
      * ESLint requires "ignores" key to be the only one in this object
      */
-    ignores: ['src-tauri', 'public/docs/*'],
+    ignores: ['src-tauri', 'public/docs/*', 'packages/rumoca*'],
   },
 
   pluginQuasar.configs.recommended(),

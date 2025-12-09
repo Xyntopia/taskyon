@@ -193,7 +193,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import type * as WasmTypes from 'rumoca-wasm'
+import type * as WasmTypes from 'rumoca'
 import {
   matCheckCircle,
   matCode,
@@ -240,13 +240,25 @@ const abortController = ref<AbortController | null>(null)
 
 // ---------- WASM loading ----------
 
-// src/wasm/rumoca.ts
+import rumocaWasmUrl from 'rumoca/rumoca_bg.wasm?url'
 
 const loadWasm = async () => {
   try {
-    //const wasmModule = await import('../../../packages/rumoca/wasm/pkg/rumoca_wasm')
-    const wasmModule = await import('rumoca-wasm')
-    wasm.value = wasmModule
+    const wasmModule = await import('rumoca')
+
+    // wasm-bindgen init (loads .wasm)
+    if (typeof wasmModule.default === 'function') {
+      // default() may take an optional input, but we let it auto-detect
+      await wasmModule.default(rumocaWasmUrl)
+    }
+
+    // Initialize Rayon thread pool (single-thread to avoid extra workers)
+    /*if ('wasm_init' in wasmModule && typeof wasmModule.wasm_init === 'function') {
+      // Use 1 thread to minimize requirements (no extra workers)
+      await wasmModule.wasm_init(1)
+    }*/
+
+    wasm.value = wasmModule as WasmModule
     wasmLoaded.value = true
     statusMessage.value = 'WASM module loaded successfully! Ready to compile.'
     statusType.value = 'success'
@@ -260,7 +272,9 @@ const loadWasm = async () => {
   }
 }
 
-// ---------- Compile Modelica → JS ----------
+// ---------- Compile Modelica → JS via new API ----------
+// 1. compile_to_json(source, modelName) → JSON string
+// 2. render_template(daeJson, template) → rendered string (JS in your case)
 const compile = () => {
   if (!modelicaSource.value || !templateSource.value) {
     statusMessage.value = 'Please provide both Modelica source and template'
@@ -277,25 +291,53 @@ const compile = () => {
   executionError.value = null
 
   try {
-    if (!wasm.value) {
+    const m = wasm.value
+    if (!m) {
       throw new Error('WASM module not loaded')
     }
+    if (typeof m.compile_to_json !== 'function' || typeof m.render_template !== 'function') {
+      throw new Error('WASM module is missing compile_to_json / render_template exports')
+    }
 
-    const result = wasm.value.translate_modelica_to_template(
-      modelicaSource.value,
-      templateSource.value,
-      verbose.value,
-    )
+    const source = modelicaSource.value
+    const template = templateSource.value
 
-    // result is the generated JS (string)
-    output.value = result
-    jsSource.value = result
+    // Heuristic: take first model/class/record/etc name as modelName
+    const match = source.match(/(?:model|class|block|connector|record)\s+(\w+)/)
+    const modelName = match?.[1] ?? 'Model'
+
+    // Step 1: compile Modelica → DAE JSON
+    const jsonStr = m.compile_to_json(source, modelName)
+    const compiled = JSON.parse(jsonStr) as {
+      dae?: unknown
+      dae_native?: unknown
+      pretty?: string
+      balance?: unknown
+    }
+
+    // Prefer dae_native (matches what render_template expects in the worker example)
+    const daeForTemplate = compiled.dae_native ?? compiled.dae
+    if (!daeForTemplate) {
+      throw new Error('Compilation did not return a DAE object')
+    }
+
+    const daeJson = JSON.stringify(daeForTemplate)
+
+    // Step 2: render template (your Jinja template should output JS code)
+    const rendered = m.render_template(daeJson, template)
+
+    output.value = rendered
+    jsSource.value = rendered
 
     statusMessage.value = 'Compilation successful!'
     statusType.value = 'success'
     setTimeout(() => {
       statusMessage.value = ''
     }, 3000)
+
+    if (verbose.value) {
+      console.debug('Rumoca compile result (raw):', compiled)
+    }
   } catch (error) {
     const msg = (error as Error).message
     output.value = `Error: ${msg}`
@@ -363,14 +405,7 @@ const copyJsToClipboard = async () => {
 }
 
 // ---------- Build iframe function code ----------
-// Wrap compiled JS module into a single arrow function:
-//   (params, context) => { <compiled JS sans export> ; const model = new Model(); ... return result }
 const buildIframeCode = (compiledJs: string): string => {
-  // The function body:
-  //  - defines Model and helpers (from sanitized code)
-  //  - creates a Model instance
-  //  - runs a simulation
-  //  - returns plain JSON-ish object (safe for postMessage / ObjectTreeView)
   const wrapped = `
     (params, context) => {
       "use strict";
@@ -387,7 +422,6 @@ const buildIframeCode = (compiledJs: string): string => {
         ? sim.x0.slice()
         : model.x0.slice();
 
-      // Simple zero-input function; if you want more control, encode it into params
       const f_u = (t) => new Array(model.uNames.length).fill(0);
 
       const data = model.simulate(t0, tf, dt, { x0, f_u });
@@ -410,10 +444,6 @@ const buildIframeCode = (compiledJs: string): string => {
       };
     }
   `
-
-  // sourceURL helps DevTools show a named script. If you want real mappings,
-  // I can produce a proper source-map and inline it (base64) — tell me and I'll
-  // generate a sourcemap that maps the compiled JS into the wrapper.
   return wrapped + `\n//# sourceURL=rumoca-generated.js\n`
 }
 
@@ -433,7 +463,6 @@ const runInSandbox = async () => {
   running.value = true
 
   try {
-    // params passed to generated function
     const params = {
       sim: {
         t0: simT0.value,
@@ -442,7 +471,6 @@ const runInSandbox = async () => {
       },
     }
 
-    // optional context object – can carry metadata, user info, etc.
     const context = {
       source: 'ModelicaPage',
       compiledAt: new Date().toISOString(),
