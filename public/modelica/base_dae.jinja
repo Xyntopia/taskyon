@@ -1,52 +1,46 @@
-{# ============================
-   Expression rendering
-   ============================ #}
 {% macro render_expr(e) -%}
   {%- if e is string and e == "Empty" -%}
     0
   {%- elif "Terminal" in e -%}
-    {{- e.Terminal.token.text -}}
+    {{ e.Terminal.token.text }}
   {%- elif "ComponentReference" in e -%}
     {%- set cr = e.ComponentReference -%}
     {%- for part in cr.parts -%}
-      {{- part.ident.text -}}{{- "." if not loop.last -}}
+      {{ part.ident.text }}{{ "." if not loop.last }}
     {%- endfor -%}
   {%- elif "Unary" in e -%}
     {%- set u = e.Unary -%}
     {%- if "Minus" in u.op -%}
-      -{{- render_expr(u.rhs) -}}
+      -{{ render_expr(u.rhs) }}
     {%- elif "Not" in u.op -%}
-      not {{- render_expr(u.rhs) -}}
+      not {{ render_expr(u.rhs) }}
     {%- else -%}
-      ({{- u.op|tojson -}} {{- render_expr(u.rhs) -}})
+      ({{ u.op|tojson }} {{ render_expr(u.rhs) }})
     {%- endif -%}
   {%- elif "Binary" in e -%}
     {%- set b = e.Binary -%}
     {%- set op -%}
       {%- if "Add" in b.op -%}+{%- elif "Sub" in b.op -%}-{%- elif "Mul" in b.op -%}*{%- elif "Div" in b.op -%}/{%- elif "Pow" in b.op -%}^{%- elif "LessEq" in b.op -%}<={%- elif "Less" in b.op -%}<{%- elif "GreaterEq" in b.op -%}>={%- elif "Greater" in b.op -%}>{%- elif "Equals" in b.op -%}=={%- elif "NotEquals" in b.op -%}!={%- elif "And" in b.op -%}and{%- elif "Or" in b.op -%}or{%- else -%}?{%- endif -%}
     {%- endset -%}
-    {{- render_expr(b.lhs) -}} {{ op }} {{- render_expr(b.rhs) -}}
+    {{ render_expr(b.lhs) }} {{ op }} {{ render_expr(b.rhs) }}
   {%- elif "FunctionCall" in e -%}
     {%- set f = e.FunctionCall -%}
     {%- set name = f.comp.parts[0].ident.text -%}
     {%- if name == "der" and f.args|length == 1 and "ComponentReference" in f.args[0] -%}
       {%- set cr = f.args[0].ComponentReference -%}
-      {{- cr.parts[0].ident.text -}}'
+      {{ cr.parts[0].ident.text }}'
     {%- else -%}
-      {{- name -}}(
+      {{ name }}(
       {%- for a in f.args -%}
-        {{- render_expr(a) -}}{{- ", " if not loop.last -}}
+        {{ render_expr(a) }}{{ "," if not loop.last }}
       {%- endfor -%}
       )
     {%- endif -%}
   {%- else -%}
-    [UNKNOWN_EXPR {{- e|tojson -}}]
+    [UNKNOWN_EXPR {{ e|tojson }}]
   {%- endif -%}
-{%- endmacro %}
+{%- endmacro -%}
 
-{# ============================
-   Detect der(...) = ... equations
-   ============================ #}
 {% macro is_derivative_eq(eq) -%}
   {%- if "Simple" in eq and "FunctionCall" in eq.Simple.lhs -%}
     {%- set f = eq.Simple.lhs.FunctionCall -%}
@@ -54,75 +48,70 @@
       1
     {%- endif -%}
   {%- endif -%}
-{%- endmacro %}
+{%- endmacro -%}
 
 {% macro render_lhs_prime(eq) -%}
   {%- set f = eq.Simple.lhs.FunctionCall -%}
   {%- set cr = f.args[0].ComponentReference -%}
-  {{- cr.parts[0].ident.text -}}'
-{%- endmacro %}
+  {{ cr.parts[0].ident.text }}'
+{%- endmacro -%}
 
-{# ============================
-   MAIN OUTPUT
-   ============================ #}
 Model: {{ dae.model_name or "GeneratedModel" }}
-
-Time variable:
-  {{ dae.t.name }} : {{ dae.t.type_name.name[0].text }}
+Time variable: {{ dae.t.name }} : {{ dae.t.type_name.name[0].text }}
 
 Parameters:
-{%- if dae.p|length == 0 %}
+{% if dae.p|length == 0 -%}
   (none)
-{%- else %}
+{%- else -%}
 {%- for (name, comp) in dae.p|items %}
   {{ name }} = {{ render_expr(comp.start) }}
-{%- endfor %}
+{%- endfor -%}
 {%- endif %}
 
 States x(t):
-{%- if dae.x|length == 0 %}
+{% if dae.x|length == 0 -%}
   (none)
-{%- else %}
+{%- else -%}
 {%- for (name, comp) in dae.x|items %}
   {{ name }}(t) with {{ name }}(0) = {{ render_expr(comp.start) }}
-{%- endfor %}
+{%- endfor -%}
 {%- endif %}
 
 Algebraic variables y(t):
-{%- if dae.y|length == 0 and dae.z|length == 0 %}
+{% if dae.y|length == 0 and dae.z|length == 0 -%}
   (none)
-{%- else %}
+{%- else -%}
 {%- for (name, comp) in dae.y|items %}
   {{ name }}(t)
-{%- endfor %}
+{%- endfor -%}
 {%- for (name, comp) in dae.z|items %}
   {{ name }}(t)    // discrete / event-related
 {%- endfor %}
 {%- endif %}
 
 Differential equations (explicit ODE form x' = f(t, x, p)):
-{%- for eq in dae.fx %}
+{% for eq in dae.fx -%}
   {%- if is_derivative_eq(eq) %}
   {{ render_lhs_prime(eq) }} = {{ render_expr(eq.Simple.rhs) }}
-  {%- endif %}
+  {%- endif -%}
 {%- endfor %}
 
 Algebraic equations:
-{%- set flags = namespace(has_alg=false) %}
+{% set flags = namespace(has_alg=false) %}
 {%- for eq in dae.fx %}
-  {%- if "Simple" in eq and not is_derivative_eq(eq) %}
-    {%- set flags.has_alg = true %}
+  {%- if "Simple" in eq and not is_derivative_eq(eq) -%}
+    {% set flags.has_alg = true %}
   {{ render_expr(eq.Simple.lhs) }} = {{ render_expr(eq.Simple.rhs) }}
-  {%- endif %}
-{%- endfor %}
-{%- if not flags.has_alg %}
+  {%- endif -%}
+{%- endfor -%}
+{%- if not flags.has_alg -%}
   (none)
 {%- endif %}
 
 Events (when-clauses):
-{%- if dae.fz|length == 0 %}
+{% if dae.fz|length == 0 %}
   (none)
-{%- else %}
+{%- else -%}
   {# TODO: inspect dae.fz structure and pretty-print when/reinit. #}
   {{ dae.fz|tojson }}
 {%- endif %}
