@@ -14,10 +14,19 @@
 
     <!-- Editors -->
     <div class="row q-col-gutter-md q-mb-md">
+      <!-- Modelica source -->
       <div class="col-12 col-md-6">
         <q-card>
-          <q-card-section>
+          <q-card-section class="row items-center justify-between">
             <div class="text-h6"><q-icon :name="matDescription" /> Modelica Source</div>
+            <q-btn
+              color="grey-7"
+              flat
+              dense
+              label="Copy"
+              :disable="!modelicaSource"
+              @click="copyModelicaToClipboard"
+            />
           </q-card-section>
           <q-card-section>
             <q-input
@@ -32,10 +41,19 @@
         </q-card>
       </div>
 
+      <!-- Template source -->
       <div class="col-12 col-md-6">
         <q-card>
-          <q-card-section>
+          <q-card-section class="row items-center justify-between">
             <div class="text-h6"><q-icon :name="matCode" /> Template Source</div>
+            <q-btn
+              color="grey-7"
+              flat
+              dense
+              label="Copy"
+              :disable="!templateSource"
+              @click="copyTemplateToClipboard"
+            />
           </q-card-section>
           <q-card-section>
             <q-input
@@ -105,34 +123,83 @@
       {{ statusMessage }}
     </q-banner>
 
-    <!-- Output row: JS + Execution -->
+    <!-- Output row: Code + Execution -->
     <div class="row q-col-gutter-md">
-      <!-- Generated JS -->
+      <!-- Compilation outputs (Code + DAE JSON + Pretty) -->
       <div class="col-12 col-md-6">
         <q-card>
           <q-card-section class="row items-center justify-between">
-            <div class="text-h6"><q-icon :name="matCode" /> Generated JavaScript</div>
-            <q-btn
-              color="grey-7"
-              flat
-              dense
-              label="Copy"
-              :disable="!jsSource"
-              @click="copyJsToClipboard"
-            />
+            <div class="text-h6"><q-icon :name="matCode" /> Compilation Outputs</div>
+            <div class="row items-center no-wrap q-gutter-xs">
+              <q-btn
+                color="grey-7"
+                flat
+                dense
+                label="Copy JS"
+                :disable="!jsSource"
+                @click="copyJsToClipboard"
+              />
+              <q-btn
+                color="grey-7"
+                flat
+                dense
+                label="Copy DAE JSON"
+                :disable="!daeJsonOutput"
+                @click="copyDaeJsonToClipboard"
+              />
+              <q-btn
+                color="grey-7"
+                flat
+                dense
+                label="Copy Pretty"
+                :disable="!daePrettyOutput"
+                @click="copyDaePrettyToClipboard"
+              />
+            </div>
           </q-card-section>
+
+          <q-separator />
+
           <q-card-section>
-            <q-input
-              v-model="jsSource"
-              type="textarea"
-              outlined
-              readonly
-              placeholder="Generated JavaScript will appear here..."
-              :rows="20"
-              input-class="text-code"
-              bg-color="grey-10"
-              dark
-            />
+            <q-tabs v-model="outputTab" dense align="justify" narrow-indicator>
+              <q-tab name="js" label="Code" />
+              <q-tab name="daeJson" label="JSON" />
+              <q-tab name="daePretty" label="Pretty" />
+            </q-tabs>
+
+            <q-tab-panels v-model="outputTab" animated>
+              <q-tab-panel name="js">
+                <q-input
+                  v-model="jsSource"
+                  type="textarea"
+                  outlined
+                  readonly
+                  placeholder="Generated Code will appear here..."
+                  :rows="20"
+                  input-class="text-code"
+                  bg-color="grey-10"
+                  dark
+                />
+              </q-tab-panel>
+
+              <q-tab-panel name="daeJson">
+                <ObjectTreeView v-model="daeJsonOutput" />
+              </q-tab-panel>
+
+              <q-tab-panel name="daePretty">
+                <q-input
+                  v-model="daePrettyOutput"
+                  type="textarea"
+                  outlined
+                  readonly
+                  placeholder="Pretty-printed DAE will appear here..."
+                  :rows="20"
+                  input-class="text-code"
+                  bg-color="grey-10"
+                  dark
+                />
+              </q-tab-panel>
+            </q-tab-panels>
           </q-card-section>
         </q-card>
       </div>
@@ -167,8 +234,8 @@
             </q-banner>
           </q-card-section>
 
-          <q-card-section v-if="executionResult">
-            <ObjectTreeView v-model="executionResult" />
+          <q-card-section v-if="executionResult && Object.keys(executionResult).length">
+            <ObjectTreeView v-model="executionResult" dense hide-missing read-only />
           </q-card-section>
 
           <q-card-section v-else-if="!executionError">
@@ -212,6 +279,10 @@ const modelicaSource = ref('')
 const templateSource = ref('')
 const output = ref('') // legacy raw output if needed
 const jsSource = ref('') // generated JS shown + executed
+const daeJsonOutput = ref<Record<string, unknown>>({}) // DAE JSON (pretty-printed)
+const daePrettyOutput = ref('') // Pretty DAE textual representation (from WASM)
+const outputTab = ref<'js' | 'daeJson' | 'daePretty'>('js')
+
 const verbose = ref(false)
 const loading = ref(false)
 const wasmLoaded = ref(false)
@@ -243,18 +314,16 @@ const loadWasm = async () => {
       await wasmModule.default(rumocaWasmUrl)
     }
 
-    // 2) Try to initialize Rayon thread pool, but do NOT treat failure as fatal
+    // Try to initialize Rayon thread pool, but do NOT treat failure as fatal
     if ('wasm_init' in wasmModule && typeof wasmModule.wasm_init === 'function') {
       try {
-        // Using 1 thread here; but even this may try to create workers,
-        // so we just swallow errors and fall back to single-threaded behavior.
+        // Using 1 thread here; errors are swallowed – we fall back to single-threaded behavior.
         await wasmModule.wasm_init(1)
       } catch (e) {
         console.warn(
           'Rumoca wasm_init (thread pool) failed – continuing in single-threaded mode:',
           e,
         )
-        // IMPORTANT: do not rethrow – we want the rest of the module to still be usable.
       }
     }
 
@@ -272,19 +341,27 @@ const loadWasm = async () => {
   }
 }
 
-// ---------- Compile Modelica → JS via new API ----------
+// ---------- Compile Modelica → JS & DAE via new API ----------
 // 1. compile_to_json(source, modelName) → JSON string
 // 2. render_template(daeJson, template) → rendered string (JS in your case)
 watch([modelicaSource, templateSource], () => {
   if (!modelicaSource.value || !templateSource.value) {
     statusMessage.value = 'Please provide both Modelica source and template'
     statusType.value = 'error'
+    jsSource.value = ''
+    daeJsonOutput.value = {}
+    daePrettyOutput.value = ''
+    output.value = ''
+    executionResult.value = {}
+    executionError.value = null
     return
   }
 
   loading.value = true
   output.value = ''
   jsSource.value = ''
+  daeJsonOutput.value = {}
+  daePrettyOutput.value = ''
   statusMessage.value = 'Compiling...'
   statusType.value = 'loading'
   executionResult.value = {}
@@ -306,7 +383,7 @@ watch([modelicaSource, templateSource], () => {
     const match = source.match(/(?:model|class|block|connector|record)\s+(\w+)/)
     const modelName = match?.[1] ?? 'Model'
 
-    // Step 1: compile Modelica → DAE JSON
+    // Step 1: compile Modelica → DAE JSON (wrapper object)
     const jsonStr = m.compile_to_json(source, modelName)
     const compiled = JSON.parse(jsonStr) as {
       dae?: unknown
@@ -315,11 +392,15 @@ watch([modelicaSource, templateSource], () => {
       balance?: unknown
     }
 
-    // Prefer dae_native (matches what render_template expects in the worker example)
+    // Prefer dae_native (matches what render_template expects)
     const daeForTemplate = compiled.dae_native ?? compiled.dae
     if (!daeForTemplate) {
       throw new Error('Compilation did not return a DAE object')
     }
+
+    // For display
+    daeJsonOutput.value = daeForTemplate as Record<string, unknown>
+    daePrettyOutput.value = compiled.pretty ?? ''
 
     const daeJson = JSON.stringify(daeForTemplate)
 
@@ -342,6 +423,8 @@ watch([modelicaSource, templateSource], () => {
     const msg = (error as Error).message
     output.value = `Error: ${msg}`
     jsSource.value = ''
+    daeJsonOutput.value = {}
+    daePrettyOutput.value = ''
     statusMessage.value = `Compilation failed: ${msg}`
     statusType.value = 'error'
     console.error('Compilation error:', error)
@@ -356,6 +439,8 @@ const clearAll = () => {
   templateSource.value = ''
   output.value = ''
   jsSource.value = ''
+  daeJsonOutput.value = {}
+  daePrettyOutput.value = ''
   statusMessage.value = ''
   executionResult.value = {}
   executionError.value = null
@@ -389,19 +474,59 @@ end BouncingBall;`
   }, 2000)
 }
 
-const copyJsToClipboard = async () => {
-  if (!jsSource.value) return
+const copyToClipboard = async (text: string, successMessage: string, errorMessage: string) => {
+  if (!text) return
   try {
-    await navigator.clipboard.writeText(jsSource.value)
-    statusMessage.value = 'Generated JavaScript copied to clipboard.'
+    await navigator.clipboard.writeText(text)
+    statusMessage.value = successMessage
     statusType.value = 'success'
     setTimeout(() => {
       statusMessage.value = ''
     }, 1500)
   } catch {
-    statusMessage.value = 'Failed to copy to clipboard.'
+    statusMessage.value = errorMessage
     statusType.value = 'error'
   }
+}
+
+const copyJsToClipboard = async () => {
+  await copyToClipboard(
+    jsSource.value,
+    'Generated JavaScript copied to clipboard.',
+    'Failed to copy JavaScript to clipboard.',
+  )
+}
+
+const copyModelicaToClipboard = async () => {
+  await copyToClipboard(
+    modelicaSource.value,
+    'Modelica source copied to clipboard.',
+    'Failed to copy Modelica source to clipboard.',
+  )
+}
+
+const copyTemplateToClipboard = async () => {
+  await copyToClipboard(
+    templateSource.value,
+    'Template source copied to clipboard.',
+    'Failed to copy template source to clipboard.',
+  )
+}
+
+const copyDaeJsonToClipboard = async () => {
+  await copyToClipboard(
+    JSON.stringify(daeJsonOutput.value, null, 2),
+    'DAE JSON copied to clipboard.',
+    'Failed to copy DAE JSON to clipboard.',
+  )
+}
+
+const copyDaePrettyToClipboard = async () => {
+  await copyToClipboard(
+    daePrettyOutput.value,
+    'Pretty DAE output copied to clipboard.',
+    'Failed to copy Pretty DAE output to clipboard.',
+  )
 }
 
 // ---------- Build iframe function code ----------
