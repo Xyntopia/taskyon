@@ -392,6 +392,8 @@ watch([modelicaSource, templateSource], () => {
       balance?: unknown
     }
 
+    // TODO: add "compile_with_libraries" option here
+
     // Prefer dae_native (matches what render_template expects)
     const daeForTemplate = compiled.dae_native ?? compiled.dae
     if (!daeForTemplate) {
