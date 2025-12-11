@@ -534,43 +534,158 @@ const copyDaePrettyToClipboard = async () => {
 // ---------- Build iframe function code ----------
 const buildIframeCode = (compiledJs: string): string => {
   const wrapped = `
-    (params, context) => {
-      "use strict";
-      ${compiledJs}
+  (params, context) => {
+    "use strict";
+    ${compiledJs}
 
-      const model = Model();
+    const model = Model();
 
-      const sim = (params && params.sim) || {};
-      const t0 = Number.isFinite(sim.t0) ? sim.t0 : 0;
-      const tf = Number.isFinite(sim.tf) ? sim.tf : 5;
-      const dt = Number.isFinite(sim.dt) ? sim.dt : 0.1;
+    /**
+     * Evaluate derivatives and algebraic variables at (t, x).
+     *
+     * Uses structure:
+     *   res[i]        = xDot[i] - f_i(t,x,y,u,p)
+     *   res[nx + j]   = y[j]    - g_j(t,x,u,p)
+     *
+     * by calling residual with xDot = 0 and a yGuess.
+     */
+    function evalDerivativesAndAlgebraics(t, x, u, yGuess, pOverride) {
+      const nx = model.xNames.length;
+      const ny = model.yNames.length;
 
-      const x0 = Array.isArray(sim.x0) && sim.x0.length === model.x0.length
-        ? sim.x0.slice()
+      const xDotZero = new Array(nx).fill(0);
+      const y = (Array.isArray(yGuess) && yGuess.length === ny)
+        ? yGuess.slice()
+        : model.y0.slice();
+
+      const res = model.residual(t, x, xDotZero, y, u, pOverride);
+
+      // xDot[i] = -res[i]  (since res[i] = 0 - rhs_i = -rhs_i)
+      const xDot = new Array(nx);
+      for (let i = 0; i < nx; i++) {
+        xDot[i] = -res[i];
+      }
+
+      // y[j] = yGuess[j] - res[nx + j]  (since res = y - g(x,...) )
+      const yOut = new Array(ny);
+      for (let j = 0; j < ny; j++) {
+        const idx = nx + j;
+        yOut[j] = y[j] - res[idx];
+      }
+
+      return { xDot, y: yOut };
+    }
+
+    /**
+     * Very simple explicit Euler "implicit-DAE aware" simulator.
+     *
+     * - Time stepping: explicit Euler on x:
+     *       x_{k+1} = x_k + dt * f(t_k, x_k)
+     * - f is obtained from residual via the trick above.
+     * - y is recomputed from algebraic equations at each step.
+     *
+     * NOTE:
+     * - No event handling yet (no when/reinit).
+     * - Assumes residual has the structure produced by your Jinja template.
+     */
+    function simulate(t0, tf, dt, opts) {
+      opts = opts || {};
+      const nx = model.xNames.length;
+      const ny = model.yNames.length;
+      const nu = model.uNames.length;
+
+      const x0 = (Array.isArray(opts.x0) && opts.x0.length === nx)
+        ? opts.x0.slice()
         : model.x0.slice();
 
-      const f_u = (t) => new Array(model.uNames.length).fill(0);
+      const f_u = typeof opts.f_u === "function"
+        ? opts.f_u
+        : ((t) => new Array(nu).fill(0));
 
-      const data = model.simulate(t0, tf, dt, { x0, f_u });
+      const pOverride = opts.pOverride || null;
+
+      const nSteps = Math.max(1, Math.floor((tf - t0) / dt));
+
+      const tArr = new Array(nSteps + 1);
+      const xArr = new Array(nSteps + 1);
+      const yArr = new Array(nSteps + 1);
+      const uArr = new Array(nSteps + 1);
+
+      let t = t0;
+      let x = x0.slice();
+      let y = model.y0.slice(); // initial guess for algebraics
+
+      for (let k = 0; k <= nSteps; k++) {
+        const u = f_u(t) || new Array(nu).fill(0);
+
+        // Compute xDot and consistent y at (t, x)
+        const { xDot, y: yNew } = evalDerivativesAndAlgebraics(
+          t,
+          x,
+          u,
+          y,
+          pOverride
+        );
+
+        // Store current step
+        tArr[k] = t;
+        xArr[k] = x.slice();
+        yArr[k] = yNew.slice();
+        uArr[k] = Array.isArray(u) ? u.slice() : Array.from(u);
+
+        if (k === nSteps) break;
+
+        // Explicit Euler update for x
+        const xNext = new Array(nx);
+        for (let i = 0; i < nx; i++) {
+          xNext[i] = x[i] + dt * xDot[i];
+        }
+
+        // Advance state and time; keep latest algebraics as guess
+        t += dt;
+        x = xNext;
+        y = yNew;
+      }
 
       return {
-        meta: {
-          t0,
-          tf,
-          dt,
-          nSteps: data.t.length,
-          model: {
-            xNames: model.xNames,
-            uNames: model.uNames,
-            yNames: model.yNames,
-            cNames: model.cNames,
-          },
-          context: context || null,
-        },
-        data,
+        t: tArr,
+        x: xArr,
+        y: yArr,
+        u: uArr,
       };
     }
-  `
+
+    const sim = (params && params.sim) || {};
+    const t0 = Number.isFinite(sim.t0) ? sim.t0 : 0;
+    const tf = Number.isFinite(sim.tf) ? sim.tf : 5;
+    const dt = Number.isFinite(sim.dt) ? sim.dt : 0.1;
+
+    const x0 = Array.isArray(sim.x0) && sim.x0.length === model.x0.length
+      ? sim.x0.slice()
+      : model.x0.slice();
+
+    const f_u = (t) => new Array(model.uNames.length).fill(0);
+
+    const data = simulate(t0, tf, dt, { x0, f_u });
+
+    return {
+      meta: {
+        t0,
+        tf,
+        dt,
+        nSteps: data.t.length,
+        model: {
+          xNames: model.xNames,
+          uNames: model.uNames,
+          yNames: model.yNames,
+          cNames: model.cNames,
+        },
+        context: context || null,
+      },
+      data,
+    };
+  }
+`
   return wrapped + `\n//# sourceURL=rumoca-generated.js\n`
 }
 
