@@ -233,8 +233,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { type QTreeNode } from 'quasar'
-import JsonInput from 'components/JsonInput.vue' // Adjust the path as necessary
-import InfoDialog from 'components/InfoDialog.vue'
+import JsonInput from './JsonInput.vue' // Adjust the path as necessary
+import InfoDialog from './InfoDialog.vue'
 import type { JSONSchema7 } from 'json-schema'
 import type z from 'zod'
 import FieldView from './FieldView.vue'
