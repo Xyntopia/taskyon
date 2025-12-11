@@ -116,6 +116,13 @@ function Model() {
   {%- endfor %}
   };
 
+  /* constants */
+  const constants = {
+  {%- for (name, comp) in dae.cp|items %}
+    {{ name }}: {{ render_expr(comp.start) }}{% if not loop.last %},{% endif %}
+  {%- endfor %}
+  };
+
   /* initial guesses */
   const x0 = [
   {%- for (name, comp) in dae.x|items %}
@@ -168,6 +175,11 @@ function Model() {
     /* aliases for parameters */
   {%- for (name, comp) in dae.p|items %}
     const {{ name }} = params.{{ name }};
+  {%- endfor %}
+
+    /* aliases for constants */
+  {%- for (name, comp) in dae.cp|items %}
+    const {{ name }} = constants.{{ name }};
   {%- endfor %}
 
     const res = new Array({{ dae.x|length + dae.y|length }});

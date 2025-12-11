@@ -449,23 +449,26 @@ const clearAll = () => {
 }
 
 const loadExample = async () => {
-  modelicaSource.value = `model BouncingBall "The 'classic' bouncing ball model"
-  parameter Real e=0.8 "Coefficient of restitution";
-  parameter Real h0=1.0 "Initial height";
-  Real h = 1.0 "Height";
-  Real v "Velocity";
-  Real z;
+  modelicaSource.value = `model BouncingBall             "The bouncing ball model"
+  constant Real g = 9.81 "Gravitational acceleration";
+  parameter Real c = 0.9 "Elasticity constant of ball";
+  parameter Real radius = 0.1 "Radius of the ball";
+  Real h(start = 1,fixed=true) "height above ground of ball center";
+  Real v(start = 0,fixed=true) "Velocity of the ball";
+  Real E "Mechanical energy";
 equation
-  z = 2*h + v;
-  v = der(h);
-  der(v) = -9.81;
-  when h<0 then
-    reinit(v, -e*pre(v));
+  der(h) = v;
+  der(v) = -g;
+  E = 9.81*h + 0.5*v*v;
+  when h <= radius then
+    reinit(v, -c*pre(v));
   end when;
 end BouncingBall;`
 
   // select first example template
-  const exampleTemplate = (await jinjaTemplateUrls['/public/modelica/base_dae.jinja']?.()) as string
+  const exampleTemplate = (await jinjaTemplateUrls[
+    '/public/modelica/javascript.jinja'
+  ]?.()) as string
 
   templateSource.value = exampleTemplate || ''
 
