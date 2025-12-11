@@ -538,7 +538,7 @@ const buildIframeCode = (compiledJs: string): string => {
       "use strict";
       ${compiledJs}
 
-      const model = new Model();
+      const model = Model();
 
       const sim = (params && params.sim) || {};
       const t0 = Number.isFinite(sim.t0) ? sim.t0 : 0;
