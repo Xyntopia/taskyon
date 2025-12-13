@@ -158,7 +158,7 @@ import {
 import type { InternalTool, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { craeteToolJsonSchema, createTaskNode, ToolBase } from '@taskyon/taskyon'
 import { copyToClipboard } from 'quasar'
-import JsonInput from 'src/components/JsonInput.vue'
+import JsonInput from 'src/components/varViews/JsonInput.vue'
 import ObjectTreeView from 'src/components/ObjectTreeView.vue'
 import TaskChainPublishDialog from 'src/components/taskyon/TaskChainPublishDialog.vue'
 import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'

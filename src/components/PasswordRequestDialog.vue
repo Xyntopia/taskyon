@@ -24,7 +24,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import SecretInput from './SecretInput.vue'
+import SecretInput from './varViews/SecretInput.vue'
 import TyMarkdown from './tyMarkdown.vue'
 
 const newSecret = ref<string>('')
