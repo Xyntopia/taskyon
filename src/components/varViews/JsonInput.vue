@@ -16,7 +16,6 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { debounce as lodashDebounce } from 'lodash'
 import { useQuasar } from 'quasar'
 import { matSave } from '@quasar/extras/material-icons'
 
@@ -26,6 +25,14 @@ const props = defineProps({
   autoSave: { type: Boolean, default: false }, // NEW
   debounce: { type: Number, default: 500 }, // NEW, ms
 })
+
+function debounceFn<F extends (...args: unknown[]) => void>(fn: F, wait: number) {
+  let timeout: number | undefined
+  return (...args: Parameters<F>) => {
+    if (timeout) clearTimeout(timeout)
+    timeout = window.setTimeout(() => fn(...args), wait)
+  }
+}
 
 const emit = defineEmits(['update:modelValue'])
 const q = useQuasar()
@@ -52,7 +59,7 @@ const jsonRule = (val: string) => {
 
 // auto-save with debounce
 if (props.autoSave) {
-  const doSave = lodashDebounce(() => {
+  const doSave = debounceFn(() => {
     // only emit when valid
     try {
       const parsed = JSON.parse(jsonString.value)

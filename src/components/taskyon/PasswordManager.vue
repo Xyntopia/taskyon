@@ -97,7 +97,7 @@ import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { onMounted, ref, watch } from 'vue'
 import InfoDialog from '../InfoDialog.vue'
-import SecretInput from '../SecretInput.vue'
+import SecretInput from '../varViews/SecretInput.vue'
 
 const { onlyThisKey } = defineProps<{
   title?: string

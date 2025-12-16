@@ -26,7 +26,7 @@ import { buildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { computed } from 'vue'
 import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
-import ObjectTreeView from '../ObjectTreeView.vue'
+import ObjectTreeView from '../varViews/ObjectTreeView.vue'
 import { llmSettings } from '@taskyon/taskyon'
 
 const state = useAppStateStore()

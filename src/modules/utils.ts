@@ -1,6 +1,32 @@
 //import equal from 'fast-deep-equal/es6';
 import type { AnyFunction, CacheEntry } from '@taskyon/taskyon'
 
+export function countLeaves(value: unknown): number {
+  const seen = new Set<unknown>()
+  const stack = [value]
+  let count = 0
+
+  while (stack.length) {
+    const cur = stack.pop()
+
+    if (cur === null || typeof cur !== 'object') {
+      count++
+      continue
+    }
+
+    if (seen.has(cur)) continue
+    seen.add(cur)
+
+    if (Array.isArray(cur)) {
+      for (const v of cur) stack.push(v)
+    } else {
+      for (const v of Object.values(cur)) stack.push(v)
+    }
+  }
+
+  return count
+}
+
 export function copyToClipboard(text: string | undefined) {
   if (text)
     navigator.clipboard

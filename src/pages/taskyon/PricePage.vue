@@ -227,7 +227,7 @@ import { useAppStateStore } from 'src/stores/appState'
 import InfoDialog from 'components/InfoDialog.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import ApiSelect from 'components/taskyon/ApiSelect.vue'
-import ObjectTreeView from 'src/components/ObjectTreeView.vue'
+import ObjectTreeView from 'src/components/varViews/ObjectTreeView.vue'
 
 import { humanReadablePrice, openrouterPricing } from 'src/modules/utils'
 import type { Model } from '@taskyon/taskyon'

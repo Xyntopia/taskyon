@@ -9,6 +9,8 @@
       <q-icon v-if="item.icon" size="sm" class="q-pr-sm" :name="item.icon" />
       <div v-else class="gt-xs q-mr-sm" style="min-width: 24px" />
       <template v-if="item.label && showLabel">{{ item.label }}:</template>
+
+      <!-- Reset button -->
       <template v-if="reset">
         <q-btn
           v-if="item.default"
@@ -21,10 +23,17 @@
           <q-tooltip>Reset to default</q-tooltip>
         </q-btn>
       </template>
+
+      <!-- NEW: Copy button -->
+      <q-btn v-if="copy" dense size="sm" flat :icon="matContentCopy" @click.stop="emit('copy')">
+        <q-tooltip>Copy value as JSON</q-tooltip>
+      </q-btn>
     </div>
+
     <template v-if="item.description">
       <InfoDialog class="lt-sm col-auto" :info-text="item.description" />
     </template>
+
     <div class="col-grow row" :data-cy="item.label">
       <div class="col" style="flex: 1 0 auto">
         <!--valueSlot-->
@@ -39,16 +48,18 @@
 </template>
 
 <script setup lang="ts">
-import { matRestartAlt } from '@quasar/extras/material-icons'
+import { matRestartAlt, matContentCopy } from '@quasar/extras/material-icons'
 import InfoDialog from 'components/InfoDialog.vue'
 
 const emit = defineEmits<{
   (e: 'reset'): void
+  (e: 'copy'): void // NEW
 }>()
 
-const { reset = true } = defineProps<{
+defineProps<{
   showLabel?: boolean
   reset?: boolean
+  copy?: boolean // NEW: enable / disable copy button
   item: {
     icon?: string
     description?: string
