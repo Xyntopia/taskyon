@@ -78,7 +78,7 @@
               flat
               dense
               size="sm"
-              icon="bar_chart"
+              :icon="matBarChart"
               :color="chartPaths?.includes(String(prop.node.key)) ? 'primary' : 'grey'"
               @click.stop="toggleChartPath(String(prop.node.key))"
             >
@@ -319,7 +319,7 @@
 </template>
 
 <script setup lang="ts">
-import { matInfo } from '@quasar/extras/material-icons'
+import { matBarChart, matInfo } from '@quasar/extras/material-icons'
 import { type JSONSchema7 } from 'json-schema'
 import { type QTreeNode } from 'quasar'
 import { copyToClipboard, countLeaves } from 'src/modules/utils'
