@@ -1,10 +1,12 @@
+<!--ObjectTreeView.vue-->
 <template>
   <q-tree
     v-if="modelValue"
     :nodes="nodeTree"
-    node-key="label"
+    node-key="key"
     v-bind="$attrs"
     class="object-tree-view"
+    @lazy-load="onLazyLoad"
   >
     <!--This is only used for debuging..-->
     <!--template #default-header="prop">
@@ -12,6 +14,7 @@
     </template-->
     <!--for all the component which explicitly want to remove the header...-->
     <template #default-header></template>
+
     <template #header-object="prop">
       <FieldView
         :item="prop.node"
@@ -21,6 +24,7 @@
         @reset="updateValue(prop.node.path, prop.node.default)"
       />
     </template>
+
     <template #body-unknown="prop">
       <FieldView
         :show-label="separateLabels"
@@ -35,6 +39,7 @@
         </InfoDialog>
       </FieldView>
     </template>
+
     <template #body-text="prop">
       <FieldView
         :show-label="separateLabels"
@@ -56,6 +61,7 @@
         />
       </FieldView>
     </template>
+
     <template #body-list="prop">
       <FieldView
         :show-label="separateLabels"
@@ -65,17 +71,73 @@
         @copy="copyNodeValue(prop.node.path)"
         @reset="updateValue(prop.node.path, prop.node.default)"
       >
-        <json-input
-          :readonly="readOnly"
-          auto-save
-          filled
-          :label="separateLabels ? '' : prop.node.label"
-          :model-value="prop.node.value"
-          style="min-width: 200px"
-          @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
-        />
+        <div class="column q-gutter-sm">
+          <!-- Row with chart toggle button -->
+          <div class="row items-center q-gutter-xs">
+            <q-btn
+              flat
+              dense
+              size="sm"
+              icon="bar_chart"
+              :color="chartPaths?.includes(String(prop.node.key)) ? 'primary' : 'grey'"
+              @click.stop="toggleChartPath(String(prop.node.key))"
+            >
+              <q-tooltip>
+                {{ chartPaths?.includes(String(prop.node.key)) ? 'Hide chart' : 'Show chart' }}
+              </q-tooltip>
+            </q-btn>
+
+            <!-- Optional: show brief info about the array -->
+            <div class="text-caption text-grey">
+              <template
+                v-if="
+                  Array.isArray(prop.node.value) &&
+                  prop.node.value.length > 0 &&
+                  prop.node.value.every((r: unknown) => Array.isArray(r))
+                "
+              >
+                <div>
+                  2D array of length {{ countLeaves(prop.node.value) }} [{{
+                    prop.node.value.length
+                  }},
+                  {{
+                    Math.max(
+                      ...prop.node.value.map((r: unknown) => (Array.isArray(r) ? r.length : 0)),
+                    )
+                  }}
+                  (max)]
+                </div>
+              </template>
+              <template v-else>
+                <div>Array of length {{ prop.node.value.length }}</div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Content: either chart or original editor/summary -->
+          <div>
+            <template v-if="chartPaths?.includes(String(prop.node.key))">
+              <!-- When chart is active, replace JSON input with chart -->
+              <ListChart :value="prop.node.value" />
+            </template>
+            <template v-else>
+              <!-- Original behavior (JSON editor or summary) -->
+              <json-input
+                v-if="countLeaves(prop.node.value) < listSummary"
+                :readonly="readOnly"
+                auto-save
+                filled
+                :label="separateLabels ? '' : prop.node.label"
+                :model-value="prop.node.value"
+                style="min-width: 200px"
+                @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
+              />
+            </template>
+          </div>
+        </div>
       </FieldView>
     </template>
+
     <template #body-string="prop">
       <FieldView
         :show-label="separateLabels"
@@ -99,6 +161,7 @@
         />
       </FieldView>
     </template>
+
     <template #body-boolean="prop">
       <FieldView
         :show-label="separateLabels"
@@ -129,6 +192,7 @@
         />
       </FieldView>
     </template>
+
     <template #body-number="prop">
       <FieldView
         :show-label="separateLabels"
@@ -151,6 +215,7 @@
         />
       </FieldView>
     </template>
+
     <template #body-enum="prop">
       <FieldView
         :show-label="separateLabels"
@@ -172,6 +237,7 @@
         />
       </FieldView>
     </template>
+
     <template #body-color="prop">
       <FieldView
         :show-label="separateLabels"
@@ -214,6 +280,7 @@
         </q-input>
       </FieldView>
     </template>
+
     <template #body-timestamp="prop">
       <FieldView
         :show-label="separateLabels"
@@ -247,19 +314,21 @@
       </FieldView>
     </template>
   </q-tree>
+
   <div v-else>no input data!</div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { type QTreeNode } from 'quasar'
-import JsonInput from 'src/components/varViews/JsonInput.vue' // Adjust the path as necessary
-import InfoDialog from 'components/InfoDialog.vue'
-import type { JSONSchema7 } from 'json-schema'
-import type z from 'zod'
-import FieldView from './FieldView.vue'
 import { matInfo } from '@quasar/extras/material-icons'
-import { copyToClipboard } from 'src/modules/utils'
+import { type JSONSchema7 } from 'json-schema'
+import { type QTreeNode } from 'quasar'
+import { copyToClipboard, countLeaves } from 'src/modules/utils'
+import { computed } from 'vue'
+import type z from 'zod'
+import InfoDialog from '../InfoDialog.vue'
+import FieldView from './FieldView.vue'
+import JsonInput from './JsonInput.vue'
+import ListChart from './ListChart.vue'
 
 const {
   readOnly = false,
@@ -270,6 +339,8 @@ const {
   descriptionsAsLabels = false,
   hideMissing = false,
   copyBtn = false,
+  lazyRender = false,
+  listSummary = 10,
 } = defineProps<{
   readOnly?: boolean
   inputFieldBehavior?: 'auto' | 'textarea' | 'autogrow'
@@ -279,29 +350,72 @@ const {
   descriptionsAsLabels?: boolean
   hideMissing?: boolean
   copyBtn?: boolean
+  lazyRender?: boolean
+  listSummary?: number
 }>()
 
 const modelValue = defineModel<Record<string, unknown> | undefined>({
   required: true,
 })
 
+const chartPaths = defineModel<string[]>('chartPaths', {
+  default: () => [],
+})
+
 const updateValue = (keyPath: string[], value: unknown) => {
   if (!modelValue.value) return
 
-  // walk down the existing object…
   let target: Record<string, unknown> = modelValue.value
   for (let i = 0; i < keyPath.length - 1; i++) {
     target = target[keyPath[i]!] as Record<string, unknown>
   }
-
-  // …and set the leaf. Vue will pick up the change.
   target[keyPath[keyPath.length - 1]!] = value
+}
+
+const toggleChartPath = (dotPath: string) => {
+  const current = chartPaths.value ?? []
+  const idx = current.indexOf(dotPath)
+  if (idx === -1) {
+    chartPaths.value = [...current, dotPath]
+  } else {
+    chartPaths.value = current.filter((p) => p !== dotPath)
+  }
+}
+
+const getValueByPath = (obj: unknown, path: string[]): unknown => {
+  let cur = obj
+  for (const segment of path) {
+    if (cur == null || typeof cur !== 'object') return undefined
+    cur = (cur as Record<string, unknown>)[segment]
+  }
+  return cur
+}
+
+// Optional helper:
+// quick & shallow check if an object has any non-missing *immediate* children.
+const hasAnyVisibleImmediateChild = (
+  obj: Record<string, unknown>,
+  subschema?: JSONSchema7 | z.core.JSONSchema.BaseSchema,
+): boolean => {
+  if (!hideMissing) {
+    return Object.keys(obj).length > 0
+  }
+
+  if (subschema && 'properties' in subschema && subschema.type === 'object') {
+    return Object.entries(subschema.properties ?? {}).some(([k]) => {
+      const v = obj[k]
+      return v !== undefined && v !== null && v !== ''
+    })
+  }
+
+  return Object.values(obj).some((v) => v !== undefined && v !== null && v !== '')
 }
 
 const transformToTreeNodes = (
   obj: Record<string, unknown>,
   schema?: JSONSchema7 | z.core.JSONSchema.BaseSchema,
   keyPath: string[] = [],
+  useLazy: boolean = false,
 ): QTreeNode[] => {
   const mapEntry = (
     key: string,
@@ -316,7 +430,7 @@ const transformToTreeNodes = (
       | undefined,
     path: string[],
   ): QTreeNode | null => {
-    if (hideMissing && (value === undefined || value === null)) {
+    if (hideMissing && (value === undefined || value === null || value === '')) {
       return null
     }
 
@@ -349,7 +463,6 @@ const transformToTreeNodes = (
 
     switch (runtimeType) {
       case 'enum': {
-        // pick default if none set (but if hideMissing, we already skipped null/undefined)
         const actualVal = isUndef ? (subschema!.default ?? subschema!.enum![0]) : value
         return {
           ...base,
@@ -358,6 +471,7 @@ const transformToTreeNodes = (
           body: 'enum',
         }
       }
+
       case 'timestamp': {
         const ts = isUndef ? (subschema!.default ?? Date.now()) : (value as number)
         return {
@@ -366,6 +480,7 @@ const transformToTreeNodes = (
           body: 'timestamp',
         }
       }
+
       case 'color': {
         const actualVal = isUndef ? (subschema!.default ?? '#000000') : value
         return {
@@ -374,41 +489,62 @@ const transformToTreeNodes = (
           body: 'color',
         }
       }
+
       case 'object': {
-        // If value is not a proper object, treat as empty object
         const childObj =
           !isUndef && typeof value === 'object' && !Array.isArray(value)
             ? (value as Record<string, unknown>)
             : {}
 
-        // Build children
-        const children = transformToTreeNodes(childObj, subschema, newPath)
+        if (useLazy) {
+          // LAZY MODE:
+          // - Do NOT build full subtree here
+          // - Keep node only if it "might" have visible children
+          const hasChildren = hasAnyVisibleImmediateChild(childObj, subschema)
 
-        // NEW: if hideMissing and there are no children to show, omit this node entirely
-        if (hideMissing && children.length === 0) {
-          return null
-        }
+          if (hideMissing && !hasChildren) {
+            // NOTE: Slightly approximate vs. full deep check, but much faster.
+            return null
+          }
 
-        return {
-          ...base,
-          value: null,
-          children,
-          header: 'object',
+          return {
+            ...base,
+            value: null,
+            children: [],
+            header: 'object',
+            lazy: hasChildren, // Quasar will trigger @lazy-load when expanded
+          }
+        } else {
+          // NON-LAZY MODE: original behavior
+          const children = transformToTreeNodes(childObj, subschema, newPath, useLazy)
+
+          if (hideMissing && children.length === 0) {
+            return null
+          }
+
+          return {
+            ...base,
+            value: null,
+            children,
+            header: 'object',
+          }
         }
       }
+
       case 'array': {
-        // When hideMissing is on, an undefined array would have been skipped above.
-        // If we got here, it's either an actual array or a defined value.
-        const arrVal = isUndef ? [] : (value as unknown[])
-        // NEW: if hideMissing and array is empty, we can choose to show empty arrays,
-        // but if you also want to hide empty arrays, uncomment the next block:
-        // if (hideMissing && arrVal.length === 0) return null
+        const arrVal =
+          !isUndef && Array.isArray(value) ? (value as unknown[]) : isUndef ? [] : [value] // fallback; optional
+
+        // Here you can add extra logic to guard against very large arrays
+        // e.g. attach metadata for plots, or flag "tooLarge" based on length.
+        // For now we just forward the full array to the 'list' body.
         return {
           ...base,
           value: arrVal,
           body: 'list',
         }
       }
+
       case 'string': {
         const actualVal = isUndef ? '' : (value as string)
         const isSingleLine =
@@ -419,12 +555,14 @@ const transformToTreeNodes = (
           body: isSingleLine ? 'string' : 'text',
         }
       }
+
       case 'boolean':
         return {
           ...base,
           value: !!value,
           body: 'boolean',
         }
+
       case 'number':
       case 'integer': {
         const numVal = isUndef ? undefined : (value as number)
@@ -434,6 +572,7 @@ const transformToTreeNodes = (
           body: 'number',
         }
       }
+
       default:
         // fallback: show raw JSON
         return {
@@ -444,46 +583,81 @@ const transformToTreeNodes = (
     }
   }
 
-  if (schema?.type === 'object' && schema.properties) {
-    return (
-      Object.entries(schema.properties)
-        // NEW: when hideMissing, only include keys that exist on the object and are not null/undefined
-        .filter(([key]) => {
-          if (!hideMissing) return true
-          const v = obj[key]
-          return v !== undefined && v !== null
-        })
-        .map(([key, subschema]) => mapEntry(key, obj[key], subschema as JSONSchema7, keyPath))
-        // NEW: mapEntry can return null; filter those out
-        .filter((n): n is QTreeNode => n !== null)
-    )
+  if (schema && 'type' in schema && schema.type === 'object' && 'properties' in schema) {
+    const schemaProps = (schema.properties ?? {}) as Record<string, JSONSchema7>
+
+    // union of schema keys + actual object keys
+    const allKeys = Array.from(new Set([...Object.keys(schemaProps), ...Object.keys(obj)]))
+
+    return allKeys
+      .filter((key) => {
+        if (!hideMissing) return true
+        const v = obj[key]
+        return v !== undefined && v !== null && v !== ''
+      })
+      .map((key) => {
+        const subschema = schemaProps[key]
+        const value = obj[key]
+        return mapEntry(key, value, subschema, keyPath)
+      })
+      .filter((n): n is QTreeNode => n !== null)
   }
 
-  // No schema: we only have actual entries from the object.
-  return (
-    Object.entries(obj)
-      // NEW: when hideMissing, filter null/undefined values too
-      .filter(([, value]) => !hideMissing || (value !== undefined && value !== null))
-      .map(([key, value]) => mapEntry(key, value, undefined, keyPath))
-      .filter((n): n is QTreeNode => n !== null)
-  )
+  // No schema: derive from runtime object
+  return Object.entries(obj)
+    .filter(([, value]) => !hideMissing || (value !== undefined && value !== null && value !== ''))
+    .map(([key, value]) => mapEntry(key, value, undefined, keyPath))
+    .filter((n): n is QTreeNode => n !== null)
 }
 
 const nodeTree = computed(() => {
-  if (modelValue.value) {
-    return transformToTreeNodes(modelValue.value, schema)
-  } else {
-    return []
-  }
+  if (!modelValue.value) return []
+  // For the root level, pass lazyRender flag
+  return transformToTreeNodes(modelValue.value, schema, [], lazyRender)
 })
+
+type LazyLoadParams = {
+  node: QTreeNode & {
+    path: string[]
+    schema?: JSONSchema7 | z.core.JSONSchema.BaseSchema
+  }
+  key: string | number
+  done: (children: QTreeNode[]) => void
+  fail: () => void
+}
+
+const onLazyLoad = ({ node, done, fail }: LazyLoadParams) => {
+  try {
+    if (!modelValue.value) {
+      done([])
+      return
+    }
+
+    // Re-read the latest value for this node from modelValue
+    const raw = getValueByPath(modelValue.value, node.path)
+    const obj =
+      raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+
+    const subschema = node.schema
+
+    // Build children for THIS object node only
+    const children = transformToTreeNodes(obj, subschema, node.path, lazyRender)
+
+    done(children)
+  } catch (err) {
+    console.error('Lazy load failed', err)
+    fail()
+  }
+}
 
 const formatDate = (ts?: number) => (ts ? new Date(ts).toISOString().slice(0, 10) : '')
 
 const formatTime = (ts?: number) => (ts ? new Date(ts).toISOString().slice(11, 16) : '')
 
 const updateDateTime = (path: string[], date: string | null, time: string | null) => {
-  const ts = modelValue.value ? (modelValue.value[path.at(-1)!] as number) : Date.now()
+  const ts = modelValue.value ? (getValueByPath(modelValue.value, path) as number) : Date.now()
   const d = new Date(ts || Date.now())
+
   if (date) {
     const [y = 1970, m = 1, day = 1] = date.split('-').map(Number)
     d.setFullYear(y, m - 1, day)
