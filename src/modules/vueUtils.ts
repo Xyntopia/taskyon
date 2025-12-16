@@ -1,4 +1,3 @@
-import { convertZodToJsonSchemaCached } from '@taskyon/taskyon'
 import { scroll } from 'quasar'
 import type { Ref } from 'vue'
 import { computed, type ComputedRef, reactive, ref, toRefs, watch } from 'vue'
@@ -41,7 +40,7 @@ export function buildSlimView<O extends Record<string, unknown>, S extends Singl
     return z.object(pickedSchema)
   })
   const mergedSchema = pickedSchemas.reduce((a, b) => z.object({ ...a.shape, ...b.shape }))
-  const jsonSchema = convertZodToJsonSchemaCached(mergedSchema, { unrepresentable: 'any' })
+  const jsonSchema = z.toJSONSchema(mergedSchema, { unrepresentable: 'any' })
 
   const plainRefMap = sources.reduce(
     (acc, { obj, pickKeys }) => {
