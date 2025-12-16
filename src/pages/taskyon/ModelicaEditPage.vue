@@ -264,7 +264,7 @@ import {
   matRocketLaunch,
 } from '@quasar/extras/material-icons'
 import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
-import ObjectTreeView from 'src/components/ObjectTreeView.vue'
+import ObjectTreeView from 'src/components/varViews/ObjectTreeView.vue'
 
 const jinjaTemplateUrls = import.meta.glob('app/public/modelica/*.jinja', {
   query: '?raw', // get the file content
