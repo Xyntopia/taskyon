@@ -7251,6 +7251,11 @@ dns-packet@^5.2.2, dns-packet@^5.6.1:
   dependencies:
     "@leichtgewicht/ip-codec" "^2.0.1"
 
+dockview-core@^4.11.0:
+  version "4.11.0"
+  resolved "https://registry.yarnpkg.com/dockview-core/-/dockview-core-4.11.0.tgz#fc7f012f59f4e20c1089a2173a735ea6cf2f48c1"
+  integrity sha512-v7I9fjJ7mNsRCrtN4fLeopc46mufqUEie7hszJ4m37f3zWTnj73herI30021+v5BIxgM3Et/S95fI+ibdYZbQg==
+
 dom-serializer@^1.0.1, dom-serializer@^1.3.2:
   version "1.4.1"
   resolved "https://registry.yarnpkg.com/dom-serializer/-/dom-serializer-1.4.1.tgz#de5d41b1aea290215dc45a6dae8adcf1d32e2d30"
