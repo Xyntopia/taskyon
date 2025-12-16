@@ -58,8 +58,11 @@ interface GenericMapProps {
   initialCenter: [number, number]
   initialZoom: number
   useDefaultTileLayer: boolean
+  // eslint-disable-next-line vue/require-default-prop
   tileLayerUrl?: string
+  // eslint-disable-next-line vue/require-default-prop
   tileLayerOptions?: L.TileLayerOptions
+  // eslint-disable-next-line vue/require-default-prop
   placeName?: string
 }
 
@@ -194,10 +197,7 @@ const setView = (lat: number, lng: number, zoom?: number) => {
   zoomTo(lat, lng, zoom)
 }
 
-const getMap = (): L.Map | null => {
-  console.log(`${logPrefix} getMap()`, { hasMap: !!map.value })
-  return map.value as L.Map | null
-}
+const getMap = () => map.value
 
 /**
  * Geocode a place name via Nominatim and zoom the map to the result.

@@ -76,7 +76,7 @@
 
 <script setup lang="ts">
 import { convertZodToJsonSchemaCached } from '@taskyon/taskyon'
-import ObjectTreeView from 'components/ObjectTreeView.vue'
+import ObjectTreeView from 'components/varViews/ObjectTreeView.vue'
 import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
 import LLMProviders from 'components/taskyon/LLMProviders.vue'
 import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'

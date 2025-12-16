@@ -22,7 +22,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import ObjectTreeView from '../ObjectTreeView.vue'
+import ObjectTreeView from '../varViews/ObjectTreeView.vue'
 import { type JSONSchema7 } from 'json-schema'
 import type z from 'zod'
 

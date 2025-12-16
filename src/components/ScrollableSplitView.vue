@@ -29,17 +29,6 @@
       </div>
     </q-page-container>
 
-    <!-- Fixed Taskyon rail, ALWAYS in DOM, aligned to splitter's "after" area,
-         but height clamped to viewport -->
-    <div id="taskyon-rail" class="taskyon-rail" :style="taskyonRailStyle">
-      <iframe
-        id="taskyon"
-        frameborder="0"
-        :src="taskyon.tyUrl"
-        allow="clipboard-read; clipboard-write"
-      ></iframe>
-    </div>
-
     <!-- Fixed toggle button, always same position (right middle) -->
     <div class="taskyon-toggle">
       <q-btn flat class="q-px-xs q-py-md" @click="toggleExpanded">
@@ -52,10 +41,7 @@
 <script setup lang="ts">
 import TopBar from 'src/components/TopBar.vue'
 import { syncRefsWithLocalStorage } from 'src/modules/saveState'
-import { useTaskyonStore } from 'src/stores/taskyon'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
-
-const taskyon = useTaskyonStore()
+import { nextTick, onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
 
 // q-splitter model: percentage of "before" (left / router) pane
 const splitterModel = ref(75) // router takes 75%, Joulios 25% initially
@@ -118,7 +104,6 @@ onMounted(async () => {
   await nextTick()
 
   // At this point, <iframe id="taskyon"> definitely exists
-  void taskyon.initialize()
 
   updateRailBox()
 
@@ -137,23 +122,6 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   window.removeEventListener('resize', updateRailBox)
-})
-
-const taskyonRailStyle = computed(() => {
-  const style: Record<string, string> = {
-    left: `${railBox.value.left}px`,
-    top: `${railBox.value.top}px`,
-    width: `${railBox.value.width}px`,
-    height: `${railBox.value.height}px`,
-  }
-
-  // When not expanded or not yet measured, hide purely via CSS,
-  // but keep iframe DOM node alive.
-  if (!isExpanded.value || railBox.value.width === 0 || railBox.value.height === 0) {
-    style.display = 'none'
-  }
-
-  return style
 })
 </script>
 
