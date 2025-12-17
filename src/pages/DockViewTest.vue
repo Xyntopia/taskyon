@@ -1,16 +1,10 @@
 <!-- DockViewTest.vue -->
 <template>
   <q-page class="column">
-    <header>
-      <div>
-        <q-icon :name="matAutoAwesomeMosaic" />
-        <span class="text-h2">Vue Dock Manager</span>
-      </div>
-      <!-- Removed the old "Add Editor Tab" / "Add Terminal Tab" buttons -->
-    </header>
+    <span class="text-h4 q-pa-md"> <q-icon :name="matAutoAwesomeMosaic" /> Vue Dock Manager</span>
 
     <!-- v-model:node -->
-    <q-card flat class="col column">
+    <q-card flat class="col column bg-transparent text-secondary">
       <DockView v-model:node="layout" class="col" @add-view="handleAddView">
         <!-- Explorer View -->
         <template #Explorer>
@@ -26,7 +20,7 @@
 
         <!-- Nested View -->
         <template #Nested>
-          <DockView v-model:node="nestedLayout">
+          <DockView v-model:node="nestedLayout" :show-tab-add="false" :show-tab-close="false">
             <template #nested-view>
               <div>nested view!</div>
             </template>

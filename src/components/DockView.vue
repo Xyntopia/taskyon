@@ -13,7 +13,12 @@
     <template v-if="node.type === 'container' && node.children && node.children.length">
       <template v-for="(child, index) in node.children" :key="child.id">
         <!-- Non-null assertion on children to satisfy TS (DockNode, not DockNode | undefined) -->
-        <DockView v-model:node="node.children![index]!" @add-view="onChildAddView">
+        <DockView
+          v-model:node="node.children![index]!"
+          :show-tab-add="props.showTabAdd"
+          :show-tab-close="props.showTabClose"
+          @add-view="onChildAddView"
+        >
           <!-- Forward all slots -->
           <template v-for="(_, slotName) in $slots" :key="slotName" #[slotName]="slotProps">
             <!-- slotProps is now typed as an object so v-bind is OK -->
@@ -42,11 +47,25 @@
           @click="onTabClick(index)"
         >
           <span class="dock-tab-title">{{ viewId }}</span>
-          <button class="dock-tab-close" type="button" @click.stop="onTabClose(viewId)">×</button>
+          <button
+            v-if="props.showTabClose"
+            class="dock-tab-close"
+            type="button"
+            @click.stop="onTabClose(viewId)"
+          >
+            ×
+          </button>
         </div>
 
         <!-- Plus button to add a new tab in this leaf -->
-        <button class="dock-tab-add" type="button" @click.stop="onAddTabClick">+</button>
+        <button
+          v-if="props.showTabAdd"
+          class="dock-tab-add"
+          type="button"
+          @click.stop="onAddTabClick"
+        >
+          +
+        </button>
       </div>
 
       <div class="dock-content">
@@ -99,6 +118,19 @@ export interface AddViewResult {
   /** whether the new tab should become active (default: true) */
   makeActive?: boolean
 }
+
+const props = withDefaults(
+  defineProps<{
+    /** Show the "x" close button on each tab (default: true) */
+    showTabClose?: boolean
+    /** Show the "+" add-tab button (default: true) */
+    showTabAdd?: boolean
+  }>(),
+  {
+    showTabClose: true,
+    showTabAdd: true,
+  },
+)
 
 /** Callback that the parent calls once it knows what to add */
 export type AddViewDone = (result: AddViewResult | null | undefined) => void
@@ -306,6 +338,7 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 /* Splitter */
 .dock-splitter {
   flex-shrink: 0;
+  background-color: currentColor;
 }
 
 .dock-splitter.row {
@@ -345,22 +378,18 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   overflow: hidden;
 }
 
-.dock-tab-close {
-  margin-left: 0.25rem;
-  border: none;
-  background: none;
-  cursor: pointer;
-}
-
-/* "+" button */
+.dock-tab-close,
 .dock-tab-add {
-  margin-left: 0.5rem;
+  margin-left: 0.25rem;
   border: none;
   background: none;
   cursor: pointer;
   padding: 0 0.25rem;
   flex-shrink: 0;
   font-size: 1rem;
+
+  /* new: match text color */
+  color: inherit;
 }
 
 /* Content */
