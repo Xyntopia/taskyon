@@ -34,8 +34,11 @@
         <div
           v-if="index < node.children.length - 1"
           class="dock-splitter"
-          :class="node.direction"
-          @mousedown="startResize(index, $event)"
+          :class="[
+            node.direction,
+            isSplitterResizable(index) ? 'dock-splitter--enabled' : 'dock-splitter--disabled',
+          ]"
+          @mousedown="isSplitterResizable(index) && startResize(index, $event)"
         ></div>
       </template>
     </template>
@@ -200,6 +203,18 @@ const emit = defineEmits<{
 }>()
 
 /* ---------- Pure helpers ---------- */
+
+const isSplitterResizable = (splitterIndex: number): boolean => {
+  const n = node.value
+  if (n.type !== 'container' || !n.children) return false
+
+  const left = n.children[splitterIndex]
+  const right = n.children[splitterIndex + 1]
+  if (!left || !right) return false
+
+  // disable if either side is content-sized
+  return left.sizeMode !== 'content' && right.sizeMode !== 'content'
+}
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value))
@@ -408,7 +423,7 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   position: relative;
   flex-shrink: 0;
   /* very subtle by default */
-  color: rgba(0, 0, 0, 0.14);
+  color: rgba(0, 0, 0, 0.11);
   background: transparent;
   transition:
     background-color 0.15s ease,
@@ -418,12 +433,19 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 /* Horizontal split (vertical splitter line) */
 .dock-splitter.row {
   width: 8px;
-  cursor: col-resize;
 }
 
 /* Vertical split (horizontal splitter line) */
 .dock-splitter.column {
   height: 8px;
+}
+
+/* Only enabled splitters get resize cursors */
+.dock-splitter--enabled.row {
+  cursor: col-resize;
+}
+
+.dock-splitter--enabled.column {
   cursor: row-resize;
 }
 
@@ -441,7 +463,7 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 
 /* Idle: thin, low contrast line */
 .dock-splitter.row::before {
-  width: 1px;
+  width: 2px;
   top: 4px;
   bottom: 4px;
   left: 50%;
@@ -449,25 +471,25 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 }
 
 .dock-splitter.column::before {
-  height: 1px;
+  height: 2px;
   left: 4px;
   right: 4px;
   top: 50%;
   transform: translateY(-50%);
 }
 
-/* Hover: stronger color, slight background, thicker line */
-.dock-splitter:hover {
+/* Hover: stronger color, slight background, thicker line – only when enabled */
+.dock-splitter--enabled:hover {
   color: rgba(0, 0, 0, 0.45);
   background-color: rgba(0, 0, 0, 0.04);
 }
 
-.dock-splitter.row:hover::before {
-  width: 8px;
+.dock-splitter--enabled.row:hover::before {
+  width: 4px;
 }
 
-.dock-splitter.column:hover::before {
-  height: 8px;
+.dock-splitter--enabled.column:hover::before {
+  height: 4px;
 }
 
 /* Tabs */
