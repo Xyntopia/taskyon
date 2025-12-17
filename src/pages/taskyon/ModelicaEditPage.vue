@@ -84,7 +84,7 @@
 
       <template #modelica>
         <!-- Modelica source -->
-        <div>
+        <q-card flat>
           <q-btn
             color="grey-7"
             flat
@@ -98,11 +98,11 @@
             placeholder="Enter your Modelica code here..."
             language="modelica"
           />
-        </div>
+        </q-card>
       </template>
 
       <template #template>
-        <div>
+        <q-card flat>
           <q-btn
             color="grey-7"
             flat
@@ -116,7 +116,7 @@
             placeholder="Enter your Jinja template here..."
             language="jinja2"
           />
-        </div>
+        </q-card>
       </template>
 
       <template #model>
@@ -154,32 +154,24 @@
               <q-tab name="daePretty" label="Pretty" />
             </q-tabs>
 
-            <q-tab-panels v-model="outputTab" animated>
-              <q-tab-panel name="js">
+            <q-tab-panels v-model="outputTab" animated class="bg-grey-3">
+              <div name="js">
                 <CodeEditor
                   v-model="jsSource"
                   placeholder="Generated Code will appear here..."
                   language="javascript"
                 />
-              </q-tab-panel>
+              </div>
 
-              <q-tab-panel name="daeJson">
+              <div name="daeJson">
                 <ObjectTreeView v-model="daeJsonOutput" />
-              </q-tab-panel>
+              </div>
 
-              <q-tab-panel name="daePretty">
-                <q-input
-                  v-model="daePrettyOutput"
-                  type="textarea"
-                  outlined
-                  readonly
-                  placeholder="Pretty-printed DAE will appear here..."
-                  :rows="20"
-                  input-class="text-code"
-                  bg-color="grey-10"
-                  dark
-                />
-              </q-tab-panel>
+              <div name="daePretty">
+                <pre>
+                {{ daePrettyOutput }}
+                </pre>
+              </div>
             </q-tab-panels>
           </div>
         </div>
