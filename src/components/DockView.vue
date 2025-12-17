@@ -6,6 +6,7 @@
     :class="{
       'dock-row': node.type === 'container' && node.direction === 'row',
       'dock-col': node.type === 'container' && node.direction === 'column',
+      'dock-resizing': isResizing,
     }"
     :style="nodeStyle"
   >
@@ -388,6 +389,10 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 /* Default direction for leaf nodes */
 .dock-node:not(.dock-row):not(.dock-col) {
   flex-direction: column;
+}
+
+.dock-resizing :deep(iframe) {
+  pointer-events: none !important;
 }
 
 .dock-row {
