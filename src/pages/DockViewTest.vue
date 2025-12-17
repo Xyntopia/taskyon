@@ -1,93 +1,369 @@
-<!-- src/pages/DockViewTest.vue -->
 <template>
-  <q-page class="q-pa-md column">
-    <div class="text-h5 q-mb-md">Dockview + Vue slots + createReusableTemplate Demo</div>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="logo">
+        <Layout class="icon" />
+        <span>Vue Dock Manager</span>
+      </div>
+      <div class="controls">
+        <button class="btn" @click="addView('editors', `New_File_${nextId++}`)">
+          <Plus size="14" /> Add Editor Tab
+        </button>
+        <button class="btn" @click="addView('panel', `Process_${nextId++}`)">
+          <Terminal size="14" /> Add Terminal Tab
+        </button>
+      </div>
+    </header>
 
-    <div class="col bg-grey-10 rounded-borders overflow-hidden">
-      <DockView class="full-height">
-        <!-- Editor pane -->
-        <template #Editor>
-          <div class="q-pa-sm column full-height">
-            <div class="text-subtitle1 q-mb-sm">Editor</div>
-            <q-input
-              v-model="editorText"
-              type="textarea"
-              filled
-              autogrow
-              class="col"
-              label="Type something..."
-            />
+    <main class="dock-area">
+      <DockView :node="layout" :is-root="true" @close-view="handleCloseView">
+        <!-- Dynamic Slots for Content -->
+
+        <!-- Explorer View -->
+        <template #Explorer>
+          <div class="panel-content sidebar">
+            <h3>Files</h3>
+            <ul>
+              <li><FileText size="14" /> src/App.vue</li>
+              <li><FileText size="14" /> src/main.ts</li>
+              <li><FileText size="14" /> src/components/DockView.vue</li>
+            </ul>
           </div>
         </template>
 
-        <!-- Console pane -->
-        <template #Console>
-          <div class="q-pa-sm column full-height">
-            <div class="text-subtitle1 q-mb-sm">Console</div>
-            <q-scroll-area class="col" style="border: 1px solid rgba(255, 255, 255, 0.1)">
-              <pre class="q-pa-sm">{{ editorText }}</pre>
-            </q-scroll-area>
+        <template #Search>
+          <div class="panel-content sidebar">
+            <input type="text" placeholder="Search files..." class="search-input" />
+            <div class="empty-state">No results</div>
           </div>
         </template>
 
-        <!-- Help pane -->
-        <template #Help>
-          <div class="q-pa-sm column full-height">
-            <div class="text-subtitle1 q-mb-sm">Help</div>
-            <div class="text-body2">
-              <p>This demo shows how to:</p>
-              <ul>
-                <li>Map named Vue slots to Dockview panels.</li>
-                <li>
-                  Reuse the slot templates with
-                  <code>createReusableTemplate</code>.
-                </li>
-                <li>Drag, dock, and rearrange the panels freely.</li>
-              </ul>
-              <p>Try:</p>
-              <ol>
-                <li>Dragging panel headers to re-arrange panels.</li>
-                <li>Docking panels side by side.</li>
-              </ol>
+        <!-- Editor Views -->
+        <template v-for="view in ['App.vue', 'main.ts', 'styles.css']" :key="view" #[view]>
+          <div class="panel-content editor">
+            <div class="line-numbers">
+              <span v-for="n in 20" :key="n">{{ n }}</span>
+            </div>
+            <div class="code">
+              <pre>
+// Content of {{ view }}
+import { defineComponent } from 'vue';
+
+export default defineComponent({
+  name: '{{ view.replace('.vue', '') }}',
+  setup() {
+    return {};
+  }
+});</pre
+              >
             </div>
           </div>
         </template>
+
+        <!-- Terminal Views -->
+        <template #Terminal>
+          <div class="panel-content terminal">
+            <div>$ npm run dev</div>
+            <div class="success">Ready in 300ms.</div>
+            <div>> Network: http://localhost:5000/</div>
+            <div class="cursor">_</div>
+          </div>
+        </template>
+
+        <template #Output>
+          <div class="panel-content terminal">
+            <div>[Log] Application mounted.</div>
+            <div>[Info] Dock layout initialized.</div>
+          </div>
+        </template>
+
+        <!-- Fallback for dynamically added tabs -->
+        <template v-for="n in 20" :key="getNewFileSlotName(n)" #[getNewFileSlotName(n)]>
+          <div class="panel-content editor">
+            <div class="empty-state">New Empty File {{ n }}</div>
+          </div>
+        </template>
+
+        <template v-for="n in 20" :key="getProcessSlotName(n)" #[getProcessSlotName(n)]>
+          <div class="panel-content terminal">
+            <div>Process {{ n }} running...</div>
+          </div>
+        </template>
       </DockView>
-    </div>
-  </q-page>
+    </main>
+  </div>
 </template>
 
 <script setup lang="ts">
-import DockView from 'src/components/DockView.vue'
-import { ref, watch, onMounted } from 'vue'
+import { reactive, ref } from 'vue'
+import type { DockNode } from 'components/DockView.vue'
+import DockView from 'components/DockView.vue'
 
-const editorText = ref('Hello Dockview + Vue slots 👋')
+// --- State ---
+const nextId = ref(1)
 
-console.log('[DockviewSlotsDemoPage] setup: initial editorText:', editorText.value)
-
-watch(
-  editorText,
-  (newVal, oldVal) => {
-    console.log('[DockviewSlotsDemoPage] editorText changed:', {
-      old: oldVal,
-      new: newVal,
-    })
-  },
-  { immediate: true },
-)
-
-onMounted(() => {
-  console.log('[DockviewSlotsDemoPage] onMounted')
+const layout = reactive<DockNode>({
+  id: 'root',
+  type: 'container',
+  direction: 'row',
+  children: [
+    {
+      id: 'sidebar',
+      type: 'leaf',
+      size: 20,
+      views: ['Explorer', 'Search'],
+      activeViewIndex: 0,
+    },
+    {
+      id: 'main',
+      type: 'container',
+      direction: 'column',
+      size: 80,
+      children: [
+        {
+          id: 'editors',
+          type: 'leaf',
+          size: 70,
+          views: ['App.vue', 'main.ts', 'styles.css'],
+          activeViewIndex: 0,
+        },
+        {
+          id: 'panel',
+          type: 'leaf',
+          size: 30,
+          views: ['Terminal', 'Output'],
+          activeViewIndex: 0,
+        },
+      ],
+    },
+  ],
 })
-</script>
 
-<style scoped>
-.full-height {
-  height: 100%;
+// --- Actions ---
+const handleCloseView = (nodeId: string, viewId: string) => {
+  const findAndRemove = (node: DockNode): boolean => {
+    if (node.id === nodeId && node.views) {
+      const idx = node.views.indexOf(viewId)
+      if (idx !== -1) {
+        node.views.splice(idx, 1)
+        if (node.activeViewIndex !== undefined) {
+          if (node.activeViewIndex >= node.views.length) {
+            node.activeViewIndex = Math.max(0, node.views.length - 1)
+          }
+        }
+        return true
+      }
+    }
+    if (node.children) {
+      for (const child of node.children) {
+        if (findAndRemove(child)) return true
+      }
+    }
+    return false
+  }
+  findAndRemove(layout)
 }
 
-.q-page {
+const addView = (target: 'editors' | 'sidebar' | 'panel', name: string) => {
+  const findAndAdd = (node: DockNode): boolean => {
+    if (node.id === target && node.views) {
+      node.views.push(name)
+      node.activeViewIndex = node.views.length - 1
+      return true
+    }
+    if (node.children) {
+      for (const child of node.children) {
+        if (findAndAdd(child)) return true
+      }
+    }
+    return false
+  }
+  findAndAdd(layout)
+}
+
+// Helper for dynamic slot names to avoid template parser issues
+const getNewFileSlotName = (n: number) => `New_File_${n}`
+const getProcessSlotName = (n: number) => `Process_${n}`
+</script>
+
+<style>
+/* Global Reset & Theme */
+:root {
+  --bg-dark: #1e1e1e;
+  --bg-darker: #181818;
+  --bg-light: #252526;
+  --border: #3e3e3e;
+  --accent: #007fd4;
+  --text: #cccccc;
+  --text-muted: #858585;
+}
+
+body,
+html,
+#app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans',
+    'Helvetica Neue', sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.app-container {
   display: flex;
   flex-direction: column;
+  height: 100vh;
+}
+
+.app-header {
+  height: 40px;
+  background-color: var(--bg-light);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  justify-content: space-between;
+}
+
+.logo {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  background: var(--accent);
+  border: none;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn:hover {
+  opacity: 0.9;
+}
+
+.dock-area {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Panel Content Styles */
+.panel-content {
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+  position: relative;
+}
+
+.panel-content.sidebar {
+  padding: 10px;
+  background-color: var(--bg-light);
+}
+
+.panel-content.sidebar ul {
+  list-style: none;
+  padding: 0;
+  margin-top: 10px;
+}
+
+.panel-content.sidebar li {
+  padding: 4px 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.panel-content.sidebar li:hover {
+  background-color: #2a2d2e;
+  color: var(--text);
+}
+
+.search-input {
+  width: 100%;
+  padding: 6px;
+  background: #3c3c3c;
+  border: 1px solid transparent;
+  color: white;
+  border-radius: 2px;
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.panel-content.editor {
+  display: flex;
+  background-color: var(--bg-dark);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 14px;
+}
+
+.line-numbers {
+  width: 50px;
+  background-color: var(--bg-dark);
+  color: #6e7681;
+  text-align: right;
+  padding-right: 15px;
+  padding-top: 10px;
+  user-select: none;
+  border-right: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+}
+
+.code {
+  flex: 1;
+  padding: 10px;
+}
+
+.panel-content.terminal {
+  background-color: var(--bg-dark);
+  padding: 10px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+}
+
+.success {
+  color: #4ec9b0;
+}
+
+.cursor {
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
 }
 </style>

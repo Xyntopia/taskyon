@@ -14,12 +14,12 @@
     <template v-if="node.type === 'container' && node.children">
       <template v-for="(child, index) in node.children" :key="child.id">
         <!-- Recursive Child -->
-        <DockLayout :node="child" @close-view="(nId, vId) => emit('close-view', nId, vId)">
+        <DockView :node="child" @close-view="(nId, vId) => emit('close-view', nId, vId)">
           <!-- Forward all slots -->
           <template v-for="(_, slot) in $slots" #[slot]="scope">
             <slot :name="slot" v-bind="scope" />
           </template>
-        </DockLayout>
+        </DockView>
 
         <!-- Splitter -->
         <div
