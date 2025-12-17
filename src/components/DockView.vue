@@ -89,11 +89,22 @@
         </button>
       </div>
 
-      <div class="dock-content">
+      <!-- Content-sized leaves: keep simple, participate in layout -->
+      <div v-if="isContentSizedLeaf" class="dock-content dock-content--content">
         <template v-if="node.views && node.views.length > 0">
           <slot :name="node.views[node.activeViewIndex ?? 0]" />
         </template>
         <div v-else class="dock-empty">No Views</div>
+      </div>
+
+      <!-- Weight-based leaves: isolate content in an absolute scroller -->
+      <div v-else class="dock-content dock-content--weight">
+        <div class="dock-content-inner">
+          <template v-if="node.views && node.views.length > 0">
+            <slot :name="node.views[node.activeViewIndex ?? 0]" />
+          </template>
+          <div v-else class="dock-empty">No Views</div>
+        </div>
       </div>
     </template>
   </div>
@@ -313,6 +324,10 @@ const nodeStyle = computed(() => {
 const containerRef = ref<HTMLElement | null>(null)
 const isResizing = ref(false)
 const activeSplitterIndex = ref(-1)
+
+const isContentSizedLeaf = computed(
+  () => node.value.type === 'leaf' && (node.value.sizeMode ?? 'weight') === 'content',
+)
 
 const handleMouseMove = (event: MouseEvent) => {
   if (!isResizing.value || !containerRef.value) return
@@ -558,15 +573,39 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 }
 
 /* Content */
+/* Base: shared bits */
 .dock-content {
-  flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
 }
 
+/* For sizeMode: 'content' leaves (e.g. 'actions') */
+.dock-content--content {
+  /* Let the content define the leaf's size; do NOT try to fill */
+  flex: 0 0 auto; /* or just omit 'flex' entirely */
+  overflow: visible; /* content can spill as needed */
+}
+
+/* For weight-based leaves (editors, etc.) */
+.dock-content--weight {
+  position: relative;
+  flex: 1 1 0;
+  overflow: hidden; /* isolate scrollable inner layer */
+}
+
+/* Absolute inner scroller ONLY for weight-based leaves */
+.dock-content-inner {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Optional: make "No Views" fill the available area in weight-based leaves.
+   For content leaves, you typically won't hit .dock-empty anyway. */
 .dock-empty {
-  flex: 1;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
