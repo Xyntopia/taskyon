@@ -1,4 +1,4 @@
-<!--DockViewTest.vue-->
+<!-- DockViewTest.vue -->
 <template>
   <q-page class="column">
     <header>
@@ -6,25 +6,12 @@
         <q-icon :name="matAutoAwesomeMosaic" />
         <span class="text-h2">Vue Dock Manager</span>
       </div>
-      <div>
-        <q-btn
-          flat
-          label="Add Editor Tab"
-          :icon="matAdd"
-          @click="addView('editors', `New_File_${nextId++}`)"
-        />
-        <q-btn
-          flat
-          label="Add Terminal Tab"
-          :icon="matAdd"
-          @click="addView('panel', `Process_${nextId++}`)"
-        />
-      </div>
+      <!-- Removed the old "Add Editor Tab" / "Add Terminal Tab" buttons -->
     </header>
 
-    <!-- New API: v-model:node -->
+    <!-- v-model:node -->
     <q-card flat class="col column">
-      <DockView v-model:node="layout" class="col">
+      <DockView v-model:node="layout" class="col" @add-view="handleAddView">
         <!-- Explorer View -->
         <template #Explorer>
           <q-card class="fit">
@@ -80,13 +67,14 @@ export default defineComponent({
           </div>
         </template>
 
-        <!-- Fallback for dynamically added tabs -->
+        <!-- Fallback for dynamically added tabs (editors) -->
         <template v-for="n in 20" :key="getNewFileSlotName(n)" #[getNewFileSlotName(n)]>
           <div>
             <div>New Empty File {{ n }}</div>
           </div>
         </template>
 
+        <!-- Fallback for dynamically added tabs (processes) -->
         <template v-for="n in 20" :key="getProcessSlotName(n)" #[getProcessSlotName(n)]>
           <div>
             <div>Process {{ n }} running...</div>
@@ -99,11 +87,10 @@ export default defineComponent({
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { DockNode } from 'components/DockView.vue'
+import type { DockNode, AddViewContext, AddViewDone } from 'components/DockView.vue'
 import DockView from 'components/DockView.vue'
 
-/* icons omitted here – keep your own imports */
-import { matAdd, matAutoAwesomeMosaic } from '@quasar/extras/material-icons'
+import { matAutoAwesomeMosaic } from '@quasar/extras/material-icons'
 
 /* ---------- Initial layout ---------- */
 
@@ -147,46 +134,32 @@ const createInitialLayout = (): DockNode => ({
 const layout = ref<DockNode>(createInitialLayout())
 const nextId = ref(1)
 
-/* ---------- Pure helpers for tree updates ---------- */
+/* ---------- Helpers for dynamic slot names ---------- */
 
-// Generic depth-first update by id (returns a new tree)
-const updateNodeById = (
-  node: DockNode,
-  targetId: string,
-  updater: (node: DockNode) => DockNode,
-): DockNode => {
-  if (node.id === targetId) {
-    return updater(node)
-  }
-
-  if (node.type === 'container' && node.children && node.children.length) {
-    let changed = false
-    const newChildren = node.children.map((child) => {
-      const updated = updateNodeById(child, targetId, updater)
-      if (updated !== child) changed = true
-      return updated
-    })
-    if (changed) {
-      return { ...node, children: newChildren }
-    }
-  }
-
-  return node
-}
-
-const addViewToLeaf = (node: DockNode, name: string): DockNode => {
-  if (node.type !== 'leaf') return node
-  const views = [...(node.views ?? []), name]
-  return { ...node, views, activeViewIndex: views.length - 1 }
-}
-
-/* ---------- Actions ---------- */
-
-const addView = (target: 'editors' | 'sidebar' | 'panel', name: string) => {
-  layout.value = updateNodeById(layout.value, target, (n) => addViewToLeaf(n, name))
-}
-
-// Helpers for dynamic slot names
 const getNewFileSlotName = (n: number) => `New_File_${n}`
 const getProcessSlotName = (n: number) => `Process_${n}`
+
+/* ---------- Handle add-view from DockView ---------- */
+
+/**
+ * Decide what kind of view to add based on which leaf the "+" was clicked in.
+ * For now:
+ *  - in 'editors' → add New_File_X
+ *  - in 'panel'   → add Process_X
+ *  - in others    → do nothing
+ */
+const handleAddView = (ctx: AddViewContext, done: AddViewDone) => {
+  if (ctx.leafId === 'editors') {
+    const id = nextId.value++
+    const viewId = getNewFileSlotName(id)
+    done({ viewId, makeActive: true })
+  } else if (ctx.leafId === 'panel') {
+    const id = nextId.value++
+    const viewId = getProcessSlotName(id)
+    done({ viewId, makeActive: true })
+  } else {
+    // For now, do nothing for sidebar or unknown leaves
+    done(null)
+  }
+}
 </script>

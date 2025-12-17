@@ -1,4 +1,4 @@
-<!--DockView.vue-->
+<!-- DockView.vue -->
 <template>
   <div
     ref="containerRef"
@@ -13,7 +13,7 @@
     <template v-if="node.type === 'container' && node.children && node.children.length">
       <template v-for="(child, index) in node.children" :key="child.id">
         <!-- Non-null assertion on children to satisfy TS (DockNode, not DockNode | undefined) -->
-        <DockView v-model:node="node.children![index]!">
+        <DockView v-model:node="node.children![index]!" @add-view="onChildAddView">
           <!-- Forward all slots -->
           <template v-for="(_, slotName) in $slots" :key="slotName" #[slotName]="slotProps">
             <!-- slotProps is now typed as an object so v-bind is OK -->
@@ -44,6 +44,9 @@
           <span class="dock-tab-title">{{ viewId }}</span>
           <button class="dock-tab-close" type="button" @click.stop="onTabClose(viewId)">×</button>
         </div>
+
+        <!-- Plus button to add a new tab in this leaf -->
+        <button class="dock-tab-add" type="button" @click.stop="onAddTabClick">+</button>
       </div>
 
       <div class="dock-content">
@@ -57,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onUnmounted } from 'vue'
+import { ref, onUnmounted, useSlots } from 'vue'
 
 /* ---------- Types ---------- */
 
@@ -79,6 +82,27 @@ export interface DockNode {
   size?: number // flex weight
 }
 
+/* ---------- Add-view event types ---------- */
+
+export interface AddViewContext {
+  /** id of the leaf where "+" was clicked (e.g. "editors", "panel", "sidebar") */
+  leafId: string
+  /** current view ids (slot names) in that leaf */
+  currentViews: string[]
+  /** all slot names available on this DockView instance */
+  availableViewTypes: string[]
+}
+
+export interface AddViewResult {
+  /** name of the slot to add as a new tab (e.g. "New_File_3", "Process_2") */
+  viewId: string
+  /** whether the new tab should become active (default: true) */
+  makeActive?: boolean
+}
+
+/** Callback that the parent calls once it knows what to add */
+export type AddViewDone = (result: AddViewResult | null | undefined) => void
+
 /* ---------- v-model ---------- */
 
 // Expose `v-model:node`
@@ -93,6 +117,14 @@ const node = nodeModel
  * Using `unknown` here would cause the "Spread types may only be created from object types" error.
  */
 defineSlots<Record<string, (props: Record<string, unknown>) => unknown>>()
+
+const slots = useSlots()
+
+/* ---------- Emits ---------- */
+
+const emit = defineEmits<{
+  (e: 'add-view', ctx: AddViewContext, done: AddViewDone): void
+}>()
 
 /* ---------- Pure helpers (functional style) ---------- */
 
@@ -150,6 +182,14 @@ const resizeChildren = (n: DockNode, splitterIndex: number, deltaWeight: number)
   return { ...n, children: newChildren }
 }
 
+/** Add a view id to a leaf node (used when "+" is confirmed by parent) */
+const addViewToLeaf = (n: DockNode, viewId: string, makeActive = true): DockNode => {
+  if (n.type !== 'leaf') return n
+  const views = [...(n.views ?? []), viewId]
+  const activeViewIndex = makeActive ? views.length - 1 : (n.activeViewIndex ?? 0)
+  return { ...n, views, activeViewIndex }
+}
+
 /* ---------- Resizing logic ---------- */
 
 const containerRef = ref<HTMLElement | null>(null)
@@ -199,7 +239,7 @@ onUnmounted(() => {
   stopResize()
 })
 
-/* ---------- Tab handlers (wrap pure helpers) ---------- */
+/* ---------- Tab handlers ---------- */
 
 const onTabClick = (index: number) => {
   node.value = setActiveView(node.value, index)
@@ -207,6 +247,37 @@ const onTabClick = (index: number) => {
 
 const onTabClose = (viewId: string) => {
   node.value = closeView(node.value, viewId)
+}
+
+/* ---------- Add tab ("+") handlers ---------- */
+
+/**
+ * Called when "+" in a leaf tab bar is clicked.
+ * Emits 'add-view' with context and a callback to complete the addition.
+ */
+const onAddTabClick = () => {
+  if (node.value.type !== 'leaf') return
+
+  const ctx: AddViewContext = {
+    leafId: node.value.id,
+    currentViews: node.value.views ?? [],
+    availableViewTypes: Object.keys(slots),
+  }
+
+  const done: AddViewDone = (result) => {
+    if (!result || !result.viewId) return
+    node.value = addViewToLeaf(node.value, result.viewId, result.makeActive ?? true)
+  }
+
+  emit('add-view', ctx, done)
+}
+
+/**
+ * Forward add-view events from children up the tree.
+ * This way the top-level parent (DockViewTest) can handle everything.
+ */
+const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
+  emit('add-view', ctx, done)
 }
 </script>
 
@@ -252,6 +323,7 @@ const onTabClose = (viewId: string) => {
   display: flex;
   flex-shrink: 0;
   overflow-x: auto;
+  align-items: center;
 }
 
 .dock-tab {
@@ -278,6 +350,17 @@ const onTabClose = (viewId: string) => {
   border: none;
   background: none;
   cursor: pointer;
+}
+
+/* "+" button */
+.dock-tab-add {
+  margin-left: 0.5rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  flex-shrink: 0;
+  font-size: 1rem;
 }
 
 /* Content */
