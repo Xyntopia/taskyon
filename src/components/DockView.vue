@@ -337,18 +337,53 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 
 /* Splitter */
 .dock-splitter {
+  position: relative;
   flex-shrink: 0;
-  background-color: currentColor;
+  /* hit area color not really visible; inner line uses currentColor */
 }
 
+/* Horizontal split (vertical splitter line) */
 .dock-splitter.row {
-  width: 4px;
+  /* Wider hitbox, still easy to grab */
+  width: 8px;
   cursor: col-resize;
 }
 
+/* Vertical split (horizontal splitter line) */
 .dock-splitter.column {
-  height: 4px;
+  /* Taller hitbox, still easy to grab */
+  height: 8px;
   cursor: row-resize;
+}
+
+/* Actual visible line */
+.dock-splitter::before {
+  content: '';
+  position: absolute;
+  background-color: currentColor; /* matches text color */
+  border-radius: 999px; /* fully rounded ends */
+}
+
+/* Inner line for vertical splitter (between left/right panels) */
+.dock-splitter.row::before {
+  /* Thin vertical line */
+  width: 2px;
+  /* leave small gaps top/bottom so it does not touch panels */
+  top: 4px;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Inner line for horizontal splitter (between top/bottom panels) */
+.dock-splitter.column::before {
+  /* Thin horizontal line */
+  height: 2px;
+  /* leave small gaps left/right so it does not touch panels */
+  left: 4px;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 /* Tabs */
