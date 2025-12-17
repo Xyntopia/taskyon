@@ -76,7 +76,7 @@
           v-model="currentContent"
           class="col"
           placeholder="Write here..."
-          language="markdown"
+          language="javascript"
           style="max-height: 87vh"
           @update:model-value="onContentChange"
         />

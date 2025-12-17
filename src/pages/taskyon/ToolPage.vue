@@ -98,7 +98,7 @@
                 label="copy as js string"
                 @click="copyAsJsString(toolDraft.code)"
               />
-              <CodeEditor v-model="toolDraft.code" />
+              <CodeEditor v-model="toolDraft.code" language="javascript" />
             </div>
             <div v-else>
               This tool dosn't contain any code. It might be a taskyon-internal tool, an external
@@ -157,11 +157,11 @@ import {
 } from '@quasar/extras/mdi-v6'
 import type { InternalTool, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { craeteToolJsonSchema, createTaskNode, ToolBase } from '@taskyon/taskyon'
-import { copyToClipboard } from 'quasar'
-import JsonInput from 'src/components/varViews/JsonInput.vue'
 import ObjectTreeView from 'components/varViews/ObjectTreeView.vue'
+import { copyToClipboard } from 'quasar'
 import TaskChainPublishDialog from 'src/components/taskyon/TaskChainPublishDialog.vue'
 import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
+import JsonInput from 'src/components/varViews/JsonInput.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
