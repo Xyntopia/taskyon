@@ -2,31 +2,36 @@
   <div class="app-container">
     <header class="app-header">
       <div class="logo">
-        <Layout class="icon" />
+        <q-icon :name="matAutoAwesomeMosaic" />
         <span>Vue Dock Manager</span>
       </div>
       <div class="controls">
-        <button class="btn" @click="addView('editors', `New_File_${nextId++}`)">
-          <Plus size="14" /> Add Editor Tab
-        </button>
-        <button class="btn" @click="addView('panel', `Process_${nextId++}`)">
-          <Terminal size="14" /> Add Terminal Tab
-        </button>
+        <q-btn
+          flat
+          label="Add Editor Tab"
+          :icon="matAdd"
+          @click="addView('editors', `New_File_${nextId++}`)"
+        />
+        <q-btn
+          flat
+          label="Add Terminal Tab"
+          :icon="matAdd"
+          @click="addView('panel', `Process_${nextId++}`)"
+        />
       </div>
     </header>
 
     <main class="dock-area">
-      <DockView :node="layout" :is-root="true" @close-view="handleCloseView">
-        <!-- Dynamic Slots for Content -->
-
+      <!-- New API: v-model:node -->
+      <DockView v-model:node="layout">
         <!-- Explorer View -->
         <template #Explorer>
           <div class="panel-content sidebar">
             <h3>Files</h3>
             <ul>
-              <li><FileText size="14" /> src/App.vue</li>
-              <li><FileText size="14" /> src/main.ts</li>
-              <li><FileText size="14" /> src/components/DockView.vue</li>
+              <li>src/App.vue</li>
+              <li>src/main.ts</li>
+              <li>src/components/DockView.vue</li>
             </ul>
           </div>
         </template>
@@ -95,14 +100,16 @@ export default defineComponent({
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { ref } from 'vue'
 import type { DockNode } from 'components/DockView.vue'
 import DockView from 'components/DockView.vue'
 
-// --- State ---
-const nextId = ref(1)
+/* icons omitted here – keep your own imports */
+import { matAdd, matAutoAwesomeMosaic } from '@quasar/extras/material-icons'
 
-const layout = reactive<DockNode>({
+/* ---------- Initial layout ---------- */
+
+const createInitialLayout = (): DockNode => ({
   id: 'root',
   type: 'container',
   direction: 'row',
@@ -139,55 +146,54 @@ const layout = reactive<DockNode>({
   ],
 })
 
-// --- Actions ---
-const handleCloseView = (nodeId: string, viewId: string) => {
-  const findAndRemove = (node: DockNode): boolean => {
-    if (node.id === nodeId && node.views) {
-      const idx = node.views.indexOf(viewId)
-      if (idx !== -1) {
-        node.views.splice(idx, 1)
-        if (node.activeViewIndex !== undefined) {
-          if (node.activeViewIndex >= node.views.length) {
-            node.activeViewIndex = Math.max(0, node.views.length - 1)
-          }
-        }
-        return true
-      }
-    }
-    if (node.children) {
-      for (const child of node.children) {
-        if (findAndRemove(child)) return true
-      }
-    }
-    return false
+const layout = ref<DockNode>(createInitialLayout())
+const nextId = ref(1)
+
+/* ---------- Pure helpers for tree updates ---------- */
+
+// Generic depth-first update by id (returns a new tree)
+const updateNodeById = (
+  node: DockNode,
+  targetId: string,
+  updater: (node: DockNode) => DockNode,
+): DockNode => {
+  if (node.id === targetId) {
+    return updater(node)
   }
-  findAndRemove(layout)
+
+  if (node.type === 'container' && node.children && node.children.length) {
+    let changed = false
+    const newChildren = node.children.map((child) => {
+      const updated = updateNodeById(child, targetId, updater)
+      if (updated !== child) changed = true
+      return updated
+    })
+    if (changed) {
+      return { ...node, children: newChildren }
+    }
+  }
+
+  return node
 }
+
+const addViewToLeaf = (node: DockNode, name: string): DockNode => {
+  if (node.type !== 'leaf') return node
+  const views = [...(node.views ?? []), name]
+  return { ...node, views, activeViewIndex: views.length - 1 }
+}
+
+/* ---------- Actions ---------- */
 
 const addView = (target: 'editors' | 'sidebar' | 'panel', name: string) => {
-  const findAndAdd = (node: DockNode): boolean => {
-    if (node.id === target && node.views) {
-      node.views.push(name)
-      node.activeViewIndex = node.views.length - 1
-      return true
-    }
-    if (node.children) {
-      for (const child of node.children) {
-        if (findAndAdd(child)) return true
-      }
-    }
-    return false
-  }
-  findAndAdd(layout)
+  layout.value = updateNodeById(layout.value, target, (n) => addViewToLeaf(n, name))
 }
 
-// Helper for dynamic slot names to avoid template parser issues
+// Helpers for dynamic slot names
 const getNewFileSlotName = (n: number) => `New_File_${n}`
 const getProcessSlotName = (n: number) => `Process_${n}`
 </script>
 
 <style>
-/* Global Reset & Theme */
 :root {
   --bg-dark: #1e1e1e;
   --bg-darker: #181818;
@@ -265,7 +271,7 @@ html,
   overflow: hidden;
 }
 
-/* Panel Content Styles */
+/* Panel Content Styles (unchanged, just theming the inner views) */
 .panel-content {
   height: 100%;
   width: 100%;
