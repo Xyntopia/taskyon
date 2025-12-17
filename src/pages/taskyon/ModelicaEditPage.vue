@@ -1,282 +1,259 @@
 <template>
   <FixedHeightPage class="column">
     <!-- Header -->
-    <q-card flat bordered class="q-mb-md">
-      <q-card-section>
-        <div class="text-h4 text-primary">
-          <q-icon :name="matRocketLaunch" /> Rumoca WASM Compiler
-        </div>
-        <div class="text-subtitle2 text-grey-7">
-          Test your Modelica to template compilation in the browser
-        </div>
-      </q-card-section>
+    <q-card flat class="q-mb-md">
+      <div class="text-h6 text-primary">
+        <q-icon :name="matRocketLaunch" /> Rumoca WASM Compiler
+      </div>
     </q-card>
 
-    <div class="col scroll">
-      <ScrollableSplitView class="fit">
-        <template #before>
-          <!-- Editors -->
-          <div class="row q-col-gutter-md q-mb-md">
-            <!-- Modelica source -->
-            <div class="col-12 col-md-6">
-              <q-card>
-                <q-card-section class="row items-center justify-between">
-                  <div class="text-h6"><q-icon :name="matDescription" /> Modelica Source</div>
-                  <q-btn
-                    color="grey-7"
-                    flat
-                    dense
-                    label="Copy"
-                    :disable="!modelicaSource"
-                    @click="copyModelicaToClipboard"
-                  />
-                </q-card-section>
-                <q-card-section>
-                  <q-input
-                    v-model="modelicaSource"
-                    type="textarea"
-                    outlined
-                    placeholder="Enter your Modelica code here..."
-                    :rows="15"
-                    input-class="text-code"
-                  />
-                </q-card-section>
-              </q-card>
-            </div>
-
-            <!-- Template source -->
-            <div class="col-12 col-md-6">
-              <q-card>
-                <q-card-section class="row items-center justify-between">
-                  <div class="text-h6"><q-icon :name="matCode" /> Template Source</div>
-                  <q-btn
-                    color="grey-7"
-                    flat
-                    dense
-                    label="Copy"
-                    :disable="!templateSource"
-                    @click="copyTemplateToClipboard"
-                  />
-                </q-card-section>
-                <q-card-section>
-                  <q-input
-                    v-model="templateSource"
-                    type="textarea"
-                    outlined
-                    placeholder="Enter your Jinja template here..."
-                    :rows="15"
-                    input-class="text-code"
-                  />
-                </q-card-section>
-              </q-card>
-            </div>
+    <DockView v-model:node="layout" class="col">
+      <template #before>
+        <!-- Editors -->
+        <div class="row q-col-gutter-md q-mb-md">
+          <!-- Modelica source -->
+          <div class="col-12 col-md-6">
+            <q-card>
+              <q-card-section class="row items-center justify-between">
+                <div class="text-h6"><q-icon :name="matDescription" /> Modelica Source</div>
+                <q-btn
+                  color="grey-7"
+                  flat
+                  dense
+                  label="Copy"
+                  :disable="!modelicaSource"
+                  @click="copyModelicaToClipboard"
+                />
+              </q-card-section>
+              <q-card-section>
+                <q-input
+                  v-model="modelicaSource"
+                  type="textarea"
+                  outlined
+                  placeholder="Enter your Modelica code here..."
+                  :rows="15"
+                  input-class="text-code"
+                />
+              </q-card-section>
+            </q-card>
           </div>
 
-          <!-- Actions -->
-          <q-card class="q-mb-md">
-            <q-card-section>
-              <div class="row q-gutter-sm items-center">
+          <!-- Template source -->
+          <div class="col-12 col-md-6">
+            <q-card>
+              <q-card-section class="row items-center justify-between">
+                <div class="text-h6"><q-icon :name="matCode" /> Template Source</div>
                 <q-btn
                   color="grey-7"
-                  :icon="matDelete"
-                  label="Clear All"
-                  outline
-                  @click="clearAll"
+                  flat
+                  dense
+                  label="Copy"
+                  :disable="!templateSource"
+                  @click="copyTemplateToClipboard"
                 />
-
-                <q-btn
-                  color="grey-7"
-                  :icon="matDescription"
-                  label="Load Example"
-                  outline
-                  @click="loadExample"
+              </q-card-section>
+              <q-card-section>
+                <q-input
+                  v-model="templateSource"
+                  type="textarea"
+                  outlined
+                  placeholder="Enter your Jinja template here..."
+                  :rows="15"
+                  input-class="text-code"
                 />
+              </q-card-section>
+            </q-card>
+          </div>
+        </div>
 
-                <q-toggle v-model="verbose" label="Verbose logging" />
+        <!-- Actions -->
+        <q-card class="q-mb-md">
+          <q-card-section>
+            <div class="row q-gutter-sm items-center">
+              <q-btn color="grey-7" :icon="matDelete" label="Clear All" outline @click="clearAll" />
 
-                <q-space />
-
-                <!-- Run / Stop execution -->
-                <q-btn
-                  color="secondary"
-                  :icon="matPlayArrow"
-                  label="Run in Sandbox"
-                  :disable="!jsSource"
-                  :loading="running"
-                  @click="runInSandbox"
-                />
-                <q-btn
-                  v-if="running"
-                  color="negative"
-                  label="Stop"
-                  outline
-                  @click="stopExecution"
-                />
-              </div>
-            </q-card-section>
-          </q-card>
-
-          <!-- Status banner -->
-          <q-banner
-            v-if="statusMessage"
-            :class="
-              statusType === 'error'
-                ? 'bg-negative'
-                : statusType === 'success'
-                  ? 'bg-positive'
-                  : 'bg-warning'
-            "
-            class="text-white q-mb-md"
-          >
-            <template #avatar>
-              <q-icon
-                :name="
-                  statusType === 'error'
-                    ? matError
-                    : statusType === 'success'
-                      ? matCheckCircle
-                      : matInfo
-                "
+              <q-btn
+                color="grey-7"
+                :icon="matDescription"
+                label="Load Example"
+                outline
+                @click="loadExample"
               />
-            </template>
-            {{ statusMessage }}
-          </q-banner>
 
-          <!-- Output row: Code + Execution -->
-          <div class="row q-col-gutter-md">
-            <!-- Compilation outputs (Code + DAE JSON + Pretty) -->
-            <div class="col-12 col-md-6">
-              <q-card>
-                <q-card-section class="row items-center justify-between">
-                  <div class="text-h6"><q-icon :name="matCode" /> Compilation Outputs</div>
-                  <div class="row items-center no-wrap q-gutter-xs">
-                    <q-btn
-                      color="grey-7"
-                      flat
-                      dense
-                      label="Copy JS"
-                      :disable="!jsSource"
-                      @click="copyJsToClipboard"
-                    />
-                    <q-btn
-                      color="grey-7"
-                      flat
-                      dense
-                      label="Copy DAE JSON"
-                      :disable="!daeJsonOutput"
-                      @click="copyDaeJsonToClipboard"
-                    />
-                    <q-btn
-                      color="grey-7"
-                      flat
-                      dense
-                      label="Copy Pretty"
-                      :disable="!daePrettyOutput"
-                      @click="copyDaePrettyToClipboard"
-                    />
-                  </div>
-                </q-card-section>
+              <q-toggle v-model="verbose" label="Verbose logging" />
 
-                <q-separator />
+              <q-space />
 
-                <q-card-section>
-                  <q-tabs v-model="outputTab" dense align="justify" narrow-indicator>
-                    <q-tab name="js" label="Code" />
-                    <q-tab name="daeJson" label="JSON" />
-                    <q-tab name="daePretty" label="Pretty" />
-                  </q-tabs>
-
-                  <q-tab-panels v-model="outputTab" animated>
-                    <q-tab-panel name="js">
-                      <q-input
-                        v-model="jsSource"
-                        type="textarea"
-                        outlined
-                        readonly
-                        placeholder="Generated Code will appear here..."
-                        :rows="20"
-                        input-class="text-code"
-                        bg-color="grey-10"
-                        dark
-                      />
-                    </q-tab-panel>
-
-                    <q-tab-panel name="daeJson">
-                      <ObjectTreeView v-model="daeJsonOutput" />
-                    </q-tab-panel>
-
-                    <q-tab-panel name="daePretty">
-                      <q-input
-                        v-model="daePrettyOutput"
-                        type="textarea"
-                        outlined
-                        readonly
-                        placeholder="Pretty-printed DAE will appear here..."
-                        :rows="20"
-                        input-class="text-code"
-                        bg-color="grey-10"
-                        dark
-                      />
-                    </q-tab-panel>
-                  </q-tab-panels>
-                </q-card-section>
-              </q-card>
+              <!-- Run / Stop execution -->
+              <q-btn
+                color="secondary"
+                :icon="matPlayArrow"
+                label="Run in Sandbox"
+                :disable="!jsSource"
+                :loading="running"
+                @click="runInSandbox"
+              />
+              <q-btn v-if="running" color="negative" label="Stop" outline @click="stopExecution" />
             </div>
+          </q-card-section>
+        </q-card>
 
-            <!-- Execution / Result -->
-            <div class="col-12 col-md-6">
-              <q-card>
-                <q-card-section>
-                  <div class="text-h6">
-                    <q-icon :name="matOutput" /> Execution (Sandboxed Iframe)
-                  </div>
-                </q-card-section>
+        <!-- Status banner -->
+        <q-banner
+          v-if="statusMessage"
+          :class="
+            statusType === 'error'
+              ? 'bg-negative'
+              : statusType === 'success'
+                ? 'bg-positive'
+                : 'bg-warning'
+          "
+          class="text-white q-mb-md"
+        >
+          <template #avatar>
+            <q-icon
+              :name="
+                statusType === 'error'
+                  ? matError
+                  : statusType === 'success'
+                    ? matCheckCircle
+                    : matInfo
+              "
+            />
+          </template>
+          {{ statusMessage }}
+        </q-banner>
 
-                <q-card-section>
-                  <div class="row q-col-gutter-sm">
-                    <div class="col-4">
-                      <q-input v-model.number="simT0" type="number" outlined label="t0" />
-                    </div>
-                    <div class="col-4">
-                      <q-input v-model.number="simTf" type="number" outlined label="tf" />
-                    </div>
-                    <div class="col-4">
-                      <q-input v-model.number="simDt" type="number" outlined label="dt" />
-                    </div>
-                  </div>
-                </q-card-section>
+        <!-- Output row: Code + Execution -->
+        <div class="row q-col-gutter-md">
+          <!-- Compilation outputs (Code + DAE JSON + Pretty) -->
+          <div class="col-12 col-md-6">
+            <q-card>
+              <q-card-section class="row items-center justify-between">
+                <div class="text-h6"><q-icon :name="matCode" /> Compilation Outputs</div>
+                <div class="row items-center no-wrap q-gutter-xs">
+                  <q-btn
+                    color="grey-7"
+                    flat
+                    dense
+                    label="Copy JS"
+                    :disable="!jsSource"
+                    @click="copyJsToClipboard"
+                  />
+                  <q-btn
+                    color="grey-7"
+                    flat
+                    dense
+                    label="Copy DAE JSON"
+                    :disable="!daeJsonOutput"
+                    @click="copyDaeJsonToClipboard"
+                  />
+                  <q-btn
+                    color="grey-7"
+                    flat
+                    dense
+                    label="Copy Pretty"
+                    :disable="!daePrettyOutput"
+                    @click="copyDaePrettyToClipboard"
+                  />
+                </div>
+              </q-card-section>
 
-                <q-card-section v-if="executionError">
-                  <q-banner class="bg-negative text-white">
-                    <template #avatar>
-                      <q-icon :name="matError" />
-                    </template>
-                    {{ executionError }}
-                  </q-banner>
-                </q-card-section>
+              <q-separator />
 
-                <q-card-section v-if="executionResult && Object.keys(executionResult).length">
-                  <ObjectTreeView v-model="executionResult" dense hide-missing read-only />
-                </q-card-section>
+              <q-card-section>
+                <q-tabs v-model="outputTab" dense align="justify" narrow-indicator>
+                  <q-tab name="js" label="Code" />
+                  <q-tab name="daeJson" label="JSON" />
+                  <q-tab name="daePretty" label="Pretty" />
+                </q-tabs>
 
-                <q-card-section v-else-if="!executionError">
-                  <div class="text-grey-7">
-                    No execution result yet. Compile and click “Run in Sandbox”.
-                  </div>
-                </q-card-section>
-              </q-card>
-            </div>
+                <q-tab-panels v-model="outputTab" animated>
+                  <q-tab-panel name="js">
+                    <q-input
+                      v-model="jsSource"
+                      type="textarea"
+                      outlined
+                      readonly
+                      placeholder="Generated Code will appear here..."
+                      :rows="20"
+                      input-class="text-code"
+                      bg-color="grey-10"
+                      dark
+                    />
+                  </q-tab-panel>
+
+                  <q-tab-panel name="daeJson">
+                    <ObjectTreeView v-model="daeJsonOutput" />
+                  </q-tab-panel>
+
+                  <q-tab-panel name="daePretty">
+                    <q-input
+                      v-model="daePrettyOutput"
+                      type="textarea"
+                      outlined
+                      readonly
+                      placeholder="Pretty-printed DAE will appear here..."
+                      :rows="20"
+                      input-class="text-code"
+                      bg-color="grey-10"
+                      dark
+                    />
+                  </q-tab-panel>
+                </q-tab-panels>
+              </q-card-section>
+            </q-card>
           </div>
-        </template>
-        <template #after> second view </template>
-      </ScrollableSplitView>
-    </div>
+
+          <!-- Execution / Result -->
+          <div class="col-12 col-md-6">
+            <q-card>
+              <q-card-section>
+                <div class="text-h6"><q-icon :name="matOutput" /> Execution (Sandboxed Iframe)</div>
+              </q-card-section>
+
+              <q-card-section>
+                <div class="row q-col-gutter-sm">
+                  <div class="col-4">
+                    <q-input v-model.number="simT0" type="number" outlined label="t0" />
+                  </div>
+                  <div class="col-4">
+                    <q-input v-model.number="simTf" type="number" outlined label="tf" />
+                  </div>
+                  <div class="col-4">
+                    <q-input v-model.number="simDt" type="number" outlined label="dt" />
+                  </div>
+                </div>
+              </q-card-section>
+
+              <q-card-section v-if="executionError">
+                <q-banner class="bg-negative text-white">
+                  <template #avatar>
+                    <q-icon :name="matError" />
+                  </template>
+                  {{ executionError }}
+                </q-banner>
+              </q-card-section>
+
+              <q-card-section v-if="executionResult && Object.keys(executionResult).length">
+                <ObjectTreeView v-model="executionResult" dense hide-missing read-only />
+              </q-card-section>
+
+              <q-card-section v-else-if="!executionError">
+                <div class="text-grey-7">
+                  No execution result yet. Compile and click “Run in Sandbox”.
+                </div>
+              </q-card-section>
+            </q-card>
+          </div>
+        </div>
+      </template>
+      <template #after> second view </template>
+    </DockView>
   </FixedHeightPage>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import type * as WasmTypes from 'rumoca'
 import {
   matCheckCircle,
   matCode,
@@ -288,8 +265,34 @@ import {
   matPlayArrow,
   matRocketLaunch,
 } from '@quasar/extras/material-icons'
-import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
+import type * as WasmTypes from 'rumoca'
+import rumocaWasmUrl from 'rumoca/rumoca_bg.wasm?url'
+import type { DockNode } from 'src/components/DockView.vue'
+import DockView from 'src/components/DockView.vue'
 import ObjectTreeView from 'src/components/varViews/ObjectTreeView.vue'
+import { onMounted, ref, watch } from 'vue'
+import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
+import FixedHeightPage from '../FixedHeightPage.vue'
+
+const layout = ref<DockNode>({
+  id: 'root',
+  type: 'container',
+  direction: 'row',
+  children: [
+    {
+      id: 'modelica',
+      type: 'leaf',
+      views: ['before'],
+      activeViewIndex: 0,
+    },
+    {
+      id: 'chat',
+      type: 'leaf',
+      views: ['after'],
+      activeViewIndex: 0,
+    },
+  ],
+})
 
 const jinjaTemplateUrls = import.meta.glob('app/public/modelica/*.jinja', {
   query: '?raw', // get the file content
@@ -326,11 +329,6 @@ const running = ref(false)
 const abortController = ref<AbortController | null>(null)
 
 // ---------- WASM loading ----------
-
-import rumocaWasmUrl from 'rumoca/rumoca_bg.wasm?url'
-import ScrollableSplitView from 'src/components/ScrollableSplitView.vue'
-import FixedHeightPage from '../FixedHeightPage.vue'
-
 const loadWasm = async () => {
   try {
     const wasmModule = await import('rumoca')

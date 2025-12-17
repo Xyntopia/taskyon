@@ -120,14 +120,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         },
       },
       {
-        path: 'modelica',
-        component: () => import('pages/taskyon/ModelicaEditPage.vue'),
-        meta: {
-          title: 'Taskyon Modelica Editor',
-          description: 'Edit and run modelica code together with AI',
-        },
-      },
-      {
         path: '/sql',
         component: () => import('pages/taskyon/SqlQueryPage.vue'),
         meta: {
@@ -201,6 +193,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         meta: {
           title: 'p2p chat',
           description: 'libp2p chat',
+        },
+      },
+      {
+        path: 'modelica',
+        component: () => import('pages/taskyon/ModelicaEditPage.vue'),
+        meta: {
+          title: 'Taskyon Modelica Editor',
+          description: 'Edit and run modelica code together with AI',
         },
       },
     ],
