@@ -1,3 +1,4 @@
+<!--DockViewTest.vue-->
 <template>
   <q-page class="column">
     <header>

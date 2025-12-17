@@ -1,3 +1,4 @@
+<!--DockView.vue-->
 <template>
   <div
     ref="containerRef"
