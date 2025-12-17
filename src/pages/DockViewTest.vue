@@ -1,11 +1,10 @@
-<!-- src/pages/DockviewSlotsDemoPage.vue -->
+<!-- src/pages/DockViewTest.vue -->
 <template>
   <q-page class="q-pa-md column">
     <div class="text-h5 q-mb-md">Dockview + Vue slots + createReusableTemplate Demo</div>
 
     <div class="col bg-grey-10 rounded-borders overflow-hidden">
-      <!-- Make sure the container can stretch to full height -->
-      <DockviewFromSlots class="full-height">
+      <DockView class="full-height">
         <!-- Editor pane -->
         <template #Editor>
           <div class="q-pa-sm column full-height">
@@ -39,7 +38,10 @@
               <p>This demo shows how to:</p>
               <ul>
                 <li>Map named Vue slots to Dockview panels.</li>
-                <li>Reuse the slot templates with <code>createReusableTemplate</code>.</li>
+                <li>
+                  Reuse the slot templates with
+                  <code>createReusableTemplate</code>.
+                </li>
                 <li>Drag, dock, and rearrange the panels freely.</li>
               </ul>
               <p>Try:</p>
@@ -50,16 +52,33 @@
             </div>
           </div>
         </template>
-      </DockviewFromSlots>
+      </DockView>
     </div>
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import DockviewFromSlots from 'src/components/DockView.vue'
+import DockView from 'src/components/DockView.vue'
+import { ref, watch, onMounted } from 'vue'
 
 const editorText = ref('Hello Dockview + Vue slots 👋')
+
+console.log('[DockviewSlotsDemoPage] setup: initial editorText:', editorText.value)
+
+watch(
+  editorText,
+  (newVal, oldVal) => {
+    console.log('[DockviewSlotsDemoPage] editorText changed:', {
+      old: oldVal,
+      new: newVal,
+    })
+  },
+  { immediate: true },
+)
+
+onMounted(() => {
+  console.log('[DockviewSlotsDemoPage] onMounted')
+})
 </script>
 
 <style scoped>
