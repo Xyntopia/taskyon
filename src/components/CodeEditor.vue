@@ -16,7 +16,7 @@ import { ref, computed, watchEffect } from 'vue'
 import { useQuasar } from 'quasar'
 import { basicSetup } from 'codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
-import type { LanguageSupport } from '@codemirror/language'
+import type { LanguageSupport, StreamParser } from '@codemirror/language'
 import { StreamLanguage } from '@codemirror/language'
 import type { Extension } from '@codemirror/state'
 import { Codemirror } from 'vue-codemirror'
@@ -44,10 +44,22 @@ const legacyModesMap = import.meta.glob(
 >
 
 async function loadLegacyMode(lang: string) {
-  const entry = Object.entries(legacyModesMap).find(([path]) => path.endsWith(`${lang}.js`))
+  const entry = Object.entries(legacyModesMap).find(
+    ([path]) => path.endsWith(`/${lang}.js`), // note the slash for safety
+  )
   if (!entry) return null
+
   const mod = await entry[1]()
-  return StreamLanguage.define(mod.default ?? mod)
+
+  // Try to get the named export that matches the filename
+  const parser: StreamParser<unknown> | undefined = mod[lang] ?? mod.default
+
+  if (!parser) {
+    console.warn(`Legacy mode module for '${lang}' has no export '${lang}' or default export`)
+    return null
+  }
+
+  return StreamLanguage.define(parser)
 }
 
 // ---------------------------
