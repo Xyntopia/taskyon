@@ -94,13 +94,10 @@
             @click="copyModelicaToClipboard"
           />
           <q-card-section>
-            <q-input
+            <CodeEditor
               v-model="modelicaSource"
-              type="textarea"
-              outlined
               placeholder="Enter your Modelica code here..."
-              :rows="15"
-              input-class="text-code"
+              language="modelica"
             />
           </q-card-section>
         </q-card>
@@ -272,6 +269,7 @@ import { onMounted, ref, watch } from 'vue'
 import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
 import { initializeTaskyon, toolCall } from '../../../packages/tyclient/src'
 import FixedHeightPage from '../FixedHeightPage.vue'
+import CodeEditor from 'src/components/CodeEditor.vue'
 
 const taskyonUrl = window.location.origin
 onMounted(() => {
