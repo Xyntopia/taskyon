@@ -407,6 +407,12 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 .dock-splitter {
   position: relative;
   flex-shrink: 0;
+  /* very subtle by default */
+  color: rgba(0, 0, 0, 0.14);
+  background: transparent;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 /* Horizontal split (vertical splitter line) */
@@ -427,10 +433,15 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   position: absolute;
   background-color: currentColor;
   border-radius: 999px;
+  transition:
+    background-color 0.15s ease,
+    width 0.15s ease,
+    height 0.15s ease;
 }
 
+/* Idle: thin, low contrast line */
 .dock-splitter.row::before {
-  width: 2px;
+  width: 1px;
   top: 4px;
   bottom: 4px;
   left: 50%;
@@ -438,11 +449,25 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 }
 
 .dock-splitter.column::before {
-  height: 2px;
+  height: 1px;
   left: 4px;
   right: 4px;
   top: 50%;
   transform: translateY(-50%);
+}
+
+/* Hover: stronger color, slight background, thicker line */
+.dock-splitter:hover {
+  color: rgba(0, 0, 0, 0.45);
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+.dock-splitter.row:hover::before {
+  width: 8px;
+}
+
+.dock-splitter.column:hover::before {
+  height: 8px;
 }
 
 /* Tabs */
