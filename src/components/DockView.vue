@@ -1,4 +1,4 @@
-<!-- src/pages/DockView.vue -->
+<!-- src/components/DockView.vue -->
 <template>
   <div
     ref="containerRef"
@@ -14,10 +14,18 @@
     <template v-if="node.type === 'container' && node.children">
       <template v-for="(child, index) in node.children" :key="child.id">
         <!-- Recursive Child -->
-        <DockView :node="child" @close-view="(nId, vId) => emit('close-view', nId, vId)">
+        <DockView
+          :node="child"
+          @close-view="(nId, vId) => emit('close-view', nId, vId)"
+          @select-view="(nId, vIdx) => emit('select-view', nId, vIdx)"
+        >
           <!-- Forward all slots -->
-          <template v-for="(_, slot) in $slots" #[slot]="scope">
-            <slot :name="slot" v-bind="scope" />
+          <template
+            v-for="(_, slotName) in $slots as unknown as Record<string, any>"
+            :key="slotName"
+            #[slotName]="slotProps"
+          >
+            <slot :name="slotName" v-bind="slotProps as unknown as Record<string, any>" />
           </template>
         </DockView>
 
@@ -72,6 +80,7 @@ export interface DockNode {
   size?: number // Relative size (weight) for flex-grow
 }
 
+// --- Props & Emits ---
 const props = defineProps<{
   node: DockNode
   isRoot?: boolean
@@ -81,6 +90,11 @@ const emit = defineEmits<{
   (e: 'update:node', node: DockNode): void
   (e: 'close-view', nodeId: string, viewId: string): void
   (e: 'select-view', nodeId: string, viewIndex: number): void
+}>()
+
+// Allow arbitrary slots with arbitrary props
+defineSlots<{
+  [key: string]: (props: unknown) => unknown
 }>()
 
 // --- Resizing Logic ---
@@ -111,26 +125,10 @@ const handleMouseMove = (event: MouseEvent) => {
   const totalSize = props.node.direction === 'row' ? containerRect.width : containerRect.height
   const delta = props.node.direction === 'row' ? event.movementX : event.movementY
 
-  // Calculate relative change
-  // We are using 'size' as flex-grow weights.
-  // To keep it proportional, we need to know the total weight of the two resizing nodes.
-  // But a simpler approach for flex-grow is to just adjust the weights directly based on pixels if we know the pixel-to-weight ratio.
-  // Alternatively, we can use percentages.
-
-  // Let's assume size is roughly proportional to pixels for now or normalize it.
-  // If we sum all sizes in children, that equals container size.
   const totalWeight = props.node.children.reduce((acc, child) => acc + (child.size || 1), 0)
   const weightPerPixel = totalWeight / totalSize
 
   const deltaWeight = delta * weightPerPixel
-
-  // Update sizes
-  // We need to mutate the props deeply or emit an update.
-  // Since we passed a reactive object, mutating it is the Vue way for this kind of tight coupling,
-  // or we emit a new tree. Mutating is faster for resizing.
-  // For 'clean' architecture, we should emit. But for 'self-contained' simple component, mutation is often accepted if documented.
-  // Let's try to be nice and emit, but mutating deeply nested prop is tricky without a store.
-  // We will assume the parent passed a reactive object and we can mutate it for performance.
 
   if (node1.size === undefined) node1.size = 1
   if (node2.size === undefined) node2.size = 1
@@ -138,6 +136,7 @@ const handleMouseMove = (event: MouseEvent) => {
   const newSize1 = Math.max(0.1, node1.size + deltaWeight)
   const newSize2 = Math.max(0.1, node2.size - deltaWeight)
 
+  // Mutate underlying objects for performance
   node1.size = newSize1
   node2.size = newSize2
 }
@@ -153,13 +152,13 @@ const stopResize = () => {
 // --- Tab Logic ---
 const setActiveTab = (index: number) => {
   if (props.node.type === 'leaf') {
+    // eslint-disable-next-line vue/no-mutating-props
     props.node.activeViewIndex = index
+    emit('select-view', props.node.id, index)
   }
 }
 
 const closeTab = (viewId: string) => {
-  // This needs to be handled by parent to remove from array
-  // We emit an event up
   emit('close-view', props.node.id, viewId)
 }
 </script>
