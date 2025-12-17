@@ -20,7 +20,7 @@
 
         <!-- Nested View -->
         <template #Nested>
-          <DockView v-model:node="nestedLayout" :show-tab-add="false" :show-tab-close="false">
+          <DockView v-model:node="nestedLayout" hide-tab-add hide-tab-close>
             <template #nested-view>
               <div>nested view!</div>
             </template>

@@ -15,8 +15,8 @@
         <!-- Non-null assertion on children to satisfy TS (DockNode, not DockNode | undefined) -->
         <DockView
           v-model:node="node.children![index]!"
-          :show-tab-add="props.showTabAdd"
-          :show-tab-close="props.showTabClose"
+          :hide-tab-add="props.hideTabAdd"
+          :hide-tab-close="props.hideTabClose"
           @add-view="onChildAddView"
         >
           <!-- Forward all slots -->
@@ -48,7 +48,7 @@
         >
           <span class="dock-tab-title">{{ viewId }}</span>
           <button
-            v-if="props.showTabClose"
+            v-if="!props.hideTabClose"
             class="dock-tab-close"
             type="button"
             @click.stop="onTabClose(viewId)"
@@ -59,7 +59,7 @@
 
         <!-- Plus button to add a new tab in this leaf -->
         <button
-          v-if="props.showTabAdd"
+          v-if="!props.hideTabAdd"
           class="dock-tab-add"
           type="button"
           @click.stop="onAddTabClick"
@@ -122,13 +122,13 @@ export interface AddViewResult {
 const props = withDefaults(
   defineProps<{
     /** Show the "x" close button on each tab (default: true) */
-    showTabClose?: boolean
+    hideTabClose?: boolean
     /** Show the "+" add-tab button (default: true) */
-    showTabAdd?: boolean
+    hideTabAdd?: boolean
   }>(),
   {
-    showTabClose: true,
-    showTabAdd: true,
+    hideTabClose: false,
+    hideTabAdd: false,
   },
 )
 
