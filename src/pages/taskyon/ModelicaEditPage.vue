@@ -236,17 +236,18 @@ import {
   matRocketLaunch,
 } from '@quasar/extras/material-icons'
 import { mdiFunctionVariant } from '@quasar/extras/mdi-v6'
+import { watchDebounced } from '@vueuse/core'
 import type * as WasmTypes from 'rumoca'
 import rumocaWasmUrl from 'rumoca/rumoca_bg.wasm?url'
+import CodeEditor from 'src/components/CodeEditor.vue'
 import type { DockNode } from 'src/components/DockView.vue'
 import DockView from 'src/components/DockView.vue'
 import ObjectTreeView from 'src/components/varViews/ObjectTreeView.vue'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, ref } from 'vue'
 import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
 import { initializeTaskyon, toolCall } from '../../../packages/tyclient/src'
 import FixedHeightPage from '../FixedHeightPage.vue'
-import CodeEditor from 'src/components/CodeEditor.vue'
 
 const taskyonUrl = window.location.origin
 onMounted(() => {
@@ -398,96 +399,87 @@ const loadWasm = async () => {
 // ---------- Compile Modelica → JS & DAE via new API ----------
 // 1. compile_to_json(source, modelName) → JSON string
 // 2. render_template(daeJson, template) → rendered string (JS in your case)
-watch([modelicaSource, templateSource], () => {
-  if (!modelicaSource.value || !templateSource.value) {
-    statusMessage.value = 'Please provide both Modelica source and template'
-    statusType.value = 'error'
-    jsSource.value = ''
-    daeJsonOutput.value = {}
-    daePrettyOutput.value = ''
+watchDebounced(
+  [modelicaSource, templateSource],
+  () => {
+    // If one of the inputs is missing, don't try to compile.
+    // But crucially: DO NOT clear jsSource / dae* here.
+    if (!modelicaSource.value || !templateSource.value) {
+      statusMessage.value = 'Please provide both Modelica source and template'
+      statusType.value = 'error'
+      // leave jsSource / daeJsonOutput / daePrettyOutput untouched
+      executionResult.value = {}
+      executionError.value = null
+      return
+    }
+
+    loading.value = true
+    // We can clear only "raw" debug output and execution results.
     output.value = ''
+    statusMessage.value = 'Compiling...'
+    statusType.value = 'loading'
     executionResult.value = {}
     executionError.value = null
-    return
-  }
 
-  loading.value = true
-  output.value = ''
-  jsSource.value = ''
-  daeJsonOutput.value = {}
-  daePrettyOutput.value = ''
-  statusMessage.value = 'Compiling...'
-  statusType.value = 'loading'
-  executionResult.value = {}
-  executionError.value = null
+    try {
+      const m = wasm.value
+      if (!m) {
+        throw new Error('WASM module not loaded')
+      }
+      if (typeof m.compile_to_json !== 'function' || typeof m.render_template !== 'function') {
+        throw new Error('WASM module is missing compile_to_json / render_template exports')
+      }
 
-  try {
-    const m = wasm.value
-    if (!m) {
-      throw new Error('WASM module not loaded')
+      const source = modelicaSource.value
+      const template = templateSource.value
+
+      const match = source.match(/(?:model|class|block|connector|record)\s+(\w+)/)
+      const modelName = match?.[1] ?? 'Model'
+
+      const jsonStr = m.compile_to_json(source, modelName)
+      const compiled = JSON.parse(jsonStr) as {
+        dae?: unknown
+        dae_native?: unknown
+        pretty?: string
+        balance?: unknown
+      }
+
+      const daeForTemplate = compiled.dae_native ?? compiled.dae
+      if (!daeForTemplate) {
+        throw new Error('Compilation did not return a DAE object')
+      }
+
+      const daeJson = JSON.stringify(daeForTemplate)
+      const rendered = m.render_template(daeJson, template)
+
+      // ---- Only here, on success, update the visible "last good" outputs ----
+      daeJsonOutput.value = daeForTemplate as Record<string, unknown>
+      daePrettyOutput.value = compiled.pretty ?? ''
+      output.value = rendered
+      jsSource.value = rendered
+
+      statusMessage.value = 'Compilation successful!'
+      statusType.value = 'success'
+      setTimeout(() => {
+        statusMessage.value = ''
+      }, 3000)
+
+      if (verbose.value) {
+        console.debug('Rumoca compile result (raw):', compiled)
+      }
+    } catch (error) {
+      const msg = (error as Error).message
+      // Note: we only update messages, NOT the last good JS / DAE
+      output.value = `Error: ${msg}`
+      statusMessage.value = `Compilation failed: ${msg}`
+      statusType.value = 'error'
+      console.error('Compilation error:', error)
+    } finally {
+      loading.value = false
     }
-    if (typeof m.compile_to_json !== 'function' || typeof m.render_template !== 'function') {
-      throw new Error('WASM module is missing compile_to_json / render_template exports')
-    }
-
-    const source = modelicaSource.value
-    const template = templateSource.value
-
-    // Heuristic: take first model/class/record/etc name as modelName
-    const match = source.match(/(?:model|class|block|connector|record)\s+(\w+)/)
-    const modelName = match?.[1] ?? 'Model'
-
-    // Step 1: compile Modelica → DAE JSON (wrapper object)
-    const jsonStr = m.compile_to_json(source, modelName)
-    const compiled = JSON.parse(jsonStr) as {
-      dae?: unknown
-      dae_native?: unknown
-      pretty?: string
-      balance?: unknown
-    }
-
-    // TODO: add "compile_with_libraries" option here
-
-    // Prefer dae_native (matches what render_template expects)
-    const daeForTemplate = compiled.dae_native ?? compiled.dae
-    if (!daeForTemplate) {
-      throw new Error('Compilation did not return a DAE object')
-    }
-
-    // For display
-    daeJsonOutput.value = daeForTemplate as Record<string, unknown>
-    daePrettyOutput.value = compiled.pretty ?? ''
-
-    const daeJson = JSON.stringify(daeForTemplate)
-
-    // Step 2: render template (your Jinja template should output JS code)
-    const rendered = m.render_template(daeJson, template)
-
-    output.value = rendered
-    jsSource.value = rendered
-
-    statusMessage.value = 'Compilation successful!'
-    statusType.value = 'success'
-    setTimeout(() => {
-      statusMessage.value = ''
-    }, 3000)
-
-    if (verbose.value) {
-      console.debug('Rumoca compile result (raw):', compiled)
-    }
-  } catch (error) {
-    const msg = (error as Error).message
-    output.value = `Error: ${msg}`
-    jsSource.value = ''
-    daeJsonOutput.value = {}
-    daePrettyOutput.value = ''
-    statusMessage.value = `Compilation failed: ${msg}`
-    statusType.value = 'error'
-    console.error('Compilation error:', error)
-  } finally {
-    loading.value = false
-  }
-})
+  },
+  { debounce: 500, maxWait: 1000 },
+)
 
 // ---------- Simple helpers ----------
 const clearAll = () => {
