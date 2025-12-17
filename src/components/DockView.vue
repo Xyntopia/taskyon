@@ -7,21 +7,24 @@
       'dock-row': node.type === 'container' && node.direction === 'row',
       'dock-col': node.type === 'container' && node.direction === 'column',
     }"
-    :style="{ flex: node.size ?? 1 }"
+    :style="nodeStyle"
   >
     <!-- Container Node -->
     <template v-if="node.type === 'container' && node.children && node.children.length">
       <template v-for="(child, index) in node.children" :key="child.id">
-        <!-- Non-null assertion on children to satisfy TS (DockNode, not DockNode | undefined) -->
         <DockView
           v-model:node="node.children![index]!"
           :hide-tab-add="props.hideTabAdd"
           :hide-tab-close="props.hideTabClose"
+          :tab-class="props.tabClass"
+          :active-tab-class="props.activeTabClass"
+          :tab-button-class="props.tabButtonClass"
+          :add-button-class="props.addButtonClass"
+          :tab-icons="props.tabIcons"
           @add-view="onChildAddView"
         >
           <!-- Forward all slots -->
           <template v-for="(_, slotName) in $slots" :key="slotName" #[slotName]="slotProps">
-            <!-- slotProps is now typed as an object so v-bind is OK -->
             <slot :name="slotName" v-bind="slotProps" />
           </template>
         </DockView>
@@ -38,19 +41,32 @@
 
     <!-- Leaf Node (Tabs) -->
     <template v-else-if="node.type === 'leaf'">
-      <div class="dock-tabs-header">
+      <!-- Tabs header (may be hidden depending on showTabs) -->
+      <div v-if="showTabs" class="dock-tabs-header">
         <div
           v-for="(viewId, index) in node.views || []"
           :key="viewId"
           class="dock-tab"
-          :class="{ active: index === (node.activeViewIndex ?? 0) }"
+          :class="[
+            props.tabClass,
+            { active: index === (node.activeViewIndex ?? 0) },
+            index === (node.activeViewIndex ?? 0) && props.activeTabClass,
+          ]"
           @click="onTabClick(index)"
         >
+          <!-- Optional SVG icon -->
+          <q-icon
+            v-if="props.tabIcons?.[viewId]"
+            class="dock-tab-icon"
+            :name="props.tabIcons[viewId]"
+          />
           <span class="dock-tab-title">{{ viewId }}</span>
+
           <button
             v-if="!props.hideTabClose"
             class="dock-tab-close"
             type="button"
+            :class="props.tabButtonClass"
             @click.stop="onTabClose(viewId)"
           >
             ×
@@ -62,6 +78,7 @@
           v-if="!props.hideTabAdd"
           class="dock-tab-add"
           type="button"
+          :class="props.addButtonClass"
           @click.stop="onAddTabClick"
         >
           +
@@ -79,7 +96,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onUnmounted, useSlots } from 'vue'
+import { ref, onUnmounted, useSlots, computed } from 'vue'
 
 /* ---------- Types ---------- */
 
@@ -96,9 +113,21 @@ export interface DockNode {
   // leaf
   views?: string[]
   activeViewIndex?: number
+  /**
+   * Controls whether the tab header is shown.
+   * - "always": header is always visible (default)
+   * - "auto": hide when 0 or 1 tab
+   * - "never": never show tabs (e.g. menu bars, static views)
+   */
+  showTabs?: 'always' | 'auto' | 'never'
 
   // layout
-  size?: number // flex weight
+  size?: number // flex "weight"
+  /**
+   * 'weight' (default): flex-grow with given size
+   * 'content': shrink/grow to min content size (e.g. menu bar region)
+   */
+  sizeMode?: 'weight' | 'content'
 }
 
 /* ---------- Add-view event types ---------- */
@@ -119,12 +148,26 @@ export interface AddViewResult {
   makeActive?: boolean
 }
 
+/** Callback that the parent calls once it knows what to add */
+export type AddViewDone = (result: AddViewResult | null | undefined) => void
+
+/* ---------- Props ---------- */
+
 const props = withDefaults(
   defineProps<{
     /** Show the "x" close button on each tab (default: true) */
     hideTabClose?: boolean
     /** Show the "+" add-tab button (default: true) */
     hideTabAdd?: boolean
+
+    /** Extra CSS classes for easier styling from parent */
+    tabClass?: string | undefined
+    activeTabClass?: string | undefined
+    tabButtonClass?: string | undefined
+    addButtonClass?: string | undefined
+
+    /** Map viewId -> raw SVG string (trusted HTML) for tab icons */
+    tabIcons?: Record<string, string> | undefined
   }>(),
   {
     hideTabClose: false,
@@ -132,24 +175,14 @@ const props = withDefaults(
   },
 )
 
-/** Callback that the parent calls once it knows what to add */
-export type AddViewDone = (result: AddViewResult | null | undefined) => void
-
 /* ---------- v-model ---------- */
 
-// Expose `v-model:node`
 const nodeModel = defineModel<DockNode>('node', { required: true })
-
-// Alias for template (auto unwrapped)
 const node = nodeModel
 
 /* ---------- Slots typing ---------- */
-/**
- * We declare slot props as an object type so that `v-bind="slotProps"` is valid.
- * Using `unknown` here would cause the "Spread types may only be created from object types" error.
- */
-defineSlots<Record<string, (props: Record<string, unknown>) => unknown>>()
 
+defineSlots<Record<string, (props: Record<string, unknown>) => unknown>>()
 const slots = useSlots()
 
 /* ---------- Emits ---------- */
@@ -158,7 +191,7 @@ const emit = defineEmits<{
   (e: 'add-view', ctx: AddViewContext, done: AddViewDone): void
 }>()
 
-/* ---------- Pure helpers (functional style) ---------- */
+/* ---------- Pure helpers ---------- */
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value))
@@ -222,6 +255,36 @@ const addViewToLeaf = (n: DockNode, viewId: string, makeActive = true): DockNode
   return { ...n, views, activeViewIndex }
 }
 
+/* ---------- Layout-related computed ---------- */
+
+/** Whether to show the tab header for this leaf node */
+const showTabs = computed(() => {
+  if (node.value.type !== 'leaf') return false
+
+  const mode = node.value.showTabs ?? 'always'
+  const count = node.value.views?.length ?? 0
+
+  if (mode === 'never') return false
+  if (mode === 'always') return true
+  // 'auto'
+  return count > 1
+})
+
+/** Flex style respecting size / sizeMode */
+const nodeStyle = computed(() => {
+  const n = node.value
+  const mode = n.sizeMode ?? 'weight'
+
+  if (mode === 'content') {
+    // shrink to fit content, don't stretch
+    return { flex: '0 0 auto' }
+  }
+
+  const weight = n.size ?? 1
+  // grow according to weight, allow shrink, no fixed basis
+  return { flex: `${weight} 1 0` }
+})
+
 /* ---------- Resizing logic ---------- */
 
 const containerRef = ref<HTMLElement | null>(null)
@@ -283,10 +346,6 @@ const onTabClose = (viewId: string) => {
 
 /* ---------- Add tab ("+") handlers ---------- */
 
-/**
- * Called when "+" in a leaf tab bar is clicked.
- * Emits 'add-view' with context and a callback to complete the addition.
- */
 const onAddTabClick = () => {
   if (node.value.type !== 'leaf') return
 
@@ -304,10 +363,7 @@ const onAddTabClick = () => {
   emit('add-view', ctx, done)
 }
 
-/**
- * Forward add-view events from children up the tree.
- * This way the top-level parent (DockViewTest) can handle everything.
- */
+/** Forward add-view events from children up the tree. */
 const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   emit('add-view', ctx, done)
 }
@@ -339,19 +395,16 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 .dock-splitter {
   position: relative;
   flex-shrink: 0;
-  /* hit area color not really visible; inner line uses currentColor */
 }
 
 /* Horizontal split (vertical splitter line) */
 .dock-splitter.row {
-  /* Wider hitbox, still easy to grab */
   width: 8px;
   cursor: col-resize;
 }
 
 /* Vertical split (horizontal splitter line) */
 .dock-splitter.column {
-  /* Taller hitbox, still easy to grab */
   height: 8px;
   cursor: row-resize;
 }
@@ -360,26 +413,20 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 .dock-splitter::before {
   content: '';
   position: absolute;
-  background-color: currentColor; /* matches text color */
-  border-radius: 999px; /* fully rounded ends */
+  background-color: currentColor;
+  border-radius: 999px;
 }
 
-/* Inner line for vertical splitter (between left/right panels) */
 .dock-splitter.row::before {
-  /* Thin vertical line */
   width: 2px;
-  /* leave small gaps top/bottom so it does not touch panels */
   top: 4px;
   bottom: 4px;
   left: 50%;
   transform: translateX(-50%);
 }
 
-/* Inner line for horizontal splitter (between top/bottom panels) */
 .dock-splitter.column::before {
-  /* Thin horizontal line */
   height: 2px;
-  /* leave small gaps left/right so it does not touch panels */
   left: 4px;
   right: 4px;
   top: 50%;
@@ -392,18 +439,29 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   flex-shrink: 0;
   overflow-x: auto;
   align-items: center;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
 }
 
 .dock-tab {
   display: flex;
   align-items: center;
-  padding: 0 0.5rem;
+  padding: 0.25rem 0.75rem;
   cursor: pointer;
   white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.dock-tab:hover {
+  background: rgba(0, 0, 0, 0.03);
 }
 
 .dock-tab.active {
   font-weight: 600;
+  border-bottom-color: currentColor;
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .dock-tab-title {
@@ -413,6 +471,21 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   overflow: hidden;
 }
 
+/* Icons */
+.dock-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.25rem;
+  flex-shrink: 0;
+}
+
+.dock-tab-icon svg {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+}
+
+/* Buttons */
 .dock-tab-close,
 .dock-tab-add {
   margin-left: 0.25rem;
@@ -422,8 +495,6 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   padding: 0 0.25rem;
   flex-shrink: 0;
   font-size: 1rem;
-
-  /* new: match text color */
   color: inherit;
 }
 

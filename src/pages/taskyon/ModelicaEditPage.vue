@@ -5,7 +5,18 @@
       <q-icon :name="matRocketLaunch" /> Rumoca WASM Compiler
     </div>
 
-    <DockView v-model:node="layout" class="col" hide-tab-add hide-tab-close>
+    <DockView
+      v-model:node="layout"
+      class="col"
+      hide-tab-add
+      hide-tab-close
+      :tab-icons="{
+        simulate: matPlayArrow,
+        template: matCode,
+        modelica: matCode,
+        model: mdiFunctionVariant,
+      }"
+    >
       <template #actions>
         <!-- Actions -->
         <q-card-section>
@@ -267,16 +278,17 @@ import {
   matPlayArrow,
   matRocketLaunch,
 } from '@quasar/extras/material-icons'
+import { mdiFunctionVariant } from '@quasar/extras/mdi-v6'
 import type * as WasmTypes from 'rumoca'
 import rumocaWasmUrl from 'rumoca/rumoca_bg.wasm?url'
 import type { DockNode } from 'src/components/DockView.vue'
 import DockView from 'src/components/DockView.vue'
 import ObjectTreeView from 'src/components/varViews/ObjectTreeView.vue'
+import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { onMounted, ref, watch } from 'vue'
 import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
-import FixedHeightPage from '../FixedHeightPage.vue'
-import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { initializeTaskyon, toolCall } from '../../../packages/tyclient/src'
+import FixedHeightPage from '../FixedHeightPage.vue'
 
 const taskyonUrl = window.location.origin
 onMounted(() => {
@@ -312,7 +324,9 @@ const layout = ref<DockNode>({
         {
           id: 'actions',
           type: 'leaf',
+          showTabs: 'never',
           views: ['actions'],
+          sizeMode: 'content',
           size: 20,
           activeViewIndex: 0,
         },
@@ -343,6 +357,7 @@ const layout = ref<DockNode>({
     {
       id: 'chat',
       type: 'leaf',
+      showTabs: 'never',
       views: ['after'],
       size: 30,
       activeViewIndex: 0,
