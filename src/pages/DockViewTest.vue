@@ -22,31 +22,32 @@
     </header>
 
     <!-- New API: v-model:node -->
-    <DockView v-model:node="layout" class="col">
-      <!-- Explorer View -->
-      <template #Explorer>
-        <q-card class="fit">
-          <div>Files</div>
-          <ul>
-            <li>src/App.vue</li>
-            <li>src/main.ts</li>
-            <li>src/components/DockView.vue</li>
-          </ul>
-        </q-card>
-      </template>
+    <q-card flat class="col column">
+      <DockView v-model:node="layout" class="col">
+        <!-- Explorer View -->
+        <template #Explorer>
+          <q-card class="fit">
+            <div>Files</div>
+            <ul>
+              <li>src/App.vue</li>
+              <li>src/main.ts</li>
+              <li>src/components/DockView.vue</li>
+            </ul>
+          </q-card>
+        </template>
 
-      <template #Search>
-        <q-card>
-          <input type="text" placeholder="Search files..." />
-          <div>No results</div>
-        </q-card>
-      </template>
+        <template #Search>
+          <q-card>
+            <input type="text" placeholder="Search files..." />
+            <div>No results</div>
+          </q-card>
+        </template>
 
-      <!-- Editor Views -->
-      <template v-for="view in ['App.vue', 'main.ts', 'styles.css']" :key="view" #[view]>
-        <div>
+        <!-- Editor Views -->
+        <template v-for="view in ['App.vue', 'main.ts', 'styles.css']" :key="view" #[view]>
           <div>
-            <pre>
+            <div>
+              <pre>
 // Content of {{ view }}
 import { defineComponent } from 'vue';
 
@@ -56,41 +57,42 @@ export default defineComponent({
     return {};
   }
 });</pre
-            >
+              >
+            </div>
           </div>
-        </div>
-      </template>
+        </template>
 
-      <!-- Terminal Views -->
-      <template #Terminal>
-        <div>
-          <div>$ npm run dev</div>
-          <div>Ready in 300ms.</div>
-          <div>> Network: http://localhost:5000/</div>
-          <div>_</div>
-        </div>
-      </template>
+        <!-- Terminal Views -->
+        <template #Terminal>
+          <div>
+            <div>$ npm run dev</div>
+            <div>Ready in 300ms.</div>
+            <div>> Network: http://localhost:5000/</div>
+            <div>_</div>
+          </div>
+        </template>
 
-      <template #Output>
-        <div>
-          <div>[Log] Application mounted.</div>
-          <div>[Info] Dock layout initialized.</div>
-        </div>
-      </template>
+        <template #Output>
+          <div>
+            <div>[Log] Application mounted.</div>
+            <div>[Info] Dock layout initialized.</div>
+          </div>
+        </template>
 
-      <!-- Fallback for dynamically added tabs -->
-      <template v-for="n in 20" :key="getNewFileSlotName(n)" #[getNewFileSlotName(n)]>
-        <div>
-          <div>New Empty File {{ n }}</div>
-        </div>
-      </template>
+        <!-- Fallback for dynamically added tabs -->
+        <template v-for="n in 20" :key="getNewFileSlotName(n)" #[getNewFileSlotName(n)]>
+          <div>
+            <div>New Empty File {{ n }}</div>
+          </div>
+        </template>
 
-      <template v-for="n in 20" :key="getProcessSlotName(n)" #[getProcessSlotName(n)]>
-        <div>
-          <div>Process {{ n }} running...</div>
-        </div>
-      </template>
-    </DockView>
+        <template v-for="n in 20" :key="getProcessSlotName(n)" #[getProcessSlotName(n)]>
+          <div>
+            <div>Process {{ n }} running...</div>
+          </div>
+        </template>
+      </DockView>
+    </q-card>
   </q-page>
 </template>
 
@@ -109,13 +111,6 @@ const createInitialLayout = (): DockNode => ({
   type: 'container',
   direction: 'row',
   children: [
-    {
-      id: 'sidebar',
-      type: 'leaf',
-      size: 20,
-      views: ['Explorer', 'Search'],
-      activeViewIndex: 0,
-    },
     {
       id: 'main',
       type: 'container',
@@ -137,6 +132,13 @@ const createInitialLayout = (): DockNode => ({
           activeViewIndex: 0,
         },
       ],
+    },
+    {
+      id: 'sidebar',
+      type: 'leaf',
+      size: 20,
+      views: ['Explorer', 'Search'],
+      activeViewIndex: 0,
     },
   ],
 })
