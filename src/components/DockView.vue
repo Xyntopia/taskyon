@@ -161,17 +161,24 @@ const props = withDefaults(
     hideTabAdd?: boolean
 
     /** Extra CSS classes for easier styling from parent */
-    tabClass?: string | undefined
-    activeTabClass?: string | undefined
-    tabButtonClass?: string | undefined
-    addButtonClass?: string | undefined
+    tabClass?: string
+    activeTabClass?: string
+    tabButtonClass?: string
+    addButtonClass?: string
 
     /** Map viewId -> raw SVG string (trusted HTML) for tab icons */
-    tabIcons?: Record<string, string> | undefined
+    tabIcons?: Record<string, string>
   }>(),
   {
     hideTabClose: false,
     hideTabAdd: false,
+
+    // these can be whatever you like – empty string / undefined / {}
+    tabClass: '',
+    activeTabClass: '',
+    tabButtonClass: '',
+    addButtonClass: '',
+    tabIcons: () => ({}),
   },
 )
 
