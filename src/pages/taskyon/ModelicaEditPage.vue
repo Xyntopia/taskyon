@@ -84,7 +84,7 @@
 
       <template #modelica>
         <!-- Modelica source -->
-        <q-card>
+        <div>
           <q-btn
             color="grey-7"
             flat
@@ -93,18 +93,16 @@
             :disable="!modelicaSource"
             @click="copyModelicaToClipboard"
           />
-          <q-card-section>
-            <CodeEditor
-              v-model="modelicaSource"
-              placeholder="Enter your Modelica code here..."
-              language="modelica"
-            />
-          </q-card-section>
-        </q-card>
+          <CodeEditor
+            v-model="modelicaSource"
+            placeholder="Enter your Modelica code here..."
+            language="modelica"
+          />
+        </div>
       </template>
 
       <template #template>
-        <q-card>
+        <div>
           <q-btn
             color="grey-7"
             flat
@@ -113,44 +111,40 @@
             :disable="!templateSource"
             @click="copyTemplateToClipboard"
           />
-          <q-card-section>
-            <CodeEditor
-              v-model="templateSource"
-              placeholder="Enter your Jinja template here..."
-              language="jinja2"
-            />
-          </q-card-section>
-        </q-card>
+          <CodeEditor
+            v-model="templateSource"
+            placeholder="Enter your Jinja template here..."
+            language="jinja2"
+          />
+        </div>
       </template>
 
       <template #model>
         <div>
-          <div class="row items-center no-wrap q-gutter-xs">
-            <q-btn
-              color="grey-7"
-              flat
-              dense
-              label="Copy JS"
-              :disable="!jsSource"
-              @click="copyJsToClipboard"
-            />
-            <q-btn
-              color="grey-7"
-              flat
-              dense
-              label="Copy DAE JSON"
-              :disable="!daeJsonOutput"
-              @click="copyDaeJsonToClipboard"
-            />
-            <q-btn
-              color="grey-7"
-              flat
-              dense
-              label="Copy Pretty"
-              :disable="!daePrettyOutput"
-              @click="copyDaePrettyToClipboard"
-            />
-          </div>
+          <q-btn
+            color="grey-7"
+            flat
+            dense
+            label="Copy JS"
+            :disable="!jsSource"
+            @click="copyJsToClipboard"
+          />
+          <q-btn
+            color="grey-7"
+            flat
+            dense
+            label="Copy DAE JSON"
+            :disable="!daeJsonOutput"
+            @click="copyDaeJsonToClipboard"
+          />
+          <q-btn
+            color="grey-7"
+            flat
+            dense
+            label="Copy Pretty"
+            :disable="!daePrettyOutput"
+            @click="copyDaePrettyToClipboard"
+          />
           <q-separator />
 
           <div>
