@@ -60,6 +60,7 @@
     "core-js": "^3.6.5",
     "datastore-level": "^11.0.1",
     "dockview-core": "^4.11.0",
+    "dockview-vue": "^4.11.0",
     "echarts": "^6.0.0",
     "fast-equals": "^5.0.1",
     "fflate": "^0.8.2",

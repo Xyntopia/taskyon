@@ -180,6 +180,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           description: 'libp2p chat',
         },
       },
+
       /*{
         path: '/componenttests',
         component: () => import('pages/ComponentTests.vue'),
@@ -188,6 +189,20 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           description: 'Testing Taskyon Components.',
         },
       },*/
+    ],
+  },
+  {
+    path: '/',
+    component: () => import('layouts/EmptyLayout2.vue'),
+    children: [
+      {
+        path: '/dockview',
+        component: () => import('pages/DockViewTest.vue'),
+        meta: {
+          title: 'p2p chat',
+          description: 'libp2p chat',
+        },
+      },
     ],
   },
   // diagnostics should stay in its own page in order to be as independent as possible
