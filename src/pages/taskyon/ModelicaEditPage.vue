@@ -13,13 +13,13 @@
       :tab-icons="{
         simulate: matPlayArrow,
         template: matCode,
-        modelica: matCode,
+        modelica: matDescription,
         model: mdiFunctionVariant,
       }"
     >
       <template #actions>
         <!-- Actions -->
-        <q-card-section>
+        <div>
           <div class="row q-gutter-sm items-center">
             <q-btn
               dense
@@ -38,13 +38,14 @@
               @click="loadExample"
             />
 
-            <q-toggle v-model="verbose" label="Verbose logging" />
+            <q-toggle v-model="verbose" dense label="Verbose logging" />
 
             <q-space />
 
             <!-- Run / Stop execution -->
             <q-btn
               dense
+              flat
               color="secondary"
               :icon="matPlayArrow"
               label="Run in Sandbox"
@@ -52,50 +53,46 @@
               :loading="running"
               @click="runInSandbox"
             />
-            <q-btn v-if="running" color="negative" label="Stop" outline @click="stopExecution" />
-          </div>
-        </q-card-section>
-        <!-- Status banner -->
-        <q-banner
-          v-if="statusMessage"
-          :class="
-            statusType === 'error'
-              ? 'bg-negative'
-              : statusType === 'success'
-                ? 'bg-positive'
-                : 'bg-warning'
-          "
-          class="text-white q-mb-md"
-        >
-          <template #avatar>
-            <q-icon
-              :name="
-                statusType === 'error'
-                  ? matError
-                  : statusType === 'success'
-                    ? matCheckCircle
-                    : matInfo
-              "
+            <q-btn
+              v-if="running"
+              flat
+              dense
+              color="negative"
+              label="Stop"
+              outline
+              @click="stopExecution"
             />
-          </template>
-          {{ statusMessage }}
-        </q-banner>
+          </div>
+        </div>
+        <!-- Status banner -->
+        <div style="height: 1.5rem">
+          <div
+            v-if="statusMessage"
+            :class="
+              statusType === 'error'
+                ? 'bg-negative'
+                : statusType === 'success'
+                  ? 'bg-positive'
+                  : 'bg-warning'
+            "
+            class="text-white"
+          >
+            {{ statusMessage }}
+          </div>
+        </div>
       </template>
 
       <template #modelica>
         <!-- Modelica source -->
         <q-card>
-          <q-card-section class="row items-center justify-between">
-            <div class="text-h6"><q-icon :name="matDescription" /> Modelica Source</div>
-            <q-btn
-              color="grey-7"
-              flat
-              dense
-              label="Copy"
-              :disable="!modelicaSource"
-              @click="copyModelicaToClipboard"
-            />
-          </q-card-section>
+          <q-btn
+            color="grey-7"
+            flat
+            dense
+            label="Copy"
+            :disable="!modelicaSource"
+            @click="copyModelicaToClipboard"
+          />
           <q-card-section>
             <q-input
               v-model="modelicaSource"
@@ -111,17 +108,14 @@
 
       <template #template>
         <q-card>
-          <q-card-section class="row items-center justify-between">
-            <div class="text-h6"><q-icon :name="matCode" /> Template Source</div>
-            <q-btn
-              color="grey-7"
-              flat
-              dense
-              label="Copy"
-              :disable="!templateSource"
-              @click="copyTemplateToClipboard"
-            />
-          </q-card-section>
+          <q-btn
+            color="grey-7"
+            flat
+            dense
+            label="Copy"
+            :disable="!templateSource"
+            @click="copyTemplateToClipboard"
+          />
           <q-card-section>
             <q-input
               v-model="templateSource"
@@ -137,40 +131,36 @@
 
       <template #model>
         <q-card>
-          <q-card-section class="row items-center justify-between">
-            <div class="text-h6"><q-icon :name="matCode" /> Compilation Outputs</div>
-            <div class="row items-center no-wrap q-gutter-xs">
-              <q-btn
-                color="grey-7"
-                flat
-                dense
-                label="Copy JS"
-                :disable="!jsSource"
-                @click="copyJsToClipboard"
-              />
-              <q-btn
-                color="grey-7"
-                flat
-                dense
-                label="Copy DAE JSON"
-                :disable="!daeJsonOutput"
-                @click="copyDaeJsonToClipboard"
-              />
-              <q-btn
-                color="grey-7"
-                flat
-                dense
-                label="Copy Pretty"
-                :disable="!daePrettyOutput"
-                @click="copyDaePrettyToClipboard"
-              />
-            </div>
-          </q-card-section>
-
+          <div class="row items-center no-wrap q-gutter-xs">
+            <q-btn
+              color="grey-7"
+              flat
+              dense
+              label="Copy JS"
+              :disable="!jsSource"
+              @click="copyJsToClipboard"
+            />
+            <q-btn
+              color="grey-7"
+              flat
+              dense
+              label="Copy DAE JSON"
+              :disable="!daeJsonOutput"
+              @click="copyDaeJsonToClipboard"
+            />
+            <q-btn
+              color="grey-7"
+              flat
+              dense
+              label="Copy Pretty"
+              :disable="!daePrettyOutput"
+              @click="copyDaePrettyToClipboard"
+            />
+          </div>
           <q-separator />
 
           <q-card-section>
-            <q-tabs v-model="outputTab" dense align="justify" narrow-indicator>
+            <q-tabs v-model="outputTab" dense narrow-indicator>
               <q-tab name="js" label="Code" />
               <q-tab name="daeJson" label="JSON" />
               <q-tab name="daePretty" label="Pretty" />
@@ -214,10 +204,6 @@
       </template>
       <template #simulate>
         <q-card>
-          <q-card-section>
-            <div class="text-h6"><q-icon :name="matOutput" /> Execution (Sandboxed Iframe)</div>
-          </q-card-section>
-
           <q-card-section>
             <div class="row q-col-gutter-sm">
               <div class="col-4">
@@ -268,13 +254,10 @@
 
 <script setup lang="ts">
 import {
-  matCheckCircle,
   matCode,
   matDelete,
   matDescription,
   matError,
-  matInfo,
-  matOutput,
   matPlayArrow,
   matRocketLaunch,
 } from '@quasar/extras/material-icons'
