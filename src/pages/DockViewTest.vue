@@ -24,6 +24,15 @@
           </q-card>
         </template>
 
+        <!-- Nested View -->
+        <template #Nested>
+          <DockView v-model:node="nestedLayout">
+            <template #nested-view>
+              <div>nested view!</div>
+            </template>
+          </DockView>
+        </template>
+
         <template #Search>
           <q-card>
             <input type="text" placeholder="Search files..." />
@@ -109,7 +118,7 @@ const createInitialLayout = (): DockNode => ({
           id: 'editors',
           type: 'leaf',
           size: 70,
-          views: ['App.vue', 'main.ts', 'styles.css'],
+          views: ['App.vue', 'main.ts', 'styles.css', 'Nested'],
           activeViewIndex: 0,
         },
         {
@@ -132,6 +141,12 @@ const createInitialLayout = (): DockNode => ({
 })
 
 const layout = ref<DockNode>(createInitialLayout())
+const nestedLayout = ref<DockNode>({
+  id: 'nested',
+  type: 'leaf',
+  views: ['Explorer', 'Search'],
+  activeViewIndex: 0,
+})
 const nextId = ref(1)
 
 /* ---------- Helpers for dynamic slot names ---------- */
