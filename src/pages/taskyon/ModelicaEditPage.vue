@@ -114,13 +114,10 @@
             @click="copyTemplateToClipboard"
           />
           <q-card-section>
-            <q-input
+            <CodeEditor
               v-model="templateSource"
-              type="textarea"
-              outlined
               placeholder="Enter your Jinja template here..."
-              :rows="15"
-              input-class="text-code"
+              language="jinja2"
             />
           </q-card-section>
         </q-card>
