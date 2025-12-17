@@ -124,7 +124,7 @@
       </template>
 
       <template #model>
-        <q-card>
+        <div>
           <div class="row items-center no-wrap q-gutter-xs">
             <q-btn
               color="grey-7"
@@ -153,7 +153,7 @@
           </div>
           <q-separator />
 
-          <q-card-section>
+          <div>
             <q-tabs v-model="outputTab" dense narrow-indicator>
               <q-tab name="js" label="Code" />
               <q-tab name="daeJson" label="JSON" />
@@ -162,16 +162,10 @@
 
             <q-tab-panels v-model="outputTab" animated>
               <q-tab-panel name="js">
-                <q-input
+                <CodeEditor
                   v-model="jsSource"
-                  type="textarea"
-                  outlined
-                  readonly
                   placeholder="Generated Code will appear here..."
-                  :rows="20"
-                  input-class="text-code"
-                  bg-color="grey-10"
-                  dark
+                  language="javascript"
                 />
               </q-tab-panel>
 
@@ -193,8 +187,8 @@
                 />
               </q-tab-panel>
             </q-tab-panels>
-          </q-card-section>
-        </q-card>
+          </div>
+        </div>
       </template>
       <template #simulate>
         <q-card>
