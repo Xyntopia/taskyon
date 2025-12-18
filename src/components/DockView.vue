@@ -55,6 +55,17 @@
           'dock-tabs-header--collapsed': isCollapsed,
         }"
       >
+        <!-- Plus button still available when not collapsed -->
+        <button
+          v-if="!hideTabAdd && !isCollapsed"
+          class="dock-tab-add"
+          type="button"
+          :class="addButtonClass"
+          @click.stop="onAddTabClick"
+        >
+          +
+        </button>
+
         <div
           v-for="(viewId, index) in node.views || []"
           :key="viewId"
@@ -88,17 +99,6 @@
           @click.stop="toggleCollapse"
         >
           {{ isCollapsed ? '▢' : '▁' }}
-        </button>
-
-        <!-- Plus button still available when not collapsed -->
-        <button
-          v-if="!hideTabAdd && !isCollapsed"
-          class="dock-tab-add"
-          type="button"
-          :class="addButtonClass"
-          @click.stop="onAddTabClick"
-        >
-          +
         </button>
       </div>
 
@@ -610,16 +610,17 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   height: 4px;
 }
 
-/* Tabs */
+/* Tabs header */
 .dock-tabs-header {
   display: flex;
   flex-shrink: 0;
   overflow-x: auto;
   align-items: center;
   border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-  /*background: color-mix(in srgb, currentColor 2%, transparent);*/
+  /* background: color-mix(in srgb, currentColor 2%, transparent); */
 }
 
+/* Individual tab */
 .dock-tab {
   display: flex;
   align-items: center;
@@ -663,7 +664,7 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   fill: currentColor;
 }
 
-/* Buttons */
+/* Close and Add buttons inside tabs/header */
 .dock-tab-close,
 .dock-tab-add {
   margin-left: 0.25rem;
@@ -676,36 +677,9 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   color: inherit;
 }
 
-/* Collapsed state: the header is the only visible part */
-.dock-tabs-header--collapsed {
-  flex-shrink: 0;
-}
-
-/* When collapsed in a row container: vertical strip */
-.dock-tabs-header--vertical {
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  /* Make tabs stack top-to-bottom */
-  flex-direction: column;
-  align-items: stretch;
-  border-bottom: none;
-  border-right: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-}
-
-/* Vertical tabs */
-.dock-tabs-header--vertical .dock-tab {
-  border-bottom: none;
-  border-right: 2px solid transparent;
-}
-
-/* Active state in vertical strip */
-.dock-tabs-header--vertical .dock-tab.active {
-  border-right-color: currentColor;
-}
-
 /* Minimize button styling */
 .dock-tab-minimize {
-  margin-left: auto;
+  margin-left: auto; /* pushes it to the far right in horizontal layout */
   border: none;
   background: none;
   cursor: pointer;
@@ -715,14 +689,57 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   color: inherit;
 }
 
-/* Optional: make collapsed strip a bit narrower */
-.dock-tabs-header--vertical {
-  padding-block: 0.25rem;
+/* Collapsed state: the header is the only visible part */
+.dock-tabs-header--collapsed {
+  flex-shrink: 0;
 }
+
+/* ---------- Vertical collapsed strip ---------- */
+/* When collapsed in a row container: vertical strip */
+.dock-tabs-header--vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  flex-direction: column; /* stack items (tabs, +, minimize) vertically */
+  align-items: stretch;
+  border-bottom: none;
+  border-right: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  overflow-x: visible; /* vertical layout: scroll vertically, not horizontally */
+  overflow-y: auto;
+  padding-block: 0.25rem; /* Optional: a bit of padding */
+}
+
+/* Tabs within the vertical strip:
+   - make tab contents (icon, title, close) vertical as well */
+.dock-tabs-header--vertical .dock-tab {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-bottom: none;
+  border-right: 2px solid transparent;
+}
+
+/* Active state in vertical strip */
+.dock-tabs-header--vertical .dock-tab.active {
+  border-right-color: currentColor;
+}
+
+/* Title constraints in vertical mode */
 .dock-tabs-header--vertical .dock-tab-title {
-  /* optionally limit length */
   max-height: 5em;
   overflow: hidden;
+}
+
+/* Adjust button spacing in vertical mode */
+.dock-tabs-header--vertical .dock-tab-close {
+  margin-left: 0;
+  margin-top: 0.25rem;
+}
+
+.dock-tabs-header--vertical .dock-tab-add,
+.dock-tabs-header--vertical .dock-tab-minimize {
+  margin-left: 0;
+  margin-top: 0.25rem;
+  align-self: center;
 }
 
 /* Content */
