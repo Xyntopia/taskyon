@@ -514,6 +514,7 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   overflow-x: auto;
   align-items: center;
   border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  background: color-mix(in srgb, currentColor 2%, transparent);
 }
 
 .dock-tab {
@@ -529,13 +530,13 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 }
 
 .dock-tab:hover {
-  background: rgba(0, 0, 0, 0.03);
+  background: color-mix(in srgb, currentColor 4%, transparent);
 }
 
 .dock-tab.active {
   font-weight: 600;
   border-bottom-color: currentColor;
-  background: rgba(0, 0, 0, 0.04);
+  background: color-mix(in srgb, currentColor 7%, transparent);
 }
 
 .dock-tab-title {
