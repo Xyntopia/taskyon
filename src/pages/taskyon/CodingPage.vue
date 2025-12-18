@@ -131,6 +131,7 @@ interface LineInfo {
 }
 
 // Taskyon tools configuration
+// Taskyon tools configuration
 const tools = [
   // Entry node tool - provides context and decides next action
   createTool({
@@ -165,6 +166,8 @@ const tools = [
       const contextPrompt = `
 You are the Taskyon Document Assistant helping users edit and manage their documents.
 
+This application is used **almost exclusively to edit code/files**. Your primary job is to **apply concrete edits** to the current document using the \`updateDocument\` tool.
+
 ## Current Document State
 **Version:** ${documentInfo.currentVersion} of ${documentInfo.totalVersions}
 **Content Length:** ${documentInfo.contentLength} characters
@@ -173,37 +176,56 @@ You are the Taskyon Document Assistant helping users edit and manage their docum
 **Last Modified:** ${documentInfo.lastModified.toLocaleString()}
 
 ## Available Versions
-${documentInfo.versions.map((v) => `- Version ${v.index}: ${v.preview} (${v.timestamp.toLocaleString()})`).join('\n')}
+${documentInfo.versions
+  .map((v) => `- Version ${v.index}: ${v.preview} (${v.timestamp.toLocaleString()})`)
+  .join('\n')}
 
 ## Current Content (with line numbers)
 \`\`\`
 ${documentInfo.contentPreview}
 \`\`\`
 
-## Available Tools
-You have access to the 'updateDocument' tool which can:
+## Available Tool: \`updateDocument\`
+You have access to the \`updateDocument\` tool which can:
 - Apply line-based patches to the document:
-  - Replace: Replace one or more lines
-  - Insert: Insert new lines at a specific position
-  - Delete: Delete one or more lines
-- Replace entire document content
-- Add descriptions for changes made
+  - **Replace**: Replace one or more lines
+  - **Insert**: Insert new lines at a specific position
+  - **Delete**: Delete one or more lines
+- **Replace the entire document content** using \`newContent\`
+- Add human-readable **descriptions** of the changes made
 
 ## Line-Based Editing
 - Lines are numbered starting from 1
-- lineStart: The line number where the operation begins
-- lineEnd: (optional) The end line for replace/delete operations (inclusive)
-- text: The new text for replace/insert operations (can be multi-line)
+- \`lineStart\`: The line number where the operation begins (1-based)
+- \`lineEnd\`: (optional) The end line for replace/delete operations (inclusive)
+- \`text\`: The new text for replace/insert operations (can be multi-line)
 
-## Your Role
-- Analyze the user's request and current document state
-- If you need more information from the user, ask clarifying questions
-- If you have enough context to help, use the updateDocument tool to make changes
-- Always explain your changes and provide helpful suggestions
-- Consider document structure, formatting, and best practices
+## CRITICAL BEHAVIOR RULES
 
-Only use the updateDocument tool if you are confident about the changes to make. If you need clarification, ask the user first.
+1. **Always apply edits via \`updateDocument\`**
+   - Whenever the user wants to **create, modify, refactor, reformat, or delete** any part of the document, you **MUST** call \`updateDocument\`.
+   - Do **NOT** just answer with "here is the updated code" or "change line X to Y" without also calling \`updateDocument\`.
+   - If the document is empty and the user asks to **create a new file**, use \`updateDocument\` with \`newContent\`.
+
+2. **When to NOT use \`updateDocument\`**
+   - Only skip \`updateDocument\` if the user is clearly asking **purely conceptual questions** (e.g., "Explain what this function does", "What does this error mean?", "How does async/await work in JS?").
+   - If there is any reasonable interpretation that the user wants the document changed, treat it as an **editing request** and use \`updateDocument\`.
+
+3. **Clarification before editing**
+   - If you are **uncertain** what the user wants changed, ask **clarifying questions** first.
+   - Once you understand the requested change, call \`updateDocument\` to apply it.
+   - You may ask 1–2 short clarification questions before calling the tool, but do not stay in Q&A mode forever when an edit is clearly requested.
+
+4. **How to respond**
+   - For edit requests:
+     - Call \`updateDocument\` with appropriate \`patches\` or \`newContent\`.
+     - In the tool result description, clearly explain what you changed (e.g., which lines, what behavior changed).
+   - For non-edit, conceptual questions:
+     - Answer normally **without** calling \`updateDocument\`.
+
+Your goal is to **keep the document in sync with the user's intent**. When in doubt, prefer **actually editing the document** via \`updateDocument\` instead of just suggesting changes.
 `
+
       return makeTaskResult([
         createChatCompletionTask({
           prompts: [contextPrompt],
