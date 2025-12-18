@@ -1,55 +1,56 @@
 <!-- DocumentEditorPage.vue -->
 <template>
   <q-page class="row">
-    <!-- Document Editor Card -->
-    <div dense class="col column">
-      <!-- Version Controls -->
-      <div class="row">
-        <div style="font-size: x-small" class="q-pl-xs">
-          Version:<br />{{ currentVersionIndex + 1 }} / {{ documentVersions.length }}
-        </div>
-        <q-btn
-          flat
-          dense
-          :icon="matNavigateBefore"
-          title="Previous Version"
-          :disable="currentVersionIndex === 0"
-          @click="goToPreviousVersion"
-        />
-        <q-btn
-          flat
-          dense
-          :icon="matNavigateNext"
-          title="Next Version"
-          :disable="currentVersionIndex === documentVersions.length - 1"
-          @click="goToNextVersion"
-        />
-        <q-btn
-          flat
-          dense
-          :icon="mdiTextBoxPlus"
-          color="secondary"
-          title="Create New Version"
-          @click="createNewVersion"
-        />
-        <q-space />
-        <q-btn
-          flat
-          dense
-          :icon="matContentCopy"
-          color="secondary"
-          title="Copy"
-          @click="copyContent"
-        />
-        <q-btn
-          flat
-          dense
-          :icon="mdiNewBox"
-          color="secondary"
-          title="Reset Document"
-          @click="reset"
-        />
-        <!--
+    <SplitTaskyonView :configuration="configuration" :tools="tools" name="codingpage" persist>
+      <!-- Document Editor Card -->
+      <div dense class="col column">
+        <!-- Version Controls -->
+        <div class="row">
+          <div style="font-size: x-small" class="q-pl-xs">
+            Version:<br />{{ currentVersionIndex + 1 }} / {{ documentVersions.length }}
+          </div>
+          <q-btn
+            flat
+            dense
+            :icon="matNavigateBefore"
+            title="Previous Version"
+            :disable="currentVersionIndex === 0"
+            @click="goToPreviousVersion"
+          />
+          <q-btn
+            flat
+            dense
+            :icon="matNavigateNext"
+            title="Next Version"
+            :disable="currentVersionIndex === documentVersions.length - 1"
+            @click="goToNextVersion"
+          />
+          <q-btn
+            flat
+            dense
+            :icon="mdiTextBoxPlus"
+            color="secondary"
+            title="Create New Version"
+            @click="createNewVersion"
+          />
+          <q-space />
+          <q-btn
+            flat
+            dense
+            :icon="matContentCopy"
+            color="secondary"
+            title="Copy"
+            @click="copyContent"
+          />
+          <q-btn
+            flat
+            dense
+            :icon="mdiNewBox"
+            color="secondary"
+            title="Reset Document"
+            @click="reset"
+          />
+          <!--
         <q-btn-dropdown
           color="primary"
           size="sm"
@@ -68,31 +69,22 @@
             </q-item>
           </q-list>
         </q-btn-dropdown>
-      --></div>
+      -->
+        </div>
 
-      <!-- Code Editor -->
-      <q-card flat class="col" style="max-width: 100%">
-        <CodeEditor
-          v-model="currentContent"
-          class="col"
-          placeholder="Write here..."
-          language="javascript"
-          style="max-height: 87vh"
-          @update:model-value="onContentChange"
-        />
-      </q-card>
-    </div>
-
-    <!-- Taskyon iframe -->
-    <div class="col col-sm-6 col-md-5" style="min-height: 500px; min-width: 300px">
-      <iframe
-        id="taskyon"
-        title="Taskyon agent"
-        frameborder="0"
-        :src="`${taskyonUrl}?iframe=true&profile=coding`"
-        style="width: 100%; height: 99%"
-      ></iframe>
-    </div>
+        <!-- Code Editor -->
+        <q-card flat class="col" style="max-width: 100%">
+          <CodeEditor
+            v-model="currentContent"
+            class="col"
+            placeholder="Write here..."
+            language="javascript"
+            style="max-height: 87vh"
+            @update:model-value="onContentChange"
+          />
+        </q-card>
+      </div>
+    </SplitTaskyonView>
   </q-page>
 </template>
 
@@ -110,10 +102,10 @@ import { watchThrottled } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { copyToClipboard, Notify } from 'quasar'
 import CodeEditor from 'src/components/CodeEditor.vue'
+import SplitTaskyonView from 'src/components/SplitTaskyonView.vue'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { useAppStateStore } from 'src/stores/appState'
 import { computed, onMounted, ref } from 'vue'
-import { initializeTaskyon } from '../../../packages/tyclient/src'
 
 const state = useAppStateStore()
 
@@ -138,12 +130,206 @@ interface LineInfo {
   endPos: number
 }
 
+// Taskyon tools configuration
+const tools = [
+  // Entry node tool - provides context and decides next action
+  createTool({
+    name: 'documentAssistant',
+    description:
+      'Main document assistant that provides context and decides on next actions for document editing',
+    parameters: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    } as const satisfies JSONSchema7,
+    function: () => {
+      // Gather document context information
+      const lineInfo = getLineInfo(currentContent.value)
+      const documentInfo = {
+        currentVersion: currentVersionIndex.value + 1,
+        totalVersions: documentVersions.value.length,
+        contentLength: currentContent.value.length,
+        totalLines: lineInfo.length,
+        hasUnsavedChanges: hasUnsavedChanges.value,
+        lastModified: currentVersion.value?.timestamp || 'never',
+        contentPreview: formatContentWithLineNumbers(currentContent.value, maxPreviewLines),
+        versions: documentVersions.value.map((v, i) => ({
+          index: i + 1,
+          timestamp: v.timestamp,
+          preview: getVersionPreview(v.content),
+          description: v.description,
+        })),
+      }
+
+      // Create context prompt for the AI
+      const contextPrompt = `
+You are the Taskyon Document Assistant helping users edit and manage their documents.
+
+## Current Document State
+**Version:** ${documentInfo.currentVersion} of ${documentInfo.totalVersions}
+**Content Length:** ${documentInfo.contentLength} characters
+**Total Lines:** ${documentInfo.totalLines}
+**Has Unsaved Changes:** ${documentInfo.hasUnsavedChanges}
+**Last Modified:** ${documentInfo.lastModified.toLocaleString()}
+
+## Available Versions
+${documentInfo.versions.map((v) => `- Version ${v.index}: ${v.preview} (${v.timestamp.toLocaleString()})`).join('\n')}
+
+## Current Content (with line numbers)
+\`\`\`
+${documentInfo.contentPreview}
+\`\`\`
+
+## Available Tools
+You have access to the 'updateDocument' tool which can:
+- Apply line-based patches to the document:
+  - Replace: Replace one or more lines
+  - Insert: Insert new lines at a specific position
+  - Delete: Delete one or more lines
+- Replace entire document content
+- Add descriptions for changes made
+
+## Line-Based Editing
+- Lines are numbered starting from 1
+- lineStart: The line number where the operation begins
+- lineEnd: (optional) The end line for replace/delete operations (inclusive)
+- text: The new text for replace/insert operations (can be multi-line)
+
+## Your Role
+- Analyze the user's request and current document state
+- If you need more information from the user, ask clarifying questions
+- If you have enough context to help, use the updateDocument tool to make changes
+- Always explain your changes and provide helpful suggestions
+- Consider document structure, formatting, and best practices
+
+Only use the updateDocument tool if you are confident about the changes to make. If you need clarification, ask the user first.
+`
+      return makeTaskResult([
+        createChatCompletionTask({
+          prompts: [contextPrompt],
+          goal: 'ChooseTool',
+          allowedTools: ['updateDocument'],
+        }),
+      ])
+    },
+  }),
+
+  // Document update tool - handles actual document modifications
+  createTool({
+    name: 'updateDocument',
+    description:
+      'Update the document content using line-based patches for efficient editing or full content replacement',
+    parameters: {
+      type: 'object',
+      properties: {
+        patches: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              type: {
+                type: 'string',
+                enum: ['replace', 'insert', 'delete'],
+                description: 'Type of patch operation',
+              },
+              lineStart: {
+                type: 'number',
+                description: 'Start line number (1-based)',
+              },
+              lineEnd: {
+                type: 'number',
+                description: 'End line number (1-based, inclusive) for replace/delete operations',
+              },
+              text: {
+                type: 'string',
+                description: 'Text to insert/replace with (can be multi-line)',
+              },
+            },
+            required: ['type', 'lineStart'],
+          },
+        },
+        newContent: {
+          type: 'string',
+          description: 'Full new content (alternative to patches)',
+        },
+        description: {
+          type: 'string',
+          description: 'Description of the changes made',
+        },
+      },
+      additionalProperties: false,
+    } as const satisfies JSONSchema7,
+    function: ({ patches, newContent, description }) => {
+      createNewVersion()
+      saveCurrentVersion()
+      let updatedContent: string
+
+      createNewVersion()
+      if (newContent) {
+        // Full content replacement
+        updatedContent = newContent
+      } else if (patches) {
+        // Apply line-based patches
+        const linePatches: LinePatchOperation[] = patches.map((patch) => ({
+          type: patch.type,
+          lineStart: patch.lineStart,
+          lineEnd: patch.lineEnd,
+          text: patch.text,
+        }))
+
+        updatedContent = applyLinePatches(currentContent.value, linePatches)
+      } else {
+        return makeTaskResult({
+          role: 'system',
+          content: {
+            type: 'return',
+            data: 'Error: Either patches or newContent must be provided',
+          },
+        })
+      }
+
+      // Update the editor content
+      currentContent.value = updatedContent
+      hasUnsavedChanges.value = true
+      saveCurrentVersion()
+
+      const changeDescription = description || 'Document updated by AI'
+
+      return makeTaskResult({
+        role: 'system',
+        content: {
+          type: 'message',
+          data: `Document updated successfully!\n\n**Changes:** ${changeDescription}\n\n**Content preview:**\n\`\`\`\n${updatedContent.substring(0, 200)}${updatedContent.length > 200 ? '...' : ''}\n\`\`\``,
+        },
+      })
+    },
+  }),
+]
+
+const configuration: partialTyConfiguration = {
+  llmSettings: {
+    ...removeKeys(state.llmSettings, ['entryNode']),
+    enableOpenAiTools: false,
+    enableToolChooser: true,
+    entryNode: toolCall({ name: 'documentAssistant', arguments: {} }),
+  },
+  appConfiguration: {
+    ...removeKeys(state.appConfiguration, ['chatSuggestions']),
+    guiMode: 'minChat',
+    expertMode: true,
+    showLogo: false,
+    chatSuggestions: [],
+    welcomeMsg:
+      'Hi! I can help you edit documents. I can see the current content with line numbers and make precise line-based edits.',
+  },
+  signatureOrKey: state.activeTaskyonToken,
+}
+
 // State
 const documentVersions = ref<DocumentVersion[]>([])
 const currentVersionIndex = ref(0)
 const currentContent = ref('')
 const hasUnsavedChanges = ref(false)
-const taskyonUrl = window.location.origin
 
 // make sure we persist current version for page reloads
 const storeKey = 'codeEditorText'
@@ -329,202 +515,5 @@ onMounted(() => {
   if (current) {
     currentContent.value = current.content
   }
-
-  // Taskyon tools configuration
-  const tools = [
-    // Entry node tool - provides context and decides next action
-    createTool({
-      name: 'documentAssistant',
-      description:
-        'Main document assistant that provides context and decides on next actions for document editing',
-      parameters: {
-        type: 'object',
-        properties: {},
-        additionalProperties: false,
-      } as const satisfies JSONSchema7,
-      function: () => {
-        // Gather document context information
-        const lineInfo = getLineInfo(currentContent.value)
-        const documentInfo = {
-          currentVersion: currentVersionIndex.value + 1,
-          totalVersions: documentVersions.value.length,
-          contentLength: currentContent.value.length,
-          totalLines: lineInfo.length,
-          hasUnsavedChanges: hasUnsavedChanges.value,
-          lastModified: currentVersion.value?.timestamp || 'never',
-          contentPreview: formatContentWithLineNumbers(currentContent.value, maxPreviewLines),
-          versions: documentVersions.value.map((v, i) => ({
-            index: i + 1,
-            timestamp: v.timestamp,
-            preview: getVersionPreview(v.content),
-            description: v.description,
-          })),
-        }
-
-        // Create context prompt for the AI
-        const contextPrompt = `
-You are the Taskyon Document Assistant helping users edit and manage their documents.
-
-## Current Document State
-**Version:** ${documentInfo.currentVersion} of ${documentInfo.totalVersions}
-**Content Length:** ${documentInfo.contentLength} characters
-**Total Lines:** ${documentInfo.totalLines}
-**Has Unsaved Changes:** ${documentInfo.hasUnsavedChanges}
-**Last Modified:** ${documentInfo.lastModified.toLocaleString()}
-
-## Available Versions
-${documentInfo.versions.map((v) => `- Version ${v.index}: ${v.preview} (${v.timestamp.toLocaleString()})`).join('\n')}
-
-## Current Content (with line numbers)
-\`\`\`
-${documentInfo.contentPreview}
-\`\`\`
-
-## Available Tools
-You have access to the 'updateDocument' tool which can:
-- Apply line-based patches to the document:
-  - Replace: Replace one or more lines
-  - Insert: Insert new lines at a specific position
-  - Delete: Delete one or more lines
-- Replace entire document content
-- Add descriptions for changes made
-
-## Line-Based Editing
-- Lines are numbered starting from 1
-- lineStart: The line number where the operation begins
-- lineEnd: (optional) The end line for replace/delete operations (inclusive)
-- text: The new text for replace/insert operations (can be multi-line)
-
-## Your Role
-- Analyze the user's request and current document state
-- If you need more information from the user, ask clarifying questions
-- If you have enough context to help, use the updateDocument tool to make changes
-- Always explain your changes and provide helpful suggestions
-- Consider document structure, formatting, and best practices
-
-Only use the updateDocument tool if you are confident about the changes to make. If you need clarification, ask the user first.
-`
-        return makeTaskResult([
-          createChatCompletionTask({
-            prompts: [contextPrompt],
-            goal: 'ChooseTool',
-            allowedTools: ['updateDocument'],
-          }),
-        ])
-      },
-    }),
-
-    // Document update tool - handles actual document modifications
-    createTool({
-      name: 'updateDocument',
-      description:
-        'Update the document content using line-based patches for efficient editing or full content replacement',
-      parameters: {
-        type: 'object',
-        properties: {
-          patches: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                type: {
-                  type: 'string',
-                  enum: ['replace', 'insert', 'delete'],
-                  description: 'Type of patch operation',
-                },
-                lineStart: {
-                  type: 'number',
-                  description: 'Start line number (1-based)',
-                },
-                lineEnd: {
-                  type: 'number',
-                  description: 'End line number (1-based, inclusive) for replace/delete operations',
-                },
-                text: {
-                  type: 'string',
-                  description: 'Text to insert/replace with (can be multi-line)',
-                },
-              },
-              required: ['type', 'lineStart'],
-            },
-          },
-          newContent: {
-            type: 'string',
-            description: 'Full new content (alternative to patches)',
-          },
-          description: {
-            type: 'string',
-            description: 'Description of the changes made',
-          },
-        },
-        additionalProperties: false,
-      } as const satisfies JSONSchema7,
-      function: ({ patches, newContent, description }) => {
-        createNewVersion()
-        saveCurrentVersion()
-        let updatedContent: string
-
-        createNewVersion()
-        if (newContent) {
-          // Full content replacement
-          updatedContent = newContent
-        } else if (patches) {
-          // Apply line-based patches
-          const linePatches: LinePatchOperation[] = patches.map((patch) => ({
-            type: patch.type,
-            lineStart: patch.lineStart,
-            lineEnd: patch.lineEnd,
-            text: patch.text,
-          }))
-
-          updatedContent = applyLinePatches(currentContent.value, linePatches)
-        } else {
-          return makeTaskResult({
-            role: 'system',
-            content: {
-              type: 'return',
-              data: 'Error: Either patches or newContent must be provided',
-            },
-          })
-        }
-
-        // Update the editor content
-        currentContent.value = updatedContent
-        hasUnsavedChanges.value = true
-        saveCurrentVersion()
-
-        const changeDescription = description || 'Document updated by AI'
-
-        return makeTaskResult({
-          role: 'system',
-          content: {
-            type: 'message',
-            data: `Document updated successfully!\n\n**Changes:** ${changeDescription}\n\n**Content preview:**\n\`\`\`\n${updatedContent.substring(0, 200)}${updatedContent.length > 200 ? '...' : ''}\n\`\`\``,
-          },
-        })
-      },
-    }),
-  ]
-
-  const configuration: partialTyConfiguration = {
-    llmSettings: {
-      ...removeKeys(state.llmSettings, ['entryNode']),
-      enableOpenAiTools: false,
-      enableToolChooser: true,
-      entryNode: toolCall({ name: 'documentAssistant', arguments: {} }),
-    },
-    appConfiguration: {
-      ...removeKeys(state.appConfiguration, ['chatSuggestions']),
-      guiMode: 'minChat',
-      expertMode: true,
-      showLogo: false,
-      chatSuggestions: [],
-      welcomeMsg:
-        'Hi! I can help you edit documents. I can see the current content with line numbers and make precise line-based edits.',
-    },
-    signatureOrKey: state.activeTaskyonToken,
-  }
-
-  void initializeTaskyon({ tools, configuration, name: 'codingpage', persist: true })
 })
 </script>
