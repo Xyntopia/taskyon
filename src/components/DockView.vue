@@ -40,13 +40,33 @@
             isSplitterResizable(index) ? 'dock-splitter--enabled' : 'dock-splitter--disabled',
           ]"
           @mousedown="isSplitterResizable(index) && startResize(index, $event)"
-        ></div>
+        >
+          <!-- Arrow to collapse the left / previous pane -->
+          <button
+            class="dock-splitter-btn dock-splitter-btn--prev"
+            type="button"
+            @mousedown.stop
+            @click.stop="collapsePane(index, 'prev')"
+          >
+            {{ node.direction === 'row' ? '◀' : '▲' }}
+          </button>
+
+          <!-- Arrow to collapse the right / next pane -->
+          <button
+            class="dock-splitter-btn dock-splitter-btn--next"
+            type="button"
+            @mousedown.stop
+            @click.stop="collapsePane(index, 'next')"
+          >
+            {{ node.direction === 'row' ? '▶' : '▼' }}
+          </button>
+        </div>
       </template>
     </template>
 
     <!-- Leaf Node (Tabs) -->
     <template v-else-if="node.type === 'leaf'">
-      <!-- Tabs header: always shown if showTabs, even when collapsed -->
+      <!-- Tabs header: always shown if showTabs, even when collapsed (see showTabs computed) -->
       <div
         v-if="showTabs"
         class="dock-tabs-header"
@@ -279,7 +299,16 @@ const closeView = (n: DockNode, viewId: string): DockNode => {
   return { ...n, views, activeViewIndex: active }
 }
 
-const resizeChildren = (n: DockNode, splitterIndex: number, deltaWeight: number): DockNode => {
+/**
+ * Resize two adjacent children and implement "snap to collapse"
+ * using a weight threshold derived from pixels.
+ */
+const resizeChildren = (
+  n: DockNode,
+  splitterIndex: number,
+  deltaWeight: number,
+  collapseWeightThreshold: number,
+): DockNode => {
   if (n.type !== 'container' || !n.children || n.children.length < 2) return n
 
   const children = n.children
@@ -296,8 +325,8 @@ const resizeChildren = (n: DockNode, splitterIndex: number, deltaWeight: number)
 
   const updated = [...children]
 
-  // snap-to-collapse behavior
-  if (newLeft < COLLAPSE_THRESHOLD && left.type === 'leaf') {
+  // snap-to-collapse behavior (works for containers AND leaves)
+  if (newLeft < collapseWeightThreshold) {
     // collapse left, give all weight to right
     updated[splitterIndex] = {
       ...left,
@@ -310,7 +339,7 @@ const resizeChildren = (n: DockNode, splitterIndex: number, deltaWeight: number)
       collapsed: false,
       size: leftSize + rightSize,
     }
-  } else if (newRight < COLLAPSE_THRESHOLD && right.type === 'leaf') {
+  } else if (newRight < collapseWeightThreshold) {
     // collapse right, give all weight to left
     updated[splitterIndex] = {
       ...left,
@@ -324,9 +353,9 @@ const resizeChildren = (n: DockNode, splitterIndex: number, deltaWeight: number)
       size: 0,
     }
   } else {
-    // normal resize
-    newLeft = Math.max(COLLAPSE_THRESHOLD, newLeft)
-    newRight = Math.max(COLLAPSE_THRESHOLD, newRight)
+    // normal resize – don't allow going smaller than the threshold
+    newLeft = Math.max(collapseWeightThreshold, newLeft)
+    newRight = Math.max(collapseWeightThreshold, newRight)
 
     updated[splitterIndex] = { ...left, collapsed: false, size: newLeft }
     updated[splitterIndex + 1] = { ...right, collapsed: false, size: newRight }
@@ -343,16 +372,22 @@ const addViewToLeaf = (n: DockNode, viewId: string, makeActive = true): DockNode
   return { ...n, views, activeViewIndex }
 }
 
-/* ---------- Collapse-reated helpers ---------- */
+/* ---------- Collapse-related helpers ---------- */
 
-const COLLAPSE_THRESHOLD = 0.15 // flex weight below which we treat as collapsed
+/**
+ * Collapsed thickness in pixels.
+ * Used for:
+ *  - CSS flex-basis when collapsed
+ *  - snap-to-collapse threshold (converted to weights)
+ *  - tab-bar height reference
+ */
+const COLLAPSED_THICKNESS_PX = 32
 
 const isCollapsed = computed(() => {
   const n = node.value
   if (n.type !== 'leaf') return false
-  if (n.collapsed) return true
-  const size = n.size ?? 1
-  return size < COLLAPSE_THRESHOLD
+  // explicit flag OR size 0 means "collapsed"
+  return !!n.collapsed || (n.size ?? 0) === 0
 })
 
 const toggleCollapse = () => {
@@ -390,10 +425,14 @@ const onCollapsedTabClick = (index: number) => {
 
 /** Whether to show the tab header for this leaf node */
 const showTabs = computed(() => {
-  if (node.value.type !== 'leaf') return false
+  const n = node.value
+  if (n.type !== 'leaf') return false
 
-  const mode = node.value.showTabs ?? 'always'
-  const count = node.value.views?.length ?? 0
+  // When collapsed we always show the header (even if showTabs is "never")
+  if (isCollapsed.value) return true
+
+  const mode = n.showTabs ?? 'always'
+  const count = n.views?.length ?? 0
 
   if (mode === 'never') return false
   if (mode === 'always') return true
@@ -406,10 +445,10 @@ const nodeStyle = computed(() => {
   const n = node.value
   const mode = n.sizeMode ?? 'weight'
 
-  // Collapsed: fixed thickness (width in row, height in column)
+  // Collapsed: fixed thickness (width in row, height in column) in pixels
   if (n.type === 'leaf' && isCollapsed.value) {
-    // this is along the flex axis; 32px is a good starting value
-    return { flex: '0 0 32px' }
+    const thickness = `${COLLAPSED_THICKNESS_PX}px`
+    return { flex: `0 0 ${thickness}` }
   }
 
   if (mode === 'content') {
@@ -447,7 +486,15 @@ const handleMouseMove = (event: MouseEvent) => {
   const weightPerPixel = totalWeight / totalSize
   const deltaWeight = delta * weightPerPixel
 
-  node.value = resizeChildren(current, activeSplitterIndex.value, deltaWeight)
+  // Convert collapsed thickness in px into a weight threshold
+  const collapseWeightThreshold = (COLLAPSED_THICKNESS_PX / totalSize) * totalWeight
+
+  node.value = resizeChildren(
+    current,
+    activeSplitterIndex.value,
+    deltaWeight,
+    collapseWeightThreshold,
+  )
 }
 
 const stopResize = () => {
@@ -474,6 +521,61 @@ const startResize = (index: number, event: MouseEvent) => {
 onUnmounted(() => {
   stopResize()
 })
+
+/* ---------- Splitter collapse helpers ---------- */
+
+type SplitterSide = 'prev' | 'next'
+
+const collapsePane = (splitterIndex: number, side: SplitterSide) => {
+  const n = node.value
+  if (n.type !== 'container' || !n.children) return
+
+  const children = [...n.children]
+
+  const targetIndex = side === 'prev' ? splitterIndex : splitterIndex + 1
+  const neighborIndex = side === 'prev' ? splitterIndex + 1 : splitterIndex
+
+  const target = children[targetIndex]
+  const neighbor = children[neighborIndex]
+  if (!target || !neighbor) return
+
+  const targetSize = target.size ?? 1
+  const neighborSize = neighbor.size ?? 1
+
+  // If already collapsed, restore from lastSize
+  if ((targetSize === 0 || target.collapsed) && target.lastSize != null) {
+    const restored = target.lastSize
+    const newNeighborSize = Math.max(neighborSize - restored, 0)
+
+    children[targetIndex] = {
+      ...target,
+      collapsed: false,
+      size: restored,
+    }
+    children[neighborIndex] = {
+      ...neighbor,
+      size: newNeighborSize,
+    }
+
+    node.value = { ...n, children }
+    return
+  }
+
+  // Collapse this pane, give its space to the neighbor
+  children[targetIndex] = {
+    ...target,
+    collapsed: true,
+    lastSize: target.lastSize ?? targetSize,
+    size: 0,
+  }
+  children[neighborIndex] = {
+    ...neighbor,
+    collapsed: false,
+    size: neighborSize + targetSize,
+  }
+
+  node.value = { ...n, children }
+}
 
 /* ---------- Tab handlers ---------- */
 
@@ -603,6 +705,59 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   height: 4px;
 }
 
+/* Splitter arrow buttons (shown on hover) */
+.dock-splitter-btn {
+  position: absolute;
+  z-index: 1;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  color: inherit;
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease;
+}
+
+/* Show arrows only when splitter is hovered */
+.dock-splitter--enabled:hover .dock-splitter-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Position for horizontal (row) splitters */
+.dock-splitter.row .dock-splitter-btn--prev {
+  top: 50%;
+  left: 1px;
+  transform: translate(-50%, -50%);
+}
+.dock-splitter.row .dock-splitter-btn--next {
+  top: 50%;
+  right: 1px;
+  transform: translate(50%, -50%);
+}
+
+/* Position for vertical (column) splitters */
+.dock-splitter.column .dock-splitter-btn--prev {
+  left: 50%;
+  top: 1px;
+  transform: translate(-50%, -50%);
+}
+.dock-splitter.column .dock-splitter-btn--next {
+  left: 50%;
+  bottom: 1px;
+  transform: translate(-50%, 50%);
+}
+
 /* ---------------- Tabs header (base) ---------------- */
 .dock-tabs-header {
   display: flex;
@@ -689,15 +844,24 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   flex-shrink: 0;
 }
 
+/* Remove borders when collapsed (both orientations) */
+.dock-tabs-header.dock-tabs-header--collapsed {
+  border-bottom: none;
+}
+
+.dock-tabs-header--vertical.dock-tabs-header--collapsed {
+  border-right: none;
+}
+
 /* ---------------- Vertical strip (collapsed sidebar) ---------------- */
 /*
   IMPORTANT:
-  Do NOT set writing-mode on the flex container. That changes axes and breaks stacking.
-  Keep the header a normal flex COLUMN so children stack vertically.
+  Do NOT set writing-mode on the flex container. Keep header a flex COLUMN
+  so children stack vertically.
 */
 .dock-tabs-header--vertical {
   display: flex !important;
-  flex-direction: column !important; /* real vertical stacking */
+  flex-direction: column !important;
   align-items: stretch;
   justify-content: flex-start;
 
@@ -708,14 +872,19 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   border-right: 1px solid color-mix(in srgb, currentColor 12%, transparent);
 
   padding: 0.25rem 0.15rem;
-  gap: 0.15rem; /* nice spacing between tabs/buttons */
+  gap: 0.15rem;
 }
 
-/* Make each tab fill the strip width */
+/* Make each tab fill the strip width and stack its content vertically */
 .dock-tabs-header--vertical .dock-tab {
   width: 100%;
   padding: 0.5rem 0.25rem;
+
+  display: flex;
+  flex-direction: column; /* stack icon + title + close vertically */
+  align-items: center; /* center them in the strip */
   justify-content: center;
+
   border-bottom: none;
   border-right: 2px solid transparent;
 }
@@ -725,21 +894,22 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   border-right-color: currentColor;
 }
 
-/* Here is where vertical text should live (NOT on the container) */
+/* Vertical text for the title */
 .dock-tabs-header--vertical .dock-tab-title {
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  max-height: 10em; /* adjust as you like */
+  max-height: 10em;
   overflow: hidden;
+  text-align: center;
 }
 
-/* Optional: icon spacing in vertical strip */
+/* Icon spacing in vertical strip */
 .dock-tabs-header--vertical .dock-tab-icon {
   margin-right: 0;
   margin-bottom: 0.25rem;
 }
 
-/* Close button usually hidden when collapsed anyway, but keep sane layout */
+/* Close button layout in vertical strip */
 .dock-tabs-header--vertical .dock-tab-close {
   margin-left: 0;
   margin-top: 0.25rem;
