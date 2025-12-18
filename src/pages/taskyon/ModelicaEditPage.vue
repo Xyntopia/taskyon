@@ -177,7 +177,7 @@
         </div>
       </template>
       <template #simulate>
-        <q-card>
+        <q-card flat>
           <q-card-section>
             <div class="row q-col-gutter-sm">
               <div class="col-4">
@@ -505,7 +505,7 @@ const loadExample = async () => {
 equation
   der(h) = v;
   der(v) = -g;
-  E = 9.81*h + 0.5*v*v;
+  E = g*h + 0.5*v*v;
   when h <= radius then
     reinit(v, -c*pre(v));
   end when;
