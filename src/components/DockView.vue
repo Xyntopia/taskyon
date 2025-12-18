@@ -32,7 +32,7 @@
 
         <!-- Splitter -->
         <div
-          v-if="index < node.children.length - 1"
+          v-if="isSplitterResizable(index) && index < node.children.length - 1"
           class="dock-splitter"
           :class="[
             node.direction,
@@ -495,8 +495,8 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 
 /* Hover: stronger color, slight background, thicker line – only when enabled */
 .dock-splitter--enabled:hover {
-  color: rgba(0, 0, 0, 0.45);
-  background-color: rgba(0, 0, 0, 0.04);
+  color: color-mix(in srgb, currentColor 45%, transparent);
+  background-color: color-mix(in srgb, currentColor 4%, transparent);
 }
 
 .dock-splitter--enabled.row:hover::before {
@@ -513,8 +513,8 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   flex-shrink: 0;
   overflow-x: auto;
   align-items: center;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
-  background: color-mix(in srgb, currentColor 2%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  /*background: color-mix(in srgb, currentColor 2%, transparent);*/
 }
 
 .dock-tab {
