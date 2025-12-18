@@ -707,30 +707,39 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 
 /* Splitter arrow buttons (shown on hover) */
 .dock-splitter-btn {
+  /* tune these two if you want even bigger buttons */
+  --btn-size: 28px;
+  --btn-gap: 18px; /* separation from the splitter center (prevents overlap) */
+
   position: absolute;
   z-index: 1;
-  border: none;
-  border-radius: 999px;
-  background: color-mix(in srgb, currentColor 12%, transparent);
-  color: inherit;
-  padding: 0;
-  width: 28px; /* bigger click area */
-  height: 28px; /* bigger click area */
-  font-size: 14px; /* bigger symbol */
+
+  width: var(--btn-size);
+  height: var(--btn-size);
+
   display: flex;
   align-items: center;
   justify-content: center;
 
+  padding: 0;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 3px; /* square-ish, not round */
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: inherit;
+
+  font-size: 14px;
+  line-height: 1;
+
   opacity: 0;
   pointer-events: none;
-  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
+
   transition:
     opacity 0.15s ease,
     background-color 0.15s ease,
     transform 0.1s ease;
 }
 
-/* Show arrows only when splitter is hovered */
+/* show only on hover of enabled splitter */
 .dock-splitter--enabled:hover .dock-splitter-btn {
   opacity: 1;
   pointer-events: auto;
@@ -738,31 +747,38 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 
 .dock-splitter-btn:hover {
   background: color-mix(in srgb, currentColor 22%, transparent);
-  transform: scale(1.03);
 }
 
-/* Position for horizontal (row) splitters */
-.dock-splitter.row .dock-splitter-btn--prev {
-  top: 50%;
-  left: 2px;
-  transform: translate(-50%, -50%);
-}
+/* --- Horizontal splitter buttons: left & right, no overlap --- */
+.dock-splitter.row .dock-splitter-btn--prev,
 .dock-splitter.row .dock-splitter-btn--next {
   top: 50%;
-  right: 2px;
-  transform: translate(50%, -50%);
-}
-
-/* Position for vertical (column) splitters */
-.dock-splitter.column .dock-splitter-btn--prev {
   left: 50%;
-  top: 2px;
   transform: translate(-50%, -50%);
 }
+
+.dock-splitter.row .dock-splitter-btn--prev {
+  transform: translate(-50%, -50%) translateX(calc(var(--btn-gap) * -1));
+}
+
+.dock-splitter.row .dock-splitter-btn--next {
+  transform: translate(-50%, -50%) translateX(var(--btn-gap));
+}
+
+/* --- Vertical splitter buttons: top & bottom, no overlap --- */
+.dock-splitter.column .dock-splitter-btn--prev,
 .dock-splitter.column .dock-splitter-btn--next {
   left: 50%;
-  bottom: 2px;
-  transform: translate(-50%, 50%);
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.dock-splitter.column .dock-splitter-btn--prev {
+  transform: translate(-50%, -50%) translateY(calc(var(--btn-gap) * -1));
+}
+
+.dock-splitter.column .dock-splitter-btn--next {
+  transform: translate(-50%, -50%) translateY(var(--btn-gap));
 }
 
 /* ---------------- Tabs header (base) ---------------- */
