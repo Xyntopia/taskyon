@@ -16,13 +16,13 @@
         <DockView
           v-model:node="node.children![index]!"
           :parent-direction="node.direction"
-          :hide-tab-add="props.hideTabAdd"
-          :hide-tab-close="props.hideTabClose"
-          :tab-class="props.tabClass"
-          :active-tab-class="props.activeTabClass"
-          :tab-button-class="props.tabButtonClass"
-          :add-button-class="props.addButtonClass"
-          :tab-icons="props.tabIcons"
+          :hide-tab-add="hideTabAdd"
+          :hide-tab-close="hideTabClose"
+          :tab-class="tabClass"
+          :active-tab-class="activeTabClass"
+          :tab-button-class="tabButtonClass"
+          :add-button-class="addButtonClass"
+          :tab-icons="tabIcons"
           @add-view="onChildAddView"
         >
           <!-- Forward all slots -->
@@ -51,7 +51,7 @@
         v-if="showTabs"
         class="dock-tabs-header"
         :class="{
-          'dock-tabs-header--vertical': isCollapsed && props.parentDirection === 'row',
+          'dock-tabs-header--vertical': isCollapsed && parentDirection === 'row',
           'dock-tabs-header--collapsed': isCollapsed,
         }"
       >
@@ -60,24 +60,20 @@
           :key="viewId"
           class="dock-tab"
           :class="[
-            props.tabClass,
+            tabClass,
             { active: index === (node.activeViewIndex ?? 0) },
-            index === (node.activeViewIndex ?? 0) && props.activeTabClass,
+            index === (node.activeViewIndex ?? 0) && activeTabClass,
           ]"
           @click="isCollapsed ? onCollapsedTabClick(index) : onTabClick(index)"
         >
-          <q-icon
-            v-if="props.tabIcons?.[viewId]"
-            class="dock-tab-icon"
-            :name="props.tabIcons[viewId]"
-          />
+          <q-icon v-if="tabIcons?.[viewId]" class="dock-tab-icon" :name="tabIcons[viewId]" />
           <span class="dock-tab-title">{{ viewId }}</span>
 
           <button
-            v-if="!props.hideTabClose && !isCollapsed"
+            v-if="!hideTabClose && !isCollapsed"
             class="dock-tab-close"
             type="button"
-            :class="props.tabButtonClass"
+            :class="tabButtonClass"
             @click.stop="onTabClose(viewId)"
           >
             ×
@@ -88,7 +84,7 @@
         <button
           class="dock-tab-minimize"
           type="button"
-          :class="props.tabButtonClass"
+          :class="tabButtonClass"
           @click.stop="toggleCollapse"
         >
           {{ isCollapsed ? '▢' : '▁' }}
@@ -96,10 +92,10 @@
 
         <!-- Plus button still available when not collapsed -->
         <button
-          v-if="!props.hideTabAdd && !isCollapsed"
+          v-if="!hideTabAdd && !isCollapsed"
           class="dock-tab-add"
           type="button"
-          :class="props.addButtonClass"
+          :class="addButtonClass"
           @click.stop="onAddTabClick"
         >
           +
@@ -193,38 +189,35 @@ export type AddViewDone = (result: AddViewResult | null | undefined) => void
 
 /* ---------- Props ---------- */
 
-const props = withDefaults(
-  defineProps<{
-    parentDirection?: DockDirection
+const {
+  parentDirection = 'column',
 
-    /** Show the "x" close button on each tab (default: true) */
-    hideTabClose?: boolean
-    /** Show the "+" add-tab button (default: true) */
-    hideTabAdd?: boolean
+  hideTabClose = false,
+  hideTabAdd = false,
 
-    /** Extra CSS classes for easier styling from parent */
-    tabClass?: string
-    activeTabClass?: string
-    tabButtonClass?: string
-    addButtonClass?: string
+  // these can be whatever you like – empty string / undefined / {}
+  tabClass = '',
+  activeTabClass = '',
+  tabButtonClass = '',
+  addButtonClass = '',
+  tabIcons = {},
+} = defineProps<{
+  parentDirection?: DockDirection | undefined
 
-    /** Map viewId -> raw SVG string (trusted HTML) for tab icons */
-    tabIcons?: Record<string, string>
-  }>(),
-  {
-    parentDirection: 'column',
+  /** Show the "x" close button on each tab (default: true) */
+  hideTabClose?: boolean
+  /** Show the "+" add-tab button (default: true) */
+  hideTabAdd?: boolean
 
-    hideTabClose: false,
-    hideTabAdd: false,
+  /** Extra CSS classes for easier styling from parent */
+  tabClass?: string
+  activeTabClass?: string
+  tabButtonClass?: string
+  addButtonClass?: string
 
-    // these can be whatever you like – empty string / undefined / {}
-    tabClass: '',
-    activeTabClass: '',
-    tabButtonClass: '',
-    addButtonClass: '',
-    tabIcons: () => ({}),
-  },
-)
+  /** Map viewId -> raw SVG string (trusted HTML) for tab icons */
+  tabIcons?: Record<string, string>
+}>()
 
 /* ---------- v-model ---------- */
 
