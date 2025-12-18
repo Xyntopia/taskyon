@@ -15,6 +15,7 @@
       <template v-for="(child, index) in node.children" :key="child.id">
         <DockView
           v-model:node="node.children![index]!"
+          :parent-direction="node.direction"
           :hide-tab-add="props.hideTabAdd"
           :hide-tab-close="props.hideTabClose"
           :tab-class="props.tabClass"
@@ -45,8 +46,15 @@
 
     <!-- Leaf Node (Tabs) -->
     <template v-else-if="node.type === 'leaf'">
-      <!-- Tabs header (may be hidden depending on showTabs) -->
-      <div v-if="showTabs" class="dock-tabs-header">
+      <!-- Tabs header: always shown if showTabs, even when collapsed -->
+      <div
+        v-if="showTabs"
+        class="dock-tabs-header"
+        :class="{
+          'dock-tabs-header--vertical': isCollapsed && props.parentDirection === 'row',
+          'dock-tabs-header--collapsed': isCollapsed,
+        }"
+      >
         <div
           v-for="(viewId, index) in node.views || []"
           :key="viewId"
@@ -56,9 +64,8 @@
             { active: index === (node.activeViewIndex ?? 0) },
             index === (node.activeViewIndex ?? 0) && props.activeTabClass,
           ]"
-          @click="onTabClick(index)"
+          @click="isCollapsed ? onCollapsedTabClick(index) : onTabClick(index)"
         >
-          <!-- Optional SVG icon -->
           <q-icon
             v-if="props.tabIcons?.[viewId]"
             class="dock-tab-icon"
@@ -67,7 +74,7 @@
           <span class="dock-tab-title">{{ viewId }}</span>
 
           <button
-            v-if="!props.hideTabClose"
+            v-if="!props.hideTabClose && !isCollapsed"
             class="dock-tab-close"
             type="button"
             :class="props.tabButtonClass"
@@ -77,9 +84,19 @@
           </button>
         </div>
 
-        <!-- Plus button to add a new tab in this leaf -->
+        <!-- Minimize / restore button -->
         <button
-          v-if="!props.hideTabAdd"
+          class="dock-tab-minimize"
+          type="button"
+          :class="props.tabButtonClass"
+          @click.stop="toggleCollapse"
+        >
+          {{ isCollapsed ? '▢' : '▁' }}
+        </button>
+
+        <!-- Plus button still available when not collapsed -->
+        <button
+          v-if="!props.hideTabAdd && !isCollapsed"
           class="dock-tab-add"
           type="button"
           :class="props.addButtonClass"
@@ -89,23 +106,26 @@
         </button>
       </div>
 
-      <!-- Content-sized leaves: keep simple, participate in layout -->
-      <div v-if="isContentSizedLeaf" class="dock-content dock-content--content">
-        <template v-if="node.views && node.views.length > 0">
-          <slot :name="node.views[node.activeViewIndex ?? 0]" />
-        </template>
-        <div v-else class="dock-empty">No Views</div>
-      </div>
-
-      <!-- Weight-based leaves: isolate content in an absolute scroller -->
-      <div v-else class="dock-content dock-content--weight">
-        <div class="dock-content-inner">
+      <!-- Normal content when NOT collapsed -->
+      <template v-if="!isCollapsed">
+        <!-- Content-sized leaves -->
+        <div v-if="isContentSizedLeaf" class="dock-content dock-content--content">
           <template v-if="node.views && node.views.length > 0">
             <slot :name="node.views[node.activeViewIndex ?? 0]" />
           </template>
           <div v-else class="dock-empty">No Views</div>
         </div>
-      </div>
+
+        <!-- Weight-based leaves -->
+        <div v-else class="dock-content dock-content--weight">
+          <div class="dock-content-inner">
+            <template v-if="node.views && node.views.length > 0">
+              <slot :name="node.views[node.activeViewIndex ?? 0]" />
+            </template>
+            <div v-else class="dock-empty">No Views</div>
+          </div>
+        </div>
+      </template>
     </template>
   </div>
 </template>
@@ -143,6 +163,11 @@ export interface DockNode {
    * 'content': shrink/grow to min content size (e.g. menu bar region)
    */
   sizeMode?: 'weight' | 'content'
+
+  /** whether this pane is collapsed (minimized) */
+  collapsed?: boolean
+  /** remembered flex weight when last non-collapsed */
+  lastSize?: number
 }
 
 /* ---------- Add-view event types ---------- */
@@ -170,6 +195,8 @@ export type AddViewDone = (result: AddViewResult | null | undefined) => void
 
 const props = withDefaults(
   defineProps<{
+    parentDirection?: DockDirection
+
     /** Show the "x" close button on each tab (default: true) */
     hideTabClose?: boolean
     /** Show the "+" add-tab button (default: true) */
@@ -185,6 +212,8 @@ const props = withDefaults(
     tabIcons?: Record<string, string>
   }>(),
   {
+    parentDirection: 'column',
+
     hideTabClose: false,
     hideTabAdd: false,
 
@@ -269,16 +298,48 @@ const resizeChildren = (n: DockNode, splitterIndex: number, deltaWeight: number)
   const leftSize = left.size ?? 1
   const rightSize = right.size ?? 1
 
-  const newLeft = Math.max(0.1, leftSize + deltaWeight)
-  const newRight = Math.max(0.1, rightSize - deltaWeight)
+  let newLeft = Math.max(0, leftSize + deltaWeight)
+  let newRight = Math.max(0, rightSize - deltaWeight)
 
-  const newChildren = children.map((child, idx) => {
-    if (idx === splitterIndex) return { ...child, size: newLeft }
-    if (idx === splitterIndex + 1) return { ...child, size: newRight }
-    return child
-  })
+  const updated = [...children]
 
-  return { ...n, children: newChildren }
+  // snap-to-collapse behavior
+  if (newLeft < COLLAPSE_THRESHOLD && left.type === 'leaf') {
+    // collapse left, give all weight to right
+    updated[splitterIndex] = {
+      ...left,
+      collapsed: true,
+      lastSize: left.lastSize ?? leftSize,
+      size: 0,
+    }
+    updated[splitterIndex + 1] = {
+      ...right,
+      collapsed: false,
+      size: leftSize + rightSize,
+    }
+  } else if (newRight < COLLAPSE_THRESHOLD && right.type === 'leaf') {
+    // collapse right, give all weight to left
+    updated[splitterIndex] = {
+      ...left,
+      collapsed: false,
+      size: leftSize + rightSize,
+    }
+    updated[splitterIndex + 1] = {
+      ...right,
+      collapsed: true,
+      lastSize: right.lastSize ?? rightSize,
+      size: 0,
+    }
+  } else {
+    // normal resize
+    newLeft = Math.max(COLLAPSE_THRESHOLD, newLeft)
+    newRight = Math.max(COLLAPSE_THRESHOLD, newRight)
+
+    updated[splitterIndex] = { ...left, collapsed: false, size: newLeft }
+    updated[splitterIndex + 1] = { ...right, collapsed: false, size: newRight }
+  }
+
+  return { ...n, children: updated }
 }
 
 /** Add a view id to a leaf node (used when "+" is confirmed by parent) */
@@ -287,6 +348,49 @@ const addViewToLeaf = (n: DockNode, viewId: string, makeActive = true): DockNode
   const views = [...(n.views ?? []), viewId]
   const activeViewIndex = makeActive ? views.length - 1 : (n.activeViewIndex ?? 0)
   return { ...n, views, activeViewIndex }
+}
+
+/* ---------- Collapse-reated helpers ---------- */
+
+const COLLAPSE_THRESHOLD = 0.15 // flex weight below which we treat as collapsed
+
+const isCollapsed = computed(() => {
+  const n = node.value
+  if (n.type !== 'leaf') return false
+  if (n.collapsed) return true
+  const size = n.size ?? 1
+  return size < COLLAPSE_THRESHOLD
+})
+
+const toggleCollapse = () => {
+  const n = node.value
+  if (n.type !== 'leaf') return
+
+  if (isCollapsed.value) {
+    // expand
+    const restored = n.lastSize ?? 1
+    node.value = { ...n, collapsed: false, size: restored }
+  } else {
+    // collapse
+    const currentSize = n.size ?? 1
+    node.value = { ...n, collapsed: true, lastSize: currentSize, size: 0 }
+  }
+}
+
+/** When clicking a tab on a collapsed pane, expand & activate it */
+const onCollapsedTabClick = (index: number) => {
+  const n = node.value
+  if (n.type !== 'leaf') return
+
+  // first expand
+  if (isCollapsed.value) {
+    const restored = n.lastSize ?? 1
+    node.value = {
+      ...setActiveView({ ...n, collapsed: false, size: restored }, index),
+    }
+  } else {
+    node.value = setActiveView(n, index)
+  }
 }
 
 /* ---------- Layout-related computed ---------- */
@@ -308,6 +412,12 @@ const showTabs = computed(() => {
 const nodeStyle = computed(() => {
   const n = node.value
   const mode = n.sizeMode ?? 'weight'
+
+  // Collapsed: fixed thickness (width in row, height in column)
+  if (n.type === 'leaf' && isCollapsed.value) {
+    // this is along the flex axis; 32px is a good starting value
+    return { flex: '0 0 32px' }
+  }
 
   if (mode === 'content') {
     // shrink to fit content, don't stretch
@@ -571,6 +681,55 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   flex-shrink: 0;
   font-size: 1rem;
   color: inherit;
+}
+
+/* Collapsed state: the header is the only visible part */
+.dock-tabs-header--collapsed {
+  flex-shrink: 0;
+}
+
+/* When collapsed in a row container: vertical strip */
+.dock-tabs-header--vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  /* Make tabs stack top-to-bottom */
+  flex-direction: column;
+  align-items: stretch;
+  border-bottom: none;
+  border-right: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* Vertical tabs */
+.dock-tabs-header--vertical .dock-tab {
+  border-bottom: none;
+  border-right: 2px solid transparent;
+}
+
+/* Active state in vertical strip */
+.dock-tabs-header--vertical .dock-tab.active {
+  border-right-color: currentColor;
+}
+
+/* Minimize button styling */
+.dock-tab-minimize {
+  margin-left: auto;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  color: inherit;
+}
+
+/* Optional: make collapsed strip a bit narrower */
+.dock-tabs-header--vertical {
+  padding-block: 0.25rem;
+}
+.dock-tabs-header--vertical .dock-tab-title {
+  /* optionally limit length */
+  max-height: 5em;
+  overflow: hidden;
 }
 
 /* Content */
