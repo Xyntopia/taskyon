@@ -270,7 +270,7 @@ onMounted(() => {
 })
 
 const layout = ref<DockNode>({
-  id: 'root',
+  id: 'editor',
   type: 'container',
   direction: 'row',
   children: [
@@ -303,7 +303,7 @@ const layout = ref<DockNode>({
               activeViewIndex: 0,
             },
             {
-              id: 'editors',
+              id: 'simulation',
               type: 'leaf',
               size: 85,
               views: ['model', 'simulate'],
