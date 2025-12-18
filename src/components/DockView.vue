@@ -711,21 +711,23 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   z-index: 1;
   border: none;
   border-radius: 999px;
-  background: color-mix(in srgb, currentColor 8%, transparent);
+  background: color-mix(in srgb, currentColor 12%, transparent);
   color: inherit;
   padding: 0;
-  width: 16px;
-  height: 16px;
-  font-size: 10px;
+  width: 28px; /* bigger click area */
+  height: 28px; /* bigger click area */
+  font-size: 14px; /* bigger symbol */
   display: flex;
   align-items: center;
   justify-content: center;
 
   opacity: 0;
   pointer-events: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
   transition:
     opacity 0.15s ease,
-    background-color 0.15s ease;
+    background-color 0.15s ease,
+    transform 0.1s ease;
 }
 
 /* Show arrows only when splitter is hovered */
@@ -734,27 +736,32 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   pointer-events: auto;
 }
 
+.dock-splitter-btn:hover {
+  background: color-mix(in srgb, currentColor 22%, transparent);
+  transform: scale(1.03);
+}
+
 /* Position for horizontal (row) splitters */
 .dock-splitter.row .dock-splitter-btn--prev {
   top: 50%;
-  left: 1px;
+  left: 2px;
   transform: translate(-50%, -50%);
 }
 .dock-splitter.row .dock-splitter-btn--next {
   top: 50%;
-  right: 1px;
+  right: 2px;
   transform: translate(50%, -50%);
 }
 
 /* Position for vertical (column) splitters */
 .dock-splitter.column .dock-splitter-btn--prev {
   left: 50%;
-  top: 1px;
+  top: 2px;
   transform: translate(-50%, -50%);
 }
 .dock-splitter.column .dock-splitter-btn--next {
   left: 50%;
-  bottom: 1px;
+  bottom: 2px;
   transform: translate(-50%, 50%);
 }
 
@@ -856,8 +863,7 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 /* ---------------- Vertical strip (collapsed sidebar) ---------------- */
 /*
   IMPORTANT:
-  Do NOT set writing-mode on the flex container. Keep header a flex COLUMN
-  so children stack vertically.
+  Header is a flex COLUMN so children stack vertically.
 */
 .dock-tabs-header--vertical {
   display: flex !important;
@@ -887,6 +893,9 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 
   border-bottom: none;
   border-right: 2px solid transparent;
+
+  /* ensure enough height for rotated text */
+  min-height: 40px;
 }
 
 /* Highlight active tab in vertical strip */
@@ -894,13 +903,15 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   border-right-color: currentColor;
 }
 
-/* Vertical text for the title */
+/* Vertical text for the title: use rotation instead of writing-mode */
 .dock-tabs-header--vertical .dock-tab-title {
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  max-height: 10em;
-  overflow: hidden;
+  display: inline-block;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  white-space: nowrap;
+  line-height: 1.1;
   text-align: center;
+  max-width: 8rem; /* prevent very long titles taking too much space */
 }
 
 /* Icon spacing in vertical strip */
