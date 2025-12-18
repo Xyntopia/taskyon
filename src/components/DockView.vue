@@ -438,7 +438,7 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   position: relative;
   flex-shrink: 0;
   /* very subtle by default */
-  color: rgba(0, 0, 0, 0.11);
+  color: color-mix(in srgb, currentColor 15%, transparent);
   background: transparent;
   transition:
     background-color 0.15s ease,
