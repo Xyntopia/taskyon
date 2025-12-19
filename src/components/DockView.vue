@@ -40,33 +40,13 @@
             isSplitterResizable(index) ? 'dock-splitter--enabled' : 'dock-splitter--disabled',
           ]"
           @mousedown="isSplitterResizable(index) && startResize(index, $event)"
-        >
-          <!-- Arrow to collapse the left / previous pane -->
-          <button
-            class="dock-splitter-btn dock-splitter-btn--prev"
-            type="button"
-            @mousedown.stop
-            @click.stop="collapsePane(index, 'prev')"
-          >
-            {{ node.direction === 'row' ? '◀' : '▲' }}
-          </button>
-
-          <!-- Arrow to collapse the right / next pane -->
-          <button
-            class="dock-splitter-btn dock-splitter-btn--next"
-            type="button"
-            @mousedown.stop
-            @click.stop="collapsePane(index, 'next')"
-          >
-            {{ node.direction === 'row' ? '▶' : '▼' }}
-          </button>
-        </div>
+        ></div>
       </template>
     </template>
 
     <!-- Leaf Node (Tabs) -->
     <template v-else-if="node.type === 'leaf'">
-      <!-- Tabs header: always shown if showTabs, even when collapsed (see showTabs computed) -->
+      <!-- Tabs header: always shown if showTabs, even when collapsed -->
       <div
         v-if="showTabs"
         class="dock-tabs-header"
@@ -425,14 +405,10 @@ const onCollapsedTabClick = (index: number) => {
 
 /** Whether to show the tab header for this leaf node */
 const showTabs = computed(() => {
-  const n = node.value
-  if (n.type !== 'leaf') return false
+  if (node.value.type !== 'leaf') return false
 
-  // When collapsed we always show the header (even if showTabs is "never")
-  if (isCollapsed.value) return true
-
-  const mode = n.showTabs ?? 'always'
-  const count = n.views?.length ?? 0
+  const mode = node.value.showTabs ?? 'always'
+  const count = node.value.views?.length ?? 0
 
   if (mode === 'never') return false
   if (mode === 'always') return true
@@ -522,61 +498,6 @@ onUnmounted(() => {
   stopResize()
 })
 
-/* ---------- Splitter collapse helpers ---------- */
-
-type SplitterSide = 'prev' | 'next'
-
-const collapsePane = (splitterIndex: number, side: SplitterSide) => {
-  const n = node.value
-  if (n.type !== 'container' || !n.children) return
-
-  const children = [...n.children]
-
-  const targetIndex = side === 'prev' ? splitterIndex : splitterIndex + 1
-  const neighborIndex = side === 'prev' ? splitterIndex + 1 : splitterIndex
-
-  const target = children[targetIndex]
-  const neighbor = children[neighborIndex]
-  if (!target || !neighbor) return
-
-  const targetSize = target.size ?? 1
-  const neighborSize = neighbor.size ?? 1
-
-  // If already collapsed, restore from lastSize
-  if ((targetSize === 0 || target.collapsed) && target.lastSize != null) {
-    const restored = target.lastSize
-    const newNeighborSize = Math.max(neighborSize - restored, 0)
-
-    children[targetIndex] = {
-      ...target,
-      collapsed: false,
-      size: restored,
-    }
-    children[neighborIndex] = {
-      ...neighbor,
-      size: newNeighborSize,
-    }
-
-    node.value = { ...n, children }
-    return
-  }
-
-  // Collapse this pane, give its space to the neighbor
-  children[targetIndex] = {
-    ...target,
-    collapsed: true,
-    lastSize: target.lastSize ?? targetSize,
-    size: 0,
-  }
-  children[neighborIndex] = {
-    ...neighbor,
-    collapsed: false,
-    size: neighborSize + targetSize,
-  }
-
-  node.value = { ...n, children }
-}
-
 /* ---------- Tab handlers ---------- */
 
 const onTabClick = (index: number) => {
@@ -638,10 +559,11 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   flex-direction: column;
 }
 
-/* ---------------- Splitter ---------------- */
+/* Splitter */
 .dock-splitter {
   position: relative;
   flex-shrink: 0;
+  /* very subtle by default */
   color: color-mix(in srgb, currentColor 15%, transparent);
   background: transparent;
   transition:
@@ -649,14 +571,17 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
     color 0.15s ease;
 }
 
+/* Horizontal split (vertical splitter line) */
 .dock-splitter.row {
   width: 8px;
 }
 
+/* Vertical split (horizontal splitter line) */
 .dock-splitter.column {
   height: 8px;
 }
 
+/* Only enabled splitters get resize cursors */
 .dock-splitter--enabled.row {
   cursor: col-resize;
 }
@@ -665,6 +590,7 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   cursor: row-resize;
 }
 
+/* Actual visible line */
 .dock-splitter::before {
   content: '';
   position: absolute;
@@ -676,6 +602,7 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
     height 0.15s ease;
 }
 
+/* Idle: thin, low contrast line */
 .dock-splitter.row::before {
   width: 2px;
   top: 4px;
@@ -692,6 +619,7 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   transform: translateY(-50%);
 }
 
+/* Hover: stronger color, slight background, thicker line – only when enabled */
 .dock-splitter--enabled:hover {
   color: color-mix(in srgb, currentColor 45%, transparent);
   background-color: color-mix(in srgb, currentColor 4%, transparent);
@@ -705,97 +633,19 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   height: 4px;
 }
 
-/* Splitter arrow buttons (shown on hover) */
-.dock-splitter-btn {
-  /* tune these two if you want even bigger buttons */
-  --btn-size: 28px;
-  --btn-gap: 18px; /* separation from the splitter center (prevents overlap) */
-
-  position: absolute;
-  z-index: 1;
-
-  width: var(--btn-size);
-  height: var(--btn-size);
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  padding: 0;
-  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
-  border-radius: 3px; /* square-ish, not round */
-  background: color-mix(in srgb, currentColor 12%, transparent);
-  color: inherit;
-
-  font-size: 14px;
-  line-height: 1;
-
-  opacity: 0;
-  pointer-events: none;
-
-  transition:
-    opacity 0.15s ease,
-    background-color 0.15s ease,
-    transform 0.1s ease;
-}
-
-/* show only on hover of enabled splitter */
-.dock-splitter--enabled:hover .dock-splitter-btn {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.dock-splitter-btn:hover {
-  background: color-mix(in srgb, currentColor 22%, transparent);
-}
-
-/* --- Horizontal splitter buttons: left & right, no overlap --- */
-.dock-splitter.row .dock-splitter-btn--prev,
-.dock-splitter.row .dock-splitter-btn--next {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.dock-splitter.row .dock-splitter-btn--prev {
-  transform: translate(-50%, -50%) translateX(calc(var(--btn-gap) * -1));
-}
-
-.dock-splitter.row .dock-splitter-btn--next {
-  transform: translate(-50%, -50%) translateX(var(--btn-gap));
-}
-
-/* --- Vertical splitter buttons: top & bottom, no overlap --- */
-.dock-splitter.column .dock-splitter-btn--prev,
-.dock-splitter.column .dock-splitter-btn--next {
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.dock-splitter.column .dock-splitter-btn--prev {
-  transform: translate(-50%, -50%) translateY(calc(var(--btn-gap) * -1));
-}
-
-.dock-splitter.column .dock-splitter-btn--next {
-  transform: translate(-50%, -50%) translateY(var(--btn-gap));
-}
-
-/* ---------------- Tabs header (base) ---------------- */
+/* Tabs header */
 .dock-tabs-header {
   display: flex;
-  flex-direction: row;
   flex-shrink: 0;
-  align-items: center;
   overflow-x: auto;
-  overflow-y: hidden;
+  align-items: center;
   border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  /* background: color-mix(in srgb, currentColor 2%, transparent); */
 }
 
-/* Tabs */
+/* Individual tab */
 .dock-tab {
   display: flex;
-  flex-direction: row;
   align-items: center;
   padding: 0.25rem 0.75rem;
   cursor: pointer;
@@ -837,7 +687,7 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   fill: currentColor;
 }
 
-/* Buttons */
+/* Close and Add buttons inside tabs/header */
 .dock-tab-close,
 .dock-tab-add {
   margin-left: 0.25rem;
@@ -850,9 +700,9 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   color: inherit;
 }
 
-/* Minimize button: right edge in horizontal mode */
+/* Minimize button styling */
 .dock-tab-minimize {
-  margin-left: auto;
+  margin-left: auto; /* pushes it to the far right in horizontal layout */
   border: none;
   background: none;
   cursor: pointer;
@@ -862,117 +712,81 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   color: inherit;
 }
 
-/* Collapsed: header is the only visible part */
+/* Collapsed state: the header is the only visible part */
 .dock-tabs-header--collapsed {
   flex-shrink: 0;
 }
 
-/* Remove borders when collapsed (both orientations) */
-.dock-tabs-header.dock-tabs-header--collapsed {
-  border-bottom: none;
-}
-
-.dock-tabs-header--vertical.dock-tabs-header--collapsed {
-  border-right: none;
-}
-
-/* ---------------- Vertical strip (collapsed sidebar) ---------------- */
-/*
-  IMPORTANT:
-  Header is a flex COLUMN so children stack vertically.
-*/
+/* ---------- Vertical collapsed strip ---------- */
+/* When collapsed in a row container: vertical strip */
 .dock-tabs-header--vertical {
-  display: flex !important;
-  flex-direction: column !important;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  flex-direction: column; /* stack items (tabs, +, minimize) vertically */
   align-items: stretch;
-  justify-content: flex-start;
-
-  overflow-x: hidden;
-  overflow-y: auto;
-
   border-bottom: none;
   border-right: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-
-  padding: 0.25rem 0.15rem;
-  gap: 0.15rem;
+  overflow-x: visible; /* vertical layout: scroll vertically, not horizontally */
+  overflow-y: auto;
+  padding-block: 0.25rem; /* Optional: a bit of padding */
 }
 
-/* Make each tab fill the strip width and stack its content vertically */
+/* Tabs within the vertical strip:
+   - make tab contents (icon, title, close) vertical as well */
 .dock-tabs-header--vertical .dock-tab {
-  width: 100%;
-  padding: 0.5rem 0.25rem;
-
-  display: flex;
-  flex-direction: column; /* stack icon + title + close vertically */
-  align-items: center; /* center them in the strip */
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-
   border-bottom: none;
   border-right: 2px solid transparent;
-
-  /* ensure enough height for rotated text */
-  min-height: 40px;
 }
 
-/* Highlight active tab in vertical strip */
+/* Active state in vertical strip */
 .dock-tabs-header--vertical .dock-tab.active {
   border-right-color: currentColor;
 }
 
-/* Vertical text for the title: use rotation instead of writing-mode */
+/* Title constraints in vertical mode */
 .dock-tabs-header--vertical .dock-tab-title {
-  display: inline-block;
-  transform: rotate(-90deg);
-  transform-origin: center;
-  white-space: nowrap;
-  line-height: 1.1;
-  text-align: center;
-  max-width: 8rem; /* prevent very long titles taking too much space */
+  max-height: 5em;
+  overflow: hidden;
 }
 
-/* Icon spacing in vertical strip */
-.dock-tabs-header--vertical .dock-tab-icon {
-  margin-right: 0;
-  margin-bottom: 0.25rem;
-}
-
-/* Close button layout in vertical strip */
+/* Adjust button spacing in vertical mode */
 .dock-tabs-header--vertical .dock-tab-close {
   margin-left: 0;
   margin-top: 0.25rem;
 }
 
-/* '+' in vertical strip */
-.dock-tabs-header--vertical .dock-tab-add {
+.dock-tabs-header--vertical .dock-tab-add,
+.dock-tabs-header--vertical .dock-tab-minimize {
   margin-left: 0;
   margin-top: 0.25rem;
   align-self: center;
 }
 
-/* Minimize goes to the bottom in vertical strip */
-.dock-tabs-header--vertical .dock-tab-minimize {
-  margin-left: 0;
-  margin-top: auto; /* push to bottom */
-  align-self: center;
-}
-
-/* ---------------- Content ---------------- */
+/* Content */
+/* Base: shared bits */
 .dock-content {
   min-width: 0;
   min-height: 0;
 }
 
+/* For sizeMode: 'content' leaves (e.g. 'actions') */
 .dock-content--content {
-  flex: 0 0 auto;
-  overflow: visible;
+  /* Let the content define the leaf's size; do NOT try to fill */
+  flex: 0 0 auto; /* or just omit 'flex' entirely */
+  overflow: visible; /* content can spill as needed */
 }
 
+/* For weight-based leaves (editors, etc.) */
 .dock-content--weight {
   position: relative;
   flex: 1 1 0;
-  overflow: hidden;
+  overflow: hidden; /* isolate scrollable inner layer */
 }
 
+/* Absolute inner scroller ONLY for weight-based leaves */
 .dock-content-inner {
   position: absolute;
   inset: 0;
@@ -981,6 +795,8 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   min-height: 0;
 }
 
+/* Optional: make "No Views" fill the available area in weight-based leaves.
+   For content leaves, you typically won't hit .dock-empty anyway. */
 .dock-empty {
   height: 100%;
   display: flex;
