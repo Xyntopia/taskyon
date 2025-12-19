@@ -19,53 +19,55 @@
     >
       <template #actions>
         <!-- Actions -->
-        <div>
-          <div class="row q-gutter-sm items-center">
-            <q-btn
-              dense
-              color="grey-7"
-              :icon="matDelete"
-              label="Clear All"
-              outline
-              @click="clearAll"
-            />
-            <q-btn
-              dense
-              color="grey-7"
-              :icon="matDescription"
-              label="Load Example"
-              outline
-              @click="loadExample"
-            />
+        <q-bar flat class="rounded-borders">
+          <q-btn
+            dense
+            color="grey-7"
+            :icon="matDelete"
+            label="Clear All"
+            outline
+            @click="clearAll"
+          />
+          <q-btn
+            dense
+            color="grey-7"
+            :icon="matDescription"
+            label="Load Example"
+            outline
+            @click="loadExample"
+          />
 
-            <q-toggle v-model="verbose" dense label="Verbose logging" />
+          <q-toggle v-model="verbose" dense label="Verbose logging" />
 
-            <q-space />
+          <q-space />
 
-            <!-- Run / Stop execution -->
-            <q-btn
-              dense
-              flat
-              color="secondary"
-              :icon="matPlayArrow"
-              label="Run in Sandbox"
-              :disable="!jsSource"
-              :loading="running"
-              @click="runInSandbox"
-            />
-            <q-btn
-              v-if="running"
-              flat
-              dense
-              color="negative"
-              label="Stop"
-              outline
-              @click="stopExecution"
-            />
-          </div>
-        </div>
-        <!-- Status banner -->
-        <div style="height: 1.5rem">
+          <!-- Run / Stop execution -->
+          <q-btn
+            dense
+            flat
+            color="secondary"
+            :icon="matPlayArrow"
+            label="Run in Sandbox"
+            :disable="!jsSource"
+            :loading="running"
+            @click="runInSandbox"
+          />
+          <q-btn
+            v-if="running"
+            flat
+            dense
+            color="negative"
+            label="Stop"
+            outline
+            @click="stopExecution"
+          />
+        </q-bar>
+      </template>
+
+      <template #logs>
+        <!-- logs -->
+        <q-card bordered flat square style="height: 1.5rem">
+          >
           <div
             v-if="statusMessage"
             :class="
@@ -79,7 +81,7 @@
           >
             {{ statusMessage }}
           </div>
-        </div>
+        </q-card>
       </template>
 
       <template #modelica>
@@ -310,6 +312,15 @@ const layout = ref<DockNode>({
               activeViewIndex: 0,
             },
           ],
+        },
+        {
+          id: 'logs',
+          type: 'leaf',
+          showTabs: 'never',
+          views: ['logs'],
+          sizeMode: 'content',
+          size: 20,
+          activeViewIndex: 0,
         },
       ],
     },
