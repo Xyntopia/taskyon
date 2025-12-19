@@ -110,17 +110,9 @@
       </template>
 
       <template #model>
-        <div>
+        <div class="q-gutter-xs">
+          <q-btn flat dense label="Copy JS" :disable="!jsSource" @click="copyJsToClipboard" />
           <q-btn
-            color="grey-7"
-            flat
-            dense
-            label="Copy JS"
-            :disable="!jsSource"
-            @click="copyJsToClipboard"
-          />
-          <q-btn
-            color="grey-7"
             flat
             dense
             label="Copy DAE JSON"
@@ -128,7 +120,6 @@
             @click="copyDaeJsonToClipboard"
           />
           <q-btn
-            color="grey-7"
             flat
             dense
             label="Copy Pretty"
@@ -144,7 +135,7 @@
               <q-tab name="daePretty" label="Pretty" />
             </q-tabs>
 
-            <q-tab-panels v-model="outputTab" animated class="bg-grey-3">
+            <q-tab-panels v-model="outputTab" animated>
               <div name="js">
                 <CodeEditor
                   v-model="jsSource"
@@ -897,10 +888,3 @@ onMounted(async () => {
   await loadWasm()
 })
 </script>
-
-<style scoped>
-.text-code {
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 14px;
-}
-</style>
