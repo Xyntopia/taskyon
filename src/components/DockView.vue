@@ -540,23 +540,16 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-}
-
-/* Default direction for leaf nodes */
-.dock-node:not(.dock-row):not(.dock-col) {
   flex-direction: column;
-}
 
-.dock-resizing :deep(iframe) {
-  pointer-events: none !important;
-}
+  /*we do this to not loose the mouse grab when dragging an iframe split view*/
+  &.dock-resizing :deep(iframe) {
+    pointer-events: none !important;
+  }
 
-.dock-row {
-  flex-direction: row;
-}
-
-.dock-col {
-  flex-direction: column;
+  &.dock-row {
+    flex-direction: row;
+  }
 }
 
 /* Splitter */
@@ -569,16 +562,16 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   transition:
     background-color 0.15s ease,
     color 0.15s ease;
-}
 
-/* Horizontal split (vertical splitter line) */
-.dock-splitter.row {
-  width: 8px;
-}
+  /* Horizontal split (vertical splitter line) */
+  &.row {
+    width: 8px;
+  }
 
-/* Vertical split (horizontal splitter line) */
-.dock-splitter.column {
-  height: 8px;
+  /* Vertical split (horizontal splitter line) */
+  &.column {
+    height: 8px;
+  }
 }
 
 /* Only enabled splitters get resize cursors */
@@ -637,6 +630,7 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 .dock-tabs-header {
   display: flex;
   flex-shrink: 0;
+  flex-direction: row;
   overflow-x: auto;
   align-items: center;
   border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
@@ -654,37 +648,36 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease;
-}
 
-.dock-tab:hover {
-  background: color-mix(in srgb, currentColor 4%, transparent);
-}
+  &:hover {
+    background: color-mix(in srgb, currentColor 4%, transparent);
+  }
+  &.active {
+    font-weight: 600;
+    border-bottom-color: currentColor;
+    background: color-mix(in srgb, currentColor 7%, transparent);
+  }
 
-.dock-tab.active {
-  font-weight: 600;
-  border-bottom-color: currentColor;
-  background: color-mix(in srgb, currentColor 7%, transparent);
-}
+  .dock-tab-title {
+    flex: 1;
+    min-width: 0;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
 
-.dock-tab-title {
-  flex: 1;
-  min-width: 0;
-  text-overflow: ellipsis;
-  overflow: hidden;
-}
+  /* Icons */
+  .dock-tab-icon {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 0.25rem;
+    flex-shrink: 0;
+  }
 
-/* Icons */
-.dock-tab-icon {
-  display: inline-flex;
-  align-items: center;
-  margin-right: 0.25rem;
-  flex-shrink: 0;
-}
-
-.dock-tab-icon svg {
-  width: 1em;
-  height: 1em;
-  fill: currentColor;
+  .dock-tab-icon svg {
+    width: 1em;
+    height: 1em;
+    fill: currentColor;
+  }
 }
 
 /* Close and Add buttons inside tabs/header */
@@ -717,10 +710,14 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   flex-shrink: 0;
 }
 
+/* Remove borders when collapsed (both orientations) */
+.dock-tabs-header.dock-tabs-header--collapsed {
+  border-bottom: none;
+}
+
 /* ---------- Vertical collapsed strip ---------- */
 /* When collapsed in a row container: vertical strip */
 .dock-tabs-header--vertical {
-  writing-mode: vertical-rl;
   text-orientation: mixed;
   flex-direction: column; /* stack items (tabs, +, minimize) vertically */
   align-items: stretch;
@@ -734,6 +731,8 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 /* Tabs within the vertical strip:
    - make tab contents (icon, title, close) vertical as well */
 .dock-tabs-header--vertical .dock-tab {
+  writing-mode: vertical-rl;
+  padding: 0.75rem 0.25rem;
   flex-direction: column;
   align-items: center;
   justify-content: center;
