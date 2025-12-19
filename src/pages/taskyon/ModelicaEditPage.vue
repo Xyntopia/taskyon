@@ -174,7 +174,7 @@
           </q-card-section>
 
           <q-card-section v-if="executionResult && Object.keys(executionResult).length">
-            <ObjectTreeView v-model="executionResult" dense hide-missing read-only />
+            <ObjectTreeView v-model="executionResult" dense hide-missing read-only copy-btn />
           </q-card-section>
         </q-card>
       </template>
@@ -298,8 +298,19 @@ Currently, the jinja template editor has loaded the following source code:
 
     ${templateSource.value}
 
-Only use the tool 'setModelicaAndTemplate' Tool if you think the user wants to change the modelica source code
-or jinja template.
+Currently, the generated code from the modelica source and the jinja template editor
+looks like this:
+
+    ${jsSource.value}
+
+The last logs from our compiler are these:
+
+    ${JSON.stringify(modelicaLog.value)}
+
+You are required to use the tool 'setModelicaAndTemplate' whenever you think the user
+wants to change the modelica source code or jinja template. The user is currently using that
+Interface so instead of proposing changes in the chat, just use the tool
+and add them to the editor!
 `
 
         return makeTaskResult([
