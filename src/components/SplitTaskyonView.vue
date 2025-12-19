@@ -1,6 +1,6 @@
 <template>
   <DockView v-model:node="layout" class="col" hide-tab-add hide-tab-close>
-    <template #before>
+    <template #app>
       <slot name="default"></slot>
     </template>
     <template #chat>

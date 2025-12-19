@@ -10,6 +10,62 @@
     }"
     :style="nodeStyle"
   >
+    <!-- Tabs header: always shown if showTabs, even when collapsed -->
+    <div
+      v-if="showTabs || isCollapsed"
+      class="dock-tabs-header"
+      :class="{
+        'dock-tabs-header--vertical': isCollapsed && parentDirection === 'row',
+        'dock-tabs-header--collapsed': isCollapsed,
+      }"
+    >
+      <!-- Plus button still available when not collapsed -->
+      <button
+        v-if="!hideTabAdd && !isCollapsed"
+        class="dock-tab-add"
+        type="button"
+        :class="addButtonClass"
+        @click.stop="onAddTabClick"
+      >
+        +
+      </button>
+
+      <div
+        v-for="(viewId, index) in node.views || []"
+        :key="viewId"
+        class="dock-tab"
+        :class="[
+          tabClass,
+          { active: index === (node.activeViewIndex ?? 0) },
+          index === (node.activeViewIndex ?? 0) && activeTabClass,
+        ]"
+        @click="isCollapsed ? onCollapsedTabClick(index) : onTabClick(index)"
+      >
+        <q-icon v-if="tabIcons?.[viewId]" class="dock-tab-icon" :name="tabIcons[viewId]" />
+        <span class="dock-tab-title">{{ viewId }}</span>
+
+        <button
+          v-if="!hideTabClose && !isCollapsed"
+          class="dock-tab-close"
+          type="button"
+          :class="tabButtonClass"
+          @click.stop="onTabClose(viewId)"
+        >
+          ×
+        </button>
+      </div>
+
+      <!-- Minimize / restore button -->
+      <button
+        class="dock-tab-minimize"
+        type="button"
+        :class="tabButtonClass"
+        @click.stop="toggleCollapse"
+      >
+        {{ isCollapsed ? '▢' : '▁' }}
+      </button>
+    </div>
+
     <!-- Container Node -->
     <template v-if="node.type === 'container' && node.children && node.children.length">
       <template v-for="(child, index) in node.children" :key="child.id">
@@ -43,62 +99,6 @@
 
     <!-- Leaf Node (Tabs) -->
     <template v-else-if="node.type === 'leaf'">
-      <!-- Tabs header: always shown if showTabs, even when collapsed -->
-      <div
-        v-if="showTabs"
-        class="dock-tabs-header"
-        :class="{
-          'dock-tabs-header--vertical': isCollapsed && parentDirection === 'row',
-          'dock-tabs-header--collapsed': isCollapsed,
-        }"
-      >
-        <!-- Plus button still available when not collapsed -->
-        <button
-          v-if="!hideTabAdd && !isCollapsed"
-          class="dock-tab-add"
-          type="button"
-          :class="addButtonClass"
-          @click.stop="onAddTabClick"
-        >
-          +
-        </button>
-
-        <div
-          v-for="(viewId, index) in node.views || []"
-          :key="viewId"
-          class="dock-tab"
-          :class="[
-            tabClass,
-            { active: index === (node.activeViewIndex ?? 0) },
-            index === (node.activeViewIndex ?? 0) && activeTabClass,
-          ]"
-          @click="isCollapsed ? onCollapsedTabClick(index) : onTabClick(index)"
-        >
-          <q-icon v-if="tabIcons?.[viewId]" class="dock-tab-icon" :name="tabIcons[viewId]" />
-          <span class="dock-tab-title">{{ viewId }}</span>
-
-          <button
-            v-if="!hideTabClose && !isCollapsed"
-            class="dock-tab-close"
-            type="button"
-            :class="tabButtonClass"
-            @click.stop="onTabClose(viewId)"
-          >
-            ×
-          </button>
-        </div>
-
-        <!-- Minimize / restore button -->
-        <button
-          class="dock-tab-minimize"
-          type="button"
-          :class="tabButtonClass"
-          @click.stop="toggleCollapse"
-        >
-          {{ isCollapsed ? '▢' : '▁' }}
-        </button>
-      </div>
-
       <!-- Normal content when NOT collapsed -->
       <template v-if="!isCollapsed">
         <!-- Content-sized leaves -->
@@ -402,14 +402,12 @@ const onCollapsedTabClick = (index: number) => {
 
 /** Whether to show the tab header for this leaf node */
 const showTabs = computed(() => {
-  if (node.value.type !== 'leaf') return false
-
+  if (node.value.type === 'container') return false
   const mode = node.value.showTabs ?? 'always'
-  const count = node.value.views?.length ?? 0
-
   if (mode === 'never') return false
   if (mode === 'always') return true
   // 'auto'
+  const count = node.value.views?.length ?? 0
   return count > 1
 })
 
