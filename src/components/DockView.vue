@@ -35,11 +35,8 @@
         <div
           v-if="isSplitterResizable(index) && index < node.children.length - 1"
           class="dock-splitter"
-          :class="[
-            node.direction,
-            isSplitterResizable(index) ? 'dock-splitter--enabled' : 'dock-splitter--disabled',
-          ]"
-          @mousedown="isSplitterResizable(index) && startResize(index, $event)"
+          :class="[node.direction]"
+          @mousedown="startResize(index, $event)"
         ></div>
       </template>
     </template>
@@ -563,67 +560,54 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
     background-color 0.15s ease,
     color 0.15s ease;
 
+  /* Hover: stronger color, slight background, thicker line – only when enabled */
+  &:hover {
+    color: color-mix(in srgb, currentColor 45%, transparent);
+    background-color: color-mix(in srgb, currentColor 4%, transparent);
+  }
+
+  &::before {
+    content: '';
+    position: absolute;
+    background-color: currentColor;
+    border-radius: 999px;
+    transition:
+      background-color 0.15s ease,
+      width 0.15s ease,
+      height 0.15s ease;
+  }
+
   /* Horizontal split (vertical splitter line) */
   &.row {
     width: 8px;
+    cursor: col-resize;
+    &:hover::before {
+      width: 4px;
+    }
+    &::before {
+      width: 2px;
+      top: 4px;
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
   }
 
   /* Vertical split (horizontal splitter line) */
   &.column {
     height: 8px;
+    cursor: row-resize;
+    &:hover::before {
+      height: 4px;
+    }
+    &::before {
+      height: 2px;
+      left: 4px;
+      right: 4px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
   }
-}
-
-/* Only enabled splitters get resize cursors */
-.dock-splitter--enabled.row {
-  cursor: col-resize;
-}
-
-.dock-splitter--enabled.column {
-  cursor: row-resize;
-}
-
-/* Actual visible line */
-.dock-splitter::before {
-  content: '';
-  position: absolute;
-  background-color: currentColor;
-  border-radius: 999px;
-  transition:
-    background-color 0.15s ease,
-    width 0.15s ease,
-    height 0.15s ease;
-}
-
-/* Idle: thin, low contrast line */
-.dock-splitter.row::before {
-  width: 2px;
-  top: 4px;
-  bottom: 4px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.dock-splitter.column::before {
-  height: 2px;
-  left: 4px;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-/* Hover: stronger color, slight background, thicker line – only when enabled */
-.dock-splitter--enabled:hover {
-  color: color-mix(in srgb, currentColor 45%, transparent);
-  background-color: color-mix(in srgb, currentColor 4%, transparent);
-}
-
-.dock-splitter--enabled.row:hover::before {
-  width: 4px;
-}
-
-.dock-splitter--enabled.column:hover::before {
-  height: 4px;
 }
 
 /* Tabs header */
