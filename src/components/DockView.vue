@@ -619,6 +619,24 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   align-items: center;
   border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
   /* background: color-mix(in srgb, currentColor 2%, transparent); */
+
+  /* Remove borders when collapsed (both orientations) */
+  &.dock-tabs-header--collapsed {
+    border-bottom: none;
+  }
+
+  /* ---------- Vertical collapsed strip ---------- */
+  /* When collapsed in a row container: vertical strip */
+  &.dock-tabs-header--vertical {
+    text-orientation: mixed;
+    flex-direction: column; /* stack items (tabs, +, minimize) vertically */
+    align-items: stretch;
+    border-bottom: none;
+    border-right: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+    overflow-x: visible; /* vertical layout: scroll vertically, not horizontally */
+    overflow-y: auto;
+    padding-block: 0.25rem; /* Optional: a bit of padding */
+  }
 }
 
 /* Individual tab */
@@ -664,6 +682,32 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   }
 }
 
+/* Tabs within the vertical strip:
+   - make tab contents (icon, title, close) vertical as well */
+.dock-tabs-header--vertical .dock-tab {
+  padding: 0.75rem 0.25rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-bottom: none;
+  border-right: 2px solid transparent;
+
+  &.active {
+    border-right-color: currentColor;
+  }
+
+  .dock-tab-title {
+    max-height: 5em;
+    overflow: hidden;
+    color: red;
+  }
+
+  .dock-tab-close {
+    margin-left: 0;
+    margin-top: 0.25rem;
+  }
+}
+
 /* Close and Add buttons inside tabs/header */
 .dock-tab-close,
 .dock-tab-add {
@@ -675,6 +719,13 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   flex-shrink: 0;
   font-size: 1rem;
   color: inherit;
+}
+
+.dock-tabs-header--vertical .dock-tab-add,
+.dock-tabs-header--vertical .dock-tab-minimize {
+  margin-left: 0;
+  margin-top: 0.25rem;
+  align-self: center;
 }
 
 /* Minimize button styling */
@@ -689,70 +740,29 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   color: inherit;
 }
 
-/* Collapsed state: the header is the only visible part */
-.dock-tabs-header--collapsed {
-  flex-shrink: 0;
-}
-
-/* Remove borders when collapsed (both orientations) */
-.dock-tabs-header.dock-tabs-header--collapsed {
-  border-bottom: none;
-}
-
-/* ---------- Vertical collapsed strip ---------- */
-/* When collapsed in a row container: vertical strip */
-.dock-tabs-header--vertical {
-  text-orientation: mixed;
-  flex-direction: column; /* stack items (tabs, +, minimize) vertically */
-  align-items: stretch;
-  border-bottom: none;
-  border-right: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-  overflow-x: visible; /* vertical layout: scroll vertically, not horizontally */
-  overflow-y: auto;
-  padding-block: 0.25rem; /* Optional: a bit of padding */
-}
-
-/* Tabs within the vertical strip:
-   - make tab contents (icon, title, close) vertical as well */
-.dock-tabs-header--vertical .dock-tab {
-  writing-mode: vertical-rl;
-  padding: 0.75rem 0.25rem;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border-bottom: none;
-  border-right: 2px solid transparent;
-}
-
-/* Active state in vertical strip */
-.dock-tabs-header--vertical .dock-tab.active {
-  border-right-color: currentColor;
-}
-
-/* Title constraints in vertical mode */
-.dock-tabs-header--vertical .dock-tab-title {
-  max-height: 5em;
-  overflow: hidden;
-}
-
-/* Adjust button spacing in vertical mode */
-.dock-tabs-header--vertical .dock-tab-close {
-  margin-left: 0;
-  margin-top: 0.25rem;
-}
-
-.dock-tabs-header--vertical .dock-tab-add,
-.dock-tabs-header--vertical .dock-tab-minimize {
-  margin-left: 0;
-  margin-top: 0.25rem;
-  align-self: center;
-}
-
 /* Content */
 /* Base: shared bits */
 .dock-content {
   min-width: 0;
   min-height: 0;
+
+  /* Absolute inner scroller ONLY for weight-based leaves */
+  .dock-content-inner {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+    min-width: 0;
+    min-height: 0;
+
+    /* Optional: make "No Views" fill the available area in weight-based leaves.
+   For content leaves, you typically won't hit .dock-empty anyway. */
+    .dock-empty {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
 }
 
 /* For sizeMode: 'content' leaves (e.g. 'actions') */
@@ -767,23 +777,5 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   position: relative;
   flex: 1 1 0;
   overflow: hidden; /* isolate scrollable inner layer */
-}
-
-/* Absolute inner scroller ONLY for weight-based leaves */
-.dock-content-inner {
-  position: absolute;
-  inset: 0;
-  overflow: auto;
-  min-width: 0;
-  min-height: 0;
-}
-
-/* Optional: make "No Views" fill the available area in weight-based leaves.
-   For content leaves, you typically won't hit .dock-empty anyway. */
-.dock-empty {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 </style>
