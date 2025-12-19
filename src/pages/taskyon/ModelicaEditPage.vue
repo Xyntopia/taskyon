@@ -1,3 +1,4 @@
+<!--ModelicaEditPage.vue-->
 <template>
   <FixedHeightPage class="column">
     <!-- Header -->
@@ -66,21 +67,8 @@
 
       <template #logs>
         <!-- logs -->
-        <q-card bordered flat square style="height: 1.5rem">
-          >
-          <div
-            v-if="statusMessage"
-            :class="
-              statusType === 'error'
-                ? 'bg-negative'
-                : statusType === 'success'
-                  ? 'bg-positive'
-                  : 'bg-warning'
-            "
-            class="text-white"
-          >
-            {{ statusMessage }}
-          </div>
+        <q-card bordered flat square style="min-height: 1.5rem">
+          <div v-for="(entry, idx) in modelicaLog" :key="idx">> {{ entry.message }}</div>
         </q-card>
       </template>
 
@@ -248,8 +236,127 @@ import ObjectTreeView from 'src/components/varViews/ObjectTreeView.vue'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { onMounted, ref } from 'vue'
 import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
-import { initializeTaskyon, toolCall } from '../../../packages/tyclient/src'
+import {
+  createChatCompletionTask,
+  createTool,
+  initializeTaskyon,
+  makeTaskResult,
+  toolCall,
+} from '../../../packages/tyclient/src'
 import FixedHeightPage from '../FixedHeightPage.vue'
+import type { JSONSchema7 } from 'json-schema'
+
+// Optional: adjust if you put this elsewhere
+type ModelicaLogPhase = 'compile' | 'run' | 'loadWasm' | 'general'
+type ModelicaLogLevel = 'info' | 'success' | 'warning' | 'error'
+
+interface ModelicaLogEntry {
+  timestamp: string
+  phase: ModelicaLogPhase
+  level: ModelicaLogLevel
+  message: string
+  details?: unknown
+}
+
+/**
+ * Shared log for all Modelica / template / simulation related actions.
+ * Make sure to push entries from:
+ *  - WASM loading
+ *  - compile success / failure
+ *  - simulation run success / failure
+ *  - user-triggered compile / run as well as AI-triggered ones
+ */
+const modelicaLog = ref<ModelicaLogEntry[]>([])
+
+function appendModelicaLog(entry: Omit<ModelicaLogEntry, 'timestamp'> & { timestamp?: string }) {
+  console.log(entry)
+  modelicaLog.value.push({
+    timestamp: entry.timestamp ?? new Date().toISOString(),
+    phase: entry.phase,
+    level: entry.level,
+    message: entry.message,
+    details: entry.details,
+  })
+}
+
+/**
+ * Tool 1: setModelicaAndTemplate
+ * --------------------------------
+ * Simple mutator tool that can update Modelica and/or Jinja template source.
+ * This is used both for one-off edits and inside the auto-fix loops.
+ */
+const tools = [
+  createTool({
+    name: 'setModelicaAndTemplate',
+    description:
+      'Replace the current Modelica source and/or Jinja template in the editors. ' +
+      'If one of the fields is omitted, it is left unchanged.',
+    parameters: {
+      type: 'object',
+      properties: {
+        modelica: {
+          type: 'string',
+          description: 'New Modelica source code to place in the editor (optional).',
+        },
+        template: {
+          type: 'string',
+          description: 'New Jinja template source to place in the editor (optional).',
+        },
+      },
+      additionalProperties: false,
+    } as const satisfies JSONSchema7,
+    function({ modelica, template }) {
+      if (!modelica && !template) {
+        const toolPrompt = `
+You are are the taskyon Modelica assistant helping users write and simulate Modelica models using
+the Rumoca compiler. You modify the state of an editor and the user you chat with will see the
+result in the UI.
+
+You can use the tools provided to set the modelica code.
+Always ensure that the modelica code you generate is syntactically correct and safe to run.
+
+Currently, the modelica editor has loaded the following source code:
+
+    ${modelicaSource.value}
+
+Currently, the jinja template editor has loaded the following source code:
+
+    ${templateSource.value}
+
+Only use the tool 'setModelicaAndTemplate' Tool if you think the user wants to change the modelica source code
+or jinja template.
+`
+
+        return makeTaskResult([
+          createChatCompletionTask({
+            prompts: [toolPrompt],
+            goal: 'ChooseTool',
+            allowedTools: ['setModelicaAndTemplate'],
+          }),
+        ])
+      }
+
+      if (modelica) modelicaSource.value = modelica
+      if (template) templateSource.value = template
+      return makeTaskResult([
+        {
+          role: 'assistant',
+          content: {
+            type: 'message',
+            data: `The editor has been updated.`,
+          },
+        },
+        {
+          role: 'system',
+          content: {
+            type: 'return',
+            data: 'OK',
+          },
+        },
+      ])
+    },
+  }),
+]
 
 const taskyonUrl = window.location.origin
 onMounted(() => {
@@ -258,7 +365,7 @@ onMounted(() => {
       //selectedApi: 'taskyon',
       enableOpenAiTools: false,
       enableToolChooser: true,
-      entryNode: toolCall({ name: 'setSqlQuery', arguments: {} }),
+      entryNode: toolCall({ name: 'setModelicaAndTemplate', arguments: {} }),
     },
     appConfiguration: {
       guiMode: 'minChat',
@@ -268,7 +375,7 @@ onMounted(() => {
     },
     // TODO: signatureOrKey: state.activeTaskyonToken,
   }
-  void initializeTaskyon({ tools: [], configuration, name: 'modelica', persist: true })
+  void initializeTaskyon({ tools, configuration, name: 'modelica', persist: true })
 })
 
 const layout = ref<DockNode>({
@@ -318,8 +425,8 @@ const layout = ref<DockNode>({
           type: 'leaf',
           showTabs: 'never',
           views: ['logs'],
-          sizeMode: 'content',
-          size: 20,
+          sizeMode: 'weight',
+          size: 10,
           activeViewIndex: 0,
         },
       ],
@@ -355,7 +462,6 @@ const outputTab = ref<'js' | 'daeJson' | 'daePretty'>('js')
 const verbose = ref(false)
 const loading = ref(false)
 const wasmLoaded = ref(false)
-const statusMessage = ref('Loading WASM module...')
 const statusType = ref<StatusType>('loading')
 const wasm = ref<WasmModule | null>(null)
 
@@ -395,15 +501,17 @@ const loadWasm = async () => {
 
     wasm.value = wasmModule as WasmModule
     wasmLoaded.value = true
-    statusMessage.value = 'WASM module loaded successfully! Ready to compile.'
-    statusType.value = 'success'
-    setTimeout(() => {
-      statusMessage.value = ''
-    }, 3000)
+    appendModelicaLog({
+      level: 'success',
+      phase: 'general',
+      message: 'WASM module loaded successfully! Ready to compile.',
+    })
   } catch (error) {
-    statusMessage.value = `Failed to load WASM: ${(error as Error).message}`
-    statusType.value = 'error'
-    console.error('WASM loading error:', error)
+    appendModelicaLog({
+      level: 'error',
+      phase: 'general',
+      message: `Failed to load WASM: ${(error as Error).message}`,
+    })
   }
 }
 
@@ -416,8 +524,11 @@ watchDebounced(
     // If one of the inputs is missing, don't try to compile.
     // But crucially: DO NOT clear jsSource / dae* here.
     if (!modelicaSource.value || !templateSource.value) {
-      statusMessage.value = 'Please provide both Modelica source and template'
-      statusType.value = 'error'
+      appendModelicaLog({
+        level: 'error',
+        phase: 'general',
+        message: 'Please provide both Modelica source and template',
+      })
       // leave jsSource / daeJsonOutput / daePrettyOutput untouched
       executionResult.value = {}
       executionError.value = null
@@ -427,7 +538,11 @@ watchDebounced(
     loading.value = true
     // We can clear only "raw" debug output and execution results.
     output.value = ''
-    statusMessage.value = 'Compiling...'
+    appendModelicaLog({
+      level: 'info',
+      phase: 'compile',
+      message: 'Compiling...',
+    })
     statusType.value = 'loading'
     executionResult.value = {}
     executionError.value = null
@@ -469,21 +584,20 @@ watchDebounced(
       output.value = rendered
       jsSource.value = rendered
 
-      statusMessage.value = 'Compilation successful!'
-      statusType.value = 'success'
-      setTimeout(() => {
-        statusMessage.value = ''
-      }, 3000)
-
-      if (verbose.value) {
-        console.debug('Rumoca compile result (raw):', compiled)
-      }
+      appendModelicaLog({
+        level: 'success',
+        phase: 'compile',
+        message: 'Compilation successful!',
+      })
     } catch (error) {
       const msg = (error as Error).message
       // Note: we only update messages, NOT the last good JS / DAE
       output.value = `Error: ${msg}`
-      statusMessage.value = `Compilation failed: ${msg}`
-      statusType.value = 'error'
+      appendModelicaLog({
+        level: 'success',
+        phase: 'compile',
+        message: `Compilation failed: ${msg}`,
+      })
       console.error('Compilation error:', error)
     } finally {
       loading.value = false
@@ -500,9 +614,9 @@ const clearAll = () => {
   jsSource.value = ''
   daeJsonOutput.value = {}
   daePrettyOutput.value = ''
-  statusMessage.value = ''
   executionResult.value = {}
   executionError.value = null
+  modelicaLog.value = []
 }
 
 const loadExample = async () => {
@@ -528,67 +642,31 @@ end BouncingBall;`
   ]?.()) as string
 
   templateSource.value = exampleTemplate || ''
-
-  statusMessage.value = 'Example loaded!'
-  statusType.value = 'success'
-  setTimeout(() => {
-    statusMessage.value = ''
-  }, 2000)
 }
 
-const copyToClipboard = async (text: string, successMessage: string, errorMessage: string) => {
+const copyToClipboard = async (text: string) => {
   if (!text) return
-  try {
-    await navigator.clipboard.writeText(text)
-    statusMessage.value = successMessage
-    statusType.value = 'success'
-    setTimeout(() => {
-      statusMessage.value = ''
-    }, 1500)
-  } catch {
-    statusMessage.value = errorMessage
-    statusType.value = 'error'
-  }
+  await navigator.clipboard.writeText(text)
 }
 
 const copyJsToClipboard = async () => {
-  await copyToClipboard(
-    jsSource.value,
-    'Generated JavaScript copied to clipboard.',
-    'Failed to copy JavaScript to clipboard.',
-  )
+  await copyToClipboard(jsSource.value)
 }
 
 const copyModelicaToClipboard = async () => {
-  await copyToClipboard(
-    modelicaSource.value,
-    'Modelica source copied to clipboard.',
-    'Failed to copy Modelica source to clipboard.',
-  )
+  await copyToClipboard(modelicaSource.value)
 }
 
 const copyTemplateToClipboard = async () => {
-  await copyToClipboard(
-    templateSource.value,
-    'Template source copied to clipboard.',
-    'Failed to copy template source to clipboard.',
-  )
+  await copyToClipboard(templateSource.value)
 }
 
 const copyDaeJsonToClipboard = async () => {
-  await copyToClipboard(
-    JSON.stringify(daeJsonOutput.value, null, 2),
-    'DAE JSON copied to clipboard.',
-    'Failed to copy DAE JSON to clipboard.',
-  )
+  await copyToClipboard(JSON.stringify(daeJsonOutput.value, null, 2))
 }
 
 const copyDaePrettyToClipboard = async () => {
-  await copyToClipboard(
-    daePrettyOutput.value,
-    'Pretty DAE output copied to clipboard.',
-    'Failed to copy Pretty DAE output to clipboard.',
-  )
+  await copyToClipboard(daePrettyOutput.value)
 }
 
 // ---------- Build iframe function code ----------
