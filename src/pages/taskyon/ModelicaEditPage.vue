@@ -173,23 +173,8 @@
             </div>
           </q-card-section>
 
-          <q-card-section v-if="executionError">
-            <q-banner class="bg-negative text-white">
-              <template #avatar>
-                <q-icon :name="matError" />
-              </template>
-              {{ executionError }}
-            </q-banner>
-          </q-card-section>
-
           <q-card-section v-if="executionResult && Object.keys(executionResult).length">
             <ObjectTreeView v-model="executionResult" dense hide-missing read-only />
-          </q-card-section>
-
-          <q-card-section v-else-if="!executionError">
-            <div class="text-grey-7">
-              No execution result yet. Compile and click “Run in Sandbox”.
-            </div>
           </q-card-section>
         </q-card>
       </template>
@@ -212,7 +197,6 @@ import {
   matCode,
   matDelete,
   matDescription,
-  matError,
   matPlayArrow,
   matRocketLaunch,
 } from '@quasar/extras/material-icons'
@@ -462,7 +446,6 @@ const simTf = ref(5)
 const simDt = ref(0.1)
 
 const executionResult = ref<Record<string, unknown>>({})
-const executionError = ref<string | null>(null)
 const running = ref(false)
 const abortController = ref<AbortController | null>(null)
 
@@ -522,7 +505,6 @@ watchDebounced(
       })
       // leave jsSource / daeJsonOutput / daePrettyOutput untouched
       executionResult.value = {}
-      executionError.value = null
       return
     }
 
@@ -536,7 +518,6 @@ watchDebounced(
     })
     statusType.value = 'loading'
     executionResult.value = {}
-    executionError.value = null
 
     try {
       const m = wasm.value
@@ -606,7 +587,6 @@ const clearAll = () => {
   daeJsonOutput.value = {}
   daePrettyOutput.value = ''
   executionResult.value = {}
-  executionError.value = null
   modelicaLog.value = []
 }
 
@@ -821,10 +801,13 @@ const buildIframeCode = (compiledJs: string): string => {
 // ---------- Run in sandboxed iframe ----------
 const runInSandbox = async () => {
   executionResult.value = {}
-  executionError.value = null
 
   if (!jsSource.value) {
-    executionError.value = 'No generated JavaScript. Compile first.'
+    appendModelicaLog({
+      level: 'error',
+      phase: 'run',
+      message: 'No generated JavaScript. Compile first.',
+    })
     return
   }
 
@@ -862,16 +845,32 @@ const runInSandbox = async () => {
       typeof v === 'object' && v !== null && !Array.isArray(v)
 
     if (!isRecord(result)) {
-      executionError.value = 'Execution returned invalid result: expected an object.'
-      console.error('Invalid execution result:', result)
+      appendModelicaLog({
+        level: 'error',
+        phase: 'run',
+        message: `Simulation returned invalid result: expected an object. ${JSON.stringify(result)}`,
+      })
       return
     }
     executionResult.value = result
+    appendModelicaLog({
+      level: 'error',
+      phase: 'run',
+      message: `Simulation was succesful!`,
+    })
   } catch (error) {
     if ((error as Error).name === 'AbortError') {
-      executionError.value = 'Execution aborted.'
+      appendModelicaLog({
+        level: 'warning',
+        phase: 'run',
+        message: 'Execution aborted.',
+      })
     } else {
-      executionError.value = (error as Error).message
+      appendModelicaLog({
+        level: 'warning',
+        phase: 'run',
+        message: `Iframe execution error: ${(error as Error).message}`,
+      })
       console.error('Iframe execution error:', error)
     }
   } finally {
