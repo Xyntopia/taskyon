@@ -7,7 +7,7 @@
     <q-card flat class="col column bg-transparent text-secondary">
       <DockView v-model:node="layout" class="col" @add-view="handleAddView">
         <!-- Explorer View -->
-        <template #Explorer>
+        <template #ExplorerWithAVeryLongName>
           <q-card class="fit">
             <div>Files</div>
             <ul>
@@ -128,7 +128,7 @@ const createInitialLayout = (): DockNode => ({
       id: 'sidebar',
       type: 'leaf',
       size: 20,
-      views: ['Explorer', 'Search'],
+      views: ['ExplorerWithAVeryLongName', 'Search'],
       activeViewIndex: 0,
     },
   ],

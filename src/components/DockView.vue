@@ -654,6 +654,7 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   &:hover {
     background: color-mix(in srgb, currentColor 4%, transparent);
   }
+
   &.active {
     font-weight: 600;
     border-bottom-color: currentColor;
@@ -693,13 +694,31 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   border-right: 2px solid transparent;
 
   &.active {
-    border-right-color: currentColor;
+    font-weight: inherit;
+    border-bottom-color: inherit;
+    background: inherit;
+  }
+
+  &:hover {
+    background: color-mix(in srgb, currentColor 4%, transparent);
   }
 
   .dock-tab-title {
-    max-height: 5em;
+    flex: 0 0 auto; /* key fix: stop flex:1 from collapsing height */
+    min-width: unset; /* horizontal rule not meaningful here */
+    min-height: 0;
+    display: inline-block;
+
+    /* Make the text actually vertical */
+    writing-mode: vertical-rl; /* use this (more widely supported) */
+    text-orientation: mixed; /* latin reads sideways, not stacked upright */
+
+    /* Use logical sizing instead of max-height (axes swap in vertical writing) */
+    max-inline-size: 6rem; /* limits “length” of the vertical label (physical height) */
     overflow: hidden;
-    color: red;
+
+    /* optional spacing similar to horizontal tab */
+    margin-top: 0.25rem;
   }
 
   .dock-tab-close {
