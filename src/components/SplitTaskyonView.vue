@@ -1,7 +1,7 @@
 <template>
   <DockView v-model:node="layout" class="col" hide-tab-add hide-tab-close>
     <template #app>
-      <slot name="default"></slot>
+      <slot name="default" />
     </template>
     <template #chat>
       <!-- Taskyon iframe -->
@@ -49,7 +49,7 @@ onMounted(() => {
         guiMode: 'minChat',
         showLogo: false,
         // TODO: chatSuggestions: [gettingStarted],
-        welcomeMsg: 'Ask taskyon for help with using rumoca/modelica!',
+        welcomeMsg: 'Taskyon Split View!',
       },
       // TODO: signatureOrKey: state.activeTaskyonToken,
     },
@@ -67,7 +67,7 @@ const layout = ref<DockNode>({
       id: 'before',
       type: 'leaf',
       showTabs: 'never',
-      views: ['before'],
+      views: ['app'],
       size: 30,
       activeViewIndex: 0,
     },
