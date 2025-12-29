@@ -6,12 +6,18 @@
     <template #chat>
       <!-- Taskyon iframe -->
       <iframe
+        v-if="configuration"
         id="taskyon"
         title="Taskyon agent"
         frameborder="0"
         :src="`${taskyonUrl}?iframe=true&profile=coding`"
         style="width: 100%; height: 99%"
+        @load="onIframeLoaded"
       ></iframe>
+      <div v-else class="column items-center justify-center full-height">
+        <div>Initializing Agent...</div>
+        <q-spinner-dots size="50px" />
+      </div>
     </template>
   </DockView>
 </template>
@@ -20,7 +26,7 @@
 import type { DockNode } from 'src/components/DockView.vue'
 import DockView from 'src/components/DockView.vue'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
-import { onMounted, ref } from 'vue'
+import { ref } from 'vue'
 import { deepMerge } from '../../packages/taskyon/src/utils/objHelpers'
 import { type ClientTool, initializeTaskyon } from '../../packages/tyclient/src'
 
@@ -31,13 +37,13 @@ const {
   name,
 } = defineProps<{
   tools: ClientTool[]
-  configuration: partialTyConfiguration
+  configuration: partialTyConfiguration | null
   persist?: boolean
   name: string
 }>()
 
 const taskyonUrl = window.location.origin
-onMounted(() => {
+const onIframeLoaded = () => {
   const configuration: partialTyConfiguration = deepMerge(
     {
       llmSettings: {
@@ -51,12 +57,11 @@ onMounted(() => {
         // TODO: chatSuggestions: [gettingStarted],
         welcomeMsg: 'Taskyon Split View!',
       },
-      // TODO: signatureOrKey: state.activeTaskyonToken,
     },
     config,
   )
   void initializeTaskyon({ tools, configuration, name, persist })
-})
+}
 
 const layout = ref<DockNode>({
   id: 'root',

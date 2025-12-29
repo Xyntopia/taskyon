@@ -328,24 +328,27 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
   }),
 ]
 
-const configuration: partialTyConfiguration = {
-  llmSettings: {
-    ...removeKeys(state.llmSettings, ['entryNode']),
-    enableOpenAiTools: false,
-    enableToolChooser: true,
-    entryNode: toolCall({ name: 'documentAssistant', arguments: {} }),
-  },
-  appConfiguration: {
-    ...removeKeys(state.appConfiguration, ['chatSuggestions']),
-    guiMode: 'minChat',
-    expertMode: true,
-    showLogo: false,
-    chatSuggestions: [],
-    welcomeMsg:
-      'Hi! I can help you edit documents. I can see the current content with line numbers and make precise line-based edits.',
-  },
-  signatureOrKey: state.activeTaskyonToken,
-}
+const configuration = computed<partialTyConfiguration | null>(() => {
+  if (state.authToken == null) return null
+  return {
+    llmSettings: {
+      ...removeKeys(state.llmSettings, ['entryNode']),
+      enableOpenAiTools: false,
+      enableToolChooser: true,
+      entryNode: toolCall({ name: 'documentAssistant', arguments: {} }),
+    },
+    appConfiguration: {
+      ...removeKeys(state.appConfiguration, ['chatSuggestions']),
+      guiMode: 'minChat',
+      expertMode: true,
+      showLogo: false,
+      chatSuggestions: [],
+      welcomeMsg:
+        'Hi! I can help you edit documents. I can see the current content with line numbers and make precise line-based edits.',
+    },
+    signatureOrKey: state.authToken,
+  }
+})
 
 // State
 const documentVersions = ref<DocumentVersion[]>([])
