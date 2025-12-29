@@ -21,6 +21,19 @@ if (process.env.DEV) {
     devScript.src = `${window.location.origin}:8098` // Adjust the URL if needed
     document.head.appendChild(devScript)
   })
+  ;(() => {
+    const isTop = window === window.top
+    const prefix = isTop ? '[TOP]' : '[IFRAME]'
+    const style = isTop ? 'color:#2e8b57;font-weight:bold' : 'color:#1e90ff;font-weight:bold'
+
+    type LogMethod = 'log' | 'info' | 'warn' | 'error'
+    ;(['log', 'info', 'warn', 'error'] as LogMethod[]).forEach((k) => {
+      const orig = console[k].bind(console)
+      console[k] = ((...args: unknown[]) => {
+        orig(`%c${prefix}`, style, ...args)
+      }) as (typeof console)[LogMethod]
+    })
+  })()
 }
 
 watch(
