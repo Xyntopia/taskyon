@@ -27,11 +27,11 @@ if (process.env.DEV) {
     const style = isTop ? 'color:#2e8b57;font-weight:bold' : 'color:#1e90ff;font-weight:bold'
 
     type LogMethod = 'log' | 'info' | 'warn' | 'error'
-    ;(['log', 'info', 'warn', 'error'] as LogMethod[]).forEach((k) => {
-      const orig = console[k].bind(console)
-      console[k] = ((...args: unknown[]) => {
-        orig(`%c${prefix}`, style, ...args)
-      }) as (typeof console)[LogMethod]
+    ;(['log', 'info', 'warn', 'error'] as const).forEach((k) => {
+      const orig = console[k] // keep original
+
+      // Prepend "%c[prefix]" + style without a JS wrapper
+      console[k] = orig.bind(console, `%c${prefix}`, style) as (typeof console)[LogMethod]
     })
   })()
 }
