@@ -152,8 +152,10 @@
         <TaskDebugTabs :task="task" />
       </div>
     </q-slide-transition>
-    <share-dialog-btn v-model="showShareDlg" single share :task-or-id="task.id" />
-    <share-dialog-btn v-model="showDownloadDlg" single download :task-or-id="task.id" />
+    <template v-if="task.id">
+      <share-dialog-btn v-model="showShareDlg" single share :task-or-id="task.id" />
+      <share-dialog-btn v-model="showDownloadDlg" single download :task-or-id="task.id" />
+    </template>
   </div>
 </template>
 
