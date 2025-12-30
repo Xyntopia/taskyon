@@ -1,90 +1,81 @@
 <!-- SqlQueryPage.vue -->
 <template>
   <q-page class="row">
-    <!-- SQL Card -->
-    <q-card class="col q-ma-md" style="min-width: 200px">
-      <q-card-section>
-        <div class="text-h6">SQL Queries</div>
-        <div class="text-subtitle2">Tables in DB ({{ db?.name }}): {{ allTables }}</div>
-      </q-card-section>
+    <SplitTaskyonView :configuration="configuration" :tools="tools" name="sql" persist>
+      <!-- SQL Card -->
+      <q-card class="col q-ma-md" style="min-width: 200px">
+        <q-card-section>
+          <div class="text-h6">SQL Queries</div>
+          <div class="text-subtitle2">Tables in DB ({{ db?.name }}): {{ allTables }}</div>
+        </q-card-section>
 
-      <q-card-section>
-        <q-input
-          v-model="sqlQuery"
-          type="textarea"
-          rows="3"
-          autogrow
-          label="SQL Query"
-          placeholder="Enter SQL here"
-        />
-        <div class="row q-mt-md items-center q-gutter-sm">
-          <q-btn label="Run Query" color="primary" @click="executeQuery" />
-          <q-btn flat label="Add Sample Table" color="secondary" @click="addSampleTable" />
-        </div>
-      </q-card-section>
-
-      <q-card-section v-if="queryResult !== null">
-        <div class="row items-center justify-between">
-          <div class="text-h6 q-mb-sm">Results</div>
-          <q-btn-dropdown
-            color="primary"
-            size="sm"
-            :icon="matContentCopy"
-            label="Copy"
-            flat
-            dense
-            :dropdown-icon="matArrowDropDown"
-            class="q-mb-sm"
-          >
-            <q-list>
-              <q-item v-close-popup clickable @click="copyJson">
-                <q-item-section>Copy as JSON</q-item-section>
-              </q-item>
-              <q-item
-                v-close-popup
-                clickable
-                :disable="!isTabularResult || !tableRows.length"
-                @click="copyCsv"
-              >
-                <q-item-section>Copy as CSV</q-item-section>
-              </q-item>
-            </q-list>
-          </q-btn-dropdown>
-        </div>
-        <q-tabs v-model="activeTab" dense class="q-mb-md">
-          <q-tab name="table" label="Table" :disable="!isTabularResult" />
-          <q-tab name="json" label="JSON" />
-        </q-tabs>
-
-        <div v-if="activeTab === 'table' && isTabularResult">
-          <q-table
-            :rows="tableRows"
-            :columns="tableColumns"
-            row-key="id"
-            dense
-            flat
-            bordered
-            :pagination="{ rowsPerPage: 10 }"
-            style="max-height: 300px"
+        <q-card-section>
+          <q-input
+            v-model="sqlQuery"
+            type="textarea"
+            rows="3"
+            autogrow
+            label="SQL Query"
+            placeholder="Enter SQL here"
           />
-        </div>
+          <div class="row q-mt-md items-center q-gutter-sm">
+            <q-btn label="Run Query" color="primary" @click="executeQuery" />
+            <q-btn flat label="Add Sample Table" color="secondary" @click="addSampleTable" />
+          </div>
+        </q-card-section>
 
-        <div v-else>
-          <pre style="max-height: 300px; overflow: auto">{{ formattedResult }}</pre>
-        </div>
-      </q-card-section>
-    </q-card>
+        <q-card-section v-if="queryResult !== null">
+          <div class="row items-center justify-between">
+            <div class="text-h6 q-mb-sm">Results</div>
+            <q-btn-dropdown
+              color="primary"
+              size="sm"
+              :icon="matContentCopy"
+              label="Copy"
+              flat
+              dense
+              :dropdown-icon="matArrowDropDown"
+              class="q-mb-sm"
+            >
+              <q-list>
+                <q-item v-close-popup clickable @click="copyJson">
+                  <q-item-section>Copy as JSON</q-item-section>
+                </q-item>
+                <q-item
+                  v-close-popup
+                  clickable
+                  :disable="!isTabularResult || !tableRows.length"
+                  @click="copyCsv"
+                >
+                  <q-item-section>Copy as CSV</q-item-section>
+                </q-item>
+              </q-list>
+            </q-btn-dropdown>
+          </div>
+          <q-tabs v-model="activeTab" dense class="q-mb-md">
+            <q-tab name="table" label="Table" :disable="!isTabularResult" />
+            <q-tab name="json" label="JSON" />
+          </q-tabs>
 
-    <!-- Taskyon iframe -->
-    <div class="col" style="min-height: 0; min-width: 200px">
-      <iframe
-        id="taskyon"
-        title="Taskyon agent"
-        frameborder="0"
-        :src="`${taskyonUrl}?iframe=true&profile=sql`"
-        style="width: 100%; height: 99%"
-      ></iframe>
-    </div>
+          <div v-if="activeTab === 'table' && isTabularResult">
+            <q-table
+              :rows="tableRows"
+              :columns="tableColumns"
+              row-key="id"
+              dense
+              flat
+              bordered
+              :pagination="{ rowsPerPage: 10 }"
+              style="max-height: 300px"
+            />
+          </div>
+
+          <div v-else>
+            <pre style="max-height: 300px; overflow: auto">{{ formattedResult }}</pre>
+          </div>
+        </q-card-section>
+      </q-card>
+    </SplitTaskyonView>
   </q-page>
 </template>
 
@@ -96,14 +87,15 @@ import { getDatabase } from '@taskyon/taskyon/db'
 import { dump } from 'js-yaml'
 import type { JSONSchema7 } from 'json-schema'
 import { copyToClipboard, Notify } from 'quasar'
+import SplitTaskyonView from 'src/components/SplitTaskyonView.vue'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
-import { computed, markRaw, onMounted, ref, watchEffect } from 'vue'
-import { initializeTaskyon } from '../../../packages/tyclient/src'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import { computed, markRaw, ref, watchEffect } from 'vue'
 
-const taskyonUrl = window.location.origin
 const state = useAppStateStore()
+const tystate = useTaskyonStore()
 
 function copyJson() {
   copyToClipboard(formattedResult.value)
@@ -389,23 +381,21 @@ FROM
         `,
 }
 
-// Mount: init DB and Taskyon tools (unchanged)
-onMounted(() => {
-  // Taskyon tools
-  const tools = [
-    createTool({
-      name: 'setSqlQuery',
-      description: 'Replace the current SQL query in the editor with the provided string',
-      parameters: {
-        type: 'object',
-        properties: { sql: { type: 'string', description: 'SQL to place in the editor' } },
-        required: [],
-        additionalProperties: false,
-      } as const satisfies JSONSchema7,
-      function: async ({ sql }) => {
-        if (!sql) {
-          const schema = await db.value!.query(sqlschemaquery)
-          const toolPrompt = `
+// Taskyon tools
+const tools = [
+  createTool({
+    name: 'setSqlQuery',
+    description: 'Replace the current SQL query in the editor with the provided string',
+    parameters: {
+      type: 'object',
+      properties: { sql: { type: 'string', description: 'SQL to place in the editor' } },
+      required: [],
+      additionalProperties: false,
+    } as const satisfies JSONSchema7,
+    function: async ({ sql }) => {
+      if (!sql) {
+        const schema = await db.value!.query(sqlschemaquery)
+        const toolPrompt = `
 You are are the taskyon SQL assistant helping users write and execute SQL queries against the local
 in-browser pglite PostgreSQL database.
 
@@ -433,53 +423,51 @@ ${lastQuery}
 Only use the tool 'setSqlQuery' Tool if you think the user wants to change the SQL query.
 `
 
-          return makeTaskResult([
-            createChatCompletionTask({
-              prompts: [toolPrompt],
-              goal: 'ChooseTool',
-              allowedTools: ['setSqlQuery'],
-            }),
-          ])
-        }
-
-        sqlQuery.value = sql
         return makeTaskResult([
-          {
-            role: 'assistant',
-            content: {
-              type: 'message',
-              data: `The SQL query has been updated to:\n\`\`\`sql\n${sql}\n\`\`\``,
-            },
-          },
-          {
-            role: 'system',
-            content: {
-              type: 'return',
-              data: 'OK',
-            },
-          },
+          createChatCompletionTask({
+            prompts: [toolPrompt],
+            goal: 'ChooseTool',
+            allowedTools: ['setSqlQuery'],
+          }),
         ])
-      },
-    }),
-  ]
+      }
 
-  const configuration: partialTyConfiguration = {
-    llmSettings: {
-      //selectedApi: 'taskyon',
-      enableOpenAiTools: false,
-      enableToolChooser: true,
-      entryNode: toolCall({ name: 'setSqlQuery', arguments: {} }),
+      sqlQuery.value = sql
+      return makeTaskResult([
+        {
+          role: 'assistant',
+          content: {
+            type: 'message',
+            data: `The SQL query has been updated to:\n\`\`\`sql\n${sql}\n\`\`\``,
+          },
+        },
+        {
+          role: 'system',
+          content: {
+            type: 'return',
+            data: 'OK',
+          },
+        },
+      ])
     },
-    appConfiguration: {
-      guiMode: 'minChat',
-      showLogo: false,
-      chatSuggestions: [gettingStarted],
-      welcomeMsg: 'Ask taskyon for help on querying your database!',
-    },
-    signatureOrKey: state.activeTaskyonToken,
-  }
-  void initializeTaskyon({ tools, configuration, name: 'sqlqueries', persist: true })
-})
+  }),
+]
+
+const configuration: partialTyConfiguration = {
+  llmSettings: {
+    //selectedApi: 'taskyon',
+    //enableOpenAiTools: false,
+    enableToolChooser: true,
+    entryNode: toolCall({ name: 'setSqlQuery', arguments: {} }),
+  },
+  appConfiguration: {
+    guiMode: 'minChat',
+    showLogo: false,
+    chatSuggestions: [gettingStarted],
+    welcomeMsg: 'Ask taskyon for help on querying your database!',
+  },
+  signatureOrKey: tystate.currentKeyString ?? undefined,
+}
 
 // Formatted JSON result for JSON view
 const formattedResult = computed(() => JSON.stringify(queryResult.value, null, 2))
