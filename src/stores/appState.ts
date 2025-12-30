@@ -17,7 +17,6 @@ import { computed, reactive, ref, toRefs, unref, watch, type Reactive } from 'vu
 // TODO: remove, to make this file here faster...
 import type { KeyString, tyPublicKeyDraft } from '@taskyon/taskyon'
 import { deepMerge, sleep, type FunctionCall } from '@taskyon/taskyon'
-import { freeKey } from 'assets/taskyon_free_key.json'
 import {
   getCurrentProfileName,
   getTaskyonUiProfile,
@@ -302,35 +301,19 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // we do the toRefs operation, so we simply reassign the same type "stateRefs" to it again which seems to work...
   const allRefs = toRefs(stateRefs) as unknown as typeof stateRefs
 
-  // TODO:
-  // this flag can be set by other parts of the app in order to signal the desired mode.
-  // other parts of taskyon UI will watch this flag and configure themselves accordingly.
-  // we are doing it this way, because we need this as early as possibel to prevent flicker
-  // but some parts of our app e.g. tycors and the secret store need a long time for initialization
-  // we don't save this variable on purpose, because we used it to present tokens to othe parts of the app...
-  const activeTaskyonToken = ref<KeyString>()
-  const usingFreeTaskyonKey = computed(() => {
-    console.log('using free taskyon key:', activeTaskyonToken.value === freeKey)
-    return activeTaskyonToken.value === freeKey
-  })
-
   const authToken = ref<KeyString>()
+  const iframeApiKey = ref<KeyString>() // used to pass api keys if we are running this as  an iframe
 
   // it is *SUPERIMPORTANT*  that we ONLY return computed refs & functions in the store EXCEPT
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
   return {
-    usingFreeTaskyonKey,
     authToken,
+    iframeApiKey,
     sessionId: computed(() => sessionId.value),
     setSessionId,
     bindingKey,
     setBindingKey,
-    activeTaskyonToken: computed(() => activeTaskyonToken.value),
-    setActiveApiToken: (tok: KeyString | undefined) => {
-      console.log('set new active token secret', tok?.slice(-5))
-      activeTaskyonToken.value = tok
-    },
     isInIframe: urlConfig.isInIframe,
     setSelectedTask: (taskId: string | null | undefined) => {
       console.log('set selected task:', taskId)

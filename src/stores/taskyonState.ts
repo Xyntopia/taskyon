@@ -29,6 +29,7 @@ import {
   getDefaultParametersForTool,
   isTaskyonKey,
   joinUrl,
+  latestOnly,
   llmSettings,
   OAUTH_PROVIDERS,
   randomString,
@@ -55,7 +56,7 @@ import { gDriveSyncPort } from 'src/modules/taskyon/sync'
 import { getApiConfig, type TyProfile } from 'src/modules/taskyon/types'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { match, P } from 'ts-pattern'
-import { computed, onScopeDispose, readonly, ref, watch, watchEffect } from 'vue'
+import { computed, onScopeDispose, onWatcherCleanup, readonly, ref, watch, watchEffect } from 'vue'
 import { guiTools } from '../modules/taskyon/GuiTools'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
@@ -401,7 +402,7 @@ const useApiManagement = (
 ) => {
   const llmModelsInternal = ref<Record<string, Model>>({})
   // we need this in order to reactivly see if something changed..
-  const availableKeys = ref<KeyString[]>()
+  const availableKeys = ref<Record<string, string | undefined>>({})
 
   const getProviderApiKey = async (name: string): Promise<KeyString | null> => {
     const ty = await taskyon()
@@ -418,12 +419,11 @@ const useApiManagement = (
     }
   }
 
-  const updateModelList = async () => {
-    console.log(' update model list!')
-    await updateLlmModels(stateRefs.llmSettings, getProviderApiKey).then(
-      (m) => (llmModelsInternal.value = m),
-    )
-  }
+  const updateModelList = latestOnly(async () => {
+    console.log('Update model list!')
+    const m = await updateLlmModels(stateRefs.llmSettings, getProviderApiKey)
+    llmModelsInternal.value = m
+  })
 
   // TODO: add apis to model history as well!
   const addModelToHistory = (model: string) => {
@@ -461,18 +461,24 @@ const useApiManagement = (
     if (api === 'taskyon') {
       console.log('check if we are using a taskyon key!')
       // if we have a taskyon key defined only display the models allowed for that key..
-      const key = isTaskyonKey(stateRefs.activeTaskyonToken ?? undefined, false)
-      if (key) {
-        console.log('yes, using a taskyon key', key.name)
-        return key
-      }
+      const key = isTaskyonKey(availableKeys.value.taskyon ?? undefined, false)
+      return key
     }
     return undefined
   })
 
-  const usingTaskyonKey = computed(() =>
-    taskyonKey.value ? (taskyonKey.value.name ?? true) : false,
-  )
+  const currentKeyString = computed(() => {
+    const api = stateRefs.llmSettings.selectedApi
+    if (api) return availableKeys.value[api] ?? null
+    return null
+  })
+
+  const usingFreeTaskyonKey = computed(() => {
+    const useFreeKey =
+      stateRefs.llmSettings.selectedApi === 'taskyon' && availableKeys.value['taskyon'] === freeKey
+    console.log('using free key:', useFreeKey)
+    return useFreeKey
+  })
 
   function getKeyModels(key: tyPublicApiKeyObject) {
     if (key.model && key.model.length > 0 && !key.model.includes('*')) {
@@ -498,21 +504,15 @@ const useApiManagement = (
       await ty.setSecret(AiProvideKeyStoreName, name, value)
       await ty.updateChatCompletionApiKey(name, value)
     }
-    const keys = Object.keys(await ty.listSecrets(AiProvideKeyStoreName))
-    availableKeys.value = keys as KeyString[]
-    if (name === 'taskyon') {
-      stateRefs.setActiveApiToken(value)
-    }
-    //selectValidModel()
+    // and keep track of it internally
+    availableKeys.value[name] = value
   })
 
   ///////////   computed properties
-
   const providerDefs = computed(() => Object.keys(stateRefs.llmSettings.llmApis))
   const availableProviders = computed(() => {
-    console.log('update available key providers!')
     //return Array.from(new Set(availableKeys.value).intersection(new Set(providerDefs.value)))
-    return availableKeys.value
+    return Object.keys(availableKeys.value)
   })
 
   // Computed property to determine the currently selected bot name
@@ -523,7 +523,6 @@ const useApiManagement = (
   })
 
   const noAiService = asyncComputed(async () => {
-    console.log('check if Ai service exists!')
     if (stateRefs.llmSettings.selectedApi) {
       const apiK = await getProviderApiKey(stateRefs.llmSettings.selectedApi)
       return apiK == null
@@ -542,63 +541,56 @@ const useApiManagement = (
     }
   }
 
-  const updateTyKeyStates = async (newKey?: KeyString) => {
-    console.log('updating key states', { newKey })
+  function resolveTaskyonKey(args: {
+    authToken?: KeyString | undefined
+    iframeToken?: KeyString | undefined
+    storedKey?: KeyString | undefined
+  }) {
+    const { authToken, storedKey, iframeToken } = args
 
-    // we only need to update taskyon here, because taskyon can also use oauth tokens!
-    // the other keys simply stay "the same"
-    let keystr = await getProviderApiKey('taskyon')
-    const tyKeyObj = isTaskyonKey(keystr ?? undefined, false)
-    if (newKey && (keystr === freeKey || !tyKeyObj)) {
-      keystr = newKey
-    } else if (!tyKeyObj) {
-      // if there is no key, or if there is an oauth token, but no Taskyon key.
-      // this could for example happen, if we log out. In this
-      // case we want the taskyon key of that session to be reverted back to a "free" key.
-      keystr = freeKey as KeyString
-    } // in all other cases, we simply leave the taskyon key "as is"
-    await setProviderApiKey('taskyon', keystr ?? undefined) // can force (!) key here, because we check if it exists with isTaskyonKey
+    return (iframeToken ??
+      // only use stored key if it isn't a free key and if it is a taskyon key
+      (storedKey === freeKey ? undefined : isTaskyonKey(storedKey, true) ? storedKey : undefined) ??
+      authToken ??
+      freeKey) as KeyString
+  }
+
+  //////   INITIALIZATION
+  // make sure, that we check our secretStore right after initialization if we hae stored any keys in
+  // there (especially ifits a taskyon key) and then use those!
+  const init = async () => {
+    const ty = await taskyon()
+    const sessionId = await ty.getCryptoSession().getSessionId()
+    console.log(`updating taskyon after session/key change!, ${sessionId}`, {
+      authToken: stateRefs.authToken,
+      iframeApiKey: stateRefs.iframeApiKey,
+    })
+
+    const keystr = (await getProviderApiKey('taskyon')) ?? undefined
+    console.log('found stored key:', keystr?.slice(-5))
+    const selectedKey = resolveTaskyonKey({
+      authToken: stateRefs.authToken,
+      iframeToken: stateRefs.iframeApiKey,
+      storedKey: keystr,
+    })
+    console.log('setting selected key:', selectedKey?.slice(-5))
+    // update the secretstore with this key in order to give chatCompletion the correct key!
+    await setProviderApiKey('taskyon', selectedKey)
+
     const newKeyObj = isTaskyonKey(keystr ?? undefined, false)
     if (newKeyObj) {
       const model = getValidModel(newKeyObj)
       if (model) updateModelAndApi({ newName: model })
     }
+
+    const keys = await ty.listSecrets(AiProvideKeyStoreName)
+    availableKeys.value = keys
   }
-
-  //////   INITIALIZATION
-
-  // make sure, that we check our secretStore right after initialization if we hae stored any keys in
-  // there (especially ifits a taskyon key) and then use those!
-  void taskyon().then(async () => {
-    console.log('setting key after secretstore initialization')
-    await updateTyKeyStates(stateRefs.authToken)
-  })
-
-  //////   WATCHERS & INITIALIZATION
-
-  // this simply watches if we get a 3rd paty oauth token from somewhere...
-  watch(
-    [() => stateRefs.authToken, () => stateRefs.sessionId],
-    async ([newAuthToken, newSessionId], [oldAuthToken, oldSessionId]) => {
-      console.log('updating taskyon after session/key change!', {
-        newAuthToken,
-        oldAuthToken,
-        newSessionId,
-        oldSessionId,
-      })
-
-      await updateTyKeyStates(newAuthToken)
-    },
-  )
 
   // make sure we update our model list whenever anything changes for our
   // endpoints...
   watch(
-    [
-      () => stateRefs.llmSettings.selectedApi,
-      () => stateRefs.llmSettings.llmApis,
-      () => stateRefs.activeTaskyonToken,
-    ],
+    [() => stateRefs.llmSettings.selectedApi, () => stateRefs.llmSettings.llmApis, availableKeys],
     updateModelList,
     {
       immediate: true,
@@ -606,10 +598,13 @@ const useApiManagement = (
   )
 
   return {
+    init,
     currentModelId,
     tyKeyAllowedModels,
+    taskyonKey,
+    currentKeyString,
     currentModel,
-    usingTaskyonKey,
+    usingFreeTaskyonKey,
     availableProviders,
     providerDefs,
     noAiService,
@@ -892,30 +887,42 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return await tyCore(() => stateRefs.llmSettings, defineTyGuiTools(stateRefs), cs)
   })
 
+  const apiKeyManagement = useApiManagement(stateRefs, () => taskyon)
+  void apiKeyManagement.init()
+
   // switch user session on key change!
   watch(
     () => stateRefs.bindingKey,
     async (newkey) => {
+      console.log('new binding key', newkey)
+
+      let cancelled = false
+      onWatcherCleanup(() => {
+        // This runs when the watcher re-triggers
+        cancelled = true
+      })
       const cs = await initCryptoSessionFromBrowser(
         {
           bindingKey: newkey ?? undefined,
         },
         true,
       )
+      if (cancelled) return
       const ty = await taskyon
       const newId = await cs.getSessionId()
       const oldId = await ty.getCryptoSession().getSessionId()
-      if (newId !== oldId) {
-        console.log(`switch user session because of binding key change! ${oldId}->${newId}`)
-        await ty.setNewSession(cs)
-        // after we are finished switching, we can officially chang ethe session id...
-        stateRefs.setSessionId(await cs.getSessionId())
-      }
+      if (cancelled || newId === oldId) return
+
+      console.log(`switch user session because of binding key change! ${oldId}->${newId}`)
+      await ty.setNewSession(cs)
+      // after we are finished switching, we can officially chang ethe session id...
+      stateRefs.setSessionId(newId)
+      // and re-init our api key management with new session...
+      await apiKeyManagement.init()
     },
   )
 
   const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
-  const apiKeyManagement = useApiManagement(stateRefs, () => taskyon)
 
   // iApiOutside is the port to the "outside" of taskyon UI. It is the port used to
   // communicate towards the taskyon engine. iApiInside communicates to the outside of taskyon.
@@ -947,12 +954,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           // let taskyon do more configurations
 
           // and also set a possible signature as the api key!
-          if (stateRefs.llmSettings.selectedApi && newConfig.signatureOrKey) {
+          if (newConfig.signatureOrKey) {
             // we only set the API key, if it was provided by the
             // parent app.
             const newKey = newConfig.signatureOrKey as KeyString
             if (typeof newKey === 'string') {
-              await apiKeyManagement.setProviderApiKey(stateRefs.llmSettings.selectedApi, newKey)
+              stateRefs.iframeApiKey = newKey
+              await apiKeyManagement.init()
             } else {
               console.warn('Provided signatureOrKey is not a string:', newKey)
             }
@@ -1011,7 +1019,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     const ty = await taskyon
     const tg = usePersistentOauth({
       getSecret: async (name) => await ty.getSecret(STORAGE_PREFIX, name, false),
-      setSecret: async (name, data) => await ty.setSecret(STORAGE_PREFIX, name, data),
+      setSecret: async (name, data) => await ty.setSecret(STORAGE_PREFIX, name, data as KeyString),
     })
     return await tg(...args)
   }

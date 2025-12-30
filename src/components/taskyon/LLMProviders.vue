@@ -13,7 +13,7 @@ Please ensure that your application provides a valid API key. For more informati
 To get started, you'll need an API key for an OpenAI-compatible AI service. You can choose from a variety of options, including third-party services or even hosting your own inference server.`
         "
       />
-      <q-card-section v-if="state.usingFreeTaskyonKey">
+      <q-card-section v-if="tystate.usingFreeTaskyonKey">
         You’re currently using Taskyon’s free version, which includes access to basic models. For a
         better experience with higher-quality models, consider [signing
         up](https://taskyon.space/auth).

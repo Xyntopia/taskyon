@@ -27,12 +27,9 @@
         @keydown.enter="selectFirstOption"
       >
         <template #prepend>
-          <q-icon
-            v-if="state.llmSettings.selectedApi === 'taskyon' && tystate.usingTaskyonKey"
-            :name="mdiKeyLink"
-          >
+          <q-icon v-if="selectedApi === 'taskyon' && tystate.taskyonKey" :name="mdiKeyLink">
             <q-tooltip
-              >Only models allowed from taskyon key: {{ tystate.usingTaskyonKey }}</q-tooltip
+              >Only models allowed from taskyon key: {{ tystate.taskyonKey.name }}</q-tooltip
             >
           </q-icon>
         </template>
@@ -54,7 +51,6 @@
 import { matVisibility } from '@quasar/extras/material-icons'
 import { mdiKeyLink } from '@quasar/extras/mdi-v6'
 import { levenshteinDistance } from 'src/modules/string_utils'
-import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, ref } from 'vue'
 import ToggleButton from '../ToggleButton.vue'
@@ -80,7 +76,6 @@ const emit = defineEmits<{
 }>()
 
 const tystate = useTaskyonStore()
-const state = useAppStateStore()
 
 const selectModelInput = ref()
 
