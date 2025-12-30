@@ -1,3 +1,4 @@
+<!-- eslint-disable no-useless-escape -->
 <!-- DocumentEditorPage.vue -->
 <template>
   <q-page class="row">
@@ -37,6 +38,15 @@
           <q-btn
             flat
             dense
+            :icon="showPreview ? matCode : matVisibility"
+            color="secondary"
+            :label="showPreview ? 'Editor' : 'Preview'"
+            title="Toggle editor/preview"
+            @click="togglePreview"
+          />
+          <q-btn
+            flat
+            dense
             :icon="matContentCopy"
             color="secondary"
             title="Copy"
@@ -72,16 +82,32 @@
       -->
         </div>
 
-        <!-- Code Editor -->
+        <!-- Code Editor / Preview -->
         <q-card flat class="col" style="max-width: 100%">
-          <CodeEditor
-            v-model="currentContent"
-            class="col"
-            placeholder="Write here..."
-            language="javascript"
-            style="max-height: 87vh"
-            @update:model-value="onContentChange"
-          />
+          <div v-if="!showPreview" class="col">
+            <CodeEditor
+              v-model="currentContent"
+              class="col"
+              placeholder="Write here..."
+              language="javascript"
+              style="max-height: 87vh"
+              @update:model-value="onContentChange"
+            />
+          </div>
+          <div v-else class="col column">
+            <iframe
+              class="col"
+              style="border: 1px solid #ccc; width: 100%; min-height: 87vh"
+              :srcdoc="iframeContent"
+            ></iframe>
+            <div
+              class="q-mt-xs text-caption"
+              :class="isCodeValid ? 'text-positive' : 'text-negative'"
+            >
+              <span v-if="isCodeValid">Preview loaded without runtime errors.</span>
+              <span v-else>Preview error: {{ validationError }}</span>
+            </div>
+          </div>
         </q-card>
       </div>
     </SplitTaskyonView>
@@ -89,7 +115,13 @@
 </template>
 
 <script setup lang="ts">
-import { matContentCopy, matNavigateBefore, matNavigateNext } from '@quasar/extras/material-icons'
+import {
+  matCode,
+  matContentCopy,
+  matNavigateBefore,
+  matNavigateNext,
+  matVisibility,
+} from '@quasar/extras/material-icons'
 import { mdiNewBox, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
 import {
   createChatCompletionTask,
@@ -105,7 +137,7 @@ import CodeEditor from 'src/components/CodeEditor.vue'
 import SplitTaskyonView from 'src/components/SplitTaskyonView.vue'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { useAppStateStore } from 'src/stores/appState'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 const state = useAppStateStore()
 
@@ -356,6 +388,36 @@ const currentVersionIndex = ref(0)
 const currentContent = ref('')
 const hasUnsavedChanges = ref(false)
 
+const showPreview = ref(false)
+const isCodeValid = ref(true)
+const validationError = ref('')
+
+const iframeContent = computed(() => {
+  const userCode = currentContent.value || ''
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Preview</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body { box-sizing: border-box; padding: 8px; }
+</style>
+  <script>
+  window.onerror = function(message, source, lineno, colno, error) {
+    parent.postMessage({ type: 'iframe-error', message, source, lineno, colno }, '*');
+  };
+  window.addEventListener('DOMContentLoaded', function() {
+    parent.postMessage({ type: 'iframe-ready' }, '*');
+  });
+<\u002Fscript>
+</head>
+<body>
+${userCode}
+</body>
+</html>`
+})
+
 // make sure we persist current version for page reloads
 const storeKey = 'codeEditorText'
 const initialText = state.store[storeKey] as string
@@ -363,6 +425,9 @@ if (initialText) currentContent.value = initialText
 watchThrottled(currentContent, (text) => {
   console.log('store text!!')
   state.store[storeKey] = text
+  // Reset validation state on content change; iframe will report any new errors
+  isCodeValid.value = true
+  validationError.value = ''
 })
 
 // Computed
@@ -380,6 +445,21 @@ function reset() {
   currentVersionIndex.value = 0
   currentContent.value = ''
   hasUnsavedChanges.value = false
+}
+function togglePreview() {
+  showPreview.value = !showPreview.value
+}
+
+function handleIframeMessage(event: MessageEvent) {
+  if (!event.data || typeof event.data !== 'object') return
+  const { type, message } = event.data as { type?: string; message?: string }
+  if (type === 'iframe-error') {
+    isCodeValid.value = false
+    validationError.value = message || 'Unknown error'
+  } else if (type === 'iframe-ready') {
+    isCodeValid.value = true
+    validationError.value = ''
+  }
 }
 
 // Version management functions (unchanged)
@@ -536,9 +616,14 @@ const maxPreviewLines = 1000
 
 // Initialize on mount
 onMounted(() => {
+  window.addEventListener('message', handleIframeMessage)
   const current = currentVersion.value
   if (current) {
     currentContent.value = current.content
   }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('message', handleIframeMessage)
 })
 </script>
