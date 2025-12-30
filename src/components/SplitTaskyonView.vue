@@ -10,7 +10,7 @@
         id="taskyon"
         title="Taskyon agent"
         frameborder="0"
-        :src="`${taskyonUrl}?iframe=true&profile=coding`"
+        :src="`${taskyonUrl}?iframe=true&profile=${name}`"
         style="width: 100%; height: 99%"
         @load="onIframeLoaded"
       ></iframe>
