@@ -137,9 +137,11 @@ import CodeEditor from 'src/components/CodeEditor.vue'
 import SplitTaskyonView from 'src/components/SplitTaskyonView.vue'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 const state = useAppStateStore()
+const tystate = useTaskyonStore()
 
 // Types
 interface DocumentVersion {
@@ -365,7 +367,7 @@ const configuration = computed<partialTyConfiguration | null>(() => {
   return {
     llmSettings: {
       ...removeKeys(state.llmSettings, ['entryNode']),
-      enableOpenAiTools: false,
+      //enableOpenAiTools: false,
       enableToolChooser: true,
       entryNode: toolCall({ name: 'documentAssistant', arguments: {} }),
     },
@@ -378,7 +380,7 @@ const configuration = computed<partialTyConfiguration | null>(() => {
       welcomeMsg:
         'Hi! I can help you edit documents. I can see the current content with line numbers and make precise line-based edits.',
     },
-    signatureOrKey: state.authToken,
+    signatureOrKey: tystate.currentKeyString ?? undefined,
   }
 })
 
