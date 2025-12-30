@@ -80,6 +80,22 @@ export function exclusive<F extends (...args: any) => any>(fn: F): F {
   return wrapped
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function latestOnly<F extends (...args: any[]) => Promise<any>>(fn: F): F {
+  let callId = 0
+
+  return (async (...args: Parameters<F>): Promise<ReturnType<F>> => {
+    const id = ++callId
+    const result = await fn(...args)
+    // If a newer call has started since we began, drop this result
+    if (id !== callId) {
+      // @ts-expect-error - we are explicitly discarding stale results
+      return
+    }
+    return result as ReturnType<F>
+  }) as F
+}
+
 export function lockMap(name: string = 'item') {
   const locks = new Map<string | number, Lock>()
 
