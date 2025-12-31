@@ -17,8 +17,8 @@
 
 <script setup lang="ts">
 import { deepMerge } from '../../packages/taskyon/src/utils/objHelpers'
-import { partialTyConfiguration } from '../../packages/tyclient/dist/tyclient.mjs'
-import { ClientTool, initializeTaskyon } from '../../packages/tyclient/src'
+import type { partialTyConfiguration } from '../../packages/tyclient/dist/tyclient.mjs'
+import { type ClientTool, initializeTaskyon } from '../../packages/tyclient/src'
 
 const {
   tools = [],
