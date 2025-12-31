@@ -3,14 +3,23 @@
  #
  # Model() returns:
  #   - name
- #   - xNames, yNames, uNames, cNames
- #   - pDefaults
- #   - x0, y0
+ #   - meta: {
+ #       name,
+ #       parameters, constants,
+ #       states, algebraics, inputs, conditions,
+ #       summary
+ #     }
+ #   - x0, y0, c0
  #   - residual(t, x, xDot, y, u, pOverride) -> residual vector
  #
- # Solver (to be written separately) will:
- #   - choose time-stepping scheme (implicit Euler, BDF, ...)
- #   - treat residual as F(t, x, xDot, y, u, p) = 0
+ # Residual ordering:
+ #   - First: all state derivative equations (der(x) = ...)
+ #   - Then: all other equations (typically for algebraics)
+ #   - Then: zeros for unsupported forms (to preserve length)
+ #
+ # Solver-side wrapper may assume:
+ #   res[i]        = xDot[i] - f_i(t,x,y,u,p)
+ #   res[nx + j]   = y[j]    - g_j(t,x,u,p)
  # ------------------------------------------------------------------------- #}
 
 {%- macro render_expr(e) -%}
@@ -77,82 +86,145 @@
 
 /**
  * Generated Modelica DAE model: {{ dae.model_name or "GeneratedModel" }}
- * Implicit form via residual:
- *   F(t, x, xDot, y, u, p) = 0
+ *
+ * Parameters:
+{%- for (name, comp) in dae.p|items %}
+ *   {{ name }} = {{ render_expr(comp.start) }}
+{%- endfor %}
+ *
+ * Constants:
+{%- for (name, comp) in dae.cp|items %}
+ *   {{ name }} = {{ render_expr(comp.start) }}
+{%- endfor %}
+ *
+ * States (x):
+{%- for (name, comp) in dae.x|items %}
+ *   {{ name }} = {{ render_expr(comp.start) }}
+{%- endfor %}
+ *
+ * Algebraics (y):
+{%- for (name, comp) in dae.y|items %}
+ *   {{ name }} = {{ render_expr(comp.start) }}
+{%- endfor %}
+ *
+ * Conditions (c):
+{%- for (name, comp) in dae.c|items %}
+ *   {{ name }} = {{ render_expr(comp.start) if comp.start is defined else "false" }}
+{%- endfor %}
+ *
+ * Equations (fx):
+{%- for eq in dae.fx %}
+  {%- if "Simple" in eq and is_derivative_eq(eq) %}
+ *   der({{ lhs_state_name(eq) }}) = {{ render_expr(eq.Simple.rhs) }};
+  {%- elif "Simple" in eq %}
+ *   {{ render_expr(eq.Simple.lhs) }} = {{ render_expr(eq.Simple.rhs) }};
+  {%- else %}
+ *   /* unsupported equation: {{ eq|tojson }} */
+  {%- endif %}
+{%- endfor %}
  */
 function Model() {
   "use strict";
 
-  /* --- variable metadata -------------------------------------------------- */
+  /* --- metadata ----------------------------------------------------------- */
 
-  const xNames = [
-  {%- for (name, comp) in dae.x|items %}
-    "{{ name }}"{% if not loop.last %},{% endif %}
-  {%- endfor %}
-  ];
+  const meta = {
+    name: "{{ dae.model_name or "GeneratedModel" }}",
 
-  const uNames = [
-  {%- for (name, comp) in dae.u|items %}
-    "{{ name }}"{% if not loop.last %},{% endif %}
-  {%- endfor %}
-  ];
+    parameters: [
+    {%- for (name, comp) in dae.p|items %}
+      { name: "{{ name }}", start: {{ render_expr(comp.start) }} }{% if not loop.last %},{% endif %}
+    {%- endfor %}
+    ],
 
-  const yNames = [
-  {%- for (name, comp) in dae.y|items %}
-    "{{ name }}"{% if not loop.last %},{% endif %}
-  {%- endfor %}
-  ];
+    constants: [
+    {%- for (name, comp) in dae.cp|items %}
+      { name: "{{ name }}", value: {{ render_expr(comp.start) }} }{% if not loop.last %},{% endif %}
+    {%- endfor %}
+    ],
 
-  const cNames = [
-  {%- for (name, comp) in dae.c|items %}
-    "{{ name }}"{% if not loop.last %},{% endif %}
-  {%- endfor %}
-  ];
+    states: [
+    {%- for (name, comp) in dae.x|items %}
+      { name: "{{ name }}", start: {{ render_expr(comp.start) }} }{% if not loop.last %},{% endif %}
+    {%- endfor %}
+    ],
 
-  /* parameters with default values */
+    algebraics: [
+    {%- for (name, comp) in dae.y|items %}
+      { name: "{{ name }}", start: {{ render_expr(comp.start) }} }{% if not loop.last %},{% endif %}
+    {%- endfor %}
+    ],
+
+    inputs: [
+    {%- for (name, comp) in dae.u|items %}
+      { name: "{{ name }}" }{% if not loop.last %},{% endif %}
+    {%- endfor %}
+    ],
+
+    conditions: [
+    {%- for (name, comp) in dae.c|items %}
+      { name: "{{ name }}", start: {{ render_expr(comp.start) if comp.start is defined else "false" }} }{% if not loop.last %},{% endif %}
+    {%- endfor %}
+    ],
+
+    summary: {
+      nx: {{ dae.x|length }},
+      ny: {{ dae.y|length }},
+      nc: {{ dae.c|length }},
+      neqs: {{ dae.fx|length }}
+    }
+  };
+
+  /* convenient initial vectors */
+  const x0 = meta.states.map(s => s.start);
+  const y0 = meta.algebraics.map(a => a.start);
+  const c0 = meta.conditions.map(c => c.start);
+
+  /* parameter defaults (object) */
   const pDefaults = {
   {%- for (name, comp) in dae.p|items %}
     {{ name }}: {{ render_expr(comp.start) }}{% if not loop.last %},{% endif %}
   {%- endfor %}
   };
 
-  /* constants */
+  /* constants as a simple object */
   const constants = {
   {%- for (name, comp) in dae.cp|items %}
     {{ name }}: {{ render_expr(comp.start) }}{% if not loop.last %},{% endif %}
   {%- endfor %}
   };
 
-  /* initial guesses */
-  const x0 = [
-  {%- for (name, comp) in dae.x|items %}
-    {{ render_expr(comp.start) }}{% if not loop.last %},{% endif %}
-  {%- endfor %}
-  ];
-
-  const y0 = [
-  {%- for (name, comp) in dae.y|items %}
-    {{ render_expr(comp.start) }}{% if not loop.last %},{% endif %}
-  {%- endfor %}
-  ];
-
   /**
    * Residual function:
    *   F(t, x, xDot, y, u, pOverride) = 0
    *
-   * @param {number} t      time
-   * @param {number[]} x    state vector
-   * @param {number[]} xDot state derivative (chosen by solver)
-   * @param {number[]} y    algebraic variables
-   * @param {number[]} u    inputs
-   * @param {object}  pOverride parameter overrides
+   * @param {number}   t      time
+   * @param {number[]} x      state vector
+   * @param {number[]} xDot   state derivative (chosen by solver)
+   * @param {number[]} y      algebraic variables
+   * @param {number[]} u      inputs
+   * @param {object}   pOverride parameter overrides
    *
    * @returns {number[]} residual vector of length (nx + ny)
+   *
+   * Ordering:
+   *   - First: residuals for all state derivatives (der(x) = ...)
+   *   - Then: residuals for other equations (typically algebraics)
    */
-  const residual = (t, x, xDot, y, u, pOverride) => {
-    const params = Object.assign({}, pDefaults, pOverride || {});
+  function residual(t, x, xDot, y, u, pOverride) {
+    const p = Object.assign({}, pDefaults, pOverride || {});
 
-    /* unpack state */
+    /* unpack parameters */
+  {%- for (name, comp) in dae.p|items %}
+    const {{ name }} = p.{{ name }};
+  {%- endfor %}
+
+    /* unpack constants */
+  {%- for (name, comp) in dae.cp|items %}
+    const {{ name }} = constants.{{ name }};
+  {%- endfor %}
+
+    /* unpack states */
   {%- for (name, comp) in dae.x|items %}
     const {{ name }} = x[{{ loop.index0 }}];
   {%- endfor %}
@@ -162,7 +234,7 @@ function Model() {
     const {{ name }}_dot = xDot[{{ loop.index0 }}];
   {%- endfor %}
 
-    /* unpack algebraic variables */
+    /* unpack algebraics */
   {%- for (name, comp) in dae.y|items %}
     const {{ name }} = y[{{ loop.index0 }}];
   {%- endfor %}
@@ -172,48 +244,46 @@ function Model() {
     const {{ name }} = u[{{ loop.index0 }}];
   {%- endfor %}
 
-    /* aliases for parameters */
-  {%- for (name, comp) in dae.p|items %}
-    const {{ name }} = params.{{ name }};
-  {%- endfor %}
-
-    /* aliases for constants */
-  {%- for (name, comp) in dae.cp|items %}
-    const {{ name }} = constants.{{ name }};
-  {%- endfor %}
-
-    const res = new Array({{ dae.x|length + dae.y|length }});
-    let k = 0;
-
-    /* --- equations from fx: map to residuals ----------------------------- */
-  {%- for eq in dae.fx %}
-    {%- if "Simple" in eq %}
-      {%- if is_derivative_eq(eq) %}
-    // der({{ lhs_state_name(eq) }}) = {{ render_expr(eq.Simple.rhs) }}
-    res[k++] = {{ lhs_state_name(eq) }}_dot - ({{ render_expr(eq.Simple.rhs) }});
-      {%- else %}
-    // {{ render_expr(eq.Simple.lhs) }} = {{ render_expr(eq.Simple.rhs) }}
-    res[k++] = ({{ render_expr(eq.Simple.lhs) }}) - ({{ render_expr(eq.Simple.rhs) }});
+    /* residuals: derivative equations first, then others */
+    {%- set res = namespace(first=true) %}
+    return [
+    {# -- 1) derivative equations: der(x) = ... -------------------------- #}
+    {%- for eq in dae.fx %}
+      {%- if "Simple" in eq and is_derivative_eq(eq) %}
+        {%- if not res.first %},{% endif %}
+        // der({{ lhs_state_name(eq) }}) = {{ render_expr(eq.Simple.rhs) }}
+        {{ lhs_state_name(eq) }}_dot - ({{ render_expr(eq.Simple.rhs) }})
+        {%- set res.first = false %}
       {%- endif %}
-    {%- else %}
-    // unsupported equation form: {{ eq|tojson }}
-    // (fill with 0 to preserve vector length if needed)
-    // res[k++] = 0;
-    {%- endif %}
-  {%- endfor %}
+    {%- endfor %}
 
-    return res;
-  };
+    {# -- 2) other simple equations: lhs = rhs (typically algebraics) ----- #}
+    {%- for eq in dae.fx %}
+      {%- if "Simple" in eq and not is_derivative_eq(eq) %}
+        {%- if not res.first %},{% endif %}
+        // {{ render_expr(eq.Simple.lhs) }} = {{ render_expr(eq.Simple.rhs) }}
+        ({{ render_expr(eq.Simple.lhs) }}) - ({{ render_expr(eq.Simple.rhs) }})
+        {%- set res.first = false %}
+      {%- endif %}
+    {%- endfor %}
+
+    {# -- 3) unsupported equations: fill with 0 to preserve length -------- #}
+    {%- for eq in dae.fx %}
+      {%- if "Simple" not in eq %}
+        {%- if not res.first %},{% endif %}
+        0 /* unsupported equation form: {{ eq|tojson }} */
+        {%- set res.first = false %}
+      {%- endif %}
+    {%- endfor %}
+    ];
+  }
 
   return {
-    name: "{{ dae.model_name or "GeneratedModel" }}",
-    xNames,
-    yNames,
-    uNames,
-    cNames,
-    pDefaults,
+    name: meta.name,
+    meta,
     x0,
     y0,
+    c0,
     residual
   };
 }

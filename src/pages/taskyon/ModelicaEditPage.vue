@@ -181,12 +181,17 @@
 
       <template #after>
         <iframe
+          v-if="tystate.currentKeyString"
           id="taskyon"
           title="Taskyon agent"
           frameborder="0"
-          :src="`${taskyonUrl}?iframe=true&profile=sql`"
+          :src="`${taskyonUrl}?iframe=true&profile=modelica`"
           style="width: 100%; height: 99%"
         ></iframe>
+        <div v-else class="column items-center justify-center full-height">
+          <div>Loading Modelica Agent...</div>
+          <q-spinner-do ts size="50px" />
+        </div>
       </template>
     </DockView>
   </FixedHeightPage>
@@ -220,6 +225,9 @@ import {
 } from '../../../packages/tyclient/src'
 import FixedHeightPage from '../FixedHeightPage.vue'
 import type { JSONSchema7 } from 'json-schema'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+
+const tystate = useTaskyonStore()
 
 // Optional: adjust if you put this elsewhere
 type ModelicaLogPhase = 'compile' | 'run' | 'loadWasm' | 'general'
@@ -349,17 +357,17 @@ onMounted(() => {
   const configuration: partialTyConfiguration = {
     llmSettings: {
       //selectedApi: 'taskyon',
-      enableOpenAiTools: false,
+      //enableOpenAiTools: false,
       enableToolChooser: true,
       entryNode: toolCall({ name: 'setModelicaAndTemplate', arguments: {} }),
     },
     appConfiguration: {
       guiMode: 'minChat',
       showLogo: false,
-      // TODO: chatSuggestions: [gettingStarted],
+      chatSuggestions: [],
       welcomeMsg: 'Ask taskyon for help with using rumoca/modelica!',
     },
-    // TODO: signatureOrKey: state.activeTaskyonToken,
+    signatureOrKey: tystate.currentKeyString ?? undefined,
   }
   void initializeTaskyon({ tools, configuration, name: 'modelica', persist: true })
 })
@@ -659,6 +667,17 @@ const buildIframeCode = (compiledJs: string): string => {
     ${compiledJs}
 
     const model = Model();
+    const meta = model.meta || {};
+
+    const stateNames     = (meta.states     || []).map(s => s.name);
+    const algebraicNames = (meta.algebraics || []).map(a => a.name);
+    const inputNames     = (meta.inputs     || []).map(u => u.name);
+    const conditionNames = (meta.conditions || []).map(c => c.name);
+
+    const nx = Array.isArray(model.x0) ? model.x0.length : 0;
+    const ny = Array.isArray(model.y0) ? model.y0.length : 0;
+    const nc = Array.isArray(model.c0) ? model.c0.length : 0;
+    const nu = inputNames.length;
 
     /**
      * Evaluate derivatives and algebraic variables at (t, x).
@@ -670,13 +689,11 @@ const buildIframeCode = (compiledJs: string): string => {
      * by calling residual with xDot = 0 and a yGuess.
      */
     function evalDerivativesAndAlgebraics(t, x, u, yGuess, pOverride) {
-      const nx = model.xNames.length;
-      const ny = model.yNames.length;
-
       const xDotZero = new Array(nx).fill(0);
+
       const y = (Array.isArray(yGuess) && yGuess.length === ny)
         ? yGuess.slice()
-        : model.y0.slice();
+        : (Array.isArray(model.y0) ? model.y0.slice() : new Array(ny).fill(0));
 
       const res = model.residual(t, x, xDotZero, y, u, pOverride);
 
@@ -706,23 +723,18 @@ const buildIframeCode = (compiledJs: string): string => {
      *
      * NOTE:
      * - No event handling yet (no when/reinit).
-     * - Assumes residual has the structure produced by your Jinja template.
      */
     function simulate(t0, tf, dt, opts) {
       opts = opts || {};
-      const nx = model.xNames.length;
-      const ny = model.yNames.length;
-      const nu = model.uNames.length;
+      const pOverride = opts.pOverride || null;
 
       const x0 = (Array.isArray(opts.x0) && opts.x0.length === nx)
         ? opts.x0.slice()
-        : model.x0.slice();
+        : (Array.isArray(model.x0) ? model.x0.slice() : new Array(nx).fill(0));
 
       const f_u = typeof opts.f_u === "function"
         ? opts.f_u
-        : ((t) => new Array(nu).fill(0));
-
-      const pOverride = opts.pOverride || null;
+        : function (_t) { return new Array(nu).fill(0); };
 
       const nSteps = Math.max(1, Math.floor((tf - t0) / dt));
 
@@ -733,19 +745,21 @@ const buildIframeCode = (compiledJs: string): string => {
 
       let t = t0;
       let x = x0.slice();
-      let y = model.y0.slice(); // initial guess for algebraics
+      let y = Array.isArray(model.y0) ? model.y0.slice() : new Array(ny).fill(0);
 
       for (let k = 0; k <= nSteps; k++) {
         const u = f_u(t) || new Array(nu).fill(0);
 
         // Compute xDot and consistent y at (t, x)
-        const { xDot, y: yNew } = evalDerivativesAndAlgebraics(
+        const result = evalDerivativesAndAlgebraics(
           t,
           x,
           u,
           y,
           pOverride
         );
+        const xDot = result.xDot;
+        const yNew = result.y;
 
         // Store current step
         tArr[k] = t;
@@ -775,34 +789,62 @@ const buildIframeCode = (compiledJs: string): string => {
       };
     }
 
+    // Helper: convert array-of-vectors to named series
+    function buildNamedSeries(names, valuesPerStep) {
+      const out = {};
+      for (let i = 0; i < names.length; i++) {
+        out[names[i]] = new Array(valuesPerStep.length);
+      }
+      for (let k = 0; k < valuesPerStep.length; k++) {
+        const row = valuesPerStep[k];
+        for (let i = 0; i < names.length; i++) {
+          out[names[i]][k] = row[i];
+        }
+      }
+      return out;
+    }
+
     const sim = (params && params.sim) || {};
     const t0 = Number.isFinite(sim.t0) ? sim.t0 : 0;
     const tf = Number.isFinite(sim.tf) ? sim.tf : 5;
     const dt = Number.isFinite(sim.dt) ? sim.dt : 0.1;
 
-    const x0 = Array.isArray(sim.x0) && sim.x0.length === model.x0.length
+    const x0 = Array.isArray(sim.x0) && sim.x0.length === nx
       ? sim.x0.slice()
-      : model.x0.slice();
+      : (Array.isArray(model.x0) ? model.x0.slice() : new Array(nx).fill(0));
 
-    const f_u = (t) => new Array(model.uNames.length).fill(0);
+    const f_u = function (_t) { return new Array(nu).fill(0); };
 
-    const data = simulate(t0, tf, dt, { x0, f_u });
+    const raw = simulate(t0, tf, dt, { x0, f_u });
+
+    // Build named outputs:
+    //   data.x.h, data.x.v, ...
+    //   data.y.E, ...
+    //   data.u.<inputName>, ...
+    const data = {
+      t: raw.t,
+      x: buildNamedSeries(stateNames,     raw.x),
+      y: buildNamedSeries(algebraicNames, raw.y),
+      u: buildNamedSeries(inputNames,     raw.u),
+      // c: later when conditions are simulated
+    };
 
     return {
       meta: {
-        t0,
-        tf,
-        dt,
-        nSteps: data.t.length,
+        t0: t0,
+        tf: tf,
+        dt: dt,
+        nSteps: raw.t.length,
         model: {
-          xNames: model.xNames,
-          uNames: model.uNames,
-          yNames: model.yNames,
-          cNames: model.cNames,
+          name: model.name || meta.name || "UnnamedModel",
+          stateNames: stateNames,
+          inputNames: inputNames,
+          algebraicNames: algebraicNames,
+          conditionNames: conditionNames,
         },
         context: context || null,
       },
-      data,
+      data: data,
     };
   }
 `
