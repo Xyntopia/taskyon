@@ -1,189 +1,202 @@
 <!--ModelicaEditPage.vue-->
 <template>
-  <FixedHeightPage class="column">
-    <!-- Header -->
-    <div class="text-h6 text-primary q-mb-md">
-      <q-icon :name="matRocketLaunch" /> Rumoca WASM Compiler
-    </div>
-
-    <DockView
-      v-model:node="layout"
-      class="col"
-      hide-tab-add
-      hide-tab-close
-      :tab-icons="{
-        simulate: matPlayArrow,
-        template: matCode,
-        modelica: matDescription,
-        model: mdiFunctionVariant,
-      }"
-    >
-      <template #actions>
-        <!-- Actions -->
-        <q-bar flat class="rounded-borders">
-          <q-btn
-            dense
-            color="grey-7"
-            :icon="matDelete"
-            label="Clear All"
-            outline
-            @click="clearAll"
-          />
-          <q-btn
-            dense
-            color="grey-7"
-            :icon="matDescription"
-            label="Load Example"
-            outline
-            @click="loadExample"
-          />
-
-          <q-toggle v-model="verbose" dense label="Verbose logging" />
-
-          <q-space />
-
-          <!-- Run / Stop execution -->
-          <q-btn
-            dense
-            flat
-            color="secondary"
-            :icon="matPlayArrow"
-            label="Run in Sandbox"
-            :disable="!jsSource"
-            :loading="running"
-            @click="runInSandbox"
-          />
-          <q-btn
-            v-if="running"
-            flat
-            dense
-            color="negative"
-            label="Stop"
-            outline
-            @click="stopExecution"
-          />
-        </q-bar>
-      </template>
-
-      <template #logs>
-        <!-- logs -->
-        <q-card bordered flat square style="min-height: 1.5rem">
-          <div v-for="(entry, idx) in modelicaLog" :key="idx">> {{ entry.message }}</div>
-        </q-card>
-      </template>
-
-      <template #modelica>
-        <!-- Modelica source -->
-        <q-card flat>
-          <q-btn
-            color="grey-7"
-            flat
-            dense
-            label="Copy"
-            :disable="!modelicaSource"
-            @click="copyModelicaToClipboard"
-          />
-          <CodeEditor
-            v-model="modelicaSource"
-            placeholder="Enter your Modelica code here..."
-            language="modelica"
-          />
-        </q-card>
-      </template>
-
-      <template #template>
-        <q-card flat>
-          <q-btn
-            color="grey-7"
-            flat
-            dense
-            label="Copy"
-            :disable="!templateSource"
-            @click="copyTemplateToClipboard"
-          />
-          <CodeEditor
-            v-model="templateSource"
-            placeholder="Enter your Jinja template here..."
-            language="jinja2"
-          />
-        </q-card>
-      </template>
-
-      <template #model>
-        <div class="q-gutter-xs">
-          <q-btn flat dense label="Copy JS" :disable="!jsSource" @click="copyJsToClipboard" />
-          <q-btn
-            flat
-            dense
-            label="Copy DAE JSON"
-            :disable="!daeJsonOutput"
-            @click="copyDaeJsonToClipboard"
-          />
-          <q-btn
-            flat
-            dense
-            label="Copy Pretty"
-            :disable="!daePrettyOutput"
-            @click="copyDaePrettyToClipboard"
-          />
-          <q-separator />
-
-          <div>
-            <q-tabs v-model="outputTab" dense narrow-indicator>
-              <q-tab name="js" label="Code" />
-              <q-tab name="daeJson" label="JSON" />
-              <q-tab name="daePretty" label="Pretty" />
-            </q-tabs>
-
-            <q-tab-panels v-model="outputTab" animated>
-              <div name="js">
-                <CodeEditor
-                  v-model="jsSource"
-                  placeholder="Generated Code will appear here..."
-                  language="javascript"
-                />
-              </div>
-
-              <div name="daeJson">
-                <ObjectTreeView v-model="daeJsonOutput" />
-              </div>
-
-              <div name="daePretty">
-                <pre>
-                {{ daePrettyOutput }}
-                </pre>
-              </div>
-            </q-tab-panels>
-          </div>
+  <q-layout>
+    <TaskyonHeader btn-size="md" min-mode no-chat-button-border>
+      <template #left>
+        <!-- Header -->
+        <div class="text-h6 text-primary q-mb-md">
+          <q-icon :name="matRocketLaunch" /> Rumoca WASM Compiler
         </div>
       </template>
-      <template #simulate>
-        <q-card flat>
-          <q-card-section>
-            <div class="row q-col-gutter-sm">
-              <div class="col-4">
-                <q-input v-model.number="simT0" type="number" outlined label="t0" />
-              </div>
-              <div class="col-4">
-                <q-input v-model.number="simTf" type="number" outlined label="tf" />
-              </div>
-              <div class="col-4">
-                <q-input v-model.number="simDt" type="number" outlined label="dt" />
+    </TaskyonHeader>
+    <q-page-container>
+      <FixedHeightPage class="column">
+        <DockView
+          v-model:node="layout"
+          class="col"
+          hide-tab-add
+          hide-tab-close
+          :tab-icons="{
+            simulate: matPlayArrow,
+            template: matCode,
+            modelica: matDescription,
+            model: mdiFunctionVariant,
+          }"
+        >
+          <template #actions>
+            <!-- Actions -->
+            <q-bar flat class="rounded-borders">
+              <q-btn
+                dense
+                color="grey-7"
+                :icon="matDelete"
+                label="Clear All"
+                outline
+                @click="clearAll"
+              />
+              <q-btn
+                dense
+                color="grey-7"
+                :icon="matDescription"
+                label="Load Example"
+                outline
+                @click="loadExample"
+              />
+
+              <q-toggle v-model="verbose" dense label="Verbose logging" />
+
+              <q-space />
+
+              <!-- Run / Stop execution -->
+              <q-btn
+                dense
+                flat
+                color="secondary"
+                :icon="matPlayArrow"
+                label="Run in Sandbox"
+                :disable="!jsSource"
+                :loading="running"
+                @click="runInSandbox"
+              />
+              <q-btn
+                v-if="running"
+                flat
+                dense
+                color="negative"
+                label="Stop"
+                outline
+                @click="stopExecution"
+              />
+            </q-bar>
+          </template>
+
+          <template #logs>
+            <!-- logs -->
+            <q-card bordered flat square style="min-height: 1.5rem">
+              <div v-for="(entry, idx) in modelicaLog" :key="idx">> {{ entry.message }}</div>
+            </q-card>
+          </template>
+
+          <template #modelica>
+            <!-- Modelica source -->
+            <q-card flat>
+              <q-btn
+                color="grey-7"
+                flat
+                dense
+                label="Copy"
+                :disable="!modelicaSource"
+                @click="copyModelicaToClipboard"
+              />
+              <CodeEditor
+                v-model="modelicaSource"
+                placeholder="Enter your Modelica code here..."
+                language="modelica"
+              />
+            </q-card>
+          </template>
+
+          <template #template>
+            <q-card flat>
+              <q-btn
+                color="grey-7"
+                flat
+                dense
+                label="Copy"
+                :disable="!templateSource"
+                @click="copyTemplateToClipboard"
+              />
+              <CodeEditor
+                v-model="templateSource"
+                placeholder="Enter your Jinja template here..."
+                language="jinja2"
+              />
+            </q-card>
+          </template>
+
+          <template #model>
+            <div class="q-gutter-xs">
+              <q-btn flat dense label="Copy JS" :disable="!jsSource" @click="copyJsToClipboard" />
+              <q-btn
+                flat
+                dense
+                label="Copy DAE JSON"
+                :disable="!daeJsonOutput"
+                @click="copyDaeJsonToClipboard"
+              />
+              <q-btn
+                flat
+                dense
+                label="Copy Pretty"
+                :disable="!daePrettyOutput"
+                @click="copyDaePrettyToClipboard"
+              />
+              <q-separator />
+
+              <div>
+                <q-tabs v-model="outputTab" dense narrow-indicator>
+                  <q-tab name="js" label="Code" />
+                  <q-tab name="daeJson" label="JSON" />
+                  <q-tab name="daePretty" label="Pretty" />
+                </q-tabs>
+
+                <q-tab-panels v-model="outputTab" animated>
+                  <div name="js">
+                    <CodeEditor
+                      v-model="jsSource"
+                      placeholder="Generated Code will appear here..."
+                      language="javascript"
+                    />
+                  </div>
+
+                  <div name="daeJson">
+                    <ObjectTreeView v-model="daeJsonOutput" />
+                  </div>
+
+                  <div name="daePretty">
+                    <pre>
+                {{ daePrettyOutput }}
+                </pre
+                    >
+                  </div>
+                </q-tab-panels>
               </div>
             </div>
-          </q-card-section>
+          </template>
+          <template #simulate>
+            <q-card flat>
+              <q-card-section>
+                <div class="row q-col-gutter-sm">
+                  <div class="col-4">
+                    <q-input v-model.number="simT0" type="number" outlined label="t0" />
+                  </div>
+                  <div class="col-4">
+                    <q-input v-model.number="simTf" type="number" outlined label="tf" />
+                  </div>
+                  <div class="col-4">
+                    <q-input v-model.number="simDt" type="number" outlined label="dt" />
+                  </div>
+                </div>
+              </q-card-section>
 
-          <q-card-section v-if="executionResult && Object.keys(executionResult).length">
-            <ObjectTreeView v-model="executionResult" dense hide-missing read-only copy-btn />
-          </q-card-section>
-        </q-card>
-      </template>
+              <q-card-section v-if="executionResult && Object.keys(executionResult).length">
+                <ObjectTreeView v-model="executionResult" dense hide-missing read-only copy-btn />
+              </q-card-section>
+            </q-card>
+          </template>
 
-      <template #after>
-        <TaskyonIframe :tools="tools" :configuration="configuration" name="modelica-chat" />
-      </template>
-    </DockView>
-  </FixedHeightPage>
+          <template #after>
+            <TaskyonIframe
+              :tools="tools"
+              :configuration="configuration"
+              name="modelica-chat"
+              :persist="true"
+            />
+          </template>
+        </DockView>
+      </FixedHeightPage>
+    </q-page-container>
+  </q-layout>
 </template>
 
 <script setup lang="ts">
@@ -202,10 +215,12 @@ import rumocaWasmUrl from 'rumoca/rumoca_bg.wasm?url'
 import CodeEditor from 'src/components/CodeEditor.vue'
 import type { DockNode } from 'src/components/DockView.vue'
 import DockView from 'src/components/DockView.vue'
+import TaskyonIframe from 'src/components/TaskyonIframe.vue'
 import ObjectTreeView from 'src/components/varViews/ObjectTreeView.vue'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
+import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
 import {
   createChatCompletionTask,
@@ -214,8 +229,10 @@ import {
   toolCall,
 } from '../../../packages/tyclient/src'
 import FixedHeightPage from '../FixedHeightPage.vue'
+import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 
 const tystate = useTaskyonStore()
+const state = useAppStateStore()
 
 // Optional: adjust if you put this elsewhere
 type ModelicaLogPhase = 'compile' | 'run' | 'loadWasm' | 'general'
@@ -340,21 +357,24 @@ and add them to the editor!
   }),
 ]
 
-const configuration: partialTyConfiguration = {
-  llmSettings: {
-    //selectedApi: 'taskyon',
-    //enableOpenAiTools: false,
-    enableToolChooser: true,
-    entryNode: toolCall({ name: 'setModelicaAndTemplate', arguments: {} }),
-  },
-  appConfiguration: {
-    guiMode: 'minChat',
-    showLogo: false,
-    chatSuggestions: [],
-    welcomeMsg: 'Ask taskyon for help with using rumoca/modelica!',
-  },
-  signatureOrKey: tystate.currentKeyString ?? undefined,
-}
+const configuration = computed<partialTyConfiguration | null>(() => {
+  if (state.authToken == null) return null
+  return {
+    llmSettings: {
+      //selectedApi: 'taskyon',
+      //enableOpenAiTools: false,
+      enableToolChooser: true,
+      entryNode: toolCall({ name: 'setModelicaAndTemplate', arguments: {} }),
+    },
+    appConfiguration: {
+      guiMode: 'minChat',
+      showLogo: false,
+      chatSuggestions: [],
+      welcomeMsg: 'Ask taskyon for help with using rumoca/modelica!',
+    },
+    signatureOrKey: tystate.currentKeyString ?? undefined,
+  }
+})
 
 const layout = ref<DockNode>({
   id: 'editor',

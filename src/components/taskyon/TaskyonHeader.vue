@@ -15,6 +15,7 @@
         class="q-mr-lg"
         @click="drawerOpen = !drawerOpen"
       />
+      <slot name="left"></slot>
       <div v-if="state && !noChatButtons" :class="[noChatButtonBorder ? '' : 'button-group']">
         <q-btn
           v-if="!minMode"

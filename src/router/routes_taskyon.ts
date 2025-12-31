@@ -195,15 +195,15 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           description: 'libp2p chat',
         },
       },
-      {
-        path: 'modelica',
-        component: () => import('pages/taskyon/ModelicaEditPage.vue'),
-        meta: {
-          title: 'Taskyon Modelica Editor',
-          description: 'Edit and run modelica code together with AI',
-        },
-      },
     ],
+  },
+  {
+    path: '/modelica',
+    component: () => import('pages/taskyon/ModelicaEditPage.vue'),
+    meta: {
+      title: 'Taskyon Modelica Editor',
+      description: 'Edit and run modelica code together with AI',
+    },
   },
   // diagnostics should stay in its own page in order to be as independent as possible
   // in case there are any errors in the rest of the app...
