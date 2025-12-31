@@ -180,18 +180,7 @@
       </template>
 
       <template #after>
-        <iframe
-          v-if="tystate.currentKeyString"
-          id="taskyon"
-          title="Taskyon agent"
-          frameborder="0"
-          :src="`${taskyonUrl}?iframe=true&profile=modelica`"
-          style="width: 100%; height: 99%"
-        ></iframe>
-        <div v-else class="column items-center justify-center full-height">
-          <div>Loading Modelica Agent...</div>
-          <q-spinner-do ts size="50px" />
-        </div>
+        <TaskyonIframe :tools="tools" :configuration="configuration" name="modelica-chat" />
       </template>
     </DockView>
   </FixedHeightPage>
@@ -207,6 +196,7 @@ import {
 } from '@quasar/extras/material-icons'
 import { mdiFunctionVariant } from '@quasar/extras/mdi-v6'
 import { watchDebounced } from '@vueuse/core'
+import type { JSONSchema7 } from 'json-schema'
 import type * as WasmTypes from 'rumoca'
 import rumocaWasmUrl from 'rumoca/rumoca_bg.wasm?url'
 import CodeEditor from 'src/components/CodeEditor.vue'
@@ -214,18 +204,16 @@ import type { DockNode } from 'src/components/DockView.vue'
 import DockView from 'src/components/DockView.vue'
 import ObjectTreeView from 'src/components/varViews/ObjectTreeView.vue'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
+import { useTaskyonStore } from 'src/stores/taskyonState'
 import { onMounted, ref } from 'vue'
 import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
 import {
   createChatCompletionTask,
   createTool,
-  initializeTaskyon,
   makeTaskResult,
   toolCall,
 } from '../../../packages/tyclient/src'
 import FixedHeightPage from '../FixedHeightPage.vue'
-import type { JSONSchema7 } from 'json-schema'
-import { useTaskyonStore } from 'src/stores/taskyonState'
 
 const tystate = useTaskyonStore()
 
@@ -352,25 +340,21 @@ and add them to the editor!
   }),
 ]
 
-const taskyonUrl = window.location.origin
-onMounted(() => {
-  const configuration: partialTyConfiguration = {
-    llmSettings: {
-      //selectedApi: 'taskyon',
-      //enableOpenAiTools: false,
-      enableToolChooser: true,
-      entryNode: toolCall({ name: 'setModelicaAndTemplate', arguments: {} }),
-    },
-    appConfiguration: {
-      guiMode: 'minChat',
-      showLogo: false,
-      chatSuggestions: [],
-      welcomeMsg: 'Ask taskyon for help with using rumoca/modelica!',
-    },
-    signatureOrKey: tystate.currentKeyString ?? undefined,
-  }
-  void initializeTaskyon({ tools, configuration, name: 'modelica', persist: true })
-})
+const configuration: partialTyConfiguration = {
+  llmSettings: {
+    //selectedApi: 'taskyon',
+    //enableOpenAiTools: false,
+    enableToolChooser: true,
+    entryNode: toolCall({ name: 'setModelicaAndTemplate', arguments: {} }),
+  },
+  appConfiguration: {
+    guiMode: 'minChat',
+    showLogo: false,
+    chatSuggestions: [],
+    welcomeMsg: 'Ask taskyon for help with using rumoca/modelica!',
+  },
+  signatureOrKey: tystate.currentKeyString ?? undefined,
+}
 
 const layout = ref<DockNode>({
   id: 'editor',
