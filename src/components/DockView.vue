@@ -389,7 +389,7 @@ const onCollapsedTabClick = (index: number) => {
 
   // first expand
   if (isCollapsed.value) {
-    const restored = n.lastSize ?? 1
+    const restored = Math.min(n.lastSize ?? 100, 100)
     node.value = {
       ...setActiveView({ ...n, collapsed: false, size: restored }, index),
     }
