@@ -28,7 +28,11 @@
 {%- macro render_expr(e) -%}
   {%- if e is string and e == "Empty" -%}
     0
-  {%- elif "Terminal" in e -%}
+  {%- elif "parts" in e -%}
+    {% for part in e.parts %}
+      {{ part.ident.text }}{{ "." if not loop.last }}
+    {%- endfor -%}
+  {%- elif "Terminal" in e -%}    
     {{ e.Terminal.token.text }}
   {%- elif "ComponentReference" in e -%}
     {%- set cr = e.ComponentReference -%}
@@ -74,8 +78,8 @@
       /* der(...) should not appear in RHS after DAE translation */
       der_{{ render_expr(f.args[0]) }}
     {%- elif name == "pre" and f.args|length == 1 and "ComponentReference" in f.args[0] -%}
-      {# For now, treat pre(x) as x evaluated at pre-event state.         #}
-      {# This is correct inside applyResets, and OK between events.       #}
+      {#- For now, treat pre(x) as x evaluated at pre-event state.         -#}
+      {#- This is correct inside applyResets, and OK between events.       -#}
       {{ render_expr(f.args[0]) }}
     {%- else -%}
       {{ name }}(
