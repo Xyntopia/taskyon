@@ -56,7 +56,7 @@
                 label="Run in Sandbox"
                 :disable="!jsSource"
                 :loading="running"
-                @click="runInSandbox"
+                @click="runInSandbox(jsSource)"
               />
               <q-btn
                 v-if="running"
@@ -73,7 +73,14 @@
           <template #logs>
             <!-- logs -->
             <q-card bordered flat square style="min-height: 1.5rem">
-              <div v-for="(entry, idx) in modelicaLog" :key="idx">> {{ entry.message }}</div>
+              <q-expansion-item
+                v-for="(entry, idx) in modelicaLog"
+                :key="idx"
+                dense
+                :label="entry.message"
+              >
+                <pre>{{ safeYamlDump(entry) }}</pre>
+              </q-expansion-item>
             </q-card>
           </template>
 
@@ -230,6 +237,8 @@ import {
   toolCall,
 } from '../../../packages/tyclient/src'
 import FixedHeightPage from '../FixedHeightPage.vue'
+import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
+import { validateJavaScriptInSandbox } from '../../../packages/taskyon/src/utils/checkJsSyntax'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -623,10 +632,10 @@ const copyDaePrettyToClipboard = async () => {
 }
 
 // ---------- Run in sandboxed iframe ----------
-const runInSandbox = async () => {
+const runInSandbox = async (jsSource: string | undefined) => {
   executionResult.value = {}
 
-  if (!jsSource.value) {
+  if (!jsSource) {
     appendModelicaLog({
       level: 'error',
       phase: 'run',
@@ -635,7 +644,18 @@ const runInSandbox = async () => {
     return
   }
 
-  const code = buildIframeCode(jsSource.value)
+  const msg = await validateJavaScriptInSandbox(jsSource)
+  if (msg.valid === false) {
+    appendModelicaLog({
+      level: 'error',
+      phase: 'run',
+      message: `Generated JavaScript has syntax errors: ${msg.message}`,
+      details: msg,
+    })
+    return
+  }
+
+  const code = buildIframeCode(jsSource)
   const id = `rumoca-model-${Date.now()}`
   abortController.value = new AbortController()
   running.value = true
