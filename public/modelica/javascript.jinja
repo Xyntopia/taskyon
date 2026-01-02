@@ -1,5 +1,5 @@
 {# -------------------------------------------------------------------------
- # Minimal JS generator for rumoca DAE JSON (implicit form)
+ # JS generator for rumoca DAE JSON (implicit form) with basic event handling
  #
  # Model() returns:
  #   - name
@@ -11,6 +11,9 @@
  #     }
  #   - x0, y0, c0
  #   - residual(t, x, xDot, y, u, pOverride) -> residual vector
+ #   - evalConditions(t, x, y, u, pOverride) -> [c_i] boolean array
+ #   - applyResets(t, x, y, u, pOverride, cPrev, cCurr)
+ #       -> { x: xNew, y: yNew, c: cNew }
  #
  # Residual ordering:
  #   - First: all state derivative equations (der(x) = ...)
@@ -43,8 +46,25 @@
     {%- endif -%}
   {%- elif "Binary" in e -%}
     {%- set b = e.Binary -%}
+    {# Comparison ops: support both short and long names #}
     {%- set op -%}
-      {%- if "Add" in b.op -%}+{%- elif "Sub" in b.op -%}-{%- elif "Mul" in b.op -%}*{%- elif "Div" in b.op -%}/{%- elif "Pow" in b.op -%}**{%- elif "LessEq" in b.op -%}<={%- elif "Less" in b.op -%}<{%- elif "GreaterEq" in b.op -%}>={%- elif "Greater" in b.op -%}>{%- elif "Equals" in b.op -%}=== {%- elif "NotEquals" in b.op -%}!=={%- elif "And" in b.op -%}&&{%- elif "Or" in b.op -%}||{%- else -%}?{%- endif -%}
+      {%- if "Add" in b.op -%}+{%- 
+      elif "Sub" in b.op -%}-{%- 
+      elif "Mul" in b.op -%}*{%- 
+      elif "Div" in b.op -%}/{%- 
+      elif "Pow" in b.op -%}**{%- 
+
+      elif "Le" in b.op or "LessEq" in b.op -%}<={%- 
+      elif "Lt" in b.op or "Less" in b.op -%}<{%- 
+      elif "Ge" in b.op or "GreaterEq" in b.op -%}>={%- 
+      elif "Gt" in b.op or "Greater" in b.op -%}>{%- 
+      elif "Eq" in b.op or "Equals" in b.op -%}==={%- 
+      elif "Ne" in b.op or "NotEquals" in b.op -%}!=="{%- 
+
+      elif "And" in b.op -%}&&{%- 
+      elif "Or" in b.op -%}||{%- 
+      else -%}?{%- 
+      endif -%}
     {%- endset -%}
     ({{ render_expr(b.lhs) }} {{ op }} {{ render_expr(b.rhs) }})
   {%- elif "FunctionCall" in e -%}
@@ -54,7 +74,8 @@
       /* der(...) should not appear in RHS after DAE translation */
       der_{{ render_expr(f.args[0]) }}
     {%- elif name == "pre" and f.args|length == 1 and "ComponentReference" in f.args[0] -%}
-      /* placeholder: treat pre(x) as x for now */
+      {# For now, treat pre(x) as x evaluated at pre-event state.         #}
+      {# This is correct inside applyResets, and OK between events.       #}
       {{ render_expr(f.args[0]) }}
     {%- else -%}
       {{ name }}(
@@ -120,6 +141,21 @@
  *   {{ render_expr(eq.Simple.lhs) }} = {{ render_expr(eq.Simple.rhs) }};
   {%- else %}
  *   /* unsupported equation: {{ eq|tojson }} */
+  {%- endif %}
+{%- endfor %}
+ *
+ * When-conditions (fc):
+{%- for (name, cond) in dae.fc|items %}
+ *   {{ name }} : {{ render_expr(cond) }}
+{%- endfor %}
+ *
+ * Reset rules (fr):
+{%- for (name, rule) in dae.fr|items %}
+  {%- if "Assignment" in rule %}
+    {%- set a = rule.Assignment %}
+ *   when {{ name }} then {{ render_expr(a.comp) }} := {{ render_expr(a.value) }};
+  {%- else %}
+ *   when {{ name }} then /* unsupported reset form: {{ rule|tojson }} */
   {%- endif %}
 {%- endfor %}
  */
@@ -191,6 +227,25 @@ function Model() {
   const constants = {
   {%- for (name, comp) in dae.cp|items %}
     {{ name }}: {{ render_expr(comp.start) }}{% if not loop.last %},{% endif %}
+  {%- endfor %}
+  };
+
+  /* index maps for convenience in events / resets */
+  const stateIndex = {
+  {%- for (name, comp) in dae.x|items %}
+    "{{ name }}": {{ loop.index0 }}{% if not loop.last %},{% endif %}
+  {%- endfor %}
+  };
+
+  const algebraicIndex = {
+  {%- for (name, comp) in dae.y|items %}
+    "{{ name }}": {{ loop.index0 }}{% if not loop.last %},{% endif %}
+  {%- endfor %}
+  };
+
+  const conditionIndex = {
+  {%- for (name, comp) in dae.c|items %}
+    "{{ name }}": {{ loop.index0 }}{% if not loop.last %},{% endif %}
   {%- endfor %}
   };
 
@@ -278,12 +333,131 @@ function Model() {
     ];
   }
 
+  /**
+   * Evaluate condition booleans c_i = fc_i(t, x, y, u, p).
+   * Used for when / reinit event detection.
+   */
+  function evalConditions(t, x, y, u, pOverride) {
+    const p = Object.assign({}, pDefaults, pOverride || {});
+
+    /* unpack parameters */
+  {%- for (name, comp) in dae.p|items %}
+    const {{ name }} = p.{{ name }};
+  {%- endfor %}
+
+    /* unpack constants */
+  {%- for (name, comp) in dae.cp|items %}
+    const {{ name }} = constants.{{ name }};
+  {%- endfor %}
+
+    /* unpack states (pre-event) */
+  {%- for (name, comp) in dae.x|items %}
+    const {{ name }} = x[{{ loop.index0 }}];
+  {%- endfor %}
+
+    /* unpack algebraics (pre-event) */
+  {%- for (name, comp) in dae.y|items %}
+    const {{ name }} = y[{{ loop.index0 }}];
+  {%- endfor %}
+
+    /* unpack inputs */
+  {%- for (name, comp) in dae.u|items %}
+    const {{ name }} = u[{{ loop.index0 }}];
+  {%- endfor %}
+
+    return [
+    {%- for (name, comp) in dae.c|items %}
+      {%- if dae.fc is defined and (name in dae.fc) -%}
+        {{ render_expr(dae.fc[name]) }}
+      {%- else -%}
+        {{ render_expr(comp.start) if comp.start is defined else "false" }}
+      {%- endif -%}
+      {%- if not loop.last %},{% endif %}
+    {%- endfor %}
+    ];
+  }
+
+  /**
+   * Apply reset rules for events that fired between cPrev and cCurr.
+   *
+   * - x, y are pre-event values at the event time.
+   * - cPrev, cCurr are boolean arrays.
+   * - Returns new { x, y, c } after applying resets.
+   */
+  function applyResets(t, x, y, u, pOverride, cPrev, cCurr) {
+    const p = Object.assign({}, pDefaults, pOverride || {});
+
+    /* unpack parameters (pre-event) */
+  {%- for (name, comp) in dae.p|items %}
+    const {{ name }} = p.{{ name }};
+  {%- endfor %}
+
+    /* unpack constants (pre-event) */
+  {%- for (name, comp) in dae.cp|items %}
+    const {{ name }} = constants.{{ name }};
+  {%- endfor %}
+
+    /* unpack states (pre-event) */
+  {%- for (name, comp) in dae.x|items %}
+    const {{ name }} = x[{{ loop.index0 }}];
+  {%- endfor %}
+
+    /* unpack algebraics (pre-event) */
+  {%- for (name, comp) in dae.y|items %}
+    const {{ name }} = y[{{ loop.index0 }}];
+  {%- endfor %}
+
+    /* unpack inputs */
+  {%- for (name, comp) in dae.u|items %}
+    const {{ name }} = u[{{ loop.index0 }}];
+  {%- endfor %}
+
+    let xNew = x.slice();
+    let yNew = y.slice();
+    let cNew = Array.isArray(cCurr) ? cCurr.slice() : [];
+
+  {%- for (cname, ccomp) in dae.c|items %}
+    {
+      const idx = conditionIndex["{{ cname }}"];
+      const fired = !cPrev[idx] && cCurr[idx];
+
+      if (fired) {
+        // when {{ cname }} fires, apply associated reset(s)
+        {%- if dae.fr is defined and (cname in dae.fr) %}
+          {%- set r = dae.fr[cname] %}
+          {%- if "Assignment" in r %}
+            {%- set a = r.Assignment %}
+            {%- set target = a.comp.parts[0].ident.text %}
+            {%- if target in dae.x %}
+        // Reset state {{ target }}
+        xNew[stateIndex["{{ target }}"]] = {{ render_expr(a.value) }};
+            {%- elif target in dae.y %}
+        // Reset algebraic {{ target }}
+        yNew[algebraicIndex["{{ target }}"]] = {{ render_expr(a.value) }};
+            {%- else %}
+        // Unsupported reset target {{ target }} (only states/algebraics supported)
+            {%- endif %}
+          {%- else %}
+        // Unsupported reset form for condition {{ cname }}
+          {%- endif %}
+        {%- else %}
+        // No reset rule defined for condition {{ cname }}
+        {%- endif %}
+      }
+    }
+  {%- endfor %}
+
+    return { x: xNew, y: yNew, c: cNew };
+  }
+
   return {
     name: meta.name,
     meta,
     x0,
     y0,
     c0,
-    residual
+    residual,
+    evalConditions,
+    applyResets
   };
 }

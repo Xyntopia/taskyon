@@ -44,6 +44,10 @@ export const buildIframeCode = (compiledJs: string): string => {
     const nc = Array.isArray(model.c0) ? model.c0.length : 0;
     const nu = inputNames.length;
 
+    const haveEvents =
+      typeof model.evalConditions === "function" &&
+      typeof model.applyResets   === "function";
+
     /**
      * Evaluate derivatives and algebraic variables at (t, x).
      *
@@ -79,15 +83,21 @@ export const buildIframeCode = (compiledJs: string): string => {
     }
 
     /**
-     * Very simple explicit Euler "implicit-DAE aware" simulator.
+     * Very simple explicit Euler "implicit-DAE aware" simulator
+     * with basic when/reinit event handling.
      *
      * - Time stepping: explicit Euler on x:
      *       x_{k+1} = x_k + dt * f(t_k, x_k)
      * - f is obtained from residual via the trick above.
      * - y is recomputed from algebraic equations at each step.
+     * - Events:
+     *      * Conditions c_i(t, x, y, u, p) evaluated at step end.
+     *      * Rising edges (!cPrev[i] && cCurr[i]) trigger resets
+     *        via model.applyResets.
      *
      * NOTE:
-     * - No event handling yet (no when/reinit).
+     * - No root finding: events are located at step boundaries.
+     * - No iteration of cascaded events.
      */
     function simulate(t0, tf, dt, opts) {
       opts = opts || {};
@@ -96,6 +106,10 @@ export const buildIframeCode = (compiledJs: string): string => {
       const x0 = (Array.isArray(opts.x0) && opts.x0.length === nx)
         ? opts.x0.slice()
         : (Array.isArray(model.x0) ? model.x0.slice() : new Array(nx).fill(0));
+
+      const c0 = Array.isArray(model.c0)
+        ? model.c0.slice()
+        : new Array(nc).fill(false);
 
       const f_u = typeof opts.f_u === "function"
         ? opts.f_u
@@ -107,10 +121,12 @@ export const buildIframeCode = (compiledJs: string): string => {
       const xArr = new Array(nSteps + 1);
       const yArr = new Array(nSteps + 1);
       const uArr = new Array(nSteps + 1);
+      const cArr = new Array(nSteps + 1);
 
       let t = t0;
       let x = x0.slice();
       let y = Array.isArray(model.y0) ? model.y0.slice() : new Array(ny).fill(0);
+      let c = c0.slice();
 
       for (let k = 0; k <= nSteps; k++) {
         const u = f_u(t) || new Array(nu).fill(0);
@@ -126,24 +142,70 @@ export const buildIframeCode = (compiledJs: string): string => {
         const xDot = result.xDot;
         const yNew = result.y;
 
-        // Store current step
+        // Store current step (state at time t, before events at t+dt)
         tArr[k] = t;
         xArr[k] = x.slice();
         yArr[k] = yNew.slice();
         uArr[k] = Array.isArray(u) ? u.slice() : Array.from(u);
+        cArr[k] = c.slice();
 
         if (k === nSteps) break;
 
-        // Explicit Euler update for x
-        const xNext = new Array(nx);
+        // Explicit Euler update for x (pre-event prediction at t+dt)
+        let xNext = new Array(nx);
         for (let i = 0; i < nx; i++) {
           xNext[i] = x[i] + dt * xDot[i];
         }
 
-        // Advance state and time; keep latest algebraics as guess
+        let yNext = yNew.slice();
+        let cNext = c.slice();
+
+        // Event handling at step end (tNext, xNext)
+        if (haveEvents && nc > 0) {
+          const tNext = t + dt;
+          const uNext = f_u(tNext) || new Array(nu).fill(0);
+
+          // Recompute algebraics at (tNext, xNext) before events
+          const resNext = evalDerivativesAndAlgebraics(
+            tNext,
+            xNext,
+            uNext,
+            yNext,
+            pOverride
+          );
+          yNext = resNext.y;
+
+          // Evaluate conditions at step end
+          const cPrev = c.slice();
+          const cCurr = model.evalConditions(
+            tNext,
+            xNext,
+            yNext,
+            uNext,
+            pOverride
+          );
+
+          // Apply resets based on rising edges
+          const applied = model.applyResets(
+            tNext,
+            xNext,
+            yNext,
+            uNext,
+            pOverride,
+            cPrev,
+            cCurr
+          );
+
+          xNext = Array.isArray(applied.x) ? applied.x.slice() : xNext;
+          yNext = Array.isArray(applied.y) ? applied.y.slice() : yNext;
+          cNext = Array.isArray(applied.c) ? applied.c.slice() : cCurr.slice();
+        }
+
+        // Advance state and time; keep latest algebraics and conditions
         t += dt;
         x = xNext;
-        y = yNew;
+        y = yNext;
+        c = cNext;
       }
 
       return {
@@ -151,6 +213,7 @@ export const buildIframeCode = (compiledJs: string): string => {
         x: xArr,
         y: yArr,
         u: uArr,
+        c: cArr
       };
     }
 
@@ -186,12 +249,13 @@ export const buildIframeCode = (compiledJs: string): string => {
     //   data.x.h, data.x.v, ...
     //   data.y.E, ...
     //   data.u.<inputName>, ...
+    //   data.c.c0, ...
     const data = {
       t: raw.t,
       x: buildNamedSeries(stateNames,     raw.x),
       y: buildNamedSeries(algebraicNames, raw.y),
       u: buildNamedSeries(inputNames,     raw.u),
-      // c: later when conditions are simulated
+      c: buildNamedSeries(conditionNames, raw.c),
     };
 
     return {
