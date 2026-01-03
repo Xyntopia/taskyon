@@ -442,6 +442,7 @@ const layout = ref<DockNode>({
       id: 'chat',
       type: 'leaf',
       showTabs: 'never',
+      collapsed: true,
       views: ['after'],
       size: 30,
       activeViewIndex: 0,
