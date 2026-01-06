@@ -119,8 +119,8 @@
           # local-ai
 
           # node
-          yarn
-          # TODO: enable new yarn:
+          # yarn
+          # we disable yarn-berry, because it is installed using corepack!
           # yarn-berry
           nodejs_22
 
@@ -187,6 +187,35 @@
               pkgs.lib.makeLibraryPath libraries
             }:$LD_LIBRARY_PATH
             export XDG_DATA_DIRS=${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}:$XDG_DATA_DIRS
+
+
+            # ── Corepack cache location ─────────────────────────────────────────────────────
+            # By default, Corepack stores downloaded package managers (e.g. Yarn CLI JS) in
+            # $COREPACK_HOME. If unset, it uses a global cache outside the repo (e.g. ~/.cache/node/corepack).
+            #
+            # In our old setup, we forced COREPACK_HOME into ./.corepack/home (inside the repo)
+            # so everything was self-contained. However:
+            #   • Our repo’s package.json sets `"type": "module"`, so any JS under it is treated as ESM.
+            #   • Yarn’s CLI bundle contains `require()` calls, which fail under ESM with:
+            #       "Error: Dynamic require of 'util' is not supported"
+            #   • This broke Yarn in some projects (notably when package.json was at repo root).
+            #
+            # Fix: move COREPACK_HOME to a location *outside* any `"type": "module"` package boundary
+            #      (e.g. $HOME/.cache/corepack-home) so Node treats Yarn’s CLI as CommonJS.
+            #      We still keep shims (yarn, pnpm, etc.) in ./.corepack/bin so they are project-local.
+            #
+            # Nix note: use ''${...} to pass Bash \$\{...} through without Nix interpolating it.
+            ###  ability to use modern yarn
+            # Put shims & downloaded package managers inside repo
+            # this helps with our new yarn version using corepack on nixos!
+            export COREPACK_HOME="''${XDG_CACHE_HOME:-$HOME/.cache}/corepack-home"
+            export PATH="$(pwd)/.corepack/bin:$PATH"
+
+            if [ ! -x "$(pwd)/.corepack/bin/yarn" ]; then
+              echo "[devShell] Generating Corepack shims ➜ .corepack/bin"
+              mkdir -p "$(pwd)/.corepack/bin"
+              corepack enable --install-directory="$(pwd)/.corepack/bin"
+            fi
           '';
           # fixes xcb issues :
           # QT_PLUGIN_PATH=${qt5.qtbase}/${qt5.qtbase.qtPluginPrefix}
