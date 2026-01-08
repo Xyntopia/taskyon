@@ -74,34 +74,7 @@ import { dump } from 'js-yaml'
 import { exportFile } from 'quasar'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
-import {
-  getData,
-  markdownGeneration,
-  oauthTests,
-  testArchiveUploadDownload,
-  testChatCompletion,
-  testChatCompletionWebSearch,
-  testCreateDeepTansformer,
-  testCryptoSession,
-  testEstimateChatTokens,
-  testFileUpload,
-  testGdriveUpload,
-  testGdriveZipRoundtrip,
-  testIndexedDBKeyStorage,
-  testJsonSchemas,
-  testJsonSchemaToYaml,
-  testMetaDb,
-  testMultipleArchiveUploadDownload,
-  testPGLite,
-  testPyodide,
-  testSecretStore,
-  testSessionSwitching,
-  testTaskIdHashing,
-  testToolLista,
-  testTransformersPipeline,
-  testVectorizerInitialization,
-  testVectorizeText,
-} from 'src/modules/taskyon/tests'
+import * as TaskyonTests from 'src/modules/taskyon/tests'
 import { copyToClipboard, getEnvironmentInfo } from 'src/modules/utils'
 import { testBuildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
@@ -113,6 +86,18 @@ const state = useAppStateStore()
 const diagnostics = ref<string>('')
 const showPassWordDialog = ref(false)
 const testFinished = ref(false)
+
+function camelToNormal(input: string): string {
+  if (!input) return ''
+
+  // Insert a space before all caps
+  const withSpaces = input
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2') // fooBar → foo Bar
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2') // HTMLParser → HTML Parser
+
+  // Optionally lowercase everything except first character
+  return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1)
+}
 
 const infoText = ref('get password')
 let resolveSecret: (secret: string) => void
@@ -156,44 +141,22 @@ async function runTest(name: string, testFunc: () => unknown, details = false) {
   return dump(result, { skipInvalid: true, noRefs: true })
 }
 
-const tests = {
-  'test file upload': testFileUpload,
-  'test meta database': testMetaDb,
-  'test taskyon chatCompletion websearch': testChatCompletionWebSearch,
-  'test session switching': testSessionSwitching,
-  'test key indexeddb storage': testIndexedDBKeyStorage,
-  'test crypto session': testCryptoSession,
-  'task hashing': testTaskIdHashing,
-  'test Pyodide': testPyodide,
-  'Test Secret Store': testSecretStore,
-  'test json schema to yam conversion': testJsonSchemaToYaml,
-  'test build slim view': testBuildSlimView,
-  'test createDeeptransformer': testCreateDeepTansformer,
-  'test chatCompletion tool': testChatCompletion,
-  'environment info': getEnvironmentInfo,
-  'list of Tools': testToolLista,
-  'json schemas': testJsonSchemas,
-  'pg lite': testPGLite,
-  testTransformersPipeline: testTransformersPipeline,
-  load_vecorization_initialization: testVectorizerInitialization,
-  markdown_generation: markdownGeneration,
-  test_token_counter: testEstimateChatTokens,
-  test_vectorization: testVectorizeText,
-  taskyon_data: getData,
-  /*diagnostics.value += await runTest(
-    'ipfs_helia_upload',
-    testIPFS,
-    details,
-  );*/
+export interface TaskyonTestFn {
+  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+  (): Promise<unknown> | unknown
+  description?: string
+  gui?: boolean
 }
 
-const guiTests = {
-  'test multiple archive upload gdrive': testMultipleArchiveUploadDownload,
-  'test archive upload gdrive': testArchiveUploadDownload,
-  'Test Gdrive zip file packets': testGdriveZipRoundtrip,
-  'oAuth Tests': oauthTests,
-  gdrive_upload: testGdriveUpload,
-}
+const guiTests = {} as Record<string, TaskyonTestFn>
+const tests = {} as Record<string, TaskyonTestFn>
+Object.entries(TaskyonTests).forEach(([name, func]) => {
+  if (typeof func !== 'function') return
+  if ('gui' in func) guiTests[camelToNormal(String(name))] = func
+  else tests[camelToNormal(String(name))] = func
+})
+tests.testBuildSlimView = testBuildSlimView
+tests.getEnvironmentInfo = getEnvironmentInfo
 
 async function runTests(tests: Record<string, () => unknown>, details = false) {
   testFinished.value = false

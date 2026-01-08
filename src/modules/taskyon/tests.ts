@@ -721,6 +721,7 @@ export async function testMultipleArchiveUploadDownload() {
 
   return results
 }
+testMultipleArchiveUploadDownload.gui = true
 
 // quick-n-dirty integration test
 export async function testArchiveUploadDownload() {
@@ -758,6 +759,7 @@ export async function testArchiveUploadDownload() {
   console.log('Test completed', results)
   return results
 }
+testArchiveUploadDownload.gui = true
 
 export const testPyodide = async () => {
   const python = usePyodideWebworker()
@@ -809,6 +811,7 @@ export async function oauthTests() {
 
   return creds
 }
+oauthTests.gui = true
 
 export async function testGdriveZipRoundtrip() {
   const t0 = Date.now()
@@ -948,6 +951,7 @@ export async function testGdriveZipRoundtrip() {
     }
   }
 }
+testGdriveZipRoundtrip.gui = true
 
 export const testSecretStore = async () => {
   console.log('request a random secret from the store')
@@ -974,7 +978,7 @@ export const testSecretStore = async () => {
   }
 }
 
-export async function testToolLista() {
+export async function testToolList() {
   console.log('gather all available tools in a list!')
 
   const ty = await tystate.taskyon
@@ -1013,6 +1017,7 @@ export async function testGdriveUpload() {
 
   //throw { message: 'could not found the task we just loaded!!' };
 }
+testGdriveUpload.gui = true
 
 export function testCreateDeepTansformer() {
   const errors: unknown[] = []
@@ -1097,6 +1102,7 @@ export const testChatCompletionWebSearch = async () => {
     webSearchResponse,
   }
 }
+testChatCompletionWebSearch.description = 'test taskyon chatCompletion websearch'
 
 export const testChatCompletion = async () => {
   console.log('request a random secret from the store')
@@ -1225,6 +1231,7 @@ export const testMetaDb = async () => {
     result,
   }
 }
+testMetaDb.description = 'test meta database'
 
 export const testPGLite = async () => {
   const db = await getDatabase('chatStore')
@@ -1523,7 +1530,7 @@ ${out}
   return { out }
 }
 
-export async function getData() {
+export async function getTestMetaData() {
   async function completionMessage() {
     const ty = await tystate.taskyon
     const tyChat: Record<string, unknown> = {

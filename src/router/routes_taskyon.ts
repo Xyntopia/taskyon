@@ -209,7 +209,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
   // in case there are any errors in the rest of the app...
   {
     path: '/diagnostics',
-    component: () => import('pages/taskyon/DiagnosticsPage.vue'),
+    component: () => import('pages/DiagnosticsPage.vue'),
     meta: {
       title: 'Diagnostics',
       description: 'Error & Diagnostics display',
