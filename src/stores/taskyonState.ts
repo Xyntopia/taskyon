@@ -41,7 +41,7 @@ import {
   usePyodideWebworker,
 } from '@taskyon/taskyon'
 import { until } from '@vueuse/core'
-import { freeKey } from 'assets/taskyon_free_key.json'
+import { freeKey } from 'src/assets/taskyon_free_key'
 import { defineStore } from 'pinia'
 import { useQuasar } from 'quasar' // load dynamically! :)
 import { setColors } from 'src/boot/brand-colors'

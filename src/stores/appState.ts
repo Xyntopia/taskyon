@@ -4,7 +4,7 @@
 import axios from 'axios'
 import { defineStore } from 'pinia'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
-import defaultSettings from 'src/assets/taskyon_settings.json'
+import defaultSettings from 'src/assets/taskyon_settings.json?raw'
 import { TyProfile } from 'src/modules/taskyon/types'
 import type { MergeOptions } from 'src/modules/utils'
 import {

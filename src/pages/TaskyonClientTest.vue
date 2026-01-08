@@ -47,7 +47,7 @@ import {
   createTool,
   createChatCompletionTask,
 } from '../../packages/tyclient/src'
-import { freeKey } from 'src/assets/taskyon_free_key.json'
+import { freeKey } from 'src/assets/taskyon_free_key'
 
 const dev = ref(true)
 const taskyonUrl = computed(() => (dev.value ? window.location.origin : 'https://taskyon.space'))

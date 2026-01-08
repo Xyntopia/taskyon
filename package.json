@@ -122,8 +122,8 @@
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@intlify/unplugin-vue-i18n": "^4.0.0",
-    "@quasar/app-vite": "^2.1.0",
-    "@quasar/cli": "^2.4.1",
+    "@quasar/app-vite": "^2.3.0",
+    "@quasar/cli": "^2.5.0",
     "@quasar/quasar-app-extension-testing-e2e-cypress": "^6.1.0",
     "@tauri-apps/cli": "^2.6.0",
     "@tauri-apps/tauricon": "github:tauri-apps/tauricon",
@@ -197,7 +197,9 @@
     "@libp2p/webtransport": "5.0.33",
     "libp2p": "2.7.4",
     "@libp2p/multistream-select": "6.0.17",
-    "@libp2p/peer-store": "11.0.21"
+    "@libp2p/peer-store": "11.0.21",
+    "@types/express": "4.17.23",
+    "@types/express-serve-static-core": "4.19.6"
   },
   "packageManager": "yarn@4.9.2"
 }

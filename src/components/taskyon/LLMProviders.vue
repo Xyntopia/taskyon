@@ -199,7 +199,7 @@ insert into the settings below."
 
 <script setup lang="ts">
 import { matEdit } from '@quasar/extras/material-icons'
-import { freeKey } from 'src/assets/taskyon_free_key.json'
+import { freeKey } from 'src/assets/taskyon_free_key'
 import { useAppStateStore } from 'src/stores/appState'
 import { AiProvideKeyStoreName, useTaskyonStore } from 'src/stores/taskyonState'
 import InfoDialog from '../InfoDialog.vue'
