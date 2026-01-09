@@ -42,7 +42,7 @@ function clearBrowserStorage(localStorageKeys?: string[]) {
 
 function getInitialState() {
   // load storable settings
-  const res = TyProfile.safeParse(defaultSettings)
+  const res = TyProfile.safeParse(JSON.parse(defaultSettings))
   if (!res.success) {
     throw new Error('The default settings provided do not work!', { cause: res.error.message })
   }
