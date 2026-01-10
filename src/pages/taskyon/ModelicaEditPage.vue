@@ -657,7 +657,7 @@ const runInSandbox = async (jsSource: string | undefined) => {
   }
 
   const code = buildIframeCode(jsSource)
-  const id = `rumoca-model-${Date.now()}`
+  const id = `rumoca-model-worker`
   abortController.value = new AbortController()
   running.value = true
 

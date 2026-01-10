@@ -2,128 +2,10 @@ import z from 'zod'
 import { sleep } from './asyncUtils'
 import type { toolContext } from '../types/toolApi'
 import { taskMarker } from '../types/tools'
-
-// Store iframe + its dedicated MessagePort by id / toolId
-const iframes = new Map<string, { iframe: HTMLIFrameElement; port: MessagePort }>()
+import { createSandboxedIframe, iframes, interruptExecution } from '../iframeruntime/iframeWorker'
 
 // Small helper for JSON-based deep cloning to keep payloads structured-clone-safe
 const deepClone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
-
-// TODO: can we use iframebridge here?
-
-// Create and initialize iframe and its control MessagePort
-async function createSandboxedIframe(
-  id: string,
-): Promise<{ iframe: HTMLIFrameElement; port: MessagePort }> {
-  console.log('create taskyon iframe worker', id)
-  const iframe = document.createElement('iframe')
-  iframe.id = id
-  iframe.style.display = 'none'
-  iframe.sandbox.add('allow-scripts', 'allow-popups', 'allow-popups-to-escape-sandbox')
-  document.body.appendChild(iframe)
-
-  try {
-    // Minimal runner:
-    //  - set up a dedicated control channel to the parent
-    //  - expose controlPort & optional extra messagePort on window
-    //  - expect { code, params, sourceURL } messages
-    //  - execute userFn(...params) and post { result } or { error }
-    iframe.srcdoc = `
-<script>
-  // Each iframe has its own persistent control channel to the parent
-  const controlChannel = new MessageChannel()
-  const controlPort = controlChannel.port1
-  controlPort.start()
-
-  // Expose control port and id for advanced/tool use
-  // window.__taskyonControlPort = controlPort
-  window.toolId = "${id}"
-
-  // Listen on the controlPort for "execute code" messages from the parent
-  controlPort.onmessage = async (e) => {
-    // Optional extra MessagePort (e.g., for streaming)
-    const extraPort = e.ports && e.ports[0] ? e.ports[0] : null
-    // TODO: get rid of this and only use it as an argument to the user function?
-    if (extraPort) {
-      window.__taskyonMessagePort = extraPort
-    }
-
-    const data = e.data || {}
-    const code = data.code
-    const params = Array.isArray(data.params) ? data.params : []
-    const sourceURL = data.sourceURL || 'sandboxed-code.js'
-
-    if (!code) return
-
-    try {
-      const fn = new Function(
-        "params",
-        "const userFn = (" + code + ");" +
-        "return userFn(...params);\\n" +
-        "//# sourceURL=" + sourceURL
-      )
-      const result = await fn(params)
-      controlPort.postMessage({ result })
-    } catch (err) {
-      const message = err && err.message ? err.message : String(err)
-      controlPort.postMessage({ error: message })
-    }
-  }
-
-  // Signal readiness and transfer the parent's end of the control channel
-  window.parent.postMessage({ ready: true }, "*", [controlChannel.port2])
-  // debugger;
-  //# sourceURL=iframeWorker${id.slice(0, 5)}.js
-</script>`
-  } catch (error: unknown) {
-    throw new Error(
-      `Iframe worker code contains errors: ${error instanceof Error ? error.message : String(error)}`,
-      {
-        cause: error,
-      },
-    )
-  }
-
-  // wait for the ready ping and capture the transferred MessagePort
-  return new Promise((resolve) => {
-    function onReady(ev: MessageEvent) {
-      if (ev.data && ev.data.ready && ev.source === iframe.contentWindow) {
-        const [port] = ev.ports || []
-        if (!port) {
-          console.error('Iframe ready message did not include a MessagePort')
-          return
-        }
-        window.removeEventListener('message', onReady)
-        port.start()
-        resolve({ iframe, port })
-      }
-    }
-    window.addEventListener('message', onReady)
-  })
-}
-
-// Interrupt logic
-let interrupted = false
-function interruptExecution(id: string) {
-  const entry = iframes.get(id)
-  if (!entry) return
-
-  const { iframe, port } = entry
-  interrupted = true
-
-  // Close the control port
-  try {
-    port.close()
-  } catch {
-    // ignore
-  }
-
-  // Remove the iframe to terminate the script execution
-  // TODO: gracefully terminate the iframe. We should be able to stop execution of
-  //       a function in an iframe so that we don't loose e.g. oauth access that we've alread had..
-  document.body.removeChild(iframe)
-  iframes.delete(id)
-}
 
 // 1) Define schemas for the two message “shapes”
 const rpcMessageSchema = z.object({
@@ -167,12 +49,9 @@ async function executeInIframeCore<R = unknown>(
   const sourceURL = options.sourceURL ?? 'sandboxed-code.js'
 
   let iframeEntry = iframes.get(id)
-
   // Lazy initialize iframe + control port
-  if (!iframeEntry || interrupted) {
+  if (!iframeEntry) {
     iframeEntry = await createSandboxedIframe(id)
-    iframes.set(id, iframeEntry)
-    interrupted = false
     // Add a delay to ensure iframe is fully ready. Its ok, because we normally do this only once here...
     await sleep(100)
   }

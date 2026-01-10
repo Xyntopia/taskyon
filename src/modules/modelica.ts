@@ -22,8 +22,7 @@ export const loadWasm = async () => {
 }
 
 // ---------- Build iframe function code ----------
-export const buildIframeCode = (compiledJs: string): string => {
-  return `
+export const buildIframeCode = (compiledJs: string): string => `
 (params, context) => {
 ${compiledJs}
 
@@ -315,4 +314,3 @@ return {
 };
 }
 `
-}
