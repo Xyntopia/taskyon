@@ -223,13 +223,15 @@ import DockView from 'src/components/DockView.vue'
 import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import TaskyonIframe from 'src/components/TaskyonIframe.vue'
 import ObjectTreeView from 'src/components/varViews/ObjectTreeView.vue'
-import type { RumocaModule } from 'src/modules/modelica'
-import { buildIframeCode, loadWasm } from 'src/modules/modelica'
+import type { RumocaModule } from 'src/modules/modelica/modelica'
+import { buildIframeCode, loadWasm } from 'src/modules/modelica/modelica'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onMounted, ref } from 'vue'
+import { validateJavaScriptInSandbox } from '../../../packages/taskyon/src/utils/checkJsSyntax'
 import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
+import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
 import {
   createChatCompletionTask,
   createTool,
@@ -237,8 +239,6 @@ import {
   toolCall,
 } from '../../../packages/tyclient/src'
 import FixedHeightPage from '../FixedHeightPage.vue'
-import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
-import { validateJavaScriptInSandbox } from '../../../packages/taskyon/src/utils/checkJsSyntax'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -450,7 +450,7 @@ const layout = ref<DockNode>({
   ],
 })
 
-const jinjaTemplateUrls = import.meta.glob('app/public/modelica/*.jinja', {
+const jinjaTemplateUrls = import.meta.glob('src/modules/modelica/*.jinja', {
   query: '?raw', // get the file content
   import: 'default',
   eager: false, // lazy-load each file when used
@@ -599,11 +599,10 @@ equation
   end when;
 end BouncingBall;`
 
-  // select first example template
-  const exampleTemplate = (await jinjaTemplateUrls[
-    '/public/modelica/javascript.jinja'
-  ]?.()) as string
-
+  // select template that contains "javascript"
+  const sel = Object.keys(jinjaTemplateUrls).find((key) => key.includes('javascript.jinja'))
+  if (!sel) return
+  const exampleTemplate = (await jinjaTemplateUrls[sel]!()) as string
   templateSource.value = exampleTemplate || ''
 }
 
