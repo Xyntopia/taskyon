@@ -6,7 +6,7 @@ import type {
   CryptoSession,
   InternalTool,
   KeyString,
-  Model,
+  ModelCard,
   Port,
   TaskNodeMeta,
   Taskyon,
@@ -400,7 +400,7 @@ const useApiManagement = (
   stateRefs: ReturnType<typeof useAppStateStore>,
   taskyon: Thunk<Promise<Taskyon>>,
 ) => {
-  const llmModelsInternal = ref<Record<string, Model>>({})
+  const llmModelsInternal = ref<Record<string, ModelCard>>({})
   // we need this in order to reactivly see if something changed..
   const availableKeys = ref<Record<string, string | undefined>>({})
 

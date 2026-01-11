@@ -1,10 +1,11 @@
 import type OpenAI from 'openai'
 import type { Model } from 'openai/resources/models.mjs'
-import type { apiConfig, OpenAIMessage, OpenRouterGenerationInfo } from '../types/chatCompletion'
+import type { apiConfig, OpenAIMessage } from '../types/chatCompletion'
 import { ChatResponseType } from '../types/chatCompletion'
+import type { OpenRouterGenerationInfo } from '../types/chatCompletionService'
+import { sleep } from '../utils/asyncUtils'
 import { asyncTimeLruCache } from '../utils/caching'
 import { charHash } from '../utils/crypto'
-import { sleep } from '../utils/asyncUtils'
 
 export function generateHeaders(Bearer: string, selectedApi: string, siteUrl?: string) {
   let headers: Record<string, string> = {

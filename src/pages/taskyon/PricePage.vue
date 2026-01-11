@@ -216,21 +216,21 @@ For in in-depth comparison check out webpages like the following
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { type QTableProps, exportFile } from 'quasar'
 import { matBlock, matCheck, matFilterList } from '@quasar/extras/material-icons'
+import { type QTableProps, exportFile } from 'quasar'
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
-import { useTaskyonStore } from 'src/stores/taskyonState'
 import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'src/stores/taskyonState'
 
 import InfoDialog from 'components/InfoDialog.vue'
-import tyMarkdown from 'components/tyMarkdown.vue'
 import ApiSelect from 'components/taskyon/ApiSelect.vue'
+import tyMarkdown from 'components/tyMarkdown.vue'
 import ObjectTreeView from 'src/components/varViews/ObjectTreeView.vue'
 
+import type { ModelCard } from '@taskyon/taskyon'
 import { humanReadablePrice, openrouterPricing } from 'src/modules/utils'
-import type { Model } from '@taskyon/taskyon'
 
 /* ─────────── Local constants ─────────── */
 const pricingOptions = ['$/token', 'pages/0.01$', '$/million tokens'] as const
@@ -268,7 +268,7 @@ const sortAllowedFirst = computed<boolean>({
 })
 
 /* ─────────── Helpers ─────────── */
-type Row = Model & { inKey?: boolean }
+type Row = ModelCard & { inKey?: boolean }
 
 function rowClassFn(row: Row) {
   return row.inKey === undefined || row.inKey === true ? '' : 'not-in-key'

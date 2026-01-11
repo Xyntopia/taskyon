@@ -14,9 +14,9 @@ interface Permission {
 }
 
 // ────────────────────────── leaf enums & helpers ──────────────────────────
-export type IOmodality = 'text' | 'image' | 'file'
+type IOmodality = 'text' | 'image' | 'file'
 
-export type SupportedParameter =
+type SupportedParameter =
   | 'max_tokens'
   | 'temperature'
   | 'top_p'
@@ -40,7 +40,7 @@ export type SupportedParameter =
   | 'web_search_options'
 
 /** pricing quoted as *USD per–token* strings to avoid FP rounding */
-export interface Pricing {
+interface Pricing {
   prompt: string
   completion: string
   image?: string
@@ -51,7 +51,7 @@ export interface Pricing {
   input_cache_write?: string
 }
 
-export interface Architecture {
+interface Architecture {
   /** e.g. `"text->text"` or `"text+image->text"` */
   modality?: string
   input_modalities?: IOmodality[]
@@ -60,7 +60,7 @@ export interface Architecture {
   instruct_type?: string | null
 }
 
-export interface TopProvider {
+interface TopProvider {
   context_length: number
   max_completion_tokens: number | null
   is_moderated: boolean

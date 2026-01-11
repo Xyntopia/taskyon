@@ -18,13 +18,9 @@ import {
 } from '../llm/chat'
 import type { Goals } from '../llm/promptCreation'
 import { addPrompts } from '../llm/promptCreation'
-import type {
-  apiConfig,
-  ChatResponseType,
-  OpenRouterGenerationInfo,
-  TaskNodeMeta,
-} from '../types/chatCompletion'
+import type { apiConfig, ChatResponseType, TaskNodeMeta } from '../types/chatCompletion'
 import { getCurrentModel } from '../types/chatCompletion'
+import type { OpenRouterGenerationInfo } from '../types/chatCompletionService'
 import type { FileMapping, partialTaskDraft, TaskNode } from '../types/node'
 import type { llmSettings } from '../types/profiles'
 import type { toolContext } from '../types/toolApi'

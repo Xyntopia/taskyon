@@ -13,6 +13,7 @@ export * from './p2p/constants'
 export * from './p2p/tyP2p'
 export { convertTaskNodesToOpenAIChat } from './tools/chatCompletionTool'
 export * from './types/chatCompletion'
+export * from './types/chatCompletionService'
 export * from './api'
 export {
   partialTaskDraft,
@@ -23,6 +24,7 @@ export {
 } from './types/node'
 export * from './types/toolApi'
 export * from './types/tools'
+export * from './types/tyKey'
 export * from './utils/asyncUtils'
 export * from './utils/caching'
 export * from './utils/crypto'
