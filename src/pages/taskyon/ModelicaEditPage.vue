@@ -226,7 +226,6 @@ import ObjectTreeView from 'src/components/varViews/ObjectTreeView.vue'
 import type { RumocaModule } from 'src/modules/modelica/modelica'
 import { buildIframeCode, loadWasm } from 'src/modules/modelica/modelica'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
-import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onMounted, ref } from 'vue'
 import { validateJavaScriptInSandbox } from '../../../packages/taskyon/src/utils/checkJsSyntax'
@@ -241,7 +240,6 @@ import {
 import FixedHeightPage from '../FixedHeightPage.vue'
 
 const tystate = useTaskyonStore()
-const state = useAppStateStore()
 
 // Optional: adjust if you put this elsewhere
 type ModelicaLogPhase = 'compile' | 'run' | 'loadWasm' | 'general'
@@ -367,7 +365,7 @@ and add them to the editor!
 ]
 
 const configuration = computed<partialTyConfiguration | null>(() => {
-  if (state.authToken == null) return null
+  if (tystate.currentKeyString == null) return null
   return {
     llmSettings: {
       //selectedApi: 'taskyon',

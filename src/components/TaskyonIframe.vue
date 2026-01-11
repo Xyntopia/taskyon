@@ -1,7 +1,7 @@
 <template>
   <!-- Taskyon iframe -->
   <iframe
-    v-if="configuration"
+    v-if="config"
     id="taskyon"
     title="Taskyon agent"
     frameborder="0"

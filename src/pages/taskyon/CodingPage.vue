@@ -202,6 +202,9 @@ You are the Taskyon Document Assistant helping users edit and manage their docum
 
 This application is used **almost exclusively to edit code/files**. Your primary job is to **apply concrete edits** to the current document using the \`updateDocument\` tool.
 
+If the user request to write an html-based app. Then write it exactly as if it where a single html file
+webpage. The user can preview the app in an iframe!
+
 ## Current Document State
 **Version:** ${documentInfo.currentVersion} of ${documentInfo.totalVersions}
 **Content Length:** ${documentInfo.contentLength} characters
@@ -363,7 +366,7 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
 ]
 
 const configuration = computed<partialTyConfiguration | null>(() => {
-  if (state.authToken == null) return null
+  if (tystate.currentKeyString == null) return null
   return {
     llmSettings: {
       ...removeKeys(state.llmSettings, ['entryNode']),
