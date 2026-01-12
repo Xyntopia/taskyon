@@ -298,7 +298,7 @@ function toggleMarkdown(id: string) {
 
   .task-menu-anchor
     position: sticky
-    top: 20px
+    top: 10px
     width: 100%
     pointer-events: none
     z-index: 100
