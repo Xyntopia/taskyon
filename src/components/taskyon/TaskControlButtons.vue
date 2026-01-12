@@ -2,7 +2,7 @@
 <template>
   <div class="column q-gutter-xs task-control-buttons">
     <!-- scroll to top -->
-    <div class="col-auto">
+    <div v-if="showTopScroll" class="col-auto">
       <q-btn
         fab-mini
         class="taskyon-control-button"
@@ -15,7 +15,7 @@
     </div>
 
     <!-- scroll to previous message -->
-    <div class="col-auto">
+    <div v-if="showTopScroll" class="col-auto">
       <q-btn
         fab-mini
         class="taskyon-control-button"
@@ -28,7 +28,7 @@
     </div>
 
     <!-- scroll to next message -->
-    <div class="col-auto">
+    <div v-if="showBottomScroll" class="col-auto">
       <q-btn
         fab-mini
         class="taskyon-control-button"
@@ -41,9 +41,8 @@
     </div>
 
     <!-- scroll to bottom -->
-    <div class="col-auto">
+    <div v-if="showBottomScroll" class="col-auto">
       <q-btn
-        v-if="showBottomScrollLock"
         fab-mini
         class="taskyon-control-button"
         :icon="matKeyboardDoubleArrowDown"
@@ -83,7 +82,8 @@ import {
 const tystate = useTaskyonStore()
 
 defineProps<{
-  showBottomScrollLock: boolean
+  showBottomScroll: boolean
+  showTopScroll: boolean
 }>()
 
 defineEmits<{

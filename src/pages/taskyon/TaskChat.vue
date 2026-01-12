@@ -62,7 +62,8 @@
     <div style="height: 0px" class="relative-position">
       <TaskControlButtons
         class="absolute-bottom-right q-pa-xs"
-        :show-bottom-scroll-lock="!state.lockBottomScroll"
+        :show-bottom-scroll="!state.lockBottomScroll"
+        :show-top-scroll="scm.showTopButtons.value"
         @scroll-to-thread-end="scm.scrollToBottom"
         @scroll-to-next-message="scm.scrollToNext"
         @scroll-to-prev-message="scm.scrollToPrev"

@@ -125,6 +125,9 @@ export function createScrollManager(
   // --- Internal state ---
   let rafId: number | null = null
   const minUnlockOffset = 5 // px before we really unlock
+  const buttonHideTolerancePx = 30 // px range near edges where buttons consider us "at" top/bottom
+  const showTopButtons = ref(false)
+  const showBottomButtons = ref(true)
 
   // --- Core scroll ---
   const scrollToBottom = (smooth = true) => {
@@ -156,6 +159,12 @@ export function createScrollManager(
 
     const scrollEnd = el.scrollHeight - el.clientHeight
     const diff = scrollEnd - details.position.top
+
+    const atTopForButtons = details.position.top <= buttonHideTolerancePx
+    const atBottomForButtons = diff <= buttonHideTolerancePx
+
+    showTopButtons.value = !atTopForButtons
+    showBottomButtons.value = !atBottomForButtons
 
     if (details.direction === 'up' && diff > minUnlockOffset) lockScroll.value = false
     else if (details.direction === 'down' && diff < bottomTolerancePx) lockScroll.value = true
@@ -241,5 +250,7 @@ export function createScrollManager(
     scrollToTop,
     scrollToNext,
     scrollToPrev,
+    showTopButtons,
+    showBottomButtons,
   }
 }
