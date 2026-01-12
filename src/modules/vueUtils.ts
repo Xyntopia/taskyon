@@ -117,6 +117,7 @@ export function testBuildSlimView() {
 export function createScrollManager(
   container: Ref<HTMLElement | undefined>,
   lockScroll: Ref<boolean>,
+  selector: string,
   bottomTolerancePx = 30,
 ) {
   const { setVerticalScrollPosition } = scroll
@@ -168,10 +169,77 @@ export function createScrollManager(
     }
   }
 
+  function getMessageElements(): HTMLElement[] {
+    const con = container.value
+    if (!con) return []
+    return Array.from(con.querySelectorAll<HTMLElement>(selector))
+  }
+
+  function scrollToTop() {
+    const con = container.value
+    if (!con) return
+    con.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function scrollToNext() {
+    const cont = container.value
+    if (!cont) return
+
+    const containerRect = cont.getBoundingClientRect()
+    const messages = getMessageElements()
+
+    let next: HTMLElement | null = null
+    let nextOffset = Infinity
+
+    for (const el of messages) {
+      const rect = el.getBoundingClientRect()
+      const offset = rect.top - containerRect.top // distance from top of scroll area
+
+      // we want the first message clearly below the current viewport start
+      if (offset > 8 && offset < nextOffset) {
+        next = el
+        nextOffset = offset
+      }
+    }
+
+    if (next) {
+      next.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  function scrollToPrev() {
+    const con = container.value
+    if (!con) return
+
+    const containerRect = con.getBoundingClientRect()
+    const messages = getMessageElements()
+
+    let prev: HTMLElement | null = null
+    let prevOffset = -Infinity
+
+    for (const el of messages) {
+      const rect = el.getBoundingClientRect()
+      const offset = rect.top - containerRect.top
+
+      // we want the last message clearly above the current viewport start
+      if (offset < -8 && offset > prevOffset) {
+        prev = el
+        prevOffset = offset
+      }
+    }
+
+    if (prev) {
+      prev.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
   return {
     onScroll,
     scrollToBottom, // manual call, smooth param preserved
     autoScroll: requestAutoScroll, // scheduled auto scroll
     cancel,
+    scrollToTop,
+    scrollToNext,
+    scrollToPrev,
   }
 }

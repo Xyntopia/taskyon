@@ -64,6 +64,9 @@
         class="absolute-bottom-right q-pa-xs"
         :show-bottom-scroll-lock="!state.lockBottomScroll"
         @scroll-to-thread-end="scm.scrollToBottom"
+        @scroll-to-next-message="scm.scrollToNext"
+        @scroll-to-prev-message="scm.scrollToPrev"
+        @scroll-to-top="scm.scrollToTop"
       />
     </div>
     <!--Create new task area-->
@@ -127,6 +130,7 @@ import { fetchMarkdown, getTextFile, sleep } from '@taskyon/taskyon'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
 import GetStarted from 'components/taskyon/GetStarted.vue'
 import TaskChainViewer from 'components/taskyon/TaskChainViewer.vue'
+import TaskControlButtons from 'components/taskyon/TaskControlButtons.vue'
 import { storeToRefs } from 'pinia'
 import { QSpinnerBox, useMeta, useQuasar } from 'quasar'
 import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
@@ -138,7 +142,6 @@ import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
-import TaskControlButtons from '../../components/taskyon/TaskControlButtons.vue'
 
 // we are re-creating the following meta tag dynamically here just for the chat page!
 // <!-- Viewport Meta in order to make window size shrink on mobile when keyboard pops up! -->
@@ -280,7 +283,7 @@ Please check the path and try again.
 }
 
 const { lockBottomScroll } = storeToRefs(state)
-const scm = createScrollManager(taskThreadContainer, lockBottomScroll)
+const scm = createScrollManager(taskThreadContainer, lockBottomScroll, '.task-container.message')
 
 watch(tystate.currentTask, () => {
   scm.autoScroll()
