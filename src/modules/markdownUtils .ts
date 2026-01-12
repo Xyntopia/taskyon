@@ -1,3 +1,4 @@
+// markdownUtils.ts
 import MarkdownIt from 'markdown-it'
 
 //import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
@@ -52,6 +53,14 @@ import type { Token } from 'markdown-it'
 import { svgStringToPngUint8 } from './svgUtils'
 import { copyPngToClipboard, hexToRgb } from './utils'
 
+// A lean markdown-it instance only for HTML detection
+export const mdHtmlDetector = new MarkdownIt({
+  html: true, // we want HTML tokens
+  linkify: false,
+  typographer: false,
+  highlight: () => '',
+})
+
 export const tyMdCssUrls = {
   dark: [darkHref],
   light: [lightHref],
@@ -94,20 +103,25 @@ export function setPrismTheme(isDark: boolean) {
 }
 
 export const containsHtmlTags = (markdown: string) => {
-  const cleaned = markdown
-    // 1. remove fenced code blocks ```…```
-    .replace(/```[\s\S]*?```/g, '')
-    // 2. remove indented code blocks (4 spaces or a tab)
-    .replace(/^(?: {4}|\t).*(\r?\n(?: {4}|\t).*)*/gm, '')
-    // 3. remove inline code spans `…`
-    .replace(/`[^`\n]+`/g, '')
-    // 4. remove any <code>…</code> sections
-    .replace(/<code\b[^>]*>[\s\S]*?<\/code>/gi, '')
-    // 5. remove HTML comments <!-- … -->
-    .replace(/<!--[\s\S]*?-->/g, '')
+  const tokens = mdHtmlDetector.parse(markdown, {})
 
-  const tagPattern = /<\/?[a-z][a-z0-9]*\b[^>]*>/gi
-  return tagPattern.test(cleaned)
+  for (const t of tokens) {
+    if (t.type === 'html_block' || t.type === 'html_inline') {
+      const trimmed = t.content.trim()
+      if (!trimmed) continue
+
+      // Keep old behavior: ignore "pure" comments as HTML
+      if (/^<!--[\s\S]*?-->$/.test(trimmed)) continue
+
+      // Keep old behavior: ignore a single <code>...</code> section
+      if (/^<code\b[^>]*>[\s\S]*<\/code>$/i.test(trimmed)) continue
+
+      // Anything else counts as real HTML
+      return true
+    }
+  }
+
+  return false
 }
 
 /**
@@ -568,7 +582,7 @@ export const generateIframeSrc = (
       </style>
     </head>
     <body>
-      <div class="content ${mdContentClass}">
+      <div class="content ${mdContentClass} in-iframe">
         ${renderedHtml}
       </div>
       <script>

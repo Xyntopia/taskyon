@@ -1,3 +1,4 @@
+<!--tyMarkdown.vue-->
 <!--
  we are disabling the no-v-html warning, because we take a lot of precautions
  against XSS attacks. we only render markdown html locally and only if it doesn't
@@ -63,7 +64,7 @@ const { src, useIframe = false } = defineProps<{
 const renderedHtml = asyncComputed(async () => {
   const raw = src ?? ''
   const isPureHtml =
-    containsHtmlTags(raw) &&
+    containsHtmlTags(raw) && // 1) has real HTML (outside code)
     ![
       /(^|\n)\s*#{1,6}\s/, // headings: #, ##, ...
       /(^|\n)\s*>\s/, // blockquotes: >
@@ -80,8 +81,17 @@ const renderedHtml = asyncComputed(async () => {
       /(^|\n)\s*:::/, // custom containers (like :::note)
     ].some((pattern) => pattern.test(raw))
 
-  if (!useIframe) return await md2Html(raw, $q.dark.isActive, false)
-  return isPureHtml ? raw : await md2Html(raw, $q.dark.isActive, true)
+  if (!useIframe) {
+    // No iframe: render as markdown with HTML disabled (extra safety)
+    return await md2Html(raw, $q.dark.isActive, false)
+  }
+
+  // useIframe = true:
+  // case 1: pure HTML => don't run through markdown-it, just show raw HTML in iframe
+  if (isPureHtml) return raw
+
+  // case 2 & 3: markdown, possibly with HTML outside code => markdown-it with html enabled
+  return await md2Html(raw, $q.dark.isActive, true)
 }, 'rendering ...')
 
 // Only produce iFrame HTML once real content is ready
