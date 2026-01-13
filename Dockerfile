@@ -1,8 +1,12 @@
 # Stage 1: Build the Quasar application
 FROM node:22.14.0 AS prepare
-
 # Set up Yarn cache directory
 ENV YARN_CACHE_FOLDER=/tmp/.yarn-cache
+
+# make sure, subsequent installs use corepack properly (e.g. xorrect yarn version)
+ENV COREPACK_ENABLE_STRICT=1
+RUN corepack enable
+
 
 # it looks like after removing quasar postinstall we don't need this anymore??
 # we don't need to bust the cache here, because it  gets thrown away due to our staged build anyways...
@@ -20,7 +24,7 @@ ENV YARN_CACHE_FOLDER=/tmp/.yarn-cache
 WORKDIR /app
 
 # Copy package.json and yarn.lock first to leverage Docker's cache
-COPY package.json yarn.lock /app/
+COPY package.json yarn.lock .yarnrc.yml /app/
 
 # Also copy child packages!
 # COPY --parents packages/*/package.json .
