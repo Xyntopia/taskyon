@@ -1,19 +1,25 @@
 // src/modules/svgUtils.ts
 
-import type { Resvg as ResvgClass, ResvgRenderOptions } from '@resvg/resvg-wasm'
-
-interface ResvgModule {
-  initWasm(bytes: Response): Promise<void>
-  Resvg: typeof ResvgClass
-}
+import type { ResvgRenderOptions } from '@resvg/resvg-wasm'
+import wasmUrl from '@resvg/resvg-wasm/index_bg.wasm?url'
+import type ResvgModule_ from '@resvg/resvg-wasm'
+type ResvgModule = typeof ResvgModule_
 
 let wasmModule: ResvgModule | null = null
-async function loadResvg(): Promise<ResvgModule> {
+export async function loadResvg(): Promise<ResvgModule> {
   if (wasmModule) return wasmModule
-  const mod = (await import('@resvg/resvg-wasm')) as unknown as ResvgModule
-  const wasmPath = new URL('index_bg.wasm', import.meta.url)
-  await mod.initWasm(await fetch(wasmPath))
-  return (wasmModule = mod)
+
+  const mod = (await import('@resvg/resvg-wasm')) as ResvgModule
+
+  // Vite will give us the final URL for the WASM asset
+  const response = await fetch(wasmUrl)
+  const bytes = await response.arrayBuffer()
+
+  // `initWasm` is now properly typed from the module
+  await mod.initWasm(bytes)
+
+  wasmModule = mod
+  return mod
 }
 
 function getSvgSize(svg: string): { width: number; height: number } {
