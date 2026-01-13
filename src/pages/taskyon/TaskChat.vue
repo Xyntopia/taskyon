@@ -21,8 +21,8 @@
       -->
       <!-- "Task" Display (.tasks-container & .task-container) -->
       <TaskChainViewer
-        v-if="tystate.selectedThread.value.length > 0 && tystate.currentTask.value"
-        :selected-thread="tystate.selectedThread.value"
+        v-if="tystate.selectedThread.length > 0 && tystate.currentTask.value"
+        :selected-thread="tystate.selectedThread"
         :current-task="tystate.currentTask.value"
         :show-all-tasks="showAllTasks"
         :show-hierarchy="showHierarchy"
@@ -73,7 +73,7 @@
     <!--Create new task area-->
     <div class="col-auto row justify-center create-new-task-container self-stretch">
       <CreateNewTask
-        v-if="tystate.selectedThread.value.length > 0"
+        v-if="tystate.selectedThread.length > 0"
         :file-attachments="fileAttachments"
         :entry-node="tystate.entryNode"
         class="col q-pa-xs create-new-task"
@@ -383,7 +383,7 @@ For full functionality you should do that here:`,
 
 let chatison: ReturnType<typeof $q.notify> | undefined = undefined
 watchEffect(() => {
-  if (tystate.selectedThread.value.length > 0 && invitedChat.value && !chatison) {
+  if (tystate.selectedThread.length > 0 && invitedChat.value && !chatison) {
     chatison = $q.notify({
       message: `You've been invited to read this chat!`,
       color: 'primary',

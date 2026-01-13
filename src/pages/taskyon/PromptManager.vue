@@ -40,7 +40,7 @@
         <div v-if="tystate.currentTask.value" class="col">
           <q-scroll-area class="fit">
             <TaskChainViewer
-              :selected-thread="tystate.selectedThread.value"
+              :selected-thread="tystate.selectedThread"
               :current-task="tystate.currentTask.value"
             />
           </q-scroll-area>

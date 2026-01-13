@@ -336,7 +336,7 @@ const currentnewTask = computed(() => {
 
 const getCurrentKeyword = async () => {
   const startTime = performance.now()
-  const kwd = (await generateTaskKeyWords(currentnewTask.value, tystate.selectedThread.value))[0]
+  const kwd = (await generateTaskKeyWords(currentnewTask.value, tystate.selectedThread))[0]
   const endTime = performance.now()
   console.log(`Keyword creation took ${endTime - startTime} ms.`)
   return kwd

@@ -620,7 +620,6 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
   // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
   // we want to oad them gradually into our UI
   const currentTask = ref<TaskNode | null>(null)
-  const selectedThread = ref<TaskNode[]>([])
 
   void taskyon.then((ty) => {
     const add2ChatHistory = async (
@@ -701,11 +700,8 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
         // TODO: I don't remember why we need this delay here....
         if (newSelectedTask) {
           currentTask.value = await ty.getTask(newSelectedTask)
-          const selectedThreadIDs = await ty.getTaskIdChain(newSelectedTask)
-          selectedThread.value = await ty.convertTaskIDs(selectedThreadIDs)
         } else {
           currentTask.value = null
-          selectedThread.value = []
         }
       },
       {
@@ -736,8 +732,19 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
     )
   })
 
+  const selectedThread = asyncComputed<TaskNode[]>(async () => {
+    const newSelectedTask = stateRefs.llmSettings.selectedTaskId
+    if (newSelectedTask) {
+      const ty = await taskyon
+      const selectedThreadIDs = await ty.getTaskIdChain(newSelectedTask)
+      return await ty.convertTaskIDs(selectedThreadIDs)
+    } else {
+      return []
+    }
+  }, [])
+
   return {
-    selectedThread: computed(() => selectedThread),
+    selectedThread,
     currentTask: computed(() => currentTask),
   }
 }
