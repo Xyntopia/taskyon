@@ -73,7 +73,7 @@
     <!--Create new task area-->
     <div class="col-auto row justify-center create-new-task-container self-stretch">
       <CreateNewTask
-        v-if="tystate.selectedThread.length > 0"
+        v-if="tystate.selectedThread.length > 0 && tystate.currentTask.value"
         :file-attachments="fileAttachments"
         :entry-node="tystate.entryNode"
         class="col q-pa-xs create-new-task"
