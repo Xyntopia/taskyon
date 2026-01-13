@@ -42,6 +42,8 @@
           :bot-name="tystate.currentModelId ?? 'no valid model selected...'"
           :model-list="state.appConfiguration.expertMode"
           :select-api="state.appConfiguration.expertMode"
+          :model-options="Object.values(tystate.llmModels)"
+          :allowed-models="tystate.tyKeyAllowedModels"
           @update-bot-name="
             (bot) => {
               tystate.updateModelAndApi(bot)

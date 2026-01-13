@@ -21,16 +21,14 @@
         @update:model-value="onModelSelect"
         @filter="
           (val: string, update: updateCallBack, abort: () => void) =>
-            filterModels(val, update, abort, modelOptions)
+            filterModels(val, update, abort, computedModelOptions)
         "
         @filter-abort="abortFilterFn"
         @keydown.enter="selectFirstOption"
       >
         <template #prepend>
-          <q-icon v-if="selectedApi === 'taskyon' && tystate.taskyonKey" :name="mdiKeyLink">
-            <q-tooltip
-              >Only models allowed from taskyon key: {{ tystate.taskyonKey.name }}</q-tooltip
-            >
+          <q-icon v-if="selectedApi === 'taskyon' && usedKey" :name="mdiKeyLink">
+            <q-tooltip>Only models allowed from taskyon key: {{ usedKey.name }}</q-tooltip>
           </q-icon>
         </template>
       </q-select>
@@ -51,14 +49,20 @@
 import { matVisibility } from '@quasar/extras/material-icons'
 import { mdiKeyLink } from '@quasar/extras/mdi-v6'
 import { levenshteinDistance } from 'src/modules/string_utils'
-import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, ref } from 'vue'
 import ToggleButton from '../ToggleButton.vue'
 
-defineProps<{
+const props = defineProps<{
   botName: string | null
   modelList?: boolean
   selectApi?: boolean
+  modelOptions: {
+    id: string
+    architecture?: { modality?: string }
+    pricing?: { prompt?: string; completion?: string }
+  }[]
+  allowedModels?: string[] | undefined
+  usedKey?: { name: string } | undefined
 }>()
 
 const selectedApi = defineModel<string | null>('selectedApi', {
@@ -75,15 +79,13 @@ const emit = defineEmits<{
   ] // named tuple syntax
 }>()
 
-const tystate = useTaskyonStore()
-
 const selectModelInput = ref()
 
-const modelOptions = computed(() => {
+const computedModelOptions = computed(() => {
   // openai has no pricing information attached, so we sort it in different ways...
   console.log('calculate model options!')
   if (selectedApi.value === 'openai') {
-    const options = Object.values(tystate.llmModels)
+    const options = [...props.modelOptions]
       .sort((m1, m2) => m1.id.localeCompare(m2.id))
       .map((m) => ({
         label: `${m.id}`,
@@ -91,11 +93,9 @@ const modelOptions = computed(() => {
       }))
     return options
   } else {
-    let llmModels = Object.values(tystate.llmModels)
-    if (tystate.tyKeyAllowedModels) {
-      llmModels = llmModels.filter((m) =>
-        m.id ? tystate.tyKeyAllowedModels?.includes(m.id) : false,
-      )
+    let llmModels = props.modelOptions
+    if (props.allowedModels) {
+      llmModels = llmModels.filter((m) => (m.id ? props.allowedModels?.includes(m.id) : false))
     }
     if (showVisionModels.value) {
       llmModels = llmModels.filter((m) => m.architecture?.modality === 'text+image->text')
