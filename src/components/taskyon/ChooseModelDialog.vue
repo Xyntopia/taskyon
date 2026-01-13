@@ -39,7 +39,7 @@
         <ModelSelection
           v-model:selected-api="selectedApi"
           class="q-px-xs self-stretch"
-          :bot-name="tystate.currentModelId ?? 'no valid model selected...'"
+          :selected-model="tystate.currentModelId ?? 'no valid model selected...'"
           :model-list="state.appConfiguration.expertMode"
           :select-api="state.appConfiguration.expertMode"
           :model-options="Object.values(tystate.llmModels)"

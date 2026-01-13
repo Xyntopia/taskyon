@@ -11,13 +11,13 @@
         label="Select LLM Model for answering/solving the task."
         :options="filteredOptions"
         emit-value
-        :model-value="botName"
+        :model-value="selectedModel"
         hide-selected
         use-input
         fill-input
         input-debounce="0"
         v-bind="$attrs"
-        :display-value="botName || ''"
+        :display-value="selectedModel || ''"
         @update:model-value="onModelSelect"
         @filter="
           (val: string, update: updateCallBack, abort: () => void) =>
@@ -53,7 +53,7 @@ import { computed, ref } from 'vue'
 import ToggleButton from '../ToggleButton.vue'
 
 const props = defineProps<{
-  botName: string | null
+  selectedModel: string | null
   modelList?: boolean
   selectApi?: boolean
   modelOptions: {

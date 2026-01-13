@@ -555,10 +555,29 @@ const useApiManagement = (
       freeKey) as KeyString
   }
 
+  const ensureValidModel = (keystr?: KeyString) => {
+    const newKeyObj = isTaskyonKey(keystr ?? undefined, false)
+    if (newKeyObj) {
+      const model = getValidModel(newKeyObj)
+      if (model) updateModelAndApi({ newName: model })
+    }
+  }
+
+  const getSelectedKey = async () => {
+    const storedKeyStr = (await getProviderApiKey('taskyon')) ?? undefined
+    console.log('found stored key:', storedKeyStr?.slice(-5))
+    const selectedKey = resolveTaskyonKey({
+      authToken: stateRefs.authToken,
+      iframeToken: stateRefs.iframeApiKey,
+      storedKey: storedKeyStr,
+    })
+    return selectedKey
+  }
+
   //////   INITIALIZATION
   // make sure, that we check our secretStore right after initialization if we hae stored any keys in
   // there (especially ifits a taskyon key) and then use those!
-  const init = async () => {
+  const initModelsAndStoredKeys = async () => {
     const ty = await taskyon()
     const sessionId = await ty.getCryptoSession().getSessionId()
     console.log(`updating taskyon after session/key change!, ${sessionId}`, {
@@ -566,22 +585,11 @@ const useApiManagement = (
       iframeApiKey: stateRefs.iframeApiKey,
     })
 
-    const keystr = (await getProviderApiKey('taskyon')) ?? undefined
-    console.log('found stored key:', keystr?.slice(-5))
-    const selectedKey = resolveTaskyonKey({
-      authToken: stateRefs.authToken,
-      iframeToken: stateRefs.iframeApiKey,
-      storedKey: keystr,
-    })
-    console.log('setting selected key:', selectedKey?.slice(-5))
+    const selectedKey = await getSelectedKey()
     // update the secretstore with this key in order to give chatCompletion the correct key!
+    console.log('setting selected key:', selectedKey?.slice(-5))
     await setProviderApiKey('taskyon', selectedKey)
-
-    const newKeyObj = isTaskyonKey(keystr ?? undefined, false)
-    if (newKeyObj) {
-      const model = getValidModel(newKeyObj)
-      if (model) updateModelAndApi({ newName: model })
-    }
+    ensureValidModel(selectedKey)
 
     const keys = await ty.listSecrets(AiProvideKeyStoreName)
     availableKeys.value = keys
@@ -589,16 +597,31 @@ const useApiManagement = (
 
   // make sure we update our model list whenever anything changes for our
   // endpoints...
+  // TODO:  there is a potential infinite loop here with
+  // "ensureValidModel" setting a new "selectedModel" inside stateRefs.llmSettings.llmApis
+  //  which then triggers this watch again... we need to be careful here!
   watch(
     [() => stateRefs.llmSettings.selectedApi, () => stateRefs.llmSettings.llmApis, availableKeys],
-    updateModelList,
+    async ([newSelectedApi, newApiConfigs, availableKeys]) => {
+      console.log('update models... due to api/key change', {
+        newSelectedApi,
+        newApiConfigs,
+        availableKeys,
+      })
+      if (newSelectedApi === 'taskyon') {
+        console.log('ensure, we have a valid model for taskyon key...')
+        const selectedKey = await getSelectedKey()
+        ensureValidModel(selectedKey)
+      }
+      await updateModelList()
+    },
     {
       immediate: true,
     },
   )
 
   return {
-    init,
+    initModelsAndStoredKeys,
     currentModelId,
     tyKeyAllowedModels,
     taskyonKey,
@@ -895,7 +918,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   })
 
   const apiKeyManagement = useApiManagement(stateRefs, () => taskyon)
-  void apiKeyManagement.init()
+  void apiKeyManagement.initModelsAndStoredKeys()
 
   // switch user session on key change!
   watch(
@@ -925,7 +948,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       // after we are finished switching, we can officially chang ethe session id...
       stateRefs.setSessionId(newId)
       // and re-init our api key management with new session...
-      await apiKeyManagement.init()
+      await apiKeyManagement.initModelsAndStoredKeys()
     },
   )
 
@@ -967,7 +990,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
             const newKey = newConfig.signatureOrKey as KeyString
             if (typeof newKey === 'string') {
               stateRefs.iframeApiKey = newKey
-              await apiKeyManagement.init()
+              await apiKeyManagement.initModelsAndStoredKeys()
             } else {
               console.warn('Provided signatureOrKey is not a string:', newKey)
             }
