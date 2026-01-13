@@ -1,0 +1,3 @@
+[submodule "rumoca"]
+    path = packages/rumoca
+    url = https://github.com/CogniPilot/rumoca.git
