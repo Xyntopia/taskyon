@@ -59,7 +59,7 @@ describe('taskyon API', () => {
       force: true,
     })
 
-    writeMessage('Whats in the picture?{enter}')
+    writeMessage('Whats in the picture?')
 
     checkLastMessage('taskyon.space').and('contain', 'logo')
 
