@@ -1,5 +1,4 @@
-import type { AnySchema, JSONSchemaType, ValidateFunction } from 'ajv'
-import Ajv from 'ajv'
+import { Ajv, type AnySchema, type JSONSchemaType, type ValidateFunction } from 'ajv'
 import type { JSONSchema7, JSONSchema7Object } from 'json-schema'
 import { RemoteFunctionCall, RemoteFunctionResponse } from '../types/messages'
 import type { InternalTool, toolContext } from '../types/toolApi'
@@ -97,16 +96,9 @@ function getTool(tools: Record<string, ToolBase | InternalTool>, name: string) {
  * @param schema - A JSON Schema (with `default` fields on its properties).
  * @returns A fresh object with all defaults applied.
  */
-export async function createWithDefaults<T>(schema: JSONSchemaType<T> | JSONSchema7): Promise<T> {
-  const Ajv = await import(
-    /* webpackPrefetch: true */
-    /* webpackChunkName: "codemirror" */
-    /* webpackMode: "lazy" */
-    /* webpackFetchPriority: "low" */
-    'ajv'
-  )
-
-  const ajv = new Ajv.default({ useDefaults: true })
+export function createWithDefaults<T>(schema: JSONSchemaType<T> | JSONSchema7): T {
+  //const { default: Ajv } = await import('ajv')
+  const ajv = new Ajv({ useDefaults: true })
 
   // Compile (or reuse) a validator that applies defaults
   const validate: ValidateFunction<T> = ajv.compile<T>(schema as unknown as AnySchema)
@@ -138,7 +130,7 @@ export async function handleFunctionExecution(
   // TODO: test here, if tool parameters are correct according to json schema
   //       if not, throw an error message...
   let funcR: unknown
-  const toolDefaultParams = await createWithDefaults(tool.parameters)
+  const toolDefaultParams = createWithDefaults(tool.parameters)
   // mix in with explicit parameters
   const execFunc: FunctionCall = {
     ...func,

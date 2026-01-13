@@ -1,4 +1,4 @@
-import type { AnySchema } from 'ajv'
+import { Ajv, type AnySchema } from 'ajv'
 import { load } from 'js-yaml'
 import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
@@ -768,18 +768,12 @@ async function makeFilesAiReadable(
 
 export const chatCompletionToolName = 'chatCompletion'
 
-export async function createChatCompletionTool(
+export function createChatCompletionTool(
   llmSettings: Thunk<llmSettings>,
   taskManager: TyTaskManager,
 ) {
-  const Ajv = await import(
-    /* webpackPrefetch: true */
-    /* webpackChunkName: "codemirror" */
-    /* webpackMode: "lazy" */
-    /* webpackFetchPriority: "low" */
-    'ajv'
-  )
-  const ajv = new Ajv.default() // options can be passed, e.g. {allErrors: true}
+  //const { default: Ajv } = await import('ajv')
+  const ajv = new Ajv({ useDefaults: true })
 
   const chatCompletionStream = createStream<{
     taskId: string
