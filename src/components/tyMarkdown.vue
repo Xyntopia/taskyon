@@ -10,18 +10,18 @@
   <!--TODO: maybe also use "allow-presentation, allow-top-navigation-by-user-activation"
   or also allow="clipboard write"?-->
   <iframe
-    v-if="useIframe && iframeHtml"
-    :key="iframeHtml"
+    v-if="useIframe && renderedHtml.iframe"
+    :key="renderedHtml.html.slice(0, 10)"
     ref="iframeRef"
     class="markdown-iframe"
     sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"
     v-bind="$attrs"
   />
-  <div v-else v-bind="$attrs" class="ty-markdown" v-html="renderedHtml" />
+  <div v-else v-bind="$attrs" class="ty-markdown" v-html="renderedHtml.html" />
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, watch } from 'vue'
 import {
   containsHtmlTags,
   generateIframeSrc,
@@ -61,44 +61,47 @@ const { src = undefined, useIframe = false } = defineProps<{
   useIframe?: boolean
 }>()
 
-const renderedHtml = asyncComputed(async () => {
-  const raw = src ?? ''
-  const isPureHtml =
-    containsHtmlTags(raw) && // 1) has real HTML (outside code)
-    ![
-      /(^|\n)\s*#{1,6}\s/, // headings: #, ##, ...
-      /(^|\n)\s*>\s/, // blockquotes: >
-      /(^|\n)\s*[-+*]\s/, // unordered lists
-      /(^|\n)\s*\d+\.\s/, // ordered lists
-      /\*\*(.*?)\*\*/, // bold: **bold**
-      /_(.*?)_/, // italic: _italic_
-      /`{1,3}[^`]+`{1,3}/, // inline or fenced code: `code`, ```block```
-      /(?<!\\)\$\$[^$]+\$\$/, // mathjax: $$block$$
-      /(?<!\\)\$[^$\n]+\$/, // mathjax: $inline$
-      /!\[.*?\]\(.*?\)/, // image
-      /\[.*?\]\(.*?\)/, // link
-      /(^|\n)\s*---+/, // horizontal rule
-      /(^|\n)\s*:::/, // custom containers (like :::note)
-    ].some((pattern) => pattern.test(raw))
+const hasMarkdownElements = (raw: string) => {
+  return [
+    /(^|\n)\s*#{1,6}\s/, // headings: #, ##, ...
+    /(^|\n)\s*>\s/, // blockquotes: >
+    /(^|\n)\s*[-+*]\s/, // unordered lists
+    /(^|\n)\s*\d+\.\s/, // ordered lists
+    /\*\*(.*?)\*\*/, // bold: **bold**
+    /_(.*?)_/, // italic: _italic_
+    /`{1,3}[^`]+`{1,3}/, // inline or fenced code: `code`, ```block```
+    /(?<!\\)\$\$[^$]+\$\$/, // mathjax: $$block$$
+    /(?<!\\)\$[^$\n]+\$/, // mathjax: $inline$
+    /!\[.*?\]\(.*?\)/, // image
+    /\[.*?\]\(.*?\)/, // link
+    /(^|\n)\s*---+/, // horizontal rule
+    /(^|\n)\s*:::/, // custom containers (like :::note)
+  ].some((pattern) => pattern.test(raw))
+}
 
-  if (!useIframe) {
-    // No iframe: render as markdown with HTML disabled (extra safety)
-    return await md2Html(raw, $q.dark.isActive, false)
-  }
+const renderedHtml = asyncComputed(
+  async () => {
+    const raw = src ?? ''
+    if (!useIframe) {
+      // No iframe: render as markdown with HTML disabled (extra safety)
+      return { html: await md2Html(raw, $q.dark.isActive, false), iframe: false }
+    }
+    const hasHtmlTags = containsHtmlTags(raw)
+    if (!hasHtmlTags) return { html: await md2Html(raw, $q.dark.isActive, false), iframe: false }
+    const hasMdElements = hasMarkdownElements(raw)
+    const isPureHtml = hasHtmlTags && !hasMdElements // 1) has real HTML (outside code)
+    // useIframe = true:
+    // pure HTML => don't run through markdown-it, just show raw HTML in iframe
+    if (isPureHtml) return { html: raw, iframe: true }
 
-  // useIframe = true:
-  // case 1: pure HTML => don't run through markdown-it, just show raw HTML in iframe
-  if (isPureHtml) return raw
-
-  // case 2 & 3: markdown, possibly with HTML outside code => markdown-it with html enabled
-  return await md2Html(raw, $q.dark.isActive, true)
-}, 'rendering ...')
+    // possibly with HTML outside code => markdown-it with html enabled
+    return { html: await md2Html(raw, $q.dark.isActive, true), iframe: true }
+  },
+  { html: 'rendering ...', iframe: false },
+)
 
 // Only produce iFrame HTML once real content is ready
-const iframeHtml = computed<string | undefined>(() => {
-  if (!useIframe || !containsHtmlTags(src ?? '')) return undefined
-  if (renderedHtml.value === 'rendering ...') return undefined
-
+const buildIframeHtml = (renderedHtmlString: string) => {
   const parentStyle = window.getComputedStyle(document.body)
   const fontFamily = parentStyle.fontFamily || 'Roboto, sans-serif'
   const fontSize = parentStyle.fontSize || '16px'
@@ -117,20 +120,21 @@ const iframeHtml = computed<string | undefined>(() => {
     .join('\n')
 
   return generateIframeSrc(
-    renderedHtml.value,
+    renderedHtmlString,
     `${linkTags}${inlineStyle}`,
     getCssVar('primary') ?? '#000000',
     getCssVar('secondary') ?? '#00ffff',
     'ty-markdown',
   )
-})
+}
 
 watch(
-  iframeHtml,
-  async (html) => {
-    if (html && iframeRef.value) {
+  renderedHtml,
+  async (renderResult) => {
+    if (renderResult.iframe && iframeRef.value && useIframe) {
       await nextTick()
-      iframeRef.value.srcdoc = html
+      const iframeSrc = buildIframeHtml(renderResult.html)
+      iframeRef.value.srcdoc = iframeSrc
     }
   },
   { flush: 'post' },

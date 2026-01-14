@@ -3,17 +3,20 @@ $primary: var(--q-primary-rgb)
 
 // BEGIN we do all of this to really make sure, that 
 // pasted html inside our markdown editor is not too wide
-.ty-markdown *
-  max-width: 100% !important
-  max-height: 100% !important
+.ty-markdown img,
+.ty-markdown table,
+.ty-markdown pre,
+.ty-markdown code,
+.ty-markdown iframe,
+.ty-markdown video
+  max-width: 100%
   box-sizing: border-box
 
-/* 3) Clamp every descendant to that 100%-of-ancestor width */
-.ty-markdown *,
-.ty-markdown *::before,
-.ty-markdown *::after
-  max-width: 100% !important
-  box-sizing: border-box
+.ty-markdown p,
+.ty-markdown li,
+.ty-markdown blockquote,
+.ty-markdown pre,
+.ty-markdown code
   overflow-wrap: anywhere
   word-break: break-word
 

@@ -2,7 +2,9 @@
 import MarkdownIt from 'markdown-it'
 
 //import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
-import { katex } from '@mdit/plugin-katex-slim' //import mathjax from  '@mdit/plugin-mathjax-slim'
+import { katex } from '@mdit/plugin-katex'
+import 'katex/dist/katex.min.css'
+//import mathjax from  '@mdit/plugin-mathjax-slim'
 //import mathjax3 from 'markdown-it-mathjax3'
 //@ts-expect-error no types for this package
 import sub from 'markdown-it-sub'
@@ -22,12 +24,8 @@ import abbr from 'markdown-it-abbr'
 import container from 'markdown-it-container'
 //@ts-expect-error no types for this package
 import { full as emoji } from 'markdown-it-emoji'
-
-//import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
-//import katex from  '@mdit/plugin-katex-slim'
 import type { Mermaid, MermaidConfig } from 'mermaid'
 import mermaid from 'mermaid'
-
 // we fist import "Prism" and then the languages we need
 // the subsequent imports need Prism to be initialized, because
 // they add the languages to the Prism instance
@@ -49,9 +47,10 @@ import darkHref from 'prismjs/themes/prism-tomorrow.css?url'
 import tyMarkdownCss from 'src/css/markdown.sass?inline'
 
 import { uid } from 'quasar'
-import type { Token } from 'markdown-it'
 import { svgStringToPngUint8 } from './svgUtils'
 import { copyPngToClipboard, hexToRgb } from './utils'
+
+type MditToken = ReturnType<InstanceType<typeof MarkdownIt>['parse']>[number]
 
 // A lean markdown-it instance only for HTML detection
 export const mdHtmlDetector = new MarkdownIt({
@@ -130,7 +129,7 @@ export const containsHtmlTags = (markdown: string) => {
 export function createFenceTransformPlugin(
   langMatcher: RegExp, // regex or string to match
   // transform the content into something else..
-  transformer: (token: Token, lang: string, content: string) => string,
+  transformer: (token: MditToken, lang: string, content: string) => string,
 ) {
   return function wrapPlugin(md: MarkdownIt) {
     const defaultFence = md.renderer.rules.fence!
@@ -179,7 +178,7 @@ export function createMultiButtonPlugin(
   }
 
   // 2) Return a plugin that injects buttons using postMessage
-  const plugin = createFenceTransformPlugin(langMatcher, (_token: Token, lang, content) => {
+  const plugin = createFenceTransformPlugin(langMatcher, (_token: MditToken, lang, content) => {
     const uid = `code-${Math.random().toString(36).slice(2)}`
     const blockId = `block-${Math.random().toString(36).slice(2)}`
     const htmlWithId = content.replace('<pre', `<pre id="${uid}"`)
@@ -462,6 +461,7 @@ export const md2Html = async (src: string, darkMode = false, allowHtml = false) 
     // If result starts with <pre... internal wrapper is skipped.
     highlight: highlighter,
   })
+
   const plugins = [
     emoji,
     sub,
@@ -470,19 +470,22 @@ export const md2Html = async (src: string, darkMode = false, allowHtml = false) 
     mark,
     footnote,
     deflist,
-    katex,
     createMermaidPlaceholders,
     codeButtons,
   ]
   plugins.forEach((plugin) => {
     md.use(plugin)
   })
+  md.use(katex, {
+    delimiters: 'all', // or 'brackets' | 'dollars',
+    throwOnError: false, // don’t explode rendering
+  })
   md.use(abbr)
   md.use(container, 'dynamic', {
     validate: function () {
       return true
     },
-    render: function (tokens: Token[], idx: number) {
+    render: function (tokens: MditToken[], idx: number) {
       const token = tokens[idx]
       if (!token) return
       return token.nesting === 1

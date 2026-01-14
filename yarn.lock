@@ -800,7 +800,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@electric-sql/pglite@npm:^0.3.14":
+"@electric-sql/pglite@npm:0.3.14":
   version: 0.3.14
   resolution: "@electric-sql/pglite@npm:0.3.14"
   checksum: 10c0/da61bece304e1ef0c094ae83d18c3cc73afcab750037195fc2342d39ebd1591e62a4e9041be297dd8f694b97a8d22a44cf9ad4389c56e9ee04eb166a83bca44f
@@ -4019,22 +4019,20 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@mdit/plugin-katex-slim@npm:^0.25.1":
-  version: 0.25.1
-  resolution: "@mdit/plugin-katex-slim@npm:0.25.1"
+"@mdit/plugin-katex@npm:^0.24.1":
+  version: 0.24.1
+  resolution: "@mdit/plugin-katex@npm:0.24.1"
   dependencies:
     "@mdit/helper": "npm:0.22.1"
     "@mdit/plugin-tex": "npm:0.23.0"
     "@types/markdown-it": "npm:^14.1.2"
+    katex: "npm:^0.16.25"
   peerDependencies:
-    katex: ^0.16.25
     markdown-it: ^14.1.0
   peerDependenciesMeta:
-    katex:
-      optional: true
     markdown-it:
       optional: true
-  checksum: 10c0/ea48acb5f907b60aa487d697f3b0457b79411a0b594b317b16c5c4649f81787ddf9680a832e25f89efe5f23b84a985b0b0f41d3e64914f42303aaa687c06646b
+  checksum: 10c0/1399404ad0d4c96b38fd60579ae8f27fb031402941b4ec30fa523916b5119cbabd653a75c1a899af5111e400640655eefe48c53a8af7ee3813dcdc7a8fbf1e87
   languageName: node
   linkType: hard
 
@@ -6251,13 +6249,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/linkify-it@npm:^3":
-  version: 3.0.5
-  resolution: "@types/linkify-it@npm:3.0.5"
-  checksum: 10c0/696e09975991c649ba37c5585714929fdebf5c64a8bfb99910613ef838337dbbba6c608fccdfa03d6347432586ef12e139bc0e947ae6fec569096fef5cc1c550
-  languageName: node
-  linkType: hard
-
 "@types/linkify-it@npm:^5":
   version: 5.0.0
   resolution: "@types/linkify-it@npm:5.0.0"
@@ -6272,16 +6263,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/markdown-it@npm:^13.0.7":
-  version: 13.0.9
-  resolution: "@types/markdown-it@npm:13.0.9"
-  dependencies:
-    "@types/linkify-it": "npm:^3"
-    "@types/mdurl": "npm:^1"
-  checksum: 10c0/d974b1edc52236b0ec6de20e37be9051bcb38fa87b7f36ed5d1b0f0d521918b6e0164a72d57a453ce72976002d6909ceb0c66826e0690cb5283e18a13cd56d66
-  languageName: node
-  linkType: hard
-
 "@types/markdown-it@npm:^14.1.2":
   version: 14.1.2
   resolution: "@types/markdown-it@npm:14.1.2"
@@ -6289,13 +6270,6 @@ __metadata:
     "@types/linkify-it": "npm:^5"
     "@types/mdurl": "npm:^2"
   checksum: 10c0/34f709f0476bd4e7b2ba7c3341072a6d532f1f4cb6f70aef371e403af8a08a7c372ba6907ac426bc618d356dab660c5b872791ff6c1ead80c483e0d639c6f127
-  languageName: node
-  linkType: hard
-
-"@types/mdurl@npm:^1":
-  version: 1.0.5
-  resolution: "@types/mdurl@npm:1.0.5"
-  checksum: 10c0/8991c781eb94fb3621e48e191251a94057908fc14be60f52bdd7c48684af923ffa77559ea979450a0475f85c08f8a472f99ff9c2ca4308961b9b9d35fd7584f7
   languageName: node
   linkType: hard
 
@@ -14999,6 +14973,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"katex@npm:^0.16.25":
+  version: 0.16.27
+  resolution: "katex@npm:0.16.27"
+  dependencies:
+    commander: "npm:^8.3.0"
+  bin:
+    katex: cli.js
+  checksum: 10c0/f5f9a8c9f422c8f798081cc3483d44f112d75f65968a643572d9cfa910b9ebcf47f3563111764b91b9298f32776dfc04ebaf950f515ff3f406f058a0b9a33c9a
+  languageName: node
+  linkType: hard
+
 "katex@npm:^0.16.9":
   version: 0.16.22
   resolution: "katex@npm:0.16.22"
@@ -20778,7 +20763,7 @@ __metadata:
     "@codemirror/lang-sql": "npm:^6.10.0"
     "@codemirror/legacy-modes": "npm:^6.5.2"
     "@codemirror/theme-one-dark": "npm:^6.1.2"
-    "@electric-sql/pglite": "npm:^0.3.14"
+    "@electric-sql/pglite": "npm:0.3.14"
     "@eslint/js": "npm:^9.17.0"
     "@helia/delegated-routing-v1-http-api-client": "npm:^4.2.5"
     "@huggingface/transformers": "npm:^3.1.2"
@@ -20794,7 +20779,7 @@ __metadata:
     "@libp2p/webrtc": "npm:^5.2.24"
     "@libp2p/websockets": "npm:^9.2.19"
     "@libp2p/webtransport": "npm:^5.0.51"
-    "@mdit/plugin-katex-slim": "npm:^0.25.1"
+    "@mdit/plugin-katex": "npm:^0.24.1"
     "@mozilla/readability": "npm:^0.5.0"
     "@msgpack/msgpack": "npm:^3.1.2"
     "@multiformats/multiaddr": "npm:^12.5.1"
@@ -20815,7 +20800,7 @@ __metadata:
     "@types/json-schema": "npm:^7.0.15"
     "@types/leaflet": "npm:^1.9.21"
     "@types/lodash": "npm:^4.14.177"
-    "@types/markdown-it": "npm:^13.0.7"
+    "@types/markdown-it": "npm:^14.1.2"
     "@types/node": "npm:^20.5.9"
     "@types/prismjs": "npm:^1.26.5"
     "@types/qrcode": "npm:^1.5.5"
