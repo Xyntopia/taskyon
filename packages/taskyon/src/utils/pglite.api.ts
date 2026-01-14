@@ -1,3 +1,4 @@
+//pglite.api.ts
 import { PGliteWorker } from '@electric-sql/pglite/worker'
 import type { LiveNamespace } from '@electric-sql/pglite/live'
 import { live } from '@electric-sql/pglite/live'
@@ -20,7 +21,10 @@ export const getDatabase: (name: string) => Promise<TyPGDB> = async (name) => {
     {
       //'memory://'  // if we want to use taskyon in memory-only (this might make sense on
       // an ephemeral serve for example!)
-      dataDir: `idb://${name}0.1`,
+      // TODO: currently, we need to make sure, that we manually change the pglite version
+      // number and use it as the string for the database...
+      // it would be good to automatically adapt the name based on the version...
+      dataDir: `idb://${name}314`,
       meta: {
         // additional metadata passed to `init`
       },

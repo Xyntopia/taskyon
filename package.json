@@ -32,7 +32,7 @@
     "@codemirror/lang-sql": "^6.10.0",
     "@codemirror/legacy-modes": "^6.5.2",
     "@codemirror/theme-one-dark": "^6.1.2",
-    "@electric-sql/pglite": "^0.2.15",
+    "@electric-sql/pglite": "0.3.14",
     "@helia/delegated-routing-v1-http-api-client": "^4.2.5",
     "@huggingface/transformers": "^3.1.2",
     "@langchain/codemirror-json-schema": "^0.7.9",

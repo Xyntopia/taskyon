@@ -1,3 +1,4 @@
+//pglite.worker.ts
 // check out this for more info: https://pglite.dev/docs/multi-tab-workers
 import { PGlite } from '@electric-sql/pglite'
 import { worker } from '@electric-sql/pglite/worker'
@@ -10,8 +11,10 @@ void worker({
     // Create and return a PGlite instance
     // Do something with additional metadata.
     // or even run your own code in the leader along side the PGlite
+    const dataDir = options.dataDir || 'memory://'
+    console.log('using dataDir:', dataDir)
     return new PGlite({
-      dataDir: options.dataDir || 'taskyon0.0',
+      dataDir,
       extensions: {
         vector,
       },

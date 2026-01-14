@@ -800,10 +800,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@electric-sql/pglite@npm:^0.2.15":
-  version: 0.2.17
-  resolution: "@electric-sql/pglite@npm:0.2.17"
-  checksum: 10c0/4358eccb2a3de5148b8995c7dbf3cad2d80a2a193885838ec19e0381ca204c0e37f721d006ad23fcad0b694ec6089a6786b82f2ad87f18344c82e059ff37017f
+"@electric-sql/pglite@npm:^0.3.14":
+  version: 0.3.14
+  resolution: "@electric-sql/pglite@npm:0.3.14"
+  checksum: 10c0/da61bece304e1ef0c094ae83d18c3cc73afcab750037195fc2342d39ebd1591e62a4e9041be297dd8f694b97a8d22a44cf9ad4389c56e9ee04eb166a83bca44f
   languageName: node
   linkType: hard
 
@@ -20778,7 +20778,7 @@ __metadata:
     "@codemirror/lang-sql": "npm:^6.10.0"
     "@codemirror/legacy-modes": "npm:^6.5.2"
     "@codemirror/theme-one-dark": "npm:^6.1.2"
-    "@electric-sql/pglite": "npm:^0.2.15"
+    "@electric-sql/pglite": "npm:^0.3.14"
     "@eslint/js": "npm:^9.17.0"
     "@helia/delegated-routing-v1-http-api-client": "npm:^4.2.5"
     "@huggingface/transformers": "npm:^3.1.2"
