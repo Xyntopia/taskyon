@@ -167,7 +167,7 @@ import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
-const { name } = defineProps<{ name?: string }>()
+const { name = undefined } = defineProps<{ name?: string }>()
 
 const CodeEditor = defineAsyncComponent(
   () =>

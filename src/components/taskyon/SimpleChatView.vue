@@ -24,13 +24,13 @@ import { useTaskyonStore } from 'src/stores/taskyonState'
 
 const tystate = useTaskyonStore()
 
-const { expertMode } = defineProps<{
+const { expertMode, reasoning = undefined } = defineProps<{
   reasoning?: Map<string, string>
   isProcessing: (id: string) => boolean
   showIds: boolean | undefined
   showAllTasks: boolean | undefined
   selectedThread: TaskNode[]
-  expertMode?: boolean | undefined
+  expertMode?: boolean
 }>()
 
 function showTask(t: TaskNode) {

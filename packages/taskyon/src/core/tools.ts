@@ -1,5 +1,5 @@
-import { Ajv, type AnySchema, type JSONSchemaType, type ValidateFunction } from 'ajv'
-import type { JSONSchema7, JSONSchema7Object } from 'json-schema'
+import Ajv from 'ajv'
+import type { JSONSchema7, JSONSchema7Object, JSONSchema7Type } from 'json-schema'
 import { RemoteFunctionCall, RemoteFunctionResponse } from '../types/messages'
 import type { InternalTool, toolContext } from '../types/toolApi'
 import type { FunctionArguments, FunctionCall, ParamType } from '../types/tools'
@@ -96,15 +96,14 @@ function getTool(tools: Record<string, ToolBase | InternalTool>, name: string) {
  * @param schema - A JSON Schema (with `default` fields on its properties).
  * @returns A fresh object with all defaults applied.
  */
-export function createWithDefaults<T>(schema: JSONSchemaType<T> | JSONSchema7): T {
-  //const { default: Ajv } = await import('ajv')
+export function createWithDefaults(schema: JSONSchema7Type | JSONSchema7) {
   const ajv = new Ajv({ useDefaults: true })
 
   // Compile (or reuse) a validator that applies defaults
-  const validate: ValidateFunction<T> = ajv.compile<T>(schema as unknown as AnySchema)
+  const validate = ajv.compile(schema as object)
 
   // Start from an empty object; AJV will inject defaults into it
-  const result = {} as T
+  const result = {}
   validate(result)
   return result
 }
@@ -260,9 +259,11 @@ export function craeteToolJsonSchema() {
       'A valid JSON Schema object defining the structure, types, and constraints for the tool parameters. Include properties, required fields, and any other validations as needed.',
   }
 
-  const toolBaseJsonSchema = convertZodToJsonSchemaCached(ToolBase, {
+  // Omit "parameters" from the Zod schema before converting to JSON Schema
+  const toolBaseJsonSchema = convertZodToJsonSchemaCached(ToolBase.omit({ parameters: true }), {
     unrepresentable: 'any',
   }) as JSONSchema7Object
+
   if (
     toolBaseJsonSchema.properties &&
     typeof toolBaseJsonSchema.properties === 'object' &&

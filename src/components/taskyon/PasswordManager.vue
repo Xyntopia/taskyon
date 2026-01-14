@@ -99,7 +99,7 @@ import { onMounted, ref, watch } from 'vue'
 import InfoDialog from '../InfoDialog.vue'
 import SecretInput from '../varViews/SecretInput.vue'
 
-const { onlyThisKey } = defineProps<{
+const { onlyThisKey = undefined, title = undefined } = defineProps<{
   title?: string
   copybtn?: boolean
   onlyThisKey?: string

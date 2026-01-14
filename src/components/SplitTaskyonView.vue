@@ -23,8 +23,8 @@ const {
   persist = false,
   name,
 } = defineProps<{
-  tools: ClientTool[]
-  configuration: partialTyConfiguration | null
+  tools?: ClientTool[]
+  configuration?: partialTyConfiguration | null
   persist?: boolean
   name: string
 }>()

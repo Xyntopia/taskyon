@@ -182,7 +182,7 @@ import tyMarkdown from '../tyMarkdown.vue'
 import FileBrowser from './FileBrowser.vue'
 import TaskField from './TaskField.vue'
 
-const { task } = defineProps<{
+const { task, nextTask = undefined } = defineProps<{
   task: TaskNode
   nextTask?: TaskNode | undefined
   isWorking?: boolean

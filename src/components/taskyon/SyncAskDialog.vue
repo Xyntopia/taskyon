@@ -145,7 +145,7 @@ const uploadSK = async () => {
   }
 }
 
-const { title, showDontAskOption = false } = defineProps<{
+const { title = undefined, showDontAskOption = false } = defineProps<{
   title?: string
   showDontAskOption?: boolean
 }>()

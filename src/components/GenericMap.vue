@@ -55,9 +55,9 @@ if (!DomEventAny.fakeStop) {
 }
 
 interface GenericMapProps {
-  initialCenter: [number, number]
-  initialZoom: number
-  useDefaultTileLayer: boolean
+  initialCenter?: [number, number]
+  initialZoom?: number
+  useDefaultTileLayer?: boolean
   // eslint-disable-next-line vue/require-default-prop
   tileLayerUrl?: string
   // eslint-disable-next-line vue/require-default-prop

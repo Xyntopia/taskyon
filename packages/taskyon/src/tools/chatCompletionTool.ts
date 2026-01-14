@@ -1,4 +1,4 @@
-import { Ajv, type AnySchema } from 'ajv'
+import { default as Ajv } from 'ajv'
 import { load } from 'js-yaml'
 import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
@@ -1035,7 +1035,7 @@ export function createChatCompletionTool(
         if (typeof schema === 'object' && schema !== null) {
           // I *think* we can simply cast our schema here t ajv, because it
           // will spit out an error anyways if our schema isn't compatible..
-          const validate = ajv.compile(schema as unknown as AnySchema)
+          const validate = ajv.compile(schema)
           const valid = validate(structResponse)
           if (!valid) {
             throw new Error(

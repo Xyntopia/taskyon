@@ -335,7 +335,7 @@ const {
   inputFieldBehavior = 'auto',
   separateLabels = true,
   debounce = 100,
-  schema,
+  schema = undefined,
   descriptionsAsLabels = false,
   hideMissing = false,
   copyBtn = false,

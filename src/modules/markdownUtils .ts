@@ -2,8 +2,8 @@
 import MarkdownIt from 'markdown-it'
 
 //import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
-//import katex from  '@mdit/plugin-katex-slim'
-import mathjax3 from 'markdown-it-mathjax3'
+import { katex } from '@mdit/plugin-katex-slim' //import mathjax from  '@mdit/plugin-mathjax-slim'
+//import mathjax3 from 'markdown-it-mathjax3'
 //@ts-expect-error no types for this package
 import sub from 'markdown-it-sub'
 //@ts-expect-error no types for this package
@@ -470,7 +470,7 @@ export const md2Html = async (src: string, darkMode = false, allowHtml = false) 
     mark,
     footnote,
     deflist,
-    mathjax3,
+    katex,
     createMermaidPlaceholders,
     codeButtons,
   ]

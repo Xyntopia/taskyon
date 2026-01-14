@@ -56,7 +56,7 @@ defineOptions({
 const $q = useQuasar()
 initPrismTheme($q.dark.isActive)
 
-const { src, useIframe = false } = defineProps<{
+const { src = undefined, useIframe = false } = defineProps<{
   src?: string
   useIframe?: boolean
 }>()

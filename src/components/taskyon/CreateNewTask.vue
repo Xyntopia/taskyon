@@ -234,7 +234,8 @@ import SimpleSettingsDialog from './SimpleSettingsDialog.vue'
 
 const {
   expertMode = false,
-  entryNode,
+  entryNode = undefined,
+  p2pTopic = undefined,
   addToTaskyon,
 } = defineProps<{
   entryNode?: partialTaskDraft | undefined
