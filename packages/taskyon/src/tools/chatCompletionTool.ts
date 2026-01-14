@@ -773,7 +773,7 @@ export function createChatCompletionTool(
   taskManager: TyTaskManager,
 ) {
   //const { default: Ajv } = await import('ajv')
-  const ajv = new Ajv({ useDefaults: true })
+  const ajv = new Ajv()
 
   const chatCompletionStream = createStream<{
     taskId: string
