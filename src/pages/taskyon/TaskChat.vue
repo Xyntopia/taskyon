@@ -41,8 +41,8 @@
       <!-- Welcome Message -->
       <div
         v-else
-        class="full-height column justify-center items-center q-pa-sm welcome"
-        style="max-width: 600px"
+        class="full-height column justify-center items-center q-pa-sm welcome no-wrap"
+        style="max-width: 600px; max-height: 90%"
       >
         <div class="welcome-message column col-auto items-center scroll overflow-auto no-wrap">
           <GetStarted />

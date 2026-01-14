@@ -1,6 +1,6 @@
 <template>
   <!--Create new task area-->
-  <div style="position: relative" class="create-tasks">
+  <div class="create-tasks">
     <!--Function Control-->
     <div v-if="selectedTaskType" class="text-caption text-center">
       <InfoDialog
