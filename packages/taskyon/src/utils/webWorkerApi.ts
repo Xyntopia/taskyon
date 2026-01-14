@@ -15,14 +15,7 @@ export const useNlpWorker = () => {
   // on NLP tasks...
   if (!nlpWorker) {
     nlpWorker = wrap<NlpWorkerInterface>(
-      new Worker(
-        /* webpackChunkName: "nlpworker" */
-        /* webpackModnlpWorkere: "lazy" */
-        /* webpackFetchPriority: "low" */
-        /* webpackIgnore: "true" */
-        new URL('./nlp.worker.ts', import.meta.url),
-        { type: 'module' },
-      ),
+      new Worker(new URL('./nlp.worker.ts', import.meta.url), { type: 'module' }),
     )
   }
 
@@ -48,14 +41,7 @@ export function usePyodideWebworker() {
     // Create the initialization promise
     pythonWorkerPromise = (async () => {
       const worker = wrap<pythonWorker>(
-        new Worker(
-          /* webpackChunkName: "pyodide-worker" */
-          /* webpackMode: "lazy" */
-          /* webpackFetchPriority: "low" */
-          /* webpackIgnore: "true" */
-          new URL('./pyodide.worker.ts', import.meta.url),
-          { type: 'module' },
-        ),
+        new Worker(new URL('./pyodide.worker.ts', import.meta.url), { type: 'module' }),
       )
 
       // Wait for the worker to be fully initialized by running a simple script
