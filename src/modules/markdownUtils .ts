@@ -4,6 +4,7 @@ import MarkdownIt from 'markdown-it'
 //import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
 import { katex } from '@mdit/plugin-katex'
 import 'katex/dist/katex.min.css'
+import katexCssHref from 'katex/dist/katex.min.css?url' // we need this for the iframe..
 //import mathjax from  '@mdit/plugin-mathjax-slim'
 //import mathjax3 from 'markdown-it-mathjax3'
 //@ts-expect-error no types for this package
@@ -29,7 +30,7 @@ import mermaid from 'mermaid'
 // we fist import "Prism" and then the languages we need
 // the subsequent imports need Prism to be initialized, because
 // they add the languages to the Prism instance
-import Prism from 'prismjs'
+import PrismThemes from 'prismjs'
 // TODO: do this as a dynamic import :)
 import 'prismjs/components/prism-python'
 import 'prismjs/components/prism-rust'
@@ -59,8 +60,8 @@ export const tyMdCssUrls = {
 
 export const highlighter = (code: string, lang: string) => {
   // non-null assertion or coalesce to JS grammar
-  const grammar = Prism.languages[lang]! ?? Prism.languages.javascript!
-  const result = Prism.highlight(code, grammar, lang)
+  const grammar = PrismThemes.languages[lang]! ?? PrismThemes.languages.javascript!
+  const result = PrismThemes.highlight(code, grammar, lang)
   return `<pre class="language-${lang}"><code>${result}</code></pre>`
 }
 
@@ -687,6 +688,7 @@ export const generateIframeSrc = (
   return `<html>
     <head>
       ${linkTags}
+      <link rel="stylesheet" href="${katexCssHref}">
       <style>
         :root {
           --q-primary-rgb: ${primary};
