@@ -40,9 +40,195 @@ import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
 import { useGdrive } from '../gdrive'
+import { containsHtmlTags, hasMarkdownElements } from '../markdownUtils '
+import { getCurrentProfileName, getStoredStateString } from '../ui/initialState'
 import { initCryptoSessionFromBrowser } from './browserCryptoSession'
 import { gDriveSyncPort } from './sync'
-import { getCurrentProfileName, getStoredStateString } from '../ui/initialState'
+
+// Assuming hasMarkdownElements and containsHtmlTags are in scope
+// import { hasMarkdownElements, containsHtmlTags } from './your-module'
+
+/**
+ * Run a small suite of detection tests against hasMarkdownElements
+ * and containsHtmlTags, and return a summary.
+ */
+export function runMarkdownDetectionTests() {
+  const cases = [
+    {
+      name: 'plain text',
+      input: 'Just a normal sentence with no markdown or HTML.',
+      expectMarkdown: false,
+      expectHtml: false,
+    },
+    {
+      name: 'heading',
+      input: '# Heading 1',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'blockquote',
+      input: '> a quote',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'unordered list',
+      input: '- item 1\n- item 2',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'ordered list',
+      input: '1. first\n2. second',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'bold text',
+      input: 'Some **bold** text',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'italic text',
+      input: 'Some _italic_ text',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'inline code',
+      input: 'Use `npm install` to install.',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'fenced code (single-line content)',
+      input: '```js\nconsole.log(1)\n```',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'inline math',
+      input: 'Inline math $x^2 + y^2$ inside text.',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'block math single-line',
+      input: '$$x^2 + y^2 = z^2$$',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'image',
+      input: '![Alt text](https://example.com/image.png)',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'link',
+      input: '[Example](https://example.com)',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'horizontal rule',
+      input: 'Some text\n---\nMore text',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'custom container',
+      input: ':::\nnote content\n:::',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'simple HTML block',
+      input: '<div>HTML content</div>',
+      expectMarkdown: false,
+      expectHtml: true,
+    },
+    {
+      name: 'inline HTML',
+      input: 'Text with <span>inline HTML</span> inside.',
+      expectMarkdown: false,
+      expectHtml: true,
+    },
+    {
+      name: 'HTML comment only (should NOT count as HTML)',
+      input: '<!-- Just a comment -->',
+      expectMarkdown: false,
+      expectHtml: false,
+    },
+    {
+      name: '<code> HTML only (should NOT count as HTML)',
+      input: '<code>inline code in HTML tag</code>',
+      expectMarkdown: false,
+      expectHtml: true,
+    },
+    {
+      name: 'HTML comment and real HTML mixed',
+      input: '<!-- comment --><span>real</span>',
+      expectMarkdown: false,
+      expectHtml: true,
+    },
+    {
+      name: 'Markdown + HTML mixed',
+      input: '**bold** and <div>html</div>',
+      expectMarkdown: true,
+      expectHtml: true,
+    },
+    {
+      name: 'newline before markdown heading',
+      input: 'Intro text\n\n## Subheading',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'escape dollar in math-like text (should not match math)',
+      input: 'Price is \\$5.00 only',
+      expectMarkdown: false,
+      expectHtml: false,
+    },
+  ]
+
+  const results = cases.map((tc) => {
+    const actualMarkdown = hasMarkdownElements(tc.input)
+    const actualHtml = containsHtmlTags(tc.input)
+
+    return {
+      ...tc,
+      actualMarkdown,
+      actualHtml,
+      markdownOk: actualMarkdown === tc.expectMarkdown,
+      htmlOk: actualHtml === tc.expectHtml,
+    }
+  })
+
+  const markdownFailed = results.filter((r) => !r.markdownOk)
+  const htmlFailed = results.filter((r) => !r.htmlOk)
+
+  const res = {
+    total: cases.length,
+    success: markdownFailed.length + htmlFailed.length === 0,
+    markdown: {
+      passed: cases.length - markdownFailed.length,
+      failed: markdownFailed.length,
+      failedCases: markdownFailed,
+    },
+    html: {
+      passed: cases.length - htmlFailed.length,
+      failed: htmlFailed.length,
+      failedCases: htmlFailed,
+    },
+  }
+
+  if (!res.success) throw new Error('markdown/html detection did not work:', { cause: res })
+
+  return res
+}
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()

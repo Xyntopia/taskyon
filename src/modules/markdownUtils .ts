@@ -52,14 +52,6 @@ import { copyPngToClipboard, hexToRgb } from './utils'
 
 type MditToken = ReturnType<InstanceType<typeof MarkdownIt>['parse']>[number]
 
-// A lean markdown-it instance only for HTML detection
-export const mdHtmlDetector = new MarkdownIt({
-  html: true, // we want HTML tokens
-  linkify: false,
-  typographer: false,
-  highlight: () => '',
-})
-
 export const tyMdCssUrls = {
   dark: [darkHref],
   light: [lightHref],
@@ -101,26 +93,58 @@ export function setPrismTheme(isDark: boolean) {
   linkEl.href = isDark ? darkHref : lightHref
 }
 
+export const hasMarkdownElements = (raw: string) => {
+  return [
+    /(^|\n)\s*#{1,6}\s/, // headings: #, ##, ...
+    /(^|\n)\s*>\s/, // blockquotes: >
+    /(^|\n)\s*[-+*]\s/, // unordered lists
+    /(^|\n)\s*\d+\.\s/, // ordered lists
+    /\*\*(.*?)\*\*/, // bold: **bold**
+    /_(.*?)_/, // italic: _italic_
+    /`{1,3}[^`]+`{1,3}/, // inline or fenced code: `code`, ```block```
+    /(?<!\\)\$\$[^$]+\$\$/, // mathjax: $$block$$
+    /(?<!\\)\$[^$\n]+\$/, // mathjax: $inline$
+    /!\[.*?\]\(.*?\)/, // image
+    /\[.*?\]\(.*?\)/, // link
+    /(^|\n)\s*---+/, // horizontal rule
+    /(^|\n)\s*:::/, // custom containers (like :::note)
+  ].some((pattern) => pattern.test(raw))
+}
+
+// A lean markdown-it instance only for HTML detection
+export const mdHtmlDetector = new MarkdownIt({
+  html: true, // we want HTML tokens
+  linkify: false,
+  typographer: false,
+  highlight: () => '',
+})
+
 export const containsHtmlTags = (markdown: string) => {
   const tokens = mdHtmlDetector.parse(markdown, {})
 
-  for (const t of tokens) {
-    if (t.type === 'html_block' || t.type === 'html_inline') {
-      const trimmed = t.content.trim()
-      if (!trimmed) continue
+  // Recursively search for real HTML tokens (block or inline)
+  const hasHtml = (toks: typeof tokens): boolean => {
+    for (const t of toks) {
+      if (t.type === 'html_block' || t.type === 'html_inline') {
+        const trimmed = t.content.trim()
+        if (!trimmed) continue
 
-      // Keep old behavior: ignore "pure" comments as HTML
-      if (/^<!--[\s\S]*?-->$/.test(trimmed)) continue
+        // Ignore *pure* HTML comments
+        if (/^<!--[\s\S]*?-->$/.test(trimmed)) continue
 
-      // Keep old behavior: ignore a single <code>...</code> section
-      if (/^<code\b[^>]*>[\s\S]*<\/code>$/i.test(trimmed)) continue
+        // Anything else counts as real HTML
+        return true
+      }
 
-      // Anything else counts as real HTML
-      return true
+      // Inline tokens (including html_inline) live in .children
+      if (t.children && t.children.length > 0 && hasHtml(t.children)) {
+        return true
+      }
     }
+    return false
   }
 
-  return false
+  return hasHtml(tokens)
 }
 
 /**

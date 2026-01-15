@@ -25,6 +25,7 @@ import { nextTick, onMounted, onUnmounted, watch } from 'vue'
 import {
   containsHtmlTags,
   generateIframeSrc,
+  hasMarkdownElements,
   initPrismTheme,
   md2Html,
   tyMdCssUrls,
@@ -60,24 +61,6 @@ const { src = undefined, useIframe = false } = defineProps<{
   src?: string
   useIframe?: boolean
 }>()
-
-const hasMarkdownElements = (raw: string) => {
-  return [
-    /(^|\n)\s*#{1,6}\s/, // headings: #, ##, ...
-    /(^|\n)\s*>\s/, // blockquotes: >
-    /(^|\n)\s*[-+*]\s/, // unordered lists
-    /(^|\n)\s*\d+\.\s/, // ordered lists
-    /\*\*(.*?)\*\*/, // bold: **bold**
-    /_(.*?)_/, // italic: _italic_
-    /`{1,3}[^`]+`{1,3}/, // inline or fenced code: `code`, ```block```
-    /(?<!\\)\$\$[^$]+\$\$/, // mathjax: $$block$$
-    /(?<!\\)\$[^$\n]+\$/, // mathjax: $inline$
-    /!\[.*?\]\(.*?\)/, // image
-    /\[.*?\]\(.*?\)/, // link
-    /(^|\n)\s*---+/, // horizontal rule
-    /(^|\n)\s*:::/, // custom containers (like :::note)
-  ].some((pattern) => pattern.test(raw))
-}
 
 const renderedHtml = asyncComputed(
   async () => {
