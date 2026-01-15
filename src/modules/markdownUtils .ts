@@ -4,7 +4,9 @@ import MarkdownIt from 'markdown-it'
 //import { createMathjaxInstance, mathjax } from '@mdit/plugin-mathjax';
 import { katex } from '@mdit/plugin-katex'
 import 'katex/dist/katex.min.css'
-import katexCssHref from 'katex/dist/katex.min.css?url' // we need this for the iframe..
+// The following doesn't work in our iframe, as the iframes are sandboxed and
+// we get CORS issues, if we use the URL.
+//import katexCssHref from 'katex/dist/katex.min.css?url' // we need this for the iframe..
 //import mathjax from  '@mdit/plugin-mathjax-slim'
 //import mathjax3 from 'markdown-it-mathjax3'
 //@ts-expect-error no types for this package
@@ -32,22 +34,23 @@ import mermaid from 'mermaid'
 // they add the languages to the Prism instance
 import PrismThemes from 'prismjs'
 // TODO: do this as a dynamic import :)
+import 'prismjs/components/prism-bash'
+import 'prismjs/components/prism-css'
+import 'prismjs/components/prism-javascript'
+import 'prismjs/components/prism-markup'
 import 'prismjs/components/prism-python'
 import 'prismjs/components/prism-rust'
 import 'prismjs/components/prism-typescript'
-import 'prismjs/components/prism-markup'
-import 'prismjs/components/prism-css'
-import 'prismjs/components/prism-javascript'
-import 'prismjs/components/prism-bash'
 
 // we import the themes as URLs so that vite bundler
 // creates static assets for them and we can use them
 // dynamically
-import lightHref from 'prismjs/themes/prism.css?url'
 import darkHref from 'prismjs/themes/prism-tomorrow.css?url'
+import lightHref from 'prismjs/themes/prism.css?url'
 import tyMarkdownCss from 'src/css/markdown.sass?inline'
 
 import { uid } from 'quasar'
+import { generateKaTeXIframeCss } from './katexFonts'
 import { svgStringToPngUint8 } from './svgUtils'
 import { copyPngToClipboard, hexToRgb } from './utils'
 
@@ -688,7 +691,6 @@ export const generateIframeSrc = (
   return `<html>
     <head>
       ${linkTags}
-      <link rel="stylesheet" href="${katexCssHref}">
       <style>
         :root {
           --q-primary-rgb: ${primary};
@@ -696,6 +698,9 @@ export const generateIframeSrc = (
         }
 
         ${tyMarkdownCss}
+
+        // katex declarations
+        ${generateKaTeXIframeCss()}
 
         html, body {
           width: 100%;
