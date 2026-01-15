@@ -31,6 +31,11 @@ function toBase64(raw: string): string {
   return btoa(binary)
 }
 
+// TODO: we currently do not remove katex fonts which can not
+// be downloaded..  we should do that.. the regex below
+// doesn't work correctly..  but it is the right way to do it.
+// also in minified code, possibly we wont be able to see a
+// 'node_modules' string in them..
 export function generateKaTeXIframeCss(): string {
   let css = katexCssRaw
 
