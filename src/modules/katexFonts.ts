@@ -7,22 +7,29 @@ const rawFontModules: Record<string, string> = import.meta.glob(
   '../../node_modules/katex/dist/fonts/*.woff2',
   {
     eager: true,
-    as: 'raw',
+    query: '?raw',
+    import: 'default',
   },
 )
 
 // console.log('converting katex languages for iframes...', fontModules)
 
-// 2) Whitelist only the fonts you want
+// 2) Whitelist the fonts we want to inline (filenames only)
 const WHITELIST = new Set([
+  // core set:
   'KaTeX_Main-Regular.woff2',
   'KaTeX_Main-Italic.woff2',
   'KaTeX_Math-Italic.woff2',
+
+  // your new errors (bold variants):
   'KaTeX_Main-Bold.woff2',
   'KaTeX_Math-BoldItalic.woff2',
-  'KaTeX_Main-BoldItalic.woff2',
+
+  // optional if you ever need them:
+  // 'KaTeX_Main-BoldItalic.woff2',
 ])
 
+// 3) raw → base64 helper
 function toBase64(raw: string): string {
   let binary = ''
   for (let i = 0; i < raw.length; i++) {
@@ -31,42 +38,43 @@ function toBase64(raw: string): string {
   return btoa(binary)
 }
 
-// TODO: we currently do not remove katex fonts which can not
-// be downloaded..  we should do that.. the regex below
-// doesn't work correctly..  but it is the right way to do it.
-// also in minified code, possibly we wont be able to see a
-// 'node_modules' string in them..
+// 4) Generate iframe-safe KaTeX CSS
 export function generateKaTeXIframeCss(): string {
-  let css = katexCssRaw
+  // 4a) Build our own @font-face rules with data: URLs
+  let fontFaceCss = ''
 
-  // 3) patch src: for whitelisted fonts → inline data: URLs
   for (const [path, raw] of Object.entries(rawFontModules)) {
     const filename = path.split('/').pop()!
     if (!WHITELIST.has(filename)) continue
 
     const base64 = toBase64(raw)
 
-    const escName = filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    let fontFamily = ''
+    let fontStyle = 'normal'
+    let fontWeight = '400'
 
-    // Replace the entire src: …; block for the woff2 variant
-    const srcRe = new RegExp(
-      String.raw`src:url\([^)]*${escName}[^)]*\)\s*format\("woff2"\)[^;]*;`,
-      'g',
-    )
+    if (filename.startsWith('KaTeX_Main')) fontFamily = 'KaTeX_Main'
+    else if (filename.startsWith('KaTeX_Math')) fontFamily = 'KaTeX_Math'
+    else continue // we’re strict for now
 
-    const replacement = `src:url("data:font/woff2;base64,${base64}") format("woff2");`
+    if (filename.includes('Italic')) fontStyle = 'italic'
+    if (filename.includes('Bold')) fontWeight = '700'
 
-    css = css.replace(srcRe, replacement)
+    fontFaceCss += `
+@font-face {
+  font-family: "${fontFamily}";
+  font-style: ${fontStyle};
+  font-weight: ${fontWeight};
+  font-display: block;
+  src:url("data:font/woff2;base64,${base64}") format("woff2");
+}
+`
   }
 
-  // 4) REMOVE any remaining @font-face rules that still reference node_modules fonts
-  //    (i.e. fonts not in whitelist → cannot load → delete them)
-  // css = css.replace(/@font-face\s*{[^}]*?\/node_modules\/katex\/dist\/fonts\/[^}]*?}/g, '')
+  // 4b) Strip *all* @font-face blocks from the original KaTeX CSS
+  //     (so no /node_modules/ or /assets/... URLs can survive)
+  const cssWithoutFontFaces = katexCssRaw.replace(/@font-face\s*{[^}]*}/gs, '')
 
-  // Optional dev sanity check
-  if (css.includes('/node_modules/katex/dist/fonts/')) {
-    console.warn('[KaTeX iframe CSS] Some font URLs were not patched/removed as expected.')
-  }
-
-  return css
+  // 4c) Final CSS = our font faces + KaTeX rules (without their original @font-face)
+  return fontFaceCss + '\n' + cssWithoutFontFaces
 }
