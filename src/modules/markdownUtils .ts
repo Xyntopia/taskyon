@@ -744,7 +744,7 @@ export const generateIframeSrc = (
 
           // 4) width in the same way (optional)
           const width = Math.ceil(rect.width);
-          console.log('Iframe content size:', width, height);
+          // console.log('Iframe content size:', width, height);
           window.parent.postMessage({ type: 'resizeIframe', width, height }, '*');
         }
 
