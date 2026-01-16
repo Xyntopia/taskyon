@@ -258,15 +258,7 @@ const drawerOpen = defineModel<boolean | undefined>('drawerOpen', {
   default: undefined,
 })
 
-const ShareDialogBtn = defineAsyncComponent(
-  () =>
-    import(
-      /* webpackChunkName: "ShareDialogButton" */
-      /* webpackMode: "lazy" */
-      /* webpackFetchPriority: "low" */
-      '../taskyon/TaskChainPublishDialog.vue'
-    ),
-)
+const ShareDialogBtn = defineAsyncComponent(() => import('../taskyon/TaskChainPublishDialog.vue'))
 
 const environmentInfo = getEnvironmentInfo()
 
