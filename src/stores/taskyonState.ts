@@ -556,9 +556,9 @@ const useApiManagement = (
   }
 
   const ensureValidModel = (keystr?: KeyString) => {
-    const newKeyObj = isTaskyonKey(keystr ?? undefined, false)
-    if (newKeyObj) {
-      const model = getValidModel(newKeyObj)
+    const tykey = isTaskyonKey(keystr ?? undefined, false)
+    if (tykey) {
+      const model = getValidModel(tykey)
       if (model) updateModelAndApi({ newName: model })
     }
   }
