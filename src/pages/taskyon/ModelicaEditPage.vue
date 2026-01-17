@@ -12,7 +12,7 @@
     <q-page-container>
       <FixedHeightPage class="column">
         <DockView
-          v-model:node="layout"
+          v-model:node="initialLayout"
           class="col"
           hide-tab-add
           hide-tab-close
@@ -383,7 +383,7 @@ const configuration = computed<partialTyConfiguration | null>(() => {
   }
 })
 
-const layout = ref<DockNode>({
+const initialLayout = ref<DockNode>({
   id: 'editor',
   type: 'container',
   direction: 'row',
