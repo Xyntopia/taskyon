@@ -8,6 +8,7 @@
           <table-of-chat-content />
         </q-expansion-item>
       </div-->
+      <div v-if="localDev">{{ state.sessionId?.slice(0, 10) }}</div>
       <div class="q-pa-xs text-caption row justify-center items-center q-gutter-md">
         <q-icon
           v-if="state.minimalGui === 'default'"
@@ -113,6 +114,7 @@ import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 import TaskChainMenu from './TaskChainMenu.vue'
 
+const localDev = process.env.DEV
 const $route = useRoute()
 const $q = useQuasar()
 const state = useAppStateStore()
