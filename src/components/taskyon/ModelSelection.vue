@@ -62,7 +62,7 @@ const props = defineProps<{
     pricing?: { prompt?: string; completion?: string }
   }[]
   allowedModels?: string[] | undefined
-  usedKey?: { name: string } | undefined
+  usedKey?: { name?: string | undefined } | undefined
 }>()
 
 const selectedApi = defineModel<string | null>('selectedApi', {
