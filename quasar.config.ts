@@ -2,12 +2,12 @@
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
 
 import { defineConfig } from '#q-app/wrappers'
-import { execSync } from 'child_process'
+import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'path'
-import type { Plugin } from 'vite'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
+
 // --- helper to copy pyodide runtime ---
 function viteStaticCopyPyodide() {
   const pyodideDir = dirname(fileURLToPath(import.meta.resolve('pyodide')))
@@ -62,7 +62,7 @@ const DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid'
 console.log('compile app: ', APPNAME, DESCRIPTION)
 
 // Custom plugin to adjust sourcemaps and add banner comment
-function sourcemapBannerPlugin(): Plugin {
+/*function sourcemapBannerPlugin(): Plugin {
   return {
     name: 'sourcemap-banner-plugin',
     generateBundle(this, options, bundle) {
@@ -92,7 +92,7 @@ function sourcemapBannerPlugin(): Plugin {
       }
     },
   }
-}
+}*/
 
 export default defineConfig((ctx) => {
   /*if (ctx.prod) {
@@ -149,55 +149,9 @@ export default defineConfig((ctx) => {
       typescript: {
         strict: true,
         vueShim: true,
-        extendTsConfig(ts) {
-          // 1) Narrow Quasar's very broad include so vue-tsc doesn't crawl packages/**
-          ts.include?.push(
-            './../packages/taskyon/src/**/*',
-            //'./**/*.d.ts',
-            //'../src',
-            //'../src/**/*.vue',
-            //'../env.d.ts',
-            //'../.quasar/**/*.d.ts',
-          )
-
-          // for some reason, adding references here doesn't work very well...
-          //ts.files = []
-          //ts.references = [{ path: './packages/taskyon' }, { path: './packages/tyclient' }]
-
-          // // Be explicit about exclusions (prevents TS6305 looking into dist or packages)
-          ts.exclude = [
-            ...(ts.exclude ?? []),
-            './../dist-desktop',
-            './../src-tauri',
-            './../packages/rumoca',
-            //'./../packages/**', // <- key bit: keep workspace packages out
-          ]
-
-          // // 2) Keep the 'app' alias but scope it to the app, not the entire repo
-          // // (prevents auto-imports like 'app/packages/taskyon/...'; still allows 'app/src/...').
-          // ts.compilerOptions ??= {}
-          // ts.compilerOptions.moduleResolution = 'bundler' // good with Vite + ESM
-          // ts.compilerOptions.paths ??= {}
-
-          // // leave 'app' (root) if you use it; just tighten the wildcard
-          // if (ts.compilerOptions.paths['app/*']) {
-          //   ts.compilerOptions.paths['app/*'] = ['../src/*']
-          // }
-          // // (optional) you can also remove it completely:
-          delete ts.compilerOptions?.paths['app']
-          delete ts.compilerOptions?.paths['app/*']
-
-          // we can't do this, because we want everything to be under
-          // @ŧaskyon/taskyon package :)
-          /*if (ts.compilerOptions?.paths) {
-            ts.compilerOptions.paths.taskyon = ['./../packages/taskyon/src']
-            ts.compilerOptions.paths['taskyon/*'] = ['./../packages/taskyon/src/*']
-          }*/
-          return ts
-        },
+        // extendTsConfig (tsConfig) {}
       },
 
-      //publicPath:  '/', TODO: check if we can use this to deploy a "test" version of our app on gitlab pages..
       vueRouterMode: 'history', // available values: 'hash', 'history'
       // vueRouterBase,
       // vueDevtools,
@@ -208,45 +162,14 @@ export default defineConfig((ctx) => {
       // publicPath: '/',
       analyze: true,
 
-      /**
-       * Set to `false` to disable minification, or specify the minifier to use.
-       * Available options are 'terser' or 'esbuild'.
-       * If set to anything but boolean false then it also applies to CSS.
-       * For production only.
-       * @default 'esbuild'
-       */
-      minify: 'terser',
-
-      /**
-       * Minification options for html-minifier-terser.
-       *
-       * @see https://github.com/terser/html-minifier-terser?tab=readme-ov-file#options-quick-reference for complete list of options
-       *
-       * @default
-       *  {
-       *    removeComments: true,
-       *    collapseWhitespace: true,
-       *    removeAttributeQuotes: true,
-       *    collapseBooleanAttributes: true,
-       *    removeScriptTypeAttributes: true
-       *  }
-       */
-      htmlMinifyOptions: {
-        //TODO: remove console.log!
-        removeComments: true,
-        collapseWhitespace: true,
-        removeAttributeQuotes: true,
-        collapseBooleanAttributes: true,
-        removeScriptTypeAttributes: true,
-      },
-
       // not sure, if we need this here...
-      sourcemap: process.env.SOURCEMAP === 'true',
-
+      // we need the as unknown as boolean due to a bug in quasar
+      sourcemap: process.env.SOURCEMAP === 'true' ? ('true' as unknown as boolean) : false,
       env: {
         PUBLISH_DATE: new Date().toISOString(),
         COMMIT_HASH: commitHash,
       },
+      // env: {},
       // rawDefine: {}
       // ignorePublicFolder: true,
       // minify: false,
@@ -256,9 +179,9 @@ export default defineConfig((ctx) => {
       extendViteConf(viteConf) {
         // *******  get rid of console.log in prod mode ****
         // Add this for dropping console and debugger in production:
-        viteConf.esbuild = viteConf.esbuild || {}
         // TODO: https://github.com/evanw/esbuild/issues/3656  only drop console.log/info
         // TODO: write a custom logging library and then drop those calls as well
+        viteConf.esbuild = viteConf.esbuild || {}
         viteConf.esbuild.drop = droplogging ? ['console', 'debugger'] : []
 
         // ********   configure pglite ********/
@@ -285,17 +208,6 @@ export default defineConfig((ctx) => {
             ],
           }),
         ]
-
-        // Optional: Exclude from Rollup build as well
-        viteConf.build = {
-          ...viteConf.build,
-          rollupOptions: {
-            ...viteConf.build?.rollupOptions,
-            external: ['@electric-sql/pglite'], // ensure that Rollup does not bundle this module
-          },
-        }
-        //*****   end of pglite configuration  */
-
         // ****   make our old taskyon workers "work" in vite
         // TODO: check if w need this extendedConf
         // we might be able to get rid of it...
@@ -306,18 +218,6 @@ export default defineConfig((ctx) => {
         // check https://github.com/vitejs/vite/issues/18585 for more infos
         viteConf.worker.format = 'es' // Ensure workers use ES module format
         //*******    end of worker config */
-
-        // we are doing the following, because we always get this error here whe building our app:
-        // x Build failed in 4.18s
-        // [vite:build-import-analysis] [plugin vite:build-import-analysis] public/docs/DEVELOPMENT.md (29:182): Failed to parse source for import analysis because the content contains invalid JS syntax. You may need to install appropriate plugins to handle the .md file format, or if it's an asset, add "**/*.md" to `assetsInclude` in your configuration.
-        // file: /home/tom/git/taskyon/frontend/public/docs/DEVELOPMENT.md:29:182
-        viteConf.assetsInclude = viteConf.assetsInclude || []
-        // Treat Markdown files as static assets
-        if (Array.isArray(viteConf.assetsInclude)) {
-          viteConf.assetsInclude.push('**/*.md')
-        } else {
-          viteConf.assetsInclude = [viteConf.assetsInclude, '**/*.md']
-        }
       },
       // viteVuePluginOptions: {},
 
@@ -327,19 +227,12 @@ export default defineConfig((ctx) => {
         // top-level-await is needed, because wasm-pack generates async init functions
         // to load the wasm binary which we would also like to use in older browsers which don't
         // support top-level-await natively.
-        ['vite-plugin-wasm'],
-        ['vite-plugin-top-level-await'],
+        // ['vite-plugin-wasm'],
+        // ['vite-plugin-top-level-await'],
         // Only apply this plugin in production when sourcemaps are enabled
-        ...(ctx.prod ? [sourcemapBannerPlugin()] : []),
-        {
-          name: 'disable-sri-for-pyodide',
-          transformIndexHtml(html) {
-            return html.replace(
-              /(<script[^>]+src="[^"]*pyodide[^"]*"[^>]+)integrity="[^"]+"([^>]*>)/g,
-              '$1$2',
-            )
-          },
-        },
+        // not sure, if we need it right now...
+        // ...(ctx.prod ? [sourcemapBannerPlugin()] : []),
+
         // https://www.npmjs.com/package/vite-bundle-analyzer
         // TODO: re-enable this!
         /*analyzer({

@@ -12,7 +12,13 @@
 </template>
 
 <script setup lang="ts">
-const toc = Object.entries(import.meta.glob('../../public/docs/**/*.md')).map(([path]) => {
+const toc = Object.entries(
+  import.meta.glob('../../public/docs/**/*.md', {
+    eager: true,
+    query: '?url',
+    import: 'default',
+  }),
+).map(([path]) => {
   const fileName = path.split('/').pop()?.replace('.md', '') ?? 'Unknown'
   return {
     title: fileName,
