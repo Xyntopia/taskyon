@@ -14,6 +14,7 @@
         :class="['q-px-sm', content?.length ? 'q-pt-sm' : '']"
         v-bind="$attrs"
         @keyup="checkKeyboardEvents"
+        @paste="onPaste"
       >
         <template #before>
           <div v-show="smallMode">
@@ -117,6 +118,27 @@ const checkKeyboardEvents = (event: KeyboardEvent) => {
   if (shouldSend) {
     emit('execute-task')
     event.preventDefault()
+  }
+}
+
+const onPaste = (e: ClipboardEvent) => {
+  const items = e.clipboardData?.items
+  if (!items) return
+
+  let hasFile = false
+  for (const item of items) {
+    if (item.kind === 'file') {
+      hasFile = true
+      break
+    }
+  }
+
+  // If there is at least one file (e.g. pasted screenshot/image),
+  // prevent the textarea from receiving the file path as text.
+  // We *do not* stop propagation so FileDropzone's enable-paste
+  // can still handle the same event and add the files.
+  if (hasFile) {
+    e.preventDefault()
   }
 }
 
