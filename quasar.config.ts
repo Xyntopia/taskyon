@@ -149,9 +149,55 @@ export default defineConfig((ctx) => {
       typescript: {
         strict: true,
         vueShim: true,
-        // extendTsConfig (tsConfig) {}
+        extendTsConfig(ts) {
+          // 1) Narrow Quasar's very broad include so vue-tsc doesn't crawl packages/**
+          ts.include?.push(
+            './../packages/taskyon/src/**/*',
+            //'./**/*.d.ts',
+            //'../src',
+            //'../src/**/*.vue',
+            //'../env.d.ts',
+            //'../.quasar/**/*.d.ts',
+          )
+
+          // for some reason, adding references here doesn't work very well...
+          //ts.files = []
+          //ts.references = [{ path: './packages/taskyon' }, { path: './packages/tyclient' }]
+
+          // // Be explicit about exclusions (prevents TS6305 looking into dist or packages)
+          ts.exclude = [
+            ...(ts.exclude ?? []),
+            './../dist-desktop',
+            './../src-tauri',
+            './../packages/rumoca',
+            //'./../packages/**', // <- key bit: keep workspace packages out
+          ]
+
+          // // 2) Keep the 'app' alias but scope it to the app, not the entire repo
+          // // (prevents auto-imports like 'app/packages/taskyon/...'; still allows 'app/src/...').
+          // ts.compilerOptions ??= {}
+          // ts.compilerOptions.moduleResolution = 'bundler' // good with Vite + ESM
+          // ts.compilerOptions.paths ??= {}
+
+          // // leave 'app' (root) if you use it; just tighten the wildcard
+          // if (ts.compilerOptions.paths['app/*']) {
+          //   ts.compilerOptions.paths['app/*'] = ['../src/*']
+          // }
+          // // (optional) you can also remove it completely:
+          delete ts.compilerOptions?.paths['app']
+          delete ts.compilerOptions?.paths['app/*']
+
+          // we can't do this, because we want everything to be under
+          // @ŧaskyon/taskyon package :)
+          /*if (ts.compilerOptions?.paths) {
+            ts.compilerOptions.paths.taskyon = ['./../packages/taskyon/src']
+            ts.compilerOptions.paths['taskyon/*'] = ['./../packages/taskyon/src/*']
+          }*/
+          return ts
+        },
       },
 
+      //publicPath:  '/', TODO: check if we can use this to deploy a "test" version of our app on gitlab pages..
       vueRouterMode: 'history', // available values: 'hash', 'history'
       // vueRouterBase,
       // vueDevtools,
