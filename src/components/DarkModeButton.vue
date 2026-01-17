@@ -13,7 +13,6 @@
 
 <script setup lang="ts">
 import { useQuasar } from 'quasar'
-
 import { matContrast, matDarkMode, matLightMode } from '@quasar/extras/material-icons'
 
 // Emits an event when the theme is changed
