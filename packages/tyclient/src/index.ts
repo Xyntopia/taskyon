@@ -110,6 +110,12 @@ export interface TyClient {
   waitForTaskResult: ReturnType<typeof processTasks>
   port: Port<TaskyonGuiMessage, TaskyonGuiMessage>
   sendFile: (file: File) => Promise<string>
+  reconfigure: (options: {
+    name?: string
+    persist?: boolean
+    tools: ClientTool[]
+    configuration: partialTyConfiguration
+  }) => void
 }
 
 export async function initializeTaskyon(options: {
@@ -117,6 +123,7 @@ export async function initializeTaskyon(options: {
   persist?: boolean
   tools: ClientTool[]
   configuration: partialTyConfiguration
+  iframeId?: string
 }): Promise<TyClient> {
   console.log('initialize taskyon tyclient...')
 
@@ -125,7 +132,7 @@ export async function initializeTaskyon(options: {
     return p
   }, {})
 
-  const taskyon = document.getElementById('taskyon') as HTMLIFrameElement
+  const taskyon = document.getElementById(options.iframeId ?? 'taskyon') as HTMLIFrameElement
 
   const controller = new AbortController()
   const { x: clientSidePort, y: towardsIframe } = createDuplexChannel<
@@ -133,52 +140,67 @@ export async function initializeTaskyon(options: {
     TaskyonGuiMessage
   >()
 
-  if (taskyon !== null && taskyon.tagName === 'IFRAME' && taskyon.contentWindow !== null) {
-    console.log('make sure, we can ')
-    // TODO: detect disconnect and reconnect!
-    const iframeMessagePort = await waitForApiChannel(taskyon)
-    MessageChannelBridge(towardsIframe, iframeMessagePort)
-    const send = (msg: TaskyonGuiMessage) => {
-      console.log('tyclient sending', msg)
-      clientSidePort.send(safeClone(msg))
-    }
+  if (!taskyon || taskyon.tagName !== 'IFRAME' || taskyon.contentWindow === null)
+    throw new Error(`we could not find the taskyon iframe with id: ${options.iframeId}`)
 
-    console.log('tyclient send our configuration!')
-    send({
-      type: 'configurationMessage',
-      conf: options.configuration,
-      persist: options.persist,
-      origin: window.location.origin,
-      peerId: options?.name,
-    })
-
-    console.log('tyclient sending our functions!')
-    options.tools.forEach((t) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { function: _toolfunc, ...fdescr } = t
-      send({
-        type: 'functionDescription',
-        ...fdescr,
-      })
-    })
-
-    console.log('tyclient set up function listener!')
-
-    clientSidePort.receive((msg) => console.log('tyclient received message', msg))
-    clientSidePort.receive.narrow((msg) => msg.type === 'functionCall')(async (msg) => {
-      const tool = toolMap[msg.functionName]
-      if (tool) {
-        const res = await handleFunctionExecution(msg.arguments ?? {}, tool, controller.signal)
-        send({ type: 'functionResponse', functionName: tool.name, response: res })
-        console.log('tyclient tool send functionResponse to iframe', res, tool)
-      }
-    })
+  console.log('make sure, we can ')
+  // TODO: detect disconnect and reconnect!
+  const iframeMessagePort = await waitForApiChannel(taskyon)
+  MessageChannelBridge(towardsIframe, iframeMessagePort)
+  const send = (msg: TaskyonGuiMessage) => {
+    console.log('tyclient sending', msg)
+    clientSidePort.send(safeClone(msg))
   }
+
+  console.log('tyclient send our configuration!')
+  send({
+    type: 'configurationMessage',
+    conf: options.configuration,
+    persist: options.persist,
+    origin: window.location.origin,
+    peerId: options?.name,
+  })
+
+  console.log('tyclient sending our functions!')
+  options.tools.forEach((t) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { function: _toolfunc, ...fdescr } = t
+    send({
+      type: 'functionDescription',
+      ...fdescr,
+    })
+  })
+
+  console.log('tyclient set up function listener!')
+
+  clientSidePort.receive((msg) => console.log('tyclient received message', msg))
+  clientSidePort.receive.narrow((msg) => msg.type === 'functionCall')(async (msg) => {
+    const tool = toolMap[msg.functionName]
+    if (tool) {
+      const res = await handleFunctionExecution(msg.arguments ?? {}, tool, controller.signal)
+      send({ type: 'functionResponse', functionName: tool.name, response: res })
+      console.log('tyclient tool send functionResponse to iframe', res, tool)
+    }
+  })
 
   return {
     sendTasks: sendTasks(clientSidePort),
     waitForTaskResult: processTasks(clientSidePort),
     port: clientSidePort,
     sendFile: (file: File) => sendFile(clientSidePort.send)(file),
+    reconfigure: (options: {
+      name?: string
+      persist?: boolean
+      tools: ClientTool[]
+      configuration: partialTyConfiguration
+    }) => {
+      send({
+        type: 'configurationMessage',
+        conf: options.configuration,
+        persist: options.persist,
+        origin: window.location.origin,
+        peerId: options?.name,
+      })
+    },
   }
 }
