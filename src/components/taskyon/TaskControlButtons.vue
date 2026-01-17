@@ -2,7 +2,7 @@
 <template>
   <div class="column q-gutter-xs task-control-buttons">
     <!-- scroll to top -->
-    <div v-if="showTopScroll" class="col-auto">
+    <div :class="{ invisible: !showTopScroll }" class="col-auto">
       <q-btn
         fab-mini
         class="taskyon-control-button"
@@ -15,7 +15,7 @@
     </div>
 
     <!-- scroll to previous message -->
-    <div v-if="showTopScroll" class="col-auto">
+    <div :class="{ invisible: !showTopScroll }" class="col-auto">
       <q-btn
         fab-mini
         class="taskyon-control-button"
@@ -28,7 +28,7 @@
     </div>
 
     <!-- scroll to next message -->
-    <div v-if="showBottomScroll" class="col-auto">
+    <div :class="{ invisible: !showBottomScroll }" class="col-auto">
       <q-btn
         fab-mini
         class="taskyon-control-button"
@@ -41,7 +41,7 @@
     </div>
 
     <!-- scroll to bottom -->
-    <div v-if="showBottomScroll" class="col-auto">
+    <div :class="{ invisible: !showBottomScroll }" class="col-auto">
       <q-btn
         fab-mini
         class="taskyon-control-button"
@@ -56,7 +56,7 @@
     <!-- stop button (existing) -->
     <div class="col-auto">
       <q-btn
-        v-if="tystate.currentTask && !tystate.taskWorkerWaiting"
+        :class="{ invisible: !(tystate.currentTask && !tystate.taskWorkerWaiting) }"
         fab-mini
         class="taskyon-control-button"
         :icon="matStop"
@@ -93,3 +93,10 @@ defineEmits<{
   scrollToTop: []
 }>()
 </script>
+
+<style scoped>
+.invisible {
+  visibility: hidden;
+  pointer-events: none;
+}
+</style>
