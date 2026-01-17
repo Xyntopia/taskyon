@@ -28,7 +28,7 @@
       >
         <template #prepend>
           <q-icon v-if="selectedApi === 'taskyon' && usedKey" :name="mdiKeyLink">
-            <q-tooltip>Only models allowed from taskyon key: {{ usedKey.name }}</q-tooltip>
+            <q-tooltip>Only models allowed from key: {{ usedKey.name }}</q-tooltip>
           </q-icon>
         </template>
       </q-select>
