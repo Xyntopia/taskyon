@@ -580,7 +580,7 @@ const useApiManagement = (
   const initModelsAndStoredKeys = async () => {
     const ty = await taskyon()
     const sessionId = await ty.getCryptoSession().getSessionId()
-    console.log(`updating taskyon after session/key change!, ${sessionId}`, {
+    console.log(`Sync secretstore with taskyon keys!, ${sessionId}`, {
       authToken: stateRefs.authToken,
       iframeApiKey: stateRefs.iframeApiKey,
     })
@@ -597,7 +597,8 @@ const useApiManagement = (
 
   // make sure we update our model list whenever anything changes for our
   // endpoints...
-  // TODO:  there is a potential infinite loop here with
+  // TODO: there is a potential infinite loop here with
+  // TODO: get rid of this..  we need this to be explicit!
   // "ensureValidModel" setting a new "selectedModel" inside stateRefs.llmSettings.llmApis
   //  which then triggers this watch again... we need to be careful here!
   watch(
