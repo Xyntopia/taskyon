@@ -16,8 +16,9 @@
 </template>
 
 <script setup lang="ts">
+import { watchEffect } from 'vue'
 import { deepMerge } from '../../packages/taskyon/src/utils/objHelpers'
-import type { partialTyConfiguration } from '../../packages/tyclient/src'
+import type { partialTyConfiguration, TyClient } from '../../packages/tyclient/src'
 import { type ClientTool, initializeTaskyon } from '../../packages/tyclient/src'
 
 const {
@@ -32,8 +33,7 @@ const {
   name: string
 }>()
 
-const taskyonUrl = window.location.origin
-const onIframeLoaded = () => {
+const mergeConfig = (config: partialTyConfiguration | null) => {
   const configuration: partialTyConfiguration = deepMerge(
     {
       llmSettings: {
@@ -50,6 +50,28 @@ const onIframeLoaded = () => {
     },
     config,
   )
-  void initializeTaskyon({ tools, configuration, name, persist })
+  return configuration
 }
+
+const taskyonUrl = window.location.origin
+let tyAgent: TyClient | undefined = undefined
+const onIframeLoaded = async () => {
+  tyAgent = await initializeTaskyon({
+    tools,
+    configuration: mergeConfig(config),
+    name,
+    persist,
+    iframeId: 'taskyon',
+  })
+}
+
+watchEffect(() => {
+  if (tyAgent)
+    tyAgent.reconfigure({
+      tools,
+      configuration: mergeConfig(config),
+      name,
+      persist,
+    })
+})
 </script>

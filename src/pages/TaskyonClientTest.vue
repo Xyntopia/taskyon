@@ -114,7 +114,12 @@ const tools: ClientTool[] = [
 ]
 
 onMounted(async () => {
-  tyclient.value = await initializeTaskyon({ tools, configuration, name: 'taskyon client test' })
+  tyclient.value = await initializeTaskyon({
+    tools,
+    configuration,
+    name: 'taskyon client test',
+    iframeId: 'taskyon',
+  })
 })
 
 async function startClientTest() {

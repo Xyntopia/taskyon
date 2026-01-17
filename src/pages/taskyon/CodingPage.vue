@@ -2,7 +2,12 @@
 <!-- DocumentEditorPage.vue -->
 <template>
   <q-page class="row">
-    <SplitTaskyonView :configuration="configuration" :tools="tools" name="codingpage" persist>
+    <SplitTaskyonView
+      :configuration="configuration"
+      :tools="tools"
+      :name="tystate.usingFreeTaskyonKey ? 'codingpage_free' : 'codingpage'"
+      persist
+    >
       <!-- Document Editor Card -->
       <div dense class="col column">
         <!-- Version Controls -->
