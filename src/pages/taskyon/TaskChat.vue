@@ -48,7 +48,7 @@
           <GetStarted />
         </div>
         <CreateNewTask
-          :file-attachments="fileAttachments"
+          v-model:file-attachments="fileAttachments"
           :entry-node="tystate.entryNode"
           class="q-pa-md col-auto self-stretch"
           :min-mode="state.minimalGui === 'iframe'"
@@ -74,7 +74,7 @@
     <div class="col-auto row justify-center create-new-task-container self-stretch">
       <CreateNewTask
         v-if="tystate.selectedThread.length > 0 && tystate.currentTask.value"
-        :file-attachments="fileAttachments"
+        v-model:file-attachments="fileAttachments"
         :entry-node="tystate.entryNode"
         class="col q-pa-xs create-new-task"
         :min-mode="state.minimalGui === 'iframe'"

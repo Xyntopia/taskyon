@@ -411,7 +411,6 @@ async function addNewTask(p2pTopic?: string, webSearch?: boolean) {
   if (fileTaskObj) {
     console.log('add files to chat:', fileTaskObj)
     newTaskChain.push(fileTaskObj)
-    fileAttachments.value = [] // clear out fileAttachments for the next task
   }
 
   // execute: if true, we immediatly queue the task for execution in the taskManager
@@ -475,6 +474,7 @@ async function addNewTask(p2pTopic?: string, webSearch?: boolean) {
   // and empty out the contents for the next chat message :)
   if (currentnewTask.value.role === 'user') {
     tystate.setNewContentDraft({ type: 'message', data: '' })
+    fileAttachments.value = []
   }
 
   emit('addTasks', newTaskChain)
