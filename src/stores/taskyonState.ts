@@ -541,16 +541,21 @@ const useApiManagement = (
     }
   }
 
-  function resolveTaskyonKey(args: {
+  async function resolveTaskyonKey(args: {
     authToken?: KeyString | undefined
     iframeToken?: KeyString | undefined
-    storedKey?: KeyString | undefined
   }) {
-    const { authToken, storedKey, iframeToken } = args
+    const { authToken, iframeToken } = args
+    const storedKeyStr = (await getProviderApiKey('taskyon')) ?? undefined
+    console.log('found stored key:', storedKeyStr?.slice(-5))
 
     return (iframeToken ??
       // only use stored key if it isn't a free key and if it is a taskyon key
-      (storedKey === freeKey ? undefined : isTaskyonKey(storedKey, true) ? storedKey : undefined) ??
+      (storedKeyStr === freeKey
+        ? undefined
+        : isTaskyonKey(storedKeyStr, true)
+          ? storedKeyStr
+          : undefined) ??
       authToken ??
       freeKey) as KeyString
   }
@@ -561,17 +566,6 @@ const useApiManagement = (
       const model = getValidModel(tykey)
       if (model) updateModelAndApi({ newName: model })
     }
-  }
-
-  const getSelectedKey = async () => {
-    const storedKeyStr = (await getProviderApiKey('taskyon')) ?? undefined
-    console.log('found stored key:', storedKeyStr?.slice(-5))
-    const selectedKey = resolveTaskyonKey({
-      authToken: stateRefs.authToken,
-      iframeToken: stateRefs.iframeApiKey,
-      storedKey: storedKeyStr,
-    })
-    return selectedKey
   }
 
   //////   INITIALIZATION
@@ -585,7 +579,10 @@ const useApiManagement = (
       iframeApiKey: stateRefs.iframeApiKey,
     })
 
-    const selectedKey = await getSelectedKey()
+    const selectedKey = await resolveTaskyonKey({
+      authToken: stateRefs.authToken,
+      iframeToken: stateRefs.iframeApiKey,
+    })
     // update the secretstore with this key in order to give chatCompletion the correct key!
     console.log('setting selected key:', selectedKey?.slice(-5))
     await setProviderApiKey('taskyon', selectedKey)
@@ -611,7 +608,10 @@ const useApiManagement = (
       })
       if (newSelectedApi === 'taskyon') {
         console.log('ensure, we have a valid model for taskyon key...')
-        const selectedKey = await getSelectedKey()
+        const selectedKey = await resolveTaskyonKey({
+          authToken: stateRefs.authToken,
+          iframeToken: stateRefs.iframeApiKey,
+        })
         ensureValidModel(selectedKey)
       }
       await updateModelList()
