@@ -5,6 +5,7 @@ import type { PartialDeep } from 'type-fest'
 
 // load our saved state as fast as possible to avoid "color-glitches" at the beginning.
 
+// TODO: move this into appState and explicitly set the profile name...
 export function getUrlConfig() {
   const searchParams = new URLSearchParams(window.location.search)
   const isIframeParam = searchParams.get('iframe') === 'true'
