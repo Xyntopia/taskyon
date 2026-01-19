@@ -515,7 +515,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@codemirror/lang-html@npm:^6.0.0":
+"@codemirror/lang-html@npm:^6.0.0, @codemirror/lang-html@npm:^6.4.11":
   version: 6.4.11
   resolution: "@codemirror/lang-html@npm:6.4.11"
   dependencies:
@@ -20755,6 +20755,7 @@ __metadata:
     "@chainsafe/libp2p-noise": "npm:^16.1.4"
     "@chainsafe/libp2p-yamux": "npm:^7.0.4"
     "@codemirror/lang-cpp": "npm:^6.0.3"
+    "@codemirror/lang-html": "npm:^6.4.11"
     "@codemirror/lang-javascript": "npm:^6.2.2"
     "@codemirror/lang-jinja": "npm:^6.0.0"
     "@codemirror/lang-json": "npm:^6.0.1"
