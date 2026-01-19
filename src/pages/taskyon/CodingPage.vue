@@ -33,13 +33,21 @@
             class="editor-drop-zone"
             disable-dropzone-border
             accept="*"
-            enable-paste
             @add-files="handleAddFiles"
           >
             <q-btn dense flat round title="Upload File">
               <q-icon :name="matUpload" />
             </q-btn>
           </FileDropzone>
+
+          <q-btn
+            flat
+            dense
+            round
+            :icon="matContentPaste"
+            title="Paste as new file"
+            @click="pasteAsNewFile"
+          />
 
           <q-btn
             flat
@@ -148,6 +156,25 @@
               style="max-height: 100%"
               @update:model-value="onContentChange"
             />
+
+            <!-- Empty state when there are no files yet -->
+            <div
+              v-else-if="fileList.length === 0"
+              class="col q-pa-lg column items-center justify-center text-grey-8"
+            >
+              <div class="text-subtitle2 q-mb-sm">Welcome to the project editor</div>
+              <div class="text-body2 q-mb-sm">You don't have any files yet. You can:</div>
+              <ul class="text-body2 q-mb-md">
+                <li>Paste text using the "Paste as new file" button above</li>
+                <li>Upload existing files using the upload button</li>
+                <li>Create a new empty file with the "+" (Create File) button</li>
+              </ul>
+              <div class="text-caption text-grey-7">
+                The AI agent can also automatically create new files for you as needed.
+              </div>
+            </div>
+
+            <!-- When there are files but none is selected -->
             <div v-else class="col flex flex-center text-grey">No file selected</div>
           </div>
           <div v-else class="col column relative-position">
@@ -247,6 +274,7 @@ import {
   matAdd,
   matCode,
   matContentCopy,
+  matContentPaste,
   matDelete,
   matDescription,
   matNavigateBefore,
@@ -640,6 +668,50 @@ function copyContent() {
   void copyToClipboard(activeFileContent.value).then(() =>
     Notify.create({ message: 'Copied!', color: 'positive' }),
   )
+}
+
+async function pasteAsNewFile() {
+  if (!('clipboard' in navigator) || !navigator.clipboard?.readText) {
+    Notify.create({
+      message: 'Clipboard paste is not supported in this browser/context.',
+      color: 'negative',
+    })
+    return
+  }
+
+  let text: string
+  try {
+    text = await navigator.clipboard.readText()
+  } catch {
+    Notify.create({
+      message: 'Could not read from clipboard. Please grant permission and try again.',
+      color: 'negative',
+    })
+    return
+  }
+
+  if (!text) {
+    Notify.create({
+      message: 'Clipboard is empty or does not contain text.',
+      color: 'warning',
+    })
+    return
+  }
+
+  // Auto-generate a simple file name like "pasted content 1", "pasted content 2", ...
+  let index = 1
+  let name = `pasted content ${index}`
+  while (files.value[name] !== undefined) {
+    index += 1
+    name = `pasted content ${index}`
+  }
+
+  files.value = {
+    ...files.value,
+    [name]: text,
+  }
+  activeFileName.value = name
+  createNewVersion(`Created file ${name} from clipboard`)
 }
 
 function reset() {
