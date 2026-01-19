@@ -41,9 +41,9 @@ import {
   usePyodideWebworker,
 } from '@taskyon/taskyon'
 import { until } from '@vueuse/core'
-import { freeKey } from 'src/assets/taskyon_free_key'
 import { defineStore } from 'pinia'
 import { useQuasar } from 'quasar' // load dynamically! :)
+import { freeKey } from 'src/assets/taskyon_free_key'
 import { setColors } from 'src/boot/brand-colors'
 import { useGdrive } from 'src/modules/gdrive'
 import { setPrismTheme } from 'src/modules/markdownUtils '
@@ -53,15 +53,15 @@ import {
   persistSession,
 } from 'src/modules/taskyon/browserCryptoSession'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
-import { getApiConfig, type TyProfile } from 'src/modules/taskyon/types'
+import { type TyProfile } from 'src/modules/taskyon/types'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { match, P } from 'ts-pattern'
+import type { ReadonlyDeep } from 'type-fest'
 import { computed, onScopeDispose, onWatcherCleanup, readonly, ref, watch, watchEffect } from 'vue'
+import { sendFile } from '../../packages/taskyon/src/types/apiTypes'
 import { guiTools } from '../modules/taskyon/GuiTools'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
-import { sendFile } from '../../packages/taskyon/src/types/apiTypes'
-import type { ReadonlyDeep } from 'type-fest'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -134,7 +134,7 @@ async function updateLlmModels(
   getApiKey: (name: string) => Promise<string | null>,
 ) {
   console.log('downloading models...')
-  const api = getApiConfig(llmSettings)
+  const api = llmSettings.llmApis[llmSettings.selectedApi || '']
   if (api) {
     // and also get a "fresh" list of models from the server...
     let baseURL: string
@@ -460,19 +460,23 @@ const useApiManagement = (
     newName: string
     newService?: string | null
   }) => {
-    if (newService) {
-      stateRefs.setLLMSettings('selectedApi', newService)
-    }
-    const api = getApiConfig(stateRefs.llmSettings)
-    if (api) {
-      stateRefs.setLLMSettings('selectedModel', newName)
-    }
     console.log('getting an api & bot update', {
       'new name': newName,
       'new service': newService,
-      'old name': api?.selectedModel,
-      'old service': api?.name,
+      'old name':
+        stateRefs.llmSettings.llmApis[stateRefs.llmSettings.selectedApi || '']?.selectedModel,
+      'old service': stateRefs.llmSettings.llmApis[stateRefs.llmSettings.selectedApi || '']?.name,
     })
+
+    if (newService) {
+      stateRefs.setLLMSettings('selectedApi', newService)
+    }
+    if (stateRefs.llmSettings.selectedApi) {
+      stateRefs.setLLMSettings(
+        ['llmApis', stateRefs.llmSettings.selectedApi, 'selectedModel'],
+        newName,
+      )
+    }
     addModelToHistory(newName)
   }
 

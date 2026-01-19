@@ -16,7 +16,7 @@ import {
 import type { DeepReadonly } from 'vue'
 import { computed, reactive, ref, toRefs, unref, watch, type Reactive } from 'vue'
 // TODO: remove, to make this file here faster...
-import type { KeyString, tyPublicKeyDraft } from '@taskyon/taskyon'
+import type { KeyString, Thunk, tyPublicKeyDraft } from '@taskyon/taskyon'
 import { deepMerge, sleep, type FunctionCall } from '@taskyon/taskyon'
 import {
   getCurrentProfileName,
@@ -314,9 +314,9 @@ export const useAppStateStore = defineStore('ui-state', () => {
   }
 
   const setReadOnlySettings =
-    (obj: Record<string, unknown>) => (path: string | string[], value: unknown) => {
+    (obj: Thunk<Record<string, unknown>>) => (path: string | string[], value: unknown) => {
       const keys = Array.isArray(path) ? path : path.split('.')
-      let target = obj
+      let target = obj()
       for (const key of keys.slice(0, -1)) {
         if (!(key in target)) {
           throw new Error(`Invalid llmSettings path: ${JSON.stringify(path)}`)
@@ -346,7 +346,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
       () => stateRefs.llmSettings as DeepReadonly<typeof stateRefs.llmSettings>,
     ), // make sure to write protect llmSettings in order to make changes explicit!
     patchLLMSettings,
-    setLLMSettings: setReadOnlySettings(stateRefs.llmSettings),
+    setLLMSettings: setReadOnlySettings(() => stateRefs.llmSettings),
     overRideSettings,
     getStateValues: () => unref(allRefs),
     $reset,

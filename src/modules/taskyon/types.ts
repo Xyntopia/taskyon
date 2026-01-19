@@ -1,7 +1,6 @@
 import { matKeyboardReturn } from '@quasar/extras/material-icons'
 import { mdiProfessionalHexagon } from '@quasar/extras/mdi-v6'
 import { llmSettings, partialTaskDraft, TyToolchainConfig } from '@taskyon/taskyon/api'
-import type { ReadonlyDeep } from 'type-fest'
 import { z } from 'zod'
 
 export const taskTemplateTypes = {
@@ -29,12 +28,6 @@ export const taskTemplateTypes = {
     },
     label: ['file']
   })*/
-}
-
-export function getApiConfig(llmSettings: ReadonlyDeep<llmSettings>) {
-  if (llmSettings.selectedApi) {
-    return llmSettings.llmApis[llmSettings.selectedApi]
-  }
 }
 
 const hexColorRegex = /^#([A-Fa-f0-9]{6})$/
