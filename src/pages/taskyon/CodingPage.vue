@@ -10,15 +10,71 @@
     >
       <!-- Document Editor Card -->
       <div dense class="col column">
-        <!-- Version Controls -->
-        <div class="row">
-          <div style="font-size: x-small" class="q-pl-xs">
-            Version:<br />{{ currentVersionIndex + 1 }} / {{ documentVersions.length }}
-          </div>
+        <!-- Version & File Controls -->
+        <div class="row items-center q-pa-xs q-gutter-x-xs">
+          <!-- File Selector -->
+          <q-select
+            v-model="activeFileName"
+            :options="fileList"
+            label="Current File"
+            dense
+            outlined
+            options-dense
+            class="col-grow"
+            style="min-width: 150px"
+            :disable="fileList.length === 0"
+          >
+            <template #prepend>
+              <q-icon :name="matDescription" />
+            </template>
+          </q-select>
+
           <q-btn
             flat
             dense
+            round
+            :icon="matAdd"
+            size="sm"
+            title="Create File"
+            @click="openCreateFileDialog"
+          />
+
+          <q-btn
+            flat
+            dense
+            round
+            :icon="mdiRenameBox"
+            size="sm"
+            :disable="!activeFileName"
+            title="Rename Current File"
+            @click="openRenameFileDialog"
+          />
+
+          <q-btn
+            flat
+            dense
+            round
+            :icon="matDelete"
+            size="sm"
+            :disable="!canDeleteFile || !activeFileName"
+            title="Delete Current File"
+            @click="openDeleteFileDialog"
+          />
+
+          <q-separator vertical class="q-mx-sm" />
+
+          <!-- Version Info -->
+          <div style="font-size: x-small" class="text-center">
+            Ver:<br />{{ currentVersionIndex + 1 }} / {{ documentVersions.length }}
+          </div>
+
+          <!-- Version Navigation -->
+          <q-btn
+            flat
+            dense
+            round
             :icon="matNavigateBefore"
+            size="sm"
             title="Previous Version"
             :disable="currentVersionIndex === 0"
             @click="goToPreviousVersion"
@@ -26,7 +82,9 @@
           <q-btn
             flat
             dense
+            round
             :icon="matNavigateNext"
+            size="sm"
             title="Next Version"
             :disable="currentVersionIndex === documentVersions.length - 1"
             @click="goToNextVersion"
@@ -34,12 +92,16 @@
           <q-btn
             flat
             dense
+            round
             :icon="mdiTextBoxPlus"
             color="secondary"
-            title="Create New Version"
-            @click="createNewVersion"
+            size="sm"
+            title="Create New Version Snapshot"
+            @click="handleCreateNewVersionClick"
           />
+
           <q-space />
+
           <q-btn
             flat
             dense
@@ -54,7 +116,7 @@
             dense
             :icon="matContentCopy"
             color="secondary"
-            title="Copy"
+            title="Copy Current File"
             @click="copyContent"
           />
           <q-btn
@@ -62,72 +124,130 @@
             dense
             :icon="mdiNewBox"
             color="secondary"
-            title="Reset Document"
+            title="Reset Project"
             @click="reset"
           />
-          <!--
-        <q-btn-dropdown
-          color="primary"
-          size="sm"
-          :icon="matContentCopy"
-          label="Copy"
-          flat
-          dense
-          :dropdown-icon="matArrowDropDown"
-        >
-          <q-list>
-            <q-item v-close-popup clickable @click="copyContent">
-              <q-item-section></q-item-section>
-            </q-item>
-            <q-item v-close-popup clickable @click="copyAsMarkdown">
-              <q-item-section>Copy as Markdown</q-item-section>
-            </q-item>
-          </q-list>
-        </q-btn-dropdown>
-      -->
         </div>
 
         <!-- Code Editor / Preview -->
-        <q-card flat class="col" style="max-width: 100%">
-          <div v-if="!showPreview" class="col">
+        <q-card flat class="col column" style="max-width: 100%; overflow: hidden">
+          <div v-if="!showPreview" class="col column">
             <CodeEditor
-              v-model="currentContent"
+              v-if="activeFileName"
+              :key="activeFileName"
+              v-model="activeFileContent"
               class="col"
+              :language="getLanguage(activeFileName)"
               placeholder="Write here..."
-              language="javascript"
-              style="max-height: 87vh"
+              style="max-height: 100%"
               @update:model-value="onContentChange"
             />
+            <div v-else class="col flex flex-center text-grey">No file selected</div>
           </div>
-          <div v-else class="col column">
+          <div v-else class="col column relative-position">
             <iframe
               class="col"
-              style="border: 1px solid #ccc; width: 100%; min-height: 87vh"
-              :srcdoc="iframeContent"
+              style="border: none; width: 100%; height: 100%"
+              sandbox="allow-scripts allow-modals allow-popups allow-forms"
+              :srcdoc="previewContent"
             ></iframe>
             <div
-              class="q-mt-xs text-caption"
-              :class="isCodeValid ? 'text-positive' : 'text-negative'"
+              class="absolute-bottom q-pa-xs text-center text-caption bg-white"
+              style="border-top: 1px solid #ddd"
             >
-              <span v-if="isCodeValid">Preview loaded without runtime errors.</span>
-              <span v-else>Preview error: {{ validationError }}</span>
+              Previewing: {{ activeFileName }}
             </div>
           </div>
         </q-card>
       </div>
     </SplitTaskyonView>
+
+    <q-dialog v-model="isCreateFileDialogOpen">
+      <q-card style="min-width: 300px">
+        <q-card-section>
+          <div class="text-h6">Create New File</div>
+        </q-card-section>
+        <q-card-section>
+          <q-input
+            v-model="newFileName"
+            label="File name (e.g. index.html, main.js)"
+            autofocus
+            dense
+            @keyup.enter="confirmCreateFile"
+          />
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat label="Cancel" />
+          <q-btn
+            flat
+            label="Create"
+            color="primary"
+            :disable="!newFileName"
+            @click="confirmCreateFile"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <q-dialog v-model="isRenameFileDialogOpen">
+      <q-card style="min-width: 300px">
+        <q-card-section>
+          <div class="text-h6">Rename File</div>
+        </q-card-section>
+        <q-card-section>
+          <q-input
+            v-model="renameFileName"
+            label="New file name"
+            autofocus
+            dense
+            @keyup.enter="confirmRenameFile"
+          />
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat label="Cancel" />
+          <q-btn
+            flat
+            label="Rename"
+            color="primary"
+            :disable="!renameFileName || renameFileName === activeFileName"
+            @click="confirmRenameFile"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <q-dialog v-model="isDeleteFileDialogOpen">
+      <q-card style="min-width: 300px">
+        <q-card-section>
+          <div class="text-h6">Delete File</div>
+        </q-card-section>
+        <q-card-section>
+          <div>
+            Are you sure you want to delete <strong>{{ activeFileName }}</strong
+            >?
+          </div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat label="Cancel" />
+          <q-btn flat label="Delete" color="negative" @click="confirmDeleteFile" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
 <script setup lang="ts">
 import {
+  matAdd,
   matCode,
   matContentCopy,
+  matDelete,
+  matDescription,
   matNavigateBefore,
   matNavigateNext,
   matVisibility,
 } from '@quasar/extras/material-icons'
-import { mdiNewBox, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
+import { mdiNewBox, mdiRenameBox, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
 import {
   createChatCompletionTask,
   createTool,
@@ -143,131 +263,189 @@ import SplitTaskyonView from 'src/components/SplitTaskyonView.vue'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 
-// Types
-interface DocumentVersion {
-  content: string
+const isCreateFileDialogOpen = ref(false)
+const isRenameFileDialogOpen = ref(false)
+const isDeleteFileDialogOpen = ref(false)
+const newFileName = ref('')
+const renameFileName = ref('')
+
+// --- Types ---
+
+type FilePath = string
+type FileContent = string
+type FilesMap = Record<FilePath, FileContent>
+
+interface ProjectVersion {
+  files: FilesMap
   timestamp: Date
   description?: string
 }
 
 interface LinePatchOperation {
   type: 'replace' | 'insert' | 'delete'
-  lineStart: number // 1-based line number
-  lineEnd?: number | undefined // 1-based line number (inclusive) for replace/delete
-  text?: string | undefined // New text for replace/insert
+  lineStart: number
+  lineEnd?: number
+  text?: string
 }
 
-interface LineInfo {
-  lineNumber: number
-  content: string
-  startPos: number
-  endPos: number
+// --- State ---
+
+const files = ref<FilesMap>({})
+const activeFileName = ref<string>('')
+const documentVersions = ref<ProjectVersion[]>([])
+const currentVersionIndex = ref(0)
+const hasUnsavedChanges = ref(false)
+const showPreview = ref(false)
+
+// --- Computed ---
+
+const fileList = computed(() => Object.keys(files.value))
+const canDeleteFile = computed(() => Object.keys(files.value).length > 1)
+
+// Proxy for the CodeEditor v-model
+const activeFileContent = computed({
+  get: () => files.value[activeFileName.value] || '',
+  set: (val) => {
+    if (activeFileName.value) {
+      files.value = {
+        ...files.value,
+        [activeFileName.value]: val,
+      }
+    }
+  },
+})
+
+const currentVersion = computed(() => documentVersions.value[currentVersionIndex.value])
+
+// Basic preview strategy:
+// If HTML, show it. If JS/CSS, wrap it slightly or just show text?
+// For now, we stick to the iframe logic for the *active* file if it looks like HTML,
+// or wrap it if it looks like JS.
+const previewContent = computed(() => {
+  const fileName = activeFileName.value || ''
+  const content = activeFileContent.value
+  const isHtml = fileName.endsWith('.html') || fileName.endsWith('.htm')
+
+  if (isHtml) return content
+
+  // Default wrapper for non-html content (treating as script or text)
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>body{font-family:monospace;white-space:pre-wrap;}</style>
+</head>
+<body>
+${content}
+</body>
+</html>`
+})
+
+// --- Persistence ---
+
+const storeKey = 'multiFileProjectData'
+
+// We store a simplified snapshot: { files: ..., versionCount: ... }
+// Recovering exact version history might be heavy, so we might just store last state or simplified history.
+// For this "minimal" implementation, let's try to persist `files` and maybe the current content.
+// Actually, let's persist everything like before but adapted.
+interface PersistedState {
+  version: number
+  files: FilesMap
+  // We can add version history later if needed, but let's keep it light for localStorage
 }
 
-// Taskyon tools configuration
-// Taskyon tools configuration
+// Restore
+const savedData = state.store[storeKey] as PersistedState | undefined
+if (savedData && savedData.files) {
+  files.value = savedData.files
+  // Restore basic version hook if we want, or just start fresh with content
+  // initializing a base version
+  documentVersions.value = [
+    {
+      files: { ...savedData.files },
+      timestamp: new Date(),
+      description: 'Restored session',
+    },
+  ]
+  currentVersionIndex.value = 0
+  if (Object.keys(files.value).length > 0) {
+    activeFileName.value = Object.keys(files.value)[0]!
+  }
+} else {
+  // Start with an empty project and an initial empty version snapshot
+  createNewVersion('Initial empty project')
+}
+
+// Persist
+watchThrottled(
+  files,
+  (newFiles) => {
+    state.store[storeKey] = {
+      version: 1,
+      files: newFiles,
+    }
+  },
+  { deep: true, throttle: 1000 },
+)
+
+// --- Tools Configuration ---
+
 const tools = [
-  // Entry node tool - provides context and decides next action
   createTool({
     name: 'documentAssistant',
-    description:
-      'Main document assistant that provides context and decides on next actions for document editing',
+    description: 'Main assistant that inspects the project files and decides on next actions.',
     parameters: {
       type: 'object',
       properties: {},
       additionalProperties: false,
     } as const satisfies JSONSchema7,
     function: () => {
-      // Gather document context information
-      const lineInfo = getLineInfo(currentContent.value)
-      const documentInfo = {
-        currentVersion: currentVersionIndex.value + 1,
-        totalVersions: documentVersions.value.length,
-        contentLength: currentContent.value.length,
-        totalLines: lineInfo.length,
-        hasUnsavedChanges: hasUnsavedChanges.value,
-        lastModified: currentVersion.value?.timestamp || 'never',
-        contentPreview: formatContentWithLineNumbers(currentContent.value, maxPreviewLines),
-        versions: documentVersions.value.map((v, i) => ({
-          index: i + 1,
-          timestamp: v.timestamp,
-          preview: getVersionPreview(v.content),
-          description: v.description,
-        })),
-      }
+      // 1. Context Assembly
+      const fileNames = Object.keys(files.value)
+      const currentFile = activeFileName.value
+      const currentFileContent = files.value[currentFile] || ''
 
-      // Create context prompt for the AI
+      const filesPreview = fileNames
+        .map((name) => {
+          const content = files.value[name] || ''
+          const lineCount = content.split('\n').length
+          const isCurrent = name === currentFile ? ' (Currently Open)' : ''
+          return `- **${name}**${isCurrent}: ${lineCount} lines`
+        })
+        .join('\n')
+
+      const activeContentWithLines = formatContentWithLineNumbers(currentFileContent, 1000)
+
       const contextPrompt = `
-You are the Taskyon Document Assistant helping users edit and manage their documents.
+You are the Taskyon Coding Assistant managing a multi-file project.
 
-This application is used **almost exclusively to edit code/files**. Your primary job is to **apply concrete edits** to the current document using the \`updateDocument\` tool.
+## Project State
+**Total Files:** ${fileNames.length}
+**Current Active File:** ${currentFile}
+**Files in Project:**
+${filesPreview}
 
-If the user request to write an html-based app. Then write it exactly as if it where a single html file
-webpage. The user can preview the app in an iframe!
-
-## Current Document State
-**Version:** ${documentInfo.currentVersion} of ${documentInfo.totalVersions}
-**Content Length:** ${documentInfo.contentLength} characters
-**Total Lines:** ${documentInfo.totalLines}
-**Has Unsaved Changes:** ${documentInfo.hasUnsavedChanges}
-**Last Modified:** ${documentInfo.lastModified.toLocaleString()}
-
-## Available Versions
-${documentInfo.versions
-  .map((v) => `- Version ${v.index}: ${v.preview} (${v.timestamp.toLocaleString()})`)
-  .join('\n')}
-
-## Current Content (with line numbers)
+## Content of Active File (${currentFile})
 \`\`\`
-${documentInfo.contentPreview}
+${activeContentWithLines}
 \`\`\`
 
-## Available Tool: \`updateDocument\`
-You have access to the \`updateDocument\` tool which can:
-- Apply line-based patches to the document:
-  - **Replace**: Replace one or more lines
-  - **Insert**: Insert new lines at a specific position
-  - **Delete**: Delete one or more lines
-- **Replace the entire document content** using \`newContent\`
-- Add human-readable **descriptions** of the changes made
+## Capabilities
+- You can read and edit **any** file in the project, not just the active one.
+- You can apply edits to **multiple files** in a single \`updateDocument\` call.
+- Use \`updateDocument\` to modify existing files.
 
-## Line-Based Editing
-- Lines are numbered starting from 1
-- \`lineStart\`: The line number where the operation begins (1-based)
-- \`lineEnd\`: (optional) The end line for replace/delete operations (inclusive)
-- \`text\`: The new text for replace/insert operations (can be multi-line)
-
-## CRITICAL BEHAVIOR RULES
-
-1. **Always apply edits via \`updateDocument\`**
-   - Whenever the user wants to **create, modify, refactor, reformat, or delete** any part of the document, you **MUST** call \`updateDocument\`.
-   - Do **NOT** just answer with "here is the updated code" or "change line X to Y" without also calling \`updateDocument\`.
-   - If the document is empty and the user asks to **create a new file**, use \`updateDocument\` with \`newContent\`.
-
-2. **When to NOT use \`updateDocument\`**
-   - Only skip \`updateDocument\` if the user is clearly asking **purely conceptual questions** (e.g., "Explain what this function does", "What does this error mean?", "How does async/await work in JS?").
-   - If there is any reasonable interpretation that the user wants the document changed, treat it as an **editing request** and use \`updateDocument\`.
-
-3. **Clarification before editing**
-   - If you are **uncertain** what the user wants changed, ask **clarifying questions** first.
-   - Once you understand the requested change, call \`updateDocument\` to apply it.
-   - You may ask 1–2 short clarification questions before calling the tool, but do not stay in Q&A mode forever when an edit is clearly requested.
-
-4. **How to respond**
-   - For edit requests:
-     - Call \`updateDocument\` with appropriate \`patches\` or \`newContent\`.
-     - In the tool result description, clearly explain what you changed (e.g., which lines, what behavior changed).
-   - For non-edit, conceptual questions:
-     - Answer normally **without** calling \`updateDocument\`.
-
-Your goal is to **keep the document in sync with the user's intent**. When in doubt, prefer **actually editing the document** via \`updateDocument\` instead of just suggesting changes.
+## Rules
+1. **Always edit via tool**: Do not just output code blocks. Use \`updateDocument\`.
+2. **Context**: If you need to see the content of other files effectively, you can assume you have read access or ask for them (internal thought process), but for this tool, I am providing the active file details. *Note: If you need to edit a file that is not active, you can blindly apply patches if you are confident, or you might need to rely on your internal knowledge if you just created it.*
+3. **Multi-file Edits**: If a request involves changing \`index.html\` and \`main.js\`, do it in **one** tool call with multiple entries in the \`updates\` array.
 `
-
       return makeTaskResult([
         createChatCompletionTask({
           prompts: [contextPrompt],
@@ -278,92 +456,89 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
     },
   }),
 
-  // Document update tool - handles actual document modifications
   createTool({
     name: 'updateDocument',
-    description:
-      'Update the document content using line-based patches for efficient editing or full content replacement',
+    description: 'Update one or more files in the project.',
     parameters: {
       type: 'object',
       properties: {
-        patches: {
+        updates: {
           type: 'array',
           items: {
             type: 'object',
             properties: {
-              type: {
+              filePath: {
                 type: 'string',
-                enum: ['replace', 'insert', 'delete'],
-                description: 'Type of patch operation',
+                description: 'The path/name of the file to update',
               },
-              lineStart: {
-                type: 'number',
-                description: 'Start line number (1-based)',
-              },
-              lineEnd: {
-                type: 'number',
-                description: 'End line number (1-based, inclusive) for replace/delete operations',
-              },
-              text: {
+              newContent: {
                 type: 'string',
-                description: 'Text to insert/replace with (can be multi-line)',
+                description: 'Full new content for the file',
+              },
+              patches: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    type: { enum: ['replace', 'insert', 'delete'], type: 'string' },
+                    lineStart: { type: 'number' },
+                    lineEnd: { type: 'number' },
+                    text: { type: 'string' },
+                  },
+                  required: ['type', 'lineStart'],
+                },
               },
             },
-            required: ['type', 'lineStart'],
+            required: ['filePath'],
           },
         },
-        newContent: {
-          type: 'string',
-          description: 'Full new content (alternative to patches)',
-        },
-        description: {
-          type: 'string',
-          description: 'Description of the changes made',
-        },
+        description: { type: 'string', description: 'Summary of changes' },
       },
-      additionalProperties: false,
+      required: ['updates'],
     } as const satisfies JSONSchema7,
-    function: ({ patches, newContent, description }) => {
-      createNewVersion()
-      saveCurrentVersion()
-      let updatedContent: string
+    function: ({ updates, description }) => {
+      // 1. Snapshot current state before applying changes?
+      // Actually we save a snapshot *after* the change usually, or *as* the new version.
+      // Let's take the current state, apply changes, and push a NEW version.
 
-      createNewVersion()
-      if (newContent) {
-        // Full content replacement
-        updatedContent = newContent
-      } else if (patches) {
-        // Apply line-based patches
-        const linePatches: LinePatchOperation[] = patches.map((patch) => ({
-          type: patch.type,
-          lineStart: patch.lineStart,
-          lineEnd: patch.lineEnd,
-          text: patch.text,
-        }))
+      const currentFilesSnapshot = { ...files.value } // Shallow copy of map
+      const changesLog: string[] = []
 
-        updatedContent = applyLinePatches(currentContent.value, linePatches)
-      } else {
-        return makeTaskResult({
-          role: 'system',
-          content: {
-            type: 'return',
-            data: 'Error: Either patches or newContent must be provided',
-          },
-        })
+      for (const update of updates) {
+        const { filePath, newContent, patches } = update
+        const originalContent = currentFilesSnapshot[filePath]
+
+        // Check existence?
+        // User said: "AI should not yet be able to create... files".
+        // But for "create a new file", we usually need to allow it.
+        // Let's allow creating if it doesn't exist, to be safe, or just strict edit?
+        // "AI should not yet be able to create/delete/rename files" -> Strict check.
+        if (originalContent === undefined) {
+          changesLog.push(`Skipped ${filePath}: File not found.`)
+          continue
+        }
+
+        let updatedContent = originalContent
+        if (newContent !== undefined) {
+          updatedContent = newContent
+          changesLog.push(`Replaced content of ${filePath}`)
+        } else if (patches) {
+          updatedContent = applyLinePatches(originalContent, patches)
+          changesLog.push(`Patched ${filePath} (${patches.length} ops)`)
+        }
+
+        currentFilesSnapshot[filePath] = updatedContent
       }
 
-      // Update the editor content
-      currentContent.value = updatedContent
-      hasUnsavedChanges.value = true
-      saveCurrentVersion()
-
-      const changeDescription = description || 'Document updated by AI'
+      // Commit changes
+      files.value = currentFilesSnapshot
+      createNewVersion(`Auto-update: ${description || changesLog.join(', ')}`)
 
       return makeTaskResult({
         role: 'system',
         content: {
           type: 'message',
-          data: `Document updated successfully!\n\n**Changes:** ${changeDescription}\n\n**Content preview:**\n\`\`\`\n${updatedContent.substring(0, 200)}${updatedContent.length > 200 ? '...' : ''}\n\`\`\``,
+          data: `Updates applied:\n${changesLog.join('\n')}`,
         },
       })
     },
@@ -375,7 +550,6 @@ const configuration = computed<partialTyConfiguration | null>(() => {
   return {
     llmSettings: {
       ...removeKeys(state.llmSettings, ['entryNode', 'enableOpenAiTools']),
-      //enableOpenAiTools: false,
       enableToolChooser: true,
       entryNode: toolCall({ name: 'documentAssistant', arguments: {} }),
     },
@@ -385,255 +559,212 @@ const configuration = computed<partialTyConfiguration | null>(() => {
       expertMode: true,
       showLogo: false,
       chatSuggestions: [],
-      welcomeMsg:
-        'Hi! I can help you edit documents. I can see the current content with line numbers and make precise line-based edits.',
+      welcomeMsg: 'I see all your files! Select a file to view it, or ask me to edit any of them.',
     },
     signatureOrKey: tystate.currentKeyString ?? undefined,
   }
 })
 
-// State
-const documentVersions = ref<DocumentVersion[]>([])
-const currentVersionIndex = ref(0)
-const currentContent = ref('')
-const hasUnsavedChanges = ref(false)
+// --- Helper Functions ---
 
-const showPreview = ref(false)
-const isCodeValid = ref(true)
-const validationError = ref('')
-
-const iframeContent = computed(() => {
-  const userCode = currentContent.value || ''
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Preview</title>
-<style>
-  html, body { margin: 0; padding: 0; height: 100%; }
-  body { box-sizing: border-box; padding: 8px; }
-</style>
-  <script>
-  window.onerror = function(message, source, lineno, colno, error) {
-    parent.postMessage({ type: 'iframe-error', message, source, lineno, colno }, '*');
-  };
-  window.addEventListener('DOMContentLoaded', function() {
-    parent.postMessage({ type: 'iframe-ready' }, '*');
-  });
-<\u002Fscript>
-</head>
-<body>
-${userCode}
-</body>
-</html>`
-})
-
-// make sure we persist current version for page reloads
-const storeKey = 'codeEditorText'
-const initialText = state.store[storeKey] as string
-if (initialText) currentContent.value = initialText
-watchThrottled(currentContent, (text) => {
-  console.log('store text!!')
-  state.store[storeKey] = text
-  // Reset validation state on content change; iframe will report any new errors
-  isCodeValid.value = true
-  validationError.value = ''
-})
-
-// Computed
-const currentVersion = computed(() => documentVersions.value[currentVersionIndex.value])
-
-// Copy functions
-function copyContent() {
-  copyToClipboard(currentContent.value)
-    .then(() => Notify.create({ message: 'Content copied', color: 'primary' }))
-    .catch(() => Notify.create({ message: 'Copy failed', color: 'negative' }))
+function getLanguage(fileName: string) {
+  if (fileName.endsWith('.js') || fileName.endsWith('.ts')) return 'javascript'
+  if (fileName.endsWith('.html')) return 'html'
+  if (fileName.endsWith('.css')) return 'css'
+  if (fileName.endsWith('.json')) return 'json'
+  if (fileName.endsWith('.vue')) return 'html' // simplistic
+  return 'javascript' // default
 }
 
-function reset() {
-  documentVersions.value = []
-  currentVersionIndex.value = 0
-  currentContent.value = ''
-  hasUnsavedChanges.value = false
-}
-function togglePreview() {
-  showPreview.value = !showPreview.value
-}
-
-function handleIframeMessage(event: MessageEvent) {
-  if (!event.data || typeof event.data !== 'object') return
-  const { type, message } = event.data as { type?: string; message?: string }
-  if (type === 'iframe-error') {
-    isCodeValid.value = false
-    validationError.value = message || 'Unknown error'
-  } else if (type === 'iframe-ready') {
-    isCodeValid.value = true
-    validationError.value = ''
-  }
-}
-
-// Version management functions (unchanged)
-function onContentChange() {
-  const current = currentVersion.value
-  if (current) {
-    hasUnsavedChanges.value = currentContent.value !== current.content
-  }
-}
-
-function saveCurrentVersion() {
-  if (!hasUnsavedChanges.value) return
-
-  const current = currentVersion.value
-  if (!current) return
-
-  documentVersions.value[currentVersionIndex.value] = {
-    ...current,
-    content: currentContent.value,
-    timestamp: new Date(),
-  }
-  hasUnsavedChanges.value = false
-  Notify.create({ message: 'Version saved', color: 'positive' })
-}
-
-function createNewVersion() {
-  const newVersion: DocumentVersion = {
-    content: currentContent.value,
-    timestamp: new Date(),
-    description: `Version ${documentVersions.value.length + 1}`,
-  }
-  documentVersions.value.push(newVersion)
-  currentVersionIndex.value = documentVersions.value.length - 1
-  hasUnsavedChanges.value = false
-  Notify.create({ message: 'New version created', color: 'positive' })
-}
-
-function switchToVersion(index: number) {
-  if (hasUnsavedChanges.value) {
-    // Ask user if they want to save changes
-    if (confirm('You have unsaved changes. Do you want to save them before switching versions?')) {
-      saveCurrentVersion()
-    }
-  }
-  currentVersionIndex.value = index
-  const version = documentVersions.value[index]
-  if (version) {
-    currentContent.value = version.content
-  }
-  hasUnsavedChanges.value = false
-}
-
-function goToPreviousVersion() {
-  if (currentVersionIndex.value > 0) {
-    switchToVersion(currentVersionIndex.value - 1)
-  }
-}
-
-function goToNextVersion() {
-  if (currentVersionIndex.value < documentVersions.value.length - 1) {
-    switchToVersion(currentVersionIndex.value + 1)
-  }
-}
-
-function getVersionPreview(content: string): string {
-  const firstLine = content.split('\n')[0]
-  if (!firstLine) return 'Empty document'
-  return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine
-}
-
-// Get line information with character positions
-function getLineInfo(content: string): LineInfo[] {
-  const lines = content.split('\n')
-  const lineInfo: LineInfo[] = []
-  let currentPos = 0
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!
-    lineInfo.push({
-      lineNumber: i + 1,
-      content: line,
-      startPos: currentPos,
-      endPos: currentPos + line.length,
-    })
-    currentPos += line.length + 1 // +1 for the newline character
-  }
-
-  return lineInfo
-}
-
-// Format content with line numbers
 function formatContentWithLineNumbers(content: string, maxLines?: number): string {
   const lines = content.split('\n')
   const totalLines = lines.length
   const displayLines = maxLines ? lines.slice(0, maxLines) : lines
 
-  const formatted = displayLines
-    .map((line, index) => {
-      const maxLineDigits = Math.max(1, Math.floor(Math.log10(lines.length)) + 1)
-      const lineNum = (index + 1).toString().padStart(maxLineDigits, ' ')
-      return `${lineNum}: ${line}`
-    })
-    .join('\n')
-
-  if (maxLines && totalLines > maxLines) {
-    return formatted + `\n... (${totalLines - maxLines} more lines)`
-  }
-
-  return formatted
+  return (
+    displayLines
+      .map((line, index) => {
+        const lineNum = (index + 1).toString().padStart(4, ' ')
+        return `${lineNum}: ${line}`
+      })
+      .join('\n') +
+    (maxLines && totalLines > maxLines ? `\n... (${totalLines - maxLines} more)` : '')
+  )
 }
 
-// Apply line-based patches to text
 function applyLinePatches(text: string, patches: LinePatchOperation[]): string {
   const lines = text.split('\n')
+  // Sort patches reverse to avoid index shifts
+  const sortedPatches = [...patches].sort((a, b) => b.lineStart - a.lineStart)
 
-  // Sort patches by line number in reverse order to maintain indices
-  patches.sort((a, b) => (b.lineStart || 0) - (a.lineStart || 0))
+  for (const patch of sortedPatches) {
+    const startIdx = patch.lineStart - 1
+    if (startIdx < 0) continue
 
-  for (const patch of patches) {
-    const lineIndex = patch.lineStart - 1 // Convert to 0-based index
-
-    switch (patch.type) {
-      case 'replace':
-        if (patch.lineEnd !== undefined) {
-          const endIndex = patch.lineEnd - 1
-          const newLines = patch.text ? patch.text.split('\n') : []
-          lines.splice(lineIndex, endIndex - lineIndex + 1, ...newLines)
-        } else {
-          // Replace single line
-          lines[lineIndex] = patch.text || ''
-        }
-        break
-      case 'insert': {
-        const insertLines = patch.text ? patch.text.split('\n') : ['']
-        lines.splice(lineIndex, 0, ...insertLines)
-        break
+    if (patch.type === 'insert') {
+      const newLines = (patch.text || '').split('\n')
+      lines.splice(startIdx, 0, ...newLines)
+    } else {
+      // replace or delete
+      const endLine = patch.lineEnd ?? patch.lineStart
+      const deleteCount = endLine - patch.lineStart + 1
+      if (patch.type === 'delete') {
+        lines.splice(startIdx, deleteCount)
+      } else if (patch.type === 'replace') {
+        const newLines = (patch.text || '').split('\n')
+        lines.splice(startIdx, deleteCount, ...newLines)
       }
-      case 'delete':
-        if (patch.lineEnd !== undefined) {
-          const endIndex = patch.lineEnd - 1
-          lines.splice(lineIndex, endIndex - lineIndex + 1)
-        } else {
-          // Delete single line
-          lines.splice(lineIndex, 1)
-        }
-        break
     }
   }
-
   return lines.join('\n')
 }
 
-const maxPreviewLines = 1000
+// --- Actions (UI) ---
 
-// Initialize on mount
-onMounted(() => {
-  window.addEventListener('message', handleIframeMessage)
-  const current = currentVersion.value
-  if (current) {
-    currentContent.value = current.content
+function copyContent() {
+  void copyToClipboard(activeFileContent.value).then(() =>
+    Notify.create({ message: 'Copied!', color: 'positive' }),
+  )
+}
+
+function reset() {
+  files.value = {}
+  activeFileName.value = ''
+  documentVersions.value = []
+  createNewVersion('Reset')
+}
+
+function openCreateFileDialog() {
+  newFileName.value = ''
+  isCreateFileDialogOpen.value = true
+}
+
+function confirmCreateFile() {
+  const name = newFileName.value.trim()
+  if (!name) return
+  if (files.value[name] !== undefined) {
+    Notify.create({
+      message: `File "${name}" already exists`,
+      color: 'negative',
+    })
+    return
   }
-})
 
-onBeforeUnmount(() => {
-  window.removeEventListener('message', handleIframeMessage)
-})
+  files.value = {
+    ...files.value,
+    [name]: '',
+  }
+  activeFileName.value = name
+  isCreateFileDialogOpen.value = false
+  createNewVersion(`Created file ${name}`)
+}
+
+function openRenameFileDialog() {
+  if (!activeFileName.value) return
+  renameFileName.value = activeFileName.value
+  isRenameFileDialogOpen.value = true
+}
+
+function confirmRenameFile() {
+  const oldName = activeFileName.value
+  const nextName = renameFileName.value.trim()
+  if (!oldName || !nextName || nextName === oldName) {
+    isRenameFileDialogOpen.value = false
+    return
+  }
+  if (files.value[nextName] !== undefined) {
+    Notify.create({
+      message: `File "${nextName}" already exists`,
+      color: 'negative',
+    })
+    return
+  }
+
+  const updated: FilesMap = {}
+  for (const [key, value] of Object.entries(files.value)) {
+    updated[key === oldName ? nextName : key] = value
+  }
+  files.value = updated
+  activeFileName.value = nextName
+  isRenameFileDialogOpen.value = false
+  createNewVersion(`Renamed file ${oldName} -> ${nextName}`)
+}
+
+function openDeleteFileDialog() {
+  if (!activeFileName.value || !canDeleteFile.value) return
+  isDeleteFileDialogOpen.value = true
+}
+
+function confirmDeleteFile() {
+  const name = activeFileName.value
+  if (!name) {
+    isDeleteFileDialogOpen.value = false
+    return
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { [name]: _removed, ...rest } = files.value
+  files.value = rest
+  const remaining = Object.keys(rest)
+  activeFileName.value = remaining[0] ?? ''
+  isDeleteFileDialogOpen.value = false
+  createNewVersion(`Deleted file ${name}`)
+}
+
+function togglePreview() {
+  showPreview.value = !showPreview.value
+}
+
+// Versioning Logic
+// We now snapshot the whole file map
+function createNewVersion(desc?: string) {
+  const snapshot: ProjectVersion = {
+    files: { ...files.value },
+    timestamp: new Date(),
+    description: desc || `Version ${documentVersions.value.length + 1}`,
+  }
+  documentVersions.value = [...documentVersions.value, snapshot]
+  currentVersionIndex.value = documentVersions.value.length - 1
+  hasUnsavedChanges.value = false
+  Notify.create({ message: 'Version snapshot saved', color: 'positive', timeout: 1000 })
+}
+
+function handleCreateNewVersionClick() {
+  createNewVersion()
+}
+
+function onContentChange() {
+  // Check if current files differ from current version snapshot
+  // This is a bit expensive for deep comparison every keystroke, so we throttle or simplify.
+  // For now, let's just assume if user types, we have "unsaved changes" relative to the last snapshot.
+  const currentSnap = currentVersion.value
+  if (!currentSnap) return
+
+  // Simple check: active file changed?
+  const activeFile = activeFileName.value
+  if (files.value[activeFile] !== currentSnap.files[activeFile]) {
+    hasUnsavedChanges.value = true
+  }
+}
+
+function goToPreviousVersion() {
+  if (currentVersionIndex.value > 0) {
+    jumpToVersion(currentVersionIndex.value - 1)
+  }
+}
+
+function goToNextVersion() {
+  if (currentVersionIndex.value < documentVersions.value.length - 1) {
+    jumpToVersion(currentVersionIndex.value + 1)
+  }
+}
+
+function jumpToVersion(idx: number) {
+  currentVersionIndex.value = idx
+  const target = documentVersions.value[idx]
+  if (target) {
+    // Restore files
+    files.value = { ...target.files }
+  }
+}
 </script>
