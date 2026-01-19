@@ -18,7 +18,7 @@ import { basicSetup } from 'codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
 import type { LanguageSupport, StreamParser } from '@codemirror/language'
 import { StreamLanguage } from '@codemirror/language'
-import type { Extension } from '@codemirror/state'
+import { EditorState, type Extension } from '@codemirror/state'
 import { Codemirror } from 'vue-codemirror'
 
 const content = defineModel<string>({
@@ -29,7 +29,7 @@ const content = defineModel<string>({
 const props = defineProps<{ language?: string }>()
 
 const $q = useQuasar()
-const langExtension = ref<Extension>()
+const langExtension = ref<Extension | null>()
 const languageKey = ref('')
 
 // ---------------------------
@@ -91,7 +91,26 @@ async function loadModernLanguage(lang: string) {
 }
 
 // ---------------------------
-// 3️⃣ Runtime loader with fallback
+// 3️⃣ Safety check for dynamically loaded extensions
+// ---------------------------
+function isSafeExtension(ext: Extension | null | undefined): ext is Extension {
+  if (!ext) return false
+  try {
+    // Try to construct a temporary EditorState; if this fails,
+    // the extension is likely from a different @codemirror/state instance.
+    EditorState.create({
+      doc: '',
+      extensions: [ext],
+    })
+    return true
+  } catch (e) {
+    console.warn('[CodeEditor] Ignoring incompatible CodeMirror extension from CDN:', e)
+    return false
+  }
+}
+
+// ---------------------------
+// 4️⃣ Runtime loader with fallback
 // ---------------------------
 async function loadLanguage(lang: string) {
   // 1. Try modern CM6
@@ -102,13 +121,25 @@ async function loadLanguage(lang: string) {
   ext = await loadLegacyMode(lang)
   if (ext) return ext
 
-  // 3. Optional: external URL fallback
+  // 3. Optional: external URL fallback (CDN)
   try {
     const url = `https://unpkg.com/@codemirror/lang-${lang}?module`
     const mod = await import(/* @vite-ignore */ url)
-    return mod[lang]()
-  } catch {
-    console.warn(`No CodeMirror language found for '${lang}', using plaintext fallback`)
+    const candidate = typeof mod[lang] === 'function' ? mod[lang]() : null
+
+    if (isSafeExtension(candidate)) {
+      return candidate
+    }
+
+    console.warn(
+      `[CodeMirror] CDN language '${lang}' is incompatible with local CodeMirror, falling back to plaintext`,
+    )
+    return null
+  } catch (err) {
+    console.warn(
+      `No CodeMirror language found for '${lang}' via CDN, using plaintext fallback`,
+      err,
+    )
     return null
   }
 }
