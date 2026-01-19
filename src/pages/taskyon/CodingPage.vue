@@ -29,12 +29,23 @@
             </template>
           </q-select>
 
+          <FileDropzone
+            class="editor-drop-zone"
+            disable-dropzone-border
+            accept="*"
+            enable-paste
+            @add-files="handleAddFiles"
+          >
+            <q-btn dense flat round title="Upload File">
+              <q-icon :name="matUpload" />
+            </q-btn>
+          </FileDropzone>
+
           <q-btn
             flat
             dense
             round
             :icon="matAdd"
-            size="sm"
             title="Create File"
             @click="openCreateFileDialog"
           />
@@ -44,7 +55,6 @@
             dense
             round
             :icon="mdiRenameBox"
-            size="sm"
             :disable="!activeFileName"
             title="Rename Current File"
             @click="openRenameFileDialog"
@@ -55,7 +65,6 @@
             dense
             round
             :icon="matDelete"
-            size="sm"
             :disable="!canDeleteFile || !activeFileName"
             title="Delete Current File"
             @click="openDeleteFileDialog"
@@ -74,7 +83,6 @@
             dense
             round
             :icon="matNavigateBefore"
-            size="sm"
             title="Previous Version"
             :disable="currentVersionIndex === 0"
             @click="goToPreviousVersion"
@@ -84,7 +92,6 @@
             dense
             round
             :icon="matNavigateNext"
-            size="sm"
             title="Next Version"
             :disable="currentVersionIndex === documentVersions.length - 1"
             @click="goToNextVersion"
@@ -95,7 +102,6 @@
             round
             :icon="mdiTextBoxPlus"
             color="secondary"
-            size="sm"
             title="Create New Version Snapshot"
             @click="handleCreateNewVersionClick"
           />
@@ -245,6 +251,7 @@ import {
   matDescription,
   matNavigateBefore,
   matNavigateNext,
+  matUpload,
   matVisibility,
 } from '@quasar/extras/material-icons'
 import { mdiNewBox, mdiRenameBox, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
@@ -259,6 +266,7 @@ import { watchThrottled } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { copyToClipboard, Notify } from 'quasar'
 import CodeEditor from 'src/components/CodeEditor.vue'
+import FileDropzone from 'src/components/FileDropzone.vue'
 import SplitTaskyonView from 'src/components/SplitTaskyonView.vue'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { useAppStateStore } from 'src/stores/appState'
@@ -508,13 +516,20 @@ ${activeContentWithLines}
         const { filePath, newContent, patches } = update
         const originalContent = currentFilesSnapshot[filePath]
 
-        // Check existence?
-        // User said: "AI should not yet be able to create... files".
-        // But for "create a new file", we usually need to allow it.
-        // Let's allow creating if it doesn't exist, to be safe, or just strict edit?
-        // "AI should not yet be able to create/delete/rename files" -> Strict check.
+        // Check existence.
+        // If the file does not exist yet and `newContent` is provided, we
+        // treat this as a request to create a new file.
+        // If only patches are provided for a non-existent file, we skip it
+        // because we cannot reliably apply line-based patches.
         if (originalContent === undefined) {
-          changesLog.push(`Skipped ${filePath}: File not found.`)
+          if (newContent !== undefined) {
+            currentFilesSnapshot[filePath] = newContent
+            changesLog.push(`Created file ${filePath}`)
+          } else if (patches && patches.length > 0) {
+            changesLog.push(
+              `Skipped ${filePath}: File not found (cannot apply patches to non-existent file).`,
+            )
+          }
           continue
         }
 
@@ -632,6 +647,31 @@ function reset() {
   activeFileName.value = ''
   documentVersions.value = []
   createNewVersion('Reset')
+}
+
+function handleAddFiles(addedFiles: Array<{ name: string; content?: string }>) {
+  if (!addedFiles || addedFiles.length === 0) return
+
+  const nextFiles: FilesMap = { ...files.value }
+  const addedNames: string[] = []
+
+  for (const file of addedFiles) {
+    if (!file?.name) continue
+    // Simple behavior: add/overwrite using file name as key
+    nextFiles[file.name] = file.content ?? ''
+    addedNames.push(file.name)
+  }
+
+  files.value = nextFiles
+
+  // If there was no active file before, focus the first added one
+  if (!activeFileName.value && addedNames.length > 0) {
+    activeFileName.value = addedNames[0]!
+  }
+
+  if (addedNames.length > 0) {
+    createNewVersion(`Added files: ${addedNames.join(', ')}`)
+  }
 }
 
 function openCreateFileDialog() {
