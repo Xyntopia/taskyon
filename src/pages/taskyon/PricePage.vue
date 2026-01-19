@@ -127,7 +127,7 @@ For in in-depth comparison check out webpages like the following
                     `No information provided by Backend: **${state.llmSettings.selectedApi}**`
                   "
                 />
-                <object-tree-view v-model="props.row" read-only />
+                <ObjectTreeView v-model="props.row" read-only copy-btn />
               </InfoDialog>
               <q-btn
                 v-if="

@@ -24,7 +24,6 @@
         </q-btn>
       </template>
 
-      <!-- NEW: Copy button -->
       <q-btn v-if="copy" dense size="sm" flat :icon="matContentCopy" @click.stop="emit('copy')">
         <q-tooltip>Copy value as JSON</q-tooltip>
       </q-btn>
@@ -59,7 +58,7 @@ const emit = defineEmits<{
 defineProps<{
   showLabel?: boolean
   reset?: boolean
-  copy?: boolean // NEW: enable / disable copy button
+  copy?: boolean
   item: {
     icon?: string
     description?: string

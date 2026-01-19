@@ -72,9 +72,10 @@
         @reset="updateValue(prop.node.path, prop.node.default)"
       >
         <div class="column q-gutter-sm">
-          <!-- Row with chart toggle button -->
+          <!-- Row with toolbar -->
           <div class="row items-center q-gutter-xs">
             <q-btn
+              v-if="isNumericArray(prop.node.value)"
               flat
               dense
               size="sm"
@@ -96,6 +97,7 @@
                   prop.node.value.every((r: unknown) => Array.isArray(r))
                 "
               >
+                <!-- 2D Array Info -->
                 <div>
                   2D array of length {{ countLeaves(prop.node.value) }} [{{
                     prop.node.value.length
@@ -112,18 +114,38 @@
                 <div>Array of length {{ prop.node.value.length }}</div>
               </template>
             </div>
+
+            <q-space />
+
+            <!-- Toggle Summary/JSON View -->
+            <q-btn
+              v-if="isLarge(prop.node.value)"
+              flat
+              dense
+              size="sm"
+              no-caps
+              :label="
+                fullViewPaths.includes(String(prop.node.key)) ? 'Show Summary' : 'Show Full JSON'
+              "
+              color="primary"
+              @click.stop="toggleFullView(String(prop.node.key), prop.node.value)"
+            />
           </div>
 
-          <!-- Content: either chart or original editor/summary -->
+          <!-- Content: chart, summary, or editor -->
           <div>
-            <template v-if="chartPaths?.includes(String(prop.node.key))">
-              <!-- When chart is active, replace JSON input with chart -->
+            <!-- Chart View -->
+            <template
+              v-if="isNumericArray(prop.node.value) && chartPaths?.includes(String(prop.node.key))"
+            >
               <ListChart :value="prop.node.value" />
             </template>
-            <template v-else>
-              <!-- Original behavior (JSON editor or summary) -->
+
+            <!-- Full JSON Editor -->
+            <template
+              v-else-if="!isLarge(prop.node.value) || fullViewPaths.includes(String(prop.node.key))"
+            >
               <json-input
-                v-if="countLeaves(prop.node.value) < listSummary"
                 :readonly="readOnly"
                 auto-save
                 filled
@@ -132,6 +154,21 @@
                 style="min-width: 200px"
                 @update:model-value="(value: unknown) => updateValue(prop.node.path, value)"
               />
+            </template>
+
+            <!-- Summary Text -->
+            <template v-else>
+              <div
+                class="q-pa-xs bg-grey-2 rounded-borders text-code text-caption"
+                style="
+                  white-space: pre-wrap;
+                  word-break: break-all;
+                  max-height: 200px;
+                  overflow-y: auto;
+                "
+              >
+                {{ serializeObject(prop.node.value, { maxDepth: 2, maxArrayLength: 20 }) }}
+              </div>
             </template>
           </div>
         </div>
@@ -323,9 +360,10 @@ import { matBarChart, matInfo } from '@quasar/extras/material-icons'
 import { type JSONSchema7 } from 'json-schema'
 import { type QTreeNode } from 'quasar'
 import { copyToClipboard, countLeaves } from 'src/modules/utils'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type z from 'zod'
-import InfoDialog from '../InfoDialog.vue'
+import { serializeObject } from 'src/modules/serializeObject'
+
 import FieldView from './FieldView.vue'
 import JsonInput from './JsonInput.vue'
 import ListChart from './ListChart.vue'
@@ -685,6 +723,54 @@ const copyNodeValue = (path: string[]) => {
   // You can decide how to handle undefined; here we still stringify it
   const json = JSON.stringify(target, null, 2)
   copyToClipboard(json)
+}
+
+const fullViewPaths = ref<string[]>([])
+
+const isLarge = (val: unknown) => {
+  // Use listSummary as threshold for "large"
+  // countLeaves might be expensive for huge arrays, so we can also check length directly
+  if (Array.isArray(val) && val.length > listSummary) return true
+  return countLeaves(val) > listSummary
+}
+
+const toggleFullView = (key: string, val: unknown) => {
+  if (fullViewPaths.value.includes(key)) {
+    fullViewPaths.value = fullViewPaths.value.filter((k) => k !== key)
+  } else {
+    // Safety check for massive objects
+    const leaves = countLeaves(val)
+    if (leaves > 5000) {
+      // Hard cap warning
+      const confirmLoad = window.confirm(
+        `This object contains approx ${leaves} items. Rendering the full editor might freeze your browser. Are you sure?`,
+      )
+      if (!confirmLoad) return
+    }
+    fullViewPaths.value.push(key)
+  }
+}
+
+const isNumericArray = (val: unknown): boolean => {
+  if (!Array.isArray(val)) return false
+  if (val.length === 0) return false
+
+  // Quick check on the first item to determine type
+  const first = val[0]
+
+  // Check for 2D numeric array
+  if (Array.isArray(first)) {
+    // We check if the FIRST row is numeric and assume consistency for perf,
+    // or we can use .every() if we want strict correctness.
+    // Given potentially large datasets, we'll check every row but only first element of row?
+    // Let's stick to safe .every() but acknowledge it might be slow for million-item arrays.
+    // Optimization: check first, middle, last?
+    // For now, strict check:
+    return val.every((row) => Array.isArray(row) && row.every((n) => typeof n === 'number'))
+  }
+
+  // Check for 1D numeric array
+  return val.every((n) => typeof n === 'number')
 }
 </script>
 
