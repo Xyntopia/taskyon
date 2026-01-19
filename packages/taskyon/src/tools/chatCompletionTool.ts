@@ -43,6 +43,7 @@ import {
 import type { Thunk } from '../utils/tsHelpers'
 import { useNlpWorker } from '../utils/webWorkerApi'
 import { safeYamlDump } from '../utils/yamlUtils'
+import type { ReadonlyDeep } from 'type-fest'
 
 function generateOpenAIToolDeclarations(
   allowedTools: string[],
@@ -769,7 +770,7 @@ async function makeFilesAiReadable(
 export const chatCompletionToolName = 'chatCompletion'
 
 export function createChatCompletionTool(
-  llmSettings: Thunk<llmSettings>,
+  llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
   taskManager: TyTaskManager,
 ) {
   //const { default: Ajv } = await import('ajv')

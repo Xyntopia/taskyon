@@ -61,6 +61,7 @@ import { guiTools } from '../modules/taskyon/GuiTools'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
 import { sendFile } from '../../packages/taskyon/src/types/apiTypes'
+import type { ReadonlyDeep } from 'type-fest'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -129,7 +130,7 @@ export function asyncProxy<T extends object>(initializer: () => Promise<T>): Asy
 }
 
 async function updateLlmModels(
-  llmSettings: TyProfile['llmSettings'],
+  llmSettings: ReadonlyDeep<TyProfile['llmSettings']>,
   getApiKey: (name: string) => Promise<string | null>,
 ) {
   console.log('downloading models...')
@@ -366,7 +367,7 @@ function defineTyGuiTools(stateRefs: ReturnType<typeof useAppStateStore>): Inter
         }
         const result = llmSettings.shape.taskChatTemplates.strict().safeParse(newPromptsMerged)
         if (result.success) {
-          stateRefs.llmSettings.taskChatTemplates = result.data
+          stateRefs.setLLMSettings('taskChatTemplates', result.data)
           console.log('Prompts modified:', stateRefs.llmSettings.taskChatTemplates)
         } else {
           return `It was not possible to add prompts for ${JSON.stringify(Object.keys(newPrompts))} to
@@ -460,11 +461,11 @@ const useApiManagement = (
     newService?: string | null
   }) => {
     if (newService) {
-      stateRefs.llmSettings.selectedApi = newService
+      stateRefs.setLLMSettings('selectedApi', newService)
     }
     const api = getApiConfig(stateRefs.llmSettings)
     if (api) {
-      api.selectedModel = newName
+      stateRefs.setLLMSettings('selectedModel', newName)
     }
     console.log('getting an api & bot update', {
       'new name': newName,

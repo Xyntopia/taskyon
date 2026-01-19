@@ -13,6 +13,7 @@ import {
   clearServiceWorkers,
   deepMergeReactive,
 } from 'src/modules/utils'
+import type { DeepReadonly } from 'vue'
 import { computed, reactive, ref, toRefs, unref, watch, type Reactive } from 'vue'
 // TODO: remove, to make this file here faster...
 import type { KeyString, tyPublicKeyDraft } from '@taskyon/taskyon'
@@ -304,6 +305,27 @@ export const useAppStateStore = defineStore('ui-state', () => {
   const authToken = ref<KeyString>()
   const iframeApiKey = ref<KeyString>() // used to pass api keys if we are running this as  an iframe
 
+  // We are using a setter function here, because we want to make sure, we can trace changes
+  // to the llmSettings explicitly.  This makes sure that any change to llmSettings
+  // explicitly!
+
+  const patchLLMSettings = (newSettings: PartialDeep<typeof stateRefs.llmSettings>) => {
+    deepMergeReactive(stateRefs.llmSettings, newSettings)
+  }
+
+  const setReadOnlySettings =
+    (obj: Record<string, unknown>) => (path: string | string[], value: unknown) => {
+      const keys = Array.isArray(path) ? path : path.split('.')
+      let target = obj
+      for (const key of keys.slice(0, -1)) {
+        if (!(key in target)) {
+          throw new Error(`Invalid llmSettings path: ${JSON.stringify(path)}`)
+        }
+        target = target[key] as Record<string, unknown>
+      }
+      target[keys[keys.length - 1]!] = value
+    }
+
   // it is *SUPERIMPORTANT*  that we ONLY return computed refs & functions in the store EXCEPT
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
@@ -319,7 +341,12 @@ export const useAppStateStore = defineStore('ui-state', () => {
       console.log('set selected task:', taskId)
       stateRefs.llmSettings.selectedTaskId = taskId || undefined
     },
-    ...allRefs, // we need to convert everything into refs, as we have a reactive object which only turns
+    ...allRefs,
+    llmSettings: computed(
+      () => stateRefs.llmSettings as DeepReadonly<typeof stateRefs.llmSettings>,
+    ), // make sure to write protect llmSettings in order to make changes explicit!
+    patchLLMSettings,
+    setLLMSettings: setReadOnlySettings(stateRefs.llmSettings),
     overRideSettings,
     getStateValues: () => unref(allRefs),
     $reset,

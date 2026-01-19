@@ -48,7 +48,7 @@
           aria-label="start new chat"
           @click="
             () => {
-              state.llmSettings.selectedTaskId = undefined
+              state.setLLMSettings('selectedTaskId', undefined)
               state.createTaskType.type = 'message'
             }
           "

@@ -132,7 +132,7 @@ and verify the authenticity of messages sent by other users."
                 :icon="matDeleteForever"
                 dense
                 flat
-                @click="state.llmSettings.userId = undefined"
+                @click="state.setLLMSettings('userId', undefined)"
               >
                 <q-tooltip> Delete User ID. </q-tooltip>
               </q-btn>
@@ -285,7 +285,7 @@ function onGenerateSeedPhrase() {
 
 async function onAcceptSeedPhrase(seedPhrase: string) {
   const key = await keyPairFromMnemonic(seedPhrase)
-  state.llmSettings.userId = key.pkb64
+  state.setLLMSettings('userId', key.pkb64)
   throw new Error("doesn't work yet!")
 }
 

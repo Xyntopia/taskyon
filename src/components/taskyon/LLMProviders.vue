@@ -223,7 +223,7 @@ const passwords = useTemplateRef('passwords')
 const expertModeOn = defineModel<boolean>('expertModeOn', { default: false })
 
 async function initFreeMode() {
-  state.llmSettings.selectedApi = 'taskyon'
+  state.setLLMSettings('selectedApi', 'taskyon')
   await tystate.setProviderApiKey('taskyon', freeKey as KeyString)
 }
 

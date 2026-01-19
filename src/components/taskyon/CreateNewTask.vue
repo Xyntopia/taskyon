@@ -228,6 +228,7 @@ import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
 import chatMessageEdit from './chatMessageEdit.vue'
 import ChooseModelDialog from './ChooseModelDialog.vue'
 import SimpleSettingsDialog from './SimpleSettingsDialog.vue'
+import type { ReadonlyDeep, WritableDeep } from 'type-fest'
 // import { watchThrottled } from '@vueuse/core'
 // use idel mechanism to calculate all kinds of stuff here :=)
 //import { useIdle } from '@vueuse/core'
@@ -238,7 +239,7 @@ const {
   p2pTopic = undefined,
   addToTaskyon,
 } = defineProps<{
-  entryNode?: partialTaskDraft | undefined
+  entryNode?: ReadonlyDeep<partialTaskDraft> | undefined
   minMode?: boolean
   expertMode?: boolean
   p2pTopic?: string // the p2p network that we want to send the task to
@@ -423,7 +424,7 @@ async function addNewTask(p2pTopic?: string, webSearch?: boolean) {
 
   if (currentnewTask.value.content.type === 'message') {
     if (entryNode) {
-      const chooseTask = deepCopy(entryNode)
+      const chooseTask = deepCopy(entryNode) as WritableDeep<partialTaskDraft>
       if (chooseTask.content.type === 'functioncall') {
         // in the future, we should make this "dynamic" and automatically add the relevant buttons
         // from our entry node to the task creation area!

@@ -49,6 +49,7 @@ import type { Thunk } from '../utils/tsHelpers'
 import type { TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
 import { generateSecretId, runTaskWorker } from './taskWorker'
+import type { ReadonlyDeep } from 'type-fest'
 
 function createApi(
   insidePort: Port<TaskyonMessage, TaskyonMessage>,
@@ -194,7 +195,7 @@ const staticContext = () => {
 
 const dynamicContext =
   (
-    llmSettings: Thunk<llmSettings>,
+    llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
     ToolList: InternalTool[],
     insidePort: Port<TaskyonMessage, TaskyonMessage>,
     iframeMultiPlexer: IframeMultiPlexer,
@@ -282,7 +283,7 @@ const dynamicContext =
 export async function tyCore(
   // TODO: we want to save some settings "internally" and not in the GUI...
   //       but then....   we als want taskyon to be as "stateless" as possible..
-  llmSettings: Thunk<llmSettings>,
+  llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
   // with the Environment Tools we can provide a list of tools as closures which have access
   // to the environment in which taskyon is running (through closure variables
   // of this environment inside the tool).
