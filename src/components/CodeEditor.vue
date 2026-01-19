@@ -65,27 +65,26 @@ async function loadLegacyMode(lang: string) {
 // ---------------------------
 // 2️⃣ Load CM6 modern language
 // ---------------------------
+const modernLanguageLoaders: Record<string, () => Promise<LanguageSupport>> = {
+  javascript: async () => (await import('@codemirror/lang-javascript')).javascript(),
+  python: async () => (await import('@codemirror/lang-python')).python(),
+  cpp: async () => (await import('@codemirror/lang-cpp')).cpp(),
+  json: async () => (await import('@codemirror/lang-json')).json(),
+  rust: async () => (await import('@codemirror/lang-rust')).rust(),
+  sql: async () => (await import('@codemirror/lang-sql')).sql(),
+  html: async () => (await import('@codemirror/lang-html')).html(),
+  // Assumes @codemirror/lang-jinja exports a `jinja()` function
+  jinja: async () => (await import('@codemirror/lang-jinja')).jinja(),
+}
+
 async function loadModernLanguage(lang: string) {
+  const loader = modernLanguageLoaders[lang]
+  if (!loader) return null
+
   try {
-    switch (lang) {
-      case 'javascript':
-        return (await import('@codemirror/lang-javascript')).javascript()
-      case 'python':
-        return (await import('@codemirror/lang-python')).python()
-      case 'cpp':
-        return (await import('@codemirror/lang-cpp')).cpp()
-      case 'json':
-        return (await import('@codemirror/lang-json')).json()
-      case 'rust':
-        return (await import('@codemirror/lang-rust')).rust()
-      case 'sql':
-        return (await import('@codemirror/lang-sql')).sql()
-      case 'jinja':
-        return (await import('@codemirror/lang-jinja')).jinja()
-      default:
-        throw new Error('not found')
-    }
-  } catch {
+    return await loader()
+  } catch (error) {
+    console.warn(`No CodeMirror modern language found for '${lang}':`, error)
     return null
   }
 }
