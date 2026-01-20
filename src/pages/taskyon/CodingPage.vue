@@ -557,7 +557,7 @@ ${activeContentWithLines}
         // If only patches are provided for a non-existent file, we skip it
         // because we cannot reliably apply line-based patches.
         if (originalContent === undefined) {
-          if (newContent !== undefined) {
+          if (newContent !== undefined && newContent !== null && newContent !== '') {
             currentFilesSnapshot[filePath] = newContent
             changesLog.push(`Created file ${filePath}`)
           } else if (patches && patches.length > 0) {
@@ -569,7 +569,7 @@ ${activeContentWithLines}
         }
 
         let updatedContent = originalContent
-        if (newContent !== undefined) {
+        if (newContent !== undefined && newContent !== null && newContent !== '') {
           updatedContent = newContent
           changesLog.push(`Replaced content of ${filePath}`)
         } else if (patches) {
