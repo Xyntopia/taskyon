@@ -16884,9 +16884,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"openai@npm:^6.3.0":
-  version: 6.3.0
-  resolution: "openai@npm:6.3.0"
+"openai@npm:^6.16.0":
+  version: 6.16.0
+  resolution: "openai@npm:6.16.0"
   peerDependencies:
     ws: ^8.18.0
     zod: ^3.25 || ^4.0
@@ -16897,7 +16897,7 @@ __metadata:
       optional: true
   bin:
     openai: bin/cli
-  checksum: 10c0/192304069a75b9b0d71ee6e1b719544ec31f6f64cd750e1837cff9cc00187c023c80dd2c6d3049627b3b74721dd0a463a8fed230443003e4ab72c705c0d540dc
+  checksum: 10c0/67d2cd58224f0777ea1369eae3f35a2a48c9efa9e70d05b854b9d2e96bc56f15e7baf88a732070e35d701906842baed9bf3363fb379e613037b86085d406bcd0
   languageName: node
   linkType: hard
 
@@ -20854,7 +20854,7 @@ __metadata:
     markdown-it-sup: "npm:^2.0.0"
     mathjs: "npm:^11.8.2"
     mermaid: "npm:^11.6.0"
-    openai: "npm:^6.3.0"
+    openai: "npm:^6.16.0"
     path: "npm:^0.12.7"
     pdfjs-dist: "npm:^4.3.136"
     pinia: "npm:^3.0.1"

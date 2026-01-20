@@ -146,7 +146,7 @@
     "globals": "^16.4.0",
     "json-schema-to-ts": "^3.1.1",
     "madge": "^8.0.0",
-    "openai": "^6.3.0",
+    "openai": "^6.16.0",
     "prettier": "^3.3.3",
     "sort-package-json": "^3.0.0",
     "type-fest": "^4.30.1",

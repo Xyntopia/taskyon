@@ -6,6 +6,7 @@ import type { OpenRouterGenerationInfo } from '../types/chatCompletionService'
 import { sleep } from '../utils/asyncUtils'
 import { asyncTimeLruCache } from '../utils/caching'
 import { charHash } from '../utils/crypto'
+import type { ChatCompletionReasoningEffort } from 'openai/resources/chat/completions.mjs'
 
 export function generateHeaders(Bearer: string, selectedApi: string, siteUrl?: string) {
   let headers: Record<string, string> = {
@@ -573,7 +574,18 @@ export async function createChatCompletionRequest(
       payload.web_search_options = {
         search_context_size: webSearch.searchContextSize,
       }
-    payload.reasoning_effort = reasoning_effort ?? 'minimal'
+    const reasoning_map = {
+      'gpt-5': { none: 'none', low: 'low', medium: 'medium', high: 'high' } as Record<
+        string,
+        ChatCompletionReasoningEffort
+      >,
+    }
+    if (payload.model.includes('gpt-5')) {
+      const effort = reasoning_map['gpt-5'][reasoning_effort ?? 'none'] ?? null
+      payload.reasoning_effort = effort
+    } else {
+      payload.reasoning_effort = null
+    }
 
     return {
       headers,
