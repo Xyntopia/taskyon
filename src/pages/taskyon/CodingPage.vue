@@ -476,6 +476,13 @@ ${activeContentWithLines}
 - You can read and edit **any** file in the project, not just the active one.
 - You can apply edits to **multiple files** in a single \`updateDocument\` call.
 - Use \`updateDocument\` to modify existing files.
+- You can read and edit **any** file in the project, not just the active one.
+- You can apply edits to **multiple files** in a single \`updateDocument\` call.
+- Use \`updateDocument\` to modify existing files.
+
+## Rules
+1. **Always edit via tool**: Do not just output code blocks. Use \`updateDocument\`.
+2. **Context**: If you need to see the content
 
 ## Rules
 1. **Always edit via tool**: Do not just output code blocks. Use \`updateDocument\`.
@@ -721,16 +728,15 @@ function reset() {
   createNewVersion('Reset')
 }
 
-function handleAddFiles(addedFiles: Array<{ name: string; content?: string }>) {
+async function handleAddFiles(addedFiles: File[]) {
   if (!addedFiles || addedFiles.length === 0) return
 
   const nextFiles: FilesMap = { ...files.value }
   const addedNames: string[] = []
 
   for (const file of addedFiles) {
-    if (!file?.name) continue
     // Simple behavior: add/overwrite using file name as key
-    nextFiles[file.name] = file.content ?? ''
+    nextFiles[file.name] = await file.text()
     addedNames.push(file.name)
   }
 
