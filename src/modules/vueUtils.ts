@@ -185,12 +185,20 @@ export function createScrollManager(
   }
 
   function scrollToTop() {
+    // manual navigation should always unlock bottom-lock & cancel auto-scroll
+    cancel()
+    lockScroll.value = false
+
     const con = container.value
     if (!con) return
     con.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function scrollToNext() {
+    // manual navigation should always unlock bottom-lock & cancel auto-scroll
+    cancel()
+    lockScroll.value = false
+
     const cont = container.value
     if (!cont) return
 
@@ -217,6 +225,10 @@ export function createScrollManager(
   }
 
   function scrollToPrev() {
+    // manual navigation should always unlock bottom-lock & cancel auto-scroll
+    cancel()
+    lockScroll.value = false
+
     const con = container.value
     if (!con) return
 
