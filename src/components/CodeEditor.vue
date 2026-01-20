@@ -1,3 +1,4 @@
+<!-- CodeEditor.vue-->
 <template>
   <codemirror
     :key="languageKey"

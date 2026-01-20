@@ -9,7 +9,7 @@
       persist
     >
       <!-- Document Editor Card -->
-      <div dense class="col column">
+      <div dense class="col column no-wrap fit">
         <!-- Version & File Controls -->
         <div class="row items-center q-pa-xs q-gutter-x-xs">
           <!-- File Selector -->
@@ -144,18 +144,17 @@
         </div>
 
         <!-- Code Editor / Preview -->
-        <q-card flat class="col column" style="max-width: 100%; overflow: hidden">
-          <div v-if="!showPreview" class="col column">
-            <CodeEditor
-              v-if="activeFileName"
-              :key="activeFileName"
-              v-model="activeFileContent"
-              class="col"
-              :language="getLanguage(activeFileName)"
-              placeholder="Write here..."
-              style="max-height: 100%"
-              @update:model-value="onContentChange"
-            />
+        <q-card flat class="col column no-wrap">
+          <div v-if="!showPreview" class="col column no-wrap fit">
+            <div v-if="activeFileName" class="col scroll">
+              <CodeEditor
+                :key="activeFileName"
+                v-model="activeFileContent"
+                :language="getLanguage(activeFileName)"
+                placeholder="Write here..."
+                @update:model-value="onContentChange"
+              />
+            </div>
 
             <!-- Empty state when there are no files yet -->
             <div
@@ -177,13 +176,14 @@
             <!-- When there are files but none is selected -->
             <div v-else class="col flex flex-center text-grey">No file selected</div>
           </div>
-          <div v-else class="col column relative-position">
-            <iframe
-              class="col"
-              style="border: none; width: 100%; height: 100%"
-              sandbox="allow-scripts allow-modals allow-popups allow-forms"
-              :srcdoc="previewContent"
-            ></iframe>
+          <div v-else class="col column relative-position no-wrap" style="min-height: 0">
+            <div class="col scroll" style="min-height: 0">
+              <iframe
+                style="border: none; width: 100%; height: 100%"
+                sandbox="allow-scripts allow-modals allow-popups allow-forms"
+                :srcdoc="previewContent"
+              ></iframe>
+            </div>
             <div
               class="absolute-bottom q-pa-xs text-center text-caption bg-white"
               style="border-top: 1px solid #ddd"
