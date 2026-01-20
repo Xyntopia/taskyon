@@ -4,7 +4,7 @@
 
 <script setup lang="ts">
 // we are using lang=js here in order to integrate g analytics
-import { onMounted, watch } from 'vue'
+import { watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { generateTaskyonMeta } from './modules/meta'
 import { useMeta } from 'quasar'
@@ -12,15 +12,60 @@ import { useMeta } from 'quasar'
 const route = useRoute()
 
 if (process.env.DEV) {
-  // Dynamically inject script src="http://localhost:8098" in DEV mode
-  // this can be used to debug for example remote taskyon isntances (e.g. in phone browser)
-  console.log('loading vue devtools!')
-  onMounted(() => {
-    const devScript = document.createElement('script')
-    devScript.async = true
-    devScript.src = `${window.location.origin}:8098` // Adjust the URL if needed
-    document.head.appendChild(devScript)
-  })
+  const CHII_PORT = 8090 // or 8090, but must match how you run `chii`
+
+  console.warn(
+    `Loading chii devtools. Make sure "chii -P ${CHII_PORT}" is running on your dev machine.`,
+  )
+
+  const devScript = document.createElement('script')
+
+  const host = window.location.hostname
+  const protocol = 'https' // "http" or "https", depending on your setup
+
+  // This matches the official snippet from chii:
+  // "<script src="//host-machine-ip:8080/target.js" ...
+  devScript.src = `${protocol}://${host}:${CHII_PORT}/target.js`
+  devScript.async = true
+
+  devScript.onload = () => console.log('Chii devtools script loaded successfully')
+  devScript.onerror = () => console.error('Failed to load chii devtools script')
+
+  document.head.appendChild(devScript)
+
+  // ---- Eruda dev console (only if NOT on localhost) ----
+  const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(host)
+
+  if (!isLocalhost) {
+    const erudaScript = document.createElement('script')
+    erudaScript.src = 'https://cdn.jsdelivr.net/npm/eruda'
+    erudaScript.async = true
+
+    erudaScript.onload = () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const eruda = (window as any).eruda
+        if (eruda && typeof eruda.init === 'function') {
+          eruda.init()
+          console.log('Eruda dev console initialized')
+        } else {
+          console.error('Eruda loaded but not available on window.eruda')
+        }
+      } catch (e) {
+        console.error('Error while initializing Eruda', e)
+      }
+    }
+
+    erudaScript.onerror = () => {
+      console.error('Failed to load Eruda dev console script')
+    }
+
+    document.head.appendChild(erudaScript)
+  } else {
+    console.log('Skipping Eruda: running on localhost')
+  }
+
+  // better logging for dev
   ;(() => {
     const isTop = window === window.top
     const prefix = isTop ? '[TOP]' : '[IFRAME]'
