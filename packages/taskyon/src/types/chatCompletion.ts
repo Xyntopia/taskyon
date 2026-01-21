@@ -41,7 +41,6 @@ export type OpenAIMessage = z.infer<typeof OpenAIMessage>
 export const ChatResponseType = z.object({
   id: z.string().default('N/A'),
   model: z.string().default('N/A'),
-  object: z.literal('chat.completion'),
   choices: z
     .array(
       z.object({

@@ -102,8 +102,6 @@ export function accumulateStep(
     ? { ...existing }
     : {
         id: chunk.id,
-        object: 'chat.completion',
-        created: chunk.created,
         model: chunk.model,
         choices: [],
       }

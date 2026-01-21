@@ -3,13 +3,15 @@ import type {
   FilePart,
   ImagePart,
   ModelMessage,
+  streamText,
   SystemModelMessage,
   Tool,
   ToolModelMessage,
   ToolResultPart,
+  ToolSet,
   UserModelMessage,
 } from 'ai'
-import { jsonSchema, tool } from 'ai'
+import { jsonSchema, Output, smoothStream, tool } from 'ai'
 import { default as Ajv } from 'ajv'
 import { load } from 'js-yaml'
 import type { JSONSchema7 } from 'json-schema'
@@ -21,14 +23,8 @@ import { z } from 'zod'
 import type { TyTaskManager } from '../core/taskManager'
 import { mapFunctionNames } from '../core/tools'
 import { isTaskyonKey } from '../core/tyCrypto'
-import type { ChatCompletionChunk, WebSearchOptions } from '../llm/chat'
-import {
-  callLLM,
-  createChatCompletionRequest,
-  generateHeaders,
-  getOpenRouterGenerationInfo,
-  getTaskyonCosts,
-} from '../llm/chat'
+import type { WebSearchOptions } from '../llm/chat'
+import { generateHeaders, getOpenRouterGenerationInfo, getTaskyonCosts } from '../llm/chat'
 import type { Goals } from '../llm/promptCreation'
 import { addPrompts } from '../llm/promptCreation'
 import type { apiConfig, ChatResponseType, TaskNodeMeta } from '../types/chatCompletion'
@@ -43,8 +39,8 @@ import { FunctionCall } from '../types/tools'
 import { sleep } from '../utils/asyncUtils'
 import { charHash } from '../utils/crypto'
 import { humanizeError } from '../utils/error'
+import type { frpBus } from '../utils/frpBus'
 import { createStream } from '../utils/frpBus'
-import { joinUrl } from '../utils/httpUtils'
 import { convertFileToText } from '../utils/loadFiles'
 import {
   createDeepTransformer,
@@ -68,9 +64,12 @@ const convertToChatCompletionTool = (t: ToolBase): Tool => {
 function generateOpenAIToolDeclarations(
   allowedTools: string[],
   toolCollection: Record<string, ToolBase>,
-): Tool[] {
+): ToolSet {
   const tools: ToolBase[] = mapFunctionNames(allowedTools || [], toolCollection) || []
-  const aiTools = tools.map(convertToChatCompletionTool)
+  const aiTools = tools.reduce((prev, curr) => {
+    prev[curr.name] = convertToChatCompletionTool(curr)
+    return prev
+  }, {} as ToolSet)
   return aiTools
 }
 
@@ -137,7 +136,7 @@ export async function processChatTask(
     throw new Error('We were not able to convert our tasks into an AI-compatible format!')
   }
 
-  let tools: Tool[] = []
+  let tools: ToolSet = {}
   if (llmTools) {
     tools = generateOpenAIToolDeclarations(allowedTools || [], toolDefs)
   }
@@ -145,75 +144,63 @@ export async function processChatTask(
   return { openAIConversationThread: chatCompletionMessages, tools, msgs: msgs ?? {} }
 }
 
-const useVercel = true
+type streamOptsType = Parameters<typeof streamText>[0]
+type streamChunk = Parameters<Required<streamOptsType>['onChunk']>[0]['chunk']
 
 async function llmRequest(
   openAIConversationThread: ModelMessage[],
-  tools: Tool[],
+  tools: ToolSet,
   selectedModel: string,
   stopSignal: AbortSignal,
   api: apiConfig,
   apiKey: string,
-  streamTracker: (chunk: ChatCompletionChunk | undefined) => void,
+  streamTracker: (chunk: streamChunk) => void,
   schema?: Record<string, unknown>,
   siteUrl?: string,
   webSearch?: WebSearchOptions,
   reasoning_effort?: 'low' | 'high' | 'medium',
   verbosity?: OpenAI.ChatCompletionCreateParams['verbosity'],
 ) {
-  if (useVercel && api.name === 'openai') {
-    /*const { createOpenRouter } = await import('@openrouter/ai-sdk-provider')
+  console.log({ siteUrl, webSearch, reasoning_effort, verbosity })
+  /*const { createOpenRouter } = await import('@openrouter/ai-sdk-provider')
     const openrouter = createOpenRouter({
       apiKey,
       baseURL: siteUrl,
     })*/
-    //import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-    const { streamText } = await import('ai')
+  //import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+  const { streamText } = await import('ai')
 
-    const { createOpenAI } = await import('@ai-sdk/openai')
-    const openai = createOpenAI({
-      apiKey,
-    })
+  const { createOpenAI } = await import('@ai-sdk/openai')
+  const openai = createOpenAI({
+    apiKey,
+  })
 
-    const result = streamText({
-      model: openai(selectedModel),
-      messages: openAIConversationThread,
-      onChunk({ chunk }) {
-        // implement your own logic here, e.g.:
-        if (chunk.type === 'text') {
-          console.log(chunk.text)
-        }
-      },
-      onFinish({ text, finishReason, usage, response, steps, totalUsage }) {
+  // https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-text
+  const streamOpts: streamOptsType = {
+    model: openai(selectedModel),
+    messages: openAIConversationThread,
+    tools,
+    abortSignal: stopSignal,
+    onChunk({ chunk }) {
+      streamTracker(chunk)
+    },
+    experimental_transform: smoothStream({
+      delayInMs: 20, // optional: defaults to 10ms
+      chunking: 'line', // optional: defaults to 'word'
+    }),
+    /*onFinish({ text, finishReason, usage, response, steps, totalUsage, content }) {
         // your own logic, e.g. for saving the chat history or recording usage
         const messages = response.messages // messages that were generated
-      },
-    })
-  } else {
-    const streamTask = true
-    const request = await createChatCompletionRequest(
-      apiKey,
-      { ...api, selectedModel, endpoint: joinUrl(api.baseURL, api.routes.chatCompletion) },
-      openAIConversationThread,
-      schema,
-      streamTask, // for now, we always want to stream our task...
-      tools,
-      webSearch,
-      reasoning_effort,
-      verbosity,
-      siteUrl,
-    )
-    const chatCompletion = await callLLM(
-      request,
-      streamTask,
-      streamTracker, // track incoming streams...
-      stopSignal,
-      // we are using a pretty big timeout, bceause apparentl chat API from openAI needs thiw right now..
-      request.timeout, // Timeout in milliseconds for waiting for first streamed response
-      3, // Maximum number of retry attempts
-    )
-    return chatCompletion
+      },*/
   }
+
+  if (schema)
+    streamOpts.output = Output.object({
+      schema: jsonSchema(schema),
+    })
+
+  const result = streamText(streamOpts)
+  return result
 }
 
 // Ensures that every assistant.tool_calls is paired with a role:"tool" message.
@@ -832,6 +819,11 @@ async function makeFilesAiReadable(
 
 export const chatCompletionToolName = 'chatCompletion'
 
+export type chunkStreamType = {
+  taskId: string
+  chunk: streamChunk
+}
+
 export function createChatCompletionTool(
   llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
   taskManager: TyTaskManager,
@@ -839,10 +831,7 @@ export function createChatCompletionTool(
   //const { default: Ajv } = await import('ajv')
   const ajv = new Ajv()
 
-  const chatCompletionStream = createStream<{
-    taskId: string
-    chunk: ChatCompletionChunk | undefined
-  }>()
+  const chatCompletionStream = createStream<chunkStreamType>()
 
   const chatCompletion = createTool({
     description: 'Generates a chat-based response using the OpenAI API for the previous message.',
@@ -1029,12 +1018,13 @@ export function createChatCompletionTool(
       )
 
       // parse the response into our own type ...
-      const choice = chatCompletion?.choices[0]
+      const res = await chatCompletion.response
 
-      // get token usage for this task..
-      if (currentTask && lastTaskBeforeChatCompletion) {
+      // TODO: get token usage for this task..
+      const metrics = false
+      if (currentTask && lastTaskBeforeChatCompletion && metrics) {
         // need to make sure, that we remove audio, image and file data here!
-        const truncatedMsgs = createDotPathTransformer({
+        /*const truncatedMsgs = createDotPathTransformer({
           'modifiedOpenAIConversationThread.*.content.*.file.file_data': () =>
             '[[file_data omitted]]',
           'modifiedOpenAIConversationThread.*.content.*.image_url.url': () =>
@@ -1080,21 +1070,22 @@ export function createChatCompletionTool(
             })
         }
 
-        metaInfo.rawOutput = { choice }
+        metaInfo.rawOutput = { choice: res }
         console.log('saving task metadata', metaInfo)
-        void taskManager.metaUpsert(currentTask.id, metaInfo, 'shallow_merge')
+        void taskManager.metaUpsert(currentTask.id, metaInfo, 'shallow_merge')*/
       }
 
-      if (!choice)
+      if (!res.messages[0])
         throw new Error('The AI gave us an incomplete response!', {
           cause: chatCompletion,
         })
 
       // in case a schema was given, we simply use that schema and return it as a structured message
       // for further processing (e.g. a contextFunction)...
-      if (schema) {
+      const customValidation = false
+      if (schema && customValidation) {
         console.log('parsing custom schema', schema)
-        const structResponse = parseYamlResponse2Record(choice.message.content || '')
+        const structResponse = parseYamlResponse2Record(res.messages[0].content || '')
 
         if (typeof schema === 'object' && schema !== null) {
           // I *think* we can simply cast our schema here t ajv, because it
@@ -1118,11 +1109,17 @@ export function createChatCompletionTool(
             },
           ],
         ])
+      } else if (schema) {
+        const structResponse = await chatCompletion.output
+        return makeTaskResult({
+          role: 'assistant',
+          content: { type: 'structured', data: structResponse },
+        })
       }
 
       const newTaskChain = generateFollowUpTasksFromResult(
         goal || 'SimpleCompletion',
-        choice,
+        res,
         allowedTools,
         selectedModel,
         usellmTools,

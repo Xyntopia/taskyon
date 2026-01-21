@@ -61,13 +61,7 @@
     />
     <!--Render tasks which are in progress-->
     <div class="task-logs q-py-sm">
-      <template
-        v-if="
-          currentMessageStream?.length === 0 &&
-          currentThinkingStream &&
-          currentThinkingStream.length > 0
-        "
-      >
+      <template v-if="currentMsgStream && currentMsgStream.reasoning.length > 0">
         <div class="text-caption">THINKING:</div>
         <div
           ref="thinkingContainer"
@@ -77,7 +71,7 @@
           <tyMarkdown
             no-line-numbers
             no-mermaid
-            :src="currentThinkingStream /*?.split('\n').slice(-30).join('\n')*/"
+            :src="currentMsgStream.reasoning /*?.split('\n').slice(-30).join('\n')*/"
             class="text-caption"
           />
         </div>
@@ -85,13 +79,13 @@
       <q-card v-if="isProcessing(currentTask.id)" class="row" flat>
         <div class="col">
           <tyMarkdown
-            v-if="currentMessageStream"
+            v-if="currentMsgStream && currentMsgStream.text.length > 0"
             no-line-numbers
             no-mermaid
-            :src="currentMessageStream || ''"
+            :src="currentMsgStream.text || ''"
           />
-          <div>
-            {{ safeYamlDump(currentFunctionStream) }}
+          <div v-if="currentMsgStream?.func">
+            {{ currentMsgStream.func }}
           </div>
           <q-spinner-dots size="2rem" color="secondary" />
         </div>
@@ -124,8 +118,8 @@
 
 <script setup lang="ts">
 import { matArrowDropDown } from '@quasar/extras/material-icons'
-import type { ChatResponseType, TaskTreeNode } from '@taskyon/taskyon'
-import { accumulateStep, safeYamlDump, type TaskNode } from '@taskyon/taskyon'
+import type { TaskTreeNode } from '@taskyon/taskyon'
+import { type TaskNode } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
@@ -188,8 +182,6 @@ const isProcessing = (id: string) => {
   else return false
 }
 
-const streamingTracker = ref<Map<string, ChatResponseType>>(new Map())
-
 function formatTimeStamp(timestamp: string | number | Date): string {
   const date = new Date(timestamp)
   const now = new Date()
@@ -216,28 +208,49 @@ function formatTimeStamp(timestamp: string | number | Date): string {
   }
 }
 
+const streamingTracker = ref<
+  Map<
+    string,
+    {
+      text: string
+      reasoning: string
+      func: string
+    }
+  >
+>(new Map())
+const currentMsgStream = computed(() => {
+  return streamingTracker.value.get(props.currentTask.id)
+})
+
 const streamerUnsubscriber = tystate.chatCompletionStream(({ taskId, chunk }) => {
   if (!chunk) return
-  const currentStream = streamingTracker.value.get(taskId)
-  const updatedStream = accumulateStep(currentStream, chunk)
-  streamingTracker.value.set(taskId, updatedStream)
+  let currentStream = streamingTracker.value.get(taskId)
+  if (!currentStream) {
+    currentStream = {
+      text: '',
+      reasoning: '',
+      func: '',
+    }
+    streamingTracker.value.set(taskId, currentStream)
+  }
+
+  switch (chunk.type) {
+    case 'text-delta':
+      currentStream.text += chunk.text
+      break
+    case 'reasoning-delta':
+      currentStream.reasoning += chunk.text
+      break
+    case 'tool-input-delta':
+      currentStream.func += chunk.delta
+      break
+  }
+
   emit('onSizeChange')
 })
 
 onBeforeUnmount(() => {
   streamerUnsubscriber()
-})
-
-const currentMessageStream = computed(() => {
-  if (props.currentTask)
-    return streamingTracker.value.get(props.currentTask.id)?.choices?.[0]?.message?.content || ''
-  else return undefined
-})
-
-const currentThinkingStream = computed(() => {
-  if (props.currentTask) {
-    return streamingTracker.value.get(props.currentTask.id)?.choices?.[0]?.reasoning || ''
-  } else return undefined
 })
 
 const thinkingContainer = ref<HTMLElement>()
@@ -254,10 +267,10 @@ const handleUserScroll = () => {
 }
 
 watch(
-  () => currentThinkingStream.value,
-  async () => {
+  () => streamingTracker.value.get(props.currentTask.id)?.reasoning,
+  async (reason) => {
     // This will run whenever currentThinkingStream changes
-    if (currentThinkingStream.value && shouldAutoScroll.value) {
+    if (reason && shouldAutoScroll.value) {
       await nextTick()
       if (thinkingContainer.value) {
         //console.log('scrolling!!', thinkingContainer.value.scrollHeight)
@@ -266,16 +279,6 @@ watch(
     }
   },
 )
-
-const currentFunctionStream = computed(() => {
-  if (props.currentTask) {
-    const currentFunctionCall = streamingTracker.value.get(props.currentTask.id)?.choices?.[0]
-      ?.message?.tool_calls?.[0]
-    if (currentFunctionCall && 'function' in currentFunctionCall)
-      return currentFunctionCall.function
-  }
-  return undefined
-})
 
 interface taskTreeNodeType {
   label: string

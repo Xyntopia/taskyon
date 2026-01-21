@@ -1,7 +1,6 @@
 import type {
   Asyncify,
   AuthenticationOptions,
-  ChatCompletionChunk,
   ChatResponseType,
   CryptoSession,
   InternalTool,
@@ -40,6 +39,7 @@ import {
   usePersistentOauth,
   usePyodideWebworker,
 } from '@taskyon/taskyon'
+import type { chunkStreamType } from '@taskyon/taskyon/tools/chatCompletionTool'
 import { until } from '@vueuse/core'
 import { defineStore } from 'pinia'
 import { useQuasar } from 'quasar' // load dynamically! :)
@@ -1145,10 +1145,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     instance.workerStop(reason)
   }
 
-  const { stream: chatCompletionStream, emit: chatCompletionConnector } = createStream<{
-    taskId: string
-    chunk: ChatCompletionChunk | undefined
-  }>()
+  const { stream: chatCompletionStream, emit: chatCompletionConnector } =
+    createStream<chunkStreamType>()
   // connect taskyon to this stream as soon as it is initialized...
   void taskyon.then((ty) => ty.chatCompletionStream(chatCompletionConnector))
 
