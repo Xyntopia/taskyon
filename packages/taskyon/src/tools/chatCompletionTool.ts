@@ -163,7 +163,6 @@ async function llmRequest(
   //     stream_options: { include_usage: true },
   //     store: false,
   //
-
   console.log({ siteUrl, webSearch, reasoning_effort, verbosity })
   const { streamText } = await import('ai')
   let model
@@ -199,6 +198,7 @@ async function llmRequest(
       const { createOpenRouter } = await import('@openrouter/ai-sdk-provider')
       const openrouter = createOpenRouter({
         apiKey,
+        ...(api.name === 'taskyon' ? { baseURL: api.baseURL + api.routes.chatCompletion } : {}),
       })
       const opts: Parameters<typeof openrouter>[1] = {
         provider: {

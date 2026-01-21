@@ -24,7 +24,7 @@
           "apiKey": "sb_publishable_WrQ1aIRvl9BrMtpMQ9TocQ_JN7I9kJm"
         },
         "routes": {
-          "chatCompletion": "/functions/v1/api/chat/completions",
+          "chatCompletion": "/functions/v1/api",
           "models": "/functions/v1/api/models"
         }
       },
