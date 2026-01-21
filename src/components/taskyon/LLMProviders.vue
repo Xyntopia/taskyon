@@ -203,18 +203,17 @@ import { freeKey } from 'src/assets/taskyon_free_key'
 import { useAppStateStore } from 'src/stores/appState'
 import { AiProvideKeyStoreName, useTaskyonStore } from 'src/stores/taskyonState'
 import InfoDialog from '../InfoDialog.vue'
-import JsonInput from '../varViews/JsonInput.vue'
 import TyMarkdown from '../tyMarkdown.vue'
+import JsonInput from '../varViews/JsonInput.vue'
 // TODO: separate user from supabase and only update the "user" from supabase...
 //       this way we can make this component independent from supabase.
+import type { KeyString } from '@taskyon/taskyon'
 import { useQuasar } from 'quasar'
 import { ref, useTemplateRef } from 'vue'
 import DialogButton from '../DialogButton.vue'
 import SecretInput from '../varViews/SecretInput.vue'
 import ApiSelect from './ApiSelect.vue'
 import PasswordManager from './PasswordManager.vue'
-import type { KeyString } from '@taskyon/taskyon'
-import { mdiKeyLink } from '@quasar/extras/mdi-v6'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
