@@ -34,7 +34,8 @@ import type { FileMapping, partialTaskDraft, TaskNode } from '../types/node'
 import type { llmSettings } from '../types/profiles'
 import type { toolContext } from '../types/toolApi'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
-import type { FunctionArguments, ToolBase } from '../types/tools'
+import type { ToolBase } from '../types/tools'
+import { FunctionArguments } from '../types/tools'
 import { FunctionCall } from '../types/tools'
 import { sleep } from '../utils/asyncUtils'
 import { charHash } from '../utils/crypto'
@@ -52,6 +53,8 @@ import {
 import type { Thunk } from '../utils/tsHelpers'
 import { useNlpWorker } from '../utils/webWorkerApi'
 import { safeYamlDump } from '../utils/yamlUtils'
+import { ContentFilterFinishReasonError } from 'openai/error'
+import { Content } from 'openai/resources/containers/files/content.mjs'
 
 const convertToChatCompletionTool = (t: ToolBase): Tool => {
   return tool({
@@ -412,10 +415,10 @@ const robustKeys = createDeepTransformer({
 // we use this to decide whether we should call a function or to continue
 // this is usually not needed if we use llmTools (like built-in tools from openai API)
 // TODO: ability to parse multiple commands/tasks...
-function getCommandFromStructuredResponse(choice: ChatResponseType['choices'][0]): FunctionCall[] {
+function getCommandFromStructuredResponse(message: string): FunctionCall[] {
   // all of the following is done in order to make this as robust as possible
   // thats also why we don't just simply use zod validation on this.
-  const structResponse = parseYamlResponse2Record(choice.message.content || '')
+  const structResponse = parseYamlResponse2Record(message || '')
   const structResponseN = normalizeFalsyValues()(structResponse)
   const lowerStruct = robustKeys(structResponseN) as Record<string, string | boolean>
 
@@ -485,7 +488,7 @@ property correctly.`)
 //        this tool would analyze the results of the previous function and create new tasks!
 function generateFollowUpTasksFromResult(
   goal: Goals,
-  choice: ChatResponseType['choices'][0],
+  message: AssistantModelMessage,
   allowedTools: string[] | undefined,
   chatModel: string,
   llmTools: boolean,
@@ -495,119 +498,127 @@ function generateFollowUpTasksFromResult(
   console.log('generate follow up task')
 
   let newTasks: partialTaskDraft[] = []
+
   // TODO: what do we do in case of an empty user message, but only a file?
   //       right now, we assume, that user message always comes after uploaded file message :)
-
-  // check if we have any functioncalls from the llm inference
-  // in that case we shoud handle that first :)
-  const functionCall = extractOpenAIFunctions(choice, allTools)
-  if (functionCall[0]) {
-    // TODO: enable multiple parallel function calls
-    newTasks = [
-      // this functionCall will be executed in the next step, so we don't need any additional tasks here
-      {
-        role: 'function',
-        content: { type: 'functioncall', data: functionCall[0] },
-      },
-    ]
-  } else if (goal === 'SimpleCompletion' || goal === 'WebSearch' || llmTools) {
-    // if we don't need to call a tool, we simply generate a normal message...
-    // the same is true, if we have enabled native llmTools. In this case
-    // we either got a function back already (functionCall[0]) or we
-    // got a message back :)
-    newTasks = [
-      {
-        role: 'assistant',
-        content: {
-          type: 'message',
-          data: choice.message.content || '',
-          ...(choice.annotations ? { ann: choice.annotations } : {}),
-        },
-      },
-      {
-        role: 'system',
-        content: { type: 'return', data: 'assistant answered' },
-      },
-    ]
-    console.log('No more follow up tasks!')
-  } else if (goal === 'AnalyzeToolResult' || goal === 'ChooseTool' || goal === 'AnalyzeError') {
-    const commands = getCommandFromStructuredResponse(choice)
-    if (commands.length > 0) {
-      const command = commands[0]!
-      if (!allowedTools?.includes(command.name)) {
-        throw new Error(`Tool '${command.name}' is not in the list of allowed tools`, {
-          cause: { allowedTools, requestedTool: command.name },
-        })
-      }
-    }
-    newTasks = [
-      {
-        role: 'assistant',
-        content: { type: 'structured', data: choice.message.content || '' },
-      },
-    ]
-    if (commands.length > 0) {
-      console.log('Define tool call')
-      newTasks.push({
-        role: 'function',
-        content: { type: 'functioncall', data: commands[0]! },
-      })
-    } else {
-      console.log('no more tools to call, finalize the result :)')
+  for (const cont of message.content) {
+    // check if we have any function calls from the llm inference
+    // in that case we shoud handle that first :)
+    const functionCall = extractFunctionCall(cont, allTools)
+    if (functionCall) {
       newTasks.push(
-        toolCall<chatCompletionParams>({
-          name: 'chatCompletion',
-          arguments: {
-            prompts: prompts || [],
-            model: chatModel,
-            goal: 'SimpleCompletion',
-          },
-        }),
+        // this functionCall will be executed in the next step, so we don't need any additional tasks here
+        {
+          role: 'function',
+          content: { type: 'functioncall', data: functionCall },
+        },
       )
     }
-  } else {
-    // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-    throw new Error(`chatCompletion goal unknown: ${goal}`)
+    let txtContent
+    if (typeof cont === 'string') {
+      txtContent = cont
+    } else if (cont.type === 'text') {
+      txtContent = cont.text
+    }
+    if (txtContent) {
+      if (goal === 'SimpleCompletion' || goal === 'WebSearch' || llmTools) {
+        // if we don't need to call a tool, we simply generate a normal message...
+        // the same is true, if we have enabled native llmTools. In this case
+        // we either got a function back already (functionCall[0]) or we
+        // got a message back :)
+        newTasks = [
+          {
+            role: 'assistant',
+            content: {
+              type: 'message',
+              data: txtContent,
+              // TODO: add annotations once we can extract them from vercel ai sdk
+            },
+          },
+          {
+            role: 'system',
+            content: { type: 'return', data: 'assistant answered' },
+          },
+        ]
+        console.log('No more follow up tasks!')
+      } else if (goal === 'AnalyzeToolResult' || goal === 'ChooseTool' || goal === 'AnalyzeError') {
+        const commands = getCommandFromStructuredResponse(txtContent)
+        if (commands.length > 0) {
+          const command = commands[0]!
+          if (!allowedTools?.includes(command.name)) {
+            throw new Error(`Tool '${command.name}' is not in the list of allowed tools`, {
+              cause: { allowedTools, requestedTool: command.name },
+            })
+          }
+        }
+        newTasks = [
+          {
+            role: 'assistant',
+            content: { type: 'structured', data: txtContent },
+          },
+        ]
+        if (commands.length > 0) {
+          console.log('Define tool call')
+          newTasks.push({
+            role: 'function',
+            content: { type: 'functioncall', data: commands[0]! },
+          })
+        } else {
+          console.log('no more tools to call, finalize the result :)')
+          newTasks.push(
+            toolCall<chatCompletionParams>({
+              name: 'chatCompletion',
+              arguments: {
+                prompts: prompts || [],
+                model: chatModel,
+                goal: 'SimpleCompletion',
+              },
+            }),
+          )
+        }
+      } else {
+        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+        throw new Error(`chatCompletion goal unknown: ${goal}`)
+      }
+    }
   }
   return newTasks
 }
 
-export function extractOpenAIFunctions(
-  choice: ChatResponseType['choices'][0],
+export function extractFunctionCall(
+  content: ModelMessage['content'][0],
   tools: Record<string, ToolBase>,
 ) {
-  const functionCalls: FunctionCall[] = []
-  for (const toolCall of choice.message.tool_calls || []) {
+  if (typeof content === 'string') return
+  if ('type' in content && content.type === 'tool-call') {
     // if our response contained a call to a function...
     // TODO: update this to the new tools API from Openai
     console.log('A function call was returned...')
     // we convert the object into our own FunctionCall and afterwards parse it, to make
     // sure it really worked...
     let fargs: FunctionArguments = {}
-    if (!('function' in toolCall))
-      throw new Error("toolCall doesn't contain a function", { cause: toolCall })
+    const { input, toolName } = content
+    //if (!('function' in toolCall))
+    //  throw new Error("toolCall doesn't contain a function", { cause: toolCall })
     try {
-      fargs = JSON.parse(toolCall.function.arguments)
+      //fargs = JSON.parse(toolCall.function.arguments)
+      fargs = FunctionArguments.parse(input)
     } catch (error) {
       console.warn('Failed to parse arguments as JSON:', error)
-      if (choice.finish_reason === 'cancelled') fargs = { cancelled: toolCall.function.arguments }
-      else
-        throw new Error(
-          `We cold not parse the function arguments as json:
-
+      /*if (message.finish_reason === 'cancelled')
+          fargs = { cancelled: toolCall.function.arguments }
+        else
+          throw new Error(
+            `We cold not parse the function arguments as json:
 ${toolCall.function.arguments}`,
-        )
+          )*/
     }
     const functionCallObj: FunctionCall = {
-      name: toolCall.function.name,
+      name: toolName,
       arguments: fargs,
     }
-    const functionCall = FunctionCall.parse(functionCallObj)
-    if (tools[functionCall.name]) {
-      functionCalls.push(functionCall)
-    }
+    if (tools[functionCallObj.name]) return functionCallObj
   }
-  return functionCalls
 }
 
 // sometimes a single task can get convserted to multiple messages
@@ -1119,7 +1130,7 @@ export function createChatCompletionTool(
 
       const newTaskChain = generateFollowUpTasksFromResult(
         goal || 'SimpleCompletion',
-        res,
+        res.messages[0],
         allowedTools,
         selectedModel,
         usellmTools,

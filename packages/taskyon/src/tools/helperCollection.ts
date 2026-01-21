@@ -196,52 +196,42 @@ const notification = createTool({
   name: 'notification',
   renderOptions: { hideChat: false, hideLlm: false },
   parameters: {
-    // Accept EITHER a single item or a list
-    anyOf: [
-      {
-        type: 'object',
-        required: ['message'],
-        properties: {
-          message: { type: 'string', description: 'Notification text.' },
-          delay: {
-            type: 'number',
-            description: 'Delay in milliseconds before showing. Ignored if `time` is provided.',
-          },
-          time: {
-            anyOf: [{ type: 'string' }, { type: 'number' }],
-            description:
-              'When to show: ISO string, epoch (ms or s), or time-only (e.g. "1pm", "13:00", "13:00:30"). Time-only uses LOCAL today (rolls to tomorrow if already passed).',
-          },
-        },
+    type: 'object',
+    properties: {
+      // Single notification fields
+      message: { type: 'string', description: 'Notification text.' },
+      delay: {
+        type: 'number',
+        description: 'Delay in milliseconds before showing. Ignored if `time` is provided.',
       },
-      {
-        type: 'object',
-        required: ['list'],
-        properties: {
-          list: {
-            type: 'array',
-            description: 'List of notifications to schedule.',
-            items: {
-              type: 'object',
-              required: ['message'],
-              properties: {
-                message: { type: 'string', description: 'Notification text.' },
-                delay: {
-                  type: 'number',
-                  description:
-                    'Delay in milliseconds before showing. Ignored if `time` is provided.',
-                },
-                time: {
-                  anyOf: [{ type: 'string' }, { type: 'number' }],
-                  description:
-                    'When to show: ISO string, epoch (ms or s), or time-only (e.g. "1pm", "13:00", "13:00:30"). Time-only uses LOCAL today (rolls to tomorrow if already passed).',
-                },
-              },
+      time: {
+        type: ['string', 'number'],
+        description:
+          'When to show: ISO string, epoch (ms or s), or time-only (e.g. "1pm", "13:00", "13:00:30"). Time-only uses LOCAL today (rolls to tomorrow if already passed).',
+      },
+      // Batch scheduling: provide a list of notifications
+      list: {
+        type: 'array',
+        description:
+          'List of notifications to schedule. Each item is like the single notification fields.',
+        items: {
+          type: 'object',
+          required: ['message'],
+          properties: {
+            message: { type: 'string', description: 'Notification text.' },
+            delay: {
+              type: 'number',
+              description: 'Delay in milliseconds before showing. Ignored if `time` is provided.',
+            },
+            time: {
+              type: ['string', 'number'],
+              description:
+                'When to show: ISO string, epoch (ms or s), or time-only (e.g. "1pm", "13:00", "13:00:30"). Time-only uses LOCAL today (rolls to tomorrow if already passed).',
             },
           },
         },
       },
-    ],
+    },
   },
   code: `({ list, message, time, delay }) => {
     const log = (...args) => console.log("[NotificationTool]", ...args);
