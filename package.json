@@ -20,6 +20,8 @@
     "relay": "yarn workspace @taskyon/relay start"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.13",
+    "@ai-sdk/openai-compatible": "^2.0.16",
     "@chainsafe/libp2p-gossipsub": "^14.1.1",
     "@chainsafe/libp2p-noise": "^16.1.4",
     "@chainsafe/libp2p-yamux": "^7.0.4",
@@ -52,12 +54,14 @@
     "@msgpack/msgpack": "^3.1.2",
     "@multiformats/multiaddr": "^12.5.1",
     "@noble/ed25519": "^2.1.0",
+    "@openrouter/ai-sdk-provider": "^2.0.0",
     "@quasar/extras": "^1.17.0",
     "@resvg/resvg-wasm": "^2.6.2",
     "@scure/bip39": "^1.5.0",
     "@supabase/supabase-js": "^2.39.0",
     "@tauri-apps/api": "^2.6.0",
     "@vueuse/core": "^10.10.0",
+    "ai": "^6.0.42",
     "axios": "^1.12.2",
     "codemirror": "^6.0.1",
     "codemirror-lang-mermaid": "^0.5.0",

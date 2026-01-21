@@ -43,6 +43,65 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@ai-sdk/gateway@npm:3.0.17":
+  version: 3.0.17
+  resolution: "@ai-sdk/gateway@npm:3.0.17"
+  dependencies:
+    "@ai-sdk/provider": "npm:3.0.4"
+    "@ai-sdk/provider-utils": "npm:4.0.8"
+    "@vercel/oidc": "npm:3.1.0"
+  peerDependencies:
+    zod: ^3.25.76 || ^4.1.8
+  checksum: 10c0/da5756d2c6de8feea002b18323a2016332e993783b390bf9a259879d462037c9e9f9f7533690c0b9da8c335a123878f0f7980ee3e954cf8fa68677587269ff0e
+  languageName: node
+  linkType: hard
+
+"@ai-sdk/openai-compatible@npm:^2.0.16":
+  version: 2.0.16
+  resolution: "@ai-sdk/openai-compatible@npm:2.0.16"
+  dependencies:
+    "@ai-sdk/provider": "npm:3.0.4"
+    "@ai-sdk/provider-utils": "npm:4.0.8"
+  peerDependencies:
+    zod: ^3.25.76 || ^4.1.8
+  checksum: 10c0/ce3e587bcbfbc6e429b1e1037ba76b6d2128c24d07a2c55dd7d151144a1948d024deee5a4ee5c231e3bc194f52109e718f437f478b97b785e238d21cd6e39d65
+  languageName: node
+  linkType: hard
+
+"@ai-sdk/openai@npm:^3.0.13":
+  version: 3.0.13
+  resolution: "@ai-sdk/openai@npm:3.0.13"
+  dependencies:
+    "@ai-sdk/provider": "npm:3.0.4"
+    "@ai-sdk/provider-utils": "npm:4.0.8"
+  peerDependencies:
+    zod: ^3.25.76 || ^4.1.8
+  checksum: 10c0/c277712b757fd51646e954ee40acfd7a896743638583e99f77699d6ffa12cc6e452c729ca576a632b90ce545ca8bc3cf4663105e9f1f2db942e5748d01764bba
+  languageName: node
+  linkType: hard
+
+"@ai-sdk/provider-utils@npm:4.0.8":
+  version: 4.0.8
+  resolution: "@ai-sdk/provider-utils@npm:4.0.8"
+  dependencies:
+    "@ai-sdk/provider": "npm:3.0.4"
+    "@standard-schema/spec": "npm:^1.1.0"
+    eventsource-parser: "npm:^3.0.6"
+  peerDependencies:
+    zod: ^3.25.76 || ^4.1.8
+  checksum: 10c0/c818b7ef53652665929428addac0122bcadfbf4abc7c99b98b93373607dce54e28d3a88820bd6cba8a34bb9817e076719f1713af4ce28be9e9899a7a14cd105c
+  languageName: node
+  linkType: hard
+
+"@ai-sdk/provider@npm:3.0.4":
+  version: 3.0.4
+  resolution: "@ai-sdk/provider@npm:3.0.4"
+  dependencies:
+    json-schema: "npm:^0.4.0"
+  checksum: 10c0/dca9cfd2f3380094a4891d91bdc94ec1b96872be709b519c3cf1c5ad5bc870f5281014c9201e17d00966f2f0bafd884ad116977bad60d0c913d29d218112cbc7
+  languageName: node
+  linkType: hard
+
 "@ampproject/remapping@npm:^2.2.0":
   version: 2.3.0
   resolution: "@ampproject/remapping@npm:2.3.0"
@@ -4346,6 +4405,34 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@openrouter/ai-sdk-provider@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "@openrouter/ai-sdk-provider@npm:2.0.0"
+  dependencies:
+    "@openrouter/sdk": "npm:^0.1.27"
+  peerDependencies:
+    ai: 6.0.3
+    zod: ^3.25.0 || ^4.0.0
+  checksum: 10c0/142934a46a265b41f622649ff3d2041bde07347886bc68f36b9f78367f3eaf266c47bccc426df2a294e6dc2d61af10d1e5ad196707cf189110b2609b707f17ca
+  languageName: node
+  linkType: hard
+
+"@openrouter/sdk@npm:^0.1.27":
+  version: 0.1.27
+  resolution: "@openrouter/sdk@npm:0.1.27"
+  dependencies:
+    zod: "npm:^3.25.0 || ^4.0.0"
+  checksum: 10c0/c63972851b4544a6585babacb2909b8af529444c6319e0a98b8e219f75295a25d433ba1978f24c0252fbb41ac2471bf209c2728649bf0c42b7a722c3868e267e
+  languageName: node
+  linkType: hard
+
+"@opentelemetry/api@npm:1.9.0":
+  version: 1.9.0
+  resolution: "@opentelemetry/api@npm:1.9.0"
+  checksum: 10c0/9aae2fe6e8a3a3eeb6c1fdef78e1939cf05a0f37f8a4fae4d6bf2e09eb1e06f966ece85805626e01ba5fab48072b94f19b835449e58b6d26720ee19a58298add
+  languageName: node
+  linkType: hard
+
 "@peculiar/asn1-cms@npm:^2.3.15, @peculiar/asn1-cms@npm:^2.4.0":
   version: 2.4.0
   resolution: "@peculiar/asn1-cms@npm:2.4.0"
@@ -6826,6 +6913,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@vercel/oidc@npm:3.1.0":
+  version: 3.1.0
+  resolution: "@vercel/oidc@npm:3.1.0"
+  checksum: 10c0/f57278ed4b4c022c7ca85e8baa5f9bdb2623397abfa0e5dbfd75de283c8e5dc534d64dac1364b5ad8c96d00eb2d469886e6f7b640f6f195def5766950ad8ce71
+  languageName: node
+  linkType: hard
+
 "@vitejs/plugin-vue@npm:^6.0.1":
   version: 6.0.3
   resolution: "@vitejs/plugin-vue@npm:6.0.3"
@@ -7317,6 +7411,20 @@ __metadata:
     clean-stack: "npm:^2.0.0"
     indent-string: "npm:^4.0.0"
   checksum: 10c0/a42f67faa79e3e6687a4923050e7c9807db3848a037076f791d10e092677d65c1d2d863b7848560699f40fc0502c19f40963fb1cd1fb3d338a7423df8e45e039
+  languageName: node
+  linkType: hard
+
+"ai@npm:^6.0.42":
+  version: 6.0.42
+  resolution: "ai@npm:6.0.42"
+  dependencies:
+    "@ai-sdk/gateway": "npm:3.0.17"
+    "@ai-sdk/provider": "npm:3.0.4"
+    "@ai-sdk/provider-utils": "npm:4.0.8"
+    "@opentelemetry/api": "npm:1.9.0"
+  peerDependencies:
+    zod: ^3.25.76 || ^4.1.8
+  checksum: 10c0/c680a38ca66f1e6181fa3d81bdbc6db5d62cb867098f02476e0bc92fe7cdb3ceec8dbb9d153d0806d68d1da11f8b36cd20dbfd245e3534ee458b854195513bb8
   languageName: node
   linkType: hard
 
@@ -11583,6 +11691,13 @@ __metadata:
   version: 3.3.0
   resolution: "events@npm:3.3.0"
   checksum: 10c0/d6b6f2adbccbcda74ddbab52ed07db727ef52e31a61ed26db9feb7dc62af7fc8e060defa65e5f8af9449b86b52cc1a1f6a79f2eafcf4e62add2b7a1fa4a432f6
+  languageName: node
+  linkType: hard
+
+"eventsource-parser@npm:^3.0.6":
+  version: 3.0.6
+  resolution: "eventsource-parser@npm:3.0.6"
+  checksum: 10c0/70b8ccec7dac767ef2eca43f355e0979e70415701691382a042a2df8d6a68da6c2fca35363669821f3da876d29c02abe9b232964637c1b6635c940df05ada78a
   languageName: node
   linkType: hard
 
@@ -20751,6 +20866,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "taskyon@workspace:."
   dependencies:
+    "@ai-sdk/openai": "npm:^3.0.13"
+    "@ai-sdk/openai-compatible": "npm:^2.0.16"
     "@chainsafe/libp2p-gossipsub": "npm:^14.1.1"
     "@chainsafe/libp2p-noise": "npm:^16.1.4"
     "@chainsafe/libp2p-yamux": "npm:^7.0.4"
@@ -20785,6 +20902,7 @@ __metadata:
     "@msgpack/msgpack": "npm:^3.1.2"
     "@multiformats/multiaddr": "npm:^12.5.1"
     "@noble/ed25519": "npm:^2.1.0"
+    "@openrouter/ai-sdk-provider": "npm:^2.0.0"
     "@quasar/app-vite": "npm:^2.3.0"
     "@quasar/cli": "npm:^2.5.0"
     "@quasar/extras": "npm:^1.17.0"
@@ -20815,6 +20933,7 @@ __metadata:
     "@vue/eslint-config-typescript": "npm:^14.4.0"
     "@vue/test-utils": "npm:^2.3.0"
     "@vueuse/core": "npm:^10.10.0"
+    ai: "npm:^6.0.42"
     autoprefixer: "npm:^10.4.2"
     axios: "npm:^1.12.2"
     codemirror: "npm:^6.0.1"
@@ -22999,6 +23118,13 @@ __metadata:
     compress-commons: "npm:^6.0.2"
     readable-stream: "npm:^4.0.0"
   checksum: 10c0/50f2fb30327fb9d09879abf7ae2493705313adf403e794b030151aaae00009162419d60d0519e807673ec04d442e140c8879ca14314df0a0192de3b233e8f28b
+  languageName: node
+  linkType: hard
+
+"zod@npm:^3.25.0 || ^4.0.0":
+  version: 4.3.5
+  resolution: "zod@npm:4.3.5"
+  checksum: 10c0/5a2db7e59177a3d7e202543f5136cb87b97b047b77c8a3d824098d3fa8b80d3aa40a0a5f296965c3b82dfdccdd05dbbfacce91347f16a39c675680fd7b1ab109
   languageName: node
   linkType: hard
 

@@ -1,9 +1,22 @@
+import type {
+  AssistantModelMessage,
+  FilePart,
+  ImagePart,
+  ModelMessage,
+  SystemModelMessage,
+  Tool,
+  ToolModelMessage,
+  ToolResultPart,
+  UserModelMessage,
+} from 'ai'
+import { jsonSchema, tool } from 'ai'
 import { default as Ajv } from 'ajv'
 import { load } from 'js-yaml'
 import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
 import { isEmpty } from 'lodash'
 import type OpenAI from 'openai'
+import type { ReadonlyDeep } from 'type-fest'
 import { z } from 'zod'
 import type { TyTaskManager } from '../core/taskManager'
 import { mapFunctionNames } from '../core/tools'
@@ -43,25 +56,22 @@ import {
 import type { Thunk } from '../utils/tsHelpers'
 import { useNlpWorker } from '../utils/webWorkerApi'
 import { safeYamlDump } from '../utils/yamlUtils'
-import type { ReadonlyDeep } from 'type-fest'
+
+const convertToChatCompletionTool = (t: ToolBase): Tool => {
+  return tool({
+    title: t.name,
+    description: t.description,
+    inputSchema: jsonSchema(t.parameters),
+  })
+}
 
 function generateOpenAIToolDeclarations(
   allowedTools: string[],
   toolCollection: Record<string, ToolBase>,
-): OpenAI.ChatCompletionTool[] {
+): Tool[] {
   const tools: ToolBase[] = mapFunctionNames(allowedTools || [], toolCollection) || []
-  const openAITools: OpenAI.ChatCompletionTool[] = tools.map((t) => {
-    const functionDef: OpenAI.FunctionDefinition = {
-      name: t.name,
-      parameters: t.parameters as unknown as Record<string, unknown>,
-      description: t.description,
-    }
-    return {
-      function: functionDef,
-      type: 'function',
-    }
-  })
-  return openAITools
+  const aiTools = tools.map(convertToChatCompletionTool)
+  return aiTools
 }
 
 // this function processes all tasks which go to any sort of an LLM
@@ -88,10 +98,10 @@ export async function processChatTask(
   //      main objective, previous tasks etc....
   //      actualy: this would be great for a new tool ;)
   // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
-  let openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+  let chatCompletionMessages: ModelMessage[]
   if (lastTaskBeforeChatCompletion) {
     const taskChain = await taskManager.getTaskChain(lastTaskBeforeChatCompletion.id)
-    openAIConversationThread = await convertTaskNodesToOpenAIChat(
+    chatCompletionMessages = await convertTaskNodesToOpenAIChat(
       taskChain,
       taskManager.getFileMappingByUuid,
       taskManager.getUploadedFile,
@@ -100,7 +110,7 @@ export async function processChatTask(
       toolDefs,
     )
   } else {
-    openAIConversationThread = []
+    chatCompletionMessages = []
   }
 
   const msgs = addPrompts(
@@ -109,7 +119,7 @@ export async function processChatTask(
     llmTools, // we turn on/off native structured & tools ith the same setting here!
     llmSettings.useBasePrompt,
     llmSettings.taskChatTemplates,
-    openAIConversationThread,
+    chatCompletionMessages,
     prompts,
     allowedTools,
     lastTaskBeforeChatCompletion?.content.data,
@@ -117,27 +127,29 @@ export async function processChatTask(
     schema,
   )
 
-  openAIConversationThread = [
+  chatCompletionMessages = [
     ...msgs.prependMessages,
     ...msgs.modifiedOpenAIConversationThread,
     ...msgs.appendMessages,
   ]
 
-  if (openAIConversationThread.length <= 0) {
+  if (chatCompletionMessages.length <= 0) {
     throw new Error('We were not able to convert our tasks into an AI-compatible format!')
   }
 
-  let tools: OpenAI.ChatCompletionTool[] = []
+  let tools: Tool[] = []
   if (llmTools) {
     tools = generateOpenAIToolDeclarations(allowedTools || [], toolDefs)
   }
 
-  return { openAIConversationThread, tools, msgs: msgs ?? {} }
+  return { openAIConversationThread: chatCompletionMessages, tools, msgs: msgs ?? {} }
 }
 
+const useVercel = true
+
 async function llmRequest(
-  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  tools: OpenAI.ChatCompletionTool[],
+  openAIConversationThread: ModelMessage[],
+  tools: Tool[],
   selectedModel: string,
   stopSignal: AbortSignal,
   api: apiConfig,
@@ -149,57 +161,95 @@ async function llmRequest(
   reasoning_effort?: 'low' | 'high' | 'medium',
   verbosity?: OpenAI.ChatCompletionCreateParams['verbosity'],
 ) {
-  const streamTask = true
-  const request = await createChatCompletionRequest(
-    apiKey,
-    { ...api, selectedModel, endpoint: joinUrl(api.baseURL, api.routes.chatCompletion) },
-    openAIConversationThread,
-    schema,
-    streamTask, // for now, we always want to stream our task...
-    tools,
-    webSearch,
-    reasoning_effort,
-    verbosity,
-    siteUrl,
-  )
-  const chatCompletion = await callLLM(
-    request,
-    streamTask,
-    streamTracker, // track incoming streams...
-    stopSignal,
-    // we are using a pretty big timeout, bceause apparentl chat API from openAI needs thiw right now..
-    request.timeout, // Timeout in milliseconds for waiting for first streamed response
-    3, // Maximum number of retry attempts
-  )
+  if (useVercel && api.name === 'openai') {
+    /*const { createOpenRouter } = await import('@openrouter/ai-sdk-provider')
+    const openrouter = createOpenRouter({
+      apiKey,
+      baseURL: siteUrl,
+    })*/
+    //import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+    const { streamText } = await import('ai')
 
-  return chatCompletion
+    const { createOpenAI } = await import('@ai-sdk/openai')
+    const openai = createOpenAI({
+      apiKey,
+    })
+
+    const result = streamText({
+      model: openai(selectedModel),
+      messages: openAIConversationThread,
+      onChunk({ chunk }) {
+        // implement your own logic here, e.g.:
+        if (chunk.type === 'text') {
+          console.log(chunk.text)
+        }
+      },
+      onFinish({ text, finishReason, usage, response, steps, totalUsage }) {
+        // your own logic, e.g. for saving the chat history or recording usage
+        const messages = response.messages // messages that were generated
+      },
+    })
+  } else {
+    const streamTask = true
+    const request = await createChatCompletionRequest(
+      apiKey,
+      { ...api, selectedModel, endpoint: joinUrl(api.baseURL, api.routes.chatCompletion) },
+      openAIConversationThread,
+      schema,
+      streamTask, // for now, we always want to stream our task...
+      tools,
+      webSearch,
+      reasoning_effort,
+      verbosity,
+      siteUrl,
+    )
+    const chatCompletion = await callLLM(
+      request,
+      streamTask,
+      streamTracker, // track incoming streams...
+      stopSignal,
+      // we are using a pretty big timeout, bceause apparentl chat API from openAI needs thiw right now..
+      request.timeout, // Timeout in milliseconds for waiting for first streamed response
+      3, // Maximum number of retry attempts
+    )
+    return chatCompletion
+  }
 }
 
 // Ensures that every assistant.tool_calls is paired with a role:"tool" message.
-function ensureToolResponses(messages: OpenAI.ChatCompletionMessageParam[]) {
+function ensureToolResponses(messages: ModelMessage[]) {
   // 1) Pre‑scan all tool responses
   const responded = new Set<string>()
   for (const m of messages) {
-    if (m.role === 'tool' && 'tool_call_id' in m) {
-      responded.add(m.tool_call_id)
+    // we can use [0] here because we only ever have a single tool call
+    // multiple parallel tool calls are handled in taskyon itself.
+    if (m.role === 'tool' && m.content[0]?.type === 'tool-result') {
+      responded.add(m.content[0]?.toolCallId)
     }
   }
 
   // 2) Rebuild, injecting only the missing ones
-  const result: OpenAI.ChatCompletionMessageParam[] = []
+  const result: ModelMessage[] = []
   for (const msg of messages) {
     result.push(msg)
 
-    if (msg.role === 'assistant' && Array.isArray(msg.tool_calls)) {
-      for (const call of msg.tool_calls) {
-        if (!responded.has(call.id)) {
-          result.push({
-            role: 'tool',
-            tool_call_id: call.id,
-            content: '',
-          })
-          responded.add(call.id)
-        }
+    if (msg.role === 'assistant') {
+      for (const call of msg.content) {
+        if (typeof call !== 'string' && call.type === 'tool-call')
+          if (!responded.has(call.toolCallId)) {
+            result.push({
+              role: 'tool',
+              content: [
+                {
+                  type: 'tool-result',
+                  toolCallId: call.toolCallId, // the tool call will get the parent ID as well! :)
+                  toolName: call.toolName,
+                  output: { type: 'text', value: 'No response was recorded from the tool.' },
+                },
+              ],
+            })
+            responded.add(call.toolCallId)
+          }
       }
     }
   }
@@ -213,25 +263,28 @@ export async function convertTaskNodesToOpenAIChat(
   getFileMapping: (uuid: string) => Promise<FileMapping | null>,
   getUploadedFile: (uuid: string) => Promise<File | undefined>,
   tryUsingVisionModels: boolean,
-  enableOpenAiTools: boolean,
+  useNativeTools: boolean,
   toolDefs: Record<string, ToolBase>,
 ) {
+  const tasksById = new Map<string, TaskNode>(taskChain.map((t) => [t.id, t]))
+
   const messages = (
     await Promise.all(
       taskChain.map((task) =>
         convertTaskNodeToOpenAIMessage(
           task,
+          tasksById,
           tryUsingVisionModels,
           getFileMapping,
           getUploadedFile,
-          enableOpenAiTools,
+          useNativeTools,
           toolDefs,
         ),
       ),
     )
   )
     .flat()
-    .filter<OpenAI.ChatCompletionMessageParam>((message) => message != undefined)
+    .filter<ModelMessage>((message) => message != undefined)
 
   // Inject any missing tool response messages (this happens, if our tools create a recursive task chain)
   return ensureToolResponses(messages)
@@ -295,7 +348,7 @@ const { estimateChatTokens } = useNlpWorker()
 
 async function saveTokenUsage(
   chatResponse: ChatResponseType,
-  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  openAIConversationThread: ModelMessage[],
   toolDefs: Record<string, ToolBase>,
   content: TaskNode['content'],
   allowedTools: string[] | undefined,
@@ -574,30 +627,28 @@ ${toolCall.function.arguments}`,
 // and sometime we don't need it at all in the chat :)
 async function convertTaskNodeToOpenAIMessage(
   task: TaskNode,
+  tasksById: Map<string, TaskNode>,
   useVisionModels: boolean,
   getFileMapping: (uuid: string) => Promise<FileMapping | null>,
   getUploadedFile: (uuid: string) => Promise<File | undefined>,
-  useOpenAITools: boolean,
+  useNativeTools: boolean,
   toolCollection: Record<string, ToolBase>,
   maxToolIdLength = 9, // the max length here is influenced by the Mistral model, which can only use 9 characters for tool ids
-): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[] | undefined> {
+): Promise<ModelMessage[] | undefined> {
   if (task.content.type === 'functioncall') {
     const functionCallName = task.content.data.name
     if (toolCollection[functionCallName]?.renderOptions?.hideLlm) {
       return
     }
-    if (useOpenAITools) {
-      const functionMessage: OpenAI.ChatCompletionMessageParam = {
+    if (useNativeTools) {
+      const functionMessage: AssistantModelMessage = {
         role: 'assistant',
-        content: null,
-        tool_calls: [
+        content: [
           {
-            id: await charHash(task.id, maxToolIdLength),
-            type: 'function',
-            function: {
-              name: task.content.data.name,
-              arguments: JSON.stringify(task.content.data.arguments),
-            },
+            type: 'tool-call',
+            toolCallId: await charHash(task.id, maxToolIdLength),
+            toolName: task.content.data.name,
+            input: task.content.data.arguments,
           },
         ],
       }
@@ -607,7 +658,7 @@ async function convertTaskNodeToOpenAIMessage(
       // the arguments in it.
       return [
         {
-          role: 'system',
+          role: 'assistant',
           // and the result of the function
           content:
             `The following tool was used: ${functionCallName}.` +
@@ -618,11 +669,27 @@ async function convertTaskNodeToOpenAIMessage(
       ]
     }
   } else if (task.content.type === 'toolresult') {
-    if (task.parentID && useOpenAITools) {
-      const message: OpenAI.ChatCompletionMessageParam = {
+    if (task.parentID && useNativeTools) {
+      // the parent task should be the tool call task...
+      const toolCallTask = tasksById.get(task.parentID)
+      const name =
+        toolCallTask?.content.type === 'functioncall' ? toolCallTask.content.data.name : 'unknown'
+      const output: ToolResultPart['output'] = {
+        type: 'text',
+        // TODO: not sure, if it makes senese to use type 'json' here at some point in the future?
+        //       its not very generic...
+        value: safeYamlDump(task.content.data),
+      }
+      const message: ToolModelMessage = {
         role: 'tool',
-        tool_call_id: await charHash(task.parentID, maxToolIdLength), // the tool call will get the parent ID as well! :)
-        content: safeYamlDump(task.content.data),
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: await charHash(task.parentID, maxToolIdLength), // the tool call will get the parent ID as well! :)
+            toolName: name,
+            output,
+          },
+        ],
       }
       return [message]
     } else
@@ -635,15 +702,13 @@ async function convertTaskNodeToOpenAIMessage(
         },
       ]
   } else if (task.content.type === 'message' && task.role != 'function') {
-    const message: OpenAI.ChatCompletionMessageParam = {
-      // TODO: we need to dynamically generate task roles here!! and move it into the task type,  if its a message!
+    const message: ModelMessage = {
       role: task.role,
       content: task.content.data,
     }
     return [message]
   } else if (task.content.type === 'error') {
-    const message: OpenAI.ChatCompletionMessageParam = {
-      // TODO: we need to dynamically generate task roles here!! and move it into the task type,  if its a message!
+    const message: SystemModelMessage = {
       role: 'system',
       content: humanizeError(task.content.data),
     }
@@ -654,7 +719,7 @@ async function convertTaskNodeToOpenAIMessage(
       .map((fm) => '- ' + (fm?.opfs || fm?.name || 'unknown'))
       .join('\n')
 
-    const sysMessage: OpenAI.ChatCompletionMessageParam = {
+    const sysMessage: SystemModelMessage = {
       role: 'system',
       content: `User uploaded files:\n${fileNames}`,
     }
@@ -662,7 +727,7 @@ async function convertTaskNodeToOpenAIMessage(
     const fileContent = await makeFilesAiReadable(fileMappings, getUploadedFile, useVisionModels)
 
     if (fileContent.length > 0) {
-      const userMessage: OpenAI.ChatCompletionMessageParam = {
+      const userMessage: UserModelMessage = {
         role: 'user',
         content: fileContent,
       }
@@ -698,8 +763,8 @@ async function makeFilesAiReadable(
   fileMappings: (FileMapping | null)[],
   getFile: (uuid: string) => Promise<File | undefined>,
   nativeModelProcessing: boolean,
-): Promise<OpenAI.Chat.Completions.ChatCompletionContentPart[]> {
-  const fileContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = []
+): Promise<(FilePart | ImagePart)[]> {
+  const fileContent: (FilePart | ImagePart)[] = []
   for (const fm of fileMappings) {
     if (!fm) continue
     const name = fm.name || fm.opfs || 'unknown'
@@ -711,24 +776,21 @@ async function makeFilesAiReadable(
     if (/\.(png|jpe?g|gif|webp)$/i.test(lower) && nativeModelProcessing) {
       const base64 = await fileToBase64(file)
       fileContent.push({
-        type: 'image_url',
-        image_url: {
-          url: `data:${file.type};base64,${base64}`,
-          detail: 'auto',
-        },
+        type: 'image',
+        mediaType: file.type,
+        image: `data:${file.type};base64,${base64}`,
       })
     }
+    // TODO: support image URLs
 
     // Audio (OpenAI spec requires base64 + format)
     else if (/\.(wav|mp3)$/i.test(lower) && nativeModelProcessing) {
       const base64 = await fileToBase64(file)
-      const format = lower.endsWith('wav') ? 'wav' : 'mp3'
+      const mediaType = lower.endsWith('.wav') ? 'audio/wav' : 'audio/mpeg'
       fileContent.push({
-        type: 'input_audio',
-        input_audio: {
-          data: base64,
-          format,
-        },
+        type: 'file',
+        mediaType,
+        data: base64,
       })
     }
 
@@ -738,10 +800,9 @@ async function makeFilesAiReadable(
       const mime = file.type || 'application/pdf'
       fileContent.push({
         type: 'file',
-        file: {
-          file_data: `data:${mime};base64,${base64}`, // ✅ OpenAI expects full data URL
-          filename: name,
-        },
+        mediaType: mime,
+        data: `data:${mime};base64,${base64}`, // ✅ OpenAI expects full data URL
+        filename: name,
       })
     }
 
@@ -751,13 +812,15 @@ async function makeFilesAiReadable(
         const text = await convertFileToText(file)
 
         fileContent.push({
-          type: 'text',
-          text: `Contents of file: ${name}\n\n` + "'''" + text + "'''",
+          type: 'file',
+          mediaType: 'text/plain',
+          data: `Contents of file: ${name}\n\n` + "'''" + text + "'''",
         })
       } catch (err) {
         fileContent.push({
-          type: 'text',
-          text: `Skipping unsupported file type: ${name}`,
+          type: 'file',
+          mediaType: 'text/plain',
+          data: `Skipping unsupported file type: ${name}`,
         })
         console.warn(`Skipping unsupported file type for OpenAI: ${name}`, err)
         // Or throw if you want stricter behavior

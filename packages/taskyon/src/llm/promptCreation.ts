@@ -1,9 +1,9 @@
+import type { ModelMessage } from 'ai'
 import { z } from 'zod'
 import { summarizeTools } from '../core/tools'
 import type { ToolBase } from '../types/tools'
 import { FunctionCall } from '../types/tools'
 import { safeYamlDump, zodToYamlString } from '../utils/yamlUtils'
-import type OpenAI from 'openai'
 
 const answer = z.string()
 const yesno = z.enum(['yes', 'no']).or(z.boolean()).nullable()
@@ -89,22 +89,23 @@ function substituteStringVariables(variables: Record<string, string>, content: s
 
 // gets all the function calls in an openai conversation and makes a list from that :)
 function getAllFunctionsInOpenAiConversation(
-  modifiedOpenAIConversationThread: readonly OpenAI.ChatCompletionMessageParam[],
+  modifiedOpenAIConversationThread: readonly ModelMessage[],
 ): Set<string> {
   return modifiedOpenAIConversationThread.reduce((acc, msg) => {
-    if (msg.role === 'function' && msg.name) {
-      acc.add(msg.name)
+    if (msg.role === 'tool') {
+      msg.content.forEach((c) => {
+        if (c.type === 'tool-result') {
+          acc.add(c.toolName)
+        }
+      })
     }
 
-    if (msg.role === 'assistant' && 'tool_calls' in msg && msg.tool_calls) {
-      for (const tc of msg.tool_calls) {
-        acc.add('function' in tc ? tc.function.name : tc.id)
-      }
-    }
-
-    if (msg.role === 'tool' && msg.tool_call_id) {
-      // tool messages don’t have tool_calls, just ids
-      acc.add(msg.tool_call_id)
+    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+      msg.content.forEach((c) => {
+        if (c.type === 'tool-call') {
+          acc.add(c.toolName)
+        }
+      })
     }
 
     return acc
@@ -116,7 +117,7 @@ const string2OpenAiMessage =
     msgList.map((prompt) => ({
       role,
       content: substituteStringVariables(variables, prompt),
-    })) as OpenAI.ChatCompletionMessageParam[]
+    })) as ModelMessage[]
 
 function calculateCompletionVariables(
   allowedTools: string[],
@@ -165,7 +166,7 @@ export function addPrompts(
     schemaReminder: string
     toolResult: string
   },
-  openAIConversationThread: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  chatCompletionMessages: ModelMessage[],
   prompts: string[],
   allowedTools: string[],
   lastMessage: unknown,
@@ -189,7 +190,7 @@ export function addPrompts(
     variables.schema = safeYamlDump({ schemaType: 'json schema', ...schema })
   }
 
-  const modifiedOpenAIConversationThread = structuredClone(openAIConversationThread)
+  const modifiedOpenAIConversationThread = structuredClone(chatCompletionMessages)
   const prependMessagesList: string[] = []
   const appendMessagesList: string[] = []
   const appendSystemMessage: string[] = []
