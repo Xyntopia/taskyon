@@ -214,6 +214,7 @@ import SecretInput from '../varViews/SecretInput.vue'
 import ApiSelect from './ApiSelect.vue'
 import PasswordManager from './PasswordManager.vue'
 import type { KeyString } from '@taskyon/taskyon'
+import { mdiKeyLink } from '@quasar/extras/mdi-v6'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
