@@ -35,17 +35,14 @@ import type { llmSettings } from '../types/profiles'
 import type { toolContext } from '../types/toolApi'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import type { ToolBase } from '../types/tools'
-import { FunctionArguments } from '../types/tools'
-import { FunctionCall } from '../types/tools'
+import { FunctionArguments, FunctionCall } from '../types/tools'
 import { sleep } from '../utils/asyncUtils'
 import { charHash } from '../utils/crypto'
 import { humanizeError } from '../utils/error'
-import type { frpBus } from '../utils/frpBus'
 import { createStream } from '../utils/frpBus'
 import { convertFileToText } from '../utils/loadFiles'
 import {
   createDeepTransformer,
-  createDotPathTransformer,
   deepCopy,
   normalizeFalsyValues,
   pickProperties,
@@ -53,8 +50,6 @@ import {
 import type { Thunk } from '../utils/tsHelpers'
 import { useNlpWorker } from '../utils/webWorkerApi'
 import { safeYamlDump } from '../utils/yamlUtils'
-import { ContentFilterFinishReasonError } from 'openai/error'
-import { Content } from 'openai/resources/containers/files/content.mjs'
 
 const convertToChatCompletionTool = (t: ToolBase): Tool => {
   return tool({
@@ -164,26 +159,123 @@ async function llmRequest(
   reasoning_effort?: 'low' | 'high' | 'medium',
   verbosity?: OpenAI.ChatCompletionCreateParams['verbosity'],
 ) {
-  console.log({ siteUrl, webSearch, reasoning_effort, verbosity })
-  /*const { createOpenRouter } = await import('@openrouter/ai-sdk-provider')
-    const openrouter = createOpenRouter({
-      apiKey,
-      baseURL: siteUrl,
-    })*/
-  //import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-  const { streamText } = await import('ai')
+  // TODO:
+  //     stream_options: { include_usage: true },
+  //     store: false,
+  //
 
-  const { createOpenAI } = await import('@ai-sdk/openai')
-  const openai = createOpenAI({
-    apiKey,
-  })
+  console.log({ siteUrl, webSearch, reasoning_effort, verbosity })
+  const { streamText } = await import('ai')
+  let model
+  switch (api.name) {
+    case 'openai': {
+      /*
+          if (webSearch)
+            payload.web_search_options = {
+              search_context_size: webSearch.searchContextSize,
+            }
+          const reasoning_map = {
+            'gpt-5': { none: 'none', low: 'low', medium: 'medium', high: 'high' } as Record<
+              string,
+              ChatCompletionReasoningEffort
+            >,
+          }
+          if (payload.model.includes('gpt-5')) {
+            const effort = reasoning_map['gpt-5'][reasoning_effort ?? 'none'] ?? null
+            payload.reasoning_effort = effort
+          } else {
+            payload.reasoning_effort = null
+          }
+      */
+      const { createOpenAI } = await import('@ai-sdk/openai')
+      const openai = createOpenAI({
+        apiKey,
+      })
+      model = openai(selectedModel)
+      break
+    }
+    case 'taskyon':
+    case 'openrouter.ai': {
+      const { createOpenRouter } = await import('@openrouter/ai-sdk-provider')
+      const openrouter = createOpenRouter({
+        apiKey,
+      })
+      const opts: Parameters<typeof openrouter>[1] = {
+        provider: {
+          //only: ['GMICloud'],
+          // TODO: we need to make this generic. and on certain errors, avoid specific providers...
+          // gives back "bad" results..
+          ignore: ['GMICloud'],
+        },
+        usage: { include: true },
+      }
+      if (reasoning_effort)
+        opts.reasoning = {
+          // One of the following (not both):
+          // Can be "high", "medium", or "low" (OpenAI-style)
+          // for other APIs, we use max_tokens
+          effort: reasoning_effort,
+          // max tokens can only be used if we don't use "effort"
+          // max_tokens: 2000, // Specific token limit (Anthropic-style)
+          // Optional: Default is false. All models support this.
+          exclude: false, // Set to true to exclude reasoning tokens from response
+          // Or enable reasoning with the default parameters:
+          // enabled: true, // Default: inferred from `effort` or `max_tokens`
+        }
+
+      if (webSearch?.maxResults) {
+        opts.plugins = [
+          {
+            id: 'web',
+            engine: 'exa', // Optional: "native", "exa", or undefined
+            max_results: webSearch.maxResults, // Defaults to 5
+            /*docs from: https://openrouter.ai/docs/features/web-search
+          A web search was conducted on `date`. Incorporate the following web search results into your response.
+
+          IMPORTANT: Cite them using markdown links named using the domain of the source.
+          Example: [nytimes.com](https://nytimes.com/some-page).
+
+          //search_prompt: 'Some relevant web results:', // See default below*/
+          },
+          {
+            id: 'file-parser',
+            pdf: {
+              engine: 'native',
+            },
+          },
+        ]
+        opts.extraBody = {
+          web_search_options: {
+            engine: 'exa',
+            search_context_size: webSearch.searchContextSize,
+            //TODO: user_location:
+          },
+        }
+      }
+
+      model = openrouter(selectedModel, opts)
+      break
+    }
+    default: {
+      const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible')
+      const openai = createOpenAICompatible({
+        apiKey,
+        baseURL: api.baseURL,
+        name: api.name,
+      })
+      model = openai(selectedModel)
+      break
+      //throw new Error('Api is currently not supports', { cause: { api } })
+    }
+  }
 
   // https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-text
   const streamOpts: streamOptsType = {
-    model: openai(selectedModel),
+    model,
     messages: openAIConversationThread,
     tools,
     abortSignal: stopSignal,
+    timeout: { totalMs: 5 * 60 * 1000, stepMs: 120 * 1000, chunkMs: 120 * 1000 },
     onChunk({ chunk }) {
       streamTracker(chunk)
     },
@@ -488,7 +580,7 @@ property correctly.`)
 //        this tool would analyze the results of the previous function and create new tasks!
 function generateFollowUpTasksFromResult(
   goal: Goals,
-  message: AssistantModelMessage,
+  message: ModelMessage,
   allowedTools: string[] | undefined,
   chatModel: string,
   llmTools: boolean,
@@ -1093,8 +1185,16 @@ export function createChatCompletionTool(
 
       // in case a schema was given, we simply use that schema and return it as a structured message
       // for further processing (e.g. a contextFunction)...
+      if (schema) {
+        const structResponse = await chatCompletion.output
+        return makeTaskResult({
+          role: 'assistant',
+          content: { type: 'structured', data: structResponse },
+        })
+      }
+      // TODO: need to detect whether AI gave use a structured response...
       const customValidation = false
-      if (schema && customValidation) {
+      if (schema && customValidation && typeof res.messages[0].content === 'string') {
         console.log('parsing custom schema', schema)
         const structResponse = parseYamlResponse2Record(res.messages[0].content || '')
 
@@ -1120,12 +1220,6 @@ export function createChatCompletionTool(
             },
           ],
         ])
-      } else if (schema) {
-        const structResponse = await chatCompletion.output
-        return makeTaskResult({
-          role: 'assistant',
-          content: { type: 'structured', data: structResponse },
-        })
       }
 
       const newTaskChain = generateFollowUpTasksFromResult(
