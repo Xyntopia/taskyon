@@ -167,9 +167,11 @@ async function llmRequest(
   console.log({ siteUrl, webSearch, reasoning_effort, verbosity })
   const { streamText } = await import('ai')
   let model
+  let providerOpts = {}
   switch (api.name) {
-    case 'openai': {
-      /*
+    case 'openai':
+      {
+        /*
           if (webSearch)
             payload.web_search_options = {
               search_context_size: webSearch.searchContextSize,
@@ -187,13 +189,30 @@ async function llmRequest(
             payload.reasoning_effort = null
           }
       */
-      const { createOpenAI } = await import('@ai-sdk/openai')
-      const openai = createOpenAI({
-        apiKey,
-      })
-      model = openai(selectedModel)
+        const { createOpenAI } = await import('@ai-sdk/openai')
+        const openai = createOpenAI({
+          apiKey,
+        })
+        model = openai(selectedModel)
+        providerOpts = {
+          tools: {
+            ...tools,
+            web_search: openai.tools.webSearch({
+              // optional configuration:
+              externalWebAccess: true,
+              searchContextSize: 'high',
+              /*userLocation: {
+                type: 'approximate',
+                city: 'San Francisco',
+                region: 'California',
+              },*/
+            }),
+          },
+          // Force web search tool (optional):
+          toolChoice: { type: 'tool', toolName: 'web_search' },
+        }
+      }
       break
-    }
     case 'taskyon':
     case 'openrouter.ai': {
       const { createOpenRouter } = await import('@openrouter/ai-sdk-provider')
@@ -285,6 +304,7 @@ async function llmRequest(
       delayInMs: 20, // optional: defaults to 10ms
       chunking: 'line', // optional: defaults to 'word'
     }),
+    ...providerOpts,
     /*onFinish({ text, finishReason, usage, response, steps, totalUsage, content }) {
         // your own logic, e.g. for saving the chat history or recording usage
         const messages = response.messages // messages that were generated
