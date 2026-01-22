@@ -208,15 +208,36 @@
             ###  ability to use modern yarn
             # Put shims & downloaded package managers inside repo
             # this helps with our new yarn version using corepack on nixos!
+
+
+            # ── Corepack shims (idempotent & self-healing) ────────────────────────────────
+            # Keep Corepack cache outside the repo (CJS-safe),
+            # but regenerate repo-local shims when Node/Corepack changes.
+
             export COREPACK_HOME="''${XDG_CACHE_HOME:-$HOME/.cache}/corepack-home"
             export PATH="$(pwd)/.corepack/bin:$PATH"
 
-            if [ ! -x "$(pwd)/.corepack/bin/yarn" ]; then
-              echo "[devShell] Generating Corepack shims ➜ .corepack/bin"
-              mkdir -p "$(pwd)/.corepack/bin"
-              corepack enable --install-directory="$(pwd)/.corepack/bin"
+            COREPACK_BIN="$(pwd)/.corepack/bin"
+            COREPACK_MARKER="$COREPACK_BIN/.node-version"
+
+            mkdir -p "$COREPACK_BIN"
+
+            NODE_VERSION="$(node -v 2>/dev/null || true)"
+
+            if [ ! -f "$COREPACK_MARKER" ] || ! grep -qx "$NODE_VERSION" "$COREPACK_MARKER"; then
+              echo "[devShell] Refreshing Corepack shims (node $NODE_VERSION)"
+
+              rm -f \
+                "$COREPACK_BIN/yarn" \
+                "$COREPACK_BIN/yarnpkg" \
+                "$COREPACK_BIN/pnpm" \
+                "$COREPACK_BIN/pnpx"
+
+              corepack enable --install-directory="$COREPACK_BIN"
+              echo "$NODE_VERSION" > "$COREPACK_MARKER"
             fi
           '';
+
           # fixes xcb issues :
           # QT_PLUGIN_PATH=${qt5.qtbase}/${qt5.qtbase.qtPluginPrefix}
 
