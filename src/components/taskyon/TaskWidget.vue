@@ -135,6 +135,7 @@
       <div v-else class="raw-markdown q-mb-md">
         {{ task.content.data }}
       </div>
+      <SourcesList :sources="task.content.ann ?? []" />
     </template>
   </TaskField>
   <TaskField
@@ -181,6 +182,7 @@ import { ref } from 'vue'
 import tyMarkdown from '../tyMarkdown.vue'
 import FileBrowser from './FileBrowser.vue'
 import TaskField from './TaskField.vue'
+import SourcesList from './SourcesList.vue'
 
 const { task, nextTask = undefined } = defineProps<{
   task: TaskNode

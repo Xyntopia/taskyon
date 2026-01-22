@@ -3,20 +3,26 @@ import type { Expand } from '../utils/tsHelpers'
 import { FunctionCall, ToolBase } from './tools'
 
 export const Annotation = z.union([
-  z.object({
-    type: z.literal('url'),
-    id: z.string(),
-    end_index: z.number().optional(),
-    start_index: z.number().optional(),
-    title: z.string(),
-    url: z.string(),
-    content: z.string().optional(),
-  }),
-  z.object({
-    type: z.literal('document'),
-    text: z.string().optional(),
-    content: z.string().optional(),
-  }),
+  z
+    .object({
+      type: z.literal('url'),
+      id: z.string(),
+      end_index: z.number(),
+      start_index: z.number(),
+      title: z.string(),
+      url: z.string(),
+      content: z.string(),
+    })
+    .partial()
+    .required({ type: true }),
+  z
+    .object({
+      type: z.literal('document'),
+      text: z.string().optional(),
+      content: z.string().optional(),
+    })
+    .partial()
+    .required({ type: true }),
 ])
 
 export type Annotation = z.infer<typeof Annotation>

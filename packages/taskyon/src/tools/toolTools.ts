@@ -267,7 +267,7 @@ tool Selection capabilities, otherwise we will use an openai compatible tool api
             const goal = webSearch ? 'WebSearch' : 'SimpleCompletion'
             console.log('Do a simple direct chatCOmpletion query!', { goal })
             // TODO: in the case useTools are enabled, maybe afterwards add another tool Chooser?
-            return makeTaskResult(createChatCompletionTask({ goal }))
+            return makeTaskResult(createChatCompletionTask({ goal, llmTools }))
           },
         )
         // any other string...

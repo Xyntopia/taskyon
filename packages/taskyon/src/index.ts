@@ -15,13 +15,8 @@ export { convertTaskNodesToOpenAIChat } from './tools/chatCompletionTool'
 export * from './types/chatCompletion'
 export * from './types/chatCompletionService'
 export * from './api'
-export {
-  partialTaskDraft,
-  TaskNode,
-  TaskContent,
-  type FileMapping,
-  type TaskTreeNode,
-} from './types/node'
+export { partialTaskDraft, TaskNode, TaskContent } from './types/node'
+export type * from './types/node'
 export * from './types/toolApi'
 export * from './types/tools'
 export * from './types/tyKey'
