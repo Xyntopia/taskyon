@@ -2,7 +2,9 @@ import type {
   AssistantModelMessage,
   FilePart,
   ImagePart,
+  LanguageModelResponseMetadata,
   ModelMessage,
+  ReasoningOutput,
   streamText,
   SystemModelMessage,
   Tool,
@@ -1069,65 +1071,19 @@ export function createChatCompletionTool(
       if (currentTask && lastTaskBeforeChatCompletion) {
         // need to make sure, that we remove audio, image and file data here!
         // TODO: make sure the following works..  e.g. with adding a file..
-        const truncatedMsgs = createDotPathTransformer({
-          '*.content.*.file.file_data': () => '[[file_data omitted]]',
-          '*.content.*.image_url.url': () => '[[image_url omitted]]',
-          '*.content.*.input_audio.data': () => '[[input_audio omitted]]',
-        })(chatInfo.chatCompletionMessageThread)
-        //const out = await chatCompletion.output // same as in messages...
-        const content = await chatCompletion.content
-        // const b = await chatCompletion.providerMetadata
-        // const t = await chatCompletion.usage
-        const f = await chatCompletion.totalUsage
-
-        const metaInfo: TaskNodeMeta = {
-          streamContent: rawOutput,
-          taskPrompt: truncatedMsgs,
-          tools: Object.values(chatInfo.tools),
-          rawOutput: chatCompletion,
-          promptTokens: f.inputTokens,
-          resultTokens: f.outputTokens,
-          taskTokens: f.totalTokens,
-          // this doesn't work correctly for taskyon.space service right now...
-          //taskCosts: (b?.openrouter?.usage as Record<string, unknown>)?.cost as number,
-        }
-
-        const cont = res.messages[0]?.content
-        if (typeof cont !== 'string') {
-          const reasoning = content.find((c) => c.type === 'reasoning')
-          metaInfo.reasoning = reasoning?.text
-        }
-
-        // doing deepcopy here, because we're communicating to a worker
-        // and need to make sure to dereference values (e.g. if they're vue reactive objects)
-        /* metaInfo.estimatedTokens = await estimateChatTokens(
-          deepCopy(content),
-          openAIConversationThread,
-          toolDefs,
-          deepCopy(allowedTools) || [],
-          typeof choice?.message.content === 'string' ? choice.message.content : '',
-        ) */
-
-        // we run this asynchronously, because it fetches data in the
-        // background and we don't want to wait here...
-
-        // TODO: remove "configuration" here and get the information from the tasks function call parameters
-        //       this would require us to have "defaultsettings" implemented...
-        if (api)
-          void addTyTaskCostInformation(
-            res.id,
-            currentTask?.id,
-            selectedApi,
-            siteUrl,
-            apiKey,
-            llmApis['taskyon']?.defaultHeaders?.apiKey ?? '',
-            api,
-          ).then((costs) => {
-            console.log('found new task costs:', costs)
-            void taskManager.metaUpsert(currentTask.id, { taskCosts: costs }, 'shallow_merge')
-          })
-
-        metaInfo.rawOutput = { choice: res }
+        const metaInfo: TaskNodeMeta = await getMetaInfos(
+          chatInfo,
+          chatCompletion,
+          rawOutput,
+          res,
+          api,
+          currentTask,
+          selectedApi,
+          siteUrl,
+          apiKey,
+          llmApis['taskyon']?.defaultHeaders?.apiKey ?? '',
+          taskManager,
+        )
         console.log('saving task metadata', metaInfo)
         void taskManager.metaUpsert(currentTask.id, metaInfo, 'shallow_merge')
       }
@@ -1199,4 +1155,89 @@ export type chatCompletionParams = FromSchema<
 
 export type ChatCompletionArgs = Omit<chatCompletionParams, 'schema'> & {
   schema?: JSONSchema7 & Record<string, unknown>
+}
+
+async function getMetaInfos(
+  chatInfo: {
+    chatCompletionMessageThread: ModelMessage[]
+    tools: ToolSet
+    msgs: {
+      prependMessages: ModelMessage[]
+      modifiedOpenAIConversationThread: ModelMessage[]
+      appendMessages: ModelMessage[]
+    }
+  },
+  chatCompletion: Awaited<ReturnType<typeof llmRequest>>,
+  rawOutput: string,
+  res: LanguageModelResponseMetadata & {
+    messages: Array<AssistantModelMessage | ToolModelMessage>
+  },
+  api: apiConfig,
+  currentTask: TaskNode,
+  selectedApi: string,
+  siteUrl: string,
+  apiKey: string,
+  taskyonKey: string,
+  taskManager: TyTaskManager,
+) {
+  const truncatedMsgs = createDotPathTransformer({
+    '*.content.*.file.file_data': () => '[[file_data omitted]]',
+    '*.content.*.image_url.url': () => '[[image_url omitted]]',
+    '*.content.*.input_audio.data': () => '[[input_audio omitted]]',
+  })(chatInfo.chatCompletionMessageThread)
+  //const out = await chatCompletion.output // same as in messages...
+  const content = await chatCompletion.content
+  // const b = await chatCompletion.providerMetadata
+  // const t = await chatCompletion.usage
+  const f = await chatCompletion.totalUsage
+
+  const metaInfo: TaskNodeMeta = {
+    streamContent: rawOutput,
+    taskPrompt: truncatedMsgs,
+    tools: Object.values(chatInfo.tools),
+    rawOutput: chatCompletion,
+    promptTokens: f.inputTokens,
+    resultTokens: f.outputTokens,
+    taskTokens: f.totalTokens,
+    // this doesn't work correctly for taskyon.space service right now...
+    //taskCosts: (b?.openrouter?.usage as Record<string, unknown>)?.cost as number,
+  }
+
+  const cont = res.messages[0]?.content
+  if (typeof cont !== 'string') {
+    const reasoning = content.find(
+      (c: { type: string }) => c.type === 'reasoning',
+    ) as ReasoningOutput
+    metaInfo.reasoning = reasoning?.text
+  }
+
+  // doing deepcopy here, because we're communicating to a worker
+  // and need to make sure to dereference values (e.g. if they're vue reactive objects)
+  /* metaInfo.estimatedTokens = await estimateChatTokens(
+    deepCopy(content),
+    openAIConversationThread,
+    toolDefs,
+    deepCopy(allowedTools) || [],
+    typeof choice?.message.content === 'string' ? choice.message.content : '',
+  ) */
+  // we run this asynchronously, because it fetches data in the
+  // background and we don't want to wait here...
+  // TODO: remove "configuration" here and get the information from the tasks function call parameters
+  //       this would require us to have "defaultsettings" implemented...
+  if (api)
+    void addTyTaskCostInformation(
+      res.id,
+      currentTask?.id,
+      selectedApi,
+      siteUrl,
+      apiKey,
+      taskyonKey,
+      api,
+    ).then((costs) => {
+      console.log('found new task costs:', costs)
+      void taskManager.metaUpsert(currentTask.id, { taskCosts: costs }, 'shallow_merge')
+    })
+
+  metaInfo.rawOutput = { choice: res }
+  return metaInfo
 }
