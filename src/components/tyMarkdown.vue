@@ -21,18 +21,11 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, watch } from 'vue'
-import {
-  containsHtmlTags,
-  generateIframeSrc,
-  hasMarkdownElements,
-  initPrismTheme,
-  md2Html,
-  tyMdCssUrls,
-} from '../modules/markdownUtils '
 import { getCssVar, useQuasar } from 'quasar'
-import { ref } from 'vue'
+import { containsHtmlTags, hasMarkdownElements } from 'src/modules/markdownDetection'
 import { asyncComputed } from 'src/modules/vueUtils'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { generateIframeSrc, initPrismTheme, md2Html, tyMdCssUrls } from '../modules/markdownUtils '
 
 // https://mdit-plugins.github.io/mathjax.html#usage
 //const mathjaxInstance = createMathjaxInstance();

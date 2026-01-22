@@ -74,6 +74,7 @@ import { dump } from 'js-yaml'
 import { exportFile } from 'quasar'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
+import { runMarkdownDetectionTests } from 'src/modules/taskyon/runMarkdownDetectionTests'
 import * as TaskyonTests from 'src/modules/taskyon/tests'
 import { copyToClipboard, getEnvironmentInfo } from 'src/modules/utils'
 import { testBuildSlimView } from 'src/modules/vueUtils'
@@ -157,6 +158,7 @@ Object.entries(TaskyonTests).forEach(([name, func]) => {
 })
 tests.testBuildSlimView = testBuildSlimView
 tests.getEnvironmentInfo = getEnvironmentInfo
+tests.runMarkdownDetectionTests = runMarkdownDetectionTests
 
 async function runTests(tests: Record<string, () => unknown>, details = false) {
   testFinished.value = false
