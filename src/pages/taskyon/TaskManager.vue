@@ -1,5 +1,5 @@
 <template>
-  <q-page class="q-gutter-xs q-pa-xs">
+  <FadeAwayScrollPage class="q-gutter-xs q-pa-xs">
     <q-btn flat :percentage="syncProgress" :icon="mdiRefresh" @click="onUpdateSearchIndex">
       update search index {{ syncProgressString }}
       <q-tooltip>Re-index all taskyon nodes! (Depending on size this mght take a while)</q-tooltip>
@@ -103,7 +103,7 @@
         </td>
       </template>
     </q-table>
-  </q-page>
+  </FadeAwayScrollPage>
 </template>
 
 <script setup lang="ts">
@@ -126,6 +126,7 @@ import { onMounted } from 'vue'
 import { type QTableProps } from 'quasar'
 import type { PartialDeep } from 'type-fest'
 import { useAppStateStore } from 'src/stores/appState'
+import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 
 // TODO:  do some search caching ;) so that we can move faster back & forth between
 //        pages in the browser...
