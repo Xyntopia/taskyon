@@ -4,27 +4,18 @@ import { FunctionCall, ToolBase } from './tools'
 
 export const Annotation = z.union([
   z.object({
-    type: z.literal('url_citation'),
-    url_citation: z
-      .object({
-        end_index: z.number(),
-        start_index: z.number(),
-        title: z.string(),
-        url: z.string(),
-        content: z.string(),
-      })
-      .partial()
-      .optional(),
+    type: z.literal('url'),
+    id: z.string(),
+    end_index: z.number().optional(),
+    start_index: z.number().optional(),
+    title: z.string(),
+    url: z.string(),
+    content: z.string().optional(),
   }),
   z.object({
-    type: z.literal('file'),
-    content: z
-      .object({
-        text: z.string(),
-        type: z.string(),
-      })
-      .array()
-      .optional(),
+    type: z.literal('document'),
+    text: z.string().optional(),
+    content: z.string().optional(),
   }),
 ])
 

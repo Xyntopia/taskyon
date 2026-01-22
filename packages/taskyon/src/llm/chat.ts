@@ -144,10 +144,10 @@ export function accumulateStep(
     if (delta.reasoning) {
       choice.reasoning = (choice.reasoning || '') + delta.reasoning
     }
-    if (delta.annotations) {
+    /*if (delta.annotations) {
       choice.annotations = choice.annotations ?? []
       choice.annotations.push(...delta.annotations)
-    }
+    }*/
 
     if (chunkChoice0.finish_reason) {
       choice.finish_reason = chunkChoice0.finish_reason

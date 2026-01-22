@@ -8,6 +8,7 @@ import type {
   streamText,
   SystemModelMessage,
   Tool,
+  ToolCallPart,
   ToolModelMessage,
   ToolResultPart,
   ToolSet,
@@ -31,7 +32,7 @@ import type { Goals } from '../llm/promptCreation'
 import { addPrompts } from '../llm/promptCreation'
 import type { apiConfig, TaskNodeMeta } from '../types/chatCompletion'
 import { getCurrentModel } from '../types/chatCompletion'
-import type { FileMapping, partialTaskDraft, TaskNode } from '../types/node'
+import type { Annotation, FileMapping, partialTaskDraft, TaskNode } from '../types/node'
 import type { llmSettings } from '../types/profiles'
 import type { toolContext } from '../types/toolApi'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
@@ -522,6 +523,7 @@ property correctly.`)
 // TODO:  move all of this function into its own Tool as well! this would be our "planner" tool/function :)
 //        this tool would analyze the results of the previous function and create new tasks!
 function generateFollowUpTasksFromResult(
+  sources: Annotation[],
   goal: Goals,
   message: ModelMessage,
   allowedTools: string[] | undefined,
@@ -532,128 +534,144 @@ function generateFollowUpTasksFromResult(
 ): partialTaskDraft[] {
   console.log('generate follow up task')
 
-  let newTasks: partialTaskDraft[] = []
+  const newTasks: partialTaskDraft[] = []
+
+  /*if(Array.isArray(message.content)){
+    const sources = message.content.filter((m) => m.type === 'source')
+  }*/
+
+  let srcsAdded = false
 
   // TODO: what do we do in case of an empty user message, but only a file?
   //       right now, we assume, that user message always comes after uploaded file message :)
   for (const cont of message.content) {
-    // check if we have any function calls from the llm inference
-    // in that case we shoud handle that first :)
-    const functionCall = extractFunctionCall(cont, allTools)
-    if (functionCall) {
-      newTasks.push(
-        // this functionCall will be executed in the next step, so we don't need any additional tasks here
+    // I think we can do the next line, because we only get string messages from user! but this here is the AI response
+    // where we alwazs get structured content!
+    if (typeof cont === 'string') continue
+    switch (cont.type) {
+      // TODO: handle images, tool results, files etc. here as well!
+      // case 'image':
+      //case 'file':
+      //case 'tool-result':
+      //case "file":
+      case 'tool-call':
         {
-          role: 'function',
-          content: { type: 'functioncall', data: functionCall },
-        },
-      )
-    }
-    let txtContent
-    if (typeof cont === 'string') {
-      txtContent = cont
-    } else if (cont.type === 'text') {
-      txtContent = cont.text
-    }
-    if (txtContent) {
-      if (goal === 'SimpleCompletion' || goal === 'WebSearch' || llmTools) {
-        // if we don't need to call a tool, we simply generate a normal message...
-        // the same is true, if we have enabled native llmTools. In this case
-        // we either got a function back already (functionCall[0]) or we
-        // got a message back :)
-        newTasks = [
-          {
-            role: 'assistant',
-            content: {
-              type: 'message',
-              data: txtContent,
-              // TODO: add annotations once we can extract them from vercel ai sdk
-            },
-          },
-          {
-            role: 'system',
-            content: { type: 'return', data: 'assistant answered' },
-          },
-        ]
-        console.log('No more follow up tasks!')
-      } else if (goal === 'AnalyzeToolResult' || goal === 'ChooseTool' || goal === 'AnalyzeError') {
-        const commands = getCommandFromStructuredResponse(txtContent)
-        if (commands.length > 0) {
-          const command = commands[0]!
-          if (!allowedTools?.includes(command.name)) {
-            throw new Error(`Tool '${command.name}' is not in the list of allowed tools`, {
-              cause: { allowedTools, requestedTool: command.name },
+          // check if we have any function calls from the llm inference
+          // in that case we shoud handle that first :)
+          const functionCall = convertFunctionCall(cont, allTools)
+          if (functionCall) {
+            newTasks.push({
+              role: 'function',
+              content: { type: 'functioncall', data: functionCall },
             })
           }
         }
-        newTasks = [
-          {
-            role: 'assistant',
-            content: { type: 'structured', data: txtContent },
-          },
-        ]
-        if (commands.length > 0) {
-          console.log('Define tool call')
-          newTasks.push({
-            role: 'function',
-            content: { type: 'functioncall', data: commands[0]! },
-          })
-        } else {
-          console.log('no more tools to call, finalize the result :)')
-          newTasks.push(
-            toolCall<chatCompletionParams>({
-              name: 'chatCompletion',
-              arguments: {
-                prompts: prompts || [],
-                model: chatModel,
-                goal: 'SimpleCompletion',
-              },
-            }),
-          )
+        break
+      case 'text':
+      default: {
+        let txtContent
+        if (typeof cont === 'string') {
+          txtContent = cont
+        } else if (cont.type === 'text') {
+          txtContent = cont.text
         }
-      } else {
-        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-        throw new Error(`chatCompletion goal unknown: ${goal}`)
+        if (txtContent) {
+          if (goal === 'SimpleCompletion' || goal === 'WebSearch' || llmTools) {
+            // if we don't need to call a tool, we simply generate a normal message...
+            // the same is true, if we have enabled native llmTools. In this case
+            // we either got a function back already (functionCall[0]) or we
+            // got a message back :)
+            const newMsg = {
+              role: 'assistant',
+              content: {
+                type: 'message',
+                data: txtContent,
+                ...(sources.length > 0 && !srcsAdded ? { ann: sources } : {}),
+              },
+            } as partialTaskDraft
+            if (sources.length) srcsAdded = true
+
+            newTasks.push(newMsg, {
+              role: 'system',
+              content: { type: 'return', data: 'assistant answered' },
+            })
+            console.log('No more follow up tasks!')
+          } else if (
+            goal === 'AnalyzeToolResult' ||
+            goal === 'ChooseTool' ||
+            goal === 'AnalyzeError'
+          ) {
+            const commands = getCommandFromStructuredResponse(txtContent)
+            if (commands.length > 0) {
+              const command = commands[0]!
+              if (!allowedTools?.includes(command.name)) {
+                throw new Error(`Tool '${command.name}' is not in the list of allowed tools`, {
+                  cause: { allowedTools, requestedTool: command.name },
+                })
+              }
+            }
+            newTasks.push({
+              role: 'assistant',
+              content: { type: 'structured', data: txtContent },
+            })
+            if (commands.length > 0) {
+              console.log('Define tool call')
+              newTasks.push({
+                role: 'function',
+                content: { type: 'functioncall', data: commands[0]! },
+              })
+            } else {
+              console.log('no more tools to call, finalize the result :)')
+              newTasks.push(
+                toolCall<chatCompletionParams>({
+                  name: 'chatCompletion',
+                  arguments: {
+                    prompts: prompts || [],
+                    model: chatModel,
+                    goal: 'SimpleCompletion',
+                  },
+                }),
+              )
+            }
+          } else {
+            // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+            throw new Error(`chatCompletion goal unknown: ${goal}`)
+          }
+        }
       }
     }
   }
   return newTasks
 }
 
-export function extractFunctionCall(
-  content: ModelMessage['content'][0],
-  tools: Record<string, ToolBase>,
-) {
-  if (typeof content === 'string') return
-  if ('type' in content && content.type === 'tool-call') {
-    // if our response contained a call to a function...
-    // TODO: update this to the new tools API from Openai
-    console.log('A function call was returned...')
-    // we convert the object into our own FunctionCall and afterwards parse it, to make
-    // sure it really worked...
-    let fargs: FunctionArguments = {}
-    const { input, toolName } = content
-    //if (!('function' in toolCall))
-    //  throw new Error("toolCall doesn't contain a function", { cause: toolCall })
-    try {
-      //fargs = JSON.parse(toolCall.function.arguments)
-      fargs = FunctionArguments.parse(input)
-    } catch (error) {
-      console.warn('Failed to parse arguments as JSON:', error)
-      /*if (message.finish_reason === 'cancelled')
+export function convertFunctionCall(content: ToolCallPart, tools: Record<string, ToolBase>) {
+  // if our response contained a call to a function...
+  // TODO: update this to the new tools API from Openai
+  console.log('A function call was returned...')
+  // we convert the object into our own FunctionCall and afterwards parse it, to make
+  // sure it really worked...
+  let fargs: FunctionArguments = {}
+  const { input, toolName } = content
+  //if (!('function' in toolCall))
+  //  throw new Error("toolCall doesn't contain a function", { cause: toolCall })
+  try {
+    //fargs = JSON.parse(toolCall.function.arguments)
+    fargs = FunctionArguments.parse(input)
+  } catch (error) {
+    console.warn('Failed to parse arguments as JSON:', error)
+    /*if (message.finish_reason === 'cancelled')
           fargs = { cancelled: toolCall.function.arguments }
         else
           throw new Error(
             `We cold not parse the function arguments as json:
 ${toolCall.function.arguments}`,
           )*/
-    }
-    const functionCallObj: FunctionCall = {
-      name: toolName,
-      arguments: fargs,
-    }
-    if (tools[functionCallObj.name]) return functionCallObj
   }
+  const functionCallObj: FunctionCall = {
+    name: toolName,
+    arguments: fargs,
+  }
+  if (tools[functionCallObj.name]) return functionCallObj
 }
 
 // sometimes a single task can get convserted to multiple messages
@@ -1067,10 +1085,9 @@ export function createChatCompletionTool(
 
       // parse the response into our own type ...
       const res = await chatCompletion.response
+      console.log('chat completion response', res, await chatCompletion.output)
 
       if (currentTask && lastTaskBeforeChatCompletion) {
-        // need to make sure, that we remove audio, image and file data here!
-        // TODO: make sure the following works..  e.g. with adding a file..
         const metaInfo: TaskNodeMeta = await getMetaInfos(
           chatInfo,
           chatCompletion,
@@ -1132,7 +1149,28 @@ export function createChatCompletionTool(
         ])
       }
 
+      // convert sources
+      const sources = (await chatCompletion.sources)
+        .map<Annotation | undefined>((source) => {
+          switch (source.sourceType) {
+            case 'url':
+              return {
+                type: source.sourceType,
+                title: source.title,
+                url: source.url,
+                content: source.providerMetadata?.openrouter?.content as string | undefined,
+              } as Annotation
+            case 'document':
+              return {
+                type: source.sourceType,
+                title: source.title,
+              } as Annotation
+          }
+        })
+        .filter((s): s is Annotation => s !== undefined)
+
       const newTaskChain = generateFollowUpTasksFromResult(
+        sources,
         goal || 'SimpleCompletion',
         res.messages[0],
         allowedTools,
@@ -1180,6 +1218,9 @@ async function getMetaInfos(
   taskyonKey: string,
   taskManager: TyTaskManager,
 ) {
+  // need to make sure, that we remove audio, image and file data here!
+  // TODO: make sure the following works..  e.g. with adding a file..
+
   const truncatedMsgs = createDotPathTransformer({
     '*.content.*.file.file_data': () => '[[file_data omitted]]',
     '*.content.*.image_url.url': () => '[[image_url omitted]]',
