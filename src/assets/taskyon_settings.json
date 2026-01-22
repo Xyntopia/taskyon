@@ -30,11 +30,11 @@
       },
       "huggingface.co": {
         "name": "huggingface.co",
-        "baseURL": "https://router.huggingface.co/",
+        "baseURL": "https://router.huggingface.co",
         "defaultModel": "meta-llama/llama-3.2-90b-vision-instruct",
         "streamSupport": true,
         "routes": {
-          "chatCompletion": "/v1/chat/completions",
+          "chatCompletion": "/v1",
           "models": "https://huggingface.co/api/models"
         }
       },
@@ -44,7 +44,7 @@
         "defaultModel": "gpt-5-mini",
         "streamSupport": true,
         "routes": {
-          "chatCompletion": "/v1/chat/completions",
+          "chatCompletion": "/v1/",
           "models": "/v1/models"
         }
       },
@@ -54,7 +54,7 @@
         "defaultModel": "meta-llama/llama-3.2-90b-vision-instruct",
         "streamSupport": true,
         "routes": {
-          "chatCompletion": "/api/v1/chat/completions",
+          "chatCompletion": "/api/v1/",
           "models": "/api/v1/models"
         }
       },
@@ -64,7 +64,7 @@
         "defaultModel": "qwen3-4b",
         "streamSupport": true,
         "routes": {
-          "chatCompletion": "/v1/chat/completions",
+          "chatCompletion": "/v1/",
           "models": "/v1/models"
         }
       }

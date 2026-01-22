@@ -238,9 +238,9 @@ Finally, it creates a chat completion task with the selected tools in the allowe
         },
         llmTools: {
           type: 'boolean',
-          description: `Optional Parameter. If set to true, we will make use of taskyons
+          description: `Optional Parameter. If set to false, we will make use of taskyons
 tool Selection capabilities, otherwise we will use an openai compatible tool api`,
-          default: true,
+          default: false,
         },
         webSearch: {
           type: 'boolean',
@@ -251,7 +251,7 @@ tool Selection capabilities, otherwise we will use an openai compatible tool api
     } as const,
     function: async ({ llmTools, webSearch, useTools }, { taskChain }) => {
       const pattern = { ...taskChain.at(-2), webSearch, useTools }
-      console.log('choose tool!', pattern)
+      console.log('choose tool!', pattern, llmTools)
       // use pattern matching on the last task
       const result = await match(pattern)
         .returnType<taskResult | Promise<taskResult>>()

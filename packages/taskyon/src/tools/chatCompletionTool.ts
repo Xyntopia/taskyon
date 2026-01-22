@@ -261,7 +261,7 @@ async function llmRequest(
       const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible')
       const openai = createOpenAICompatible({
         apiKey,
-        baseURL: api.baseURL,
+        baseURL: api.baseURL + api.routes.chatCompletion,
         name: api.name,
       })
       model = openai(selectedModel)
@@ -1071,7 +1071,8 @@ export function createChatCompletionTool(
           chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
           if (chunk.type === 'raw') rawOutput += chunk.rawValue as string
         },
-        schema,
+        // only add a schema if we want ot use native tools!
+        llmTools ? schema : undefined,
         siteUrl,
         goal === 'WebSearch'
           ? {
@@ -1105,50 +1106,9 @@ export function createChatCompletionTool(
         void taskManager.metaUpsert(currentTask.id, metaInfo, 'shallow_merge')
       }
 
-      if (!res.messages[0])
-        throw new Error('The AI gave us an incomplete response!', {
-          cause: chatCompletion,
-        })
-
       // in case a schema was given, we simply use that schema and return it as a structured message
       // for further processing (e.g. a contextFunction)...
-      if (schema) {
-        const structResponse = await chatCompletion.output
-        return makeTaskResult({
-          role: 'assistant',
-          content: { type: 'structured', data: structResponse },
-        })
-      }
-      // TODO: need to detect whether AI gave use a structured response...
-      const customValidation = false
-      if (schema && customValidation && typeof res.messages[0].content === 'string') {
-        console.log('parsing custom schema', schema)
-        const structResponse = parseYamlResponse2Record(res.messages[0].content || '')
-
-        if (typeof schema === 'object' && schema !== null) {
-          // I *think* we can simply cast our schema here t ajv, because it
-          // will spit out an error anyways if our schema isn't compatible..
-          const validate = ajv.compile(schema)
-          const valid = validate(structResponse)
-          if (!valid) {
-            throw new Error(
-              'Chat response has the wrong format: ' + ajv.errorsText(validate.errors),
-            )
-          }
-        } else {
-          throw new Error('Schema needs to be an object!', { cause: schema })
-        }
-
-        return makeTaskResult([
-          [
-            {
-              role: 'assistant',
-              content: { type: 'structured', data: structResponse },
-            },
-          ],
-        ])
-      }
-
+      const output = await chatCompletion.output
       // convert sources
       const sources = (await chatCompletion.sources)
         .map<Annotation | undefined>((source) => {
@@ -1168,6 +1128,52 @@ export function createChatCompletionTool(
           }
         })
         .filter((s): s is Annotation => s !== undefined)
+
+      if (schema) {
+        // convert the output manually here :)
+        let structResponse
+        if (typeof output === 'string') {
+          console.log('parsing custom schema', schema)
+          structResponse = parseYamlResponse2Record(output || '')
+
+          if (typeof schema === 'object' && schema !== null) {
+            // I *think* we can simply cast our schema here t ajv, because it
+            // will spit out an error anyways if our schema isn't compatible..
+            const validate = ajv.compile(schema)
+            const valid = validate(structResponse)
+            if (!valid) {
+              throw new Error(
+                'Chat response has the wrong format: ' + ajv.errorsText(validate.errors),
+              )
+            }
+          } else {
+            throw new Error('Schema needs to be an object!', { cause: schema })
+          }
+        } else structResponse = output
+        return makeTaskResult([
+          ...(sources.length > 0
+            ? [
+                {
+                  role: 'assistant',
+                  content: {
+                    type: 'message',
+                    data: 'Provided sources for the structured response.',
+                    ann: sources,
+                  },
+                } as partialTaskDraft,
+              ]
+            : []),
+          {
+            role: 'assistant',
+            content: { type: 'structured', data: structResponse },
+          },
+        ])
+      }
+
+      if (!res.messages[0])
+        throw new Error('The AI gave us an incomplete response!', {
+          cause: chatCompletion,
+        })
 
       const newTaskChain = generateFollowUpTasksFromResult(
         sources,
