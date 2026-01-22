@@ -123,7 +123,7 @@ import { type TaskNode } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
-import { getReasoning, useTaskyonStore } from 'src/stores/taskyonState'
+import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import SimpleChatView from './SimpleChatView.vue'
 
@@ -157,9 +157,8 @@ watch(
     void Promise.all(
       props.selectedThread.map(async (t) => {
         const meta = await tystate.getMeta(t.id)
-        if (meta) {
-          const reason = getReasoning(meta)
-          if (reason) reasoning.value.set(t.id, reason)
+        if (meta?.reasoning) {
+          reasoning.value.set(t.id, meta.reasoning)
         }
       }),
     )

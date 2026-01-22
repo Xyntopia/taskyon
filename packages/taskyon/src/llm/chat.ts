@@ -624,16 +624,16 @@ export async function getTaskyonCosts(
   }
   const baseUrl = new URL(api.baseURL).origin
   console.log('get generation info from ', baseUrl)
-  const url = `${baseUrl}/rest/v1/api_usage_log?select=reference_data&id=eq.${completionId}`
+  const url = `${baseUrl}/rest/v1/api_usage_log?select=used_credits&id=eq.${completionId}`
   const response = await fetch(url, { headers })
   if (!response.ok) {
     // TODO: replace this with an error message in the UsageInfos
     //       so that the user can manually try to get the cost info...
     throw new Error(`Could not find generation information for task ${taskid}`)
   }
-  const data = await (response.json() as Promise<{ reference_data: OpenRouterGenerationInfo }[]>)
+  const data = await (response.json() as Promise<{ used_credits: number }[]>)
 
-  return data[0]?.reference_data
+  return data[0]?.used_credits
 }
 
 export async function getOpenRouterGenerationInfo(

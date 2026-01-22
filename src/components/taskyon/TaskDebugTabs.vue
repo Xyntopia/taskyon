@@ -43,10 +43,7 @@
         </textarea>
       </q-tab-panel>
       <q-tab-panel v-if="taskMeta?.taskPrompt" name="TASKPROMPT">
-        <template
-          v-for="(tp, idx) in taskMeta.taskPrompt.openAIConversationThread as OpenAIMessage[]"
-          :key="idx"
-        >
+        <template v-for="(tp, idx) in taskMeta.taskPrompt as ModelMessage[]" :key="idx">
           <div class="text-caption q-pt-sm">{{ tp.role }}</div>
           <textarea
             :value="typeof tp.content === 'string' ? tp.content : ''"
@@ -87,7 +84,8 @@
 </template>
 
 <script setup lang="ts">
-import type { ChatResponseType, OpenAIMessage, TaskNode } from '@taskyon/taskyon'
+import type { ChatResponseType, TaskNode } from '@taskyon/taskyon'
+import type { ModelMessage } from 'ai'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, onUnmounted } from 'vue'

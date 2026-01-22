@@ -24,12 +24,11 @@ import type { TyTaskManager } from '../core/taskManager'
 import { mapFunctionNames } from '../core/tools'
 import { isTaskyonKey } from '../core/tyCrypto'
 import type { WebSearchOptions } from '../llm/chat'
-import { generateHeaders, getOpenRouterGenerationInfo, getTaskyonCosts } from '../llm/chat'
+import { getTaskyonCosts } from '../llm/chat'
 import type { Goals } from '../llm/promptCreation'
 import { addPrompts } from '../llm/promptCreation'
-import type { apiConfig, ChatResponseType, TaskNodeMeta } from '../types/chatCompletion'
+import type { apiConfig, TaskNodeMeta } from '../types/chatCompletion'
 import { getCurrentModel } from '../types/chatCompletion'
-import type { OpenRouterGenerationInfo } from '../types/chatCompletionService'
 import type { FileMapping, partialTaskDraft, TaskNode } from '../types/node'
 import type { llmSettings } from '../types/profiles'
 import type { toolContext } from '../types/toolApi'
@@ -43,12 +42,11 @@ import { createStream } from '../utils/frpBus'
 import { convertFileToText } from '../utils/loadFiles'
 import {
   createDeepTransformer,
-  deepCopy,
+  createDotPathTransformer,
   normalizeFalsyValues,
   pickProperties,
 } from '../utils/objHelpers'
 import type { Thunk } from '../utils/tsHelpers'
-import { useNlpWorker } from '../utils/webWorkerApi'
 import { safeYamlDump } from '../utils/yamlUtils'
 
 const convertToChatCompletionTool = (t: ToolBase): Tool => {
@@ -139,7 +137,7 @@ export async function processChatTask(
     tools = generateOpenAIToolDeclarations(allowedTools || [], toolDefs)
   }
 
-  return { openAIConversationThread: chatCompletionMessages, tools, msgs: msgs ?? {} }
+  return { chatCompletionMessageThread: chatCompletionMessages, tools, msgs: msgs ?? {} }
 }
 
 type streamOptsType = Parameters<typeof streamText>[0]
@@ -276,6 +274,7 @@ async function llmRequest(
     tools,
     abortSignal: stopSignal,
     timeout: { totalMs: 5 * 60 * 1000, stepMs: 120 * 1000, chunkMs: 120 * 1000 },
+    includeRawChunks: true,
     onChunk({ chunk }) {
       streamTracker(chunk)
     },
@@ -372,89 +371,31 @@ export async function convertTaskNodesToOpenAIChat(
   return ensureToolResponses(messages)
 }
 
-async function addTaskCostInformation(
-  chatResponse: ChatResponseType | undefined,
+async function addTyTaskCostInformation(
+  completionId: string, // this is the id coming from taskyon!
   taskId: string,
   selectedApi: string | null,
   siteUrl: string,
   apiKey: string,
   anonymousTaskyonKey: string,
   api: apiConfig | undefined,
-): Promise<TaskNodeMeta> {
-  let generationInfo: OpenRouterGenerationInfo | undefined
-  // TODO: it might be a good idea to simply replace this with a tasknode ;)
-  if (chatResponse && selectedApi === 'openrouter.ai') {
-    console.log('getting openrouter generation info')
-    await sleep(10000)
-    generationInfo = await getOpenRouterGenerationInfo(
-      chatResponse.id,
-      generateHeaders(apiKey, selectedApi || '', siteUrl),
-    )
-  } else if (
-    chatResponse &&
-    selectedApi === 'taskyon' &&
-    !chatResponse.model.endsWith(':free') &&
-    !isTaskyonKey(apiKey, false) &&
-    api
-  ) {
+) {
+  if (selectedApi === 'taskyon' && !isTaskyonKey(apiKey, false) && api) {
     console.log('getting taskyon generation info')
     // our backend tries to get the finished costs
     // after ~4000ms, so we wait for 6000 here...
     await sleep(6000)
-    generationInfo = await getTaskyonCosts(
+    const costs = await getTaskyonCosts(
       siteUrl,
       anonymousTaskyonKey,
       apiKey,
       api,
-      chatResponse.id,
+      completionId,
       taskId,
     )
-    console.log('taskyon generation info:', generationInfo)
+    console.log('taskyon generation info:', costs)
+    return costs
   }
-  if (generationInfo?.native_tokens_completion && generationInfo.native_tokens_prompt) {
-    // we get the useage data very often in an asynchronous form.
-    // thats why we need to
-    // openai sends back the exact number of prompt tokens :)
-    return {
-      promptTokens: generationInfo.native_tokens_prompt,
-      resultTokens: generationInfo.native_tokens_completion,
-      taskCosts: generationInfo.usage,
-      taskTokens: generationInfo.native_tokens_prompt + generationInfo.native_tokens_completion,
-    }
-  }
-  return {}
-}
-
-// get worker function for our chat :)
-const { estimateChatTokens } = useNlpWorker()
-
-async function saveTokenUsage(
-  chatResponse: ChatResponseType,
-  openAIConversationThread: ModelMessage[],
-  toolDefs: Record<string, ToolBase>,
-  content: TaskNode['content'],
-  allowedTools: string[] | undefined,
-): Promise<TaskNodeMeta> {
-  let costInfo: TaskNodeMeta = {}
-  if (chatResponse.usage) {
-    costInfo = {
-      promptTokens: chatResponse.usage.prompt_tokens,
-      resultTokens: chatResponse.usage.completion_tokens,
-      taskTokens: chatResponse.usage.total_tokens,
-    }
-  }
-
-  const choice = chatResponse.choices[0]
-  // doing deepcopy here, because we're communicating to a worker
-  // and need to make sure to dereference values (e.g. if they're vue reactive objects)
-  costInfo.estimatedTokens = await estimateChatTokens(
-    deepCopy(content),
-    openAIConversationThread,
-    toolDefs,
-    deepCopy(allowedTools) || [],
-    typeof choice?.message.content === 'string' ? choice.message.content : '',
-  )
-  return costInfo
 }
 
 function parseYamlResponse2Record(message: string): Record<string, unknown> {
@@ -1098,8 +1039,9 @@ export function createChatCompletionTool(
         schema,
       )
 
+      let rawOutput = ''
       const chatCompletion = await llmRequest(
-        chatInfo.openAIConversationThread,
+        chatInfo.chatCompletionMessageThread,
         chatInfo.tools,
         selectedModel,
         context.stopSignal,
@@ -1107,6 +1049,7 @@ export function createChatCompletionTool(
         apiKey,
         (chunk) => {
           chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
+          if (chunk.type === 'raw') rawOutput += chunk.rawValue as string
         },
         schema,
         siteUrl,
@@ -1123,59 +1066,70 @@ export function createChatCompletionTool(
       // parse the response into our own type ...
       const res = await chatCompletion.response
 
-      // TODO: get token usage for this task..
-      const metrics = false
-      if (currentTask && lastTaskBeforeChatCompletion && metrics) {
+      if (currentTask && lastTaskBeforeChatCompletion) {
         // need to make sure, that we remove audio, image and file data here!
-        /*const truncatedMsgs = createDotPathTransformer({
-          'modifiedOpenAIConversationThread.*.content.*.file.file_data': () =>
-            '[[file_data omitted]]',
-          'modifiedOpenAIConversationThread.*.content.*.image_url.url': () =>
-            '[[image_url omitted]]',
-          'modifiedOpenAIConversationThread.*.content.*.input_audio.data': () =>
-            '[[input_audio omitted]]',
-        })(chatInfo.msgs)
-        let metaInfo: TaskNodeMeta = {
-          taskPrompt: truncatedMsgs,
-          tools: chatInfo.tools,
-          rawOutput: chatCompletion,
-        }
-        if (chatCompletion) {
-          console.log('save token usage...')
-          // openai & openrouter  sends back the exact number of prompt tokens :)
-          metaInfo = {
-            ...metaInfo,
-            ...(await saveTokenUsage(
-              chatCompletion,
-              chatInfo.openAIConversationThread,
-              toolDefs,
-              lastTaskBeforeChatCompletion?.content,
-              allowedTools,
-            )),
-          }
-          // we run this asynchronously, because it fetches data in the
-          // background and we don't want to wait here...
+        // TODO: make sure the following works..  e.g. with adding a file..
+        const truncatedMsgs = createDotPathTransformer({
+          '*.content.*.file.file_data': () => '[[file_data omitted]]',
+          '*.content.*.image_url.url': () => '[[image_url omitted]]',
+          '*.content.*.input_audio.data': () => '[[input_audio omitted]]',
+        })(chatInfo.chatCompletionMessageThread)
+        //const out = await chatCompletion.output // same as in messages...
+        const content = await chatCompletion.content
+        // const b = await chatCompletion.providerMetadata
+        // const t = await chatCompletion.usage
+        const f = await chatCompletion.totalUsage
 
-          // TODO: remove "configuration" here and get the information from the tasks function call parameters
-          //       this would require us to have "defaultsettings" implemented...
-          if (api)
-            void addTaskCostInformation(
-              chatCompletion,
-              currentTask?.id,
-              selectedApi,
-              siteUrl,
-              apiKey,
-              llmApis['taskyon']?.defaultHeaders?.apiKey ?? '',
-              api,
-            ).then((newMeta) => {
-              console.log('found new task costs:', newMeta)
-              void taskManager.metaUpsert(currentTask.id, newMeta, 'shallow_merge')
-            })
+        const metaInfo: TaskNodeMeta = {
+          streamContent: rawOutput,
+          taskPrompt: truncatedMsgs,
+          tools: Object.values(chatInfo.tools),
+          rawOutput: chatCompletion,
+          promptTokens: f.inputTokens,
+          resultTokens: f.outputTokens,
+          taskTokens: f.totalTokens,
+          // this doesn't work correctly for taskyon.space service right now...
+          //taskCosts: (b?.openrouter?.usage as Record<string, unknown>)?.cost as number,
         }
+
+        const cont = res.messages[0]?.content
+        if (typeof cont !== 'string') {
+          const reasoning = content.find((c) => c.type === 'reasoning')
+          metaInfo.reasoning = reasoning?.text
+        }
+
+        // doing deepcopy here, because we're communicating to a worker
+        // and need to make sure to dereference values (e.g. if they're vue reactive objects)
+        /* metaInfo.estimatedTokens = await estimateChatTokens(
+          deepCopy(content),
+          openAIConversationThread,
+          toolDefs,
+          deepCopy(allowedTools) || [],
+          typeof choice?.message.content === 'string' ? choice.message.content : '',
+        ) */
+
+        // we run this asynchronously, because it fetches data in the
+        // background and we don't want to wait here...
+
+        // TODO: remove "configuration" here and get the information from the tasks function call parameters
+        //       this would require us to have "defaultsettings" implemented...
+        if (api)
+          void addTyTaskCostInformation(
+            res.id,
+            currentTask?.id,
+            selectedApi,
+            siteUrl,
+            apiKey,
+            llmApis['taskyon']?.defaultHeaders?.apiKey ?? '',
+            api,
+          ).then((costs) => {
+            console.log('found new task costs:', costs)
+            void taskManager.metaUpsert(currentTask.id, { taskCosts: costs }, 'shallow_merge')
+          })
 
         metaInfo.rawOutput = { choice: res }
         console.log('saving task metadata', metaInfo)
-        void taskManager.metaUpsert(currentTask.id, metaInfo, 'shallow_merge')*/
+        void taskManager.metaUpsert(currentTask.id, metaInfo, 'shallow_merge')
       }
 
       if (!res.messages[0])

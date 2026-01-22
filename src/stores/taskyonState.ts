@@ -1,7 +1,6 @@
 import type {
   Asyncify,
   AuthenticationOptions,
-  ChatResponseType,
   CryptoSession,
   InternalTool,
   KeyString,
@@ -94,14 +93,6 @@ import { waitForIframeDuplexChannel } from './iframeClient'
 // Helper: Await if value is a Promise, else return as-is
 function maybeAwait<T>(value: T | Promise<T>): Promise<T> {
   return Promise.resolve(value)
-}
-
-export function getReasoning(meta: TaskNodeMeta | undefined) {
-  return (
-    meta?.rawOutput as {
-      choice?: ChatResponseType['choices'][0]
-    }
-  )?.choice?.reasoning
 }
 
 export function asyncProxy<T extends object>(initializer: () => Promise<T>): Asyncify<T> {
