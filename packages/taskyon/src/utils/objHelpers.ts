@@ -264,6 +264,37 @@ export function makeTruncateTransformer<T>(
   }) as (obj: T) => T
 }
 
+/**
+ * Creates an immutable transformer that applies value transformations at
+ * specific dot-separated paths within an object.
+ *
+ * Each rule key is a dot-path (e.g. `"user.profile.name"`). Path segments may
+ * refer to object keys, numeric array indices, or `"*"` to apply the rule to
+ * all elements of an array.
+ *
+ * The returned transformer:
+ * - Deep-clones the input object using `structuredClone`
+ * - Applies each rule to the cloned object in iteration order
+ * - Mutates only the clone, never the original input
+ *
+ * Rule functions receive the current value at the resolved path and:
+ * - If they return a value, that value replaces the existing one
+ * - If they return `undefined`, the property (or array element) is removed
+ *
+ * Rules are only applied to existing paths; missing keys or out-of-bounds
+ * indices are ignored silently.
+ *
+ * @param rules A mapping of dot-paths to transformation functions
+ * @returns A function that takes an object and returns a transformed clone
+ *
+ * @example
+ * const transform = createDotPathTransformer({
+ *   'users.*.age': v => typeof v === 'number' ? v + 1 : v,
+ *   'meta.debug': () => undefined, // deletes `meta.debug`
+ * })
+ *
+ * const result = transform(input)
+ */
 export function createDotPathTransformer(
   rules: Record<string, (currentValue: unknown) => unknown>,
 ) {
