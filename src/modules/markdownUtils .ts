@@ -240,6 +240,12 @@ export const containsHtmlTags = (markdown: string) => {
         // Ignore *pure* HTML comments
         if (/^<!--[\s\S]*?-->$/.test(trimmed)) continue
 
+        // Ignore commonly used, safe inline tags that don't allow any content
+        // or attributes, such as one or more <br> tags used for line breaks.
+        // Examples that will be ignored:
+        //   "<br>", "<br/>", "<br />", "<br> <br>" etc.
+        if (/^(?:<br\s*\/?>(?:\s*)?)+$/i.test(trimmed)) continue
+
         // Anything else counts as real HTML
         return true
       }

@@ -361,6 +361,24 @@ export function runMarkdownDetectionTests() {
       expectMarkdown: true,
       expectHtml: true,
     },
+    {
+      name: 'markdown with <br> symbol',
+      input: 'Some text with <br> line break.',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'markdown with multiple <br> symbols',
+      input: 'Some text with <br> <br> multiple line breaks.',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
+    {
+      name: 'markdown with <br> in tables',
+      input: '| column | description |\n| --- | --- |\n| cell 1 | line 1 <br> line 2 |',
+      expectMarkdown: true,
+      expectHtml: false,
+    },
   ]
 
   const results = cases.map((tc) => {
