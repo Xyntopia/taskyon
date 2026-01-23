@@ -6,6 +6,7 @@ import {
   mdiSearchWeb,
   mdiTools,
 } from '@quasar/extras/mdi-v6'
+import { FunctionArguments } from '@taskyon/taskyon'
 import z from 'zod'
 import { apiConfig } from './chatCompletion'
 import { partialTaskDraft } from './node'
@@ -144,11 +145,9 @@ export type llmSettings = z.infer<typeof llmSettings>
 export const TyToolchainConfig = z
   .record(
     z.string(),
-    z
-      .json()
-      .describe(
-        'Settings for a single tool. The tool ID is the ID of the tasknode where the tool is defined.',
-      ),
+    FunctionArguments.describe(
+      'Settings for a single tool. The tool ID is the ID of the tasknode where the tool is defined.',
+    ),
   )
   .default({})
   .describe(`All tool parameters can be turned into settings as well. This makes taskyons

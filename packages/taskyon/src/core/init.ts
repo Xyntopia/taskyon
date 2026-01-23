@@ -24,6 +24,7 @@ import { appDevTools } from '../tools/webAppDev'
 import { TaskyonMessage } from '../types/apiTypes'
 import type { llmSettings } from '../types/profiles'
 import { toolCall, type InternalTool } from '../types/toolApi'
+import type { FunctionArguments } from '../types/tools'
 import { ToolBase } from '../types/tools'
 import {
   createCombinedCrudWrapper,
@@ -199,6 +200,7 @@ const dynamicContext =
     ToolList: InternalTool[],
     insidePort: Port<TaskyonMessage, TaskyonMessage>,
     iframeMultiPlexer: IframeMultiPlexer,
+    toolchainConfig: Thunk<Record<string, FunctionArguments>>,
   ) =>
   async (cs: CryptoSession) => {
     // if our cryptoSession changes, we need to re-calculate everything below!
@@ -254,6 +256,7 @@ const dynamicContext =
       secretStore,
       stopFuncExecution.signal,
       workerport,
+      toolchainConfig,
     )
     const { workerStream, stopAllTasks, queueTask } = runTaskWorker(
       taskManagerInstance,
@@ -293,7 +296,7 @@ export async function tyCore(
   // TODO: we want to save some settings "internally" and not in the GUI...
   //       but then....   we als want taskyon to be as "stateless" as possible..
   llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
-  toolchainConfig: Thunk<Record<string, unknown>>,
+  toolchainConfig: Thunk<Record<string, FunctionArguments>>,
   // with the Environment Tools we can provide a list of tools as closures which have access
   // to the environment in which taskyon is running (through closure variables
   // of this environment inside the tool).
@@ -319,6 +322,7 @@ export async function tyCore(
     [...EnvironmentTools, ...ToolList],
     insidePort,
     iframeMultiPlexer,
+    toolchainConfig,
   )
 
   // TODO: we need to integrate all of these with our API.

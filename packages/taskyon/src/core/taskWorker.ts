@@ -1,7 +1,7 @@
 import type { TaskNode, TaskNodeType, partialTaskDraft } from '../types/node'
 import type { InternalTool, toolContext } from '../types/toolApi'
 import { taskResult } from '../types/toolApi'
-import type { FunctionCall } from '../types/tools'
+import type { FunctionArguments, FunctionCall } from '../types/tools'
 import { createAsyncQueue, sleep } from '../utils/asyncUtils'
 import type { SecretStore } from '../utils/crudWrapper'
 import { sha256UrlSafeHash } from '../utils/encoding'
@@ -9,6 +9,7 @@ import { humanizeError } from '../utils/error'
 import type { TaskMessageStream } from '../utils/frpBus'
 import { createMessagePortAdapter, createStream } from '../utils/frpBus'
 import { serializeForJson } from '../utils/objHelpers'
+import type { Thunk } from '../utils/tsHelpers'
 import { type TyTaskManager } from './taskManager'
 import type { RemoteFunctionPort } from './tools'
 import { handleFunctionExecution } from './tools'
@@ -45,6 +46,7 @@ export const functionExecutorCreator =
     secretStore: SecretStore,
     stopSignal: AbortSignal,
     duplexPort: RemoteFunctionPort,
+    toolchainConfig: Thunk<Record<string, FunctionArguments>>,
   ) =>
   async (func: FunctionCall, taskChain: TaskNode[], filteredStream: TaskMessageStream) => {
     const { tool, def } = await getToolDefinition(func.name)
@@ -67,6 +69,16 @@ export const functionExecutorCreator =
         toolId,
         messagePort: msgPortAdapter.port,
       }
+
+      // mix in toolchain config into function arguments
+      const funcSettings = toolchainConfig()[func.name]
+      if (!funcSettings)
+        console.debug(`No tool settings found for tool ${func.name} in toolchainConfig`)
+      func.arguments = {
+        ...(funcSettings || {}),
+        ...func.arguments,
+      }
+
       const funcR = await handleFunctionExecution(func, tool, stopSignal, context, duplexPort)
 
       return funcR
