@@ -511,6 +511,7 @@ You have access to the \`updateDocument\` tool which can:
 4. **How to respond**
    - For edit requests:
      - Always prefer patching instead of replacing the entire document.
+     - if you can edit an existing document, prefer that instead of creating a new one.
      - Call \`updateDocument\` with appropriate \`patches\` or \`newContent\`.
      - In the tool result description, clearly explain what you changed (e.g., which lines, what behavior changed).
    - For non-edit, conceptual questions:
