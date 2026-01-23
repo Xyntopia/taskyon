@@ -20,8 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { type QMenu, type QDialog } from 'quasar'
-import { ref } from 'vue'
+import { type QDialog, type QMenu } from 'quasar'
 import ResponsiveMenuDialog from './ResponsiveMenuDialog.vue'
 
 defineOptions({ inheritAttrs: false })
@@ -32,5 +31,5 @@ defineProps<{
   autoClose?: QMenu['autoClose']
 }>()
 
-const open = ref(false)
+const open = defineModel<boolean>({ default: false })
 </script>

@@ -3,8 +3,40 @@
     v-if="urlSources.length"
     class="row items-center q-gutter-xs text-caption text-grey-7 sources-row"
   >
-    <!-- Label / dialog trigger -->
-    <span class="sources-label cursor-pointer" @click="dialogOpen = true"> Sources </span>
+    <!-- Dialog / menu -->
+    <ResponsiveMenuDialogBtn
+      v-model="dialogOpen"
+      label="Sources"
+      auto-close
+      size="sm"
+      no-caps
+      flat
+      maximized
+    >
+      <template #default="{ close }">
+        <q-list style="min-width: 320px; max-width: 420px" separator>
+          <q-item
+            v-for="(ann, idx) in urlSources"
+            :key="idx"
+            clickable
+            @click="
+              () => {
+                ;(open(ann.url), close())
+              }
+            "
+          >
+            <q-item-section>
+              <q-item-label class="text-weight-medium">
+                {{ ann.title || ann.id || `Source ${idx + 1}` }}
+              </q-item-label>
+              <q-item-label caption>
+                {{ ann.url }}
+              </q-item-label>
+            </q-item-section>
+          </q-item>
+        </q-list>
+      </template>
+    </ResponsiveMenuDialogBtn>
 
     <!-- Inline chips (limited) -->
     <q-chip
@@ -38,53 +70,26 @@
       outline
       clickable
       class="source-chip source-overflow"
-      @click="dialogOpen = true"
+      @click="() => (dialogOpen = true)"
     >
       +{{ overflowCount }}
     </q-chip>
-
-    <!-- Dialog / menu -->
-    <ResponsiveMenuDialog v-model="dialogOpen" :auto-close="true" :target="dialogTarget">
-      <template #default="{ close }">
-        <q-list dense style="min-width: 320px; max-width: 420px">
-          <q-item
-            v-for="(ann, idx) in urlSources"
-            :key="idx"
-            clickable
-            @click="
-              () => {
-                ;(open(ann.url), close())
-              }
-            "
-          >
-            <q-item-section>
-              <q-item-label class="text-weight-medium">
-                {{ ann.title || ann.id || `Source ${idx + 1}` }}
-              </q-item-label>
-              <q-item-label caption>
-                {{ ann.url }}
-              </q-item-label>
-            </q-item-section>
-          </q-item>
-        </q-list>
-      </template>
-    </ResponsiveMenuDialog>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { computed, ref } from 'vue'
 import type { Annotation } from '@taskyon/taskyon'
-import ResponsiveMenuDialog from '../ResponsiveMenuDialog.vue'
+import { computed } from 'vue'
+import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
+import { ref } from 'vue'
 
-const MAX_INLINE = 5
+const MAX_INLINE = 10
 
 const props = defineProps<{
   sources: Annotation[]
 }>()
 
 const dialogOpen = ref(false)
-const dialogTarget = ref<HTMLElement | undefined>(undefined)
 
 const urlSources = computed(() =>
   props.sources.filter(
@@ -114,10 +119,6 @@ const domain = (url: string) => {
 .sources-row {
   opacity: 0.75;
   flex-wrap: wrap;
-}
-
-.sources-label {
-  margin-right: 4px;
 }
 
 .source-chip {
