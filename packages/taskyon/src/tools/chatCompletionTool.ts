@@ -157,17 +157,22 @@ async function llmRequest(
   schema?: Record<string, unknown>,
   siteUrl?: string,
   webSearch?: WebSearchOptions,
-  reasoning_effort?: 'low' | 'high' | 'medium',
+  reasoningEffort?: 'low' | 'high' | 'medium',
   verbosity?: OpenAI.ChatCompletionCreateParams['verbosity'],
 ) {
   // TODO:
   //     stream_options: { include_usage: true },
   //     store: false,
   //
-  console.log({ siteUrl, webSearch, reasoning_effort, verbosity })
+  console.log('Creating chat completion request', {
+    siteUrl,
+    webSearch,
+    reasoning_effort: reasoningEffort,
+    verbosity,
+  })
   const { streamText } = await import('ai')
   let model
-  let providerOpts = {}
+  let overrideOpts: Record<string, unknown> = {}
   switch (api.name) {
     case 'openai':
       {
@@ -194,8 +199,14 @@ async function llmRequest(
           apiKey,
         })
         model = openai(selectedModel)
-        providerOpts = {
-          tools: {
+        const providerOptions: Record<string, unknown> = {
+          openai: {
+            reasoningEffort,
+            reasoningSummary: 'auto', // 'auto' for condensed or 'detailed' for comprehensive
+          },
+        }
+        if (webSearch?.maxResults) {
+          providerOptions.tools = {
             ...tools,
             web_search: openai.tools.webSearch({
               // optional configuration:
@@ -207,10 +218,11 @@ async function llmRequest(
                 region: 'California',
               },*/
             }),
-          },
+          }
           // Force web search tool (optional):
-          toolChoice: { type: 'tool', toolName: 'web_search' },
+          providerOptions.toolChoice = { type: 'tool', toolName: 'web_search' }
         }
+        overrideOpts = { providerOptions }
       }
       break
     case 'taskyon':
@@ -229,12 +241,12 @@ async function llmRequest(
         },
         usage: { include: true },
       }
-      if (reasoning_effort)
+      if (reasoningEffort)
         opts.reasoning = {
           // One of the following (not both):
           // Can be "high", "medium", or "low" (OpenAI-style)
           // for other APIs, we use max_tokens
-          effort: reasoning_effort,
+          effort: reasoningEffort,
           // max tokens can only be used if we don't use "effort"
           // max_tokens: 2000, // Specific token limit (Anthropic-style)
           // Optional: Default is false. All models support this.
@@ -304,7 +316,7 @@ async function llmRequest(
       delayInMs: 20, // optional: defaults to 10ms
       chunking: 'line', // optional: defaults to 'word'
     }),
-    ...providerOpts,
+    ...overrideOpts,
     /*onFinish({ text, finishReason, usage, response, steps, totalUsage, content }) {
         // your own logic, e.g. for saving the chat history or recording usage
         const messages = response.messages // messages that were generated
@@ -1011,7 +1023,7 @@ export function createChatCompletionTool(
         allowedTools,
         prompts,
         schema,
-        reasoning_effort,
+        reasoning_effort: reasoningEffort,
         verbosity,
         // if we don't set it, choose the default setting...
         use_multimodal = tryUsingVisionModels,
@@ -1100,7 +1112,7 @@ export function createChatCompletionTool(
               searchContextSize: 'medium',
             }
           : undefined,
-        reasoning_effort,
+        reasoningEffort,
         verbosity,
       )
 
