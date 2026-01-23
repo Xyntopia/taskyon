@@ -126,6 +126,18 @@
             <JsonInput v-model="toolDraft" class="fit" filled auto-save autogrow="false" />
           </div>
         </template>
+        <template #settings>
+          <div class="fit">
+            Current tool settings. Every parameter of a tool can be given a default value here,
+            which will be used if other values are not provided when the tool is called. This
+            effectivly creates dynamic agent profiles for taskyon.
+            <ObjectTreeView
+              :model-value="toolSettings"
+              :schema="selectedTool?.parameters"
+              missing-mode="placeholders"
+            />
+          </div>
+        </template>
       </DockView>
     </div>
     <div v-else>
@@ -186,6 +198,8 @@ import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 const { name = undefined } = defineProps<{ name?: string }>()
+
+const toolSettings = ref<Record<string, unknown>>({})
 
 const initialLayout = ref<DockNode>({
   id: 'root',
