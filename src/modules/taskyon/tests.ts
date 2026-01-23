@@ -1091,6 +1091,7 @@ export const testChatCompletionWebSearch = async () => {
       createChatCompletionTask({
         goal: 'WebSearch',
         model: 'google/gemini-2.5-flash-lite',
+        llmTools: false,
       }),
     ],
   ]
@@ -1124,6 +1125,7 @@ export const testChatCompletion = async () => {
         prompts: [
           `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
         ],
+        llmTools: false,
         schema: {
           type: 'object',
           properties: {
@@ -1183,6 +1185,7 @@ export const testFileUpload = async () => {
       prompts: ['The user just uploaded a file, can you extract the data below?'],
       verbosity: 'high',
       reasoning_effort: 'low',
+      llmTools: false,
       //reasoning_effort: undefined,
       model: 'google/gemini-2.5-flash-lite',
       schema: {

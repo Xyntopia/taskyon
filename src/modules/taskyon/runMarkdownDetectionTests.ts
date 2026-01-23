@@ -1,3 +1,4 @@
+//runMarkdownDetectionTests.ts
 import { hasMarkdownElements, containsHtmlTags } from '../markdownDetection'
 
 // Assuming hasMarkdownElements and containsHtmlTags are in scope

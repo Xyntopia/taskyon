@@ -1,3 +1,4 @@
+// src/modules/markdownDetection.ts
 import MarkdownIt from 'markdown-it'
 
 // A lean markdown-it instance only for HTML detection
@@ -113,7 +114,7 @@ const maskHtmlContainers = (src: string): string => {
 export const hasMarkdownElements = (raw: string): boolean => {
   const masked = maskHtmlContainers(raw)
 
-  return [
+  const markdownPatterns = [
     /(^|\n)\s*#{1,6}\s/, // headings: #, ##, ...
     /(^|\n)\s*>\s/, // blockquotes: >
     /(^|\n)\s*[-+*]\s/, // unordered lists
@@ -127,7 +128,21 @@ export const hasMarkdownElements = (raw: string): boolean => {
     /\[.*?\]\(.*?\)/, // link
     /(^|\n)\s*---+/, // horizontal rule
     /(^|\n)\s*:::/, // custom containers (like :::note)
-  ].some((pattern) => pattern.test(masked))
+  ]
+
+  if (markdownPatterns.some((pattern) => pattern.test(masked))) {
+    return true
+  }
+
+  // Treat safe HTML line breaks (<br>) as markdown when there is no
+  // other HTML present. This allows inputs like "Some text with <br>"
+  // (or tables containing <br>) to be recognized as markdown, while
+  // still considering larger HTML fragments as HTML content.
+  if (!containsHtmlTags(raw) && /<br\s*\/?>(?:\s*<br\s*\/?>)*/i.test(raw)) {
+    return true
+  }
+
+  return false
 }
 
 export const containsHtmlTags = (markdown: string) => {
