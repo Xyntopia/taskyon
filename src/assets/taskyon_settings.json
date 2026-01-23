@@ -12,7 +12,11 @@
     "primaryColor": "#2A3548",
     "secondaryColor": "#F78F3B"
   },
-  "toolchainConfig": {},
+  "toolchainConfig": {
+    "chatCompletion": {
+      "reasoning_effort": "low"
+    }
+  },
   "llmSettings": {
     "llmApis": {
       "taskyon": {

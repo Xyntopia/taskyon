@@ -18,8 +18,7 @@ export const llmSettings = z.object({
       'a (public) cryptographic user id which is used to identify the user in different chats',
   }),
   allowWebSearch: z.boolean().optional().default(true).meta({
-    description:
-      'Allow web search for chat Completion. This can be turned off for enhanced security.',
+    description: 'Allow web search for chat Completion.',
     icon: mdiSearchWeb,
     label: 'Web Search',
   }),
@@ -142,16 +141,19 @@ export type llmSettings = z.infer<typeof llmSettings>
 /* ───────────────────────────────
    Tool-chain level configuration
    ─────────────────────────────── */
-export const TyToolchainConfig = z.object({
-  tools: z
-    .record(z.string(), z.json())
-    .default({})
-    .describe(
-      'Settings for a single tool. The tool ID is the ID of the tasknode where the tool is defined.',
-    ),
-}).describe(`All tool parameters can be turned into settings as well. This makes taskyons
+export const TyToolchainConfig = z
+  .record(
+    z.string(),
+    z
+      .json()
+      .describe(
+        'Settings for a single tool. The tool ID is the ID of the tasknode where the tool is defined.',
+      ),
+  )
+  .default({})
+  .describe(`All tool parameters can be turned into settings as well. This makes taskyons
 configuration very adaptable to new tools.
-Taskyon lets you configure each tool with optional defaut values.
+Taskyon lets you configure each tool with optional default values.
 Taskyon provides the option of letting profiles partially be overriden by each other.`)
 
 export type TyToolchainConfig = z.infer<typeof TyToolchainConfig>

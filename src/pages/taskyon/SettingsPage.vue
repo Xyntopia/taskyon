@@ -46,6 +46,16 @@
         </q-tab-panel>
         <q-tab-panel name="agent config" :class="tabPanelClass">
           <div>AI/LLM chat completion configurations</div>
+          <template v-for="[key, val] in Object.entries(state.toolchainConfig)" :key="key">
+            <ObjectTreeView
+              :model-value="val as Record<string, unknown>"
+              :schema="tystate.allTools[key]?.parameters"
+              class="fit"
+              hide-missing
+              @update:model-value="(val) => console.log('updated', val)"
+            />
+          </template>
+          <q-separator />
           <ObjectTreeView
             v-model="state.llmSettings"
             :schema="
@@ -86,9 +96,11 @@ import { TyProfile } from 'src/modules/taskyon/types'
 import { useAppStateStore } from 'src/stores/appState'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useTaskyonStore } from 'src/stores/taskyonState'
 
 const route = useRoute()
 const state = useAppStateStore()
+const tystate = useTaskyonStore()
 
 const tabPanelClass = 'column items-center'
 
