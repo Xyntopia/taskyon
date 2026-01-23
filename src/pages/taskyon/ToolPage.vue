@@ -3,8 +3,8 @@
       <CreateNewTask class="q-pa-xs" expert-mode />
       <ObjectTreeView :model-value="functionArgs" />
     </q-drawer>-->
-  <UnderConstructionHint />
-  <q-page padding>
+  <FadeAwayScrollPage padding class="column">
+    <UnderConstructionHint />
     <div class="row">
       <q-select
         class="col"
@@ -30,8 +30,8 @@
       <q-btn flat dense label="New Tool" @click="switchTool()" />
     </div>
     <q-separator class="q-my-md" />
-    <div v-if="selectedTool || !name" class="column q-gutter-sm">
-      <div>
+    <div v-if="selectedTool || !name" class="col column q-gutter-sm">
+      <div class="row">
         <TaskChainPublishDialog
           v-if="preliminaryTaskNode"
           buttons
@@ -46,11 +46,12 @@
         </TaskChainPublishDialog>
         <q-btn
           flat
+          dense
           :icon="matSearch"
           label="Search for similar tools"
           :to="`/taskmanager?k=10&ct=tooldefinition&q=${JSON.stringify(selectedTool)}`"
         />
-        <q-btn flat label="Secrets" :icon="mdiKeyChain" to="/settings/secrets" />
+        <q-btn flat dense label="Secrets" :icon="mdiKeyChain" to="/settings/secrets" />
         <div class="row items-center">
           <q-btn
             class="col-auto"
@@ -76,14 +77,20 @@
         </div>
       </div>
       <q-input v-model="toolDraft.name" dense filled label="New Tool Name" />
-      <div class="row">
-        <q-tabs v-model="selectedTab" class="col-auto" dense no-caps vertical>
-          <q-tab name="code" :icon="mdiLanguageJavascript" label="tool code" />
-          <q-tab name="configure" :icon="mdiFormTextbox" label="tool configuration" />
-          <q-tab name="definition" :icon="mdiCodeJson" label="tool definition" />
-        </q-tabs>
-        <q-tab-panels :model-value="selectedTab" animated swipeable infinite class="col">
-          <q-tab-panel name="code">
+      <DockView
+        v-model:node="initialLayout"
+        class="col"
+        hide-tab-add
+        hide-tab-close
+        :tab-icons="{
+          code: mdiLanguageJavascript,
+          configure: mdiFormTextbox,
+          definition: mdiCodeJson,
+          settings: matSettings,
+        }"
+      >
+        <template #code>
+          <div class="fit">
             <div v-if="selectedTool && selectedTool.function" class="q-pa-lg text-negative">
               The currently selected Tool is a Taskyon-internal tool with a "function" property and
               can not be edited here. You can however replace it with your own tool with the same
@@ -109,15 +116,17 @@
                 @click="() => (toolDraft.code = freshTool.code)"
               />
             </div>
-          </q-tab-panel>
-          <q-tab-panel name="configure">
-            <ObjectTreeView :model-value="toolDraft" :schema="toolJsonSchema" />
-          </q-tab-panel>
-          <q-tab-panel name="definition" class="column">
-            <JsonInput v-model="toolDraft" filled auto-save />
-          </q-tab-panel>
-        </q-tab-panels>
-      </div>
+          </div>
+        </template>
+        <template #configure>
+          <ObjectTreeView :model-value="toolDraft" :schema="toolJsonSchema" />
+        </template>
+        <template #definition>
+          <div class="fit">
+            <JsonInput v-model="toolDraft" class="fit" filled auto-save autogrow="false" />
+          </div>
+        </template>
+      </DockView>
     </div>
     <div v-else>
       The selected tool "{{ name }}" is not available for editing. Please select one of the
@@ -141,11 +150,17 @@
         >
       </div>
     </div>
-  </q-page>
+  </FadeAwayScrollPage>
 </template>
 
 <script setup lang="ts">
-import { matAdd, matContentCopy, matSave, matSearch } from '@quasar/extras/material-icons'
+import {
+  matAdd,
+  matContentCopy,
+  matSave,
+  matSearch,
+  matSettings,
+} from '@quasar/extras/material-icons'
 import {
   mdiCodeJson,
   mdiFormTextbox,
@@ -159,6 +174,9 @@ import type { InternalTool, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { craeteToolJsonSchema, createTaskNode, ToolBase } from '@taskyon/taskyon'
 import ObjectTreeView from 'components/varViews/ObjectTreeView.vue'
 import { copyToClipboard } from 'quasar'
+import type { DockNode } from 'src/components/DockView.vue'
+import DockView from 'src/components/DockView.vue'
+import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 import TaskChainPublishDialog from 'src/components/taskyon/TaskChainPublishDialog.vue'
 import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
 import JsonInput from 'src/components/varViews/JsonInput.vue'
@@ -168,6 +186,22 @@ import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 const { name = undefined } = defineProps<{ name?: string }>()
+
+const initialLayout = ref<DockNode>({
+  id: 'root',
+  type: 'container',
+  direction: 'row',
+  children: [
+    {
+      id: 'code',
+      type: 'leaf',
+      collapsed: false,
+      views: ['code', 'configure', 'definition', 'settings'],
+      activeViewIndex: 0,
+      size: 100,
+    },
+  ],
+})
 
 const CodeEditor = defineAsyncComponent(
   () =>
@@ -180,7 +214,6 @@ const CodeEditor = defineAsyncComponent(
     ),
 )
 
-const selectedTab = ref('code')
 const tystate = useTaskyonStore()
 const router = useRouter()
 const toolNames = computed(() => Object.keys(tystate.allTools))

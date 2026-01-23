@@ -45,7 +45,7 @@
           />
         </q-tab-panel>
         <q-tab-panel name="agent config" :class="tabPanelClass">
-          <div>All of the Agent configuration</div>
+          <div>AI/LLM chat completion configurations</div>
           <ObjectTreeView
             v-model="state.llmSettings"
             :schema="

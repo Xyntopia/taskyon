@@ -6,6 +6,8 @@
     v-bind="$attrs"
     :rules="[jsonRule]"
     :debounce="autoSave ? debounce : 0"
+    :input-style="{ height: '100%', minHeight: '100%' }"
+    input-class="fit"
     @blur="onBlur"
   >
     <template v-if="!readonly && !autoSave" #append>

@@ -359,11 +359,12 @@
 import { matBarChart, matInfo } from '@quasar/extras/material-icons'
 import { type JSONSchema7 } from 'json-schema'
 import { type QTreeNode } from 'quasar'
+import { serializeObject } from 'src/modules/serializeObject'
 import { copyToClipboard, countLeaves } from 'src/modules/utils'
 import { computed, ref } from 'vue'
 import type z from 'zod'
-import { serializeObject } from 'src/modules/serializeObject'
 
+import InfoDialog from '../InfoDialog.vue'
 import FieldView from './FieldView.vue'
 import JsonInput from './JsonInput.vue'
 import ListChart from './ListChart.vue'
