@@ -915,7 +915,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       return initCs
     }
   })().then(async (cs) => {
-    return await tyCore(() => stateRefs.llmSettings, defineTyGuiTools(stateRefs), cs)
+    return await tyCore(
+      () => stateRefs.llmSettings,
+      () => stateRefs.toolchainConfig,
+      defineTyGuiTools(stateRefs),
+      cs,
+    )
   })
 
   const apiKeyManagement = useApiManagement(stateRefs, () => taskyon)

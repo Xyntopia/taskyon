@@ -48,7 +48,7 @@ import { getDatabase } from '../utils/pglite.api'
 import type { Thunk } from '../utils/tsHelpers'
 import type { TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
-import { generateSecretId, runTaskWorker } from './taskWorker'
+import { functionExecutorCreator, generateSecretId, runTaskWorker } from './taskWorker'
 import type { ReadonlyDeep } from 'type-fest'
 
 function createApi(
@@ -248,11 +248,16 @@ const dynamicContext =
     // taskyon should automatically pick up on this...
     console.log('starting taskyon worker')
     const { port: workerport } = createTypeFilteredPort(insidePort, ['functionResponse'])
+    const stopFuncExecution: AbortController = new AbortController()
+    const executor = functionExecutorCreator(
+      taskManagerInstance.getToolDefinition,
+      secretStore,
+      stopFuncExecution.signal,
+      workerport,
+    )
     const { workerStream, stopAllTasks, queueTask } = runTaskWorker(
       taskManagerInstance,
-      secretStore,
       iframeMultiPlexer.all$,
-      workerport,
       llmSettings().maxAutonomousTasks,
       toolCall<ChatCompletionArgs>({
         name: 'chatCompletion',
@@ -268,12 +273,16 @@ const dynamicContext =
           llmTools: llmSettings().enableOpenAiTools,
         },
       }),
+      executor,
     )
     //##################### END INIT CTX #################
     return {
       chatCompletionStream,
       workerStream,
-      stopAllTasks,
+      stopAllTasks: (message: string) => {
+        stopAllTasks(message)
+        stopFuncExecution.abort(new Error(message))
+      },
       queueTask,
       taskManagerInstance,
       secretStore,
@@ -284,6 +293,7 @@ export async function tyCore(
   // TODO: we want to save some settings "internally" and not in the GUI...
   //       but then....   we als want taskyon to be as "stateless" as possible..
   llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
+  toolchainConfig: Thunk<Record<string, unknown>>,
   // with the Environment Tools we can provide a list of tools as closures which have access
   // to the environment in which taskyon is running (through closure variables
   // of this environment inside the tool).

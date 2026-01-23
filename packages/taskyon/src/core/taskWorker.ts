@@ -1,6 +1,7 @@
-import type { TaskNode, partialTaskDraft } from '../types/node'
-import type { toolContext } from '../types/toolApi'
+import type { TaskNode, TaskNodeType, partialTaskDraft } from '../types/node'
+import type { InternalTool, toolContext } from '../types/toolApi'
 import { taskResult } from '../types/toolApi'
+import type { FunctionCall } from '../types/tools'
 import { createAsyncQueue, sleep } from '../utils/asyncUtils'
 import type { SecretStore } from '../utils/crudWrapper'
 import { sha256UrlSafeHash } from '../utils/encoding'
@@ -36,29 +37,19 @@ export async function generateSecretId(
   return tool.name + ':' + (taskId ?? (await sha256UrlSafeHash(tool.code ?? tool.function)))
 }
 
-// TODO: how about we put this here into its own tool as well!
-//       its totally possible now... Would probably make the code cleaner...
-async function safeExecuteTask(
-  task: TaskNode,
-  taskManager: TyTaskManager,
-  secretStore: SecretStore,
-  stopSignal: AbortSignal,
-  taskMessageStream: TaskMessageStream,
-  duplexPort: RemoteFunctionPort,
-): Promise<unknown> {
-  if (task.content.type === 'functioncall') {
-    // calculate function result
-    const func = task.content.data
-    console.log(`Calling function ${func.name}`)
-    const { tool, def } = await taskManager.getToolDefinition(func.name)
+export const functionExecutorCreator =
+  (
+    getToolDefinition: (
+      name: string,
+    ) => Promise<{ def?: TaskNodeType<'tooldefinition'> | undefined; tool?: InternalTool }>,
+    secretStore: SecretStore,
+    stopSignal: AbortSignal,
+    duplexPort: RemoteFunctionPort,
+  ) =>
+  async (func: FunctionCall, taskChain: TaskNode[], filteredStream: TaskMessageStream) => {
+    const { tool, def } = await getToolDefinition(func.name)
     if (tool && !stopSignal.aborted) {
-      // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
-      const taskChain = await taskManager.getTaskChain(task.id)
       const toolId = await generateSecretId(def?.id, tool)
-      // only allow immediate prior or parent tasks to send messages for now...
-      const filteredStream = taskMessageStream.filter((msg) => {
-        return msg.id === task.parentID || msg.id === task.priorID
-      })
       const msgPortAdapter = createMessagePortAdapter(filteredStream)
       const context: toolContext = {
         taskChain,
@@ -87,6 +78,28 @@ async function safeExecuteTask(
           : 'The function execution was cancelled by taskyon',
       )
     }
+  }
+
+type FunctionExecutor = ReturnType<typeof functionExecutorCreator>
+
+// TODO: how about we put this here into its own tool as well!
+//       its totally possible now... Would probably make the code cleaner...
+async function safeExecuteTask(
+  task: TaskNode,
+  taskMessageStream: TaskMessageStream,
+  taskChain: TaskNode[],
+  executor: FunctionExecutor,
+): Promise<unknown> {
+  if (task.content.type === 'functioncall') {
+    // calculate function result
+    const func = task.content.data
+    console.log(`Calling function ${func.name}`)
+    // only allow immediate prior or parent tasks to send messages for now...
+    const filteredStream = taskMessageStream.filter((msg) => {
+      return msg.id === task.parentID || msg.id === task.priorID
+    })
+
+    return await executor(func, taskChain, filteredStream)
   } else {
     throw new Error(
       `Task with id ${task.id} is not a functioncall task, but of type ${task.content.type}. This should not happen!`,
@@ -310,9 +323,8 @@ const createTaskProcessor = (
   taskisInLoop: (taskId: string) => void,
   taskOutOfLoop: (taskId: string, toolName?: string) => void,
   stopAllTasks: (message: string) => void,
-  secretStore: SecretStore,
   taskMessageStream: TaskMessageStream,
-  duplexPort: RemoteFunctionPort,
+  executor: FunctionExecutor,
 ) => {
   // this is uses to track how long a list of tasks has been processing
   const handleError = createHandleError(stopAllTasks, taskManager, currentTaskCtrl, queueTask)
@@ -359,14 +371,9 @@ const createTaskProcessor = (
 
       let newTasks: TaskNode[][] = []
       try {
-        const funcR = await safeExecuteTask(
-          task,
-          taskManager,
-          secretStore,
-          currentTaskCtrl.signal,
-          taskMessageStream,
-          duplexPort,
-        )
+        // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
+        const taskChain = await taskManager.getTaskChain(task.id)
+        const funcR = await safeExecuteTask(task, taskMessageStream, taskChain, executor)
 
         // We check the result of the task here to see whether it contains
         // a lists of tasks. If thats the case we return
@@ -444,9 +451,8 @@ const setupRun = (
   streamEmit: (value: TyTaskStreamData) => void,
   stopAllTasks: (message: string) => void,
   taskManager: TyTaskManager,
-  secretStore: SecretStore,
   taskMessageStream: TaskMessageStream,
-  duplexPort: RemoteFunctionPort,
+  executor: FunctionExecutor,
 ) => {
   console.log('setting up task worker run...')
   const currentTaskCtrl: AbortController = new AbortController()
@@ -469,9 +475,8 @@ const setupRun = (
     taskisInLoop,
     taskOutOfLoop,
     stopAllTasks,
-    secretStore,
     taskMessageStream,
-    duplexPort,
+    executor,
   )
 
   const run = async (
@@ -521,14 +526,13 @@ function createDebugInfoFromError(error: unknown) {
 
 export function runTaskWorker(
   taskManager: TyTaskManager,
-  secretStore: SecretStore,
   // task message stream is used in order to give message tasks the ability to communicate to
   // tool call tasks (e.g. a button click)
   taskMessageStream: TaskMessageStream,
-  duplexPort: RemoteFunctionPort,
   maxAutonomousTasks: number,
   defaultTask: partialTaskDraft,
   errorTask: partialTaskDraft,
+  executor: FunctionExecutor,
 ) {
   console.log('starting task worker listener...')
 
@@ -560,9 +564,8 @@ export function runTaskWorker(
         taskProcessingStream.emit,
         stopAllTasks,
         taskManager,
-        secretStore,
         taskMessageStream,
-        duplexPort,
+        executor,
       )
       currentTaskCtrl = newTaskCtrl
       queueTask = newQueueTask
