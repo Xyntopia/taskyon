@@ -38,6 +38,11 @@
         <!--valueSlot-->
         <slot />
       </div>
+      <span
+        v-if="hideMissingIndicator"
+        class="q-ml-xs"
+        :class="item.hasValue ? 'presence-dot--present' : 'presence-dot--missing'"
+      />
       <div v-if="item.description" class="gt-xs col-auto obj-info">
         <InfoDialog :info-text="item.description" />
       </div>
@@ -59,11 +64,30 @@ defineProps<{
   showLabel?: boolean
   reset?: boolean
   copy?: boolean
+  hideMissingIndicator?: boolean
   item: {
     icon?: string
     description?: string
     label?: string
     default?: unknown
+    hasValue: boolean
   }
 }>()
 </script>
+
+<style scoped lang="sass">
+.presence-dot--present
+  display: inline-block
+  width: 6px
+  height: 6px
+  border-radius: 50%
+  background-color: #4caf50 // subtle green
+
+.presence-dot--missing
+  display: inline-block
+  width: 6px
+  height: 6px
+  border-radius: 50%
+  background-color: #bdbdbd // subtle grey
+  opacity: 0.6
+</style>

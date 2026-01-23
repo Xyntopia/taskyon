@@ -25,6 +25,33 @@
       />
     </template>
 
+    <template #body-missing="prop">
+      <FieldView
+        :show-label="separateLabels"
+        :item="prop.node"
+        :copy="false"
+        :show-missing-indicator="showMissingIndicator"
+      >
+        <q-btn
+          flat
+          dense
+          size="sm"
+          :icon="matAdd"
+          color="primary"
+          label="Set value"
+          @click.stop="enableField(prop.node)"
+        />
+
+        <!-- Optional quick hint about default -->
+        <span
+          v-if="prop.node.schema?.default !== undefined"
+          class="text-caption text-grey-7 q-ml-sm"
+        >
+          Default: {{ String(prop.node.schema.default) }}
+        </span>
+      </FieldView>
+    </template>
+
     <template #body-unknown="prop">
       <FieldView
         :show-label="separateLabels"
@@ -356,7 +383,7 @@
 </template>
 
 <script setup lang="ts">
-import { matBarChart, matInfo } from '@quasar/extras/material-icons'
+import { matAdd, matBarChart, matInfo } from '@quasar/extras/material-icons'
 import { type JSONSchema7 } from 'json-schema'
 import { type QTreeNode } from 'quasar'
 import { serializeObject } from 'src/modules/serializeObject'
@@ -377,6 +404,8 @@ const {
   schema = undefined,
   descriptionsAsLabels = false,
   hideMissing = false,
+  missingMode = 'all', // 'hide' | 'placeholders' | 'all'
+  showMissingIndicator = true,
   copyBtn = false,
   lazyRender = false,
   listSummary = 10,
@@ -388,10 +417,17 @@ const {
   schema?: JSONSchema7 | z.core.JSONSchema.BaseSchema | undefined
   descriptionsAsLabels?: boolean
   hideMissing?: boolean
+  missingMode?: 'hide' | 'placeholders' | 'all'
+  showMissingIndicator?: boolean
   copyBtn?: boolean
   lazyRender?: boolean
   listSummary?: number
 }>()
+
+// Backwards compat: hideMissing=true wins
+const effectiveMissingMode = computed<'hide' | 'placeholders' | 'all'>(() =>
+  hideMissing ? 'hide' : missingMode,
+)
 
 const modelValue = defineModel<Record<string, unknown> | undefined>({
   required: true,
@@ -469,6 +505,10 @@ const transformToTreeNodes = (
       | undefined,
     path: string[],
   ): QTreeNode | null => {
+    const rawVal = obj[key]
+    // Treat undefined/null as "missing", but allow empty string as a valid value
+    const hasValue = rawVal !== undefined && rawVal !== null
+
     if (hideMissing && (value === undefined || value === null || value === '')) {
       return null
     }
@@ -485,11 +525,22 @@ const transformToTreeNodes = (
       path: newPath,
       schema: subschema,
       children: [],
+      hasValue,
+      isMissing: !hasValue,
     }
     if (subschema?.icon) base.icon = subschema.icon
     if (subschema?.offIcon) base.offIcon = subschema.offIcon
     if (subschema?.onIcon) base.onIcon = subschema.onIcon
-    if (subschema?.default) base.default = subschema.default
+    if (subschema?.default !== undefined) base.default = subschema.default
+
+    // PLACEHOLDER MODE
+    if (effectiveMissingMode.value === 'placeholders' && !hasValue) {
+      return {
+        ...base,
+        body: 'missing', // new body type
+        value: undefined, // or subschema?.default if you want to show it
+      }
+    }
 
     const isUndef = value === undefined || value === null
     const runtimeType = subschema?.enum
@@ -630,9 +681,9 @@ const transformToTreeNodes = (
 
     return allKeys
       .filter((key) => {
-        if (!hideMissing) return true
+        if (effectiveMissingMode.value !== 'hide') return true
         const v = obj[key]
-        return v !== undefined && v !== null && v !== ''
+        return !(v === undefined || v === null || v === '')
       })
       .map((key) => {
         const subschema = schemaProps[key]
@@ -647,6 +698,28 @@ const transformToTreeNodes = (
     .filter(([, value]) => !hideMissing || (value !== undefined && value !== null && value !== ''))
     .map(([key, value]) => mapEntry(key, value, undefined, keyPath))
     .filter((n): n is QTreeNode => n !== null)
+}
+
+const enableField = (node: QTreeNode & { path: string[]; schema?: JSONSchema7 }) => {
+  const def = node.schema?.default
+  // pick a sensible initial value per type if you wish
+  const init =
+    def !== undefined
+      ? def
+      : node.schema?.type === 'object'
+        ? {}
+        : node.schema?.type === 'array'
+          ? []
+          : node.schema?.type === 'boolean'
+            ? false
+            : node.schema?.type === 'number' || node.schema?.type === 'integer'
+              ? 0
+              : ''
+
+  updateValue(node.path, init)
+  // nodeTree is computed from modelValue, so on next render
+  // this node will automatically switch from body='missing'
+  // to the appropriate editor body.
 }
 
 const nodeTree = computed(() => {
