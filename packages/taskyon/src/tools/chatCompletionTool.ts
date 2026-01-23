@@ -172,7 +172,7 @@ async function llmRequest(
   })
   const { streamText } = await import('ai')
   let model
-  let overrideOpts: Record<string, unknown> = {}
+  const overrideOpts: Record<string, unknown> = {}
   switch (api.name) {
     case 'openai':
       {
@@ -199,14 +199,14 @@ async function llmRequest(
           apiKey,
         })
         model = openai(selectedModel)
-        const providerOptions: Record<string, unknown> = {
+        overrideOpts.providerOptions = {
           openai: {
             reasoningEffort,
             reasoningSummary: 'auto', // 'auto' for condensed or 'detailed' for comprehensive
           },
         }
         if (webSearch?.maxResults) {
-          providerOptions.tools = {
+          overrideOpts.tools = {
             ...tools,
             web_search: openai.tools.webSearch({
               // optional configuration:
@@ -220,9 +220,8 @@ async function llmRequest(
             }),
           }
           // Force web search tool (optional):
-          providerOptions.toolChoice = { type: 'tool', toolName: 'web_search' }
+          overrideOpts.toolChoice = { type: 'tool', toolName: 'web_search' }
         }
-        overrideOpts = { providerOptions }
       }
       break
     case 'taskyon':
