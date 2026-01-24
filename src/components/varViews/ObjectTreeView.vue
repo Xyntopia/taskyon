@@ -268,7 +268,7 @@
       >
         <q-input
           :readonly="readOnly"
-          style="min-width: 200px"
+          style="min-width: 100px"
           :label="separateLabels ? '' : prop.node.label"
           filled
           dense
@@ -297,6 +297,7 @@
           :label="separateLabels ? '' : prop.node.label"
           :options="prop.node.options.map((v: string) => ({ label: String(v), value: v }))"
           :model-value="prop.node.value"
+          style="min-width: 100px"
           @update:model-value="(val) => updateValue(prop.node.path, val)"
         />
       </FieldView>

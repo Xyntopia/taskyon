@@ -14,7 +14,8 @@
   },
   "toolchainConfig": {
     "chatCompletion": {
-      "reasoning_effort": "low"
+      "reasoning_effort": "low",
+      "max_results": 5
     }
   },
   "llmSettings": {

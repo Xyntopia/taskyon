@@ -940,6 +940,11 @@ export const chatCompletionToolParameters = {
       enum: ['low', 'high', 'medium', 'none'],
       description: 'How many reasoning tokens should models with reasoning capability use?',
     },
+    max_results: {
+      type: 'integer',
+      description:
+        '[Optional] In case of a WebSearch, how many results should be retrieved at max?',
+    },
     verbosity: {
       type: 'string',
       enum: ['low', 'high', 'medium'],
@@ -1074,7 +1079,7 @@ export function createChatCompletionTool(
         siteUrl,
         goal === 'WebSearch'
           ? {
-              maxResults: 5,
+              maxResults: opts.max_results ?? 5,
               searchContextSize: 'medium',
             }
           : undefined,
@@ -1228,7 +1233,10 @@ export type ChatCompletionTool = Awaited<
   ReturnType<typeof createChatCompletionTool>
 >['chatCompletion']
 
-export type chatCompletionParams = FromSchema<ChatCompletionTool['parameters']>
+export type chatCompletionParams = FromSchema<
+  ChatCompletionTool['parameters'],
+  { keepDefaultedPropertiesOptional: true }
+>
 
 export type ChatCompletionArgs = Omit<chatCompletionParams, 'schema'> & {
   schema?: JSONSchema7 & Record<string, unknown>
