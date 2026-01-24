@@ -1,7 +1,6 @@
 import { scroll } from 'quasar'
 import type { Ref } from 'vue'
 import { computed, type ComputedRef, reactive, ref, toRefs, watch } from 'vue'
-import type { ZodObject } from 'zod'
 import { z } from 'zod'
 
 export function asyncComputed<T>(
@@ -22,25 +21,56 @@ export function asyncComputed<T>(
   return computed(() => state.value) // Read-only computed value
 }
 
+type JsonSchemaObject = {
+  type?: string
+  properties?: Record<string, unknown>
+  required?: string[]
+  [key: string]: unknown
+}
+
 type SingleSource<O extends Record<string, unknown>> = {
   obj: O
-  schema: ZodObject
+  schema: JsonSchemaObject
   pickKeys: Array<keyof O & string>
 }
 
 export function buildSlimView<O extends Record<string, unknown>, S extends SingleSource<O>[]>(
   ...sources: S
 ) {
-  // — your runtime code stays exactly the same —
-  const pickedSchemas = sources.map(({ schema, pickKeys }) => {
-    const pickedSchema = pickKeys.reduce<typeof schema.shape>((acc, k) => {
-      acc[k] = schema.shape[k]
-      return acc
-    }, {})
-    return z.object(pickedSchema)
-  })
-  const mergedSchema = pickedSchemas.reduce((a, b) => z.object({ ...a.shape, ...b.shape }))
-  const jsonSchema = z.toJSONSchema(mergedSchema, { unrepresentable: 'any' })
+  const mergedJsonSchema: JsonSchemaObject = sources.reduce(
+    (acc, { schema, pickKeys }) => {
+      const srcProps = schema.properties ?? {}
+      const srcRequired = Array.isArray(schema.required) ? schema.required : []
+
+      const pickedProps: Record<string, unknown> = {}
+      const pickedRequired: string[] = []
+
+      pickKeys.forEach((key) => {
+        if (key in srcProps) {
+          pickedProps[key] = srcProps[key]
+          if (srcRequired.includes(key)) {
+            pickedRequired.push(key)
+          }
+        }
+      })
+
+      const accProps = acc.properties ?? {}
+      const accRequired = Array.isArray(acc.required) ? acc.required : []
+
+      return {
+        ...acc,
+        type: 'object',
+        properties: {
+          ...accProps,
+          ...pickedProps,
+        },
+        required: [...accRequired, ...pickedRequired.filter((key) => !accRequired.includes(key))],
+      }
+    },
+    { type: 'object', properties: {}, required: [] } as JsonSchemaObject,
+  )
+
+  const jsonSchema = mergedJsonSchema
 
   const plainRefMap = sources.reduce(
     (acc, { obj, pickKeys }) => {
@@ -60,56 +90,105 @@ export function buildSlimView<O extends Record<string, unknown>, S extends Singl
     }[number]
   }
 
-  return { mergedSchema, jsonSchema, reactiveView }
+  return { jsonSchema, reactiveView }
 }
 
 export function testBuildSlimView() {
-  // Setup two reactive source objects
+  // Setup reactive source objects
   const obj1 = reactive({ a: 1, b: 'hello', c: true })
   const obj2 = reactive({ d: 42, e: 'world' })
 
-  // Invocation
-  const { mergedSchema, jsonSchema, reactiveView } = buildSlimView(
+  // Zod schemas for testing, converted to JSON Schema just before usage
+  const zodSchema1 = z.object({ a: z.number(), b: z.string(), c: z.boolean() })
+  const zodSchema2 = z.object({ d: z.number(), e: z.string() })
+
+  const jsonSchema1 = z.toJSONSchema(zodSchema1, { unrepresentable: 'any' })
+  const jsonSchema2 = z.toJSONSchema(zodSchema2, { unrepresentable: 'any' })
+
+  // Invocation using JSON Schemas
+  const { jsonSchema, reactiveView } = buildSlimView(
     {
       obj: obj1,
-      schema: z.object({ a: z.number(), b: z.string(), c: z.boolean() }),
+      schema: jsonSchema1,
       pickKeys: ['a', 'c'],
     },
     {
       obj: obj2,
-      schema: z.object({ d: z.number(), e: z.string() }),
+      schema: jsonSchema2,
       pickKeys: ['d'],
     },
   )
 
-  // 1) mergedSchema should accept {a, c, d}
-  try {
-    mergedSchema.parse({ a: 10, c: false, d: 100 })
-    console.log('✔ mergedSchema.parse works')
-  } catch (e) {
-    console.error('✖ mergedSchema.parse failed:', e)
-  }
-
-  // 2) jsonSchema should at least be an object
+  // 1) jsonSchema should describe exactly the picked keys
   console.assert(
-    typeof jsonSchema === 'object' && jsonSchema !== null,
-    'jsonSchema is not an object',
+    typeof jsonSchema === 'object' && jsonSchema !== null && jsonSchema.type === 'object',
+    'jsonSchema is not a valid object schema',
   )
 
-  console.log(reactiveView.a)
+  const properties = jsonSchema.properties ?? {}
+  console.assert('a' in properties, 'jsonSchema missing property "a"')
+  console.assert('c' in properties, 'jsonSchema missing property "c"')
+  console.assert('d' in properties, 'jsonSchema missing property "d"')
+  console.assert(!('b' in properties), 'jsonSchema should not contain unpicked property "b"')
+  console.assert(!('e' in properties), 'jsonSchema should not contain unpicked property "e"')
+  console.log('✔ jsonSchema properties match picked keys')
 
-  // 3) reactiveView initial values
+  const required = Array.isArray(jsonSchema.required) ? jsonSchema.required : []
+  console.assert(required.includes('a'), '"a" should be required')
+  console.assert(required.includes('c'), '"c" should be required')
+  console.assert(required.includes('d'), '"d" should be required')
+  console.log('✔ jsonSchema required keys look correct')
+
+  // 2) reactiveView initial values
   console.assert(reactiveView.a === 1, 'reactiveView.a ≠ 1')
   console.assert(reactiveView.c === true, 'reactiveView.c ≠ true')
   console.assert(reactiveView.d === 42, 'reactiveView.d ≠ 42')
   console.log('✔ reactiveView initial values OK')
 
-  // 4) reactive updates propagate
-  if (reactiveView.a) reactiveView.a = 99
+  // 3) reactive updates propagate from view to sources
+  reactiveView.a = 99
   console.assert(obj1.a === 99, 'obj1.a did not update from reactiveView.a')
-  if (reactiveView.d) reactiveView.d = 123
+  reactiveView.d = 123
   console.assert(obj2.d === 123, 'obj2.d did not update from reactiveView.d')
-  console.log('✔ updates propagate bi-directionally')
+  console.log('✔ updates propagate view → source')
+
+  // 4) reactive updates propagate from sources to view
+  obj1.c = false
+  obj2.d = 777
+  console.assert(reactiveView.c === false, 'reactiveView.c did not update from obj1.c')
+  console.assert(reactiveView.d === 777, 'reactiveView.d did not update from obj2.d')
+  console.log('✔ updates propagate source → view')
+
+  // 5) second scenario: additional source with overlapping and optional keys
+  const obj3 = reactive({ a: 5, f: 'extra' as string | undefined })
+  const zodSchema3 = z.object({ a: z.number(), f: z.string().optional() })
+  const jsonSchema3 = z.toJSONSchema(zodSchema3, { unrepresentable: 'any' })
+
+  const { jsonSchema: jsonSchemaScenario2, reactiveView: reactiveView2 } = buildSlimView(
+    {
+      obj: obj1,
+      schema: jsonSchema1,
+      pickKeys: ['a'],
+    },
+    {
+      obj: obj3,
+      schema: jsonSchema3,
+      pickKeys: ['f'],
+    },
+  )
+
+  const properties2 = jsonSchemaScenario2.properties ?? {}
+  console.assert('a' in properties2, 'scenario2: missing "a" in json schema')
+  console.assert('f' in properties2, 'scenario2: missing "f" in json schema')
+
+  reactiveView2.a = 200
+  console.assert(obj1.a === 200, 'scenario2: obj1.a did not update from reactiveView2.a')
+  obj3.f = 'updated'
+  console.assert(
+    reactiveView2.f === 'updated',
+    'scenario2: reactiveView2.f did not update from obj3.f',
+  )
+  console.log('✔ scenario 2 (overlapping / optional) behaves correctly')
 
   console.log('✅ All tests passed!')
 }
