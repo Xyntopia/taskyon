@@ -81,6 +81,7 @@ import { testBuildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { onMounted, ref } from 'vue'
+import { testHumanizeError } from '../../packages/taskyon/src/tests/testErrors'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -151,6 +152,7 @@ export interface TaskyonTestFn {
 
 const guiTests = {} as Record<string, TaskyonTestFn>
 const tests = {} as Record<string, TaskyonTestFn>
+tests.testHumanizeError = testHumanizeError
 Object.entries(TaskyonTests).forEach(([name, func]) => {
   if (typeof func !== 'function') return
   if ('gui' in func) guiTests[camelToNormal(String(name))] = func

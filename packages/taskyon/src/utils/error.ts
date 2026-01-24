@@ -1,4 +1,98 @@
+// error.ts
 import { safeYamlDump } from './yamlUtils'
+
+interface SerializedError {
+  name: string
+  message: string
+  stack?: string // optional, not `string | undefined`
+  cause?: SerializableError
+  errors?: SerializableError[]
+  // allow arbitrary custom props
+  [key: string]: unknown
+}
+
+interface SerializedNonError {
+  nonError: true
+  value: unknown
+}
+
+type SerializableError = SerializedError | SerializedNonError
+
+type ErrorWithExtras = Error & {
+  [key: string]: unknown
+  cause?: unknown
+  errors?: unknown[]
+}
+
+// ----- Serialize -----
+
+/**
+ * Recursively converts Errors into plain objects with enumerable properties,
+ * while leaving primitives and normal objects matching the original structure.
+ */
+export function serializeError(value: unknown, seen = new WeakSet<object>()): unknown {
+  // 1. Pass through primitives (string, number, boolean, null, undefined)
+  if (value === null || typeof value !== 'object') {
+    return value
+  }
+
+  // 2. Prevent infinite loops via Circular References
+  if (seen.has(value)) {
+    return '[Circular]'
+  }
+  seen.add(value)
+
+  // 3. Handle Arrays (recurse into elements)
+  if (Array.isArray(value)) {
+    return value.map((item) => serializeError(item, seen))
+  }
+
+  // 4. Handle Error Objects
+  if (value instanceof Error) {
+    const errorCopy: Record<string, unknown> = {
+      name: value.name,
+      message: value.message,
+    }
+
+    if (value.stack) {
+      errorCopy.stack = value.stack
+    }
+
+    // Double-cast allows us to treat the Error as a generic dictionary
+    // satisfying strict TS checks.
+    const rawError = value as unknown as Record<string, unknown>
+
+    // Handle 'cause'
+    if ('cause' in value) {
+      errorCopy.cause = serializeError(rawError.cause, seen)
+    }
+
+    // Handle 'errors' (AggregateError)
+    if ('errors' in value && Array.isArray(rawError.errors)) {
+      errorCopy.errors = rawError.errors.map((e) => serializeError(e, seen))
+    }
+
+    // Copy all other own enumerable properties (custom fields)
+    for (const key of Object.keys(value)) {
+      if (['name', 'message', 'stack', 'cause', 'errors'].includes(key)) {
+        continue
+      }
+      errorCopy[key] = serializeError(rawError[key], seen)
+    }
+
+    return errorCopy
+  }
+
+  // 5. Handle Plain Objects (recurse into values)
+  const plainObj: Record<string, unknown> = {}
+  const sourceObj = value as Record<string, unknown>
+
+  for (const key of Object.keys(sourceObj)) {
+    plainObj[key] = serializeError(sourceObj[key], seen)
+  }
+
+  return plainObj
+}
 
 /**
  * Convert any thrown value into a short, customer-friendly string.
@@ -9,6 +103,7 @@ import { safeYamlDump } from './yamlUtils'
  * Designed for production UI logs (no stack traces, YAML only).
  */
 export function humanizeError(errorInput: unknown): string {
+  console.log('serialized error:', serializeError(errorInput))
   const seenObjects = new WeakSet<object>()
   const lines: string[] = []
 
