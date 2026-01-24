@@ -21,7 +21,7 @@ export const llmSettings = z.object({
   allowWebSearch: z.boolean().optional().default(true).meta({
     description: 'Allow web search for chat Completion.',
     icon: mdiSearchWeb,
-    label: 'Web Search',
+    title: 'Web Search',
   }),
   secretPublicKey: z.string().nullish().optional().meta({
     description: 'A (public) cryptographic key which is used to encrypt secrets',
@@ -37,7 +37,7 @@ export const llmSettings = z.object({
       onIcon: matSmartToy,
       offIcon: 'svguse:/taskyon_mono_opt.svg#taskyon',
       icon: mdiFunctionVariant,
-      label: 'Native Agent Tools',
+      title: 'Native Agent Tools',
       description: `### Enable native AI function selection.
 
 If this is enabled Taskyon will try to
@@ -80,7 +80,7 @@ simple chatCompletion for non-tool calls.
     description:
       'Enable the standard tool chooser. This function enables taskyon to decide if and then which tool it should use for the task.',
     icon: mdiTools,
-    label: 'Use Tools',
+    title: 'Use Tools',
   }),
   useBasePrompt: z
     .boolean()
@@ -88,7 +88,7 @@ simple chatCompletion for non-tool calls.
     .meta({
       offIcon: mdiAlphabeticalVariant,
       icon: mdiAutoFix,
-      label: 'Fancy AI',
+      title: 'Fancy AI',
       description: `
   *Toggle the base prompt on/off.*
 
@@ -102,7 +102,7 @@ simple chatCompletion for non-tool calls.
     .meta({
       icon: matVisibility,
       offIcon: matVisibilityOff,
-      label: 'Vision',
+      title: 'Vision',
       description: `Toggle Vision ON/OFF. If a model supports vision, we
 will send the model attached images and pdf files..`,
     }),

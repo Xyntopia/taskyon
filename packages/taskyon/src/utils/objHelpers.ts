@@ -1,6 +1,14 @@
 import { deepEqual } from 'fast-equals'
 import type { RemoveUndefined, Thunk } from './tsHelpers'
 
+type Key = string | number | symbol
+type Indexable = Record<Key, unknown>
+
+export const getByPath =
+  (path: readonly Key[]) =>
+  (obj: Indexable): unknown =>
+    path.reduce<unknown>((acc, key) => (acc as Indexable)[key], obj)
+
 export const removeKeys = <T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> => {
   return Object.fromEntries(
     Object.entries(obj).filter(([key]) => !keys.includes(key as K)),

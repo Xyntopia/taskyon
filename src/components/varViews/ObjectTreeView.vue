@@ -391,11 +391,15 @@ import { serializeObject } from 'src/modules/serializeObject'
 import { copyToClipboard, countLeaves } from 'src/modules/utils'
 import { computed, ref } from 'vue'
 import type z from 'zod'
-
 import InfoDialog from '../InfoDialog.vue'
 import FieldView from './FieldView.vue'
 import JsonInput from './JsonInput.vue'
 import ListChart from './ListChart.vue'
+import { getByPath } from '@taskyon/taskyon'
+
+export type iconMap = {
+  [key: string]: string | iconMap
+}
 
 const {
   readOnly = false,
@@ -410,6 +414,7 @@ const {
   copyBtn = false,
   lazyRender = false,
   listSummary = 10,
+  icons = {},
 } = defineProps<{
   readOnly?: boolean
   inputFieldBehavior?: 'auto' | 'textarea' | 'autogrow'
@@ -423,6 +428,7 @@ const {
   copyBtn?: boolean
   lazyRender?: boolean
   listSummary?: number
+  icons?: iconMap
 }>()
 
 // Backwards compat: hideMissing=true wins
@@ -515,9 +521,11 @@ const transformToTreeNodes = (
     }
 
     const newPath = [...path, key]
-
     const label =
-      (descriptionsAsLabels ? subschema?.description?.trim() : undefined) ?? subschema?.label ?? key
+      (descriptionsAsLabels ? subschema?.description?.trim() : undefined) ??
+      subschema?.title ??
+      subschema?.label ??
+      key
 
     const base: QTreeNode = {
       label,
@@ -529,9 +537,11 @@ const transformToTreeNodes = (
       hasValue,
       isMissing: !hasValue,
     }
-    if (subschema?.icon) base.icon = subschema.icon
-    if (subschema?.offIcon) base.offIcon = subschema.offIcon
-    if (subschema?.onIcon) base.onIcon = subschema.onIcon
+
+    const icon = getByPath(newPath)(icons) as string | undefined
+
+    // add icons to each property...
+    if (icon) base.icon = icon
     if (subschema?.default !== undefined) base.default = subschema.default
 
     // PLACEHOLDER MODE

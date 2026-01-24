@@ -1,5 +1,3 @@
-import { matKeyboardReturn } from '@quasar/extras/material-icons'
-import { mdiProfessionalHexagon } from '@quasar/extras/mdi-v6'
 import { llmSettings, partialTaskDraft, TyToolchainConfig } from '@taskyon/taskyon/api'
 import { z } from 'zod'
 
@@ -58,8 +56,7 @@ export const appConfiguration = z.object({
   }),
   enableGdriveSync: z.boolean().default(false).optional(),
   expertMode: z.boolean().default(false).meta({
-    icon: mdiProfessionalHexagon,
-    label: 'Expert Mode',
+    title: 'Expert Mode',
     description:
       'Turn on additional settings and configurations and debugging tools for advanced users.',
   }),
@@ -84,7 +81,7 @@ export const appConfiguration = z.object({
       z.union([
         z.object({ url: z.string(), label: z.string() }).meta({
           description:
-            'Use url and label which point toa  markdown file which you want to use as a chat template!',
+            'Use url and label which point to a  markdown file which you want to use as a chat template!',
         }),
         z
           .object({ md: z.string(), label: z.string() })
@@ -101,8 +98,7 @@ export const appConfiguration = z.object({
     .enum(['auto', 'on', 'off', 'shift'])
     .default('auto')
     .meta({
-      icon: matKeyboardReturn,
-      label: 'Use Enter to Send',
+      title: 'Use Enter to Send',
       description: `Controls the behavior of the Enter key for sending messages.
   "Auto" enables sending messages with Enter on desktop devices while disabling it on mobile devices.
   Other options allow always enabling, always disabling, or requiring Shift+Enter to insert a new line.`,

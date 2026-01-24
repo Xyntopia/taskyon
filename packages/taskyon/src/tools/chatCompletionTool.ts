@@ -939,11 +939,14 @@ export const chatCompletionToolParameters = {
     reasoning_effort: {
       enum: ['low', 'high', 'medium', 'none'],
       description: 'How many reasoning tokens should models with reasoning capability use?',
+      title: 'Reasoning Effort',
     },
     max_results: {
       type: 'integer',
       description:
         '[Optional] In case of a WebSearch, how many results should be retrieved at max?',
+      title: 'Max Results',
+      default: 5,
     },
     verbosity: {
       type: 'string',

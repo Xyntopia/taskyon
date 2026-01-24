@@ -10,12 +10,21 @@
   >
     <template #btnContent><q-tooltip> More AI Settings</q-tooltip></template>
     <div class="q-pa-sm" @click.stop>
-      <ObjectTreeView v-model="slimSettings.reactiveView" :schema="slimSettings.jsonSchema" dense />
+      <ObjectTreeView
+        v-model="slimSettings.reactiveView"
+        :schema="slimSettings.jsonSchema"
+        dense
+        :icons="{
+          ...(settingsIcons.llmSettings as iconMap),
+          ...(settingsIcons.appConfiguration as iconMap),
+        }"
+      />
       <ObjectTreeView
         v-model="state.toolchainConfig.chatCompletion"
         :schema="chatCompletionToolParameters"
         dense
         hide-missing
+        :icons="iconRegistry.chatCompletion as iconMap"
       />
     </div>
     <q-card-actions class="float-right">
@@ -28,6 +37,8 @@
 <script setup lang="ts">
 import { matMoreHoriz } from '@quasar/extras/material-icons'
 import { chatCompletionToolParameters, llmSettings } from '@taskyon/taskyon'
+import type { iconMap } from 'src/modules/icons'
+import { iconRegistry, settingsIcons } from 'src/modules/icons'
 import { appConfiguration } from 'src/modules/taskyon/types'
 import { buildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
