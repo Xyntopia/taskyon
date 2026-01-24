@@ -7,7 +7,10 @@ type Indexable = Record<Key, unknown>
 export const getByPath =
   (path: readonly Key[]) =>
   (obj: Indexable): unknown =>
-    path.reduce<unknown>((acc, key) => (acc as Indexable)[key], obj)
+    path.reduce<unknown>(
+      (acc, key) => (acc != null && typeof acc === 'object' ? (acc as Indexable)[key] : undefined),
+      obj,
+    )
 
 export const removeKeys = <T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> => {
   return Object.fromEntries(
