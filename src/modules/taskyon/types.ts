@@ -103,6 +103,10 @@ export const appConfiguration = z.object({
   "Auto" enables sending messages with Enter on desktop devices while disabling it on mobile devices.
   Other options allow always enabling, always disabling, or requiring Shift+Enter to insert a new line.`,
     }),
+  webSearchButton: z.boolean().optional().default(true).meta({
+    description: 'Enable web search button in message editor.',
+    title: 'Web Search Button',
+  }),
   guiMode: z.enum(['auto', 'iframe', 'default', 'minChat']).default('auto').meta({
     description: 'Sets whether we want to have a minimalist chat or the full app',
   }),

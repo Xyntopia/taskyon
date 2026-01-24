@@ -17,18 +17,18 @@ export const iconRegistry: iconMap = {
   chatCompletion: {
     reasoning_effort: mdiHeadSnowflake,
     max_results: mdiFormatListNumbered,
+    llmTools: mdiFunctionVariant,
   },
 }
 
 export const settingsIcons: iconMap = {
   llmSettings: {
-    allowWebSearch: mdiSearchWeb,
-    enableOpenAiTools: mdiFunctionVariant,
     enableToolChooser: mdiTools,
     useBasePrompt: mdiAutoFix,
     tryUsingVisionModels: matVisibility,
   },
   appConfiguration: {
+    webSearchButton: mdiSearchWeb,
     expertMode: mdiProfessionalHexagon,
     useEnterToSend: matKeyboardReturn,
   },

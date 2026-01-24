@@ -1,27 +1,13 @@
-import { matSmartToy, matVisibility, matVisibilityOff } from '@quasar/extras/material-icons'
-import {
-  mdiAlphabeticalVariant,
-  mdiAutoFix,
-  mdiFunctionVariant,
-  mdiSearchWeb,
-  mdiTools,
-} from '@quasar/extras/mdi-v6'
 import { FunctionArguments } from '@taskyon/taskyon'
 import z from 'zod'
 import { apiConfig } from './chatCompletion'
 import { partialTaskDraft } from './node'
 
 // TODO: rename llmSettings to "tyOptions"
-// TODO: move most of this into "tool Profiles"
 export const llmSettings = z.object({
   userId: z.string().nullish().optional().meta({
     description:
       'a (public) cryptographic user id which is used to identify the user in different chats',
-  }),
-  allowWebSearch: z.boolean().optional().default(true).meta({
-    description: 'Allow web search for chat Completion.',
-    icon: mdiSearchWeb,
-    title: 'Web Search',
   }),
   secretPublicKey: z.string().nullish().optional().meta({
     description: 'A (public) cryptographic key which is used to encrypt secrets',
@@ -30,24 +16,11 @@ export const llmSettings = z.object({
     description:
       'The currently selected conversation defined by the ID of its last node. The task chain is defined through each tasknodes parent IDs',
   }),
-  enableOpenAiTools: z
-    .boolean()
-    .default(false)
-    .meta({
-      onIcon: matSmartToy,
-      offIcon: 'svguse:/taskyon_mono_opt.svg#taskyon',
-      icon: mdiFunctionVariant,
-      title: 'Native Agent Tools',
-      description: `### Enable native AI function selection.
-
-If this is enabled Taskyon will try to
-leverage the native tool selection functionality of AI models.
-Turning this off is usually recommended in order to use Taskyons model-agnostic mechanisms.
-
-This doesn't work for all models currently and is mainly recommended for all openAI models.
-
-For more information check this link: https://platform.openai.com/docs/guides/function-calling`,
-    }),
+  // TODO:  simply add apiconfig here..  if we want a different one, we would
+  // simply load an entirely different settings profile
+  // TODO: also:  move this to chatCompletion..  we are using chatCompletion for this after all!
+  // we could also define a second tool for chatCompletion to get a list of models. which
+  // we can then also use in our frontend
   selectedApi: z.string().nullish().default('taskyon').meta({
     description: 'which of the defined APIs are we currently using?',
   }),
@@ -79,15 +52,12 @@ simple chatCompletion for non-tool calls.
   enableToolChooser: z.boolean().default(true).meta({
     description:
       'Enable the standard tool chooser. This function enables taskyon to decide if and then which tool it should use for the task.',
-    icon: mdiTools,
     title: 'Use Tools',
   }),
   useBasePrompt: z
     .boolean()
     .default(true)
     .meta({
-      offIcon: mdiAlphabeticalVariant,
-      icon: mdiAutoFix,
       title: 'Fancy AI',
       description: `
   *Toggle the base prompt on/off.*
@@ -100,8 +70,6 @@ simple chatCompletion for non-tool calls.
     .boolean()
     .default(true)
     .meta({
-      icon: matVisibility,
-      offIcon: matVisibilityOff,
       title: 'Vision',
       description: `Toggle Vision ON/OFF. If a model supports vision, we
 will send the model attached images and pdf files..`,

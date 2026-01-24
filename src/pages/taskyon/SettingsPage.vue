@@ -47,6 +47,7 @@
         <q-tab-panel name="agent config" :class="tabPanelClass">
           <div>AI/LLM chat completion configurations</div>
           <template v-for="[key, val] in Object.entries(state.toolchainConfig)" :key="key">
+            {{ key }}
             <ObjectTreeView
               :model-value="val as Record<string, unknown>"
               :schema="tystate.allTools[key]?.parameters"
@@ -55,7 +56,8 @@
               @update:model-value="(val) => console.log('updated', val)"
             />
           </template>
-          <q-separator />
+          <q-separator size="xl" spaced class="self-stretch" />
+          other settings:
           <ObjectTreeView
             v-model="state.llmSettings"
             :schema="

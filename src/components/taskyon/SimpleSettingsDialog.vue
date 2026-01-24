@@ -11,20 +11,14 @@
     <template #btnContent><q-tooltip> More AI Settings</q-tooltip></template>
     <div class="q-pa-sm" @click.stop>
       <ObjectTreeView
-        v-model="slimSettings.reactiveView"
-        :schema="slimSettings.jsonSchema"
+        v-model="reactiveView"
+        :schema="jsonSchema as JSONSchema7"
         dense
         :icons="{
           ...(settingsIcons.llmSettings as iconMap),
           ...(settingsIcons.appConfiguration as iconMap),
+          ...(iconRegistry.chatCompletion as iconMap),
         }"
-      />
-      <ObjectTreeView
-        v-model="state.toolchainConfig.chatCompletion"
-        :schema="chatCompletionToolParameters"
-        dense
-        hide-missing
-        :icons="iconRegistry.chatCompletion as iconMap"
       />
     </div>
     <q-card-actions class="float-right">
@@ -45,38 +39,38 @@ import { useAppStateStore } from 'src/stores/appState'
 import { computed } from 'vue'
 import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
 import ObjectTreeView from '../varViews/ObjectTreeView.vue'
+import type { JSONSchema7 } from 'json-schema'
+import z from 'zod'
 
 const state = useAppStateStore()
 
 const em = computed(() => state.appConfiguration.expertMode)
+const sources = [
+  {
+    obj: state.appConfiguration,
+    schema: z.toJSONSchema(appConfiguration, { unrepresentable: 'any' }),
+    pickKeys: ['expertMode'],
+  },
+  {
+    obj: state.llmSettings,
+    schema: z.toJSONSchema(llmSettings, { unrepresentable: 'any' }),
+    pickKeys: [
+      ...(em.value
+        ? ['enableToolChooser', 'tryUsingVisionModels', 'useBasePrompt']
+        : ['enableToolChooser']),
+    ],
+  },
+  {
+    obj: state.toolchainConfig.chatCompletion!,
+    schema: chatCompletionToolParameters,
+    pickKeys: ['reasoning_effort', 'max_results'],
+  },
+  {
+    obj: state.appConfiguration,
+    schema: z.toJSONSchema(appConfiguration, { unrepresentable: 'any' }),
+    pickKeys: ['primaryColor', 'secondaryColor'],
+  },
+]
 
-const slimSettings = computed(() =>
-  buildSlimView(
-    {
-      obj: state.appConfiguration,
-      schema: appConfiguration,
-      pickKeys: ['expertMode'],
-    },
-    {
-      obj: state.llmSettings,
-      schema: llmSettings,
-      pickKeys: [
-        ...(em.value
-          ? [
-              'allowWebSearch',
-              'enableToolChooser',
-              'enableOpenAiTools',
-              'tryUsingVisionModels',
-              'useBasePrompt',
-            ]
-          : ['allowWebSearch']),
-      ],
-    },
-    {
-      obj: state.appConfiguration,
-      schema: appConfiguration,
-      pickKeys: ['primaryColor', 'secondaryColor'],
-    },
-  ),
-)
+const { jsonSchema, reactiveView } = buildSlimView(...sources)
 </script>
