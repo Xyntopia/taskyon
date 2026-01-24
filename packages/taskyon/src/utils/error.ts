@@ -18,12 +18,6 @@ interface SerializedNonError {
 
 type SerializableError = SerializedError | SerializedNonError
 
-type ErrorWithExtras = Error & {
-  [key: string]: unknown
-  cause?: unknown
-  errors?: unknown[]
-}
-
 // ----- Serialize -----
 
 /**
@@ -97,15 +91,19 @@ export function serializeError(value: unknown, seen = new WeakSet<object>()): un
 /**
  * Convert any thrown value into a short, customer-friendly string.
  *
- * Priority: message → HTTP hints → meta fields → one-level cause.
+ * Priority: message → HTTP hints → meta fields → nested causes (up to depth 5).
  * Handles Array-style causes (e.g. ["403 Forbidden: …"]) by promoting
  * them to the top of the output.
  * Designed for production UI logs (no stack traces, YAML only).
  */
 export function humanizeError(errorInput: unknown): string {
-  console.log('serialized error:', serializeError(errorInput))
+  // console.log('serialized error:', serializeError(errorInput)) // debug if needed
   const seenObjects = new WeakSet<object>()
   const lines: string[] = []
+
+  // Prevent infinite recursion, but allow enough depth for:
+  // WrapperError -> CauseObj -> APIError -> InnerDetails
+  const MAX_DEPTH = 5
 
   /* ---------- helpers --------------------------------------------------- */
   const toYaml = (val: unknown): string =>
@@ -123,7 +121,7 @@ export function humanizeError(errorInput: unknown): string {
 
   /* ---------- main walker ----------------------------------------------- */
   const traverse = (value: unknown, level = 0): void => {
-    if (value == null) return
+    if (value == null || level >= MAX_DEPTH) return
 
     const valueType = typeof value
 
@@ -133,7 +131,7 @@ export function humanizeError(errorInput: unknown): string {
       return
     }
 
-    // avoid infinite recursion
+    // avoid infinite recursion in graph cycles
     if (seenObjects.has(value as object)) return
     seenObjects.add(value as object)
 
@@ -163,37 +161,43 @@ export function humanizeError(errorInput: unknown): string {
     if (typeof obj.url === 'string' && obj.url) append(`URL: ${obj.url}`)
 
     /* #3 data/body helpers */
+    // Expanded to include 'requestBodyValues' for AI SDK errors
     const dataCandidate =
       (typeof obj.response === 'object' && obj.response
         ? (obj.response as Record<string, unknown>).data
         : undefined) ??
       obj.data ??
       (obj as { body?: unknown }).body ??
-      (obj as { responseBody?: unknown }).responseBody
-    if (dataCandidate !== undefined)
-      append(`Data: ${toYaml(dataCandidate)}`)
+      (obj as { responseBody?: unknown }).responseBody ??
+      (obj as { requestBodyValues?: unknown }).requestBodyValues
 
-      /* #4 meta fields */
+    if (dataCandidate !== undefined) {
+      append(`Data: ${toYaml(dataCandidate)}`)
+    }
+
+    /* #4 meta fields */
     ;(['code', 'errno', 'name'] as const).forEach((key) => {
       const val = obj[key]
       if (typeof val === 'string' && val) append(`${key}=${val}`)
     })
 
-    /* #5 cause (descend one level) */
-    if (level === 0) {
+    /* #5 cause (descend deeper) */
+    if (level < MAX_DEPTH) {
       const causeKeys = ['cause', 'originalError', 'inner', 'error'] as const
       for (const key of causeKeys) {
         const causeVal = obj[key]
         if (causeVal === undefined) continue
 
-        // Promote array causes so they’re shown first
+        // Promote array causes so they’re shown first/inline
         if (Array.isArray(causeVal)) {
           appendArray(causeVal)
         } else {
+          // Verify the cause isn't empty/useless before appending the arrow
+          // (Though checking 'seenObjects' here is tricky, we rely on traverse)
           append('Caused by →')
           traverse(causeVal, level + 1)
         }
-        break // handle only the first found cause
+        break // handle only the first found cause path to avoid tree explosion
       }
     }
   }
