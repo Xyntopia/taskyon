@@ -141,8 +141,8 @@ const structuredResponsePrompt = computed(() => {
     if (Object.keys(tystate.allTools).length !== 0) {
       const rp = addPrompts(
         tystate.allTools,
-        state.llmSettings.enableOpenAiTools,
-        state.llmSettings.enableOpenAiTools,
+        !!state.toolchainConfig.chatCompletion?.llmTools,
+        !!state.toolchainConfig.chatCompletion?.llmTools,
         state.llmSettings.useBasePrompt,
         state.llmSettings.taskChatTemplates,
         [],

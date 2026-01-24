@@ -911,8 +911,8 @@ export const chatCompletionToolParameters = {
     },
     llmTools: {
       type: 'boolean',
-      description:
-        'Optional Parameter. If set to true, we will use a openai compatible tool api. If undefined, it will be treated as false.',
+      description: `Optional Parameter. If set to true, we will use native tool apis offered by llm providers to generate tool calls in json format. If undefined, it will be treated as false.`,
+      default: false,
     },
     allowedTools: {
       type: 'array',
@@ -970,6 +970,8 @@ export function createChatCompletionTool(
   llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
   taskManager: TyTaskManager,
 ) {
+  // TODO: detect whether selected API supports function calls natively... if not,
+  //       fall back to taskyon function calling...
   //const { default: Ajv } = await import('ajv')
   const ajv = new Ajv()
 
@@ -990,7 +992,6 @@ export function createChatCompletionTool(
         useBasePrompt,
         selectedApi,
         llmApis,
-        enableOpenAiTools,
         taskChatTemplates,
         tryUsingVisionModels,
         siteUrl,
@@ -998,7 +999,7 @@ export function createChatCompletionTool(
       const {
         model,
         goal,
-        llmTools,
+        llmTools = false,
         allowedTools,
         prompts,
         schema,
@@ -1022,7 +1023,6 @@ export function createChatCompletionTool(
       if (!apiKey || typeof apiKey !== 'string')
         throw new Error('We need to define an API key to process our chat Task!')
 
-      const usellmTools = llmTools ?? enableOpenAiTools
       const selectedModel = model ?? getCurrentModel(api)
       console.log('calling chat completion tool...', selectedModel, goal, llmTools)
       // the current task doesn't *have* to exist. We can also works solely with prompts...
@@ -1057,7 +1057,7 @@ export function createChatCompletionTool(
       const chatInfo = await processChatTask(
         [...tools, ...allowedToolsFromError],
         toolDefs,
-        usellmTools,
+        llmTools,
         {
           taskChatTemplates: taskChatTemplates,
           tryUsingVisionModels: use_multimodal,
@@ -1220,7 +1220,7 @@ export function createChatCompletionTool(
         res.messages[0],
         allowedTools,
         selectedModel,
-        usellmTools,
+        llmTools,
         toolDefs,
         prompts,
       )

@@ -236,12 +236,6 @@ Finally, it creates a chat completion task with the selected tools in the allowe
             'Optional. Set to true if we want to use tools, otherwise we will do a simple chat completion.',
           default: false,
         },
-        llmTools: {
-          type: 'boolean',
-          description: `Optional Parameter. If set to false, we will make use of taskyons
-tool Selection capabilities, otherwise we will use an openai compatible tool api`,
-          default: false,
-        },
         webSearch: {
           type: 'boolean',
           description:
@@ -267,7 +261,7 @@ tool Selection capabilities, otherwise we will use an openai compatible tool api
             const goal = webSearch ? 'WebSearch' : 'SimpleCompletion'
             console.log('Do a simple direct chatCOmpletion query!', { goal })
             // TODO: in the case useTools are enabled, maybe afterwards add another tool Chooser?
-            return makeTaskResult(createChatCompletionTask({ goal, llmTools }))
+            return makeTaskResult(createChatCompletionTask({ goal }))
           },
         )
         // any other string...
@@ -302,7 +296,6 @@ Examples are:
 
 If you are sure that none of the tools are relevant, your choice should be simple string "no".`,
                   ],
-                  llmTools,
                   schema: {
                     type: 'object',
                     properties: {
@@ -339,7 +332,7 @@ If you are sure that none of the tools are relevant, your choice should be simpl
                     required: ['reasoning_steps', 'choice'],
                   },
                 }),
-                toolCall({ name: 'chooseTool', arguments: { llmTools } }),
+                toolCall({ name: 'chooseTool', arguments: {} }),
               ],
             ])
           },
@@ -381,7 +374,6 @@ If you are sure that none of the tools are relevant, your choice should be simpl
                   goal: 'ChooseTool',
                   prompts: ['Please use one of the tools you chose earlier'],
                   allowedTools: filteredChoice,
-                  llmTools,
                 }),
               ],
             ])

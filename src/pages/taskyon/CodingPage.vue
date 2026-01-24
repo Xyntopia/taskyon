@@ -629,7 +629,7 @@ const configuration = computed<partialTyConfiguration | null>(() => {
   if (tystate.currentKeyString == null) return null
   return {
     llmSettings: {
-      ...removeKeys(state.llmSettings, ['entryNode', 'enableOpenAiTools']),
+      ...removeKeys(state.llmSettings, ['entryNode']),
       enableToolChooser: true,
       entryNode: toolCall({ name: 'documentAssistant', arguments: {} }),
     },

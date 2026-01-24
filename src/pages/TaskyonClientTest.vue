@@ -60,7 +60,6 @@ const taskResult = ref<unknown>()
 const configuration: partialTyConfiguration = {
   llmSettings: {
     selectedApi: 'taskyon',
-    enableOpenAiTools: false,
     enableToolChooser: true,
     tryUsingVisionModels: false,
     llmApis: {

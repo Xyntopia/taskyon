@@ -1554,7 +1554,7 @@ export async function getTestMetaData() {
           () => new Promise(() => null),
           () => new Promise(() => undefined),
           state.llmSettings.tryUsingVisionModels,
-          state.llmSettings.enableOpenAiTools,
+          !!state.toolchainConfig.chatCompletion?.llmTools,
           toolDefs,
         )
         tyChat.thread = res

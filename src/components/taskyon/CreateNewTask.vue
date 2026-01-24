@@ -28,7 +28,7 @@
         :debounce="0"
         :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
-        :show-web-search="state.llmSettings.allowWebSearch"
+        :show-web-search="state.appConfiguration.webSearchButton"
         @execute-task="addNewTask(p2pTopic)"
         @execute-web-search="addNewTask(p2pTopic, true)"
       >
@@ -431,7 +431,6 @@ async function addNewTask(p2pTopic?: string, webSearch?: boolean) {
         chooseTask.content.data.arguments = {
           ...(webSearch ? { webSearch: true } : {}),
           ...(state.llmSettings.enableToolChooser ? { useTools: true } : {}),
-          ...(state.llmSettings.enableOpenAiTools ? { llmTools: true } : {}),
         }
       }
       newTaskChain.push(chooseTask)

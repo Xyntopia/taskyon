@@ -260,19 +260,15 @@ const dynamicContext =
       taskManagerInstance,
       iframeMultiPlexer.all$,
       llmSettings().maxAutonomousTasks,
+      // TODO: might make sense for us here to add the toolChooser instead!
+      // for the error as well as the tool results!
       toolCall<ChatCompletionArgs>({
         name: 'chatCompletion',
-        arguments: {
-          goal: 'AnalyzeToolResult',
-          llmTools: llmSettings().enableOpenAiTools,
-        },
+        arguments: { goal: 'AnalyzeToolResult' },
       }),
       toolCall<ChatCompletionArgs>({
         name: 'chatCompletion',
-        arguments: {
-          goal: 'AnalyzeError',
-          llmTools: llmSettings().enableOpenAiTools,
-        },
+        arguments: { goal: 'AnalyzeError' },
       }),
       executor,
     )
