@@ -895,6 +895,69 @@ export type chunkStreamType = {
   chunk: streamChunk
 }
 
+export const chatCompletionToolParameters = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    model: {
+      type: 'string',
+      description:
+        'The name of the model to use for the completion. Optional, will choose default model if not provided',
+    },
+    goal: {
+      enum: ['SimpleCompletion', 'AnalyzeError', 'ChooseTool', 'AnalyzeToolResult', 'WebSearch'],
+      description:
+        'Optional Parameter to define the goal of the chat completion. If not set, the goal is dynamically inferred from the input.',
+    },
+    llmTools: {
+      type: 'boolean',
+      description:
+        'Optional Parameter. If set to true, we will use a openai compatible tool api. If undefined, it will be treated as false.',
+    },
+    allowedTools: {
+      type: 'array',
+      description:
+        'Optional Parameter. We can specify which tools are allowed to be called by the LLM',
+      items: {
+        type: 'string',
+      },
+    },
+    prompts: {
+      type: 'array',
+      description:
+        "Optional Parameter. We can add a custom prompt to the chatCompletion which doesn't get recorded as a task and therefore disappears during message thread conversion.",
+      items: {
+        type: 'string',
+      },
+    },
+    schema: {
+      type: 'object',
+      description:
+        'A json schema object which we can use to generate a specific response and parse it.',
+      additionalProperties: true,
+    },
+    reasoning_effort: {
+      enum: ['low', 'high', 'medium', 'none'],
+      description: 'How many reasoning tokens should models with reasoning capability use?',
+    },
+    verbosity: {
+      type: 'string',
+      enum: ['low', 'high', 'medium'],
+      description: 'how verbose should the reponse be?',
+    },
+    use_multimodal: {
+      type: 'boolean',
+      description:
+        'Allow models to use their vision/audio document undestanding capabilities if their are any files in the prompt.',
+    },
+    contextSize: {
+      type: 'integer',
+      description:
+        '[Optional] How many of the peceding tasks are going to be used for the chatCompletion?',
+    },
+  },
+} as const satisfies JSONSchema7
+
 export function createChatCompletionTool(
   llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
   taskManager: TyTaskManager,
@@ -912,74 +975,7 @@ export function createChatCompletionTool(
   list and generate a response`,
     name: chatCompletionToolName,
     renderOptions: { hideChat: true, hideLlm: true },
-    parameters: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        model: {
-          type: 'string',
-          description:
-            'The name of the model to use for the completion. Optional, will choose default model if not provided',
-        },
-        goal: {
-          enum: [
-            'SimpleCompletion',
-            'AnalyzeError',
-            'ChooseTool',
-            'AnalyzeToolResult',
-            'WebSearch',
-          ],
-          description:
-            'Optional Parameter to define the goal of the chat completion. If not set, the goal is dynamically inferred from the input.',
-        },
-        llmTools: {
-          type: 'boolean',
-          description:
-            'Optional Parameter. If set to true, we will use a openai compatible tool api. If undefined, it will be treated as false.',
-        },
-        allowedTools: {
-          type: 'array',
-          description:
-            'Optional Parameter. We can specify which tools are allowed to be called by the LLM',
-          items: {
-            type: 'string',
-          },
-        },
-        prompts: {
-          type: 'array',
-          description:
-            "Optional Parameter. We can add a custom prompt to the chatCompletion which doesn't get recorded as a task and therefore disappears during message thread conversion.",
-          items: {
-            type: 'string',
-          },
-        },
-        schema: {
-          type: 'object',
-          description:
-            'A json schema object which we can use to generate a specific response and parse it.',
-          additionalProperties: true,
-        },
-        reasoning_effort: {
-          enum: ['low', 'high', 'medium', 'none'],
-          description: 'How many reasoning tokens should models with reasoning capability use?',
-        },
-        verbosity: {
-          type: 'string',
-          enum: ['low', 'high', 'medium'],
-          description: 'how verbose should the reponse be?',
-        },
-        use_multimodal: {
-          type: 'boolean',
-          description:
-            'Allow models to use their vision/audio document undestanding capabilities if their are any files in the prompt.',
-        },
-        contextSize: {
-          type: 'integer',
-          description:
-            '[Optional] How many of the peceding tasks are going to be used for the chatCompletion?',
-        },
-      },
-    } as const satisfies JSONSchema7,
+    parameters: chatCompletionToolParameters,
     function: async (opts, context: toolContext) => {
       //////////   INITIALIZATION
       const {
@@ -1228,9 +1224,11 @@ export function createChatCompletionTool(
   return { chatCompletion, stream: chatCompletionStream.stream }
 }
 
-export type chatCompletionParams = FromSchema<
-  Awaited<ReturnType<typeof createChatCompletionTool>>['chatCompletion']['parameters']
->
+export type ChatCompletionTool = Awaited<
+  ReturnType<typeof createChatCompletionTool>
+>['chatCompletion']
+
+export type chatCompletionParams = FromSchema<ChatCompletionTool['parameters']>
 
 export type ChatCompletionArgs = Omit<chatCompletionParams, 'schema'> & {
   schema?: JSONSchema7 & Record<string, unknown>

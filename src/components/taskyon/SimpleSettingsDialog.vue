@@ -11,6 +11,12 @@
     <template #btnContent><q-tooltip> More AI Settings</q-tooltip></template>
     <div class="q-pa-sm" @click.stop>
       <ObjectTreeView v-model="slimSettings.reactiveView" :schema="slimSettings.jsonSchema" dense />
+      <ObjectTreeView
+        v-model="state.toolchainConfig.chatCompletion"
+        :schema="chatCompletionToolParameters"
+        dense
+        hide-missing
+      />
     </div>
     <q-card-actions class="float-right">
       <q-btn v-if="em" flat to="/settings/agent%20config" label="Full list of settings" />
@@ -21,13 +27,13 @@
 
 <script setup lang="ts">
 import { matMoreHoriz } from '@quasar/extras/material-icons'
+import { chatCompletionToolParameters, llmSettings } from '@taskyon/taskyon'
 import { appConfiguration } from 'src/modules/taskyon/types'
 import { buildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { computed } from 'vue'
 import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
 import ObjectTreeView from '../varViews/ObjectTreeView.vue'
-import { llmSettings } from '@taskyon/taskyon'
 
 const state = useAppStateStore()
 
