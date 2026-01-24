@@ -38,61 +38,83 @@ export async function generateSecretId(
   return tool.name + ':' + (taskId ?? (await sha256UrlSafeHash(tool.code ?? tool.function)))
 }
 
-export const functionExecutorCreator =
-  (
-    getToolDefinition: (
-      name: string,
-    ) => Promise<{ def?: TaskNodeType<'tooldefinition'> | undefined; tool?: InternalTool }>,
-    secretStore: SecretStore,
-    stopSignal: AbortSignal,
-    duplexPort: RemoteFunctionPort,
-    toolchainConfig: Thunk<Record<string, FunctionArguments>>,
-  ) =>
-  async (func: FunctionCall, taskChain: TaskNode[], filteredStream: TaskMessageStream) => {
-    const { tool, def } = await getToolDefinition(func.name)
-    if (tool && !stopSignal.aborted) {
-      const toolId = await generateSecretId(def?.id, tool)
-      const msgPortAdapter = createMessagePortAdapter(filteredStream)
-      const context: toolContext = {
-        taskChain,
-        getSecret: async (name, askNew, saveNew = true) => {
-          console.log('get secret name', name)
-          const secr = await secretStore.getSecret(toolId, name, askNew, saveNew)
-          return secr ?? null
-        },
-        setSecret: async (name, value) => {
-          console.log('set secret name', name)
-          await secretStore.setSecret(toolId, name, value)
-        },
-        stopSignal,
-        // if w are dealing with a tool definition use that id. otherwise generate an id on the fly )
-        toolId,
-        messagePort: msgPortAdapter.port,
+export const functionExecutorCreator = (
+  getToolDefinition: (
+    name: string,
+  ) => Promise<{ def?: TaskNodeType<'tooldefinition'> | undefined; tool?: InternalTool }>,
+  secretStore: SecretStore,
+  duplexPort: RemoteFunctionPort,
+  toolchainConfig: Thunk<Record<string, FunctionArguments>>,
+) => {
+  const availableFunctionAbortControllers = new Set<AbortController>()
+
+  return {
+    stop: () => {
+      console.log('stopping all available function executions...')
+      for (const ctrl of availableFunctionAbortControllers) {
+        ctrl.abort()
       }
+    },
 
-      // mix in toolchain config into function arguments
-      const funcSettings = toolchainConfig()[func.name]
-      if (!funcSettings)
-        console.debug(`No tool settings found for tool ${func.name} in toolchainConfig`)
-      func.arguments = {
-        ...(funcSettings || {}),
-        ...func.arguments,
-      }
+    executor: async (
+      func: FunctionCall,
+      taskChain: TaskNode[],
+      filteredStream: TaskMessageStream,
+    ) => {
+      const abctl = new AbortController()
+      availableFunctionAbortControllers.add(abctl)
 
-      const funcR = await handleFunctionExecution(func, tool, stopSignal, context, duplexPort)
+      try {
+        const { tool, def } = await getToolDefinition(func.name)
+        if (tool && !abctl.signal.aborted) {
+          const toolId = await generateSecretId(def?.id, tool)
+          const msgPortAdapter = createMessagePortAdapter(filteredStream)
+          const context: toolContext = {
+            taskChain,
+            getSecret: async (name, askNew, saveNew = true) => {
+              console.log('get secret name', name)
+              const secr = await secretStore.getSecret(toolId, name, askNew, saveNew)
+              return secr ?? null
+            },
+            setSecret: async (name, value) => {
+              console.log('set secret name', name)
+              await secretStore.setSecret(toolId, name, value)
+            },
+            stopSignal: abctl.signal,
+            // if w are dealing with a tool definition use that id. otherwise generate an id on the fly )
+            toolId,
+            messagePort: msgPortAdapter.port,
+          }
 
-      return funcR
-    } else {
-      throw new Error(
-        !stopSignal.aborted
-          ? `The function '${func.name}' is not available in tools. Please select a valid toolname. You can use
+          // mix in toolchain config into function arguments
+          const funcSettings = toolchainConfig()[func.name]
+          if (!funcSettings)
+            console.debug(`No tool settings found for tool ${func.name} in toolchainConfig`)
+          func.arguments = {
+            ...(funcSettings || {}),
+            ...func.arguments,
+          }
+
+          const funcR = await handleFunctionExecution(func, tool, abctl.signal, context, duplexPort)
+
+          return funcR
+        } else {
+          throw new Error(
+            !abctl.signal.aborted
+              ? `The function '${func.name}' is not available in tools. Please select a valid toolname. You can use
           the toolSearcher to search for valid names.`
-          : 'The function execution was cancelled by taskyon',
-      )
-    }
+              : `The function execution was cancelled by taskyon ${abctl.signal.reason}`,
+          )
+        }
+      } finally {
+        // O(1), no indexOf / splice
+        availableFunctionAbortControllers.delete(abctl)
+      }
+    },
   }
+}
 
-type FunctionExecutor = ReturnType<typeof functionExecutorCreator>
+type FunctionExecutor = ReturnType<typeof functionExecutorCreator>['executor']
 
 // TODO: how about we put this here into its own tool as well!
 //       its totally possible now... Would probably make the code cleaner...

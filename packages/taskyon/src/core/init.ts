@@ -250,11 +250,9 @@ const dynamicContext =
     // taskyon should automatically pick up on this...
     console.log('starting taskyon worker')
     const { port: workerport } = createTypeFilteredPort(insidePort, ['functionResponse'])
-    const stopFuncExecution: AbortController = new AbortController()
-    const executor = functionExecutorCreator(
+    const { executor, stop } = functionExecutorCreator(
       taskManagerInstance.getToolDefinition,
       secretStore,
-      stopFuncExecution.signal,
       workerport,
       toolchainConfig,
     )
@@ -283,8 +281,9 @@ const dynamicContext =
       chatCompletionStream,
       workerStream,
       stopAllTasks: (message: string) => {
+        console.log('tycore stopping all tasks:', message)
         stopAllTasks(message)
-        stopFuncExecution.abort(new Error(message))
+        stop()
       },
       queueTask,
       taskManagerInstance,
