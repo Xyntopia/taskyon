@@ -150,14 +150,12 @@ async function llmRequest(
   openAIConversationThread: ModelMessage[],
   tools: ToolSet,
   selectedModel: string,
-  stopSignal: AbortSignal,
   api: apiConfig,
   apiKey: string,
-  streamTracker: (chunk: streamChunk) => void,
   schema?: Record<string, unknown>,
   siteUrl?: string,
   webSearch?: WebSearchOptions,
-  reasoningEffort?: 'low' | 'high' | 'medium',
+  reasoningEffort?: 'low' | 'high' | 'medium' | 'none',
   verbosity?: OpenAI.ChatCompletionCreateParams['verbosity'],
 ) {
   // TODO:
@@ -170,38 +168,25 @@ async function llmRequest(
     reasoning_effort: reasoningEffort,
     verbosity,
   })
-  const { streamText } = await import('ai')
   let model
   const overrideOpts: Record<string, unknown> = {}
   switch (api.name) {
     case 'openai':
       {
-        /*
-          if (webSearch)
-            payload.web_search_options = {
-              search_context_size: webSearch.searchContextSize,
-            }
-          const reasoning_map = {
-            'gpt-5': { none: 'none', low: 'low', medium: 'medium', high: 'high' } as Record<
-              string,
-              ChatCompletionReasoningEffort
-            >,
-          }
-          if (payload.model.includes('gpt-5')) {
-            const effort = reasoning_map['gpt-5'][reasoning_effort ?? 'none'] ?? null
-            payload.reasoning_effort = effort
-          } else {
-            payload.reasoning_effort = null
-          }
-      */
         const { createOpenAI } = await import('@ai-sdk/openai')
         const openai = createOpenAI({
           apiKey,
         })
         model = openai(selectedModel)
+
+        const gptReasoning = selectedModel.includes('gpt-5')
+          ? ({ none: 'none', low: 'low', medium: 'medium', high: 'high' }[
+              reasoningEffort ?? 'none'
+            ] ?? null)
+          : null
         overrideOpts.providerOptions = {
           openai: {
-            reasoningEffort,
+            reasoningEffort: gptReasoning,
             reasoningSummary: 'auto', // 'auto' for condensed or 'detailed' for comprehensive
           },
         }
@@ -211,7 +196,7 @@ async function llmRequest(
             web_search: openai.tools.webSearch({
               // optional configuration:
               externalWebAccess: true,
-              searchContextSize: 'high',
+              searchContextSize: webSearch.searchContextSize,
               /*userLocation: {
                 type: 'approximate',
                 city: 'San Francisco',
@@ -240,7 +225,9 @@ async function llmRequest(
         },
         usage: { include: true },
       }
-      if (reasoningEffort)
+      // TODO: even if we disable reasnoning effort for openrouter and taskyon it is
+      //       mandatory ( as of 2026/01/20)
+      if (reasoningEffort && reasoningEffort !== 'none')
         opts.reasoning = {
           // One of the following (not both):
           // Can be "high", "medium", or "low" (OpenAI-style)
@@ -305,16 +292,6 @@ async function llmRequest(
     model,
     messages: openAIConversationThread,
     tools,
-    abortSignal: stopSignal,
-    timeout: { totalMs: 5 * 60 * 1000, stepMs: 120 * 1000, chunkMs: 120 * 1000 },
-    includeRawChunks: true,
-    onChunk({ chunk }) {
-      streamTracker(chunk)
-    },
-    experimental_transform: smoothStream({
-      delayInMs: 20, // optional: defaults to 10ms
-      chunking: 'line', // optional: defaults to 'word'
-    }),
     ...overrideOpts,
     /*onFinish({ text, finishReason, usage, response, steps, totalUsage, content }) {
         // your own logic, e.g. for saving the chat history or recording usage
@@ -327,8 +304,7 @@ async function llmRequest(
       schema: jsonSchema(schema),
     })
 
-  const result = streamText(streamOpts)
-  return result
+  return streamOpts
 }
 
 // Ensures that every assistant.tool_calls is paired with a role:"tool" message.
@@ -984,8 +960,8 @@ export function createChatCompletionTool(
           additionalProperties: true,
         },
         reasoning_effort: {
-          enum: ['low', 'high', 'medium'],
-          description: 'How many reasoning tokens should models with reasonin capability use?',
+          enum: ['low', 'high', 'medium', 'none'],
+          description: 'How many reasoning tokens should models with reasoning capability use?',
         },
         verbosity: {
           type: 'string',
@@ -1091,17 +1067,12 @@ export function createChatCompletionTool(
       )
 
       let rawOutput = ''
-      const chatCompletion = await llmRequest(
+      const streamOpts = await llmRequest(
         chatInfo.chatCompletionMessageThread,
         chatInfo.tools,
         selectedModel,
-        context.stopSignal,
         api,
         apiKey,
-        (chunk) => {
-          chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
-          if (chunk.type === 'raw') rawOutput += chunk.rawValue as string
-        },
         // only add a schema if we want ot use native tools!
         llmTools ? schema : undefined,
         siteUrl,
@@ -1115,9 +1086,42 @@ export function createChatCompletionTool(
         verbosity,
       )
 
-      // parse the response into our own type ...
-      const res = await chatCompletion.response
-      console.log('chat completion response', res, await chatCompletion.output)
+      let errorCapture: unknown
+      const { streamText } = await import('ai')
+      const chatCompletion = streamText({
+        timeout: { totalMs: 5 * 60 * 1000, stepMs: 120 * 1000, chunkMs: 120 * 1000 },
+        includeRawChunks: true,
+        onChunk({ chunk }) {
+          chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
+          if (chunk.type === 'raw') rawOutput += chunk.rawValue as string
+        },
+        onError(err) {
+          errorCapture = err
+          console.error('Error in chat completion stream:', err)
+        },
+        experimental_transform: smoothStream({
+          delayInMs: 20, // optional: defaults to 10ms
+          chunking: 'line', // optional: defaults to 'word'
+        }),
+        abortSignal: context.stopSignal,
+        ...streamOpts,
+      })
+
+      let res: LanguageModelResponseMetadata & {
+        messages: Array<AssistantModelMessage | ToolModelMessage>
+      }
+      try {
+        const fin = await chatCompletion.rawFinishReason
+        console.log('chat completion finished because of', fin)
+        res = await chatCompletion.response
+        console.log('chat completion response', res, await chatCompletion.output)
+      } catch (err) {
+        console.log('chat completion error', {
+          rawOutput,
+          errorCapture,
+        })
+        throw new Error('Chat completion failed!', { cause: errorCapture ?? err })
+      }
 
       if (currentTask && lastTaskBeforeChatCompletion) {
         const metaInfo: TaskNodeMeta = await getMetaInfos(
@@ -1242,7 +1246,7 @@ async function getMetaInfos(
       appendMessages: ModelMessage[]
     }
   },
-  chatCompletion: Awaited<ReturnType<typeof llmRequest>>,
+  chatCompletion: Awaited<ReturnType<typeof streamText>>,
   rawOutput: string,
   res: LanguageModelResponseMetadata & {
     messages: Array<AssistantModelMessage | ToolModelMessage>
