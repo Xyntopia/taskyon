@@ -100,7 +100,7 @@ not working:
     } as const satisfies JSONSchema7,
 
     function: async (
-      { oauthURL, clientId, scope, toolId, tokenUrl },
+      { oauthURL, clientId, scope = '', toolId, tokenUrl },
       { taskChain, stopSignal },
     ) => {
       // we need the 3rd last task, -1 is the current task and -2 is the button message UI

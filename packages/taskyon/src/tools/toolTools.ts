@@ -249,7 +249,7 @@ tool Selection capabilities, otherwise we will use an openai compatible tool api
         },
       },
     } as const,
-    function: async ({ llmTools, webSearch, useTools }, { taskChain }) => {
+    function: async ({ llmTools = false, webSearch, useTools = false }, { taskChain }) => {
       const pattern = { ...taskChain.at(-2), webSearch, useTools }
       console.log('choose tool!', pattern, llmTools)
       // use pattern matching on the last task

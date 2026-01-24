@@ -39,7 +39,9 @@ export const taskSearcher = (taskManager: TyTaskManager) =>
             },
           }
         : undefined
-      const result = await taskManager.filteredVectorSearch(searchString, k, jsonfilter)
+      const result = searchString
+        ? await taskManager.filteredVectorSearch(searchString, k, jsonfilter)
+        : []
       return result
     },
   })

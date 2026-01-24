@@ -51,7 +51,11 @@ export type InternalTool = z.infer<typeof InternalTool>
 export type ClientTool = WithRequired<InternalTool, 'function'>
 
 // Create a helper function to preserve schema types
-export function createTool<T, SCHEMA extends Readonly<JSONSchema>, PARAMS = FromSchema<SCHEMA>>(
+export function createTool<
+  T,
+  SCHEMA extends Readonly<JSONSchema>,
+  PARAMS = FromSchema<SCHEMA, { keepDefaultedPropertiesOptional: true }>,
+>(
   tool: T & {
     parameters: SCHEMA
     function?: (params: PARAMS, context: toolContext) => unknown

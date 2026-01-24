@@ -45,7 +45,7 @@ export const ragSearchTool = createTool({
     },
     required: ['searchText', 'sourceType'],
   } as const satisfies JSONSchema7,
-  function: async ({ searchText, k, sourceType, label }) => {
+  function: async ({ searchText, k = 5, sourceType, label }) => {
     if (sourceType === 'vectorStore') {
       const { search } = await createVectorStore(await getDatabase('DEMODB'), 'vectorStoreTool')
 

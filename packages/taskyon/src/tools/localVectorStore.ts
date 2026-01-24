@@ -34,7 +34,7 @@ export const localVectorStore = (db: TyPGDB) =>
         },
       },
     } as const satisfies JSONSchema7,
-    function: async ({ searchText, k, saveText, label }) => {
+    function: async ({ searchText, k = 5, saveText, label }) => {
       const { search, upsert } = await createVectorStore(db, 'vectorStoreTool')
 
       if (searchText) {
