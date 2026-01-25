@@ -15,7 +15,9 @@
   "toolchainConfig": {
     "chatCompletion": {
       "reasoning_effort": "low",
-      "max_results": 5
+      "max_results": 5,
+      "use_baseprompt": true,
+      "use_multimodal": true
     }
   },
   "llmSettings": {
@@ -79,9 +81,6 @@
     "vectorizationModel": "xyntopia/all-MiniLM-L6-v2",
     "maxAutonomousTasks": 5,
     "enableToolChooser": true,
-    "useBasePrompt": true,
-    "tryUsingVisionModels": true,
-    "enableOpenAiTools": false,
     "taskChatTemplates": {
       "basePrompt": "You are a helpful assistant called *Taskyon*. Return your answers in markdown format, you can use the following features:\n\n- **Mermaid charts**: Include diagrams, mindmaps, Gantt diagrams, quadrants, and XY charts using the 'mermaid' keyword in fenced code blocks. For example:\n```mermaid\n...\n```\n\n- Our markdown version supports inline-html:\n   * SVG graphics: Use HTML to embed SVG graphics.\n   * HTML widgets: Create interactive elements within the markdown using HTML.\n- **MathJax**: Write mathematical formulas using $$ ... $$ for block formulas and $ ... $ for inline formulas. **Note:** Only `$` and `$$` syntax is supported.\n- use backticks for code:\n  \n```<language>\n  ....\n```\n- and all the other markdown features are supported as well! \n\nPlease use this!  but make it elegant, use it when it makes sense, and not just for the effect.",
       "instruction": "You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented,\nand adheres to YAML standards. Do not include any explanatory text in your YAML responses. \nRemember, the focus is on the precision and correctness of the YAML output.",

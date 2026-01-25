@@ -34,7 +34,7 @@
     </template>
 
     <div class="col-grow row" :data-cy="item.label">
-      <div class="col" style="flex: 1 0 auto">
+      <div class="col">
         <!--valueSlot-->
         <slot />
       </div>

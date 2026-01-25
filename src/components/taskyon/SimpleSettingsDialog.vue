@@ -11,8 +11,8 @@
     <template #btnContent><q-tooltip> More AI Settings</q-tooltip></template>
     <div class="q-pa-sm" @click.stop>
       <ObjectTreeView
-        v-model="reactiveView"
-        :schema="jsonSchema as JSONSchema7"
+        v-model="slimView.reactiveView"
+        :schema="slimView.jsonSchema as JSONSchema7"
         dense
         :icons="{
           ...(settingsIcons.llmSettings as iconMap),
@@ -45,32 +45,33 @@ import z from 'zod'
 const state = useAppStateStore()
 
 const em = computed(() => state.appConfiguration.expertMode)
-const sources = [
-  {
-    obj: state.appConfiguration,
-    schema: z.toJSONSchema(appConfiguration, { unrepresentable: 'any' }),
-    pickKeys: ['expertMode'],
-  },
-  {
-    obj: state.llmSettings,
-    schema: z.toJSONSchema(llmSettings, { unrepresentable: 'any' }),
-    pickKeys: [
-      ...(em.value
-        ? ['enableToolChooser', 'tryUsingVisionModels', 'useBasePrompt']
-        : ['enableToolChooser']),
-    ],
-  },
-  {
-    obj: state.toolchainConfig.chatCompletion!,
-    schema: chatCompletionToolParameters,
-    pickKeys: ['reasoning_effort', 'max_results'],
-  },
-  {
-    obj: state.appConfiguration,
-    schema: z.toJSONSchema(appConfiguration, { unrepresentable: 'any' }),
-    pickKeys: ['primaryColor', 'secondaryColor'],
-  },
-]
-
-const { jsonSchema, reactiveView } = buildSlimView(...sources)
+const slimView = computed(() => {
+  const sources = [
+    {
+      obj: state.appConfiguration,
+      schema: z.toJSONSchema(appConfiguration, { unrepresentable: 'any' }),
+      pickKeys: ['expertMode'],
+    },
+    {
+      obj: state.llmSettings,
+      schema: z.toJSONSchema(llmSettings, { unrepresentable: 'any' }),
+      pickKeys: [...(em.value ? ['enableToolChooser'] : ['enableToolChooser'])],
+    },
+    {
+      obj: state.toolchainConfig.chatCompletion!,
+      schema: chatCompletionToolParameters,
+      pickKeys: [
+        ...(em.value
+          ? ['use_baseprompt', 'use_multimodal', 'reasoning_effort', 'max_results']
+          : ['reasoning_effort']),
+      ],
+    },
+    {
+      obj: state.appConfiguration,
+      schema: z.toJSONSchema(appConfiguration, { unrepresentable: 'any' }),
+      pickKeys: ['primaryColor', 'secondaryColor'],
+    },
+  ]
+  return buildSlimView(...sources)
+})
 </script>

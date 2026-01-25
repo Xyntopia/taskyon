@@ -143,7 +143,7 @@ const structuredResponsePrompt = computed(() => {
         tystate.allTools,
         !!state.toolchainConfig.chatCompletion?.llmTools,
         !!state.toolchainConfig.chatCompletion?.llmTools,
-        state.llmSettings.useBasePrompt,
+        !!state.toolchainConfig.chatCompletion?.use_baseprompt,
         state.llmSettings.taskChatTemplates,
         [],
         [],

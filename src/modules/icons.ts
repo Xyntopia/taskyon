@@ -1,4 +1,9 @@
-import { matKeyboardReturn, matVisibility } from '@quasar/extras/material-icons'
+import {
+  matGradient,
+  matKeyboardReturn,
+  matTexture,
+  matVisibility,
+} from '@quasar/extras/material-icons'
 import {
   mdiAutoFix,
   mdiFormatListNumbered,
@@ -18,18 +23,20 @@ export const iconRegistry: iconMap = {
     reasoning_effort: mdiHeadSnowflake,
     max_results: mdiFormatListNumbered,
     llmTools: mdiFunctionVariant,
+    use_baseprompt: mdiAutoFix,
+    use_multimodal: matVisibility,
   },
 }
 
 export const settingsIcons: iconMap = {
   llmSettings: {
     enableToolChooser: mdiTools,
-    useBasePrompt: mdiAutoFix,
-    tryUsingVisionModels: matVisibility,
   },
   appConfiguration: {
     webSearchButton: mdiSearchWeb,
     expertMode: mdiProfessionalHexagon,
     useEnterToSend: matKeyboardReturn,
+    primaryColor: matTexture,
+    secondaryColor: matGradient,
   },
 }

@@ -55,26 +55,6 @@ simple chatCompletion for non-tool calls.
       'Enable the standard tool chooser. This function enables taskyon to decide if and then which tool it should use for the task.',
     title: 'Use Tools',
   }),
-  useBasePrompt: z
-    .boolean()
-    .default(true)
-    .meta({
-      title: 'Fancy AI',
-      description: `
-  *Toggle the base prompt on/off.*
-
-  This gives the AI instructions how to draw better graphics, math
-  formulas and generally make the chat a little more fancy than just plain
-  text. You can check/change the base prompt in the settings...`,
-    }),
-  tryUsingVisionModels: z
-    .boolean()
-    .default(true)
-    .meta({
-      title: 'Vision',
-      description: `Toggle Vision ON/OFF. If a model supports vision, we
-will send the model attached images and pdf files..`,
-    }),
   taskChatTemplates: z
     .object({
       basePrompt: z.string().meta({

@@ -52,6 +52,7 @@
               :model-value="val as Record<string, unknown>"
               :schema="tystate.allTools[key]?.parameters"
               class="fit"
+              :icons="iconRegistry.chatCompletion as iconMap"
               hide-missing
               @update:model-value="(val) => console.log('updated', val)"
             />
@@ -67,7 +68,6 @@
             "
             class="fit"
           />
-          <!--{{ state.llmSettings }}-->
         </q-tab-panel>
         <q-tab-panel name="app config" :class="tabPanelClass">
           <div>All of the app configurations</div>
@@ -78,6 +78,7 @@
                 unrepresentable: 'any',
               })
             "
+            :icons="settingsIcons.appConfiguration as iconMap"
             class="fit"
           />
         </q-tab-panel>
@@ -99,6 +100,8 @@ import { useAppStateStore } from 'src/stores/appState'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTaskyonStore } from 'src/stores/taskyonState'
+import type { iconMap } from 'src/modules/icons'
+import { iconRegistry, settingsIcons } from 'src/modules/icons'
 
 const route = useRoute()
 const state = useAppStateStore()

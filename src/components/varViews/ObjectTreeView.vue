@@ -268,10 +268,10 @@
       >
         <q-input
           :readonly="readOnly"
-          style="min-width: 100px"
           :label="separateLabels ? '' : prop.node.label"
           filled
           dense
+          style="min-width: 100px"
           type="number"
           :debounce="debounce"
           :model-value="prop.node.value"

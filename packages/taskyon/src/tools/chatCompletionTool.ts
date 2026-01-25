@@ -955,8 +955,15 @@ export const chatCompletionToolParameters = {
     },
     use_multimodal: {
       type: 'boolean',
+      title: 'Use Vision',
       description:
-        'Allow models to use their vision/audio document undestanding capabilities if their are any files in the prompt.',
+        'Allow models to use their vision/audio & document undestanding capabilities if their are any files in the prompt.',
+    },
+    use_baseprompt: {
+      type: 'boolean',
+      title: 'Use Base Prompt',
+      description:
+        'Enable or disable the based prompt for the chat completion which makes output more fancy.',
     },
     contextSize: {
       type: 'integer',
@@ -988,14 +995,7 @@ export function createChatCompletionTool(
     parameters: chatCompletionToolParameters,
     function: async (opts, context: toolContext) => {
       //////////   INITIALIZATION
-      const {
-        useBasePrompt,
-        selectedApi,
-        llmApis,
-        taskChatTemplates,
-        tryUsingVisionModels,
-        siteUrl,
-      } = llmSettings()
+      const { selectedApi, llmApis, taskChatTemplates, siteUrl } = llmSettings()
       const {
         model,
         goal,
@@ -1003,10 +1003,11 @@ export function createChatCompletionTool(
         allowedTools,
         prompts,
         schema,
+        use_baseprompt = true,
         reasoning_effort: reasoningEffort,
         verbosity,
         // if we don't set it, choose the default setting...
-        use_multimodal = tryUsingVisionModels,
+        use_multimodal = true,
       } = opts
       const tools = allowedTools ?? []
 
@@ -1061,7 +1062,7 @@ export function createChatCompletionTool(
         {
           taskChatTemplates: taskChatTemplates,
           tryUsingVisionModels: use_multimodal,
-          useBasePrompt: useBasePrompt,
+          useBasePrompt: use_baseprompt,
         },
         taskManager,
         lastTaskBeforeChatCompletion,

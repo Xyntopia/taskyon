@@ -1553,7 +1553,7 @@ export async function getTestMetaData() {
           // we are not testing files right now...
           () => new Promise(() => null),
           () => new Promise(() => undefined),
-          state.llmSettings.tryUsingVisionModels,
+          !!state.toolchainConfig.chatCompletion?.use_multimodal,
           !!state.toolchainConfig.chatCompletion?.llmTools,
           toolDefs,
         )
