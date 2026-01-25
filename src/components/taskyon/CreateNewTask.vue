@@ -426,8 +426,9 @@ async function addNewTask(p2pTopic?: string, webSearch?: boolean) {
     if (entryNode) {
       const chooseTask = deepCopy(entryNode) as WritableDeep<partialTaskDraft>
       if (chooseTask.content.type === 'functioncall') {
-        // in the future, we should make this "dynamic" and automatically add the relevant buttons
+        // TODO: in the future, we should make this "dynamic" and automatically add the relevant buttons
         // from our entry node to the task creation area!
+        //  also move this into the toolChooser settings!
         chooseTask.content.data.arguments = {
           ...(webSearch ? { webSearch: true } : {}),
           ...(state.llmSettings.enableToolChooser ? { useTools: true } : {}),
