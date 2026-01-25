@@ -369,7 +369,6 @@ const configuration = computed<partialTyConfiguration | null>(() => {
   return {
     llmSettings: {
       //selectedApi: 'taskyon',
-      //enableOpenAiTools: false,
       enableToolChooser: true,
       entryNode: toolCall({ name: 'setModelicaAndTemplate', arguments: {} }),
     },

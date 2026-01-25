@@ -13,7 +13,6 @@
   },
   "llmSettings": {
     "userId": null,
-    "enableOpenAiTools": false,
     "selectedApi": null,
     "llmApis": {
       "taskyon": {

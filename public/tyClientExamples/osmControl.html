@@ -101,7 +101,6 @@
       const configuration = {
         llmSettings: {
           selectedApi: 'taskyon',
-          enableOpenAiTools: false,
           enableToolChooser: true,
           llmApis: {
             taskyon: {
@@ -141,7 +140,7 @@
     <script
       src="../lib/tyclient.umd.js"
       defer
-      onload="TyClient.initializeTaskyon(tools, configuration);"
+      onload="TyClient.initializeTaskyon(tools, configuration)"
     ></script>
   </body>
 </html>

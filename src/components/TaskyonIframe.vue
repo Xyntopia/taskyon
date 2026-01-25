@@ -38,7 +38,6 @@ const mergeConfig = (config: partialTyConfiguration | null) => {
     {
       llmSettings: {
         //selectedApi: 'taskyon',
-        enableOpenAiTools: false,
         enableToolChooser: true,
       },
       appConfiguration: {
