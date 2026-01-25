@@ -38,42 +38,44 @@
       </template>
     </ResponsiveMenuDialogBtn>
 
-    <!-- Inline chips (limited) -->
-    <q-chip
-      v-for="(ann, idx) in visibleSources"
-      :key="idx"
-      dense
-      outline
-      clickable
-      class="source-chip"
-      @click="open(ann.url)"
-    >
-      {{ idx + 1 }}
-      <span class="source-domain">
-        {{ domain(ann.url) }}
-      </span>
+    <div class="col row">
+      <!-- Inline chips (limited) -->
+      <q-chip
+        v-for="(ann, idx) in visibleSources"
+        :key="idx"
+        dense
+        size="sm"
+        outline
+        clickable
+        @click="open(ann.url)"
+      >
+        {{ idx + 1 }}
+        <span class="q-pl-xs">
+          {{ domain(ann.url) }}
+        </span>
 
-      <q-tooltip anchor="top middle" self="bottom middle" max-width="320px">
-        <div class="text-weight-medium q-mb-xs">
-          {{ ann.title || ann.id || `Source ${idx + 1}` }}
-        </div>
-        <div class="text-caption text-grey-6">
-          {{ ann.url }}
-        </div>
-      </q-tooltip>
-    </q-chip>
+        <q-tooltip anchor="top middle" self="bottom middle" max-width="320px">
+          <div class="text-weight-medium q-mb-xs">
+            {{ ann.title || ann.id || `Source ${idx + 1}` }}
+          </div>
+          <div class="text-caption text-grey-6">
+            {{ ann.url }}
+          </div>
+        </q-tooltip>
+      </q-chip>
 
-    <!-- Overflow indicator -->
-    <q-chip
-      v-if="overflowCount > 0"
-      dense
-      outline
-      clickable
-      class="source-chip source-overflow"
-      @click="() => (dialogOpen = true)"
-    >
-      +{{ overflowCount }}
-    </q-chip>
+      <!-- Overflow indicator -->
+      <q-chip
+        v-if="overflowCount > 0"
+        dense
+        outline
+        clickable
+        class="source-overflow"
+        @click="() => (dialogOpen = true)"
+      >
+        +{{ overflowCount }}
+      </q-chip>
+    </div>
   </div>
 </template>
 
@@ -114,25 +116,3 @@ const domain = (url: string) => {
   }
 }
 </script>
-
-<style lang="css">
-.sources-row {
-  opacity: 0.75;
-  flex-wrap: wrap;
-}
-
-.source-chip {
-  font-size: 11px;
-  padding: 0 6px;
-}
-
-.source-chip:hover {
-  opacity: 1;
-}
-
-.source-domain {
-  margin-left: 4px;
-  font-size: 10px;
-  opacity: 0.6;
-}
-</style>
