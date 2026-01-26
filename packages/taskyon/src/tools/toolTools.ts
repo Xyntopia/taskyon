@@ -243,9 +243,9 @@ Finally, it creates a chat completion task with the selected tools in the allowe
         },
       },
     } as const,
-    function: async ({ llmTools = false, webSearch, useTools = false }, { taskChain }) => {
+    function: async ({ webSearch, useTools = false }, { taskChain }) => {
       const pattern = { ...taskChain.at(-2), webSearch, useTools }
-      console.log('choose tool!', pattern, llmTools)
+      console.log('choose tool!', pattern)
       // use pattern matching on the last task
       const result = await match(pattern)
         .returnType<taskResult | Promise<taskResult>>()

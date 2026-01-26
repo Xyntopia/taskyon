@@ -62,7 +62,7 @@ const slimView = computed(() => {
       schema: chatCompletionToolParameters,
       pickKeys: [
         ...(em.value
-          ? ['use_baseprompt', 'use_multimodal', 'reasoning_effort', 'max_results']
+          ? ['use_baseprompt', 'use_multimodal', 'reasoning_effort', 'max_results', 'llmTools']
           : ['reasoning_effort']),
       ],
     },
