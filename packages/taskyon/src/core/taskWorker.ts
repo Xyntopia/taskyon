@@ -1,3 +1,4 @@
+import type { ReadonlyDeep } from 'type-fest'
 import type { TaskNode, TaskNodeType, partialTaskDraft } from '../types/node'
 import type { InternalTool, toolContext } from '../types/toolApi'
 import { taskResult } from '../types/toolApi'
@@ -57,7 +58,7 @@ export const functionExecutorCreator = (
     },
 
     executor: async (
-      func: FunctionCall,
+      func: ReadonlyDeep<FunctionCall>,
       taskChain: TaskNode[],
       filteredStream: TaskMessageStream,
     ) => {
@@ -90,12 +91,20 @@ export const functionExecutorCreator = (
           const funcSettings = toolchainConfig()[func.name]
           if (!funcSettings)
             console.debug(`No tool settings found for tool ${func.name} in toolchainConfig`)
-          func.arguments = {
-            ...(funcSettings || {}),
-            ...func.arguments,
-          }
 
-          const funcR = await handleFunctionExecution(func, tool, abctl.signal, context, duplexPort)
+          const funcR = await handleFunctionExecution(
+            {
+              ...func,
+              arguments: {
+                ...(funcSettings || {}),
+                ...func.arguments,
+              },
+            },
+            tool,
+            abctl.signal,
+            context,
+            duplexPort,
+          )
 
           return funcR
         } else {

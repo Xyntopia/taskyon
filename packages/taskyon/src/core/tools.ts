@@ -9,6 +9,7 @@ import { executeCodeInIframe } from '../utils/iframeWorker'
 import { bigIntToString } from '../utils/objHelpers'
 import { convertZodToJsonSchemaCached } from '../utils/schema'
 import { jsonSchemaToYamlString } from '../utils/yamlUtils'
+import type { ReadonlyDeep } from 'type-fest'
 
 export type RemoteFunctionPort = Port<RemoteFunctionCall, RemoteFunctionResponse>
 
@@ -35,7 +36,7 @@ export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSche
 // TODO: move this into our iframe API?
 async function handleRemoteFunction(
   name: string,
-  args: FunctionArguments,
+  args: ReadonlyDeep<FunctionArguments>,
   duplexPort: RemoteFunctionPort,
 ) {
   const funcRP: Promise<RemoteFunctionResponse> = new Promise((resolve, reject) => {
@@ -119,7 +120,7 @@ export function createWithDefaults(schema: JSONSchema7Type | JSONSchema7) {
  * @returns
  */
 export async function handleFunctionExecution(
-  func: FunctionCall,
+  func: ReadonlyDeep<FunctionCall>,
   tool: InternalTool,
   stopSignal: AbortSignal, // add this to our duplexPort!!
   context: toolContext,
@@ -131,7 +132,7 @@ export async function handleFunctionExecution(
   let funcR: unknown
   const toolDefaultParams = createWithDefaults(tool.parameters)
   // mix in with explicit parameters
-  const execFunc: FunctionCall = {
+  const execFunc: ReadonlyDeep<FunctionCall> = {
     ...func,
     arguments: {
       ...(toolDefaultParams as Record<string, ParamType>),
