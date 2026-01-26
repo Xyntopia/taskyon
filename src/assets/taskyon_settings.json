@@ -1,5 +1,5 @@
 {
-  "version": 22,
+  "version": 23,
   "appConfiguration": {
     "darkTheme": "auto",
     "appConfigurationUrl": "/taskyon_settings.json",
@@ -18,7 +18,7 @@
       "max_results": 5,
       "use_baseprompt": true,
       "use_multimodal": true,
-      "llmTools": false,
+      "llmTools": true,
       "prompt_templates": {
         "basePrompt": "You are a helpful assistant called *Taskyon*. Return your answers in markdown format, you can use the following features:\n\n- **Mermaid charts**: Include diagrams, mindmaps, Gantt diagrams, quadrants, and XY charts using the 'mermaid' keyword in fenced code blocks. For example:\n```mermaid\n...\n```\n\n- Our markdown version supports inline-html:\n   * SVG graphics: Use HTML to embed SVG graphics.\n   * HTML widgets: Create interactive elements within the markdown using HTML.\n- **MathJax**: Write mathematical formulas using $$ ... $$ for block formulas and $ ... $ for inline formulas. **Note:** Only `$` and `$$` syntax is supported.\n- use backticks for code:\n  \n```<language>\n  ....\n```\n- and all the other markdown features are supported as well! \n\nPlease use this!  but make it elegant, use it when it makes sense, and not just for the effect.",
         "instruction": "You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented,\nand adheres to YAML standards. Do not include any explanatory text in your YAML responses. \nRemember, the focus is on the precision and correctness of the YAML output.",
@@ -35,7 +35,7 @@
       "taskyon": {
         "name": "taskyon",
         "baseURL": "https://sicynrpldixtrddgqnpm.supabase.co",
-        "defaultModel": "meta-llama/llama-3.2-90b-vision-instruct",
+        "defaultModel": "google/gemini-2.5-flash-lite",
         "streamSupport": true,
         "defaultHeaders": {
           "apiKey": "sb_publishable_WrQ1aIRvl9BrMtpMQ9TocQ_JN7I9kJm"
@@ -48,7 +48,7 @@
       "huggingface.co": {
         "name": "huggingface.co",
         "baseURL": "https://router.huggingface.co",
-        "defaultModel": "meta-llama/llama-3.2-90b-vision-instruct",
+        "defaultModel": "meta-llama/llama-3.3-70b-instruct",
         "streamSupport": true,
         "routes": {
           "chatCompletion": "/v1",
@@ -58,7 +58,7 @@
       "openai": {
         "name": "openai",
         "baseURL": "https://api.openai.com",
-        "defaultModel": "gpt-5-mini",
+        "defaultModel": "gpt-5.1",
         "streamSupport": true,
         "routes": {
           "chatCompletion": "/v1/",
@@ -68,7 +68,7 @@
       "openrouter.ai": {
         "name": "openrouter.ai",
         "baseURL": "https://openrouter.ai",
-        "defaultModel": "meta-llama/llama-3.2-90b-vision-instruct",
+        "defaultModel": "google/gemini-2.5-flash-lite",
         "streamSupport": true,
         "routes": {
           "chatCompletion": "/api/v1/",
