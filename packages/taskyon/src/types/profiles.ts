@@ -55,36 +55,6 @@ simple chatCompletion for non-tool calls.
       'Enable the standard tool chooser. This function enables taskyon to decide if and then which tool it should use for the task.',
     title: 'Use Tools',
   }),
-  taskChatTemplates: z
-    .object({
-      basePrompt: z.string().meta({
-        description:
-          'The base prompt. This should be used e.g. to set the behaviour of the AI. used as a "system" prompt.',
-      }),
-      instruction: z.string().meta({
-        description: 'This prompt is used to make the AI follow instructions',
-      }),
-      toolResult: z.string().meta({
-        description:
-          'This prompt is used to make the AI display tool results in a certain structured way.',
-      }),
-      task: z.string().meta({
-        description: 'This prompt is used to explain to the AI what to do with a specific task.',
-      }),
-      evaluate: z.string().meta({
-        description: 'This prompt is used to evaluate errors',
-      }),
-      schemaReminder: z.string().meta({
-        description: 'This prompt is used to enforce a specific schema as a response...',
-      }),
-      tools: z.string().meta({
-        description: 'This prompt is used to give the AI a list of tools.',
-      }),
-    })
-    .meta({
-      description:
-        'These are the definitions of the prompts which are used in chats for different purposes.',
-    }),
 })
 export type llmSettings = z.infer<typeof llmSettings>
 

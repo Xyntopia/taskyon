@@ -17,7 +17,17 @@
       "reasoning_effort": "low",
       "max_results": 5,
       "use_baseprompt": true,
-      "use_multimodal": true
+      "use_multimodal": true,
+      "llmTools": false,
+      "prompt_templates": {
+        "basePrompt": "You are a helpful assistant called *Taskyon*. Return your answers in markdown format, you can use the following features:\n\n- **Mermaid charts**: Include diagrams, mindmaps, Gantt diagrams, quadrants, and XY charts using the 'mermaid' keyword in fenced code blocks. For example:\n```mermaid\n...\n```\n\n- Our markdown version supports inline-html:\n   * SVG graphics: Use HTML to embed SVG graphics.\n   * HTML widgets: Create interactive elements within the markdown using HTML.\n- **MathJax**: Write mathematical formulas using $$ ... $$ for block formulas and $ ... $ for inline formulas. **Note:** Only `$` and `$$` syntax is supported.\n- use backticks for code:\n  \n```<language>\n  ....\n```\n- and all the other markdown features are supported as well! \n\nPlease use this!  but make it elegant, use it when it makes sense, and not just for the effect.",
+        "instruction": "You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented,\nand adheres to YAML standards. Do not include any explanatory text in your YAML responses. \nRemember, the focus is on the precision and correctness of the YAML output.",
+        "toolResult": "**Instruction:**\n\nPlease evaluate the tool/function result and provide the response in the specified schema format. The response should **only** contain the requested schema, formatted as {format}.\n\n---\n\n**Result of the Tool/Function:**\n\n```\n{message}\n```",
+        "task": "COMPLETE THE FOLLOWING TASK:\n\n``` \n{message}\n```\n\nProvide only the precise information requested without context.",
+        "evaluate": "Evaluate the following message and provide the result back in the specified schema format. The response should **only** contain the requested schema, formatted as {format}.\n\nMessage:\n```\n{message}\n```\n\n",
+        "schemaReminder": "Your output must strictly follow these rules:\n\n1. **Exact Format:** Output exactly in {format} with no additional text, commentary, or formatting.\n2. **Strict Schema:** Include only the specified schema below—every property (including any questions) must be present and exactly as defined.\n3. **No Deviations:** Do not add, omit, or alter any parts of the schema. Extra keys, explanations, or commentary are forbidden.\n4. **Full Parseability:** The final output must be fully parseable as {format}. Any deviation from the schema renders the response invalid.\n5. **Single Schema:** Fill in the schema exactly once without repeating it.\n6. **JSON Schema Instance:** If `schemaType: json schema` is specified, output a valid instance that conforms to the JSON Schema rather than reproducing the schema definition itself.\n\nSchema: \n\n{schema}",
+        "tools": "Choose one of the following tools if it helps you to complete the task:\n\n${tools}"
+      }
     }
   },
   "llmSettings": {
@@ -80,15 +90,6 @@
     "summaryModel": "Xenova/distilbart-cnn-6-6",
     "vectorizationModel": "xyntopia/all-MiniLM-L6-v2",
     "maxAutonomousTasks": 5,
-    "enableToolChooser": true,
-    "taskChatTemplates": {
-      "basePrompt": "You are a helpful assistant called *Taskyon*. Return your answers in markdown format, you can use the following features:\n\n- **Mermaid charts**: Include diagrams, mindmaps, Gantt diagrams, quadrants, and XY charts using the 'mermaid' keyword in fenced code blocks. For example:\n```mermaid\n...\n```\n\n- Our markdown version supports inline-html:\n   * SVG graphics: Use HTML to embed SVG graphics.\n   * HTML widgets: Create interactive elements within the markdown using HTML.\n- **MathJax**: Write mathematical formulas using $$ ... $$ for block formulas and $ ... $ for inline formulas. **Note:** Only `$` and `$$` syntax is supported.\n- use backticks for code:\n  \n```<language>\n  ....\n```\n- and all the other markdown features are supported as well! \n\nPlease use this!  but make it elegant, use it when it makes sense, and not just for the effect.",
-      "instruction": "You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented,\nand adheres to YAML standards. Do not include any explanatory text in your YAML responses. \nRemember, the focus is on the precision and correctness of the YAML output.",
-      "toolResult": "**Instruction:**\n\nPlease evaluate the tool/function result and provide the response in the specified schema format. The response should **only** contain the requested schema, formatted as {format}.\n\n---\n\n**Result of the Tool/Function:**\n\n```\n{message}\n```",
-      "task": "COMPLETE THE FOLLOWING TASK:\n\n``` \n{message}\n```\n\nProvide only the precise information requested without context.",
-      "evaluate": "Evaluate the following message and provide the result back in the specified schema format. The response should **only** contain the requested schema, formatted as {format}.\n\nMessage:\n```\n{message}\n```\n\n",
-      "schemaReminder": "Your output must strictly follow these rules:\n\n1. **Exact Format:** Output exactly in {format} with no additional text, commentary, or formatting.\n2. **Strict Schema:** Include only the specified schema below—every property (including any questions) must be present and exactly as defined.\n3. **No Deviations:** Do not add, omit, or alter any parts of the schema. Extra keys, explanations, or commentary are forbidden.\n4. **Full Parseability:** The final output must be fully parseable as {format}. Any deviation from the schema renders the response invalid.\n5. **Single Schema:** Fill in the schema exactly once without repeating it.\n6. **JSON Schema Instance:** If `schemaType: json schema` is specified, output a valid instance that conforms to the JSON Schema rather than reproducing the schema definition itself.\n\nSchema: \n\n{schema}",
-      "tools": "Choose one of the following tools if it helps you to complete the task:\n\n${tools}"
-    }
+    "enableToolChooser": true
   }
 }

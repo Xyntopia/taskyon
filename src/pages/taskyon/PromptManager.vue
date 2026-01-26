@@ -4,7 +4,10 @@
     <div class="row q-gutter-xs q-pa-xs">
       <div class="col fit">
         <q-toggle v-model="edit" label="Manually edit prompts" />
-        <ObjectTreeView v-if="edit" v-model="state.llmSettings.taskChatTemplates" />
+        <ObjectTreeView
+          v-if="edit && state.toolchainConfig.chatCompletion?.prompt_templates"
+          v-model="state.toolchainConfig.chatCompletion.prompt_templates as Record<string, unknown>"
+        />
         <q-card v-else flat>
           <q-card-section>
             <div>
@@ -99,7 +102,7 @@ name: current taskyon prompts
 label: ["discard", "hide"]
 -->
 
-${dump(state.llmSettings.taskChatTemplates, { forceQuotes: true })}
+${dump(state.toolchainConfig.chatCompletion?.prompt_templates, { forceQuotes: true })}
 
 ---
 
@@ -116,7 +119,7 @@ is added which explains the required return format.
 
 Available prompts are:
 
-${Object.keys(state.llmSettings.taskChatTemplates)
+${Object.keys(state.toolchainConfig.chatCompletion?.prompt_templates ?? {})
   .map((x) => '- ' + x)
   .join('\n')}
 
@@ -144,7 +147,15 @@ const structuredResponsePrompt = computed(() => {
         !!state.toolchainConfig.chatCompletion?.llmTools,
         !!state.toolchainConfig.chatCompletion?.llmTools,
         !!state.toolchainConfig.chatCompletion?.use_baseprompt,
-        state.llmSettings.taskChatTemplates,
+        (state.toolchainConfig.chatCompletion?.prompt_templates ?? {}) as {
+          basePrompt: string
+          evaluate: string
+          instruction: string
+          tools: string
+          task: string
+          schemaReminder: string
+          toolResult: string
+        },
         [],
         [],
         [],

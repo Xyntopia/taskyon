@@ -154,7 +154,7 @@ function calculateCompletionVariables(
 // make them better to understand for the AI...
 export function addPrompts(
   toolCollection: Record<string, ToolBase>,
-  enableOpenAiTools: boolean,
+  useNativeTools: boolean,
   nativeStructuredResponse: boolean,
   useBasePrompt: boolean,
   taskChatTemplates: {
@@ -175,7 +175,7 @@ export function addPrompts(
 ) {
   // Check if task has tools and OpenAI tools are not enabled
   //console.log('Creating chat prompts');
-  const useToolChat = allowedTools.length > 0 && !enableOpenAiTools
+  const useToolChat = allowedTools.length > 0 && !useNativeTools
 
   const variables = calculateCompletionVariables(
     allowedTools,
@@ -196,10 +196,10 @@ export function addPrompts(
   const appendSystemMessage: string[] = []
 
   // we always prepend our "fancy" prompt, if we use "native" tools...
-  if ((goal === 'SimpleCompletion' && useBasePrompt) || enableOpenAiTools || goal === 'WebSearch') {
+  if ((goal === 'SimpleCompletion' && useBasePrompt) || useNativeTools || goal === 'WebSearch') {
     prependMessagesList.unshift(taskChatTemplates.basePrompt)
 
-    if (!enableOpenAiTools) {
+    if (!useNativeTools) {
       const calledFunctions = getAllFunctionsInOpenAiConversation(modifiedOpenAIConversationThread)
       // if any tools appeared during the conversation...
       if (calledFunctions.size > 0) {
@@ -214,7 +214,7 @@ export function addPrompts(
   }
   if (goal && goal !== 'SimpleCompletion' && goal !== 'WebSearch') {
     // only add tools, if we don#t use the native API already
-    if (!enableOpenAiTools) {
+    if (!useNativeTools) {
       appendMessagesList.push(taskChatTemplates.instruction, taskChatTemplates.tools)
       // send instructions only if there aren't any custom prompts...
       if (prompts.length === 0) {
@@ -234,7 +234,7 @@ export function addPrompts(
     // put custom prompts between general instruction, tool lists and
     // the schema enforcer
     appendMessagesList.push(...prompts)
-    if (!enableOpenAiTools) appendSystemMessage.push(taskChatTemplates.schemaReminder)
+    if (!useNativeTools) appendSystemMessage.push(taskChatTemplates.schemaReminder)
   } else {
     appendMessagesList.push(...prompts)
     if (schema && !nativeStructuredResponse) {

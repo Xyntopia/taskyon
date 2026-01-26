@@ -60,7 +60,7 @@ const convertToChatCompletionTool = (t: ToolBase): Tool => {
   })
 }
 
-function generateOpenAIToolDeclarations(
+function generateToolDeclarations(
   allowedTools: string[],
   toolCollection: Record<string, ToolBase>,
 ): ToolSet {
@@ -137,7 +137,7 @@ export async function processChatTask(
 
   let tools: ToolSet = {}
   if (llmTools) {
-    tools = generateOpenAIToolDeclarations(allowedTools || [], toolDefs)
+    tools = generateToolDeclarations(allowedTools || [], toolDefs)
   }
 
   return { chatCompletionMessageThread: chatCompletionMessages, tools, msgs: msgs ?? {} }
@@ -911,6 +911,7 @@ export const chatCompletionToolParameters = {
     },
     llmTools: {
       type: 'boolean',
+      title: 'Use LLM Native Tools',
       description: `Optional Parameter. If set to true, we will use native tool apis offered by llm providers to generate tool calls in json format. If undefined, it will be treated as false.`,
       default: false,
     },
@@ -965,10 +966,56 @@ export const chatCompletionToolParameters = {
       description:
         'Enable or disable the based prompt for the chat completion which makes output more fancy.',
     },
-    contextSize: {
+    context_size: {
       type: 'integer',
       description:
         '[Optional] How many of the peceding tasks are going to be used for the chatCompletion?',
+    },
+    prompt_templates: {
+      required: [
+        'basePrompt',
+        'instruction',
+        'toolResult',
+        'task',
+        'evaluate',
+        'schemaReminder',
+        'tools',
+      ],
+      type: 'object',
+      description:
+        'These are the definitions of the prompts which are used in chats for different purposes.',
+      properties: {
+        basePrompt: {
+          type: 'string',
+          description:
+            'The base prompt. This should be used e.g. to set the behaviour of the AI. used as a "system" prompt.',
+        },
+        instruction: {
+          type: 'string',
+          description: 'This prompt is used to make the AI follow instructions',
+        },
+        toolResult: {
+          type: 'string',
+          description:
+            'This prompt is used to make the AI display tool results in a certain structured way.',
+        },
+        task: {
+          type: 'string',
+          description: 'This prompt is used to explain to the AI what to do with a specific task.',
+        },
+        evaluate: {
+          type: 'string',
+          description: 'This prompt is used to evaluate errors',
+        },
+        schemaReminder: {
+          type: 'string',
+          description: 'This prompt is used to enforce a specific schema as a response...',
+        },
+        tools: {
+          type: 'string',
+          description: 'This prompt is used to give the AI a list of tools.',
+        },
+      },
     },
   },
 } as const satisfies JSONSchema7
@@ -995,7 +1042,7 @@ export function createChatCompletionTool(
     parameters: chatCompletionToolParameters,
     function: async (opts, context: toolContext) => {
       //////////   INITIALIZATION
-      const { selectedApi, llmApis, taskChatTemplates, siteUrl } = llmSettings()
+      const { selectedApi, llmApis, siteUrl } = llmSettings()
       const {
         model,
         goal,
@@ -1008,8 +1055,12 @@ export function createChatCompletionTool(
         verbosity,
         // if we don't set it, choose the default setting...
         use_multimodal = true,
+        prompt_templates,
       } = opts
       const tools = allowedTools ?? []
+
+      if (!prompt_templates)
+        throw new Error('No prompt templates defined for chat completion tool!')
 
       if (!selectedApi) {
         throw new Error('No API selected!')
@@ -1060,7 +1111,7 @@ export function createChatCompletionTool(
         toolDefs,
         llmTools,
         {
-          taskChatTemplates: taskChatTemplates,
+          taskChatTemplates: prompt_templates,
           tryUsingVisionModels: use_multimodal,
           useBasePrompt: use_baseprompt,
         },
