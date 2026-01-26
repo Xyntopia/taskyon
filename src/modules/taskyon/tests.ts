@@ -40,7 +40,11 @@ import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
 import { useGdrive } from '../gdrive'
-import { getCurrentProfileName, getStoredStateString } from '../ui/initialState'
+import {
+  getCurrentProfileName,
+  getStoredStateString,
+  initialStoredStateObj,
+} from '../ui/initialState'
 import { initCryptoSessionFromBrowser } from './browserCryptoSession'
 import { gDriveSyncPort } from './sync'
 
@@ -1109,8 +1113,6 @@ export const testChatCompletionWebSearch = async () => {
 testChatCompletionWebSearch.description = 'test taskyon chatCompletion websearch'
 
 export const testChatCompletion = async () => {
-  console.log('request a random secret from the store')
-
   const ty = await tystate.taskyon
 
   const stopSignal = new AbortController().signal
@@ -1125,7 +1127,8 @@ export const testChatCompletion = async () => {
         prompts: [
           `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
         ],
-        llmTools: false,
+        llmTools: true,
+        prompt_templates: initialStoredStateObj?.toolchainConfig?.chatCompletion?.prompt_templates,
         schema: {
           type: 'object',
           properties: {
