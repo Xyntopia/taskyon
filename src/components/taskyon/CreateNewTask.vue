@@ -69,6 +69,7 @@
           input-field-behavior="auto"
           :separate-labels="false"
           :schema="functionSchema"
+          missing-mode="placeholders"
         />
         <q-btn
           v-if="state.appConfiguration.expertMode"

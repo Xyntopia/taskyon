@@ -36,9 +36,8 @@
           flat
           dense
           size="sm"
-          :icon="matAdd"
-          color="primary"
-          label="Set value"
+          no-caps
+          :label="'+ ' + prop.node.label"
           @click.stop="enableField(prop.node)"
         />
 
@@ -384,7 +383,8 @@
 </template>
 
 <script setup lang="ts">
-import { matAdd, matBarChart, matInfo } from '@quasar/extras/material-icons'
+import { matBarChart, matInfo } from '@quasar/extras/material-icons'
+import { getByPath } from '@taskyon/taskyon'
 import { type JSONSchema7 } from 'json-schema'
 import { type QTreeNode } from 'quasar'
 import { serializeObject } from 'src/modules/serializeObject'
@@ -395,7 +395,6 @@ import InfoDialog from '../InfoDialog.vue'
 import FieldView from './FieldView.vue'
 import JsonInput from './JsonInput.vue'
 import ListChart from './ListChart.vue'
-import { getByPath } from '@taskyon/taskyon'
 
 export type iconMap = {
   [key: string]: string | iconMap
