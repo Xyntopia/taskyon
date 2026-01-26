@@ -41,6 +41,7 @@ import {
 import type { chunkStreamType } from '@taskyon/taskyon/tools/chatCompletionTool'
 import { until } from '@vueuse/core'
 import { default as Ajv } from 'ajv'
+import type { JSONSchema7 } from 'json-schema'
 import { defineStore } from 'pinia'
 import { useQuasar } from 'quasar' // load dynamically! :)
 import { freeKey } from 'src/assets/taskyon_free_key'
@@ -62,7 +63,6 @@ import { sendFile } from '../../packages/taskyon/src/types/apiTypes'
 import { guiTools } from '../modules/taskyon/GuiTools'
 import { useAppStateStore } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
-import type { JSONSchema7 } from 'json-schema'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -583,6 +583,16 @@ const useApiManagement = (
     }
   }
 
+  const shouldUpdateFreeKey = (currentTyKey?: KeyString) => {
+    // make sure, we update old free keys that are currently in use
+    // whne a key is updated, taskyon identifies the old key as a
+    // 'custom' key so we need to explicitly update it with the new key.
+    if (currentTyKey && currentTyKey !== freeKey) {
+      if (['W1lIjoidGFza3lvbi5zcGFjZTpmcmVlX2tleV8yMDI1MDgw'].some((n) => currentTyKey.includes(n)))
+        return true
+    }
+  }
+
   //////   INITIALIZATION
   // make sure, that we check our secretStore right after initialization if we hae stored any keys in
   // there (especially ifits a taskyon key) and then use those!
@@ -594,10 +604,12 @@ const useApiManagement = (
       iframeApiKey: stateRefs.iframeApiKey,
     })
 
+    let storedKeyStr = await getStoredTaskyonKey()
+    if (shouldUpdateFreeKey(storedKeyStr)) storedKeyStr = freeKey as KeyString
     const selectedKey = resolveTaskyonKey({
       authToken: stateRefs.authToken,
       iframeToken: stateRefs.iframeApiKey,
-      storedKeyStr: await getStoredTaskyonKey(),
+      storedKeyStr,
     })
     // update the secretstore with this key in order to give chatCompletion the correct key!
     console.log('setting selected key:', selectedKey?.slice(-5))
