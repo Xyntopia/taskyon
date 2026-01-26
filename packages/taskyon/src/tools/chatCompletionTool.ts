@@ -962,9 +962,9 @@ export const chatCompletionToolParameters = {
     },
     use_baseprompt: {
       type: 'boolean',
-      title: 'Use Base Prompt',
+      title: 'Fancy Output',
       description:
-        'Enable or disable the based prompt for the chat completion which makes output more fancy.',
+        'Enable or disable the base prompt chat completion which makes output more fancy or enables customized behaviour.',
     },
     context_size: {
       type: 'integer',

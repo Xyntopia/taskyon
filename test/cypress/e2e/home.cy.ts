@@ -55,7 +55,7 @@ describe('test taskyon startpage', () => {
     // check if more fancy options ae present  now...
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
     cy.contains('Vision')
-    cy.contains('Fancy AI').type('{esc}')
+    cy.contains('Fancy Output').type('{esc}')
 
     //cy.dataCy('chat-input').focus().type('{enter}')
     //cy.get('li').first().click();

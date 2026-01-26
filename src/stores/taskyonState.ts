@@ -480,6 +480,7 @@ const useApiManagement = (
       stateRefs.setLLMSettings('selectedApi', newService)
     }
     if (stateRefs.llmSettings.selectedApi) {
+      console.log('update model for api:', stateRefs.llmSettings.selectedApi, newName)
       stateRefs.setLLMSettings(
         ['llmApis', stateRefs.llmSettings.selectedApi, 'selectedModel'],
         newName,

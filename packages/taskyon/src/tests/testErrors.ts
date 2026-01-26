@@ -39,7 +39,7 @@ type CyclicErrorLike = {
  * - Throws an Error if any test fails.
  * - Otherwise returns a summary object.
  */
-export function testHumanizeError(): TestSummary {
+export function testHumanizeErr(): TestSummary {
   const innerError = new Error('Inner failure message')
 
   const outerError: ErrorWithCause = new Error('Outer failure message')

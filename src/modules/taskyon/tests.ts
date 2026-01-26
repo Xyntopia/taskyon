@@ -40,11 +40,7 @@ import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
 import { useGdrive } from '../gdrive'
-import {
-  getCurrentProfileName,
-  getStoredStateString,
-  initialStoredStateObj,
-} from '../ui/initialState'
+import { getCurrentProfileName, getStoredStateString } from '../ui/initialState'
 import { initCryptoSessionFromBrowser } from './browserCryptoSession'
 import { gDriveSyncPort } from './sync'
 
@@ -1095,7 +1091,8 @@ export const testChatCompletionWebSearch = async () => {
       createChatCompletionTask({
         goal: 'WebSearch',
         model: 'google/gemini-2.5-flash-lite',
-        llmTools: false,
+        llmTools: true,
+        max_results: 2,
       }),
     ],
   ]
@@ -1121,6 +1118,7 @@ export const testChatCompletion = async () => {
   const { tool: chatCompletion } = await ty.getToolDefinition('chatCompletion')
   let structuredResponse
   if (chatCompletion && 'function' in chatCompletion && chatCompletion.function !== undefined) {
+    const prompt_templates = state.toolchainConfig.chatCompletion?.prompt_templates
     structuredResponse = await chatCompletion.function(
       {
         model: 'google/gemini-2.5-flash-lite',
@@ -1128,7 +1126,7 @@ export const testChatCompletion = async () => {
           `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
         ],
         llmTools: true,
-        prompt_templates: initialStoredStateObj?.toolchainConfig?.chatCompletion?.prompt_templates,
+        prompt_templates,
         schema: {
           type: 'object',
           properties: {
