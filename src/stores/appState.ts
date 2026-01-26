@@ -119,6 +119,7 @@ function loadConfigurationFile(initialState: initialState, stateRefs: Reactive<i
           version?: number
           llmSettings: typeof initialState.llmSettings
           appConfiguration: typeof initialState.appConfiguration
+          toolchainConfig: typeof initialState.toolchainConfig
         }
       | undefined
     >(stateRefs.appConfiguration.appConfigurationUrl)
@@ -143,6 +144,7 @@ function loadConfigurationFile(initialState: initialState, stateRefs: Reactive<i
             : { arrays: 'concat', objects: 'merge', typeMismatch: 'target', primitives: 'preserve' }
           deepMergeReactive(stateRefs.appConfiguration, config.appConfiguration, mergeStrategy)
           deepMergeReactive(stateRefs.llmSettings, config.llmSettings, mergeStrategy)
+          deepMergeReactive(stateRefs.toolchainConfig, config.toolchainConfig, mergeStrategy)
         } else {
           console.warn(
             `Config version (${config.version || 'undefined'}) is not compatible with current version (${initialState.version}). Skipping dynamic config merge.`,
