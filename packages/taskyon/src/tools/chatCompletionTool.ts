@@ -19,7 +19,6 @@ import { default as Ajv } from 'ajv'
 import { load } from 'js-yaml'
 import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
-import { isEmpty } from 'lodash'
 import type OpenAI from 'openai'
 import type { ReadonlyDeep } from 'type-fest'
 import { z } from 'zod'
@@ -46,6 +45,7 @@ import { convertFileToText } from '../utils/loadFiles'
 import {
   createDeepTransformer,
   createDotPathTransformer,
+  isEmpty,
   normalizeFalsyValues,
   pickProperties,
 } from '../utils/objHelpers'

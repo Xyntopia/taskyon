@@ -6343,13 +6343,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/lodash@npm:^4.14.177":
-  version: 4.17.20
-  resolution: "@types/lodash@npm:4.17.20"
-  checksum: 10c0/98cdd0faae22cbb8079a01a3bb65aa8f8c41143367486c1cbf5adc83f16c9272a2a5d2c1f541f61d0d73da543c16ee1d21cf2ef86cb93cd0cc0ac3bced6dd88f
-  languageName: node
-  linkType: hard
-
 "@types/markdown-it@npm:^14.1.2":
   version: 14.1.2
   resolution: "@types/markdown-it@npm:14.1.2"
@@ -20937,7 +20930,6 @@ __metadata:
     "@types/js-yaml": "npm:^4.0.5"
     "@types/json-schema": "npm:^7.0.15"
     "@types/leaflet": "npm:^1.9.21"
-    "@types/lodash": "npm:^4.14.177"
     "@types/markdown-it": "npm:^14.1.2"
     "@types/node": "npm:^20.5.9"
     "@types/prismjs": "npm:^1.26.5"
@@ -20976,7 +20968,6 @@ __metadata:
     json-schema-to-ts: "npm:^3.1.1"
     leaflet: "npm:^1.9.4"
     libp2p: "npm:^2.10.0"
-    lodash: "npm:^4.17.21"
     lz-string: "npm:^1.5.0"
     madge: "npm:^8.0.0"
     mammoth: "npm:^1.6.0"

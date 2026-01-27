@@ -1,6 +1,39 @@
 import { deepEqual } from 'fast-equals'
 import type { RemoveUndefined, Thunk } from './tsHelpers'
 
+// utils/isEmpty.ts
+export function isEmpty(value: unknown): boolean {
+  // null or undefined
+  if (value == null) return true
+
+  // String or Array (or anything with a length property that’s a number)
+  if (typeof value === 'string' || Array.isArray(value)) {
+    return value.length === 0
+  }
+
+  // Map or Set
+  if (value instanceof Map || value instanceof Set) {
+    return value.size === 0
+  }
+
+  // Plain object or other non-null object
+  if (typeof value === 'object') {
+    // Check own enumerable string keys
+    for (const _key in value) {
+      if (Object.prototype.hasOwnProperty.call(value, _key)) {
+        return false
+      }
+    }
+
+    // Also check own symbol keys
+    const symbols = Object.getOwnPropertySymbols(value)
+    return symbols.length === 0
+  }
+
+  // Numbers, booleans, functions, etc. are never "empty"
+  return false
+}
+
 type Key = string | number | symbol
 type Indexable = Record<Key, unknown>
 
@@ -406,16 +439,6 @@ export const normalizeFalsyValues = (normalizer: unknown = false): ((node: unkno
 
 export function pickProperties(obj: object, keys: string[]) {
   return Object.fromEntries(Object.entries(obj).filter(([key]) => keys.includes(key)))
-}
-
-export function isEmpty(obj: object): boolean {
-  for (const prop in obj) {
-    if (Object.prototype.hasOwnProperty.call(obj, prop)) {
-      return false
-    }
-  }
-
-  return true
 }
 
 /**
