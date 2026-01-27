@@ -26,6 +26,8 @@ export default defineRouter(function (/* { store, ssrContext } */) {
   console.log('creating router... in mode:', process.env.MODE)
   const Router = createRouter({
     scrollBehavior: () => ({ left: 0, top: 0 }),
+    // this needs to be 'MODE" and not 'SERVER', because we need this to be the same
+    // whether we are in the browser or on ther server
     routes: process.env.MODE === 'ssr' ? tyServerRoutes : routes,
 
     // Leave this as is and make changes in quasar.conf.js instead!
