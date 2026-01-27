@@ -5,12 +5,13 @@ import axios from 'axios'
 
 const { GOOGLE_API_KEY } = process.env
 
-if (!GOOGLE_API_KEY) {
-  throw new Error('Missing GOOGLE_API_KEY in environment variables')
-}
-
 const fetchGoogleDriveFile = async (fileId: string, res: Response) => {
   try {
+    if (!GOOGLE_API_KEY) {
+      console.error('Missing GOOGLE_API_KEY in environment variables')
+      return res.status(500).json({ error: 'internal error' })
+    }
+
     const fileMetadataResponse = await axios.get(
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${GOOGLE_API_KEY}`,
       {
@@ -34,7 +35,7 @@ const fetchGoogleDriveFile = async (fileId: string, res: Response) => {
       res.status(404).json({ error: 'File not found on Google Drive' })
     } else {
       console.error('Error fetching file from Google Drive:', error)
-      res.status(500).json({ error: 'Failed to fetch file' })
+      res.status(500).json({ error: 'internal error' })
     }
   }
 }
