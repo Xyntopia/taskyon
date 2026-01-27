@@ -2,9 +2,10 @@ import type { JSONSchema7 } from 'json-schema'
 import { createTool } from '../types/toolApi'
 
 const openMeteoWeatherTool = createTool({
-  description: 'A tool that fetches weather data using the Open-Meteo API.',
+  description:
+    "A tool that fetches weather data using the Open-Meteo API. If no latitude/longitude is provided, it uses the browser's current location.",
   longDescription:
-    'This tool uses the Open-Meteo API to retrieve current weather data for a specified location.',
+    "This tool uses the Open-Meteo API to retrieve current weather data for a specified location. You can optionally provide latitude and longitude. If they are omitted, the tool will attempt to use the browser's geolocation (navigator.geolocation) to determine the current location. If geolocation is unavailable or denied and no coordinates are provided, the tool will reject with an error.",
   name: 'openMeteoWeatherTool',
   renderOptions: {
     hideChat: false,
@@ -12,22 +13,58 @@ const openMeteoWeatherTool = createTool({
   },
   parameters: {
     type: 'object',
-    required: ['latitude', 'longitude'],
+    required: [],
     properties: {
       latitude: {
         type: 'number',
-        description: 'The latitude of the location for which to fetch weather data.',
+        description:
+          "Optional. The latitude of the location for which to fetch weather data. If omitted, the tool will attempt to use the browser's current location.",
       },
       longitude: {
         type: 'number',
-        description: 'The longitude of the location for which to fetch weather data.',
+        description:
+          "Optional. The longitude of the location for which to fetch weather data. If omitted, the tool will attempt to use the browser's current location.",
       },
     },
   } as const satisfies JSONSchema7,
-  code: `({latitude, longitude}) => {
-    return fetch(\`https://api.open-meteo.com/v1/forecast?latitude=\${latitude}&longitude=\${longitude}&current_weather=true\`)
-      .then(response => response.json())
-      .then(data => data.current_weather);
+  code:
+    `({ latitude, longitude }) => {
+    const getWeather = (lat, lon) => {
+      return fetch(
+        ` +
+    '`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`' +
+    `
+      )
+        .then(response => response.json())
+        .then(data => data.current_weather);
+    };
+
+    if (typeof latitude === 'number' && typeof longitude === 'number') {
+      // Use provided coordinates directly
+      return getWeather(latitude, longitude);
+    }
+
+    // Fallback to browser geolocation if available
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(
+          new Error(
+            'Geolocation is not supported by this browser and no latitude/longitude were provided.'
+          )
+        );
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        position => {
+          const { latitude: lat, longitude: lon } = position.coords;
+          getWeather(lat, lon).then(resolve).catch(reject);
+        },
+        error => {
+          reject(error);
+        }
+      );
+    });
   }`,
 })
 

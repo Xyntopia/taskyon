@@ -1,4 +1,5 @@
-import iframeRuntimeString from './iframeIndex.js?raw'
+import * as mod from './iframeIndex?raw'
+const iframeRuntimeString = mod.default ?? mod
 
 // Store iframe + its dedicated MessagePort by id / toolId
 export const iframes = new Map<string, { iframe: HTMLIFrameElement; port: MessagePort }>()
@@ -13,7 +14,13 @@ export async function createSandboxedIframe(
   const iframe = document.createElement('iframe')
   iframe.id = id
   iframe.style.display = 'none'
-  iframe.sandbox.add('allow-scripts', 'allow-popups', 'allow-popups-to-escape-sandbox')
+  iframe.sandbox.add(
+    'allow-scripts',
+    'allow-popups',
+    'allow-popups-to-escape-sandbox',
+    'allow-geolocation', // TODO: send this from parent on request!
+  )
+  iframe.allow = 'geolocation'
   document.body.appendChild(iframe)
 
   try {
