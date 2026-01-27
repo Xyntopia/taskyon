@@ -1,7 +1,7 @@
-import { FunctionArguments } from '@taskyon/taskyon'
 import z from 'zod'
 import { apiConfig } from './chatCompletion'
 import { partialTaskDraft } from './node'
+import { FunctionArguments } from './tools'
 
 // TODO: rename llmSettings to "tyOptions"
 export const llmSettings = z.object({
