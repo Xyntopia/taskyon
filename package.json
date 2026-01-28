@@ -11,7 +11,7 @@
   "scripts": {
     "build": "yarn pack:tyclient && yarn build:app",
     "build:app": "yarn run quasar build",
-    "build:desktop": "docker build --file Dockerfile.tauri --target export --output type=local,dest=./dist-desktop .",
+    "build:desktop": "docker build --file Dockerfile --target export --output type=local,dest=./dist-desktop .",
     "build:tyclient": "echo 'build client library' && yarn workspace @taskyon/tyclient run build",
     "pack:tyclient": "mkdir -p public/lib && yarn workspace @taskyon/tyclient pack --filename ../../public/lib/tyclient-$npm_package_version.tgz && cp packages/tyclient/dist/tyclient.* public/lib/",
     "dev": "yarn run quasar dev",
