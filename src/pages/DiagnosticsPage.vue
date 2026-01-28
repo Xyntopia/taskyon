@@ -81,7 +81,12 @@ import { testBuildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { onMounted, ref } from 'vue'
-import { testHumanizeErr } from '../../packages/taskyon/src/tests/testErrors'
+
+const testModules = import.meta.glob(
+  '../../packages/taskyon/src/tests/**/*.ts',
+  { eager: true }, // so modules are imported at build time (synchronously)
+)
+console.log('test modules:', testModules)
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
@@ -116,11 +121,12 @@ onMounted(async () => {
   })
 })
 
-async function runTest(name: string, testFunc: () => unknown, details = false) {
+async function runTest(name: string, testFunc: TaskyonTestFn, details = false) {
+  const tyauth = tystate.getTaskyonKeyString()
   const result: Record<string, unknown> = {}
   console.log('run test:', name)
   try {
-    const res = await testFunc()
+    const res = await testFunc({ tyauth })
     if (details) {
       result[name] = {
         status: 'OK',
@@ -145,22 +151,32 @@ async function runTest(name: string, testFunc: () => unknown, details = false) {
 
 export interface TaskyonTestFn {
   // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
-  (): Promise<unknown> | unknown
+  (opts?: { tyauth?: string | undefined }): Promise<unknown> | unknown
   description?: string
   gui?: boolean
 }
 
 const guiTests = {} as Record<string, TaskyonTestFn>
 const tests = {} as Record<string, TaskyonTestFn>
-tests.testHumanizeErr = testHumanizeErr
-Object.entries(TaskyonTests).forEach(([name, func]) => {
-  if (typeof func !== 'function') return
-  if ('gui' in func) guiTests[camelToNormal(String(name))] = func
-  else tests[camelToNormal(String(name))] = func
-})
+
 tests.testBuildSlimView = testBuildSlimView
 tests.getEnvironmentInfo = getEnvironmentInfo
 tests.runMarkdownDetectionTests = runMarkdownDetectionTests
+
+const modules = Object.entries(testModules).map(([path, mod]) => {
+  console.log('add test', path)
+  return mod
+})
+modules.push(TaskyonTests)
+
+modules.forEach((mod) => {
+  if (!mod || typeof mod !== 'object') return
+  Object.entries(mod).forEach(([name, func]) => {
+    if (typeof func !== 'function') return
+    if ('gui' in func) guiTests[camelToNormal(String(name))] = func
+    else tests[camelToNormal(String(name))] = func
+  })
+})
 
 async function runTests(tests: Record<string, () => unknown>, details = false) {
   testFinished.value = false

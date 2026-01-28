@@ -500,6 +500,10 @@ const useApiManagement = (
     return undefined
   })
 
+  const getTaskyonKeyString = () => {
+    return availableKeys.value.taskyon
+  }
+
   const currentKeyString = computed(() => {
     const api = stateRefs.llmSettings.selectedApi
     if (api) return availableKeys.value[api] ?? null
@@ -653,6 +657,7 @@ const useApiManagement = (
 
   return {
     initModelsAndStoredKeys,
+    getTaskyonKeyString,
     currentModelId,
     tyKeyAllowedModels,
     taskyonKey,
