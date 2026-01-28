@@ -52,5 +52,5 @@ export const testTokenMinting = async (ctx: { tyauth: string }) => {
   // - max_costs (0.20)
   // - services: ['proxy', 'chat_completion']
 
-  return { payloadJson, headerB64 }
+  return { payloadJson, headerB64, token }
 }
