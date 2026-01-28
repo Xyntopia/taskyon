@@ -438,10 +438,15 @@ const tools = [
     description: 'Main assistant that inspects the project files and decides on next actions.',
     parameters: {
       type: 'object',
-      properties: {},
+      properties: {
+        webSearch: {
+          type: 'boolean',
+          description: 'Whether web search is enabled for this session',
+        },
+      },
       additionalProperties: false,
     } as const satisfies JSONSchema7,
-    function: () => {
+    function: (opts) => {
       // 1. Context Assembly
       const fileNames = Object.keys(files.value)
       const currentFile = activeFileName.value
@@ -521,6 +526,7 @@ You have access to the \`updateDocument\` tool which can:
 Your goal is to **keep the document in sync with the user's intent**. When in doubt, prefer **actually editing the document** via \`updateDocument\` instead of just suggesting changes.
 `
       return makeTaskResult([
+        ...(opts.webSearch ? [createChatCompletionTask({ goal: 'WebSearch' })] : []),
         createChatCompletionTask({
           prompts: [contextPrompt],
           goal: 'ChooseTool',
