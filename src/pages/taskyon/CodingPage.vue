@@ -449,6 +449,7 @@ const tools = [
 
       const filesPreview = fileNames
         .map((name) => {
+          // TODO: make sure, taskyon sees all open files, if it needs to! (use this as a function argument?)
           const content = files.value[name] || ''
           const lineCount = content.split('\n').length
           const isCurrent = name === currentFile ? ' (Currently Open)' : ''
