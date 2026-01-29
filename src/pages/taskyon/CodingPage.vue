@@ -504,6 +504,7 @@ You have access to the \`updateDocument\` tool which can:
    - Whenever the user wants to **create, modify, refactor, reformat, or delete** any part of the document, you **MUST** call \`updateDocument\`.
    - Do **NOT** just answer with "here is the updated code" or "change line X to Y" without also calling \`updateDocument\`.
    - If the document is empty and the user asks to **create a new file**, use \`updateDocument\` with \`newContent\`.
+   - Do **NOT** explain to the user what changes should be made, but apply them using the tool if its possible!
 
 2. **When to NOT use \`updateDocument\`**
    - Only skip \`updateDocument\` if the user is clearly asking **purely conceptual questions** (e.g., "Explain what this function does", "What does this error mean?", "How does async/await work in JS?").
@@ -517,6 +518,7 @@ You have access to the \`updateDocument\` tool which can:
 4. **How to respond**
    - For edit requests:
      - Always prefer patching instead of replacing the entire document.
+     - Make sure you don't include the line numbers!
      - if you can edit an existing document, prefer that instead of creating a new one.
      - Call \`updateDocument\` with appropriate \`patches\` or \`newContent\`.
      - In the tool result description, clearly explain what you changed (e.g., which lines, what behavior changed).
