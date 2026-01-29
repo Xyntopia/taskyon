@@ -8,6 +8,7 @@ import type {
   ReturnTokenRequest,
   ReturnTokenResponse,
 } from './tokenservice.types'
+import { sleep } from '../utils/asyncUtils'
 
 /**
  * Very simple client-side helper to call the minting service using axios.
@@ -82,8 +83,24 @@ export const testTokenMinting = async (ctx: { tyauth: string }) => {
   // - max_costs (0.20)
   // - services: ['proxy', 'chat_completion']
 
+  await sleep(10000)
+
   const credits_spent_increase = 0.0111
-  const returnres = returnToken(baseUrl, token, ctx.tyauth, credits_spent_increase)
+  const returnres = await returnToken(baseUrl, token, ctx.tyauth, credits_spent_increase)
+
+  /*
+   TODO:
+
+   - check for double spending
+   - check for wrong jwt tokens
+   - check for unverifiable jwt tokens
+  - check for tokens with missing claims
+    - check for unauthorized users trying to return tokens
+    - check for free taskyon key users trying to return tokens
+    - check for negative credits_spent_increase
+    - check for negative depositos
+    - check for late deposits (after token expiration)
+  */
 
   return { payloadJson, headerB64, token, returnres }
 }
