@@ -11,8 +11,6 @@ import type {
   tyPublicApiKeyObject,
   TyTaskStreamData,
 } from '@taskyon/taskyon'
-import type { AuthenticationOptions } from '@taskyon/taskyon/browser'
-import { OAUTH_PROVIDERS, usePersistentOauth, type TokenGetter } from '@taskyon/taskyon/browser'
 import {
   availableModels,
   chatCompletionToolParameters,
@@ -29,6 +27,7 @@ import {
   isTaskyonKey,
   joinUrl,
   latestOnly,
+  OAUTH_PROVIDERS,
   randomString,
   TaskNode,
   TaskyonMessage,
@@ -36,6 +35,8 @@ import {
   tyCore,
   usePyodideWebworker,
 } from '@taskyon/taskyon'
+import type { AuthenticationOptions } from '@taskyon/taskyon/browser'
+import { usePersistentOauth, type TokenGetter } from '@taskyon/taskyon/browser'
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
 import type { chunkStreamType } from '@taskyon/taskyon/tools/chatCompletionTool'
 import { until } from '@vueuse/core'

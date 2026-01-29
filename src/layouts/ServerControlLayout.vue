@@ -16,6 +16,7 @@
         </div>
       </q-scroll-area>
     </q-drawer>-->
+    <DarkModeButton flat />
 
     <!-- Main Content Area -->
     <q-page-container>
@@ -24,4 +25,12 @@
   </q-layout>
 </template>
 
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import DarkModeButton from 'src/components/DarkModeButton.vue'
+import { useAppStateStore } from 'src/stores/appState'
+
+if (process.env.CLIENT) {
+  const state = useAppStateStore()
+  console.log('ServerControlLayout state:', state)
+}
+</script>

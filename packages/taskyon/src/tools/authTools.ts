@@ -1,6 +1,6 @@
 import type { JSONSchema7 } from 'json-schema'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
-import { authenticateWithPopup } from '../utils/oauth'
+import { authenticateWithPopup } from '../utils/oauthUi'
 
 declare global {
   interface Window {

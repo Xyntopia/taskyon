@@ -19,6 +19,7 @@ import {
   getTextFile,
   jsonSchemaToYamlString,
   normalizeFalsyValues,
+  OAUTH_PROVIDERS,
   processTasks,
   removeKeys,
   safeYamlDump,
@@ -31,7 +32,7 @@ import {
   usePyodideWebworker,
   zodToYamlString,
 } from '@taskyon/taskyon'
-import { authenticateWithPopup, OAUTH_PROVIDERS } from '@taskyon/taskyon/browser'
+import { authenticateWithPopup } from '@taskyon/taskyon/browser'
 import { getDatabase } from '@taskyon/taskyon/db'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'

@@ -1,6 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
 import { useGdrive } from 'src/modules/gdrive' // Import the gdrive module
-import { OAUTH_PROVIDERS, usePersistentOauth } from '../utils/oauth'
+import { usePersistentOauth } from '../utils/oauthUi'
+import { OAUTH_PROVIDERS } from '../utils/oauth'
 import { createTool, makeTaskResult } from '../types/toolApi'
 
 /*const googleDriveTool = createTool({

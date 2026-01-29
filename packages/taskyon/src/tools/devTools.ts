@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
+import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import type { OAuthCredentials } from '../utils/oauth'
 import { OAUTH_PROVIDERS, useRefreshTokenIfExpired } from '../utils/oauth'
-import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 
 const getGitlabInfo = createTool({
   name: 'getGitlabInfo',
