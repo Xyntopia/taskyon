@@ -386,6 +386,7 @@ export default defineConfig((ctx) => {
       middlewares: [
         'logger',
         'gdriveProxy',
+        'proxyMiddleware',
         'render', // keep this as last one
       ],
 
