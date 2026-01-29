@@ -71,6 +71,9 @@ export async function returnToken(
 
 export const testTokenMinting = async (ctx: { tyauth: string }) => {
   const baseUrl = 'https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/tokenservice'
+
+  //const { data, error } = await supabase.rpc('get_available_credits')
+
   const token = await mintToken(baseUrl, ctx.tyauth)
   console.log('Minted token:', token)
 
@@ -85,7 +88,7 @@ export const testTokenMinting = async (ctx: { tyauth: string }) => {
 
   await sleep(10000)
 
-  // TODO: check if credits are decreased by depost amount!
+  //const { data, error } = await supabase.rpc('get_available_credits')
 
   const credits_spent_increase = 0.0111
   const returnres = await returnToken(baseUrl, token, ctx.tyauth, credits_spent_increase)
