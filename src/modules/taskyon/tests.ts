@@ -1,6 +1,5 @@
 import type { OpenAIMessage, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import {
-  authenticateWithPopup,
   base64ToPublixX25519,
   chat2Md,
   convertTaskNodesToOpenAIChat,
@@ -20,7 +19,6 @@ import {
   getTextFile,
   jsonSchemaToYamlString,
   normalizeFalsyValues,
-  OAUTH_PROVIDERS,
   processTasks,
   removeKeys,
   safeYamlDump,
@@ -33,6 +31,7 @@ import {
   usePyodideWebworker,
   zodToYamlString,
 } from '@taskyon/taskyon'
+import { authenticateWithPopup, OAUTH_PROVIDERS } from '@taskyon/taskyon/browser'
 import { getDatabase } from '@taskyon/taskyon/db'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'

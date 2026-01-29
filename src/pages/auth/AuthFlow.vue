@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import type { authReturn } from '@taskyon/taskyon'
+import type { authReturn } from '@taskyon/taskyon/browser'
 import { onMounted, ref } from 'vue'
 
 /**

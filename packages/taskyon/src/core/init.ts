@@ -1,6 +1,5 @@
 import { dump } from 'js-yaml'
 import z from 'zod'
-import { createOAuthTool } from '../tools/authTools'
 import type { ChatCompletionArgs } from '../tools/chatCompletionTool'
 import { chatCompletionToolName, createChatCompletionTool } from '../tools/chatCompletionTool'
 import { devTools } from '../tools/devTools'
@@ -240,7 +239,6 @@ const dynamicContext =
       createToolSearcher(taskManagerInstance),
       createChooseTool(taskManagerInstance),
       taskSearcher(taskManagerInstance),
-      createOAuthTool(secretStore),
     )
     taskManagerInstance.addDefaultTools(ToolList)
     await taskManagerInstance.updateToolDefinitions()
@@ -387,6 +385,7 @@ export async function tyCore(
         'getTaskIdChain',
         'convertTaskIDs',
         'updateToolDefinitions',
+        'addDefaultTools',
         'addPartialTask2Tree',
         'getMeta',
         'metaUpsert',

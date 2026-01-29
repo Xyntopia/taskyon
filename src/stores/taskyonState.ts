@@ -1,6 +1,5 @@
 import type {
   Asyncify,
-  AuthenticationOptions,
   CryptoSession,
   InternalTool,
   KeyString,
@@ -9,10 +8,11 @@ import type {
   TaskNodeMeta,
   Taskyon,
   Thunk,
-  TokenGetter,
   tyPublicApiKeyObject,
   TyTaskStreamData,
 } from '@taskyon/taskyon'
+import type { AuthenticationOptions } from '@taskyon/taskyon/browser'
+import { OAUTH_PROVIDERS, usePersistentOauth, type TokenGetter } from '@taskyon/taskyon/browser'
 import {
   availableModels,
   chatCompletionToolParameters,
@@ -29,15 +29,14 @@ import {
   isTaskyonKey,
   joinUrl,
   latestOnly,
-  OAUTH_PROVIDERS,
   randomString,
   TaskNode,
   TaskyonMessage,
   toolCall,
   tyCore,
-  usePersistentOauth,
   usePyodideWebworker,
 } from '@taskyon/taskyon'
+import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
 import type { chunkStreamType } from '@taskyon/taskyon/tools/chatCompletionTool'
 import { until } from '@vueuse/core'
 import { default as Ajv } from 'ajv'
@@ -348,9 +347,13 @@ function connectGdriveSync(
   }
 }
 
-function defineTyGuiTools(stateRefs: ReturnType<typeof useAppStateStore>): InternalTool[] {
+function defineTyGuiTools(
+  stateRefs: ReturnType<typeof useAppStateStore>,
+  ty: Taskyon,
+): InternalTool[] {
   return [
     ...guiTools,
+    createOAuthTool(ty.setSecret),
     {
       function: ({ newPrompts }) => {
         console.log('Modifying prompts in llmSettings...')
@@ -953,9 +956,14 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return await tyCore(
       () => stateRefs.llmSettings,
       () => stateRefs.toolchainConfig,
-      defineTyGuiTools(stateRefs),
+      [],
       cs,
     )
+  })
+
+  void taskyon.then(async (ty) => {
+    ty.addDefaultTools(defineTyGuiTools(stateRefs, ty))
+    await ty.updateToolDefinitions(false)
   })
 
   const apiKeyManagement = useApiManagement(stateRefs, () => taskyon)

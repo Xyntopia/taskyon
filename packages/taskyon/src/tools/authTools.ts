@@ -1,7 +1,6 @@
 import type { JSONSchema7 } from 'json-schema'
-import type { SecretStore } from '../utils/crudWrapper'
-import { authenticateWithPopup } from '../utils/oauth'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
+import { authenticateWithPopup } from '../utils/oauth'
 
 declare global {
   interface Window {
@@ -56,7 +55,9 @@ function withAbort<T>(signal: AbortSignal, p: Promise<T>) {
 }
 
 // Enhance createOAuthTool to wait for button press before opening popup
-export const createOAuthTool = (secretStore: SecretStore) => {
+export const createOAuthTool = (
+  setSecret: (id: string | number, secretName: string, secretData: string) => Promise<void>,
+) => {
   return createTool({
     name: 'ensureOauthLogin',
     description: `Ensure, that we have an oauth token for the calling tool.`,
@@ -141,7 +142,7 @@ not working:
       const creds = await authenticateWithPopup({ oauthURL, clientId, scope, tokenUrl }, stopSignal)
 
       // store secret and confirm
-      await secretStore.setSecret(toolId, 'oauth-creds', JSON.stringify(creds))
+      await setSecret(toolId, 'oauth-creds', JSON.stringify(creds))
 
       return makeTaskResult([
         [{ role: 'assistant', content: { type: 'return', data: '🎉 Logged in successfully.' } }],

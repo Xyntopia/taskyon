@@ -8,6 +8,9 @@
     ".": {
       "import": "./src/index.ts"
     },
+    "./browser": {
+      "import": "./src/browser.ts"
+    },
     "./tools": {
       "import": "./src/tools/index.ts"
     },
