@@ -85,8 +85,12 @@ export const testTokenMinting = async (ctx: { tyauth: string }) => {
 
   await sleep(10000)
 
+  // TODO: check if credits are decreased by depost amount!
+
   const credits_spent_increase = 0.0111
   const returnres = await returnToken(baseUrl, token, ctx.tyauth, credits_spent_increase)
+
+  // TODO: check here if credits are increased by deposit amount - spent amount
 
   /*
    TODO:
