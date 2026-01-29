@@ -3,28 +3,13 @@ import { LocalStorage } from 'quasar'
 import type { TyProfile } from 'src/modules/taskyon/types'
 import type { PartialDeep } from 'type-fest'
 
-// load our saved state as fast as possible to avoid "color-glitches" at the beginning.
-
-// TODO: move this into appState and explicitly set the profile name...
-export function getUrlConfig() {
-  const searchParams = new URLSearchParams(window.location.search)
-  const isIframeParam = searchParams.get('iframe') === 'true'
-  const profile = searchParams.get('profile')
-  console.log('we are in an iframe via param:', isIframeParam)
-  const isInIframe = window.self !== window.top || isIframeParam
-  console.log('we are in an iframe:', window.self !== window.top, isInIframe)
-  return { isInIframe, profile }
-}
-
-export const urlConfig = getUrlConfig()
-
 const profilePointerKey = 'currentProfile'
 const profileName = (name: string) => `session_${name}`
 
-export const getCurrentProfileName = () =>
-  urlConfig.profile ?? LocalStorage.getItem(profilePointerKey)
+export const getCurrentActiveProfileName = (): string | null =>
+  LocalStorage.getItem(profilePointerKey)
 
-export const switchCurrentProfilePointer = (newProfileId: string) =>
+export const switchCurrentActiveProfilePointer = (newProfileId: string) =>
   LocalStorage.setItem(profilePointerKey, newProfileId)
 
 export const setTaskyonUiProfile = (name: string, newState: PartialDeep<TyProfile>) =>
@@ -40,4 +25,4 @@ export const getTaskyonUiProfile = (name: string | null) => {
   return stateObj
 }
 
-export const initialStoredStateObj = getTaskyonUiProfile(getCurrentProfileName())
+export const initialStoredStateObj = getTaskyonUiProfile(getCurrentActiveProfileName())

@@ -40,7 +40,7 @@ import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
 import { useGdrive } from '../gdrive'
-import { getCurrentProfileName, getStoredStateString } from '../ui/initialState'
+import { getCurrentActiveProfileName, getStoredStateString } from '../ui/initialState'
 import { initCryptoSessionFromBrowser } from './browserCryptoSession'
 import { gDriveSyncPort } from './sync'
 
@@ -1564,7 +1564,7 @@ export async function getTestMetaData() {
     return tyChat
   }
 
-  const currentProfilePointer = getCurrentProfileName()
+  const currentProfilePointer = getCurrentActiveProfileName()
   return safeYamlDump({
     browserInfo: {
       userAgent: navigator.userAgent,

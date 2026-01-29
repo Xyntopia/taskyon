@@ -19,12 +19,11 @@ import { computed, reactive, ref, toRefs, unref, watch, type Reactive } from 'vu
 import type { KeyString, Thunk, tyPublicKeyDraft } from '@taskyon/taskyon'
 import { deepMerge, sleep, type FunctionCall } from '@taskyon/taskyon'
 import {
-  getCurrentProfileName,
+  getCurrentActiveProfileName,
   getTaskyonUiProfile,
   initialStoredStateObj,
   setTaskyonUiProfile,
-  switchCurrentProfilePointer,
-  urlConfig,
+  switchCurrentActiveProfilePointer,
 } from 'src/modules/ui/initialState'
 import type { PartialDeep } from 'type-fest'
 
@@ -39,6 +38,22 @@ function clearBrowserStorage(localStorageKeys?: string[]) {
   clearBrowserCaches()
   clearServiceWorkers()
   clearCookies()
+}
+
+export function getUrlConfig() {
+  if (process.env.CLIENT) {
+    const searchParams = new URLSearchParams(window.location.search)
+    const isIframeParam = searchParams.get('iframe') === 'true'
+    const profile = searchParams.get('profile')
+    console.log('we are in an iframe via param:', isIframeParam)
+    const isInIframe = window.self !== window.top || isIframeParam
+    console.log('we are in an iframe:', window.self !== window.top, isInIframe)
+    return { isInIframe, profile }
+  } else
+    return {
+      isInIframe: false,
+      profile: null,
+    }
 }
 
 function getInitialState() {
@@ -170,7 +185,7 @@ const useSessionKey = () => {
   }
 }
 
-const saveAndLoadState = (initialState: initialState) => {
+const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null>) => {
   const initialStoredStateObjTyped = initialStoredStateObj as Partial<initialState> | undefined
 
   let stateRefs: Reactive<initialState>
@@ -190,8 +205,8 @@ const saveAndLoadState = (initialState: initialState) => {
         initialStoredStateObjTyped?.version || 'undefined'
       }) is not compatible with current version (${initialState.version}). Using default settings.`,
     )
-    const pname = getCurrentProfileName()
-    if (pname) clearBrowserStorage([pname])
+    const pn = pname()
+    if (pn) clearBrowserStorage([pn])
     stateRefs = reactive(initialState)
   }
 
@@ -201,9 +216,9 @@ const saveAndLoadState = (initialState: initialState) => {
   // store the state on every change!! :)
   watch(stateRefs, (newState) => {
     //console.log('saved store!!');
-    const pname = getCurrentProfileName()
-    if (saveToLocalStorage && pname) {
-      setTaskyonUiProfile(pname, newState)
+    const pn = pname()
+    if (saveToLocalStorage && pn) {
+      setTaskyonUiProfile(pn, newState)
     }
   })
 
@@ -235,7 +250,13 @@ const saveAndLoadState = (initialState: initialState) => {
 export const useAppStateStore = defineStore('ui-state', () => {
   // configuration from the URL!
   const { initialState, defaultStorableSettings } = getInitialState()
-  const { overRideSettings, stateRefs } = saveAndLoadState(initialState)
+  const urlConfig = getUrlConfig()
+  const getCurrentActiveProfileNameOrUrlProfile = () =>
+    urlConfig.profile ?? getCurrentActiveProfileName()
+  const { overRideSettings, stateRefs } = saveAndLoadState(
+    initialState,
+    getCurrentActiveProfileNameOrUrlProfile,
+  )
 
   // this file could potentially be replaced in kubernetes or docker using a configmap!
   // that way we can configure our webapp even if its already compiled...
@@ -290,10 +311,10 @@ export const useAppStateStore = defineStore('ui-state', () => {
     console.log('switch Profile to new sessionId:', newId)
     if (newId) {
       // we don't need to save our old state, as it should have been persisted automatically
-      switchCurrentProfilePointer(newId)
+      switchCurrentActiveProfilePointer(newId)
     }
     // re-load state with new profile!
-    Object.assign(stateRefs, getTaskyonUiProfile(getCurrentProfileName()))
+    Object.assign(stateRefs, getTaskyonUiProfile(getCurrentActiveProfileNameOrUrlProfile()))
   }
 
   // we do this funny next line, because our store is currently "reactive" which means
