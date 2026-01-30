@@ -1,11 +1,23 @@
 // wsProxyFetch.ts
-import { makeTLSClient } from '@reclaimprotocol/tls'
-// Extra debug flag
+
 const DEBUG = true
 
 function log(...args: unknown[]) {
   if (DEBUG) console.log('[secure-fetch-over-ws]', ...args)
 }
+
+log('@reclaimprotocol/tls')
+import { setCryptoImplementation, makeTLSClient } from '@reclaimprotocol/tls'
+log('and get webcryptoCrypto')
+// import { webcryptoCrypto } from '@reclaimprotocol/tls/webcrypto'
+// setCryptoImplementation(webcryptoCrypto)
+
+// TODO: why does webcryptoCrypto  not work???
+import { pureJsCrypto } from '@reclaimprotocol/tls/purejs-crypto'
+
+// Configure TLS to use WebCrypto in the browser
+log('setting TLS crypto impl')
+setCryptoImplementation(pureJsCrypto) // Extra debug flag
 
 /* =====================
    Config
@@ -80,7 +92,10 @@ type TlsConnection = {
 
 async function openTlsConnection(host: string): Promise<TlsConnection> {
   log('openTlsConnection: creating WebSocket to tunnel', TUNNEL_WS_URL, 'for host', host)
-  const ws = new WebSocket(TUNNEL_WS_URL)
+  // Pass the target TLS host to the proxy as a query param so the server
+  // can know which upstream host to connect to.
+  const wsUrl = `${TUNNEL_WS_URL}/?host=${encodeURIComponent(host)}`
+  const ws = new WebSocket(wsUrl)
   ws.binaryType = 'arraybuffer'
 
   log('openTlsConnection: waiting for WebSocket to open')
