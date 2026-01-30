@@ -600,10 +600,6 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
                 type: 'string',
                 description: 'The path/name of the file to update',
               },
-              newContent: {
-                type: 'string',
-                description: 'Full new content for the file',
-              },
               patches: {
                 type: 'array',
                 items: {
@@ -616,6 +612,11 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
                   },
                   required: ['type', 'lineStart'],
                 },
+              },
+              newContent: {
+                type: 'string',
+                description:
+                  'Full new content for the file. Only do this, if realy necessary, otherwise use patches.',
               },
             },
             required: ['filePath'],
