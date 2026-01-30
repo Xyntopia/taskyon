@@ -56,6 +56,7 @@
     "@noble/ed25519": "^2.1.0",
     "@openrouter/ai-sdk-provider": "^2.0.0",
     "@quasar/extras": "^1.17.0",
+    "@reclaimprotocol/tls": "^0.1.2",
     "@resvg/resvg-wasm": "^2.6.2",
     "@scure/bip39": "^1.5.0",
     "@supabase/supabase-js": "^2.39.0",

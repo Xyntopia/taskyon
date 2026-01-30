@@ -1,5 +1,5 @@
 // secure-fetch-over-ws.ts
-import { createTlsClient } from '@reclaimprotocol/tls'
+import { makeTLSClient } from '@reclaimprotocol/tls'
 
 /* =====================
    Config
@@ -14,7 +14,7 @@ const TUNNEL_WS_URL = 'wss://tunnel.example.com'
 const te = new TextEncoder()
 const td = new TextDecoder()
 
-function concat(a: Uint8Array, b: Uint8Array) {
+function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
   const out = new Uint8Array(a.length + b.length)
   out.set(a, 0)
   out.set(b, a.length)
@@ -32,40 +32,46 @@ function indexOf(buf: Uint8Array, needleStr: string): number | null {
   return null
 }
 
-function waitFor(obj: any, ev: string, ms: number) {
-  return new Promise<void>((res) => obj.addEventListener(ev, () => res(), { once: true }))
+function waitFor(obj: WebSocket, ev: 'open' | 'error'): Promise<void> {
+  return new Promise((res, rej) => {
+    obj.addEventListener(ev, () => res(), { once: true })
+    obj.addEventListener('error', (e) => rej(e), { once: true })
+  })
 }
 
 /* =====================
    TLS over WebSocket
 ===================== */
 
-async function openTlsConnection(host: string, port = 443) {
+type TlsConnection = {
+  send(data: Uint8Array): void
+  read(): Promise<Uint8Array>
+  close(): void
+}
+
+async function openTlsConnection(host: string): Promise<TlsConnection> {
   const ws = new WebSocket(TUNNEL_WS_URL)
   ws.binaryType = 'arraybuffer'
 
-  await waitFor(ws, 'open', 10_000)
-
-  // OPTIONAL: tunnel control message
-  // ws.send(JSON.stringify({ host, port }));
-
-  let onHandshakeDone!: () => void
-  let onHandshakeErr!: (e: any) => void
-
-  const handshake = new Promise<void>((res, rej) => {
-    onHandshakeDone = res
-    onHandshakeErr = rej
-  })
+  await waitFor(ws, 'open')
 
   const rxQueue: Uint8Array[] = []
   let pendingRead: ((v: Uint8Array) => void) | null = null
 
-  const tls = createTlsClient({
-    serverName: host,
-    write(data: Uint8Array) {
-      ws.send(data)
+  const tls = makeTLSClient({
+    host,
+    verifyServerCertificate: true,
+
+    async write({ header, content }) {
+      ws.send(header)
+      if (content?.length) ws.send(content)
     },
-    onData(data: Uint8Array) {
+
+    onHandshake() {
+      // noop, handshake resolved by protocol itself
+    },
+
+    onApplicationData(data: Uint8Array) {
       if (pendingRead) {
         pendingRead(data)
         pendingRead = null
@@ -73,23 +79,22 @@ async function openTlsConnection(host: string, port = 443) {
         rxQueue.push(data)
       }
     },
-    onHandshakeDone() {
-      onHandshakeDone()
-    },
-    onError(err: any) {
-      onHandshakeErr(err)
+
+    onTlsEnd(err?: Error) {
+      if (err) console.error('TLS error', err)
+      ws.close()
     },
   })
 
-  ws.onmessage = (ev) => tls.receive(new Uint8Array(ev.data))
-  ws.onerror = (e) => onHandshakeErr(e)
+  ws.onmessage = (ev) => {
+    tls.handleReceivedBytes(new Uint8Array(ev.data))
+  }
 
   tls.startHandshake()
-  await handshake
 
   return {
     send(data: Uint8Array) {
-      tls.send(data)
+      tls.write(data)
     },
     read(): Promise<Uint8Array> {
       if (rxQueue.length) return Promise.resolve(rxQueue.shift()!)
@@ -141,15 +146,19 @@ async function readHttpResponse(read: () => Promise<Uint8Array>) {
   let rest = buf.slice(headerEnd + 4)
 
   const lines = headerText.split('\r\n')
-  const [_, status, ...statusText] = lines[0].split(' ')
+  if (!lines[0]) throw new Error('Invalid HTTP response')
+
+  const [, status, ...statusText] = lines[0].split(' ')
 
   const headers: Record<string, string> = {}
   for (const l of lines.slice(1)) {
     const i = l.indexOf(':')
-    headers[l.slice(0, i).toLowerCase()] = l.slice(i + 1).trim()
+    if (i > 0) {
+      headers[l.slice(0, i).toLowerCase()] = l.slice(i + 1).trim()
+    }
   }
 
-  const len = headers['content-length'] ? parseInt(headers['content-length'], 10) : null
+  const len = headers['content-length'] ? Number.parseInt(headers['content-length'], 10) : null
 
   while (len !== null && rest.length < len) {
     rest = concat(rest, await read())
@@ -167,18 +176,27 @@ async function readHttpResponse(read: () => Promise<Uint8Array>) {
    secureFetch
 ===================== */
 
-const connCache = new Map<string, any>()
+const connCache = new Map<string, Promise<TlsConnection>>()
 
-export async function secureFetch(urlStr: string, opts: any = {}) {
+export async function secureFetch(
+  urlStr: string,
+  opts: {
+    method?: string
+    headers?: Record<string, string>
+    body?: Uint8Array | string
+  } = {},
+) {
   const url = new URL(urlStr)
-  if (url.protocol !== 'https:') throw new Error('https only')
-
-  const key = `${url.hostname}:${url.port || 443}`
-  if (!connCache.has(key)) {
-    connCache.set(key, openTlsConnection(url.hostname, Number(url.port) || 443))
+  if (url.protocol !== 'https:') {
+    throw new Error('https only')
   }
 
-  const conn = await connCache.get(key)
+  const key = url.hostname
+  if (!connCache.has(key)) {
+    connCache.set(key, openTlsConnection(url.hostname))
+  }
+
+  const conn = await connCache.get(key)!
 
   const body = typeof opts.body === 'string' ? te.encode(opts.body) : opts.body
 
@@ -191,13 +209,13 @@ export async function secureFetch(urlStr: string, opts: any = {}) {
     status: res.status,
     statusText: res.statusText,
     headers: res.headers,
-    async arrayBuffer() {
+    arrayBuffer() {
       return res.body.buffer.slice(0)
     },
-    async text() {
+    text() {
       return td.decode(res.body)
     },
-    async json() {
+    json() {
       return JSON.parse(td.decode(res.body))
     },
   }
@@ -211,7 +229,7 @@ export async function selfTest() {
   const start = performance.now()
 
   const res = await secureFetch('https://example.com/')
-  const text = await res.text()
+  const text = res.text()
 
   return {
     ok: res.status === 200,
