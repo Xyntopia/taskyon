@@ -116,6 +116,14 @@
 
           <q-space />
 
+          <q-toggle
+            v-model="showAllFilesInPrompt"
+            dense
+            size="sm"
+            color="secondary"
+            label="AI sees all files"
+          />
+
           <q-btn
             flat
             dense
@@ -337,6 +345,7 @@ const documentVersions = ref<ProjectVersion[]>([])
 const currentVersionIndex = ref(0)
 const hasUnsavedChanges = ref(false)
 const showPreview = ref(false)
+const showAllFilesInPrompt = ref(false)
 
 // --- Computed ---
 
@@ -443,13 +452,22 @@ const tools = [
           type: 'boolean',
           description: 'Whether web search is enabled for this session',
         },
+        showAllFiles: {
+          type: 'boolean',
+          description:
+            'If true, include the full contents (truncated) of all files in the prompt, not just the active one.',
+        },
       },
       additionalProperties: false,
     } as const satisfies JSONSchema7,
     function: (opts) => {
+      const showAllFiles = opts.showAllFiles ?? false
+
       // 1. Context Assembly
       const fileNames = Object.keys(files.value)
       const currentFile = activeFileName.value
+      const maxLinesPerFile = 400
+
       const currentFileContent = files.value[currentFile] || ''
 
       const filesPreview = fileNames
@@ -462,7 +480,33 @@ const tools = [
         })
         .join('\n')
 
-      const activeContentWithLines = formatContentWithLineNumbers(currentFileContent, 1000)
+      let filesContentsSection = ''
+      if (showAllFiles) {
+        const filesDetails = fileNames
+          .map((name) => {
+            const content = files.value[name] || ''
+            const formatted = formatContentWithLineNumbers(content, maxLinesPerFile)
+            return (
+              `### File: ${name}${name === currentFile ? ' (Currently Open)' : ''}` +
+              '\n```' +
+              '\n' +
+              formatted +
+              '\n```'
+            )
+          })
+          .join('\n\n')
+
+        filesContentsSection = `## Contents of All Files (truncated)` + `\n${filesDetails}`
+      } else {
+        const activeContentWithLines = formatContentWithLineNumbers(
+          currentFileContent,
+          maxLinesPerFile,
+        )
+
+        filesContentsSection =
+          `## Content of Active File (${currentFile})` +
+          `\n\`\`\`\n${activeContentWithLines}\n\`\`\``
+      }
 
       const contextPrompt = `
 You are the Taskyon Coding Assistant managing a multi-file project.
@@ -473,10 +517,13 @@ You are the Taskyon Coding Assistant managing a multi-file project.
 **Files in Project:**
 ${filesPreview}
 
-## Content of Active File (${currentFile})
-\`\`\`
-${activeContentWithLines}
-\`\`\`
+## Project State
+**Total Files:** ${fileNames.length}
+**Current Active File:** ${currentFile}
+**Files in Project:**
+${filesPreview}
+
+${filesContentsSection}
 
 ## Capabilities
 - You can read and edit **any** file in the project, not just the active one.
