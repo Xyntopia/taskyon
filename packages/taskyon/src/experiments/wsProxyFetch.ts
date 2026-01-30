@@ -1,5 +1,11 @@
 // secure-fetch-over-ws.ts
 import { makeTLSClient } from '@reclaimprotocol/tls'
+// Extra debug flag
+const DEBUG = true
+
+function log(...args: unknown[]) {
+  if (DEBUG) console.log('[secure-fetch-over-ws]', ...args)
+}
 
 /* =====================
    Config
@@ -40,10 +46,26 @@ function indexOf(buf: Uint8Array, needleStr: string): number | null {
   return null
 }
 
+log('waitForOpen: attaching event listeners')
+
 function waitForOpen(ws: WebSocket): Promise<void> {
   return new Promise((resolve, reject) => {
-    ws.addEventListener('open', () => resolve(), { once: true })
-    ws.addEventListener('error', () => reject(new Error('WebSocket error')), { once: true })
+    ws.addEventListener(
+      'open',
+      () => {
+        log('WebSocket open to tunnel', ws.url)
+        resolve()
+      },
+      { once: true },
+    )
+    ws.addEventListener(
+      'error',
+      (ev) => {
+        log('WebSocket error while opening', ev)
+        reject(new Error('WebSocket error'))
+      },
+      { once: true },
+    )
   })
 }
 
@@ -57,12 +79,15 @@ type TlsConnection = {
   close(): void
 }
 
+log('openTlsConnection: creating WebSocket to tunnel', TUNNEL_WS_URL, 'for host', host)
 async function openTlsConnection(host: string): Promise<TlsConnection> {
   const ws = new WebSocket(TUNNEL_WS_URL)
   ws.binaryType = 'arraybuffer'
 
+  log('openTlsConnection: waiting for WebSocket to open')
   await waitForOpen(ws)
 
+  log('openTlsConnection: WebSocket open, setting up TLS client')
   const rxQueue: Uint8Array[] = []
   let pendingRead: ((v: Uint8Array) => void) | null = null
 
@@ -71,45 +96,78 @@ async function openTlsConnection(host: string): Promise<TlsConnection> {
     verifyServerCertificate: true,
 
     write({ header, content }) {
+      log(
+        'TLS write: sending record(s) over WebSocket',
+        'header bytes =',
+        header?.byteLength ?? 0,
+        'content bytes =',
+        content?.byteLength ?? 0,
+      )
       ws.send(header)
       if (content && content.length) ws.send(content)
     },
 
-    onHandshake() {},
+    onHandshake() {
+      log('TLS handshake completed for host', host)
+    },
 
     onApplicationData(data) {
       const chunk = toU8(data)
+      log('TLS application data received, bytes =', chunk.byteLength)
       if (pendingRead) {
+        log('Delivering data to pending reader')
         pendingRead(chunk)
         pendingRead = null
       } else {
+        log('Queueing data chunk, queue length before push =', rxQueue.length)
         rxQueue.push(chunk)
       }
     },
 
     onTlsEnd(err) {
-      if (err) console.error('TLS ended:', err)
+      if (err) log('TLS ended with error:', err)
+      else log('TLS ended cleanly for host', host)
       ws.close()
     },
   })
 
   ws.onmessage = (ev) => {
-    void tls.handleReceivedBytes(new Uint8Array(ev.data))
+    const data = new Uint8Array(ev.data)
+    log('WebSocket message received, bytes =', data.byteLength)
+    void tls.handleReceivedBytes(data)
   }
 
+  ws.onclose = (ev) => {
+    log('WebSocket closed', { code: ev.code, reason: ev.reason, wasClean: ev.wasClean })
+  }
+
+  ws.onerror = (ev) => {
+    log('WebSocket error after open', ev)
+  }
+
+  log('openTlsConnection: starting TLS handshake')
+  void tls.startHandshake()
   void tls.startHandshake()
 
   return {
     send(data: Uint8Array) {
-      void tls.write(toU8(data))
+      const d = toU8(data)
+      log('TlsConnection.send called, bytes =', d.byteLength)
+      void tls.write(d)
     },
 
     read(): Promise<Uint8Array> {
-      if (rxQueue.length) return Promise.resolve(rxQueue.shift()!)
+      if (rxQueue.length) {
+        const chunk = rxQueue.shift()!
+        log('TlsConnection.read: returning queued chunk, bytes =', chunk.byteLength)
+        return Promise.resolve(chunk)
+      }
+      log('TlsConnection.read: waiting for next chunk')
       return new Promise((res) => (pendingRead = res))
     },
 
     close() {
+      log('TlsConnection.close: closing WebSocket')
       ws.close()
     },
   }
@@ -125,6 +183,7 @@ function buildHttpRequest(
   headers: Record<string, string>,
   body?: Uint8Array,
 ): Uint8Array {
+  log('buildHttpRequest:', { method, url: url.toString() })
   const lines: string[] = []
 
   lines.push(`${method} ${url.pathname + url.search || '/'} HTTP/1.1`)
@@ -145,13 +204,19 @@ function buildHttpRequest(
 async function readHttpResponse(read: () => Promise<Uint8Array>) {
   let buf: Uint8Array = new Uint8Array(0)
 
+  log('readHttpResponse: reading until headers complete')
+
   while (indexOf(buf, '\r\n\r\n') === null) {
-    buf = concat(buf, await read())
+    const chunk = await read()
+    log('readHttpResponse: received chunk while waiting for headers, bytes =', chunk.byteLength)
+    buf = concat(buf, chunk)
   }
 
   const headerEnd = indexOf(buf, '\r\n\r\n')!
   const headerText = td.decode(buf.slice(0, headerEnd))
   let rest: Uint8Array = buf.slice(headerEnd + 4)
+
+  log('readHttpResponse: raw headers =\n' + headerText)
 
   const lines = headerText.split('\r\n')
   if (!lines[0]) throw new Error('Invalid HTTP response')
@@ -168,15 +233,27 @@ async function readHttpResponse(read: () => Promise<Uint8Array>) {
 
   const len = headers['content-length'] ? Number.parseInt(headers['content-length'], 10) : null
 
+  log('readHttpResponse: parsed status/header', {
+    status: Number(status),
+    statusText: statusText.join(' '),
+    contentLength: len,
+  })
+
   while (len !== null && rest.length < len) {
-    rest = concat(rest, await read())
+    const chunk = await read()
+    log('readHttpResponse: reading body chunk, bytes =', chunk.byteLength)
+    rest = concat(rest, chunk)
   }
+
+  const body = len !== null ? rest.slice(0, len) : rest
+
+  log('readHttpResponse: body complete, bytes =', body.byteLength)
 
   return {
     status: Number(status),
     statusText: statusText.join(' '),
     headers,
-    body: len !== null ? rest.slice(0, len) : rest,
+    body,
   }
 }
 
@@ -194,23 +271,34 @@ export async function secureFetch(
     body?: Uint8Array | string
   } = {},
 ) {
+  log('secureFetch called with', { urlStr, opts })
   const url = new URL(urlStr)
   if (url.protocol !== 'https:') throw new Error('https only')
 
   const key = url.hostname
   if (!connCache.has(key)) {
+    log('secureFetch: no cached connection for host, opening new TLS connection', key)
     connCache.set(key, openTlsConnection(url.hostname))
+  } else {
+    log('secureFetch: reusing cached connection for host', key)
   }
 
   const conn = await connCache.get(key)!
-
+  log('secureFetch: got TLS connection, building HTTP request')
+  if (typeof opts.body === 'string') {
+    log('secureFetch: body is string, length =', opts.body.length)
+  }
   const body = typeof opts.body === 'string' ? te.encode(opts.body) : opts.body
 
   const req = buildHttpRequest(opts.method || 'GET', url, opts.headers || {}, body)
 
+  log('secureFetch: sending HTTP request bytes =', req.byteLength)
   conn.send(req)
 
+  log('secureFetch: waiting for HTTP response')
   const res = await readHttpResponse(() => conn.read())
+
+  log('secureFetch: response received', { status: res.status, statusText: res.statusText })
 
   return {
     status: res.status,
@@ -218,14 +306,17 @@ export async function secureFetch(
     headers: res.headers,
 
     arrayBuffer() {
+      log('secureFetch.arrayBuffer called')
       return res.body.buffer.slice(0)
     },
 
     text() {
+      log('secureFetch.text called')
       return td.decode(res.body)
     },
 
     json() {
+      log('secureFetch.json called')
       return JSON.parse(td.decode(res.body))
     },
   }
@@ -236,16 +327,25 @@ export async function secureFetch(
 ===================== */
 
 export async function selfTest() {
+  log('selfTest: starting')
   const start = performance.now()
 
-  const res = await secureFetch('https://example.com/')
-  const text = res.text()
+  try {
+    const res = await secureFetch('https://example.com/')
+    const text = res.text()
 
-  return {
-    ok: res.status === 200,
-    status: res.status,
-    bytes: text.length,
-    durationMs: Math.round(performance.now() - start),
-    sample: text.slice(0, 120),
+    const result = {
+      ok: res.status === 200,
+      status: res.status,
+      bytes: text.length,
+      durationMs: Math.round(performance.now() - start),
+      sample: text.slice(0, 120),
+    }
+
+    log('selfTest: completed', result)
+    return result
+  } catch (err) {
+    log('selfTest: error', err)
+    throw err
   }
 }
