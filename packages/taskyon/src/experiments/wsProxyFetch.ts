@@ -14,14 +14,13 @@ const TUNNEL_WS_URL = 'wss://tunnel.example.com'
 const te = new TextEncoder()
 const td = new TextDecoder()
 
-function normalizeU8(data: Uint8Array): Uint8Array {
-  if (data.buffer instanceof ArrayBuffer) return data
-  return new Uint8Array(data.buffer.slice(0))
+function toU8(data: Uint8Array): Uint8Array {
+  return data.buffer instanceof ArrayBuffer ? data : new Uint8Array(data.buffer.slice(0))
 }
 
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const aa = normalizeU8(a)
-  const bb = normalizeU8(b)
+  const aa = toU8(a)
+  const bb = toU8(b)
 
   const out = new Uint8Array(aa.length + bb.length)
   out.set(aa, 0)
@@ -72,17 +71,13 @@ async function openTlsConnection(host: string): Promise<TlsConnection> {
 
     write({ header, content }) {
       ws.send(header)
-      if (content && content.length > 0) {
-        ws.send(content)
-      }
+      if (content && content.length) ws.send(content)
     },
 
-    onHandshake() {
-      // handshake complete
-    },
+    onHandshake() {},
 
     onApplicationData(data) {
-      const chunk = normalizeU8(data)
+      const chunk = toU8(data)
       if (pendingRead) {
         pendingRead(chunk)
         pendingRead = null
@@ -92,9 +87,7 @@ async function openTlsConnection(host: string): Promise<TlsConnection> {
     },
 
     onTlsEnd(err) {
-      if (err) {
-        console.error('TLS ended with error:', err)
-      }
+      if (err) console.error('TLS ended:', err)
       ws.close()
     },
   })
@@ -107,16 +100,12 @@ async function openTlsConnection(host: string): Promise<TlsConnection> {
 
   return {
     send(data: Uint8Array) {
-      void tls.write(normalizeU8(data))
+      void tls.write(toU8(data))
     },
 
     read(): Promise<Uint8Array> {
-      if (rxQueue.length) {
-        return Promise.resolve(rxQueue.shift()!)
-      }
-      return new Promise((resolve) => {
-        pendingRead = resolve
-      })
+      if (rxQueue.length) return Promise.resolve(rxQueue.shift()!)
+      return new Promise((res) => (pendingRead = res))
     },
 
     close() {
@@ -144,9 +133,7 @@ function buildHttpRequest(
     lines.push(`${k}: ${v}`)
   }
 
-  if (body) {
-    lines.push(`Content-Length: ${body.byteLength}`)
-  }
+  if (body) lines.push(`Content-Length: ${body.byteLength}`)
 
   lines.push('', '')
 
@@ -155,7 +142,7 @@ function buildHttpRequest(
 }
 
 async function readHttpResponse(read: () => Promise<Uint8Array>) {
-  let buf = new Uint8Array(0)
+  let buf: Uint8Array = new Uint8Array(0)
 
   while (indexOf(buf, '\r\n\r\n') === null) {
     buf = concat(buf, await read())
@@ -163,12 +150,10 @@ async function readHttpResponse(read: () => Promise<Uint8Array>) {
 
   const headerEnd = indexOf(buf, '\r\n\r\n')!
   const headerText = td.decode(buf.slice(0, headerEnd))
-  let rest = buf.slice(headerEnd + 4)
+  let rest: Uint8Array = buf.slice(headerEnd + 4)
 
   const lines = headerText.split('\r\n')
-  if (!lines[0]) {
-    throw new Error('Invalid HTTP response')
-  }
+  if (!lines[0]) throw new Error('Invalid HTTP response')
 
   const [, status, ...statusText] = lines[0].split(' ')
 
@@ -209,9 +194,7 @@ export async function secureFetch(
   } = {},
 ) {
   const url = new URL(urlStr)
-  if (url.protocol !== 'https:') {
-    throw new Error('https only')
-  }
+  if (url.protocol !== 'https:') throw new Error('https only')
 
   const key = url.hostname
   if (!connCache.has(key)) {
