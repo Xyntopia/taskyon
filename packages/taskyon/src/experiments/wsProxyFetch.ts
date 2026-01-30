@@ -14,10 +14,18 @@ const TUNNEL_WS_URL = 'wss://tunnel.example.com'
 const te = new TextEncoder()
 const td = new TextDecoder()
 
+function normalizeU8(data: Uint8Array): Uint8Array {
+  if (data.buffer instanceof ArrayBuffer) return data
+  return new Uint8Array(data.buffer.slice(0))
+}
+
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const out = new Uint8Array(a.length + b.length)
-  out.set(a, 0)
-  out.set(b, a.length)
+  const aa = normalizeU8(a)
+  const bb = normalizeU8(b)
+
+  const out = new Uint8Array(aa.length + bb.length)
+  out.set(aa, 0)
+  out.set(bb, aa.length)
   return out
 }
 
@@ -32,10 +40,10 @@ function indexOf(buf: Uint8Array, needleStr: string): number | null {
   return null
 }
 
-function waitFor(obj: WebSocket, ev: 'open' | 'error'): Promise<void> {
-  return new Promise((res, rej) => {
-    obj.addEventListener(ev, () => res(), { once: true })
-    obj.addEventListener('error', (e) => rej(e), { once: true })
+function waitForOpen(ws: WebSocket): Promise<void> {
+  return new Promise((resolve, reject) => {
+    ws.addEventListener('open', () => resolve(), { once: true })
+    ws.addEventListener('error', () => reject(new Error('WebSocket error')), { once: true })
   })
 }
 
@@ -53,7 +61,7 @@ async function openTlsConnection(host: string): Promise<TlsConnection> {
   const ws = new WebSocket(TUNNEL_WS_URL)
   ws.binaryType = 'arraybuffer'
 
-  await waitFor(ws, 'open')
+  await waitForOpen(ws)
 
   const rxQueue: Uint8Array[] = []
   let pendingRead: ((v: Uint8Array) => void) | null = null
@@ -62,46 +70,56 @@ async function openTlsConnection(host: string): Promise<TlsConnection> {
     host,
     verifyServerCertificate: true,
 
-    async write({ header, content }) {
+    write({ header, content }) {
       ws.send(header)
-      if (content?.length) ws.send(content)
-    },
-
-    onHandshake() {
-      // noop, handshake resolved by protocol itself
-    },
-
-    onApplicationData(data: Uint8Array) {
-      if (pendingRead) {
-        pendingRead(data)
-        pendingRead = null
-      } else {
-        rxQueue.push(data)
+      if (content && content.length > 0) {
+        ws.send(content)
       }
     },
 
-    onTlsEnd(err?: Error) {
-      if (err) console.error('TLS error', err)
+    onHandshake() {
+      // handshake complete
+    },
+
+    onApplicationData(data) {
+      const chunk = normalizeU8(data)
+      if (pendingRead) {
+        pendingRead(chunk)
+        pendingRead = null
+      } else {
+        rxQueue.push(chunk)
+      }
+    },
+
+    onTlsEnd(err) {
+      if (err) {
+        console.error('TLS ended with error:', err)
+      }
       ws.close()
     },
   })
 
   ws.onmessage = (ev) => {
-    tls.handleReceivedBytes(new Uint8Array(ev.data))
+    void tls.handleReceivedBytes(new Uint8Array(ev.data))
   }
 
-  tls.startHandshake()
+  void tls.startHandshake()
 
   return {
     send(data: Uint8Array) {
-      tls.write(data)
+      void tls.write(normalizeU8(data))
     },
+
     read(): Promise<Uint8Array> {
-      if (rxQueue.length) return Promise.resolve(rxQueue.shift()!)
-      return new Promise((res) => (pendingRead = res))
+      if (rxQueue.length) {
+        return Promise.resolve(rxQueue.shift()!)
+      }
+      return new Promise((resolve) => {
+        pendingRead = resolve
+      })
     },
+
     close() {
-      tls.close()
       ws.close()
     },
   }
@@ -126,7 +144,9 @@ function buildHttpRequest(
     lines.push(`${k}: ${v}`)
   }
 
-  if (body) lines.push(`Content-Length: ${body.byteLength}`)
+  if (body) {
+    lines.push(`Content-Length: ${body.byteLength}`)
+  }
 
   lines.push('', '')
 
@@ -146,7 +166,9 @@ async function readHttpResponse(read: () => Promise<Uint8Array>) {
   let rest = buf.slice(headerEnd + 4)
 
   const lines = headerText.split('\r\n')
-  if (!lines[0]) throw new Error('Invalid HTTP response')
+  if (!lines[0]) {
+    throw new Error('Invalid HTTP response')
+  }
 
   const [, status, ...statusText] = lines[0].split(' ')
 
@@ -203,18 +225,22 @@ export async function secureFetch(
   const req = buildHttpRequest(opts.method || 'GET', url, opts.headers || {}, body)
 
   conn.send(req)
-  const res = await readHttpResponse(conn.read)
+
+  const res = await readHttpResponse(() => conn.read())
 
   return {
     status: res.status,
     statusText: res.statusText,
     headers: res.headers,
+
     arrayBuffer() {
       return res.body.buffer.slice(0)
     },
+
     text() {
       return td.decode(res.body)
     },
+
     json() {
       return JSON.parse(td.decode(res.body))
     },
@@ -222,7 +248,7 @@ export async function secureFetch(
 }
 
 /* =====================
-   Simple test function
+   Simple test
 ===================== */
 
 export async function selfTest() {
