@@ -1,4 +1,4 @@
-// secure-fetch-over-ws.ts
+// wsProxyFetch.ts
 import { makeTLSClient } from '@reclaimprotocol/tls'
 // Extra debug flag
 const DEBUG = true
@@ -46,9 +46,8 @@ function indexOf(buf: Uint8Array, needleStr: string): number | null {
   return null
 }
 
-log('waitForOpen: attaching event listeners')
-
 function waitForOpen(ws: WebSocket): Promise<void> {
+  log('waitForOpen: attaching event listeners for', ws.url)
   return new Promise((resolve, reject) => {
     ws.addEventListener(
       'open',
@@ -79,8 +78,8 @@ type TlsConnection = {
   close(): void
 }
 
-log('openTlsConnection: creating WebSocket to tunnel', TUNNEL_WS_URL, 'for host', host)
 async function openTlsConnection(host: string): Promise<TlsConnection> {
+  log('openTlsConnection: creating WebSocket to tunnel', TUNNEL_WS_URL, 'for host', host)
   const ws = new WebSocket(TUNNEL_WS_URL)
   ws.binaryType = 'arraybuffer'
 
@@ -146,7 +145,6 @@ async function openTlsConnection(host: string): Promise<TlsConnection> {
   }
 
   log('openTlsConnection: starting TLS handshake')
-  void tls.startHandshake()
   void tls.startHandshake()
 
   return {
