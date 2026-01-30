@@ -5,7 +5,8 @@ import { makeTLSClient } from '@reclaimprotocol/tls'
    Config
 ===================== */
 
-const TUNNEL_WS_URL = 'wss://tunnel.example.com'
+//const TUNNEL_WS_URL = 'wss://tunnel.example.com'
+const TUNNEL_WS_URL = 'ws://127.0.0.1:8443'
 
 /* =====================
    Utils
