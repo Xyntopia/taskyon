@@ -21,11 +21,6 @@
   "dependencies": {
     "@reclaimprotocol/tls": "^0.1.2"
   },
-  "devDependencies": {
-    "typescript": "^5.0.0",
-    "vite": "^5.0.0",
-    "vite-plugin-dts": "^3.7.0"
-  },
   "keywords": [
     "tls",
     "https",

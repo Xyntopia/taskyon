@@ -5452,6 +5452,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@standard-schema/spec@npm:^1.1.0":
+  version: 1.1.0
+  resolution: "@standard-schema/spec@npm:1.1.0"
+  checksum: 10c0/d90f55acde4b2deb983529c87e8025fa693de1a5e8b49ecc6eb84d1fd96328add0e03d7d551442156c7432fd78165b2c26ff561b970a9a881f046abb78d6a526
+  languageName: node
+  linkType: hard
+
 "@supabase/auth-js@npm:2.90.1":
   version: 2.90.1
   resolution: "@supabase/auth-js@npm:2.90.1"
@@ -5693,6 +5700,14 @@ __metadata:
     "@libp2p/tcp": "npm:*"
     "@libp2p/websockets": "npm:*"
     libp2p: "npm:*"
+  languageName: unknown
+  linkType: soft
+
+"@taskyon/secure-tunnel@workspace:packages/secure-tunnel":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/secure-tunnel@workspace:packages/secure-tunnel"
+  dependencies:
+    "@reclaimprotocol/tls": "npm:^0.1.2"
   languageName: unknown
   linkType: soft
 
