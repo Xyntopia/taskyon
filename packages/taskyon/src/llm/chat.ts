@@ -8,6 +8,8 @@ import { asyncTimeLruCache } from '../utils/caching'
 import { charHash } from '../utils/crypto'
 import type { ChatCompletionReasoningEffort } from 'openai/resources/chat/completions.mjs'
 
+// TODO: we can radically shoten this file as we replaced most of the functions with vercel ai sdk.
+
 export function generateHeaders(Bearer: string, selectedApi: string, siteUrl?: string) {
   let headers: Record<string, string> = {
     'Content-Type': 'application/json',
