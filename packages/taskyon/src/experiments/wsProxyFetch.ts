@@ -6,6 +6,9 @@ function log(...args: unknown[]) {
   if (DEBUG) console.log('[secure-fetch-over-ws]', ...args)
 }
 
+// TODO: try out alternative library:
+//       https://github.com/jawj/subtls/tree/main
+
 log('@reclaimprotocol/tls')
 import { setCryptoImplementation, makeTLSClient } from '@reclaimprotocol/tls'
 log('and get webcryptoCrypto')
@@ -105,6 +108,14 @@ async function openTlsConnection(host: string): Promise<TlsConnection> {
   const rxQueue: Uint8Array[] = []
   let pendingRead: ((v: Uint8Array) => void) | null = null
 
+  // Handshake completion gate: we must not send application data
+  // before the TLS handshake has fully completed, otherwise
+  // makeTLSClient.write will throw "Handshake not done".
+  let resolveHandshake: (() => void) | null = null
+  const handshakeDone = new Promise<void>((resolve) => {
+    resolveHandshake = resolve
+  })
+
   const tls = makeTLSClient({
     host,
     verifyServerCertificate: true,
@@ -123,6 +134,7 @@ async function openTlsConnection(host: string): Promise<TlsConnection> {
 
     onHandshake() {
       log('TLS handshake completed for host', host)
+      resolveHandshake?.()
     },
 
     onApplicationData(data) {
@@ -163,17 +175,24 @@ async function openTlsConnection(host: string): Promise<TlsConnection> {
   void tls.startHandshake()
 
   return {
-    send(data: Uint8Array) {
+    async send(data: Uint8Array) {
+      // Ensure the TLS handshake has fully completed before
+      // sending any application data, otherwise makeTLSClient
+      // will throw "Handshake not done".
+      await handshakeDone
       const d = toU8(data)
       log('TlsConnection.send called, bytes =', d.byteLength)
-      void tls.write(d)
+      await tls.write(d)
     },
 
-    read(): Promise<Uint8Array> {
+    async read(): Promise<Uint8Array> {
+      // Also wait for handshake to complete before attempting
+      // to read application data.
+      await handshakeDone
       if (rxQueue.length) {
         const chunk = rxQueue.shift()!
         log('TlsConnection.read: returning queued chunk, bytes =', chunk.byteLength)
-        return Promise.resolve(chunk)
+        return chunk
       }
       log('TlsConnection.read: waiting for next chunk')
       return new Promise((res) => (pendingRead = res))
