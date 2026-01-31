@@ -13,9 +13,9 @@ export interface SecureFetchResponse {
   statusText: string
   headers: Record<string, string>
   body: string
-  arrayBuffer(): Promise<ArrayBuffer>
-  text(): Promise<string>
-  json<T = unknown>(): Promise<T>
+  arrayBuffer(): ArrayBufferLike
+  text(): string
+  json<T = unknown>(): T
 }
 
 export async function secureFetch(
@@ -44,8 +44,8 @@ export async function secureFetch(
   try {
     const reqBytes = buildHttpRequest(method, urlStr, headers, options.body)
     await tls.write(reqBytes)
-    const res = await parseHttpResponse(tls.read)
-    await tls.close()
+    const res = await parseHttpResponse(() => tls.read())
+    tls.close()
 
     const textBody = new TextDecoder().decode(res.body)
 
@@ -54,12 +54,12 @@ export async function secureFetch(
       statusText: res.statusText,
       headers: res.headers,
       body: textBody,
-      arrayBuffer: async () => res.body.buffer as ArrayBuffer,
-      text: async () => textBody,
-      json: async <T>() => JSON.parse(textBody) as T,
+      arrayBuffer: () => res.body.buffer,
+      text: () => textBody,
+      json: <T>() => JSON.parse(textBody) as T,
     }
   } catch (err) {
-    await tls.close()
+    tls.close()
     throw err
   }
 }
