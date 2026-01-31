@@ -1,0 +1,40 @@
+{
+  "name": "@taskyon/secure-tunnel",
+  "version": "1.0.0",
+  "description": "Browser-side HTTPS-over-WebSocket tunnel client with in-browser TLS termination",
+  "type": "module",
+  "main": "./dist/secure-tunnel.umd.cjs",
+  "module": "./dist/secure-tunnel.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/secure-tunnel.js",
+      "require": "./dist/secure-tunnel.umd.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build && tsc --emitDeclarationOnly",
+    "dev": "vite build --watch"
+  },
+  "dependencies": {
+    "@reclaimprotocol/tls": "^0.1.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0",
+    "vite-plugin-dts": "^3.7.0"
+  },
+  "keywords": [
+    "tls",
+    "https",
+    "websocket",
+    "tunnel",
+    "browser",
+    "secure-fetch"
+  ],
+  "license": "MIT"
+}
