@@ -1,6 +1,6 @@
 {
   "name": "@taskyon/secure-tunnel",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Browser-side HTTPS-over-WebSocket tunnel client with in-browser TLS termination",
   "type": "module",
   "main": "./dist/secure-tunnel.umd.cjs",
@@ -8,9 +8,7 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/secure-tunnel.js",
-      "require": "./dist/secure-tunnel.umd.cjs",
-      "types": "./dist/index.d.ts"
+      "import": "./src/index.ts"
     }
   },
   "files": [
