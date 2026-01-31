@@ -14,10 +14,32 @@ export const testSecureFetch = async () => {
 
   console.log(response.status)
   console.log(response.body)
-  const data = await response.json()
+  const data = await response.text()
+
+  const weatherURl =
+    'https://re.jrc.ec.europa.eu/api/v5_3/seriescalc?lat=48.85&lon=2.35&startyear=2020&endyear=2020&outputformat=json'
+  let res: unknown
+  try {
+    const resp = await fetch(weatherURl)
+    res = await resp.json()
+  } catch {
+    res = "Success: Error while downloading 'normal' browser based fetch, but expected"
+  }
+
+  const daresp = await secureFetch(weatherURl, {
+    method: 'GET',
+    headers: {
+      Authorization: 'Bearer token123',
+    },
+    tunnelUrl: 'ws://localhost:8443',
+  })
+
+  const weather = daresp.json()
 
   return {
+    res,
     data,
+    weather,
   }
 }
 
