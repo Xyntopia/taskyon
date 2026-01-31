@@ -14,32 +14,33 @@ export interface TlsConnection {
   close(): Promise<void>;
 }
 
+/**
+ * Opens a TLS connection through a WebSocket tunnel.
+ * 
+ * @param tunnelUrl - Base WebSocket URL (e.g., 'ws://localhost:8443' or 'wss://proxy.example.com')
+ * @param targetHost - Target hostname to connect to
+ * @param targetPort - Target port (default: 443)
+ * @returns TlsConnection interface for reading/writing encrypted data
+ * 
+ * The tunnel URL will have host and port appended as query parameters:
+ * ws://localhost:8443?host=example.com&port=443
+ */
 export async function openTlsConnection(
   tunnelUrl: string,
   targetHost: string,
   targetPort: number = 443
 ): Promise<TlsConnection> {
-  const ws = new WebSocket(tunnelUrl);
+  // Build WebSocket URL with host/port as query parameters
+  const wsUrl = new URL(tunnelUrl);
+  wsUrl.searchParams.set('host', targetHost);
+  wsUrl.searchParams.set('port', targetPort.toString());
+  
+  const ws = new WebSocket(wsUrl.toString());
   ws.binaryType = 'arraybuffer';
 
   await new Promise<void>((resolve, reject) => {
     ws.onopen = () => resolve();
-    ws.onerror = (err) => reject(err);
-  });
-
-  ws.send(`CONNECT ${targetHost}:${targetPort}`);
-
-  await new Promise<void>((resolve, reject) => {
-    const handleMsg = (event: MessageEvent) => {
-      const msg = typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data);
-      if (msg === 'CONNECTED') {
-        ws.removeEventListener('message', handleMsg);
-        resolve();
-      } else if (msg.startsWith('ERROR')) {
-        reject(new Error(`Tunnel Error: ${msg}`));
-      }
-    };
-    ws.addEventListener('message', handleMsg);
+    ws.onerror = (err) => reject(new Error('WebSocket connection failed'));
   });
 
   const readQueue: Uint8Array[] = [];

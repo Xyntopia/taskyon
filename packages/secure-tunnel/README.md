@@ -64,11 +64,21 @@ Low-level API to open a TLS connection through the tunnel.
 
 ## Tunnel Server Protocol
 
-The tunnel server must implement this simple protocol:
+The library is designed to work with the wsproxy WebSocket-to-TCP proxy server.
 
-1. Client sends: `CONNECT host:port`
-2. Server responds: `CONNECTED` (or `ERROR: message`)
-3. All subsequent binary messages are raw TCP data
+**Connection URL format:**
+
+```
+ws://proxy-host:port?host=target.example.com&port=443
+```
+
+The tunnel server:
+
+1. Receives WebSocket connection with `host` and `port` query parameters
+2. Opens a TCP connection to the specified host:port
+3. Forwards all binary WebSocket messages to TCP and vice versa
+
+**Example wsproxy server:** See the included `wsProxyServer.ts` for a reference implementation.
 
 ## Building
 
