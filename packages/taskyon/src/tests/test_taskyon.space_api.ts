@@ -4,17 +4,18 @@ export { selfTest } from '../experiments/wsProxyFetch'
 import { secureFetch } from '@taskyon/secure-tunnel'
 
 export const testSecureFetch = async () => {
+  const tunnelUrl = 'wss://localhost:9100/ws-proxy/'
   const response = await secureFetch('https://example.com', {
     method: 'GET',
     headers: {
       Authorization: 'Bearer token123',
     },
-    tunnelUrl: 'ws://localhost:8443',
+    tunnelUrl,
   })
 
   console.log(response.status)
   console.log(response.body)
-  const data = await response.text()
+  const data = response.text()
 
   const weatherURl =
     'https://re.jrc.ec.europa.eu/api/v5_3/seriescalc?lat=48.85&lon=2.35&startyear=2020&endyear=2020&outputformat=json'
@@ -31,7 +32,7 @@ export const testSecureFetch = async () => {
     headers: {
       Authorization: 'Bearer token123',
     },
-    tunnelUrl: 'ws://localhost:8443',
+    tunnelUrl,
   })
 
   const weather = daresp.json()
