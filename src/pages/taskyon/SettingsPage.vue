@@ -54,6 +54,7 @@
               class="fit"
               :icons="iconRegistry.chatCompletion as iconMap"
               hide-missing
+              copy-btn
               @update:model-value="(val) => console.log('updated', val)"
             />
           </template>
