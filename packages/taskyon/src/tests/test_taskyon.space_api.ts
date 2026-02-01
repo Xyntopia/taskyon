@@ -15,9 +15,7 @@ export const testSecureFetch = async (ctx: { tyauth: string }) => {
   const sfetch = async (url: string, opts: Record<string, string>) => {
     return await secureFetch(url, {
       method: 'GET',
-      headers: {
-        Authorization: 'Bearer ' + token,
-      },
+      tunnelToken: token,
       tunnelUrl,
       ...opts,
     })
