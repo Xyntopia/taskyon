@@ -29,13 +29,14 @@ export async function openTlsConnection(
   tunnelUrl: string,
   targetHost: string,
   targetPort: number = 443,
+  token: string,
 ): Promise<TlsConnection> {
   // Build WebSocket URL with host/port as query parameters
   const wsUrl = new URL(tunnelUrl)
   wsUrl.searchParams.set('host', targetHost)
   wsUrl.searchParams.set('port', targetPort.toString())
 
-  const ws = new WebSocket(wsUrl.toString())
+  const ws = new WebSocket(wsUrl.toString(), [`bearer.${token}`])
   ws.binaryType = 'arraybuffer'
 
   await new Promise<void>((resolve, reject) => {

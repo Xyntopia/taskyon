@@ -6,6 +6,7 @@ export interface SecureFetchOptions {
   headers?: Record<string, string>
   body?: string | Uint8Array
   tunnelUrl?: string
+  tunnelToken?: string
 }
 
 export interface SecureFetchResponse {
@@ -39,7 +40,7 @@ export async function secureFetch(
     throw new Error('secureFetch only supports https:// URLs')
   }
 
-  const tls = await openTlsConnection(tunnelUrl, host, port)
+  const tls = await openTlsConnection(tunnelUrl, host, port, options.tunnelToken || '')
 
   try {
     const reqBytes = buildHttpRequest(method, urlStr, headers, options.body)
