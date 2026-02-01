@@ -1,4 +1,5 @@
 // tokenservice.types.ts
+import z from 'zod'
 
 // ==============================
 // 1. JWT payload
@@ -12,21 +13,22 @@
  * - `jti` is bound to the api_usage_log.id of the "take_out_security_deposit" call.
  * - `uid` should be the user id this token belongs to (your createJWT implementation does this).
  */
-export interface ServiceTokenPayload {
-  max_costs: number // Maximum allowed total cost (e.g., credits or $)
-  services: string[] // Allowed service identifiers, e.g. ["proxy", "chat_completion"]
-  oms: number // Operation max duration in seconds
-  jti: string // Unique token ID == api_usage_log.id (for take_out)
-  uid: string // User ID encoded by createJWT/verifyJWT helpers
 
-  // Standard-ish JWT fields (if your createJWT/verifyJWT expose them in payload)
-  exp?: number // Expiration time (seconds since epoch)
-  iat?: number // Issued-at time  (seconds since epoch)
-  nbf?: number // Not-before time (seconds since epoch)
+export const ServiceTokenPayloadSchema = z
+  .object({
+    max_costs: z.number().positive(),
+    services: z.array(z.string()).min(1),
+    oms: z.number().positive(), // seconds
+    jti: z.string().min(1),
+    uid: z.string().min(1),
 
-  // Allow future extension without breaking clients:
-  [key: string]: unknown
-}
+    exp: z.number().optional(),
+    iat: z.number().optional(),
+    nbf: z.number().optional(),
+  })
+  .passthrough()
+
+export type ServiceTokenPayload = z.infer<typeof ServiceTokenPayloadSchema>
 
 // ==============================
 // 2. /tokenservice/mint

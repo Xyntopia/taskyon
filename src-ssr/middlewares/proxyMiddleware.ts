@@ -1,28 +1,9 @@
 import { defineSsrMiddleware } from '#q-app/wrappers'
-import type { Request, Response } from 'express'
+import type { ServiceTokenPayload } from '@taskyon/taskyon'
+import { ServiceTokenPayloadSchema } from '@taskyon/taskyon'
 import axios from 'axios'
-import { z } from 'zod'
-import { jwtVerify, importSPKI } from 'jose'
-
-/* ============================================================
- *  ZOD: ServiceTokenPayload
- * ============================================================ */
-
-const ServiceTokenPayloadSchema = z
-  .object({
-    max_costs: z.number().positive(),
-    services: z.array(z.string()).min(1),
-    oms: z.number().positive(), // seconds
-    jti: z.string().min(1),
-    uid: z.string().min(1),
-
-    exp: z.number().optional(),
-    iat: z.number().optional(),
-    nbf: z.number().optional(),
-  })
-  .passthrough()
-
-type ServiceTokenPayload = z.infer<typeof ServiceTokenPayloadSchema>
+import type { Request, Response } from 'express'
+import { importSPKI, jwtVerify } from 'jose'
 
 /* ============================================================
  *  JWT VERIFICATION
