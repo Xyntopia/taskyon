@@ -7,6 +7,8 @@ import { importSPKI, jwtVerify } from 'jose'
 import { sleep } from '../utils/asyncUtils'
 import {
   ServiceTokenPayloadSchema,
+  TOKEN_SERVICE_BASE_URL,
+  TOKEN_SERVICE_PREFIX,
   type MintTokenResponse,
   type ReturnTokenRequest,
   type ReturnTokenResponse,
@@ -72,13 +74,63 @@ export async function returnToken(
   return response.data
 }
 
-export const testTokenMinting = async (ctx: { tyauth: string }) => {
-  const baseUrl = 'https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/tokenservice'
+/* ============================================================
+ *  JWT VERIFICATION
+ * ============================================================ */
 
+export async function verifyServiceToken(
+  publicKeyPromise: CryptoKey,
+  jwt: string,
+): Promise<ServiceTokenPayload> {
+  const publicKey = publicKeyPromise
+
+  const { payload } = await jwtVerify(jwt, publicKey, {
+    algorithms: ['EdDSA'],
+  })
+
+  const parsed = ServiceTokenPayloadSchema.safeParse(payload)
+  if (!parsed.success) {
+    throw new Error('Invalid service token payload')
+  }
+
+  return parsed.data
+}
+
+/**
+ * Retrieve the public key for verifying Ty JWTs from env var. or the web
+ */
+export const getTyJwtPublicKey = async () => {
+  console.log('[getTyJwtPublicKey] Fetching public key for JWT verification')
+
+  const PROXY_JWT_PUBLIC_KEY =
+    (
+      await axios.get(
+        'https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/tokenservice/public-key',
+      )
+    ).data ?? process.env
+
+  console.log('[getTyJwtPublicKey] Retrieved public key:', PROXY_JWT_PUBLIC_KEY)
+
+  if (!PROXY_JWT_PUBLIC_KEY) {
+    console.error('[attachWsProxy] Missing PROXY_JWT_PUBLIC_KEY env var, WS proxy disabled')
+    return
+  }
+
+  const publicKeyPromise = await importSPKI(PROXY_JWT_PUBLIC_KEY, 'EdDSA')
+
+  return publicKeyPromise
+}
+
+export const testTokenMinting = async (ctx: { tyauth: string }) => {
+  const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
   //const { data, error } = await supabase.rpc('get_available_credits')
 
   const token = await mintToken(baseUrl, ctx.tyauth)
   console.log('Minted token:', token)
+
+  const publicKeyPromise = await getTyJwtPublicKey()
+
+  const svcTokenData = await verifyServiceToken(publicKeyPromise!, token)
 
   // Optional: inspect payload in the browser (to see user_id, expiration, max_costs, services)
   const [headerB64, payloadB64] = token.split('.').slice(0, 2)
@@ -112,43 +164,5 @@ export const testTokenMinting = async (ctx: { tyauth: string }) => {
     - check for late deposits (after token expiration)
   */
 
-  return { payloadJson, headerB64, token, returnres }
-}
-
-/* ============================================================
- *  JWT VERIFICATION
- * ============================================================ */
-
-export async function verifyServiceToken(
-  publicKeyPromise: CryptoKey,
-  jwt: string,
-): Promise<ServiceTokenPayload> {
-  const publicKey = publicKeyPromise
-
-  const { payload } = await jwtVerify(jwt, publicKey, {
-    algorithms: ['EdDSA'],
-  })
-
-  const parsed = ServiceTokenPayloadSchema.safeParse(payload)
-  if (!parsed.success) {
-    throw new Error('Invalid service token payload')
-  }
-
-  return parsed.data
-}
-
-/**
- * Retrieve the public key for verifying Ty JWTs from env var. or the web
- */
-export const getTyJwtPublicKey = async () => {
-  const { PROXY_JWT_PUBLIC_KEY } = process.env
-
-  if (!PROXY_JWT_PUBLIC_KEY) {
-    console.error('[attachWsProxy] Missing PROXY_JWT_PUBLIC_KEY env var, WS proxy disabled')
-    return
-  }
-
-  const publicKeyPromise = await importSPKI(PROXY_JWT_PUBLIC_KEY, 'EdDSA')
-
-  return publicKeyPromise
+  return { payloadJson, svcTokenData, headerB64, token, returnres }
 }
