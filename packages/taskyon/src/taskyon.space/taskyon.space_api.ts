@@ -3,12 +3,15 @@
 // or: import axios from "axios";
 
 import axios from 'axios'
-import type {
-  MintTokenResponse,
-  ReturnTokenRequest,
-  ReturnTokenResponse,
-} from './tokenservice.types'
+import { jwtVerify } from 'jose'
 import { sleep } from '../utils/asyncUtils'
+import {
+  ServiceTokenPayloadSchema,
+  type MintTokenResponse,
+  type ReturnTokenRequest,
+  type ReturnTokenResponse,
+  type ServiceTokenPayload,
+} from './tokenservice.types'
 
 /**
  * Very simple client-side helper to call the minting service using axios.
@@ -110,4 +113,26 @@ export const testTokenMinting = async (ctx: { tyauth: string }) => {
   */
 
   return { payloadJson, headerB64, token, returnres }
+}
+
+/* ============================================================
+ *  JWT VERIFICATION
+ * ============================================================ */
+
+export async function verifyServiceToken(
+  publicKeyPromise: Promise<CryptoKey>,
+  jwt: string,
+): Promise<ServiceTokenPayload> {
+  const publicKey = await publicKeyPromise
+
+  const { payload } = await jwtVerify(jwt, publicKey, {
+    algorithms: ['EdDSA'],
+  })
+
+  const parsed = ServiceTokenPayloadSchema.safeParse(payload)
+  if (!parsed.success) {
+    throw new Error('Invalid service token payload')
+  }
+
+  return parsed.data
 }
