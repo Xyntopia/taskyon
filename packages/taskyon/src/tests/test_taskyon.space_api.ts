@@ -1,40 +1,46 @@
 export { testTokenMinting } from '../taskyon.space/taskyon.space_api'
-export { selfTest } from '../experiments/wsProxyFetch'
-
 import { secureFetch } from '@taskyon/secure-tunnel'
+import { humanizeError } from '../utils/error'
+import { mintToken } from '../taskyon.space/taskyon.space_api'
+import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
 
-export const testSecureFetch = async () => {
+export const testSecureFetch = async (ctx: { tyauth: string }) => {
+  const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
+
+  const token = await mintToken(baseUrl, ctx.tyauth)
+  console.log('Minted token:', token)
+
   const tunnelUrl = 'wss://localhost:9100/ws-proxy/'
-  const response = await secureFetch('https://example.com', {
-    method: 'GET',
-    headers: {
-      Authorization: 'Bearer token123',
-    },
-    tunnelUrl,
-  })
+
+  const sfetch = async (url: string, opts: Record<string, string>) => {
+    return await secureFetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: 'Bearer ' + token,
+      },
+      tunnelUrl,
+      ...opts,
+    })
+  }
+
+  const response = await sfetch('https://example.com', { method: 'GET' })
 
   console.log(response.status)
   console.log(response.body)
   const data = response.text()
 
-  const weatherURl =
-    'https://re.jrc.ec.europa.eu/api/v5_3/seriescalc?lat=48.85&lon=2.35&startyear=2020&endyear=2020&outputformat=json'
+  const weatherURl = 'https://officeapi.dev/api/quotes/random'
   let res: unknown
   try {
     const resp = await fetch(weatherURl)
     res = await resp.json()
-  } catch {
-    res = "Success: Error while downloading 'normal' browser based fetch, but expected"
+  } catch (err) {
+    res =
+      "Success: Error while downloading 'normal' browser based fetch, but expected" +
+      humanizeError(err)
   }
 
-  const daresp = await secureFetch(weatherURl, {
-    method: 'GET',
-    headers: {
-      Authorization: 'Bearer token123',
-    },
-    tunnelUrl,
-  })
-
+  const daresp = await sfetch(weatherURl, { method: 'GET' })
   const weather = daresp.json()
 
   return {
