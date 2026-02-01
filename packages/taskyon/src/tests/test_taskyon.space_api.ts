@@ -27,7 +27,7 @@ export const testSecureFetch = async (ctx: { tyauth: string }) => {
   console.log(response.body)
   const data = response.text()
 
-  const weatherURl = 'https://officeapi.dev/api/quotes/random'
+  const weatherURl = 'https://openwhyd.org/hot?format=json'
   let res: unknown
   try {
     const resp = await fetch(weatherURl)
