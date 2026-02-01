@@ -166,3 +166,48 @@ export const testTokenMinting = async (ctx: { tyauth: string }) => {
 
   return { payloadJson, svcTokenData, headerB64, token, returnres }
 }
+
+/**
+ * Close codes shared between server and client.
+ *
+ * NOTE: Keep this enum in sync with the client-side version.
+ */
+export enum WsProxyCloseCode {
+  // 40xx – protocol / auth / validation issues
+  MissingSecWebSocketProtocol = 4000,
+  MissingBearerToken = 4001,
+  InvalidSubprotocol = 4002,
+  AuthFailed = 4003,
+
+  MissingHost = 4100,
+  InvalidPort = 4101,
+
+  ServiceNotAllowed = 4200,
+  PortNotAllowed = 4201,
+
+  InvalidHostFormat = 4300,
+  PrivateIpForbidden = 4301,
+  DnsResolutionFailed = 4302,
+
+  // 45xx – runtime / network issues after connection
+  TcpConnectionFailed = 4500,
+
+  // 48xx – generic server-side issues
+  InternalError = 4800,
+}
+
+export class WsProxyCloseError extends Error {
+  readonly code: number
+  readonly reason: string
+
+  constructor(code: number, reason: string) {
+    super(`WebSocket tunnel closed: code=${code} reason=${reason || 'no reason provided'}`)
+    this.name = 'WsProxyCloseError'
+    this.code = code
+    this.reason = reason
+  }
+
+  isKnownProxyCode(): this is { code: WsProxyCloseCode } {
+    return this.code in WsProxyCloseCode
+  }
+}
