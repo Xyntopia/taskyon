@@ -19,8 +19,8 @@ export const ServiceTokenPayloadSchema = z
     max_costs: z.number().positive(),
     services: z.array(z.string()).min(1),
     oms: z.number().positive(), // seconds
-    jti: z.string().min(1),
-    uid: z.string().min(1),
+    jti: z.string().min(1).describe('JWT ID bound to api_usage_log.id'),
+    auid: z.string().min(1).describe('The anonymous user id that owns this token'),
 
     exp: z.number().optional(),
     iat: z.number().optional(),
