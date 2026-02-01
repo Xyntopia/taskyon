@@ -1,5 +1,6 @@
 import { makeTLSClient, setCryptoImplementation } from '@reclaimprotocol/tls'
 import { pureJsCrypto } from '@reclaimprotocol/tls/purejs-crypto'
+import { WsProxyCloseCode, WsProxyCloseError } from '@taskyon/taskyon'
 
 // Set up pure JavaScript crypto implementation for browser compatibility
 try {
@@ -31,7 +32,6 @@ export async function openTlsConnection(
   targetPort: number = 443,
   token: string,
 ): Promise<TlsConnection> {
-  // Build WebSocket URL with host/port as query parameters
   const wsUrl = new URL(tunnelUrl)
   wsUrl.searchParams.set('host', targetHost)
   wsUrl.searchParams.set('port', targetPort.toString())
@@ -39,29 +39,48 @@ export async function openTlsConnection(
   const ws = new WebSocket(wsUrl.toString(), [`bearer.${token}`])
   ws.binaryType = 'arraybuffer'
 
-  await new Promise<void>((resolve, reject) => {
-    ws.onopen = () => resolve()
-    ws.onerror = (err) => reject(new Error('WebSocket connection failed', { cause: err }))
-  })
-
-  const readQueue: Uint8Array[] = []
-  let readResolve: ((value: Uint8Array | null) => void) | null = null
   let isClosed = false
+  let closeError: Error | null = null
+  let readResolve: ((value: Uint8Array | null) => void) | null = null
+  const readQueue: Uint8Array[] = []
+
   let handshakeResolve: (() => void) | null = null
   let handshakeReject: ((err: Error) => void) | null = null
 
-  const closeConnection = () => {
+  const closeConnection = (err?: Error) => {
+    if (isClosed) return
     isClosed = true
-    ws.close()
+    closeError = err ?? closeError
+
+    try {
+      ws.close()
+    } catch {
+      /* ignore */
+    }
+
     if (readResolve) {
+      // surface null, caller can also check `closeError` if you expose it
       readResolve(null)
       readResolve = null
     }
-    if (handshakeReject) {
+
+    if (err && handshakeReject) {
+      handshakeReject(err)
+      handshakeReject = null
+    } else if (handshakeReject) {
       handshakeReject(new Error('Connection closed during handshake'))
       handshakeReject = null
     }
   }
+
+  // Wait for raw WS open or fail
+  await new Promise<void>((resolve, reject) => {
+    ws.onopen = () => resolve()
+    ws.onerror = () => {
+      reject(new Error('WebSocket connection failed'))
+    }
+    // NOTE: we also handle onclose below to give better errors
+  })
 
   const tls = makeTLSClient({
     host: targetHost,
@@ -94,7 +113,7 @@ export async function openTlsConnection(
         handshakeReject(error)
         handshakeReject = null
       }
-      closeConnection()
+      closeConnection(error ?? undefined)
     },
   })
 
@@ -104,11 +123,44 @@ export async function openTlsConnection(
     void tls.handleReceivedBytes(data)
   })
 
-  ws.addEventListener('close', () => closeConnection())
-  ws.addEventListener('error', () => closeConnection())
+  ws.addEventListener('close', (event) => {
+    const { code, reason } = event
+    const err = new WsProxyCloseError(code, reason)
+
+    // Optional: log a nicer message based on known codes
+    switch (code as WsProxyCloseCode) {
+      case WsProxyCloseCode.AuthFailed:
+        console.warn('[SecureTunnel] Auth failed in ws-proxy:', reason)
+        break
+      case WsProxyCloseCode.MissingHost:
+      case WsProxyCloseCode.InvalidPort:
+      case WsProxyCloseCode.ServiceNotAllowed:
+      case WsProxyCloseCode.PortNotAllowed:
+      case WsProxyCloseCode.InvalidHostFormat:
+      case WsProxyCloseCode.PrivateIpForbidden:
+      case WsProxyCloseCode.DnsResolutionFailed:
+        console.warn('[SecureTunnel] Target validation failed:', reason)
+        break
+      case WsProxyCloseCode.TcpConnectionFailed:
+        console.warn('[SecureTunnel] TCP connection failed:', reason)
+        break
+      case WsProxyCloseCode.InternalError:
+      default:
+        console.warn('[SecureTunnel] Tunnel closed:', code, reason)
+        break
+    }
+
+    closeConnection(err)
+  })
+
+  ws.addEventListener('error', () => {
+    const err = new Error('WebSocket error in tunnel')
+    closeConnection(err)
+  })
 
   await tls.startHandshake()
 
+  // Wait for TLS handshake OR ws-proxy close error
   await new Promise<void>((resolve, reject) => {
     handshakeResolve = resolve
     handshakeReject = reject
@@ -122,6 +174,9 @@ export async function openTlsConnection(
 
   return {
     write: async (data: Uint8Array) => {
+      if (isClosed) {
+        throw closeError ?? new Error('Connection is closed')
+      }
       await tls.write(data)
     },
     read: () => {
@@ -129,12 +184,16 @@ export async function openTlsConnection(
         return Promise.resolve(readQueue.shift()!)
       }
       if (isClosed) {
+        // If you want to propagate the close error directly:
+        if (closeError) {
+          return Promise.reject(closeError)
+        }
         return Promise.resolve(null)
       }
       return new Promise((resolve) => {
         readResolve = resolve
       })
     },
-    close: closeConnection,
+    close: () => closeConnection(),
   }
 }
