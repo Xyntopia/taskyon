@@ -3,7 +3,7 @@
 // or: import axios from "axios";
 
 import axios from 'axios'
-import { jwtVerify } from 'jose'
+import { importSPKI, jwtVerify } from 'jose'
 import { sleep } from '../utils/asyncUtils'
 import {
   ServiceTokenPayloadSchema,
@@ -120,10 +120,10 @@ export const testTokenMinting = async (ctx: { tyauth: string }) => {
  * ============================================================ */
 
 export async function verifyServiceToken(
-  publicKeyPromise: Promise<CryptoKey>,
+  publicKeyPromise: CryptoKey,
   jwt: string,
 ): Promise<ServiceTokenPayload> {
-  const publicKey = await publicKeyPromise
+  const publicKey = publicKeyPromise
 
   const { payload } = await jwtVerify(jwt, publicKey, {
     algorithms: ['EdDSA'],
@@ -135,4 +135,20 @@ export async function verifyServiceToken(
   }
 
   return parsed.data
+}
+
+/**
+ * Retrieve the public key for verifying Ty JWTs from env var. or the web
+ */
+export const getTyJwtPublicKey = async () => {
+  const { PROXY_JWT_PUBLIC_KEY } = process.env
+
+  if (!PROXY_JWT_PUBLIC_KEY) {
+    console.error('[attachWsProxy] Missing PROXY_JWT_PUBLIC_KEY env var, WS proxy disabled')
+    return
+  }
+
+  const publicKeyPromise = await importSPKI(PROXY_JWT_PUBLIC_KEY, 'EdDSA')
+
+  return publicKeyPromise
 }
