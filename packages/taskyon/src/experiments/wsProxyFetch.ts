@@ -358,7 +358,7 @@ export async function secureFetch(
    Simple test
 ===================== */
 
-export async function selfTest() {
+export async function testSecureProxyFetch() {
   log('selfTest: starting')
   const start = performance.now()
 
