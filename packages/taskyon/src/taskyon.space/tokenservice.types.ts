@@ -24,7 +24,6 @@ export const ServiceTokenPayloadSchema = z
 
     exp: z.number().optional(),
     iat: z.number().optional(),
-    nbf: z.number().optional(),
   })
   .passthrough()
 
