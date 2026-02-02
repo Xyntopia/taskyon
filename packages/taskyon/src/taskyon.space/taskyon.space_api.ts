@@ -4,6 +4,7 @@
 
 import axios from 'axios'
 import { importSPKI, jwtVerify } from 'jose'
+import type { JsonObject } from 'type-fest'
 import { sleep } from '../utils/asyncUtils'
 import {
   ServiceTokenPayloadSchema,
@@ -46,16 +47,18 @@ export async function mintToken(baseUrl: string, authToken: string) {
   return response.data.token
 }
 
-export async function returnToken(baseUrl: string, token: string, credits_spent_increase: number) {
+export async function returnToken(
+  baseUrl: string,
+  token: string,
+  credits_spent_increase: number,
+  reference_data: JsonObject,
+) {
   const url = `${baseUrl}/return`
 
   const response = await axios.post<ReturnTokenResponse>(url, {
     token,
     credits_spent_increase,
-    reference_data: {
-      'spending reason':
-        'the token was returned with costs of 0.0111 during testing of the tokenservice api.',
-    },
+    reference_data: reference_data,
   } as ReturnTokenRequest)
 
   return response.data
@@ -133,7 +136,10 @@ export const testTokenMinting = async (ctx: { tyauth: string }) => {
   //const { data, error } = await supabase.rpc('get_available_credits')
 
   const credits_spent_increase = 0.0111
-  const returnres = await returnToken(baseUrl, token, credits_spent_increase)
+  const returnres = await returnToken(baseUrl, token, credits_spent_increase, {
+    'spending reason':
+      'the token was returned with costs of 0.0111 during testing of the tokenservice api.',
+  })
 
   // TODO: check here if credits are increased by deposit amount - spent amount
 
