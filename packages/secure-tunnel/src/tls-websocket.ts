@@ -32,6 +32,12 @@ export async function openTlsConnection(
   targetPort: number = 443,
   token: string,
 ): Promise<TlsConnection> {
+  // ---- NEW: connection id for clearer logs ----
+  const connId = Math.random().toString(36).slice(2, 8)
+  const logPrefix = `[SecureTunnel conn=${connId} host=${targetHost}:${targetPort}]`
+
+  console.log(`${logPrefix} creating WebSocket`, { tunnelUrl })
+
   const wsUrl = new URL(tunnelUrl)
   wsUrl.searchParams.set('host', targetHost)
   wsUrl.searchParams.set('port', targetPort.toString())
@@ -52,6 +58,11 @@ export async function openTlsConnection(
     isClosed = true
     closeError = err ?? closeError
 
+    console.log(`${logPrefix} closeConnection called`, {
+      hasError: !!err,
+      error: err?.message,
+    })
+
     try {
       ws.close()
     } catch {
@@ -59,28 +70,39 @@ export async function openTlsConnection(
     }
 
     if (readResolve) {
-      // surface null, caller can also check `closeError` if you expose it
+      console.log(`${logPrefix} resolving pending read with null due to close`)
       readResolve(null)
       readResolve = null
     }
 
     if (err && handshakeReject) {
+      console.log(`${logPrefix} rejecting handshake due to error in closeConnection`, {
+        error: err.message,
+      })
       handshakeReject(err)
       handshakeReject = null
+      handshakeResolve = null
     } else if (handshakeReject) {
+      console.log(`${logPrefix} rejecting handshake: connection closed during handshake`)
       handshakeReject(new Error('Connection closed during handshake'))
       handshakeReject = null
+      handshakeResolve = null
     }
   }
 
   // Wait for raw WS open or fail
   await new Promise<void>((resolve, reject) => {
-    ws.onopen = () => resolve()
-    ws.onerror = () => {
+    ws.onopen = () => {
+      console.log(`${logPrefix} WebSocket onopen`)
+      resolve()
+    }
+    ws.onerror = (ev) => {
+      console.warn(`${logPrefix} WebSocket onerror`, ev)
       reject(new Error('WebSocket connection failed'))
     }
-    // NOTE: we also handle onclose below to give better errors
   })
+
+  console.log(`${logPrefix} WebSocket open, creating TLS client`)
 
   const tls = makeTLSClient({
     host: targetHost,
@@ -90,47 +112,73 @@ export async function openTlsConnection(
         const combined = new Uint8Array(header.length + content.length)
         combined.set(header)
         combined.set(content, header.length)
+        console.log(`${logPrefix} TLS write: sending ${combined.length} bytes over WebSocket`)
         ws.send(combined)
+      } else {
+        console.warn(`${logPrefix} TLS write attempted but WebSocket not OPEN`, {
+          readyState: ws.readyState,
+        })
       }
     },
     onHandshake() {
+      console.log(`${logPrefix} TLS onHandshake fired`)
       if (handshakeResolve) {
         handshakeResolve()
         handshakeResolve = null
         handshakeReject = null
+      } else {
+        console.warn(`${logPrefix} TLS onHandshake fired but no handshakeResolve set`)
       }
     },
     onApplicationData(plaintext: Uint8Array) {
+      console.log(`${logPrefix} TLS onApplicationData: received ${plaintext.length} bytes`)
       if (readResolve) {
-        readResolve(plaintext)
+        const resolver = readResolve
         readResolve = null
+        resolver(plaintext)
       } else {
         readQueue.push(plaintext)
       }
     },
     onTlsEnd(error) {
+      console.log(`${logPrefix} TLS onTlsEnd`, { error: error?.message })
       if (error && handshakeReject) {
+        console.log(`${logPrefix} rejecting handshake from onTlsEnd`, { error: error.message })
         handshakeReject(error)
         handshakeReject = null
+        handshakeResolve = null
       }
       closeConnection(error ?? undefined)
     },
   })
 
   ws.addEventListener('message', (event) => {
-    if (typeof event.data === 'string') return
-    const data = new Uint8Array(event.data)
+    if (typeof event.data === 'string') {
+      console.log(`${logPrefix} WebSocket message (string) ignored, length=${event.data.length}`)
+      return
+    }
+    const data = new Uint8Array(event.data as ArrayBuffer)
+    console.log(`${logPrefix} WebSocket message: ${data.length} bytes, passing to TLS`)
     void tls.handleReceivedBytes(data)
   })
 
   ws.addEventListener('close', (event) => {
-    const { code, reason } = event
+    const { code, reason, wasClean } = event
+    console.log(`${logPrefix} WebSocket close event`, { code, reason, wasClean })
+
+    // If this is your "normal" tcp-closed-after-response code,
+    // do NOT always treat it as a hard error.
+    if (code === 4500 && reason === 'tcp closed') {
+      console.log(`${logPrefix} treating code=4500, reason="tcp closed" as normal close`)
+      closeConnection() // no error
+      return
+    }
+
     const err = new WsProxyCloseError(code, reason)
 
-    // Optional: log a nicer message based on known codes
     switch (code as WsProxyCloseCode) {
       case WsProxyCloseCode.AuthFailed:
-        console.warn('[SecureTunnel] Auth failed in ws-proxy:', reason)
+        console.warn(`${logPrefix} Auth failed in ws-proxy:`, reason)
         break
       case WsProxyCloseCode.MissingHost:
       case WsProxyCloseCode.InvalidPort:
@@ -139,61 +187,105 @@ export async function openTlsConnection(
       case WsProxyCloseCode.InvalidHostFormat:
       case WsProxyCloseCode.PrivateIpForbidden:
       case WsProxyCloseCode.DnsResolutionFailed:
-        console.warn('[SecureTunnel] Target validation failed:', reason)
+        console.warn(`${logPrefix} Target validation failed:`, reason)
         break
       case WsProxyCloseCode.TcpConnectionFailed:
-        console.warn('[SecureTunnel] TCP connection failed:', reason)
+        console.warn(`${logPrefix} TCP connection failed:`, reason)
         break
       case WsProxyCloseCode.InternalError:
       default:
-        console.warn('[SecureTunnel] Tunnel closed:', code, reason)
+        console.warn(`${logPrefix} Tunnel closed:`, code, reason)
         break
     }
 
     closeConnection(err)
   })
 
-  ws.addEventListener('error', () => {
+  ws.addEventListener('error', (ev) => {
+    console.warn(`${logPrefix} WebSocket error event`, ev)
     const err = new Error('WebSocket error in tunnel')
     closeConnection(err)
   })
 
-  await tls.startHandshake()
+  // Wait for TLS handshake to complete (or timeout/fail)
+  console.log(`${logPrefix} starting TLS handshake`)
 
-  // Wait for TLS handshake OR ws-proxy close error
   await new Promise<void>((resolve, reject) => {
-    handshakeResolve = resolve
-    handshakeReject = reject
-    setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       if (handshakeReject) {
+        console.warn(`${logPrefix} TLS handshake timeout reached (10s)`)
         handshakeReject(new Error('TLS handshake timeout'))
         handshakeReject = null
+        handshakeResolve = null
       }
     }, 10000)
+
+    handshakeResolve = () => {
+      console.log(`${logPrefix} handshakeResolve invoked`)
+      clearTimeout(timeoutId)
+      resolve()
+      handshakeResolve = null
+      handshakeReject = null
+    }
+
+    handshakeReject = (err: Error) => {
+      console.warn(`${logPrefix} handshakeReject invoked`, { error: err.message })
+      clearTimeout(timeoutId)
+      reject(err)
+      handshakeResolve = null
+      handshakeReject = null
+    }
+
+    void tls.startHandshake().catch((err) => {
+      console.warn(`${logPrefix} tls.startHandshake() threw/rejected`, { error: err.message })
+      if (handshakeReject) {
+        handshakeReject(err)
+      }
+    })
   })
+
+  console.log(`${logPrefix} TLS handshake completed successfully`)
 
   return {
     write: async (data: Uint8Array) => {
+      console.log(`${logPrefix} write() called with ${data.length} bytes`)
       if (isClosed) {
+        console.warn(`${logPrefix} write() called but connection already closed`, {
+          error: closeError?.message,
+        })
         throw closeError ?? new Error('Connection is closed')
       }
       await tls.write(data)
     },
-    read: () => {
+    read: (): Promise<Uint8Array | null> => {
       if (readQueue.length > 0) {
-        return Promise.resolve(readQueue.shift()!)
+        const chunk = readQueue.shift()
+        console.log(`${logPrefix} read() returning queued chunk ${chunk ? chunk.length : 0} bytes`)
+        return Promise.resolve(chunk ?? null)
       }
       if (isClosed) {
-        // If you want to propagate the close error directly:
         if (closeError) {
+          console.warn(`${logPrefix} read() called after close with error`, {
+            error: closeError.message,
+          })
           return Promise.reject(closeError)
         }
+        console.log(`${logPrefix} read() called after normal close -> null`)
         return Promise.resolve(null)
       }
-      return new Promise((resolve) => {
-        readResolve = resolve
+      console.log(`${logPrefix} read() waiting for data`)
+      return new Promise<Uint8Array | null>((resolve) => {
+        readResolve = (val: Uint8Array | null) => {
+          console.log(
+            `${logPrefix} read() resolver invoked with ${val ? `${val.length} bytes` : 'null'}`,
+          )
+          resolve(val)
+        }
       })
     },
-    close: () => closeConnection(),
+    close: () => {
+      console.log(`${logPrefix} manual close() called`)
+      closeConnection()
+    },
   }
 }
