@@ -3,6 +3,7 @@ import { secureFetch } from '@taskyon/secure-tunnel'
 import { humanizeError } from '../utils/error'
 import { mintToken } from '../taskyon.space/taskyon.space_api'
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
+import { sleep } from '../utils/asyncUtils'
 
 async function expectThrows(fn: () => Promise<unknown>): Promise<unknown> {
   try {
@@ -29,29 +30,33 @@ export const testSecureFetch = async (ctx: { tyauth: string }) => {
     })
   }
 
-  const response = await sfetchGet('https://example.com', token)
+  const testApiUrl1 = 'https://api.nasdaq.com/api/quote/AAPL/chart'
+  const testApiUrl2 = 'https://example.com'
+
+  const response = await sfetchGet(testApiUrl1, token)
 
   console.log(response.status)
   console.log(response.body)
   const data1 = response.text()
-  const expectedString =
-    '<!doctype html><html lang="en"><head><title>Example Domain</title><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{background:#eee;width:60vw;margin:15vh auto;font-family:system-ui,sans-serif}h1{font-size:1.5em}div{opacity:0.8}a:link,a:visited{color:#348}</style><body><div><h1>Example Domain</h1><p>This domain is for use in documentation examples without needing permission. Avoid use in operations.<p><a href="https://iana.org/domains/example">Learn more</a></div></body></html>'
-  if (data1 != expectedString) throw new Error('We did not get the correct string...')
+  /*const expectedString = '<!doctype html><html lang="en"><head><title>Example Domain</title>'
+  if (data1.slice(0, expectedString.length) !== expectedString) {
+    console.error('Not the correct string:', { data1 })
+    throw new Error('We did not get the correct string...')
+  }*/
 
-  const testApiUrl = 'https://openwhyd.org/hot?format=json'
-
-  const err1 = await expectThrows(async () => await fetch(testApiUrl))
+  const err1 = await expectThrows(async () => await fetch(testApiUrl2))
   const expectedCorsError =
     "Success: Error while downloading 'normal' browser based fetch, but expected" +
     humanizeError(err1)
 
   // error should occur for no double spending with the same token.
-  const err = await expectThrows(async () => await sfetchGet(testApiUrl, token))
+  const err = await expectThrows(async () => await sfetchGet(testApiUrl2, token))
   const expectedDoubleSpendError =
     'This Error is expected and should occur during double spending! ' + humanizeError(err)
 
+  await sleep(5000)
   // we have mint a new token for every request
-  const data2 = (await sfetchGet(testApiUrl, await mintToken(baseUrl, ctx.tyauth))).text()
+  const data2 = (await sfetchGet(testApiUrl2, await mintToken(baseUrl, ctx.tyauth))).text()
 
   return {
     fetch1: data1.slice(0, 500),

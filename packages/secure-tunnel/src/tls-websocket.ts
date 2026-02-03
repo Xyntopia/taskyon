@@ -214,11 +214,12 @@ export async function openTlsConnection(
     const timeoutId = setTimeout(() => {
       if (handshakeReject) {
         console.warn(`${logPrefix} TLS handshake timeout reached (10s)`)
-        handshakeReject(new Error('TLS handshake timeout'))
-        handshakeReject = null
-        handshakeResolve = null
+        // Reject AND close the connection
+        const err = new Error('TLS handshake timeout')
+        handshakeReject(err)
+        // closeConnection will be invoked from handshakeReject below
       }
-    }, 10000)
+    }, 30000)
 
     handshakeResolve = () => {
       console.log(`${logPrefix} handshakeResolve invoked`)
@@ -231,6 +232,8 @@ export async function openTlsConnection(
     handshakeReject = (err: Error) => {
       console.warn(`${logPrefix} handshakeReject invoked`, { error: err.message })
       clearTimeout(timeoutId)
+      // Ensure tunnel is closed as well
+      closeConnection(err)
       reject(err)
       handshakeResolve = null
       handshakeReject = null
