@@ -14,13 +14,13 @@ import { executeScript } from './pyodide'
 let pyodideEnv: PyodideInterface | undefined = undefined
 let pyodideInitPromise: Promise<PyodideInterface> | null = null
 
-async function getPyodide(useLocal = true) {
+async function getPyodide() {
   if (pyodideEnv) return pyodideEnv
   if (pyodideInitPromise) return pyodideInitPromise // Return ongoing initialization promise
 
   const startTime = performance.now()
   const cdnUrl = `https://cdn.jsdelivr.net/pyodide/v${version}/full/`
-  const pyodideUrl = useLocal ? '/assets/pyodide' : cdnUrl
+  const pyodideUrl = '/assets/pyodide'
   console.log('load Pyodide', version)
   const pyodide = await loadPyodide({
     // load pyodide from the specified URL here:
@@ -33,7 +33,8 @@ async function getPyodide(useLocal = true) {
   console.log(`Pyodide code loaded after ${(performance.now() - startTime).toFixed(2)} ms`)
   await pyodide.loadPackage(['micropip'])
   const micropip = pyodide.pyimport('micropip')
-  await micropip.install('yake')
+  // TODO: instead of python use a js/wasm keyword extractor
+  await micropip.install('yake==0.6.0')
   pyodideEnv = pyodide
   pyodideInitPromise = null // Clear the promise after successful load
   console.log(`Pyodide initialization took ${(performance.now() - startTime).toFixed(2)} ms`)
