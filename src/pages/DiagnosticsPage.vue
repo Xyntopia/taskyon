@@ -32,20 +32,23 @@
           </div>
         </div>
         <q-card flat bordered class="row items-top">
-          <div class="col-auto">
+          <div class="column">
             <div class="text-caption">Available Tests:</div>
-            <q-separator />
-            <div>
-              <q-list dense :padding="false">
-                <q-item
-                  v-for="(val, name) in { ...tests, ...guiTests }"
-                  :key="name"
-                  clickable
-                  @click="runTests({ name: val }, true)"
-                >
-                  <q-item-section>{{ name }}</q-item-section>
-                </q-item>
-              </q-list>
+            <div v-for="(testListName, idx) in testListKeys" :key="idx" class="col-auto">
+              <q-separator />
+              <div class="text-caption">{{ testListName }}</div>
+              <div>
+                <q-list dense :padding="false">
+                  <q-item
+                    v-for="(val, name) in testLists[testListName] ?? {}"
+                    :key="name"
+                    clickable
+                    @click="runTests({ name: val }, true)"
+                  >
+                    <q-item-section>{{ name }}</q-item-section>
+                  </q-item>
+                </q-list>
+              </div>
             </div>
           </div>
           <q-separator vertical />
@@ -158,6 +161,13 @@ export interface TaskyonTestFn {
 
 const guiTests = {} as Record<string, TaskyonTestFn>
 const tests = {} as Record<string, TaskyonTestFn>
+const experimentalTests = {} as Record<string, TaskyonTestFn>
+const testLists = {
+  tests,
+  experimentalTests,
+  guiTests,
+}
+const testListKeys = Object.keys(testLists) as Array<keyof typeof testLists>
 
 tests.testBuildSlimView = testBuildSlimView
 tests.getEnvironmentInfo = getEnvironmentInfo
@@ -174,6 +184,7 @@ modules.forEach((mod) => {
   Object.entries(mod).forEach(([name, func]) => {
     if (typeof func !== 'function') return
     if ('gui' in func) guiTests[camelToNormal(String(name))] = func
+    if ('experimental' in func) experimentalTests[camelToNormal(String(name))] = func
     else tests[camelToNormal(String(name))] = func
   })
 })
