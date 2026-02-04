@@ -1,5 +1,5 @@
-import { openTlsConnection } from './tls-websocket'
 import { buildHttpRequest, parseHttpResponse } from './http-client'
+import { openTlsConnection } from './tls-websocket'
 
 export interface SecureFetchOptions {
   method?: string
@@ -26,11 +26,8 @@ export async function secureFetch(
   const method = options.method || 'GET'
   const headers = options.headers || {}
   // Default tunnel URL - uses wsproxy protocol with query params for host/port
-  const tunnelUrl =
-    options.tunnelUrl ||
-    (typeof window !== 'undefined'
-      ? (window.location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + window.location.host
-      : 'ws://localhost:8443')
+  const tunnelUrl = options.tunnelUrl
+  if (!tunnelUrl) throw new Error('tunnelUrl is required in SecureFetchOptions')
 
   const url = new URL(urlStr)
   const host = url.hostname
@@ -40,7 +37,32 @@ export async function secureFetch(
     throw new Error('secureFetch only supports https:// URLs')
   }
 
-  const tls = await openTlsConnection(tunnelUrl, host, port, options.tunnelToken || '')
+  let tls
+  try {
+    tls = await openTlsConnection(tunnelUrl, host, port, options.tunnelToken || '')
+  } catch (err: unknown) {
+    // Improve diagnostics around common dev scenarios, especially wss + self-signed certs
+    const isBrowser = typeof window !== 'undefined'
+    const usingWss = typeof tunnelUrl === 'string' && tunnelUrl.startsWith('wss:')
+
+    let hint = ''
+
+    if (isBrowser && usingWss) {
+      hint =
+        ' This often happens on dev servers using self-signed TLS certificates. ' +
+        'Open the dev server URL in your browser first and accept the certificate, ' +
+        'then retry the operation.'
+    }
+
+    const originalMessage =
+      err && (err as Error).message ? String((err as Error).message) : String(err)
+
+    throw new Error(
+      `Failed to establish secure tunnel via WebSocket (${tunnelUrl}) to ${host}:${port}. ` +
+        `Underlying error: ${originalMessage}.` +
+        (hint ? ` ${hint}` : ''),
+    )
+  }
 
   try {
     const reqBytes = buildHttpRequest(method, urlStr, headers, options.body)
