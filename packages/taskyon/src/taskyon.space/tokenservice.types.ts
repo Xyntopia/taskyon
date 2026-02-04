@@ -22,8 +22,8 @@ export const ServiceTokenPayloadSchema = z
     jti: z.string().min(1).describe('JWT ID bound to api_usage_log.id'),
     auid: z.string().min(1).describe('The anonymous user id that owns this token'),
 
-    exp: z.number().optional(),
-    iat: z.number().optional(),
+    exp: z.number().optional().describe('Expiration time (epoch seconds)'),
+    iat: z.number().optional().describe('Issued at (epoch seconds)'),
   })
   .passthrough()
 
