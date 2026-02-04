@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Extract version details
 GIT_HASH=$(git rev-parse --short HEAD)
