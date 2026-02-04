@@ -78,7 +78,7 @@ export const testTyProxy = async (ctx: { tyauth: string }) => {
   const proxyFetch = async (url: string, tunnelToken: string) => {
     const urlObj = new URL(tunnelUrl)
     urlObj.searchParams.set('url', url)
-    return await axios.get(urlObj.toString(), {
+    return await axios.get<string>(urlObj.toString(), {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${tunnelToken}`,
@@ -92,8 +92,8 @@ export const testTyProxy = async (ctx: { tyauth: string }) => {
   const response = await proxyFetch(testApiUrl2, token)
 
   console.log(response.status)
-  console.log(response.data())
-  const data1 = response.data()
+  console.log(response.data)
+  const data1 = response.data
   /*const expectedString = '<!doctype html><html lang="en"><head><title>Example Domain</title>'
   if (data1.slice(0, expectedString.length) !== expectedString) {
     console.error('Not the correct string:', { data1 })
@@ -112,7 +112,7 @@ export const testTyProxy = async (ctx: { tyauth: string }) => {
 
   await sleep(5000)
   // we have mint a new token for every request
-  const data2 = (await proxyFetch(testApiUrl2, await mintToken(baseUrl, ctx.tyauth))).data()
+  const data2 = (await proxyFetch(testApiUrl2, await mintToken(baseUrl, ctx.tyauth))).data
 
   return {
     fetch1: data1.slice(0, 500),
