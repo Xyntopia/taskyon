@@ -30,6 +30,7 @@ COPY package.json yarn.lock .yarnrc.yml /app/
 # COPY --parents packages/*/package.json .
 COPY packages/tyclient/package.json /app/packages/tyclient/
 COPY packages/taskyon/package.json /app/packages/taskyon/
+COPY packages/secure-tunnel/package.json /app/packages/secure-tunnel/
 
 RUN ls -a packages/*
 
