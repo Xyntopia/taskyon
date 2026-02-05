@@ -21,6 +21,24 @@
     "ui"
   ],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "taskyon",
+          "title": "Taskyon",
+          "icon": "resources/taskyon_mono_opt.svg"
+        }
+      ]
+    },
+    "views": {
+      "taskyon": [
+        {
+          "id": "taskyon.sidebar",
+          "name": "Taskyon",
+          "type": "webview"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "taskyon.open",
