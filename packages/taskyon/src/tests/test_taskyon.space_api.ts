@@ -21,7 +21,7 @@ export const testSecureFetch = async (ctx: { tyauth: string }) => {
   const token = await mintToken(baseUrl, ctx.tyauth)
   console.log('Minted token:', token)
 
-  const tunnelUrl = 'wss://localhost:9100/ws-proxy/'
+  const tunnelUrl = 'wss://share.taskyon.space/ws-proxy/'
 
   const sfetchGet = async (url: string, tunnelToken: string) => {
     return await secureFetch(url, {
@@ -73,7 +73,7 @@ export const testTyProxy = async (ctx: { tyauth: string }) => {
   const token = await mintToken(baseUrl, ctx.tyauth)
   console.log('Minted token:', token)
 
-  const tunnelUrl = 'https://localhost:9100/proxy'
+  const tunnelUrl = 'https://share.taskyon.space/proxy'
 
   const proxyFetch = async (url: string, tunnelToken: string) => {
     const urlObj = new URL(tunnelUrl)
