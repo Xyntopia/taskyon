@@ -139,7 +139,7 @@ COPY --from=server-builder /app/dist/ssr /app
 
 # Install dependencies
 WORKDIR /app
-RUN yarn install --frozen-lockfile --ignore-optional
+RUN yarn install --immutable
 
 EXPOSE 3000
 STOPSIGNAL SIGTERM

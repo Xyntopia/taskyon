@@ -5,6 +5,7 @@ GIT_HASH=$(git rev-parse --short HEAD)
 DATE_TAG=$(date +'%Y%m%d')
 
 IMAGE_NAME="xyntopia/taskyon-server"
+BUILD_STAGE="ssr-server"  # Change this to your desired build stage
 
 # Fail early if not logged in
 docker whoami >/dev/null 2>&1 || {
@@ -12,7 +13,7 @@ docker whoami >/dev/null 2>&1 || {
   exit 1
 }
 
-docker build -t ${IMAGE_NAME}:latest .
+docker build --target ${BUILD_STAGE} -t ${IMAGE_NAME}:latest .
 
 docker tag ${IMAGE_NAME}:latest ${IMAGE_NAME}:${GIT_HASH}
 docker tag ${IMAGE_NAME}:latest ${IMAGE_NAME}:${DATE_TAG}
