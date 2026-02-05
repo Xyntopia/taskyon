@@ -1,8 +1,11 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 
 const DEFAULT_URL = 'https://taskyon.space';
 const EXTENSION_TITLE = 'Taskyon';
 const THEME_QUERY_KEY = 'vscodeTheme';
+const VSCODE_QUERY_KEY = 'vscode';
+const VSCODE_MESSAGE_SOURCE = 'taskyon-vscode';
 
 type ThemeMode = 'dark' | 'light';
 
@@ -44,6 +47,12 @@ function appendThemeQuery(url: string, theme: ThemeMode): string {
   return parsed.toString();
 }
 
+function appendVscodeQuery(url: string): string {
+  const parsed = new URL(url);
+  parsed.searchParams.set(VSCODE_QUERY_KEY, 'true');
+  return parsed.toString();
+}
+
 function buildWebviewHtml(webview: vscode.Webview, targetUrl: string, theme: ThemeMode): string {
   const csp = [
     "default-src 'none'",
@@ -57,6 +66,7 @@ function buildWebviewHtml(webview: vscode.Webview, targetUrl: string, theme: The
   ].join('; ');
 
   const themedUrl = appendThemeQuery(targetUrl, theme);
+  const framedUrl = appendVscodeQuery(themedUrl);
 
   return `<!doctype html>
 <html lang="en" data-vscode-theme="${theme}">
@@ -88,13 +98,37 @@ function buildWebviewHtml(webview: vscode.Webview, targetUrl: string, theme: The
   <body>
     <iframe
       id="frame"
-      src="${themedUrl}"
+      src="${framedUrl}"
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
       allow="clipboard-read; clipboard-write; fullscreen"
     ></iframe>
     <script>
+      const vscode = acquireVsCodeApi();
       const vscodeThemeKey = ${JSON.stringify(THEME_QUERY_KEY)};
+      const vscodeMessageSource = ${JSON.stringify(VSCODE_MESSAGE_SOURCE)};
       const frame = document.getElementById('frame');
+      const queuedMessages = [];
+
+      const postToFrame = (message) => {
+        if (frame && frame.contentWindow) {
+          frame.contentWindow.postMessage(message, '*');
+        } else {
+          queuedMessages.push(message);
+        }
+      };
+
+      const initTaskyonPort = () => {
+        if (!frame || !frame.contentWindow) return;
+        const channel = new MessageChannel();
+        frame.contentWindow.postMessage({ type: 'initPort' }, '*', [channel.port1]);
+      };
+
+      frame.addEventListener('load', () => {
+        initTaskyonPort();
+        while (queuedMessages.length && frame.contentWindow) {
+          frame.contentWindow.postMessage(queuedMessages.shift(), '*');
+        }
+      });
       const setTheme = (theme) => {
         if (!theme) return;
         const current = document.documentElement.getAttribute('data-vscode-theme');
@@ -113,6 +147,18 @@ function buildWebviewHtml(webview: vscode.Webview, targetUrl: string, theme: The
         const data = event.data || {};
         if (data.type === 'theme') {
           setTheme(data.theme);
+          return;
+        }
+        if (data.source === vscodeMessageSource && data.type === 'vscodeActiveFile') {
+          postToFrame(data);
+        }
+      });
+
+      window.addEventListener('message', (event) => {
+        if (!frame || event.source !== frame.contentWindow) return;
+        const data = event.data || {};
+        if (data.source === vscodeMessageSource && data.type === 'vscodeApplyEdits') {
+          vscode.postMessage(data);
         }
       });
     </script>
@@ -128,6 +174,8 @@ class TaskyonViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewId = 'taskyon.sidebar';
   private view?: vscode.WebviewView;
   private readonly context: vscode.ExtensionContext;
+  private pendingMessage?: unknown;
+  private messageHandler?: (message: unknown) => void;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
@@ -139,6 +187,9 @@ class TaskyonViewProvider implements vscode.WebviewViewProvider {
       enableScripts: true,
       retainContextWhenHidden: true,
     };
+    webviewView.webview.onDidReceiveMessage(message => {
+      this.messageHandler?.(message);
+    });
 
     const rawUrl = getConfiguredUrl();
     const url = normalizeUrl(rawUrl);
@@ -155,11 +206,27 @@ class TaskyonViewProvider implements vscode.WebviewViewProvider {
     }
 
     webviewView.webview.html = buildWebviewHtml(webviewView.webview, url, theme);
+    if (this.pendingMessage) {
+      void webviewView.webview.postMessage(this.pendingMessage);
+      this.pendingMessage = undefined;
+    }
   }
 
   updateTheme(theme: ThemeMode): void {
     if (!this.view) return;
     this.view.webview.postMessage({ type: 'theme', theme });
+  }
+
+  postMessage(message: unknown): void {
+    if (this.view) {
+      void this.view.webview.postMessage(message);
+    } else {
+      this.pendingMessage = message;
+    }
+  }
+
+  setMessageHandler(handler: (message: unknown) => void): void {
+    this.messageHandler = handler;
   }
 }
 
@@ -209,6 +276,151 @@ export function activate(context: vscode.ExtensionContext): void {
   });
 
   context.subscriptions.push(openCommand, openExternalCommand, themeListener);
+
+  const resolveFileUri = (pathOrUri: string): vscode.Uri | undefined => {
+    if (!pathOrUri) return undefined;
+    try {
+      const parsed = vscode.Uri.parse(pathOrUri);
+      if (parsed.scheme) return parsed;
+    } catch {
+      // ignore
+    }
+    if (path.isAbsolute(pathOrUri)) {
+      return vscode.Uri.file(pathOrUri);
+    }
+    if (vscode.workspace.workspaceFolders?.length) {
+      return vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, pathOrUri);
+    }
+    return undefined;
+  };
+
+  const applyLinePatches = (
+    text: string,
+    patches: Array<{
+      type: 'replace' | 'insert' | 'delete';
+      lineStart: number;
+      lineEnd?: number;
+      text?: string;
+    }>
+  ): string => {
+    const lines = text.split('\n');
+    const sorted = [...patches].sort((a, b) => b.lineStart - a.lineStart);
+    for (const patch of sorted) {
+      const startIdx = Math.max(0, patch.lineStart - 1);
+      if (patch.type === 'insert') {
+        const newLines = (patch.text || '').split('\n');
+        lines.splice(startIdx, 0, ...newLines);
+        continue;
+      }
+      const endLine = patch.lineEnd ?? patch.lineStart;
+      const deleteCount = Math.max(0, endLine - patch.lineStart + 1);
+      if (patch.type === 'delete') {
+        lines.splice(startIdx, deleteCount);
+      } else {
+        const newLines = (patch.text || '').split('\n');
+        lines.splice(startIdx, deleteCount, ...newLines);
+      }
+    }
+    return lines.join('\n');
+  };
+
+  const replaceDocumentContent = async (uri: vscode.Uri, content: string) => {
+    try {
+      const document = await vscode.workspace.openTextDocument(uri);
+      const lastLine = Math.max(0, document.lineCount - 1);
+      const fullRange = new vscode.Range(
+        0,
+        0,
+        lastLine,
+        document.lineAt(lastLine).range.end.character
+      );
+      const edit = new vscode.WorkspaceEdit();
+      edit.replace(uri, fullRange, content);
+      await vscode.workspace.applyEdit(edit);
+    } catch {
+      const buffer = Buffer.from(content, 'utf8');
+      await vscode.workspace.fs.writeFile(uri, buffer);
+    }
+  };
+
+  viewProvider.setMessageHandler(async message => {
+    const data = message as {
+      source?: string;
+      type?: string;
+      payload?: {
+        updates?: Array<{
+          filePath: string;
+          patches?: Array<{
+            type: 'replace' | 'insert' | 'delete';
+            lineStart: number;
+            lineEnd?: number;
+            text?: string;
+          }>;
+          newContent?: string;
+        }>;
+      };
+    };
+
+    if (!data || data.source !== VSCODE_MESSAGE_SOURCE || data.type !== 'vscodeApplyEdits') return;
+    const updates = data.payload?.updates ?? [];
+    for (const update of updates) {
+      const uri = resolveFileUri(update.filePath);
+      if (!uri) continue;
+      if (typeof update.newContent === 'string' && update.newContent.length >= 0) {
+        await replaceDocumentContent(uri, update.newContent);
+        continue;
+      }
+      if (update.patches?.length) {
+        const doc = await vscode.workspace.openTextDocument(uri);
+        const updated = applyLinePatches(doc.getText(), update.patches);
+        await replaceDocumentContent(uri, updated);
+      }
+    }
+  });
+
+  const getActiveFilePayload = (): {
+    uri: string;
+    path: string;
+    content: string;
+    languageId: string;
+    version: number;
+  } | null => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) return null;
+    const doc = editor.document;
+    if (doc.uri.scheme !== 'file') return null;
+    return {
+      uri: doc.uri.toString(),
+      path: doc.fileName,
+      content: doc.getText(),
+      languageId: doc.languageId,
+      version: doc.version,
+    };
+  };
+
+  let lastSent: { uri: string; version: number } | null = null;
+  const sendActiveFile = () => {
+    const payload = getActiveFilePayload();
+    if (!payload) return;
+    if (lastSent && lastSent.uri === payload.uri && lastSent.version === payload.version) return;
+    lastSent = { uri: payload.uri, version: payload.version };
+    viewProvider.postMessage({
+      source: VSCODE_MESSAGE_SOURCE,
+      type: 'vscodeActiveFile',
+      payload,
+    });
+  };
+
+  const editorListener = vscode.window.onDidChangeActiveTextEditor(() => sendActiveFile());
+  const documentListener = vscode.workspace.onDidChangeTextDocument(event => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || event.document !== editor.document) return;
+    sendActiveFile();
+  });
+
+  context.subscriptions.push(editorListener, documentListener);
+
+  sendActiveFile();
 
   void revealSidebar();
 }

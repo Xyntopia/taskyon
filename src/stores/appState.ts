@@ -44,14 +44,17 @@ export function getUrlConfig() {
   if (process.env.CLIENT) {
     const searchParams = new URLSearchParams(window.location.search)
     const isIframeParam = searchParams.get('iframe') === 'true'
+    const isVscodeParam =
+      searchParams.get('vscode') === 'true' || searchParams.get('vscode') === '1'
     const profile = searchParams.get('profile')
     console.log('we are in an iframe via param:', isIframeParam)
     const isInIframe = window.self !== window.top || isIframeParam
     console.log('we are in an iframe:', window.self !== window.top, isInIframe)
-    return { isInIframe, profile }
+    return { isInIframe, isInVscode: isVscodeParam, profile }
   } else
     return {
       isInIframe: false,
+      isInVscode: false,
       profile: null,
     }
 }
@@ -360,6 +363,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
     bindingKey,
     setBindingKey,
     isInIframe: urlConfig.isInIframe,
+    isInVscode: urlConfig.isInVscode,
     setSelectedTask: (taskId: string | null | undefined) => {
       console.log('set selected task:', taskId)
       stateRefs.llmSettings.selectedTaskId = taskId || undefined

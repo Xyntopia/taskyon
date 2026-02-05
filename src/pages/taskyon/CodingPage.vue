@@ -307,10 +307,13 @@ import SplitTaskyonView from 'src/components/SplitTaskyonView.vue'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
+const isInVscode = state.isInVscode
+
+const VSCODE_MESSAGE_SOURCE = 'taskyon-vscode'
 
 const isCreateFileDialogOpen = ref(false)
 const isRenameFileDialogOpen = ref(false)
@@ -406,7 +409,9 @@ interface PersistedState {
 }
 
 // Restore
-const savedData = state.store[storeKey] as PersistedState | undefined
+const savedData = !isInVscode
+  ? (state.store[storeKey] as PersistedState | undefined)
+  : undefined
 if (savedData && savedData.files) {
   files.value = savedData.files
   // Restore basic version hook if we want, or just start fresh with content
@@ -422,22 +427,34 @@ if (savedData && savedData.files) {
   if (Object.keys(files.value).length > 0) {
     activeFileName.value = Object.keys(files.value)[0]!
   }
-} else {
+} else if (!isInVscode) {
   // Start with an empty project and an initial empty version snapshot
   createNewVersion('Initial empty project')
 }
+if (isInVscode && documentVersions.value.length === 0) {
+  documentVersions.value = [
+    {
+      files: {},
+      timestamp: new Date(),
+      description: 'Waiting for VS Code',
+    },
+  ]
+  currentVersionIndex.value = 0
+}
 
 // Persist
-watchThrottled(
-  files,
-  (newFiles) => {
-    state.store[storeKey] = {
-      version: 1,
-      files: newFiles,
-    }
-  },
-  { deep: true, throttle: 1000 },
-)
+if (!isInVscode) {
+  watchThrottled(
+    files,
+    (newFiles) => {
+      state.store[storeKey] = {
+        version: 1,
+        files: newFiles,
+      }
+    },
+    { deep: true, throttle: 1000 },
+  )
+}
 
 // --- Tools Configuration ---
 
@@ -627,6 +644,17 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
       required: ['updates'],
     } as const satisfies JSONSchema7,
     function: ({ updates, description }) => {
+      if (isInVscode) {
+        window.parent?.postMessage(
+          {
+            source: VSCODE_MESSAGE_SOURCE,
+            type: 'vscodeApplyEdits',
+            payload: { updates, description },
+          },
+          '*',
+        )
+      }
+
       // 1. Snapshot current state before applying changes?
       // Actually we save a snapshot *after* the change usually, or *as* the new version.
       // Let's take the current state, apply changes, and push a NEW version.
@@ -669,7 +697,9 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
 
       // Commit changes
       files.value = currentFilesSnapshot
-      createNewVersion(`Auto-update: ${description || changesLog.join(', ')}`)
+      if (!isInVscode) {
+        createNewVersion(`Auto-update: ${description || changesLog.join(', ')}`)
+      }
 
       return makeTaskResult({
         role: 'system',
@@ -700,6 +730,54 @@ const configuration = computed<partialTyConfiguration | null>(() => {
     },
     signatureOrKey: tystate.currentKeyString ?? undefined,
   }
+})
+
+type VscodeActiveFilePayload = {
+  uri: string
+  path: string
+  content: string
+  languageId?: string
+  version?: number
+}
+
+const handleVscodeActiveFile = (payload: VscodeActiveFilePayload) => {
+  if (!payload?.path) return
+
+  const nextFiles = {
+    ...files.value,
+    [payload.path]: payload.content ?? '',
+  }
+  files.value = nextFiles
+  activeFileName.value = payload.path
+
+  if (documentVersions.value.length === 0) {
+    documentVersions.value = [
+      {
+        files: { ...nextFiles },
+        timestamp: new Date(),
+        description: 'Synced from VS Code',
+      },
+    ]
+    currentVersionIndex.value = 0
+  }
+}
+
+const onVscodeMessage = (event: MessageEvent) => {
+  const data = event.data as { source?: string; type?: string; payload?: VscodeActiveFilePayload }
+  if (!data || data.source !== VSCODE_MESSAGE_SOURCE) return
+  if (data.type === 'vscodeActiveFile' && data.payload) {
+    handleVscodeActiveFile(data.payload)
+  }
+}
+
+onMounted(() => {
+  if (!isInVscode) return
+  window.addEventListener('message', onVscodeMessage)
+})
+
+onBeforeUnmount(() => {
+  if (!isInVscode) return
+  window.removeEventListener('message', onVscodeMessage)
 })
 
 // --- Helper Functions ---
