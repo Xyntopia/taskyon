@@ -40,7 +40,7 @@ function getGitCommitHash() {
     // Try to fetch commit hash locally
     // we need to expicitly specify 8 chars, because git default behaves differently on different OS.
     console.log('detecting current commit hash.')
-    const commitHash = execSync(`it -C ${here} rev-parse --short=8 HEAD`, {
+    const commitHash = execSync(`git -C ${here} rev-parse --short=8 HEAD`, {
       stdio: ['ignore', 'pipe', 'ignore'],
     })
       .toString()
