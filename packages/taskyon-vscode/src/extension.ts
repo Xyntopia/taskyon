@@ -31,15 +31,9 @@ function normalizeUrl(url: string): string | undefined {
 
 function appendVscodePath(url: string): string {
   const parsed = new URL(url)
-  if (parsed.hash) {
-    const hashPath = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash
-    if (!hashPath.endsWith('/vscode')) {
-      const normalized = hashPath ? (hashPath.startsWith('/') ? hashPath : `/${hashPath}`) : '/'
-      const base = normalized.replace(/\/$/, '')
-      parsed.hash = `${base}/vscode`
-    }
-  } else {
-    parsed.hash = '#/vscode'
+  const basePath = parsed.pathname.replace(/\/$/, '')
+  if (!basePath.endsWith('/vscode')) {
+    parsed.pathname = `${basePath}/vscode`
   }
   return parsed.toString()
 }
@@ -121,6 +115,7 @@ function buildWebviewHtml(webview: vscode.Webview, targetUrl: string, theme: The
       const vscode = acquireVsCodeApi();
       const vscodeThemeKey = ${JSON.stringify(THEME_QUERY_KEY)};
       const vscodeMessageSource = ${JSON.stringify(VSCODE_MESSAGE_SOURCE)};
+      const framedUrl = ${JSON.stringify(framedUrl)};
       const frame = document.getElementById('frame');
       const queuedMessages = [];
 
@@ -139,6 +134,12 @@ function buildWebviewHtml(webview: vscode.Webview, targetUrl: string, theme: The
       };
 
       frame.addEventListener('load', () => {
+        console.log('[Taskyon][Webview] iframe src:', framedUrl);
+        vscode.postMessage({
+          source: vscodeMessageSource,
+          type: 'vscodeWebviewUrl',
+          payload: { framedUrl },
+        });
         initTaskyonPort();
         while (queuedMessages.length && frame.contentWindow) {
           frame.contentWindow.postMessage(queuedMessages.shift(), '*');
@@ -221,6 +222,7 @@ class TaskyonViewProvider implements vscode.WebviewViewProvider {
     }
 
     const vscodeUrl = appendVscodePath(url)
+    console.log(`[Taskyon][Webview] resolved url: ${vscodeUrl}`)
     webviewView.webview.html = buildWebviewHtml(webviewView.webview, vscodeUrl, theme)
     if (this.pendingMessage) {
       void webviewView.webview.postMessage(this.pendingMessage)
@@ -261,7 +263,9 @@ async function openTaskyon(): Promise<void> {
 
   const openMode = getOpenMode()
   if (openMode === 'external') {
-    await openExternal(appendVscodePath(url))
+    const vscodeUrl = appendVscodePath(url)
+    console.log(`[Taskyon][External] resolved url: ${vscodeUrl}`)
+    await openExternal(vscodeUrl)
     return
   }
 
@@ -284,7 +288,9 @@ export function activate(context: vscode.ExtensionContext): void {
       return
     }
 
-    await openExternal(appendVscodePath(url))
+    const vscodeUrl = appendVscodePath(url)
+    console.log(`[Taskyon][External] resolved url: ${vscodeUrl}`)
+    await openExternal(vscodeUrl)
   })
 
   const themeListener = vscode.window.onDidChangeActiveColorTheme((theme) => {
@@ -374,10 +380,19 @@ export function activate(context: vscode.ExtensionContext): void {
           }>
           newContent?: string
         }>
+        framedUrl?: string
       }
     }
 
-    if (!data || data.source !== VSCODE_MESSAGE_SOURCE || data.type !== 'vscodeApplyEdits') return
+    if (!data || data.source !== VSCODE_MESSAGE_SOURCE) return
+    if (data.type === 'vscodeWebviewUrl') {
+      const framedUrl = data.payload?.framedUrl
+      if (framedUrl) {
+        console.log(`[Taskyon][Webview] iframe src: ${framedUrl}`)
+      }
+      return
+    }
+    if (data.type !== 'vscodeApplyEdits') return
     const updates = data.payload?.updates ?? []
     for (const update of updates) {
       const uri = resolveFileUri(update.filePath)
