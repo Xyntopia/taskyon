@@ -806,7 +806,7 @@ const copyNodeValue = (path: string[]) => {
 
   // You can decide how to handle undefined; here we still stringify it
   const json = JSON.stringify(target, null, 2)
-  copyToClipboard(json)
+  void copyToClipboard(json)
 }
 
 const fullViewPaths = ref<string[]>([])
