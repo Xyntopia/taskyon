@@ -22,9 +22,15 @@ export async function waitForMessagePort(
 }
 
 export async function waitForIframeDuplexChannel() {
+  const searchParams = new URLSearchParams(window.location.search)
+  const isVscodeParam =
+    searchParams.get('vscode') === 'true' || searchParams.get('vscode') === '1'
   const mport = await waitForMessagePort((ev) => {
     // Check if the message is from the parent window
-    return ev.source === window.parent && ev.data?.type === 'initPort'
+    return (
+      ev.data?.type === 'initPort' &&
+      (ev.source === window.parent || (!ev.source && isVscodeParam))
+    )
     // Optionally, check the origin if you know what it should be
     // For example, if you expect messages only from 'https://example.com'
     /*if (event.origin === 'https://example.com') {

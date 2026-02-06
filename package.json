@@ -15,6 +15,7 @@
     "build:tyclient": "echo 'build client library' && yarn workspace @taskyon/tyclient run build",
     "pack:tyclient": "mkdir -p public/lib && yarn workspace @taskyon/tyclient pack --filename ../../public/lib/tyclient-$npm_package_version.tgz && cp packages/tyclient/dist/tyclient.* public/lib/",
     "dev": "yarn run quasar dev",
+    "dev:http": "TASKYON_HTTP=1 yarn run quasar dev",
     "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .gitignore",
     "lint": "vue-tsc --noEmit && eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}'",
     "relay": "yarn workspace @taskyon/relay start"

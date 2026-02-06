@@ -185,7 +185,7 @@ import {
 import type { InternalTool, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { craeteToolJsonSchema, createTaskNode, ToolBase } from '@taskyon/taskyon'
 import ObjectTreeView from 'components/varViews/ObjectTreeView.vue'
-import { copyToClipboard } from 'quasar'
+import { copyToClipboard } from 'src/modules/utils'
 import type { DockNode } from 'src/components/DockView.vue'
 import DockView from 'src/components/DockView.vue'
 import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'

@@ -72,6 +72,7 @@ import { mdiFile } from '@quasar/extras/mdi-v6'
 import type { QTreeNode } from 'quasar'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import InfoDialog from 'src/components/InfoDialog.vue'
+import { copyToClipboard } from 'src/modules/utils'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -270,11 +271,11 @@ async function downloadFile(node: TreeNode) {
 }
 
 async function copyPath(node: TreeNode) {
-  try {
-    await navigator.clipboard.writeText(node.path)
+  const ok = await copyToClipboard(node.path)
+  if (ok) {
     console.log('[copyPath] copied', node.path)
-  } catch (err) {
-    console.error('[copyPath] failed:', err)
+  } else {
+    console.error('[copyPath] failed')
   }
 }
 

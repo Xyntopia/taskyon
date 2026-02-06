@@ -226,6 +226,7 @@ import ObjectTreeView from 'src/components/varViews/ObjectTreeView.vue'
 import type { RumocaModule } from 'src/modules/modelica/modelica'
 import { buildIframeCode, loadWasm } from 'src/modules/modelica/modelica'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
+import { copyToClipboard } from 'src/modules/utils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onMounted, ref } from 'vue'
 import { validateJavaScriptInSandbox } from '../../../packages/taskyon/src/utils/checkJsSyntax'
@@ -601,11 +602,6 @@ end BouncingBall;`
   if (!sel) return
   const exampleTemplate = (await jinjaTemplateUrls[sel]!()) as string
   templateSource.value = exampleTemplate || ''
-}
-
-const copyToClipboard = async (text: string) => {
-  if (!text) return
-  await navigator.clipboard.writeText(text)
 }
 
 const copyJsToClipboard = async () => {

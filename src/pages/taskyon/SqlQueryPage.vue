@@ -86,7 +86,8 @@ import type { TyPGDB } from '@taskyon/taskyon/db'
 import { getDatabase } from '@taskyon/taskyon/db'
 import { dump } from 'js-yaml'
 import type { JSONSchema7 } from 'json-schema'
-import { copyToClipboard, Notify } from 'quasar'
+import { Notify } from 'quasar'
+import { copyToClipboard } from 'src/modules/utils'
 import SplitTaskyonView from 'src/components/SplitTaskyonView.vue'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { asyncComputed } from 'src/modules/vueUtils'
@@ -98,9 +99,13 @@ const state = useAppStateStore()
 const tystate = useTaskyonStore()
 
 function copyJson() {
-  copyToClipboard(formattedResult.value)
-    .then(() => Notify.create({ message: 'Copied as JSON', color: 'primary' }))
-    .catch(() => Notify.create({ message: 'Copy failed', color: 'negative' }))
+  void copyToClipboard(formattedResult.value).then((ok) => {
+    if (ok) {
+      Notify.create({ message: 'Copied as JSON', color: 'primary' })
+    } else {
+      Notify.create({ message: 'Copy failed', color: 'negative' })
+    }
+  })
 }
 
 function copyCsv() {
@@ -110,9 +115,13 @@ function copyCsv() {
     cols.join(','), // header
     ...tableRows.value.map((row) => cols.map((k) => JSON.stringify(row[k] ?? '')).join(',')),
   ]
-  copyToClipboard(csvRows.join('\n'))
-    .then(() => Notify.create({ message: 'Copied as CSV', color: 'primary' }))
-    .catch(() => Notify.create({ message: 'Copy failed', color: 'negative' }))
+  void copyToClipboard(csvRows.join('\n')).then((ok) => {
+    if (ok) {
+      Notify.create({ message: 'Copied as CSV', color: 'primary' })
+    } else {
+      Notify.create({ message: 'Copy failed', color: 'negative' })
+    }
+  })
 }
 
 // Row interfaces (no `any`)

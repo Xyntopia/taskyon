@@ -300,7 +300,8 @@ import {
 } from '@taskyon/taskyon'
 import { watchThrottled } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
-import { copyToClipboard, Notify } from 'quasar'
+import { Notify } from 'quasar'
+import { copyToClipboard } from 'src/modules/utils'
 import CodeEditor from 'src/components/CodeEditor.vue'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import SplitTaskyonView from 'src/components/SplitTaskyonView.vue'
@@ -409,9 +410,7 @@ interface PersistedState {
 }
 
 // Restore
-const savedData = !isInVscode
-  ? (state.store[storeKey] as PersistedState | undefined)
-  : undefined
+const savedData = !isInVscode ? (state.store[storeKey] as PersistedState | undefined) : undefined
 if (savedData && savedData.files) {
   files.value = savedData.files
   // Restore basic version hook if we want, or just start fresh with content
@@ -837,9 +836,13 @@ function applyLinePatches(text: string, patches: LinePatchOperation[]): string {
 // --- Actions (UI) ---
 
 function copyContent() {
-  void copyToClipboard(activeFileContent.value).then(() =>
-    Notify.create({ message: 'Copied!', color: 'positive' }),
-  )
+  void copyToClipboard(activeFileContent.value).then((ok) => {
+    if (ok) {
+      Notify.create({ message: 'Copied!', color: 'positive' })
+    } else {
+      Notify.create({ message: 'Copy failed', color: 'negative' })
+    }
+  })
 }
 
 async function pasteAsNewFile() {

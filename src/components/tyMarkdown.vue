@@ -17,7 +17,14 @@
     sandbox="allow-scripts allow-modals allow-downloads allow-forms allow-popups"
     v-bind="$attrs"
   />
-  <div v-else v-bind="$attrs" class="ty-markdown" v-html="renderedHtml.html" />
+  <div
+    v-else
+    ref="htmlRef"
+    v-bind="$attrs"
+    class="ty-markdown"
+    @click="handleMarkdownClick"
+    v-html="renderedHtml.html"
+  />
 </template>
 
 <script setup lang="ts">
@@ -31,13 +38,23 @@ import { generateIframeSrc, initPrismTheme, md2Html, tyMdCssUrls } from '../modu
 //const mathjaxInstance = createMathjaxInstance();
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
-
 // inside your <script setup>
 const emit = defineEmits<{
   (e: 'iframe-ready', el: HTMLIFrameElement): void
   (e: 'ifLongpress', pos: { x: number; y: number }): void
   (e: 'ifClick', pos: { x: number; y: number }): void
 }>()
+
+function handleMarkdownClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  const link = target?.closest('a[href]') as HTMLAnchorElement | null
+  if (!link) return
+  event.preventDefault()
+  window.parent?.postMessage(
+    { type: 'linkClick', href: link.getAttribute('href') || '' },
+    '*',
+  )
+}
 
 watch(iframeRef, (el) => {
   if (el) emit('iframe-ready', el)

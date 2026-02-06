@@ -1,11 +1,13 @@
 import * as vscode from 'vscode'
 import * as path from 'path'
+import * as fs from 'fs'
 
-const DEFAULT_URL = 'https://taskyon.space'
-const EXTENSION_TITLE = 'Taskyon'
+const DEFAULT_URL = 'http://localhost:9000'
 const THEME_QUERY_KEY = 'vscodeTheme'
 const VSCODE_QUERY_KEY = 'vscode'
+const IFRAME_QUERY_KEY = 'iframe'
 const VSCODE_MESSAGE_SOURCE = 'taskyon-vscode'
+const BASE_URL_STATE_KEY = 'taskyon.baseUrlOverride'
 
 type ThemeMode = 'dark' | 'light'
 
@@ -13,6 +15,15 @@ function getConfiguredUrl(): string {
   const config = vscode.workspace.getConfiguration('taskyon')
   const url = config.get<string>('url', DEFAULT_URL).trim()
   return url.length ? url : DEFAULT_URL
+}
+
+function getStoredBaseUrl(context: vscode.ExtensionContext): string | undefined {
+  const stored = (context.globalState.get<string>(BASE_URL_STATE_KEY) || '').trim()
+  return stored.length ? stored : undefined
+}
+
+function getEffectiveBaseUrl(context: vscode.ExtensionContext): string {
+  return getStoredBaseUrl(context) || getConfiguredUrl()
 }
 
 function getOpenMode(): 'webview' | 'external' {
@@ -27,15 +38,6 @@ function normalizeUrl(url: string): string | undefined {
   } catch {
     return undefined
   }
-}
-
-function appendVscodePath(url: string): string {
-  const parsed = new URL(url)
-  const basePath = parsed.pathname.replace(/\/$/, '')
-  if (!basePath.endsWith('/vscode')) {
-    parsed.pathname = `${basePath}/vscode`
-  }
-  return parsed.toString()
 }
 
 function getThemeMode(theme: vscode.ColorTheme): ThemeMode {
@@ -62,11 +64,73 @@ function appendVscodeQuery(url: string): string {
   return parsed.toString()
 }
 
-function buildWebviewHtml(webview: vscode.Webview, targetUrl: string, theme: ThemeMode): string {
+function appendIframeQuery(url: string): string {
+  const parsed = new URL(url)
+  parsed.searchParams.set(IFRAME_QUERY_KEY, 'true')
+  return parsed.toString()
+}
+
+function buildWebviewHtmlForUrl(options: {
+  context: vscode.ExtensionContext
+  webview: vscode.Webview
+  baseUrl: string
+  theme: ThemeMode
+}): string {
+  const { context, webview, baseUrl, theme } = options
+  const themedUrl = appendThemeQuery(baseUrl, theme)
+  const vscodeUrl = appendVscodeQuery(themedUrl)
+  const framedUrl = appendIframeQuery(vscodeUrl)
+  const tyclientUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(context.extensionUri, '..', '..', 'packages', 'tyclient', 'dist', 'tyclient.mjs'),
+  )
+  const bundledTyclientPath = path.join(
+    context.extensionUri.fsPath,
+    '..',
+    '..',
+    'packages',
+    'taskyon-vscode',
+    'media',
+    'tyclient.bundle.mjs',
+  )
+  const bundledTyclientUri = webview.asWebviewUri(vscode.Uri.file(bundledTyclientPath))
+  const webviewScriptUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(context.extensionUri, '..', '..', 'packages', 'taskyon-vscode', 'media', 'webview.js'),
+  )
+  const htmlPath = path.join(
+    context.extensionUri.fsPath,
+    '..',
+    '..',
+    'packages',
+    'taskyon-vscode',
+    'media',
+    'index.html',
+  )
+  const nonce = Math.random().toString(36).slice(2)
+  return buildWebviewHtml({
+    webview,
+    htmlPath,
+    framedUrl,
+    theme,
+    nonce,
+    tyclientUri: fs.existsSync(bundledTyclientPath) ? bundledTyclientUri : tyclientUri,
+    webviewScriptUri,
+  })
+}
+
+function buildWebviewHtml(options: {
+  webview: vscode.Webview
+  htmlPath: string
+  framedUrl: string
+  theme: ThemeMode
+  nonce: string
+  tyclientUri: vscode.Uri
+  webviewScriptUri: vscode.Uri
+}): string {
+  const { webview, htmlPath, framedUrl, theme, nonce, tyclientUri, webviewScriptUri } = options
   const csp = [
     "default-src 'none'",
     `style-src ${webview.cspSource} 'unsafe-inline'`,
-    `script-src ${webview.cspSource} 'unsafe-inline'`,
+    `script-src ${webview.cspSource} 'nonce-${nonce}'`,
     'img-src https: http: data:',
     'frame-src https: http:',
     'connect-src https: http:',
@@ -74,112 +138,25 @@ function buildWebviewHtml(webview: vscode.Webview, targetUrl: string, theme: The
     "base-uri 'none'",
   ].join('; ')
 
-  const themedUrl = appendThemeQuery(targetUrl, theme)
-  const framedUrl = appendVscodeQuery(themedUrl)
+  const html = fs.readFileSync(htmlPath, 'utf8')
+  const configSnippet = `<script nonce="${nonce}">window.__TASKYON__=${JSON.stringify({
+    themeKey: THEME_QUERY_KEY,
+    messageSource: VSCODE_MESSAGE_SOURCE,
+    framedUrl,
+    defaultUrl: getConfiguredUrl(),
+  })};</script>`
 
-  return `<!doctype html>
-<html lang="en" data-vscode-theme="${theme}">
-  <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="${csp}" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${EXTENSION_TITLE}</title>
-    <style>
-      :root {
-        color-scheme: ${theme};
-      }
-      body, html {
-        padding: 0;
-        margin: 0;
-        height: 100%;
-        width: 100%;
-        overflow: hidden;
-        background: var(--vscode-sideBar-background, #0b0f14);
-      }
-      #frame {
-        border: none;
-        height: 100%;
-        width: 100%;
-        background: var(--vscode-sideBar-background, #0b0f14);
-      }
-    </style>
-  </head>
-  <body>
-    <iframe
-      id="frame"
-      src="${framedUrl}"
-      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
-      allow="clipboard-read; clipboard-write; fullscreen"
-    ></iframe>
-    <script>
-      const vscode = acquireVsCodeApi();
-      const vscodeThemeKey = ${JSON.stringify(THEME_QUERY_KEY)};
-      const vscodeMessageSource = ${JSON.stringify(VSCODE_MESSAGE_SOURCE)};
-      const framedUrl = ${JSON.stringify(framedUrl)};
-      const frame = document.getElementById('frame');
-      const queuedMessages = [];
+  const withConfig = html.includes('__TASKYON_CONFIG__')
+    ? html.replace('__TASKYON_CONFIG__', configSnippet)
+    : html.replace('</body>', `${configSnippet}</body>`)
 
-      const postToFrame = (message) => {
-        if (frame && frame.contentWindow) {
-          frame.contentWindow.postMessage(message, '*');
-        } else {
-          queuedMessages.push(message);
-        }
-      };
-
-      const initTaskyonPort = () => {
-        if (!frame || !frame.contentWindow) return;
-        const channel = new MessageChannel();
-        frame.contentWindow.postMessage({ type: 'initPort' }, '*', [channel.port1]);
-      };
-
-      frame.addEventListener('load', () => {
-        console.log('[Taskyon][Webview] iframe src:', framedUrl);
-        vscode.postMessage({
-          source: vscodeMessageSource,
-          type: 'vscodeWebviewUrl',
-          payload: { framedUrl },
-        });
-        initTaskyonPort();
-        while (queuedMessages.length && frame.contentWindow) {
-          frame.contentWindow.postMessage(queuedMessages.shift(), '*');
-        }
-      });
-      const setTheme = (theme) => {
-        if (!theme) return;
-        const current = document.documentElement.getAttribute('data-vscode-theme');
-        if (current === theme) return;
-        document.documentElement.setAttribute('data-vscode-theme', theme);
-        document.documentElement.style.colorScheme = theme;
-        try {
-          const url = new URL(frame.src);
-          url.searchParams.set(vscodeThemeKey, theme);
-          frame.src = url.toString();
-        } catch {
-          // Ignore malformed URLs.
-        }
-      };
-      window.addEventListener('message', (event) => {
-        const data = event.data || {};
-        if (data.type === 'theme') {
-          setTheme(data.theme);
-          return;
-        }
-        if (data.source === vscodeMessageSource && data.type === 'vscodeActiveFile') {
-          postToFrame(data);
-        }
-      });
-
-      window.addEventListener('message', (event) => {
-        if (!frame || event.source !== frame.contentWindow) return;
-        const data = event.data || {};
-        if (data.source === vscodeMessageSource && data.type === 'vscodeApplyEdits') {
-          vscode.postMessage(data);
-        }
-      });
-    </script>
-  </body>
-</html>`
+  return withConfig
+    .replace(/__TASKYON_CSP__/g, csp)
+    .replace(/__TASKYON_THEME__/g, theme) // TODO: we are not using this currently in the index.html, I am not sure if we need it...
+    .replace(/__TASKYON_NONCE__/g, nonce)
+    .replace(/__TASKYON_IFRAME_SRC__/g, framedUrl)
+    .replace(/__TASKYON_TYCLIENT_URI__/g, tyclientUri.toString())
+    .replace(/__TASKYON_WEBVIEW_SCRIPT__/g, webviewScriptUri.toString())
 }
 
 async function openExternal(url: string): Promise<void> {
@@ -192,6 +169,7 @@ class TaskyonViewProvider implements vscode.WebviewViewProvider {
   private readonly context: vscode.ExtensionContext
   private pendingMessage?: unknown
   private messageHandler?: (message: unknown) => void
+  private lastWebviewUrl: string | undefined
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context
@@ -201,13 +179,40 @@ class TaskyonViewProvider implements vscode.WebviewViewProvider {
     this.view = webviewView
     webviewView.webview.options = {
       enableScripts: true,
-      retainContextWhenHidden: true,
+      localResourceRoots: [
+        this.context.extensionUri,
+        vscode.Uri.joinPath(
+          this.context.extensionUri,
+          '..',
+          '..',
+          'packages',
+          'taskyon-vscode',
+          'media',
+        ),
+        vscode.Uri.joinPath(this.context.extensionUri, '..', '..', 'packages', 'tyclient', 'dist'),
+      ],
     }
     webviewView.webview.onDidReceiveMessage((message) => {
       this.messageHandler?.(message)
     })
 
-    const rawUrl = getConfiguredUrl()
+    this.renderWebview()
+  }
+
+  refresh(): void {
+    if (!this.view) return
+    this.renderWebview(true)
+  }
+
+  async setBaseUrl(url: string): Promise<void> {
+    await this.context.globalState.update(BASE_URL_STATE_KEY, url)
+    this.refresh()
+  }
+
+  private renderWebview(force = false): void {
+    if (!this.view) return
+    const webviewView = this.view
+    const rawUrl = getEffectiveBaseUrl(this.context)
     const url = normalizeUrl(rawUrl)
     const theme = getThemeMode(vscode.window.activeColorTheme)
 
@@ -218,12 +223,27 @@ class TaskyonViewProvider implements vscode.WebviewViewProvider {
     <p>Invalid Taskyon URL: ${rawUrl}</p>
   </body>
 </html>`
+      this.lastWebviewUrl = undefined
       return
     }
 
-    const vscodeUrl = appendVscodePath(url)
-    console.log(`[Taskyon][Webview] resolved url: ${vscodeUrl}`)
-    webviewView.webview.html = buildWebviewHtml(webviewView.webview, vscodeUrl, theme)
+    if (!force && webviewView.webview.html && this.lastWebviewUrl === url) {
+      void webviewView.webview.postMessage({ type: 'theme', theme })
+      if (this.pendingMessage) {
+        void webviewView.webview.postMessage(this.pendingMessage)
+        this.pendingMessage = undefined
+      }
+      return
+    }
+
+    console.log(`[Taskyon][Webview] resolved url: ${url}`)
+    webviewView.webview.html = buildWebviewHtmlForUrl({
+      context: this.context,
+      webview: webviewView.webview,
+      baseUrl: url,
+      theme,
+    })
+    this.lastWebviewUrl = url
     if (this.pendingMessage) {
       void webviewView.webview.postMessage(this.pendingMessage)
       this.pendingMessage = undefined
@@ -263,9 +283,10 @@ async function openTaskyon(): Promise<void> {
 
   const openMode = getOpenMode()
   if (openMode === 'external') {
-    const vscodeUrl = appendVscodePath(url)
-    console.log(`[Taskyon][External] resolved url: ${vscodeUrl}`)
-    await openExternal(vscodeUrl)
+    const theme = getThemeMode(vscode.window.activeColorTheme)
+    const externalUrl = appendVscodeQuery(appendThemeQuery(url, theme))
+    console.log(`[Taskyon][External] resolved url: ${externalUrl}`)
+    await openExternal(externalUrl)
     return
   }
 
@@ -275,7 +296,11 @@ async function openTaskyon(): Promise<void> {
 export function activate(context: vscode.ExtensionContext): void {
   const viewProvider = new TaskyonViewProvider(context)
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(TaskyonViewProvider.viewId, viewProvider),
+    vscode.window.registerWebviewViewProvider(TaskyonViewProvider.viewId, viewProvider, {
+      webviewOptions: {
+        retainContextWhenHidden: true,
+      },
+    }),
   )
 
   const openCommand = vscode.commands.registerCommand('taskyon.open', () => openTaskyon())
@@ -288,9 +313,10 @@ export function activate(context: vscode.ExtensionContext): void {
       return
     }
 
-    const vscodeUrl = appendVscodePath(url)
-    console.log(`[Taskyon][External] resolved url: ${vscodeUrl}`)
-    await openExternal(vscodeUrl)
+    const theme = getThemeMode(vscode.window.activeColorTheme)
+    const externalUrl = appendVscodeQuery(appendThemeQuery(url, theme))
+    console.log(`[Taskyon][External] resolved url: ${externalUrl}`)
+    await openExternal(externalUrl)
   })
 
   const themeListener = vscode.window.onDidChangeActiveColorTheme((theme) => {
@@ -310,9 +336,8 @@ export function activate(context: vscode.ExtensionContext): void {
     if (path.isAbsolute(pathOrUri)) {
       return vscode.Uri.file(pathOrUri)
     }
-    if (vscode.workspace.workspaceFolders?.length) {
-      return vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, pathOrUri)
-    }
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+    if (workspaceFolder) return vscode.Uri.joinPath(workspaceFolder.uri, pathOrUri)
     return undefined
   }
 
@@ -365,48 +390,295 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
 
-  viewProvider.setMessageHandler(async (message) => {
-    const data = message as {
-      source?: string
-      type?: string
-      payload?: {
-        updates?: Array<{
-          filePath: string
-          patches?: Array<{
-            type: 'replace' | 'insert' | 'delete'
-            lineStart: number
-            lineEnd?: number
-            text?: string
-          }>
-          newContent?: string
-        }>
-        framedUrl?: string
+  const openFileInEditor = async (
+    pathOrUri: string,
+    line?: number,
+    character?: number,
+  ): Promise<void> => {
+    const uri = resolveFileUri(pathOrUri)
+    if (!uri) return
+    const document = await vscode.workspace.openTextDocument(uri)
+    const editor = await vscode.window.showTextDocument(document, { preview: false })
+    const safeLine = typeof line === 'number' && Number.isFinite(line) ? line : undefined
+    const safeCharacter =
+      typeof character === 'number' && Number.isFinite(character) ? character : undefined
+    if (safeLine !== undefined) {
+      const lineIndex = Math.max(0, safeLine - 1)
+      const charIndex = Math.max(0, (safeCharacter ?? 1) - 1)
+      const position = new vscode.Position(lineIndex, charIndex)
+      editor.selection = new vscode.Selection(position, position)
+      editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter)
+    }
+  }
+
+  const parseFileLink = (
+    href: string,
+  ): { path: string; line?: number; character?: number } | null => {
+    if (!href) return null
+    const [base = '', hash] = href.split('#', 2)
+    if (!base) return null
+    const hashMatch = hash?.match(/^L(\d+)(?:C(\d+))?$/i)
+    const line = hashMatch ? Number(hashMatch[1]) : undefined
+    const character = hashMatch && hashMatch[2] ? Number(hashMatch[2]) : undefined
+
+    const stripLeadingSlashes = (value: string) => value.replace(/^\/+/, '')
+    const buildResult = (filePath: string) => {
+      const result: { path: string; line?: number; character?: number } = {
+        path: stripLeadingSlashes(filePath),
       }
+      if (line !== undefined) result.line = line
+      if (character !== undefined) result.character = character
+      return result
     }
 
-    if (!data || data.source !== VSCODE_MESSAGE_SOURCE) return
-    if (data.type === 'vscodeWebviewUrl') {
-      const framedUrl = data.payload?.framedUrl
-      if (framedUrl) {
-        console.log(`[Taskyon][Webview] iframe src: ${framedUrl}`)
-      }
-      return
+    if (base.startsWith('file:')) {
+      const path = base.slice('file:'.length)
+      return buildResult(path)
     }
-    if (data.type !== 'vscodeApplyEdits') return
-    const updates = data.payload?.updates ?? []
-    for (const update of updates) {
-      const uri = resolveFileUri(update.filePath)
-      if (!uri) continue
-      if (typeof update.newContent === 'string' && update.newContent.length >= 0) {
-        await replaceDocumentContent(uri, update.newContent)
-        continue
-      }
-      if (update.patches?.length) {
-        const doc = await vscode.workspace.openTextDocument(uri)
-        const updated = applyLinePatches(doc.getText(), update.patches)
-        await replaceDocumentContent(uri, updated)
+    if (base.startsWith('taskyon://') || base.startsWith('vscode://')) {
+      try {
+        const url = new URL(base)
+        if (url.hostname === 'file') {
+          return buildResult(url.pathname)
+        }
+      } catch {
+        return null
       }
     }
+    return null
+  }
+
+  const DEFAULT_FILE_EXCLUDE =
+    '**/{node_modules,.git,.hg,.svn,.direnv,.idea,.vscode,.venv,.virtualenv,dist,build,out,coverage,target,bin,obj,logs,log,tmp,temp,.cache,.parcel-cache,.pytest_cache,.mypy_cache,.ruff_cache,.next,.turbo,.svelte-kit,.nuxt,.vercel,.angular,.gradle,.dart_tool}/**'
+
+  const buildSearchGlob = (query?: string, include?: string): string => {
+    if (include) return include
+    if (!query) return '**/*'
+    if (/[*?[\]{}]/.test(query)) return query
+    return `**/*${query}*`
+  }
+
+  const postResponse = (requestId: string, payload: unknown, error?: string) => {
+    viewProvider.postMessage({
+      source: VSCODE_MESSAGE_SOURCE,
+      type: 'vscodeResponse',
+      payload: {
+        requestId,
+        error,
+        data: payload,
+      },
+    })
+  }
+
+  viewProvider.setMessageHandler((message) => {
+    void (async () => {
+      const data = message as {
+        source?: string
+        type?: string
+        payload?: {
+          requestId?: string
+          query?: string
+          include?: string
+          exclude?: string
+          showAll?: boolean
+          maxResults?: number
+          paths?: string[]
+          path?: string
+          href?: string
+          line?: number | string
+          character?: number | string
+          updates?: Array<{
+            filePath: string
+            patches?: Array<{
+              type: 'replace' | 'insert' | 'delete'
+              lineStart: number
+              lineEnd?: number
+              text?: string
+            }>
+            newContent?: string
+          }>
+          text?: string
+          framedUrl?: string
+          level?: 'log' | 'info' | 'warn' | 'error' | 'debug'
+          args?: unknown[]
+          url?: string
+        }
+      }
+
+      if (!data || data.source !== VSCODE_MESSAGE_SOURCE) return
+
+      if (data.type === 'vscodeWebviewUrl') {
+        const framedUrl = data.payload?.framedUrl
+        if (framedUrl) {
+          console.log(`[Taskyon][Webview] iframe src: ${framedUrl}`)
+        }
+        return
+      }
+      if (data.type === 'vscodeIframeLog') {
+        const level = data.payload?.level ?? 'log'
+        const args = data.payload?.args ?? []
+        const prefix = `[Taskyon][Iframe][${level}]`
+        switch (level) {
+          case 'error':
+            console.error(prefix, ...args)
+            break
+          case 'warn':
+            console.warn(prefix, ...args)
+            break
+          case 'info':
+            console.info(prefix, ...args)
+            break
+          case 'debug':
+            console.debug(prefix, ...args)
+            break
+          default:
+            console.log(prefix, ...args)
+        }
+        return
+      }
+      if (data.type === 'vscodeWebviewLog') {
+        const level = data.payload?.level ?? 'log'
+        const args = data.payload?.args ?? []
+        const prefix = `[Taskyon][Webview][${level}]`
+        switch (level) {
+          case 'error':
+            console.error(prefix, ...args)
+            break
+          case 'warn':
+            console.warn(prefix, ...args)
+            break
+          case 'info':
+            console.info(prefix, ...args)
+            break
+          case 'debug':
+            console.debug(prefix, ...args)
+            break
+          default:
+            console.log(prefix, ...args)
+        }
+        return
+      }
+      if (data.type === 'vscodeListFiles') {
+        const requestId = data.payload?.requestId
+        if (!requestId) return
+        const include = data.payload?.include ?? '**/*'
+        const showAll = Boolean(data.payload?.showAll)
+        const exclude = showAll
+          ? data.payload?.exclude
+          : (data.payload?.exclude ?? DEFAULT_FILE_EXCLUDE)
+        const maxResults = data.payload?.maxResults ?? 5000
+        try {
+          const files = await vscode.workspace.findFiles(include, exclude, maxResults)
+          const results = files.map((uri) => vscode.workspace.asRelativePath(uri, false))
+          postResponse(requestId, { files: results })
+        } catch (error) {
+          postResponse(requestId, { files: [] }, (error as Error).message)
+        }
+        return
+      }
+      if (data.type === 'vscodeSearchFiles') {
+        const requestId = data.payload?.requestId
+        if (!requestId) return
+        const include = buildSearchGlob(data.payload?.query, data.payload?.include)
+        const exclude = data.payload?.exclude ?? DEFAULT_FILE_EXCLUDE
+        const maxResults = data.payload?.maxResults ?? 2000
+        try {
+          const files = await vscode.workspace.findFiles(include, exclude, maxResults)
+          const results = files.map((uri) => vscode.workspace.asRelativePath(uri, false))
+          postResponse(requestId, { files: results })
+        } catch (error) {
+          postResponse(requestId, { files: [] }, (error as Error).message)
+        }
+        return
+      }
+      if (data.type === 'vscodeReadFiles') {
+        const requestId = data.payload?.requestId
+        if (!requestId) return
+        const paths = data.payload?.paths ?? []
+        const results: Array<{
+          path: string
+          uri?: string
+          content?: string
+          languageId?: string
+          error?: string
+        }> = []
+        for (const filePath of paths) {
+          const uri = resolveFileUri(filePath)
+          if (!uri) {
+            results.push({ path: filePath, error: 'Unable to resolve file path.' })
+            continue
+          }
+          try {
+            const doc = await vscode.workspace.openTextDocument(uri)
+            results.push({
+              path: vscode.workspace.asRelativePath(uri, false),
+              uri: uri.toString(),
+              content: doc.getText(),
+              languageId: doc.languageId,
+            })
+          } catch (error) {
+            try {
+              const buffer = await vscode.workspace.fs.readFile(uri)
+              results.push({
+                path: vscode.workspace.asRelativePath(uri, false),
+                uri: uri.toString(),
+                content: Buffer.from(buffer).toString('utf8'),
+              })
+            } catch {
+              results.push({
+                path: vscode.workspace.asRelativePath(uri, false),
+                uri: uri.toString(),
+                error: (error as Error).message,
+              })
+            }
+          }
+        }
+        postResponse(requestId, { files: results })
+        return
+      }
+      if (data.type === 'vscodeClipboardWrite') {
+        const requestId = data.payload?.requestId
+        if (!requestId) return
+        try {
+          const text = data.payload?.text ?? ''
+          await vscode.env.clipboard.writeText(text)
+          postResponse(requestId, { ok: true })
+        } catch (error) {
+          postResponse(requestId, { ok: false }, (error as Error).message)
+        }
+        return
+      }
+      if (data.type === 'vscodeOpenLink') {
+        const href = data.payload?.href
+        if (!href) return
+        const parsed = parseFileLink(href)
+        if (!parsed) return
+        await openFileInEditor(parsed.path, parsed.line, parsed.character)
+        return
+      }
+      if (data.type === 'vscodeSetBaseUrl') {
+        const url = data.payload?.url
+        if (!url) return
+        await viewProvider.setBaseUrl(url)
+        return
+      }
+      if (data.type !== 'vscodeApplyEdits') return
+
+      const updates = data.payload?.updates ?? []
+      for (const update of updates) {
+        const uri = resolveFileUri(update.filePath)
+        if (!uri) continue
+        if (typeof update.newContent === 'string' && update.newContent.length >= 0) {
+          await replaceDocumentContent(uri, update.newContent)
+          continue
+        }
+        if (update.patches?.length) {
+          const doc = await vscode.workspace.openTextDocument(uri)
+          const updated = applyLinePatches(doc.getText(), update.patches)
+          await replaceDocumentContent(uri, updated)
+        }
+      }
+    })()
   })
 
   const getActiveFilePayload = (): {
@@ -415,26 +687,45 @@ export function activate(context: vscode.ExtensionContext): void {
     content: string
     languageId: string
     version: number
+    selections: Array<{
+      start: { line: number; character: number }
+      end: { line: number; character: number }
+      text: string
+    }>
   } | null => {
     const editor = vscode.window.activeTextEditor
     if (!editor) return null
     const doc = editor.document
     if (doc.uri.scheme !== 'file') return null
+    const selections = editor.selections.map((selection) => ({
+      start: { line: selection.start.line, character: selection.start.character },
+      end: { line: selection.end.line, character: selection.end.character },
+      text: doc.getText(selection),
+    }))
     return {
       uri: doc.uri.toString(),
       path: doc.fileName,
       content: doc.getText(),
       languageId: doc.languageId,
       version: doc.version,
+      selections,
     }
   }
 
-  let lastSent: { uri: string; version: number } | null = null
+  let lastSent: { uri: string; version: number; selectionHash: string } | null = null
   const sendActiveFile = () => {
     const payload = getActiveFilePayload()
     if (!payload) return
-    if (lastSent && lastSent.uri === payload.uri && lastSent.version === payload.version) return
-    lastSent = { uri: payload.uri, version: payload.version }
+    const selectionHash = JSON.stringify(payload.selections)
+    if (
+      lastSent &&
+      lastSent.uri === payload.uri &&
+      lastSent.version === payload.version &&
+      lastSent.selectionHash === selectionHash
+    ) {
+      return
+    }
+    lastSent = { uri: payload.uri, version: payload.version, selectionHash }
     viewProvider.postMessage({
       source: VSCODE_MESSAGE_SOURCE,
       type: 'vscodeActiveFile',
@@ -443,13 +734,14 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   const editorListener = vscode.window.onDidChangeActiveTextEditor(() => sendActiveFile())
+  const selectionListener = vscode.window.onDidChangeTextEditorSelection(() => sendActiveFile())
   const documentListener = vscode.workspace.onDidChangeTextDocument((event) => {
     const editor = vscode.window.activeTextEditor
     if (!editor || event.document !== editor.document) return
     sendActiveFile()
   })
 
-  context.subscriptions.push(editorListener, documentListener)
+  context.subscriptions.push(editorListener, selectionListener, documentListener)
 
   sendActiveFile()
 

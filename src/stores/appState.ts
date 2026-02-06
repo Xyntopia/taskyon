@@ -31,6 +31,52 @@ interface TaskWidgetStateType {
   markdownEnabled: boolean
 }
 
+const VSCODE_MESSAGE_SOURCE = 'taskyon-vscode'
+const installVscodeConsoleBridge = (() => {
+  let installed = false
+  return () => {
+    if (installed || typeof window === 'undefined') return
+    installed = true
+    const consoleLevels: Array<'log' | 'info' | 'warn' | 'error' | 'debug'> = [
+      'log',
+      'info',
+      'warn',
+      'error',
+      'debug',
+    ]
+    const formatArg = (arg: unknown): string => {
+      if (typeof arg === 'string') return arg
+      if (arg instanceof Error) return arg.stack || arg.message
+      try {
+        return JSON.stringify(arg)
+      } catch {
+        return String(arg)
+      }
+    }
+    for (const level of consoleLevels) {
+      const original = console[level].bind(console)
+      console[level] = (...args: unknown[]) => {
+        try {
+          window.parent?.postMessage(
+            {
+              source: VSCODE_MESSAGE_SOURCE,
+              type: 'vscodeIframeLog',
+              payload: {
+                level,
+                args: args.map(formatArg),
+              },
+            },
+            '*',
+          )
+        } catch {
+          // ignore logging bridge failures
+        }
+        original(...args)
+      }
+    }
+  }
+})()
+
 function clearBrowserStorage(localStorageKeys?: string[]) {
   if (localStorageKeys) localStorageKeys.forEach((key) => LocalStorage.removeItem(key))
   else LocalStorage.clear()
@@ -47,6 +93,7 @@ export function getUrlConfig() {
     const isVscodeParam =
       searchParams.get('vscode') === 'true' || searchParams.get('vscode') === '1'
     const profile = searchParams.get('profile')
+    if (isVscodeParam) installVscodeConsoleBridge()
     console.log('we are in an iframe via param:', isIframeParam)
     const isInIframe = window.self !== window.top || isIframeParam
     console.log('we are in an iframe:', window.self !== window.top, isInIframe)

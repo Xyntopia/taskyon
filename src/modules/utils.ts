@@ -27,16 +27,41 @@ export function countLeaves(value: unknown): number {
   return count
 }
 
-export function copyToClipboard(text: string | undefined) {
-  if (text)
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        console.log('Copied to clipboard')
-      })
-      .catch((err) => {
-        console.error('Error in copying text: ', err)
-      })
+export async function copyToClipboard(text: string | undefined): Promise<boolean> {
+  if (!text) return false
+  if (typeof window === 'undefined') return false
+
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch (err) {
+    console.warn('Clipboard write failed; trying bridge', err)
+  }
+
+  if (window.parent && window.parent !== window) {
+    const requestId = `clipboard-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const response = new Promise<boolean>((resolve) => {
+      const timeout = window.setTimeout(() => {
+        window.removeEventListener('message', onMessage)
+        resolve(false)
+      }, 1500)
+
+      const onMessage = (event: MessageEvent) => {
+        const data = event.data || {}
+        if (data.type !== 'taskyonClipboardWriteResult' || data.requestId !== requestId) return
+        window.clearTimeout(timeout)
+        window.removeEventListener('message', onMessage)
+        resolve(Boolean(data.ok))
+      }
+
+      window.addEventListener('message', onMessage)
+    })
+
+    window.parent.postMessage({ type: 'taskyonClipboardWrite', text, requestId }, '*')
+    return response
+  }
+
+  return false
 }
 
 export async function copyPngToClipboard(png: Uint8Array) {
@@ -51,12 +76,53 @@ export async function copyPngToClipboard(png: Uint8Array) {
   // 2. Build the Blob
   const blob = new Blob([ab], { type: 'image/png' })
 
-  // 3. Copy to clipboard
+  // 3. Copy to clipboard (or fall back to webview bridge)
+  if (typeof window === 'undefined') return false
   if ('ClipboardItem' in globalThis) {
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-  } else {
-    alert('ClipboardItem not supported in this browser')
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      return true
+    } catch (err) {
+      console.warn('Clipboard image write failed; trying bridge', err)
+    }
   }
+
+  if (window.parent && window.parent !== window) {
+    const requestId = `clipboard-img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const response = new Promise<boolean>((resolve) => {
+      const timeout = window.setTimeout(() => {
+        window.removeEventListener('message', onMessage)
+        resolve(false)
+      }, 1500)
+
+      const onMessage = (event: MessageEvent) => {
+        const data = event.data || {}
+        if (data.type !== 'taskyonClipboardWriteImageResult' || data.requestId !== requestId) return
+        window.clearTimeout(timeout)
+        window.removeEventListener('message', onMessage)
+        resolve(Boolean(data.ok))
+      }
+
+      window.addEventListener('message', onMessage)
+    })
+
+    const bytes = new Uint8Array(ab)
+    let binary = ''
+    const chunkSize = 0x8000
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize)
+      binary += String.fromCharCode(...chunk)
+    }
+    const base64 = btoa(binary)
+
+    window.parent.postMessage(
+      { type: 'taskyonClipboardWriteImage', mime: 'image/png', data: base64, requestId },
+      '*',
+    )
+    return response
+  }
+
+  return false
 }
 
 export function openrouterPricing(price: number | string, digits = 1) {

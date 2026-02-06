@@ -335,7 +335,7 @@ export default defineConfig((ctx) => {
     devServer: {
       // https: true
       //vueDevtools: true,
-      https: true, // NECESSARY (alternative is type 'http')
+      https: process.env.TASKYON_HTTP ? false : true,
       open: false, // opens browser window automatically
     },
 

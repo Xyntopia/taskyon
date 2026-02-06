@@ -167,7 +167,7 @@ import {
   matWarning,
   matClose,
 } from '@quasar/extras/material-icons'
-import { copyToClipboard, exportFile, useQuasar } from 'quasar'
+import { exportFile, useQuasar } from 'quasar'
 import { ref, computed, watch } from 'vue'
 import {
   symOutlinedDriveExport,
@@ -182,6 +182,7 @@ import { chat2Md, chatToYaml, type TaskNode } from '@taskyon/taskyon'
 import { asyncComputed } from 'src/modules/vueUtils'
 import QrCode from '../QrCode.vue'
 import InfoDialog from '../InfoDialog.vue'
+import { copyToClipboard } from 'src/modules/utils'
 
 const showDialog = defineModel({ type: Boolean, default: false })
 

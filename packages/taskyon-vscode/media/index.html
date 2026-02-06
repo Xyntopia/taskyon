@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en" data-vscode-theme="__TASKYON_THEME__">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="__TASKYON_CSP__" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Taskyon</title>
+    <style>
+      body,
+      html {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+      }
+      #taskyon-source-toggle {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 10;
+        display: flex;
+        gap: 6px;
+        background: rgba(0, 0, 0, 0.35);
+        padding: 4px;
+        border-radius: 6px;
+        font-family: system-ui, sans-serif;
+        font-size: 11px;
+      }
+      #taskyon-source-toggle button {
+        border: 0;
+        border-radius: 4px;
+        padding: 4px 8px;
+        cursor: pointer;
+        background: rgba(255, 255, 255, 0.15);
+        color: #fff;
+      }
+      #taskyon-source-toggle button.active {
+        background: #2d8cff;
+        color: #fff;
+      }
+      #taskyon {
+        border: none;
+        height: 100%;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    __TASKYON_CONFIG__
+    <div id="taskyon-source-toggle">
+      <button type="button" data-source="local">Local</button>
+      <button type="button" data-source="prod">Prod</button>
+    </div>
+    <iframe
+      id="taskyon"
+      src="__TASKYON_IFRAME_SRC__"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
+      allow="clipboard-read; clipboard-write; fullscreen"
+    ></iframe>
+    <script nonce="__TASKYON_NONCE__" type="module">
+      import * as tyclient from '__TASKYON_TYCLIENT_URI__'
+      window.tyclient = tyclient
+      window.dispatchEvent(new CustomEvent('taskyon:tyclient-ready'))
+    </script>
+    <script nonce="__TASKYON_NONCE__" src="__TASKYON_WEBVIEW_SCRIPT__"></script>
+  </body>
+</html>

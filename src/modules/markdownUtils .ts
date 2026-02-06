@@ -52,7 +52,7 @@ import tyMarkdownCss from 'src/css/markdown.sass?inline'
 import { uid } from 'quasar'
 import { generateKaTeXIframeCss } from './katexFonts'
 import { svgStringToPngUint8 } from './svgUtils'
-import { copyPngToClipboard, hexToRgb } from './utils'
+import { copyPngToClipboard, copyToClipboard, hexToRgb } from './utils'
 
 type MditToken = ReturnType<InstanceType<typeof MarkdownIt>['parse']>[number]
 
@@ -219,7 +219,7 @@ const { plugin: codeButtons, setupListener } = createMultiButtonPlugin(/.*/, [
       const codeEl = doc.querySelector('pre code')
       const code = codeEl?.textContent ?? ''
       console.log(`copy ${lang}:`, code)
-      void navigator.clipboard.writeText(code)
+      void copyToClipboard(code)
     },
   },
   // Mermaid: Copy Source
@@ -233,7 +233,7 @@ const { plugin: codeButtons, setupListener } = createMultiButtonPlugin(/.*/, [
       const codeEl = doc.querySelector('pre code')
       const code = codeEl?.textContent ?? ''
       console.log(`copy ${lang}:`, code)
-      void navigator.clipboard.writeText(code)
+      void copyToClipboard(code)
     },
   },
   // TODO: Run code for js/python
@@ -260,7 +260,7 @@ const { plugin: codeButtons, setupListener } = createMultiButtonPlugin(/.*/, [
       void fetch(img.src)
         .then((res) => res.text())
         .then((svg) => {
-          void navigator.clipboard.writeText(svg)
+          void copyToClipboard(svg)
         })
     },
   },*/
@@ -311,6 +311,7 @@ const { plugin: codeButtons, setupListener } = createMultiButtonPlugin(/.*/, [
     },
   },
 ])
+
 setupListener()
 
 // Example of using the render function
@@ -603,9 +604,18 @@ export const generateIframeSrc = (
         contentEl.addEventListener('touchend', () => clearTimeout(pressTimer));
         contentEl.addEventListener('touchmove', () => clearTimeout(pressTimer));
 
-        // Inside your-iframe-content.html
         document.addEventListener('click', function(event) {
-            window.parent.postMessage({ type: 'iframeClick', x: event.clientX, y: event.clientY }, '*');
+          const target = event.target;
+          const link = target && target.closest ? target.closest('a[href]') : null;
+          if (link) {
+            event.preventDefault();
+            window.parent.postMessage(
+              { type: 'linkClick', href: link.getAttribute('href') || '' },
+              '*'
+            );
+            return;
+          }
+          window.parent.postMessage({ type: 'iframeClick', x: event.clientX, y: event.clientY }, '*');
         });
 
       </script>

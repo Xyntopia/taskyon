@@ -120,14 +120,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         },
       },
       {
-        path: 'vscode',
-        component: () => import('pages/taskyon/VscodePage.vue'),
-        meta: {
-          title: 'Taskyon VS Code',
-          description: 'Taskyon agent connected to VS Code',
-        },
-      },
-      {
         path: '/sql',
         component: () => import('pages/taskyon/SqlQueryPage.vue'),
         meta: {
