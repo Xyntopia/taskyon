@@ -4,6 +4,7 @@
   const vscodeMessageSource = window.__TASKYON__.messageSource
   const framedUrl = window.__TASKYON__.framedUrl
   const defaultUrl = window.__TASKYON__.defaultUrl
+  const localUrl = window.__TASKYON__.localUrl || 'http://localhost:9000'
   const frame = document.getElementById('taskyon')
   const sourceToggle = document.getElementById('taskyon-source-toggle')
   const sourceButtons = sourceToggle ? sourceToggle.querySelectorAll('button[data-source]') : []
@@ -533,8 +534,10 @@
     if (!sourceButtons.length) return
     let isLocal = false
     try {
-      const url = new URL(frame?.getAttribute('src') || framedUrl || '')
-      isLocal = url.host === 'localhost:9000'
+      const currentSrc = frame?.getAttribute('src') || framedUrl || ''
+      const url = new URL(currentSrc)
+      const localHost = new URL(localUrl).host || 'localhost:9000'
+      isLocal = url.host === localHost
     } catch {
       // ignore invalid urls
     }
@@ -551,8 +554,7 @@
       if (!(target instanceof HTMLElement)) return
       const source = target.getAttribute('data-source')
       if (!source) return
-      const url =
-        source === 'local' ? defaultUrl || 'http://localhost:9000' : 'https://taskyon.space'
+      const url = source === 'local' ? localUrl : defaultUrl || 'https://taskyon.space'
       vscode.postMessage({
         source: vscodeMessageSource,
         type: 'vscodeSetBaseUrl',

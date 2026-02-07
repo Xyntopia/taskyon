@@ -144,6 +144,7 @@ function buildWebviewHtml(options: {
     messageSource: VSCODE_MESSAGE_SOURCE,
     framedUrl,
     defaultUrl: getConfiguredUrl(),
+    localUrl: DEFAULT_URL,
   })};</script>`
 
   const withConfig = html.includes('__TASKYON_CONFIG__')
