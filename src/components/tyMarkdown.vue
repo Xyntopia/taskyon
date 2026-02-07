@@ -30,9 +30,10 @@
 <script setup lang="ts">
 import { getCssVar, useQuasar } from 'quasar'
 import { containsHtmlTags, hasMarkdownElements } from 'src/modules/markdownDetection'
+import { generateIframeSrc, initPrismTheme, md2Html, tyMdCssUrls } from 'src/modules/markdownUtils '
 import { asyncComputed } from 'src/modules/vueUtils'
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { generateIframeSrc, initPrismTheme, md2Html, tyMdCssUrls } from '../modules/markdownUtils '
+import { useRoute, useRouter } from 'vue-router'
 
 // https://mdit-plugins.github.io/mathjax.html#usage
 //const mathjaxInstance = createMathjaxInstance();
@@ -49,11 +50,45 @@ function handleMarkdownClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
   const link = target?.closest('a[href]') as HTMLAnchorElement | null
   if (!link) return
+  const href = link.getAttribute('href') || ''
+  if (!href) return
+  if (href.startsWith('#')) return
   event.preventDefault()
-  window.parent?.postMessage(
-    { type: 'linkClick', href: link.getAttribute('href') || '' },
-    '*',
-  )
+  openMarkdownLink(href)
+}
+
+function openMarkdownLink(href: string) {
+  if (!href) return
+  const trimmed = href.trim()
+  if (!trimmed || trimmed.startsWith('#')) return
+
+  const isExternal = /^([a-z][a-z0-9+.-]*:|\/\/)/i.test(trimmed)
+  if (!isExternal) {
+    const resolved = resolveInternalPath(trimmed)
+    if (resolved) {
+      void router.push(resolved)
+      return
+    }
+  }
+
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ type: 'linkClick', href: trimmed }, '*')
+    return
+  }
+  window.open(trimmed, '_blank', 'noopener')
+}
+
+function resolveInternalPath(href: string) {
+  try {
+    const base = new URL(route.fullPath, window.location.origin)
+    const resolved = new URL(href, base)
+    if (resolved.origin !== window.location.origin) return null
+    let path = resolved.pathname
+    if (path.endsWith('.md')) path = path.slice(0, -3)
+    return `${path}${resolved.search}${resolved.hash}`
+  } catch {
+    return null
+  }
 }
 
 watch(iframeRef, (el) => {
@@ -66,6 +101,8 @@ defineOptions({
 
 const $q = useQuasar()
 initPrismTheme($q.dark.isActive)
+const router = useRouter()
+const route = useRoute()
 
 const { src = undefined, useIframe = false } = defineProps<{
   src?: string
@@ -205,6 +242,11 @@ function handleMessage(event: MessageEvent) {
 
   if (event.data?.type === 'iframeClick') {
     emit('ifClick', { x: event.data.x, y: event.data.y })
+  }
+
+  if (event.data?.type === 'linkClick') {
+    const href = String(event.data?.href || '')
+    if (href) openMarkdownLink(href)
   }
 }
 
