@@ -4,6 +4,9 @@
 
 Taskyon offers a flexible and powerful system for integrating and managing tools, allowing users to extend its capabilities. This guide provides comprehensive information on using, defining, and managing tools within Taskyon.
 
+For end-to-end workflow patterns (entry nodes, tool chains, return tasks), see:
+`/docs/taskyon_workflow_guide`.
+
 ## Built-In tools
 
 - **chatCompletion**: This function automatically takes the previous task chain as an input, converts it into a list of messages which an LLM can understand and returns new tasks for further processing of the result. It connects to chat completion APIs in the background and can handle all the relevant things: upload of files/images, function excution, structured data response etc..

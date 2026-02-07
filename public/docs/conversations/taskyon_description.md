@@ -19,12 +19,11 @@ Inside the source code you can find that right now, there are three main parts t
 
 The Task Transitions Map illustrates the flow and transitions of various content types within taskyon, which operates as an agent. Each node in the diagram represents a specific type of task content. Depending on the content type, new tasks with specific content are created, leading to different processing paths.
 
-We expect all function calls to do three things:
+We expect all function calls to do one of the following:
 
-- either return a result
-- return a taskchain where the last task is a functionTask in order to signal further processing
-- return a taskchain with the last task a "return" task.. which signals to the parent, that we're done and
-  can return to the parent
+- **Return a plain value** -> Taskyon auto-wraps it as `toolresult` and appends `chatCompletion(goal=AnalyzeToolResult)`.
+- **Return a task chain** via `makeTaskResult(...)` (sequential or parallel).
+- **Return a task chain that ends with `return`** to explicitly signal completion to the parent task.
 
 #### Workflow Description:
 
@@ -46,78 +45,62 @@ this are the "runTaskWorker", "processTask" and "handleFunctionExecution" functi
 
 ```mermaid
 ---
-title: Task Processor
+title: Task Worker (Actual Execution Flow)
 ---
-%%{init: { "flowchart": { "curve": "cardinal", "wrappingWidth": 400 } } }%%
+%%{init: { "flowchart": { "curve": "cardinal", "wrappingWidth": 420 } } }%%
 flowchart TB
-    m_a[MessageContent_A]
-    m_u[MessageContent_U]
-    ErrorContent[Error]
-    tcc{{ToolCallTask}}
-    ErrorContent[Error_S]
-    ToolResultContent[ToolResultContent]
-    TERMINATION([TERMINATION])
+  A([Task queued]) --> B{Prior chain finished?}
+  B -- No --> C[Requeue + wait] --> B
+  B -- Yes --> D{Task type?}
+  D -- functioncall --> E[Execute tool]
+  D -- other --> F[Skip execution]
 
+  E --> G{tool returned taskResult?}
+  G -- Yes --> H[Append child chains / parentID]
+  G -- No --> I[Append toolresult + AnalyzeToolResult]
 
-    tcc -- task chains created by tools --> tcc
-
-    PD(["Parameter Database"])
-    PD --> tcc
-
-    m_u -- initiate first tool cool (e.g. ChatCompletionTool or Planner Tool) --> tcc
-    m_a --> TERMINATION
-    tcc --> ErrorContent
-    ErrorContent -- analyze error tool --> tcc
-    tcc -- generic result --> ToolResultContent
-    ToolResultContent -- analyze result Tool --> tcc
-    tcc -- task chains created by the tool --> m_a
+  E --> J[Error -> error + AnalyzeError]
+  H --> K[Queue new tasks]
+  I --> K
 ```
 
 Taskyon provides a basic Taskflow to get started with and which can automatically
 incorporate new tools and generically analyze their results and use it.
 The chatCompletion tool in its current form takes the previous tasks and converts them into
-an openAI API compatible list of messages, adds task-specific prompts and
-then sends it to an openAI API compatible LLM Service (which can also be local).
+a list of messages, adds task-specific prompts and
+then sends it to an LLM Service (which can also be local).
 When a task becomes more clear and repeats itself
 often, it might make sense
 to define a new tool which works faster on repeated
 or complex tasks then trying to solve a problem
 with the generic tools available.
-If we unfold the graph from above and add the chatCompletion tool more explicitly.
-We can see the transitions between different types of task in taskyons initial
-configuration:
+In the UI, user messages are typically followed by an **entry node** (a tool call). The default
+entry node is `chooseTool`, which decides whether to run a plain chat completion or route
+into a restricted set of tools. The graph below shows this default workflow.
 
 ```mermaid
 ---
-title: chatCompletion Task Transitions
+title: Default Workflow (Entry Node + chooseTool)
 ---
-%%{init: { "flowchart": { "curve": "cardinal", "wrappingWidth": 400 } } }%%
+%%{init: { "flowchart": { "curve": "cardinal", "wrappingWidth": 420 } } }%%
 flowchart TD
-  Message_U
-  Message_A
-  Message_S
-  ToolResultContent
-  UploadedFilesContent
-  cct{{"ChatCompletionTool<br>(prompts=Chat)"}}
-  cctct{{"ChatCompletionTool<br>ChooseTool|AnalyzeToolResult|AnalyzeError"}}
-  cct1{{"Example Custom<br>Tool Sequence"}}
-  at{{AnyTool}}
-  cct2{{CT}}
+  S([Start]) --> Files[files?]
+  Files --> U[User message]
+  U --> Entry{{entryNode: chooseTool}}
 
+  Entry --> CTsimple{{chatCompletion<br/>goal=SimpleCompletion}}
+  Entry --> CTpick{{chatCompletion<br/>goal=ChooseTool}}
 
-  TERMINATION([TERMINATION])
-  e([ERROR])-->Message_S
-  s([Start])
+  CTpick --> ToolCall{{Tool call}}
+  ToolCall --> ToolResult[toolresult]
+  ToolResult --> CTanalysis{{chatCompletion<br/>goal=AnalyzeToolResult}}
 
-  Message_S-->cctct
-  s-->Message_U
-  s-->UploadedFilesContent --> Message_U --> cct --> Message_A --> TERMINATION
-  Message_U -- if tools enabled --> cctct
-  at-->ToolResultContent-->cctct
-  cctct -- use tool --> at
-  cctct -- no tools needed --> cct
-  at --> cct1-->cct2-- e.g. go back to chatcompletion or any other task type -->cctct
+  CTsimple --> A[Assistant message]
+  CTanalysis --> A
 
+  ToolCall --> Error[error]
+  Error --> CTerror{{chatCompletion<br/>goal=AnalyzeError}}
+  CTerror --> A
 ```
 
 ### Comparison of taskyon's task sequence to a reduce function
@@ -125,7 +108,6 @@ flowchart TD
 The taskchain in the AI chat-app functions similarly to the "reduce" concept in functional programming, where each task builds upon the previous ones, maintaining context throughout the process. Here's a concise explanation:
 
 1. **Function Execution and Context Accumulation:**
-
    - Each task in the taskchain receives all previous tasks as implicit arguments, allowing it to access the accumulated context and results from earlier tasks.
    - After executing, the task produces a new task that is added to the chain, representing the next step in the sequence.
 
@@ -180,11 +162,11 @@ flowchart TB
 
 ```
 
-In many cases, the steps are tightly coupled and require specific input and output data. With this single tool approach—leveraging flatmapping and state machine-like pattern matching—you avoid having to write separate tools for each step while maintaining clear, adaptable transitions.
+In many cases, the steps are tightly coupled and require specific input and output data. With this single tool approach---leveraging flatmapping and state machine-like pattern matching---you avoid having to write separate tools for each step while maintaining clear, adaptable transitions.
 
 ## Creating Context
 
-Taskyon manages hierarchical tasks using a two-layer structure, which allows both sequential and nested execution. In this design, a primary function task (TW1) initiates a subtask chain (t1). Within that chain, specific tasks like **t1** and **t2** can each spawn their own branches—denoted here as the "a" chain (from t1) and the "b" chain (from t2)—each eventually returning a result.
+Taskyon manages hierarchical tasks using a two-layer structure, which allows both sequential and nested execution. In this design, a primary function task (TW1) initiates a subtask chain (t1). Within that chain, specific tasks like **t1** and **t2** can each spawn their own branches---denoted here as the "a" chain (from t1) and the "b" chain (from t2)---each eventually returning a result.
 
 For example, if you select **b1** in your chat or chatCompletion, the visible sequence might be:
 
@@ -233,12 +215,10 @@ TODO: add a json-example for a tool that can do this..
 To make the distinction crystal clear, think of Taskyon as a dynamic programming language tailored for AI‑driven workflows:
 
 1. **Sequential execution, familiar style**
-
    - Like a traditional program, Taskyon processes one “line” (task) at a time (or a sequence of parallel chains), each waiting on its predecessor.
    - You still get that clear, step‑by‑step flow—no magic black box.
 
 2. **Static vs. dynamic code**
-
    - In classic languages your code is fixed at write‑time.
    - In Taskyon, _each new task_ decides on the next function (tool) to call and with which parameters—_at runtime_.
    - Your “program” (the task tree) literally grows and reshapes itself as it runs, adapting to evolving data and state.

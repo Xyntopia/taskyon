@@ -2,6 +2,9 @@
 
 **Tools, Task Results, and Task Processing**
 
+For a full workflow overview (including entry nodes and tool chooser patterns), see:
+`/docs/taskyon_workflow_guide`.
+
 TODO: add the api for our chatCompletion tool...
 TODO: add taskyon client description (initialization, config, tools)
 
@@ -150,8 +153,11 @@ return makeTaskResult([
 
 Task processing has two parts:
 
-- **High-level API** – `processTasks`, used by external code
-- **Execution Engine** – ensures correct order, parallelism, and task chain continuation
+- **High-level API** --- `processTasks`, used by external code
+- **Execution Engine** --- ensures correct order, parallelism, and task chain continuation
+
+**Default UI flow:** when a user sends a message, Taskyon appends an **entry node** (usually
+`chooseTool`) which decides whether to run a plain chat completion or route into tool calls.
 
 ### 4.2 processTasks API
 
