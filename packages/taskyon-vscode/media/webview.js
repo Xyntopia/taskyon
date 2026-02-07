@@ -17,8 +17,11 @@
   let webSearchEnabled = false
   const maxFollowUps = 5
   let followUpCount = 0
-
-  const getVscodeLink = (filePath) => `vscode://file/${encodeURI(filePath)}`
+  let lastListResult = null
+  let lastSearchResult = null
+  let lastReadResult = null
+  let lastUpdateResult = null
+  let lastToolEvent = ''
 
   const getFollowUpTask = () => {
     const toolCallFn = window.tyclient?.toolCall
@@ -153,6 +156,67 @@
     return lines.join('\n')
   }
 
+  const formatListForPrompt = (items, maxItems = 200) => {
+    if (!items || !items.length) return '(none)'
+    const clipped = items.slice(0, maxItems)
+    const suffix = items.length > maxItems ? `\n... (${items.length - maxItems} more)` : ''
+    return `${clipped.join('\n')}${suffix}`
+  }
+
+  const formatToolResultsForPrompt = () => {
+    const sections = []
+    if (lastToolEvent) {
+      sections.push(`Last tool event: ${lastToolEvent}`)
+    }
+    if (lastListResult) {
+      sections.push(
+        [
+          '### listWorkspaceFiles',
+          `Include: ${lastListResult.include || '(default)'}`,
+          `Exclude: ${lastListResult.exclude || '(none)'}`,
+          `ShowAll: ${String(lastListResult.showAll ?? false)}`,
+          `MaxResults: ${lastListResult.maxResults ?? '(default)'}`,
+          `Total: ${lastListResult.count}`,
+          formatListForPrompt(lastListResult.files),
+        ].join('\n'),
+      )
+    }
+    if (lastSearchResult) {
+      sections.push(
+        [
+          '### searchWorkspaceFiles',
+          `Query: ${lastSearchResult.query || '(none)'}`,
+          `Include: ${lastSearchResult.include || '(default)'}`,
+          `Exclude: ${lastSearchResult.exclude || '(none)'}`,
+          `MaxResults: ${lastSearchResult.maxResults ?? '(default)'}`,
+          `Total: ${lastSearchResult.count}`,
+          formatListForPrompt(lastSearchResult.files),
+        ].join('\n'),
+      )
+    }
+    if (lastReadResult) {
+      sections.push(
+        [
+          '### readWorkspaceFiles',
+          `Requested: ${formatListForPrompt(lastReadResult.requested || [], 50)}`,
+          `Loaded: ${formatListForPrompt(lastReadResult.loaded || [], 50)}`,
+        ].join('\n'),
+      )
+    }
+    if (lastUpdateResult) {
+      sections.push(
+        [
+          '### updateDocument',
+          lastUpdateResult.summary || '(no summary)',
+          lastUpdateResult.editedFiles?.length
+            ? `Edited files:\n${formatListForPrompt(lastUpdateResult.editedFiles, 50)}`
+            : 'Edited files: (none)',
+        ].join('\n'),
+      )
+    }
+    return sections.length ? sections.join('\n\n') : '(none)'
+  }
+
   const formatSelections = (selections) => {
     if (!selections || !selections.length) return '(none)'
     return selections
@@ -188,13 +252,17 @@
           webSearchEnabled = Boolean(opts?.webSearch)
           const currentFile = activeFileName
           const currentFileContent = files[currentFile] || ''
-          const maxLines = 400
+          const maxLines = 200
           const contentWithLines = formatContentWithLineNumbers(currentFileContent, maxLines)
           const knownFiles = Object.keys(files)
           const currentMeta = fileMeta[currentFile] || {}
           const selections = formatSelections(currentMeta.selections)
+          const recentToolResults = formatToolResultsForPrompt()
           const contextPrompt = [
             'You are the Taskyon VS Code assistant.',
+            '',
+            '## Recent Tool Results (discardable, not shown to user)',
+            recentToolResults,
             '',
             '## Active File',
             `**Path:** ${currentFile || '(none)'}`,
@@ -218,6 +286,11 @@
             "- You can list, search, read, and edit files in the user's VS Code workspace.",
             '- Use `updateDocument` to apply changes. Prefer line-based patches.',
             '- Use `listWorkspaceFiles`, `searchWorkspaceFiles`, and `readWorkspaceFiles` to gather context.',
+            '',
+            '## Response Guidelines',
+            '- Use recent tool results instead of asking the user to paste outputs.',
+            '- Summarize large lists; offer to expand if the user asks.',
+            '- Keep the final response concise and actionable.',
             '',
             '## Line-Based Editing',
             '- Lines are numbered starting from 1',
@@ -277,18 +350,16 @@
             maxResults,
           })
           const files = response?.data?.files || []
-          return makeTaskResult([
-            [
-              {
-                role: 'system',
-                content: {
-                  type: 'message',
-                  data: files.length ? `Workspace files:\n${files.join('\n')}` : 'No files found.',
-                },
-              },
-              getFollowUpTask(),
-            ],
-          ])
+          lastListResult = {
+            files,
+            count: files.length,
+            include,
+            exclude,
+            showAll,
+            maxResults,
+          }
+          lastToolEvent = `listWorkspaceFiles -> ${files.length} files`
+          return makeTaskResult([[getFollowUpTask()]])
         },
       }),
       createTool({
@@ -313,18 +384,16 @@
             maxResults,
           })
           const files = response?.data?.files || []
-          return makeTaskResult([
-            [
-              {
-                role: 'system',
-                content: {
-                  type: 'message',
-                  data: files.length ? `Matched files:\n${files.join('\n')}` : 'No matches found.',
-                },
-              },
-              getFollowUpTask(),
-            ],
-          ])
+          lastSearchResult = {
+            query,
+            files,
+            count: files.length,
+            include,
+            exclude,
+            maxResults,
+          }
+          lastToolEvent = `searchWorkspaceFiles -> ${files.length} matches`
+          return makeTaskResult([[getFollowUpTask()]])
         },
       }),
       createTool({
@@ -356,20 +425,9 @@
               loaded.push(file.path)
             }
           }
-          return makeTaskResult([
-            [
-              {
-                role: 'system',
-                content: {
-                  type: 'message',
-                  data: loaded.length
-                    ? `Loaded files:\n${loaded.join('\n')}`
-                    : 'No files were loaded.',
-                },
-              },
-              getFollowUpTask(),
-            ],
-          ])
+          lastReadResult = { requested: paths || [], loaded }
+          lastToolEvent = `readWorkspaceFiles -> ${loaded.length} loaded`
+          return makeTaskResult([[getFollowUpTask()]])
         },
       }),
       createTool({
@@ -465,24 +523,12 @@
           Object.keys(files).forEach((key) => delete files[key])
           Object.assign(files, nextFiles)
 
-          const editedFilesSummary = editedFiles.length
-            ? `\n\nEdited files:\n${editedFiles
-                .map((filePath) => `- [${filePath}](${getVscodeLink(filePath)})`)
-                .join('\n')}`
-            : ''
-
-          return makeTaskResult([
-            [
-              {
-                role: 'system',
-                content: {
-                  type: 'message',
-                  data: `Updates applied:\n${changesLog.join('\n')}${editedFilesSummary}`,
-                },
-              },
-              getFollowUpTask(),
-            ],
-          ])
+          lastUpdateResult = {
+            summary: changesLog.join('\n') || '(no changes)',
+            editedFiles,
+          }
+          lastToolEvent = `updateDocument -> ${editedFiles.length} files edited`
+          return makeTaskResult([[getFollowUpTask()]])
         },
       }),
     ]
@@ -605,11 +651,7 @@
       await sendRequest('vscodeClipboardWrite', { text })
       sendClipboardResult(requestId, true)
     } catch (error) {
-      sendClipboardResult(
-        requestId,
-        false,
-        error instanceof Error ? error.message : String(error),
-      )
+      sendClipboardResult(requestId, false, error instanceof Error ? error.message : String(error))
     }
   }
 
