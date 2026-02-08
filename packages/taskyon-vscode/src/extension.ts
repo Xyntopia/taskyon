@@ -508,6 +508,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
       if (!data || data.source !== VSCODE_MESSAGE_SOURCE) return
 
+      if (data.type === 'vscodeWebviewReady') {
+        sendActiveFile()
+        return
+      }
       if (data.type === 'vscodeWebviewUrl') {
         const framedUrl = data.payload?.framedUrl
         if (framedUrl) {
@@ -714,7 +718,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   let lastSent: { uri: string; version: number; selectionHash: string } | null = null
-  const sendActiveFile = () => {
+  function sendActiveFile(): void {
     const payload = getActiveFilePayload()
     if (!payload) return
     const selectionHash = JSON.stringify(payload.selections)

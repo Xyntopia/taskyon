@@ -20,7 +20,10 @@
   let lastSearchResult = null
   let lastReadResult = null
   let lastUpdateResult = null
-  let lastToolEvent = ''
+  let toolIterationCount = 0
+
+  const HARD_RESULT_CAP = 50
+  const TOOL_ITERATION_LIMIT = 5
 
   const sendRequest = (type, payload = {}) =>
     new Promise((resolve, reject) => {
@@ -127,22 +130,72 @@
     return lines.join('\n')
   }
 
-  const formatListForPrompt = (items, maxItems = 50) => {
+  const formatListForPrompt = (items, maxItems = HARD_RESULT_CAP) => {
     if (!items || !items.length) return '(none)'
     const clipped = items.slice(0, maxItems)
     const suffix = items.length > maxItems ? `\n... (${items.length - maxItems} more)` : ''
     return `${clipped.join('\n')}${suffix}`
   }
 
-  const buildAssistantContext = ({ toolResultSection = '(none)', capNote = '' } = {}) => {
+  const formatListSummary = (result) => {
+    if (!result) return '(none)'
+    const summary = [
+      `Include: ${result.include || '(default)'}`,
+      `Exclude: ${result.exclude || '(none)'}`,
+    ]
+    if (result.showAll !== undefined) {
+      summary.push(`ShowAll: ${String(result.showAll)}`)
+    }
+    if (result.query) {
+      summary.unshift(`Query: ${result.query}`)
+    }
+    summary.push(formatListForPrompt(result.items || [], HARD_RESULT_CAP))
+    if (result.hitCap) {
+      summary.push(`\nHit cap of ${HARD_RESULT_CAP}; refine your query or include/exclude filters.`)
+    }
+    return summary.filter(Boolean).join('\n')
+  }
+
+  const formatReadSummary = (result) => {
+    if (!result) return '(none)'
+    const summary = [
+      `Loaded: ${result.loaded?.length || 0}`,
+      formatListForPrompt(result.loaded || [], HARD_RESULT_CAP),
+    ]
+    if (result.failed?.length) {
+      summary.push(`\nFailed: ${result.failed.length}`)
+      summary.push(formatListForPrompt(result.failed, HARD_RESULT_CAP))
+    }
+    return summary.filter(Boolean).join('\n')
+  }
+
+  const formatUpdateSummary = (result) => {
+    if (!result) return '(none)'
+    const summary = [
+      `Edited: ${result.editedFiles?.length || 0}`,
+      formatListForPrompt(result.editedFiles || [], HARD_RESULT_CAP),
+    ]
+    if (result.changesLog?.length) {
+      summary.push(`\nNotes:`)
+      summary.push(formatListForPrompt(result.changesLog, HARD_RESULT_CAP))
+    }
+    return summary.filter(Boolean).join('\n')
+  }
+
+  const buildAssistantContext = ({
+    toolResultSection = '(none)',
+    capNote = '',
+    includeActiveFileContent = false,
+  } = {}) => {
     const currentFile = activeFileName
     const currentFileContent = files[currentFile] || ''
-    const maxLines = 200
-    const contentWithLines = formatContentWithLineNumbers(currentFileContent, maxLines)
     const knownFiles = Object.keys(files)
     const currentMeta = fileMeta[currentFile] || {}
     const selections = formatSelections(currentMeta.selections)
-    const cappedKnownFiles = formatListForPrompt(knownFiles, 50)
+    const cappedKnownFiles = formatListForPrompt(knownFiles, HARD_RESULT_CAP)
+    const activeFileSummary = currentFile
+      ? `${currentFile} (${currentFileContent.split('\n').length} lines)`
+      : '(none)'
 
     return [
       'You are the Taskyon VS Code assistant.',
@@ -150,23 +203,34 @@
       '## Recent Tool Results (discardable, not shown to user)',
       toolResultSection,
       '',
-      '## Active File',
-      `**Path:** ${currentFile || '(none)'}`,
-      `**Lines:** ${currentFileContent.split('\n').length}`,
-      `**Selections:** ${currentMeta.selections?.length || 0}`,
+      '## Available Context',
+      `Active File: ${activeFileSummary}`,
+      `Selections: ${currentMeta.selections?.length || 0}`,
       '',
-      '## Content (truncated)',
-      '```',
-      contentWithLines,
-      '```',
-      '',
-      '## Selections',
-      '```',
-      selections,
-      '```',
-      '',
-      '## Known Files (in memory, capped)',
+      '### Loaded File Contents (in memory, capped)',
       cappedKnownFiles,
+      '',
+      '### Last List Result',
+      formatListSummary(lastListResult),
+      '',
+      '### Last Search Result',
+      formatListSummary(lastSearchResult),
+      '',
+      '### Last Read Result',
+      formatReadSummary(lastReadResult),
+      '',
+      '### Last Update Result',
+      formatUpdateSummary(lastUpdateResult),
+      '',
+      includeActiveFileContent ? '## Active File Content (truncated)' : '',
+      includeActiveFileContent ? '```' : '',
+      includeActiveFileContent ? formatContentWithLineNumbers(currentFileContent, 200) : '',
+      includeActiveFileContent ? '```' : '',
+      includeActiveFileContent ? '' : '',
+      includeActiveFileContent ? '## Selections' : '',
+      includeActiveFileContent ? '```' : '',
+      includeActiveFileContent ? selections : '',
+      includeActiveFileContent ? '```' : '',
       '',
       '## Capabilities',
       "- You can list, search, read, and edit files in the user's VS Code workspace.",
@@ -178,6 +242,7 @@
       '- Summarize large lists; offer to expand if the user asks.',
       '- Keep the final response concise and actionable.',
       capNote ? `- Search and list results are capped at ${capNote}.` : '',
+      `- If you hit the ${HARD_RESULT_CAP} cap, refine queries or include/exclude filters.`,
       '- If results hit the cap and the target was not found, refine the search.',
       '',
       '## Line-Based Editing',
@@ -213,17 +278,18 @@
     const { createTool, createChatCompletionTask, makeTaskResult, toolCall } = window.tyclient || {}
     if (!createTool) return { tools: [], entryNode: undefined }
 
-    const HARD_RESULT_CAP = 50
-
-    const capResults = (maxResults) => {
-      if (!Number.isFinite(maxResults)) return HARD_RESULT_CAP
-      return Math.max(1, Math.min(maxResults, HARD_RESULT_CAP))
-    }
-
-    const createFollowUpCompletion = ({ toolSection, capValue = HARD_RESULT_CAP }) =>
+    const createFollowUpCompletion = ({
+      toolSection,
+      capValue = HARD_RESULT_CAP,
+      includeActiveFileContent = false,
+    }) =>
       createChatCompletionTask({
         prompts: [
-          buildAssistantContext({ toolResultSection: toolSection, capNote: String(capValue) }),
+          buildAssistantContext({
+            toolResultSection: toolSection,
+            capNote: String(capValue),
+            includeActiveFileContent,
+          }),
         ],
         goal: 'ChooseTool',
         allowedTools: [
@@ -234,9 +300,32 @@
         ],
       })
 
-    const getFollowUpTask = () => {
-      const toolSection = lastToolEvent ? `### ${lastToolEvent}` : '(none)'
-      return createFollowUpCompletion({ toolSection, capValue: HARD_RESULT_CAP })
+    const createPauseForUserResult = () =>
+      makeTaskResult([
+        [
+          {
+            role: 'assistant',
+            content: {
+              type: 'message',
+              data: `I have run ${TOOL_ITERATION_LIMIT} tool calls in a row. Reply "continue" if you'd like me to keep going, or tell me how to narrow the search.`,
+            },
+          },
+        ],
+      ])
+
+    const createToolFollowUp = ({
+      toolSection,
+      includeActiveFileContent = false,
+      capValue = HARD_RESULT_CAP,
+    }) => {
+      toolIterationCount += 1
+      if (toolIterationCount >= TOOL_ITERATION_LIMIT) {
+        toolIterationCount = 0
+        return createPauseForUserResult()
+      }
+      return makeTaskResult([
+        createFollowUpCompletion({ toolSection, capValue, includeActiveFileContent }),
+      ])
     }
 
     const tools = [
@@ -255,9 +344,11 @@
         },
         function: (opts) => {
           const webSearchEnabled = Boolean(opts?.webSearch)
+          toolIterationCount = 0
           const contextPrompt = buildAssistantContext({
             toolResultSection: '(none)',
             capNote: String(HARD_RESULT_CAP),
+            includeActiveFileContent: false,
           })
 
           return makeTaskResult([
@@ -293,35 +384,39 @@
               type: 'boolean',
               description: 'Include everything (ignore default excludes)',
             },
-            maxResults: { type: 'number', description: 'Maximum number of files to return' },
           },
           additionalProperties: false,
         },
-        function: async ({ include, exclude, showAll, maxResults } = {}) => {
-          const cappedMax = capResults(maxResults)
+        function: async ({ include, exclude, showAll } = {}) => {
           const response = await sendRequest('vscodeListFiles', {
             include,
             exclude,
             showAll,
-            maxResults: cappedMax,
+            maxResults: HARD_RESULT_CAP,
           })
           const files = response?.data?.files || []
-          const clipped = files.slice(0, cappedMax)
-          const total = files.length
+          const clipped = files.slice(0, HARD_RESULT_CAP)
+          const hitCap = files.length >= HARD_RESULT_CAP
+          lastListResult = {
+            include,
+            exclude,
+            showAll,
+            items: clipped,
+            hitCap,
+          }
           const toolSection = [
             '### listWorkspaceFiles',
             `Include: ${include || '(default)'}`,
             `Exclude: ${exclude || '(none)'}`,
             `ShowAll: ${String(showAll ?? false)}`,
-            `MaxResults: ${cappedMax}`,
-            `Total: ${total}`,
-            formatListForPrompt(clipped, cappedMax),
-            total > cappedMax ? `\n... (${total - cappedMax} more, refine search if needed)` : '',
+            `Cap: ${HARD_RESULT_CAP} (hard)`,
+            formatListForPrompt(clipped, HARD_RESULT_CAP),
+            hitCap ? `\nHit cap of ${HARD_RESULT_CAP}; refine search if needed.` : '',
           ]
             .filter(Boolean)
             .join('\n')
 
-          return makeTaskResult([createFollowUpCompletion({ toolSection, capValue: cappedMax })])
+          return createToolFollowUp({ toolSection, capValue: HARD_RESULT_CAP })
         },
       }),
       createTool({
@@ -333,112 +428,40 @@
             query: { type: 'string', description: 'Search query or glob pattern' },
             include: { type: 'string', description: 'Optional glob include override' },
             exclude: { type: 'string', description: 'Optional glob exclude pattern' },
-            maxResults: { type: 'number', description: 'Maximum number of files to return' },
           },
           required: ['query'],
           additionalProperties: false,
         },
-        function: async ({ query, include, exclude, maxResults }) => {
-          const cappedMax = capResults(maxResults)
+        function: async ({ query, include, exclude }) => {
           const response = await sendRequest('vscodeSearchFiles', {
             query,
             include,
             exclude,
-            maxResults: cappedMax,
+            maxResults: HARD_RESULT_CAP,
           })
           const files = response?.data?.files || []
-          const clipped = files.slice(0, cappedMax)
-          const total = files.length
+          const clipped = files.slice(0, HARD_RESULT_CAP)
+          const hitCap = files.length >= HARD_RESULT_CAP
+          lastSearchResult = {
+            query,
+            include,
+            exclude,
+            items: clipped,
+            hitCap,
+          }
           const toolSection = [
             '### searchWorkspaceFiles',
             `Query: ${query || '(none)'}`,
             `Include: ${include || '(default)'}`,
             `Exclude: ${exclude || '(none)'}`,
-            `MaxResults: ${cappedMax}`,
-            `Total: ${total}`,
-            formatListForPrompt(clipped, cappedMax),
-            total > cappedMax ? `\n... (${total - cappedMax} more, refine search if needed)` : '',
+            `Cap: ${HARD_RESULT_CAP} (hard)`,
+            formatListForPrompt(clipped, HARD_RESULT_CAP),
+            hitCap ? `\nHit cap of ${HARD_RESULT_CAP}; refine search if needed.` : '',
           ]
             .filter(Boolean)
             .join('\n')
 
-          return makeTaskResult([createFollowUpCompletion({ toolSection, capValue: cappedMax })])
-        },
-      }),
-      createTool({
-        name: 'listWorkspaceFiles',
-        description: 'List files in the current VS Code workspace.',
-        parameters: {
-          type: 'object',
-          properties: {
-            include: {
-              type: 'string',
-              description: 'Optional glob include pattern (defaults to **/*)',
-            },
-            exclude: {
-              type: 'string',
-              description: 'Optional glob exclude pattern',
-            },
-            showAll: {
-              type: 'boolean',
-              description: 'Include everything (ignore default excludes)',
-            },
-            maxResults: { type: 'number', description: 'Maximum number of files to return' },
-          },
-          additionalProperties: false,
-        },
-        function: async ({ include, exclude, showAll, maxResults } = {}) => {
-          const response = await sendRequest('vscodeListFiles', {
-            include,
-            exclude,
-            showAll,
-            maxResults,
-          })
-          const files = response?.data?.files || []
-          lastListResult = {
-            files,
-            count: files.length,
-            include,
-            exclude,
-            showAll,
-            maxResults,
-          }
-          lastToolEvent = `listWorkspaceFiles -> ${files.length} files`
-          return makeTaskResult([[getFollowUpTask()]])
-        },
-      }),
-      createTool({
-        name: 'searchWorkspaceFiles',
-        description: 'Search for files in the workspace by name or glob pattern.',
-        parameters: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: 'Search query or glob pattern' },
-            include: { type: 'string', description: 'Optional glob include override' },
-            exclude: { type: 'string', description: 'Optional glob exclude pattern' },
-            maxResults: { type: 'number', description: 'Maximum number of files to return' },
-          },
-          required: ['query'],
-          additionalProperties: false,
-        },
-        function: async ({ query, include, exclude, maxResults }) => {
-          const response = await sendRequest('vscodeSearchFiles', {
-            query,
-            include,
-            exclude,
-            maxResults,
-          })
-          const files = response?.data?.files || []
-          lastSearchResult = {
-            query,
-            files,
-            count: files.length,
-            include,
-            exclude,
-            maxResults,
-          }
-          lastToolEvent = `searchWorkspaceFiles -> ${files.length} matches`
-          return makeTaskResult([[getFollowUpTask()]])
+          return createToolFollowUp({ toolSection, capValue: HARD_RESULT_CAP })
         },
       }),
       createTool({
@@ -459,6 +482,7 @@
         function: async ({ paths }) => {
           const response = await sendRequest('vscodeReadFiles', { paths })
           const loaded = []
+          const failed = []
           const results = response?.data?.files || []
           for (const file of results) {
             if (file?.content !== undefined) {
@@ -468,11 +492,27 @@
                 selections: fileMeta[file.path]?.selections || [],
               }
               loaded.push(file.path)
+            } else if (file?.path) {
+              failed.push(file.path)
             }
           }
-          lastReadResult = { requested: paths || [], loaded }
-          lastToolEvent = `readWorkspaceFiles -> ${loaded.length} loaded`
-          return makeTaskResult([[getFollowUpTask()]])
+          lastReadResult = { loaded, failed }
+          const toolSection = [
+            '### readWorkspaceFiles',
+            `Requested: ${paths?.length || 0}`,
+            `Loaded: ${loaded.length}`,
+            formatListForPrompt(loaded, HARD_RESULT_CAP),
+            failed.length ? `\nFailed: ${failed.length}` : '',
+            failed.length ? formatListForPrompt(failed, HARD_RESULT_CAP) : '',
+          ]
+            .filter(Boolean)
+            .join('\n')
+          const includeActive = loaded.includes(activeFileName)
+          return createToolFollowUp({
+            toolSection,
+            capValue: HARD_RESULT_CAP,
+            includeActiveFileContent: includeActive,
+          })
         },
       }),
       createTool({
@@ -567,13 +607,17 @@
           }
           Object.keys(files).forEach((key) => delete files[key])
           Object.assign(files, nextFiles)
-
-          lastUpdateResult = {
-            summary: changesLog.join('\n') || '(no changes)',
-            editedFiles,
-          }
-          lastToolEvent = `updateDocument -> ${editedFiles.length} files edited`
-          return makeTaskResult([[getFollowUpTask()]])
+          lastUpdateResult = { editedFiles, changesLog }
+          const toolSection = [
+            '### updateDocument',
+            `Edited: ${editedFiles.length}`,
+            formatListForPrompt(editedFiles, HARD_RESULT_CAP),
+            changesLog.length ? `\nNotes:` : '',
+            changesLog.length ? formatListForPrompt(changesLog, HARD_RESULT_CAP) : '',
+          ]
+            .filter(Boolean)
+            .join('\n')
+          return createToolFollowUp({ toolSection, capValue: HARD_RESULT_CAP })
         },
       }),
     ]
@@ -792,6 +836,7 @@
   applyWebviewBackground(document.documentElement.getAttribute('data-vscode-theme'))
   updateSourceToggle()
   void initTaskyon('startup')
+  vscode.postMessage({ source: vscodeMessageSource, type: 'vscodeWebviewReady' })
 
   window.addEventListener('message', (event) => {
     const data = event.data || {}
