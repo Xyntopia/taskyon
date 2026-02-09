@@ -1145,7 +1145,7 @@ export function createChatCompletionTool(
       let errorCapture: unknown
       const { streamText } = await import('ai')
       const chatCompletion = streamText({
-        timeout: { totalMs: 5 * 60 * 1000, stepMs: 120 * 1000, chunkMs: 120 * 1000 },
+        timeout: { totalMs: 5 * 60 * 1000, stepMs: 5 * 60 * 1000, chunkMs: 120 * 1000 },
         includeRawChunks: true,
         onChunk({ chunk }) {
           chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
