@@ -81,7 +81,15 @@ function buildWebviewHtmlForUrl(options: {
   const vscodeUrl = appendVscodeQuery(themedUrl)
   const framedUrl = appendIframeQuery(vscodeUrl)
   const tyclientUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(context.extensionUri, '..', '..', 'packages', 'tyclient', 'dist', 'tyclient.mjs'),
+    vscode.Uri.joinPath(
+      context.extensionUri,
+      '..',
+      '..',
+      'packages',
+      'tyclient',
+      'dist',
+      'tyclient.mjs',
+    ),
   )
   const bundledTyclientPath = path.join(
     context.extensionUri.fsPath,
@@ -94,7 +102,15 @@ function buildWebviewHtmlForUrl(options: {
   )
   const bundledTyclientUri = webview.asWebviewUri(vscode.Uri.file(bundledTyclientPath))
   const webviewScriptUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(context.extensionUri, '..', '..', 'packages', 'taskyon-vscode', 'media', 'webview.js'),
+    vscode.Uri.joinPath(
+      context.extensionUri,
+      '..',
+      '..',
+      'packages',
+      'taskyon-vscode',
+      'media',
+      'webview.js',
+    ),
   )
   const htmlPath = path.join(
     context.extensionUri.fsPath,

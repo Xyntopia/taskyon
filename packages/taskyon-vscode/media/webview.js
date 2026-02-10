@@ -1,5 +1,5 @@
+// webview.js
 /* global acquireVsCodeApi */
-
 ;(function () {
   const vscode = acquireVsCodeApi()
   const vscodeThemeKey = window.__TASKYON__.themeKey

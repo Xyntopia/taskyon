@@ -1,5 +1,5 @@
 <!-- eslint-disable no-useless-escape -->
-<!-- DocumentEditorPage.vue -->
+<!-- CodingPage.vue -->
 <template>
   <q-page class="row">
     <SplitTaskyonView
