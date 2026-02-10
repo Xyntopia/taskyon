@@ -1156,7 +1156,7 @@ export function createChatCompletionTool(
           console.error('Error in chat completion stream:', err)
         },
         experimental_transform: smoothStream({
-          delayInMs: 20, // optional: defaults to 10ms
+          delayInMs: 5, // optional: defaults to 10ms
           chunking: 'line', // optional: defaults to 'word'
         }),
         abortSignal: context.stopSignal,
