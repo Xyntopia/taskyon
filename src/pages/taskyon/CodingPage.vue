@@ -477,7 +477,7 @@ const tools = [
       additionalProperties: false,
     } as const satisfies JSONSchema7,
     function: (opts) => {
-      const showAllFiles = opts.showAllFiles ?? false
+      const showAllFiles = opts.showAllFiles ?? showAllFilesInPrompt ?? false
 
       // 1. Context Assembly
       const fileNames = Object.keys(files.value)
