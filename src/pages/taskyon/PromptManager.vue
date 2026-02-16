@@ -4,7 +4,7 @@
     <div class="row q-gutter-xs q-pa-xs">
       <div class="col fit">
         <q-toggle v-model="edit" label="Manually edit prompts" />
-        <ObjectTreeView
+        <ObjectView
           v-if="edit && state.toolchainConfig.chatCompletion?.prompt_templates"
           v-model="state.toolchainConfig.chatCompletion.prompt_templates as Record<string, unknown>"
         />
@@ -61,7 +61,6 @@ import tyMarkdown from 'components/tyMarkdown.vue'
 import { ref, computed } from 'vue'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
-import ObjectTreeView from 'components/varViews/ObjectTreeView.vue'
 import UnderConstructionHint from 'components/UnderConstructionHint.vue'
 import TaskChainViewer from 'components/taskyon/TaskChainViewer.vue'
 import { mdiMagicStaff } from '@quasar/extras/mdi-v6'
@@ -69,6 +68,7 @@ import CreateTaskButton from 'components/taskyon/CreateTaskButton.vue'
 import { dump } from 'js-yaml'
 import { useAppStateStore } from 'src/stores/appState'
 import { addPrompts } from '@taskyon/taskyon'
+import ObjectView from 'src/components/varViews/ObjectView.vue'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()

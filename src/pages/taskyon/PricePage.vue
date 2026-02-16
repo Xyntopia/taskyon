@@ -127,7 +127,7 @@ For in in-depth comparison check out webpages like the following
                     `No information provided by Backend: **${state.llmSettings.selectedApi}**`
                   "
                 />
-                <ObjectTreeView v-model="props.row" read-only copy-btn />
+                <ObjectView v-model="props.row" read-only copy-btn dense missing-mode="hide" />
               </InfoDialog>
               <q-btn
                 v-if="
@@ -217,20 +217,17 @@ For in in-depth comparison check out webpages like the following
 
 <script setup lang="ts">
 import { matBlock, matCheck, matFilterList } from '@quasar/extras/material-icons'
-import { type QTableProps, exportFile } from 'quasar'
-import { computed, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-
-import { useAppStateStore } from 'src/stores/appState'
-import { useTaskyonStore } from 'src/stores/taskyonState'
-
+import type { ModelCard } from '@taskyon/taskyon'
 import InfoDialog from 'components/InfoDialog.vue'
 import ApiSelect from 'components/taskyon/ApiSelect.vue'
 import tyMarkdown from 'components/tyMarkdown.vue'
-import ObjectTreeView from 'src/components/varViews/ObjectTreeView.vue'
-
-import type { ModelCard } from '@taskyon/taskyon'
+import { type QTableProps, exportFile } from 'quasar'
+import ObjectView from 'src/components/varViews/ObjectView.vue'
 import { humanReadablePrice, openrouterPricing } from 'src/modules/utils'
+import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 /* ─────────── Local constants ─────────── */
 const pricingOptions = ['$/token', 'pages/0.01$', '$/million tokens'] as const

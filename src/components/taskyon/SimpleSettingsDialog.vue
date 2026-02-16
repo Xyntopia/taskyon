@@ -10,7 +10,7 @@
   >
     <template #btnContent><q-tooltip> More AI Settings</q-tooltip></template>
     <div class="q-pa-sm" @click.stop>
-      <ObjectTreeView
+      <ObjectView
         v-model="slimView.reactiveView"
         :schema="slimView.jsonSchema as JSONSchema7"
         dense
@@ -31,16 +31,16 @@
 <script setup lang="ts">
 import { matMoreHoriz } from '@quasar/extras/material-icons'
 import { chatCompletionToolParameters, llmSettings } from '@taskyon/taskyon'
+import type { JSONSchema7 } from 'json-schema'
 import type { iconMap } from 'src/modules/icons'
 import { iconRegistry, settingsIcons } from 'src/modules/icons'
 import { appConfiguration } from 'src/modules/taskyon/types'
 import { buildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { computed } from 'vue'
-import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
-import ObjectTreeView from '../varViews/ObjectTreeView.vue'
-import type { JSONSchema7 } from 'json-schema'
 import z from 'zod'
+import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
+import ObjectView from '../varViews/ObjectView.vue'
 
 const state = useAppStateStore()
 

@@ -157,7 +157,7 @@
                   </div>
 
                   <div name="daeJson">
-                    <ObjectTreeView v-model="daeJsonOutput" copy-btn read-only />
+                    <ObjectView v-model="daeJsonOutput" copy-btn read-only enable-expert-mode />
                   </div>
 
                   <div name="daePretty">
@@ -187,7 +187,14 @@
               </q-card-section>
 
               <q-card-section v-if="executionResult && Object.keys(executionResult).length">
-                <ObjectTreeView v-model="executionResult" dense hide-missing read-only copy-btn />
+                <ObjectView
+                  v-model="executionResult"
+                  dense
+                  hide-missing
+                  read-only
+                  copy-btn
+                  enable-expert-mode
+                />
               </q-card-section>
             </q-card>
           </template>
@@ -222,7 +229,7 @@ import type { DockNode } from 'src/components/DockView.vue'
 import DockView from 'src/components/DockView.vue'
 import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import TaskyonIframe from 'src/components/TaskyonIframe.vue'
-import ObjectTreeView from 'src/components/varViews/ObjectTreeView.vue'
+import ObjectView from 'src/components/varViews/ObjectView.vue'
 import type { RumocaModule } from 'src/modules/modelica/modelica'
 import { buildIframeCode, loadWasm } from 'src/modules/modelica/modelica'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'

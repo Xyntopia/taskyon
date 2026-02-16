@@ -119,7 +119,7 @@
           </div>
         </template>
         <template #configure>
-          <ObjectTreeView :model-value="toolDraft" :schema="toolJsonSchema" />
+          <ObjectView :model-value="toolDraft" :schema="toolJsonSchema" />
         </template>
         <template #definition>
           <div class="fit">
@@ -131,8 +131,8 @@
             Current tool settings. Every parameter of a tool can be given a default value here,
             which will be used if other values are not provided when the tool is called. This
             effectivly creates dynamic agent profiles for taskyon.
-            <ObjectTreeView
-              :model-value="toolSettings"
+            <ObjectView
+              v-model="toolSettings"
               :schema="selectedTool?.parameters"
               missing-mode="placeholders"
             />
@@ -184,7 +184,6 @@ import {
 } from '@quasar/extras/mdi-v6'
 import type { InternalTool, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { craeteToolJsonSchema, createTaskNode, ToolBase } from '@taskyon/taskyon'
-import ObjectTreeView from 'components/varViews/ObjectTreeView.vue'
 import { copyToClipboard } from 'src/modules/utils'
 import type { DockNode } from 'src/components/DockView.vue'
 import DockView from 'src/components/DockView.vue'
@@ -196,10 +195,19 @@ import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAppStateStore } from 'src/stores/appState'
+import ObjectView from 'src/components/varViews/ObjectView.vue'
 
 const { name = undefined } = defineProps<{ name?: string }>()
 
-const toolSettings = ref<Record<string, unknown>>({})
+const state = useAppStateStore()
+
+const toolSettings = computed({
+  get: () => (name ? state.toolchainConfig[name] : undefined),
+  set: (v) => {
+    if (name && v) state.toolchainConfig[name] = v
+  },
+})
 
 const initialLayout = ref<DockNode>({
   id: 'root',

@@ -8,7 +8,7 @@
         <slot name="before" />
       </q-card-section>
       <q-card-section>
-        <ObjectTreeView v-model="reactiveData" :schema="schema" :dense="!!denseOptions" />
+        <ObjectView v-model="reactiveData" :schema="schema" :dense="!!denseOptions" />
       </q-card-section>
       <q-card-section v-if="$slots.after">
         <slot name="after" />
@@ -21,10 +21,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import ObjectTreeView from '../varViews/ObjectTreeView.vue'
 import { type JSONSchema7 } from 'json-schema'
+import { ref } from 'vue'
 import type z from 'zod'
+import ObjectView from '../varViews/ObjectView.vue'
 
 defineOptions({ inheritAttrs: false })
 

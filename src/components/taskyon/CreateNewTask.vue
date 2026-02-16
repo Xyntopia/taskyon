@@ -63,7 +63,7 @@
       </chatMessageEdit>
       <!--If we want to edit any pre-defined functions we can do that here...-->
       <div v-else-if="selectedTaskType" class="row">
-        <ObjectTreeView
+        <ObjectView
           v-model="state.draftParameters[selectedTaskType]"
           class="col"
           input-field-behavior="auto"
@@ -221,15 +221,15 @@ import { watchThrottled } from '@vueuse/core'
 import { QSelect, useQuasar } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
+import type { ReadonlyDeep, WritableDeep } from 'type-fest'
 import { computed, onMounted, ref } from 'vue'
 import FileDropzone from '../FileDropzone.vue'
 import InfoDialog from '../InfoDialog.vue'
-import ObjectTreeView from '../varViews/ObjectTreeView.vue'
 import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
+import ObjectView from '../varViews/ObjectView.vue'
 import chatMessageEdit from './chatMessageEdit.vue'
 import ChooseModelDialog from './ChooseModelDialog.vue'
 import SimpleSettingsDialog from './SimpleSettingsDialog.vue'
-import type { ReadonlyDeep, WritableDeep } from 'type-fest'
 // import { watchThrottled } from '@vueuse/core'
 // use idel mechanism to calculate all kinds of stuff here :=)
 //import { useIdle } from '@vueuse/core'

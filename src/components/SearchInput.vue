@@ -19,6 +19,7 @@
           </template>
         </q-input>
         <q-select
+          v-if="!hideNumberOfSearchResults"
           v-model="numberOfSearchResults"
           class="col-auto"
           dense
@@ -86,6 +87,10 @@ defineProps({
     default: false,
   },
   usegrid: {
+    type: Boolean,
+    default: false,
+  },
+  hideNumberOfSearchResults: {
     type: Boolean,
     default: false,
   },

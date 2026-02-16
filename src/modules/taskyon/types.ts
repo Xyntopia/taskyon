@@ -47,6 +47,7 @@ type HexColor = z.infer<typeof HexColor>
 export const appConfiguration = z.object({
   darkTheme: z
     .union([z.literal('auto'), z.boolean()])
+    .default('auto')
     .meta({ description: 'Explicitly set the taskyon dark mode' }),
   appConfigurationUrl: z.string().default('/taskyon_settings.json').meta({
     description: 'URL from which to load the initial app configuration',

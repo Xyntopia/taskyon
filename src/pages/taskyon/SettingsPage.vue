@@ -48,19 +48,20 @@
           <div>AI/LLM chat completion configurations</div>
           <template v-for="[key, val] in Object.entries(state.toolchainConfig)" :key="key">
             {{ key }}
-            <ObjectTreeView
+            <ObjectView
+              :enable-expert-mode="state.appConfiguration.expertMode"
               :model-value="val as Record<string, unknown>"
               :schema="tystate.allTools[key]?.parameters"
               class="fit"
               :icons="iconRegistry.chatCompletion as iconMap"
-              hide-missing
+              missing-mode="hide"
               copy-btn
               @update:model-value="(val) => console.log('updated', val)"
             />
           </template>
           <q-separator size="xl" spaced class="self-stretch" />
           other settings:
-          <ObjectTreeView
+          <ObjectView
             v-model="state.llmSettings"
             :schema="
               convertZodToJsonSchemaCached(TyProfile.shape.llmSettings, {
@@ -72,7 +73,7 @@
         </q-tab-panel>
         <q-tab-panel name="app config" :class="tabPanelClass">
           <div>All of the app configurations</div>
-          <ObjectTreeView
+          <ObjectView
             v-model="state.appConfiguration"
             :schema="
               convertZodToJsonSchemaCached(TyProfile.shape.appConfiguration, {
@@ -90,19 +91,19 @@
 
 <script setup lang="ts">
 import { convertZodToJsonSchemaCached } from '@taskyon/taskyon'
-import ObjectTreeView from 'components/varViews/ObjectTreeView.vue'
 import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
 import LLMProviders from 'components/taskyon/LLMProviders.vue'
 import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'
 import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 import PasswordManager from 'src/components/taskyon/PasswordManager.vue'
-import { TyProfile } from 'src/modules/taskyon/types'
-import { useAppStateStore } from 'src/stores/appState'
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
-import { useTaskyonStore } from 'src/stores/taskyonState'
+import ObjectView from 'src/components/varViews/ObjectView.vue'
 import type { iconMap } from 'src/modules/icons'
 import { iconRegistry, settingsIcons } from 'src/modules/icons'
+import { TyProfile } from 'src/modules/taskyon/types'
+import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 
 const route = useRoute()
 const state = useAppStateStore()
