@@ -1017,6 +1017,23 @@ export const chatCompletionToolParameters = {
         },
       },
     },
+    timeouts: {
+      type: 'object',
+      description: '[Optional] We can specify different timeouts for the chat completion.',
+      properties: {
+        totalMs: {
+          type: 'integer',
+          description: 'Total timeout in milliseconds for the entire chat completion process.',
+          default: 10 * 60 * 1000, // 10 minutes
+        },
+        stepMs: {
+          type: 'integer',
+          description:
+            'Timeout in milliseconds for each individual step when interacting with agents.',
+          default: 10 * 60 * 1000, // 10 minutes
+        },
+      },
+    },
   },
 } as const satisfies JSONSchema7
 
@@ -1056,7 +1073,11 @@ export function createChatCompletionTool(
         // if we don't set it, choose the default setting...
         use_multimodal = true,
         prompt_templates,
+        timeouts,
       } = opts
+
+      const totalMs = timeouts?.totalMs ?? 10 * 60 * 1000
+      const stepMs = timeouts?.stepMs ?? 10 * 60 * 1000
       const tools = allowedTools ?? []
 
       if (!prompt_templates)
@@ -1145,7 +1166,7 @@ export function createChatCompletionTool(
       let errorCapture: unknown
       const { streamText } = await import('ai')
       const chatCompletion = streamText({
-        timeout: { totalMs: 5 * 60 * 1000, stepMs: 5 * 60 * 1000, chunkMs: 120 * 1000 },
+        timeout: { totalMs, stepMs, chunkMs: 120 * 1000 },
         includeRawChunks: true,
         onChunk({ chunk }) {
           chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
