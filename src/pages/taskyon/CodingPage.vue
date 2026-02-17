@@ -661,7 +661,25 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
       const currentFilesSnapshot = { ...files.value } // Shallow copy of map
       const changesLog: string[] = []
 
-      for (const update of updates) {
+      // merge objects with same filepaths in order to make sure, we apply patches in the correct order
+
+      const mergedUpdates = updates.reduce(
+        (acc, update) => {
+          const existing = acc[update.filePath]
+          if (existing) {
+            // Merge logic: if newContent is provided, it overrides patches. If not, we concatenate patches.
+            const newContent = update.newContent ?? existing.newContent
+            if (newContent) existing.newContent = newContent
+            existing.patches = [...(existing.patches || []), ...(update.patches || [])]
+          } else {
+            acc[update.filePath] = { ...update }
+          }
+          return acc
+        },
+        {} as Record<string, (typeof updates)[0]>,
+      )
+
+      for (const update of Object.values(mergedUpdates)) {
         const { filePath, newContent, patches } = update
         const originalContent = currentFilesSnapshot[filePath]
 
@@ -700,13 +718,27 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
         createNewVersion(`Auto-update: ${description || changesLog.join(', ')}`)
       }
 
-      return makeTaskResult({
-        role: 'system',
-        content: {
-          type: 'message',
-          data: `Updates applied:\n${changesLog.join('\n')}`,
+      const returnMsgs = [
+        {
+          role: 'system' as const,
+          content: {
+            type: 'message' as const,
+            data: `Updates applied:\n${changesLog.join('\n')}`,
+          },
         },
-      })
+      ]
+
+      if (description) {
+        returnMsgs.push({
+          role: 'system' as const,
+          content: {
+            type: 'message' as const,
+            data: description,
+          },
+        })
+      }
+
+      return makeTaskResult(returnMsgs)
     },
   }),
 ]
