@@ -2,51 +2,73 @@
 <template>
   <q-page class="column">
     <span class="text-h4 q-pa-md"> <q-icon :name="matAutoAwesomeMosaic" /> Vue Dock Manager</span>
+    <q-toggle
+      v-model="showLeaf"
+      label="Show leaf as root (no tabs, just content)"
+      class="q-ma-md"
+    />
 
-    <!-- v-model:node -->
-    <q-card flat class="col column bg-transparent text-secondary">
-      <DockView v-model:node="layout" class="col" @add-view="handleAddView">
-        <!-- Explorer View -->
-        <template #ExplorerWithAVeryLongName>
-          <q-card class="fit">
-            <div>Files</div>
-            <ul>
-              <li>src/App.vue</li>
-              <li>src/main.ts</li>
-              <li>src/components/DockView.vue</li>
-            </ul>
+    <template v-if="showLeaf">
+      <DockView v-model:node="nestedLayout" class="col" hide-tab-add hide-tab-close>
+        <template #nested-Explorer>
+          <q-card class="fit column">
+            <div>nested view! which expands</div>
+            <div class="col column justify-around items-center">
+              <div v-for="i in 20" :key="i">line {{ i }}</div>
+            </div>
           </q-card>
         </template>
-
-        <!-- Nested View -->
-        <template #Nested>
-          <DockView v-model:node="nestedLayout" class="fit" hide-tab-add hide-tab-close>
-            <template #nested-Explorer>
-              <q-card class="fit column">
-                <div>nested view! which expands</div>
-                <div class="col column justify-around items-center">
-                  <div v-for="i in 20" :key="i">line {{ i }}</div>
-                </div>
-              </q-card>
-            </template>
-            <template #nested-Search>
-              <div>search inside nested view!</div>
-            </template>
-          </DockView>
+        <template #nested-Search>
+          <div>search inside nested view!</div>
         </template>
+      </DockView>
+    </template>
+    <!-- If not showing leaf as root, show the full layout with sidebar, editors, and panel -->
+    <template v-else>
+      <!-- v-model:node -->
+      <q-card flat class="col column bg-transparent text-secondary">
+        <DockView v-model:node="layout" class="col" @add-view="handleAddView">
+          <!-- Explorer View -->
+          <template #ExplorerWithAVeryLongName>
+            <q-card class="fit">
+              <div>Files</div>
+              <ul>
+                <li>src/App.vue</li>
+                <li>src/main.ts</li>
+                <li>src/components/DockView.vue</li>
+              </ul>
+            </q-card>
+          </template>
 
-        <template #Search>
-          <q-card>
-            <input type="text" placeholder="Search files..." />
-            <div>No results</div>
-          </q-card>
-        </template>
+          <!-- Nested View -->
+          <template #Nested>
+            <DockView v-model:node="nestedLayout" class="fit" hide-tab-add hide-tab-close>
+              <template #nested-Explorer>
+                <q-card class="fit column">
+                  <div>nested view! which expands</div>
+                  <div class="col column justify-around items-center">
+                    <div v-for="i in 20" :key="i">line {{ i }}</div>
+                  </div>
+                </q-card>
+              </template>
+              <template #nested-Search>
+                <div>search inside nested view!</div>
+              </template>
+            </DockView>
+          </template>
 
-        <!-- Editor Views -->
-        <template v-for="view in ['App.vue', 'main.ts', 'styles.css']" :key="view" #[view]>
-          <div>
+          <template #Search>
+            <q-card>
+              <input type="text" placeholder="Search files..." />
+              <div>No results</div>
+            </q-card>
+          </template>
+
+          <!-- Editor Views -->
+          <template v-for="view in ['App.vue', 'main.ts', 'styles.css']" :key="view" #[view]>
             <div>
-              <pre>
+              <div>
+                <pre>
 // Content of {{ view }}
 import { defineComponent } from 'vue';
 
@@ -56,43 +78,44 @@ export default defineComponent({
     return {};
   }
 });</pre
-              >
+                >
+              </div>
             </div>
-          </div>
-        </template>
+          </template>
 
-        <!-- Terminal Views -->
-        <template #Terminal>
-          <div>
-            <div>$ npm run dev</div>
-            <div>Ready in 300ms.</div>
-            <div>> Network: http://localhost:5000/</div>
-            <div>_</div>
-          </div>
-        </template>
+          <!-- Terminal Views -->
+          <template #Terminal>
+            <div>
+              <div>$ npm run dev</div>
+              <div>Ready in 300ms.</div>
+              <div>> Network: http://localhost:5000/</div>
+              <div>_</div>
+            </div>
+          </template>
 
-        <template #Output>
-          <div>
-            <div>[Log] Application mounted.</div>
-            <div>[Info] Dock layout initialized.</div>
-          </div>
-        </template>
+          <template #Output>
+            <div>
+              <div>[Log] Application mounted.</div>
+              <div>[Info] Dock layout initialized.</div>
+            </div>
+          </template>
 
-        <!-- Fallback for dynamically added tabs (editors) -->
-        <template v-for="n in 20" :key="getNewFileSlotName(n)" #[getNewFileSlotName(n)]>
-          <div>
-            <div>New Empty File {{ n }}</div>
-          </div>
-        </template>
+          <!-- Fallback for dynamically added tabs (editors) -->
+          <template v-for="n in 20" :key="getNewFileSlotName(n)" #[getNewFileSlotName(n)]>
+            <div>
+              <div>New Empty File {{ n }}</div>
+            </div>
+          </template>
 
-        <!-- Fallback for dynamically added tabs (processes) -->
-        <template v-for="n in 20" :key="getProcessSlotName(n)" #[getProcessSlotName(n)]>
-          <div>
-            <div>Process {{ n }} running...</div>
-          </div>
-        </template>
-      </DockView>
-    </q-card>
+          <!-- Fallback for dynamically added tabs (processes) -->
+          <template v-for="n in 20" :key="getProcessSlotName(n)" #[getProcessSlotName(n)]>
+            <div>
+              <div>Process {{ n }} running...</div>
+            </div>
+          </template>
+        </DockView>
+      </q-card>
+    </template>
   </q-page>
 </template>
 
@@ -104,6 +127,8 @@ import DockView from 'components/DockView.vue'
 import { matAutoAwesomeMosaic } from '@quasar/extras/material-icons'
 
 /* ---------- Initial layout ---------- */
+
+const showLeaf = ref(false)
 
 const createInitialLayout = (): DockNode => ({
   id: 'root',
