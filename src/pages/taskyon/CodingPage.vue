@@ -349,7 +349,7 @@ const documentVersions = ref<ProjectVersion[]>([])
 const currentVersionIndex = ref(0)
 const hasUnsavedChanges = ref(false)
 const showPreview = ref(false)
-const showAllFilesInPrompt = ref(false)
+const showAllFilesInPrompt = ref(true)
 
 // --- Computed ---
 
@@ -609,6 +609,8 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
       properties: {
         updates: {
           type: 'array',
+          description:
+            'An array of updates to apply. Each update specifies a file and the changes to make. You can patch and update multiple files at once',
           items: {
             type: 'object',
             properties: {
@@ -624,7 +626,11 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
                     type: { enum: ['replace', 'insert', 'delete'], type: 'string' },
                     lineStart: { type: 'number' },
                     lineEnd: { type: 'number' },
-                    text: { type: 'string' },
+                    text: {
+                      type: 'string',
+                      description:
+                        'The new text for replace/insert operations (can be multi-line). Make sure to *not* include the lines numbers here in the text...!',
+                    },
                   },
                   required: ['type', 'lineStart'],
                 },
@@ -632,7 +638,7 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
               newContent: {
                 type: 'string',
                 description:
-                  'Full new content for the file. Only do this, if realy necessary, otherwise use patches.',
+                  'Full new content for the file. Only do this, if really necessary, otherwise use patches.',
               },
             },
             required: ['filePath'],
