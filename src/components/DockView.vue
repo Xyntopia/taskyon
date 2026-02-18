@@ -363,8 +363,7 @@ const COLLAPSED_THICKNESS_PX = 32
 const isCollapsed = computed(() => {
   const n = node.value
   if (n.type !== 'leaf') return false
-  // explicit flag OR size 0 means "collapsed"
-  return !!n.collapsed || (n.size ?? 0) === 0
+  return n.collapsed === true || n.size === 0
 })
 
 const toggleCollapse = () => {

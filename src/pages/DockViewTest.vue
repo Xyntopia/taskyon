@@ -20,9 +20,17 @@
 
         <!-- Nested View -->
         <template #Nested>
-          <DockView v-model:node="nestedLayout" hide-tab-add hide-tab-close>
-            <template #nested-view>
-              <div>nested view!</div>
+          <DockView v-model:node="nestedLayout" class="fit" hide-tab-add hide-tab-close>
+            <template #nested-Explorer>
+              <q-card class="fit column">
+                <div>nested view! which expands</div>
+                <div class="col column justify-around items-center">
+                  <div v-for="i in 20" :key="i">line {{ i }}</div>
+                </div>
+              </q-card>
+            </template>
+            <template #nested-Search>
+              <div>search inside nested view!</div>
             </template>
           </DockView>
         </template>
@@ -138,7 +146,7 @@ const layout = ref<DockNode>(createInitialLayout())
 const nestedLayout = ref<DockNode>({
   id: 'nested',
   type: 'leaf',
-  views: ['Explorer', 'Search'],
+  views: ['nested-Explorer', 'nested-Search'],
   activeViewIndex: 0,
 })
 const nextId = ref(1)
