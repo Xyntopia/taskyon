@@ -1,9 +1,22 @@
 // useVariableGraph.ts
 import { computed, type Ref } from 'vue'
-import { type JSONSchema7 } from 'json-schema'
+import { type JSONSchema7, type JSONSchema7Definition } from 'json-schema'
 import type z from 'zod'
-import { getByPath } from '../../../packages/taskyon/src/utils/objHelpers'
-import type { iconMap } from 'src/modules/icons'
+
+export type iconMap = {
+  [key: string]: string | iconMap
+}
+
+type Key = string | number | symbol
+type Indexable = Record<Key, unknown>
+
+export const getByPath =
+  (path: readonly Key[]) =>
+  (obj: Indexable): unknown =>
+    path.reduce<unknown>(
+      (acc, key) => (acc != null && typeof acc === 'object' ? (acc as Indexable)[key] : undefined),
+      obj,
+    )
 
 export type VariableKind =
   | 'object'
@@ -56,6 +69,196 @@ export type UseVariableGraphOptions = {
 
 const isMissing = (value: unknown) => value === undefined || value === null
 
+type UnionResolution = {
+  schema: SchemaWithMeta
+  /**
+   * When resolving a discriminated union for an object, we generally want to *only* show keys
+   * defined by the effective schema. Otherwise stale keys from a previously selected union branch
+   * would be shown with unknown subschemas.
+   */
+  preferSchemaKeysOnly: boolean
+}
+
+const normalizeSchemaDef = (def?: JSONSchema7Definition): JSONSchema7 | undefined => {
+  if (!def) return undefined
+  if (typeof def === 'boolean') return undefined
+  return def
+}
+
+const getUnionOptions = (schema: SchemaWithMeta): JSONSchema7[] => {
+  if (!schema || typeof schema !== 'object') return []
+  const anyOf = Array.isArray((schema as JSONSchema7).anyOf)
+    ? ((schema as JSONSchema7).anyOf as JSONSchema7Definition[])
+    : []
+  const oneOf = Array.isArray((schema as JSONSchema7).oneOf)
+    ? ((schema as JSONSchema7).oneOf as JSONSchema7Definition[])
+    : []
+  const defs = [...oneOf, ...anyOf]
+  return defs.map(normalizeSchemaDef).filter((s): s is JSONSchema7 => !!s)
+}
+
+const schemaTypeMatchesValue = (schema: JSONSchema7, value: unknown): boolean => {
+  const t = schema.type
+  if (!t) return true
+  const schemaTypes = Array.isArray(t) ? t : [t]
+
+  const runtimeType = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value
+
+  const runtimeAsJsonSchemaType =
+    runtimeType === 'string' || runtimeType === 'number' || runtimeType === 'boolean'
+      ? runtimeType
+      : runtimeType === 'object'
+        ? 'object'
+        : runtimeType === 'array'
+          ? 'array'
+          : runtimeType === 'null'
+            ? 'null'
+            : undefined
+
+  if (!runtimeAsJsonSchemaType) return true
+  return schemaTypes.includes(runtimeAsJsonSchemaType as never)
+}
+
+const getConstOrSingleEnum = (schema: unknown): string | number | undefined => {
+  if (!schema || typeof schema !== 'object') return undefined
+  const s = schema as Record<string, unknown>
+
+  // JSON Schema const
+  if ('const' in s && (typeof s.const === 'string' || typeof s.const === 'number')) {
+    return s.const
+  }
+
+  // JSON Schema enum with exactly one value
+  if ('enum' in s && Array.isArray(s.enum) && s.enum.length === 1) {
+    const v = s.enum[0]
+    if (typeof v === 'string' || typeof v === 'number') return v
+  }
+
+  return undefined
+}
+
+const detectDiscriminatorKey = (
+  options: JSONSchema7[],
+): { key: string; values: Array<string | number> } | null => {
+  const objOptions = options.filter(
+    (o) => o.type === 'object' && o.properties && typeof o.properties === 'object',
+  )
+  if (objOptions.length !== options.length) return null
+
+  const propKeys = Object.keys((objOptions[0]!.properties ?? {}) as Record<string, unknown>)
+  const commonKeys = propKeys.filter((k) =>
+    objOptions.every(
+      (o) => (o.properties ?? {}) && Object.prototype.hasOwnProperty.call(o.properties!, k),
+    ),
+  )
+
+  const candidates = commonKeys
+    .map((key) => {
+      const values = objOptions.map((o) => getConstOrSingleEnum((o.properties ?? {})[key]))
+      if (values.some((v) => v === undefined)) return null
+      const vals = values as Array<string | number>
+      const unique = new Set(vals)
+      if (unique.size !== vals.length) return null
+      return { key, values: vals }
+    })
+    .filter((x): x is { key: string; values: Array<string | number> } => x !== null)
+
+  if (candidates.length === 0) return null
+
+  // Prefer conventional discriminators
+  const preferred =
+    candidates.find((c) => c.key === 'kind') ?? candidates.find((c) => c.key === 'type')
+  return preferred ?? candidates[0]!
+}
+
+const mergeObjectSchemas = (base: JSONSchema7, override: JSONSchema7): JSONSchema7 => {
+  const baseProps = (base.properties ?? {}) as Record<string, JSONSchema7Definition>
+  const overrideProps = (override.properties ?? {}) as Record<string, JSONSchema7Definition>
+
+  return {
+    ...base,
+    ...override,
+    properties: {
+      ...baseProps,
+      ...overrideProps,
+    },
+    required: Array.from(new Set([...(base.required ?? []), ...(override.required ?? [])])),
+  }
+}
+
+const resolveUnionSchemaForValue = (schema: SchemaWithMeta, value: unknown): UnionResolution => {
+  const options = getUnionOptions(schema)
+  if (!schema || options.length === 0) return { schema, preferSchemaKeysOnly: false }
+
+  // 1) Discriminated object union
+  const disc = detectDiscriminatorKey(options)
+  if (disc) {
+    const vObj =
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : null
+    const currentDiscVal = vObj ? vObj[disc.key] : undefined
+
+    const matchByDisc = (opt: JSONSchema7): boolean => {
+      const propSchema = (opt.properties ?? {})[disc.key]
+      if (!propSchema) return false
+      const c = getConstOrSingleEnum(propSchema)
+      if (c === undefined) return false
+      return c === currentDiscVal
+    }
+
+    const selected =
+      (currentDiscVal !== undefined && options.find(matchByDisc)) ||
+      // fallback: pick the first option
+      options[0]!
+
+    const discriminatorSchema: JSONSchema7 = {
+      title: disc.key,
+      // give ObjectView an enum dropdown with all variants
+      enum: disc.values,
+      default:
+        typeof currentDiscVal === 'string' || typeof currentDiscVal === 'number'
+          ? currentDiscVal
+          : disc.values[0],
+      // best-effort type
+      type: typeof disc.values[0] === 'number' ? 'number' : 'string',
+    }
+
+    const effective = mergeObjectSchemas(selected, {
+      type: 'object',
+      properties: {
+        [disc.key]: discriminatorSchema,
+      },
+      required: [disc.key],
+    })
+
+    return {
+      schema: effective,
+      preferSchemaKeysOnly: true,
+    }
+  }
+
+  // 2) Non-discriminated union: pick the first that matches value reasonably well
+  const scored = options.map((opt) => {
+    let score = 0
+
+    if (!schemaTypeMatchesValue(opt, value)) score -= 10
+    else score += 1
+
+    // enum match
+    if (Array.isArray(opt.enum) && opt.enum.some((v) => v === value)) score += 100
+
+    // const match
+    const c = (opt as unknown as { const?: unknown }).const
+    if (c !== undefined && c === value) score += 100
+
+    return { opt, score }
+  })
+
+  scored.sort((a, b) => b.score - a.score)
+  return { schema: scored[0]?.opt ?? schema, preferSchemaKeysOnly: false }
+}
+
 export const getValueByPath = (obj: unknown, path: string[]): unknown => {
   let cur = obj
   for (const segment of path) {
@@ -73,11 +276,14 @@ const hasAnyVisibleImmediateChild = (
   if (!hideMissing) {
     return Object.keys(obj).length > 0
   }
-  if (subschema && 'properties' in subschema && subschema.type === 'object') {
-    return Object.entries(subschema.properties ?? {}).some(([k]) => {
-      const v = obj[k]
-      return v !== undefined && v !== null && v !== ''
-    })
+  if (subschema && 'properties' in subschema && (subschema as JSONSchema7).type === 'object') {
+    const s = subschema as JSONSchema7
+    return Object.entries((s.properties ?? {}) as Record<string, JSONSchema7Definition>).some(
+      ([k]) => {
+        const v = obj[k]
+        return v !== undefined && v !== null && v !== ''
+      },
+    )
   }
   return Object.values(obj).some((v) => v !== undefined && v !== null && v !== '')
 }
@@ -87,12 +293,21 @@ const buildVariableNodes = (
   schema: JSONSchema7 | z.core.JSONSchema.BaseSchema | undefined,
   keyPath: string[],
   options: UseVariableGraphOptions,
+  preferSchemaKeysOnly = false,
 ): VariableNode[] => {
+  const resolvedRoot = resolveUnionSchemaForValue(schema as SchemaWithMeta, obj)
+  const effectiveSchema = resolvedRoot.schema as
+    | JSONSchema7
+    | z.core.JSONSchema.BaseSchema
+    | undefined
+  const effectivePreferSchemaKeysOnly = preferSchemaKeysOnly || resolvedRoot.preferSchemaKeysOnly
+
   const mapEntry = (
     key: string,
     value: unknown,
     subschema: SchemaWithMeta,
     path: string[],
+    preferSchemaKeysOnlyForChildren: boolean,
   ): VariableNode | null => {
     const missing = isMissing(value)
     const { descriptionsAsLabels, inputFieldBehavior, lazyRender } = options
@@ -100,14 +315,17 @@ const buildVariableNodes = (
       return null
     }
 
+    const resolved = resolveUnionSchemaForValue(subschema, value)
+    const effectiveSubschema = resolved.schema
+
     const newPath = [...path, key]
     const label =
-      (descriptionsAsLabels ? subschema?.description?.trim() : undefined) ??
-      subschema?.title ??
-      subschema?.label ??
+      (descriptionsAsLabels ? effectiveSubschema?.description?.trim() : undefined) ??
+      effectiveSubschema?.title ??
+      effectiveSubschema?.label ??
       key
 
-    const desc = subschema?.description?.trim()
+    const desc = effectiveSubschema?.description?.trim()
 
     const base: VariableNode = {
       id: newPath.join('.'),
@@ -117,37 +335,39 @@ const buildVariableNodes = (
       kind: 'unknown',
       missing,
       ...(desc ? { description: desc } : {}),
-      ...(subschema ? { schema: subschema } : {}),
+      ...(effectiveSubschema ? { schema: effectiveSubschema } : {}),
     }
 
     const icon = getByPath(newPath)(options.icons) as string | undefined
     if (icon) base.icon = icon
-    if (subschema?.icon) base.icon = subschema.icon
-    if (subschema?.offIcon) base.offIcon = subschema.offIcon
-    if (subschema?.onIcon) base.onIcon = subschema.onIcon
-    if (subschema?.default !== undefined) base.default = subschema.default
+    if (effectiveSubschema?.icon) base.icon = effectiveSubschema.icon
+    if (effectiveSubschema?.offIcon) base.offIcon = effectiveSubschema.offIcon
+    if (effectiveSubschema?.onIcon) base.onIcon = effectiveSubschema.onIcon
+    if (effectiveSubschema?.default !== undefined) base.default = effectiveSubschema.default
 
     const isUndef = value === undefined || value === null
-    const runtimeType = subschema?.enum
+    const runtimeType = effectiveSubschema?.enum
       ? 'enum'
-      : subschema?.format === 'timestamp'
+      : effectiveSubschema?.format === 'timestamp'
         ? 'timestamp'
-        : subschema?.format === 'color'
+        : effectiveSubschema?.format === 'color'
           ? 'color'
-          : (subschema?.type ?? (Array.isArray(value) ? 'array' : typeof value))
+          : (effectiveSubschema?.type ?? (Array.isArray(value) ? 'array' : typeof value))
 
     switch (runtimeType) {
       case 'enum': {
-        const actualVal = isUndef ? (subschema!.default ?? subschema!.enum![0]) : value
+        const actualVal = isUndef
+          ? (effectiveSubschema!.default ?? effectiveSubschema!.enum![0])
+          : value
         return {
           ...base,
           value: actualVal,
-          options: subschema!.enum as Array<string | number>,
+          options: effectiveSubschema!.enum as Array<string | number>,
           kind: 'enum',
         }
       }
       case 'timestamp': {
-        const ts = isUndef ? (subschema!.default ?? Date.now()) : (value as number)
+        const ts = isUndef ? (effectiveSubschema!.default ?? Date.now()) : (value as number)
         return {
           ...base,
           value: ts,
@@ -155,7 +375,7 @@ const buildVariableNodes = (
         }
       }
       case 'color': {
-        const actualVal = isUndef ? (subschema!.default ?? '#000000') : value
+        const actualVal = isUndef ? (effectiveSubschema!.default ?? '#000000') : value
         return {
           ...base,
           value: actualVal as string,
@@ -168,10 +388,13 @@ const buildVariableNodes = (
             ? (value as Record<string, unknown>)
             : {}
 
+        const childPreferSchemaKeysOnly =
+          preferSchemaKeysOnlyForChildren || resolved.preferSchemaKeysOnly
+
         if (lazyRender) {
           const hasChildren = hasAnyVisibleImmediateChild(
             childObj,
-            subschema,
+            effectiveSubschema,
             options.missingMode === 'hide',
           )
           if (options.missingMode === 'hide' && !hasChildren) return null
@@ -183,7 +406,13 @@ const buildVariableNodes = (
           }
         }
 
-        const children = buildVariableNodes(childObj, subschema, newPath, options)
+        const children = buildVariableNodes(
+          childObj,
+          effectiveSubschema,
+          newPath,
+          options,
+          childPreferSchemaKeysOnly,
+        )
         if (options.missingMode === 'hide' && children.length === 0) return null
 
         return {
@@ -235,15 +464,34 @@ const buildVariableNodes = (
     }
   }
 
-  if (schema && 'type' in schema && schema.type === 'object' && 'properties' in schema) {
-    const schemaProps = (schema.properties ?? {}) as Record<string, JSONSchema7>
+  // typed object schema handling (properties + additionalProperties)
+  if (
+    effectiveSchema &&
+    'type' in effectiveSchema &&
+    (effectiveSchema as JSONSchema7).type === 'object' &&
+    'properties' in effectiveSchema
+  ) {
+    const s = effectiveSchema as JSONSchema7
+    const schemaProps = (s.properties ?? {}) as Record<string, JSONSchema7Definition>
     const schemaKeys = Object.keys(schemaProps)
     const runtimeKeys = Object.keys(obj)
 
-    const allKeys =
-      options.missingMode === 'placeholders'
-        ? schemaKeys
-        : Array.from(new Set([...schemaKeys, ...runtimeKeys]))
+    const additionalProperties = (s.additionalProperties ?? undefined) as unknown
+    const additionalPropSchema =
+      additionalProperties && typeof additionalProperties === 'object'
+        ? (additionalProperties as JSONSchema7)
+        : undefined
+
+    const allKeys = (() => {
+      if (effectivePreferSchemaKeysOnly) return schemaKeys
+
+      if (options.missingMode === 'placeholders') {
+        // If the schema does not list explicit properties (e.g. z.record), fall back to runtime keys.
+        return schemaKeys.length > 0 ? schemaKeys : runtimeKeys
+      }
+
+      return Array.from(new Set([...schemaKeys, ...runtimeKeys]))
+    })()
 
     return allKeys
       .filter((key) => {
@@ -251,16 +499,21 @@ const buildVariableNodes = (
         const v = obj[key]
         return !isMissing(v)
       })
-      .map((key) => mapEntry(key, obj[key], schemaProps[key], keyPath))
+      .map((key) => {
+        const subschemaDef = schemaProps[key] ?? additionalPropSchema
+        const sub = normalizeSchemaDef(subschemaDef as JSONSchema7Definition) as SchemaWithMeta
+        return mapEntry(key, obj[key], sub, keyPath, effectivePreferSchemaKeysOnly)
+      })
       .filter((n): n is VariableNode => n !== null)
   }
 
+  // unknown object (no schema)
   return Object.entries(obj)
     .filter(
       ([, value]) =>
         options.missingMode !== 'hide' || (value !== undefined && value !== null && value !== ''),
     )
-    .map(([key, value]) => mapEntry(key, value, undefined, keyPath))
+    .map(([key, value]) => mapEntry(key, value, undefined, keyPath, effectivePreferSchemaKeysOnly))
     .filter((n): n is VariableNode => n !== null)
 }
 

@@ -589,6 +589,7 @@ You have access to the \`updateDocument\` tool which can:
      - Answer normally **without** calling \`updateDocument\`.
 
 Your goal is to **keep the document in sync with the user's intent**. When in doubt, prefer **actually editing the document** via \`updateDocument\` instead of just suggesting changes.
+If you do not want to make any changes to the document, don't call \`updateDocument\` at all.
 `
       return makeTaskResult([
         ...(opts.webSearch ? [createChatCompletionTask({ goal: 'WebSearch' })] : []),
@@ -634,6 +635,8 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
                   },
                   required: ['type', 'lineStart'],
                 },
+                description:
+                  'Line-based patch operations to apply to the file. Lines are 1-based indexed. Make sure to not have overlaps in the patches.',
               },
               newContent: {
                 type: 'string',
@@ -649,6 +652,29 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
       required: ['updates'],
     } as const satisfies JSONSchema7,
     function: ({ updates, description }) => {
+      // count total number of edits, because often the AI still uses this tool, but doesn't apply any
+      // edits if it simply wants to respond...
+      const totalEdits = updates.reduce((acc, update) => {
+        const patchCount = update.patches ? update.patches.length : 0
+        const hasNewContent = update.newContent !== undefined && update.newContent !== null
+        return acc + patchCount + (hasNewContent ? 1 : 0)
+      }, 0)
+      if (totalEdits === 0) {
+        Notify.create({
+          type: 'warning',
+          message: 'No edits provided in updateDocument call',
+        })
+        return makeTaskResult([
+          createChatCompletionTask({
+            prompts: [
+              "It seems you called updateDocument but did not provide any edits or new content. Please make sure to include the changes you want to apply. Or don't call it at all",
+            ],
+            goal: 'ChooseTool',
+            allowedTools: ['updateDocument'],
+          }),
+        ])
+      }
+
       if (isInVscode) {
         window.parent?.postMessage(
           {
