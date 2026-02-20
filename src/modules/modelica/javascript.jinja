@@ -450,7 +450,32 @@ function Model() {
     return { x: xNew, y: yNew, c: cNew };
   }
 
+  // --- Taskyon minimal ABI declaration (optional, but recommended) ----------
+  // The editor can validate this ABI at compile-time.
+  // A custom template can omit this entirely to opt-out.
+  const abiRequired = true;
+  const abi = { id: 'taskyon.model_runtime.residual.v1', version: 1 };
+  const description = {
+    modelName: meta.name,
+    variables: []
+      .concat(meta.parameters.map((v) => ({ name: v.name, kind: 'parameter', start: v.start })))
+      .concat(meta.constants.map((v) => ({ name: v.name, kind: 'constant', start: v.value })))
+      .concat(meta.states.map((v) => ({ name: v.name, kind: 'state', start: v.start })))
+      .concat(meta.algebraics.map((v) => ({ name: v.name, kind: 'algebraic', start: v.start })))
+      .concat(meta.inputs.map((v) => ({ name: v.name, kind: 'input' }))),
+    nx: meta.summary.nx,
+    ny: meta.summary.ny,
+    nu: meta.inputs.length,
+    // Reserved for FMI-like event indicators in the future
+    nz: 0
+  };
+  const capabilities = { events: false };
+
   return {
+    abiRequired,
+    abi,
+    description,
+    capabilities,
     name: meta.name,
     meta,
     x0,

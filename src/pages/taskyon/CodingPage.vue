@@ -295,7 +295,6 @@ import {
   createChatCompletionTask,
   createTool,
   makeTaskResult,
-  removeKeys,
   toolCall,
 } from '@taskyon/taskyon'
 import { watchThrottled } from '@vueuse/core'
@@ -482,7 +481,7 @@ const tools = [
       // 1. Context Assembly
       const fileNames = Object.keys(files.value)
       const currentFile = activeFileName.value
-      const maxLinesPerFile = 1500
+      const maxLinesPerFile = 3000
 
       const currentFileContent = files.value[currentFile] || ''
 
@@ -533,12 +532,6 @@ You are the Taskyon Coding Assistant managing a multi-file project.
 **Files in Project:**
 ${filesPreview}
 
-## Project State
-**Total Files:** ${fileNames.length}
-**Current Active File:** ${currentFile}
-**Files in Project:**
-${filesPreview}
-
 ${filesContentsSection}
 
 ## Capabilities
@@ -558,7 +551,7 @@ You have access to the \`updateDocument\` tool which can:
 ## Line-Based Editing
 - Lines are numbered starting from 1
 - \`lineStart\`: The line number where the operation begins (1-based)
-- \`lineEnd\`: (optional) The end line for replace/delete operations (inclusive)
+- \`lineEnd\`: (optional) The end line for replace/delete operations (the patch will be applied including this line! That means if you want to replace line 10 only, lineStart and lineEnd should both be 10)
 - \`text\`: The new text for replace/insert operations (can be multi-line)
 
 ## CRITICAL BEHAVIOR RULES
@@ -579,11 +572,11 @@ You have access to the \`updateDocument\` tool which can:
    - You may ask 1–2 short clarification questions before calling the tool, but do not stay in Q&A mode forever when an edit is clearly requested.
 
 4. **How to respond**
-   - For edit requests:
-     - Always prefer patching instead of replacing the entire document.
-     - Make sure you don't include the line numbers!
-     - if you can edit an existing document, prefer that instead of creating a new one.
-     - Call \`updateDocument\` with appropriate \`patches\` or \`newContent\`.
+    - For edit requests:
+      - Always prefer patching instead of replacing the entire document.
+      - Do not include the "NNNN:" line number prefixes in patch \`text\`; line numbers belong only in \`lineStart\` and \`lineEnd\`.
+      - If you can edit an existing document, prefer that instead of creating a new one.
+      - Call \`updateDocument\` with appropriate \`patches\` or \`newContent\`.
      - In the tool result description, clearly explain what you changed (e.g., which lines, what behavior changed).
    - For non-edit, conceptual questions:
      - Answer normally **without** calling \`updateDocument\`.
@@ -675,73 +668,93 @@ If you do not want to make any changes to the document, don't call \`updateDocum
         ])
       }
 
-      if (isInVscode) {
-        window.parent?.postMessage(
-          {
-            source: VSCODE_MESSAGE_SOURCE,
-            type: 'vscodeApplyEdits',
-            payload: { updates, description },
-          },
-          '*',
-        )
-      }
-
-      // 1. Snapshot current state before applying changes?
-      // Actually we save a snapshot *after* the change usually, or *as* the new version.
-      // Let's take the current state, apply changes, and push a NEW version.
-
+      // We compute the updated file map first, and only commit if everything validates.
       const currentFilesSnapshot = { ...files.value } // Shallow copy of map
       const changesLog: string[] = []
 
-      // merge objects with same filepaths in order to make sure, we apply patches in the correct order
-
+      // Merge objects with same filepaths in order to make sure we apply patches in the correct order
       const mergedUpdates = updates.reduce(
         (acc, update) => {
           const existing = acc[update.filePath]
-          if (existing) {
-            // Merge logic: if newContent is provided, it overrides patches. If not, we concatenate patches.
-            const newContent = update.newContent ?? existing.newContent
-            if (newContent) existing.newContent = newContent
-            existing.patches = [...(existing.patches || []), ...(update.patches || [])]
-          } else {
-            acc[update.filePath] = { ...update }
+          if (!existing) {
+            acc[update.filePath] = { ...update, patches: [...(update.patches || [])] }
+            return acc
           }
+
+          if (update.newContent !== undefined && update.newContent !== null) {
+            existing.newContent = update.newContent
+          }
+
+          existing.patches = [...(existing.patches || []), ...(update.patches || [])]
           return acc
         },
         {} as Record<string, (typeof updates)[0]>,
       )
 
-      for (const update of Object.values(mergedUpdates)) {
-        const { filePath, newContent, patches } = update
-        const originalContent = currentFilesSnapshot[filePath]
+      try {
+        for (const update of Object.values(mergedUpdates)) {
+          const { filePath, newContent, patches } = update
+          const originalContent = currentFilesSnapshot[filePath]
+          const hasNewContent = newContent !== undefined && newContent !== null && newContent !== ''
+          const hasPatches = (patches?.length ?? 0) > 0
 
-        // Check existence.
-        // If the file does not exist yet and `newContent` is provided, we
-        // treat this as a request to create a new file.
-        // If only patches are provided for a non-existent file, we skip it
-        // because we cannot reliably apply line-based patches.
-        if (originalContent === undefined) {
-          if (newContent !== undefined && newContent !== null && newContent !== '') {
-            currentFilesSnapshot[filePath] = newContent
-            changesLog.push(`Created file ${filePath}`)
-          } else if (patches && patches.length > 0) {
-            changesLog.push(
-              `Skipped ${filePath}: File not found (cannot apply patches to non-existent file).`,
-            )
+          if (hasNewContent && hasPatches) {
+            Notify.create({
+              type: 'warning',
+              message: `updateDocument: Both newContent and patches provided for ${filePath}. Applying patches after newContent.`,
+            })
           }
-          continue
-        }
 
-        let updatedContent = originalContent
-        if (newContent !== undefined && newContent !== null && newContent !== '') {
-          updatedContent = newContent
-          changesLog.push(`Replaced content of ${filePath}`)
-        } else if (patches) {
-          updatedContent = applyLinePatches(originalContent, patches)
-          changesLog.push(`Patched ${filePath} (${patches.length} ops)`)
-        }
+          // If the file does not exist yet and `newContent` is provided, we treat this as a request to create a new file.
+          // If only patches are provided for a non-existent file, we skip it because we cannot reliably apply line-based patches.
+          if (originalContent === undefined) {
+            if (hasNewContent && newContent !== '') {
+              let createdContent = newContent
+              if (hasPatches) createdContent = applyLinePatches(createdContent, patches || [])
+              currentFilesSnapshot[filePath] = createdContent
+              changesLog.push(`Created file ${filePath}`)
+            } else if (hasNewContent && newContent === '') {
+              Notify.create({
+                type: 'warning',
+                message: `updateDocument: newContent was empty for non-existent file ${filePath}. Skipping.`,
+              })
+              changesLog.push(`Skipped ${filePath}: Empty newContent for non-existent file.`)
+            } else if (hasPatches) {
+              changesLog.push(
+                `Skipped ${filePath}: File not found (cannot apply patches to non-existent file).`,
+              )
+            }
+            continue
+          }
 
-        currentFilesSnapshot[filePath] = updatedContent
+          let updatedContent = originalContent
+          if (hasNewContent) {
+            updatedContent = newContent
+            changesLog.push(`Replaced content of ${filePath}`)
+          }
+
+          if (hasPatches) {
+            updatedContent = applyLinePatches(updatedContent, patches || [])
+            changesLog.push(`Patched ${filePath} (${patches!.length} ops)`)
+          }
+
+          currentFilesSnapshot[filePath] = updatedContent
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        Notify.create({
+          type: 'negative',
+          message: `updateDocument failed: ${msg}`,
+        })
+        return makeTaskResult([
+          createChatCompletionTask({
+            prompts: [
+              `updateDocument failed while applying patches: ${msg}\nPlease resend the updateDocument call with corrected, non-overlapping, in-range patches.`,
+            ],
+            goal: 'ChooseTool',
+            allowedTools: ['updateDocument'],
+          }),
+        ])
       }
 
       // Commit changes
@@ -776,22 +789,21 @@ If you do not want to make any changes to the document, don't call \`updateDocum
 ]
 
 const configuration = computed<partialTyConfiguration | null>(() => {
-  if (tystate.currentKeyString == null) return null
+  const taskyonKey = tystate.getTaskyonKeyString()
+  if (taskyonKey == null) return null
   return {
     llmSettings: {
-      ...removeKeys(state.llmSettings, ['entryNode']),
       enableToolChooser: true,
       entryNode: toolCall({ name: 'documentAssistant', arguments: {} }),
     },
     appConfiguration: {
-      ...removeKeys(state.appConfiguration, ['chatSuggestions']),
       guiMode: 'minChat',
       expertMode: true,
       showLogo: false,
       chatSuggestions: [],
       welcomeMsg: 'I see all your files! Select a file to view it, or ask me to edit any of them.',
     },
-    signatureOrKey: tystate.currentKeyString ?? undefined,
+    signatureOrKey: taskyonKey,
   }
 })
 
@@ -875,26 +887,68 @@ function applyLinePatches(text: string, patches: LinePatchOperation[]): string {
   // Sort patches reverse to avoid index shifts
   const sortedPatches = [...patches].sort((a, b) => b.lineStart - a.lineStart)
 
+  // Validate first so we never partially apply a patch set and then throw.
+  let firstLine = Infinity
   for (const patch of sortedPatches) {
-    const startIdx = patch.lineStart - 1
-    if (startIdx < 0) continue
+    const lineStart = patch.lineStart
+    if (!Number.isInteger(lineStart) || lineStart < 1) {
+      throw new Error(`Invalid patch lineStart: ${String(lineStart)}`)
+    }
+
+    const endLine = patch.type === 'insert' ? lineStart : (patch.lineEnd ?? lineStart)
+    if (!Number.isInteger(endLine) || endLine < lineStart) {
+      throw new Error(`Invalid patch lineEnd for range ${lineStart} to ${String(patch.lineEnd)}`)
+    }
+
+    // With patches sorted by descending lineStart, any patch whose end reaches into the
+    // previously-seen (lower) lineStart is overlapping.
+    if (endLine >= firstLine) {
+      throw new Error('Overlapping or unsorted patches detected')
+    }
 
     if (patch.type === 'insert') {
-      const newLines = (patch.text || '').split('\n')
-      lines.splice(startIdx, 0, ...newLines)
+      if (lineStart > lines.length + 1) {
+        throw new Error(`Insert lineStart out of range: ${lineStart}`)
+      }
+      if (patch.text === undefined || patch.text === null) {
+        throw new Error('Insert patch requires text')
+      }
     } else {
-      // replace or delete
-      const endLine = patch.lineEnd ?? patch.lineStart
-      const deleteCount = endLine - patch.lineStart + 1
-      if (patch.type === 'delete') {
-        lines.splice(startIdx, deleteCount)
-      } else if (patch.type === 'replace') {
-        const newLines = (patch.text || '').split('\n')
-        lines.splice(startIdx, deleteCount, ...newLines)
+      if (lineStart > lines.length || endLine > lines.length) {
+        throw new Error(
+          `Patch range out of range: ${lineStart} to ${endLine} for ${lines.length} lines`,
+        )
+      }
+      if (patch.type === 'replace' && (patch.text === undefined || patch.text === null)) {
+        throw new Error('Replace patch requires text')
       }
     }
+
+    firstLine = lineStart
   }
-  return lines.join('\n')
+
+  const nextLines = [...lines]
+  for (const patch of sortedPatches) {
+    const startIdx = patch.lineStart - 1
+
+    if (patch.type === 'insert') {
+      const newLines = (patch.text ?? '').split('\n')
+      nextLines.splice(startIdx, 0, ...newLines)
+      continue
+    }
+
+    const endLine = patch.lineEnd ?? patch.lineStart
+    const deleteCount = endLine - patch.lineStart + 1
+
+    if (patch.type === 'delete') {
+      nextLines.splice(startIdx, deleteCount)
+    } else if (patch.type === 'replace') {
+      const newLines = (patch.text ?? '').split('\n')
+      nextLines.splice(startIdx, deleteCount, ...newLines)
+    }
+  }
+
+  return nextLines.join('\n')
 }
 
 // --- Actions (UI) ---

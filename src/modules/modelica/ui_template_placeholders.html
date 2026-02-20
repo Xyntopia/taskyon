@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Taskyon Model UI</title>
+    <style>
+      :root {
+        --bg: #0b0f17;
+        --panel: #121a26;
+        --panel2: #0f1622;
+        --text: #e7eefc;
+        --muted: #9bb0d1;
+        --accent: #6aa6ff;
+        --bad: #ff6a6a;
+        --good: #7dffb2;
+        --border: #24324a;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          Arial,
+          'Noto Sans',
+          'Liberation Sans',
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      header {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(180deg, var(--panel), var(--panel2));
+      }
+      header .title {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+      }
+      header .subtitle {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+      main {
+        padding: 12px 16px;
+        display: grid;
+        grid-template-columns: 420px 1fr;
+        gap: 12px;
+      }
+      @media (max-width: 980px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      input,
+      select,
+      textarea,
+      button {
+        font: inherit;
+      }
+      input,
+      select,
+      button {
+        min-height: 36px;
+      }
+      input,
+      select,
+      textarea {
+        background: #0d1420;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        padding: 8px 10px;
+        outline: none;
+      }
+      textarea {
+        width: 100%;
+        min-height: 140px;
+        resize: vertical;
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+          monospace;
+        font-size: 12px;
+        line-height: 1.3;
+      }
+      button {
+        -webkit-appearance: none;
+        appearance: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--accent);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: #05101f;
+        border-radius: 8px;
+        padding: 8px 10px;
+        margin: 0;
+        cursor: pointer;
+        font-weight: 700;
+        line-height: 1;
+        vertical-align: middle;
+      }
+      button.secondary {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+      .status {
+        font-size: 12px;
+        white-space: pre-wrap;
+        color: var(--muted);
+      }
+      .status.good {
+        color: var(--good);
+      }
+      .status.bad {
+        color: var(--bad);
+      }
+      .mono {
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+          monospace;
+      }
+      svg {
+        width: 100%;
+        height: 420px;
+        display: block;
+        background: #0b1220;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="title">Taskyon Model UI</div>
+      <div class="subtitle mono" id="modelName">Model</div>
+    </header>
+
+    <main>
+      <section class="card">
+        <div class="row">
+          <div style="flex: 1 1 80px">
+            <label for="t0">t0</label>
+            <input id="t0" type="number" step="any" value="0" style="width: 100%" />
+          </div>
+          <div style="flex: 1 1 80px">
+            <label for="tf">tf</label>
+            <input id="tf" type="number" step="any" value="5" style="width: 100%" />
+          </div>
+          <div style="flex: 1 1 80px">
+            <label for="dt">dt</label>
+            <input id="dt" type="number" step="any" value="0.01" style="width: 100%" />
+          </div>
+        </div>
+
+        <div style="margin-top: 10px">
+          <label for="solverOpts">Solver options JSON</label>
+          <textarea id="solverOpts" spellcheck="false">{}</textarea>
+          <div class="hint">
+            Options are merged into the solver defaults. Schema is provided by
+            <span class="mono">simulateModel.optionsSchema</span> if available.
+          </div>
+        </div>
+
+        <div style="margin-top: 10px">
+          <label for="inputFn">Input function body</label>
+          <textarea id="inputFn" spellcheck="false">
+// Called as f_u(t)
+// Return an array matching the model input order
+// Example for 1 input: return [Math.sin(t)]
+
+return [];</textarea
+          >
+          <div class="hint">
+            The function is compiled as <span class="mono">new Function('t', BODY)</span>. It must
+            return an array of length <span class="mono" id="nuCount">0</span>.
+          </div>
+        </div>
+        <div class="row" style="margin-top: 10px">
+          <button id="runBtn">Run simulation</button>
+          <button id="csvBtn" class="secondary" disabled>Download CSV</button>
+        </div>
+
+        <div style="margin-top: 10px">
+          <div class="status" id="status">Ready.</div>
+        </div>
+
+        <div style="margin-top: 12px">
+          <label for="seriesSelect">Plot series</label>
+          <select id="seriesSelect" style="width: 100%"></select>
+          <div class="hint">Plots time versus selected series using a simple SVG polyline.</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <svg
+          id="plot"
+          viewBox="0 0 1000 420"
+          preserveAspectRatio="none"
+          role="img"
+          aria-label="plot"
+        >
+          <rect x="0" y="0" width="1000" height="420" fill="#0b1220"></rect>
+          <g id="grid"></g>
+          <polyline id="line" fill="none" stroke="#6aa6ff" stroke-width="2" points=""></polyline>
+          <text
+            id="plotLabel"
+            x="12"
+            y="22"
+            fill="#9bb0d1"
+            font-size="14"
+            font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace"
+          ></text>
+        </svg>
+      </section>
+    </main>
+
+    <!--
+      Placeholder slots.
+
+      The editor will assemble:
+      - Generated model JavaScript
+      - Selected solver JavaScript
+      - This UI HTML template
+
+      at run or export time.
+
+      IMPORTANT:
+      - Do not remove these placeholders.
+      - They are replaced by string substitution.
+    -->
+
+    <script>
+      /*__TASKYON_GENERATED_MODEL_JS__*/
+    </script>
+
+    <script>
+      /*__TASKYON_SOLVER_JS__*/
+    </script>
+
+    <script>
+      'use strict'
+
+      // Minimal runtime glue for the default UI.
+      // Requirements:
+      // - Generated JS defines global Model()
+      // - Solver defines global simulateModel(params, context, model)
+
+      const model = Model()
+      const nu = (model?.meta?.inputs || []).length
+      const modelName = model?.name || model?.meta?.name || model?.description?.modelName || 'Model'
+
+      document.getElementById('modelName').textContent = `Model: ${modelName}`
+      document.getElementById('nuCount').textContent = String(nu)
+
+      const elT0 = document.getElementById('t0')
+      const elTf = document.getElementById('tf')
+      const elDt = document.getElementById('dt')
+      const elSolverOpts = document.getElementById('solverOpts')
+      const elInputFn = document.getElementById('inputFn')
+      const elRun = document.getElementById('runBtn')
+      const elCsv = document.getElementById('csvBtn')
+      const elStatus = document.getElementById('status')
+      const elSeries = document.getElementById('seriesSelect')
+      const elGrid = document.getElementById('grid')
+      const elLine = document.getElementById('line')
+      const elPlotLabel = document.getElementById('plotLabel')
+
+      // Apply solver-provided default simulation parameters, if present
+      try {
+        const d = simulateModel?.simDefaults || null
+        if (d && typeof d === 'object') {
+          if (typeof d.t0 === 'number') elT0.value = String(d.t0)
+          if (typeof d.tf === 'number') elTf.value = String(d.tf)
+          if (typeof d.dt === 'number') elDt.value = String(d.dt)
+        }
+      } catch {
+        /* empty */
+      }
+
+      // Fill solver options textarea from schema defaults (if present)
+      try {
+        const schema = simulateModel?.optionsSchema || null
+        const props = schema?.properties || {}
+        const defaults = {}
+        for (const k of Object.keys(props)) {
+          if (props?.[k] && Object.prototype.hasOwnProperty.call(props[k], 'default')) {
+            defaults[k] = props[k].default
+          }
+        }
+        elSolverOpts.value = JSON.stringify(defaults, null, 2)
+      } catch {
+        elSolverOpts.value = '{}'
+      }
+
+      let lastResult = null
+
+      function setStatus(msg, kind) {
+        elStatus.textContent = msg
+        elStatus.classList.remove('good')
+        elStatus.classList.remove('bad')
+        if (kind === 'good') elStatus.classList.add('good')
+        if (kind === 'bad') elStatus.classList.add('bad')
+      }
+
+      function escapeCsv(s) {
+        const v = String(s)
+        if (v.includes(',') || v.includes('\n') || v.includes('\r') || v.includes('"')) {
+          return '"' + v.replaceAll('"', '""') + '"'
+        }
+        return v
+      }
+
+      function toWideCsv(result) {
+        const t = result?.data?.t || []
+        const x = result?.data?.x || {}
+        const y = result?.data?.y || {}
+        const u = result?.data?.u || {}
+        const c = result?.data?.c || result?.data?.z || {}
+
+        const series = []
+        const add = (prefix, obj) => {
+          for (const k of Object.keys(obj || {}).sort()) {
+            series.push({ key: prefix + k, values: obj[k] || [] })
+          }
+        }
+        add('x.', x)
+        add('y.', y)
+        add('u.', u)
+        add('c.', c)
+
+        const header = ['t'].concat(series.map((s) => s.key))
+        const lines = [header.map(escapeCsv).join(',')]
+
+        const n = t.length
+        for (let i = 0; i < n; i++) {
+          const row = [t[i]]
+          for (const s of series) row.push(s.values[i])
+          lines.push(row.map(escapeCsv).join(','))
+        }
+
+        return lines.join('\n')
+      }
+
+      function downloadText(filename, content, mime) {
+        const blob = new Blob([content], { type: mime || 'text/plain;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(url), 500)
+      }
+
+      function buildSeriesOptions(result) {
+        while (elSeries.firstChild) elSeries.removeChild(elSeries.firstChild)
+
+        const keys = []
+        const addGroup = (prefix, obj) => {
+          if (!obj) return
+          for (const k of Object.keys(obj)) keys.push(prefix + k)
+        }
+
+        addGroup('x.', result?.data?.x)
+        addGroup('y.', result?.data?.y)
+        addGroup('u.', result?.data?.u)
+        addGroup('c.', result?.data?.c)
+        addGroup('z.', result?.data?.z)
+
+        keys.sort()
+
+        for (const k of keys) {
+          const opt = document.createElement('option')
+          opt.value = k
+          opt.textContent = k
+          elSeries.appendChild(opt)
+        }
+
+        if (keys.length > 0) {
+          elSeries.value = keys[0]
+        }
+      }
+
+      function getSeries(result, key) {
+        const t = result?.data?.t || []
+        const [grp, ...rest] = String(key || '').split('.')
+        const name = rest.join('.')
+        const group = result?.data?.[grp] || null
+        const y = group?.[name] || []
+        return { t, y }
+      }
+
+      function drawGrid() {
+        while (elGrid.firstChild) elGrid.removeChild(elGrid.firstChild)
+        const w = 1000
+        const h = 420
+        const nx = 10
+        const ny = 6
+        for (let i = 1; i < nx; i++) {
+          const x = (i * w) / nx
+          const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+          ln.setAttribute('x1', String(x))
+          ln.setAttribute('x2', String(x))
+          ln.setAttribute('y1', '0')
+          ln.setAttribute('y2', String(h))
+          ln.setAttribute('stroke', '#1a263b')
+          ln.setAttribute('stroke-width', '1')
+          elGrid.appendChild(ln)
+        }
+        for (let j = 1; j < ny; j++) {
+          const y = (j * h) / ny
+          const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+          ln.setAttribute('x1', '0')
+          ln.setAttribute('x2', String(w))
+          ln.setAttribute('y1', String(y))
+          ln.setAttribute('y2', String(y))
+          ln.setAttribute('stroke', '#1a263b')
+          ln.setAttribute('stroke-width', '1')
+          elGrid.appendChild(ln)
+        }
+      }
+
+      function plotSeries(t, y, label) {
+        const w = 1000
+        const h = 420
+
+        if (!Array.isArray(t) || !Array.isArray(y) || t.length === 0 || y.length === 0) {
+          elLine.setAttribute('points', '')
+          elPlotLabel.textContent = label || ''
+          return
+        }
+
+        const n = Math.min(t.length, y.length)
+
+        let tMin = Infinity,
+          tMax = -Infinity
+        let yMin = Infinity,
+          yMax = -Infinity
+        for (let i = 0; i < n; i++) {
+          const ti = Number(t[i])
+          const yi = Number(y[i])
+          if (!Number.isFinite(ti) || !Number.isFinite(yi)) continue
+          tMin = Math.min(tMin, ti)
+          tMax = Math.max(tMax, ti)
+          yMin = Math.min(yMin, yi)
+          yMax = Math.max(yMax, yi)
+        }
+        if (
+          !Number.isFinite(tMin) ||
+          !Number.isFinite(tMax) ||
+          !Number.isFinite(yMin) ||
+          !Number.isFinite(yMax)
+        ) {
+          elLine.setAttribute('points', '')
+          elPlotLabel.textContent = label || ''
+          return
+        }
+        if (tMax === tMin) tMax = tMin + 1
+        if (yMax === yMin) yMax = yMin + 1
+
+        const pts = []
+        for (let i = 0; i < n; i++) {
+          const ti = Number(t[i])
+          const yi = Number(y[i])
+          if (!Number.isFinite(ti) || !Number.isFinite(yi)) continue
+          const xx = ((ti - tMin) / (tMax - tMin)) * w
+          const yy = h - ((yi - yMin) / (yMax - yMin)) * h
+          pts.push(xx.toFixed(2) + ',' + yy.toFixed(2))
+        }
+        elLine.setAttribute('points', pts.join(' '))
+        elPlotLabel.textContent = String(label || '')
+      }
+
+      function makeFuFromTextarea() {
+        const body = String(elInputFn.value || '')
+        // eslint-disable-next-line no-new-func
+        const fn = new Function('t', body)
+        return (t) => {
+          let out = fn(t)
+          if (out == null) {
+            if (nu === 0) return []
+            throw new Error('f_u must return an array')
+          }
+          if (!Array.isArray(out)) {
+            if (nu === 1 && typeof out === 'number' && Number.isFinite(out)) return [out]
+            throw new Error('f_u must return an array')
+          }
+          if (out.length !== nu) {
+            if (!(nu === 0 && out.length === 0)) {
+              throw new Error(`Expected ${nu} inputs but got ${out.length}`)
+            }
+          }
+          return out
+        }
+      }
+
+      function run() {
+        elRun.disabled = true
+        elCsv.disabled = true
+        setStatus('Running...', '')
+
+        try {
+          const t0 = Number(elT0.value)
+          const tf = Number(elTf.value)
+          const dt = Number(elDt.value)
+
+          if (!Number.isFinite(t0) || !Number.isFinite(tf) || !Number.isFinite(dt)) {
+            throw new Error('t0 tf dt must be finite numbers')
+          }
+          if (dt <= 0) throw new Error('dt must be > 0')
+          if (tf <= t0) throw new Error('tf must be > t0')
+
+          const f_u = makeFuFromTextarea()
+
+          let solverOptions = {}
+          try {
+            solverOptions = JSON.parse(String(elSolverOpts.value || '{}'))
+          } catch {
+            throw new Error('Solver options JSON is not valid JSON')
+          }
+
+          const params = { sim: { t0, tf, dt, f_u, solverOptions } }
+          const context = { source: 'ui_template', compiledAt: new Date().toISOString() }
+
+          const result = simulateModel(params, context, model)
+          lastResult = result
+
+          buildSeriesOptions(result)
+          const sel = elSeries.value
+          const s = getSeries(result, sel)
+          plotSeries(s.t, s.y, sel)
+
+          elCsv.disabled = false
+          setStatus('Simulation complete.', 'good')
+        } catch (e) {
+          console.error(e)
+          setStatus(String(e?.message || e), 'bad')
+        } finally {
+          elRun.disabled = false
+        }
+      }
+
+      elRun.addEventListener('click', run)
+      elSeries.addEventListener('change', () => {
+        if (!lastResult) return
+        const sel = elSeries.value
+        const s = getSeries(lastResult, sel)
+        plotSeries(s.t, s.y, sel)
+      })
+
+      elCsv.addEventListener('click', () => {
+        if (!lastResult) return
+        const csv = toWideCsv(lastResult)
+        const stamp = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-')
+        downloadText(`simulation_${stamp}.csv`, csv, 'text/csv;charset=utf-8')
+      })
+
+      drawGrid()
+      setStatus('Ready.', '')
+    </script>
+  </body>
+</html>

@@ -474,7 +474,7 @@ const configuration: partialTyConfiguration = {
     chatSuggestions: [gettingStarted],
     welcomeMsg: 'Ask taskyon for help on querying your database!',
   },
-  signatureOrKey: tystate.currentKeyString ?? undefined,
+  signatureOrKey: tystate.getTaskyonKeyString() ?? undefined,
 }
 
 // Formatted JSON result for JSON view

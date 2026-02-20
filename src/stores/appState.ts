@@ -20,8 +20,8 @@ import type { KeyString, Thunk, tyPublicKeyDraft } from '@taskyon/taskyon'
 import { deepMerge, sleep, type FunctionCall } from '@taskyon/taskyon'
 import {
   getCurrentActiveProfileName,
+  getProfileStorageKey,
   getTaskyonUiProfile,
-  initialStoredStateObj,
   setTaskyonUiProfile,
   switchCurrentActiveProfilePointer,
 } from 'src/modules/ui/initialState'
@@ -236,7 +236,16 @@ const useSessionKey = () => {
 }
 
 const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null>) => {
-  const initialStoredStateObjTyped = initialStoredStateObj as Partial<initialState> | undefined
+  const initialProfileName = pname()
+  const initialStoredStateObjTyped = getTaskyonUiProfile(initialProfileName) as
+    | Partial<initialState>
+    | undefined
+  console.log('[PERSIST] boot profile resolution', {
+    initialProfileName,
+    currentProfilePointer: getCurrentActiveProfileName(),
+    hasStoredState: !!initialStoredStateObjTyped,
+    version: initialStoredStateObjTyped?.version,
+  })
 
   let stateRefs: Reactive<initialState>
   if (
@@ -244,7 +253,7 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
     initialStoredStateObjTyped.version &&
     initialStoredStateObjTyped.version === initialState.version
   ) {
-    console.log(`load saved ui state!`)
+    console.log(`[PERSIST] load saved ui state from profile "${initialProfileName}"`)
     const storedInitialState = deepMerge(initialState, initialStoredStateObjTyped, 'overwrite')
     stateRefs = reactive(storedInitialState)
   } else {
@@ -256,7 +265,7 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
       }) is not compatible with current version (${initialState.version}). Using default settings.`,
     )
     const pn = pname()
-    if (pn) clearBrowserStorage([pn])
+    if (pn) clearBrowserStorage([getProfileStorageKey(pn)])
     stateRefs = reactive(initialState)
   }
 
@@ -265,10 +274,24 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
 
   // store the state on every change!! :)
   watch(stateRefs, (newState) => {
-    //console.log('saved store!!');
     const pn = pname()
     if (saveToLocalStorage && pn) {
       setTaskyonUiProfile(pn, newState)
+      console.log('[PERSIST] saved ui profile', {
+        profile: pn,
+        selectedApi: newState.llmSettings.selectedApi,
+        selectedTaskId: newState.llmSettings.selectedTaskId,
+        selectedModel:
+          newState.llmSettings.selectedApi &&
+          newState.llmSettings.llmApis[newState.llmSettings.selectedApi]?.selectedModel,
+        chatHistoryLen: newState.chatHistory.length,
+        modelHistoryLen: newState.modelHistory.length,
+      })
+    } else {
+      console.log('[PERSIST] skipped ui profile save', {
+        profile: pn,
+        saveToLocalStorage,
+      })
     }
   })
 
@@ -277,6 +300,14 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
   }
 
   function overRideSettings(newConfig: PartialDeep<TyProfile>, persist: boolean = false) {
+    // For non-persistent config overrides (common for embedded clients),
+    // skip only the immediate merge write, then resume normal persistence.
+    console.log('[PERSIST] overRideSettings', {
+      persist,
+      hasLlmSettings: !!newConfig.llmSettings,
+      hasAppConfiguration: !!newConfig.appConfiguration,
+      hasToolchainConfig: !!newConfig.toolchainConfig,
+    })
     saveToLocalStorage = persist
     if (newConfig.llmSettings) {
       // TODO: make sure, this function is only temporary and doesn't overwrite our actual llmSettings...
@@ -287,6 +318,12 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
     }
     if (newConfig.toolchainConfig) {
       deepMergeReactive(stateRefs.toolchainConfig, newConfig.toolchainConfig)
+    }
+    if (!persist) {
+      queueMicrotask(() => {
+        saveToLocalStorage = true
+        console.log('[PERSIST] re-enabled local persistence after transient override')
+      })
     }
   }
 
@@ -363,8 +400,15 @@ export const useAppStateStore = defineStore('ui-state', () => {
       // we don't need to save our old state, as it should have been persisted automatically
       switchCurrentActiveProfilePointer(newId)
     }
+    const profileToLoad = getCurrentActiveProfileNameOrUrlProfile()
+    console.log('[PERSIST] setSessionId reloading profile', {
+      sessionId: newId,
+      profileToLoad,
+      currentProfilePointer: getCurrentActiveProfileName(),
+      urlProfile: urlConfig.profile,
+    })
     // re-load state with new profile!
-    Object.assign(stateRefs, getTaskyonUiProfile(getCurrentActiveProfileNameOrUrlProfile()))
+    Object.assign(stateRefs, getTaskyonUiProfile(profileToLoad))
   }
 
   // we do this funny next line, because our store is currently "reactive" which means

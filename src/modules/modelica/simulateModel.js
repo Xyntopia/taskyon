@@ -1,5 +1,24 @@
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const simulateModel = (params, context, model) => {
+  // -----------------------------------------------------------------------------------------------
+  // Logging
+  //
+  // Functional style: the solver does not own global logging state.
+  // If you want logs, provide `context.log(msg, ...details)`.
+  // The sandbox wrapper can implement context.log by forwarding to postMessage.
+  // -----------------------------------------------------------------------------------------------
+  const log = (...args) => {
+    try {
+      if (context && typeof context.log === 'function') {
+        context.log(...args)
+      }
+    } catch {
+      /* empty */
+    }
+  }
+
+  // -----------------------------------------------------------------------------------------------
+  // Existing solver implementation
+  // -----------------------------------------------------------------------------------------------
   const meta = model.meta || {}
 
   const stateNames = (meta.states || []).map((s) => s.name)
@@ -70,9 +89,11 @@ const simulateModel = (params, context, model) => {
   }
 
   // ---------- Newton solver ----------
-  function newtonSolve(residualFn, z0) {
-    const maxIter = 12
-    const tol = 1e-8
+  function newtonSolve(residualFn, z0, newtonOpts) {
+    const maxIter = Number.isFinite(newtonOpts?.maxIter) ? newtonOpts.maxIter : 12
+    const tol = Number.isFinite(newtonOpts?.tol) ? newtonOpts.tol : 1e-8
+    const epsBase = Number.isFinite(newtonOpts?.epsBase) ? newtonOpts.epsBase : 1e-6
+
     const n = z0.length
     let z = z0.slice()
 
@@ -84,7 +105,6 @@ const simulateModel = (params, context, model) => {
       if (maxAbs < tol) return z
 
       const J = Array.from({ length: n }, () => new Array(n).fill(0))
-      const epsBase = 1e-6
 
       for (let j = 0; j < n; j++) {
         const zj = z[j]
@@ -108,7 +128,7 @@ const simulateModel = (params, context, model) => {
   }
 
   // ---------- Backward-Euler-like stage ----------
-  function implicitStage(tStage, xBase, yGuess, u, dtStage, pOverride) {
+  function implicitStage(tStage, xBase, yGuess, u, dtStage, pOverride, newtonOpts) {
     const z0 = xBase.concat(yGuess)
 
     function residual(z) {
@@ -123,7 +143,7 @@ const simulateModel = (params, context, model) => {
       return model.residual(tStage, xS, xDot, yS, u, pOverride)
     }
 
-    const sol = newtonSolve(residual, z0)
+    const sol = newtonSolve(residual, z0, newtonOpts)
     return {
       x: sol.slice(0, nx),
       y: sol.slice(nx),
@@ -131,11 +151,11 @@ const simulateModel = (params, context, model) => {
   }
 
   // ---------- SDIRK-2 (Alexander) ----------
-  function sdirk2Step(t, x, y, u, dt, pOverride) {
+  function sdirk2Step(t, x, y, u, dt, pOverride, newtonOpts) {
     const gamma = 1 - 1 / Math.sqrt(2)
 
     // ---- Stage 1 ----
-    const stage1 = implicitStage(t + gamma * dt, x, y, u, gamma * dt, pOverride)
+    const stage1 = implicitStage(t + gamma * dt, x, y, u, gamma * dt, pOverride, newtonOpts)
 
     // ---- Stage 2 ----
     const z0 = stage1.x.concat(stage1.y)
@@ -153,18 +173,34 @@ const simulateModel = (params, context, model) => {
       return model.residual(t + dt, x2, xDot, y2, u, pOverride)
     }
 
-    const sol2 = newtonSolve(residualStage2, z0)
+    const sol2 = newtonSolve(residualStage2, z0, newtonOpts)
 
     return {
       x: sol2.slice(0, nx),
       y: sol2.slice(nx),
     }
   }
-
   // ---------- Simulation ----------
   function simulate(t0, tf, dt, opts) {
     opts = opts || {}
     const pOverride = opts.pOverride || null
+
+    // solver options (merged with schema defaults)
+    const solverOptions = Object.assign(
+      {
+        newtonTol: 1e-8,
+        newtonMaxIter: 12,
+        jacEpsBase: 1e-6,
+      },
+      opts.solverOptions || {},
+    )
+
+    const newtonOpts = {
+      tol: solverOptions.newtonTol,
+      maxIter: solverOptions.newtonMaxIter,
+      epsBase: solverOptions.jacEpsBase,
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const f_u = typeof opts.f_u === 'function' ? opts.f_u : (_t) => new Array(nu).fill(0)
 
@@ -180,6 +216,8 @@ const simulateModel = (params, context, model) => {
     let y = y0_model.slice()
     let c = c0.slice()
 
+    log('Simulation started', { t0, tf, dt, nx, ny, nu, haveEvents })
+
     for (let k = 0; k <= nSteps; k++) {
       const u = f_u(t) || new Array(nu).fill(0)
 
@@ -193,9 +231,17 @@ const simulateModel = (params, context, model) => {
 
       let step
       try {
-        step = sdirk2Step(t, x, y, u, dt, pOverride)
+        step = sdirk2Step(t, x, y, u, dt, pOverride, newtonOpts)
       } catch (e) {
-        console.warn('SDIRK step failed at t =', t, e)
+        log(`SDIRK step failed at t=${t}`, {
+          error: (e && e.message) || String(e),
+          stack: e && e.stack,
+        })
+        break
+      }
+
+      if (!step || !step.x || !step.y) {
+        log(`SDIRK step returned invalid data at t=${t}`, { step })
         break
       }
 
@@ -205,22 +251,33 @@ const simulateModel = (params, context, model) => {
 
       if (haveEvents) {
         const uNext = f_u(t + dt) || new Array(nu).fill(0)
-        let cPrev = c.slice()
+        const cPrev = c.slice()
         let cCurr = cPrev.slice()
+
         try {
           const ce = model.evalConditions(t + dt, xNext, yNext, uNext, pOverride)
           if (Array.isArray(ce)) cCurr = ce.slice()
-        } catch {
-          /* empty */
+        } catch (e) {
+          log(`evalConditions threw at t=${t + dt}`, {
+            error: (e && e.message) || String(e),
+            stack: e && e.stack,
+          })
         }
 
-        const applied = model.applyResets
-          ? model.applyResets(t + dt, xNext, yNext, uNext, pOverride, cPrev, cCurr)
-          : null
+        try {
+          const applied = model.applyResets
+            ? model.applyResets(t + dt, xNext, yNext, uNext, pOverride, cPrev, cCurr)
+            : null
 
-        if (applied?.x) xNext = applied.x.slice()
-        if (applied?.y) yNext = applied.y.slice()
-        if (applied?.c) cNext = applied.c.slice()
+          if (applied?.x) xNext = applied.x.slice()
+          if (applied?.y) yNext = applied.y.slice()
+          if (applied?.c) cNext = applied.c.slice()
+        } catch (e) {
+          log(`applyResets threw at t=${t + dt}`, {
+            error: (e && e.message) || String(e),
+            stack: e && e.stack,
+          })
+        }
       }
 
       t += dt
@@ -229,6 +286,7 @@ const simulateModel = (params, context, model) => {
       c = cNext
     }
 
+    log('Simulation finished', { nSamples: tArr.length })
     return { t: tArr, x: xArr, y: yArr, u: uArr, c: cArr }
   }
 
@@ -237,7 +295,17 @@ const simulateModel = (params, context, model) => {
   const raw = simulate(sim.t0 ?? 0, sim.tf ?? 5, sim.dt ?? 0.1, {
     x0: sim.x0,
     f_u: sim.f_u,
+    solverOptions: sim.solverOptions,
   })
+
+  // Return ONLY structured-cloneable data.
+  // Never return the full `context` object because it may contain functions
+  // (e.g. context.log), which would break postMessage structured cloning.
+  const contextInfo = {
+    source: context?.source,
+    compiledAt: context?.compiledAt,
+    runId: context?.__taskyonRunId ?? context?.runId,
+  }
 
   return {
     meta: {
@@ -252,7 +320,7 @@ const simulateModel = (params, context, model) => {
         algebraicNames,
         conditionNames,
       },
-      context: context || null,
+      context: contextInfo,
     },
     data: {
       t: raw.t,
@@ -262,4 +330,34 @@ const simulateModel = (params, context, model) => {
       c: Object.fromEntries(conditionNames.map((n, i) => [n, raw.c.map((r) => r[i])])),
     },
   }
+}
+
+// -------------------------------------------------------------------------------------------------
+// Solver self-description (minimal FMI-like)
+// -------------------------------------------------------------------------------------------------
+// Default simulation parameter values (used by generic UI)
+simulateModel.simDefaults = {
+  t0: 0,
+  tf: 5,
+  dt: 0.01,
+}
+
+// JSON schema describing solver options (beyond t0/tf/dt)
+simulateModel.optionsSchema = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    newtonTol: { type: 'number', default: 1e-8, description: 'Newton solver tolerance' },
+    newtonMaxIter: {
+      type: 'integer',
+      default: 12,
+      description: 'Maximum Newton iterations per stage',
+    },
+    jacEpsBase: {
+      type: 'number',
+      default: 1e-6,
+      description: 'Finite difference epsilon base used for numerical Jacobian',
+    },
+  },
 }

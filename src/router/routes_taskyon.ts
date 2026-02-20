@@ -199,7 +199,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
   },
   {
     path: '/modelica',
-    component: () => import('pages/taskyon/ModelicaEditPage.vue'),
+    component: () => import('src/modules/modelica/ModelicaEditPage.vue'),
     meta: {
       title: 'Taskyon Modelica Editor',
       description: 'Edit and run modelica code together with AI',

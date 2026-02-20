@@ -242,7 +242,7 @@
 
               <div>
                 <template v-if="isNumericArray(node.value) && chartEnabled">
-                  <ListChart :value="node.value as unknown[]" />
+                  <ListChart :value="node.value as unknown[]" :title="node.label" />
                 </template>
 
                 <template v-else-if="!isLarge(node.value) || fullViewEnabled">

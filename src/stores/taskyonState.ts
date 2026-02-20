@@ -1029,7 +1029,18 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       {
         configurationMessage: async (msg) => {
           const newConfig = msg.conf
-          console.log('setting our configuration')
+          const llmCfg = newConfig.llmSettings as Partial<TyProfile['llmSettings']> | undefined
+          console.log('[IFRAME CONFIG] setting configuration', {
+            persist: !!msg.persist,
+            peerId: msg.peerId,
+            origin: msg.origin,
+            hasLlmSettings: !!newConfig.llmSettings,
+            hasAppConfiguration: !!newConfig.appConfiguration,
+            hasToolchainConfig: !!newConfig.toolchainConfig,
+            hasSignatureOrKey: !!newConfig.signatureOrKey,
+            selectedTaskId: llmCfg?.selectedTaskId,
+            selectedApi: llmCfg?.selectedApi,
+          })
           stateRefs.overRideSettings(newConfig, !!msg.persist)
           // let taskyon do more configurations
 
