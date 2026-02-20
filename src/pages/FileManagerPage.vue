@@ -6,7 +6,7 @@
     <q-card>
       <q-card-section>
         <div class="text-h6">
-          Taskyon File Browser
+          Joulios File Browser
           <InfoDialog
             info-text="This browser shows all files that taskyon saved in its [OPFS](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system) file system and can interact with!"
           />
@@ -50,13 +50,13 @@
                 @click.stop="copyPath(node)"
               />
               <q-btn
-                v-if="node.kind === 'file'"
+                v-if="node.kind === 'file' || node.kind === 'directory'"
                 dense
                 flat
                 round
                 color="negative"
                 :icon="matDelete"
-                @click.stop="deleteFile(node)"
+                @click.stop="deleteEntry(node)"
               />
             </div>
           </template>
@@ -72,7 +72,6 @@ import { mdiFile } from '@quasar/extras/mdi-v6'
 import type { QTreeNode } from 'quasar'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import InfoDialog from 'src/components/InfoDialog.vue'
-import { copyToClipboard } from 'src/modules/utils'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -176,19 +175,22 @@ interface TreeNode extends QTreeNode {
 async function dirHandleToNodes(dir: DirHandle, parentPath = ''): Promise<TreeNode[]> {
   console.log('[dirHandleToNodes] Reading directory', dir)
   const out: TreeNode[] = []
+
   for await (const [name, handle] of dir.entries()) {
     console.log('  ├─ found', name, 'kind=', handle.kind)
     const fullPath = parentPath ? `${parentPath}/${name}` : name
+
     if (handle.kind === 'file') {
-      const file = await handle.getFile()
+      const fileHandle = handle as FileSystemFileHandle
+      const file = await fileHandle.getFile()
       out.push({
-        id: fullPath, // use path as stable id
+        id: fullPath,
         label: `${name} · ${formatSize(file.size)}`,
         icon: mdiFile,
         kind: 'file',
         size: file.size,
         handle,
-        path: fullPath, // <── keep for copy
+        path: fullPath,
       })
     } else {
       out.push({
@@ -202,6 +204,7 @@ async function dirHandleToNodes(dir: DirHandle, parentPath = ''): Promise<TreeNo
       })
     }
   }
+
   const sorted = out.sort((a, b) =>
     a.kind === b.kind
       ? (a.label ?? '').localeCompare(b.label ?? '')
@@ -209,6 +212,7 @@ async function dirHandleToNodes(dir: DirHandle, parentPath = ''): Promise<TreeNo
         ? -1
         : 1,
   )
+
   console.log('[dirHandleToNodes] → returning', sorted.length, 'nodes')
   return sorted
 }
@@ -217,9 +221,8 @@ async function dirHandleToNodes(dir: DirHandle, parentPath = ''): Promise<TreeNo
 
 async function buildRoot() {
   console.log('[buildRoot] Fetching OPFS root')
-  const root: DirHandle = await navigator.storage.getDirectory()
+  const root = (await navigator.storage.getDirectory()) as DirHandle
   treeData.value = await dirHandleToNodes(root, '')
-  /* Force refresh in case Quasar cached the array reference */
   await nextTick()
   console.log('[buildRoot] Root built; nodes =', treeData.value.length)
 }
@@ -271,45 +274,60 @@ async function downloadFile(node: TreeNode) {
 }
 
 async function copyPath(node: TreeNode) {
-  const ok = await copyToClipboard(node.path)
-  if (ok) {
+  try {
+    await navigator.clipboard.writeText(node.path)
     console.log('[copyPath] copied', node.path)
-  } else {
-    console.error('[copyPath] failed')
+  } catch (err) {
+    console.error('[copyPath] failed:', err)
   }
 }
 
-async function deleteFile(node: TreeNode) {
+async function deleteEntry(node: TreeNode) {
+  const confirmed = window.confirm(
+    node.kind === 'directory'
+      ? `Delete directory "${node.path}" and ALL its contents?`
+      : `Delete file "${node.path}"?`,
+  )
+  if (!confirmed) return
+
   try {
-    // derive parent path
     const segments = node.path.split('/')
-    const fileName = segments.pop()
+    const name = segments.pop()
     const parentPath = segments.join('/')
 
-    let parent: DirHandle = await navigator.storage.getDirectory()
+    let parent: FileSystemDirectoryHandle = await navigator.storage.getDirectory()
     if (parentPath) {
-      const parts = parentPath.split('/')
-      for (const p of parts) {
-        parent = (await parent.getDirectoryHandle(p)) as DirHandle
+      for (const p of parentPath.split('/')) {
+        parent = await parent.getDirectoryHandle(p)
       }
     }
 
-    if (fileName) {
-      await parent.removeEntry(fileName)
-      console.log('[deleteFile] removed', node.path)
+    if (!name) return
+
+    await parent.removeEntry(name, {
+      recursive: node.kind === 'directory',
+    })
+
+    // 🔪 surgically remove from UI tree
+    removeNodeById(treeData.value, node.id)
+
+    // clean expansion state
+    expandedNodeIds.value = expandedNodeIds.value.filter((id) => !id.startsWith(node.id))
+
+    if (selectedNodeId.value === node.id) {
+      selectedNodeId.value = null
     }
 
-    // rebuild root so UI updates
-    await buildRoot()
+    console.log('[deleteEntry] removed', node.path)
   } catch (err) {
-    console.error('[deleteFile] failed:', err)
+    console.error('[deleteEntry] failed:', err)
   }
 }
 
 /* ---------- uploads ---------- */
 
 async function addFiles(files: File[]) {
-  const root: DirHandle = await navigator.storage.getDirectory()
+  const root: FileSystemDirectoryHandle = await navigator.storage.getDirectory()
   console.log('[addFiles] Adding', files.length, 'file(s) to root')
   for (const f of files) {
     const h = await root.getFileHandle(f.name, { create: true })
@@ -320,7 +338,21 @@ async function addFiles(files: File[]) {
   await buildRoot()
 }
 
-/* ---------- bootstrap ---------- */
+function removeNodeById(nodes: TreeNode[], id: string): boolean {
+  const idx = nodes.findIndex((n) => n.id === id)
+  if (idx !== -1) {
+    nodes.splice(idx, 1)
+    return true
+  }
+
+  for (const n of nodes) {
+    if (n.children && removeNodeById(n.children as TreeNode[], id)) {
+      return true
+    }
+  }
+
+  return false
+}
 </script>
 
 <style scoped>

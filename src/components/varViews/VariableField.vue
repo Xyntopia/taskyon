@@ -259,7 +259,7 @@
 
                 <template v-else>
                   <div
-                    class="q-pa-xs bg-grey-2 rounded-borders text-code text-caption"
+                    class="q-pa-xs text-code text-caption"
                     style="
                       white-space: pre-wrap;
                       word-break: break-all;

@@ -20,6 +20,7 @@
           label="Bar"
           @click="chartType = 'bar'"
         />
+        <q-btn dense flat icon="fullscreen" size="sm" @click="toggleFullscreen" />
       </template>
 
       <template v-else-if="is2D">
@@ -32,7 +33,14 @@
     </div>
 
     <!-- Chart DOM -->
-    <div ref="chartEl" style="width: 100%; min-height: 220px; max-height: 320px"></div>
+    <div
+      ref="chartEl"
+      :style="{
+        width: '100%',
+        minHeight: isFullscreen ? '90vh' : '220px',
+        maxHeight: isFullscreen ? '90vh' : '320px',
+      }"
+    />
   </div>
 </template>
 
@@ -40,7 +48,12 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import * as echarts from 'echarts/core'
 import { LineChart, BarChart, HeatmapChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent, VisualMapComponent } from 'echarts/components'
+import {
+  GridComponent,
+  TooltipComponent,
+  VisualMapComponent,
+  DataZoomComponent,
+} from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 
 echarts.use([
@@ -51,11 +64,23 @@ echarts.use([
   TooltipComponent,
   VisualMapComponent,
   CanvasRenderer,
+  DataZoomComponent,
 ])
 
+const axisLabel = (a?: { label?: string; unit?: string }) =>
+  a?.unit ? `${a.label ?? ''} [${a.unit}]` : a?.label
+
 const props = defineProps<{
-  // number[] or number[][]
   value: unknown
+  title?: string
+  xAxis?: {
+    label?: string
+    unit?: string
+  }
+  yAxis?: {
+    label?: string
+    unit?: string
+  }
 }>()
 
 const chartEl = ref<HTMLDivElement | null>(null)
@@ -119,15 +144,24 @@ const buildOption = (): echarts.EChartsCoreOption => {
     return {
       tooltip: { position: 'top' },
       grid: { height: '75%', top: '10%' },
+      title: props.title ? { text: props.title, left: 'center' } : undefined,
+
       xAxis: {
         type: 'category',
         data: Array.from({ length: colCount }, (_, i) => String(i)),
+        name: axisLabel(props.xAxis),
+        nameLocation: 'middle',
+        nameGap: 30,
         splitArea: { show: false },
       },
+
       yAxis: {
         type: 'category',
         data: Array.from({ length: rowCount }, (_, i) => String(i)),
         splitArea: { show: false },
+        name: axisLabel(props.yAxis),
+        nameLocation: 'middle',
+        nameGap: 40,
       },
       visualMap: {
         min: data.length ? Math.min(...data.map((d) => d[2] ?? 0)) : 0,
@@ -137,6 +171,20 @@ const buildOption = (): echarts.EChartsCoreOption => {
         left: 'center',
         bottom: 10,
       },
+      dataZoom: [
+        {
+          type: 'inside',
+          xAxisIndex: 0,
+          filterMode: 'weakFilter',
+          throttle: 50,
+        },
+        {
+          type: 'slider',
+          xAxisIndex: 0,
+          height: 18,
+          bottom: 5,
+        },
+      ],
       series: [
         {
           type: 'heatmap',
@@ -159,19 +207,54 @@ const buildOption = (): echarts.EChartsCoreOption => {
 
     return {
       tooltip: { trigger: 'axis' },
-      grid: { left: 40, right: 10, top: 20, bottom: 30 },
+      grid: {
+        left: 40,
+        right: 10,
+        top: 20,
+        bottom: 70,
+      },
+      title: props.title ? { text: props.title, left: 'center' } : undefined,
       xAxis: {
         type: 'category',
-        data: x.map((i) => String(i)),
+        data: x.map(String),
+        name: axisLabel(props.xAxis),
+        nameLocation: 'middle',
+        nameGap: 30,
       },
+
       yAxis: {
         type: 'value',
         scale: true,
+        name: axisLabel(props.yAxis),
+        nameLocation: 'middle',
+        nameGap: 40,
       },
+      dataZoom: [
+        {
+          type: 'inside',
+          xAxisIndex: 0,
+          filterMode: 'weakFilter',
+          throttle: 50,
+        },
+        {
+          type: 'slider',
+          xAxisIndex: 0,
+          height: 32,
+          bottom: 20,
+          //handleSize: 12,
+          //handleIcon: 'path://M512 128v768M256 128v768M768 128v768',
+          //borderColor: '#999',
+          //fillerColor: 'rgba(33,150,243,0.25)',
+          //backgroundColor: 'rgba(0,0,0,0.05)',
+        },
+      ],
       series: {
         type: chartType.value,
         data,
         smooth: chartType.value === 'line',
+        sampling: chartType.value === 'line' ? 'lttp' : undefined,
+        large: data.length > 200,
+        largeThreshold: 200,
       },
     }
   }
@@ -225,4 +308,21 @@ onBeforeUnmount(() => {
     chart = null
   }
 })
+
+const isFullscreen = ref(false)
+
+const toggleFullscreen = async () => {
+  if (!chartEl.value) return
+
+  if (!document.fullscreenElement) {
+    await chartEl.value.requestFullscreen()
+    isFullscreen.value = true
+  } else {
+    await document.exitFullscreen()
+    isFullscreen.value = false
+  }
+
+  // ECharts MUST be resized after fullscreen change
+  setTimeout(() => chart?.resize(), 0)
+}
 </script>

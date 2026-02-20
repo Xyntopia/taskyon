@@ -11,7 +11,6 @@
 </template>
 
 <script setup lang="ts">
-import { fetchMarkdown } from '@taskyon/taskyon'
 import TyMarkdown from 'components/tyMarkdown.vue'
 import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 import { onMounted, ref, watch } from 'vue'
@@ -25,6 +24,20 @@ const props = defineProps<{
 }>()
 
 const markdownContent = ref('')
+
+const fetchMarkdown = async (folder: string, filePath: string) => {
+  const fileURL = folder ? `/${folder}/${filePath}` : `/${filePath}`
+  const response = await fetch(fileURL)
+
+  // Check if the response is not OK or if the content type is HTML (indicating 404 page)
+  const contentType = response.headers.get('Content-Type') || ''
+  if (!response.ok || contentType.includes('text/html')) {
+    throw new Error(`Failed to load markdown file: ${fileURL}`)
+  }
+
+  const text = await response.text()
+  return text
+}
 
 const loadMarkdown = async () => {
   const folder = props.folder

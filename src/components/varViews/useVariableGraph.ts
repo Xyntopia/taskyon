@@ -326,9 +326,8 @@ const buildVariableNodes = (
       key
 
     const desc = effectiveSubschema?.description?.trim()
-
     const base: VariableNode = {
-      id: newPath.join('.'),
+      id: '/' + newPath.map((s) => encodeURIComponent(String(s))).join('/'),
       key,
       path: newPath,
       label,

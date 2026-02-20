@@ -1,8 +1,9 @@
 <!-- ObjectView.vue -->
 <template>
   <div v-if="modelValue">
-    <div v-if="enableExpertMode" class="row">
+    <div v-if="showHeaderRow" class="row items-center">
       <SearchInput
+        v-if="enableExpertMode"
         :search-string="searchText"
         class="col fit"
         outlined
@@ -12,17 +13,39 @@
         color="secondary"
         @search="(q, k) => (searchText = q)"
       />
+
       <q-btn
+        v-if="copyObjectBtn"
         class="col-auto"
         flat
         stretch
-        :icon="viewMode === 'tree' ? matList : mdiFileTree"
-        @click="() => (viewMode = viewMode === 'tree' ? 'flat' : 'tree')"
+        icon="content_copy"
+        @click="copyWholeObject"
       >
-        <q-tooltip>Toggle View Mode (hierarchical/flat list)</q-tooltip>
+        <q-tooltip>Copy entire object as JSON</q-tooltip>
       </q-btn>
-      <q-select v-model="missingMode" :options="['all', 'hide', 'placeholders']" dense outlined />
+
+      <q-btn
+        v-if="enableExpertMode"
+        class="col-auto"
+        flat
+        stretch
+        :label="viewMode.toUpperCase()"
+        @click="cycleViewMode"
+      >
+        <q-tooltip>tree → flat → json → yaml</q-tooltip>
+      </q-btn>
+
+      <q-select
+        v-if="showMissingModeSelect"
+        v-model="missingMode"
+        :options="['all', 'hide', 'placeholders']"
+        dense
+        outlined
+        class="col-auto"
+      />
     </div>
+
     <TreeVariablesView
       v-if="viewMode === 'tree'"
       :nodes="filteredTreeNodes"
@@ -53,7 +76,7 @@
     </TreeVariablesView>
 
     <FlatVariablesView
-      v-else
+      v-else-if="viewMode === 'flat'"
       :nodes="filteredFlatNodes"
       :read-only="readOnly"
       :separate-labels="separateLabels"
@@ -79,14 +102,24 @@
         <slot name="custom" v-bind="slotProps" />
       </template>
     </FlatVariablesView>
+
+    <q-card v-else-if="viewMode === 'json'" flat bordered>
+      <q-card-section class="q-pa-sm">
+        <pre class="raw-view">{{ jsonDump }}</pre>
+      </q-card-section>
+    </q-card>
+
+    <q-card v-else-if="viewMode === 'yaml'" flat bordered>
+      <q-card-section class="q-pa-sm">
+        <pre class="raw-view">{{ yamlDump }}</pre>
+      </q-card-section>
+    </q-card>
   </div>
 
   <div v-else>no input data!</div>
 </template>
 
 <script setup lang="ts">
-import { matList } from '@quasar/extras/material-icons'
-import { mdiFileTree } from '@quasar/extras/mdi-v6'
 import { type JSONSchema7 } from 'json-schema'
 import { copyToClipboard, countLeaves } from 'src/modules/utils'
 import { computed, ref, toRef } from 'vue'
@@ -102,12 +135,13 @@ import {
   useVariableGraph,
 } from './useVariableGraph'
 import type { CustomRenderer } from './VariableField.vue'
+import { safeYamlDump } from 'src/modules/yamlUtils'
 
 export type iconMap = {
   [key: string]: string | iconMap
 }
 
-const viewMode = defineModel<'tree' | 'flat'>('viewMode', {
+const viewMode = defineModel<'tree' | 'flat' | 'json' | 'yaml'>('viewMode', {
   default: 'tree',
 })
 
@@ -130,6 +164,9 @@ const {
   search = undefined,
   renderers = [],
   enableExpertMode = false,
+  showMissingModeSelect = false,
+  copyObjectBtn = false,
+  copyObjectWarnLeavesLimit = 5000,
 } = defineProps<{
   readOnly?: boolean
   inputFieldBehavior?: 'auto' | 'textarea' | 'autogrow'
@@ -145,9 +182,35 @@ const {
   search?: string
   renderers?: CustomRenderer[]
   enableExpertMode?: boolean
+
+  /**
+   * By default, ObjectView does not show a missing-mode selector.
+   * This keeps the UI stable for normal users and avoids accidental changes.
+   */
+  showMissingModeSelect?: boolean
+
+  /**
+   * Shows a header button to copy the entire current modelValue as JSON.
+   */
+  copyObjectBtn?: boolean
+
+  /**
+   * If the object is large (approx leaf count above this), ask for confirmation before copying.
+   */
+  copyObjectWarnLeavesLimit?: number
 }>()
 
 const modelValue = defineModel<Record<string, unknown> | undefined>({ required: true })
+
+const cycleViewMode = () => {
+  const order: (typeof viewMode.value)[] = ['tree', 'flat', 'json', 'yaml']
+  const i = order.indexOf(viewMode.value)
+  viewMode.value = order[(i + 1) % order.length] ?? 'tree'
+}
+
+const jsonDump = computed(() => (modelValue.value ? JSON.stringify(modelValue.value, null, 2) : ''))
+
+const yamlDump = computed(() => (modelValue.value ? safeYamlDump(modelValue.value) : ''))
 
 const chartPaths = defineModel<string[]>('chartPaths', {
   default: () => [],
@@ -183,8 +246,23 @@ const filteredFlatNodes = computed(() =>
   searchText.value ? filterFlat(flatNodes.value, searchText.value) : flatNodes.value,
 )
 
+const showHeaderRow = computed(() => enableExpertMode || copyObjectBtn || showMissingModeSelect)
+
+const copyWholeObject = () => {
+  if (!modelValue.value) return
+
+  const leaves = countLeaves(modelValue.value)
+  if (leaves > copyObjectWarnLeavesLimit) {
+    const ok = window.confirm(
+      `This object contains approx ${leaves} items. Copying may freeze your browser. Continue?`,
+    )
+    if (!ok) return
+  }
+
+  void copyToClipboard(JSON.stringify(modelValue.value, null, 2))
+}
+
 const updateByPath = (keyPath: string[], value: unknown) => {
-  console.log('updating path', keyPath, 'to value', value)
   if (!modelValue.value) return
 
   let target: Record<string, unknown> = modelValue.value
@@ -234,3 +312,13 @@ const toggleFullView = (id: string, value: unknown) => {
   fullViewPaths.value = [...fullViewPaths.value, id]
 }
 </script>
+
+<style lang="scss" scoped>
+.raw-view {
+  font-family: monospace;
+  font-size: 12px;
+  white-space: pre;
+  overflow: auto;
+  max-height: 70vh;
+}
+</style>

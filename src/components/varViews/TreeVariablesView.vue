@@ -108,6 +108,7 @@ const listSummary = props.listSummary ?? 10
 const chartPaths = computed(() => props.chartPaths ?? [])
 const fullViewPaths = computed(() => props.fullViewPaths ?? [])
 const renderers = props.renderers ?? []
+const showMissingIndicator = props.showMissingIndicator ?? true
 
 const toQTreeNode = (node: VariableNode): QTreeNode => ({
   key: node.id,
