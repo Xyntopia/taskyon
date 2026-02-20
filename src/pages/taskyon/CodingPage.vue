@@ -482,7 +482,7 @@ const tools = [
       // 1. Context Assembly
       const fileNames = Object.keys(files.value)
       const currentFile = activeFileName.value
-      const maxLinesPerFile = 400
+      const maxLinesPerFile = 1500
 
       const currentFileContent = files.value[currentFile] || ''
 
