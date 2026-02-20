@@ -25,72 +25,70 @@
  #   res[nx + j]   = y[j]    - g_j(t,x,u,p)
  # ------------------------------------------------------------------------- #}
 
+{%- macro render_cref(cr) -%}
+{%- for part in cr.parts -%}
+{{ part.ident.text }}{{ "." if not loop.last }}
+{%- endfor -%}
+{%- endmacro -%}
+
 {%- macro render_expr(e) -%}
-  {%- if e is string and e == "Empty" -%}
-    0
-  {%- elif "parts" in e -%}
-    {% for part in e.parts %}
-      {{ part.ident.text }}{{ "." if not loop.last }}
-    {%- endfor -%}
-  {%- elif "Terminal" in e -%}    
-    {{ e.Terminal.token.text }}
-  {%- elif "ComponentReference" in e -%}
-    {%- set cr = e.ComponentReference -%}
-    {%- for part in cr.parts -%}
-      {{ part.ident.text }}{{ "." if not loop.last }}
-    {%- endfor -%}
-  {%- elif "Unary" in e -%}
-    {%- set u = e.Unary -%}
-    {%- if "Minus" in u.op -%}
-      -({{ render_expr(u.rhs) }})
-    {%- elif "Not" in u.op -%}
-      !({{ render_expr(u.rhs) }})
-    {%- else -%}
-      (/* unsupported unary op */ {{ u.op|tojson }} {{ render_expr(u.rhs) }})
-    {%- endif -%}
-  {%- elif "Binary" in e -%}
-    {%- set b = e.Binary -%}
-    {# Comparison ops: support both short and long names #}
-    {%- set op -%}
-      {%- if "Add" in b.op -%}+{%- 
-      elif "Sub" in b.op -%}-{%- 
-      elif "Mul" in b.op -%}*{%- 
-      elif "Div" in b.op -%}/{%- 
-      elif "Pow" in b.op -%}**{%- 
-
-      elif "Le" in b.op or "LessEq" in b.op -%}<={%- 
-      elif "Lt" in b.op or "Less" in b.op -%}<{%- 
-      elif "Ge" in b.op or "GreaterEq" in b.op -%}>={%- 
-      elif "Gt" in b.op or "Greater" in b.op -%}>{%- 
-      elif "Eq" in b.op or "Equals" in b.op -%}==={%- 
-      elif "Ne" in b.op or "NotEquals" in b.op -%}!=="{%- 
-
-      elif "And" in b.op -%}&&{%- 
-      elif "Or" in b.op -%}||{%- 
-      else -%}?{%- 
-      endif -%}
-    {%- endset -%}
-    ({{ render_expr(b.lhs) }} {{ op }} {{ render_expr(b.rhs) }})
-  {%- elif "FunctionCall" in e -%}
-    {%- set f = e.FunctionCall -%}
-    {%- set name = f.comp.parts[0].ident.text -%}
-    {%- if name == "der" and f.args|length == 1 and "ComponentReference" in f.args[0] -%}
-      /* der(...) should not appear in RHS after DAE translation */
-      der_{{ render_expr(f.args[0]) }}
-    {%- elif name == "pre" and f.args|length == 1 and "ComponentReference" in f.args[0] -%}
-      {#- For now, treat pre(x) as x evaluated at pre-event state.         -#}
-      {#- This is correct inside applyResets, and OK between events.       -#}
-      {{ render_expr(f.args[0]) }}
-    {%- else -%}
-      {{ name }}(
-      {%- for a in f.args -%}
-        {{ render_expr(a) }}{{ ", " if not loop.last }}
-      {%- endfor -%}
-      )
-    {%- endif -%}
+{%- if e is string -%}
+  {%- if e == "Empty" -%}0{%- else -%}0{%- endif -%}
+{%- elif "Terminal" in e -%}
+  {{- e.Terminal.token.text -}}
+{%- elif "ComponentReference" in e -%}
+  {{- render_cref(e.ComponentReference) -}}
+{%- elif "Parenthesized" in e -%}
+  ({{ render_expr(e.Parenthesized.inner) }})
+{%- elif "Unary" in e -%}
+  {%- set u = e.Unary -%}
+  {%- if "Minus" in u.op -%}
+    -({{ render_expr(u.rhs) }})
+  {%- elif "Not" in u.op -%}
+    !({{ render_expr(u.rhs) }})
   {%- else -%}
-    (/* UNKNOWN_EXPR {{ e|tojson }} */ 0)
+    0
   {%- endif -%}
+{%- elif "Binary" in e -%}
+  {%- set b = e.Binary -%}
+  {%- set op -%}
+    {%- if "Add" in b.op -%}+{%-
+    elif "Sub" in b.op -%}-{%-
+    elif "Mul" in b.op -%}*{%-
+    elif "Div" in b.op -%}/{%-
+    elif "Pow" in b.op -%}**{%-
+
+    elif "Le" in b.op or "LessEq" in b.op -%}<={%-
+    elif "Lt" in b.op or "Less" in b.op -%}<{%-
+    elif "Ge" in b.op or "GreaterEq" in b.op -%}>={%-
+    elif "Gt" in b.op or "Greater" in b.op -%}>{%-
+    elif "Eq" in b.op or "Equals" in b.op -%}==={%-
+    elif "Ne" in b.op or "NotEquals" in b.op -%}!=={%-
+
+    elif "And" in b.op -%}&&{%-
+    elif "Or" in b.op -%}||{%-
+    else -%}+{%-
+    endif -%}
+  {%- endset -%}
+  ({{ render_expr(b.lhs) }} {{ op }} {{ render_expr(b.rhs) }})
+{%- elif "FunctionCall" in e -%}
+  {%- set f = e.FunctionCall -%}
+  {%- set fname -%}{%- for part in f.comp.parts -%}{{ part.ident.text }}{{ "." if not loop.last }}{%- endfor -%}{%- endset -%}
+
+  {%- if fname == "der" and f.args|length == 1 -%}
+    der_{{ render_expr(f.args[0]) }}
+  {%- elif fname == "pre" and f.args|length == 1 -%}
+    {{ render_expr(f.args[0]) }}
+  {%- else -%}
+    {%- set jsname = fname -%}
+    {%- if fname in ["sin","cos","tan","asin","acos","atan","atan2","sinh","cosh","tanh","exp","log","log10","sqrt","abs","floor","ceil","min","max"] -%}
+      {%- set jsname = "Math." ~ fname -%}
+    {%- endif -%}
+    {{ jsname }}({%- for a in f.args -%}{{ render_expr(a) }}{{ ", " if not loop.last }}{%- endfor -%})
+  {%- endif -%}
+{%- else -%}
+  0
+{%- endif -%}
 {%- endmacro -%}
 
 {%- macro is_derivative_eq(eq) -%}

@@ -20,7 +20,7 @@
           label="Bar"
           @click="chartType = 'bar'"
         />
-        <q-btn dense flat icon="fullscreen" size="sm" @click="toggleFullscreen" />
+        <q-btn dense flat :icon="matFullscreen" size="sm" @click="toggleFullscreen" />
       </template>
 
       <template v-else-if="is2D">
@@ -55,6 +55,7 @@ import {
   DataZoomComponent,
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
+import { matFullscreen } from '@quasar/extras/material-icons'
 
 echarts.use([
   LineChart,

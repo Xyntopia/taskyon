@@ -181,7 +181,7 @@ async function dirHandleToNodes(dir: DirHandle, parentPath = ''): Promise<TreeNo
     const fullPath = parentPath ? `${parentPath}/${name}` : name
 
     if (handle.kind === 'file') {
-      const fileHandle = handle as FileSystemFileHandle
+      const fileHandle = handle
       const file = await fileHandle.getFile()
       out.push({
         id: fullPath,

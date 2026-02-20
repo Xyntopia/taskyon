@@ -221,6 +221,7 @@ async function useTaskVectors(
     const res = await vecDb.find(taskTemplate, {
       limit: k,
       orderBy: { kind: 'dataKey', key: 'created_at' },
+      orderDir: 'desc',
     })
     return Object.values(res).map((t) => ({ taskId: t.id, distance: 0 }))
   }

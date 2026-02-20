@@ -135,7 +135,7 @@ import {
   useVariableGraph,
 } from './useVariableGraph'
 import type { CustomRenderer } from './VariableField.vue'
-import { safeYamlDump } from 'src/modules/yamlUtils'
+import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
 
 export type iconMap = {
   [key: string]: string | iconMap

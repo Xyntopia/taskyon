@@ -45,7 +45,80 @@
 
               <q-toggle v-model="verbose" dense label="Verbose logging" />
 
+              <q-separator vertical class="q-mx-sm" />
+
+              <!-- Version Info -->
+              <div style="font-size: x-small" class="text-center">
+                Ver:<br />{{ currentVersionIndex + 1 }} / {{ documentVersions.length }}
+              </div>
+
+              <!-- Version Navigation -->
+              <q-btn
+                flat
+                dense
+                round
+                :icon="matNavigateBefore"
+                title="Previous Version"
+                :disable="currentVersionIndex === 0"
+                @click="goToPreviousVersion"
+              />
+              <q-btn
+                flat
+                dense
+                round
+                :icon="matNavigateNext"
+                title="Next Version"
+                :disable="currentVersionIndex === documentVersions.length - 1"
+                @click="goToNextVersion"
+              />
+              <q-btn
+                flat
+                dense
+                round
+                :icon="mdiTextBoxPlus"
+                color="secondary"
+                title="Create New Version Snapshot"
+                @click="handleCreateNewVersionClick"
+              />
+
+              <!-- Export / Save -->
+              <q-btn-dropdown
+                dense
+                flat
+                color="secondary"
+                :icon="matSave"
+                label="Save"
+                dropdown-icon=""
+              >
+                <q-list dense style="min-width: 220px">
+                  <q-item v-close-popup clickable @click="exportFile('modelica')">
+                    <q-item-section>Export Modelica</q-item-section>
+                  </q-item>
+                  <q-item v-close-popup clickable @click="exportFile('template')">
+                    <q-item-section>Export Template</q-item-section>
+                  </q-item>
+                  <q-separator />
+                  <q-item v-close-popup clickable @click="exportFile('js')">
+                    <q-item-section>Export Generated JS</q-item-section>
+                  </q-item>
+                  <q-item v-close-popup clickable @click="exportFile('daePretty')">
+                    <q-item-section>Export Pretty DAE</q-item-section>
+                  </q-item>
+                  <q-item v-close-popup clickable @click="exportFile('daeJson')">
+                    <q-item-section>Export DAE JSON</q-item-section>
+                  </q-item>
+                </q-list>
+              </q-btn-dropdown>
+
               <q-space />
+
+              <q-toggle
+                v-model="showAllInPrompt"
+                dense
+                size="sm"
+                color="secondary"
+                label="AI sees all"
+              />
 
               <!-- Run / Stop execution -->
               <q-btn
@@ -54,10 +127,21 @@
                 color="secondary"
                 :icon="matPlayArrow"
                 label="Run in Sandbox"
-                :disable="!jsSource"
+                :disable="!jsSource || isHtmlOutput"
                 :loading="running"
                 @click="runInSandbox(jsSource)"
               />
+              <q-btn
+                v-if="isHtmlOutput"
+                dense
+                flat
+                color="secondary"
+                :icon="matOpenInNew"
+                label="Popup window"
+                :disable="!jsSource"
+                @click="openGeneratedHtmlPopup"
+              />
+
               <q-btn
                 v-if="running"
                 flat
@@ -105,14 +189,32 @@
 
           <template #template>
             <q-card flat>
-              <q-btn
-                color="grey-7"
-                flat
-                dense
-                label="Copy"
-                :disable="!templateSource"
-                @click="copyTemplateToClipboard"
-              />
+              <div class="row items-center q-gutter-xs q-pa-xs">
+                <q-select
+                  v-model="selectedTemplateKey"
+                  :options="templateOptions"
+                  dense
+                  outlined
+                  options-dense
+                  label="Template"
+                  style="min-width: 220px"
+                  :disable="templateOptions.length === 0"
+                  option-label="label"
+                  option-value="value"
+                  emit-value
+                  map-options
+                />
+                <q-space />
+                <q-btn
+                  color="grey-7"
+                  flat
+                  dense
+                  label="Copy"
+                  :disable="!templateSource"
+                  @click="copyTemplateToClipboard"
+                />
+              </div>
+
               <CodeEditor
                 v-model="templateSource"
                 placeholder="Enter your Jinja template here..."
@@ -199,7 +301,7 @@
             </q-card>
           </template>
 
-          <template #after>
+          <template #assistant>
             <TaskyonIframe
               :tools="tools"
               :configuration="configuration"
@@ -218,12 +320,18 @@ import {
   matCode,
   matDelete,
   matDescription,
+  matNavigateBefore,
+  matNavigateNext,
+  matOpenInNew,
   matPlayArrow,
   matRocketLaunch,
+  matSave,
 } from '@quasar/extras/material-icons'
-import { mdiFunctionVariant } from '@quasar/extras/mdi-v6'
+import { mdiFunctionVariant, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
+import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 import { watchDebounced } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
+import { Notify } from 'quasar'
 import CodeEditor from 'src/components/CodeEditor.vue'
 import type { DockNode } from 'src/components/DockView.vue'
 import DockView from 'src/components/DockView.vue'
@@ -232,6 +340,7 @@ import TaskyonIframe from 'src/components/TaskyonIframe.vue'
 import ObjectView from 'src/components/varViews/ObjectView.vue'
 import type { RumocaModule } from 'src/modules/modelica/modelica'
 import { buildIframeCode, loadWasm } from 'src/modules/modelica/modelica'
+import { syncStateWithOPFSFolder } from 'src/modules/saveState'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { copyToClipboard } from 'src/modules/utils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
@@ -239,12 +348,6 @@ import { computed, onMounted, ref } from 'vue'
 import { validateJavaScriptInSandbox } from '../../../packages/taskyon/src/utils/checkJsSyntax'
 import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
 import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
-import {
-  createChatCompletionTask,
-  createTool,
-  makeTaskResult,
-  toolCall,
-} from '../../../packages/tyclient/src'
 import FixedHeightPage from '../FixedHeightPage.vue'
 
 const tystate = useTaskyonStore()
@@ -283,90 +386,242 @@ function appendModelicaLog(entry: Omit<ModelicaLogEntry, 'timestamp'> & { timest
 }
 
 /**
- * Tool 1: setModelicaAndTemplate
- * --------------------------------
- * Simple mutator tool that can update Modelica and/or Jinja template source.
- * This is used both for one-off edits and inside the auto-fix loops.
+ * Tools
+ *
+ * We mirror the CodingPage approach:
+ *  - modelicaDocumentAssistant: assembles prompt context with line numbers
+ *  - updateModelicaDocument: applies line-based patches and creates version snapshots
  */
+
+type ModelicaFilePath = 'modelica' | 'template'
+
+type LinePatchOperation = {
+  type: 'replace' | 'insert' | 'delete'
+  lineStart: number
+  lineEnd?: number
+  text?: string
+}
+
 const tools = [
   createTool({
-    name: 'setModelicaAndTemplate',
+    name: 'modelicaDocumentAssistant',
     description:
-      'Replace the current Modelica source and/or Jinja template in the editors. ' +
-      'If one of the fields is omitted, it is left unchanged.',
+      'Main assistant that inspects the current Modelica and template sources and decides on edits.',
     parameters: {
       type: 'object',
       properties: {
-        modelica: {
-          type: 'string',
-          description: 'New Modelica source code to place in the editor (optional).',
-        },
-        template: {
-          type: 'string',
-          description: 'New Jinja template source to place in the editor (optional).',
+        showAll: {
+          type: 'boolean',
+          description:
+            'If true, include the full contents of both Modelica and template (with line numbers). If false, include only Modelica in full.',
         },
       },
       additionalProperties: false,
     } as const satisfies JSONSchema7,
-    function({ modelica, template }) {
-      if (!modelica && !template) {
-        const toolPrompt = `
-You are are the taskyon Modelica assistant helping users write and simulate Modelica models using
-the Rumoca compiler. You modify the state of an editor and the user you chat with will see the
-result in the UI.
+    function: (opts) => {
+      const showAll = opts.showAll ?? showAllInPrompt.value ?? true
 
-You can use the tools provided to set the modelica code.
-Always ensure that the modelica code you generate is syntactically correct and safe to run.
+      const modelicaWithLines = formatContentWithLineNumbers(modelicaSource.value)
+      const templateWithLines = formatContentWithLineNumbers(templateSource.value)
 
-Currently, the modelica editor has loaded the following source code:
+      const sourcesSection = showAll
+        ? `## Modelica Source\n\n\
+\
+\
+\`\`\`\n${modelicaWithLines}\n\`\`\`\n\n## Template Source\n\n\`\`\`\n${templateWithLines}\n\`\`\``
+        : `## Modelica Source\n\n\`\`\`\n${modelicaWithLines}\n\`\`\`\n\n## Template Source\n\nTemplate source is hidden because showAll is false.`
 
-    ${modelicaSource.value}
+      const contextPrompt = `
+You are the Taskyon Modelica assistant.
 
-Currently, the jinja template editor has loaded the following source code:
+You can edit two documents:
+- Modelica source
+- Jinja template source
 
-    ${templateSource.value}
+The UI shows the results live.
 
-Currently, the generated code from the modelica source and the jinja template editor
-looks like this:
+${sourcesSection}
 
-    ${jsSource.value}
+## Generated JavaScript
+\`\`\`\n${jsSource.value}\n\`\`\`
 
-The last logs from our compiler are these:
+## Pretty DAE
+\`\`\`\n${daePrettyOutput.value}\n\`\`\`
 
-    ${JSON.stringify(modelicaLog.value)}
+## Recent logs
+\`\`\`\n${JSON.stringify(modelicaLog.value.slice(-30), null, 2)}\n\`\`\`
 
-You are required to use the tool 'setModelicaAndTemplate' whenever you think the user
-wants to change the modelica source code or jinja template. The user is currently using that
-Interface so instead of proposing changes in the chat, just use the tool
-and add them to the editor!
+## Simulation settings
+\`\`\`\n${JSON.stringify({ t0: simT0.value, tf: simTf.value, dt: simDt.value }, null, 2)}\n\`\`\`
+
+## Available Tool: updateModelicaDocument
+- Apply line-based patches to modelica or template.
+- You can update both in a single call.
+
+## CRITICAL BEHAVIOR RULES
+1. For any edit request, you MUST call updateModelicaDocument. Prefer patches.
+2. Do not include line numbers in patch text.
+3. Do NOT set newContent to an empty string. Omit newContent unless you intend a full replacement.
+4. If uncertain, ask 1–2 clarification questions.
+5. If compilation is failing, you may attempt one follow-up edit at most, preferring Modelica changes first.
 `
 
+      return makeTaskResult([
+        createChatCompletionTask({
+          prompts: [contextPrompt],
+          goal: 'ChooseTool',
+          allowedTools: ['updateModelicaDocument'],
+        }),
+      ])
+    },
+  }),
+
+  createTool({
+    name: 'updateModelicaDocument',
+    description:
+      'Apply line-based updates to Modelica and or template and create a version snapshot.',
+    parameters: {
+      type: 'object',
+      properties: {
+        updates: {
+          type: 'array',
+          description: 'Updates to apply. You can patch both modelica and template in one call.',
+          items: {
+            type: 'object',
+            properties: {
+              filePath: {
+                type: 'string',
+                enum: ['modelica', 'template'],
+                description: 'Which document to update.',
+              },
+              patches: {
+                type: 'array',
+                description:
+                  'Line-based patch operations. Lines are 1-based indexed. Do not overlap patches.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    type: { enum: ['replace', 'insert', 'delete'], type: 'string' },
+                    lineStart: { type: 'number' },
+                    lineEnd: { type: 'number' },
+                    text: { type: 'string' },
+                  },
+                  required: ['type', 'lineStart'],
+                },
+              },
+              newContent: {
+                type: 'string',
+                description: 'Replace full content. Only do this if patching is not feasible.',
+              },
+            },
+            required: ['filePath'],
+            additionalProperties: false,
+          },
+        },
+        description: { type: 'string', description: 'Summary of changes' },
+      },
+      required: ['updates'],
+      additionalProperties: false,
+    } as const satisfies JSONSchema7,
+    function: ({ updates, description }) => {
+      const totalEdits = updates.reduce((acc, update) => {
+        const patchCount = Array.isArray(update.patches) ? update.patches.length : 0
+        const newContentStr = typeof update.newContent === 'string' ? update.newContent : ''
+        const hasMeaningfulNewContent = newContentStr.trim().length > 0
+        return acc + patchCount + (hasMeaningfulNewContent ? 1 : 0)
+      }, 0)
+
+      if (totalEdits === 0) {
+        Notify.create({
+          type: 'warning',
+          message: 'No edits provided in updateModelicaDocument call',
+        })
         return makeTaskResult([
           createChatCompletionTask({
-            prompts: [toolPrompt],
+            prompts: [
+              'You called updateModelicaDocument but did not provide any patches or newContent. Provide edits or do not call the tool.',
+            ],
             goal: 'ChooseTool',
-            allowedTools: ['setModelicaAndTemplate'],
+            allowedTools: ['updateModelicaDocument'],
           }),
         ])
       }
 
-      if (modelica) modelicaSource.value = modelica
-      if (template) templateSource.value = template
-      return makeTaskResult([
-        {
-          role: 'assistant',
-          content: {
-            type: 'message',
-            data: `The editor has been updated.`,
-          },
+      // Merge updates by filePath to enforce stable application.
+      // Safety: ignore empty-string newContent to prevent accidental wiping.
+      const mergedUpdates = updates.reduce(
+        (acc, update) => {
+          const key = update.filePath as ModelicaFilePath
+          const existing = acc[key]
+
+          const incomingNewContent =
+            typeof update.newContent === 'string' ? update.newContent : undefined
+          const hasIncomingNewContent =
+            typeof incomingNewContent === 'string' && incomingNewContent.trim().length > 0
+          const incomingPatches = Array.isArray(update.patches) ? update.patches : []
+
+          if (existing) {
+            if (hasIncomingNewContent) existing.newContent = incomingNewContent
+            existing.patches = [...(existing.patches || []), ...incomingPatches]
+          } else {
+            acc[key] = {
+              filePath: key,
+              newContent: hasIncomingNewContent ? incomingNewContent : undefined,
+              patches: incomingPatches,
+            } as (typeof updates)[0]
+          }
+          return acc
         },
+        {} as Record<ModelicaFilePath, (typeof updates)[0]>,
+      )
+
+      const beforeModelica = modelicaSource.value
+      const beforeTemplate = templateSource.value
+
+      const changesLog: string[] = []
+
+      for (const [filePath, update] of Object.entries(mergedUpdates) as [
+        ModelicaFilePath,
+        (typeof updates)[0],
+      ][]) {
+        const originalContent = filePath === 'modelica' ? beforeModelica : beforeTemplate
+        let updatedContent = originalContent
+
+        const hasNewContent =
+          typeof update.newContent === 'string' && update.newContent.trim().length > 0
+
+        if (hasNewContent) {
+          updatedContent = update.newContent as string
+          changesLog.push(`Replaced content of ${filePath}`)
+        }
+
+        if (update.patches && update.patches.length > 0) {
+          updatedContent = applyLinePatches(updatedContent, update.patches as LinePatchOperation[])
+          changesLog.push(`Patched ${filePath} (${update.patches.length} ops)`)
+        }
+
+        if (filePath === 'modelica') modelicaSource.value = updatedContent
+        if (filePath === 'template') templateSource.value = updatedContent
+      }
+
+      createNewVersion(`AI update: ${description || changesLog.join(', ')}`)
+
+      return makeTaskResult([
         {
           role: 'system',
           content: {
-            type: 'return',
-            data: 'OK',
+            type: 'message',
+            data: `Updates applied:\n${changesLog.join('\n')}`,
           },
         },
+        ...(description
+          ? [
+              {
+                role: 'system' as const,
+                content: { type: 'message' as const, data: description },
+              },
+            ]
+          : []),
       ])
     },
   }),
@@ -376,15 +631,15 @@ const configuration = computed<partialTyConfiguration | null>(() => {
   if (tystate.currentKeyString == null) return null
   return {
     llmSettings: {
-      //selectedApi: 'taskyon',
       enableToolChooser: true,
-      entryNode: toolCall({ name: 'setModelicaAndTemplate', arguments: {} }),
+      entryNode: toolCall({ name: 'modelicaDocumentAssistant', arguments: {} }),
     },
     appConfiguration: {
       guiMode: 'minChat',
+      expertMode: true,
       showLogo: false,
       chatSuggestions: [],
-      welcomeMsg: 'Ask taskyon for help with using rumoca/modelica!',
+      welcomeMsg: 'I can edit your Modelica model and template. Ask me to change them.',
     },
     signatureOrKey: tystate.currentKeyString ?? undefined,
   }
@@ -448,7 +703,7 @@ const initialLayout = ref<DockNode>({
       type: 'leaf',
       showTabs: 'never',
       collapsed: true,
-      views: ['after'],
+      views: ['assistant'],
       size: 30,
       activeViewIndex: 0,
     },
@@ -461,6 +716,70 @@ const jinjaTemplateUrls = import.meta.glob('src/modules/modelica/*.jinja', {
   eager: false, // lazy-load each file when used
 })
 
+const selectedTemplateKey = ref<string>('')
+const templateOptions = computed(() =>
+  Object.keys(jinjaTemplateUrls)
+    .sort()
+    .map((key) => ({
+      label: key.split('/').pop() ?? key,
+      value: key,
+    })),
+)
+
+// Prevent template auto-reload while restoring persisted state.
+const isHydratingState = ref(true)
+// After hydration, the selectedTemplateKey watcher may still fire due to debounce.
+// This flag skips exactly one template file load for the hydrated key, ensuring
+// we restore the persisted templateSource exactly.
+const skipNextTemplateLoadForKey = ref<string>('')
+
+// --- Versioning ---
+
+type ModelicaVersion = {
+  modelica: string
+  template: string
+  timestamp: string
+  description?: string
+}
+
+const documentVersions = ref<ModelicaVersion[]>([])
+const currentVersionIndex = ref(0)
+const showAllInPrompt = ref(true)
+
+function createNewVersion(desc?: string) {
+  const snapshot: ModelicaVersion = {
+    modelica: modelicaSource.value,
+    template: templateSource.value,
+    timestamp: new Date().toISOString(),
+    description: desc || `Version ${documentVersions.value.length + 1}`,
+  }
+  documentVersions.value = [...documentVersions.value, snapshot]
+  currentVersionIndex.value = documentVersions.value.length - 1
+  Notify.create({ message: 'Version snapshot saved', color: 'positive', timeout: 800 })
+}
+
+function jumpToVersion(idx: number) {
+  currentVersionIndex.value = idx
+  const target = documentVersions.value[idx]
+  if (!target) return
+  modelicaSource.value = target.modelica
+  templateSource.value = target.template
+}
+
+function goToPreviousVersion() {
+  if (currentVersionIndex.value > 0) jumpToVersion(currentVersionIndex.value - 1)
+}
+
+function goToNextVersion() {
+  if (currentVersionIndex.value < documentVersions.value.length - 1) {
+    jumpToVersion(currentVersionIndex.value + 1)
+  }
+}
+
+function handleCreateNewVersionClick() {
+  createNewVersion()
+}
+
 type StatusType = 'loading' | 'success' | 'error' | ''
 
 const modelicaSource = ref('')
@@ -471,6 +790,11 @@ const daeJsonOutput = ref<Record<string, unknown>>({}) // DAE JSON (pretty-print
 const daePrettyOutput = ref('') // Pretty DAE textual representation (from WASM)
 const outputTab = ref<'js' | 'daeJson' | 'daePretty'>('js')
 
+const isHtmlOutput = computed(() => {
+  const s = (jsSource.value ?? '').trimStart()
+  return /^<!doctype\s+html/i.test(s) || /^<html\b/i.test(s)
+})
+
 const verbose = ref(false)
 const loading = ref(false)
 const wasmLoaded = ref(false)
@@ -480,7 +804,7 @@ const wasm = ref<RumocaModule | null>(null)
 // Simulation / execution state
 const simT0 = ref(0)
 const simTf = ref(5)
-const simDt = ref(0.1)
+const simDt = ref(0.01)
 
 const executionResult = ref<Record<string, unknown>>({})
 const running = ref(false)
@@ -575,7 +899,130 @@ watchDebounced(
   { debounce: 500, maxWait: 1000 },
 )
 
+watchDebounced(
+  selectedTemplateKey,
+  async (key) => {
+    if (!key) return
+    if (isHydratingState.value) return
+    if (skipNextTemplateLoadForKey.value && key === skipNextTemplateLoadForKey.value) {
+      skipNextTemplateLoadForKey.value = ''
+      return
+    }
+
+    const loader = jinjaTemplateUrls[key]
+    if (!loader) return
+
+    const content = (await loader()) as string
+    templateSource.value = content ?? ''
+  },
+  { debounce: 50, maxWait: 200 },
+)
+
+// --- Helper functions for line-based patching ---
+
+function formatContentWithLineNumbers(content: string): string {
+  const lines = (content ?? '').split('\n')
+  return lines
+    .map((line, index) => {
+      const lineNum = (index + 1).toString().padStart(4, ' ')
+      return `${lineNum}: ${line}`
+    })
+    .join('\n')
+}
+
+function applyLinePatches(text: string, patches: LinePatchOperation[]): string {
+  const lines = (text ?? '').split('\n')
+  const sortedPatches = [...patches].sort((a, b) => b.lineStart - a.lineStart)
+
+  for (const patch of sortedPatches) {
+    const startIdx = patch.lineStart - 1
+    if (startIdx < 0) continue
+
+    if (patch.type === 'insert') {
+      const newLines = (patch.text || '').split('\n')
+      lines.splice(startIdx, 0, ...newLines)
+      continue
+    }
+
+    const endLine = patch.lineEnd ?? patch.lineStart
+    const deleteCount = endLine - patch.lineStart + 1
+
+    if (patch.type === 'delete') {
+      lines.splice(startIdx, deleteCount)
+    } else if (patch.type === 'replace') {
+      const newLines = (patch.text || '').split('\n')
+      lines.splice(startIdx, deleteCount, ...newLines)
+    }
+  }
+
+  return lines.join('\n')
+}
+
 // ---------- Simple helpers ----------
+
+type ExportTarget = 'modelica' | 'template' | 'js' | 'daePretty' | 'daeJson'
+
+function downloadTextFile(opts: { fileName: string; content: string; mime?: string }) {
+  const blob = new Blob([opts.content ?? ''], { type: opts.mime ?? 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+
+  const a = document.createElement('a')
+  a.href = url
+  a.download = opts.fileName
+  a.click()
+
+  // cleanup
+  setTimeout(() => URL.revokeObjectURL(url), 500)
+}
+
+function exportFile(target: ExportTarget) {
+  const now = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-')
+
+  if (target === 'modelica') {
+    downloadTextFile({
+      fileName: `model_${now}.mo`,
+      content: modelicaSource.value,
+      mime: 'text/plain',
+    })
+    return
+  }
+  if (target === 'template') {
+    downloadTextFile({
+      fileName: `template_${now}.jinja`,
+      content: templateSource.value,
+      mime: 'text/plain',
+    })
+    return
+  }
+  if (target === 'js') {
+    downloadTextFile({
+      fileName: `generated_${now}.js`,
+      content: jsSource.value,
+      mime: 'text/javascript',
+    })
+    return
+  }
+  if (target === 'daePretty') {
+    downloadTextFile({
+      fileName: `dae_${now}.txt`,
+      content: daePrettyOutput.value,
+      mime: 'text/plain',
+    })
+    return
+  }
+  if (target === 'daeJson') {
+    downloadTextFile({
+      fileName: `dae_${now}.json`,
+      content: JSON.stringify(daeJsonOutput.value ?? {}, null, 2),
+      mime: 'application/json',
+    })
+    return
+  }
+
+  // exhaustive
+  Notify.create({ type: 'warning', message: `Unknown export target: ${String(target)}` })
+}
+
 const clearAll = () => {
   modelicaSource.value = ''
   templateSource.value = ''
@@ -595,18 +1042,20 @@ const loadExample = async () => {
   Real h(start = 1,fixed=true) "height above ground of ball center";
   Real v(start = 0,fixed=true) "Velocity of the ball";
   Real E "Mechanical energy";
-equation
+ equation
   der(h) = v;
   der(v) = -g;
   E = g*h + 0.5*v*v;
   when h <= radius then
     reinit(v, -c*pre(v));
   end when;
-end BouncingBall;`
+ end BouncingBall;`
 
   // select template that contains "javascript"
   const sel = Object.keys(jinjaTemplateUrls).find((key) => key.includes('javascript.jinja'))
   if (!sel) return
+
+  selectedTemplateKey.value = sel
   const exampleTemplate = (await jinjaTemplateUrls[sel]!()) as string
   templateSource.value = exampleTemplate || ''
 }
@@ -629,6 +1078,27 @@ const copyDaeJsonToClipboard = async () => {
 
 const copyDaePrettyToClipboard = async () => {
   await copyToClipboard(daePrettyOutput.value)
+}
+
+function openGeneratedHtmlPopup() {
+  if (!jsSource.value) return
+  if (!isHtmlOutput.value) return
+
+  const blob = new Blob([jsSource.value], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+
+  const w = window.open(url, '_blank', 'noopener,noreferrer,popup,width=1200,height=800')
+  if (!w) {
+    URL.revokeObjectURL(url)
+    Notify.create({
+      type: 'warning',
+      message: 'Popup blocked by browser. Allow popups for this site to open the standalone HTML.',
+    })
+    return
+  }
+
+  // Cleanup the blob URL after the popup had time to load it.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
 // ---------- Run in sandboxed iframe ----------
@@ -728,6 +1198,31 @@ const stopExecution = () => {
 }
 
 onMounted(async () => {
+  // Restore and persist the editor state (including dock layout) to OPFS.
+  // Important: we restore templateSource exactly as last edited; we do not re-load it from file
+  await syncStateWithOPFSFolder('modelicaEditPage', {
+    initialLayout,
+    selectedTemplateKey,
+    modelicaSource,
+    templateSource,
+    verbose,
+    outputTab,
+    simT0,
+    simTf,
+    simDt,
+    documentVersions,
+    currentVersionIndex,
+    showAllInPrompt,
+  })
+  // Ensure we do not auto-overwrite the restored templateSource from file
+  // due to a debounced selectedTemplateKey watcher firing after hydration.
+  skipNextTemplateLoadForKey.value = selectedTemplateKey.value
+  isHydratingState.value = false
+  // Ensure we always have at least one version snapshot
+  if (documentVersions.value.length === 0) {
+    createNewVersion('Initial')
+  }
+
   try {
     const wasmModule = await loadWasm()
 
