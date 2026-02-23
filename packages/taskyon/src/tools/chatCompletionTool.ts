@@ -146,6 +146,63 @@ export async function processChatTask(
 type streamOptsType = Parameters<typeof streamText>[0]
 type streamChunk = Parameters<Required<streamOptsType>['onChunk']>[0]['chunk']
 
+const normalizeChunkText = (value: unknown): string => {
+  if (typeof value === 'string') return value
+  return ''
+}
+
+const extractTextFromChunk = (chunk: streamChunk): string => {
+  const c = chunk as unknown as Record<string, unknown>
+  if (c['type'] === 'text-delta') return normalizeChunkText(c['textDelta'])
+  if (c['type'] === 'text') return normalizeChunkText(c['text'])
+  if (typeof c['textDelta'] === 'string') return c['textDelta']
+  if (typeof c['text'] === 'string') return c['text']
+  return ''
+}
+
+const cleanupRawStreamOutput = (rawOutput: string): string => {
+  if (!rawOutput) return ''
+  const cleaned = rawOutput
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.replace(/^data:\s*/, ''))
+    .filter((line) => line && line !== '[DONE]')
+    .join('\n')
+    .trim()
+  return cleaned
+}
+
+const classifyStreamingFailure = (
+  err: unknown,
+  aborted: boolean,
+): {
+  shortReason: string
+  systemNote: string
+  assistantPrefix: string
+} => {
+  const msg = humanizeError(err).toLowerCase()
+  if (aborted || /(abort|aborted|cancel|canceled|interrupt|stopped by user|stop signal)/.test(msg)) {
+    return {
+      shortReason: 'interrupted',
+      assistantPrefix: 'Generation was interrupted. Keeping the partial response below.',
+      systemNote:
+        'Chat completion was interrupted (likely user stop/abort signal). Partial assistant output was preserved.',
+    }
+  }
+  if (/(timeout|timed out|deadline)/.test(msg)) {
+    return {
+      shortReason: 'timed out',
+      assistantPrefix: 'Generation timed out. Keeping the partial response below.',
+      systemNote: 'Chat completion timed out before finishing. Partial assistant output was preserved.',
+    }
+  }
+  return {
+    shortReason: 'failed',
+    assistantPrefix: 'Generation ended early due to an error. Keeping the partial response below.',
+    systemNote: 'Chat completion failed before finishing. Partial assistant output was preserved.',
+  }
+}
+
 async function llmRequest(
   openAIConversationThread: ModelMessage[],
   tools: ToolSet,
@@ -1144,6 +1201,7 @@ export function createChatCompletionTool(
       )
 
       let rawOutput = ''
+      let partialTextOutput = ''
       const streamOpts = await llmRequest(
         chatInfo.chatCompletionMessageThread,
         chatInfo.tools,
@@ -1171,6 +1229,7 @@ export function createChatCompletionTool(
         onChunk({ chunk }) {
           chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
           if (chunk.type === 'raw') rawOutput += chunk.rawValue as string
+          partialTextOutput += extractTextFromChunk(chunk)
         },
         onError(err) {
           errorCapture = err
@@ -1193,11 +1252,38 @@ export function createChatCompletionTool(
         res = await chatCompletion.response
         console.log('chat completion response', res, await chatCompletion.output)
       } catch (err) {
+        const failure = classifyStreamingFailure(errorCapture ?? err, context.stopSignal?.aborted ?? false)
+        const partialContent = partialTextOutput.trim() || cleanupRawStreamOutput(rawOutput)
         console.log('chat completion error', {
           rawOutput,
+          partialTextOutput,
           errorCapture,
+          failure,
         })
-        throw new Error('Chat completion failed!', { cause: errorCapture ?? err })
+        return makeTaskResult([
+          ...(partialContent
+            ? [
+                {
+                  role: 'assistant',
+                  content: {
+                    type: 'message',
+                    data: `${failure.assistantPrefix}\n\n${partialContent}`,
+                  },
+                } as partialTaskDraft,
+              ]
+            : []),
+          {
+            role: 'system',
+            content: {
+              type: 'message',
+              data: `${failure.systemNote}${partialContent ? '' : ' No partial output was available.'}`,
+            },
+          },
+          {
+            role: 'system',
+            content: { type: 'return', data: `chat completion ${failure.shortReason}` },
+          },
+        ])
       }
 
       if (currentTask && lastTaskBeforeChatCompletion) {
