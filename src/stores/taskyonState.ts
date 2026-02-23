@@ -585,6 +585,9 @@ const useApiManagement = (
   const getStoredTaskyonKey = async () => (await getProviderApiKey('taskyon')) ?? undefined
 
   const ensureValidModel = (keystr?: KeyString) => {
+    if (stateRefs.llmSettings.selectedApi !== 'taskyon') {
+      return
+    }
     const tykey = isTaskyonKey(keystr ?? undefined, false)
     if (tykey) {
       const model = getValidModel(tykey)
