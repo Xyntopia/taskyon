@@ -93,9 +93,27 @@
         <div
           v-if="isSplitterResizable(index) && index < node.children.length - 1"
           class="dock-splitter"
-          :class="[node.direction]"
+          :class="[node.direction, getSplitterSnapClass(index)]"
+          :title="getSplitterTitle(index)"
           @mousedown="startResize(index, $event)"
-        ></div>
+          @dblclick.stop="onSplitterDoubleClick(index)"
+        >
+          <button
+            class="dock-splitter-toggle"
+            type="button"
+            :data-cy="`dock-splitter-toggle-${node.id}-${index}`"
+            @mousedown.stop
+            @click.stop="toggleChildCollapsedFromSplitter(index)"
+          >
+            {{ getSplitterToggleLabel(index) }}
+          </button>
+          <div
+            v-if="isResizing && activeSplitterIndex === index && getSplitterSnapHintLabel(index)"
+            class="dock-splitter-hint"
+          >
+            {{ getSplitterSnapHintLabel(index) }}
+          </div>
+        </div>
       </template>
     </template>
 
@@ -270,6 +288,14 @@ const isSplitterResizable = (splitterIndex: number): boolean => {
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value))
 
+const isNodeCollapsed = (n: DockNode): boolean => n.collapsed === true || (n.size ?? 0) <= 0
+
+const getContainerPixelSize = (): number => {
+  if (!containerRef.value || node.value.type !== 'container' || !node.value.direction) return 0
+  const rect = containerRef.value.getBoundingClientRect()
+  return node.value.direction === 'row' ? rect.width : rect.height
+}
+
 const setActiveView = (n: DockNode, index: number): DockNode => {
   if (n.type !== 'leaf' || !n.views || n.views.length === 0) return n
   const clamped = clamp(index, 0, n.views.length - 1)
@@ -306,6 +332,7 @@ const resizeChildren = (
   splitterIndex: number,
   deltaWeight: number,
   collapseWeightThreshold: number,
+  restoreWeightThreshold: number,
 ): DockNode => {
   if (n.type !== 'container' || !n.children || n.children.length < 2) return n
 
@@ -329,7 +356,7 @@ const resizeChildren = (
     updated[splitterIndex] = {
       ...left,
       collapsed: true,
-      lastSize: left.lastSize ?? leftSize,
+      lastSize: Math.max(left.lastSize ?? leftSize, restoreWeightThreshold),
       size: 0,
     }
     updated[splitterIndex + 1] = {
@@ -347,7 +374,7 @@ const resizeChildren = (
     updated[splitterIndex + 1] = {
       ...right,
       collapsed: true,
-      lastSize: right.lastSize ?? rightSize,
+      lastSize: Math.max(right.lastSize ?? rightSize, restoreWeightThreshold),
       size: 0,
     }
   } else {
@@ -380,6 +407,11 @@ const addViewToLeaf = (n: DockNode, viewId: string, makeActive = true): DockNode
  *  - tab-bar height reference
  */
 const COLLAPSED_THICKNESS_PX = 32
+const MIN_RESTORE_THICKNESS_PX = 220
+const MIN_RESTORE_WEIGHT = 20
+
+const getLeafRestoreSize = (n: DockNode): number =>
+  Math.max(n.lastSize ?? MIN_RESTORE_WEIGHT, MIN_RESTORE_WEIGHT)
 
 const isCollapsed = computed(() => {
   const n = node.value
@@ -393,12 +425,17 @@ const toggleCollapse = () => {
 
   if (isCollapsed.value) {
     // expand
-    const restored = n.lastSize ?? 1
+    const restored = getLeafRestoreSize(n)
     node.value = { ...n, collapsed: false, size: restored }
   } else {
     // collapse
     const currentSize = n.size ?? 1
-    node.value = { ...n, collapsed: true, lastSize: currentSize, size: 0 }
+    node.value = {
+      ...n,
+      collapsed: true,
+      lastSize: Math.max(currentSize, MIN_RESTORE_WEIGHT),
+      size: 0,
+    }
   }
 }
 
@@ -409,7 +446,7 @@ const onCollapsedTabClick = (index: number) => {
 
   // first expand
   if (isCollapsed.value) {
-    const restored = Math.min(n.lastSize ?? 100, 100)
+    const restored = getLeafRestoreSize(n)
     node.value = {
       ...setActiveView({ ...n, collapsed: false, size: restored }, index),
     }
@@ -457,6 +494,7 @@ const nodeStyle = computed(() => {
 const containerRef = ref<HTMLElement | null>(null)
 const isResizing = ref(false)
 const activeSplitterIndex = ref(-1)
+const snapSide = ref<'left' | 'right' | null>(null)
 
 const isContentSizedLeaf = computed(
   () => node.value.type === 'leaf' && (node.value.sizeMode ?? 'weight') === 'content',
@@ -484,6 +522,19 @@ const shouldRenderLeafContent = computed(() => {
   return views.some((viewId) => isKeepAliveView(viewId))
 })
 
+const getSplitterSnapSide = (
+  leftSize: number,
+  rightSize: number,
+  deltaWeight: number,
+  collapseWeightThreshold: number,
+): 'left' | 'right' | null => {
+  const newLeft = Math.max(0, leftSize + deltaWeight)
+  const newRight = Math.max(0, rightSize - deltaWeight)
+  if (newLeft < collapseWeightThreshold) return 'left'
+  if (newRight < collapseWeightThreshold) return 'right'
+  return null
+}
+
 const handleMouseMove = (event: MouseEvent) => {
   if (!isResizing.value || !containerRef.value) return
 
@@ -501,12 +552,27 @@ const handleMouseMove = (event: MouseEvent) => {
 
   // Convert collapsed thickness in px into a weight threshold
   const collapseWeightThreshold = (COLLAPSED_THICKNESS_PX / totalSize) * totalWeight
+  const restoreWeightThreshold = (MIN_RESTORE_THICKNESS_PX / totalSize) * totalWeight
+
+  const left = current.children[activeSplitterIndex.value]
+  const right = current.children[activeSplitterIndex.value + 1]
+  if (left && right) {
+    snapSide.value = getSplitterSnapSide(
+      left.size ?? 1,
+      right.size ?? 1,
+      deltaWeight,
+      collapseWeightThreshold,
+    )
+  } else {
+    snapSide.value = null
+  }
 
   node.value = resizeChildren(
     current,
     activeSplitterIndex.value,
     deltaWeight,
     collapseWeightThreshold,
+    restoreWeightThreshold,
   )
 }
 
@@ -514,6 +580,7 @@ const stopResize = () => {
   if (!isResizing.value) return
   isResizing.value = false
   activeSplitterIndex.value = -1
+  snapSide.value = null
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseup', stopResize)
   document.body.style.cursor = ''
@@ -529,6 +596,85 @@ const startResize = (index: number, event: MouseEvent) => {
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('mouseup', stopResize)
   document.body.style.cursor = node.value.direction === 'row' ? 'col-resize' : 'row-resize'
+}
+
+const toggleChildCollapsedFromSplitter = (splitterIndex: number) => {
+  const current = node.value
+  if (current.type !== 'container' || !current.children) return
+
+  const left = current.children[splitterIndex]
+  const right = current.children[splitterIndex + 1]
+  if (!left || !right) return
+
+  const pixelSize = getContainerPixelSize()
+  const pairTotal = (left.size ?? 1) + (right.size ?? 1)
+  const totalWeight = current.children.reduce((acc, child) => acc + (child.size ?? 1), 0)
+  const collapseWeightThreshold =
+    pixelSize > 0 ? (COLLAPSED_THICKNESS_PX / pixelSize) * totalWeight : 1
+  const restoreWeightThreshold =
+    pixelSize > 0 ? (MIN_RESTORE_THICKNESS_PX / pixelSize) * totalWeight : MIN_RESTORE_WEIGHT
+
+  const rightCollapsed = isNodeCollapsed(right)
+
+  if (rightCollapsed) {
+    const wanted = Math.max(right.lastSize ?? restoreWeightThreshold, restoreWeightThreshold)
+    const maxAllowed = Math.max(collapseWeightThreshold, pairTotal - collapseWeightThreshold)
+    const restored = clamp(wanted, collapseWeightThreshold, maxAllowed)
+    const newLeft = Math.max(collapseWeightThreshold, pairTotal - restored)
+
+    const children = [...current.children]
+    children[splitterIndex] = { ...left, collapsed: false, size: newLeft }
+    children[splitterIndex + 1] = { ...right, collapsed: false, size: restored }
+    node.value = { ...current, children }
+    return
+  }
+
+  const children = [...current.children]
+  children[splitterIndex] = { ...left, collapsed: false, size: pairTotal }
+  children[splitterIndex + 1] = {
+    ...right,
+    collapsed: true,
+    lastSize: Math.max(right.lastSize ?? right.size ?? 1, restoreWeightThreshold),
+    size: 0,
+  }
+  node.value = { ...current, children }
+}
+
+const onSplitterDoubleClick = (splitterIndex: number) => {
+  toggleChildCollapsedFromSplitter(splitterIndex)
+}
+
+const getSplitterTitle = (splitterIndex: number): string => {
+  const current = node.value
+  if (current.type !== 'container' || !current.children) return ''
+  const right = current.children[splitterIndex + 1]
+  if (!right) return ''
+  return isNodeCollapsed(right) ? 'Restore panel' : 'Minimize panel'
+}
+
+const getSplitterToggleLabel = (splitterIndex: number): string => {
+  const current = node.value
+  if (current.type !== 'container' || !current.children || !current.direction) return '▸'
+  const right = current.children[splitterIndex + 1]
+  if (!right) return '▸'
+  const collapsed = isNodeCollapsed(right)
+  if (current.direction === 'row') return collapsed ? '◂' : '▸'
+  return collapsed ? '▴' : '▾'
+}
+
+const getSplitterSnapClass = (splitterIndex: number): string => {
+  if (!isResizing.value || activeSplitterIndex.value !== splitterIndex || !snapSide.value) return ''
+  return snapSide.value === 'left' ? 'dock-splitter--snap-left' : 'dock-splitter--snap-right'
+}
+
+const getSplitterSnapHintLabel = (splitterIndex: number): string => {
+  if (!isResizing.value || activeSplitterIndex.value !== splitterIndex || !snapSide.value) return ''
+  const current = node.value
+  if (current.type !== 'container' || !current.direction) return ''
+  if (current.direction === 'row') {
+    return snapSide.value === 'left' ? 'Release to collapse left pane' : 'Release to collapse right pane'
+  }
+  return snapSide.value === 'left' ? 'Release to collapse top pane' : 'Release to collapse bottom pane'
 }
 
 onUnmounted(() => {
@@ -648,6 +794,161 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
       transform: translateY(-50%);
     }
   }
+
+  &.dock-splitter--snap-left,
+  &.dock-splitter--snap-right {
+    color: color-mix(in srgb, currentColor 80%, transparent);
+    background-color: color-mix(in srgb, currentColor 10%, transparent);
+  }
+}
+
+.dock-splitter-toggle {
+  position: absolute;
+  z-index: 2;
+  border: none;
+  background: transparent;
+  color: transparent;
+  font-size: 0;
+  line-height: 0;
+  cursor: pointer;
+  opacity: 0.5;
+  transition:
+    opacity 0.16s ease,
+    filter 0.16s ease;
+}
+
+.dock-splitter-toggle::before {
+  content: '';
+  display: block;
+  position: absolute;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--button-color, currentColor) 72%, transparent);
+  transition:
+    background-color 0.16s ease,
+    width 0.16s ease,
+    height 0.16s ease;
+}
+
+.dock-splitter-toggle::after {
+  content: '';
+  display: block;
+  position: absolute;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--button-color, currentColor) 72%, transparent);
+  transition:
+    background-color 0.16s ease,
+    width 0.16s ease,
+    height 0.16s ease;
+}
+
+.dock-splitter:hover .dock-splitter-toggle,
+.dock-splitter:focus-within .dock-splitter-toggle,
+.dock-splitter--snap-left .dock-splitter-toggle,
+.dock-splitter--snap-right .dock-splitter-toggle {
+  opacity: 0.96;
+}
+
+.dock-splitter-toggle:hover {
+  filter: brightness(1.08);
+}
+
+.dock-splitter.row .dock-splitter-toggle {
+  width: 14px;
+  height: 56px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.dock-splitter.column .dock-splitter-toggle {
+  width: 56px;
+  height: 14px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.dock-splitter.row .dock-splitter-toggle::before {
+  width: 5px;
+  height: 14px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -11px);
+}
+
+.dock-splitter.column .dock-splitter-toggle::before {
+  width: 14px;
+  height: 5px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-11px, -50%);
+}
+
+.dock-splitter.row .dock-splitter-toggle::after {
+  width: 5px;
+  height: 14px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, 3px);
+}
+
+.dock-splitter.column .dock-splitter-toggle::after {
+  width: 14px;
+  height: 5px;
+  top: 50%;
+  left: 50%;
+  transform: translate(3px, -50%);
+}
+
+.dock-splitter.row .dock-splitter-toggle:hover::before,
+.dock-splitter--snap-left.row .dock-splitter-toggle::before,
+.dock-splitter--snap-right.row .dock-splitter-toggle::before,
+.dock-splitter:hover.row .dock-splitter-toggle::before,
+.dock-splitter.row .dock-splitter-toggle:hover::after,
+.dock-splitter--snap-left.row .dock-splitter-toggle::after,
+.dock-splitter--snap-right.row .dock-splitter-toggle::after,
+.dock-splitter:hover.row .dock-splitter-toggle::after {
+  width: 6px;
+  height: 16px;
+  background: color-mix(in srgb, var(--button-color, currentColor) 88%, transparent);
+}
+
+.dock-splitter.column .dock-splitter-toggle:hover::before,
+.dock-splitter--snap-left.column .dock-splitter-toggle::before,
+.dock-splitter--snap-right.column .dock-splitter-toggle::before,
+.dock-splitter:hover.column .dock-splitter-toggle::before,
+.dock-splitter.column .dock-splitter-toggle:hover::after,
+.dock-splitter--snap-left.column .dock-splitter-toggle::after,
+.dock-splitter--snap-right.column .dock-splitter-toggle::after,
+.dock-splitter:hover.column .dock-splitter-toggle::after {
+  width: 16px;
+  height: 6px;
+  background: color-mix(in srgb, var(--button-color, currentColor) 88%, transparent);
+}
+
+.dock-splitter-hint {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, black 86%, transparent);
+  color: white;
+}
+
+.dock-splitter.row .dock-splitter-hint {
+  top: 50%;
+  left: 100%;
+  transform: translate(6px, -50%);
+}
+
+.dock-splitter.column .dock-splitter-hint {
+  top: 100%;
+  left: 50%;
+  transform: translate(-50%, 6px);
 }
 
 /* Tabs header */
