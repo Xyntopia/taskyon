@@ -34,6 +34,7 @@
         v-for="(viewId, index) in node.views || []"
         :key="viewId"
         class="dock-tab"
+        :data-cy="`dock-tab-${node.id}-${viewId}`"
         :class="[
           tabClass,
           { active: index === (node.activeViewIndex ?? 0) },
@@ -58,6 +59,7 @@
       <!-- Minimize / restore button -->
       <button
         class="dock-tab-minimize"
+        :data-cy="`dock-minimize-${node.id}`"
         type="button"
         :class="tabButtonClass"
         @click.stop="toggleCollapse"
@@ -99,12 +101,20 @@
 
     <!-- Leaf Node (Tabs) -->
     <template v-else-if="node.type === 'leaf'">
-      <!-- Normal content when NOT collapsed -->
-      <template v-if="!isCollapsed">
+      <template v-if="shouldRenderLeafContent">
         <!-- Content-sized leaves -->
         <div v-if="isContentSizedLeaf" class="dock-content dock-content--content">
           <template v-if="node.views && node.views.length > 0">
-            <slot :name="node.views[node.activeViewIndex ?? 0]" />
+            <template v-for="(viewId, index) in node.views" :key="viewId">
+              <div
+                v-if="shouldMountView(viewId, index)"
+                v-show="isViewVisible(index)"
+                class="dock-view-host"
+                :data-cy="`dock-view-${node.id}-${viewId}`"
+              >
+                <slot :name="viewId" />
+              </div>
+            </template>
           </template>
           <div v-else class="dock-empty">No Views</div>
         </div>
@@ -113,7 +123,16 @@
         <div v-else class="dock-content dock-content--weight">
           <div class="dock-content-inner">
             <template v-if="node.views && node.views.length > 0">
-              <slot :name="node.views[node.activeViewIndex ?? 0]" />
+              <template v-for="(viewId, index) in node.views" :key="viewId">
+                <div
+                  v-if="shouldMountView(viewId, index)"
+                  v-show="isViewVisible(index)"
+                  class="dock-view-host"
+                  :data-cy="`dock-view-${node.id}-${viewId}`"
+                >
+                  <slot :name="viewId" />
+                </div>
+              </template>
             </template>
             <div v-else class="dock-empty">No Views</div>
           </div>
@@ -161,6 +180,8 @@ export interface DockNode {
   collapsed?: boolean
   /** remembered flex weight when last non-collapsed */
   lastSize?: number
+  /** view ids that must stay mounted even when not active/collapsed */
+  keepAliveViews?: string[]
 }
 
 /* ---------- Add-view event types ---------- */
@@ -440,6 +461,28 @@ const activeSplitterIndex = ref(-1)
 const isContentSizedLeaf = computed(
   () => node.value.type === 'leaf' && (node.value.sizeMode ?? 'weight') === 'content',
 )
+
+const isKeepAliveView = (viewId: string): boolean => {
+  const n = node.value
+  if (n.type !== 'leaf') return false
+  return (n.keepAliveViews ?? []).includes(viewId)
+}
+
+const isViewVisible = (index: number): boolean =>
+  !isCollapsed.value && index === (node.value.activeViewIndex ?? 0)
+
+const shouldMountView = (viewId: string, index: number): boolean => {
+  if (node.value.type !== 'leaf') return false
+  const isActive = index === (node.value.activeViewIndex ?? 0)
+  return (!isCollapsed.value && isActive) || isKeepAliveView(viewId)
+}
+
+const shouldRenderLeafContent = computed(() => {
+  if (node.value.type !== 'leaf') return false
+  if (!isCollapsed.value) return true
+  const views = node.value.views ?? []
+  return views.some((viewId) => isKeepAliveView(viewId))
+})
 
 const handleMouseMove = (event: MouseEvent) => {
   if (!isResizing.value || !containerRef.value) return
@@ -793,5 +836,15 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   position: relative;
   flex: 1 1 0;
   overflow: hidden; /* isolate scrollable inner layer */
+}
+
+.dock-view-host {
+  min-width: 0;
+  min-height: 0;
+}
+
+.dock-content--weight .dock-view-host {
+  width: 100%;
+  height: 100%;
 }
 </style>

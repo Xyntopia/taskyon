@@ -100,6 +100,10 @@ export default defineComponent({
             </div>
           </template>
 
+          <template #KeepAliveTicker>
+            <KeepAliveProbe />
+          </template>
+
           <!-- Fallback for dynamically added tabs (editors) -->
           <template v-for="n in 20" :key="getNewFileSlotName(n)" #[getNewFileSlotName(n)]>
             <div>
@@ -120,7 +124,7 @@ export default defineComponent({
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { DockNode, AddViewContext, AddViewDone } from 'components/DockView.vue'
 import DockView from 'components/DockView.vue'
 
@@ -129,6 +133,32 @@ import { matAutoAwesomeMosaic } from '@quasar/extras/material-icons'
 /* ---------- Initial layout ---------- */
 
 const showLeaf = ref(false)
+
+const KeepAliveProbe = defineComponent({
+  name: 'KeepAliveProbe',
+  setup() {
+    const mountId = ref(`${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`)
+    const ticks = ref(0)
+    let timer: ReturnType<typeof setInterval> | undefined
+
+    onMounted(() => {
+      timer = setInterval(() => {
+        ticks.value += 1
+      }, 200)
+    })
+
+    onBeforeUnmount(() => {
+      if (timer) clearInterval(timer)
+    })
+
+    return () =>
+      h('div', { class: 'q-pa-sm' }, [
+        h('div', ['Mount ID: ', h('span', { 'data-cy': 'keepalive-mount-id' }, mountId.value)]),
+        h('div', ['Ticks: ', h('span', { 'data-cy': 'keepalive-ticks' }, String(ticks.value))]),
+        h('div', { class: 'text-caption text-grey-7' }, 'Should keep ticking while minimized'),
+      ])
+  },
+})
 
 const createInitialLayout = (): DockNode => ({
   id: 'root',
@@ -152,7 +182,8 @@ const createInitialLayout = (): DockNode => ({
           id: 'panel',
           type: 'leaf',
           size: 30,
-          views: ['Terminal', 'Output'],
+          views: ['Terminal', 'Output', 'KeepAliveTicker'],
+          keepAliveViews: ['KeepAliveTicker'],
           activeViewIndex: 0,
         },
       ],

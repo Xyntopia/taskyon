@@ -47,6 +47,7 @@ const layout = ref<DockNode>({
       type: 'leaf',
       showTabs: 'never',
       views: ['chat'],
+      keepAliveViews: ['chat'],
       size: 30,
       activeViewIndex: 0,
     },
