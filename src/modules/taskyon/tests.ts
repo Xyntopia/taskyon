@@ -1175,6 +1175,40 @@ export const testChatCompletionTaskyonProxyMint = async () => {
   const prevSelectedApi = state.llmSettings.selectedApi
   state.setLLMSettings('selectedApi', 'taskyon')
 
+  const streamStats = new Map<
+    string,
+    {
+      textDeltaCount: number
+      reasoningDeltaCount: number
+      toolInputDeltaCount: number
+      totalTextChars: number
+    }
+  >()
+  const stopStreamProbe = tystate.chatCompletionStream(({ taskId, chunk }) => {
+    if (!chunk) return
+    const stats = streamStats.get(taskId) ?? {
+      textDeltaCount: 0,
+      reasoningDeltaCount: 0,
+      toolInputDeltaCount: 0,
+      totalTextChars: 0,
+    }
+    switch (chunk.type) {
+      case 'text-delta':
+        stats.textDeltaCount++
+        stats.totalTextChars += chunk.text.length
+        break
+      case 'reasoning-delta':
+        stats.reasoningDeltaCount++
+        break
+      case 'tool-input-delta':
+        stats.toolInputDeltaCount++
+        break
+      default:
+        break
+    }
+    streamStats.set(taskId, stats)
+  })
+
   try {
     const taskList: partialTaskDraft[][] = [
       [
@@ -1182,7 +1216,8 @@ export const testChatCompletionTaskyonProxyMint = async () => {
           role: 'user',
           content: {
             type: 'message',
-            data: 'Reply with one short sentence confirming delegated proxy backend is active.',
+            data:
+              'Write a short 5-line plain-text status update explaining that delegated proxy backend streaming is active. Do not use markdown.',
           },
         },
         createChatCompletionTask({
@@ -1195,11 +1230,25 @@ export const testChatCompletionTaskyonProxyMint = async () => {
     ]
 
     const result = await processTasks(tystate.api)(taskList, 'message', { timeoutMs: 30000 })
+    const streamedTasks = [...streamStats.entries()].filter(([, stats]) => stats.textDeltaCount > 0)
+    assert(streamedTasks.length > 0, 'No text-delta chunks were observed for delegated proxy run')
+    const [streamedTaskId, bestStats] = streamedTasks.sort(
+      (a, b) => b[1].textDeltaCount - a[1].textDeltaCount,
+    )[0]!
+    assert(bestStats.textDeltaCount >= 2, `Expected streaming with >=2 text chunks, got ${bestStats.textDeltaCount}`)
+    assert(bestStats.totalTextChars > 20, `Expected streamed output length > 20 chars, got ${bestStats.totalTextChars}`)
+
     return {
       taskList,
       result,
+      streaming: {
+        streamedTaskId,
+        ...bestStats,
+        allStreamedTasks: Object.fromEntries(streamedTasks),
+      },
     }
   } finally {
+    stopStreamProbe()
     state.setLLMSettings('selectedApi', prevSelectedApi || 'taskyon')
   }
 }
