@@ -116,34 +116,40 @@ function createApi(
     (msg) => console.error('an error occured during handling of the message', msg),
   )
 
-  // send events...
-  taskManagerInstance().taskStream(async ({ data: task, id }) => {
-    // if tasks is not null, it was freshly created
-    // TODO: only trigger upload on certain task events...
-    if (task) {
-      insidePort.send({ type: 'taskCreated', task })
+  let unsubscribeTaskStream: (() => void) | null = null
+  const reconnectTaskStreamBridge = () => {
+    unsubscribeTaskStream?.()
+    unsubscribeTaskStream = taskManagerInstance().taskStream(async ({ data: task, id }) => {
+      // if task is not null, it was freshly created/updated
+      if (task) {
+        insidePort.send({ type: 'taskCreated', task })
 
-      if (sendEncryptedTasks?.()) {
-        const archiveName = `${id}.tyt`
+        if (sendEncryptedTasks?.()) {
+          const archiveName = `${id}.tyt`
 
-        // compress objects "locally" (for the test)
-        const packed = await encryptCompressObject(
-          task,
-          archiveName,
-          () => cs().getUserPublicKey()?.publicKey,
-          () => cs().getSessionKey(),
-        )
-        console.log('created encrypted task file...', id)
+          const packed = await encryptCompressObject(
+            task,
+            archiveName,
+            () => cs().getUserPublicKey()?.publicKey,
+            () => cs().getSessionKey(),
+          )
+          console.log('created encrypted task file...', id)
 
-        insidePort.send({
-          type: 'addTasks',
-          data: packed,
-          info: archiveName,
-          ids: [String(id)],
-        })
+          insidePort.send({
+            type: 'addTasks',
+            data: packed,
+            info: archiveName,
+            ids: [String(id)],
+          })
+        }
       }
-    }
-  })
+    })
+  }
+  reconnectTaskStreamBridge()
+
+  return {
+    reconnectTaskStreamBridge,
+  }
 }
 
 const staticContext = () => {
@@ -324,7 +330,7 @@ export async function tyCore(
 
   // receive events
   // the Api is static and never needs to change!
-  createApi(
+  const apiBridge = createApi(
     insidePort,
     () => ctx.taskManagerInstance,
     (id: string) => ctx.queueTask(id),
@@ -352,6 +358,7 @@ export async function tyCore(
     ctx = await ctxCreator(cs)
 
     connectStreams()
+    apiBridge.reconnectTaskStreamBridge()
 
     console.log('tycore finished initializing new session...')
   }
