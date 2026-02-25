@@ -33,6 +33,8 @@ import type { apiConfig, TaskNodeMeta } from '../types/chatCompletion'
 import { getCurrentModel } from '../types/chatCompletion'
 import type { Annotation, FileMapping, partialTaskDraft, TaskNode } from '../types/node'
 import type { llmSettings } from '../types/profiles'
+import { mintToken } from '../taskyon.space/taskyon.space_api'
+import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
 import type { toolContext } from '../types/toolApi'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import type { ToolBase } from '../types/tools'
@@ -146,6 +148,8 @@ export async function processChatTask(
 type streamOptsType = Parameters<typeof streamText>[0]
 type streamChunk = Parameters<Required<streamOptsType>['onChunk']>[0]['chunk']
 
+const TASKYON_PROXY_BASE_URL_DEFAULT = 'https://share.taskyon.space'
+
 const normalizeChunkText = (value: unknown): string => {
   if (typeof value === 'string') return value
   return ''
@@ -181,7 +185,10 @@ const classifyStreamingFailure = (
   assistantPrefix: string
 } => {
   const msg = humanizeError(err).toLowerCase()
-  if (aborted || /(abort|aborted|cancel|canceled|interrupt|stopped by user|stop signal)/.test(msg)) {
+  if (
+    aborted ||
+    /(abort|aborted|cancel|canceled|interrupt|stopped by user|stop signal)/.test(msg)
+  ) {
     return {
       shortReason: 'interrupted',
       assistantPrefix: 'Generation was interrupted. Keeping the partial response below.',
@@ -193,7 +200,8 @@ const classifyStreamingFailure = (
     return {
       shortReason: 'timed out',
       assistantPrefix: 'Generation timed out. Keeping the partial response below.',
-      systemNote: 'Chat completion timed out before finishing. Partial assistant output was preserved.',
+      systemNote:
+        'Chat completion timed out before finishing. Partial assistant output was preserved.',
     }
   }
   return {
@@ -267,11 +275,14 @@ async function llmRequest(
       }
       break
     case 'taskyon':
+    case 'taskyon-proxy-mint':
     case 'openrouter.ai': {
       const { createOpenRouter } = await import('@openrouter/ai-sdk-provider')
       const openrouter = createOpenRouter({
         apiKey,
-        ...(api.name === 'taskyon' ? { baseURL: api.baseURL + api.routes.chatCompletion } : {}),
+        ...(['taskyon', 'taskyon-proxy-mint'].includes(api.name)
+          ? { baseURL: api.baseURL + api.routes.chatCompletion }
+          : {}),
       })
       const opts: Parameters<typeof openrouter>[1] = {
         provider: {
@@ -1011,6 +1022,18 @@ export const chatCompletionToolParameters = {
       enum: ['low', 'high', 'medium'],
       description: 'how verbose should the reponse be?',
     },
+    backend: {
+      type: 'string',
+      enum: ['default', 'taskyon-proxy-mint'],
+      description:
+        'Optional backend override. "taskyon-proxy-mint" mints a delegation token and routes chat/completions through the SSR proxservice.',
+      default: 'default',
+    },
+    proxy_base_url: {
+      type: 'string',
+      description:
+        'Optional base URL for delegated proxservice backend. Defaults to https://share.taskyon.space.',
+    },
     use_multimodal: {
       type: 'boolean',
       title: 'Use Vision',
@@ -1127,6 +1150,8 @@ export function createChatCompletionTool(
         use_baseprompt = true,
         reasoning_effort: reasoningEffort,
         verbosity,
+        backend = 'default',
+        proxy_base_url,
         // if we don't set it, choose the default setting...
         use_multimodal = true,
         prompt_templates,
@@ -1152,6 +1177,33 @@ export function createChatCompletionTool(
       const apiKey = await context.getSecret(selectedApi, false, false)
       if (!apiKey || typeof apiKey !== 'string')
         throw new Error('We need to define an API key to process our chat Task!')
+      let requestApi = api
+      let requestApiKey = apiKey
+      let selectedApiForMeta = selectedApi
+
+      if (backend === 'taskyon-proxy-mint') {
+        const tokenServiceBaseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
+        let delegationToken = ''
+        try {
+          delegationToken = await mintToken(tokenServiceBaseUrl, apiKey)
+        } catch (err) {
+          throw new Error('Failed to mint delegation token for taskyon proxy backend.', {
+            cause: err,
+          })
+        }
+
+        requestApi = {
+          ...api,
+          name: 'taskyon-proxy-mint',
+          baseURL: proxy_base_url || TASKYON_PROXY_BASE_URL_DEFAULT,
+          routes: {
+            ...api.routes,
+            chatCompletion: '/proxservice/',
+          },
+        }
+        requestApiKey = delegationToken
+        selectedApiForMeta = 'taskyon-proxy-mint'
+      }
 
       const selectedModel = model ?? getCurrentModel(api)
       console.log('calling chat completion tool...', selectedModel, goal, llmTools)
@@ -1206,8 +1258,8 @@ export function createChatCompletionTool(
         chatInfo.chatCompletionMessageThread,
         chatInfo.tools,
         selectedModel,
-        api,
-        apiKey,
+        requestApi,
+        requestApiKey,
         // only add a schema if we want ot use native tools!
         llmTools ? schema : undefined,
         siteUrl,
@@ -1252,7 +1304,10 @@ export function createChatCompletionTool(
         res = await chatCompletion.response
         console.log('chat completion response', res, await chatCompletion.output)
       } catch (err) {
-        const failure = classifyStreamingFailure(errorCapture ?? err, context.stopSignal?.aborted ?? false)
+        const failure = classifyStreamingFailure(
+          errorCapture ?? err,
+          context.stopSignal?.aborted ?? false,
+        )
         const partialContent = partialTextOutput.trim() || cleanupRawStreamOutput(rawOutput)
         console.log('chat completion error', {
           rawOutput,
@@ -1292,9 +1347,9 @@ export function createChatCompletionTool(
           chatCompletion,
           rawOutput,
           res,
-          api,
+          requestApi,
           currentTask,
-          selectedApi,
+          selectedApiForMeta,
           siteUrl,
           apiKey,
           llmApis['taskyon']?.defaultHeaders?.apiKey ?? '',

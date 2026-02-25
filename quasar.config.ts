@@ -177,6 +177,7 @@ export default defineConfig((ctx) => {
             './../dist-desktop',
             './../src-tauri',
             './../packages/rumoca',
+            './../packages/taskyon-vscode',
             //'./../packages/**', // <- key bit: keep workspace packages out
           ]
 
@@ -321,7 +322,7 @@ export default defineConfig((ctx) => {
                 'eslint',
                 '-c ./eslint.config.js',
                 '"./src/**/*.{ts,js,mjs,cjs,vue}"',
-                '"./packages/*/src/**/*.{ts,js,mjs,cjs,vue}"',
+                '"./packages/{taskyon,tyclient,secure-tunnel}/src/**/*.{ts,js,mjs,cjs,vue}"',
               ].join(' '),
               useFlatConfig: true,
             },

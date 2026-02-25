@@ -1171,6 +1171,41 @@ export const testChatCompletion = async () => {
   }
 }
 
+export const testChatCompletionTaskyonProxyMint = async () => {
+  const prevSelectedApi = state.llmSettings.selectedApi
+  state.setLLMSettings('selectedApi', 'taskyon')
+
+  try {
+    const taskList: partialTaskDraft[][] = [
+      [
+        {
+          role: 'user',
+          content: {
+            type: 'message',
+            data: 'Reply with one short sentence confirming delegated proxy backend is active.',
+          },
+        },
+        createChatCompletionTask({
+          goal: 'SimpleCompletion',
+          model: 'google/gemini-2.5-flash-lite',
+          llmTools: false,
+          backend: 'taskyon-proxy-mint',
+        }),
+      ],
+    ]
+
+    const result = await processTasks(tystate.api)(taskList, 'message', { timeoutMs: 30000 })
+    return {
+      taskList,
+      result,
+    }
+  } finally {
+    state.setLLMSettings('selectedApi', prevSelectedApi || 'taskyon')
+  }
+}
+testChatCompletionTaskyonProxyMint.description =
+  'test chatCompletion via delegated taskyon SSR proxy backend'
+
 export const testFileUpload = async () => {
   const testPdf = await urlToFile('/tests/product_specs_long.pdf')
 
