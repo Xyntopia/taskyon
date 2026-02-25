@@ -16,6 +16,8 @@ import z from 'zod'
 
 export const ServiceTokenPayloadSchema = z
   .object({
+    principal_type: z.enum(['user', 'api_key']),
+    allowed_models: z.array(z.string()).min(1),
     max_costs: z.number().positive(),
     services: z.array(z.string()).min(1),
     oms: z.number().positive(), // seconds
@@ -34,14 +36,7 @@ export type ServiceTokenPayload = z.infer<typeof ServiceTokenPayloadSchema>
 // ==============================
 
 // Request body for POST /tokenservice/mint
-// Currently you don't send any body, it's fully derived
-// from the authenticated user and server-side config.
-// But we define it anyway for forward-compatibility.
-// deno-lint-ignore no-empty-interface
 export type MintTokenRequest = unknown
-// If in future you want to pass things like custom max_costs, services, etc.,
-// you can add optional fields here.
-// For now it can be empty or omitted.
 
 // Response body for POST /tokenservice/mint
 export interface MintTokenResponse {

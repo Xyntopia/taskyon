@@ -10,6 +10,7 @@ import {
   ServiceTokenPayloadSchema,
   TOKEN_SERVICE_BASE_URL,
   TOKEN_SERVICE_PREFIX,
+  type MintTokenRequest,
   type MintTokenResponse,
   type ReturnTokenRequest,
   type ReturnTokenResponse,
@@ -33,8 +34,7 @@ export async function mintToken(baseUrl: string, authToken: string) {
 
   const response = await axios.post<MintTokenResponse>(
     url,
-    // no body
-    null,
+    null as MintTokenRequest,
     {
       headers: {
         Authorization: `Bearer ${authToken}`,
