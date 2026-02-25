@@ -5,11 +5,8 @@
 import axios from 'axios'
 import { importSPKI, jwtVerify } from 'jose'
 import type { JsonObject } from 'type-fest'
-import { sleep } from '../utils/asyncUtils'
 import {
   ServiceTokenPayloadSchema,
-  TOKEN_SERVICE_BASE_URL,
-  TOKEN_SERVICE_PREFIX,
   type MintTokenRequest,
   type MintTokenResponse,
   type ReturnTokenRequest,
@@ -109,55 +106,6 @@ export const getTyJwtPublicKey = async () => {
   const publicKeyPromise = await importSPKI(PROXY_JWT_PUBLIC_KEY, 'EdDSA')
 
   return publicKeyPromise
-}
-
-export const testTokenMinting = async (ctx: { tyauth: string }) => {
-  const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
-  //const { data, error } = await supabase.rpc('get_available_credits')
-
-  const token = await mintToken(baseUrl, ctx.tyauth)
-  console.log('Minted token:', token)
-
-  const publicKeyPromise = await getTyJwtPublicKey()
-
-  const svcTokenData = await verifyServiceToken(publicKeyPromise!, token)
-
-  // Optional: inspect payload in the browser (to see user_id, expiration, max_costs, services)
-  const [headerB64, payloadB64] = token.split('.').slice(0, 2)
-  const payloadJson = JSON.parse(atob(payloadB64!.replace(/-/g, '+').replace(/_/g, '/')))
-  // should contain:
-  // - user_id
-  // - expiration
-  // - max_costs (0.20)
-  // - services: ['proxy', 'chat_completion']
-
-  await sleep(10000)
-
-  //const { data, error } = await supabase.rpc('get_available_credits')
-
-  const credits_spent_increase = 0.0111
-  const returnres = await returnToken(baseUrl, token, credits_spent_increase, {
-    'spending reason':
-      'the token was returned with costs of 0.0111 during testing of the tokenservice api.',
-  })
-
-  // TODO: check here if credits are increased by deposit amount - spent amount
-
-  /*
-   TODO:
-
-   - check for double spending
-   - check for wrong jwt tokens
-   - check for unverifiable jwt tokens
-  - check for tokens with missing claims
-    - check for unauthorized users trying to return tokens
-    - check for free taskyon key users trying to return tokens
-    - check for negative credits_spent_increase
-    - check for negative depositos
-    - check for late deposits (after token expiration)
-  */
-
-  return { payloadJson, svcTokenData, headerB64, token, returnres }
 }
 
 /**

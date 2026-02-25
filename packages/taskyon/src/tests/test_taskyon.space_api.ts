@@ -1,7 +1,6 @@
-export { testTokenMinting } from '../taskyon.space/taskyon.space_api'
 import { secureFetch } from '@taskyon/secure-tunnel'
 import { humanizeError } from '../utils/error'
-import { mintToken } from '../taskyon.space/taskyon.space_api'
+import { getTyJwtPublicKey, mintToken, returnToken, verifyServiceToken } from '../taskyon.space/taskyon.space_api'
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
 import { sleep } from '../utils/asyncUtils'
 import axios from 'axios'
@@ -16,6 +15,187 @@ async function expectThrows(
     return err
   }
   throw new Error(msg)
+}
+
+export const testTokenMinting = async (ctx: { tyauth: string }) => {
+  const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
+  const token = await mintToken(baseUrl, ctx.tyauth)
+  const publicKeyPromise = await getTyJwtPublicKey()
+  const svcTokenData = await verifyServiceToken(publicKeyPromise!, token)
+
+  await sleep(10_000)
+
+  const credits_spent_increase = 0.0111
+  const returnres = await returnToken(baseUrl, token, credits_spent_increase, {
+    spending_reason: 'token minting roundtrip test',
+    test_name: 'testTokenMinting',
+  })
+
+  return { token, svcTokenData, returnres }
+}
+
+export const testTokenMintClaims = async (ctx: { tyauth: string }) => {
+  const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
+  const token = await mintToken(baseUrl, ctx.tyauth)
+  const publicKeyPromise = await getTyJwtPublicKey()
+  const svcTokenData = await verifyServiceToken(publicKeyPromise!, token)
+
+  if (!svcTokenData.principal_type) {
+    throw new Error('Missing principal_type claim on minted token')
+  }
+  if (!Array.isArray(svcTokenData.allowed_models) || svcTokenData.allowed_models.length === 0) {
+    throw new Error('Missing allowed_models claim on minted token')
+  }
+  if (!svcTokenData.auid || typeof svcTokenData.auid !== 'string') {
+    throw new Error('Missing auid claim on minted token')
+  }
+
+  return {
+    principal_type: svcTokenData.principal_type,
+    allowed_models: svcTokenData.allowed_models,
+    services: svcTokenData.services,
+    has_auid: true,
+  }
+}
+
+export const testTokenMintSecurity = async (ctx: { tyauth: string }) => {
+  const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
+  const mintUrl = `${baseUrl}/mint`
+  const returnUrl = `${baseUrl}/return`
+  const publicKeyPromise = await getTyJwtPublicKey()
+  if (!publicKeyPromise) throw new Error('Could not fetch tokenservice public key')
+
+  const assertions: Record<string, { ok: boolean; detail?: string }> = {}
+
+  // 1) Unauthorized mint must fail.
+  try {
+    await axios.post(mintUrl, null, {
+      headers: { Authorization: 'Bearer not-a-valid-auth-token' },
+    })
+    assertions.unauthorized_mint_rejected = {
+      ok: false,
+      detail: 'Mint succeeded unexpectedly with invalid auth.',
+    }
+  } catch (err) {
+    assertions.unauthorized_mint_rejected = {
+      ok: true,
+      detail: humanizeError(err),
+    }
+  }
+
+  // 2) Mint valid token and validate core claims.
+  const token = await mintToken(baseUrl, ctx.tyauth)
+  const verified = await verifyServiceToken(publicKeyPromise, token)
+  const [headerB64, payloadB64] = token.split('.')
+  const payload = JSON.parse(atob(payloadB64!.replace(/-/g, '+').replace(/_/g, '/'))) as Record<
+    string,
+    unknown
+  >
+
+  assertions.claims_present = {
+    ok:
+      Array.isArray(verified.allowed_models) &&
+      verified.allowed_models.length > 0 &&
+      typeof verified.principal_type === 'string' &&
+      typeof verified.auid === 'string' &&
+      verified.services.includes('proxy'),
+  }
+
+  assertions.token_ttl_bounds = {
+    ok:
+      typeof verified.iat === 'number' &&
+      typeof verified.exp === 'number' &&
+      verified.exp > verified.iat &&
+      verified.exp - verified.iat <= 130,
+    detail:
+      typeof verified.iat === 'number' && typeof verified.exp === 'number'
+        ? `ttl=${verified.exp - verified.iat}s`
+        : 'missing iat/exp',
+  }
+
+  assertions.header_alg_is_eddsa = {
+    ok: JSON.parse(atob(headerB64!.replace(/-/g, '+').replace(/_/g, '/'))).alg === 'EdDSA',
+  }
+
+  assertions.payload_has_expected_fields = {
+    ok:
+      payload['iss'] === 'taskyon.space' &&
+      typeof payload['jti'] === 'string' &&
+      typeof payload['max_costs'] === 'number',
+  }
+
+  // 3) Tampered token must fail verification.
+  const tokenParts = token.split('.')
+  const tamperedToken = `${tokenParts[0]}.${tokenParts[1]}.AAAA`
+  try {
+    await verifyServiceToken(publicKeyPromise, tamperedToken)
+    assertions.tampered_token_rejected = {
+      ok: false,
+      detail: 'Tampered token verified unexpectedly.',
+    }
+  } catch (err) {
+    assertions.tampered_token_rejected = {
+      ok: true,
+      detail: humanizeError(err),
+    }
+  }
+
+  // 4) Invalid return payload (negative spent) must fail.
+  try {
+    await axios.post(
+      returnUrl,
+      {
+        token,
+        credits_spent_increase: -1,
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+      },
+    )
+    assertions.negative_spend_rejected = {
+      ok: false,
+      detail: 'Return accepted negative credits_spent_increase unexpectedly.',
+    }
+  } catch (err) {
+    assertions.negative_spend_rejected = {
+      ok: true,
+      detail: humanizeError(err),
+    }
+  }
+
+  // 5) First valid return succeeds.
+  const firstReturn = await returnToken(baseUrl, token, 0.0001, {
+    test_name: 'testTokenMintSecurity',
+    reason: 'first valid return',
+  })
+  assertions.first_return_succeeds = {
+    ok: !('error' in firstReturn),
+    detail: JSON.stringify(firstReturn),
+  }
+
+  // 6) Replay/double-return with same token should fail.
+  try {
+    await returnToken(baseUrl, token, 0.0001, {
+      test_name: 'testTokenMintSecurity',
+      reason: 'double return replay attempt',
+    })
+    assertions.double_return_rejected = {
+      ok: false,
+      detail: 'Double return unexpectedly succeeded.',
+    }
+  } catch (err) {
+    assertions.double_return_rejected = {
+      ok: true,
+      detail: humanizeError(err),
+    }
+  }
+
+  const failed = Object.entries(assertions).filter(([, v]) => !v.ok)
+  return {
+    success: failed.length === 0,
+    failed_checks: failed.map(([k, v]) => ({ check: k, detail: v.detail })),
+    assertions,
+  }
 }
 
 export const testSecureFetch = async (ctx: { tyauth: string }) => {
