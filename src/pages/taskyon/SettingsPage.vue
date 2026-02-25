@@ -53,6 +53,9 @@
               :model-value="val as Record<string, unknown>"
               :schema="tystate.allTools[key]?.parameters"
               class="fit"
+              copy-object-btn
+              show-missing-mode-select
+              :show-header-row="state.appConfiguration.expertMode"
               :icons="iconRegistry.chatCompletion as iconMap"
               missing-mode="hide"
               copy-btn

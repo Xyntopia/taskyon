@@ -15,11 +15,11 @@
       />
 
       <q-btn
-        v-if="copyObjectBtn"
+        v-if="copyObjectBtn && enableExpertMode"
         class="col-auto"
         flat
         stretch
-        icon="content_copy"
+        :icon="matContentCopy"
         @click="copyWholeObject"
       >
         <q-tooltip>Copy entire object as JSON</q-tooltip>
@@ -37,7 +37,7 @@
       </q-btn>
 
       <q-select
-        v-if="showMissingModeSelect"
+        v-if="showMissingModeSelect && enableExpertMode"
         v-model="missingMode"
         :options="['all', 'hide', 'placeholders']"
         dense
@@ -136,6 +136,7 @@ import {
 } from './useVariableGraph'
 import type { CustomRenderer } from './VariableField.vue'
 import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
+import { matContentCopy } from '@quasar/extras/material-icons'
 
 export type iconMap = {
   [key: string]: string | iconMap
