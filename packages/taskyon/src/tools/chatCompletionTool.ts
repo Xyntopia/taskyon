@@ -148,8 +148,6 @@ export async function processChatTask(
 type streamOptsType = Parameters<typeof streamText>[0]
 type streamChunk = Parameters<Required<streamOptsType>['onChunk']>[0]['chunk']
 
-const TASKYON_PROXY_BASE_URL_DEFAULT = 'https://share.taskyon.space'
-
 const normalizeChunkText = (value: unknown): string => {
   if (typeof value === 'string') return value
   return ''
@@ -1192,10 +1190,14 @@ export function createChatCompletionTool(
           })
         }
 
+        if (!proxy_base_url) {
+          throw new Error('proxy_base_url must be defined when using taskyon-proxy-mint backend.')
+        }
+
         requestApi = {
           ...api,
           name: 'taskyon-proxy-mint',
-          baseURL: proxy_base_url || TASKYON_PROXY_BASE_URL_DEFAULT,
+          baseURL: proxy_base_url,
           routes: {
             ...api.routes,
             chatCompletion: '/proxservice/',
