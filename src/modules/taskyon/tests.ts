@@ -1255,6 +1255,115 @@ export const testChatCompletionTaskyonProxyMint = async () => {
 testChatCompletionTaskyonProxyMint.description =
   'test chatCompletion via delegated taskyon SSR proxy backend'
 
+export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
+  const ty = await tystate.taskyon
+  const prevSelectedApi = state.llmSettings.selectedApi
+  state.setLLMSettings('selectedApi', 'taskyon')
+
+  const streamStats = new Map<
+    string,
+    {
+      textDeltaCount: number
+      reasoningDeltaCount: number
+      toolInputDeltaCount: number
+      totalTextChars: number
+    }
+  >()
+
+  const stopStreamProbe = tystate.chatCompletionStream(({ taskId, chunk }) => {
+    if (!chunk) return
+    const stats = streamStats.get(taskId) ?? {
+      textDeltaCount: 0,
+      reasoningDeltaCount: 0,
+      toolInputDeltaCount: 0,
+      totalTextChars: 0,
+    }
+    switch (chunk.type) {
+      case 'text-delta':
+        stats.textDeltaCount++
+        stats.totalTextChars += chunk.text.length
+        break
+      case 'reasoning-delta':
+        stats.reasoningDeltaCount++
+        break
+      case 'tool-input-delta':
+        stats.toolInputDeltaCount++
+        break
+      default:
+        break
+    }
+    streamStats.set(taskId, stats)
+  })
+
+  try {
+    const taskList: partialTaskDraft[][] = [
+      [
+        {
+          role: 'user',
+          content: {
+            type: 'message',
+            data:
+              'Write a short 5-line plain-text status update explaining that delegated proxy backend streaming is active. Do not use markdown.',
+          },
+        },
+        createChatCompletionTask({
+          goal: 'SimpleCompletion',
+          model: 'google/gemini-2.5-flash-lite',
+          llmTools: false,
+          backend: 'taskyon-proxy-mint',
+        }),
+      ],
+    ]
+
+    const result = await processTasks(tystate.api)(taskList, 'message', { timeoutMs: 30000 })
+
+    const streamedTasks = [...streamStats.entries()].filter(([, stats]) => stats.textDeltaCount > 0)
+    assert(streamedTasks.length > 0, 'No text-delta chunks were observed for delegated proxy run')
+    const [streamedTaskId, bestStats] = streamedTasks.sort(
+      (a, b) => b[1].textDeltaCount - a[1].textDeltaCount,
+    )[0]!
+    assert(bestStats.textDeltaCount >= 2, `Expected streaming with >=2 text chunks, got ${bestStats.textDeltaCount}`)
+    assert(bestStats.totalTextChars > 20, `Expected streamed output length > 20 chars, got ${bestStats.totalTextChars}`)
+
+    let taskMetaWithCosts: Record<string, unknown> | null = null
+    for (let i = 0; i < 15; i++) {
+      const meta = (await ty.getMeta(streamedTaskId)) as Record<string, unknown> | null
+      if (meta && typeof meta['taskCosts'] === 'number') {
+        taskMetaWithCosts = meta
+        break
+      }
+      await sleep(2000)
+    }
+
+    assert(
+      taskMetaWithCosts !== null,
+      'No taskCosts metadata found on chatCompletion task after delegated proxy run',
+    )
+    const taskCosts = taskMetaWithCosts['taskCosts'] as number
+    assert(taskCosts >= 0, `Expected taskCosts >= 0 in task metadata, got ${taskCosts}`)
+
+    return {
+      taskList,
+      result,
+      streaming: {
+        streamedTaskId,
+        ...bestStats,
+        allStreamedTasks: Object.fromEntries(streamedTasks),
+      },
+      taskMetadata: {
+        streamedTaskId,
+        taskCosts,
+        taskMetaWithCosts,
+      },
+    }
+  } finally {
+    stopStreamProbe()
+    state.setLLMSettings('selectedApi', prevSelectedApi || 'taskyon')
+  }
+}
+testChatCompletionTaskyonProxyMintSupabaseCosts.description =
+  'test delegated proxy chatCompletion and verify completion costs are attached as task metadata'
+
 export const testFileUpload = async () => {
   const testPdf = await urlToFile('/tests/product_specs_long.pdf')
 
