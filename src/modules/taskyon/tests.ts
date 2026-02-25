@@ -1266,10 +1266,13 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
   const prevSelectedApi = state.llmSettings.selectedApi
   const prevTaskyonKey = tystate.getTaskyonKeyString()
   const userAuthToken = state.authToken
-  assert(
-    typeof userAuthToken === 'string' && userAuthToken.length > 0,
-    'No logged-in user token available. Please sign in and ensure your account has credits before running this test.',
-  )
+  if (!(typeof userAuthToken === 'string' && userAuthToken.length > 0)) {
+    return {
+      skipped: true,
+      warning:
+        'Skipped: this test requires a logged-in user with a valid taskyon auth token and credits.',
+    }
+  }
   await tystate.setProviderApiKey('taskyon', userAuthToken)
   state.setLLMSettings('selectedApi', 'taskyon')
 
