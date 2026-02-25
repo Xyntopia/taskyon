@@ -1216,8 +1216,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
           role: 'user',
           content: {
             type: 'message',
-            data:
-              'Write a short 5-line plain-text status update explaining that delegated proxy backend streaming is active. Do not use markdown.',
+            data: 'Write a short 5-line plain-text status update explaining that delegated proxy backend streaming is active. Do not use markdown.',
           },
         },
         createChatCompletionTask({
@@ -1230,7 +1229,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
     ]
 
     const result = await processTasks(tystate.api)(taskList, ['message', 'return'], {
-      timeoutMs: 90000,
+      timeoutMs: 20000,
     })
     assert(
       result.content.type === 'message',
@@ -1241,8 +1240,14 @@ export const testChatCompletionTaskyonProxyMint = async () => {
     const [streamedTaskId, bestStats] = streamedTasks.sort(
       (a, b) => b[1].textDeltaCount - a[1].textDeltaCount,
     )[0]!
-    assert(bestStats.textDeltaCount >= 2, `Expected streaming with >=2 text chunks, got ${bestStats.textDeltaCount}`)
-    assert(bestStats.totalTextChars > 20, `Expected streamed output length > 20 chars, got ${bestStats.totalTextChars}`)
+    assert(
+      bestStats.textDeltaCount >= 2,
+      `Expected streaming with >=2 text chunks, got ${bestStats.textDeltaCount}`,
+    )
+    assert(
+      bestStats.totalTextChars > 20,
+      `Expected streamed output length > 20 chars, got ${bestStats.totalTextChars}`,
+    )
 
     return {
       taskList,
@@ -1318,8 +1323,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
           role: 'user',
           content: {
             type: 'message',
-            data:
-              'Write a short 5-line plain-text status update explaining that delegated proxy backend streaming is active. Do not use markdown.',
+            data: 'Write a short 5-line plain-text status update explaining that delegated proxy backend streaming is active. Do not use markdown.',
           },
         },
         createChatCompletionTask({
@@ -1332,7 +1336,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
     ]
 
     const result = await processTasks(tystate.api)(taskList, ['message', 'return'], {
-      timeoutMs: 90000,
+      timeoutMs: 20000,
     })
     assert(
       result.content.type === 'message',
@@ -1344,8 +1348,14 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
     const [streamedTaskId, bestStats] = streamedTasks.sort(
       (a, b) => b[1].textDeltaCount - a[1].textDeltaCount,
     )[0]!
-    assert(bestStats.textDeltaCount >= 2, `Expected streaming with >=2 text chunks, got ${bestStats.textDeltaCount}`)
-    assert(bestStats.totalTextChars > 20, `Expected streamed output length > 20 chars, got ${bestStats.totalTextChars}`)
+    assert(
+      bestStats.textDeltaCount >= 2,
+      `Expected streaming with >=2 text chunks, got ${bestStats.textDeltaCount}`,
+    )
+    assert(
+      bestStats.totalTextChars > 20,
+      `Expected streamed output length > 20 chars, got ${bestStats.totalTextChars}`,
+    )
 
     let taskMetaWithCosts: Record<string, unknown> | null = null
     let lastSeenMeta: Record<string, unknown> | null = null
