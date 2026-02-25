@@ -29,15 +29,11 @@ import {
 export async function mintToken(baseUrl: string, authToken: string) {
   const url = `${baseUrl}/mint`
 
-  const response = await axios.post<MintTokenResponse>(
-    url,
-    null as MintTokenRequest,
-    {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
+  const response = await axios.post<MintTokenResponse>(url, null as MintTokenRequest, {
+    headers: {
+      Authorization: `Bearer ${authToken}`,
     },
-  )
+  })
 
   // Expecting response.data like:
   // { token, user_id, expiration, max_costs, services }
@@ -51,6 +47,12 @@ export async function returnToken(
   reference_data: JsonObject,
 ) {
   const url = `${baseUrl}/return`
+
+  console.log('[returnToken] Returning token with data:', {
+    token,
+    credits_spent_increase,
+    reference_data,
+  })
 
   const response = await axios.post<ReturnTokenResponse>(url, {
     token,
