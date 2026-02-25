@@ -1,4 +1,4 @@
-import type { OpenAIMessage, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
+import type { KeyString, OpenAIMessage, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import {
   base64ToPublixX25519,
   chat2Md,
@@ -1229,7 +1229,13 @@ export const testChatCompletionTaskyonProxyMint = async () => {
       ],
     ]
 
-    const result = await processTasks(tystate.api)(taskList, 'message', { timeoutMs: 30000 })
+    const result = await processTasks(tystate.api)(taskList, ['message', 'return'], {
+      timeoutMs: 90000,
+    })
+    assert(
+      result.content.type === 'message',
+      `Delegated proxy run returned non-message task content: ${result.content.type}`,
+    )
     const streamedTasks = [...streamStats.entries()].filter(([, stats]) => stats.textDeltaCount > 0)
     assert(streamedTasks.length > 0, 'No text-delta chunks were observed for delegated proxy run')
     const [streamedTaskId, bestStats] = streamedTasks.sort(
@@ -1258,6 +1264,13 @@ testChatCompletionTaskyonProxyMint.description =
 export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
   const ty = await tystate.taskyon
   const prevSelectedApi = state.llmSettings.selectedApi
+  const prevTaskyonKey = tystate.getTaskyonKeyString()
+  const userAuthToken = state.authToken
+  assert(
+    typeof userAuthToken === 'string' && userAuthToken.length > 0,
+    'No logged-in user token available. Please sign in and ensure your account has credits before running this test.',
+  )
+  await tystate.setProviderApiKey('taskyon', userAuthToken)
   state.setLLMSettings('selectedApi', 'taskyon')
 
   const streamStats = new Map<
@@ -1315,7 +1328,13 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
       ],
     ]
 
-    const result = await processTasks(tystate.api)(taskList, 'message', { timeoutMs: 30000 })
+    const result = await processTasks(tystate.api)(taskList, ['message', 'return'], {
+      timeoutMs: 90000,
+    })
+    assert(
+      result.content.type === 'message',
+      `Delegated proxy supabase-cost run returned non-message task content: ${result.content.type}`,
+    )
 
     const streamedTasks = [...streamStats.entries()].filter(([, stats]) => stats.textDeltaCount > 0)
     assert(streamedTasks.length > 0, 'No text-delta chunks were observed for delegated proxy run')
@@ -1326,8 +1345,10 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
     assert(bestStats.totalTextChars > 20, `Expected streamed output length > 20 chars, got ${bestStats.totalTextChars}`)
 
     let taskMetaWithCosts: Record<string, unknown> | null = null
+    let lastSeenMeta: Record<string, unknown> | null = null
     for (let i = 0; i < 15; i++) {
       const meta = (await ty.getMeta(streamedTaskId)) as Record<string, unknown> | null
+      lastSeenMeta = meta
       if (meta && typeof meta['taskCosts'] === 'number') {
         taskMetaWithCosts = meta
         break
@@ -1337,7 +1358,9 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
 
     assert(
       taskMetaWithCosts !== null,
-      'No taskCosts metadata found on chatCompletion task after delegated proxy run',
+      `No taskCosts metadata found on chatCompletion task after delegated proxy run. streamedTaskId=${streamedTaskId}, streamStats=${JSON.stringify(
+        bestStats,
+      )}, lastMeta=${JSON.stringify(lastSeenMeta)}`,
     )
     const taskCosts = taskMetaWithCosts['taskCosts'] as number
     assert(taskCosts >= 0, `Expected taskCosts >= 0 in task metadata, got ${taskCosts}`)
@@ -1358,6 +1381,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
     }
   } finally {
     stopStreamProbe()
+    await tystate.setProviderApiKey('taskyon', prevTaskyonKey as KeyString | undefined)
     state.setLLMSettings('selectedApi', prevSelectedApi || 'taskyon')
   }
 }

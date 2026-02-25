@@ -34,6 +34,7 @@ import { getCurrentModel } from '../types/chatCompletion'
 import type { Annotation, FileMapping, partialTaskDraft, TaskNode } from '../types/node'
 import type { llmSettings } from '../types/profiles'
 import { mintToken } from '../taskyon.space/taskyon.space_api'
+import { getTyJwtPublicKey, verifyServiceToken } from '../taskyon.space/taskyon.space_api'
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
 import type { toolContext } from '../types/toolApi'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
@@ -449,6 +450,7 @@ export async function convertTaskNodesToOpenAIChat(
 
 async function addTyTaskCostInformation(
   completionId: string, // this is the id coming from taskyon!
+  delegatedTokenJti: string | undefined,
   taskId: string,
   selectedApi: string | null,
   siteUrl: string,
@@ -456,22 +458,32 @@ async function addTyTaskCostInformation(
   anonymousTaskyonKey: string,
   api: apiConfig | undefined,
 ) {
-  if (selectedApi === 'taskyon' && !isTaskyonKey(apiKey, false) && api) {
+  const isTaskyonFlow = selectedApi === 'taskyon' || selectedApi === 'taskyon-proxy-mint'
+  const hasUserJwt = !!apiKey && !isTaskyonKey(apiKey, false)
+  if (isTaskyonFlow && hasUserJwt && api) {
     console.log('getting taskyon generation info')
     // our backend tries to get the finished costs
     // after ~4000ms, so we wait for 6000 here...
     await sleep(6000)
-    const costs = await getTaskyonCosts(
-      siteUrl,
-      anonymousTaskyonKey,
-      apiKey,
-      api,
-      completionId,
-      taskId,
-    )
-    console.log('taskyon generation info:', costs)
-    return costs
+    try {
+      const costs = await getTaskyonCosts(
+        siteUrl,
+        anonymousTaskyonKey,
+        apiKey,
+        api,
+        selectedApi === 'taskyon-proxy-mint' ? undefined : completionId,
+        delegatedTokenJti,
+        taskId,
+      )
+      console.log('taskyon generation info:', costs)
+      return costs
+    } catch (err) {
+      console.warn('Could not retrieve taskyon generation costs, skipping taskCosts metadata.', err)
+      return undefined
+    }
   }
+  console.log('skip taskyon generation info lookup (missing signed-in user jwt or unsupported api)')
+  return undefined
 }
 
 function parseYamlResponse2Record(message: string): Record<string, unknown> {
@@ -1178,12 +1190,32 @@ export function createChatCompletionTool(
       let requestApi = api
       let requestApiKey = apiKey
       let selectedApiForMeta = selectedApi
+      let delegatedTokenJti: string | undefined
 
       if (backend === 'taskyon-proxy-mint') {
         const tokenServiceBaseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
         let delegationToken = ''
         try {
           delegationToken = await mintToken(tokenServiceBaseUrl, apiKey)
+          const publicKeyPromise = await getTyJwtPublicKey()
+          if (publicKeyPromise) {
+            delegatedTokenJti = (await verifyServiceToken(publicKeyPromise, delegationToken)).jti
+          }
+          if (!delegatedTokenJti && typeof atob === 'function') {
+            try {
+              const payloadB64Url = delegationToken.split('.')[1]
+              if (payloadB64Url) {
+                const payloadB64 = payloadB64Url.replace(/-/g, '+').replace(/_/g, '/')
+                const payloadJson = atob(payloadB64)
+                const payloadObj = JSON.parse(payloadJson) as { jti?: unknown }
+                if (typeof payloadObj.jti === 'string' && payloadObj.jti.length > 0) {
+                  delegatedTokenJti = payloadObj.jti
+                }
+              }
+            } catch {
+              // ignore fallback payload parsing issues
+            }
+          }
         } catch (err) {
           throw new Error('Failed to mint delegation token for taskyon proxy backend.', {
             cause: err,
@@ -1344,17 +1376,20 @@ export function createChatCompletionTool(
       }
 
       if (currentTask && lastTaskBeforeChatCompletion) {
+        const costLookupApi =
+          selectedApiForMeta === 'taskyon-proxy-mint' ? llmApis['taskyon'] ?? requestApi : requestApi
         const metaInfo: TaskNodeMeta = await getMetaInfos(
           chatInfo,
           chatCompletion,
           rawOutput,
           res,
-          requestApi,
+          costLookupApi,
           currentTask,
           selectedApiForMeta,
           siteUrl,
           apiKey,
           llmApis['taskyon']?.defaultHeaders?.apiKey ?? '',
+          delegatedTokenJti,
           taskManager,
         )
         console.log('saving task metadata', metaInfo)
@@ -1482,6 +1517,7 @@ async function getMetaInfos(
   siteUrl: string,
   apiKey: string,
   taskyonKey: string,
+  delegatedTokenJti: string | undefined,
   taskManager: TyTaskManager,
 ) {
   // need to make sure, that we remove audio, image and file data here!
@@ -1534,6 +1570,7 @@ async function getMetaInfos(
   if (api)
     void addTyTaskCostInformation(
       res.id,
+      delegatedTokenJti,
       currentTask?.id,
       selectedApi,
       siteUrl,
@@ -1541,8 +1578,10 @@ async function getMetaInfos(
       taskyonKey,
       api,
     ).then((costs) => {
-      console.log('found new task costs:', costs)
-      void taskManager.metaUpsert(currentTask.id, { taskCosts: costs }, 'shallow_merge')
+      if (typeof costs === 'number') {
+        console.log('found new task costs:', costs)
+        void taskManager.metaUpsert(currentTask.id, { taskCosts: costs }, 'shallow_merge')
+      }
     })
 
   metaInfo.rawOutput = { choice: res }

@@ -617,7 +617,8 @@ export async function getTaskyonCosts(
   anonymousTaskyonKey: string,
   apiKey: string,
   api: apiConfig,
-  completionId: string,
+  completionId: string | undefined,
+  tokenJti: string | undefined,
   taskid: string,
 ) {
   const headers = {
@@ -626,16 +627,61 @@ export async function getTaskyonCosts(
   }
   const baseUrl = new URL(api.baseURL).origin
   console.log('get generation info from ', baseUrl)
-  const url = `${baseUrl}/rest/v1/api_usage_log?select=used_credits&id=eq.${completionId}`
-  const response = await fetch(url, { headers })
-  if (!response.ok) {
-    // TODO: replace this with an error message in the UsageInfos
-    //       so that the user can manually try to get the cost info...
-    throw new Error(`Could not find generation information for task ${taskid}`)
-  }
-  const data = await (response.json() as Promise<{ used_credits: number }[]>)
 
-  return data[0]?.used_credits
+  const url = new URL(`${baseUrl}/rest/v1/api_usage_log`)
+  const search = url.searchParams
+  search.set('select', 'used_credits,call_time,info')
+  search.set('order', 'call_time.desc')
+  search.set('limit', '1')
+
+  if (tokenJti) {
+    const tenMinutesAgoIso = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    search.set('reference_data->>jti', `eq.${tokenJti}`)
+    search.set('info', 'eq.return security deposit and api call')
+    search.set('call_time', `gte.${tenMinutesAgoIso}`)
+  } else if (completionId) {
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(completionId)) {
+      console.warn('Skipping taskyon cost lookup: completion id is not a UUID and no token jti was provided', {
+        taskid,
+        completionId,
+      })
+      return undefined
+    }
+    search.set('id', `eq.${completionId}`)
+  } else {
+    return undefined
+  }
+
+  const maxAttempts = tokenJti ? 20 : 1
+  const delayMs = 2000
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const response = await fetch(url.toString(), { headers })
+    if (!response.ok) {
+      console.warn(`Could not find generation information for task ${taskid}`, {
+        attempt,
+        maxAttempts,
+        status: response.status,
+        statusText: response.statusText,
+        url: url.toString(),
+      })
+      return undefined
+    }
+    const data = await (response.json() as Promise<{ used_credits: number }[]>)
+    const cost = data[0]?.used_credits
+    if (typeof cost === 'number') return cost
+
+    if (attempt < maxAttempts) {
+      await sleep(delayMs)
+    }
+  }
+  console.warn(`No taskyon cost row found within retry window for task ${taskid}`, {
+    tokenJti,
+    completionId,
+    url: url.toString(),
+  })
+  return undefined
 }
 
 export async function getOpenRouterGenerationInfo(
