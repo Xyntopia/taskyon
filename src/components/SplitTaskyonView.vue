@@ -12,6 +12,7 @@
 <script setup lang="ts">
 import type { DockNode } from 'src/components/DockView.vue'
 import DockView from 'src/components/DockView.vue'
+import { syncRefsWithLocalStorage } from 'src/modules/saveState'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { ref } from 'vue'
 import { type ClientTool } from '../../packages/tyclient/src'
@@ -50,7 +51,16 @@ const layout = ref<DockNode>({
       keepAliveViews: ['chat'],
       size: 30,
       activeViewIndex: 0,
+      collapsed: true, // start with the chat collapsed
     },
   ],
 })
+
+syncRefsWithLocalStorage(
+  `SplitTaskyonView:${name}`,
+  {
+    layout,
+  },
+  { debounceMs: 250 },
+)
 </script>

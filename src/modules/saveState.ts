@@ -5,7 +5,15 @@ import { computed, watch, isRef, toRaw, isReactive } from 'vue'
 /* localStorage version (unchanged)                                   */
 /* ------------------------------------------------------------------ */
 
-export function syncRefsWithLocalStorage(key: string, refs: Record<string, Ref<unknown>>) {
+interface LocalStorageSyncOptions {
+  debounceMs?: number
+}
+
+export function syncRefsWithLocalStorage(
+  key: string,
+  refs: Record<string, Ref<unknown>>,
+  options: LocalStorageSyncOptions = {},
+) {
   // Load saved state if available
   const savedRaw = localStorage.getItem(key)
   if (savedRaw) {
@@ -30,15 +38,34 @@ export function syncRefsWithLocalStorage(key: string, refs: Record<string, Ref<u
     return out
   })
 
+  const debounceMs = options.debounceMs ?? 0
+  let debounceHandle: ReturnType<typeof setTimeout> | null = null
+
   // Watch the computed wrapper and persist to localStorage.
   watch(
     wrapped,
     (newVals) => {
-      try {
-        localStorage.setItem(key, JSON.stringify(newVals))
-      } catch (e) {
-        console.error('Failed to save state to localStorage', e)
+      const persist = () => {
+        try {
+          localStorage.setItem(key, JSON.stringify(newVals))
+        } catch (e) {
+          console.error('Failed to save state to localStorage', e)
+        }
       }
+
+      if (debounceMs <= 0) {
+        persist()
+        return
+      }
+
+      if (debounceHandle) {
+        clearTimeout(debounceHandle)
+      }
+
+      debounceHandle = setTimeout(() => {
+        persist()
+        debounceHandle = null
+      }, debounceMs)
     },
     { deep: true },
   )

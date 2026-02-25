@@ -43,7 +43,7 @@
                     v-for="(val, name) in testLists[testListName] ?? {}"
                     :key="name"
                     clickable
-                    @click="runTests({ name: val }, true)"
+                    @click="runTests({ [`${name}`]: val }, true)"
                   >
                     <q-item-section>{{ name }}</q-item-section>
                   </q-item>
@@ -183,6 +183,7 @@ modules.forEach((mod) => {
   if (!mod || typeof mod !== 'object') return
   Object.entries(mod).forEach(([name, func]) => {
     if (typeof func !== 'function') return
+    if ('helper' in func) return
     if ('gui' in func) guiTests[camelToNormal(String(name))] = func
     if ('experimental' in func) experimentalTests[camelToNormal(String(name))] = func
     else tests[camelToNormal(String(name))] = func

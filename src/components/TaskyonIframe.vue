@@ -6,6 +6,7 @@
     title="Taskyon agent"
     frameborder="0"
     :src="`${taskyonUrl}?iframe=true&profile=${name}`"
+    allow="clipboard-read; clipboard-write"
     style="width: 100%; height: 99%"
     @load="onIframeLoaded"
   ></iframe>
