@@ -31,6 +31,7 @@ import {
   randomString,
   TaskNode,
   TaskyonMessage,
+  TOKEN_SERVICE_BASE_URL,
   toolCall,
   tyCore,
   usePyodideWebworker,
@@ -142,8 +143,11 @@ async function updateLlmModels(
     // we are doing this, because openrouter currently
     // blocks access to models from browser origins through CORS restrictions.
     if (taskyonApi && api.name === 'openrouter.ai') {
-      baseURL = taskyonApi.baseURL + '/functions/v1/api/models_openrouter'
+      baseURL = TOKEN_SERVICE_BASE_URL + '/api/models_openrouter'
       key = (await getApiKey('taskyon')) || (await getApiKey(api?.name)) || ''
+    } else if (api.name === 'taskyon') {
+      baseURL = TOKEN_SERVICE_BASE_URL + '/api/models'
+      key = (await getApiKey('taskyon')) || ''
     } else {
       key = (await getApiKey(api.name)) || ''
     }
