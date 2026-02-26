@@ -253,17 +253,20 @@ export const testTokenReturnAfterOms = async (
   ) {
     throw new Error('Token is missing iat/exp/oms claims')
   }
+  const iat = verified.iat
+  const exp = verified.exp
+  const oms = verified.oms
 
   const nowSec = Math.floor(Date.now() / 1000)
-  const waitSeconds = Math.max(0, verified.iat + verified.oms - nowSec + 5)
+  const waitSeconds = Math.max(0, iat + oms - nowSec + 5)
   if (!ctx.allowLongRun) {
     return {
       skipped: true,
       reason:
         'Long-running test disabled. Re-run with { tyauth, allowLongRun: true } to wait until iat+oms and validate rejection.',
       required_wait_seconds: waitSeconds,
-      token_ttl_seconds: verified.exp - verified.iat,
-      oms_seconds: verified.oms,
+      token_ttl_seconds: exp - iat,
+      oms_seconds: oms,
     }
   }
 
@@ -275,9 +278,9 @@ export const testTokenReturnAfterOms = async (
         test_name: 'testTokenReturnAfterOms',
         expectation: 'return should fail after iat+oms',
         waited_seconds: waitSeconds,
-        iat: verified.iat,
-        exp: verified.exp,
-        oms: verified.oms,
+        iat,
+        exp,
+        oms,
       }),
     'Expected return to fail after iat+oms, but it succeeded',
   )
@@ -286,8 +289,8 @@ export const testTokenReturnAfterOms = async (
   return {
     success: msg.includes('Token return window exceeded'),
     waited_seconds: waitSeconds,
-    token_ttl_seconds: verified.exp - verified.iat,
-    oms_seconds: verified.oms,
+    token_ttl_seconds: exp - iat,
+    oms_seconds: oms,
     error: msg,
   }
 }
