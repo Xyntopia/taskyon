@@ -1427,6 +1427,90 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
 testChatCompletionTaskyonProxyMintSupabaseCosts.description =
   'test delegated proxy chatCompletion and verify completion costs are attached as task metadata'
 
+export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: string }) => {
+  const ty = await tystate.taskyon
+  const prevSelectedApi = state.llmSettings.selectedApi
+  const prevTaskyonKey = tystate.getTaskyonKeyString()
+  const tyauth = ctx?.tyauth
+
+  assert(
+    typeof tyauth === 'string' && tyauth.length > 0,
+    'Missing tyauth. This test must be called with the normal test context: { tyauth }',
+  )
+
+  await tystate.setProviderApiKey('taskyon', tyauth as KeyString)
+  state.setLLMSettings('selectedApi', 'taskyon')
+
+  try {
+    const taskList: partialTaskDraft[][] = [
+      [
+        {
+          role: 'user',
+          content: {
+            type: 'message',
+            data: 'Write two short lines saying delegated proxy backend streaming is active. Plain text only.',
+          },
+        },
+        createChatCompletionTask({
+          goal: 'SimpleCompletion',
+          model: 'google/gemini-2.5-flash-lite',
+          llmTools: false,
+        }),
+      ],
+    ]
+
+    const result = await processTasks(tystate.api)(taskList, ['message', 'return'], {
+      timeoutMs: 20000,
+    })
+    assert(
+      result.content.type === 'message',
+      `Delegated proxy metadata run returned non-message task content: ${result.content.type}`,
+    )
+    assert(
+      typeof result.parentID === 'string' && result.parentID.length > 0,
+      `Expected result.parentID to point at the chatCompletion task id, got: ${String(result.parentID)}`,
+    )
+
+    const taskId = result.parentID
+    let taskMeta: Record<string, unknown> | null = null
+    for (let i = 0; i < 15; i++) {
+      const meta = (await ty.getMeta(taskId)) as Record<string, unknown> | null
+      const hasCoreMeta =
+        !!meta &&
+        Array.isArray(meta['taskPrompt']) &&
+        typeof meta['rawOutput'] === 'object' &&
+        meta['rawOutput'] !== null &&
+        typeof meta['streamContent'] === 'string'
+      if (hasCoreMeta) {
+        taskMeta = meta
+        break
+      }
+      await sleep(2000)
+    }
+
+    assert(taskMeta !== null, `No expected chatCompletion metadata found for task ${taskId}`)
+    assert(
+      Array.isArray(taskMeta['tools']),
+      `Expected metadata.tools to be an array for task ${taskId}`,
+    )
+
+    return {
+      taskList,
+      result,
+      taskMetadata: {
+        taskId,
+        keys: Object.keys(taskMeta),
+        taskMeta,
+      },
+    }
+  } finally {
+    await tystate.setProviderApiKey('taskyon', prevTaskyonKey as KeyString | undefined)
+    state.setLLMSettings('selectedApi', prevSelectedApi || 'taskyon')
+  }
+}
+testChatCompletionTaskyonProxyMetadata.description =
+  'test delegated proxy chatCompletion and verify metadata exists on the resulting task using provided tyauth'
+
 export const testFileUpload = async () => {
   const testPdf = await urlToFile('/tests/product_specs_long.pdf')
 
