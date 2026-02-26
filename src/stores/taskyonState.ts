@@ -1287,6 +1287,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     let subscriptionUnsub: (() => void) | null = null
     if (taskId) {
       void taskyon.then((ty) => {
+        void ty.getMeta(taskId).then((data) => {
+          taskMetaRef.value = data || undefined
+        })
         subscriptionUnsub = ty.metaLiveRead(taskId)(({ data }) => {
           taskMetaRef.value = data || undefined
         })
