@@ -198,6 +198,101 @@ export const testTokenMintSecurity = async (ctx: { tyauth: string }) => {
   }
 }
 
+export const testTokenReturnAfterJwtExpButBeforeOms = async (ctx: { tyauth: string }) => {
+  const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
+  const token = await mintToken(baseUrl, ctx.tyauth)
+  const publicKeyPromise = await getTyJwtPublicKey()
+  if (!publicKeyPromise) throw new Error('Could not fetch tokenservice public key')
+
+  const verified = await verifyServiceToken(publicKeyPromise, token)
+  if (typeof verified.exp !== 'number' || typeof verified.iat !== 'number') {
+    throw new Error('Token is missing exp/iat claims')
+  }
+  if (typeof verified.oms !== 'number' || verified.oms <= 0) {
+    throw new Error('Token is missing valid oms claim')
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000)
+  const waitSeconds = Math.max(0, verified.exp - nowSec + 5)
+  if (waitSeconds > 0) {
+    await sleep(waitSeconds * 1000)
+  }
+
+  const returnres = await returnToken(baseUrl, token, 0.0025, {
+    test_name: 'testTokenReturnAfterJwtExpButBeforeOms',
+    expectation: 'return should still succeed after exp, as long as now <= iat+oms',
+    waited_seconds: waitSeconds,
+    iat: verified.iat,
+    exp: verified.exp,
+    oms: verified.oms,
+  })
+
+  return {
+    success: !('error' in returnres),
+    waited_seconds: waitSeconds,
+    token_ttl_seconds: verified.exp - verified.iat,
+    oms_seconds: verified.oms,
+    returnres,
+  }
+}
+testTokenReturnAfterJwtExpButBeforeOms.experimental = true
+
+export const testTokenReturnAfterOms = async (
+  ctx: { tyauth: string; allowLongRun?: boolean } = { tyauth: '' },
+) => {
+  const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
+  const token = await mintToken(baseUrl, ctx.tyauth)
+  const publicKeyPromise = await getTyJwtPublicKey()
+  if (!publicKeyPromise) throw new Error('Could not fetch tokenservice public key')
+
+  const verified = await verifyServiceToken(publicKeyPromise, token)
+  if (
+    typeof verified.iat !== 'number' ||
+    typeof verified.exp !== 'number' ||
+    typeof verified.oms !== 'number'
+  ) {
+    throw new Error('Token is missing iat/exp/oms claims')
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000)
+  const waitSeconds = Math.max(0, verified.iat + verified.oms - nowSec + 5)
+  if (!ctx.allowLongRun) {
+    return {
+      skipped: true,
+      reason:
+        'Long-running test disabled. Re-run with { tyauth, allowLongRun: true } to wait until iat+oms and validate rejection.',
+      required_wait_seconds: waitSeconds,
+      token_ttl_seconds: verified.exp - verified.iat,
+      oms_seconds: verified.oms,
+    }
+  }
+
+  await sleep(waitSeconds * 1000)
+
+  const err = await expectThrows(
+    async () =>
+      await returnToken(baseUrl, token, 0.001, {
+        test_name: 'testTokenReturnAfterOms',
+        expectation: 'return should fail after iat+oms',
+        waited_seconds: waitSeconds,
+        iat: verified.iat,
+        exp: verified.exp,
+        oms: verified.oms,
+      }),
+    'Expected return to fail after iat+oms, but it succeeded',
+  )
+
+  const msg = humanizeError(err)
+  return {
+    success: msg.includes('Token return window exceeded'),
+    waited_seconds: waitSeconds,
+    token_ttl_seconds: verified.exp - verified.iat,
+    oms_seconds: verified.oms,
+    error: msg,
+  }
+}
+testTokenReturnAfterOms.experimental = true
+
 export const testSecureFetch = async (ctx: { tyauth: string }) => {
   const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
 
