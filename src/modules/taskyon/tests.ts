@@ -1180,6 +1180,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
     {
       textDeltaCount: number
       rawChunkCount: number
+      semanticChunkCount: number
       reasoningDeltaCount: number
       toolInputDeltaCount: number
       totalTextChars: number
@@ -1190,6 +1191,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
     const stats = streamStats.get(taskId) ?? {
       textDeltaCount: 0,
       rawChunkCount: 0,
+      semanticChunkCount: 0,
       reasoningDeltaCount: 0,
       toolInputDeltaCount: 0,
       totalTextChars: 0,
@@ -1197,15 +1199,18 @@ export const testChatCompletionTaskyonProxyMint = async () => {
     switch (chunk.type) {
       case 'text-delta':
         stats.textDeltaCount++
+        stats.semanticChunkCount++
         stats.totalTextChars += chunk.text.length
         break
       case 'raw':
         stats.rawChunkCount++
         break
       case 'reasoning-delta':
+        stats.semanticChunkCount++
         stats.reasoningDeltaCount++
         break
       case 'tool-input-delta':
+        stats.semanticChunkCount++
         stats.toolInputDeltaCount++
         break
       default:
@@ -1254,8 +1259,8 @@ export const testChatCompletionTaskyonProxyMint = async () => {
       `Expected streamed output length > 20 chars, got ${bestStats.totalTextChars}`,
     )
     assert(
-      bestStats.rawChunkCount >= 2,
-      `Expected at least 2 raw chunks from upstream for real streaming, got ${bestStats.rawChunkCount}`,
+      bestStats.semanticChunkCount >= 2,
+      `Expected at least 2 semantic streamed chunks, got ${bestStats.semanticChunkCount}`,
     )
 
     return {
@@ -1295,6 +1300,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
     {
       textDeltaCount: number
       rawChunkCount: number
+      semanticChunkCount: number
       reasoningDeltaCount: number
       toolInputDeltaCount: number
       totalTextChars: number
@@ -1306,6 +1312,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
     const stats = streamStats.get(taskId) ?? {
       textDeltaCount: 0,
       rawChunkCount: 0,
+      semanticChunkCount: 0,
       reasoningDeltaCount: 0,
       toolInputDeltaCount: 0,
       totalTextChars: 0,
@@ -1313,15 +1320,18 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
     switch (chunk.type) {
       case 'text-delta':
         stats.textDeltaCount++
+        stats.semanticChunkCount++
         stats.totalTextChars += chunk.text.length
         break
       case 'raw':
         stats.rawChunkCount++
         break
       case 'reasoning-delta':
+        stats.semanticChunkCount++
         stats.reasoningDeltaCount++
         break
       case 'tool-input-delta':
+        stats.semanticChunkCount++
         stats.toolInputDeltaCount++
         break
       default:
@@ -1371,8 +1381,8 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
       `Expected streamed output length > 20 chars, got ${bestStats.totalTextChars}`,
     )
     assert(
-      bestStats.rawChunkCount >= 2,
-      `Expected at least 2 raw chunks from upstream for real streaming, got ${bestStats.rawChunkCount}`,
+      bestStats.semanticChunkCount >= 2,
+      `Expected at least 2 semantic streamed chunks, got ${bestStats.semanticChunkCount}`,
     )
 
     let taskMetaWithCosts: Record<string, unknown> | null = null
