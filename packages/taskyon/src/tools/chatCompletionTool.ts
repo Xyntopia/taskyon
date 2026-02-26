@@ -1036,13 +1036,13 @@ export const chatCompletionToolParameters = {
       type: 'string',
       enum: ['default', 'taskyon-proxy-mint'],
       description:
-        'Optional backend override. "taskyon-proxy-mint" mints a delegation token and routes chat/completions through the SSR proxservice.',
+        'Optional backend override. "taskyon-proxy-mint" mints a delegation token and routes chat/completions through the SSR /chatCompletion endpoint.',
       default: 'default',
     },
     proxy_base_url: {
       type: 'string',
       description:
-        'Optional base URL for delegated proxservice backend. Defaults to https://share.taskyon.space.',
+        'Optional base URL for delegated service backend. Defaults to https://share.taskyon.space.',
     },
     use_multimodal: {
       type: 'boolean',
@@ -1232,7 +1232,7 @@ export function createChatCompletionTool(
           baseURL: proxy_base_url,
           routes: {
             ...api.routes,
-            chatCompletion: '/proxservice/',
+            chatCompletion: '/chatCompletion/',
           },
         }
         requestApiKey = delegationToken
@@ -1377,7 +1377,9 @@ export function createChatCompletionTool(
 
       if (currentTask && lastTaskBeforeChatCompletion) {
         const costLookupApi =
-          selectedApiForMeta === 'taskyon-proxy-mint' ? llmApis['taskyon'] ?? requestApi : requestApi
+          selectedApiForMeta === 'taskyon-proxy-mint'
+            ? (llmApis['taskyon'] ?? requestApi)
+            : requestApi
         const metaInfo: TaskNodeMeta = await getMetaInfos(
           chatInfo,
           chatCompletion,
