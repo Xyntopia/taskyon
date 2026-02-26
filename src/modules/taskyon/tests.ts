@@ -1179,6 +1179,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
     string,
     {
       textDeltaCount: number
+      rawChunkCount: number
       reasoningDeltaCount: number
       toolInputDeltaCount: number
       totalTextChars: number
@@ -1188,6 +1189,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
     if (!chunk) return
     const stats = streamStats.get(taskId) ?? {
       textDeltaCount: 0,
+      rawChunkCount: 0,
       reasoningDeltaCount: 0,
       toolInputDeltaCount: 0,
       totalTextChars: 0,
@@ -1196,6 +1198,9 @@ export const testChatCompletionTaskyonProxyMint = async () => {
       case 'text-delta':
         stats.textDeltaCount++
         stats.totalTextChars += chunk.text.length
+        break
+      case 'raw':
+        stats.rawChunkCount++
         break
       case 'reasoning-delta':
         stats.reasoningDeltaCount++
@@ -1216,7 +1221,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
           role: 'user',
           content: {
             type: 'message',
-            data: 'Write a short 5-line plain-text status update explaining that delegated proxy backend streaming is active. Do not use markdown.',
+            data: 'Write a plain-text status report with exactly 18 short lines explaining that delegated proxy backend streaming is active. Do not use markdown.',
           },
         },
         createChatCompletionTask({
@@ -1247,6 +1252,10 @@ export const testChatCompletionTaskyonProxyMint = async () => {
     assert(
       bestStats.totalTextChars > 20,
       `Expected streamed output length > 20 chars, got ${bestStats.totalTextChars}`,
+    )
+    assert(
+      bestStats.rawChunkCount >= 2,
+      `Expected at least 2 raw chunks from upstream for real streaming, got ${bestStats.rawChunkCount}`,
     )
 
     return {
@@ -1285,6 +1294,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
     string,
     {
       textDeltaCount: number
+      rawChunkCount: number
       reasoningDeltaCount: number
       toolInputDeltaCount: number
       totalTextChars: number
@@ -1295,6 +1305,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
     if (!chunk) return
     const stats = streamStats.get(taskId) ?? {
       textDeltaCount: 0,
+      rawChunkCount: 0,
       reasoningDeltaCount: 0,
       toolInputDeltaCount: 0,
       totalTextChars: 0,
@@ -1303,6 +1314,9 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
       case 'text-delta':
         stats.textDeltaCount++
         stats.totalTextChars += chunk.text.length
+        break
+      case 'raw':
+        stats.rawChunkCount++
         break
       case 'reasoning-delta':
         stats.reasoningDeltaCount++
@@ -1323,7 +1337,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
           role: 'user',
           content: {
             type: 'message',
-            data: 'Write a short 5-line plain-text status update explaining that delegated proxy backend streaming is active. Do not use markdown.',
+            data: 'Write a plain-text status report with exactly 18 short lines explaining that delegated proxy backend streaming is active. Do not use markdown.',
           },
         },
         createChatCompletionTask({
@@ -1355,6 +1369,10 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
     assert(
       bestStats.totalTextChars > 20,
       `Expected streamed output length > 20 chars, got ${bestStats.totalTextChars}`,
+    )
+    assert(
+      bestStats.rawChunkCount >= 2,
+      `Expected at least 2 raw chunks from upstream for real streaming, got ${bestStats.rawChunkCount}`,
     )
 
     let taskMetaWithCosts: Record<string, unknown> | null = null

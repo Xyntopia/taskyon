@@ -140,6 +140,8 @@ COPY --from=server-builder /app/dist/ssr /app
 # Install dependencies
 WORKDIR /app
 RUN yarn install --immutable
+ENV SSR_REQUEST_TIMEOUT_MS=0
+ENV SSR_SOCKET_TIMEOUT_MS=0
 
 EXPOSE 3000
 STOPSIGNAL SIGTERM

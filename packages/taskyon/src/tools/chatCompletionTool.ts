@@ -1044,6 +1044,11 @@ export const chatCompletionToolParameters = {
       description:
         'Optional base URL for delegated service backend. Defaults to https://share.taskyon.space.',
     },
+    artificial_streaming: {
+      type: 'boolean',
+      description:
+        'Optional. If true, smooths output chunks for UI readability. Defaults to false for taskyon-proxy-mint to avoid masking real backend streaming.',
+    },
     use_multimodal: {
       type: 'boolean',
       title: 'Use Vision',
@@ -1162,6 +1167,7 @@ export function createChatCompletionTool(
         verbosity,
         backend = 'default',
         proxy_base_url,
+        artificial_streaming,
         // if we don't set it, choose the default setting...
         use_multimodal = true,
         prompt_templates,
@@ -1170,6 +1176,7 @@ export function createChatCompletionTool(
 
       const totalMs = timeouts?.totalMs ?? 10 * 60 * 1000
       const stepMs = timeouts?.stepMs ?? 10 * 60 * 1000
+      const useArtificialStreaming = artificial_streaming ?? backend !== 'taskyon-proxy-mint'
       const tools = allowedTools ?? []
 
       if (!prompt_templates)
@@ -1321,10 +1328,14 @@ export function createChatCompletionTool(
           errorCapture = err
           console.error('Error in chat completion stream:', err)
         },
-        experimental_transform: smoothStream({
-          delayInMs: 5, // optional: defaults to 10ms
-          chunking: 'line', // optional: defaults to 'word'
-        }),
+        ...(useArtificialStreaming
+          ? {
+              experimental_transform: smoothStream({
+                delayInMs: 5, // optional: defaults to 10ms
+                chunking: 'line', // optional: defaults to 'word'
+              }),
+            }
+          : {}),
         abortSignal: context.stopSignal,
         ...streamOpts,
       })
