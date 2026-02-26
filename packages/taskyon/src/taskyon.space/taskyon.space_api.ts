@@ -89,9 +89,12 @@ export async function getTaskyonCosts(
   search.set('call_time', `gte.${tenMinutesAgoIso}`)
 
   const maxAttempts = tokenJti ? 20 : 1
-  const delayMs = 2000
+  const initialDelayMs = tokenJti ? 6000 : 0
+  const maxDelayMs = 30000
+  const backoffMultiplier = 1.5
+  let delayMs = initialDelayMs
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    if (attempt < maxAttempts) {
+    if (delayMs > 0) {
       await sleep(delayMs)
     }
 
@@ -117,6 +120,8 @@ export async function getTaskyonCosts(
     const data = await (response.json() as Promise<{ used_credits: number }[]>)
     const cost = data[0]?.used_credits
     if (typeof cost === 'number') return cost
+
+    delayMs = Math.min(Math.round(delayMs * backoffMultiplier), maxDelayMs)
   }
   console.warn(`No taskyon cost row found within retry window for task ${taskid}`, {
     tokenJti,
