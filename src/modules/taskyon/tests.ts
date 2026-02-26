@@ -1233,7 +1233,6 @@ export const testChatCompletionTaskyonProxyMint = async () => {
           goal: 'SimpleCompletion',
           model: 'google/gemini-2.5-flash-lite',
           llmTools: false,
-          options: { backend: 'taskyon-proxy-mint' },
         }),
       ],
     ]
@@ -1354,7 +1353,6 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
           goal: 'SimpleCompletion',
           model: 'google/gemini-2.5-flash-lite',
           llmTools: false,
-          options: { backend: 'taskyon-proxy-mint' },
         }),
       ],
     ]

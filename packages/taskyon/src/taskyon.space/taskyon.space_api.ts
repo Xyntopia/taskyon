@@ -5,8 +5,11 @@
 import axios from 'axios'
 import { importSPKI, jwtVerify } from 'jose'
 import type { JsonObject } from 'type-fest'
+import { sleep } from '../utils/asyncUtils'
 import {
   ServiceTokenPayloadSchema,
+  TOKEN_SERVICE_BASE_URL,
+  TOKEN_SERVICE_ROUTES,
   type MintTokenRequest,
   type MintTokenResponse,
   type ReturnTokenRequest,
@@ -63,6 +66,66 @@ export async function returnToken(
   return response.data
 }
 
+export async function getTaskyonCosts(
+  siteUrl: string, // to add an indicator to the request which app/site this request is coming from
+  anonymousTaskyonKey: string,
+  apiKey: string,
+  completionId: string | undefined,
+  tokenJti: string,
+  taskid: string,
+) {
+  const baseUrl = new URL(TOKEN_SERVICE_BASE_URL).origin
+  console.log('get generation info from ', baseUrl)
+
+  const url = new URL(`${baseUrl}/rest/v1/api_usage_log`)
+  const search = url.searchParams
+  search.set('select', 'used_credits,call_time,info')
+  search.set('order', 'call_time.desc')
+  search.set('limit', '1')
+
+  const tenMinutesAgoIso = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  search.set('reference_data->>jti', `eq.${tokenJti}`)
+  search.set('info', 'eq.return security deposit and api call')
+  search.set('call_time', `gte.${tenMinutesAgoIso}`)
+
+  const maxAttempts = tokenJti ? 20 : 1
+  const delayMs = 2000
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (attempt < maxAttempts) {
+      await sleep(delayMs)
+    }
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        apiKey: anonymousTaskyonKey,
+        'HTTP-Referer': `${siteUrl}`, // To identify your app. Can be set to localhost for testing
+        'X-Title': `${siteUrl}`, // Optional. Shows on openrouter.ai
+      },
+    })
+    if (!response.ok) {
+      console.warn(`Could not find generation information for task ${taskid}`, {
+        attempt,
+        maxAttempts,
+        status: response.status,
+        statusText: response.statusText,
+        url: url.toString(),
+      })
+      return undefined
+    }
+    const data = await (response.json() as Promise<{ used_credits: number }[]>)
+    const cost = data[0]?.used_credits
+    if (typeof cost === 'number') return cost
+  }
+  console.warn(`No taskyon cost row found within retry window for task ${taskid}`, {
+    tokenJti,
+    completionId,
+    url: url.toString(),
+  })
+  return undefined
+}
+
 /* ============================================================
  *  JWT VERIFICATION
  * ============================================================ */
@@ -92,11 +155,7 @@ export const getTyJwtPublicKey = async () => {
   console.log('[getTyJwtPublicKey] Fetching public key for JWT verification')
 
   const PROXY_JWT_PUBLIC_KEY =
-    (
-      await axios.get(
-        'https://sicynrpldixtrddgqnpm.supabase.co/functions/v1/tokenservice/public-key',
-      )
-    ).data ?? process.env
+    (await axios.get(`${TOKEN_SERVICE_BASE_URL}${TOKEN_SERVICE_ROUTES.pkey}`)).data ?? process.env
 
   console.log('[getTyJwtPublicKey] Retrieved public key:', PROXY_JWT_PUBLIC_KEY)
 

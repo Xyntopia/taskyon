@@ -25,22 +25,23 @@ import { z } from 'zod'
 import type { TyTaskManager } from '../core/taskManager'
 import { mapFunctionNames } from '../core/tools'
 import { isTaskyonKey } from '../core/tyCrypto'
-import type { WebSearchOptions } from '../llm/chat'
-import { getTaskyonCosts } from '../llm/chat'
 import type { Goals } from '../llm/promptCreation'
 import { addPrompts } from '../llm/promptCreation'
+import {
+  getTaskyonCosts,
+  getTyJwtPublicKey,
+  mintToken,
+  verifyServiceToken,
+} from '../taskyon.space/taskyon.space_api'
+import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
 import type { apiConfig, TaskNodeMeta } from '../types/chatCompletion'
 import { getCurrentModel } from '../types/chatCompletion'
 import type { Annotation, FileMapping, partialTaskDraft, TaskNode } from '../types/node'
 import type { llmSettings } from '../types/profiles'
-import { mintToken } from '../taskyon.space/taskyon.space_api'
-import { getTyJwtPublicKey, verifyServiceToken } from '../taskyon.space/taskyon.space_api'
-import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
 import type { toolContext } from '../types/toolApi'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import type { ToolBase } from '../types/tools'
 import { FunctionArguments, FunctionCall } from '../types/tools'
-import { sleep } from '../utils/asyncUtils'
 import { charHash } from '../utils/crypto'
 import { humanizeError } from '../utils/error'
 import { createStream } from '../utils/frpBus'
@@ -54,6 +55,11 @@ import {
 } from '../utils/objHelpers'
 import type { Thunk } from '../utils/tsHelpers'
 import { safeYamlDump } from '../utils/yamlUtils'
+
+type WebSearchOptions = {
+  maxResults: number
+  searchContextSize: 'low' | 'high' | 'medium'
+}
 
 const convertToChatCompletionTool = (t: ToolBase): Tool => {
   return tool({
@@ -274,14 +280,11 @@ async function llmRequest(
       }
       break
     case 'taskyon':
-    case 'taskyon-proxy-mint':
     case 'openrouter.ai': {
       const { createOpenRouter } = await import('@openrouter/ai-sdk-provider')
       const openrouter = createOpenRouter({
         apiKey,
-        ...(['taskyon', 'taskyon-proxy-mint'].includes(api.name)
-          ? { baseURL: api.baseURL + api.routes.chatCompletion }
-          : {}),
+        ...(api.name === 'taskyon' ? { baseURL: api.baseURL + api.routes.chatCompletion } : {}),
       })
       const opts: Parameters<typeof openrouter>[1] = {
         provider: {
@@ -446,44 +449,6 @@ export async function convertTaskNodesToOpenAIChat(
 
   // Inject any missing tool response messages (this happens, if our tools create a recursive task chain)
   return ensureToolResponses(messages)
-}
-
-async function addTyTaskCostInformation(
-  completionId: string, // this is the id coming from taskyon!
-  delegatedTokenJti: string | undefined,
-  taskId: string,
-  selectedApi: string | null,
-  siteUrl: string,
-  apiKey: string,
-  anonymousTaskyonKey: string,
-  api: apiConfig | undefined,
-) {
-  const isTaskyonFlow = selectedApi === 'taskyon' || selectedApi === 'taskyon-proxy-mint'
-  const hasUserJwt = !!apiKey && !isTaskyonKey(apiKey, false)
-  if (isTaskyonFlow && hasUserJwt && api) {
-    console.log('getting taskyon generation info')
-    // our backend tries to get the finished costs
-    // after ~4000ms, so we wait for 6000 here...
-    await sleep(6000)
-    try {
-      const costs = await getTaskyonCosts(
-        siteUrl,
-        anonymousTaskyonKey,
-        apiKey,
-        api,
-        selectedApi === 'taskyon-proxy-mint' ? undefined : completionId,
-        delegatedTokenJti,
-        taskId,
-      )
-      console.log('taskyon generation info:', costs)
-      return costs
-    } catch (err) {
-      console.warn('Could not retrieve taskyon generation costs, skipping taskCosts metadata.', err)
-      return undefined
-    }
-  }
-  console.log('skip taskyon generation info lookup (missing signed-in user jwt or unsupported api)')
-  return undefined
 }
 
 function parseYamlResponse2Record(message: string): Record<string, unknown> {
@@ -1055,22 +1020,10 @@ export const chatCompletionToolParameters = {
           enum: ['low', 'high', 'medium'],
           description: 'how verbose should the reponse be?',
         },
-        backend: {
-          type: 'string',
-          enum: ['default', 'taskyon-proxy-mint'],
-          description:
-            'Optional backend override. "taskyon-proxy-mint" mints a delegation token and routes chat/completions through the SSR /chatCompletion endpoint.',
-          default: 'default',
-        },
-        proxy_base_url: {
-          type: 'string',
-          description:
-            'Optional base URL for delegated service backend. Defaults to https://share.taskyon.space.',
-        },
         artificial_streaming: {
           type: 'boolean',
-          description:
-            'Optional. If true, smooths output chunks for UI readability. Defaults to false for taskyon-proxy-mint to avoid masking real backend streaming.',
+          description: 'Optional. If true, smooths output chunks for UI readability.',
+          default: true,
         },
       },
     },
@@ -1178,16 +1131,11 @@ export function createChatCompletionTool(
         prompt_templates,
         timeouts,
       } = opts
-      const {
-        verbosity,
-        backend = 'taskyon-proxy-mint',
-        proxy_base_url,
-        artificial_streaming,
-      } = options || {}
+      const { verbosity, artificial_streaming } = options || {}
 
       const totalMs = timeouts?.totalMs ?? 10 * 60 * 1000
       const stepMs = timeouts?.stepMs ?? 10 * 60 * 1000
-      const useArtificialStreaming = artificial_streaming ?? backend !== 'taskyon-proxy-mint'
+      const useArtificialStreaming = artificial_streaming ?? true
       const tools = allowedTools ?? []
 
       if (!prompt_templates)
@@ -1196,8 +1144,8 @@ export function createChatCompletionTool(
       if (!selectedApi) {
         throw new Error('No API selected!')
       }
-      const api = llmApis[selectedApi]
-      if (!api) {
+      const requestApi = llmApis[selectedApi]
+      if (!requestApi) {
         throw new Error(`api doesn't exist! ${selectedApi || 'no api selected!'}`)
       }
 
@@ -1205,12 +1153,10 @@ export function createChatCompletionTool(
       const apiKey = await context.getSecret(selectedApi, false, false)
       if (!apiKey || typeof apiKey !== 'string')
         throw new Error('We need to define an API key to process our chat Task!')
-      let requestApi = api
       let requestApiKey = apiKey
-      let selectedApiForMeta = selectedApi
       let delegatedTokenJti: string | undefined
 
-      if (backend === 'taskyon-proxy-mint') {
+      if (selectedApi === 'taskyon') {
         const tokenServiceBaseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
         let delegationToken = ''
         try {
@@ -1219,45 +1165,15 @@ export function createChatCompletionTool(
           if (publicKeyPromise) {
             delegatedTokenJti = (await verifyServiceToken(publicKeyPromise, delegationToken)).jti
           }
-          if (!delegatedTokenJti && typeof atob === 'function') {
-            try {
-              const payloadB64Url = delegationToken.split('.')[1]
-              if (payloadB64Url) {
-                const payloadB64 = payloadB64Url.replace(/-/g, '+').replace(/_/g, '/')
-                const payloadJson = atob(payloadB64)
-                const payloadObj = JSON.parse(payloadJson) as { jti?: unknown }
-                if (typeof payloadObj.jti === 'string' && payloadObj.jti.length > 0) {
-                  delegatedTokenJti = payloadObj.jti
-                }
-              }
-            } catch {
-              // ignore fallback payload parsing issues
-            }
-          }
         } catch (err) {
-          throw new Error('Failed to mint delegation token for taskyon proxy backend.', {
+          throw new Error('Failed to mint delegation token for taskyon backend.', {
             cause: err,
           })
         }
-
-        if (!proxy_base_url) {
-          throw new Error('proxy_base_url must be defined when using taskyon-proxy-mint backend.')
-        }
-
-        requestApi = {
-          ...api,
-          name: 'taskyon-proxy-mint',
-          baseURL: proxy_base_url,
-          routes: {
-            ...api.routes,
-            chatCompletion: '/chatCompletion/api/v1/',
-          },
-        }
         requestApiKey = delegationToken
-        selectedApiForMeta = 'taskyon-proxy-mint'
       }
 
-      const selectedModel = model ?? getCurrentModel(api)
+      const selectedModel = model ?? getCurrentModel(requestApi)
       console.log('calling chat completion tool...', selectedModel, goal, llmTools)
       // the current task doesn't *have* to exist. We can also works solely with prompts...
       const currentTask = context.taskChain.at(-1)
@@ -1398,18 +1314,12 @@ export function createChatCompletionTool(
       }
 
       if (currentTask && lastTaskBeforeChatCompletion) {
-        const costLookupApi =
-          selectedApiForMeta === 'taskyon-proxy-mint'
-            ? (llmApis['taskyon'] ?? requestApi)
-            : requestApi
         const metaInfo: TaskNodeMeta = await getMetaInfos(
           chatInfo,
           chatCompletion,
           rawOutput,
           res,
-          costLookupApi,
           currentTask,
-          selectedApiForMeta,
           siteUrl,
           apiKey,
           llmApis['taskyon']?.defaultHeaders?.apiKey ?? '',
@@ -1535,9 +1445,7 @@ async function getMetaInfos(
   res: LanguageModelResponseMetadata & {
     messages: Array<AssistantModelMessage | ToolModelMessage>
   },
-  api: apiConfig,
   currentTask: TaskNode,
-  selectedApi: string,
   siteUrl: string,
   apiKey: string,
   taskyonKey: string,
@@ -1589,24 +1497,25 @@ async function getMetaInfos(
   ) */
   // we run this asynchronously, because it fetches data in the
   // background and we don't want to wait here...
-  // TODO: remove "configuration" here and get the information from the tasks function call parameters
-  //       this would require us to have "defaultsettings" implemented...
-  if (api)
-    void addTyTaskCostInformation(
-      res.id,
-      delegatedTokenJti,
-      currentTask?.id,
-      selectedApi,
-      siteUrl,
-      apiKey,
-      taskyonKey,
-      api,
-    ).then((costs) => {
-      if (typeof costs === 'number') {
-        console.log('found new task costs:', costs)
-        void taskManager.metaUpsert(currentTask.id, { taskCosts: costs }, 'shallow_merge')
-      }
-    })
+  if (delegatedTokenJti) {
+    const hasUserJwt = !!apiKey && !isTaskyonKey(apiKey, false)
+    if (hasUserJwt) {
+      console.log('getting taskyon generation info')
+      void getTaskyonCosts(siteUrl, taskyonKey, apiKey, res.id, delegatedTokenJti, currentTask?.id)
+        .then((costs) => {
+          if (typeof costs === 'number') {
+            console.log('found new task costs:', costs)
+            void taskManager.metaUpsert(currentTask.id, { taskCosts: costs }, 'shallow_merge')
+          }
+        })
+        .catch((err) =>
+          console.warn(
+            'Could not retrieve taskyon generation costs, skipping taskCosts metadata.',
+            err,
+          ),
+        )
+    }
+  }
 
   metaInfo.rawOutput = { choice: res }
   return metaInfo

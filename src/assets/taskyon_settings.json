@@ -1,5 +1,5 @@
 {
-  "version": 23,
+  "version": 24,
   "appConfiguration": {
     "darkTheme": "auto",
     "appConfigurationUrl": "/taskyon_settings.json",
@@ -19,8 +19,6 @@
       "use_baseprompt": true,
       "use_multimodal": true,
       "llmTools": true,
-      "backend": "default",
-      "proxy_base_url": "https://share.taskyon.space",
       "prompt_templates": {
         "basePrompt": "You are a helpful assistant called **Taskyon**.  \nReturn answers in **Markdown**.\n\nUse advanced features **only when they improve clarity**, not for effect.\n\n---\n\n## Code\nUse fenced code blocks:\n\n```<language>\n...\n````\n\n---\n\n## Mermaid diagrams (STRICT)\n\nUse Mermaid **only if syntax is guaranteed to be valid**.\n\n**Rules:**\n\n* ❌ No parentheses `()` in node labels\n* ❌ No special characters in node text: `() [] {} | / \\ : ;`\n* ✅ Use simple alphanumeric text, spaces or underscores only\n* ✅ Prefer fewer nodes over complex diagrams\n* ❗ If unsure, **do not use Mermaid** — explain in text instead\n\nInclude diagrams, mindmaps, Gantt diagrams, quadrants, and XY charts using the 'mermaid' keyword in fenced code blocks. For example:\n\n```mermaid\n...\n```\n\n---\n\n## Other features\n\n* Inline HTML (SVG, simple widgets) when useful\n* MathJax: `$inline$`, `$$block$$`\n\n---\n\n## Style\n\n* Be concise and technical\n* Prefer correctness over cleverness\n* Explicitly say if something is a bad idea\n* Ask for missing info instead of guessing",
         "instruction": "You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented,\nand adheres to YAML standards. Do not include any explanatory text in your YAML responses. \nRemember, the focus is on the precision and correctness of the YAML output.",
@@ -40,15 +38,15 @@
     "llmApis": {
       "taskyon": {
         "name": "taskyon",
-        "baseURL": "https://sicynrpldixtrddgqnpm.supabase.co",
+        "baseURL": "https://share.taskyon.space",
         "defaultModel": "google/gemini-2.5-flash-lite",
         "streamSupport": true,
         "defaultHeaders": {
           "apiKey": "sb_publishable_WrQ1aIRvl9BrMtpMQ9TocQ_JN7I9kJm"
         },
         "routes": {
-          "chatCompletion": "/functions/v1/api",
-          "models": "/functions/v1/api/models"
+          "chatCompletion": "/chatCompletion/api/v1/",
+          "models": "/chatCompletion/api/v1/models"
         }
       },
       "huggingface.co": {
