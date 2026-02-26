@@ -1233,7 +1233,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
           goal: 'SimpleCompletion',
           model: 'google/gemini-2.5-flash-lite',
           llmTools: false,
-          backend: 'taskyon-proxy-mint',
+          options: { backend: 'taskyon-proxy-mint' },
         }),
       ],
     ]
@@ -1354,7 +1354,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
           goal: 'SimpleCompletion',
           model: 'google/gemini-2.5-flash-lite',
           llmTools: false,
-          backend: 'taskyon-proxy-mint',
+          options: { backend: 'taskyon-proxy-mint' },
         }),
       ],
     ]
@@ -1442,7 +1442,7 @@ export const testFileUpload = async () => {
     },
     createChatCompletionTask({
       prompts: ['The user just uploaded a file, can you extract the data below?'],
-      verbosity: 'high',
+      options: { verbosity: 'high' },
       reasoning_effort: 'low',
       llmTools: false,
       //reasoning_effort: undefined,

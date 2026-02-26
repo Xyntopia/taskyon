@@ -1027,28 +1027,6 @@ export const chatCompletionToolParameters = {
       title: 'Max Results',
       default: 5,
     },
-    verbosity: {
-      type: 'string',
-      enum: ['low', 'high', 'medium'],
-      description: 'how verbose should the reponse be?',
-    },
-    backend: {
-      type: 'string',
-      enum: ['default', 'taskyon-proxy-mint'],
-      description:
-        'Optional backend override. "taskyon-proxy-mint" mints a delegation token and routes chat/completions through the SSR /chatCompletion endpoint.',
-      default: 'default',
-    },
-    proxy_base_url: {
-      type: 'string',
-      description:
-        'Optional base URL for delegated service backend. Defaults to https://share.taskyon.space.',
-    },
-    artificial_streaming: {
-      type: 'boolean',
-      description:
-        'Optional. If true, smooths output chunks for UI readability. Defaults to false for taskyon-proxy-mint to avoid masking real backend streaming.',
-    },
     use_multimodal: {
       type: 'boolean',
       title: 'Use Vision',
@@ -1065,6 +1043,36 @@ export const chatCompletionToolParameters = {
       type: 'integer',
       description:
         '[Optional] How many of the peceding tasks are going to be used for the chatCompletion?',
+    },
+    options: {
+      type: 'object',
+      description:
+        '[Optional] This is where we can specify additional options for the chat completion.',
+      additionalProperties: true,
+      properties: {
+        verbosity: {
+          type: 'string',
+          enum: ['low', 'high', 'medium'],
+          description: 'how verbose should the reponse be?',
+        },
+        backend: {
+          type: 'string',
+          enum: ['default', 'taskyon-proxy-mint'],
+          description:
+            'Optional backend override. "taskyon-proxy-mint" mints a delegation token and routes chat/completions through the SSR /chatCompletion endpoint.',
+          default: 'default',
+        },
+        proxy_base_url: {
+          type: 'string',
+          description:
+            'Optional base URL for delegated service backend. Defaults to https://share.taskyon.space.',
+        },
+        artificial_streaming: {
+          type: 'boolean',
+          description:
+            'Optional. If true, smooths output chunks for UI readability. Defaults to false for taskyon-proxy-mint to avoid masking real backend streaming.',
+        },
+      },
     },
     prompt_templates: {
       required: [
@@ -1164,15 +1172,18 @@ export function createChatCompletionTool(
         schema,
         use_baseprompt = true,
         reasoning_effort: reasoningEffort,
-        verbosity,
-        backend = 'default',
-        proxy_base_url,
-        artificial_streaming,
+        options,
         // if we don't set it, choose the default setting...
         use_multimodal = true,
         prompt_templates,
         timeouts,
       } = opts
+      const {
+        verbosity,
+        backend = 'taskyon-proxy-mint',
+        proxy_base_url,
+        artificial_streaming,
+      } = options || {}
 
       const totalMs = timeouts?.totalMs ?? 10 * 60 * 1000
       const stepMs = timeouts?.stepMs ?? 10 * 60 * 1000
