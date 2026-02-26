@@ -1232,7 +1232,7 @@ export function createChatCompletionTool(
           baseURL: proxy_base_url,
           routes: {
             ...api.routes,
-            chatCompletion: '/chatCompletion/',
+            chatCompletion: '/chatCompletion/api/v1/',
           },
         }
         requestApiKey = delegationToken
