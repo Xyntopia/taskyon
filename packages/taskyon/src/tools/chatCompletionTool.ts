@@ -216,6 +216,41 @@ const classifyStreamingFailure = (
   }
 }
 
+const buildStreamingFailureDetails = (
+  err: unknown,
+  context: {
+    selectedApi: string
+    selectedModel: string
+    llmTools: boolean
+    declaredToolCount: number
+  },
+): string => {
+  const message = humanizeError(err)
+  const lower = message.toLowerCase()
+  const lines = message
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const informativeLine =
+    lines.find((line) => !/^chat completion failed!?$/i.test(line)) ??
+    lines[0] ??
+    'Unknown error'
+
+  if (/no endpoints found that support tool use/i.test(lower)) {
+    const docsUrl =
+      message.match(/https?:\/\/\S+/i)?.[0] ??
+      'https://openrouter.ai/docs/guides/routing/provider-selection'
+    return [
+      'Provider routing failed: no endpoint supports tool use for this request.',
+      `Request context: api=${context.selectedApi}, model=${context.selectedModel}, llmTools=${context.llmTools}, declaredTools=${context.declaredToolCount}.`,
+      'Suggested fix: use a model/provider route with tool-call support, relax provider filters, or disable tool use for this run.',
+      `Reference: ${docsUrl}`,
+    ].join('\n')
+  }
+
+  return `Error details: ${informativeLine}`
+}
+
 async function llmRequest(
   openAIConversationThread: ModelMessage[],
   tools: ToolSet,
@@ -1276,10 +1311,17 @@ export function createChatCompletionTool(
         res = await chatCompletion.response
         console.log('chat completion response', res, await chatCompletion.output)
       } catch (err) {
+        const effectiveErr = errorCapture ?? err
         const failure = classifyStreamingFailure(
-          errorCapture ?? err,
+          effectiveErr,
           context.stopSignal?.aborted ?? false,
         )
+        const failureDetails = buildStreamingFailureDetails(effectiveErr, {
+          selectedApi,
+          selectedModel,
+          llmTools,
+          declaredToolCount: Object.keys(chatInfo.tools).length,
+        })
         const partialContent = partialTextOutput.trim() || cleanupRawStreamOutput(rawOutput)
         console.log('chat completion error', {
           rawOutput,
@@ -1303,7 +1345,7 @@ export function createChatCompletionTool(
             role: 'system',
             content: {
               type: 'message',
-              data: `${failure.systemNote}${partialContent ? '' : ' No partial output was available.'}`,
+              data: `${failure.systemNote}${partialContent ? '' : ' No partial output was available.'}\n\n${failureDetails}`,
             },
           },
           {
