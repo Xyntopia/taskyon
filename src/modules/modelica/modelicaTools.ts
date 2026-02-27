@@ -1,8 +1,9 @@
 // modelicaTools.ts
 
-import { createChatCompletionTask, createTool, makeTaskResult } from '@taskyon/taskyon'
+import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'
+import { serializeObject } from 'src/modules/serializeObject'
 import { type Ref } from 'vue'
 
 /**
@@ -14,12 +15,28 @@ import { type Ref } from 'vue'
  */
 
 type ModelicaFilePath = 'modelica' | 'template' | 'uiTemplate' | 'solver'
+type ModelicaLogEntry = {
+  timestamp: string
+  level: string
+  message: string
+  phase?: string
+  details?: unknown
+}
 
 type LinePatchOperation = {
   type: 'replace' | 'insert' | 'delete'
   lineStart: number
   lineEnd?: number
   text?: string
+}
+
+const MODELICA_AGENT_SERIALIZE_OPTIONS = {
+  format: 'json' as const,
+  maxDepth: 6,
+  maxArrayLength: 25,
+  maxObjectKeys: 30,
+  maxStringLength: 800,
+  indent: 2,
 }
 
 // --- Helper functions for line-based patching ---
@@ -62,6 +79,51 @@ function applyLinePatches(text: string, patches: LinePatchOperation[]): string {
   return lines.join('\n')
 }
 
+function extractCompileStatus(logs: ModelicaLogEntry[]) {
+  const recent = logs.slice(-120)
+  const taggedCompileLogs = recent.filter((entry) => {
+    const phase = String(entry.phase || '')
+    if (phase === 'compile' || phase === 'abi') return true
+    const msg = String(entry.message || '')
+    return (
+      msg.includes('Compilation successful') ||
+      msg.includes('Compilation failed:') ||
+      msg.includes('Model() construction probe failed') ||
+      msg.includes('Generated model ABI validation failed') ||
+      msg.includes('Template error')
+    )
+  })
+
+  const lastSuccess = [...taggedCompileLogs]
+    .reverse()
+    .find((entry) => String(entry.message || '').includes('Compilation successful'))
+  const lastFailure = [...taggedCompileLogs]
+    .reverse()
+    .find(
+      (entry) =>
+        String(entry.message || '').includes('Compilation failed:') ||
+        String(entry.message || '').includes('Model() construction probe failed') ||
+        String(entry.message || '').includes('Generated model ABI validation failed') ||
+        String(entry.message || '').includes('Template error'),
+    )
+
+  const idxSuccess = lastSuccess ? taggedCompileLogs.lastIndexOf(lastSuccess) : -1
+  const idxFailure = lastFailure ? taggedCompileLogs.lastIndexOf(lastFailure) : -1
+  const state =
+    idxSuccess > idxFailure
+      ? 'success'
+      : idxFailure > idxSuccess
+        ? 'error'
+        : 'unknown'
+
+  return {
+    state,
+    lastSuccess,
+    lastFailure,
+    recentCompileLogs: taggedCompileLogs.slice(-20),
+  }
+}
+
 export const createModelicatools = ({
   modelicaSource,
   templateSource,
@@ -75,6 +137,7 @@ export const createModelicatools = ({
   simDt,
   showAllInPrompt,
   createNewVersion,
+  compileNow,
 }: {
   modelicaSource: Ref<string>
   templateSource: Ref<string>
@@ -82,12 +145,13 @@ export const createModelicatools = ({
   solverSource: Ref<string>
   jsSource: Ref<string>
   daePrettyOutput: Ref<string>
-  modelicaLog: Ref<{ timestamp: string; level: string; message: string }[]>
+  modelicaLog: Ref<ModelicaLogEntry[]>
   simT0: Ref<number>
   simTf: Ref<number>
   simDt: Ref<number>
   showAllInPrompt: Ref<boolean>
   createNewVersion: (description?: string) => void
+  compileNow?: () => Promise<{ ok: boolean; message?: string }>
 }) => [
   createTool({
     name: 'modelicaDocumentAssistant',
@@ -96,6 +160,11 @@ export const createModelicatools = ({
     parameters: {
       type: 'object',
       properties: {
+        useTools: {
+          type: 'boolean',
+          description: 'When true, allow the assistant to run autonomous tool workflows.',
+          default: true,
+        },
         showAll: {
           type: 'boolean',
           description:
@@ -105,7 +174,30 @@ export const createModelicatools = ({
       additionalProperties: false,
     } as const satisfies JSONSchema7,
     function: (opts) => {
+      const useTools = opts.useTools ?? true
       const showAll = opts.showAll ?? showAllInPrompt.value ?? true
+      const compileStatus = extractCompileStatus(modelicaLog.value || [])
+      const compileLooksBroken = compileStatus.state === 'error'
+
+      if (useTools && compileLooksBroken) {
+        return makeTaskResult([
+          {
+            role: 'assistant',
+            content: {
+              type: 'message',
+              data: 'Compilation error detected. Starting autonomous compile-fix cycle now.',
+            },
+          },
+          toolCall({
+            name: 'autoFixModelicaCompilationCycle',
+            arguments: {
+              currentRound: 1,
+              maxRounds: 5,
+              showAll,
+            },
+          }),
+        ])
+      }
 
       const modelicaWithLines = formatContentWithLineNumbers(modelicaSource.value)
       const templateWithLines = formatContentWithLineNumbers(templateSource.value)
@@ -122,9 +214,11 @@ export const createModelicatools = ({
       const contextPrompt = `
 You are the Taskyon Modelica assistant.
 
-You can edit two documents:
+You can edit these documents:
 - Modelica source
 - Jinja template source
+- UI template source
+- Solver source
 
 The UI shows the results live.
 
@@ -137,29 +231,229 @@ ${sourcesSection}
 \`\`\`\n${daePrettyOutput.value}\n\`\`\`
 
 ## Recent logs
-\`\`\`\n${JSON.stringify(modelicaLog.value.slice(-30), null, 2)}\n\`\`\`
+\`\`\`\n${serializeObject(modelicaLog.value.slice(-30), MODELICA_AGENT_SERIALIZE_OPTIONS)}\n\`\`\`
 
 ## Simulation settings
-\`\`\`\n${JSON.stringify({ t0: simT0.value, tf: simTf.value, dt: simDt.value }, null, 2)}\n\`\`\`
+\`\`\`\n${serializeObject(
+        { t0: simT0.value, tf: simTf.value, dt: simDt.value },
+        MODELICA_AGENT_SERIALIZE_OPTIONS,
+      )}\n\`\`\`
 
 ## Available Tool: updateModelicaDocument
 - Apply line-based patches to modelica or template.
 - You can update both in a single call.
+
+## Additional tools
+- getModelicaCompilerStatus: inspect the latest compile/ABI state.
+- autoFixModelicaCompilationCycle: autonomous patch->compile->check loop.
 
 ## CRITICAL BEHAVIOR RULES
 1. For any edit request, you MUST call updateModelicaDocument. Prefer patches.
 2. Do not include line numbers in patch text.
 3. Do NOT set newContent to an empty string. Omit newContent unless you intend a full replacement.
 4. If uncertain, ask 1–2 clarification questions.
-5. If compilation is failing, you may attempt one follow-up edit at most, preferring Modelica changes first.
+5. If compilation is failing, prefer calling autoFixModelicaCompilationCycle.
 `
 
       return makeTaskResult([
         createChatCompletionTask({
           prompts: [contextPrompt],
           goal: 'ChooseTool',
-          allowedTools: ['updateModelicaDocument'],
+          allowedTools: [
+            'updateModelicaDocument',
+            'getModelicaCompilerStatus',
+            'autoFixModelicaCompilationCycle',
+          ],
         }),
+      ])
+    },
+  }),
+
+  createTool({
+    name: 'getModelicaCompilerStatus',
+    description:
+      'Return the latest compile / ABI status and recent relevant logs so the agent can decide next edits.',
+    parameters: {
+      type: 'object',
+      properties: {
+        includeSources: {
+          type: 'boolean',
+          description: 'If true, include model and template sources with line numbers.',
+        },
+      },
+      additionalProperties: false,
+    } as const satisfies JSONSchema7,
+    function: async ({ includeSources }) => {
+      if (compileNow) {
+        try {
+          await compileNow()
+        } catch (e) {
+          console.warn('getModelicaCompilerStatus: compileNow failed', e)
+        }
+      }
+      const logs = modelicaLog.value ?? []
+      const status = extractCompileStatus(logs)
+      const compileState =
+        status.state === 'success'
+          ? 'success'
+          : status.state === 'error'
+            ? 'error'
+            : jsSource.value?.trim()
+              ? 'success'
+              : 'unknown'
+
+      const payload: Record<string, unknown> = {
+        compileState,
+        lastSuccess: status.lastSuccess ?? null,
+        lastFailure: status.lastFailure ?? null,
+        recentCompileLogs: status.recentCompileLogs,
+        generatedJsPreview: String(jsSource.value || '').slice(0, 400),
+        prettyDaePreview: String(daePrettyOutput.value || '').slice(0, 400),
+      }
+
+      if (includeSources) {
+        payload.modelicaSourceWithLines = formatContentWithLineNumbers(modelicaSource.value || '')
+        payload.templateSourceWithLines = formatContentWithLineNumbers(templateSource.value || '')
+      }
+
+      return makeTaskResult([
+        {
+          role: 'system',
+          content: {
+            type: 'message',
+            data: serializeObject(payload, MODELICA_AGENT_SERIALIZE_OPTIONS),
+          },
+        },
+      ])
+    },
+  }),
+
+  createTool({
+    name: 'autoFixModelicaCompilationCycle',
+    description:
+      'Autonomous compile-fix loop: inspect latest compile errors, patch documents, and re-check until success.',
+    parameters: {
+      type: 'object',
+      properties: {
+        currentRound: {
+          type: 'number',
+          description: 'Current repair iteration, starting at 1.',
+        },
+        maxRounds: {
+          type: 'number',
+          description: 'Maximum repair iterations before stopping.',
+        },
+        showAll: {
+          type: 'boolean',
+          description: 'If true, include full modelica/template/ui/solver content in the prompt.',
+        },
+      },
+      additionalProperties: false,
+    } as const satisfies JSONSchema7,
+    function: async ({ currentRound, maxRounds, showAll }) => {
+      if (compileNow) {
+        try {
+          await compileNow()
+        } catch (e) {
+          console.warn('autoFixModelicaCompilationCycle: compileNow failed', e)
+        }
+      }
+      const round = Number(currentRound ?? 1)
+      const max = Number(maxRounds ?? 4)
+      const logs = modelicaLog.value ?? []
+      const status = extractCompileStatus(logs)
+      const hasRenderableOutput = String(jsSource.value || '').trim().length > 0
+      const compileState =
+        status.state === 'success'
+          ? 'success'
+          : status.state === 'error'
+            ? 'error'
+            : hasRenderableOutput
+              ? 'success'
+              : 'error'
+
+      if (compileState === 'success') {
+        return makeTaskResult([
+          {
+            role: 'system',
+            content: {
+              type: 'message',
+              data: `Compile-fix cycle finished: compilation is healthy (round ${round}/${max}).`,
+            },
+          },
+        ])
+      }
+
+      if (round > max) {
+        return makeTaskResult([
+          {
+            role: 'system',
+            content: {
+              type: 'message',
+              data: `Compile-fix cycle stopped after ${max} rounds without success. Last failure: ${status.lastFailure?.message ?? 'unknown'}`,
+            },
+          },
+        ])
+      }
+
+      const includeAll = showAll ?? showAllInPrompt.value ?? true
+      const modelicaWithLines = formatContentWithLineNumbers(modelicaSource.value || '')
+      const templateWithLines = formatContentWithLineNumbers(templateSource.value || '')
+      const uiTemplateWithLines = formatContentWithLineNumbers(uiTemplateSource.value || '')
+      const solverWithLines = formatContentWithLineNumbers(solverSource.value || '')
+      const sourcesSection = includeAll
+        ? `## Modelica Source\n\`\`\`\n${modelicaWithLines}\n\`\`\`\n\n## Template Source\n\`\`\`\n${templateWithLines}\n\`\`\`\n\n## UI Template Source\n\`\`\`\n${uiTemplateWithLines}\n\`\`\`\n\n## Solver Source\n\`\`\`\n${solverWithLines}\n\`\`\``
+        : `## Modelica Source\n\`\`\`\n${modelicaWithLines}\n\`\`\`\n\n## Template/UI/Solver\nHidden because showAll is false.`
+
+      const cyclePrompt = `
+You are in an autonomous Modelica compile-repair cycle.
+Current round: ${round}/${max}
+
+${sourcesSection}
+
+## Last compile failure
+\`\`\`json
+${serializeObject(status.lastFailure ?? null, MODELICA_AGENT_SERIALIZE_OPTIONS)}
+\`\`\`
+
+## Recent compile logs
+\`\`\`json
+${serializeObject(status.recentCompileLogs, MODELICA_AGENT_SERIALIZE_OPTIONS)}
+\`\`\`
+
+## Generated JS preview
+\`\`\`
+${String(jsSource.value || '').slice(0, 600)}
+\`\`\`
+
+Required workflow:
+1. Apply exactly one focused fix using updateModelicaDocument.
+2. Do not ask the user any question in this loop.
+3. If there is nothing to edit, return a short "no_change" message.
+
+Constraints:
+- Prefer minimal edits and line patches.
+- Do not replace entire files unless necessary.
+- Prefer fixing Modelica first when error points to source semantics.
+- Prefer fixing template/solver when error is JS/render/runtime.
+`
+
+      return makeTaskResult([
+        [
+          createChatCompletionTask({
+            prompts: [cyclePrompt],
+            goal: 'ChooseTool',
+            allowedTools: ['updateModelicaDocument'],
+          }),
+          toolCall({
+            name: 'autoFixModelicaCompilationCycle',
+            arguments: {
+              currentRound: round + 1,
+              maxRounds: max,
+              showAll: includeAll,
+            },
+          }),
+        ],
       ])
     },
   }),
@@ -210,7 +504,7 @@ ${sourcesSection}
       required: ['updates'],
       additionalProperties: false,
     } as const satisfies JSONSchema7,
-    function: ({ updates, description }) => {
+    function: async ({ updates, description }) => {
       const totalEdits = updates.reduce((acc, update) => {
         const patchCount = Array.isArray(update.patches) ? update.patches.length : 0
         const newContentStr = typeof update.newContent === 'string' ? update.newContent : ''
@@ -303,12 +597,24 @@ ${sourcesSection}
 
       createNewVersion(`AI update: ${description || changesLog.join(', ')}`)
 
+      let compileSummary = 'Compilation step not executed.'
+      if (compileNow) {
+        try {
+          const compileResult = await compileNow()
+          compileSummary = compileResult.ok
+            ? `Compilation ok${compileResult.message ? `: ${compileResult.message}` : ''}`
+            : `Compilation failed${compileResult.message ? `: ${compileResult.message}` : ''}`
+        } catch (e) {
+          compileSummary = `Compilation threw: ${e instanceof Error ? e.message : String(e)}`
+        }
+      }
+
       return makeTaskResult([
         {
           role: 'system',
           content: {
             type: 'message',
-            data: `Updates applied:\n${changesLog.join('\n')}`,
+            data: `Updates applied:\n${changesLog.join('\n')}\n\n${compileSummary}`,
           },
         },
         ...(description

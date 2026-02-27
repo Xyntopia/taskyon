@@ -50,8 +50,10 @@ const simulateModel = (params, context, model) => {
   // ---------- Linear solver ----------
   function solveLinearSystem(A, b) {
     const n = A.length
+    if (n === 0) return []
     const M = A.map((r) => r.slice())
     const x = b.slice()
+    const pivotTol = 1e-12
 
     for (let k = 0; k < n; k++) {
       let maxRow = k
@@ -63,7 +65,9 @@ const simulateModel = (params, context, model) => {
           maxRow = i
         }
       }
-      if (maxVal === 0) throw new Error('Singular matrix')
+      if (maxVal <= pivotTol) {
+        M[k][k] = M[k][k] >= 0 ? pivotTol : -pivotTol
+      }
 
       if (maxRow !== k) {
         ;[M[k], M[maxRow]] = [M[maxRow], M[k]]
@@ -82,14 +86,38 @@ const simulateModel = (params, context, model) => {
     for (let i = n - 1; i >= 0; i--) {
       let s = x[i]
       for (let j = i + 1; j < n; j++) s -= M[i][j] * x[j]
-      x[i] = s / M[i][i]
+      const diag = Math.abs(M[i][i]) <= pivotTol ? (M[i][i] >= 0 ? pivotTol : -pivotTol) : M[i][i]
+      x[i] = s / diag
     }
 
     return x
   }
 
+  function solveDampedLeastSquares(J, r, lambda) {
+    const m = J.length
+    if (m === 0) return []
+    const n = Array.isArray(J[0]) ? J[0].length : 0
+    if (n === 0) return []
+    const A = Array.from({ length: n }, () => new Array(n).fill(0))
+    const b = new Array(n).fill(0)
+
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        let s = 0
+        for (let k = 0; k < m; k++) s += J[k][i] * J[k][j]
+        if (i === j) s += lambda
+        A[i][j] = s
+      }
+      let rhs = 0
+      for (let k = 0; k < m; k++) rhs += J[k][i] * r[k]
+      b[i] = -rhs
+    }
+
+    return solveLinearSystem(A, b)
+  }
+
   // ---------- Newton solver ----------
-  function newtonSolve(residualFn, z0, newtonOpts) {
+  function newtonSolve(residualFn, z0, newtonOpts, trace) {
     const maxIter = Number.isFinite(newtonOpts?.maxIter) ? newtonOpts.maxIter : 12
     const tol = Number.isFinite(newtonOpts?.tol) ? newtonOpts.tol : 1e-8
     const epsBase = Number.isFinite(newtonOpts?.epsBase) ? newtonOpts.epsBase : 1e-6
@@ -98,37 +126,101 @@ const simulateModel = (params, context, model) => {
     let z = z0.slice()
 
     for (let iter = 0; iter < maxIter; iter++) {
-      const r = residualFn(z)
+      let r
+      try {
+        r = residualFn(z)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        throw new Error(
+          `Residual evaluation failed (stage=${trace?.stage || 'unknown'}, iter=${iter}, t=${Number(trace?.t).toPrecision(8)}): ${msg}`,
+        )
+      }
+      if (!Array.isArray(r) || r.length !== n) {
+        // Allow over/under-determined systems (m != n) by solving in least-squares sense.
+        // We only require an array residual.
+        if (!Array.isArray(r)) {
+          throw new Error(
+            `Residual shape invalid (stage=${trace?.stage || 'unknown'}, iter=${iter}): expected array, got non-array`,
+          )
+        }
+      }
+      const m = r.length
+      if (m === 0) {
+        throw new Error(
+          `Residual shape invalid (stage=${trace?.stage || 'unknown'}, iter=${iter}): empty residual vector`,
+        )
+      }
+      for (let i = 0; i < n; i++) {
+        if (i < m && !Number.isFinite(r[i])) {
+          throw new Error(
+            `Residual non-finite at index=${i} (stage=${trace?.stage || 'unknown'}, iter=${iter}, t=${Number(trace?.t).toPrecision(8)}): ${String(r[i])}`,
+          )
+        }
+      }
+      for (let i = n; i < m; i++) {
+        if (!Number.isFinite(r[i])) {
+          throw new Error(
+            `Residual non-finite at index=${i} (stage=${trace?.stage || 'unknown'}, iter=${iter}, t=${Number(trace?.t).toPrecision(8)}): ${String(r[i])}`,
+          )
+        }
+      }
 
       let maxAbs = 0
-      for (let i = 0; i < n; i++) maxAbs = Math.max(maxAbs, Math.abs(r[i]))
+      for (let i = 0; i < m; i++) maxAbs = Math.max(maxAbs, Math.abs(r[i]))
       if (maxAbs < tol) return z
 
-      const J = Array.from({ length: n }, () => new Array(n).fill(0))
+      const J = Array.from({ length: m }, () => new Array(n).fill(0))
 
       for (let j = 0; j < n; j++) {
         const zj = z[j]
         const eps = epsBase * (1 + Math.abs(zj))
         z[j] = zj + eps
-        const rp = residualFn(z)
+        let rp
+        try {
+          rp = residualFn(z)
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          throw new Error(
+            `Residual Jacobian probe failed (stage=${trace?.stage || 'unknown'}, iter=${iter}, col=${j}, t=${Number(trace?.t).toPrecision(8)}): ${msg}`,
+          )
+        }
         z[j] = zj
-        for (let i = 0; i < n; i++) {
+        if (!Array.isArray(rp) || rp.length !== m) {
+          throw new Error(
+            `Jacobian probe shape invalid (stage=${trace?.stage || 'unknown'}, iter=${iter}, col=${j}): expected ${m}, got ${
+              Array.isArray(rp) ? rp.length : 'non-array'
+            }`,
+          )
+        }
+        for (let i = 0; i < m; i++) {
           J[i][j] = (rp[i] - r[i]) / eps
+          if (!Number.isFinite(J[i][j])) {
+            throw new Error(
+              `Jacobian non-finite at (row=${i}, col=${j}) (stage=${trace?.stage || 'unknown'}, iter=${iter}, t=${Number(trace?.t).toPrecision(8)})`,
+            )
+          }
         }
       }
 
-      const delta = solveLinearSystem(
-        J,
-        r.map((v) => -v),
-      )
-      for (let i = 0; i < n; i++) z[i] += delta[i]
+      let delta
+      // Use damped least-squares for both square and rectangular systems.
+      // This is robust for over-determined DAEs (m > n) that arise from expanded libraries.
+      delta = solveDampedLeastSquares(J, r, 1e-8)
+      for (let i = 0; i < n; i++) {
+        if (!Number.isFinite(delta[i])) {
+          throw new Error(
+            `Newton update non-finite at index=${i} (stage=${trace?.stage || 'unknown'}, iter=${iter}, t=${Number(trace?.t).toPrecision(8)})`,
+          )
+        }
+        z[i] += delta[i]
+      }
     }
 
     return z
   }
 
   // ---------- Backward-Euler-like stage ----------
-  function implicitStage(tStage, xBase, yGuess, u, dtStage, pOverride, newtonOpts) {
+  function implicitStage(tStage, xBase, yGuess, u, dtStage, pOverride, newtonOpts, stageName) {
     const z0 = xBase.concat(yGuess)
 
     function residual(z) {
@@ -143,7 +235,7 @@ const simulateModel = (params, context, model) => {
       return model.residual(tStage, xS, xDot, yS, u, pOverride)
     }
 
-    const sol = newtonSolve(residual, z0, newtonOpts)
+    const sol = newtonSolve(residual, z0, newtonOpts, { stage: stageName, t: tStage })
     return {
       x: sol.slice(0, nx),
       y: sol.slice(nx),
@@ -155,7 +247,16 @@ const simulateModel = (params, context, model) => {
     const gamma = 1 - 1 / Math.sqrt(2)
 
     // ---- Stage 1 ----
-    const stage1 = implicitStage(t + gamma * dt, x, y, u, gamma * dt, pOverride, newtonOpts)
+    const stage1 = implicitStage(
+      t + gamma * dt,
+      x,
+      y,
+      u,
+      gamma * dt,
+      pOverride,
+      newtonOpts,
+      'sdirk2_stage1',
+    )
 
     // ---- Stage 2 ----
     const z0 = stage1.x.concat(stage1.y)
@@ -173,7 +274,10 @@ const simulateModel = (params, context, model) => {
       return model.residual(t + dt, x2, xDot, y2, u, pOverride)
     }
 
-    const sol2 = newtonSolve(residualStage2, z0, newtonOpts)
+    const sol2 = newtonSolve(residualStage2, z0, newtonOpts, {
+      stage: 'sdirk2_stage2',
+      t: t + dt,
+    })
 
     return {
       x: sol2.slice(0, nx),
@@ -210,6 +314,10 @@ const simulateModel = (params, context, model) => {
     const yArr = []
     const uArr = []
     const cArr = []
+    let stopReason = null
+    let stopError = null
+    let stopStack = null
+    let stopDetails = null
 
     let t = t0
     let x = (opts.x0 || x0_model).slice()
@@ -233,6 +341,22 @@ const simulateModel = (params, context, model) => {
       try {
         step = sdirk2Step(t, x, y, u, dt, pOverride, newtonOpts)
       } catch (e) {
+        stopReason = 'sdirk2Step_failed'
+        stopError = (e && e.message) || String(e)
+        stopStack = e && e.stack ? String(e.stack) : null
+        const missingSymbol = /([A-Za-z_$][A-Za-z0-9_$]*) is not defined/.exec(String(stopError))
+        stopDetails = {
+          stepIndex: k,
+          time: t,
+          dt,
+          nx,
+          ny,
+          nu,
+          xHead: x.slice(0, Math.min(3, x.length)),
+          yHead: y.slice(0, Math.min(3, y.length)),
+          uHead: u.slice(0, Math.min(3, u.length)),
+          missingSymbol: missingSymbol ? missingSymbol[1] : null,
+        }
         log(`SDIRK step failed at t=${t}`, {
           error: (e && e.message) || String(e),
           stack: e && e.stack,
@@ -241,6 +365,16 @@ const simulateModel = (params, context, model) => {
       }
 
       if (!step || !step.x || !step.y) {
+        stopReason = 'sdirk2Step_invalid_result'
+        stopError = `Invalid step payload at t=${t}`
+        stopDetails = {
+          stepIndex: k,
+          time: t,
+          dt,
+          nx,
+          ny,
+          nu,
+        }
         log(`SDIRK step returned invalid data at t=${t}`, { step })
         break
       }
@@ -287,7 +421,7 @@ const simulateModel = (params, context, model) => {
     }
 
     log('Simulation finished', { nSamples: tArr.length })
-    return { t: tArr, x: xArr, y: yArr, u: uArr, c: cArr }
+    return { t: tArr, x: xArr, y: yArr, u: uArr, c: cArr, stopReason, stopError, stopStack, stopDetails }
   }
 
   // ---------- Run ----------
@@ -297,6 +431,44 @@ const simulateModel = (params, context, model) => {
     f_u: sim.f_u,
     solverOptions: sim.solverOptions,
   })
+
+  const expectRows = (rows, width, label) => {
+    if (!Array.isArray(rows)) {
+      throw new Error(`Simulation result shape invalid: ${label} is not an array`)
+    }
+    if (rows.length !== raw.t.length) {
+      throw new Error(
+        `Simulation result shape invalid: ${label}.length=${rows.length} does not match t.length=${raw.t.length}`,
+      )
+    }
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
+      if (!Array.isArray(row)) {
+        throw new Error(`Simulation result shape invalid: ${label}[${i}] is not an array`)
+      }
+      if (row.length !== width) {
+        throw new Error(
+          `Simulation result shape invalid: ${label}[${i}].length=${row.length}, expected ${width}`,
+        )
+      }
+    }
+  }
+
+  expectRows(raw.x, nx, 'x')
+  expectRows(raw.y, ny, 'y')
+  expectRows(raw.u, nu, 'u')
+  expectRows(raw.c, conditionNames.length, 'c')
+
+  const projectSeries = (rows, names) =>
+    Object.fromEntries(
+      names.map((n, i) => [
+        n,
+        rows.map((r) => {
+          const v = r[i]
+          return typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN
+        }),
+      ]),
+    )
 
   // Return ONLY structured-cloneable data.
   // Never return the full `context` object because it may contain functions
@@ -313,6 +485,10 @@ const simulateModel = (params, context, model) => {
       tf: sim.tf ?? 5,
       dt: sim.dt ?? 0.1,
       nSteps: raw.t.length,
+      stopReason: raw.stopReason,
+      stopError: raw.stopError,
+      stopStack: raw.stopStack,
+      stopDetails: raw.stopDetails,
       model: {
         name: model.name || meta.name || 'UnnamedModel',
         stateNames,
@@ -324,10 +500,10 @@ const simulateModel = (params, context, model) => {
     },
     data: {
       t: raw.t,
-      x: Object.fromEntries(stateNames.map((n, i) => [n, raw.x.map((r) => r[i])])),
-      y: Object.fromEntries(algebraicNames.map((n, i) => [n, raw.y.map((r) => r[i])])),
-      u: Object.fromEntries(inputNames.map((n, i) => [n, raw.u.map((r) => r[i])])),
-      c: Object.fromEntries(conditionNames.map((n, i) => [n, raw.c.map((r) => r[i])])),
+      x: projectSeries(raw.x, stateNames),
+      y: projectSeries(raw.y, algebraicNames),
+      u: projectSeries(raw.u, inputNames),
+      c: projectSeries(raw.c, conditionNames),
     },
   }
 }

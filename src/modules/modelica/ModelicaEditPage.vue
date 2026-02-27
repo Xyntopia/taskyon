@@ -26,210 +26,53 @@
           }"
         >
           <template #actions>
-            <!-- Actions -->
-            <q-bar flat class="rounded-borders bg-transparent q-ma-xs">
-              <q-btn
-                dense
-                color="grey-7"
-                :icon="matDelete"
-                label="Clear All"
-                outline
-                @click="clearAll"
-              />
-              <q-btn
-                dense
-                color="grey-7"
-                :icon="matDescription"
-                label="Load Example"
-                outline
-                @click="loadExample"
-              />
-
-              <q-separator vertical class="q-mx-sm" />
-
-              <!-- Project -->
-              <q-select
-                v-model="currentProjectId"
-                :options="availableProjectIds"
-                dense
-                standout
-                label="Project"
-                style="max-width: 260px"
-                :disable="availableProjectIds.length === 0"
-                @update:model-value="onProjectSelected"
-              />
-              <q-btn
-                dense
-                flat
-                color="secondary"
-                label="New"
-                title="Create a new project"
-                @click="createNewProjectDialog"
-              />
-              <q-btn
-                dense
-                flat
-                color="grey-7"
-                :icon="matRefresh"
-                title="Refresh project list"
-                @click="refreshAvailableProjects"
-              />
-              <q-btn
-                dense
-                flat
-                color="negative"
-                :icon="matDelete"
-                title="Delete current project"
-                :disable="!currentProjectId"
-                @click="deleteCurrentProject"
-              />
-
-              <q-btn
-                dense
-                color="grey-7"
-                label="Export"
-                outline
-                :disable="!projectFile"
-                @click="exportProjectJson"
-              />
-              <q-btn dense color="grey-7" label="Import" outline @click="triggerImportProject" />
-
-              <input
-                ref="projectImportEl"
-                type="file"
-                accept="application/json,.json"
-                style="display: none"
-                @change="onImportProjectFile"
-              />
-
-              <q-toggle v-model="verbose" dense label="Verbose logging" />
-              <q-separator vertical class="q-mx-sm" />
-
-              <!-- Version Info -->
-              <div style="font-size: x-small" class="text-center">
-                Ver:<br />{{ currentVersionIndex + 1 }} / {{ documentVersions.length }}
-              </div>
-
-              <!-- Version Navigation -->
-              <q-btn
-                flat
-                dense
-                round
-                :icon="matNavigateBefore"
-                title="Previous Version"
-                :disable="currentVersionIndex === 0"
-                @click="goToPreviousVersion"
-              />
-              <q-btn
-                flat
-                dense
-                round
-                :icon="matNavigateNext"
-                title="Next Version"
-                :disable="currentVersionIndex === documentVersions.length - 1"
-                @click="goToNextVersion"
-              />
-              <q-btn
-                flat
-                dense
-                round
-                :icon="mdiTextBoxPlus"
-                color="secondary"
-                title="Create New Version Snapshot"
-                @click="handleCreateNewVersionClick"
-              />
-
-              <!-- Export / Save -->
-              <q-btn-dropdown
-                dense
-                flat
-                color="secondary"
-                :icon="matSave"
-                label="Save"
-                dropdown-icon=""
-              >
-                <q-list dense style="min-width: 220px">
-                  <q-item v-close-popup clickable @click="exportFile('modelica', modelicaSource)">
-                    <q-item-section>Export Modelica</q-item-section>
-                  </q-item>
-                  <q-item v-close-popup clickable @click="exportFile('template', templateSource)">
-                    <q-item-section>Export Template</q-item-section>
-                  </q-item>
-                  <q-separator />
-                  <q-item v-close-popup clickable @click="exportFile('js', jsSource)">
-                    <q-item-section>Export Generated JS</q-item-section>
-                  </q-item>
-                  <q-item v-close-popup clickable @click="exportFile('daePretty', daePrettyOutput)">
-                    <q-item-section>Export Pretty DAE</q-item-section>
-                  </q-item>
-                  <q-item
-                    v-close-popup
-                    clickable
-                    @click="exportFile('daeJson', JSON.stringify(daeJsonOutput ?? {}, null, 2))"
-                  >
-                    <q-item-section>Export DAE JSON</q-item-section>
-                  </q-item>
-                  <q-separator />
-                  <q-item
-                    v-close-popup
-                    clickable
-                    @click="
-                      exportGeneratedUiHtml(
-                        hasUiTemplate,
-                        activeUiTemplateSource,
-                        jsSource,
-                        activeSolverSource,
-                        currentProjectId,
-                      )
-                    "
-                  >
-                    <q-item-section>Export UI HTML</q-item-section>
-                  </q-item>
-                </q-list>
-              </q-btn-dropdown>
-
-              <q-space />
-
-              <q-toggle
-                v-model="showAllInPrompt"
-                dense
-                size="sm"
-                color="secondary"
-                label="AI sees all"
-              />
-
-              <!-- Run / Stop execution -->
-              <q-btn
-                dense
-                flat
-                color="secondary"
-                :icon="matPlayArrow"
-                label="Run in Sandbox"
-                :disable="!jsSource || isHtmlOutput"
-                :loading="running"
-                @click="runInSandbox(jsSource)"
-              />
-              <q-btn
-                v-if="hasUiTemplate"
-                dense
-                flat
-                color="secondary"
-                :icon="matOpenInNew"
-                label="Popup window"
-                :disable="!jsSource"
-                @click="openGeneratedHtmlPopup"
-              />
-
-              <q-btn
-                v-if="running"
-                flat
-                dense
-                color="negative"
-                label="Stop"
-                outline
-                @click="stopExecution"
-              />
-            </q-bar>
+            <ModelicaActionsBar
+              :current-project-id="currentProjectId"
+              :available-project-ids="availableProjectIds"
+              :project-file="projectFile"
+              :project-menu-options="projectMenuOptions"
+              :project-menu-schema="projectMenuSchema"
+              :library-menu-options="libraryMenuOptions"
+              :library-menu-schema="libraryMenuSchema"
+              :runtime-menu-options="runtimeMenuOptions"
+              :runtime-menu-schema="runtimeMenuSchema"
+              :msl-loaded="mslLoaded"
+              :msl-loading="mslLoading"
+              :msl-downloading="mslDownloading"
+              :msl-archive-name="mslArchiveName"
+              :msl-file-count="mslFileCount"
+              :msl-cached-zip-path="mslCachedZipPath"
+              :wasm-loaded="wasmLoaded"
+              :current-version-index="currentVersionIndex"
+              :document-versions-length="documentVersions.length"
+              :js-source="jsSource"
+              :has-ui-template="hasUiTemplate"
+              :is-html-output="isHtmlOutput"
+              :running="running"
+              @project-selected="onProjectSelected"
+              @create-project="createNewProjectDialog"
+              @refresh-projects="refreshAvailableProjects"
+              @delete-project="deleteCurrentProject"
+              @export-project="exportProjectJson"
+              @import-project-file="onImportProjectFile"
+              @import-msl-file="onImportMslZip"
+              @download-msl="downloadMslZipToOpfs"
+              @load-cached-msl="loadCachedMslZipFromOpfs"
+              @clear-msl="clearModelicaLibraries"
+              @clear-all="clearAll"
+              @load-example="loadExample"
+              @previous-version="goToPreviousVersion"
+              @next-version="goToNextVersion"
+              @create-version="handleCreateNewVersionClick"
+              @export-target="handleExportTarget"
+              @export-ui-html="handleExportUiHtml"
+              @run-sandbox="handleRunInSandbox"
+              @open-popup="openGeneratedHtmlPopup"
+              @stop-execution="stopExecution"
+              @update:project-menu-options="onProjectMenuOptionsUpdate"
+              @update:library-menu-options="onLibraryMenuOptionsUpdate"
+              @update:runtime-menu-options="onRuntimeMenuOptionsUpdate"
+            />
           </template>
 
           <template #logs>
@@ -545,7 +388,6 @@
                 <ObjectView
                   v-model="executionResult"
                   dense
-                  hide-missing
                   read-only
                   copy-btn
                   enable-expert-mode
@@ -595,19 +437,14 @@
 <script setup lang="ts">
 import {
   matCode,
-  matDelete,
   matDescription,
-  matNavigateBefore,
-  matNavigateNext,
-  matOpenInNew,
   matPlayArrow,
-  matRefresh,
   matRocketLaunch,
-  matSave,
 } from '@quasar/extras/material-icons'
-import { mdiFunctionVariant, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
+import { mdiFunctionVariant } from '@quasar/extras/mdi-v6'
 import { toolCall } from '@taskyon/taskyon'
 import { watchDebounced } from '@vueuse/core'
+import type { JSONSchema7 } from 'json-schema'
 import { Dialog, Notify } from 'quasar'
 import CodeEditor from 'src/components/CodeEditor.vue'
 import type { DockNode } from 'src/components/DockView.vue'
@@ -617,30 +454,35 @@ import TaskyonIframe from 'src/components/TaskyonIframe.vue'
 import ObjectView from 'src/components/varViews/ObjectView.vue'
 import type { RumocaModule } from 'src/modules/modelica/modelica'
 import {
-  buildIframeCode,
   loadWasm,
+  DEFAULT_MSL_ZIP_URL,
   validateModelicaProjectFileV1,
   type TyModelicaProjectFileV1,
+  type ModelicaVersion,
   modelicaLog,
   appendModelicaLog,
-  buildModelAbiValidationIframeCode,
-  validateModelAbiValidationResultV1,
   exportFile,
   exportGeneratedUiHtml,
   renderUiHtml,
+  builtinSolvers,
+  packProjectFile as packModelicaProjectFile,
+  unpackProjectFile,
+  compileModelicaToJs,
+  runModelicaSandbox,
 } from 'src/modules/modelica/modelica'
-import defaultSolverSource from 'src/modules/modelica/simulateModel?raw'
 import defaultUiTemplateSource from 'src/modules/modelica/ui_template_placeholders.html?raw'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { copyToClipboard } from 'src/modules/utils'
 import FixedHeightPage from 'src/pages/FixedHeightPage.vue'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { validateJavaScriptInSandbox } from '../../../packages/taskyon/src/utils/checkJsSyntax'
-import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
 import { syncStateWithOPFSFolder } from '../saveState'
+import ModelicaActionsBar from './components/ModelicaActionsBar.vue'
 import { createModelicatools } from './modelicaTools'
+import { useProjectFileStore } from './useProjectFileStore'
+import { useModelicaLibraries } from './useModelicaLibraries'
+import { useSolverRegistry } from './useSolverRegistry'
 
 type StatusType = 'loading' | 'success' | 'error' | ''
 
@@ -662,14 +504,101 @@ const simT0 = ref(0)
 const simTf = ref(5)
 const simDt = ref(0.01)
 
-// Solver options (declared by solver via JSON schema)
-const solverOptionsSchema = ref<Record<string, unknown> | undefined>(undefined)
-const solverOptions = ref<Record<string, unknown>>({})
-const showSolverOptionsDialog = ref(false)
+const {
+  useModelicaStandardLibrary,
+  mslLoaded,
+  mslLoading,
+  mslDownloading,
+  mslArchiveName,
+  mslFileCount,
+  mslCachedZipPath,
+  mslDownloadUrl,
+  downloadMslZipToOpfs,
+  loadCachedMslZipFromOpfs,
+  onImportMslZip,
+  clearModelicaLibraries,
+} = useModelicaLibraries({ wasm })
+
+const {
+  solverOptionsSchema,
+  solverOptions,
+  showSolverOptionsDialog,
+  projectSolvers,
+  projectSolverIds,
+  selectedSolverKey,
+  newSolverId,
+  solverKeyOptions,
+  isSolverBuiltin,
+  activeSolverSource,
+  addProjectSolver,
+  deleteActiveProjectSolver,
+} = useSolverRegistry({
+  simT0,
+  simTf,
+  simDt,
+})
 
 const executionResult = ref<Record<string, unknown>>({})
 const running = ref(false)
 const abortController = ref<AbortController | null>(null)
+
+function normalizeSimulationResultForDisplay(
+  result: Record<string, unknown>,
+): Record<string, unknown> {
+  const resultObject = result && typeof result === 'object' ? result : {}
+  const meta =
+    resultObject.meta && typeof resultObject.meta === 'object'
+      ? (resultObject.meta as Record<string, unknown>)
+      : {}
+  const model =
+    meta.model && typeof meta.model === 'object' ? (meta.model as Record<string, unknown>) : {}
+  const data =
+    resultObject.data && typeof resultObject.data === 'object'
+      ? ({ ...(resultObject.data as Record<string, unknown>) } as Record<string, unknown>)
+      : {}
+
+  const tSeries = Array.isArray(data.t) ? data.t : []
+  const tLen = tSeries.length
+  const toNames = (value: unknown): string[] =>
+    Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
+
+  const stateNames = toNames(model.stateNames)
+  const algebraicNames = toNames(model.algebraicNames)
+  const inputNames = toNames(model.inputNames)
+  const conditionNames = toNames(model.conditionNames)
+
+  const finiteSeries = (value: unknown, len: number): number[] => {
+    if (!Array.isArray(value)) return new Array(Math.max(0, len)).fill(Number.NaN)
+    const out = value.map((entry) =>
+      typeof entry === 'number' && Number.isFinite(entry) ? entry : Number.NaN,
+    )
+    if (out.length < len) out.push(...new Array(len - out.length).fill(Number.NaN))
+    if (out.length > len && len > 0) out.length = len
+    return out
+  }
+
+  const normalizeSeriesMap = (value: unknown, names: string[]): Record<string, number[]> => {
+    const src = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+    const normalized: Record<string, number[]> = {}
+    for (const [k, v] of Object.entries(src)) {
+      normalized[k] = finiteSeries(v, tLen)
+    }
+    for (const name of names) {
+      if (!(name in normalized)) normalized[name] = new Array(tLen).fill(Number.NaN)
+    }
+    return normalized
+  }
+
+  data.x = normalizeSeriesMap(data.x, stateNames)
+  data.y = normalizeSeriesMap(data.y, algebraicNames)
+  data.u = normalizeSeriesMap(data.u, inputNames)
+  data.c = normalizeSeriesMap(data.c, conditionNames)
+
+  return {
+    ...resultObject,
+    data,
+  }
+}
 
 // ---------- Live sandbox log forwarding (iframe -> editor) ----------
 // The iframe code posts messages of the form:
@@ -759,7 +688,6 @@ const configuration = computed<partialTyConfiguration | null>(() => {
   }
 })
 
-const LS_PROJECT_ID_KEY = 'taskyon.modelica.projectId'
 const initialLayout = ref<DockNode>({
   id: 'editor',
   type: 'container',
@@ -789,14 +717,14 @@ const initialLayout = ref<DockNode>({
             {
               id: 'editors',
               type: 'leaf',
-              views: ['modelica', 'template', 'uiTemplate'],
+              views: ['modelica', 'template', 'uiTemplate', 'solver'],
               activeViewIndex: 0,
             },
             {
               id: 'simulation',
               type: 'leaf',
               size: 85,
-              views: ['model', 'simulate', 'solver'],
+              views: ['model', 'simulate'],
               activeViewIndex: 0,
             },
           ],
@@ -817,6 +745,7 @@ const initialLayout = ref<DockNode>({
       type: 'leaf',
       showTabs: 'never',
       collapsed: true,
+      keepAliveViews: ['assistant'],
       views: ['assistant'],
       size: 30,
       activeViewIndex: 0,
@@ -912,13 +841,6 @@ watchDebounced(
   { debounce: 200, maxWait: 800 },
 )
 
-type ModelicaVersion = {
-  modelica: string
-  template: string
-  timestamp: string
-  description?: string
-}
-
 const documentVersions = ref<ModelicaVersion[]>([])
 const currentVersionIndex = ref(0)
 const showAllInPrompt = ref(true)
@@ -956,180 +878,6 @@ function goToNextVersion() {
 function handleCreateNewVersionClick() {
   createNewVersion()
 }
-
-async function confirmDialog(opts: {
-  title: string
-  message: string
-  okLabel?: string
-  cancelLabel?: string
-}): Promise<boolean> {
-  return await new Promise((resolve) => {
-    Dialog.create({
-      title: opts.title,
-      message: opts.message,
-      ok: { label: opts.okLabel ?? 'OK' },
-      cancel: { label: opts.cancelLabel ?? 'Cancel' },
-      persistent: true,
-    })
-      .onOk(() => resolve(true))
-      .onCancel(() => resolve(false))
-      .onDismiss(() => resolve(false))
-  })
-}
-
-// ---------- Project + UI templates ----------
-
-const projectImportEl = ref<HTMLInputElement | null>(null)
-
-const initialProjectId =
-  String(localStorage.getItem(LS_PROJECT_ID_KEY) || 'default').trim() || 'default'
-const currentProjectId = ref<string>(initialProjectId)
-const projectIdInput = ref<string>('default')
-
-// ---------- Discover existing projects (OPFS) ----------
-
-const availableProjectIds = ref<string[]>([])
-
-async function refreshAvailableProjects() {
-  const prefix = 'modelicaProject_'
-  try {
-    const navAny = navigator as unknown as {
-      storage?: { getDirectory?: () => Promise<FileSystemDirectoryHandle> }
-    }
-    if (!navAny.storage?.getDirectory) {
-      Notify.create({ type: 'warning', message: 'OPFS directory listing not supported.' })
-      return
-    }
-    const root = await navAny.storage.getDirectory()
-    const ids: string[] = []
-
-    for await (const [name, handle] of root.entries()) {
-      if (handle?.kind === 'directory' && typeof name === 'string' && name.startsWith(prefix)) {
-        ids.push(name.slice(prefix.length))
-      }
-    }
-    ids.sort()
-    availableProjectIds.value = ids
-  } catch (e) {
-    console.warn('Failed to list OPFS projects:', e)
-    Notify.create({
-      type: 'warning',
-      message: `Failed to detect saved projects: ${(e as Error).message}`,
-    })
-  }
-}
-
-async function deleteCurrentProject() {
-  const id = String(currentProjectId.value || '').trim()
-  if (!id) return
-
-  const confirmed = await confirmDialog({
-    title: 'Delete project',
-    message: `Delete project '${id}'? This cannot be undone.`,
-    okLabel: 'Delete',
-    cancelLabel: 'Cancel',
-  })
-
-  if (!confirmed) return
-
-  const prefix = 'modelicaProject_'
-  const dirName = `${prefix}${id}`
-
-  try {
-    const navAny = navigator as unknown as {
-      storage?: { getDirectory?: () => Promise<FileSystemDirectoryHandle> }
-    }
-    if (!navAny.storage?.getDirectory) {
-      Notify.create({ type: 'warning', message: 'OPFS not supported in this browser.' })
-      return
-    }
-
-    const root = await navAny.storage.getDirectory()
-
-    const rootWithRemoveEntry = root as unknown as {
-      removeEntry?: (name: string, opts?: { recursive?: boolean }) => Promise<void>
-    }
-    if (typeof rootWithRemoveEntry.removeEntry !== 'function') {
-      Notify.create({ type: 'warning', message: 'OPFS delete is not supported in this browser.' })
-      return
-    }
-
-    await rootWithRemoveEntry.removeEntry(dirName, { recursive: true })
-
-    Notify.create({ type: 'positive', message: `Deleted project '${id}'` })
-    await refreshAvailableProjects()
-
-    // Switch to another project if possible
-    const next = availableProjectIds.value.find((x) => x !== id) ?? 'default'
-    loadProjectById(next)
-  } catch (e) {
-    console.warn('Failed to delete OPFS project:', e)
-    Notify.create({
-      type: 'negative',
-      message: `Failed to delete project: ${(e as Error).message}`,
-    })
-  }
-}
-
-async function promptDialog(opts: {
-  title: string
-  message: string
-  okLabel?: string
-  cancelLabel?: string
-  initialValue?: string
-}): Promise<string | null> {
-  return await new Promise((resolve) => {
-    Dialog.create({
-      title: opts.title,
-      message: opts.message,
-      prompt: {
-        model: opts.initialValue ?? '',
-        type: 'text',
-      },
-      ok: { label: opts.okLabel ?? 'OK' },
-      cancel: { label: opts.cancelLabel ?? 'Cancel' },
-      persistent: true,
-    })
-      .onOk((v: unknown) => {
-        if (typeof v === 'string') return resolve(v.trim() || null)
-        if (typeof v === 'number') return resolve(String(v).trim() || null)
-        return resolve(null)
-      })
-      .onCancel(() => resolve(null))
-      .onDismiss(() => resolve(null))
-  })
-}
-
-async function createNewProjectDialog() {
-  const id = await promptDialog({
-    title: 'New project',
-    message: 'Enter a project name',
-    okLabel: 'Create',
-    cancelLabel: 'Cancel',
-    initialValue: '',
-  })
-
-  if (!id) return
-  if (availableProjectIds.value.includes(id)) {
-    Notify.create({ type: 'warning', message: `Project '${id}' already exists. Switching to it.` })
-    loadProjectById(id)
-    return
-  }
-
-  // Create the project as a "Save As" of the current state (minimal + predictable).
-  // The actual OPFS folder + state will be written by the OPFS sync after reload.
-  availableProjectIds.value = [...availableProjectIds.value, id].sort()
-  loadProjectById(id)
-}
-
-function onProjectSelected(val: string) {
-  const id = String(val || '').trim()
-  if (!id) return
-  if (id === currentProjectId.value) return
-  loadProjectById(id)
-}
-
-const projectFile = ref<TyModelicaProjectFileV1 | null>(null)
 
 const uiTemplates = ref<Record<string, string>>({})
 const selectedUiTemplateId = ref<string>('default')
@@ -1169,63 +917,9 @@ function deleteActiveUiTemplate() {
   selectedUiTemplateId.value = next
 }
 
-const builtinSolvers: Record<string, string> = {
-  default: defaultSolverSource,
-}
-
-// Project-local solvers (persisted inside the project JSON file)
-const projectSolvers = ref<Record<string, string>>({
-  solver1: defaultSolverSource,
-})
-
-const projectSolverIds = computed(() => Object.keys(projectSolvers.value).sort())
-
-const selectedSolverKey = ref<string>('builtin:default')
-const newSolverId = ref<string>('solver2')
-
-const solverKeyOptions = computed(() => {
-  const builtins = Object.keys(builtinSolvers)
-    .sort()
-    .map((id) => ({ label: `builtin:${id}`, value: `builtin:${id}` }))
-
-  const projects = Object.keys(projectSolvers.value)
-    .sort()
-    .map((id) => ({ label: `project:${id}`, value: `project:${id}` }))
-
-  return [...builtins, ...projects]
-})
-
-const isSolverBuiltin = computed(() => String(selectedSolverKey.value || '').startsWith('builtin:'))
-
-function solverIdFromKey(key: string): string {
-  const k = String(key || '')
-  if (k.startsWith('builtin:')) return k.slice('builtin:'.length)
-  if (k.startsWith('project:')) return k.slice('project:'.length)
-  return k
-}
-
-const activeSolverSource = computed({
-  get: () => {
-    const key = String(selectedSolverKey.value || '')
-    if (key.startsWith('builtin:')) {
-      return builtinSolvers[solverIdFromKey(key)] ?? ''
-    }
-    if (key.startsWith('project:')) {
-      return projectSolvers.value[solverIdFromKey(key)] ?? ''
-    }
-    // fallback: treat as builtin id
-    return builtinSolvers[key] ?? ''
-  },
-  set: (v: string) => {
-    if (isSolverBuiltin.value) return
-    const id = solverIdFromKey(selectedSolverKey.value)
-    if (!id) return
-    projectSolvers.value = { ...projectSolvers.value, [id]: String(v ?? '') }
-  },
-})
-
 // Tools (AI assistant)
 // Must be declared after activeUiTemplateSource and activeSolverSource
+let compileNowFn: (() => Promise<{ ok: boolean; message?: string }>) | null = null
 const tools = createModelicatools({
   modelicaSource,
   templateSource,
@@ -1239,249 +933,73 @@ const tools = createModelicatools({
   simDt,
   showAllInPrompt,
   createNewVersion,
+  compileNow: async () =>
+    compileNowFn
+      ? await compileNowFn()
+      : { ok: false, message: 'compileNow is not initialized yet' },
 })
-
-function addProjectSolver() {
-  const id = String(newSolverId.value || '').trim()
-  if (!id) return
-  if (projectSolvers.value[id] != null) {
-    Notify.create({ type: 'warning', message: `Solver '${id}' already exists in the project` })
-    selectedSolverKey.value = `project:${id}`
-    return
-  }
-  projectSolvers.value = { ...projectSolvers.value, [id]: defaultSolverSource }
-  selectedSolverKey.value = `project:${id}`
-}
-
-function deleteActiveProjectSolver() {
-  if (isSolverBuiltin.value) return
-  const id = solverIdFromKey(selectedSolverKey.value)
-  const keys = Object.keys(projectSolvers.value)
-  if (keys.length <= 1) return
-  if (!id || projectSolvers.value[id] == null) return
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { [id]: _removed, ...rest } = projectSolvers.value
-  projectSolvers.value = rest
-
-  const nextId = Object.keys(projectSolvers.value).sort()[0] ?? 'solver1'
-  selectedSolverKey.value = `project:${nextId}`
-}
-
-watchDebounced(
-  [selectedSolverKey, activeSolverSource],
-  async () => {
-    await refreshActiveSolverMetadata()
-  },
-  { debounce: 200, maxWait: 800 },
-)
-
-// ---------- Solver metadata discovery (schema + defaults) ----------
-
-type JsonSchemaPropertyWithDefault = { default?: unknown }
-
-type JsonSchemaLikeObject = {
-  properties?: Record<string, JsonSchemaPropertyWithDefault>
-}
-
-function extractDefaultsFromJsonSchema(schema: unknown): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  if (!schema || typeof schema !== 'object') return out
-  const s = schema as JsonSchemaLikeObject
-  const props = s.properties
-  if (!props || typeof props !== 'object') return out
-
-  for (const k of Object.keys(props)) {
-    const def = props[k]?.default
-    if (def !== undefined) out[k] = def
-  }
-  return out
-}
-
-async function refreshActiveSolverMetadata() {
-  const solverJs = String(activeSolverSource.value ?? '')
-  if (!solverJs.trim()) {
-    solverOptionsSchema.value = undefined
-    return
-  }
-
-  const id = 'rumoca-solver-meta'
-  const abort = new AbortController()
-
-  try {
-    const code = `
-(params, context) => {
-  ${solverJs}
-  const schema = (typeof simulateModel === 'function' && (simulateModel.optionsSchema || simulateModel.solverOptionsSchema)) || null
-  const simDefaults = (typeof simulateModel === 'function' && simulateModel.simDefaults) || null
-  return { schema, simDefaults }
-}
-`
-
-    const rawUnknown = await executeCodeInIframeSimple(
-      {
-        id,
-        code,
-        sourceURL: 'rumoca-solver-meta.js',
-        stopSignal: abort.signal,
-      },
-      {},
-      { source: 'ModelicaPage', compiledAt: new Date().toISOString(), __taskyonRunId: id },
-    )
-
-    let schema: unknown = null
-    let simDefaults: unknown = null
-
-    if (rawUnknown && typeof rawUnknown === 'object') {
-      const r = rawUnknown as Record<string, unknown>
-      schema = r.schema
-      simDefaults = r.simDefaults
-    }
-
-    solverOptionsSchema.value =
-      schema && typeof schema === 'object' ? (schema as Record<string, unknown>) : undefined
-
-    // apply solver-provided default sim values when present
-    if (simDefaults && typeof simDefaults === 'object') {
-      const d = simDefaults as Record<string, unknown>
-      if (typeof d.t0 === 'number') simT0.value = d.t0
-      if (typeof d.tf === 'number') simTf.value = d.tf
-      if (typeof d.dt === 'number') simDt.value = d.dt
-    }
-
-    // If no custom options are set yet, seed them from schema defaults.
-    if (!solverOptions.value || Object.keys(solverOptions.value).length === 0) {
-      solverOptions.value = extractDefaultsFromJsonSchema(schema)
-    }
-  } catch (e) {
-    console.warn('Failed to extract solver metadata:', e)
-    solverOptionsSchema.value = undefined
-  }
-}
 
 // ---------- Project import export ----------
 
 function packProjectFile(): TyModelicaProjectFileV1 {
-  const pf: TyModelicaProjectFileV1 = {
-    format: 'taskyon.modelica_project.v1',
-    version: 1,
+  return packModelicaProjectFile({
     projectId: currentProjectId.value,
     modelicaSource: modelicaSource.value,
-
     uiTemplates: uiTemplates.value,
     activeUiTemplateId: selectedUiTemplateId.value,
-
-    // store only project-local solvers
-    solvers: projectSolvers.value,
-
+    projectSolvers: projectSolvers.value,
     sim: {
       t0: simT0.value,
       tf: simTf.value,
       dt: simDt.value,
       solverKey: selectedSolverKey.value,
-      solverId: solverIdFromKey(selectedSolverKey.value),
       solverOptions: solverOptions.value,
     },
-
-    documentVersions:
-      documentVersions.value as unknown as TyModelicaProjectFileV1['documentVersions'],
+    documentVersions: documentVersions.value,
     currentVersionIndex: currentVersionIndex.value,
-  }
-  return validateModelicaProjectFileV1(pf)
-}
-
-function applyProjectFile(pf: TyModelicaProjectFileV1) {
-  modelicaSource.value = pf.modelicaSource ?? ''
-  uiTemplates.value = pf.uiTemplates ?? {}
-  selectedUiTemplateId.value =
-    pf.activeUiTemplateId || Object.keys(uiTemplates.value)[0] || 'default'
-
-  // restore project-local solvers
-  if (pf.solvers && typeof pf.solvers === 'object') {
-    projectSolvers.value = pf.solvers
-  }
-
-  if (pf.sim) {
-    if (typeof pf.sim.t0 === 'number') simT0.value = pf.sim.t0
-    if (typeof pf.sim.tf === 'number') simTf.value = pf.sim.tf
-    if (typeof pf.sim.dt === 'number') simDt.value = pf.sim.dt
-
-    const solverKey = typeof pf.sim.solverKey === 'string' ? pf.sim.solverKey : ''
-    const solverId = typeof pf.sim.solverId === 'string' ? pf.sim.solverId : ''
-
-    if (solverKey) {
-      selectedSolverKey.value = solverKey
-    } else if (solverId) {
-      if (builtinSolvers[solverId] != null) selectedSolverKey.value = `builtin:${solverId}`
-      else if (projectSolvers.value[solverId] != null)
-        selectedSolverKey.value = `project:${solverId}`
-    }
-
-    if (pf.sim.solverOptions && typeof pf.sim.solverOptions === 'object') {
-      solverOptions.value = pf.sim.solverOptions
-    }
-  }
-
-  if (Array.isArray(pf.documentVersions)) {
-    documentVersions.value = pf.documentVersions as unknown as ModelicaVersion[]
-  }
-  if (typeof pf.currentVersionIndex === 'number') {
-    currentVersionIndex.value = pf.currentVersionIndex
-  }
-}
-function downloadTextFile(opts: { fileName: string; content: string; mime?: string }) {
-  const blob = new Blob([opts.content ?? ''], { type: opts.mime ?? 'text/plain;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-
-  const a = document.createElement('a')
-  a.href = url
-  a.download = opts.fileName
-  a.click()
-
-  setTimeout(() => URL.revokeObjectURL(url), 500)
-}
-
-function exportProjectJson() {
-  const now = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-')
-  const pf = packProjectFile()
-  downloadTextFile({
-    fileName: `project_${pf.projectId}_${now}.json`,
-    content: JSON.stringify(pf, null, 2),
-    mime: 'application/json',
   })
 }
 
-function triggerImportProject() {
-  projectImportEl.value?.click()
-}
-
-async function onImportProjectFile(e: Event) {
-  const el = e.target as HTMLInputElement
-  const f = el.files?.[0]
-  if (!f) return
-  const txt = await f.text()
-  try {
-    const pf = validateModelicaProjectFileV1(JSON.parse(txt))
-    currentProjectId.value = pf.projectId
-    projectIdInput.value = pf.projectId
-    projectFile.value = pf
-    applyProjectFile(pf)
-    Notify.create({ type: 'positive', message: `Project imported: ${pf.projectId}` })
-  } catch (err) {
-    Notify.create({ type: 'negative', message: `Project import failed: ${(err as Error).message}` })
-  } finally {
-    // allow re-import of same file
-    el.value = ''
+function applyProjectFile(pf: TyModelicaProjectFileV1) {
+  const state = unpackProjectFile(pf, builtinSolvers)
+  modelicaSource.value = state.modelicaSource
+  uiTemplates.value = state.uiTemplates
+  selectedUiTemplateId.value = state.selectedUiTemplateId
+  if (state.projectSolvers) projectSolvers.value = state.projectSolvers
+  if (typeof state.sim.t0 === 'number') simT0.value = state.sim.t0
+  if (typeof state.sim.tf === 'number') simTf.value = state.sim.tf
+  if (typeof state.sim.dt === 'number') simDt.value = state.sim.dt
+  if (typeof state.sim.solverKey === 'string') selectedSolverKey.value = state.sim.solverKey
+  if (state.sim.solverOptions) solverOptions.value = state.sim.solverOptions
+  if (state.documentVersions) documentVersions.value = state.documentVersions
+  if (typeof state.currentVersionIndex === 'number') {
+    currentVersionIndex.value = state.currentVersionIndex
   }
 }
+const {
+  currentProjectId,
+  availableProjectIds,
+  projectFile,
+  refreshAvailableProjects,
+  deleteCurrentProject,
+  createNewProjectDialog,
+  onProjectSelected,
+  exportProjectJson,
+  onImportProjectFile,
+} = useProjectFileStore<TyModelicaProjectFileV1>({
+  packProjectFile,
+  applyProjectFile,
+  validateProjectFile: validateModelicaProjectFileV1,
+})
 
-function loadProjectById(projectId: string) {
-  const id = String(projectId || '').trim()
-  if (!id) return
-  localStorage.setItem(LS_PROJECT_ID_KEY, id)
-  currentProjectId.value = id
-  // Reload so we can re-bind OPFS sync to the new project folder key
-  setTimeout(() => window.location.reload(), 50)
+async function refreshBuiltinTemplateIfSelected() {
+  const key = String(selectedTemplateKey.value || '')
+  if (!key.startsWith('builtin:')) return
+  const path = key.slice('builtin:'.length)
+  const loader = jinjaTemplateUrls[path]
+  if (!loader) return
+  const content = (await loader()) as string
+  templateSource.value = content ?? ''
 }
 
 const isHtmlOutput = computed(() => {
@@ -1494,127 +1012,190 @@ const hasUiTemplate = computed(() => {
   return typeof src === 'string' && src.trim().length > 0
 })
 
+const projectMenuOptions = ref<Record<string, unknown>>({
+  verboseLogging: false,
+  aiSeesAll: true,
+})
+const libraryMenuOptions = ref<Record<string, unknown>>({
+  useMSL: false,
+  mslZipUrl: DEFAULT_MSL_ZIP_URL,
+})
+const runtimeMenuOptions = ref<Record<string, unknown>>({
+  t0: simT0.value,
+  tf: simTf.value,
+  dt: simDt.value,
+})
+
+const projectMenuSchema: JSONSchema7 = {
+  type: 'object',
+  properties: {
+    verboseLogging: { type: 'boolean', title: 'Verbose logging' },
+    aiSeesAll: { type: 'boolean', title: 'AI sees all editors' },
+  },
+}
+
+const libraryMenuSchema: JSONSchema7 = {
+  type: 'object',
+  properties: {
+    useMSL: { type: 'boolean', title: 'Use Modelica Standard Library for compile' },
+    mslZipUrl: { type: 'string', title: 'MSL ZIP URL' },
+  },
+}
+
+const runtimeMenuSchema: JSONSchema7 = {
+  type: 'object',
+  properties: {
+    t0: { type: 'number', title: 'Simulation t0' },
+    tf: { type: 'number', title: 'Simulation tf' },
+    dt: { type: 'number', title: 'Simulation dt (must be > 0)' },
+  },
+}
+
+function onProjectMenuOptionsUpdate(v: Record<string, unknown>) {
+  projectMenuOptions.value = v
+}
+
+function onLibraryMenuOptionsUpdate(v: Record<string, unknown>) {
+  libraryMenuOptions.value = v
+}
+
+function onRuntimeMenuOptionsUpdate(v: Record<string, unknown>) {
+  runtimeMenuOptions.value = v
+}
+
+function handleExportTarget(target: 'modelica' | 'template' | 'js' | 'daePretty' | 'daeJson') {
+  if (target === 'modelica') return exportFile('modelica', modelicaSource.value)
+  if (target === 'template') return exportFile('template', templateSource.value)
+  if (target === 'js') return exportFile('js', jsSource.value)
+  if (target === 'daePretty') return exportFile('daePretty', daePrettyOutput.value)
+  if (target === 'daeJson') return exportFile('daeJson', JSON.stringify(daeJsonOutput.value ?? {}, null, 2))
+}
+
+function handleExportUiHtml() {
+  exportGeneratedUiHtml(
+    hasUiTemplate.value,
+    activeUiTemplateSource.value,
+    jsSource.value,
+    activeSolverSource.value,
+    currentProjectId.value,
+    {
+      t0: simT0.value,
+      tf: simTf.value,
+      dt: simDt.value,
+    },
+  )
+}
+
+watch(
+  [verbose, showAllInPrompt],
+  () => {
+    projectMenuOptions.value = {
+      verboseLogging: Boolean(verbose.value),
+      aiSeesAll: Boolean(showAllInPrompt.value),
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  projectMenuOptions,
+  (v) => {
+    if (typeof v.verboseLogging === 'boolean') verbose.value = v.verboseLogging
+    if (typeof v.aiSeesAll === 'boolean') showAllInPrompt.value = v.aiSeesAll
+  },
+  { deep: true },
+)
+
+watch(
+  [useModelicaStandardLibrary, mslDownloadUrl],
+  () => {
+    libraryMenuOptions.value = {
+      useMSL: Boolean(useModelicaStandardLibrary.value),
+      mslZipUrl: String(mslDownloadUrl.value || DEFAULT_MSL_ZIP_URL),
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  libraryMenuOptions,
+  (v) => {
+    if (typeof v.useMSL === 'boolean') useModelicaStandardLibrary.value = v.useMSL
+    if (typeof v.mslZipUrl === 'string' && v.mslZipUrl.trim()) {
+      mslDownloadUrl.value = v.mslZipUrl.trim()
+    }
+  },
+  { deep: true },
+)
+
+watch(
+  [simT0, simTf, simDt],
+  () => {
+    runtimeMenuOptions.value = {
+      t0: Number(simT0.value),
+      tf: Number(simTf.value),
+      dt: Number(simDt.value),
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  runtimeMenuOptions,
+  (v) => {
+    const maybeT0 = Number(v.t0)
+    const maybeTf = Number(v.tf)
+    const maybeDt = Number(v.dt)
+    if (Number.isFinite(maybeT0)) simT0.value = maybeT0
+    if (Number.isFinite(maybeTf)) simTf.value = maybeTf
+    if (Number.isFinite(maybeDt) && maybeDt > 0) simDt.value = maybeDt
+  },
+  { deep: true },
+)
+
 // ---------- Compile Modelica → JS & DAE via new API ----------
-// 1. compile_to_json(source, modelName) → JSON string
-// 2. render_template(daeJson, template) → rendered string (JS in your case)
-watchDebounced(
-  [modelicaSource, templateSource],
-  async () => {
-    // If one of the inputs is missing, don't try to compile.
-    // But crucially: DO NOT clear jsSource / dae* here.
-    if (!modelicaSource.value || !templateSource.value) {
-      appendModelicaLog({
-        level: 'error',
-        phase: 'general',
-        message: 'Please provide both Modelica source and template',
-      })
-      // leave jsSource / daeJsonOutput / daePrettyOutput untouched
-      executionResult.value = {}
-      return
-    }
-
-    loading.value = true
-    // We can clear only "raw" debug output and execution results.
-    output.value = ''
-    appendModelicaLog({
-      level: 'info',
-      phase: 'compile',
-      message: 'Compiling...',
+const runCompilation = async (): Promise<{ ok: boolean; message?: string }> => {
+  loading.value = true
+  output.value = ''
+  statusType.value = 'loading'
+  executionResult.value = {}
+  try {
+    const result = await compileModelicaToJs({
+      wasm: wasm.value,
+      modelicaSource: modelicaSource.value,
+      templateSource: templateSource.value,
+      useModelicaStandardLibrary: useModelicaStandardLibrary.value,
+      mslLoaded: mslLoaded.value,
+      activeSandboxRunIds: activeSandboxRunIds.value,
     })
-    statusType.value = 'loading'
-    executionResult.value = {}
-
-    try {
-      const m = wasm.value
-      if (!m) {
-        throw new Error('WASM module not loaded')
+    if (!result.ok) {
+      if (typeof result.rendered === 'string' && result.rendered.length > 0) {
+        daeJsonOutput.value = result.daeForTemplate ?? {}
+        daePrettyOutput.value = result.daePretty ?? ''
+        output.value = result.rendered
+        jsSource.value = result.rendered
+      } else {
+        output.value = `Error: ${result.message}`
       }
-      if (typeof m.compile_to_json !== 'function' || typeof m.render_template !== 'function') {
-        throw new Error('WASM module is missing compile_to_json / render_template exports')
-      }
-
-      const source = modelicaSource.value
-      const template = templateSource.value
-
-      const match = source.match(/(?:model|class|block|connector|record)\s+(\w+)/)
-      const modelName = match?.[1] ?? 'Model'
-
-      const jsonStr = m.compile_to_json(source, modelName)
-      const compiled = JSON.parse(jsonStr) as {
-        dae?: unknown
-        dae_native?: unknown
-        pretty?: string
-        balance?: unknown
-      }
-
-      const daeForTemplate = compiled.dae_native ?? compiled.dae
-      if (!daeForTemplate) {
-        throw new Error('Compilation did not return a DAE object')
-      }
-
-      const daeJson = JSON.stringify(daeForTemplate)
-      const rendered = m.render_template(daeJson, template)
-
-      // ---- ABI validation (separate from solver) ----
-      // If the template declares an ABI (model.abi) or requires it (model.abiRequired)
-      // we validate the generated model JS in the sandbox and fail compilation if invalid.
-      try {
-        const code = buildModelAbiValidationIframeCode(rendered)
-        const id = 'rumoca-model-abi-check'
-        const abort = new AbortController()
-        activeSandboxRunIds.value.add(id)
-        const ctx = {
-          source: 'ModelicaPage',
-          compiledAt: new Date().toISOString(),
-          __taskyonRunId: id,
-          // enforceModelAbi: true,
-        }
-
-        const rawAbiResult = await executeCodeInIframeSimple(
-          {
-            id,
-            code,
-            sourceURL: 'rumoca-model-abi-check.js',
-            stopSignal: abort.signal,
-          },
-          {},
-          ctx,
-        )
-        const abiResult = validateModelAbiValidationResultV1(rawAbiResult)
-
-        if (abiResult.ok !== true) {
-          const msg = abiResult.errorMessage || 'Generated model ABI validation failed'
-          appendModelicaLog({ level: 'error', phase: 'abi', message: msg })
-          throw new Error(msg)
-        }
-      } finally {
-        activeSandboxRunIds.value.delete('rumoca-model-abi-check')
-      }
-
-      // ---- Only here, on success, update the visible "last good" outputs ----
-      daeJsonOutput.value = daeForTemplate as Record<string, unknown>
-      daePrettyOutput.value = compiled.pretty ?? ''
-      output.value = rendered
-      jsSource.value = rendered
-
-      appendModelicaLog({
-        level: 'success',
-        phase: 'compile',
-        message: 'Compilation successful!',
-      })
-    } catch (error) {
-      const msg = (error as Error).message
-      // Note: we only update messages, NOT the last good JS / DAE
-      output.value = `Error: ${msg}`
-      appendModelicaLog({
-        level: 'error',
-        phase: 'compile',
-        message: `Compilation failed: ${msg}`,
-      })
-      console.error('Compilation error:', error)
-    } finally {
-      loading.value = false
+      return { ok: false, message: result.message }
     }
+    daeJsonOutput.value = result.daeForTemplate
+    daePrettyOutput.value = result.daePretty
+    output.value = result.rendered
+    jsSource.value = result.rendered
+    return { ok: true, message: 'Compilation successful' }
+  } finally {
+    loading.value = false
+  }
+}
+
+// Wire explicit compile entrypoint into tools (autofix cycle).
+compileNowFn = runCompilation
+
+watchDebounced(
+  [modelicaSource, templateSource, useModelicaStandardLibrary, mslLoaded],
+  async () => {
+    await runCompilation()
   },
   { debounce: 500, maxWait: 1000 },
 )
@@ -1658,8 +1239,8 @@ const clearAll = () => {
   modelicaLog.value = []
 }
 
-const loadExample = async () => {
-  modelicaSource.value = `model BouncingBall             "The bouncing ball model"
+const exampleModels = {
+  bouncingBall: `model BouncingBall             "The bouncing ball model"
   constant Real g = 9.81 "Gravitational acceleration";
   parameter Real c = 0.9 "Elasticity constant of ball";
   parameter Real radius = 0.1 "Radius of the ball";
@@ -1673,15 +1254,42 @@ const loadExample = async () => {
   when h <= radius then
     reinit(v, -c*pre(v));
   end when;
- end BouncingBall;`
+ end BouncingBall;`,
+  resistorMsl: `model MslResistorExample
+  extends Modelica.Electrical.Analog.Examples.Resistor;
+end MslResistorExample;`,
+} as const
+
+const applyExample = async (choice: unknown) => {
+  const key = String(choice) as keyof typeof exampleModels
+  modelicaSource.value = exampleModels[key] ?? exampleModels.bouncingBall
 
   // select template that contains "javascript"
-  const sel = Object.keys(jinjaTemplateUrls).find((key) => key.includes('javascript.jinja'))
+  const sel = Object.keys(jinjaTemplateUrls).find((tplKey) => tplKey.includes('javascript.jinja'))
   if (!sel) return
 
   selectedTemplateKey.value = sel
   const exampleTemplate = (await jinjaTemplateUrls[sel]!()) as string
   templateSource.value = exampleTemplate || ''
+}
+
+const loadExample = () => {
+  Dialog.create({
+    title: 'Load Example',
+    message: 'Choose a Modelica example to load',
+    options: {
+      type: 'radio',
+      model: 'bouncingBall',
+      items: [
+        { label: 'BouncingBall (classic)', value: 'bouncingBall' },
+        { label: 'MSL Resistor (extends)', value: 'resistorMsl' },
+      ],
+    },
+    cancel: true,
+    persistent: true,
+  }).onOk((choice) => {
+    void applyExample(choice)
+  })
 }
 
 const copyJsToClipboard = async () => {
@@ -1718,6 +1326,11 @@ function openGeneratedHtmlPopup() {
     uiTemplate: activeUiTemplateSource.value,
     compiledJs: jsSource.value,
     solverJs: activeSolverSource.value,
+    simDefaults: {
+      t0: simT0.value,
+      tf: simTf.value,
+      dt: simDt.value,
+    },
   })
 
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
@@ -1738,100 +1351,32 @@ function openGeneratedHtmlPopup() {
 }
 
 // ---------- Run in sandboxed iframe ----------
+function handleRunInSandbox() {
+  void runInSandbox(jsSource.value)
+}
+
 const runInSandbox = async (jsSource: string | undefined) => {
   executionResult.value = {}
-
-  if (!jsSource) {
-    appendModelicaLog({
-      level: 'error',
-      phase: 'run',
-      message: 'No generated JavaScript. Compile first.',
-    })
-    return
-  }
-
-  const msg = await validateJavaScriptInSandbox(jsSource)
-  if (msg.valid === false) {
-    appendModelicaLog({
-      level: 'error',
-      phase: 'run',
-      message: `Generated JavaScript has syntax errors: ${msg.message}`,
-      details: msg,
-    })
-    return
-  }
-
-  const code = buildIframeCode(jsSource, activeSolverSource.value)
-  const id = `rumoca-model-worker`
   abortController.value = new AbortController()
   running.value = true
 
   try {
-    const params = {
+    const result = await runModelicaSandbox({
+      jsSource,
+      solverSource: activeSolverSource.value,
       sim: {
         t0: simT0.value,
         tf: simTf.value,
         dt: simDt.value,
         solverOptions: solverOptions.value,
       },
-    }
-
-    const context = {
-      source: 'ModelicaPage',
-      compiledAt: new Date().toISOString(),
-      __taskyonRunId: id,
-    }
-    activeSandboxRunIds.value.add(id)
-
-    const result = await executeCodeInIframeSimple(
-      {
-        id,
-        code,
-        sourceURL: 'rumoca-generated.js',
-        stopSignal: abortController.value.signal,
-      },
-      params,
-      context,
-    )
-
-    const isRecord = (v: unknown): v is Record<string, unknown> =>
-      typeof v === 'object' && v !== null && !Array.isArray(v)
-
-    if (!isRecord(result)) {
-      appendModelicaLog({
-        level: 'error',
-        phase: 'run',
-        message: `Simulation returned invalid result: expected object, got ${typeof result}`,
-        details: result,
-      })
-      return
-    }
-
-    // Note: live sandbox logs are forwarded via postMessage.
-    executionResult.value = result
-    appendModelicaLog({
-      level: 'success',
-      phase: 'run',
-      message: 'Simulation was successful',
+      activeSandboxRunIds: activeSandboxRunIds.value,
+      abortSignal: abortController.value.signal,
     })
+    if (result.ok) executionResult.value = normalizeSimulationResultForDisplay(result.result)
   } catch (error) {
-    if ((error as Error).name === 'AbortError') {
-      appendModelicaLog({
-        level: 'warning',
-        phase: 'run',
-        message: 'Execution aborted.',
-      })
-    } else {
-      appendModelicaLog({
-        level: 'warning',
-        phase: 'run',
-        message: `Iframe execution error: ${(error as Error).message}`,
-      })
-      console.error('Iframe execution error:', error)
-    }
+    console.error('Sandbox execution failed:', error)
   } finally {
-    activeSandboxRunIds.value.delete(id)
-
     running.value = false
   }
 }
@@ -1853,11 +1398,13 @@ onMounted(async () => {
     templateSource,
     customTemplates,
     verbose,
+    useModelicaStandardLibrary,
+    mslDownloadUrl,
+    mslCachedZipPath,
     outputTab,
     showAllInPrompt,
     currentProjectId,
   })
-  projectIdInput.value = currentProjectId.value
 
   // 2) Project file (model-specific). One JSON object, synced via OPFS.
   //    Folder name depends on the selected project.
@@ -1895,6 +1442,7 @@ onMounted(async () => {
 
   // Prevent template auto-reload while restoring persisted state.
   skipNextTemplateLoadForKey.value = selectedTemplateKey.value
+  await refreshBuiltinTemplateIfSelected()
   isHydratingState.value = false
 
   // Initial project discovery
@@ -1927,6 +1475,13 @@ onMounted(async () => {
 
     wasm.value = wasmModule
     wasmLoaded.value = true
+    if (typeof wasmModule.get_library_count === 'function') {
+      const n = Number(wasmModule.get_library_count()) || 0
+      if (n > 0) {
+        mslLoaded.value = true
+        mslFileCount.value = n
+      }
+    }
     appendModelicaLog({
       level: 'success',
       phase: 'general',

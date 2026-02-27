@@ -77,6 +77,7 @@ import { dump } from 'js-yaml'
 import { exportFile } from 'quasar'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
+import * as ModelicaDiagnostics from 'src/modules/modelica/modelicaDiagnostics'
 import { runMarkdownDetectionTests } from 'src/modules/taskyon/runMarkdownDetectionTests'
 import * as TaskyonTests from 'src/modules/taskyon/tests'
 import { copyToClipboard, getEnvironmentInfo } from 'src/modules/utils'
@@ -178,6 +179,7 @@ const modules = Object.entries(testModules).map(([path, mod]) => {
   return mod
 })
 modules.push(TaskyonTests)
+modules.push(ModelicaDiagnostics)
 
 modules.forEach((mod) => {
   if (!mod || typeof mod !== 'object') return

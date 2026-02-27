@@ -1,0 +1,321 @@
+<template>
+  <q-bar flat class="rounded-borders bg-transparent q-ma-xs">
+    <q-btn-dropdown dense flat color="grey-7" label="Project" dropdown-icon="">
+      <div class="q-pa-sm" style="min-width: 420px; max-width: 92vw">
+        <q-select
+          :model-value="currentProjectId"
+          :options="availableProjectIds"
+          dense
+          standout
+          label="Project"
+          :disable="availableProjectIds.length === 0"
+          @update:model-value="emit('project-selected', String($event || ''))"
+        />
+        <div class="row items-center q-gutter-xs q-mt-sm">
+          <q-btn dense flat color="secondary" label="New" title="Create a new project" @click="emit('create-project')" />
+          <q-btn dense flat color="grey-7" :icon="matRefresh" title="Refresh project list" @click="emit('refresh-projects')" />
+          <q-btn
+            dense
+            flat
+            color="negative"
+            :icon="matDelete"
+            title="Delete current project"
+            :disable="!currentProjectId"
+            @click="emit('delete-project')"
+          />
+          <q-space />
+          <q-btn dense flat color="grey-7" label="Export" :disable="!projectFile" @click="emit('export-project')" />
+          <q-btn dense flat color="grey-7" label="Import" @click="projectImportEl?.click()" />
+        </div>
+        <q-separator class="q-my-sm" />
+        <ObjectView
+          v-model="projectMenuModel"
+          :schema="projectMenuSchema"
+          class="fit"
+          dense
+          missing-mode="hide"
+        />
+      </div>
+    </q-btn-dropdown>
+
+    <q-btn-dropdown dense flat color="grey-7" label="Libraries" dropdown-icon="">
+      <div class="q-pa-sm" style="min-width: 460px; max-width: 95vw">
+        <div class="text-caption text-grey-7 q-mb-sm">
+          {{ mslLoaded ? `MSL loaded: ${mslArchiveName || 'archive'} (${mslFileCount} files)` : 'MSL not loaded' }}
+        </div>
+        <div v-if="mslLoading || mslDownloading" class="row items-center q-gutter-xs q-mb-sm text-caption text-grey-7">
+          <q-spinner color="primary" size="16px" />
+          <span>{{ mslDownloading ? 'Downloading Modelica library ZIP...' : 'Loading library ZIP...' }}</span>
+        </div>
+        <ObjectView
+          v-model="libraryMenuModel"
+          :schema="libraryMenuSchema"
+          class="fit"
+          dense
+          missing-mode="hide"
+        />
+        <div class="row items-center q-gutter-xs q-mt-sm">
+          <q-btn
+            dense
+            flat
+            color="grey-7"
+            label="Load ZIP"
+            :disable="!wasmLoaded || mslLoading || mslDownloading"
+            @click="mslImportEl?.click()"
+          />
+          <q-btn
+            dense
+            flat
+            color="grey-7"
+            label="Download to OPFS"
+            :disable="mslDownloading || mslLoading"
+            :loading="mslDownloading"
+            @click="emit('download-msl')"
+          />
+          <q-btn
+            dense
+            flat
+            color="grey-7"
+            label="Load Cached"
+            :disable="!mslCachedZipPath || mslLoading || mslDownloading"
+            @click="emit('load-cached-msl')"
+          />
+          <q-btn
+            dense
+            flat
+            color="negative"
+            label="Clear MSL"
+            :disable="!wasmLoaded || mslLoading || !mslLoaded"
+            @click="emit('clear-msl')"
+          />
+        </div>
+      </div>
+    </q-btn-dropdown>
+
+    <q-btn-dropdown dense flat color="grey-7" label="Options" dropdown-icon="">
+      <div class="q-pa-sm" style="min-width: 420px; max-width: 95vw">
+        <ObjectView
+          v-model="runtimeMenuModel"
+          :schema="runtimeMenuSchema"
+          class="fit"
+          dense
+          missing-mode="hide"
+        />
+        <div class="row items-center q-gutter-xs q-mt-sm">
+          <q-btn dense flat color="grey-7" :icon="matDelete" label="Clear All" @click="emit('clear-all')" />
+          <q-btn dense flat color="grey-7" :icon="matDescription" label="Load Example" @click="emit('load-example')" />
+        </div>
+      </div>
+    </q-btn-dropdown>
+
+    <q-btn-dropdown dense flat color="grey-7" label="Versions" dropdown-icon="">
+      <div class="q-pa-sm" style="min-width: 280px">
+        <div class="text-caption text-grey-7 q-mb-sm">
+          Version {{ currentVersionIndex + 1 }} / {{ documentVersionsLength }}
+        </div>
+        <div class="row items-center q-gutter-xs">
+          <q-btn
+            flat
+            dense
+            round
+            :icon="matNavigateBefore"
+            title="Previous Version"
+            :disable="currentVersionIndex === 0"
+            @click="emit('previous-version')"
+          />
+          <q-btn
+            flat
+            dense
+            round
+            :icon="matNavigateNext"
+            title="Next Version"
+            :disable="currentVersionIndex === documentVersionsLength - 1"
+            @click="emit('next-version')"
+          />
+          <q-btn
+            flat
+            dense
+            round
+            :icon="mdiTextBoxPlus"
+            color="secondary"
+            title="Create New Version Snapshot"
+            @click="emit('create-version')"
+          />
+        </div>
+      </div>
+    </q-btn-dropdown>
+
+    <q-btn-dropdown dense flat color="secondary" :icon="matSave" label="Save" dropdown-icon="">
+      <q-list dense style="min-width: 220px">
+        <q-item v-close-popup clickable @click="emit('export-target', 'modelica')">
+          <q-item-section>Export Modelica</q-item-section>
+        </q-item>
+        <q-item v-close-popup clickable @click="emit('export-target', 'template')">
+          <q-item-section>Export Template</q-item-section>
+        </q-item>
+        <q-separator />
+        <q-item v-close-popup clickable @click="emit('export-target', 'js')">
+          <q-item-section>Export Generated JS</q-item-section>
+        </q-item>
+        <q-item v-close-popup clickable @click="emit('export-target', 'daePretty')">
+          <q-item-section>Export Pretty DAE</q-item-section>
+        </q-item>
+        <q-item v-close-popup clickable @click="emit('export-target', 'daeJson')">
+          <q-item-section>Export DAE JSON</q-item-section>
+        </q-item>
+        <q-separator />
+        <q-item v-close-popup clickable @click="emit('export-ui-html')">
+          <q-item-section>Export UI HTML</q-item-section>
+        </q-item>
+      </q-list>
+    </q-btn-dropdown>
+
+    <input
+      ref="projectImportEl"
+      type="file"
+      accept="application/json,.json"
+      style="display: none"
+      @change="emit('import-project-file', $event)"
+    />
+    <input
+      ref="mslImportEl"
+      type="file"
+      accept=".zip,application/zip"
+      style="display: none"
+      @change="emit('import-msl-file', $event)"
+    />
+
+    <q-space />
+    <q-chip
+      v-if="mslLoading || mslDownloading"
+      dense
+      square
+      color="grey-3"
+      text-color="grey-8"
+      style="font-size: 11px; padding: 0 4px; min-height: 20px"
+    >
+      <q-spinner class="q-mr-xs" color="primary" size="10px" />
+      {{ mslDownloading ? 'MSL' : 'MSL' }}
+    </q-chip>
+    <q-chip
+      v-else-if="mslLoaded"
+      dense
+      square
+      color="positive"
+      text-color="white"
+      style="font-size: 11px; padding: 0 4px; min-height: 20px"
+      :label="`MSL ${mslFileCount}`"
+    />
+
+    <q-btn
+      dense
+      flat
+      color="secondary"
+      :icon="matPlayArrow"
+      label="Run in Sandbox"
+      :disable="!jsSource || isHtmlOutput"
+      :loading="running"
+      @click="emit('run-sandbox')"
+    />
+    <q-btn
+      v-if="hasUiTemplate"
+      dense
+      flat
+      color="secondary"
+      :icon="matOpenInNew"
+      label="Popup window"
+      :disable="!jsSource"
+      @click="emit('open-popup')"
+    />
+
+    <q-btn v-if="running" flat dense color="negative" label="Stop" outline @click="emit('stop-execution')" />
+  </q-bar>
+</template>
+
+<script setup lang="ts">
+import {
+  matDelete,
+  matDescription,
+  matNavigateBefore,
+  matNavigateNext,
+  matOpenInNew,
+  matPlayArrow,
+  matRefresh,
+  matSave,
+} from '@quasar/extras/material-icons'
+import { mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
+import type { JSONSchema7 } from 'json-schema'
+import { computed, ref } from 'vue'
+import ObjectView from 'src/components/varViews/ObjectView.vue'
+
+type ExportTarget = 'modelica' | 'template' | 'js' | 'daePretty' | 'daeJson'
+
+const props = defineProps<{
+  currentProjectId: string
+  availableProjectIds: string[]
+  projectFile: unknown
+  projectMenuOptions: Record<string, unknown>
+  projectMenuSchema: JSONSchema7
+  libraryMenuOptions: Record<string, unknown>
+  libraryMenuSchema: JSONSchema7
+  runtimeMenuOptions: Record<string, unknown>
+  runtimeMenuSchema: JSONSchema7
+  mslLoaded: boolean
+  mslLoading: boolean
+  mslDownloading: boolean
+  mslArchiveName: string
+  mslFileCount: number
+  mslCachedZipPath: string
+  wasmLoaded: boolean
+  currentVersionIndex: number
+  documentVersionsLength: number
+  jsSource: string
+  hasUiTemplate: boolean
+  isHtmlOutput: boolean
+  running: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'project-selected', value: string): void
+  (e: 'create-project'): void
+  (e: 'refresh-projects'): void
+  (e: 'delete-project'): void
+  (e: 'export-project'): void
+  (e: 'import-project-file', ev: Event): void
+  (e: 'import-msl-file', ev: Event): void
+  (e: 'download-msl'): void
+  (e: 'load-cached-msl'): void
+  (e: 'clear-msl'): void
+  (e: 'clear-all'): void
+  (e: 'load-example'): void
+  (e: 'previous-version'): void
+  (e: 'next-version'): void
+  (e: 'create-version'): void
+  (e: 'export-target', target: ExportTarget): void
+  (e: 'export-ui-html'): void
+  (e: 'run-sandbox'): void
+  (e: 'open-popup'): void
+  (e: 'stop-execution'): void
+  (e: 'update:projectMenuOptions', value: Record<string, unknown>): void
+  (e: 'update:libraryMenuOptions', value: Record<string, unknown>): void
+  (e: 'update:runtimeMenuOptions', value: Record<string, unknown>): void
+}>()
+
+const projectImportEl = ref<HTMLInputElement | null>(null)
+const mslImportEl = ref<HTMLInputElement | null>(null)
+
+const projectMenuModel = computed({
+  get: () => props.projectMenuOptions,
+  set: (v: Record<string, unknown>) => emit('update:projectMenuOptions', v),
+})
+
+const libraryMenuModel = computed({
+  get: () => props.libraryMenuOptions,
+  set: (v: Record<string, unknown>) => emit('update:libraryMenuOptions', v),
+})
+
+const runtimeMenuModel = computed({
+  get: () => props.runtimeMenuOptions,
+  set: (v: Record<string, unknown>) => emit('update:runtimeMenuOptions', v),
+})
+</script>

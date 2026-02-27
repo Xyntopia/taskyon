@@ -18,9 +18,7 @@ export async function createSandboxedIframe(
     'allow-scripts',
     'allow-popups',
     'allow-popups-to-escape-sandbox',
-    'allow-geolocation', // TODO: send this from parent on request!
   )
-  iframe.allow = 'geolocation'
   document.body.appendChild(iframe)
 
   try {

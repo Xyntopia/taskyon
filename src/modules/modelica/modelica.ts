@@ -4,6 +4,8 @@ import type * as WasmTypes from 'rumoca'
 import { z } from 'zod'
 import { ref } from 'vue'
 import { Notify } from 'quasar'
+import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
+import { validateJavaScriptInSandbox } from '../../../packages/taskyon/src/utils/checkJsSyntax'
 
 // Zod v3 vs v4 compatibility: some builds do not expose z.function().args().returns().
 // We use z.custom to type-check "is a function" while keeping strong TS inference.
@@ -12,6 +14,17 @@ const zFunction = <T extends (...args: any[]) => any>() =>
   z.custom<T>((v) => typeof v === 'function')
 
 export type RumocaModule = typeof WasmTypes
+export const DEFAULT_MSL_ZIP_URL = '/msl/ModelicaStandardLibrary-4.1.0.zip'
+export const builtinSolvers: Record<string, string> = {
+  default: defaultSolverSource,
+}
+
+export type ModelicaVersion = {
+  modelica: string
+  template: string
+  timestamp: string
+  description?: string
+}
 
 // -------------------------------------------------------------------------------------------------
 // ABI definitions (Zod)
@@ -141,10 +154,13 @@ export function validateModelRuntimeResidualV1(model: unknown): TyModelRuntimeRe
       null,
     )
     const expected = parsed.description.nx + parsed.description.ny
-    if (!Array.isArray(r) || r.length !== expected) {
-      throw new Error(
-        `ABI mismatch: residual output length ${Array.isArray(r) ? r.length : 'non-array'} != nx+ny ${expected}`,
-      )
+    if (!Array.isArray(r)) {
+      throw new Error(`ABI mismatch: residual output is non-array, expected length >= ${expected}`)
+    }
+    // Allow overdetermined residuals (m > n). The solver handles rectangular systems
+    // via damped least-squares (J^T J + lambda I).
+    if (r.length < expected) {
+      throw new Error(`ABI mismatch: residual output length ${r.length} < nx+ny ${expected}`)
     }
   } catch (e) {
     throw new Error(`ABI mismatch: residual probe call failed: ${(e as Error).message}`)
@@ -257,6 +273,37 @@ export function validateModelAbiValidationResultV1(v: unknown): TyModelAbiValida
   return TyModelAbiValidationResultV1.parse(v)
 }
 
+export type TyModelAbiValidationDecision = {
+  shouldValidate: boolean
+  reason: string
+}
+
+/**
+ * Decide whether rendered template output should go through JS ABI validation.
+ *
+ * We only validate outputs that look like JS model runtime code:
+ * - not HTML/XML-like
+ * - contains a global Model() function declaration
+ */
+export function shouldValidateModelAbiForRenderedOutput(
+  renderedOutput: string,
+): TyModelAbiValidationDecision {
+  const rendered = String(renderedOutput ?? '')
+  const trimmed = rendered.trimStart()
+
+  if (!trimmed) {
+    return { shouldValidate: false, reason: 'Rendered output is empty' }
+  }
+  if (trimmed.startsWith('<')) {
+    return { shouldValidate: false, reason: 'Rendered output appears to be HTML/XML, not JS' }
+  }
+  if (!/\bfunction\s+Model\s*\(/.test(rendered)) {
+    return { shouldValidate: false, reason: 'Rendered output does not define a global Model()' }
+  }
+
+  return { shouldValidate: true, reason: 'Rendered output looks like JS Model() runtime code' }
+}
+
 /**
  * Builds iframe-executed code that validates the generated model JS ABI.
  *
@@ -360,8 +407,14 @@ export function buildModelAbiValidationIframeCode(compiledJs: string): string {
       throw new Error('ABI mismatch: residual probe call threw: ' + ((e && e.message) || String(e)));
     }
     const expected = nx + ny;
-    if (!Array.isArray(r) || r.length !== expected) {
-      throw new Error('ABI mismatch: residual output length ' + (Array.isArray(r) ? r.length : 'non-array') + ' != nx+ny ' + expected);
+    if (!Array.isArray(r)) {
+      throw new Error('ABI mismatch: residual output is non-array, expected length >= nx+ny ' + expected);
+    }
+    if (r.length < expected) {
+      throw new Error('ABI mismatch: residual output length ' + r.length + ' < nx+ny ' + expected);
+    }
+    if (r.length > expected) {
+      emit('ABI warning: residual output length ' + r.length + ' > nx+ny ' + expected + ' (overdetermined residual accepted)');
     }
 
     emit('Model ABI validation passed', { abi });
@@ -388,7 +441,8 @@ export const loadWasm = async () => {
 
   if ('wasm_init' in wasmModule && typeof wasmModule.wasm_init === 'function') {
     try {
-      await wasmModule.wasm_init(1)
+      // Newer rumoca builds may expose wasm_init as sync; normalize to Promise.
+      await Promise.resolve(wasmModule.wasm_init(1))
     } catch (e) {
       console.warn('Rumoca wasm_init failed – single-threaded mode:', e)
     }
@@ -542,35 +596,41 @@ export function appendModelicaLog(
   })
 }
 
-export function renderUiHtml({ uiTemplate, compiledJs, solverJs }: UiTemplateRenderInput): string {
+export function renderUiHtml({
+  uiTemplate,
+  compiledJs,
+  solverJs,
+  simDefaults,
+}: UiTemplateRenderInput): string {
   const tpl = String(uiTemplate ?? '')
   const compiledEsc = escapeScriptTagEnd(String(compiledJs ?? ''))
   const solverEsc = escapeScriptTagEnd(String(solverJs ?? ''))
+  const solverWithRuntimeDefaultsEsc = solverEsc + buildSimDefaultsOverrideJs(simDefaults)
 
   // Common placeholder spellings (must match UI templates and older exports)
   let out = tpl
     // Mustache style placeholders
     .replaceAll('{{compiled_js}}', compiledEsc)
     .replaceAll('{{ compiled_js }}', compiledEsc)
-    .replaceAll('{{solver_js}}', solverEsc)
-    .replaceAll('{{ solver_js }}', solverEsc)
+    .replaceAll('{{solver_js}}', solverWithRuntimeDefaultsEsc)
+    .replaceAll('{{ solver_js }}', solverWithRuntimeDefaultsEsc)
 
     // Legacy-ish placeholders
     .replaceAll('/*__COMPILED_JS__*/', compiledEsc)
-    .replaceAll('/*__SOLVER_JS__*/', solverEsc)
+    .replaceAll('/*__SOLVER_JS__*/', solverWithRuntimeDefaultsEsc)
 
     // Taskyon UI template placeholders (current default UI template)
     .replaceAll(/\/\*__TASKYON_GENERATED_MODEL_JS__\*\//g, compiledEsc)
-    .replaceAll(/\/\*__TASKYON_SOLVER_JS__\*\//g, solverEsc)
+    .replaceAll(/\/\*__TASKYON_SOLVER_JS__\*\//g, solverWithRuntimeDefaultsEsc)
 
   const hasCompiled = out.includes(compiledEsc)
-  const hasSolver = out.includes(solverEsc)
+  const hasSolver = out.includes(solverWithRuntimeDefaultsEsc)
 
   // If the template had no placeholders at all, inject scripts before </body>
   if (!hasCompiled || !hasSolver) {
     const inject = [
       !hasCompiled ? `\n<script>\n${compiledEsc}\n</script>\n` : '',
-      !hasSolver ? `\n<script>\n${solverEsc}\n</script>\n` : '',
+      !hasSolver ? `\n<script>\n${solverWithRuntimeDefaultsEsc}\n</script>\n` : '',
     ].join('')
 
     if (/<\/body\s*>/i.test(out)) {
@@ -580,7 +640,7 @@ export function renderUiHtml({ uiTemplate, compiledJs, solverJs }: UiTemplateRen
     }
   }
 
-  return out
+  return injectSeriesSelectionPersistence(out)
 }
 
 export function exportGeneratedUiHtml(
@@ -589,6 +649,7 @@ export function exportGeneratedUiHtml(
   jsSource: string,
   activeSolverSource: string,
   currentProjectId: string,
+  simDefaults?: UiTemplateSimDefaults,
 ) {
   if (!hasUiTemplate) {
     Notify.create({ type: 'warning', message: 'No UI template selected' })
@@ -603,6 +664,7 @@ export function exportGeneratedUiHtml(
     uiTemplate: activeUiTemplateSource,
     compiledJs: jsSource,
     solverJs: activeSolverSource,
+    ...(simDefaults ? { simDefaults } : {}),
   })
 
   const now = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-')
@@ -619,10 +681,92 @@ type UiTemplateRenderInput = {
   uiTemplate: string
   compiledJs: string
   solverJs: string
+  simDefaults?: UiTemplateSimDefaults
+}
+
+type UiTemplateSimDefaults = {
+  t0?: number
+  tf?: number
+  dt?: number
 }
 
 function escapeScriptTagEnd(src: string): string {
   return String(src ?? '').replaceAll('<' + '/script>', '<\\/script>')
+}
+
+function buildSimDefaultsOverrideJs(simDefaults?: UiTemplateSimDefaults): string {
+  const next: Record<string, number> = {}
+  if (Number.isFinite(simDefaults?.t0)) next.t0 = Number(simDefaults?.t0)
+  if (Number.isFinite(simDefaults?.tf)) next.tf = Number(simDefaults?.tf)
+  if (Number.isFinite(simDefaults?.dt)) next.dt = Number(simDefaults?.dt)
+  if (Object.keys(next).length === 0) return ''
+
+  const defaultsJson = JSON.stringify(next)
+  return `
+;(() => {
+  try {
+    if (typeof simulateModel !== 'function') return
+    const prev = simulateModel.simDefaults
+    const base = prev && typeof prev === 'object' ? prev : {}
+    simulateModel.simDefaults = { ...base, ...${defaultsJson} }
+  } catch {
+    /* empty */
+  }
+})()
+`
+}
+
+function injectSeriesSelectionPersistence(html: string): string {
+  const marker = '__TASKYON_SERIES_PERSIST__'
+  if (String(html).includes(marker)) return html
+
+  const snippet = `
+<script>
+(() => {
+  const marker = '${marker}'
+  if (window[marker]) return
+  window[marker] = true
+
+  const select = document.getElementById('seriesSelect')
+  const runBtn = document.getElementById('runBtn')
+  if (!(select instanceof HTMLSelectElement) || !(runBtn instanceof HTMLElement)) return
+
+  let preferred = String(select.value || '')
+
+  const selectOption = (key) => {
+    if (!key) return false
+    for (let i = 0; i < select.options.length; i++) {
+      if (select.options[i]?.value === key) {
+        if (select.value !== key) {
+          select.value = key
+          select.dispatchEvent(new Event('change'))
+        }
+        preferred = key
+        return true
+      }
+    }
+    return false
+  }
+
+  select.addEventListener('change', () => {
+    preferred = String(select.value || '')
+  })
+
+  const observer = new MutationObserver(() => {
+    if (preferred) selectOption(preferred)
+  })
+  observer.observe(select, { childList: true })
+
+  runBtn.addEventListener('click', () => {
+    const current = String(select.value || preferred || '')
+    if (current) preferred = current
+  })
+})()
+</script>
+`
+
+  if (/<\/body\s*>/i.test(html)) return html.replace(/<\/body\s*>/i, `${snippet}</body>`)
+  return `${html}${snippet}`
 }
 
 type ExportTarget = 'modelica' | 'template' | 'js' | 'daePretty' | 'daeJson'
@@ -686,4 +830,566 @@ export function exportFile(target: ExportTarget, content: string) {
 
   // exhaustive
   Notify.create({ type: 'warning', message: `Unknown export target: ${String(target)}` })
+}
+
+export function createDefaultProjectSolvers(): Record<string, string> {
+  return { solver1: defaultSolverSource }
+}
+
+export function solverIdFromKey(key: string): string {
+  const k = String(key || '')
+  if (k.startsWith('builtin:')) return k.slice('builtin:'.length)
+  if (k.startsWith('project:')) return k.slice('project:'.length)
+  return k
+}
+
+type JsonSchemaPropertyWithDefault = { default?: unknown }
+type JsonSchemaLikeObject = { properties?: Record<string, JsonSchemaPropertyWithDefault> }
+
+export function extractDefaultsFromJsonSchema(schema: unknown): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (!schema || typeof schema !== 'object') return out
+  const s = schema as JsonSchemaLikeObject
+  const props = s.properties
+  if (!props || typeof props !== 'object') return out
+  for (const k of Object.keys(props)) {
+    const def = props[k]?.default
+    if (def !== undefined) out[k] = def
+  }
+  return out
+}
+
+export async function discoverSolverMetadata(solverJs: string): Promise<{
+  schema?: Record<string, unknown>
+  simDefaults?: Record<string, unknown>
+}> {
+  if (!String(solverJs ?? '').trim()) return {}
+  const id = 'rumoca-solver-meta'
+  const abort = new AbortController()
+  const code = `
+(params, context) => {
+  ${String(solverJs)}
+  const schema = (typeof simulateModel === 'function' && (simulateModel.optionsSchema || simulateModel.solverOptionsSchema)) || null
+  const simDefaults = (typeof simulateModel === 'function' && simulateModel.simDefaults) || null
+  return { schema, simDefaults }
+}
+`
+  const rawUnknown = await executeCodeInIframeSimple(
+    {
+      id,
+      code,
+      sourceURL: 'rumoca-solver-meta.js',
+      stopSignal: abort.signal,
+    },
+    {},
+    { source: 'ModelicaPage', compiledAt: new Date().toISOString(), __taskyonRunId: id },
+  )
+  if (!rawUnknown || typeof rawUnknown !== 'object') return {}
+  const r = rawUnknown as Record<string, unknown>
+  const schema = r.schema && typeof r.schema === 'object' ? (r.schema as Record<string, unknown>) : undefined
+  const simDefaults =
+    r.simDefaults && typeof r.simDefaults === 'object'
+      ? (r.simDefaults as Record<string, unknown>)
+      : undefined
+  const out: { schema?: Record<string, unknown>; simDefaults?: Record<string, unknown> } = {}
+  if (schema) out.schema = schema
+  if (simDefaults) out.simDefaults = simDefaults
+  return out
+}
+
+export function packProjectFile(input: {
+  projectId: string
+  modelicaSource: string
+  uiTemplates: Record<string, string>
+  activeUiTemplateId: string
+  projectSolvers: Record<string, string>
+  sim: {
+    t0: number
+    tf: number
+    dt: number
+    solverKey: string
+    solverOptions: Record<string, unknown>
+  }
+  documentVersions: ModelicaVersion[]
+  currentVersionIndex: number
+}): TyModelicaProjectFileV1 {
+  const pf: TyModelicaProjectFileV1 = {
+    format: 'taskyon.modelica_project.v1',
+    version: 1,
+    projectId: input.projectId,
+    modelicaSource: input.modelicaSource,
+    uiTemplates: input.uiTemplates,
+    activeUiTemplateId: input.activeUiTemplateId,
+    solvers: input.projectSolvers,
+    sim: {
+      t0: input.sim.t0,
+      tf: input.sim.tf,
+      dt: input.sim.dt,
+      solverKey: input.sim.solverKey,
+      solverId: solverIdFromKey(input.sim.solverKey),
+      solverOptions: input.sim.solverOptions,
+    },
+    documentVersions: input.documentVersions as unknown as TyModelicaProjectFileV1['documentVersions'],
+    currentVersionIndex: input.currentVersionIndex,
+  }
+  return validateModelicaProjectFileV1(pf)
+}
+
+export function unpackProjectFile(
+  pf: TyModelicaProjectFileV1,
+  builtins: Record<string, string>,
+): {
+  modelicaSource: string
+  uiTemplates: Record<string, string>
+  selectedUiTemplateId: string
+  projectSolvers?: Record<string, string>
+  sim: {
+    t0?: number
+    tf?: number
+    dt?: number
+    solverKey?: string
+    solverOptions?: Record<string, unknown>
+  }
+  documentVersions?: ModelicaVersion[]
+  currentVersionIndex?: number
+} {
+  const out: ReturnType<typeof unpackProjectFile> = {
+    modelicaSource: pf.modelicaSource ?? '',
+    uiTemplates: pf.uiTemplates ?? {},
+    selectedUiTemplateId: pf.activeUiTemplateId || Object.keys(pf.uiTemplates ?? {})[0] || 'default',
+    sim: {},
+  }
+  if (pf.solvers && typeof pf.solvers === 'object') out.projectSolvers = pf.solvers
+
+  if (pf.sim) {
+    if (typeof pf.sim.t0 === 'number') out.sim.t0 = pf.sim.t0
+    if (typeof pf.sim.tf === 'number') out.sim.tf = pf.sim.tf
+    if (typeof pf.sim.dt === 'number') out.sim.dt = pf.sim.dt
+
+    const solverKey = typeof pf.sim.solverKey === 'string' ? pf.sim.solverKey : ''
+    const solverId = typeof pf.sim.solverId === 'string' ? pf.sim.solverId : ''
+
+    if (solverKey) out.sim.solverKey = solverKey
+    else if (solverId) {
+      if (builtins[solverId] != null) out.sim.solverKey = `builtin:${solverId}`
+      else if (pf.solvers?.[solverId] != null) out.sim.solverKey = `project:${solverId}`
+    }
+
+    if (pf.sim.solverOptions && typeof pf.sim.solverOptions === 'object') {
+      out.sim.solverOptions = pf.sim.solverOptions
+    }
+  }
+
+  if (Array.isArray(pf.documentVersions)) {
+    out.documentVersions = pf.documentVersions as unknown as ModelicaVersion[]
+  }
+  if (typeof pf.currentVersionIndex === 'number') {
+    out.currentVersionIndex = pf.currentVersionIndex
+  }
+
+  return out
+}
+
+export function normalizeLibraryEntryPath(path: string): string {
+  const parts = String(path || '').split('/').filter(Boolean)
+  if (parts.length > 1 && /(?:Standard)?Library|^MSL/i.test(parts[0] ?? '')) {
+    return parts.slice(1).join('/')
+  }
+  if (parts.length > 0) {
+    parts[0] = parts[0]!.replace(/[\s-][\d.]+$/, '')
+  }
+  return parts.join('/')
+}
+
+export function buildModelConstructionProbeIframeCode(compiledJs: string): string {
+  return `
+(params, context) => {
+  try {
+    ${compiledJs}
+  } catch (e) {
+    return {
+      ok: false,
+      stage: 'evaluate-generated-js',
+      error: {
+        message: (e && e.message) || String(e),
+        name: (e && e.name) || undefined,
+        stack: (e && e.stack) || undefined,
+      },
+    };
+  }
+
+  if (typeof Model !== 'function') {
+    return {
+      ok: false,
+      stage: 'missing-model-factory',
+      modelType: typeof Model,
+    };
+  }
+
+  try {
+    const model = Model();
+    const keys = model && typeof model === 'object'
+      ? Object.keys(model).slice(0, 50)
+      : [];
+    return {
+      ok: true,
+      stage: 'model-constructed',
+      modelType: typeof model,
+      keys,
+      abi: model && model.abi ? { id: model.abi.id, version: model.abi.version } : undefined,
+      description:
+        model && model.description
+          ? {
+              modelName: model.description.modelName,
+              nx: model.description.nx,
+              ny: model.description.ny,
+              nu: model.description.nu,
+              nz: model.description.nz,
+            }
+          : undefined,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      stage: 'construct-model',
+      error: {
+        message: (e && e.message) || String(e),
+        name: (e && e.name) || undefined,
+        stack: (e && e.stack) || undefined,
+      },
+      modelFnPreview: String(Model).slice(0, 500),
+    };
+  }
+}
+`
+}
+
+export async function compileModelicaToJs(params: {
+  wasm: RumocaModule | null
+  modelicaSource: string
+  templateSource: string
+  useModelicaStandardLibrary: boolean
+  mslLoaded: boolean
+  activeSandboxRunIds: Set<string>
+}): Promise<
+  | {
+      ok: true
+      rendered: string
+      daeForTemplate: Record<string, unknown>
+      daePretty: string
+      usedLibraries: boolean
+      modelName: string
+    }
+  | {
+      ok: false
+      message: string
+      compileDebug?: Record<string, unknown>
+      rendered?: string
+      daeForTemplate?: Record<string, unknown>
+      daePretty?: string
+      usedLibraries?: boolean
+      modelName?: string
+    }
+> {
+  if (!params.modelicaSource || !params.templateSource) {
+    appendModelicaLog({
+      level: 'error',
+      phase: 'general',
+      message: 'Please provide both Modelica source and template',
+    })
+    return { ok: false, message: 'Missing Modelica source or template' }
+  }
+
+  appendModelicaLog({
+    level: 'info',
+    phase: 'compile',
+    message: 'Compiling...',
+  })
+
+  const compileDebug: Record<string, unknown> = {
+    phase: 'init',
+    usingMslRequested: params.useModelicaStandardLibrary,
+    mslLoaded: params.mslLoaded,
+    modelicaLength: params.modelicaSource.length,
+    templateLength: params.templateSource.length,
+  }
+  let partialRendered = ''
+  let partialDaeForTemplate: Record<string, unknown> | undefined
+  let partialDaePretty = ''
+  let partialUsedLibraries = false
+  let partialModelName = 'Model'
+
+  try {
+    const m = params.wasm
+    if (!m) throw new Error('WASM module not loaded')
+    if (typeof m.compile_to_json !== 'function' || typeof m.render_template !== 'function') {
+      throw new Error('WASM module is missing compile_to_json / render_template exports')
+    }
+
+    const match = params.modelicaSource.match(/(?:model|class|block|connector|record)\s+(\w+)/)
+    const modelName = match?.[1] ?? 'Model'
+    compileDebug.modelName = modelName
+    partialModelName = modelName
+
+    let jsonStr = ''
+    let usedLibraries = false
+    if (params.useModelicaStandardLibrary && params.mslLoaded) {
+      if (typeof m.compile_with_libraries !== 'function') {
+        throw new Error('WASM module is missing compile_with_libraries export')
+      }
+      jsonStr = m.compile_with_libraries(params.modelicaSource, modelName, '{}')
+      usedLibraries = true
+      compileDebug.phase = 'compiled-with-libraries'
+    } else {
+      if (params.useModelicaStandardLibrary && !params.mslLoaded) {
+        appendModelicaLog({
+          level: 'warning',
+          phase: 'compile',
+          message: 'MSL is enabled but no library archive is loaded. Compiling without libraries.',
+        })
+      }
+      jsonStr = m.compile_to_json(params.modelicaSource, modelName)
+      compileDebug.phase = 'compiled-no-libraries'
+    }
+
+    const compiled = JSON.parse(jsonStr) as {
+      dae?: unknown
+      dae_native?: unknown
+      pretty?: string
+    }
+    compileDebug.usedLibraries = usedLibraries
+    partialUsedLibraries = usedLibraries
+
+    const daeForTemplate = compiled.dae_native ?? compiled.dae
+    if (!daeForTemplate) throw new Error('Compilation did not return a DAE object')
+    partialDaeForTemplate = daeForTemplate as Record<string, unknown>
+    partialDaePretty = compiled.pretty ?? ''
+
+    const daeJson = JSON.stringify(daeForTemplate)
+    compileDebug.daeJsonLength = daeJson.length
+    const rendered = m.render_template(daeJson, params.templateSource)
+    partialRendered = String(rendered ?? '')
+    compileDebug.renderedPreview = String(rendered).slice(0, 220)
+
+    const abiDecision = shouldValidateModelAbiForRenderedOutput(rendered)
+    compileDebug.abiDecision = abiDecision
+
+    if (abiDecision.shouldValidate) {
+      const modelProbeRunId = 'rumoca-model-probe'
+      const modelProbeAbort = new AbortController()
+      params.activeSandboxRunIds.add(modelProbeRunId)
+      try {
+        const modelProbeCode = buildModelConstructionProbeIframeCode(rendered)
+        const modelProbeResult = await executeCodeInIframeSimple(
+          {
+            id: modelProbeRunId,
+            code: modelProbeCode,
+            sourceURL: 'rumoca-model-probe.js',
+            stopSignal: modelProbeAbort.signal,
+          },
+          {},
+          {
+            source: 'ModelicaPage',
+            compiledAt: new Date().toISOString(),
+            __taskyonRunId: modelProbeRunId,
+          },
+        )
+        compileDebug.modelProbe = modelProbeResult
+        if (
+          !modelProbeResult ||
+          typeof modelProbeResult !== 'object' ||
+          (modelProbeResult as { ok?: boolean }).ok !== true
+        ) {
+          appendModelicaLog({
+            level: 'error',
+            phase: 'compile',
+            message: 'Model() construction probe failed',
+            details: modelProbeResult,
+          })
+          throw new Error('Model() construction probe failed')
+        }
+
+        const code = buildModelAbiValidationIframeCode(rendered)
+        const id = 'rumoca-model-abi-check'
+        const abort = new AbortController()
+        params.activeSandboxRunIds.add(id)
+        const rawAbiResult = await executeCodeInIframeSimple(
+          {
+            id,
+            code,
+            sourceURL: 'rumoca-model-abi-check.js',
+            stopSignal: abort.signal,
+          },
+          {},
+          {
+            source: 'ModelicaPage',
+            compiledAt: new Date().toISOString(),
+            __taskyonRunId: id,
+          },
+        )
+        const abiResult = validateModelAbiValidationResultV1(rawAbiResult)
+        if (abiResult.ok !== true) {
+          const msg = abiResult.errorMessage || 'Generated model ABI validation failed'
+          appendModelicaLog({
+            level: 'error',
+            phase: 'abi',
+            message: msg,
+            details: abiResult,
+          })
+          throw new Error(msg)
+        }
+      } finally {
+        params.activeSandboxRunIds.delete('rumoca-model-probe')
+        modelProbeAbort.abort()
+        params.activeSandboxRunIds.delete('rumoca-model-abi-check')
+      }
+    } else {
+      appendModelicaLog({
+        level: 'info',
+        phase: 'abi',
+        message: `Skipping JS model probe/ABI validation: ${abiDecision.reason}`,
+      })
+    }
+
+    appendModelicaLog({
+      level: 'success',
+      phase: 'compile',
+      message: usedLibraries
+        ? 'Compilation successful (with Modelica libraries)!'
+        : 'Compilation successful!',
+      details: { modelName, usedLibraries },
+    })
+    return {
+      ok: true,
+      rendered,
+      daeForTemplate: daeForTemplate as Record<string, unknown>,
+      daePretty: compiled.pretty ?? '',
+      usedLibraries,
+      modelName,
+    }
+  } catch (error) {
+    const msg = (error as Error).message
+    appendModelicaLog({
+      level: 'error',
+      phase: 'compile',
+      message: `Compilation failed: ${msg}`,
+      details: {
+        error: {
+          name: (error as Error).name,
+          message: (error as Error).message,
+          stack: (error as Error).stack,
+          cause: (error as Error).cause,
+        },
+        debug: compileDebug,
+      },
+    })
+    const failed: {
+      ok: false
+      message: string
+      compileDebug?: Record<string, unknown>
+      rendered?: string
+      daeForTemplate?: Record<string, unknown>
+      daePretty?: string
+      usedLibraries?: boolean
+      modelName?: string
+    } = {
+      ok: false,
+      message: msg,
+      compileDebug,
+    }
+    if (partialRendered) failed.rendered = partialRendered
+    if (partialDaeForTemplate) failed.daeForTemplate = partialDaeForTemplate
+    if (partialDaePretty) failed.daePretty = partialDaePretty
+    failed.usedLibraries = partialUsedLibraries
+    failed.modelName = partialModelName
+    return failed
+  }
+}
+
+export async function runModelicaSandbox(params: {
+  jsSource: string | undefined
+  solverSource: string
+  sim: { t0: number; tf: number; dt: number; solverOptions: Record<string, unknown> }
+  activeSandboxRunIds: Set<string>
+  abortSignal: AbortSignal
+}): Promise<{ ok: true; result: Record<string, unknown> } | { ok: false; message: string }> {
+  if (!params.jsSource) {
+    appendModelicaLog({
+      level: 'error',
+      phase: 'run',
+      message: 'No generated JavaScript. Compile first.',
+    })
+    return { ok: false, message: 'No generated JavaScript. Compile first.' }
+  }
+
+  const msg = await validateJavaScriptInSandbox(params.jsSource)
+  if (msg.valid === false) {
+    appendModelicaLog({
+      level: 'error',
+      phase: 'run',
+      message: `Generated JavaScript has syntax errors: ${msg.message}`,
+      details: msg,
+    })
+    return { ok: false, message: String(msg.message || 'Syntax validation failed') }
+  }
+
+  const code = buildIframeCode(params.jsSource, params.solverSource)
+  const id = `rumoca-model-worker`
+  try {
+    params.activeSandboxRunIds.add(id)
+    const result = await executeCodeInIframeSimple(
+      {
+        id,
+        code,
+        sourceURL: 'rumoca-generated.js',
+        stopSignal: params.abortSignal,
+      },
+      { sim: params.sim },
+      {
+        source: 'ModelicaPage',
+        compiledAt: new Date().toISOString(),
+        __taskyonRunId: id,
+      },
+    )
+
+    if (typeof result !== 'object' || result == null || Array.isArray(result)) {
+      appendModelicaLog({
+        level: 'error',
+        phase: 'run',
+        message: `Simulation returned invalid result: expected object, got ${typeof result}`,
+        details: result,
+      })
+      return { ok: false, message: 'Simulation returned invalid result' }
+    }
+
+    appendModelicaLog({
+      level: 'success',
+      phase: 'run',
+      message: 'Simulation was successful',
+    })
+    return { ok: true, result: result as Record<string, unknown> }
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+      appendModelicaLog({
+        level: 'warning',
+        phase: 'run',
+        message: 'Execution aborted.',
+      })
+      return { ok: false, message: 'Execution aborted.' }
+    }
+    appendModelicaLog({
+      level: 'warning',
+      phase: 'run',
+      message: `Iframe execution error: ${(error as Error).message}`,
+      details: {
+        name: (error as Error).name,
+        message: (error as Error).message,
+        stack: (error as Error).stack,
+        cause: (error as Error).cause,
+      },
+    })
+    return { ok: false, message: (error as Error).message }
+  } finally {
+    params.activeSandboxRunIds.delete(id)
+  }
 }

@@ -12,83 +12,133 @@
  #  - External JS libraries are NOT used by default (keeps file:// friendly).
  # ------------------------------------------------------------------------- #}
 
-{%- macro render_expr(e) -%}
-  {%- if e is string and e == "Empty" -%}
-    0
-  {%- elif "parts" in e -%}
-    {% for part in e.parts %}
-      {{ part.ident.text }}{{ "." if not loop.last }}
-    {%- endfor -%}
-  {%- elif "Terminal" in e -%}
-    {{ e.Terminal.token.text }}
-  {%- elif "ComponentReference" in e -%}
-    {%- set cr = e.ComponentReference -%}
-    {%- for part in cr.parts -%}
-      {{ part.ident.text }}{{ "." if not loop.last }}
-    {%- endfor -%}
-  {%- elif "Unary" in e -%}
-    {%- set u = e.Unary -%}
-    {%- if "Minus" in u.op -%}
-      -({{ render_expr(u.rhs) }})
-    {%- elif "Not" in u.op -%}
-      !({{ render_expr(u.rhs) }})
-    {%- else -%}
-      (0)
-    {%- endif -%}
-  {%- elif "Binary" in e -%}
-    {%- set b = e.Binary -%}
-    {%- set op -%}
-      {%- if "Add" in b.op -%}+{%-
-      elif "Sub" in b.op -%}-{%-
-      elif "Mul" in b.op -%}*{%-
-      elif "Div" in b.op -%}/{%-
-      elif "Pow" in b.op -%}**{%-
+{%- set model_name = dae.model_name if dae.model_name is defined else "GeneratedModel" -%}
+{%- set p_map = dae.p if dae.p is defined else {} -%}
+{%- set cp_map = dae.constants if dae.constants is defined else (dae.cp if dae.cp is defined else {}) -%}
+{%- set x_map = dae.x if dae.x is defined else {} -%}
+{%- set y_map = dae.y if dae.y is defined else {} -%}
+{%- set u_map = dae.u if dae.u is defined else {} -%}
+{%- set eqs = dae.f_x if dae.f_x is defined else (dae.fx if dae.fx is defined else []) -%}
+{%- set cond_eqs = dae.f_c if dae.f_c is defined else [] -%}
+{%- set when_clauses = dae.when_clauses if dae.when_clauses is defined else [] -%}
 
-      elif "Le" in b.op or "LessEq" in b.op -%}<={%-
-      elif "Lt" in b.op or "Less" in b.op -%}<{%-
-      elif "Ge" in b.op or "GreaterEq" in b.op -%}>={%-
-      elif "Gt" in b.op or "Greater" in b.op -%}>{%-
-      elif "Eq" in b.op or "Equals" in b.op -%}==={%-
-      elif "Ne" in b.op or "NotEquals" in b.op -%}!=={%-
-
-      elif "And" in b.op -%}&&{%-
-      elif "Or" in b.op -%}||{%-
-      else -%}?{%-
-      endif -%}
-    {%- endset -%}
-    ({{ render_expr(b.lhs) }} {{ op }} {{ render_expr(b.rhs) }})
-  {%- elif "FunctionCall" in e -%}
-    {%- set f = e.FunctionCall -%}
-    {%- set name = f.comp.parts[0].ident.text -%}
-    {%- if name == "der" and f.args|length == 1 and "ComponentReference" in f.args[0] -%}
-      der_{{ render_expr(f.args[0]) }}
-    {%- elif name == "pre" and f.args|length == 1 and "ComponentReference" in f.args[0] -%}
-      {{ render_expr(f.args[0]) }}
-    {%- else -%}
-      {{ name }}(
-      {%- for a in f.args -%}
-        {{ render_expr(a) }}{{ ", " if not loop.last }}
-      {%- endfor -%}
-      )
-    {%- endif -%}
-  {%- else -%}
-    0
-  {%- endif -%}
+{%- macro render_cref(cr) -%}
+{%- for part in cr.parts -%}
+{{ part.ident.text }}{{ "." if not loop.last }}
+{%- endfor -%}
 {%- endmacro -%}
 
-{%- macro is_derivative_eq(eq) -%}
+{%- macro render_js_function_name(fname) -%}
+{%- set f = (fname|string)|trim -%}
+{%- set fl = f|lower -%}
+{%- if fl == "sin" -%}Math.sin
+{%- elif fl == "cos" -%}Math.cos
+{%- elif fl == "tan" -%}Math.tan
+{%- elif fl == "asin" -%}Math.asin
+{%- elif fl == "acos" -%}Math.acos
+{%- elif fl == "atan" -%}Math.atan
+{%- elif fl == "atan2" -%}Math.atan2
+{%- elif fl == "sqrt" -%}Math.sqrt
+{%- elif fl == "abs" -%}Math.abs
+{%- elif fl == "exp" -%}Math.exp
+{%- elif fl == "log" -%}Math.log
+{%- elif fl == "log10" -%}Math.log10
+{%- elif fl == "sinh" -%}Math.sinh
+{%- elif fl == "cosh" -%}Math.cosh
+{%- elif fl == "tanh" -%}Math.tanh
+{%- elif fl == "floor" -%}Math.floor
+{%- elif fl == "ceil" -%}Math.ceil
+{%- elif fl == "min" -%}Math.min
+{%- elif fl == "max" -%}Math.max
+{%- else -%}{{ f }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro render_expr(e) -%}
+{%- if e is string -%}
+  {{- e -}}
+{%- elif e is number -%}
+  {{- e -}}
+{%- elif e is boolean -%}
+  {{- "true" if e else "false" -}}
+{%- elif "Literal" in e -%}
+  {%- if "Integer" in e.Literal -%}{{ e.Literal.Integer }}
+  {%- elif "Real" in e.Literal -%}{{ e.Literal.Real }}
+  {%- elif "Bool" in e.Literal -%}{{ "true" if e.Literal.Bool else "false" }}
+  {%- elif "String" in e.Literal -%}"{{ e.Literal.String }}"
+  {%- else -%}0{%- endif -%}
+{%- elif "VarRef" in e -%}
+  {{- e.VarRef.name -}}
+{%- elif "BuiltinCall" in e -%}
+  {%- set bc = e.BuiltinCall -%}
+  {%- if bc.function|lower == "der" and bc.args|length == 1 -%}
+    der_{{ render_expr(bc.args[0]) }}
+  {%- elif bc.function|lower == "pre" and bc.args|length == 1 -%}
+    {{ render_expr(bc.args[0]) }}
+  {%- else -%}
+    {{ render_js_function_name(bc.function) }}({%- for a in bc.args -%}{{ render_expr(a) }}{{ ", " if not loop.last }}{%- endfor -%})
+  {%- endif -%}
+{%- elif "Terminal" in e -%}
+  {{- e.Terminal.token.text -}}
+{%- elif "ComponentReference" in e -%}
+  {{- render_cref(e.ComponentReference) -}}
+{%- elif "Parenthesized" in e -%}
+  ({{ render_expr(e.Parenthesized.inner) }})
+{%- elif "Unary" in e -%}
+  {%- set u = e.Unary -%}
+  {%- if "Minus" in u.op -%}
+    -({{ render_expr(u.rhs) }})
+  {%- elif "Not" in u.op -%}
+    !({{ render_expr(u.rhs) }})
+  {%- else -%}
+    {{ render_expr(u.rhs) }}
+  {%- endif -%}
+{%- elif "Binary" in e -%}
+  {%- set b = e.Binary -%}
+  {%- set op -%}
+    {%- if "Add" in b.op -%}+{% elif "Sub" in b.op -%}-{% elif "Mul" in b.op -%}*{% elif "Div" in b.op -%}/{% elif "Pow" in b.op -%}**
+    {%- elif "Le" in b.op or "LessEq" in b.op -%}<={% elif "Lt" in b.op or "Less" in b.op -%}<{% elif "Ge" in b.op or "GreaterEq" in b.op -%}>={% elif "Gt" in b.op or "Greater" in b.op -%}>{% elif "Eq" in b.op or "Equals" in b.op -%}==={% elif "Ne" in b.op or "NotEquals" in b.op -%}!==
+    {%- elif "And" in b.op -%}&&{% elif "Or" in b.op -%}||{% else -%}+{% endif -%}
+  {%- endset -%}
+  ({{ render_expr(b.lhs) }} {{ op }} {{ render_expr(b.rhs) }})
+{%- elif "FunctionCall" in e -%}
+  {%- set f = e.FunctionCall -%}
+  {%- set fname -%}{%- for part in f.comp.parts -%}{{ part.ident.text }}{{ "." if not loop.last }}{%- endfor -%}{%- endset -%}
+  {%- if fname|lower == "der" and f.args|length == 1 -%}
+    der_{{ render_expr(f.args[0]) }}
+  {%- elif fname|lower == "pre" and f.args|length == 1 -%}
+    {{ render_expr(f.args[0]) }}
+  {%- else -%}
+    {{ render_js_function_name(fname) }}({%- for a in f.args -%}{{ render_expr(a) }}{{ ", " if not loop.last }}{%- endfor -%})
+  {%- endif -%}
+{%- else -%}
+  0
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro is_derivative_eq_legacy(eq) -%}
   {%- if "Simple" in eq and "FunctionCall" in eq.Simple.lhs -%}
     {%- set f = eq.Simple.lhs.FunctionCall -%}
-    {%- if f.comp.parts|length == 1 and f.comp.parts[0].ident.text == "der" -%}
-      1
-    {%- endif -%}
+    {%- if f.comp.parts|length == 1 and f.comp.parts[0].ident.text == "der" -%}1{%- endif -%}
   {%- endif -%}
 {%- endmacro -%}
 
-{%- macro lhs_state_name(eq) -%}
+{%- macro lhs_state_name_legacy(eq) -%}
   {%- set f = eq.Simple.lhs.FunctionCall -%}
   {%- set cr = f.args[0].ComponentReference -%}
   {{ cr.parts[0].ident.text }}
+{%- endmacro -%}
+
+{%- macro residual_expr(eq) -%}
+  {%- if eq.rhs is defined -%}
+    {{ render_expr(eq.rhs) }}
+  {%- elif "Simple" in eq and is_derivative_eq_legacy(eq) -%}
+    {{ lhs_state_name_legacy(eq) }}_dot - ({{ render_expr(eq.Simple.rhs) }})
+  {%- elif "Simple" in eq -%}
+    ({{ render_expr(eq.Simple.lhs) }}) - ({{ render_expr(eq.Simple.rhs) }})
+  {%- else -%}
+    0
+  {%- endif -%}
 {%- endmacro -%}
 
 <!doctype html>
@@ -252,7 +302,7 @@
   <body>
     <header>
       <div class="title">Rumoca Standalone Simulation</div>
-      <div class="subtitle mono">Model: {{ dae.model_name or "GeneratedModel" }}</div>
+      <div class="subtitle mono">Model: {{ model_name }}</div>
     </header>
 
     <main>
@@ -326,245 +376,185 @@ return [];</textarea>
        * -------------------------------------------------------------------*/
 
       function Model() {
-        /* --- metadata ----------------------------------------------------- */
-
         const meta = {
-          name: "{{ dae.model_name or "GeneratedModel" }}",
+          name: "{{ model_name }}",
 
           parameters: [
-          {%- for (name, comp) in dae.p|items %}
+          {%- for (name, comp) in p_map|items %}
             { name: "{{ name }}", start: {{ render_expr(comp.start) }} }{% if not loop.last %},{% endif %}
           {%- endfor %}
           ],
 
           constants: [
-          {%- for (name, comp) in dae.cp|items %}
+          {%- for (name, comp) in cp_map|items %}
             { name: "{{ name }}", value: {{ render_expr(comp.start) }} }{% if not loop.last %},{% endif %}
           {%- endfor %}
           ],
 
           states: [
-          {%- for (name, comp) in dae.x|items %}
+          {%- for (name, comp) in x_map|items %}
             { name: "{{ name }}", start: {{ render_expr(comp.start) }} }{% if not loop.last %},{% endif %}
           {%- endfor %}
           ],
 
           algebraics: [
-          {%- for (name, comp) in dae.y|items %}
+          {%- for (name, comp) in y_map|items %}
             { name: "{{ name }}", start: {{ render_expr(comp.start) }} }{% if not loop.last %},{% endif %}
           {%- endfor %}
           ],
 
           inputs: [
-          {%- for (name, comp) in dae.u|items %}
+          {%- for (name, comp) in u_map|items %}
             { name: "{{ name }}" }{% if not loop.last %},{% endif %}
           {%- endfor %}
           ],
 
           conditions: [
-          {%- for (name, comp) in dae.c|items %}
-            { name: "{{ name }}", start: {{ render_expr(comp.start) if comp.start is defined else "false" }} }{% if not loop.last %},{% endif %}
-          {%- endfor %}
+          {%- if cond_eqs|length > 0 -%}
+            {%- for ce in cond_eqs %}
+            { name: "c[{{ loop.index }}]", start: false }{% if not loop.last %},{% endif %}
+            {%- endfor %}
+          {%- endif %}
           ],
 
           summary: {
-            nx: {{ dae.x|length }},
-            ny: {{ dae.y|length }},
-            nc: {{ dae.c|length }},
-            neqs: {{ dae.fx|length }}
+            nx: {{ x_map|length }},
+            ny: {{ y_map|length }},
+            nc: {{ cond_eqs|length }},
+            neqs: {{ eqs|length }}
           }
         };
 
-        /* convenient initial vectors */
         const x0 = meta.states.map(s => s.start);
         const y0 = meta.algebraics.map(a => a.start);
         const c0 = meta.conditions.map(c => c.start);
 
-        /* parameter defaults */
         const pDefaults = {
-        {%- for (name, comp) in dae.p|items %}
+        {%- for (name, comp) in p_map|items %}
           {{ name }}: {{ render_expr(comp.start) }}{% if not loop.last %},{% endif %}
         {%- endfor %}
         };
 
-        /* constants */
         const constants = {
-        {%- for (name, comp) in dae.cp|items %}
+        {%- for (name, comp) in cp_map|items %}
           {{ name }}: {{ render_expr(comp.start) }}{% if not loop.last %},{% endif %}
         {%- endfor %}
         };
 
-        /* index maps */
         const stateIndex = {
-        {%- for (name, comp) in dae.x|items %}
+        {%- for (name, comp) in x_map|items %}
           "{{ name }}": {{ loop.index0 }}{% if not loop.last %},{% endif %}
         {%- endfor %}
         };
 
         const algebraicIndex = {
-        {%- for (name, comp) in dae.y|items %}
+        {%- for (name, comp) in y_map|items %}
           "{{ name }}": {{ loop.index0 }}{% if not loop.last %},{% endif %}
         {%- endfor %}
         };
 
-        const conditionIndex = {
-        {%- for (name, comp) in dae.c|items %}
-          "{{ name }}": {{ loop.index0 }}{% if not loop.last %},{% endif %}
-        {%- endfor %}
-        };
-
-        function residual(t, x, xDot, y, u, pOverride) {
+        function residual(t, xVec, xDotVec, yVec, uVec, pOverride) {
           const p = Object.assign({}, pDefaults, pOverride || {});
 
-          /* unpack parameters */
-        {%- for (name, comp) in dae.p|items %}
+        {%- for (name, comp) in p_map|items %}
           const {{ name }} = p.{{ name }};
         {%- endfor %}
 
-          /* unpack constants */
-        {%- for (name, comp) in dae.cp|items %}
+        {%- for (name, comp) in cp_map|items %}
           const {{ name }} = constants.{{ name }};
         {%- endfor %}
 
-          /* unpack states */
-        {%- for (name, comp) in dae.x|items %}
-          const {{ name }} = x[{{ loop.index0 }}];
+        {%- for (name, comp) in x_map|items %}
+          const {{ name }} = xVec[{{ loop.index0 }}];
+          const der_{{ name }} = xDotVec[{{ loop.index0 }}];
         {%- endfor %}
 
-          /* unpack xDot */
-        {%- for (name, comp) in dae.x|items %}
-          const {{ name }}_dot = xDot[{{ loop.index0 }}];
+        {%- for (name, comp) in y_map|items %}
+          const {{ name }} = yVec[{{ loop.index0 }}];
         {%- endfor %}
 
-          /* unpack algebraics */
-        {%- for (name, comp) in dae.y|items %}
-          const {{ name }} = y[{{ loop.index0 }}];
+        {%- for (name, comp) in u_map|items %}
+          const {{ name }} = uVec[{{ loop.index0 }}];
         {%- endfor %}
 
-          /* unpack inputs */
-        {%- for (name, comp) in dae.u|items %}
-          const {{ name }} = u[{{ loop.index0 }}];
-        {%- endfor %}
-
-          /* residual ordering: derivative eqs first, then others */
-          {%- set res = namespace(first=true) %}
           return [
-          {%- for eq in dae.fx %}
-            {%- if "Simple" in eq and is_derivative_eq(eq) %}
-              {%- if not res.first %},{% endif %}
-              {{ lhs_state_name(eq) }}_dot - ({{ render_expr(eq.Simple.rhs) }})
-              {%- set res.first = false %}
-            {%- endif %}
-          {%- endfor %}
-
-          {%- for eq in dae.fx %}
-            {%- if "Simple" in eq and not is_derivative_eq(eq) %}
-              {%- if not res.first %},{% endif %}
-              ({{ render_expr(eq.Simple.lhs) }}) - ({{ render_expr(eq.Simple.rhs) }})
-              {%- set res.first = false %}
-            {%- endif %}
-          {%- endfor %}
-
-          {%- for eq in dae.fx %}
-            {%- if "Simple" not in eq %}
-              {%- if not res.first %},{% endif %}
-              0
-              {%- set res.first = false %}
-            {%- endif %}
+          {%- for eq in eqs %}
+            {{ residual_expr(eq) }}{% if not loop.last %},{% endif %}
           {%- endfor %}
           ];
         }
 
-        function evalConditions(t, x, y, u, pOverride) {
+        function evalConditions(t, xVec, yVec, uVec, pOverride) {
           const p = Object.assign({}, pDefaults, pOverride || {});
 
-          /* unpack parameters */
-        {%- for (name, comp) in dae.p|items %}
+        {%- for (name, comp) in p_map|items %}
           const {{ name }} = p.{{ name }};
         {%- endfor %}
 
-          /* unpack constants */
-        {%- for (name, comp) in dae.cp|items %}
+        {%- for (name, comp) in cp_map|items %}
           const {{ name }} = constants.{{ name }};
         {%- endfor %}
 
-          /* unpack states */
-        {%- for (name, comp) in dae.x|items %}
-          const {{ name }} = x[{{ loop.index0 }}];
+        {%- for (name, comp) in x_map|items %}
+          const {{ name }} = xVec[{{ loop.index0 }}];
         {%- endfor %}
 
-          /* unpack algebraics */
-        {%- for (name, comp) in dae.y|items %}
-          const {{ name }} = y[{{ loop.index0 }}];
+        {%- for (name, comp) in y_map|items %}
+          const {{ name }} = yVec[{{ loop.index0 }}];
         {%- endfor %}
 
-          /* unpack inputs */
-        {%- for (name, comp) in dae.u|items %}
-          const {{ name }} = u[{{ loop.index0 }}];
+        {%- for (name, comp) in u_map|items %}
+          const {{ name }} = uVec[{{ loop.index0 }}];
         {%- endfor %}
 
           return [
-          {%- for (name, comp) in dae.c|items %}
-            {%- if dae.fc is defined and (name in dae.fc) -%}
-              {{ render_expr(dae.fc[name]) }}
-            {%- else -%}
-              {{ render_expr(comp.start) if comp.start is defined else "false" }}
-            {%- endif -%}
-            {%- if not loop.last %},{% endif %}
+          {%- for ce in cond_eqs %}
+            {{ render_expr(ce.rhs) }}{% if not loop.last %},{% endif %}
           {%- endfor %}
           ];
         }
 
-        function applyResets(t, x, y, u, pOverride, cPrev, cCurr) {
+        function applyResets(t, xVec, yVec, uVec, pOverride, cPrev, cCurr) {
           const p = Object.assign({}, pDefaults, pOverride || {});
 
-          /* unpack parameters */
-        {%- for (name, comp) in dae.p|items %}
+        {%- for (name, comp) in p_map|items %}
           const {{ name }} = p.{{ name }};
         {%- endfor %}
 
-          /* unpack constants */
-        {%- for (name, comp) in dae.cp|items %}
+        {%- for (name, comp) in cp_map|items %}
           const {{ name }} = constants.{{ name }};
         {%- endfor %}
 
-          /* unpack states */
-        {%- for (name, comp) in dae.x|items %}
-          const {{ name }} = x[{{ loop.index0 }}];
+        {%- for (name, comp) in x_map|items %}
+          const {{ name }} = xVec[{{ loop.index0 }}];
         {%- endfor %}
 
-          /* unpack algebraics */
-        {%- for (name, comp) in dae.y|items %}
-          const {{ name }} = y[{{ loop.index0 }}];
+        {%- for (name, comp) in y_map|items %}
+          const {{ name }} = yVec[{{ loop.index0 }}];
         {%- endfor %}
 
-          /* unpack inputs */
-        {%- for (name, comp) in dae.u|items %}
-          const {{ name }} = u[{{ loop.index0 }}];
+        {%- for (name, comp) in u_map|items %}
+          const {{ name }} = uVec[{{ loop.index0 }}];
         {%- endfor %}
 
-          let xNew = x.slice();
-          let yNew = y.slice();
+          let xNew = xVec.slice();
+          let yNew = yVec.slice();
           let cNew = Array.isArray(cCurr) ? cCurr.slice() : [];
 
-        {%- for (cname, ccomp) in dae.c|items %}
+        {%- for wc in when_clauses %}
           {
-            const idx = conditionIndex["{{ cname }}"];
+            const idx = {{ loop.index0 }};
             const fired = !cPrev[idx] && cCurr[idx];
-
             if (fired) {
-              {%- if dae.fr is defined and (cname in dae.fr) %}
-                {%- set r = dae.fr[cname] %}
-                {%- if "Assignment" in r %}
-                  {%- set a = r.Assignment %}
-                  {%- set target = a.comp.parts[0].ident.text %}
-                  {%- if target in dae.x %}
-              xNew[stateIndex["{{ target }}"]] = {{ render_expr(a.value) }};
-                  {%- elif target in dae.y %}
-              yNew[algebraicIndex["{{ target }}"]] = {{ render_expr(a.value) }};
-                  {%- endif %}
-                {%- endif %}
+              {%- for eq in wc.equations %}
+              {%- if eq.lhs is defined %}
+              if (stateIndex["{{ eq.lhs }}"] !== undefined) {
+                xNew[stateIndex["{{ eq.lhs }}"]] = {{ render_expr(eq.rhs) }};
+              } else if (algebraicIndex["{{ eq.lhs }}"] !== undefined) {
+                yNew[algebraicIndex["{{ eq.lhs }}"]] = {{ render_expr(eq.rhs) }};
+              }
               {%- endif %}
+              {%- endfor %}
             }
           }
         {%- endfor %}
@@ -846,6 +836,21 @@ return [];</textarea>
       };
 
       /* ---------------------------------------------------------------------
+       * Shared runtime injection (Taskyon render path)
+       *
+       * When this template is rendered via renderUiHtml(...), these placeholders
+       * are replaced with:
+       *  - compiled model JS from javascript.jinja
+       *  - selected solver JS
+       *
+       * This keeps standalone HTML aligned with the same Model() code used by
+       * the main JavaScript template pipeline.
+       * -------------------------------------------------------------------*/
+
+      /*__TASKYON_GENERATED_MODEL_JS__*/
+      /*__TASKYON_SOLVER_JS__*/
+
+      /* ---------------------------------------------------------------------
        * UI
        * -------------------------------------------------------------------*/
 
@@ -883,7 +888,7 @@ return [];</textarea>
         return Number.isFinite(v) ? v : NaN;
       }
 
-      function buildSeriesOptions(result) {
+      function buildSeriesOptions(result, preferredKey) {
         while (elSeries.firstChild) elSeries.removeChild(elSeries.firstChild);
 
         const keys = [];
@@ -906,9 +911,11 @@ return [];</textarea>
           elSeries.appendChild(opt);
         }
 
-        if (keys.length > 0) {
-          elSeries.value = keys[0];
-        }
+        const nextSelection =
+          keys.length === 0 ? "" : keys.includes(String(preferredKey || "")) ? preferredKey : keys[0];
+
+        if (nextSelection) elSeries.value = nextSelection;
+        return String(nextSelection || "");
       }
 
       function getSeries(result, key) {
@@ -1135,10 +1142,10 @@ return [];</textarea>
           const result = simulateModel(params, context, model);
           lastResult = result;
 
-          buildSeriesOptions(result);
+          const previousSeries = elSeries.value;
+          const sel = buildSeriesOptions(result, previousSeries);
           setSummary(result);
 
-          const sel = elSeries.value;
           const s = getSeries(result, sel);
           plotSeries(s.t, s.y, sel);
 

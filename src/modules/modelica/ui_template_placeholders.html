@@ -238,6 +238,7 @@ return [];</textarea
         >
           <rect x="0" y="0" width="1000" height="420" fill="#0b1220"></rect>
           <g id="grid"></g>
+          <g id="axes"></g>
           <polyline id="line" fill="none" stroke="#6aa6ff" stroke-width="2" points=""></polyline>
           <text
             id="plotLabel"
@@ -299,6 +300,7 @@ return [];</textarea
       const elStatus = document.getElementById('status')
       const elSeries = document.getElementById('seriesSelect')
       const elGrid = document.getElementById('grid')
+      const elAxes = document.getElementById('axes')
       const elLine = document.getElementById('line')
       const elPlotLabel = document.getElementById('plotLabel')
 
@@ -365,7 +367,7 @@ return [];</textarea
         add('u.', u)
         add('c.', c)
 
-        const header = ['t'].concat(series.map((s) => s.key))
+        const header = ['t'].concat(series.map((s) => formatSeriesLabel(s.key)))
         const lines = [header.map(escapeCsv).join(',')]
 
         const n = t.length
@@ -388,7 +390,7 @@ return [];</textarea
         setTimeout(() => URL.revokeObjectURL(url), 500)
       }
 
-      function buildSeriesOptions(result) {
+      function buildSeriesOptions(result, preferredKey) {
         while (elSeries.firstChild) elSeries.removeChild(elSeries.firstChild)
 
         const keys = []
@@ -408,13 +410,15 @@ return [];</textarea
         for (const k of keys) {
           const opt = document.createElement('option')
           opt.value = k
-          opt.textContent = k
+          opt.textContent = formatSeriesLabel(k)
           elSeries.appendChild(opt)
         }
 
-        if (keys.length > 0) {
-          elSeries.value = keys[0]
-        }
+        const nextSelection =
+          keys.length === 0 ? '' : keys.includes(String(preferredKey || '')) ? preferredKey : keys[0]
+
+        if (nextSelection) elSeries.value = nextSelection
+        return String(nextSelection || '')
       }
 
       function getSeries(result, key) {
@@ -426,28 +430,76 @@ return [];</textarea
         return { t, y }
       }
 
+      function getMetaVariableUnit(group, name) {
+        const vars = Array.isArray(group) ? group : []
+        for (const v of vars) {
+          if (!v || typeof v !== 'object') continue
+          if (String(v.name || '') !== name) continue
+          const unit = String(v.unit || '').trim()
+          if (unit) return unit
+        }
+        return ''
+      }
+
+      function getSeriesUnit(key) {
+        const [grp, ...rest] = String(key || '').split('.')
+        const name = rest.join('.')
+        if (!name) return ''
+        if (grp === 'x') return getMetaVariableUnit(model?.meta?.states, name)
+        if (grp === 'y') return getMetaVariableUnit(model?.meta?.algebraics, name)
+        if (grp === 'u') return getMetaVariableUnit(model?.meta?.inputs, name)
+        if (grp === 'c' || grp === 'z') return ''
+        return ''
+      }
+
+      function formatSeriesLabel(key) {
+        const k = String(key || '')
+        const unit = getSeriesUnit(k)
+        return unit ? `${k} [${unit}]` : k
+      }
+
+      const PLOT = {
+        width: 1000,
+        height: 420,
+        marginLeft: 72,
+        marginRight: 20,
+        marginTop: 46,
+        marginBottom: 56,
+      }
+
+      function makeSvg(name) {
+        return document.createElementNS('http://www.w3.org/2000/svg', name)
+      }
+
+      function formatTick(v) {
+        const n = Number(v)
+        if (!Number.isFinite(n)) return ''
+        if (Math.abs(n) >= 1000 || (Math.abs(n) > 0 && Math.abs(n) < 0.01)) return n.toExponential(2)
+        return String(Number(n.toFixed(4)))
+      }
+
       function drawGrid() {
         while (elGrid.firstChild) elGrid.removeChild(elGrid.firstChild)
-        const w = 1000
-        const h = 420
+        const plotW = PLOT.width - PLOT.marginLeft - PLOT.marginRight
+        const plotH = PLOT.height - PLOT.marginTop - PLOT.marginBottom
         const nx = 10
         const ny = 6
         for (let i = 1; i < nx; i++) {
-          const x = (i * w) / nx
-          const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+          const x = PLOT.marginLeft + (i * plotW) / nx
+          const ln = makeSvg('line')
           ln.setAttribute('x1', String(x))
           ln.setAttribute('x2', String(x))
-          ln.setAttribute('y1', '0')
-          ln.setAttribute('y2', String(h))
+          ln.setAttribute('y1', String(PLOT.marginTop))
+          ln.setAttribute('y2', String(PLOT.marginTop + plotH))
           ln.setAttribute('stroke', '#1a263b')
           ln.setAttribute('stroke-width', '1')
           elGrid.appendChild(ln)
         }
         for (let j = 1; j < ny; j++) {
-          const y = (j * h) / ny
-          const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line')
-          ln.setAttribute('x1', '0')
-          ln.setAttribute('x2', String(w))
+          const y = PLOT.marginTop + (j * plotH) / ny
+          const ln = makeSvg('line')
+          ln.setAttribute('x1', String(PLOT.marginLeft))
+          ln.setAttribute('x2', String(PLOT.marginLeft + plotW))
           ln.setAttribute('y1', String(y))
           ln.setAttribute('y2', String(y))
           ln.setAttribute('stroke', '#1a263b')
@@ -456,12 +508,113 @@ return [];</textarea
         }
       }
 
+      function drawAxes(tMin, tMax, yMin, yMax, seriesLabel) {
+        while (elAxes.firstChild) elAxes.removeChild(elAxes.firstChild)
+        const plotW = PLOT.width - PLOT.marginLeft - PLOT.marginRight
+        const plotH = PLOT.height - PLOT.marginTop - PLOT.marginBottom
+        const x0 = PLOT.marginLeft
+        const x1 = PLOT.marginLeft + plotW
+        const y0 = PLOT.marginTop
+        const y1 = PLOT.marginTop + plotH
+
+        const xAxis = makeSvg('line')
+        xAxis.setAttribute('x1', String(x0))
+        xAxis.setAttribute('x2', String(x1))
+        xAxis.setAttribute('y1', String(y1))
+        xAxis.setAttribute('y2', String(y1))
+        xAxis.setAttribute('stroke', '#9bb0d1')
+        xAxis.setAttribute('stroke-width', '1.5')
+        elAxes.appendChild(xAxis)
+
+        const yAxis = makeSvg('line')
+        yAxis.setAttribute('x1', String(x0))
+        yAxis.setAttribute('x2', String(x0))
+        yAxis.setAttribute('y1', String(y0))
+        yAxis.setAttribute('y2', String(y1))
+        yAxis.setAttribute('stroke', '#9bb0d1')
+        yAxis.setAttribute('stroke-width', '1.5')
+        elAxes.appendChild(yAxis)
+
+        const tickCount = 5
+        for (let i = 0; i <= tickCount; i++) {
+          const frac = i / tickCount
+          const x = x0 + frac * plotW
+          const y = y1 - frac * plotH
+
+          const xTick = makeSvg('line')
+          xTick.setAttribute('x1', String(x))
+          xTick.setAttribute('x2', String(x))
+          xTick.setAttribute('y1', String(y1))
+          xTick.setAttribute('y2', String(y1 + 6))
+          xTick.setAttribute('stroke', '#9bb0d1')
+          xTick.setAttribute('stroke-width', '1')
+          elAxes.appendChild(xTick)
+
+          const yTick = makeSvg('line')
+          yTick.setAttribute('x1', String(x0 - 6))
+          yTick.setAttribute('x2', String(x0))
+          yTick.setAttribute('y1', String(y))
+          yTick.setAttribute('y2', String(y))
+          yTick.setAttribute('stroke', '#9bb0d1')
+          yTick.setAttribute('stroke-width', '1')
+          elAxes.appendChild(yTick)
+
+          const xText = makeSvg('text')
+          xText.setAttribute('x', String(x))
+          xText.setAttribute('y', String(y1 + 22))
+          xText.setAttribute('fill', '#9bb0d1')
+          xText.setAttribute('font-size', '11')
+          xText.setAttribute('text-anchor', 'middle')
+          xText.textContent = formatTick(tMin + frac * (tMax - tMin))
+          elAxes.appendChild(xText)
+
+          const yText = makeSvg('text')
+          yText.setAttribute('x', String(x0 - 10))
+          yText.setAttribute('y', String(y + 4))
+          yText.setAttribute('fill', '#9bb0d1')
+          yText.setAttribute('font-size', '11')
+          yText.setAttribute('text-anchor', 'end')
+          yText.textContent = formatTick(yMin + frac * (yMax - yMin))
+          elAxes.appendChild(yText)
+        }
+
+        const title = makeSvg('text')
+        title.setAttribute('x', String((x0 + x1) / 2))
+        title.setAttribute('y', '24')
+        title.setAttribute('fill', '#e7eefc')
+        title.setAttribute('font-size', '16')
+        title.setAttribute('font-weight', '700')
+        title.setAttribute('text-anchor', 'middle')
+        title.textContent = seriesLabel ? `Plot: ${seriesLabel}` : 'Plot'
+        elAxes.appendChild(title)
+
+        const xLabel = makeSvg('text')
+        xLabel.setAttribute('x', String((x0 + x1) / 2))
+        xLabel.setAttribute('y', String(PLOT.height - 14))
+        xLabel.setAttribute('fill', '#9bb0d1')
+        xLabel.setAttribute('font-size', '12')
+        xLabel.setAttribute('text-anchor', 'middle')
+        xLabel.textContent = 'Time (t)'
+        elAxes.appendChild(xLabel)
+
+        const yLabel = makeSvg('text')
+        yLabel.setAttribute('x', '18')
+        yLabel.setAttribute('y', String((y0 + y1) / 2))
+        yLabel.setAttribute('fill', '#9bb0d1')
+        yLabel.setAttribute('font-size', '12')
+        yLabel.setAttribute('text-anchor', 'middle')
+        yLabel.setAttribute('transform', `rotate(-90 18 ${(y0 + y1) / 2})`)
+        yLabel.textContent = seriesLabel || 'Value'
+        elAxes.appendChild(yLabel)
+      }
+
       function plotSeries(t, y, label) {
-        const w = 1000
-        const h = 420
+        const plotW = PLOT.width - PLOT.marginLeft - PLOT.marginRight
+        const plotH = PLOT.height - PLOT.marginTop - PLOT.marginBottom
 
         if (!Array.isArray(t) || !Array.isArray(y) || t.length === 0 || y.length === 0) {
           elLine.setAttribute('points', '')
+          drawAxes(0, 1, 0, 1, label || '')
           elPlotLabel.textContent = label || ''
           return
         }
@@ -488,19 +641,22 @@ return [];</textarea
           !Number.isFinite(yMax)
         ) {
           elLine.setAttribute('points', '')
+          drawAxes(0, 1, 0, 1, label || '')
           elPlotLabel.textContent = label || ''
           return
         }
         if (tMax === tMin) tMax = tMin + 1
         if (yMax === yMin) yMax = yMin + 1
 
+        drawAxes(tMin, tMax, yMin, yMax, label || '')
+
         const pts = []
         for (let i = 0; i < n; i++) {
           const ti = Number(t[i])
           const yi = Number(y[i])
           if (!Number.isFinite(ti) || !Number.isFinite(yi)) continue
-          const xx = ((ti - tMin) / (tMax - tMin)) * w
-          const yy = h - ((yi - yMin) / (yMax - yMin)) * h
+          const xx = PLOT.marginLeft + ((ti - tMin) / (tMax - tMin)) * plotW
+          const yy = PLOT.marginTop + plotH - ((yi - yMin) / (yMax - yMin)) * plotH
           pts.push(xx.toFixed(2) + ',' + yy.toFixed(2))
         }
         elLine.setAttribute('points', pts.join(' '))
@@ -561,10 +717,10 @@ return [];</textarea
           const result = simulateModel(params, context, model)
           lastResult = result
 
-          buildSeriesOptions(result)
-          const sel = elSeries.value
+          const previousSeries = elSeries.value
+          const sel = buildSeriesOptions(result, previousSeries)
           const s = getSeries(result, sel)
-          plotSeries(s.t, s.y, sel)
+          plotSeries(s.t, s.y, formatSeriesLabel(sel))
 
           elCsv.disabled = false
           setStatus('Simulation complete.', 'good')
@@ -581,7 +737,7 @@ return [];</textarea
         if (!lastResult) return
         const sel = elSeries.value
         const s = getSeries(lastResult, sel)
-        plotSeries(s.t, s.y, sel)
+        plotSeries(s.t, s.y, formatSeriesLabel(sel))
       })
 
       elCsv.addEventListener('click', () => {
@@ -592,6 +748,7 @@ return [];</textarea
       })
 
       drawGrid()
+      drawAxes(0, 1, 0, 1, '')
       setStatus('Ready.', '')
     </script>
   </body>

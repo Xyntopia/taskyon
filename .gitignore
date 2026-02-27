@@ -52,6 +52,7 @@ cypress.env.json
 
 # here we compile public libraries that other poeple might want to use for taskyon:
 public/lib
+public/msl
 
 
 dependency-cruiser-graph-flat-dot.html
