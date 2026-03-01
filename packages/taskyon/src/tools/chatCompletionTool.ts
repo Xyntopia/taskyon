@@ -232,9 +232,7 @@ const buildStreamingFailureDetails = (
     .map((line) => line.trim())
     .filter(Boolean)
   const informativeLine =
-    lines.find((line) => !/^chat completion failed!?$/i.test(line)) ??
-    lines[0] ??
-    'Unknown error'
+    lines.find((line) => !/^chat completion failed!?$/i.test(line)) ?? lines[0] ?? 'Unknown error'
 
   if (/no endpoints found that support tool use/i.test(lower)) {
     const docsUrl =
@@ -317,9 +315,20 @@ async function llmRequest(
     case 'taskyon':
     case 'openrouter.ai': {
       const { createOpenRouter } = await import('@openrouter/ai-sdk-provider')
+      const stripUserAgentFetch: typeof fetch = (input, init) => {
+        if (init?.headers) {
+          const h = new Headers(init.headers)
+          h.delete('user-agent')
+          h.delete('User-Agent')
+          return fetch(input, { ...init, headers: h })
+        }
+        return fetch(input, init)
+      }
+
       const openrouter = createOpenRouter({
         apiKey,
         ...(api.name === 'taskyon' ? { baseURL: api.baseURL + api.routes.chatCompletion } : {}),
+        fetch: stripUserAgentFetch, // <-- this is the important part (if supported)
       })
       const opts: Parameters<typeof openrouter>[1] = {
         provider: {
@@ -1312,10 +1321,7 @@ export function createChatCompletionTool(
         console.log('chat completion response', res, await chatCompletion.output)
       } catch (err) {
         const effectiveErr = errorCapture ?? err
-        const failure = classifyStreamingFailure(
-          effectiveErr,
-          context.stopSignal?.aborted ?? false,
-        )
+        const failure = classifyStreamingFailure(effectiveErr, context.stopSignal?.aborted ?? false)
         const failureDetails = buildStreamingFailureDetails(effectiveErr, {
           selectedApi,
           selectedModel,

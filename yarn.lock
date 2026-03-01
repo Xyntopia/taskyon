@@ -4538,24 +4538,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openrouter/ai-sdk-provider@npm:^2.0.0":
-  version: 2.0.0
-  resolution: "@openrouter/ai-sdk-provider@npm:2.0.0"
-  dependencies:
-    "@openrouter/sdk": "npm:^0.1.27"
+"@openrouter/ai-sdk-provider@npm:^2.2.3":
+  version: 2.2.3
+  resolution: "@openrouter/ai-sdk-provider@npm:2.2.3"
   peerDependencies:
-    ai: 6.0.3
+    ai: ^6.0.0
     zod: ^3.25.0 || ^4.0.0
-  checksum: 10c0/142934a46a265b41f622649ff3d2041bde07347886bc68f36b9f78367f3eaf266c47bccc426df2a294e6dc2d61af10d1e5ad196707cf189110b2609b707f17ca
-  languageName: node
-  linkType: hard
-
-"@openrouter/sdk@npm:^0.1.27":
-  version: 0.1.27
-  resolution: "@openrouter/sdk@npm:0.1.27"
-  dependencies:
-    zod: "npm:^3.25.0 || ^4.0.0"
-  checksum: 10c0/c63972851b4544a6585babacb2909b8af529444c6319e0a98b8e219f75295a25d433ba1978f24c0252fbb41ac2471bf209c2728649bf0c42b7a722c3868e267e
+  checksum: 10c0/d3b6cb9a8bc4df4c22ccbff13932ef25b3999b74abe9aa38d0d9de9e7ae6f69f4b0b6129c9ad13a0f901f068d4e67b7e8ce69a5cf63187bdb4c85608e359f149
   languageName: node
   linkType: hard
 
@@ -21673,7 +21662,7 @@ __metadata:
     "@msgpack/msgpack": "npm:^3.1.2"
     "@multiformats/multiaddr": "npm:^12.5.1"
     "@noble/ed25519": "npm:^2.1.0"
-    "@openrouter/ai-sdk-provider": "npm:^2.0.0"
+    "@openrouter/ai-sdk-provider": "npm:^2.2.3"
     "@quasar/app-vite": "npm:^2.3.0"
     "@quasar/cli": "npm:^2.5.0"
     "@quasar/extras": "npm:^1.17.0"
@@ -23953,13 +23942,6 @@ __metadata:
     compress-commons: "npm:^6.0.2"
     readable-stream: "npm:^4.0.0"
   checksum: 10c0/50f2fb30327fb9d09879abf7ae2493705313adf403e794b030151aaae00009162419d60d0519e807673ec04d442e140c8879ca14314df0a0192de3b233e8f28b
-  languageName: node
-  linkType: hard
-
-"zod@npm:^3.25.0 || ^4.0.0":
-  version: 4.3.5
-  resolution: "zod@npm:4.3.5"
-  checksum: 10c0/5a2db7e59177a3d7e202543f5136cb87b97b047b77c8a3d824098d3fa8b80d3aa40a0a5f296965c3b82dfdccdd05dbbfacce91347f16a39c675680fd7b1ab109
   languageName: node
   linkType: hard
 

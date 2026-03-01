@@ -385,13 +385,7 @@
               </q-card-section>
 
               <q-card-section v-if="executionResult && Object.keys(executionResult).length">
-                <ObjectView
-                  v-model="executionResult"
-                  dense
-                  read-only
-                  copy-btn
-                  enable-expert-mode
-                />
+                <ObjectView v-model="executionResult" dense read-only copy-btn enable-expert-mode />
               </q-card-section>
             </q-card>
           </template>
@@ -1068,7 +1062,8 @@ function handleExportTarget(target: 'modelica' | 'template' | 'js' | 'daePretty'
   if (target === 'template') return exportFile('template', templateSource.value)
   if (target === 'js') return exportFile('js', jsSource.value)
   if (target === 'daePretty') return exportFile('daePretty', daePrettyOutput.value)
-  if (target === 'daeJson') return exportFile('daeJson', JSON.stringify(daeJsonOutput.value ?? {}, null, 2))
+  if (target === 'daeJson')
+    return exportFile('daeJson', JSON.stringify(daeJsonOutput.value ?? {}, null, 2))
 }
 
 function handleExportUiHtml() {
