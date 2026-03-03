@@ -167,6 +167,9 @@
         <q-item v-close-popup clickable @click="emit('export-ui-html')">
           <q-item-section>Export UI HTML</q-item-section>
         </q-item>
+        <q-item v-close-popup clickable @click="emit('export-ui-jinja')">
+          <q-item-section>Export UI Jinja Template</q-item-section>
+        </q-item>
       </q-list>
     </q-btn-dropdown>
 
@@ -293,6 +296,7 @@ const emit = defineEmits<{
   (e: 'create-version'): void
   (e: 'export-target', target: ExportTarget): void
   (e: 'export-ui-html'): void
+  (e: 'export-ui-jinja'): void
   (e: 'run-sandbox'): void
   (e: 'open-popup'): void
   (e: 'stop-execution'): void

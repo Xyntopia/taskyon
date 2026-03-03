@@ -675,6 +675,42 @@ export function exportGeneratedUiHtml(
   })
 }
 
+export function exportGeneratedUiJinjaTemplate(
+  hasUiTemplate: boolean,
+  activeUiTemplateSource: string,
+  modelCodeTemplateSource: string,
+  activeSolverSource: string,
+  currentProjectId: string,
+  simDefaults?: UiTemplateSimDefaults,
+) {
+  if (!hasUiTemplate) {
+    Notify.create({ type: 'warning', message: 'No UI template selected' })
+    return
+  }
+  if (!String(modelCodeTemplateSource ?? '').trim()) {
+    Notify.create({ type: 'warning', message: 'No model JS template source available' })
+    return
+  }
+  if (!String(activeSolverSource ?? '').trim()) {
+    Notify.create({ type: 'warning', message: 'No solver source available' })
+    return
+  }
+
+  const jinjaTemplate = renderUiHtml({
+    uiTemplate: activeUiTemplateSource,
+    compiledJs: modelCodeTemplateSource,
+    solverJs: activeSolverSource,
+    ...(simDefaults ? { simDefaults } : {}),
+  })
+
+  const now = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-')
+  downloadTextFile({
+    fileName: `ui_${currentProjectId}_${now}.jinja`,
+    content: jinjaTemplate,
+    mime: 'text/plain;charset=utf-8',
+  })
+}
+
 // ---------- Simple helpers ----------
 
 type UiTemplateRenderInput = {

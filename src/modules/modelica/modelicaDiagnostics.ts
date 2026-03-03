@@ -7,7 +7,7 @@ import {
 } from 'src/modules/modelica/modelica'
 import baseDaeTemplate from 'src/modules/modelica/base_dae.jinja?raw'
 import javascriptTemplate from 'src/modules/modelica/javascript.jinja?raw'
-import standaloneHtmlTemplate from 'src/modules/modelica/standalon_html.jinja?raw'
+import standaloneHtmlTemplate from 'src/modules/modelica/standalone_html.jinja?raw'
 import bouncingBallTemplate from 'src/modules/modelica/bouncing_ball_animation.jinja?raw'
 import { serializeObject } from 'src/modules/serializeObject'
 import { strFromU8, unzipSync } from 'fflate'
@@ -21,7 +21,7 @@ const templateChecks = [
     executableAsJs: true,
   },
   {
-    name: 'standalon_html.jinja',
+    name: 'standalone_html.jinja',
     source: standaloneHtmlTemplate,
     requiredSnippets: ['<html lang="en">', 'function Model()'],
     executableAsJs: false,
@@ -228,7 +228,7 @@ end Test;
       shouldValidate: true,
     },
     {
-      name: 'standalon_html.jinja',
+      name: 'standalone_html.jinja',
       template: standaloneHtmlTemplate,
       shouldValidate: false,
     },

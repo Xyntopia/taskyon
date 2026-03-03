@@ -66,6 +66,7 @@
               @create-version="handleCreateNewVersionClick"
               @export-target="handleExportTarget"
               @export-ui-html="handleExportUiHtml"
+              @export-ui-jinja="handleExportUiJinjaTemplate"
               @run-sandbox="handleRunInSandbox"
               @open-popup="openGeneratedHtmlPopup"
               @stop-execution="stopExecution"
@@ -457,6 +458,7 @@ import {
   appendModelicaLog,
   exportFile,
   exportGeneratedUiHtml,
+  exportGeneratedUiJinjaTemplate,
   renderUiHtml,
   builtinSolvers,
   packProjectFile as packModelicaProjectFile,
@@ -465,6 +467,7 @@ import {
   runModelicaSandbox,
 } from 'src/modules/modelica/modelica'
 import defaultUiTemplateSource from 'src/modules/modelica/ui_template_placeholders.html?raw'
+import defaultJsTemplateSource from 'src/modules/modelica/javascript.jinja?raw'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { copyToClipboard } from 'src/modules/utils'
 import FixedHeightPage from 'src/pages/FixedHeightPage.vue'
@@ -1071,6 +1074,21 @@ function handleExportUiHtml() {
     hasUiTemplate.value,
     activeUiTemplateSource.value,
     jsSource.value,
+    activeSolverSource.value,
+    currentProjectId.value,
+    {
+      t0: simT0.value,
+      tf: simTf.value,
+      dt: simDt.value,
+    },
+  )
+}
+
+function handleExportUiJinjaTemplate() {
+  exportGeneratedUiJinjaTemplate(
+    hasUiTemplate.value,
+    activeUiTemplateSource.value,
+    defaultJsTemplateSource,
     activeSolverSource.value,
     currentProjectId.value,
     {
