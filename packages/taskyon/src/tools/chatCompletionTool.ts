@@ -1177,8 +1177,11 @@ export function createChatCompletionTool(
       } = opts
       const { verbosity, artificial_streaming } = options || {}
 
-      const totalMs = timeouts?.totalMs ?? 10 * 60 * 1000
-      const stepMs = timeouts?.stepMs ?? 10 * 60 * 1000
+      const timeout = {
+        totalMs: timeouts?.totalMs ?? 10 * 60 * 1000,
+        stepMs: timeouts?.stepMs ?? 10 * 60 * 1000,
+        chunkMs: 120 * 1000,
+      }
       const useArtificialStreaming = artificial_streaming ?? true
       const tools = allowedTools ?? []
 
@@ -1288,7 +1291,7 @@ export function createChatCompletionTool(
       let errorCapture: unknown
       const { streamText } = await import('ai')
       const chatCompletion = streamText({
-        timeout: { totalMs: 10 * 60 * 1000, stepMs: 10 * 60 * 1000, chunkMs: 120 * 1000 },
+        timeout,
         includeRawChunks: true,
         onChunk({ chunk }) {
           chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
