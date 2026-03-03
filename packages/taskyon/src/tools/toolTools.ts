@@ -280,6 +280,7 @@ Finally, it creates a chat completion task with the selected tools in the allowe
             return makeTaskResult([
               [
                 createChatCompletionTask({
+                  reasoning_effort: 'none',
                   prompts: [
                     `Here is list of all the tools which are available to you:
 
