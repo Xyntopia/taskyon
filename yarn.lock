@@ -19922,10 +19922,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rumoca@https://assets.taskyon.space/rumoca-bind-wasm-0.8.0.a1.tgz":
+"rumoca-bind-wasm@workspace:packages/pkg":
+  version: 0.0.0-use.local
+  resolution: "rumoca-bind-wasm@workspace:packages/pkg"
+  languageName: unknown
+  linkType: soft
+
+"rumoca@https://assets.taskyon.space/rumoca-0.8.0.a7.tgz":
   version: 0.8.0
-  resolution: "rumoca@https://assets.taskyon.space/rumoca-bind-wasm-0.8.0.a1.tgz"
-  checksum: 10c0/9d41ba522711dff8fda610e76b80636d4caa888f03c843baad6d82f168a4630bcfea6672e482a8ead97c386c45a1bc52f710a5dc761373b1033d3f551b160fd8
+  resolution: "rumoca@https://assets.taskyon.space/rumoca-0.8.0.a7.tgz"
+  checksum: 10c0/45504cda2d0ad3abaa2c75e4d2b8ffbc22d072e5bc445b71ad40db370352d37363a1c351ad3011128e53f18abd21348934d63cfab03e93b6776f772865ae4456
   languageName: node
   linkType: hard
 
@@ -21742,7 +21748,7 @@ __metadata:
     pyodide: "npm:^0.29.3"
     qrcode: "npm:^1.5.4"
     quasar: "npm:^2.17.0"
-    rumoca: "https://assets.taskyon.space/rumoca-bind-wasm-0.8.0.a1.tgz"
+    rumoca: "https://assets.taskyon.space/rumoca-0.8.0.a7.tgz"
     sort-package-json: "npm:^3.0.0"
     sqlocal: "npm:^0.6.2"
     stopword: "npm:^2.0.8"

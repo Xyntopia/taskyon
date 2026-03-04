@@ -45,6 +45,13 @@ export interface SerializeOptions {
    * Default: true
    */
   includeTruncationMeta?: boolean
+
+  /**
+   * Detect arrays where every item is the same primitive value and include
+   * a compact summary with that constant value and total length.
+   * Default: true
+   */
+  detectConstantArrayValues?: boolean
 }
 
 /**
@@ -66,6 +73,7 @@ export function serializeObject(value: unknown, options: SerializeOptions = {}):
     maxStringLength: options.maxStringLength ?? 200,
     indent: options.indent ?? 2,
     includeTruncationMeta: options.includeTruncationMeta ?? true,
+    detectConstantArrayValues: options.detectConstantArrayValues ?? true,
   }
 
   const seen = new WeakSet<object>()
@@ -158,6 +166,18 @@ export function serializeObject(value: unknown, options: SerializeOptions = {}):
 
   function summarizeArray(arr: unknown[], depth: number): unknown {
     const len = arr.length
+
+    if (resolved.detectConstantArrayValues) {
+      const constantValue = getConstantPrimitiveArrayValue(arr)
+      if (constantValue.isConstant) {
+        return {
+          __arrayType: 'constant',
+          __length: len,
+          __value: summarizePrimitive(constantValue.value),
+        }
+      }
+    }
+
     const limit = resolved.maxArrayLength
     const result: unknown[] = []
 
@@ -167,10 +187,35 @@ export function serializeObject(value: unknown, options: SerializeOptions = {}):
     }
 
     if (len > limit && resolved.includeTruncationMeta) {
-      result.push(`… (${len - limit} more items omitted)`)
+      result.push({ __omittedItems: len - limit })
     }
 
     return result
+  }
+
+  function getConstantPrimitiveArrayValue(
+    arr: unknown[],
+  ): { isConstant: true; value: unknown } | { isConstant: false } {
+    if (arr.length === 0) {
+      return { isConstant: false }
+    }
+
+    const first = arr[0]
+    if (!isPrimitiveValue(first)) {
+      return { isConstant: false }
+    }
+
+    for (let i = 1; i < arr.length; i++) {
+      if (!Object.is(arr[i], first)) {
+        return { isConstant: false }
+      }
+    }
+
+    return { isConstant: true, value: first }
+  }
+
+  function isPrimitiveValue(v: unknown): boolean {
+    return v === null || (typeof v !== 'object' && typeof v !== 'function')
   }
 
   function summarizeObject(obj: Record<string, unknown>, depth: number): Record<string, unknown> {
@@ -185,7 +230,7 @@ export function serializeObject(value: unknown, options: SerializeOptions = {}):
     }
 
     if (keys.length > limit && resolved.includeTruncationMeta) {
-      result['__omittedKeys'] = `${keys.length - limit} more keys omitted`
+      result['__omittedKeys'] = keys.length - limit
     }
 
     return result

@@ -102,6 +102,7 @@
           missing-mode="hide"
         />
         <div class="row items-center q-gutter-xs q-mt-sm">
+          <q-btn dense flat color="grey-7" label="Reset View" @click="emit('reset-view')" />
           <q-btn dense flat color="grey-7" :icon="matDelete" label="Clear All" @click="emit('clear-all')" />
           <q-btn dense flat color="grey-7" :icon="matDescription" label="Load Example" @click="emit('load-example')" />
         </div>
@@ -290,6 +291,7 @@ const emit = defineEmits<{
   (e: 'load-cached-msl'): void
   (e: 'clear-msl'): void
   (e: 'clear-all'): void
+  (e: 'reset-view'): void
   (e: 'load-example'): void
   (e: 'previous-version'): void
   (e: 'next-version'): void

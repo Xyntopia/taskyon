@@ -1,11 +1,12 @@
-import rumocaWasmUrl from 'rumoca/rumoca_bg.wasm?url'
 import defaultSolverSource from 'src/modules/modelica/simulateModel?raw'
 import type * as WasmTypes from 'rumoca'
+import rumocaWasmUrl from 'rumoca/rumoca_bg.wasm?url'
 import { z } from 'zod'
 import { ref } from 'vue'
 import { Notify } from 'quasar'
 import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
 import { validateJavaScriptInSandbox } from '../../../packages/taskyon/src/utils/checkJsSyntax'
+import { serializeObject } from 'src/modules/serializeObject'
 
 // Zod v3 vs v4 compatibility: some builds do not expose z.function().args().returns().
 // We use z.custom to type-check "is a function" while keeping strong TS inference.
@@ -39,7 +40,7 @@ export type ModelicaVersion = {
 // ---------- Model runtime ABI (solver <-> model) ----------
 
 export const TyModelRuntimeAbiRefResidualV1 = z.object({
-  id: z.literal('taskyon.model_runtime.residual.v1'),
+  id: z.literal('rumoca.model_runtime.residual.v1'),
   version: z.literal(1),
 })
 
@@ -319,7 +320,7 @@ export function buildModelAbiValidationIframeCode(compiledJs: string): string {
 (params, context) => {
   const logs = [];
   const nowIso = () => new Date().toISOString();
-  const runId = (context && (context.__taskyonRunId || context.runId)) || 'unknown';
+  const runId = (context && (context.__rumocaRunId || context.runId)) || 'unknown';
 
   const emit = (msg, ...details) => {
     const entry = {
@@ -332,7 +333,7 @@ export function buildModelAbiValidationIframeCode(compiledJs: string): string {
     logs.push(entry);
     try {
       if (typeof parent !== 'undefined' && parent && typeof parent.postMessage === 'function') {
-        parent.postMessage({ taskyon: { kind: 'modelicaSandboxLog', runId, entry } }, '*');
+        parent.postMessage({ rumoca: { kind: 'modelicaSandboxLog', runId, entry } }, '*');
       }
     } catch {
       /* empty */
@@ -373,7 +374,7 @@ export function buildModelAbiValidationIframeCode(compiledJs: string): string {
 
   try {
     const abi = model.abi;
-    if (abi.id !== 'taskyon.model_runtime.residual.v1') {
+    if (abi.id !== 'rumoca.model_runtime.residual.v1') {
       throw new Error('Unsupported model ABI id: ' + String(abi.id));
     }
 
@@ -454,7 +455,7 @@ export const loadWasm = async () => {
 // ---------- Build iframe function code ----------
 export const buildIframeCode = (compiledJs: string, solverSource?: string): string => `
 (params, context)=>{
-  const runId = (context && (context.__taskyonRunId || context.runId)) || 'unknown'
+  const runId = (context && (context.__rumocaRunId || context.runId)) || 'unknown'
 
   // Provide a pure callback on the context object.
   // The solver can call context.log(msg, ...details) without relying on globals.
@@ -470,7 +471,7 @@ export const buildIframeCode = (compiledJs: string, solverSource?: string): stri
       }
       try{
         if (typeof parent !== 'undefined' && parent && typeof parent.postMessage === 'function'){
-          parent.postMessage({ taskyon: { kind: 'modelicaSandboxLog', runId, entry } }, '*')
+          parent.postMessage({ rumoca: { kind: 'modelicaSandboxLog', runId, entry } }, '*')
         }
       }catch{}
     }
@@ -538,6 +539,7 @@ export const TyModelicaProjectFileV1 = z.object({
       solverId: z.string().optional(),
 
       solverOptions: z.record(z.string(), z.unknown()).optional(),
+      solverOptionsByKey: z.record(z.string().min(1), z.record(z.string(), z.unknown())).optional(),
     })
     .optional(),
 
@@ -620,8 +622,8 @@ export function renderUiHtml({
     .replaceAll('/*__SOLVER_JS__*/', solverWithRuntimeDefaultsEsc)
 
     // Taskyon UI template placeholders (current default UI template)
-    .replaceAll(/\/\*__TASKYON_GENERATED_MODEL_JS__\*\//g, compiledEsc)
-    .replaceAll(/\/\*__TASKYON_SOLVER_JS__\*\//g, solverWithRuntimeDefaultsEsc)
+    .replaceAll(/\/\*__RUMOCA_GENERATED_MODEL_JS__\*\//g, compiledEsc)
+    .replaceAll(/\/\*__RUMOCA_SOLVER_JS__\*\//g, solverWithRuntimeDefaultsEsc)
 
   const hasCompiled = out.includes(compiledEsc)
   const hasSolver = out.includes(solverWithRuntimeDefaultsEsc)
@@ -753,7 +755,7 @@ function buildSimDefaultsOverrideJs(simDefaults?: UiTemplateSimDefaults): string
 }
 
 function injectSeriesSelectionPersistence(html: string): string {
-  const marker = '__TASKYON_SERIES_PERSIST__'
+  const marker = '__RUMOCA_SERIES_PERSIST__'
   if (String(html).includes(marker)) return html
 
   const snippet = `
@@ -905,8 +907,15 @@ export async function discoverSolverMetadata(solverJs: string): Promise<{
   const code = `
 (params, context) => {
   ${String(solverJs)}
-  const schema = (typeof simulateModel === 'function' && (simulateModel.optionsSchema || simulateModel.solverOptionsSchema)) || null
-  const simDefaults = (typeof simulateModel === 'function' && simulateModel.simDefaults) || null
+  const contract = (typeof simulateModel === 'function' && simulateModel.contract) || null
+  const schema =
+    (contract && typeof contract === 'object' && (contract.optionsSchema || contract.solverOptionsSchema)) ||
+    (typeof simulateModel === 'function' && (simulateModel.optionsSchema || simulateModel.solverOptionsSchema)) ||
+    null
+  const simDefaults =
+    (contract && typeof contract === 'object' && contract.simDefaults) ||
+    (typeof simulateModel === 'function' && simulateModel.simDefaults) ||
+    null
   return { schema, simDefaults }
 }
 `
@@ -918,11 +927,12 @@ export async function discoverSolverMetadata(solverJs: string): Promise<{
       stopSignal: abort.signal,
     },
     {},
-    { source: 'ModelicaPage', compiledAt: new Date().toISOString(), __taskyonRunId: id },
+    { source: 'ModelicaPage', compiledAt: new Date().toISOString(), __rumocaRunId: id },
   )
   if (!rawUnknown || typeof rawUnknown !== 'object') return {}
   const r = rawUnknown as Record<string, unknown>
-  const schema = r.schema && typeof r.schema === 'object' ? (r.schema as Record<string, unknown>) : undefined
+  const schema =
+    r.schema && typeof r.schema === 'object' ? (r.schema as Record<string, unknown>) : undefined
   const simDefaults =
     r.simDefaults && typeof r.simDefaults === 'object'
       ? (r.simDefaults as Record<string, unknown>)
@@ -945,6 +955,7 @@ export function packProjectFile(input: {
     dt: number
     solverKey: string
     solverOptions: Record<string, unknown>
+    solverOptionsByKey?: Record<string, Record<string, unknown>>
   }
   documentVersions: ModelicaVersion[]
   currentVersionIndex: number
@@ -964,8 +975,10 @@ export function packProjectFile(input: {
       solverKey: input.sim.solverKey,
       solverId: solverIdFromKey(input.sim.solverKey),
       solverOptions: input.sim.solverOptions,
+      solverOptionsByKey: input.sim.solverOptionsByKey,
     },
-    documentVersions: input.documentVersions as unknown as TyModelicaProjectFileV1['documentVersions'],
+    documentVersions:
+      input.documentVersions as unknown as TyModelicaProjectFileV1['documentVersions'],
     currentVersionIndex: input.currentVersionIndex,
   }
   return validateModelicaProjectFileV1(pf)
@@ -985,6 +998,7 @@ export function unpackProjectFile(
     dt?: number
     solverKey?: string
     solverOptions?: Record<string, unknown>
+    solverOptionsByKey?: Record<string, Record<string, unknown>>
   }
   documentVersions?: ModelicaVersion[]
   currentVersionIndex?: number
@@ -992,7 +1006,8 @@ export function unpackProjectFile(
   const out: ReturnType<typeof unpackProjectFile> = {
     modelicaSource: pf.modelicaSource ?? '',
     uiTemplates: pf.uiTemplates ?? {},
-    selectedUiTemplateId: pf.activeUiTemplateId || Object.keys(pf.uiTemplates ?? {})[0] || 'default',
+    selectedUiTemplateId:
+      pf.activeUiTemplateId || Object.keys(pf.uiTemplates ?? {})[0] || 'default',
     sim: {},
   }
   if (pf.solvers && typeof pf.solvers === 'object') out.projectSolvers = pf.solvers
@@ -1014,6 +1029,9 @@ export function unpackProjectFile(
     if (pf.sim.solverOptions && typeof pf.sim.solverOptions === 'object') {
       out.sim.solverOptions = pf.sim.solverOptions
     }
+    if (pf.sim.solverOptionsByKey && typeof pf.sim.solverOptionsByKey === 'object') {
+      out.sim.solverOptionsByKey = pf.sim.solverOptionsByKey
+    }
   }
 
   if (Array.isArray(pf.documentVersions)) {
@@ -1027,7 +1045,9 @@ export function unpackProjectFile(
 }
 
 export function normalizeLibraryEntryPath(path: string): string {
-  const parts = String(path || '').split('/').filter(Boolean)
+  const parts = String(path || '')
+    .split('/')
+    .filter(Boolean)
   if (parts.length > 1 && /(?:Standard)?Library|^MSL/i.test(parts[0] ?? '')) {
     return parts.slice(1).join('/')
   }
@@ -1035,6 +1055,58 @@ export function normalizeLibraryEntryPath(path: string): string {
     parts[0] = parts[0]!.replace(/[\s-][\d.]+$/, '')
   }
   return parts.join('/')
+}
+
+type CompiledDaePayload = {
+  dae?: unknown
+  dae_native?: unknown
+  dae_prepared?: unknown
+}
+
+export function selectDaeForTemplate(
+  compiled: CompiledDaePayload,
+  options?: {
+    usePreparedDae?: boolean
+  },
+): Record<string, unknown> | null {
+  const usePreparedDae = options?.usePreparedDae ?? true
+  const nativeDaeRaw = compiled.dae_native ?? compiled.dae
+  const preparedDaeRaw = compiled.dae_prepared
+
+  const asRecord = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null
+  const countVarMapEntries = (daeObj: Record<string, unknown> | null, key: string): number => {
+    if (!daeObj) return 0
+    const map = daeObj[key]
+    if (!map || typeof map !== 'object' || Array.isArray(map)) return 0
+    return Object.keys(map as Record<string, unknown>).length
+  }
+
+  const nativeDae = asRecord(nativeDaeRaw)
+  const preparedDae = asRecord(preparedDaeRaw)
+
+  let daeForTemplate: Record<string, unknown> | null = usePreparedDae
+    ? (preparedDae ?? nativeDae)
+    : nativeDae
+
+  if (usePreparedDae && preparedDae && nativeDae) {
+    const nativeAlgebraics = countVarMapEntries(nativeDae, 'y')
+    const preparedAlgebraics = countVarMapEntries(preparedDae, 'y')
+    const rumocaObservables = preparedDae.__rumoca_observables
+    const observables = Array.isArray(rumocaObservables) && rumocaObservables.length > 0
+    if (nativeAlgebraics > preparedAlgebraics && !observables) {
+      // Backward-compatible fallback: older prepared DAEs may drop algebraic observables.
+      // Prefer native DAE to keep template outputs stable.
+      daeForTemplate = nativeDae
+    }
+  }
+
+  if (!daeForTemplate || typeof daeForTemplate !== 'object' || Array.isArray(daeForTemplate)) {
+    return null
+  }
+  return daeForTemplate
 }
 
 export function buildModelConstructionProbeIframeCode(compiledJs: string): string {
@@ -1106,6 +1178,7 @@ export async function compileModelicaToJs(params: {
   templateSource: string
   useModelicaStandardLibrary: boolean
   mslLoaded: boolean
+  usePreparedDae: boolean
   activeSandboxRunIds: Set<string>
 }): Promise<
   | {
@@ -1146,6 +1219,7 @@ export async function compileModelicaToJs(params: {
     phase: 'init',
     usingMslRequested: params.useModelicaStandardLibrary,
     mslLoaded: params.mslLoaded,
+    usePreparedDae: params.usePreparedDae,
     modelicaLength: params.modelicaSource.length,
     templateLength: params.templateSource.length,
   }
@@ -1191,14 +1265,66 @@ export async function compileModelicaToJs(params: {
     const compiled = JSON.parse(jsonStr) as {
       dae?: unknown
       dae_native?: unknown
+      dae_prepared?: unknown
+      dae_prepared_error?: unknown
       pretty?: string
     }
     compileDebug.usedLibraries = usedLibraries
     partialUsedLibraries = usedLibraries
 
-    const daeForTemplate = compiled.dae_native ?? compiled.dae
+    const countVarMapEntries = (daeObj: unknown, key: string): number => {
+      if (!daeObj || typeof daeObj !== 'object' || Array.isArray(daeObj)) return 0
+      const map = (daeObj as Record<string, unknown>)[key]
+      if (!map || typeof map !== 'object' || Array.isArray(map)) return 0
+      return Object.keys(map as Record<string, unknown>).length
+    }
+
+    const nativeDae = compiled.dae_native ?? compiled.dae
+    const daeForTemplate = selectDaeForTemplate(compiled, {
+      usePreparedDae: params.usePreparedDae,
+    })
     if (!daeForTemplate) throw new Error('Compilation did not return a DAE object')
-    partialDaeForTemplate = daeForTemplate as Record<string, unknown>
+
+    if (params.usePreparedDae && compiled.dae_prepared) {
+      const nativeAlgebraics = countVarMapEntries(nativeDae, 'y')
+      const preparedAlgebraics = countVarMapEntries(compiled.dae_prepared, 'y')
+      const nativeStates = countVarMapEntries(compiled.dae_native ?? compiled.dae, 'x')
+      const preparedStates = countVarMapEntries(compiled.dae_prepared, 'x')
+      compileDebug.preparedReduction = {
+        nativeAlgebraics,
+        preparedAlgebraics,
+      }
+      if (preparedAlgebraics < nativeAlgebraics) {
+        appendModelicaLog({
+          level: 'info',
+          phase: 'compile',
+          message:
+            `Prepared DAE reduced algebraics (${nativeAlgebraics} -> ${preparedAlgebraics})` +
+            ` and states (${nativeStates} -> ${preparedStates}). ` +
+            `If algebraic outputs are missing, update Rumoca prepared DAE observable retention.`,
+        })
+      }
+    }
+
+    if (params.usePreparedDae && compiled.dae_prepared_error) {
+      const preparedErrorText =
+        typeof compiled.dae_prepared_error === 'string'
+          ? compiled.dae_prepared_error
+          : serializeObject(compiled.dae_prepared_error, {
+              format: 'json',
+              maxDepth: 2,
+              maxArrayLength: 8,
+              maxObjectKeys: 12,
+              maxStringLength: 240,
+              indent: 0,
+            })
+      appendModelicaLog({
+        level: 'warning',
+        phase: 'compile',
+        message: `DAE prepare pass failed, falling back to raw DAE: ${preparedErrorText}`,
+      })
+    }
+    partialDaeForTemplate = daeForTemplate
     partialDaePretty = compiled.pretty ?? ''
 
     const daeJson = JSON.stringify(daeForTemplate)
@@ -1227,7 +1353,7 @@ export async function compileModelicaToJs(params: {
           {
             source: 'ModelicaPage',
             compiledAt: new Date().toISOString(),
-            __taskyonRunId: modelProbeRunId,
+            __rumocaRunId: modelProbeRunId,
           },
         )
         compileDebug.modelProbe = modelProbeResult
@@ -1260,7 +1386,7 @@ export async function compileModelicaToJs(params: {
           {
             source: 'ModelicaPage',
             compiledAt: new Date().toISOString(),
-            __taskyonRunId: id,
+            __rumocaRunId: id,
           },
         )
         const abiResult = validateModelAbiValidationResultV1(rawAbiResult)
@@ -1298,7 +1424,7 @@ export async function compileModelicaToJs(params: {
     return {
       ok: true,
       rendered,
-      daeForTemplate: daeForTemplate as Record<string, unknown>,
+      daeForTemplate,
       daePretty: compiled.pretty ?? '',
       usedLibraries,
       modelName,
@@ -1384,7 +1510,7 @@ export async function runModelicaSandbox(params: {
       {
         source: 'ModelicaPage',
         compiledAt: new Date().toISOString(),
-        __taskyonRunId: id,
+        __rumocaRunId: id,
       },
     )
 

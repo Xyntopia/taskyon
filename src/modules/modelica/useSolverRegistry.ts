@@ -15,15 +15,27 @@ export function useSolverRegistry(params: {
   simDt: Ref<number>
 }) {
   const solverOptionsSchema = ref<Record<string, unknown> | undefined>(undefined)
-  const solverOptions = ref<Record<string, unknown>>({})
+  const selectedSolverKey = ref<string>('builtin:default')
+  const newSolverId = ref<string>('solver2')
+  const solverOptionsByKey = ref<Record<string, Record<string, unknown>>>({})
+  const solverOptions = computed<Record<string, unknown>>({
+    get: () => solverOptionsByKey.value[selectedSolverKey.value] ?? {},
+    set: (v: Record<string, unknown>) => {
+      const key = String(selectedSolverKey.value || '')
+      if (!key) return
+      solverOptionsByKey.value = {
+        ...solverOptionsByKey.value,
+        [key]: { ...(v || {}) },
+      }
+    },
+  })
   const showSolverOptionsDialog = ref(false)
 
   const projectSolvers = ref<Record<string, string>>(createDefaultProjectSolvers())
   const defaultBuiltinSolverSource = builtinSolvers.default ?? ''
+  let solverMetadataRefreshId = 0
 
   const projectSolverIds = computed(() => Object.keys(projectSolvers.value).sort())
-  const selectedSolverKey = ref<string>('builtin:default')
-  const newSolverId = ref<string>('solver2')
 
   const solverKeyOptions = computed(() => {
     const builtins = Object.keys(builtinSolvers)
@@ -82,14 +94,23 @@ export function useSolverRegistry(params: {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { [id]: _removed, ...rest } = projectSolvers.value
     projectSolvers.value = rest
+    const deletedKey = `project:${id}`
+    if (solverOptionsByKey.value[deletedKey]) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [deletedKey]: _deletedOptions, ...restOptions } = solverOptionsByKey.value
+      solverOptionsByKey.value = restOptions
+    }
 
     const nextId = Object.keys(projectSolvers.value).sort()[0] ?? 'solver1'
     selectedSolverKey.value = `project:${nextId}`
   }
 
   async function refreshActiveSolverMetadata() {
+    const refreshId = ++solverMetadataRefreshId
+    const activeKey = String(selectedSolverKey.value || '')
     const solverJs = String(activeSolverSource.value ?? '')
     if (!solverJs.trim()) {
+      if (refreshId !== solverMetadataRefreshId) return
       solverOptionsSchema.value = undefined
       return
     }
@@ -97,6 +118,7 @@ export function useSolverRegistry(params: {
     const id = 'rumoca-solver-meta'
     try {
       const { schema, simDefaults } = await discoverSolverMetadata(solverJs)
+      if (refreshId !== solverMetadataRefreshId) return
       solverOptionsSchema.value = schema
 
       if (simDefaults && typeof simDefaults === 'object') {
@@ -105,10 +127,15 @@ export function useSolverRegistry(params: {
         if (typeof simDefaults.dt === 'number') params.simDt.value = simDefaults.dt
       }
 
-      if (!solverOptions.value || Object.keys(solverOptions.value).length === 0) {
-        solverOptions.value = extractDefaultsFromJsonSchema(schema)
+      const defaults = extractDefaultsFromJsonSchema(schema)
+      const current = solverOptionsByKey.value[activeKey] ?? {}
+      const merged = { ...defaults, ...current }
+      solverOptionsByKey.value = {
+        ...solverOptionsByKey.value,
+        [activeKey]: merged,
       }
     } catch (e) {
+      if (refreshId !== solverMetadataRefreshId) return
       console.warn(`Failed to extract solver metadata (${id}):`, e)
       solverOptionsSchema.value = undefined
     }
@@ -119,12 +146,24 @@ export function useSolverRegistry(params: {
     async () => {
       await refreshActiveSolverMetadata()
     },
-    { debounce: 200, maxWait: 800 },
+    { debounce: 200, maxWait: 800, immediate: true },
+  )
+
+  watchDebounced(
+    solverKeyOptions,
+    (options) => {
+      const selected = String(selectedSolverKey.value || '')
+      if (options.some((opt) => opt.value === selected)) return
+      const fallback = options.find((opt) => opt.value === 'builtin:default')?.value ?? options[0]?.value
+      selectedSolverKey.value = fallback ?? ''
+    },
+    { debounce: 50, maxWait: 200, immediate: true },
   )
 
   return {
     solverOptionsSchema,
     solverOptions,
+    solverOptionsByKey,
     showSolverOptionsDialog,
     projectSolvers,
     projectSolverIds,

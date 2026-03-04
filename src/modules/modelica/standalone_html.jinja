@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Taskyon Model UI</title>
+    <title>Rumoca Model UI</title>
     <style>
       :root {
         --bg: #0b0f17;
@@ -168,7 +168,7 @@
   </head>
   <body>
     <header>
-      <div class="title">Taskyon Model UI</div>
+      <div class="title">Rumoca Model UI</div>
       <div class="subtitle mono" id="modelName">Model</div>
     </header>
 
@@ -331,7 +331,7 @@ return [];</textarea
 {{ e }}
 {%- elif e is boolean -%}
 {{ "true" if e else "false" }}
-{%- elif e.Literal is defined -%}
+{%- elif e is mapping and e.Literal is defined -%}
   {%- if e.Literal.Integer is defined -%}{{ e.Literal.Integer }}
   {%- elif e.Literal.Real is defined -%}{{ e.Literal.Real }}
   {%- elif e.Literal.Bool is defined -%}{{ "true" if e.Literal.Bool else "false" }}
@@ -422,17 +422,17 @@ return [];</textarea
 
 {%- macro safe_symbol_ref(name) -%}
 {%- set id = js_ident(name) -%}
-((typeof {{ id }} !== "undefined") ? {{ id }} : __taskyonResolveSymbol("{{ name|string|replace('\\', '\\\\')|replace('"', '\\"') }}"))
+((typeof {{ id }} !== "undefined") ? {{ id }} : __rumocaResolveSymbol("{{ name|string|replace('\\', '\\\\')|replace('"', '\\"') }}"))
 {%- endmacro -%}
 
 {%- macro render_symbol_expr(e) -%}
-{%- if e.VarRef is defined and e.VarRef.name == "time" -%}
+{%- if e is mapping and e.VarRef is defined and e.VarRef.name == "time" -%}
   t
-{%- elif e.VarRef is defined -%}
+{%- elif e is mapping and e.VarRef is defined -%}
   {{- js_ident(e.VarRef.name) -}}
-{%- elif e.ComponentReference is defined and render_cref(e.ComponentReference) == "time" -%}
+{%- elif e is mapping and e.ComponentReference is defined and render_cref(e.ComponentReference) == "time" -%}
   t
-{%- elif e.ComponentReference is defined -%}
+{%- elif e is mapping and e.ComponentReference is defined -%}
   {{- js_ident(render_cref(e.ComponentReference)) -}}
 {%- else -%}
   {{- render_expr(e) -}}
@@ -446,21 +446,21 @@ return [];</textarea
   {{- e -}}
 {%- elif e is boolean -%}
   {{- "true" if e else "false" -}}
-{%- elif e.Literal is defined -%}
+{%- elif e is mapping and e.Literal is defined -%}
   {%- if e.Literal.Integer is defined -%}{{ e.Literal.Integer }}
   {%- elif e.Literal.Real is defined -%}{{ e.Literal.Real }}
   {%- elif e.Literal.Bool is defined -%}{{ "true" if e.Literal.Bool else "false" }}
   {%- elif e.Literal.String is defined -%}"{{ e.Literal.String }}"
   {%- else -%}0{%- endif -%}
-{%- elif e.VarRef is defined and e.VarRef.name == "time" -%}
+{%- elif e is mapping and e.VarRef is defined and e.VarRef.name == "time" -%}
   t
-{%- elif e.VarRef is defined and e.VarRef.name == "Modelica.Constants.pi" -%}
+{%- elif e is mapping and e.VarRef is defined and e.VarRef.name == "Modelica.Constants.pi" -%}
   Math.PI
-{%- elif e.VarRef is defined and e.VarRef.name == "Modelica.Constants.e" -%}
+{%- elif e is mapping and e.VarRef is defined and e.VarRef.name == "Modelica.Constants.e" -%}
   Math.E
-{%- elif e.VarRef is defined -%}
+{%- elif e is mapping and e.VarRef is defined -%}
   {{- safe_symbol_ref(e.VarRef.name) -}}
-{%- elif e.BuiltinCall is defined -%}
+{%- elif e is mapping and e.BuiltinCall is defined -%}
   {%- set bc = e.BuiltinCall -%}
   {%- if bc.function|lower == "der" and bc.args|length == 1 -%}
     der_{{ render_symbol_expr(bc.args[0]) }}
@@ -481,19 +481,19 @@ return [];</textarea
   {%- else -%}
     {{ render_js_function_name(bc.function) }}({%- for a in bc.args -%}{{ render_expr(a) }}{{ ", " if not loop.last }}{%- endfor -%})
   {%- endif -%}
-{%- elif e.Terminal is defined -%}
+{%- elif e is mapping and e.Terminal is defined -%}
   {{- normalize_expr_text(e.Terminal.token.text) -}}
-{%- elif e.ComponentReference is defined and render_cref(e.ComponentReference) == "time" -%}
+{%- elif e is mapping and e.ComponentReference is defined and render_cref(e.ComponentReference) == "time" -%}
   t
-{%- elif e.ComponentReference is defined and render_cref(e.ComponentReference) == "Modelica.Constants.pi" -%}
+{%- elif e is mapping and e.ComponentReference is defined and render_cref(e.ComponentReference) == "Modelica.Constants.pi" -%}
   Math.PI
-{%- elif e.ComponentReference is defined and render_cref(e.ComponentReference) == "Modelica.Constants.e" -%}
+{%- elif e is mapping and e.ComponentReference is defined and render_cref(e.ComponentReference) == "Modelica.Constants.e" -%}
   Math.E
-{%- elif e.ComponentReference is defined -%}
+{%- elif e is mapping and e.ComponentReference is defined -%}
   {{- safe_symbol_ref(render_cref(e.ComponentReference)) -}}
-{%- elif e.Parenthesized is defined -%}
+{%- elif e is mapping and e.Parenthesized is defined -%}
   ({{ render_expr(e.Parenthesized.inner) }})
-{%- elif e.Unary is defined -%}
+{%- elif e is mapping and e.Unary is defined -%}
   {%- set u = e.Unary -%}
   {%- if u.op.Minus is defined -%}
     -({{ render_expr(u.rhs) }})
@@ -502,7 +502,7 @@ return [];</textarea
   {%- else -%}
     {{ render_expr(u.rhs) }}
   {%- endif -%}
-{%- elif e.Binary is defined -%}
+{%- elif e is mapping and e.Binary is defined -%}
   {%- set b = e.Binary -%}
   {%- set op -%}
     {%- if b.op.Add is defined -%}+{% elif b.op.Sub is defined -%}-{% elif b.op.Mul is defined -%}*{% elif b.op.Div is defined -%}/{% elif b.op.Pow is defined -%}**
@@ -510,7 +510,7 @@ return [];</textarea
     {%- elif b.op.And is defined -%}&&{% elif b.op.Or is defined -%}||{% else -%}+{% endif -%}
   {%- endset -%}
   ({{ render_expr(b.lhs) }} {{ op }} {{ render_expr(b.rhs) }})
-{%- elif e.FunctionCall is defined -%}
+{%- elif e is mapping and e.FunctionCall is defined -%}
   {%- set f = e.FunctionCall -%}
   {%- set args = f.args if f.args is defined else [] -%}
   {%- set fname -%}
@@ -545,7 +545,7 @@ return [];</textarea
   {%- else -%}
     {{ render_js_function_name(fname) }}({%- for a in args -%}{{ render_expr(a) }}{{ ", " if not loop.last }}{%- endfor -%})
   {%- endif -%}
-{%- elif e.If is defined -%}
+{%- elif e is mapping and e.If is defined -%}
   {%- set branches = e.If.branches if e.If.branches is defined else [] -%}
   {%- set else_expr = e.If.else_branch if e.If.else_branch is defined else 0 -%}
   {%- if branches|length == 0 -%}
@@ -558,9 +558,9 @@ return [];</textarea
       ({{ render_expr(else_expr) }})
     )
   {%- endif -%}
-{%- elif e.FieldAccess is defined -%}
+{%- elif e is mapping and e.FieldAccess is defined -%}
   (({{ render_expr(e.FieldAccess.base) }})?.{{ e.FieldAccess.field }})
-{%- elif e.Index is defined -%}
+{%- elif e is mapping and e.Index is defined -%}
   {%- set subs = e.Index.subscripts if e.Index.subscripts is defined else [] -%}
   {%- if subs|length > 0 and subs[0].Expr is defined -%}
     (({{ render_expr(e.Index.base) }})[{{ render_expr(subs[0].Expr) }}])
@@ -614,9 +614,9 @@ return [];</textarea
 {%- endmacro -%}
 
 function Model() {
-  const __taskyonHasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+  const __rumocaHasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
-  function __taskyonMissingRef(name) {
+  function __rumocaMissingRef(name) {
     throw new Error("Generated residual references an unresolved symbol: " + String(name));
   }
 
@@ -694,7 +694,7 @@ function Model() {
   {%- endfor %}
   };
 
-  var __taskyonFallbackSymbols = {
+  var __rumocaFallbackSymbols = {
   {%- for (name, comp) in p_map|items %}
     "{{ name }}": {{ comp_start_or_value(comp) }}{% if not loop.last or cp_map|length > 0 or z_map|length > 0 or m_map|length > 0 or w_map|length > 0 or x_dot_alias_map|length > 0 %},{% endif %}
   {%- endfor %}
@@ -715,35 +715,35 @@ function Model() {
   {%- endfor %}
   };
 
-  function __taskyonResolveSymbol(name) {
-    if (!__taskyonFallbackSymbols || typeof __taskyonFallbackSymbols !== "object") {
-      return __taskyonMissingRef(name);
+  function __rumocaResolveSymbol(name) {
+    if (!__rumocaFallbackSymbols || typeof __rumocaFallbackSymbols !== "object") {
+      return __rumocaMissingRef(name);
     }
     const key = String(name);
-    if (__taskyonHasOwn(__taskyonFallbackSymbols, key)) return __taskyonFallbackSymbols[key];
+    if (__rumocaHasOwn(__rumocaFallbackSymbols, key)) return __rumocaFallbackSymbols[key];
 
     const keyUnderscore = key.replaceAll(".", "__");
-    if (__taskyonHasOwn(__taskyonFallbackSymbols, keyUnderscore)) {
-      return __taskyonFallbackSymbols[keyUnderscore];
+    if (__rumocaHasOwn(__rumocaFallbackSymbols, keyUnderscore)) {
+      return __rumocaFallbackSymbols[keyUnderscore];
     }
 
     const keyTail = key.includes(".") ? key.split(".").pop() : key;
-    if (keyTail && __taskyonHasOwn(__taskyonFallbackSymbols, keyTail)) {
-      return __taskyonFallbackSymbols[keyTail];
+    if (keyTail && __rumocaHasOwn(__rumocaFallbackSymbols, keyTail)) {
+      return __rumocaFallbackSymbols[keyTail];
     }
 
     const norm = (s) => String(s).replaceAll("__", ".");
-    const fallbackKeys = Object.keys(__taskyonFallbackSymbols);
+    const fallbackKeys = Object.keys(__rumocaFallbackSymbols);
 
     const exactNormalized = fallbackKeys.find((k) => norm(k) === key);
-    if (exactNormalized) return __taskyonFallbackSymbols[exactNormalized];
+    if (exactNormalized) return __rumocaFallbackSymbols[exactNormalized];
 
     const suffixMatches = fallbackKeys.filter((k) => {
       const n = norm(k);
       return key === n || key.endsWith("." + n) || n.endsWith("." + key);
     });
     if (suffixMatches.length === 1) {
-      return __taskyonFallbackSymbols[suffixMatches[0]];
+      return __rumocaFallbackSymbols[suffixMatches[0]];
     }
     if (suffixMatches.length > 1) {
       throw new Error(
@@ -753,7 +753,7 @@ function Model() {
           suffixMatches.slice(0, 6).join(", "),
       );
     }
-    return __taskyonMissingRef(name);
+    return __rumocaMissingRef(name);
   }
 
   const stateIndex = {
@@ -914,7 +914,7 @@ function Model() {
   }
 
   const abiRequired = true;
-  const abi = { id: 'taskyon.model_runtime.residual.v1', version: 1 };
+  const abi = { id: 'rumoca.model_runtime.residual.v1', version: 1 };
   const description = {
     modelName: meta.name,
     variables: []
@@ -1427,7 +1427,7 @@ function Model() {
   const contextInfo = {
     source: context?.source,
     compiledAt: context?.compiledAt,
-    runId: context?.__taskyonRunId ?? context?.runId,
+    runId: context?.__rumocaRunId ?? context?.runId,
   }
 
   return {
@@ -1981,7 +1981,7 @@ simulateModel.optionsSchema = {
   
 <script>
 (() => {
-  const marker = '__TASKYON_SERIES_PERSIST__'
+  const marker = '__RUMOCA_SERIES_PERSIST__'
   if (window[marker]) return
   window[marker] = true
 

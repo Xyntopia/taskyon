@@ -60,6 +60,7 @@
               @load-cached-msl="loadCachedMslZipFromOpfs"
               @clear-msl="clearModelicaLibraries"
               @clear-all="clearAll"
+              @reset-view="resetDockLayout"
               @load-example="loadExample"
               @previous-version="goToPreviousVersion"
               @next-version="goToNextVersion"
@@ -79,6 +80,27 @@
           <template #logs>
             <!-- logs -->
             <q-card bordered flat square style="min-height: 1.5rem">
+              <div class="row items-center q-pa-xs">
+                <div class="text-caption text-grey-7">Modelica Log</div>
+                <q-space />
+                <q-btn
+                  flat
+                  dense
+                  color="grey-7"
+                  label="Copy Logs"
+                  :disable="modelicaLog.length === 0"
+                  @click="copyLogsToClipboard()"
+                />
+                <q-btn
+                  flat
+                  dense
+                  color="grey-7"
+                  label="Clear"
+                  :disable="modelicaLog.length === 0"
+                  @click="clearModelicaLog()"
+                />
+              </div>
+              <q-separator />
               <q-expansion-item
                 v-for="(entry, idx) in modelicaLog"
                 :key="idx"
@@ -216,6 +238,21 @@
                   label="Add"
                   :disable="!newUiTemplateId"
                   @click="addUiTemplate()"
+                />
+
+                <q-select
+                  v-model="selectedSolverKey"
+                  :options="solverKeyOptions"
+                  dense
+                  outlined
+                  options-dense
+                  label="Solver for UI"
+                  style="min-width: 220px"
+                  :disable="solverKeyOptions.length === 0"
+                  option-label="label"
+                  option-value="value"
+                  emit-value
+                  map-options
                 />
 
                 <q-space />
@@ -409,17 +446,20 @@
         <q-card-section class="row items-center">
           <div class="text-subtitle1">Solver Options</div>
           <q-space />
-          <q-btn v-close-popup flat dense icon="close" />
+          <q-btn v-close-popup flat dense :icon="matClose" />
         </q-card-section>
         <q-separator />
         <q-card-section>
           <div class="text-caption text-grey-7 q-mb-sm">
             Options are solver-defined. Defaults are taken from the solver JSON schema.
           </div>
-          <ObjectView v-model="solverOptions" enable-expert-mode copy-btn />
+          <ObjectView
+            v-model="solverOptions"
+            missing-mode="placeholders"
+            copy-btn
+            :schema="solverOptionsSchema"
+          />
           <q-separator class="q-my-md" />
-          <div class="text-caption text-grey-7 q-mb-sm">Solver options schema</div>
-          <ObjectView v-model="solverOptionsSchema" read-only enable-expert-mode copy-btn />
         </q-card-section>
         <q-card-actions align="right">
           <q-btn v-close-popup flat label="Close" />
@@ -431,6 +471,7 @@
 
 <script setup lang="ts">
 import {
+  matClose,
   matCode,
   matDescription,
   matPlayArrow,
@@ -467,7 +508,6 @@ import {
   runModelicaSandbox,
 } from 'src/modules/modelica/modelica'
 import defaultUiTemplateSource from 'src/modules/modelica/ui_template_placeholders.html?raw'
-import defaultJsTemplateSource from 'src/modules/modelica/javascript.jinja?raw'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { copyToClipboard } from 'src/modules/utils'
 import FixedHeightPage from 'src/pages/FixedHeightPage.vue'
@@ -491,10 +531,14 @@ const daeJsonOutput = ref<Record<string, unknown>>({}) // DAE JSON (pretty-print
 const daePrettyOutput = ref('') // Pretty DAE textual representation (from WASM)
 const outputTab = ref<'js' | 'daeJson' | 'daePretty'>('js')
 const verbose = ref(false)
+const usePreparedDae = ref(true)
 const loading = ref(false)
 const wasmLoaded = ref(false)
 const statusType = ref<StatusType>('loading')
 const wasm = ref<RumocaModule | null>(null)
+const rumocaWasmVersion = ref('unknown')
+const rumocaWasmGitCommit = ref('unknown')
+const rumocaWasmBuildTimeUtc = ref('unknown')
 
 // Simulation / execution state
 const simT0 = ref(0)
@@ -519,6 +563,7 @@ const {
 const {
   solverOptionsSchema,
   solverOptions,
+  solverOptionsByKey,
   showSolverOptionsDialog,
   projectSolvers,
   projectSolverIds,
@@ -599,7 +644,7 @@ function normalizeSimulationResultForDisplay(
 
 // ---------- Live sandbox log forwarding (iframe -> editor) ----------
 // The iframe code posts messages of the form:
-//   { taskyon: { kind: 'modelicaSandboxLog', runId, entry } }
+//   { rumoca: { kind: 'modelicaSandboxLog', runId, entry } }
 // where entry includes timestamp, level, message, details, phase.
 
 const activeSandboxRunIds = ref<Set<string>>(new Set())
@@ -618,7 +663,7 @@ function hasSeenLogKey(key: string): boolean {
 
 function handleSandboxLogMessage(ev: MessageEvent) {
   const data = ev.data
-  const payload = data?.taskyon
+  const payload = data?.rumoca
   if (!payload || payload.kind !== 'modelicaSandboxLog') return
 
   const runId = String(payload.runId || '')
@@ -685,70 +730,74 @@ const configuration = computed<partialTyConfiguration | null>(() => {
   }
 })
 
-const initialLayout = ref<DockNode>({
-  id: 'editor',
-  type: 'container',
-  direction: 'row',
-  children: [
-    {
-      id: 'before',
-      size: 70,
-      type: 'container',
-      direction: 'column',
-      children: [
-        {
-          id: 'actions',
-          type: 'leaf',
-          showTabs: 'never',
-          views: ['actions'],
-          sizeMode: 'content',
-          size: 20,
-          activeViewIndex: 0,
-        },
-        {
-          id: 'before',
-          size: 80,
-          type: 'container',
-          direction: 'row',
-          children: [
-            {
-              id: 'editors',
-              type: 'leaf',
-              views: ['modelica', 'template', 'uiTemplate', 'solver'],
-              activeViewIndex: 0,
-            },
-            {
-              id: 'simulation',
-              type: 'leaf',
-              size: 85,
-              views: ['model', 'simulate'],
-              activeViewIndex: 0,
-            },
-          ],
-        },
-        {
-          id: 'logs',
-          type: 'leaf',
-          showTabs: 'never',
-          views: ['logs'],
-          sizeMode: 'weight',
-          size: 10,
-          activeViewIndex: 0,
-        },
-      ],
-    },
-    {
-      id: 'chat',
-      type: 'leaf',
-      showTabs: 'never',
-      collapsed: true,
-      keepAliveViews: ['assistant'],
-      views: ['assistant'],
-      size: 30,
-      activeViewIndex: 0,
-    },
-  ],
-})
+function createDefaultLayout(): DockNode {
+  return {
+    id: 'editor',
+    type: 'container',
+    direction: 'row',
+    children: [
+      {
+        id: 'before',
+        size: 70,
+        type: 'container',
+        direction: 'column',
+        children: [
+          {
+            id: 'actions',
+            type: 'leaf',
+            showTabs: 'never',
+            views: ['actions'],
+            sizeMode: 'content',
+            size: 20,
+            activeViewIndex: 0,
+          },
+          {
+            id: 'before',
+            size: 80,
+            type: 'container',
+            direction: 'row',
+            children: [
+              {
+                id: 'editors',
+                type: 'leaf',
+                views: ['modelica', 'template', 'uiTemplate', 'solver'],
+                activeViewIndex: 0,
+              },
+              {
+                id: 'simulation',
+                type: 'leaf',
+                size: 85,
+                views: ['model', 'simulate'],
+                activeViewIndex: 0,
+              },
+            ],
+          },
+          {
+            id: 'logs',
+            type: 'leaf',
+            showTabs: 'always',
+            views: ['logs'],
+            sizeMode: 'weight',
+            size: 10,
+            activeViewIndex: 0,
+          },
+        ],
+      },
+      {
+        id: 'chat',
+        type: 'leaf',
+        showTabs: 'never',
+        collapsed: true,
+        keepAliveViews: ['assistant'],
+        views: ['assistant'],
+        size: 30,
+        activeViewIndex: 0,
+      },
+    ],
+  }
+}
+
+const initialLayout = ref<DockNode>(createDefaultLayout())
 
 const jinjaTemplateUrls = import.meta.glob('src/modules/modelica/*.jinja', {
   query: '?raw',
@@ -914,6 +963,14 @@ function deleteActiveUiTemplate() {
   selectedUiTemplateId.value = next
 }
 
+function clearModelicaLog() {
+  modelicaLog.value = []
+}
+
+function resetDockLayout() {
+  initialLayout.value = createDefaultLayout()
+}
+
 // Tools (AI assistant)
 // Must be declared after activeUiTemplateSource and activeSolverSource
 let compileNowFn: (() => Promise<{ ok: boolean; message?: string }>) | null = null
@@ -951,6 +1008,7 @@ function packProjectFile(): TyModelicaProjectFileV1 {
       dt: simDt.value,
       solverKey: selectedSolverKey.value,
       solverOptions: solverOptions.value,
+      solverOptionsByKey: solverOptionsByKey.value,
     },
     documentVersions: documentVersions.value,
     currentVersionIndex: currentVersionIndex.value,
@@ -967,6 +1025,7 @@ function applyProjectFile(pf: TyModelicaProjectFileV1) {
   if (typeof state.sim.tf === 'number') simTf.value = state.sim.tf
   if (typeof state.sim.dt === 'number') simDt.value = state.sim.dt
   if (typeof state.sim.solverKey === 'string') selectedSolverKey.value = state.sim.solverKey
+  if (state.sim.solverOptionsByKey) solverOptionsByKey.value = state.sim.solverOptionsByKey
   if (state.sim.solverOptions) solverOptions.value = state.sim.solverOptions
   if (state.documentVersions) documentVersions.value = state.documentVersions
   if (typeof state.currentVersionIndex === 'number') {
@@ -1012,6 +1071,7 @@ const hasUiTemplate = computed(() => {
 const projectMenuOptions = ref<Record<string, unknown>>({
   verboseLogging: false,
   aiSeesAll: true,
+  usePreparedDae: true,
 })
 const libraryMenuOptions = ref<Record<string, unknown>>({
   useMSL: false,
@@ -1021,6 +1081,9 @@ const runtimeMenuOptions = ref<Record<string, unknown>>({
   t0: simT0.value,
   tf: simTf.value,
   dt: simDt.value,
+  rumocaWasmVersion: rumocaWasmVersion.value,
+  rumocaWasmGitCommit: rumocaWasmGitCommit.value,
+  rumocaWasmBuildTimeUtc: rumocaWasmBuildTimeUtc.value,
 })
 
 const projectMenuSchema: JSONSchema7 = {
@@ -1028,6 +1091,7 @@ const projectMenuSchema: JSONSchema7 = {
   properties: {
     verboseLogging: { type: 'boolean', title: 'Verbose logging' },
     aiSeesAll: { type: 'boolean', title: 'AI sees all editors' },
+    usePreparedDae: { type: 'boolean', title: 'Use prepared DAE for template rendering' },
   },
 }
 
@@ -1045,6 +1109,13 @@ const runtimeMenuSchema: JSONSchema7 = {
     t0: { type: 'number', title: 'Simulation t0' },
     tf: { type: 'number', title: 'Simulation tf' },
     dt: { type: 'number', title: 'Simulation dt (must be > 0)' },
+    rumocaWasmVersion: { type: 'string', title: 'Rumoca WASM version', readOnly: true },
+    rumocaWasmGitCommit: { type: 'string', title: 'Rumoca WASM git commit', readOnly: true },
+    rumocaWasmBuildTimeUtc: {
+      type: 'string',
+      title: 'Rumoca WASM build time (UTC)',
+      readOnly: true,
+    },
   },
 }
 
@@ -1088,7 +1159,7 @@ function handleExportUiJinjaTemplate() {
   exportGeneratedUiJinjaTemplate(
     hasUiTemplate.value,
     activeUiTemplateSource.value,
-    defaultJsTemplateSource,
+    templateSource.value,
     activeSolverSource.value,
     currentProjectId.value,
     {
@@ -1100,11 +1171,12 @@ function handleExportUiJinjaTemplate() {
 }
 
 watch(
-  [verbose, showAllInPrompt],
+  [verbose, showAllInPrompt, usePreparedDae],
   () => {
     projectMenuOptions.value = {
       verboseLogging: Boolean(verbose.value),
       aiSeesAll: Boolean(showAllInPrompt.value),
+      usePreparedDae: Boolean(usePreparedDae.value),
     }
   },
   { immediate: true },
@@ -1115,6 +1187,7 @@ watch(
   (v) => {
     if (typeof v.verboseLogging === 'boolean') verbose.value = v.verboseLogging
     if (typeof v.aiSeesAll === 'boolean') showAllInPrompt.value = v.aiSeesAll
+    if (typeof v.usePreparedDae === 'boolean') usePreparedDae.value = v.usePreparedDae
   },
   { deep: true },
 )
@@ -1142,12 +1215,15 @@ watch(
 )
 
 watch(
-  [simT0, simTf, simDt],
+  [simT0, simTf, simDt, rumocaWasmVersion, rumocaWasmGitCommit, rumocaWasmBuildTimeUtc],
   () => {
     runtimeMenuOptions.value = {
       t0: Number(simT0.value),
       tf: Number(simTf.value),
       dt: Number(simDt.value),
+      rumocaWasmVersion: rumocaWasmVersion.value,
+      rumocaWasmGitCommit: rumocaWasmGitCommit.value,
+      rumocaWasmBuildTimeUtc: rumocaWasmBuildTimeUtc.value,
     }
   },
   { immediate: true },
@@ -1179,6 +1255,7 @@ const runCompilation = async (): Promise<{ ok: boolean; message?: string }> => {
       templateSource: templateSource.value,
       useModelicaStandardLibrary: useModelicaStandardLibrary.value,
       mslLoaded: mslLoaded.value,
+      usePreparedDae: usePreparedDae.value,
       activeSandboxRunIds: activeSandboxRunIds.value,
     })
     if (!result.ok) {
@@ -1271,6 +1348,38 @@ const exampleModels = {
   resistorMsl: `model MslResistorExample
   extends Modelica.Electrical.Analog.Examples.Resistor;
 end MslResistorExample;`,
+  orbit: `model SatelliteOrbit2D
+  parameter Real mu = 398600.4418;
+  parameter Real r0 = 7000;
+  parameter Real v0 = sqrt(mu / r0);
+  Real rx(start = r0, fixed = true);
+  Real ry(start = 0, fixed = true);
+  Real vx(start = 0, fixed = true);
+  Real vy(start = v0, fixed = true);
+  Real inv_r;
+  Real inv_v2;
+  Real inv_h;
+  Real inv_energy;
+  Real inv_a;
+  Real inv_rv;
+  Real inv_ex;
+  Real inv_ey;
+  Real inv_ecc;
+equation
+  der(rx) = vx;
+  der(ry) = vy;
+  inv_r = sqrt(rx * rx + ry * ry);
+  inv_v2 = vx * vx + vy * vy;
+  inv_h = rx * vy - ry * vx;
+  inv_energy = 0.5 * inv_v2 - mu / inv_r;
+  inv_a = 1 / (2 / inv_r - inv_v2 / mu);
+  inv_rv = rx * vx + ry * vy;
+  inv_ex = ((inv_v2 - mu / inv_r) * rx - inv_rv * vx) / mu;
+  inv_ey = ((inv_v2 - mu / inv_r) * ry - inv_rv * vy) / mu;
+  inv_ecc = sqrt(inv_ex * inv_ex + inv_ey * inv_ey);
+  der(vx) = -mu * rx / (inv_r ^ 3);
+  der(vy) = -mu * ry / (inv_r ^ 3);
+end SatelliteOrbit2D;`,
 } as const
 
 const applyExample = async (choice: unknown) => {
@@ -1296,6 +1405,7 @@ const loadExample = () => {
       items: [
         { label: 'BouncingBall (classic)', value: 'bouncingBall' },
         { label: 'MSL Resistor (extends)', value: 'resistorMsl' },
+        { label: 'Satellite Orbit (2D)', value: 'orbit' },
       ],
     },
     cancel: true,
@@ -1323,6 +1433,10 @@ const copyDaeJsonToClipboard = async () => {
 
 const copyDaePrettyToClipboard = async () => {
   await copyToClipboard(daePrettyOutput.value)
+}
+
+const copyLogsToClipboard = async () => {
+  await copyToClipboard(safeYamlDump(modelicaLog.value))
 }
 
 function openGeneratedHtmlPopup() {
@@ -1386,7 +1500,35 @@ const runInSandbox = async (jsSource: string | undefined) => {
       activeSandboxRunIds: activeSandboxRunIds.value,
       abortSignal: abortController.value.signal,
     })
-    if (result.ok) executionResult.value = normalizeSimulationResultForDisplay(result.result)
+    if (result.ok) {
+      executionResult.value = normalizeSimulationResultForDisplay(result.result)
+      const meta =
+        executionResult.value.meta && typeof executionResult.value.meta === 'object'
+          ? (executionResult.value.meta as Record<string, unknown>)
+          : {}
+      const stopReason = typeof meta.stopReason === 'string' ? meta.stopReason : ''
+      const stopError = typeof meta.stopError === 'string' ? meta.stopError : ''
+      if (stopReason) {
+        const message = stopError
+          ? `Simulation stopped early: ${stopReason} (${stopError})`
+          : `Simulation stopped early: ${stopReason}`
+        appendModelicaLog({
+          phase: 'run',
+          level: 'error',
+          message,
+          details: {
+            stopReason,
+            stopError,
+            stopDetails: meta.stopDetails,
+          },
+        })
+        Notify.create({
+          type: 'negative',
+          message,
+          timeout: 7000,
+        })
+      }
+    }
   } catch (error) {
     console.error('Sandbox execution failed:', error)
   } finally {
@@ -1411,6 +1553,7 @@ onMounted(async () => {
     templateSource,
     customTemplates,
     verbose,
+    usePreparedDae,
     useModelicaStandardLibrary,
     mslDownloadUrl,
     mslCachedZipPath,
@@ -1466,9 +1609,12 @@ onMounted(async () => {
       modelicaSource,
       uiTemplates,
       selectedUiTemplateId,
+      projectSolvers,
       simT0,
       simTf,
       simDt,
+      selectedSolverKey,
+      solverOptionsByKey,
       documentVersions,
       currentVersionIndex,
     ],
@@ -1488,6 +1634,25 @@ onMounted(async () => {
 
     wasm.value = wasmModule
     wasmLoaded.value = true
+    if (typeof wasmModule.get_version === 'function') {
+      const version = String(wasmModule.get_version() || '').trim()
+      if (version) rumocaWasmVersion.value = version
+    }
+    // Use dynamic lookup for optional fields to stay compatible with older WASM package types/builds.
+    const toTrimmedScalarString = (value: unknown): string => {
+      if (typeof value === 'string') return value.trim()
+      if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim()
+      return ''
+    }
+    const wasmExports = wasmModule as unknown as Record<string, unknown>
+    if (typeof wasmExports.get_git_commit === 'function') {
+      const gitCommit = toTrimmedScalarString((wasmExports.get_git_commit as () => unknown)())
+      if (gitCommit) rumocaWasmGitCommit.value = gitCommit
+    }
+    if (typeof wasmExports.get_build_time_utc === 'function') {
+      const buildTime = toTrimmedScalarString((wasmExports.get_build_time_utc as () => unknown)())
+      if (buildTime) rumocaWasmBuildTimeUtc.value = buildTime
+    }
     if (typeof wasmModule.get_library_count === 'function') {
       const n = Number(wasmModule.get_library_count()) || 0
       if (n > 0) {

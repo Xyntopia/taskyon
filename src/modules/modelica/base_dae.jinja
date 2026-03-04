@@ -4,6 +4,7 @@
 {%- set x_map = dae.x if dae.x is defined else {} -%}
 {%- set y_map = dae.y if dae.y is defined else {} -%}
 {%- set z_map = dae.z if dae.z is defined else {} -%}
+{%- set obs_list = dae.__rumoca_observables if dae.__rumoca_observables is defined else [] -%}
 {%- set eqs = dae.f_x if dae.f_x is defined else (dae.fx if dae.fx is defined else []) -%}
 {%- set cond_eqs = dae.f_c if dae.f_c is defined else [] -%}
 {%- set when_clauses = dae.when_clauses if dae.when_clauses is defined else [] -%}
@@ -58,10 +59,10 @@
       {{ render_expr(u.rhs) }}
     {%- endif -%}
   {%- elif "Binary" in e -%}
-    {%- set b = e.Binary -%}
-    {%- set op -%}
-      {%- if "Add" in b.op -%}+{%- elif "Sub" in b.op -%}-{%- elif "Mul" in b.op -%}*{%- elif "Div" in b.op -%}/{%- elif "Pow" in b.op -%}^{%- elif "LessEq" in b.op or "Le" in b.op -%}<={%- elif "Less" in b.op or "Lt" in b.op -%}<{%- elif "GreaterEq" in b.op or "Ge" in b.op -%}>={%- elif "Greater" in b.op or "Gt" in b.op -%}>{%- elif "Equals" in b.op or "Eq" in b.op -%}=={%- elif "NotEquals" in b.op or "Ne" in b.op -%}!={%- elif "And" in b.op -%}and{%- elif "Or" in b.op -%}or{%- else -%}?{%- endif -%}
-    {%- endset -%}
+  {%- set b = e.Binary -%}
+  {%- set op -%}
+      {%- if "Add" in b.op -%}+{%- elif "Sub" in b.op -%}-{%- elif "Mul" in b.op -%}*{%- elif "Div" in b.op -%}/{%- elif "Pow" in b.op or "Power" in b.op or "Caret" in b.op or "Exp" in b.op or "Circumflex" in b.op -%}^{%- elif "LessEq" in b.op or "Le" in b.op -%}<={%- elif "Less" in b.op or "Lt" in b.op -%}<{%- elif "GreaterEq" in b.op or "Ge" in b.op -%}>={%- elif "Greater" in b.op or "Gt" in b.op -%}>{%- elif "Equals" in b.op or "Eq" in b.op -%}=={%- elif "NotEquals" in b.op or "Ne" in b.op -%}!={%- elif "And" in b.op -%}and{%- elif "Or" in b.op -%}or{%- else -%}?{%- endif -%}
+  {%- endset -%}
     {{ render_expr(b.lhs) }} {{ op }} {{ render_expr(b.rhs) }}
   {%- elif "FunctionCall" in e -%}
     {%- set f = e.FunctionCall -%}
@@ -112,7 +113,7 @@ States x(t):
 {%- endif %}
 
 Algebraic variables y(t):
-{% if y_map|length == 0 and z_map|length == 0 -%}
+{% if y_map|length == 0 and z_map|length == 0 and obs_list|length == 0 -%}
   (none)
 {%- else -%}
 {%- for (name, comp) in y_map|items %}
@@ -120,6 +121,9 @@ Algebraic variables y(t):
 {%- endfor -%}
 {%- for (name, comp) in z_map|items %}
   {{ name }}(t)    // discrete / event-related
+{%- endfor -%}
+{%- for obs in obs_list %}
+  {{ obs.name }}(t)    // retained observable
 {%- endfor %}
 {%- endif %}
 
@@ -140,6 +144,10 @@ Algebraic equations:
     {% set flags.has_alg = true %}
   {{ render_expr(eq.lhs if eq.lhs is defined else 0) }} = {{ render_expr(eq.rhs) }}
   {%- endif -%}
+{%- endfor -%}
+{%- for obs in obs_list %}
+  {% set flags.has_alg = true %}
+  {{ obs.name }} = {{ render_expr(obs.expr) }}
 {%- endfor -%}
 {%- if not flags.has_alg -%}
   (none)

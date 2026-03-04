@@ -34,21 +34,73 @@
         <q-card flat bordered class="row items-top">
           <div class="column">
             <div class="text-caption">Available Tests:</div>
-            <div v-for="(testListName, idx) in testListKeys" :key="idx" class="col-auto">
+            <div
+              v-for="(section, sectionIdx) in groupedTestSections"
+              :key="`${section.key}-${sectionIdx}`"
+              class="col-auto"
+            >
               <q-separator />
-              <div class="text-caption">{{ testListName }}</div>
-              <div>
-                <q-list dense :padding="false">
-                  <q-item
-                    v-for="(val, name) in testLists[testListName] ?? {}"
-                    :key="name"
-                    clickable
-                    @click="runTests({ [`${name}`]: val }, true)"
+              <q-expansion-item
+                :model-value="isSectionExpanded(section.key)"
+                dense
+                dense-toggle
+                expand-separator
+                @update:model-value="setSectionExpanded(section.key, $event)"
+              >
+                <template #header>
+                  <q-item-section class="text-caption">{{ section.label }}</q-item-section>
+                  <q-item-section side>
+                    <q-btn
+                      v-if="section.showRunAllButton"
+                      dense
+                      flat
+                      size="sm"
+                      label="run all"
+                      @click.stop="runTests(section.allTests, state.detailedTests)"
+                    />
+                  </q-item-section>
+                </template>
+                <div
+                  v-for="(groupName, groupIdx) in section.groupKeys"
+                  :key="`${groupName}-${groupIdx}`"
+                  class="col-auto"
+                >
+                  <q-expansion-item
+                    :model-value="isGroupExpanded(section.key, groupName)"
+                    dense
+                    dense-toggle
+                    expand-separator
+                    @update:model-value="setGroupExpanded(section.key, groupName, $event)"
                   >
-                    <q-item-section>{{ name }}</q-item-section>
-                  </q-item>
-                </q-list>
-              </div>
+                    <template #header>
+                      <q-item-section v-if="section.showGroupTitle" class="text-caption">
+                        {{ groupName }}
+                      </q-item-section>
+                      <q-item-section v-else class="text-caption">Tests</q-item-section>
+                      <q-item-section side>
+                        <q-btn
+                          v-if="section.showGroupRunButton"
+                          dense
+                          flat
+                          size="sm"
+                          label="run all"
+                          @click.stop="runTests(section.tests[groupName] ?? {}, state.detailedTests)"
+                        />
+                      </q-item-section>
+                    </template>
+                    <q-list dense :padding="false">
+                      <q-item
+                        v-for="(val, name) in section.tests[groupName] ?? {}"
+                        :key="name"
+                        clickable
+                        @click="runTests({ [`${name}`]: val }, true)"
+                      >
+                        <q-item-section>{{ name }}</q-item-section>
+                      </q-item>
+                    </q-list>
+                  </q-expansion-item>
+                </div>
+              </q-expansion-item>
             </div>
           </div>
           <q-separator vertical />
@@ -78,6 +130,7 @@ import { exportFile } from 'quasar'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
 import * as ModelicaDiagnostics from 'src/modules/modelica/modelicaDiagnostics'
+import { syncRefsWithLocalStorage } from 'src/modules/saveState'
 import { runMarkdownDetectionTests } from 'src/modules/taskyon/runMarkdownDetectionTests'
 import * as TaskyonTests from 'src/modules/taskyon/tests'
 import { copyToClipboard, getEnvironmentInfo } from 'src/modules/utils'
@@ -158,11 +211,17 @@ export interface TaskyonTestFn {
   (opts?: { tyauth?: string | undefined }): Promise<unknown> | unknown
   description?: string
   gui?: boolean
+  experimental?: boolean
+  helper?: boolean
 }
 
+type TestRecord = Record<string, TaskyonTestFn>
+
 const guiTests = {} as Record<string, TaskyonTestFn>
-const tests = {} as Record<string, TaskyonTestFn>
-const experimentalTests = {} as Record<string, TaskyonTestFn>
+const tests = {} as TestRecord
+const experimentalTests = {} as TestRecord
+const testsByFolder = {} as Record<string, TestRecord>
+const testsByFile = {} as Record<string, TestRecord>
 const testLists = {
   tests,
   experimentalTests,
@@ -170,29 +229,141 @@ const testLists = {
 }
 const testListKeys = Object.keys(testLists) as Array<keyof typeof testLists>
 
-tests.testBuildSlimView = testBuildSlimView
-tests.getEnvironmentInfo = getEnvironmentInfo
-tests.runMarkdownDetectionTests = runMarkdownDetectionTests
+type GroupedSection = {
+  key: string
+  label: string
+  tests: Record<string, TestRecord>
+  allTests: TestRecord
+  groupKeys: string[]
+  showGroupTitle: boolean
+  showGroupRunButton: boolean
+  showRunAllButton: boolean
+}
 
-const modules = Object.entries(testModules).map(([path, mod]) => {
-  console.log('add test', path)
-  return mod
-})
-modules.push(TaskyonTests)
-modules.push(ModelicaDiagnostics)
+function normalizeSourcePath(path: string): string {
+  return path.replace(/^(\.\.\/)+/, '')
+}
 
-modules.forEach((mod) => {
+function dirname(path: string): string {
+  const idx = path.lastIndexOf('/')
+  if (idx < 0) return '.'
+  return path.slice(0, idx)
+}
+
+function addToGroup(group: Record<string, TestRecord>, name: string, fn: TaskyonTestFn, key: string) {
+  if (!group[key]) group[key] = {}
+  group[key][name] = fn
+}
+
+function registerTest(testName: string, func: TaskyonTestFn, sourcePath: string) {
+  const name = camelToNormal(String(testName))
+  if ('helper' in func) return
+  if ('gui' in func) guiTests[name] = func
+  else if ('experimental' in func) experimentalTests[name] = func
+  else tests[name] = func
+
+  addToGroup(testsByFile, name, func, sourcePath)
+  addToGroup(testsByFolder, name, func, dirname(sourcePath))
+}
+
+registerTest('testBuildSlimView', testBuildSlimView, 'src/pages/DiagnosticsPage.vue')
+registerTest('getEnvironmentInfo', getEnvironmentInfo, 'src/pages/DiagnosticsPage.vue')
+registerTest('runMarkdownDetectionTests', runMarkdownDetectionTests, 'src/pages/DiagnosticsPage.vue')
+
+const modules = Object.entries(testModules).map(([path, mod]) => ({
+  sourcePath: normalizeSourcePath(path),
+  mod,
+}))
+modules.push({ sourcePath: 'src/modules/taskyon/tests.ts', mod: TaskyonTests })
+modules.push({ sourcePath: 'src/modules/modelica/modelicaDiagnostics.ts', mod: ModelicaDiagnostics })
+
+modules.forEach(({ sourcePath, mod }) => {
   if (!mod || typeof mod !== 'object') return
   Object.entries(mod).forEach(([name, func]) => {
     if (typeof func !== 'function') return
-    else if ('helper' in func) return
-    else if ('gui' in func) guiTests[camelToNormal(String(name))] = func
-    else if ('experimental' in func) experimentalTests[camelToNormal(String(name))] = func
-    else tests[camelToNormal(String(name))] = func
+    registerTest(name, func, sourcePath)
   })
 })
 
-async function runTests(tests: Record<string, () => unknown>, details = false) {
+function toGroupedTests(source: TestRecord): Record<string, TestRecord> {
+  return { all: source }
+}
+
+function flattenTestGroups(groups: Record<string, TestRecord>): TestRecord {
+  return Object.values(groups).reduce((acc, current) => ({ ...acc, ...current }), {})
+}
+
+const groupedTestSections: GroupedSection[] = [
+  ...testListKeys.map((key) => ({
+    key: key,
+    label: key,
+    tests: toGroupedTests(testLists[key]),
+    allTests: testLists[key],
+    groupKeys: ['all'],
+    showGroupTitle: false,
+    showGroupRunButton: false,
+    showRunAllButton: false,
+  })),
+  {
+    key: 'by-folder',
+    label: 'By Folder',
+    tests: testsByFolder,
+    allTests: flattenTestGroups(testsByFolder),
+    groupKeys: Object.keys(testsByFolder).sort((a, b) => a.localeCompare(b)),
+    showGroupTitle: true,
+    showGroupRunButton: true,
+    showRunAllButton: true,
+  },
+  {
+    key: 'by-file',
+    label: 'By File',
+    tests: testsByFile,
+    allTests: flattenTestGroups(testsByFile),
+    groupKeys: Object.keys(testsByFile).sort((a, b) => a.localeCompare(b)),
+    showGroupTitle: true,
+    showGroupRunButton: true,
+    showRunAllButton: true,
+  },
+]
+
+const sectionExpanded = ref<Record<string, boolean>>({})
+const groupExpanded = ref<Record<string, boolean>>({})
+
+for (const section of groupedTestSections) {
+  if (sectionExpanded.value[section.key] === undefined) sectionExpanded.value[section.key] = false
+
+  for (const groupName of section.groupKeys) {
+    const groupKey = `${section.key}::${groupName}`
+    if (groupExpanded.value[groupKey] === undefined) groupExpanded.value[groupKey] = false
+  }
+}
+
+function isSectionExpanded(sectionKey: string): boolean {
+  return sectionExpanded.value[sectionKey] ?? false
+}
+
+function setSectionExpanded(sectionKey: string, value: boolean) {
+  sectionExpanded.value[sectionKey] = value
+}
+
+function getGroupKey(sectionKey: string, groupName: string): string {
+  return `${sectionKey}::${groupName}`
+}
+
+function isGroupExpanded(sectionKey: string, groupName: string): boolean {
+  return groupExpanded.value[getGroupKey(sectionKey, groupName)] ?? false
+}
+
+function setGroupExpanded(sectionKey: string, groupName: string, value: boolean) {
+  groupExpanded.value[getGroupKey(sectionKey, groupName)] = value
+}
+
+syncRefsWithLocalStorage('taskyon.diagnostics.expansion', {
+  sectionExpanded,
+  groupExpanded,
+})
+
+async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
   testFinished.value = false
 
   diagnostics.value = ''
