@@ -186,9 +186,21 @@ const mergeObjectSchemas = (base: JSONSchema7, override: JSONSchema7): JSONSchem
   }
 }
 
+const withInheritedDescription = (
+  schema: JSONSchema7,
+  fallbackDescription: string | undefined,
+): JSONSchema7 => {
+  if (schema.description || !fallbackDescription) return schema
+  return {
+    ...schema,
+    description: fallbackDescription,
+  }
+}
+
 const resolveUnionSchemaForValue = (schema: SchemaWithMeta, value: unknown): UnionResolution => {
   const options = getUnionOptions(schema)
   if (!schema || options.length === 0) return { schema, preferSchemaKeysOnly: false }
+  const parentDescription = schema.description
 
   // 1) Discriminated object union
   const disc = detectDiscriminatorKey(options)
@@ -224,13 +236,16 @@ const resolveUnionSchemaForValue = (schema: SchemaWithMeta, value: unknown): Uni
       type: typeof disc.values[0] === 'number' ? 'number' : 'string',
     }
 
-    const effective = mergeObjectSchemas(selected, {
-      type: 'object',
-      properties: {
-        [disc.key]: discriminatorSchema,
-      },
-      required: [disc.key],
-    })
+    const effective = withInheritedDescription(
+      mergeObjectSchemas(selected, {
+        type: 'object',
+        properties: {
+          [disc.key]: discriminatorSchema,
+        },
+        required: [disc.key],
+      }),
+      parentDescription,
+    )
 
     return {
       schema: effective,
@@ -256,7 +271,11 @@ const resolveUnionSchemaForValue = (schema: SchemaWithMeta, value: unknown): Uni
   })
 
   scored.sort((a, b) => b.score - a.score)
-  return { schema: scored[0]?.opt ?? schema, preferSchemaKeysOnly: false }
+  const selected = scored[0]?.opt ?? schema
+  return {
+    schema: withInheritedDescription(selected, parentDescription),
+    preferSchemaKeysOnly: false,
+  }
 }
 
 export const getValueByPath = (obj: unknown, path: string[]): unknown => {

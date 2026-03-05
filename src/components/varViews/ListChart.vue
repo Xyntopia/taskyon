@@ -23,6 +23,11 @@
         <q-btn dense flat :icon="matFullscreen" size="sm" @click="toggleFullscreen" />
       </template>
 
+      <template v-else-if="isSparseHeatmap">
+        <q-btn dense outline size="sm" color="primary" label="Heatmap" disable />
+        <q-btn dense flat :icon="matFullscreen" size="sm" @click="toggleFullscreen" />
+      </template>
+
       <template v-else-if="is2D">
         <q-btn dense outline size="sm" color="primary" label="Heatmap" disable />
       </template>
@@ -70,6 +75,19 @@ echarts.use([
 
 const axisLabel = (a?: { label?: string; unit?: string }) =>
   a?.unit ? `${a.label ?? ''} [${a.unit}]` : a?.label
+const formatAxisValue = (n: number): string => {
+  if (!Number.isFinite(n)) return String(n)
+  if (Number.isInteger(n)) return String(n)
+  const s = n.toFixed(5)
+  return s.replace(/\.?0+$/, '')
+}
+
+type SparseHeatmapValuePayload = {
+  kind: 'xyv-heatmap'
+  xValues: number[]
+  yValues: number[]
+  points: Array<{ x: number; y: number; v: number }>
+}
 
 const props = defineProps<{
   value: unknown
@@ -95,15 +113,67 @@ const is2D = computed(() => {
   return Array.isArray(v) && v.length > 0 && v.every((row) => Array.isArray(row))
 })
 
+const isSparseHeatmap = computed(() => {
+  const v = props.value
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return false
+  const payload = v as Partial<SparseHeatmapValuePayload>
+  return (
+    payload.kind === 'xyv-heatmap' &&
+    Array.isArray(payload.xValues) &&
+    Array.isArray(payload.yValues) &&
+    Array.isArray(payload.points)
+  )
+})
+
 const is1D = computed(() => {
   const v = props.value
-  return Array.isArray(v) && !is2D.value
+  return Array.isArray(v) && !is2D.value && !isSparseHeatmap.value
 })
 
 const description = computed(() => {
+  if (isSparseHeatmap.value) return 'Sparse XY points visualized as heatmap'
   if (is2D.value) return '2D numeric array visualized as heatmap'
   if (is1D.value) return '1D numeric array'
   return 'Unsupported data for chart'
+})
+
+const normalizedSparseHeatmap = computed<{
+  xLabels: string[]
+  yLabels: string[]
+  data: Array<[number, number, number]>
+}>(() => {
+  if (!isSparseHeatmap.value) return { xLabels: [], yLabels: [], data: [] }
+  const payload = props.value as SparseHeatmapValuePayload
+
+  const xValues = payload.xValues
+    .map((x) => Number(x))
+    .filter((x) => Number.isFinite(x))
+    .sort((a, b) => a - b)
+  const yValues = payload.yValues
+    .map((y) => Number(y))
+    .filter((y) => Number.isFinite(y))
+    .sort((a, b) => a - b)
+
+  const xIndex = new Map(xValues.map((x, i) => [x, i]))
+  const yIndex = new Map(yValues.map((y, i) => [y, i]))
+
+  const data: Array<[number, number, number]> = []
+  for (const p of payload.points) {
+    const x = Number(p.x)
+    const y = Number(p.y)
+    const v = Number(p.v)
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(v)) continue
+    const xi = xIndex.get(x)
+    const yi = yIndex.get(y)
+    if (xi == null || yi == null) continue
+    data.push([xi, yi, v])
+  }
+
+  return {
+    xLabels: xValues.map((x) => formatAxisValue(x)),
+    yLabels: yValues.map((y) => formatAxisValue(y)),
+    data,
+  }
 })
 
 // Normalize 1D data: number[]
@@ -126,6 +196,82 @@ const normalized2D = computed<number[][]>(() => {
 })
 
 const buildOption = (): echarts.EChartsCoreOption => {
+  if (isSparseHeatmap.value) {
+    const { xLabels, yLabels, data } = normalizedSparseHeatmap.value
+    const vMin = data.length ? Math.min(...data.map((d) => d[2])) : 0
+    const vMax = data.length ? Math.max(...data.map((d) => d[2])) : 0
+
+    return {
+      tooltip: {
+        position: 'top',
+        formatter: (params: { value?: unknown }) => {
+          const val = Array.isArray(params.value) ? params.value : []
+          const xi = Number(val[0])
+          const yi = Number(val[1])
+          const v = Number(val[2])
+          const x = Number.isInteger(xi) && xi >= 0 && xi < xLabels.length ? xLabels[xi] : '?'
+          const y = Number.isInteger(yi) && yi >= 0 && yi < yLabels.length ? yLabels[yi] : '?'
+          return `x: ${x}<br/>y: ${y}<br/>value: ${v}`
+        },
+      },
+      grid: { height: '75%', top: '10%' },
+      title: props.title ? { text: props.title, left: 'center' } : undefined,
+
+      xAxis: {
+        type: 'category',
+        data: xLabels,
+        name: axisLabel(props.xAxis),
+        nameLocation: 'middle',
+        nameGap: 30,
+        splitArea: { show: false },
+      },
+
+      yAxis: {
+        type: 'category',
+        data: yLabels,
+        splitArea: { show: false },
+        name: axisLabel(props.yAxis),
+        nameLocation: 'middle',
+        nameGap: 40,
+      },
+      visualMap: {
+        min: vMin,
+        max: vMax,
+        calculable: true,
+        orient: 'horizontal',
+        left: 'center',
+        bottom: 10,
+      },
+      dataZoom: [
+        {
+          type: 'inside',
+          xAxisIndex: 0,
+          filterMode: 'weakFilter',
+          throttle: 50,
+        },
+        {
+          type: 'slider',
+          xAxisIndex: 0,
+          height: 18,
+          bottom: 5,
+        },
+      ],
+      series: [
+        {
+          type: 'heatmap',
+          data,
+          label: { show: false },
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 10,
+              shadowColor: 'rgba(0, 0, 0, 0.5)',
+            },
+          },
+        },
+      ],
+    }
+  }
+
   if (is2D.value) {
     chartType.value = 'heatmap'
 
@@ -242,11 +388,6 @@ const buildOption = (): echarts.EChartsCoreOption => {
           xAxisIndex: 0,
           height: 32,
           bottom: 20,
-          //handleSize: 12,
-          //handleIcon: 'path://M512 128v768M256 128v768M768 128v768',
-          //borderColor: '#999',
-          //fillerColor: 'rgba(33,150,243,0.25)',
-          //backgroundColor: 'rgba(0,0,0,0.05)',
         },
       ],
       series: {
@@ -279,7 +420,7 @@ const renderChart = () => {
 onMounted(() => {
   if (!chartEl.value) return
 
-  // Initial render (might be 0×0, that's ok; we'll resize when it becomes visible)
+  // Initial render (might be 0x0, that's ok; we'll resize when it becomes visible)
   renderChart()
 
   // Observe container size and resize chart when it changes
