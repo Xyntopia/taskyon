@@ -19922,12 +19922,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rumoca-bind-wasm@workspace:packages/pkg":
-  version: 0.0.0-use.local
-  resolution: "rumoca-bind-wasm@workspace:packages/pkg"
-  languageName: unknown
-  linkType: soft
-
 "rumoca@https://assets.taskyon.space/rumoca-0.8.0.a7.tgz":
   version: 0.8.0
   resolution: "rumoca@https://assets.taskyon.space/rumoca-0.8.0.a7.tgz"
