@@ -1083,6 +1083,11 @@ export function selectDaeForTemplate(
     if (!map || typeof map !== 'object' || Array.isArray(map)) return 0
     return Object.keys(map as Record<string, unknown>).length
   }
+  const countWhenClauses = (daeObj: Record<string, unknown> | null): number => {
+    if (!daeObj) return 0
+    const clauses = daeObj.when_clauses
+    return Array.isArray(clauses) ? clauses.length : 0
+  }
 
   const nativeDae = asRecord(nativeDaeRaw)
   const preparedDae = asRecord(preparedDaeRaw)
@@ -1094,11 +1099,16 @@ export function selectDaeForTemplate(
   if (usePreparedDae && preparedDae && nativeDae) {
     const nativeAlgebraics = countVarMapEntries(nativeDae, 'y')
     const preparedAlgebraics = countVarMapEntries(preparedDae, 'y')
+    const nativeWhenClauses = countWhenClauses(nativeDae)
+    const preparedWhenClauses = countWhenClauses(preparedDae)
     const rumocaObservables = preparedDae.__rumoca_observables
     const observables = Array.isArray(rumocaObservables) && rumocaObservables.length > 0
     if (nativeAlgebraics > preparedAlgebraics && !observables) {
       // Backward-compatible fallback: older prepared DAEs may drop algebraic observables.
       // Prefer native DAE to keep template outputs stable.
+      daeForTemplate = nativeDae
+    } else if (nativeWhenClauses > preparedWhenClauses) {
+      // Preserve event reset semantics if prepared DAE dropped when-clause payload.
       daeForTemplate = nativeDae
     }
   }

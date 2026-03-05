@@ -207,6 +207,304 @@ model BouncingBall             "The bouncing ball model"
   return runTemplateCoverage(source, 'BouncingBall')
 }
 
+export async function testModelicaBouncingBallEventLocalizationRegression() {
+  const source = `
+model BouncingBall             "The bouncing ball model"
+  constant Real g = 9.81 "Gravitational acceleration";
+  parameter Real c = 0.9 "Elasticity constant of ball";
+  parameter Real radius = 0.1 "Radius of the ball";
+  Real h(start = 1,fixed=true) "height above ground of ball center";
+  Real v(start = 0,fixed=true) "Velocity of the ball";
+  Real E "Mechanical energy";
+ equation
+  der(h) = v;
+  der(v) = -g;
+  E = g*h + 0.5*v*v;
+  when h <= radius then
+    reinit(v, -c*pre(v));
+  end when;
+ end BouncingBall;
+`.trim()
+
+  const wasm = await getDiagnosticsWasm()
+  if (typeof wasm.compile_to_json !== 'function') {
+    throw new Error('Rumoca wasm export missing: compile_to_json')
+  }
+  if (typeof wasm.render_template !== 'function') {
+    throw new Error('Rumoca wasm export missing: render_template')
+  }
+
+  const compiled = wasm.compile_to_json(source, 'BouncingBall')
+  const parsed = JSON.parse(compiled) as {
+    dae?: unknown
+    dae_native?: unknown
+    dae_prepared?: unknown
+  }
+  const dae = selectDaeForTemplate(parsed, { usePreparedDae: true })
+  if (!dae) {
+    throw new Error('Rumoca compile_to_json returned no DAE payload for BouncingBall')
+  }
+
+  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  if (!rendered || typeof rendered !== 'string') {
+    throw new Error('Rendering javascript.jinja failed for BouncingBall')
+  }
+  if (
+    rendered.includes('const capabilities = { events: false }') ||
+    rendered.includes('const capabilities = {events: false}')
+  ) {
+    throw new Error(
+      [
+        'BouncingBall regression: generated model reports events=false, event resets cannot be trusted.',
+        'generatedCode:',
+        rendered,
+      ].join('\n\n'),
+    )
+  }
+
+  const runCode = buildIframeCode(rendered)
+  const runId = 'modelica-bouncing-ball-event-localization'
+  const runAbort = new AbortController()
+
+  type SimResult = {
+    meta?: {
+      events?: unknown[]
+      solverStats?: Record<string, unknown>
+      stopReason?: string
+      stopError?: string
+      stopDetails?: unknown
+      model?: {
+        stateNames?: string[]
+        conditionNames?: string[]
+      }
+    }
+    data?: {
+      t?: unknown[]
+      x?: Record<string, unknown>
+      c?: Record<string, unknown>
+      cBoolean?: Record<string, unknown>
+      z?: Record<string, unknown>
+      eventTimes?: unknown[]
+    }
+  }
+  let runResult: SimResult | null = null
+  try {
+    runResult = await executeCodeInIframeSimple(
+      {
+        id: runId,
+        code: runCode,
+        sourceURL: `${runId}.js`,
+        stopSignal: runAbort.signal,
+      },
+      {
+        sim: {
+          t0: 0,
+          tf: 5,
+          dt: 0.3,
+          solverOptions: {
+            timeIntegrator: 'sdirk2',
+            captureFailureState: true,
+            enableEventLocalization: true,
+            eventTolTime: 1e-6,
+            maxEventBisectionIter: 64,
+            eventIterationMaxIter: 16,
+            maxEventsPerMacroStep: 64,
+            adaptiveSubsteps: true,
+          },
+        },
+      },
+      {
+        source: 'ModelicaDiagnostics',
+        __rumocaRunId: runId,
+      },
+    )
+  } finally {
+    runAbort.abort()
+  }
+
+  const asFiniteSeries = (value: unknown): number[] =>
+    Array.isArray(value)
+      ? value.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
+      : []
+  const getSeriesByName = (
+    bag: Record<string, unknown> | undefined,
+    name: string,
+    fallbackIdx = 0,
+  ): number[] => {
+    if (!bag || typeof bag !== 'object') return []
+    const byName = asFiniteSeries(bag[name])
+    if (byName.length > 0) return byName
+    const alt = asFiniteSeries(bag[name.replaceAll('.', '__')])
+    if (alt.length > 0) return alt
+    const keys = Object.keys(bag)
+    const fallbackKey = keys[fallbackIdx]
+    return fallbackKey ? asFiniteSeries(bag[fallbackKey]) : []
+  }
+  const countSignFlips = (arr: number[], eps = 1e-7): number => {
+    let flips = 0
+    let prevSign = 0
+    for (const value of arr) {
+      if (!Number.isFinite(value)) continue
+      const sign = Math.abs(value) <= eps ? 0 : value > 0 ? 1 : -1
+      if (sign === 0) continue
+      if (prevSign !== 0 && sign !== prevSign) flips += 1
+      prevSign = sign
+    }
+    return flips
+  }
+  const getFiniteMin = (arr: number[]): number | null => {
+    const finite = arr.filter((v) => Number.isFinite(v))
+    return finite.length > 0 ? Math.min(...finite) : null
+  }
+  const getFiniteMax = (arr: number[]): number | null => {
+    const finite = arr.filter((v) => Number.isFinite(v))
+    return finite.length > 0 ? Math.max(...finite) : null
+  }
+  const asBooleanSeries = (value: unknown): Array<boolean | null> =>
+    Array.isArray(value)
+      ? value.map((v) => {
+          if (typeof v === 'boolean') return v
+          if (typeof v === 'number' && Number.isFinite(v)) return v !== 0
+          return null
+        })
+      : []
+
+  const events = Array.isArray(runResult?.meta?.events) ? runResult.meta.events : []
+  const solverStats =
+    runResult?.meta?.solverStats && typeof runResult.meta.solverStats === 'object'
+      ? runResult.meta.solverStats
+      : {}
+  const eventCountFromStatsRaw = Number(solverStats.eventCount ?? events.length)
+  const eventCountFromStats = Number.isFinite(eventCountFromStatsRaw)
+    ? eventCountFromStatsRaw
+    : events.length
+  const eventSampleCountRaw = Number(solverStats.eventSampleCount ?? 0)
+  const eventSampleCount = Number.isFinite(eventSampleCountRaw) ? eventSampleCountRaw : 0
+  const tSeries = asFiniteSeries(runResult?.data?.t)
+  const xBag = runResult?.data?.x
+  const cIndicatorBag = runResult?.data?.c
+  const cBoolBag = runResult?.data?.cBoolean
+  const hSeries = getSeriesByName(xBag, 'h', 0)
+  const vSeries = getSeriesByName(xBag, 'v', 1)
+  const cBooleanEntries = cBoolBag
+    ? Object.entries(cBoolBag).map(([name, values]) => [name, asBooleanSeries(values)] as const)
+    : []
+  const cIndicatorEntries = cIndicatorBag
+    ? Object.entries(cIndicatorBag).map(([name, values]) => [name, asFiniteSeries(values)] as const)
+    : []
+  const c0Series = cBooleanEntries.length > 0 ? cBooleanEntries[0]?.[1] || [] : []
+  const c0IndicatorSeries = cIndicatorEntries.length > 0 ? cIndicatorEntries[0]?.[1] || [] : []
+  const c0TrueCount = c0Series.filter((v) => v === true).length
+  const c0Transitions = c0Series.reduce((acc, v, idx) => {
+    if (idx === 0) return acc
+    const prev = c0Series[idx - 1]
+    if (v == null || prev == null) return acc
+    return v === prev ? acc : acc + 1
+  }, 0)
+  const c0IndicatorSignFlips = countSignFlips(c0IndicatorSeries)
+  const velocitySignFlips = countSignFlips(vSeries)
+  const eventTimesFromData = asFiniteSeries(runResult?.data?.eventTimes)
+
+  const summary = {
+    nSamples: tSeries.length,
+    fixedGridSamples: Math.floor((5 - 0) / 0.3) + 1,
+    tStart: tSeries.length > 0 ? tSeries[0] : null,
+    tEnd: tSeries.length > 0 ? tSeries[tSeries.length - 1] : null,
+    stopReason: runResult?.meta?.stopReason ?? null,
+    stopError: runResult?.meta?.stopError ?? null,
+    solverStats,
+    eventsDetected: eventCountFromStats,
+    eventSamplesInserted: eventSampleCount,
+    eventTimesFromData,
+    stateNames: Array.isArray(runResult?.meta?.model?.stateNames)
+      ? runResult.meta.model.stateNames
+      : [],
+    conditionNames: Array.isArray(runResult?.meta?.model?.conditionNames)
+      ? runResult.meta.model.conditionNames
+      : [],
+    h: {
+      len: hSeries.length,
+      min: getFiniteMin(hSeries),
+      max: getFiniteMax(hSeries),
+      first: hSeries.slice(0, 12),
+      last: hSeries.slice(-12),
+    },
+    v: {
+      len: vSeries.length,
+      min: getFiniteMin(vSeries),
+      max: getFiniteMax(vSeries),
+      signFlips: velocitySignFlips,
+      first: vSeries.slice(0, 12),
+      last: vSeries.slice(-12),
+    },
+    c: {
+      names: cIndicatorEntries.map(([name]) => name),
+      firstConditionIndicatorMin: getFiniteMin(c0IndicatorSeries),
+      firstConditionIndicatorMax: getFiniteMax(c0IndicatorSeries),
+      firstConditionIndicatorSignFlips: c0IndicatorSignFlips,
+      firstConditionIndicatorFirst: c0IndicatorSeries.slice(0, 20),
+      firstConditionIndicatorLast: c0IndicatorSeries.slice(-20),
+      firstConditionTrueCount: c0TrueCount,
+      firstConditionTransitions: c0Transitions,
+      firstConditionFirst: c0Series.slice(0, 20),
+      firstConditionLast: c0Series.slice(-20),
+    },
+    stopDetails: runResult?.meta?.stopDetails ?? null,
+  }
+  const serializedSummary = serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
+  const serializedRunResult = serializeObject(runResult, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
+
+  if (eventCountFromStats <= 0) {
+    throw new Error(
+      [
+        'BouncingBall regression: no events detected; ball keeps falling without bounces.',
+        `summary:\n${serializedSummary}`,
+        `runResult:\n${serializedRunResult}`,
+        `generatedCode:\n${rendered}`,
+      ].join('\n\n'),
+    )
+  }
+  if (eventCountFromStats > 0 && eventSampleCount <= 0) {
+    throw new Error(
+      [
+        'BouncingBall regression: events were localized but no event samples were inserted into output.',
+        `summary:\n${serializedSummary}`,
+        `runResult:\n${serializedRunResult}`,
+        `generatedCode:\n${rendered}`,
+      ].join('\n\n'),
+    )
+  }
+  if (eventCountFromStats > 0 && tSeries.length <= Math.floor((5 - 0) / 0.3) + 1) {
+    throw new Error(
+      [
+        'BouncingBall regression: output series length did not grow beyond fixed grid despite localized events.',
+        `summary:\n${serializedSummary}`,
+        `runResult:\n${serializedRunResult}`,
+        `generatedCode:\n${rendered}`,
+      ].join('\n\n'),
+    )
+  }
+  if (velocitySignFlips <= 0) {
+    throw new Error(
+      [
+        'BouncingBall regression: velocity never flips sign after expected impact.',
+        `summary:\n${serializedSummary}`,
+        `runResult:\n${serializedRunResult}`,
+        `generatedCode:\n${rendered}`,
+      ].join('\n\n'),
+    )
+  }
+
+  return {
+    ok: true,
+    summary,
+    summarySerialized: serializedSummary,
+    runResultSerialized: serializedRunResult,
+    generatedCode: rendered,
+    generatedCodePreview: rendered.slice(0, 500),
+  }
+}
+
 export async function testModelicaAbiValidationRoutingRegression() {
   const wasm = await getDiagnosticsWasm()
 

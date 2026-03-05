@@ -286,6 +286,7 @@ return [];</textarea
 {%- set eqs = dae.f_x if dae.f_x is defined else (dae.fx if dae.fx is defined else []) -%}
 {%- set cond_eqs = dae.f_c if dae.f_c is defined else [] -%}
 {%- set when_clauses = dae.when_clauses if dae.when_clauses is defined else [] -%}
+{%- set reset_eqs = dae.f_z if dae.f_z is defined else [] -%}
 
 {%- macro render_cref(cr) -%}
 {%- if cr.parts is defined -%}
@@ -613,6 +614,23 @@ return [];</textarea
   {%- endif -%}
 {%- endmacro -%}
 
+{%- macro event_indicator_expr(e) -%}
+{%- if e is mapping and e.Binary is defined -%}
+  {%- set b = e.Binary -%}
+  {%- if b.op.Le is defined or b.op.Lt is defined or b.op.LessEq is defined or b.op.Less is defined -%}
+    (({{ render_expr(b.lhs) }}) - ({{ render_expr(b.rhs) }}))
+  {%- elif b.op.Ge is defined or b.op.Gt is defined or b.op.GreaterEq is defined or b.op.Greater is defined -%}
+    (({{ render_expr(b.rhs) }}) - ({{ render_expr(b.lhs) }}))
+  {%- elif b.op.Eq is defined or b.op.Ne is defined or b.op.Equals is defined or b.op.NotEquals is defined -%}
+    (({{ render_expr(b.lhs) }}) - ({{ render_expr(b.rhs) }}))
+  {%- else -%}
+    (({{ render_expr(e) }}) ? -1 : 1)
+  {%- endif -%}
+{%- else -%}
+  (({{ render_expr(e) }}) ? -1 : 1)
+{%- endif -%}
+{%- endmacro -%}
+
 function Model() {
   const __rumocaHasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
@@ -856,6 +874,45 @@ function Model() {
     ];
   }
 
+  function evalEventIndicators(t, xVec, yVec, uVec, pOverride) {
+    const p = Object.assign({}, pDefaults, pOverride || {});
+
+  {%- for (name, comp) in p_map|items %}
+    const {{ js_ident(name) }} = p["{{ name }}"];
+  {%- endfor %}
+
+  {%- for (name, comp) in cp_map|items %}
+    const {{ js_ident(name) }} = constants["{{ name }}"];
+  {%- endfor %}
+
+  {%- for (name, comp) in x_map|items %}
+    const {{ js_ident(name) }} = xVec[{{ loop.index0 }}];
+  {%- endfor %}
+
+  {%- for (name, comp) in y_map|items %}
+    const {{ js_ident(name) }} = yVec[{{ loop.index0 }}];
+  {%- endfor %}
+  {%- for (name, comp) in z_map|items %}
+    const {{ js_ident(name) }} = yVec[{{ y_map|length + loop.index0 }}];
+  {%- endfor %}
+  {%- for (name, comp) in m_map|items %}
+    const {{ js_ident(name) }} = yVec[{{ y_map|length + z_map|length + loop.index0 }}];
+  {%- endfor %}
+  {%- for (name, comp) in w_map|items %}
+    const {{ js_ident(name) }} = yVec[{{ y_map|length + z_map|length + m_map|length + loop.index0 }}];
+  {%- endfor %}
+
+  {%- for (name, comp) in u_map|items %}
+    const {{ js_ident(name) }} = uVec[{{ loop.index0 }}];
+  {%- endfor %}
+
+    return [
+    {%- for ce in cond_eqs %}
+      {{ event_indicator_expr(ce.rhs) }}{% if not loop.last %},{% endif %}
+    {%- endfor %}
+    ];
+  }
+
   function applyResets(t, xVec, yVec, uVec, pOverride, cPrev, cCurr) {
     const p = Object.assign({}, pDefaults, pOverride || {});
 
@@ -910,6 +967,23 @@ function Model() {
     }
   {%- endfor %}
 
+  {%- if when_clauses|length == 0 and reset_eqs|length > 0 %}
+    const firedAny = Array.isArray(cPrev) && Array.isArray(cCurr)
+      ? cCurr.some((value, idx) => !Boolean(cPrev[idx]) && Boolean(value))
+      : false;
+    if (firedAny) {
+    {%- for eq in reset_eqs %}
+      {%- if eq.lhs is defined %}
+      if (stateIndex["{{ eq.lhs }}"] !== undefined) {
+        xNew[stateIndex["{{ eq.lhs }}"]] = {{ render_expr(eq.rhs) }};
+      } else if (algebraicIndex["{{ eq.lhs }}"] !== undefined) {
+        yNew[algebraicIndex["{{ eq.lhs }}"]] = {{ render_expr(eq.rhs) }};
+      }
+      {%- endif %}
+    {%- endfor %}
+    }
+  {%- endif %}
+
     return { x: xNew, y: yNew, c: cNew };
   }
 
@@ -926,9 +1000,9 @@ function Model() {
     nx: meta.summary.nx,
     ny: meta.summary.ny,
     nu: meta.inputs.length,
-    nz: 0
+    nz: {{ cond_eqs|length }}
   };
-  const capabilities = { events: false };
+  const capabilities = { events: {{ "true" if cond_eqs|length > 0 or when_clauses|length > 0 or reset_eqs|length > 0 else "false" }} };
 
   return {
     abiRequired,
@@ -941,6 +1015,7 @@ function Model() {
     y0,
     c0,
     residual,
+    evalEventIndicators,
     evalConditions,
     applyResets
   };

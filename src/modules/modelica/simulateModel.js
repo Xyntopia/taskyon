@@ -35,6 +35,7 @@ const simulateModel = (params, context, model) => {
 
   const haveEvents =
     typeof model.evalConditions === 'function' && typeof model.applyResets === 'function'
+  const haveEventIndicators = typeof model.evalEventIndicators === 'function'
   const haveAlgebraicEval = typeof model.evalAlgebraics === 'function'
 
   const x0_model = Array.isArray(model.x0) ? model.x0.slice() : new Array(nx).fill(0)
@@ -442,7 +443,8 @@ const simulateModel = (params, context, model) => {
   }
 
   function rk4Step(t, x, y, u, dt, pOverride, newtonOpts, xDotPrev) {
-    const xDotSeed = Array.isArray(xDotPrev) && xDotPrev.length === nx ? xDotPrev.slice() : new Array(nx).fill(0)
+    const xDotSeed =
+      Array.isArray(xDotPrev) && xDotPrev.length === nx ? xDotPrev.slice() : new Array(nx).fill(0)
 
     const s1 = solveFlowAtState(t, x, y, xDotSeed, u, pOverride, newtonOpts, 'rk4_stage1')
     const x2 = new Array(nx)
@@ -474,16 +476,7 @@ const simulateModel = (params, context, model) => {
     const x4 = new Array(nx)
     for (let i = 0; i < nx; i++) x4[i] = x[i] + dt * s3.xDot[i]
 
-    const s4 = solveFlowAtState(
-      t + dt,
-      x4,
-      s3.y,
-      s3.xDot,
-      u,
-      pOverride,
-      newtonOpts,
-      'rk4_stage4',
-    )
+    const s4 = solveFlowAtState(t + dt, x4, s3.y, s3.xDot, u, pOverride, newtonOpts, 'rk4_stage4')
 
     const xNext = new Array(nx)
     for (let i = 0; i < nx; i++) {
@@ -494,6 +487,123 @@ const simulateModel = (params, context, model) => {
       x: xNext,
       y: s4.y.slice(),
       xDot: s4.xDot.slice(),
+    }
+  }
+
+  // ---------- Explicit RK45 (Dormand-Prince 5(4)) ----------
+  function rk45Step(t, x, y, u, dt, pOverride, newtonOpts, xDotPrev) {
+    const xDotSeed =
+      Array.isArray(xDotPrev) && xDotPrev.length === nx ? xDotPrev.slice() : new Array(nx).fill(0)
+
+    const s1 = solveFlowAtState(t, x, y, xDotSeed, u, pOverride, newtonOpts, 'rk45_stage1')
+
+    const x2 = new Array(nx)
+    for (let i = 0; i < nx; i++) x2[i] = x[i] + dt * ((1 / 5) * s1.xDot[i])
+    const s2 = solveFlowAtState(
+      t + dt * (1 / 5),
+      x2,
+      s1.y,
+      s1.xDot,
+      u,
+      pOverride,
+      newtonOpts,
+      'rk45_stage2',
+    )
+
+    const x3 = new Array(nx)
+    for (let i = 0; i < nx; i++) x3[i] = x[i] + dt * ((3 / 40) * s1.xDot[i] + (9 / 40) * s2.xDot[i])
+    const s3 = solveFlowAtState(
+      t + dt * (3 / 10),
+      x3,
+      s2.y,
+      s2.xDot,
+      u,
+      pOverride,
+      newtonOpts,
+      'rk45_stage3',
+    )
+
+    const x4 = new Array(nx)
+    for (let i = 0; i < nx; i++) {
+      x4[i] = x[i] + dt * ((44 / 45) * s1.xDot[i] + (-56 / 15) * s2.xDot[i] + (32 / 9) * s3.xDot[i])
+    }
+    const s4 = solveFlowAtState(
+      t + dt * (4 / 5),
+      x4,
+      s3.y,
+      s3.xDot,
+      u,
+      pOverride,
+      newtonOpts,
+      'rk45_stage4',
+    )
+
+    const x5 = new Array(nx)
+    for (let i = 0; i < nx; i++) {
+      x5[i] =
+        x[i] +
+        dt *
+          ((19372 / 6561) * s1.xDot[i] +
+            (-25360 / 2187) * s2.xDot[i] +
+            (64448 / 6561) * s3.xDot[i] +
+            (-212 / 729) * s4.xDot[i])
+    }
+    const s5 = solveFlowAtState(
+      t + dt * (8 / 9),
+      x5,
+      s4.y,
+      s4.xDot,
+      u,
+      pOverride,
+      newtonOpts,
+      'rk45_stage5',
+    )
+
+    const x6 = new Array(nx)
+    for (let i = 0; i < nx; i++) {
+      x6[i] =
+        x[i] +
+        dt *
+          ((9017 / 3168) * s1.xDot[i] +
+            (-355 / 33) * s2.xDot[i] +
+            (46732 / 5247) * s3.xDot[i] +
+            (49 / 176) * s4.xDot[i] +
+            (-5103 / 18656) * s5.xDot[i])
+    }
+    const s6 = solveFlowAtState(t + dt, x6, s5.y, s5.xDot, u, pOverride, newtonOpts, 'rk45_stage6')
+
+    const x7 = new Array(nx)
+    for (let i = 0; i < nx; i++) {
+      x7[i] =
+        x[i] +
+        dt *
+          ((35 / 384) * s1.xDot[i] +
+            (500 / 1113) * s3.xDot[i] +
+            (125 / 192) * s4.xDot[i] +
+            (-2187 / 6784) * s5.xDot[i] +
+            (11 / 84) * s6.xDot[i])
+    }
+    const s7 = solveFlowAtState(t + dt, x7, s6.y, s6.xDot, u, pOverride, newtonOpts, 'rk45_stage7')
+
+    const x5th = x7
+    const x4th = new Array(nx)
+    for (let i = 0; i < nx; i++) {
+      x4th[i] =
+        x[i] +
+        dt *
+          ((5179 / 57600) * s1.xDot[i] +
+            (7571 / 16695) * s3.xDot[i] +
+            (393 / 640) * s4.xDot[i] +
+            (-92097 / 339200) * s5.xDot[i] +
+            (187 / 2100) * s6.xDot[i] +
+            (1 / 40) * s7.xDot[i])
+    }
+
+    return {
+      x: x5th.slice(),
+      y: s7.y.slice(),
+      xDot: s7.xDot.slice(),
+      xEmbedded: x4th,
     }
   }
   // ---------- Simulation ----------
@@ -519,9 +629,22 @@ const simulateModel = (params, context, model) => {
         initRetryMinAbsBase: 1e-9,
         initRetryLambdaScale: 100,
         initRetryMaxIterScale: 2,
+        enableEventLocalization: true,
+        eventTolTime: dt / 1024,
+        maxEventBisectionIter: 40,
+        eventIterationMaxIter: 8,
+        maxEventsPerMacroStep: 16,
+        rk45AbsTol: 1e-6,
+        rk45RelTol: 1e-4,
+        rk45Safety: 0.9,
+        rk45MinFactor: 0.2,
+        rk45MaxFactor: 5,
+        rk45MinDt: dt / 1e6,
         adaptiveSubsteps: true,
         maxSubstepDepth: 6,
         minSubstepDt: dt / 128,
+        includeEventSamples: true,
+        eventSampleDedupTol: 0,
       },
       opts.solverOptions || {},
     )
@@ -542,18 +665,54 @@ const simulateModel = (params, context, model) => {
     ).toLowerCase()
     const useIrk4 = selectedIntegrator === 'irk4' || selectedIntegrator === 'gauss_legendre_irk4'
     const useRk4 = selectedIntegrator === 'rk4'
-    const stepperName = useIrk4 ? 'irk4' : useRk4 ? 'rk4' : 'sdirk2'
+    const useRk45 = selectedIntegrator === 'rk45' || selectedIntegrator === 'dopri54'
+    const stepperName = useIrk4 ? 'irk4' : useRk4 ? 'rk4' : useRk45 ? 'rk45' : 'sdirk2'
     const captureFailureState = Boolean(
       solverOptions.captureFailureState ?? opts.captureFailureState ?? false,
     )
     const initializeConsistently = Boolean(solverOptions.initializeConsistently ?? true)
     const adaptiveSubsteps = Boolean(solverOptions.adaptiveSubsteps ?? true)
+    const includeEventSamples = Boolean(solverOptions.includeEventSamples ?? true)
+    const eventSampleDedupTol = Number.isFinite(solverOptions.eventSampleDedupTol)
+      ? Math.max(0, Number(solverOptions.eventSampleDedupTol))
+      : 0
     const maxSubstepDepth = Number.isFinite(solverOptions.maxSubstepDepth)
       ? Math.max(0, Math.floor(solverOptions.maxSubstepDepth))
       : 6
     const minSubstepDt = Number.isFinite(solverOptions.minSubstepDt)
       ? Math.max(1e-9, solverOptions.minSubstepDt)
       : Math.max(1e-9, dt / 128)
+    const enableEventLocalization = Boolean(solverOptions.enableEventLocalization ?? true)
+    const eventTolTime = Number.isFinite(solverOptions.eventTolTime)
+      ? Math.max(1e-12, solverOptions.eventTolTime)
+      : Math.max(1e-9, dt / 1024)
+    const maxEventBisectionIter = Number.isFinite(solverOptions.maxEventBisectionIter)
+      ? Math.max(1, Math.floor(solverOptions.maxEventBisectionIter))
+      : 40
+    const eventIterationMaxIter = Number.isFinite(solverOptions.eventIterationMaxIter)
+      ? Math.max(1, Math.floor(solverOptions.eventIterationMaxIter))
+      : 8
+    const maxEventsPerMacroStep = Number.isFinite(solverOptions.maxEventsPerMacroStep)
+      ? Math.max(1, Math.floor(solverOptions.maxEventsPerMacroStep))
+      : 16
+    const rk45AbsTol = Number.isFinite(solverOptions.rk45AbsTol)
+      ? Math.max(1e-14, solverOptions.rk45AbsTol)
+      : 1e-6
+    const rk45RelTol = Number.isFinite(solverOptions.rk45RelTol)
+      ? Math.max(1e-14, solverOptions.rk45RelTol)
+      : 1e-4
+    const rk45Safety = Number.isFinite(solverOptions.rk45Safety)
+      ? Math.min(0.99, Math.max(0.1, solverOptions.rk45Safety))
+      : 0.9
+    const rk45MinFactor = Number.isFinite(solverOptions.rk45MinFactor)
+      ? Math.min(1, Math.max(0.01, solverOptions.rk45MinFactor))
+      : 0.2
+    const rk45MaxFactor = Number.isFinite(solverOptions.rk45MaxFactor)
+      ? Math.max(1, solverOptions.rk45MaxFactor)
+      : 5
+    const rk45MinDt = Number.isFinite(solverOptions.rk45MinDt)
+      ? Math.max(1e-14, solverOptions.rk45MinDt)
+      : Math.max(1e-12, dt / 1e6)
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const f_u = typeof opts.f_u === 'function' ? opts.f_u : (_t) => new Array(nu).fill(0)
@@ -565,6 +724,26 @@ const simulateModel = (params, context, model) => {
     const yOutArr = []
     const uArr = []
     const cArr = []
+    const zArr = []
+    const eventLog = []
+    const solverStats = {
+      runCount: 1,
+      macroStepCount: 0,
+      flowStepCalls: 0,
+      rk45Attempts: 0,
+      rk45Accepted: 0,
+      rk45Rejected: 0,
+      adaptiveRetryCount: 0,
+      adaptiveSplitCount: 0,
+      eventLocalizationCalls: 0,
+      eventBisectionIterations: 0,
+      eventIterationPasses: 0,
+      eventCount: 0,
+      eventSampleCount: 0,
+      eventSampleSkippedDuplicates: 0,
+      initAttempts: 0,
+      initFailures: 0,
+    }
     let stopReason = null
     let stopError = null
     let stopStack = null
@@ -594,6 +773,7 @@ const simulateModel = (params, context, model) => {
       const initErrors = []
       let initSolved = false
       for (let attempt = 0; attempt < retryCount; attempt++) {
+        solverStats.initAttempts += 1
         const minAbs = Math.max(minAbsBase, Math.pow(10, attempt - 9))
         const attemptOpts = Object.assign({}, newtonOpts, {
           initialGuessMinAbs:
@@ -603,18 +783,21 @@ const simulateModel = (params, context, model) => {
           lambda:
             attempt === 0
               ? newtonOpts.lambda
-              : Math.max(newtonOpts.lambda || 0, (newtonOpts.lambda || 1e-6) * Math.pow(lambdaScale, attempt)),
+              : Math.max(
+                  newtonOpts.lambda || 0,
+                  (newtonOpts.lambda || 1e-6) * Math.pow(lambdaScale, attempt),
+                ),
           maxIter:
             attempt === 0
               ? newtonOpts.maxIter
-              : Math.max(newtonOpts.maxIter || 12, Math.floor((newtonOpts.maxIter || 12) * maxIterScale)),
+              : Math.max(
+                  newtonOpts.maxIter || 12,
+                  Math.floor((newtonOpts.maxIter || 12) * maxIterScale),
+                ),
         })
-        const yGuess =
-          attempt === 0 ? y.slice() : regularizeGuessVector(y.slice(), attemptOpts)
+        const yGuess = attempt === 0 ? y.slice() : regularizeGuessVector(y.slice(), attemptOpts)
         const xDotGuess =
-          attempt === 0
-            ? xDotPrev.slice()
-            : regularizeGuessVector(xDotPrev.slice(), attemptOpts)
+          attempt === 0 ? xDotPrev.slice() : regularizeGuessVector(xDotPrev.slice(), attemptOpts)
         try {
           const init = solveFlowAtState(
             t,
@@ -631,6 +814,7 @@ const simulateModel = (params, context, model) => {
           initSolved = true
           break
         } catch (e) {
+          solverStats.initFailures += 1
           const msg = (e && e.message) || String(e)
           initErrors.push(
             `attempt=${attempt + 1}, minAbs=${attemptOpts.initialGuessMinAbs}, lambda=${attemptOpts.lambda}, maxIter=${attemptOpts.maxIter}, error=${msg}`,
@@ -655,58 +839,369 @@ const simulateModel = (params, context, model) => {
       }
     }
 
-    function performSingleStep(tLocal, xLocal, yLocal, cLocal, dtLocal, xDotSeed) {
+    function conditionsChanged(cPrev, cNext) {
+      const n = Math.max(
+        Array.isArray(cPrev) ? cPrev.length : 0,
+        Array.isArray(cNext) ? cNext.length : 0,
+      )
+      for (let i = 0; i < n; i++) {
+        if (Boolean(cPrev?.[i]) !== Boolean(cNext?.[i])) return true
+      }
+      return false
+    }
+
+    function evalConditionsSafe(tLocal, xLocal, yLocal, uLocal, fallback) {
+      if (!haveEvents) return Array.isArray(fallback) ? fallback.slice() : []
+      try {
+        const ce = model.evalConditions(tLocal, xLocal, yLocal, uLocal, pOverride)
+        if (Array.isArray(ce)) return ce.slice()
+      } catch (e) {
+        log(`evalConditions threw at t=${tLocal}`, {
+          error: (e && e.message) || String(e),
+          stack: e && e.stack,
+        })
+      }
+      return Array.isArray(fallback) ? fallback.slice() : []
+    }
+    function evalEventIndicatorsSafe(tLocal, xLocal, yLocal, uLocal, cLocal) {
+      if (haveEventIndicators) {
+        try {
+          const zi = model.evalEventIndicators(tLocal, xLocal, yLocal, uLocal, pOverride)
+          if (Array.isArray(zi)) {
+            return zi.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
+          }
+        } catch (e) {
+          log(`evalEventIndicators threw at t=${tLocal}`, {
+            error: (e && e.message) || String(e),
+            stack: e && e.stack,
+          })
+        }
+      }
+      const cSafe = Array.isArray(cLocal) ? cLocal : []
+      return cSafe.map((v) => (v ? -1 : 1))
+    }
+
+    function applyResetsSafe(tLocal, xLocal, yLocal, uLocal, cPrev, cCurr) {
+      let xNext = xLocal.slice()
+      let yNext = yLocal.slice()
+      let cNext = Array.isArray(cCurr) ? cCurr.slice() : []
+      if (!haveEvents || !model.applyResets) return { xNext, yNext, cNext }
+      try {
+        const applied = model.applyResets(tLocal, xLocal, yLocal, uLocal, pOverride, cPrev, cCurr)
+        if (applied?.x) xNext = applied.x.slice()
+        if (applied?.y) yNext = applied.y.slice()
+        if (applied?.c) cNext = applied.c.slice()
+      } catch (e) {
+        log(`applyResets threw at t=${tLocal}`, {
+          error: (e && e.message) || String(e),
+          stack: e && e.stack,
+        })
+      }
+      return { xNext, yNext, cNext }
+    }
+
+    function performFlowStepOnce(tLocal, xLocal, yLocal, dtLocal, xDotSeed) {
+      solverStats.flowStepCalls += 1
       const uLocal = f_u(tLocal) || new Array(nu).fill(0)
       const step = useIrk4
         ? irk4Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts)
         : useRk4
           ? rk4Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts, xDotSeed)
-          : sdirk2Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts)
-      if (!step || !step.x || !step.y) {
-        throw new Error(`Invalid step payload at t=${tLocal}`)
-      }
-
-      let xNext = step.x
-      let yNext = step.y
-      let cNext = Array.isArray(cLocal) ? cLocal.slice() : []
-
-      if (haveEvents) {
-        const uNext = f_u(tLocal + dtLocal) || new Array(nu).fill(0)
-        const cPrev = Array.isArray(cLocal) ? cLocal.slice() : []
-        let cCurr = cPrev.slice()
-
-        try {
-          const ce = model.evalConditions(tLocal + dtLocal, xNext, yNext, uNext, pOverride)
-          if (Array.isArray(ce)) cCurr = ce.slice()
-        } catch (e) {
-          log(`evalConditions threw at t=${tLocal + dtLocal}`, {
-            error: (e && e.message) || String(e),
-            stack: e && e.stack,
-          })
-        }
-
-        try {
-          const applied = model.applyResets
-            ? model.applyResets(tLocal + dtLocal, xNext, yNext, uNext, pOverride, cPrev, cCurr)
-            : null
-
-          if (applied?.x) xNext = applied.x.slice()
-          if (applied?.y) yNext = applied.y.slice()
-          if (applied?.c) cNext = applied.c.slice()
-        } catch (e) {
-          log(`applyResets threw at t=${tLocal + dtLocal}`, {
-            error: (e && e.message) || String(e),
-            stack: e && e.stack,
-          })
-        }
-      }
-
+          : useRk45
+            ? rk45Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts, xDotSeed)
+            : sdirk2Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts)
+      if (!step || !step.x || !step.y) throw new Error(`Invalid step payload at t=${tLocal}`)
       const xDotNext =
         Array.isArray(step.xDot) && step.xDot.length === nx
           ? step.xDot.slice()
-          : xNext.map((xv, i) => (xv - xLocal[i]) / dtLocal)
+          : step.x.map((xv, i) => (xv - xLocal[i]) / dtLocal)
+      return {
+        xNext: step.x.slice(),
+        yNext: step.y.slice(),
+        xDotNext,
+        xEmbedded: Array.isArray(step.xEmbedded) ? step.xEmbedded.slice() : null,
+      }
+    }
 
-      return { xNext, yNext, cNext, xDotNext }
+    function advanceAdaptiveOnFailure(tLocal, xLocal, yLocal, dtLocal, xDotSeed, depth) {
+      try {
+        return performFlowStepOnce(tLocal, xLocal, yLocal, dtLocal, xDotSeed)
+      } catch (e) {
+        if (!adaptiveSubsteps || depth >= maxSubstepDepth || dtLocal * 0.5 < minSubstepDt) throw e
+        solverStats.adaptiveRetryCount += 1
+        solverStats.adaptiveSplitCount += 1
+        const half = dtLocal * 0.5
+        const a = advanceAdaptiveOnFailure(tLocal, xLocal, yLocal, half, xDotSeed, depth + 1)
+        return advanceAdaptiveOnFailure(
+          tLocal + half,
+          a.xNext,
+          a.yNext,
+          half,
+          a.xDotNext,
+          depth + 1,
+        )
+      }
+    }
+
+    function rk45ErrorNorm(xOld, x5, x4) {
+      let maxNorm = 0
+      for (let i = 0; i < nx; i++) {
+        const err = Math.abs(x5[i] - x4[i])
+        const scale = rk45AbsTol + rk45RelTol * Math.max(Math.abs(xOld[i]), Math.abs(x5[i]))
+        const n = scale > 0 ? err / scale : err
+        if (n > maxNorm) maxNorm = n
+      }
+      return maxNorm
+    }
+
+    function advanceFlowInterval(tLocal, xLocal, yLocal, dtLocal, xDotSeed) {
+      if (!useRk45) return advanceAdaptiveOnFailure(tLocal, xLocal, yLocal, dtLocal, xDotSeed, 0)
+      const tEnd = tLocal + dtLocal
+      let tCur = tLocal
+      let xCur = xLocal.slice()
+      let yCur = yLocal.slice()
+      let xDotCur =
+        Array.isArray(xDotSeed) && xDotSeed.length === nx ? xDotSeed.slice() : new Array(nx).fill(0)
+      let h = Math.min(Math.max(rk45MinDt, dtLocal * 0.25), dtLocal)
+
+      while (tCur < tEnd - 1e-15) {
+        const remaining = tEnd - tCur
+        if (h > remaining) h = remaining
+        if (h < rk45MinDt) {
+          throw new Error(
+            `RK45 minimum step reached before interval end (t=${Number(tCur).toPrecision(8)}, remaining=${remaining})`,
+          )
+        }
+
+        let attempt
+        try {
+          solverStats.rk45Attempts += 1
+          attempt = performFlowStepOnce(tCur, xCur, yCur, h, xDotCur)
+        } catch (e) {
+          solverStats.rk45Rejected += 1
+          h *= 0.5
+          if (h < rk45MinDt) throw e
+          continue
+        }
+
+        const err = attempt.xEmbedded ? rk45ErrorNorm(xCur, attempt.xNext, attempt.xEmbedded) : 0
+        if (err <= 1 || h <= rk45MinDt) {
+          solverStats.rk45Accepted += 1
+          tCur += h
+          xCur = attempt.xNext
+          yCur = attempt.yNext
+          xDotCur = attempt.xDotNext
+          const factor = err > 0 ? rk45Safety * Math.pow(err, -0.2) : rk45MaxFactor
+          const clipped = Math.min(rk45MaxFactor, Math.max(rk45MinFactor, factor))
+          h = Math.min(remaining, Math.max(rk45MinDt, h * clipped))
+        } else {
+          solverStats.rk45Rejected += 1
+          const factor = rk45Safety * Math.pow(err, -0.25)
+          const clipped = Math.min(1, Math.max(rk45MinFactor, factor))
+          h = Math.max(rk45MinDt, h * clipped)
+        }
+      }
+
+      return { xNext: xCur, yNext: yCur, xDotNext: xDotCur }
+    }
+
+    function localizeEvent(tLeft, xLeft, yLeft, cLeft, xDotLeft, tRight, xRight, yRight, cRight) {
+      solverStats.eventLocalizationCalls += 1
+      let tl = tLeft
+      let xl = xLeft.slice()
+      let yl = yLeft.slice()
+      let cl = cLeft.slice()
+      let xDotL = Array.isArray(xDotLeft) ? xDotLeft.slice() : new Array(nx).fill(0)
+      let tr = tRight
+      let xr = xRight.slice()
+      let yr = yRight.slice()
+      let cr = cRight.slice()
+      let xDotR = xDotL.slice()
+
+      let bisectionIters = 0
+      for (let iter = 0; iter < maxEventBisectionIter; iter++) {
+        bisectionIters = iter + 1
+        if (tr - tl <= eventTolTime) break
+        const tm = 0.5 * (tl + tr)
+        const mid = advanceFlowInterval(tl, xl, yl, tm - tl, xDotL)
+        const uMid = f_u(tm) || new Array(nu).fill(0)
+        const cm = evalConditionsSafe(tm, mid.xNext, mid.yNext, uMid, cl)
+
+        if (conditionsChanged(cl, cm)) {
+          tr = tm
+          xr = mid.xNext
+          yr = mid.yNext
+          cr = cm
+          xDotR = mid.xDotNext
+        } else {
+          tl = tm
+          xl = mid.xNext
+          yl = mid.yNext
+          cl = cm
+          xDotL = mid.xDotNext
+        }
+      }
+
+      return {
+        tEvent: tr,
+        xEventPre: xr,
+        yEventPre: yr,
+        cLeft: cl,
+        cRight: cr,
+        xDotEventPre: xDotR,
+        bisectionIters,
+      }
+    }
+
+    function settleEventAtTime(tEvent, xEventPre, yEventPre, cPrevStep) {
+      let xCurr = xEventPre.slice()
+      let yCurr = yEventPre.slice()
+      let cPrev = Array.isArray(cPrevStep) ? cPrevStep.slice() : []
+      let cCurr = cPrev.slice()
+      const uEvent = f_u(tEvent) || new Array(nu).fill(0)
+
+      for (let iter = 0; iter < eventIterationMaxIter; iter++) {
+        cCurr = evalConditionsSafe(tEvent, xCurr, yCurr, uEvent, cPrev)
+        const applied = applyResetsSafe(tEvent, xCurr, yCurr, uEvent, cPrev, cCurr)
+        const cAfter = evalConditionsSafe(
+          tEvent,
+          applied.xNext,
+          applied.yNext,
+          uEvent,
+          applied.cNext,
+        )
+
+        xCurr = applied.xNext
+        yCurr = applied.yNext
+
+        if (!conditionsChanged(cPrev, cAfter)) {
+          const iterations = iter + 1
+          solverStats.eventIterationPasses += iterations
+          return { x: xCurr, y: yCurr, c: cAfter, iterations }
+        }
+        cPrev = cAfter
+      }
+      solverStats.eventIterationPasses += eventIterationMaxIter
+      return { x: xCurr, y: yCurr, c: cCurr, iterations: eventIterationMaxIter, clipped: true }
+    }
+
+    function advanceMacroStep(tLocal, xLocal, yLocal, cLocal, dtLocal, xDotSeed, stepIndex) {
+      solverStats.macroStepCount += 1
+      const tTarget = tLocal + dtLocal
+      if (!haveEvents || !enableEventLocalization) {
+        const flow = advanceFlowInterval(tLocal, xLocal, yLocal, dtLocal, xDotSeed)
+        const uNext = f_u(tTarget) || new Array(nu).fill(0)
+        const cEval = evalConditionsSafe(tTarget, flow.xNext, flow.yNext, uNext, cLocal)
+        const applied = applyResetsSafe(tTarget, flow.xNext, flow.yNext, uNext, cLocal, cEval)
+        return {
+          xNext: applied.xNext,
+          yNext: applied.yNext,
+          cNext: applied.cNext,
+          xDotNext: flow.xDotNext,
+          eventSamples: [],
+        }
+      }
+
+      let tCur = tLocal
+      let xCur = xLocal.slice()
+      let yCur = yLocal.slice()
+      let cCur = cLocal.slice()
+      let xDotCur =
+        Array.isArray(xDotSeed) && xDotSeed.length === nx ? xDotSeed.slice() : new Array(nx).fill(0)
+      let eventCount = 0
+      const eventSamples = []
+      let lastEventSampleTime = Number.NaN
+
+      while (tCur < tTarget - 1e-15) {
+        const remaining = tTarget - tCur
+        const flow = advanceFlowInterval(tCur, xCur, yCur, remaining, xDotCur)
+        const uEnd = f_u(tTarget) || new Array(nu).fill(0)
+        const cEnd = evalConditionsSafe(tTarget, flow.xNext, flow.yNext, uEnd, cCur)
+        if (!conditionsChanged(cCur, cEnd)) {
+          xCur = flow.xNext
+          yCur = flow.yNext
+          cCur = cEnd
+          xDotCur = flow.xDotNext
+          tCur = tTarget
+          break
+        }
+
+        if (eventCount >= maxEventsPerMacroStep) {
+          throw new Error(
+            `Exceeded maxEventsPerMacroStep=${maxEventsPerMacroStep} while localizing events at t=${Number(tCur).toPrecision(8)}`,
+          )
+        }
+
+        const localized = localizeEvent(
+          tCur,
+          xCur,
+          yCur,
+          cCur,
+          xDotCur,
+          tTarget,
+          flow.xNext,
+          flow.yNext,
+          cEnd,
+        )
+        if (localized.tEvent <= tCur + 1e-15) {
+          throw new Error(
+            `Event localization failed to progress (t=${Number(tCur).toPrecision(8)}, tEvent=${Number(localized.tEvent).toPrecision(8)})`,
+          )
+        }
+
+        const settled = settleEventAtTime(
+          localized.tEvent,
+          localized.xEventPre,
+          localized.yEventPre,
+          localized.cLeft,
+        )
+
+        eventLog.push({
+          stepIndex,
+          time: localized.tEvent,
+          iterations: settled.iterations,
+          bisectionIters: localized.bisectionIters,
+          clippedIterations: Boolean(settled.clipped),
+          before: localized.cLeft.slice(),
+          atDetection: localized.cRight.slice(),
+          after: settled.c.slice(),
+          indicatorsAtEvent: evalEventIndicatorsSafe(
+            localized.tEvent,
+            localized.xEventPre,
+            localized.yEventPre,
+            f_u(localized.tEvent) || new Array(nu).fill(0),
+            settled.c,
+          ),
+        })
+
+        tCur = localized.tEvent
+        xCur = settled.x
+        yCur = settled.y
+        cCur = settled.c
+        xDotCur = localized.xDotEventPre.slice()
+        eventCount += 1
+        solverStats.eventCount += 1
+        solverStats.eventBisectionIterations += Number(localized.bisectionIters || 0)
+        if (includeEventSamples) {
+          const minDelta = Math.max(eventTolTime * 2, eventSampleDedupTol)
+          const shouldInsert =
+            !Number.isFinite(lastEventSampleTime) ||
+            Math.abs(localized.tEvent - lastEventSampleTime) > minDelta
+          if (shouldInsert) {
+            eventSamples.push({
+              time: localized.tEvent,
+              x: settled.x.slice(),
+              y: settled.y.slice(),
+              c: settled.c.slice(),
+            })
+            lastEventSampleTime = localized.tEvent
+          } else {
+            solverStats.eventSampleSkippedDuplicates += 1
+          }
+        }
+      }
+
+      return { xNext: xCur, yNext: yCur, cNext: cCur, xDotNext: xDotCur, eventSamples }
     }
 
     function evaluateAlgebraicsAtSample(tLocal, xLocal, yLocal, uLocal) {
@@ -714,9 +1209,7 @@ const simulateModel = (params, context, model) => {
         try {
           const yEval = model.evalAlgebraics(tLocal, xLocal, yLocal, uLocal, pOverride)
           if (Array.isArray(yEval) && yEval.length === algebraicNames.length) {
-            return yEval.map((v) =>
-              typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN,
-            )
+            return yEval.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
           }
         } catch (e) {
           log(`evalAlgebraics threw at t=${tLocal}`, {
@@ -734,35 +1227,40 @@ const simulateModel = (params, context, model) => {
       return out
     }
 
-    function advanceAdaptive(tLocal, xLocal, yLocal, cLocal, dtLocal, xDotSeed, depth) {
-      try {
-        return performSingleStep(tLocal, xLocal, yLocal, cLocal, dtLocal, xDotSeed)
-      } catch (e) {
-        if (!adaptiveSubsteps || depth >= maxSubstepDepth || dtLocal * 0.5 < minSubstepDt) {
-          throw e
-        }
-        const half = dtLocal * 0.5
-        const a = advanceAdaptive(tLocal, xLocal, yLocal, cLocal, half, xDotSeed, depth + 1)
-        return advanceAdaptive(tLocal + half, a.xNext, a.yNext, a.cNext, half, a.xDotNext, depth + 1)
-      }
-    }
-
     log('Simulation started', { t0, tf, dt, nx, ny, nu, haveEvents })
+    const appendOutputSample = (tSample, xSample, ySample, uSample, cSample) => {
+      tArr.push(tSample)
+      xArr.push(xSample.slice())
+      yArr.push(ySample.slice())
+      yOutArr.push(evaluateAlgebraicsAtSample(tSample, xSample, ySample, uSample))
+      uArr.push(uSample.slice())
+      cArr.push(cSample.slice())
+      zArr.push(evalEventIndicatorsSafe(tSample, xSample, ySample, uSample, cSample))
+    }
 
     for (let k = 0; k <= nSteps; k++) {
       const u = f_u(t) || new Array(nu).fill(0)
 
-      tArr.push(t)
-      xArr.push(x.slice())
-      yArr.push(y.slice())
-      yOutArr.push(evaluateAlgebraicsAtSample(t, x, y, u))
-      uArr.push(u.slice())
-      cArr.push(c.slice())
+      appendOutputSample(t, x, y, u, c)
 
       if (k === nSteps) break
 
       try {
-        const advanced = advanceAdaptive(t, x, y, c, dt, xDotPrev, 0)
+        const advanced = advanceMacroStep(t, x, y, c, dt, xDotPrev, k)
+        if (Array.isArray(advanced.eventSamples) && advanced.eventSamples.length > 0) {
+          for (const sample of advanced.eventSamples) {
+            const tSample = Number(sample?.time)
+            if (!Number.isFinite(tSample) || tSample <= t + 1e-15 || tSample >= t + dt - 1e-15) {
+              continue
+            }
+            const xSample = Array.isArray(sample?.x) ? sample.x : x
+            const ySample = Array.isArray(sample?.y) ? sample.y : y
+            const cSample = Array.isArray(sample?.c) ? sample.c : c
+            const uSample = f_u(tSample) || new Array(nu).fill(0)
+            appendOutputSample(tSample, xSample, ySample, uSample, cSample)
+            solverStats.eventSampleCount += 1
+          }
+        }
         t += dt
         x = advanced.xNext
         y = advanced.yNext
@@ -784,6 +1282,10 @@ const simulateModel = (params, context, model) => {
           yHead: y.slice(0, Math.min(3, y.length)),
           uHead: u.slice(0, Math.min(3, u.length)),
           missingSymbol: missingSymbol ? missingSymbol[1] : null,
+          solverStatsSnapshot: {
+            ...solverStats,
+            eventCount: eventLog.length,
+          },
         }
         if (captureFailureState) {
           stopDetails.failureState = {
@@ -816,6 +1318,12 @@ const simulateModel = (params, context, model) => {
       yObserved: yOutArr,
       u: uArr,
       c: cArr,
+      z: zArr,
+      eventLog,
+      solverStats: {
+        ...solverStats,
+        eventCount: eventLog.length,
+      },
       stopReason,
       stopError,
       stopStack,
@@ -858,6 +1366,7 @@ const simulateModel = (params, context, model) => {
   expectRows(raw.yObserved, algebraicNames.length, 'yObserved')
   expectRows(raw.u, nu, 'u')
   expectRows(raw.c, conditionNames.length, 'c')
+  expectRows(raw.z, conditionNames.length, 'z')
 
   const projectSeries = (rows, names) =>
     Object.fromEntries(
@@ -866,6 +1375,18 @@ const simulateModel = (params, context, model) => {
         rows.map((r) => {
           const v = r[i]
           return typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN
+        }),
+      ]),
+    )
+  const projectConditionSeries = (rows, names) =>
+    Object.fromEntries(
+      names.map((n, i) => [
+        n,
+        rows.map((r) => {
+          const v = r[i]
+          if (typeof v === 'boolean') return v
+          if (typeof v === 'number' && Number.isFinite(v)) return v !== 0
+          return null
         }),
       ]),
     )
@@ -885,6 +1406,8 @@ const simulateModel = (params, context, model) => {
       tf: sim.tf ?? 5,
       dt: sim.dt ?? 0.1,
       nSteps: raw.t.length,
+      events: raw.eventLog || [],
+      solverStats: raw.solverStats || null,
       stopReason: raw.stopReason,
       stopError: raw.stopError,
       stopStack: raw.stopStack,
@@ -904,7 +1427,10 @@ const simulateModel = (params, context, model) => {
       x: projectSeries(raw.x, stateNames),
       y: projectSeries(raw.yObserved, algebraicNames),
       u: projectSeries(raw.u, inputNames),
-      c: projectSeries(raw.c, conditionNames),
+      c: projectSeries(raw.z, conditionNames),
+      cBoolean: projectConditionSeries(raw.c, conditionNames),
+      z: projectSeries(raw.z, conditionNames),
+      eventTimes: Array.isArray(raw.eventLog) ? raw.eventLog.map((e) => e.time) : [],
     },
   }
 }
@@ -927,10 +1453,10 @@ simulateModel.optionsSchema = {
   properties: {
     timeIntegrator: {
       type: 'string',
-      enum: ['sdirk2', 'irk4', 'rk4'],
+      enum: ['sdirk2', 'irk4', 'rk4', 'rk45'],
       default: 'sdirk2',
       description:
-        'Time integration method: SDIRK2 (robust default), IRK4 (implicit Gauss-Legendre), RK4 (explicit)',
+        'Time integration method: SDIRK2 (robust default), IRK4 (implicit Gauss-Legendre), RK4 (explicit), RK45 (Dormand-Prince explicit adaptive)',
     },
     captureFailureState: {
       type: 'boolean',
@@ -983,6 +1509,73 @@ simulateModel.optionsSchema = {
       type: 'boolean',
       default: true,
       description: 'Run a Newton consistent-initialization solve for xDot and algebraics at t0',
+    },
+    enableEventLocalization: {
+      type: 'boolean',
+      default: true,
+      description: 'Localize event times by bisection and apply resets at localized event time',
+    },
+    eventTolTime: {
+      type: 'number',
+      default: 0.00001,
+      description: 'Event localization time tolerance',
+    },
+    maxEventBisectionIter: {
+      type: 'integer',
+      default: 40,
+      description: 'Maximum bisection iterations used to localize each event',
+    },
+      eventIterationMaxIter: {
+      type: 'integer',
+      default: 8,
+      description: 'Maximum event-iteration passes at a single localized event instant',
+    },
+    includeEventSamples: {
+      type: 'boolean',
+      default: true,
+      description:
+        'Insert localized event times into output series (t/x/y/u/c) so event turnarounds are visible even for coarse dt',
+    },
+    eventSampleDedupTol: {
+      type: 'number',
+      default: 0,
+      description:
+        'Additional time tolerance for coalescing near-duplicate event samples (helps avoid clustered touch/release duplicates)',
+    },
+    maxEventsPerMacroStep: {
+      type: 'integer',
+      default: 16,
+      description: 'Maximum number of localized events handled within a single output step',
+    },
+    rk45AbsTol: {
+      type: 'number',
+      default: 1e-6,
+      description: 'Absolute error tolerance for RK45 adaptive step control',
+    },
+    rk45RelTol: {
+      type: 'number',
+      default: 1e-4,
+      description: 'Relative error tolerance for RK45 adaptive step control',
+    },
+    rk45Safety: {
+      type: 'number',
+      default: 0.9,
+      description: 'Safety factor for RK45 step-size updates',
+    },
+    rk45MinFactor: {
+      type: 'number',
+      default: 0.2,
+      description: 'Minimum multiplicative factor when RK45 shrinks/grows internal step size',
+    },
+    rk45MaxFactor: {
+      type: 'number',
+      default: 5,
+      description: 'Maximum multiplicative factor when RK45 grows internal step size',
+    },
+    rk45MinDt: {
+      type: 'number',
+      default: 1e-9,
+      description: 'Minimum RK45 internal step size',
     },
     adaptiveSubsteps: {
       type: 'boolean',
