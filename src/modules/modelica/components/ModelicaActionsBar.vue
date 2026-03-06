@@ -211,28 +211,35 @@
       :label="`MSL ${mslFileCount}`"
     />
 
-    <q-btn
-      dense
-      flat
-      color="secondary"
-      :icon="matPlayArrow"
-      label="Run in Sandbox"
-      :disable="!jsSource || isHtmlOutput"
-      :loading="running"
-      @click="emit('run-sandbox')"
-    />
-    <q-btn
-      v-if="hasUiTemplate"
-      dense
-      flat
-      color="secondary"
-      :icon="matOpenInNew"
-      label="Popup window"
-      :disable="!jsSource"
-      @click="emit('open-popup')"
-    />
-
-    <q-btn v-if="running" flat dense color="negative" label="Stop" outline @click="emit('stop-execution')" />
+    <SimulationRunControls
+      v-model:open="simulationControlsOpenModel"
+      v-model:t0="simT0Model"
+      v-model:tf="simTfModel"
+      v-model:dt="simDtModel"
+      mode="simple"
+      :solver-label="selectedSolverKey"
+      :predicted-steps="predictedSteps"
+      :actual-steps="actualSteps ?? null"
+      :event-count="eventCount ?? null"
+      :has-result="hasResult"
+      :running="running"
+      :can-run="Boolean(jsSource) && !isHtmlOutput"
+      :show-popup-button="hasUiTemplate"
+      :can-open-popup="Boolean(jsSource)"
+      @run="emit('run-sandbox')"
+      @open-popup="emit('open-popup')"
+      @stop="emit('stop-execution')"
+      @reset-from-model="emit('reset-sim-from-model')"
+    >
+      <template #solver-options>
+        <ObjectView
+          v-model="solverOptionsModel"
+          missing-mode="placeholders"
+          copy-btn
+          :schema="solverOptionsSchema"
+        />
+      </template>
+    </SimulationRunControls>
   </q-bar>
 </template>
 
@@ -242,8 +249,6 @@ import {
   matDescription,
   matNavigateBefore,
   matNavigateNext,
-  matOpenInNew,
-  matPlayArrow,
   matRefresh,
   matSave,
 } from '@quasar/extras/material-icons'
@@ -251,6 +256,7 @@ import { mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
 import type { JSONSchema7 } from 'json-schema'
 import { computed, ref } from 'vue'
 import ObjectView from 'src/components/varViews/ObjectView.vue'
+import SimulationRunControls from './SimulationRunControls.vue'
 
 type ExportTarget = 'modelica' | 'template' | 'js' | 'daePretty' | 'daeJson'
 
@@ -277,6 +283,17 @@ const props = defineProps<{
   hasUiTemplate: boolean
   isHtmlOutput: boolean
   running: boolean
+  simulationControlsOpen: boolean
+  simT0: number
+  simTf: number
+  simDt: number
+  selectedSolverKey: string
+  predictedSteps: number
+  actualSteps?: number | null
+  eventCount?: number | null
+  hasResult: boolean
+  solverOptions: Record<string, unknown>
+  solverOptionsSchema?: JSONSchema7 | undefined
 }>()
 
 const emit = defineEmits<{
@@ -302,6 +319,12 @@ const emit = defineEmits<{
   (e: 'run-sandbox'): void
   (e: 'open-popup'): void
   (e: 'stop-execution'): void
+  (e: 'reset-sim-from-model'): void
+  (e: 'update:simulation-controls-open', value: boolean): void
+  (e: 'update:sim-t0', value: number): void
+  (e: 'update:sim-tf', value: number): void
+  (e: 'update:sim-dt', value: number): void
+  (e: 'update:solver-options', value: Record<string, unknown>): void
   (e: 'update:projectMenuOptions', value: Record<string, unknown>): void
   (e: 'update:libraryMenuOptions', value: Record<string, unknown>): void
   (e: 'update:runtimeMenuOptions', value: Record<string, unknown>): void
@@ -323,5 +346,30 @@ const libraryMenuModel = computed({
 const runtimeMenuModel = computed({
   get: () => props.runtimeMenuOptions,
   set: (v: Record<string, unknown>) => emit('update:runtimeMenuOptions', v),
+})
+
+const simT0Model = computed({
+  get: () => props.simT0,
+  set: (v: number) => emit('update:sim-t0', Number(v)),
+})
+
+const simTfModel = computed({
+  get: () => props.simTf,
+  set: (v: number) => emit('update:sim-tf', Number(v)),
+})
+
+const simDtModel = computed({
+  get: () => props.simDt,
+  set: (v: number) => emit('update:sim-dt', Number(v)),
+})
+
+const simulationControlsOpenModel = computed({
+  get: () => props.simulationControlsOpen,
+  set: (v: boolean) => emit('update:simulation-controls-open', Boolean(v)),
+})
+
+const solverOptionsModel = computed({
+  get: () => props.solverOptions,
+  set: (v: Record<string, unknown>) => emit('update:solver-options', v),
 })
 </script>

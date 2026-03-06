@@ -540,6 +540,17 @@ export const TyModelicaProjectFileV1 = z.object({
 
       solverOptions: z.record(z.string(), z.unknown()).optional(),
       solverOptionsByKey: z.record(z.string().min(1), z.record(z.string(), z.unknown())).optional(),
+      charts: z
+        .array(
+          z.object({
+            x: z.string().optional(),
+            y: z.string().optional(),
+            z: z.string().optional(),
+            title: z.string().optional(),
+          }),
+        )
+        .optional(),
+      result: z.record(z.string(), z.unknown()).optional(),
     })
     .optional(),
 
@@ -956,6 +967,13 @@ export function packProjectFile(input: {
     solverKey: string
     solverOptions: Record<string, unknown>
     solverOptionsByKey?: Record<string, Record<string, unknown>>
+    charts?: Array<{
+      x?: string | undefined
+      y?: string | undefined
+      z?: string | undefined
+      title?: string | undefined
+    }>
+    result?: Record<string, unknown>
   }
   documentVersions: ModelicaVersion[]
   currentVersionIndex: number
@@ -976,6 +994,8 @@ export function packProjectFile(input: {
       solverId: solverIdFromKey(input.sim.solverKey),
       solverOptions: input.sim.solverOptions,
       solverOptionsByKey: input.sim.solverOptionsByKey,
+      charts: input.sim.charts,
+      result: input.sim.result,
     },
     documentVersions:
       input.documentVersions as unknown as TyModelicaProjectFileV1['documentVersions'],
@@ -999,6 +1019,13 @@ export function unpackProjectFile(
     solverKey?: string
     solverOptions?: Record<string, unknown>
     solverOptionsByKey?: Record<string, Record<string, unknown>>
+    charts?: Array<{
+      x?: string | undefined
+      y?: string | undefined
+      z?: string | undefined
+      title?: string | undefined
+    }>
+    result?: Record<string, unknown>
   }
   documentVersions?: ModelicaVersion[]
   currentVersionIndex?: number
@@ -1031,6 +1058,12 @@ export function unpackProjectFile(
     }
     if (pf.sim.solverOptionsByKey && typeof pf.sim.solverOptionsByKey === 'object') {
       out.sim.solverOptionsByKey = pf.sim.solverOptionsByKey
+    }
+    if (Array.isArray(pf.sim.charts)) {
+      out.sim.charts = pf.sim.charts
+    }
+    if (pf.sim.result && typeof pf.sim.result === 'object') {
+      out.sim.result = pf.sim.result
     }
   }
 

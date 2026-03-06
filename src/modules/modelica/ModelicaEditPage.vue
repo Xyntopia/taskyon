@@ -18,6 +18,7 @@
           hide-tab-close
           :tab-icons="{
             simulate: matPlayArrow,
+            plot: matShowChart,
             template: matCode,
             uiTemplate: matCode,
             solver: matCode,
@@ -49,6 +50,17 @@
               :has-ui-template="hasUiTemplate"
               :is-html-output="isHtmlOutput"
               :running="running"
+              :simulation-controls-open="showSolverOptionsDialog"
+              :sim-t0="simT0"
+              :sim-tf="simTf"
+              :sim-dt="simDt"
+              :selected-solver-key="selectedSolverKey"
+              :predicted-steps="predictedStepCount"
+              :actual-steps="actualStepCount"
+              :event-count="actualEventCount"
+              :has-result="hasSimulationResult"
+              :solver-options="solverOptions"
+              :solver-options-schema="solverOptionsSchema"
               @project-selected="onProjectSelected"
               @create-project="createNewProjectDialog"
               @refresh-projects="refreshAvailableProjects"
@@ -71,6 +83,12 @@
               @run-sandbox="handleRunInSandbox"
               @open-popup="openGeneratedHtmlPopup"
               @stop-execution="stopExecution"
+              @update:simulation-controls-open="showSolverOptionsDialog = $event"
+              @update:sim-t0="simT0 = Number($event)"
+              @update:sim-tf="simTf = Number($event)"
+              @update:sim-dt="simDt = Number($event)"
+              @update:solver-options="solverOptions = $event"
+              @reset-sim-from-model="resetSimulationSettingsFromModelAnnotations"
               @update:project-menu-options="onProjectMenuOptionsUpdate"
               @update:library-menu-options="onLibraryMenuOptionsUpdate"
               @update:runtime-menu-options="onRuntimeMenuOptionsUpdate"
@@ -428,6 +446,14 @@
             </q-card>
           </template>
 
+          <template #plot>
+            <q-card flat>
+              <q-card-section>
+                <ObjectPathCharts v-model="plotCharts" :source="executionResult" />
+              </q-card-section>
+            </q-card>
+          </template>
+
           <template #assistant>
             <TaskyonIframe
               :tools="tools"
@@ -440,42 +466,16 @@
       </FixedHeightPage>
     </q-page-container>
 
-    <!-- Solver options dialog -->
-    <q-dialog v-model="showSolverOptionsDialog">
-      <q-card style="min-width: 800px; max-width: 95vw">
-        <q-card-section class="row items-center">
-          <div class="text-subtitle1">Solver Options</div>
-          <q-space />
-          <q-btn v-close-popup flat dense :icon="matClose" />
-        </q-card-section>
-        <q-separator />
-        <q-card-section>
-          <div class="text-caption text-grey-7 q-mb-sm">
-            Options are solver-defined. Defaults are taken from the solver JSON schema.
-          </div>
-          <ObjectView
-            v-model="solverOptions"
-            missing-mode="placeholders"
-            copy-btn
-            :schema="solverOptionsSchema"
-          />
-          <q-separator class="q-my-md" />
-        </q-card-section>
-        <q-card-actions align="right">
-          <q-btn v-close-popup flat label="Close" />
-        </q-card-actions>
-      </q-card>
-    </q-dialog>
   </q-layout>
 </template>
 
 <script setup lang="ts">
 import {
-  matClose,
   matCode,
   matDescription,
   matPlayArrow,
   matRocketLaunch,
+  matShowChart,
 } from '@quasar/extras/material-icons'
 import { mdiFunctionVariant } from '@quasar/extras/mdi-v6'
 import { toolCall } from '@taskyon/taskyon'
@@ -520,8 +520,15 @@ import { createModelicatools } from './modelicaTools'
 import { useProjectFileStore } from './useProjectFileStore'
 import { useModelicaLibraries } from './useModelicaLibraries'
 import { useSolverRegistry } from './useSolverRegistry'
+import ObjectPathCharts from '../../../packages/shared/components/ObjectPathCharts.vue'
 
 type StatusType = 'loading' | 'success' | 'error' | ''
+type PlotChartSelection = {
+  x?: string | undefined
+  y?: string | undefined
+  z?: string | undefined
+  title?: string | undefined
+}
 
 const modelicaSource = ref('')
 const templateSource = ref('')
@@ -544,6 +551,7 @@ const rumocaWasmBuildTimeUtc = ref('unknown')
 const simT0 = ref(0)
 const simTf = ref(5)
 const simDt = ref(0.01)
+const allowApplySolverSimDefaults = ref(true)
 
 const {
   useModelicaStandardLibrary,
@@ -578,11 +586,141 @@ const {
   simT0,
   simTf,
   simDt,
+  allowApplySolverSimDefaults,
 })
 
 const executionResult = ref<Record<string, unknown>>({})
+const plotCharts = ref<PlotChartSelection[]>([])
+const hasHydratedSimulationSettings = ref(false)
+const applyingSimHints = ref(false)
 const running = ref(false)
 const abortController = ref<AbortController | null>(null)
+
+const hasSimulationResult = computed(
+  () => !!executionResult.value && Object.keys(executionResult.value).length > 0,
+)
+
+const predictedStepCount = computed(() => {
+  const t0 = Number(simT0.value)
+  const tf = Number(simTf.value)
+  const dt = Number(simDt.value)
+  if (!Number.isFinite(t0) || !Number.isFinite(tf) || !Number.isFinite(dt) || dt <= 0 || tf < t0) return 0
+  return Math.max(1, Math.floor((tf - t0) / dt) + 1)
+})
+
+const actualStepCount = computed<number | null>(() => {
+  const meta =
+    executionResult.value.meta && typeof executionResult.value.meta === 'object'
+      ? (executionResult.value.meta as Record<string, unknown>)
+      : {}
+  if (typeof meta.nSteps === 'number' && Number.isFinite(meta.nSteps)) return meta.nSteps
+  const data =
+    executionResult.value.data && typeof executionResult.value.data === 'object'
+      ? (executionResult.value.data as Record<string, unknown>)
+      : {}
+  return Array.isArray(data.t) ? data.t.length : null
+})
+
+const actualEventCount = computed<number | null>(() => {
+  const meta =
+    executionResult.value.meta && typeof executionResult.value.meta === 'object'
+      ? (executionResult.value.meta as Record<string, unknown>)
+      : {}
+  if (typeof meta.eventCount === 'number' && Number.isFinite(meta.eventCount)) return meta.eventCount
+  if (Array.isArray(meta.events)) return meta.events.length
+  if (Array.isArray(meta.eventTimes)) return meta.eventTimes.length
+  return null
+})
+
+function hasExplicitSimulationSettings(sim: {
+  t0?: number
+  tf?: number
+  dt?: number
+  solverKey?: string
+  solverOptions?: Record<string, unknown>
+  solverOptionsByKey?: Record<string, Record<string, unknown>>
+  charts?: PlotChartSelection[]
+  result?: Record<string, unknown>
+}): boolean {
+  return (
+    't0' in sim ||
+    'tf' in sim ||
+    'dt' in sim ||
+    'solverKey' in sim ||
+    'solverOptions' in sim ||
+    'solverOptionsByKey' in sim
+  )
+}
+
+function extractSimulationHintsFromModelica(source: string): {
+  t0?: number | undefined
+  tf?: number | undefined
+  dt?: number | undefined
+} {
+  const text = String(source || '')
+  const annotationMatch = text.match(/annotation\s*\(\s*experiment\s*\(([\s\S]*?)\)\s*\)\s*;/im)
+  if (!annotationMatch) return {}
+  const body = annotationMatch[1] ?? ''
+  const num = '[-+]?\\d*\\.?\\d+(?:[eE][-+]?\\d+)?'
+  const read = (name: string): number | undefined => {
+    const match = body.match(new RegExp(`\\b${name}\\s*=\\s*(${num})\\b`, 'i'))
+    if (!match?.[1]) return undefined
+    const parsed = Number(match[1])
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+
+  const t0 = read('StartTime')
+  const tf = read('StopTime')
+  const interval = read('Interval')
+  const nIntervals = read('NumberOfIntervals')
+  let dt = interval
+
+  if (
+    dt === undefined &&
+    Number.isFinite(t0) &&
+    Number.isFinite(tf) &&
+    Number.isFinite(nIntervals) &&
+    (nIntervals ?? 0) > 0
+  ) {
+    dt = (tf! - t0!) / nIntervals!
+  }
+
+  return {
+    ...(Number.isFinite(t0) ? { t0 } : {}),
+    ...(Number.isFinite(tf) ? { tf } : {}),
+    ...(Number.isFinite(dt) && (dt ?? 0) > 0 ? { dt } : {}),
+  }
+}
+
+function applySimulationHintsFromModelica(source: string, options?: { force?: boolean }): boolean {
+  if (!options?.force && hasHydratedSimulationSettings.value) return false
+  const hints = extractSimulationHintsFromModelica(source)
+  const hasAnyHint =
+    Number.isFinite(hints.t0) || Number.isFinite(hints.tf) || Number.isFinite(hints.dt)
+  if (!hasAnyHint) return false
+
+  applyingSimHints.value = true
+  try {
+    if (Number.isFinite(hints.t0)) simT0.value = hints.t0!
+    if (Number.isFinite(hints.tf)) simTf.value = hints.tf!
+    if (Number.isFinite(hints.dt) && hints.dt! > 0) simDt.value = hints.dt!
+    hasHydratedSimulationSettings.value = true
+    allowApplySolverSimDefaults.value = false
+  } finally {
+    applyingSimHints.value = false
+  }
+  return true
+}
+
+function resetSimulationSettingsFromModelAnnotations() {
+  const applied = applySimulationHintsFromModelica(modelicaSource.value, { force: true })
+  if (!applied) {
+    Notify.create({
+      type: 'warning',
+      message: 'No annotation(experiment(...)) defaults found in current Modelica model.',
+    })
+  }
+}
 
 function normalizeSimulationResultForDisplay(
   result: Record<string, unknown>,
@@ -767,7 +905,7 @@ function createDefaultLayout(): DockNode {
                 id: 'simulation',
                 type: 'leaf',
                 size: 85,
-                views: ['model', 'simulate'],
+                views: ['model', 'simulate', 'plot'],
                 activeViewIndex: 0,
               },
             ],
@@ -798,6 +936,25 @@ function createDefaultLayout(): DockNode {
 }
 
 const initialLayout = ref<DockNode>(createDefaultLayout())
+
+function ensurePlotViewInLayout(node: DockNode) {
+  if (node.type === 'leaf') {
+    const views = Array.isArray(node.views) ? node.views : []
+    const hasSimulate = views.includes('simulate')
+    const hasPlot = views.includes('plot')
+    if (hasSimulate && !hasPlot) {
+      const nextViews = [...views]
+      const simulateIndex = nextViews.indexOf('simulate')
+      if (simulateIndex >= 0) nextViews.splice(simulateIndex + 1, 0, 'plot')
+      else nextViews.push('plot')
+      node.views = nextViews
+    }
+    return
+  }
+  if (node.type === 'container' && Array.isArray(node.children)) {
+    for (const child of node.children) ensurePlotViewInLayout(child)
+  }
+}
 
 const jinjaTemplateUrls = import.meta.glob('src/modules/modelica/*.jinja', {
   query: '?raw',
@@ -1009,6 +1166,8 @@ function packProjectFile(): TyModelicaProjectFileV1 {
       solverKey: selectedSolverKey.value,
       solverOptions: solverOptions.value,
       solverOptionsByKey: solverOptionsByKey.value,
+      charts: plotCharts.value,
+      result: executionResult.value,
     },
     documentVersions: documentVersions.value,
     currentVersionIndex: currentVersionIndex.value,
@@ -1017,6 +1176,10 @@ function packProjectFile(): TyModelicaProjectFileV1 {
 
 function applyProjectFile(pf: TyModelicaProjectFileV1) {
   const state = unpackProjectFile(pf, builtinSolvers)
+  plotCharts.value = []
+  executionResult.value = {}
+  hasHydratedSimulationSettings.value = hasExplicitSimulationSettings(state.sim)
+  allowApplySolverSimDefaults.value = !hasHydratedSimulationSettings.value
   modelicaSource.value = state.modelicaSource
   uiTemplates.value = state.uiTemplates
   selectedUiTemplateId.value = state.selectedUiTemplateId
@@ -1027,6 +1190,13 @@ function applyProjectFile(pf: TyModelicaProjectFileV1) {
   if (typeof state.sim.solverKey === 'string') selectedSolverKey.value = state.sim.solverKey
   if (state.sim.solverOptionsByKey) solverOptionsByKey.value = state.sim.solverOptionsByKey
   if (state.sim.solverOptions) solverOptions.value = state.sim.solverOptions
+  if (Array.isArray(state.sim.charts)) plotCharts.value = state.sim.charts
+  if (state.sim.result && typeof state.sim.result === 'object') {
+    executionResult.value = state.sim.result
+  }
+  if (!hasHydratedSimulationSettings.value) {
+    applySimulationHintsFromModelica(state.modelicaSource, { force: true })
+  }
   if (state.documentVersions) documentVersions.value = state.documentVersions
   if (typeof state.currentVersionIndex === 'number') {
     currentVersionIndex.value = state.currentVersionIndex
@@ -1242,12 +1412,17 @@ watch(
   { deep: true },
 )
 
+watch([simT0, simTf, simDt], () => {
+  if (isHydratingState.value || applyingSimHints.value) return
+  hasHydratedSimulationSettings.value = true
+  allowApplySolverSimDefaults.value = false
+})
+
 // ---------- Compile Modelica → JS & DAE via new API ----------
 const runCompilation = async (): Promise<{ ok: boolean; message?: string }> => {
   loading.value = true
   output.value = ''
   statusType.value = 'loading'
-  executionResult.value = {}
   try {
     const result = await compileModelicaToJs({
       wasm: wasm.value,
@@ -1326,6 +1501,8 @@ const clearAll = () => {
   daeJsonOutput.value = {}
   daePrettyOutput.value = ''
   executionResult.value = {}
+  plotCharts.value = []
+  hasHydratedSimulationSettings.value = false
   modelicaLog.value = []
 }
 
@@ -1344,9 +1521,11 @@ const exampleModels = {
   when h <= radius then
     reinit(v, -c*pre(v));
   end when;
- end BouncingBall;`,
+ annotation(experiment(StartTime = 0, StopTime = 3, Interval = 0.01));
+end BouncingBall;`,
   resistorMsl: `model MslResistorExample
   extends Modelica.Electrical.Analog.Examples.Resistor;
+  annotation(experiment(StartTime = 0, StopTime = 1, Interval = 0.0005));
 end MslResistorExample;`,
   orbit: `model SatelliteOrbit2D
   parameter Real mu = 398600.4418;
@@ -1379,12 +1558,14 @@ equation
   inv_ecc = sqrt(inv_ex * inv_ex + inv_ey * inv_ey);
   der(vx) = -mu * rx / (inv_r ^ 3);
   der(vy) = -mu * ry / (inv_r ^ 3);
+  annotation(experiment(StartTime = 0, StopTime = 6000, Interval = 1));
 end SatelliteOrbit2D;`,
 } as const
 
 const applyExample = async (choice: unknown) => {
   const key = String(choice) as keyof typeof exampleModels
   modelicaSource.value = exampleModels[key] ?? exampleModels.bouncingBall
+  applySimulationHintsFromModelica(modelicaSource.value)
 
   // select template that contains "javascript"
   const sel = Object.keys(jinjaTemplateUrls).find((tplKey) => tplKey.includes('javascript.jinja'))
@@ -1561,6 +1742,7 @@ onMounted(async () => {
     showAllInPrompt,
     currentProjectId,
   })
+  ensurePlotViewInLayout(initialLayout.value)
 
   // 2) Project file (model-specific). One JSON object, synced via OPFS.
   //    Folder name depends on the selected project.
@@ -1580,6 +1762,10 @@ onMounted(async () => {
       uiTemplates.value = { default: defaultUiTemplateSource }
       selectedUiTemplateId.value = 'default'
       modelicaSource.value = ''
+      plotCharts.value = []
+      executionResult.value = {}
+      hasHydratedSimulationSettings.value = false
+      allowApplySolverSimDefaults.value = true
 
       // Ensure we always have at least one version snapshot
       if (documentVersions.value.length === 0) {
@@ -1593,6 +1779,10 @@ onMounted(async () => {
     uiTemplates.value = { default: defaultUiTemplateSource }
     selectedUiTemplateId.value = 'default'
     modelicaSource.value = ''
+    plotCharts.value = []
+    executionResult.value = {}
+    hasHydratedSimulationSettings.value = false
+    allowApplySolverSimDefaults.value = true
     projectFile.value = packProjectFile()
   }
 
@@ -1615,6 +1805,8 @@ onMounted(async () => {
       simDt,
       selectedSolverKey,
       solverOptionsByKey,
+      plotCharts,
+      executionResult,
       documentVersions,
       currentVersionIndex,
     ],

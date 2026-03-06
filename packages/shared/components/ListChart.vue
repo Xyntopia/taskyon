@@ -1,6 +1,6 @@
-<!-- src/components/ListChart.vue -->
+<!-- packages/shared/components/ListChart.vue -->
 <template>
-  <div class="column q-gutter-sm">
+  <div class="list-chart column q-gutter-sm">
     <!-- Chart type buttons -->
     <div class="row q-gutter-xs items-center">
       <template v-if="is1D">
@@ -19,6 +19,26 @@
           :color="chartType === 'bar' ? 'primary' : 'grey'"
           label="Bar"
           @click="chartType = 'bar'"
+        />
+        <q-btn dense flat :icon="matFullscreen" size="sm" @click="toggleFullscreen" />
+      </template>
+
+      <template v-else-if="isXYSeries">
+        <q-btn
+          dense
+          outline
+          size="sm"
+          :color="chartType === 'line' ? 'primary' : 'grey'"
+          label="Line"
+          @click="chartType = 'line'"
+        />
+        <q-btn
+          dense
+          outline
+          size="sm"
+          :color="chartType === 'scatter' ? 'primary' : 'grey'"
+          label="Scatter"
+          @click="chartType = 'scatter'"
         />
         <q-btn dense flat :icon="matFullscreen" size="sm" @click="toggleFullscreen" />
       </template>
@@ -42,8 +62,8 @@
       ref="chartEl"
       :style="{
         width: '100%',
-        minHeight: isFullscreen ? '90vh' : '220px',
-        maxHeight: isFullscreen ? '90vh' : '320px',
+        maxWidth: '100%',
+        height: isFullscreen ? '90vh' : '260px',
       }"
     />
   </div>
@@ -52,7 +72,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import * as echarts from 'echarts/core'
-import { LineChart, BarChart, HeatmapChart } from 'echarts/charts'
+import { LineChart, BarChart, HeatmapChart, ScatterChart } from 'echarts/charts'
 import {
   GridComponent,
   TooltipComponent,
@@ -66,6 +86,7 @@ echarts.use([
   LineChart,
   BarChart,
   HeatmapChart,
+  ScatterChart,
   GridComponent,
   TooltipComponent,
   VisualMapComponent,
@@ -89,6 +110,12 @@ type SparseHeatmapValuePayload = {
   points: Array<{ x: number; y: number; v: number }>
 }
 
+type XYSeriesValuePayload = {
+  kind: 'xy-series'
+  xValues: number[]
+  yValues: number[]
+}
+
 const props = defineProps<{
   value: unknown
   title?: string
@@ -106,7 +133,7 @@ const chartEl = ref<HTMLDivElement | null>(null)
 let chart: echarts.ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
 
-const chartType = ref<'line' | 'bar' | 'heatmap'>('bar')
+const chartType = ref<'line' | 'bar' | 'heatmap' | 'scatter'>('bar')
 
 const is2D = computed(() => {
   const v = props.value
@@ -125,13 +152,23 @@ const isSparseHeatmap = computed(() => {
   )
 })
 
+const isXYSeries = computed(() => {
+  const v = props.value
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return false
+  const payload = v as Partial<XYSeriesValuePayload>
+  return (
+    payload.kind === 'xy-series' && Array.isArray(payload.xValues) && Array.isArray(payload.yValues)
+  )
+})
+
 const is1D = computed(() => {
   const v = props.value
-  return Array.isArray(v) && !is2D.value && !isSparseHeatmap.value
+  return Array.isArray(v) && !is2D.value && !isSparseHeatmap.value && !isXYSeries.value
 })
 
 const description = computed(() => {
   if (isSparseHeatmap.value) return 'Sparse XY points visualized as heatmap'
+  if (isXYSeries.value) return 'XY numeric series'
   if (is2D.value) return '2D numeric array visualized as heatmap'
   if (is1D.value) return '1D numeric array'
   return 'Unsupported data for chart'
@@ -176,6 +213,20 @@ const normalizedSparseHeatmap = computed<{
   }
 })
 
+const normalizedXYSeries = computed<Array<[number, number]>>(() => {
+  if (!isXYSeries.value) return []
+  const payload = props.value as XYSeriesValuePayload
+  const len = Math.min(payload.xValues.length, payload.yValues.length)
+  const points: Array<[number, number]> = []
+  for (let i = 0; i < len; i += 1) {
+    const x = Number(payload.xValues[i])
+    const y = Number(payload.yValues[i])
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+    points.push([x, y])
+  }
+  return points
+})
+
 // Normalize 1D data: number[]
 const normalized1D = computed<number[]>(() => {
   if (!is1D.value) return []
@@ -196,6 +247,58 @@ const normalized2D = computed<number[][]>(() => {
 })
 
 const buildOption = (): echarts.EChartsCoreOption => {
+  if (isXYSeries.value) {
+    const points = normalizedXYSeries.value
+    const seriesType = chartType.value === 'scatter' ? 'scatter' : 'line'
+
+    return {
+      tooltip: { trigger: 'axis' },
+      grid: {
+        left: 40,
+        right: 10,
+        top: 20,
+        bottom: 70,
+      },
+      title: props.title ? { text: props.title, left: 'center' } : undefined,
+      xAxis: {
+        type: 'value',
+        scale: true,
+        name: axisLabel(props.xAxis),
+        nameLocation: 'middle',
+        nameGap: 30,
+      },
+      yAxis: {
+        type: 'value',
+        scale: true,
+        name: axisLabel(props.yAxis),
+        nameLocation: 'middle',
+        nameGap: 40,
+      },
+      dataZoom: [
+        {
+          type: 'inside',
+          xAxisIndex: 0,
+          filterMode: 'weakFilter',
+          throttle: 50,
+        },
+        {
+          type: 'slider',
+          xAxisIndex: 0,
+          height: 32,
+          bottom: 20,
+        },
+      ],
+      series: {
+        type: seriesType,
+        data: points,
+        showSymbol: seriesType === 'scatter',
+        symbolSize: seriesType === 'scatter' ? 5 : 3,
+        smooth: seriesType === 'line',
+        sampling: seriesType === 'line' ? 'lttb' : undefined,
+      },
+    }
+  }
+
   if (isSparseHeatmap.value) {
     const { xLabels, yLabels, data } = normalizedSparseHeatmap.value
     const vMin = data.length ? Math.min(...data.map((d) => d[2])) : 0
@@ -430,6 +533,7 @@ onMounted(() => {
     }
   })
   resizeObserver.observe(chartEl.value)
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
 })
 
 watch(
@@ -441,6 +545,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
   if (resizeObserver && chartEl.value) {
     resizeObserver.unobserve(chartEl.value)
     resizeObserver.disconnect()
@@ -453,18 +558,27 @@ onBeforeUnmount(() => {
 
 const isFullscreen = ref(false)
 
+const handleFullscreenChange = () => {
+  isFullscreen.value = document.fullscreenElement === chartEl.value
+  requestAnimationFrame(() => chart?.resize())
+}
+
 const toggleFullscreen = async () => {
   if (!chartEl.value) return
 
-  if (!document.fullscreenElement) {
-    await chartEl.value.requestFullscreen()
-    isFullscreen.value = true
-  } else {
+  if (document.fullscreenElement === chartEl.value) {
     await document.exitFullscreen()
-    isFullscreen.value = false
+  } else if (!document.fullscreenElement) {
+    await chartEl.value.requestFullscreen()
   }
-
-  // ECharts MUST be resized after fullscreen change
-  setTimeout(() => chart?.resize(), 0)
 }
 </script>
+
+<style scoped>
+.list-chart {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+</style>

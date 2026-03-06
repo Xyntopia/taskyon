@@ -287,9 +287,9 @@ import { countLeaves } from 'src/modules/utils'
 
 import FieldView from './FieldView.vue'
 import JsonInput from './JsonInput.vue'
-import ListChart from './ListChart.vue'
 import InfoDialog from '../InfoDialog.vue'
 import type { VariableNode } from './useVariableGraph'
+import ListChart from '../../../packages/shared/components/ListChart.vue'
 
 export type CustomRenderer = {
   match: (node: VariableNode) => boolean

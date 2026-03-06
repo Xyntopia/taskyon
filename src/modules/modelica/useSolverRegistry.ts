@@ -13,6 +13,7 @@ export function useSolverRegistry(params: {
   simT0: Ref<number>
   simTf: Ref<number>
   simDt: Ref<number>
+  allowApplySolverSimDefaults?: Ref<boolean>
 }) {
   const solverOptionsSchema = ref<Record<string, unknown> | undefined>(undefined)
   const selectedSolverKey = ref<string>('builtin:default')
@@ -121,7 +122,7 @@ export function useSolverRegistry(params: {
       if (refreshId !== solverMetadataRefreshId) return
       solverOptionsSchema.value = schema
 
-      if (simDefaults && typeof simDefaults === 'object') {
+      if (simDefaults && typeof simDefaults === 'object' && params.allowApplySolverSimDefaults?.value !== false) {
         if (typeof simDefaults.t0 === 'number') params.simT0.value = simDefaults.t0
         if (typeof simDefaults.tf === 'number') params.simTf.value = simDefaults.tf
         if (typeof simDefaults.dt === 'number') params.simDt.value = simDefaults.dt
