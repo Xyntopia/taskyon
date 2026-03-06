@@ -2,7 +2,7 @@
 <template>
   <div class="list-chart column q-gutter-sm">
     <!-- Chart type buttons -->
-    <div class="row q-gutter-xs items-center">
+    <div v-if="showControls" class="row q-gutter-xs items-center">
       <template v-if="is1D">
         <q-btn
           dense
@@ -63,7 +63,7 @@
       :style="{
         width: '100%',
         maxWidth: '100%',
-        height: isFullscreen ? '90vh' : '260px',
+        height: isFullscreen ? '90vh' : chartHeightResolved,
       }"
     />
   </div>
@@ -78,6 +78,7 @@ import {
   TooltipComponent,
   VisualMapComponent,
   DataZoomComponent,
+  GraphicComponent,
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { matFullscreen } from '@quasar/extras/material-icons'
@@ -92,10 +93,11 @@ echarts.use([
   VisualMapComponent,
   CanvasRenderer,
   DataZoomComponent,
+  GraphicComponent,
 ])
 
 const axisLabel = (a?: { label?: string; unit?: string }) =>
-  a?.unit ? `${a.label ?? ''} [${a.unit}]` : a?.label
+  showAxisUnits.value && a?.unit ? `${a.label ?? ''} [${a.unit}]` : a?.label
 const formatAxisValue = (n: number): string => {
   if (!Number.isFinite(n)) return String(n)
   if (Number.isInteger(n)) return String(n)
@@ -119,6 +121,11 @@ type XYSeriesValuePayload = {
 const props = defineProps<{
   value: unknown
   title?: string
+  showControls?: boolean
+  enableDataZoom?: boolean
+  showAxisTicks?: boolean
+  showAxisUnits?: boolean
+  chartHeight?: string | number
   xAxis?: {
     label?: string
     unit?: string
@@ -128,6 +135,38 @@ const props = defineProps<{
     unit?: string
   }
 }>()
+
+const showControls = computed(() => props.showControls !== false)
+const enableDataZoom = computed(() => props.enableDataZoom !== false)
+const showAxisTicks = computed(() => props.showAxisTicks !== false)
+const showAxisUnits = computed(() => props.showAxisUnits !== false)
+const isCompactPreview = computed(
+  () => !showControls.value && !enableDataZoom.value && !showAxisTicks.value,
+)
+const xAxisNameGap = computed(() => (isCompactPreview.value ? 14 : 30))
+const yAxisNameGap = computed(() => (isCompactPreview.value ? 20 : 40))
+const cartesianGrid = computed(() => ({
+  left: isCompactPreview.value ? 34 : 40,
+  right: 10,
+  top: isCompactPreview.value ? 10 : 20,
+  bottom: enableDataZoom.value ? 70 : isCompactPreview.value ? 24 : 56,
+}))
+const heatmapGrid = computed(() =>
+  isCompactPreview.value
+    ? {
+        left: 34,
+        right: 10,
+        top: 10,
+        bottom: 24,
+      }
+    : { height: '75%', top: '10%' },
+)
+const chartHeightResolved = computed(() => {
+  const raw = props.chartHeight
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return `${raw}px`
+  if (typeof raw === 'string' && raw.trim().length > 0) return raw
+  return '260px'
+})
 
 const chartEl = ref<HTMLDivElement | null>(null)
 let chart: echarts.ECharts | null = null
@@ -246,6 +285,28 @@ const normalized2D = computed<number[][]>(() => {
   )
 })
 
+const xAxisTitleText = computed(() => axisLabel(props.xAxis) ?? '')
+const useBottomXAxisTitle = computed(() => enableDataZoom.value && !isCompactPreview.value)
+const xAxisNameValue = computed(() => (useBottomXAxisTitle.value ? '' : xAxisTitleText.value))
+const bottomXAxisTitleGraphic = computed<echarts.EChartsCoreOption['graphic']>(() => {
+  if (!useBottomXAxisTitle.value) return undefined
+  const text = String(xAxisTitleText.value || '').trim()
+  if (!text) return undefined
+  return [
+    {
+      type: 'text',
+      left: 'center',
+      bottom: 0,
+      silent: true,
+      style: {
+        text,
+        fill: '#666',
+        font: '12px sans-serif',
+      },
+    },
+  ]
+})
+
 const buildOption = (): echarts.EChartsCoreOption => {
   if (isXYSeries.value) {
     const points = normalizedXYSeries.value
@@ -253,40 +314,42 @@ const buildOption = (): echarts.EChartsCoreOption => {
 
     return {
       tooltip: { trigger: 'axis' },
-      grid: {
-        left: 40,
-        right: 10,
-        top: 20,
-        bottom: 70,
-      },
+      grid: cartesianGrid.value,
+      graphic: bottomXAxisTitleGraphic.value,
       title: props.title ? { text: props.title, left: 'center' } : undefined,
       xAxis: {
         type: 'value',
         scale: true,
-        name: axisLabel(props.xAxis),
+        axisLabel: { show: showAxisTicks.value },
+        name: xAxisNameValue.value,
         nameLocation: 'middle',
-        nameGap: 30,
+        nameGap: xAxisNameGap.value,
       },
       yAxis: {
         type: 'value',
         scale: true,
+        axisLabel: { show: showAxisTicks.value },
         name: axisLabel(props.yAxis),
         nameLocation: 'middle',
-        nameGap: 40,
+        nameGap: yAxisNameGap.value,
       },
       dataZoom: [
-        {
-          type: 'inside',
-          xAxisIndex: 0,
-          filterMode: 'weakFilter',
-          throttle: 50,
-        },
-        {
-          type: 'slider',
-          xAxisIndex: 0,
-          height: 32,
-          bottom: 20,
-        },
+        ...(enableDataZoom.value
+          ? [
+              {
+                type: 'inside',
+                xAxisIndex: 0,
+                filterMode: 'weakFilter',
+                throttle: 50,
+              },
+              {
+                type: 'slider',
+                xAxisIndex: 0,
+                height: 32,
+                bottom: 20,
+              },
+            ]
+          : []),
       ],
       series: {
         type: seriesType,
@@ -317,25 +380,28 @@ const buildOption = (): echarts.EChartsCoreOption => {
           return `x: ${x}<br/>y: ${y}<br/>value: ${v}`
         },
       },
-      grid: { height: '75%', top: '10%' },
+      grid: heatmapGrid.value,
+      graphic: bottomXAxisTitleGraphic.value,
       title: props.title ? { text: props.title, left: 'center' } : undefined,
 
       xAxis: {
         type: 'category',
         data: xLabels,
-        name: axisLabel(props.xAxis),
+        axisLabel: { show: showAxisTicks.value },
+        name: xAxisNameValue.value,
         nameLocation: 'middle',
-        nameGap: 30,
+        nameGap: xAxisNameGap.value,
         splitArea: { show: false },
       },
 
       yAxis: {
         type: 'category',
         data: yLabels,
+        axisLabel: { show: showAxisTicks.value },
         splitArea: { show: false },
         name: axisLabel(props.yAxis),
         nameLocation: 'middle',
-        nameGap: 40,
+        nameGap: yAxisNameGap.value,
       },
       visualMap: {
         min: vMin,
@@ -346,18 +412,22 @@ const buildOption = (): echarts.EChartsCoreOption => {
         bottom: 10,
       },
       dataZoom: [
-        {
-          type: 'inside',
-          xAxisIndex: 0,
-          filterMode: 'weakFilter',
-          throttle: 50,
-        },
-        {
-          type: 'slider',
-          xAxisIndex: 0,
-          height: 18,
-          bottom: 5,
-        },
+        ...(enableDataZoom.value
+          ? [
+              {
+                type: 'inside',
+                xAxisIndex: 0,
+                filterMode: 'weakFilter',
+                throttle: 50,
+              },
+              {
+                type: 'slider',
+                xAxisIndex: 0,
+                height: 18,
+                bottom: 5,
+              },
+            ]
+          : []),
       ],
       series: [
         {
@@ -393,25 +463,28 @@ const buildOption = (): echarts.EChartsCoreOption => {
 
     return {
       tooltip: { position: 'top' },
-      grid: { height: '75%', top: '10%' },
+      grid: heatmapGrid.value,
+      graphic: bottomXAxisTitleGraphic.value,
       title: props.title ? { text: props.title, left: 'center' } : undefined,
 
       xAxis: {
         type: 'category',
         data: Array.from({ length: colCount }, (_, i) => String(i)),
-        name: axisLabel(props.xAxis),
+        axisLabel: { show: showAxisTicks.value },
+        name: xAxisNameValue.value,
         nameLocation: 'middle',
-        nameGap: 30,
+        nameGap: xAxisNameGap.value,
         splitArea: { show: false },
       },
 
       yAxis: {
         type: 'category',
         data: Array.from({ length: rowCount }, (_, i) => String(i)),
+        axisLabel: { show: showAxisTicks.value },
         splitArea: { show: false },
         name: axisLabel(props.yAxis),
         nameLocation: 'middle',
-        nameGap: 40,
+        nameGap: yAxisNameGap.value,
       },
       visualMap: {
         min: data.length ? Math.min(...data.map((d) => d[2] ?? 0)) : 0,
@@ -422,18 +495,22 @@ const buildOption = (): echarts.EChartsCoreOption => {
         bottom: 10,
       },
       dataZoom: [
-        {
-          type: 'inside',
-          xAxisIndex: 0,
-          filterMode: 'weakFilter',
-          throttle: 50,
-        },
-        {
-          type: 'slider',
-          xAxisIndex: 0,
-          height: 18,
-          bottom: 5,
-        },
+        ...(enableDataZoom.value
+          ? [
+              {
+                type: 'inside',
+                xAxisIndex: 0,
+                filterMode: 'weakFilter',
+                throttle: 50,
+              },
+              {
+                type: 'slider',
+                xAxisIndex: 0,
+                height: 18,
+                bottom: 5,
+              },
+            ]
+          : []),
       ],
       series: [
         {
@@ -457,41 +534,43 @@ const buildOption = (): echarts.EChartsCoreOption => {
 
     return {
       tooltip: { trigger: 'axis' },
-      grid: {
-        left: 40,
-        right: 10,
-        top: 20,
-        bottom: 70,
-      },
+      grid: cartesianGrid.value,
+      graphic: bottomXAxisTitleGraphic.value,
       title: props.title ? { text: props.title, left: 'center' } : undefined,
       xAxis: {
         type: 'category',
         data: x.map(String),
-        name: axisLabel(props.xAxis),
+        axisLabel: { show: showAxisTicks.value },
+        name: xAxisNameValue.value,
         nameLocation: 'middle',
-        nameGap: 30,
+        nameGap: xAxisNameGap.value,
       },
 
       yAxis: {
         type: 'value',
         scale: true,
+        axisLabel: { show: showAxisTicks.value },
         name: axisLabel(props.yAxis),
         nameLocation: 'middle',
-        nameGap: 40,
+        nameGap: yAxisNameGap.value,
       },
       dataZoom: [
-        {
-          type: 'inside',
-          xAxisIndex: 0,
-          filterMode: 'weakFilter',
-          throttle: 50,
-        },
-        {
-          type: 'slider',
-          xAxisIndex: 0,
-          height: 32,
-          bottom: 20,
-        },
+        ...(enableDataZoom.value
+          ? [
+              {
+                type: 'inside',
+                xAxisIndex: 0,
+                filterMode: 'weakFilter',
+                throttle: 50,
+              },
+              {
+                type: 'slider',
+                xAxisIndex: 0,
+                height: 32,
+                bottom: 20,
+              },
+            ]
+          : []),
       ],
       series: {
         type: chartType.value,

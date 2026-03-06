@@ -449,7 +449,11 @@
           <template #plot>
             <q-card flat>
               <q-card-section>
-                <ObjectPathCharts v-model="plotCharts" :source="executionResult" />
+                <ObjectPathCharts
+                  v-model="plotCharts"
+                  v-model:options="plotViewOptions"
+                  :source="plotSourceData"
+                />
               </q-card-section>
             </q-card>
           </template>
@@ -521,6 +525,7 @@ import { useProjectFileStore } from './useProjectFileStore'
 import { useModelicaLibraries } from './useModelicaLibraries'
 import { useSolverRegistry } from './useSolverRegistry'
 import ObjectPathCharts from '../../../packages/shared/components/ObjectPathCharts.vue'
+import type { ObjectPathChartsViewOptions } from '../../../packages/shared/components/ObjectPathCharts.vue'
 
 type StatusType = 'loading' | 'success' | 'error' | ''
 type PlotChartSelection = {
@@ -529,6 +534,7 @@ type PlotChartSelection = {
   z?: string | undefined
   title?: string | undefined
 }
+type PlotViewOptions = ObjectPathChartsViewOptions
 
 const modelicaSource = ref('')
 const templateSource = ref('')
@@ -591,6 +597,7 @@ const {
 
 const executionResult = ref<Record<string, unknown>>({})
 const plotCharts = ref<PlotChartSelection[]>([])
+const plotViewOptions = ref<PlotViewOptions>({})
 const hasHydratedSimulationSettings = ref(false)
 const applyingSimHints = ref(false)
 const running = ref(false)
@@ -599,6 +606,11 @@ const abortController = ref<AbortController | null>(null)
 const hasSimulationResult = computed(
   () => !!executionResult.value && Object.keys(executionResult.value).length > 0,
 )
+const plotSourceData = computed<Record<string, unknown> | null>(() => {
+  const data = executionResult.value?.data
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+  return data as Record<string, unknown>
+})
 
 const predictedStepCount = computed(() => {
   const t0 = Number(simT0.value)
@@ -1167,6 +1179,7 @@ function packProjectFile(): TyModelicaProjectFileV1 {
       solverOptions: solverOptions.value,
       solverOptionsByKey: solverOptionsByKey.value,
       charts: plotCharts.value,
+      plotViewOptions: plotViewOptions.value,
       result: executionResult.value,
     },
     documentVersions: documentVersions.value,
@@ -1177,6 +1190,7 @@ function packProjectFile(): TyModelicaProjectFileV1 {
 function applyProjectFile(pf: TyModelicaProjectFileV1) {
   const state = unpackProjectFile(pf, builtinSolvers)
   plotCharts.value = []
+  plotViewOptions.value = {}
   executionResult.value = {}
   hasHydratedSimulationSettings.value = hasExplicitSimulationSettings(state.sim)
   allowApplySolverSimDefaults.value = !hasHydratedSimulationSettings.value
@@ -1191,6 +1205,9 @@ function applyProjectFile(pf: TyModelicaProjectFileV1) {
   if (state.sim.solverOptionsByKey) solverOptionsByKey.value = state.sim.solverOptionsByKey
   if (state.sim.solverOptions) solverOptions.value = state.sim.solverOptions
   if (Array.isArray(state.sim.charts)) plotCharts.value = state.sim.charts
+  if (state.sim.plotViewOptions && typeof state.sim.plotViewOptions === 'object') {
+    plotViewOptions.value = state.sim.plotViewOptions
+  }
   if (state.sim.result && typeof state.sim.result === 'object') {
     executionResult.value = state.sim.result
   }
@@ -1502,6 +1519,7 @@ const clearAll = () => {
   daePrettyOutput.value = ''
   executionResult.value = {}
   plotCharts.value = []
+  plotViewOptions.value = {}
   hasHydratedSimulationSettings.value = false
   modelicaLog.value = []
 }
@@ -1806,6 +1824,7 @@ onMounted(async () => {
       selectedSolverKey,
       solverOptionsByKey,
       plotCharts,
+      plotViewOptions,
       executionResult,
       documentVersions,
       currentVersionIndex,
@@ -1817,7 +1836,7 @@ onMounted(async () => {
         console.warn('Failed to pack project file:', e)
       }
     },
-    { debounce: 200, maxWait: 800 },
+    { debounce: 200, maxWait: 800, deep: true },
   )
 
   // 3) WASM

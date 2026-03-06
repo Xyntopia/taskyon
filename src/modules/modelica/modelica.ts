@@ -550,6 +550,12 @@ export const TyModelicaProjectFileV1 = z.object({
           }),
         )
         .optional(),
+      plotViewOptions: z
+        .object({
+          viewMode: z.enum(['full', 'viewOnly', 'thumbnail']).optional(),
+          minimalView: z.boolean().optional(),
+        })
+        .optional(),
       result: z.record(z.string(), z.unknown()).optional(),
     })
     .optional(),
@@ -973,6 +979,10 @@ export function packProjectFile(input: {
       z?: string | undefined
       title?: string | undefined
     }>
+    plotViewOptions?: {
+      viewMode?: 'full' | 'viewOnly' | 'thumbnail' | undefined
+      minimalView?: boolean | undefined
+    }
     result?: Record<string, unknown>
   }
   documentVersions: ModelicaVersion[]
@@ -995,6 +1005,7 @@ export function packProjectFile(input: {
       solverOptions: input.sim.solverOptions,
       solverOptionsByKey: input.sim.solverOptionsByKey,
       charts: input.sim.charts,
+      plotViewOptions: input.sim.plotViewOptions,
       result: input.sim.result,
     },
     documentVersions:
@@ -1025,6 +1036,10 @@ export function unpackProjectFile(
       z?: string | undefined
       title?: string | undefined
     }>
+    plotViewOptions?: {
+      viewMode?: 'full' | 'viewOnly' | 'thumbnail' | undefined
+      minimalView?: boolean | undefined
+    }
     result?: Record<string, unknown>
   }
   documentVersions?: ModelicaVersion[]
@@ -1061,6 +1076,19 @@ export function unpackProjectFile(
     }
     if (Array.isArray(pf.sim.charts)) {
       out.sim.charts = pf.sim.charts
+    }
+    if (pf.sim.plotViewOptions && typeof pf.sim.plotViewOptions === 'object') {
+      const pvo = pf.sim.plotViewOptions
+      const normalizedViewMode =
+        pvo.viewMode === 'full' || pvo.viewMode === 'thumbnail' || pvo.viewMode === 'viewOnly'
+          ? pvo.viewMode
+          : pvo.minimalView
+            ? 'viewOnly'
+            : undefined
+      out.sim.plotViewOptions = {
+        ...pvo,
+        ...(normalizedViewMode ? { viewMode: normalizedViewMode } : {}),
+      }
     }
     if (pf.sim.result && typeof pf.sim.result === 'object') {
       out.sim.result = pf.sim.result

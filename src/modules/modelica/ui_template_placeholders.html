@@ -223,8 +223,28 @@ return [];</textarea
 
         <div style="margin-top: 12px">
           <label for="seriesSelect">Plot series</label>
-          <select id="seriesSelect" style="width: 100%"></select>
-          <div class="hint">Plots time versus selected series using a simple SVG polyline.</div>
+          <div class="row">
+            <select id="seriesSelect" style="flex: 1 1 auto"></select>
+            <button id="axisPlotBtn" type="button" class="secondary">Axis plot</button>
+          </div>
+          <div id="axisPicker" style="display: none; margin-top: 8px">
+            <div class="row">
+              <div style="flex: 1 1 180px">
+                <label for="xAxisSelect">X axis</label>
+                <select id="xAxisSelect" style="width: 100%"></select>
+              </div>
+              <div style="flex: 1 1 180px">
+                <label for="yAxisSelect">Y axis</label>
+                <select id="yAxisSelect" style="width: 100%"></select>
+              </div>
+            </div>
+            <div class="row" style="margin-top: 8px">
+              <button id="applyAxisPlotBtn" type="button" class="secondary">Plot X/Y</button>
+            </div>
+          </div>
+          <div class="hint">
+            Time plot or custom X/Y plot using local model result series.
+          </div>
         </div>
       </section>
 
@@ -299,6 +319,11 @@ return [];</textarea
       const elCsv = document.getElementById('csvBtn')
       const elStatus = document.getElementById('status')
       const elSeries = document.getElementById('seriesSelect')
+      const elAxisPlotBtn = document.getElementById('axisPlotBtn')
+      const elAxisPicker = document.getElementById('axisPicker')
+      const elXAxis = document.getElementById('xAxisSelect')
+      const elYAxis = document.getElementById('yAxisSelect')
+      const elApplyAxisPlot = document.getElementById('applyAxisPlotBtn')
       const elGrid = document.getElementById('grid')
       const elAxes = document.getElementById('axes')
       const elLine = document.getElementById('line')
@@ -390,22 +415,24 @@ return [];</textarea
         setTimeout(() => URL.revokeObjectURL(url), 500)
       }
 
-      function buildSeriesOptions(result, preferredKey) {
-        while (elSeries.firstChild) elSeries.removeChild(elSeries.firstChild)
-
+      function listSeriesKeys(result) {
         const keys = []
         const addGroup = (prefix, obj) => {
           if (!obj) return
           for (const k of Object.keys(obj)) keys.push(prefix + k)
         }
-
         addGroup('x.', result?.data?.x)
         addGroup('y.', result?.data?.y)
         addGroup('u.', result?.data?.u)
         addGroup('c.', result?.data?.c)
         addGroup('z.', result?.data?.z)
-
         keys.sort()
+        return keys
+      }
+
+      function buildSeriesOptions(result, preferredKey) {
+        while (elSeries.firstChild) elSeries.removeChild(elSeries.firstChild)
+        const keys = listSeriesKeys(result)
 
         for (const k of keys) {
           const opt = document.createElement('option')
@@ -421,6 +448,36 @@ return [];</textarea
         return String(nextSelection || '')
       }
 
+      function buildAxisSelectors(result, preferredX, preferredY) {
+        while (elXAxis.firstChild) elXAxis.removeChild(elXAxis.firstChild)
+        while (elYAxis.firstChild) elYAxis.removeChild(elYAxis.firstChild)
+
+        const keys = listSeriesKeys(result)
+        const xKeys = ['t'].concat(keys)
+        const yKeys = keys.slice()
+
+        for (const k of xKeys) {
+          const opt = document.createElement('option')
+          opt.value = k
+          opt.textContent = k === 't' ? 't (time)' : formatSeriesLabel(k)
+          elXAxis.appendChild(opt)
+        }
+        for (const k of yKeys) {
+          const opt = document.createElement('option')
+          opt.value = k
+          opt.textContent = formatSeriesLabel(k)
+          elYAxis.appendChild(opt)
+        }
+
+        const xDefault = xKeys.includes(String(preferredX || 't')) ? String(preferredX || 't') : 't'
+        const yDefault =
+          yKeys.length === 0
+            ? ''
+            : yKeys.includes(String(preferredY || '')) ? String(preferredY || '') : yKeys[0]
+        elXAxis.value = xDefault
+        elYAxis.value = yDefault
+      }
+
       function getSeries(result, key) {
         const t = result?.data?.t || []
         const [grp, ...rest] = String(key || '').split('.')
@@ -428,6 +485,16 @@ return [];</textarea
         const group = result?.data?.[grp] || null
         const y = group?.[name] || []
         return { t, y }
+      }
+
+      function getSeriesValues(result, key) {
+        const k = String(key || '')
+        if (!k) return []
+        if (k === 't') return Array.isArray(result?.data?.t) ? result.data.t : []
+        const [grp, ...rest] = k.split('.')
+        const name = rest.join('.')
+        const group = result?.data?.[grp] || null
+        return Array.isArray(group?.[name]) ? group[name] : []
       }
 
       function getMetaVariableUnit(group, name) {
@@ -508,7 +575,7 @@ return [];</textarea
         }
       }
 
-      function drawAxes(tMin, tMax, yMin, yMax, seriesLabel) {
+      function drawAxes(xMin, xMax, yMin, yMax, titleLabel, xAxisLabel, yAxisLabel) {
         while (elAxes.firstChild) elAxes.removeChild(elAxes.firstChild)
         const plotW = PLOT.width - PLOT.marginLeft - PLOT.marginRight
         const plotH = PLOT.height - PLOT.marginTop - PLOT.marginBottom
@@ -565,7 +632,7 @@ return [];</textarea
           xText.setAttribute('fill', '#9bb0d1')
           xText.setAttribute('font-size', '11')
           xText.setAttribute('text-anchor', 'middle')
-          xText.textContent = formatTick(tMin + frac * (tMax - tMin))
+          xText.textContent = formatTick(xMin + frac * (xMax - xMin))
           elAxes.appendChild(xText)
 
           const yText = makeSvg('text')
@@ -585,7 +652,7 @@ return [];</textarea
         title.setAttribute('font-size', '16')
         title.setAttribute('font-weight', '700')
         title.setAttribute('text-anchor', 'middle')
-        title.textContent = seriesLabel ? `Plot: ${seriesLabel}` : 'Plot'
+        title.textContent = titleLabel ? `Plot: ${titleLabel}` : 'Plot'
         elAxes.appendChild(title)
 
         const xLabel = makeSvg('text')
@@ -594,7 +661,7 @@ return [];</textarea
         xLabel.setAttribute('fill', '#9bb0d1')
         xLabel.setAttribute('font-size', '12')
         xLabel.setAttribute('text-anchor', 'middle')
-        xLabel.textContent = 'Time (t)'
+        xLabel.textContent = xAxisLabel || 'X'
         elAxes.appendChild(xLabel)
 
         const yLabel = makeSvg('text')
@@ -604,58 +671,63 @@ return [];</textarea
         yLabel.setAttribute('font-size', '12')
         yLabel.setAttribute('text-anchor', 'middle')
         yLabel.setAttribute('transform', `rotate(-90 18 ${(y0 + y1) / 2})`)
-        yLabel.textContent = seriesLabel || 'Value'
+        yLabel.textContent = yAxisLabel || 'Y'
         elAxes.appendChild(yLabel)
       }
 
-      function plotSeries(t, y, label) {
+      function plotSeries(xValues, yValues, label, xAxisLabel, yAxisLabel) {
         const plotW = PLOT.width - PLOT.marginLeft - PLOT.marginRight
         const plotH = PLOT.height - PLOT.marginTop - PLOT.marginBottom
 
-        if (!Array.isArray(t) || !Array.isArray(y) || t.length === 0 || y.length === 0) {
+        if (
+          !Array.isArray(xValues) ||
+          !Array.isArray(yValues) ||
+          xValues.length === 0 ||
+          yValues.length === 0
+        ) {
           elLine.setAttribute('points', '')
-          drawAxes(0, 1, 0, 1, label || '')
+          drawAxes(0, 1, 0, 1, label || '', xAxisLabel || 'X', yAxisLabel || 'Y')
           elPlotLabel.textContent = label || ''
           return
         }
 
-        const n = Math.min(t.length, y.length)
+        const n = Math.min(xValues.length, yValues.length)
 
-        let tMin = Infinity,
-          tMax = -Infinity
+        let xMin = Infinity,
+          xMax = -Infinity
         let yMin = Infinity,
           yMax = -Infinity
         for (let i = 0; i < n; i++) {
-          const ti = Number(t[i])
-          const yi = Number(y[i])
-          if (!Number.isFinite(ti) || !Number.isFinite(yi)) continue
-          tMin = Math.min(tMin, ti)
-          tMax = Math.max(tMax, ti)
+          const xi = Number(xValues[i])
+          const yi = Number(yValues[i])
+          if (!Number.isFinite(xi) || !Number.isFinite(yi)) continue
+          xMin = Math.min(xMin, xi)
+          xMax = Math.max(xMax, xi)
           yMin = Math.min(yMin, yi)
           yMax = Math.max(yMax, yi)
         }
         if (
-          !Number.isFinite(tMin) ||
-          !Number.isFinite(tMax) ||
+          !Number.isFinite(xMin) ||
+          !Number.isFinite(xMax) ||
           !Number.isFinite(yMin) ||
           !Number.isFinite(yMax)
         ) {
           elLine.setAttribute('points', '')
-          drawAxes(0, 1, 0, 1, label || '')
+          drawAxes(0, 1, 0, 1, label || '', xAxisLabel || 'X', yAxisLabel || 'Y')
           elPlotLabel.textContent = label || ''
           return
         }
-        if (tMax === tMin) tMax = tMin + 1
+        if (xMax === xMin) xMax = xMin + 1
         if (yMax === yMin) yMax = yMin + 1
 
-        drawAxes(tMin, tMax, yMin, yMax, label || '')
+        drawAxes(xMin, xMax, yMin, yMax, label || '', xAxisLabel || 'X', yAxisLabel || 'Y')
 
         const pts = []
         for (let i = 0; i < n; i++) {
-          const ti = Number(t[i])
-          const yi = Number(y[i])
-          if (!Number.isFinite(ti) || !Number.isFinite(yi)) continue
-          const xx = PLOT.marginLeft + ((ti - tMin) / (tMax - tMin)) * plotW
+          const xi = Number(xValues[i])
+          const yi = Number(yValues[i])
+          if (!Number.isFinite(xi) || !Number.isFinite(yi)) continue
+          const xx = PLOT.marginLeft + ((xi - xMin) / (xMax - xMin)) * plotW
           const yy = PLOT.marginTop + plotH - ((yi - yMin) / (yMax - yMin)) * plotH
           pts.push(xx.toFixed(2) + ',' + yy.toFixed(2))
         }
@@ -719,8 +791,9 @@ return [];</textarea
 
           const previousSeries = elSeries.value
           const sel = buildSeriesOptions(result, previousSeries)
+          buildAxisSelectors(result, elXAxis.value, elYAxis.value)
           const s = getSeries(result, sel)
-          plotSeries(s.t, s.y, formatSeriesLabel(sel))
+          plotSeries(s.t, s.y, formatSeriesLabel(sel), 'Time (t)', formatSeriesLabel(sel))
 
           elCsv.disabled = false
           setStatus('Simulation complete.', 'good')
@@ -737,7 +810,25 @@ return [];</textarea
         if (!lastResult) return
         const sel = elSeries.value
         const s = getSeries(lastResult, sel)
-        plotSeries(s.t, s.y, formatSeriesLabel(sel))
+        plotSeries(s.t, s.y, formatSeriesLabel(sel), 'Time (t)', formatSeriesLabel(sel))
+      })
+
+      elAxisPlotBtn.addEventListener('click', () => {
+        if (!lastResult) return
+        const visible = elAxisPicker.style.display !== 'none'
+        elAxisPicker.style.display = visible ? 'none' : 'block'
+      })
+
+      elApplyAxisPlot.addEventListener('click', () => {
+        if (!lastResult) return
+        const xKey = String(elXAxis.value || 't')
+        const yKey = String(elYAxis.value || '')
+        if (!yKey) return
+        const xValues = getSeriesValues(lastResult, xKey)
+        const yValues = getSeriesValues(lastResult, yKey)
+        const xLabel = xKey === 't' ? 'Time (t)' : formatSeriesLabel(xKey)
+        const yLabel = formatSeriesLabel(yKey)
+        plotSeries(xValues, yValues, `${yLabel} vs ${xLabel}`, xLabel, yLabel)
       })
 
       elCsv.addEventListener('click', () => {
@@ -748,7 +839,7 @@ return [];</textarea
       })
 
       drawGrid()
-      drawAxes(0, 1, 0, 1, '')
+      drawAxes(0, 1, 0, 1, '', 'Time (t)', 'Value')
       setStatus('Ready.', '')
     </script>
   </body>
