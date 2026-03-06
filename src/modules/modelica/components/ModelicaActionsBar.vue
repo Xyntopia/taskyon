@@ -12,8 +12,22 @@
           @update:model-value="emit('project-selected', String($event || ''))"
         />
         <div class="row items-center q-gutter-xs q-mt-sm">
-          <q-btn dense flat color="secondary" label="New" title="Create a new project" @click="emit('create-project')" />
-          <q-btn dense flat color="grey-7" :icon="matRefresh" title="Refresh project list" @click="emit('refresh-projects')" />
+          <q-btn
+            dense
+            flat
+            color="secondary"
+            label="New"
+            title="Create a new project"
+            @click="emit('create-project')"
+          />
+          <q-btn
+            dense
+            flat
+            color="grey-7"
+            :icon="matRefresh"
+            title="Refresh project list"
+            @click="emit('refresh-projects')"
+          />
           <q-btn
             dense
             flat
@@ -24,7 +38,14 @@
             @click="emit('delete-project')"
           />
           <q-space />
-          <q-btn dense flat color="grey-7" label="Export" :disable="!projectFile" @click="emit('export-project')" />
+          <q-btn
+            dense
+            flat
+            color="grey-7"
+            label="Export"
+            :disable="!projectFile"
+            @click="emit('export-project')"
+          />
           <q-btn dense flat color="grey-7" label="Import" @click="projectImportEl?.click()" />
         </div>
         <q-separator class="q-my-sm" />
@@ -41,11 +62,20 @@
     <q-btn-dropdown dense flat color="grey-7" label="Libraries" dropdown-icon="">
       <div class="q-pa-sm" style="min-width: 460px; max-width: 95vw">
         <div class="text-caption text-grey-7 q-mb-sm">
-          {{ mslLoaded ? `MSL loaded: ${mslArchiveName || 'archive'} (${mslFileCount} files)` : 'MSL not loaded' }}
+          {{
+            mslLoaded
+              ? `MSL loaded: ${mslArchiveName || 'archive'} (${mslFileCount} files)`
+              : 'MSL not loaded'
+          }}
         </div>
-        <div v-if="mslLoading || mslDownloading" class="row items-center q-gutter-xs q-mb-sm text-caption text-grey-7">
+        <div
+          v-if="mslLoading || mslDownloading"
+          class="row items-center q-gutter-xs q-mb-sm text-caption text-grey-7"
+        >
           <q-spinner color="primary" size="16px" />
-          <span>{{ mslDownloading ? 'Downloading Modelica library ZIP...' : 'Loading library ZIP...' }}</span>
+          <span>{{
+            mslDownloading ? 'Downloading Modelica library ZIP...' : 'Loading library ZIP...'
+          }}</span>
         </div>
         <ObjectView
           v-model="libraryMenuModel"
@@ -103,8 +133,22 @@
         />
         <div class="row items-center q-gutter-xs q-mt-sm">
           <q-btn dense flat color="grey-7" label="Reset View" @click="emit('reset-view')" />
-          <q-btn dense flat color="grey-7" :icon="matDelete" label="Clear All" @click="emit('clear-all')" />
-          <q-btn dense flat color="grey-7" :icon="matDescription" label="Load Example" @click="emit('load-example')" />
+          <q-btn
+            dense
+            flat
+            color="grey-7"
+            :icon="matDelete"
+            label="Clear All"
+            @click="emit('clear-all')"
+          />
+          <q-btn
+            dense
+            flat
+            color="grey-7"
+            :icon="matDescription"
+            label="Load Example"
+            @click="emit('load-example')"
+          />
         </div>
       </div>
     </q-btn-dropdown>
@@ -377,11 +421,16 @@ const solverOptionsModel = computed({
 const solverDisplayLabel = computed(() => {
   const key = String(props.selectedSolverKey || '')
   const solverId = solverIdFromKey(key) || key || '-'
-  const options = props.solverOptions && typeof props.solverOptions === 'object' ? props.solverOptions : {}
-  const integratorRaw = (options.timeIntegrator ?? options.integrator) as unknown
-  const integrator = typeof integratorRaw === 'string' && integratorRaw.trim() ? integratorRaw.trim() : ''
-  const prefix =
-    key.startsWith('builtin:') ? 'builtin' : key.startsWith('project:') ? 'project' : 'solver'
+  const options =
+    props.solverOptions && typeof props.solverOptions === 'object' ? props.solverOptions : {}
+  const integratorRaw = options.timeIntegrator ?? options.integrator
+  const integrator =
+    typeof integratorRaw === 'string' && integratorRaw.trim() ? integratorRaw.trim() : ''
+  const prefix = key.startsWith('builtin:')
+    ? 'builtin'
+    : key.startsWith('project:')
+      ? 'project'
+      : 'solver'
   return integrator ? `${integrator} (${prefix}:${solverId})` : `${prefix}:${solverId}`
 })
 </script>

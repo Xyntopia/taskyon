@@ -503,7 +503,7 @@ return [];</textarea
           if (!v || typeof v !== 'object') continue
           if (String(v.name || '') !== name) continue
           const unit = String(v.unit || '').trim()
-          if (unit) return unit
+          if (unit && unit.toLowerCase() !== 'none' && unit.toLowerCase() !== 'null') return unit
         }
         return ''
       }

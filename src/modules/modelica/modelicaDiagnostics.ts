@@ -257,7 +257,7 @@ model BouncingBall             "The bouncing ball model"
       [
         'BouncingBall regression: generated model reports events=false, event resets cannot be trusted.',
         'generatedCode:',
-        rendered,
+        serializeObject(rendered, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
       ].join('\n\n'),
     )
   }
@@ -460,7 +460,7 @@ model BouncingBall             "The bouncing ball model"
         'BouncingBall regression: no events detected; ball keeps falling without bounces.',
         `summary:\n${serializedSummary}`,
         `runResult:\n${serializedRunResult}`,
-        `generatedCode:\n${rendered}`,
+        `generatedCode:\n${serializeObject(rendered, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
       ].join('\n\n'),
     )
   }
@@ -470,7 +470,7 @@ model BouncingBall             "The bouncing ball model"
         'BouncingBall regression: events were localized but no event samples were inserted into output.',
         `summary:\n${serializedSummary}`,
         `runResult:\n${serializedRunResult}`,
-        `generatedCode:\n${rendered}`,
+        `generatedCode:\n${serializeObject(rendered, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
       ].join('\n\n'),
     )
   }
@@ -480,7 +480,7 @@ model BouncingBall             "The bouncing ball model"
         'BouncingBall regression: output series length did not grow beyond fixed grid despite localized events.',
         `summary:\n${serializedSummary}`,
         `runResult:\n${serializedRunResult}`,
-        `generatedCode:\n${rendered}`,
+        `generatedCode:\n${serializeObject(rendered, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
       ].join('\n\n'),
     )
   }
@@ -490,17 +490,16 @@ model BouncingBall             "The bouncing ball model"
         'BouncingBall regression: velocity never flips sign after expected impact.',
         `summary:\n${serializedSummary}`,
         `runResult:\n${serializedRunResult}`,
-        `generatedCode:\n${rendered}`,
+        `generatedCode:\n${serializeObject(rendered, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
       ].join('\n\n'),
     )
   }
 
   return {
     ok: true,
-    summary,
     summarySerialized: serializedSummary,
     runResultSerialized: serializedRunResult,
-    generatedCode: rendered,
+    generatedCodeSerialized: serializeObject(rendered, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
     generatedCodePreview: rendered.slice(0, 500),
   }
 }
@@ -614,7 +613,7 @@ end Test;
 
   return {
     ok: true,
-    results,
+    resultsSerialized: serializeObject(results, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
   }
 }
 
@@ -1000,7 +999,10 @@ end MslConstRamp;
         xLen,
         serializedResult: serializedRunResult,
       },
-      generatedCode: rendered,
+      generatedCodeSerialized: serializeObject(
+        rendered,
+        MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+      ),
       renderedPreview: rendered.slice(0, 120),
       prettyPreview: String(compiled.pretty ?? '').slice(0, 120),
     }
@@ -1009,7 +1011,10 @@ end MslConstRamp;
     const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
     throw new Error([baseMessage, `MSL smoke debug:\n${debugDump}`].join('\n'), {
       cause: {
-        generatedCode: fullGeneratedCode || '[generated code unavailable]',
+        generatedCodeSerialized: serializeObject(
+          fullGeneratedCode || '[generated code unavailable]',
+          MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+        ),
       },
     })
   }
@@ -1210,13 +1215,22 @@ end MslResistorManualFlattened;
 
     return {
       ok: true,
-      sources: {
-        extendsSource: extendsResistorSource,
-        manualSource: manualResistorSource,
-      },
+      sourcesSerialized: serializeObject(
+        {
+          extendsSource: extendsResistorSource,
+          manualSource: manualResistorSource,
+        },
+        MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+      ),
       rumoca: {
-        extendsSummary,
-        manualSummary,
+        extendsSummarySerialized: serializeObject(
+          extendsSummary,
+          MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+        ),
+        manualSummarySerialized: serializeObject(
+          manualSummary,
+          MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+        ),
       },
       comparison: {
         counts: {
@@ -1330,6 +1344,35 @@ end MslResistorExample;
     fullGeneratedCode = rendered
     debug.renderedPreview = rendered.slice(0, 220)
     debug.generatedCodeLength = rendered.length
+    const unitAttrMatchesInPretty = Array.from(
+      new Set(String(prettyText).match(/\bunit\s*=\s*"[^"]*"/g) ?? []),
+    )
+    const displayUnitMatchesInPretty = Array.from(
+      new Set(String(prettyText).match(/\bdisplayUnit\s*=\s*"[^"]*"/g) ?? []),
+    )
+    const generatedUnitPropertyMatches = Array.from(
+      new Set(String(rendered).match(/\bunit:\s*"[^"]*"/g) ?? []),
+    )
+    const generatedUnitAccessMarkers = [
+      'meta.states.map((v) => ({ name: v.name, kind: \'state\', start: v.start, unit: v.unit }))',
+      'meta.algebraics.map((v) => ({ name: v.name, kind: \'algebraic\', start: v.start, unit: v.unit }))',
+      'meta.inputs.map((v) => ({ name: v.name, kind: \'input\', unit: v.unit }))',
+    ]
+    debug.unitDiagnostics = {
+      compile: {
+        prettyUnitAttrCount: unitAttrMatchesInPretty.length,
+        prettyDisplayUnitAttrCount: displayUnitMatchesInPretty.length,
+        prettyUnitAttrPreview: unitAttrMatchesInPretty.slice(0, 30),
+        prettyDisplayUnitAttrPreview: displayUnitMatchesInPretty.slice(0, 30),
+      },
+      template: {
+        generatedUnitPropertyCount: generatedUnitPropertyMatches.length,
+        generatedUnitPropertyPreview: generatedUnitPropertyMatches.slice(0, 40),
+        hasGeneratedUnitAccessMarkers: generatedUnitAccessMarkers.every((marker) =>
+          rendered.includes(marker),
+        ),
+      },
+    }
 
     debug.phase = 'build-iframe-code'
     const runCode = buildIframeCode(rendered)
@@ -1345,6 +1388,12 @@ end MslResistorExample;
         model?: {
           stateNames?: string[]
           algebraicNames?: string[]
+          inputNames?: string[]
+          conditionNames?: string[]
+          stateVariables?: Array<{ name?: string; unit?: string }>
+          algebraicVariables?: Array<{ name?: string; unit?: string }>
+          inputVariables?: Array<{ name?: string; unit?: string }>
+          conditionVariables?: Array<{ name?: string; unit?: string }>
         }
       }
       data?: {
@@ -1558,11 +1607,6 @@ end MslResistorExample;
         yLen: getSeriesSampleLength(runResult?.data?.y),
       }
       serializedRunResult = serializeObject(runResult, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
-      debug.runResultSerialized = serializedRunResult
-      debug.runResultSerializedExtended = serializeObject(
-        runResult,
-        MODELICA_DIAGNOSTICS_EXTENDED_SERIALIZE_OPTIONS,
-      )
     } finally {
       runAbort.abort()
     }
@@ -1596,8 +1640,121 @@ end MslResistorExample;
     const algebraicNames = Array.isArray(runResult?.meta?.model?.algebraicNames)
       ? runResult.meta.model.algebraicNames
       : []
+    const inputNames = Array.isArray(runResult?.meta?.model?.inputNames)
+      ? runResult.meta.model.inputNames
+      : []
+    const conditionNames = Array.isArray(runResult?.meta?.model?.conditionNames)
+      ? runResult.meta.model.conditionNames
+      : []
     const stateCount = stateNames.length
     const algebraicCount = algebraicNames.length
+
+    const mapUnits = (
+      vars: unknown,
+      expectedNames: string[],
+    ): { unitByName: Record<string, string>; withUnitCount: number; totalCount: number } => {
+      const out: Record<string, string> = {}
+      const list = Array.isArray(vars) ? vars : []
+      for (const entry of list) {
+        if (!entry || typeof entry !== 'object') continue
+        const item = entry as Record<string, unknown>
+        const name = typeof item.name === 'string' ? item.name.trim() : ''
+        const unit = typeof item.unit === 'string' ? item.unit.trim() : ''
+        const u = unit.toLowerCase()
+        if (!name || !unit || u === 'none' || u === 'null') continue
+        out[name] = unit
+      }
+      const withUnitCount = expectedNames.filter((name) => typeof out[name] === 'string').length
+      return {
+        unitByName: out,
+        withUnitCount,
+        totalCount: expectedNames.length,
+      }
+    }
+
+    const stateUnitInfo = mapUnits(runResult?.meta?.model?.stateVariables, stateNames)
+    const algebraicUnitInfo = mapUnits(runResult?.meta?.model?.algebraicVariables, algebraicNames)
+    const inputUnitInfo = mapUnits(runResult?.meta?.model?.inputVariables, inputNames)
+    const conditionUnitInfo = mapUnits(runResult?.meta?.model?.conditionVariables, conditionNames)
+    const totalPhysicalUnitCount =
+      stateUnitInfo.withUnitCount +
+      algebraicUnitInfo.withUnitCount +
+      inputUnitInfo.withUnitCount +
+      conditionUnitInfo.withUnitCount
+    const plotPathUnitsPreview = {
+      t: 's',
+      ...Object.fromEntries(
+        Object.entries(stateUnitInfo.unitByName)
+          .slice(0, 20)
+          .map(([name, unit]) => [`x.${name}`, unit]),
+      ),
+      ...Object.fromEntries(
+        Object.entries(algebraicUnitInfo.unitByName)
+          .slice(0, 20)
+          .map(([name, unit]) => [`y.${name}`, unit]),
+      ),
+      ...Object.fromEntries(
+        Object.entries(inputUnitInfo.unitByName)
+          .slice(0, 20)
+          .map(([name, unit]) => [`u.${name}`, unit]),
+      ),
+      ...Object.fromEntries(
+        Object.entries(conditionUnitInfo.unitByName)
+          .slice(0, 20)
+          .map(([name, unit]) => [`z.${name}`, unit]),
+      ),
+    }
+
+    debug.unitDiagnostics = {
+      ...(debug.unitDiagnostics && typeof debug.unitDiagnostics === 'object'
+        ? (debug.unitDiagnostics as Record<string, unknown>)
+        : {}),
+      runtime: {
+        stateUnits: {
+          withUnitCount: stateUnitInfo.withUnitCount,
+          totalCount: stateUnitInfo.totalCount,
+          preview: Object.fromEntries(Object.entries(stateUnitInfo.unitByName).slice(0, 25)),
+        },
+        algebraicUnits: {
+          withUnitCount: algebraicUnitInfo.withUnitCount,
+          totalCount: algebraicUnitInfo.totalCount,
+          preview: Object.fromEntries(Object.entries(algebraicUnitInfo.unitByName).slice(0, 25)),
+        },
+        inputUnits: {
+          withUnitCount: inputUnitInfo.withUnitCount,
+          totalCount: inputUnitInfo.totalCount,
+          preview: Object.fromEntries(Object.entries(inputUnitInfo.unitByName).slice(0, 25)),
+        },
+        conditionUnits: {
+          withUnitCount: conditionUnitInfo.withUnitCount,
+          totalCount: conditionUnitInfo.totalCount,
+          preview: Object.fromEntries(Object.entries(conditionUnitInfo.unitByName).slice(0, 25)),
+        },
+        plotPathUnitsPreview,
+        totalPhysicalUnitCount,
+      },
+    }
+
+    const compileUnitAttrCount =
+      (
+        (debug.unitDiagnostics as { compile?: { prettyUnitAttrCount?: number } })?.compile
+          ?.prettyUnitAttrCount ?? 0
+      ) || 0
+    const templateUnitPropCount =
+      (
+        (debug.unitDiagnostics as { template?: { generatedUnitPropertyCount?: number } })?.template
+          ?.generatedUnitPropertyCount ?? 0
+      ) || 0
+    if (totalPhysicalUnitCount <= 0) {
+      throw new Error(
+        [
+          'MSL resistor example has no physical units in runtime metadata',
+          `totalPhysicalUnitCount=${totalPhysicalUnitCount}`,
+          `compile.prettyUnitAttrCount=${compileUnitAttrCount}`,
+          `template.generatedUnitPropertyCount=${templateUnitPropCount}`,
+        ].join('\n'),
+      )
+    }
 
     const xSeriesByName = mapSeriesByNames(runResult?.data?.x, stateNames, 'x')
     const ySeriesByName = mapSeriesByNames(runResult?.data?.y, algebraicNames, 'y')
@@ -1682,21 +1839,29 @@ end MslResistorExample;
         algebraicCount,
         stateNames,
         algebraicNames,
-        stateSeriesValues: xSeriesByName,
+        stateSeriesValuesSerialized: serializeObject(
+          xSeriesByName,
+          MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+        ),
         xAmplitude: xAmp,
         yAmplitude: yAmp,
+        unitsAvailable: totalPhysicalUnitCount > 0,
+        unitDiagnosticsSerialized: serializeObject(
+          debug.unitDiagnostics,
+          MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+        ),
         serializedResult: serializedRunResult,
       },
       generatedCode: rendered,
+      generatedCodeSerialized: serializeObject(
+        rendered,
+        MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+      ),
       prettyPreview: String(compiled.pretty ?? '').slice(0, 120),
     }
   } catch (err) {
     const baseMessage = err instanceof Error ? err.message : String(err)
     const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
-    const debugDumpExtended = serializeObject(
-      debug,
-      MODELICA_DIAGNOSTICS_EXTENDED_SERIALIZE_OPTIONS,
-    )
     const phaseValue = debug.phase
     const phaseLabel =
       typeof phaseValue === 'string' ||
@@ -1711,12 +1876,11 @@ end MslResistorExample;
         `Modelica diagnostic failed at phase="${phaseLabel}"`,
         baseMessage,
         `MSL resistor example debug (compact):\n${debugDump}`,
-        `MSL resistor example debug (extended):\n${debugDumpExtended}`,
       ].join('\n'),
       {
         cause: {
           generatedCode: fullGeneratedCode || '[generated code unavailable]',
-          debug,
+          debugSerialized: serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
         },
       },
     )
@@ -1899,7 +2063,7 @@ function makeOrbitFailure(
       headline,
       `Orbit debug summary:\n${serializeObject(debugSummary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
       `Generated code (compact):\n${serializeObject(generatedCodeDebug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-      `Generated code (full):\n${fullGeneratedCode}`,
+      `Generated code (full):\n${serializeObject(fullGeneratedCode, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
     ].join('\n\n'),
   )
 }
@@ -2692,7 +2856,10 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
     ok: true,
     model: 'SatelliteOrbit2D',
     sim: simParams,
-    debugSummary,
+    debugSummarySerialized: serializeObject(
+      debugSummary,
+      MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+    ),
     currentSolver: {
       id: 'sdirk2',
       invariants: currentInv,

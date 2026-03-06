@@ -464,6 +464,7 @@
                   v-model="plotCharts"
                   v-model:options="plotViewOptions"
                   :source="plotSourceData"
+                  :path-units="plotPathUnits"
                 />
               </q-card-section>
             </q-card>
@@ -622,6 +623,39 @@ const plotSourceData = computed<Record<string, unknown> | null>(() => {
   const data = executionResult.value?.data
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null
   return data as Record<string, unknown>
+})
+
+const plotPathUnits = computed<Record<string, string>>(() => {
+  const meta =
+    executionResult.value.meta && typeof executionResult.value.meta === 'object'
+      ? (executionResult.value.meta as Record<string, unknown>)
+      : {}
+  const model =
+    meta.model && typeof meta.model === 'object' ? (meta.model as Record<string, unknown>) : {}
+
+  const mapFromVariables = (pathPrefix: string, variables: unknown): Record<string, string> => {
+    const vars = Array.isArray(variables) ? variables : []
+    const out: Record<string, string> = {}
+    for (const entry of vars) {
+      if (!entry || typeof entry !== 'object') continue
+      const item = entry as Record<string, unknown>
+      const name = typeof item.name === 'string' ? item.name.trim() : ''
+      const unit = typeof item.unit === 'string' ? item.unit.trim() : ''
+      const u = unit.toLowerCase()
+      if (!name || !unit || u === 'none' || u === 'null') continue
+      out[`${pathPrefix}.${name}`] = unit
+    }
+    return out
+  }
+
+  return {
+    t: 's',
+    ...mapFromVariables('x', model.stateVariables),
+    ...mapFromVariables('y', model.algebraicVariables),
+    ...mapFromVariables('u', model.inputVariables),
+    ...mapFromVariables('z', model.conditionVariables),
+    ...mapFromVariables('c', model.conditionVariables),
+  }
 })
 
 const predictedStepCount = computed(() => {
@@ -1541,12 +1575,12 @@ const clearAll = () => {
 
 const exampleModels = {
   bouncingBall: `model BouncingBall             "The bouncing ball model"
-  constant Real g = 9.81 "Gravitational acceleration";
+  constant Real g(unit = "m/s2") = 9.81 "Gravitational acceleration";
   parameter Real c = 0.9 "Elasticity constant of ball";
-  parameter Real radius = 0.1 "Radius of the ball";
-  Real h(start = 1,fixed=true) "height above ground of ball center";
-  Real v(start = 0,fixed=true) "Velocity of the ball";
-  Real E "Mechanical energy";
+  parameter Real radius(unit = "m") = 0.1 "Radius of the ball";
+  Real h(unit = "m", start = 1, fixed = true) "Height above ground of ball center";
+  Real v(unit = "m/s", start = 0, fixed = true) "Velocity of the ball";
+  Real E(unit = "m2/s2") "Specific mechanical energy";
  equation
   der(h) = v;
   der(v) = -g;
@@ -1554,26 +1588,26 @@ const exampleModels = {
   when h <= radius then
     reinit(v, -c*pre(v));
   end when;
- annotation(experiment(StartTime = 0, StopTime = 3, Interval = 0.01));
+ annotation(experiment(StartTime = 0, StopTime = 7, Interval = 0.1));
 end BouncingBall;`,
   resistorMsl: `model MslResistorExample
   extends Modelica.Electrical.Analog.Examples.Resistor;
-  annotation(experiment(StartTime = 0, StopTime = 1, Interval = 0.0005));
+  annotation(experiment(StartTime = 0, StopTime = 5, Interval = 0.1));
 end MslResistorExample;`,
   orbit: `model SatelliteOrbit2D
-  parameter Real mu = 398600.4418;
-  parameter Real r0 = 7000;
-  parameter Real v0 = sqrt(mu / r0);
-  Real rx(start = r0, fixed = true);
-  Real ry(start = 0, fixed = true);
-  Real vx(start = 0, fixed = true);
-  Real vy(start = v0, fixed = true);
-  Real inv_r;
-  Real inv_v2;
-  Real inv_h;
-  Real inv_energy;
-  Real inv_a;
-  Real inv_rv;
+  parameter Real mu(unit = "km3/s2") = 398600.4418;
+  parameter Real r0(unit = "km") = 7000;
+  parameter Real v0(unit = "km/s") = sqrt(mu / r0);
+  Real rx(unit = "km", start = r0, fixed = true);
+  Real ry(unit = "km", start = 0, fixed = true);
+  Real vx(unit = "km/s", start = 0, fixed = true);
+  Real vy(unit = "km/s", start = v0, fixed = true);
+  Real inv_r(unit = "km");
+  Real inv_v2(unit = "km2/s2");
+  Real inv_h(unit = "km2/s");
+  Real inv_energy(unit = "km2/s2");
+  Real inv_a(unit = "km");
+  Real inv_rv(unit = "km2/s");
   Real inv_ex;
   Real inv_ey;
   Real inv_ecc;
@@ -1591,15 +1625,15 @@ equation
   inv_ecc = sqrt(inv_ex * inv_ex + inv_ey * inv_ey);
   der(vx) = -mu * rx / (inv_r ^ 3);
   der(vy) = -mu * ry / (inv_r ^ 3);
-  annotation(experiment(StartTime = 0, StopTime = 6000, Interval = 1));
+  annotation(experiment(StartTime = 0, StopTime = 6000, Interval = 20));
 end SatelliteOrbit2D;`,
   drivenPendulumPhaseMap: `model DrivenPendulumPhaseMap
   parameter Real delta = 0.2 "Linear damping";
-  parameter Real driveAmp = 1.2 "Drive amplitude";
-  parameter Real driveOmega = 2/3 "Drive angular frequency";
-  Real theta(start = 0.2, fixed = true) "Angle [rad]";
-  Real omega(start = 0.0, fixed = true) "Angular velocity [rad/s]";
-  Real phaseEnergy "Kinetic + potential-like scalar for color mapping";
+  parameter Real driveAmp(unit = "rad/s2") = 1.2 "Drive amplitude";
+  parameter Real driveOmega(unit = "rad/s") = 2/3 "Drive angular frequency";
+  Real theta(unit = "rad", start = 0.2, fixed = true) "Angle";
+  Real omega(unit = "rad/s", start = 0.0, fixed = true) "Angular velocity";
+  Real phaseEnergy(unit = "rad2/s2") "Kinetic + potential-like scalar for color mapping";
 equation
   der(theta) = omega;
   der(omega) = -sin(theta) - delta * omega + driveAmp * sin(driveOmega * time);

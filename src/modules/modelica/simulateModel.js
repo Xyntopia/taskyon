@@ -29,6 +29,21 @@ const simulateModel = (params, context, model) => {
   const inputNames = (meta.inputs || []).map((u) => u.name)
   const conditionNames = (meta.conditions || []).map((c) => c.name)
 
+  const sanitizeVariableMeta = (vars) =>
+    (Array.isArray(vars) ? vars : [])
+      .map((v) => {
+        const name = typeof v?.name === 'string' ? v.name : ''
+        if (!name) return null
+        const unit = typeof v?.unit === 'string' ? v.unit.trim() : ''
+        return unit ? { name, unit } : { name }
+      })
+      .filter((v) => v !== null)
+
+  const stateVariables = sanitizeVariableMeta(meta.states)
+  const algebraicVariables = sanitizeVariableMeta(meta.algebraics)
+  const inputVariables = sanitizeVariableMeta(meta.inputs)
+  const conditionVariables = sanitizeVariableMeta(meta.conditions)
+
   const nx = Array.isArray(model.x0) ? model.x0.length : 0
   const ny = Array.isArray(model.y0) ? model.y0.length : 0
   const nu = inputNames.length
@@ -1419,6 +1434,10 @@ const simulateModel = (params, context, model) => {
         algebraicNames,
         solverAlgebraicNames,
         conditionNames,
+        stateVariables,
+        algebraicVariables,
+        inputVariables,
+        conditionVariables,
       },
       context: contextInfo,
     },

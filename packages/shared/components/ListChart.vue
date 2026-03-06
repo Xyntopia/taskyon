@@ -181,7 +181,8 @@ const chartHeightResolved = computed(() => {
 })
 const chartBodyHeightResolved = computed(() => {
   if (!hasChartTitle.value) return chartHeightResolved.value
-  const titleHeight = isCompactPreview.value ? '16px' : '28px'
+  // Keep enough room for wrapped thumbnail titles (compact preview mode).
+  const titleHeight = isCompactPreview.value ? '34px' : '28px'
   return `calc(${chartHeightResolved.value} - ${titleHeight})`
 })
 

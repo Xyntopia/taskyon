@@ -50,8 +50,11 @@
             :enable-data-zoom="!isViewOnly"
             :show-axis-ticks="true"
             :show-axis-units="true"
-            :x-axis="{ label: toAxisLabel(chart.config.x) }"
-            :y-axis="{ label: toAxisLabel(chart.config.z || chart.config.y) }"
+            :x-axis="{ label: toAxisLabel(chart.config.x), unit: toAxisUnit(chart.config.x) }"
+            :y-axis="{
+              label: toAxisLabel(chart.config.z || chart.config.y),
+              unit: toAxisUnit(chart.config.z || chart.config.y),
+            }"
           />
         </div>
         <div v-else class="text-caption text-grey-7">
@@ -83,8 +86,11 @@
                   :show-axis-ticks="false"
                   :show-axis-units="false"
                   chart-height="150px"
-                  :x-axis="{ label: toAxisLabel(chart.config.x) }"
-                  :y-axis="{ label: toAxisLabel(chart.config.z || chart.config.y) }"
+                  :x-axis="{ label: toAxisLabel(chart.config.x), unit: toAxisUnit(chart.config.x) }"
+                  :y-axis="{
+                    label: toAxisLabel(chart.config.z || chart.config.y),
+                    unit: toAxisUnit(chart.config.z || chart.config.y),
+                  }"
                 />
                 <div v-else class="text-caption text-grey-7">No data</div>
               </div>
@@ -120,8 +126,14 @@
             :enable-data-zoom="true"
             :show-axis-ticks="true"
             :show-axis-units="true"
-            :x-axis="{ label: toAxisLabel(selectedThumbnailChart.config.x) }"
-            :y-axis="{ label: toAxisLabel(selectedThumbnailChart.config.z || selectedThumbnailChart.config.y) }"
+            :x-axis="{
+              label: toAxisLabel(selectedThumbnailChart.config.x),
+              unit: toAxisUnit(selectedThumbnailChart.config.x),
+            }"
+            :y-axis="{
+              label: toAxisLabel(selectedThumbnailChart.config.z || selectedThumbnailChart.config.y),
+              unit: toAxisUnit(selectedThumbnailChart.config.z || selectedThumbnailChart.config.y),
+            }"
           />
         </q-card-section>
       </q-card>
@@ -143,6 +155,7 @@ export type ObjectPathChartsViewOptions = {
 
 const props = defineProps<{
   source?: Record<string, unknown> | null
+  pathUnits?: Record<string, string> | null
 }>()
 
 const chartsModel = defineModel<ObjectPathChartDefinition[]>({ default: () => [] })
@@ -173,7 +186,7 @@ const sourceObject = computed<Record<string, unknown> | null>(() => {
 
 function isNumericArray(value: unknown): value is number[] {
   if (!Array.isArray(value)) return false
-  return value.every((entry) => typeof entry === 'number' && Number.isFinite(entry))
+  return value.every((entry) => typeof entry === 'number')
 }
 
 function collectNumericArrayPaths(root: Record<string, unknown> | null): string[] {
@@ -272,21 +285,55 @@ watch(
 
 function getPathValue(root: Record<string, unknown> | null, path?: string): unknown {
   if (!root || !path) return undefined
-  return path.split('.').reduce<unknown>((acc, key) => {
-    if (!acc || typeof acc !== 'object') return undefined
-    return (acc as Record<string, unknown>)[key]
-  }, root)
+  let current: unknown = root
+  let remaining = String(path)
+
+  while (remaining.length > 0) {
+    if (!current || typeof current !== 'object') return undefined
+    const obj = current as Record<string, unknown>
+
+    // Fast path: full remaining segment is a literal key at this level.
+    if (Object.prototype.hasOwnProperty.call(obj, remaining)) return obj[remaining]
+
+    const keys = Object.keys(obj)
+
+    // Support keys that themselves contain dots by consuming the longest key prefix.
+    let matchedKey = ''
+    for (const key of keys) {
+      if (remaining === key || remaining.startsWith(`${key}.`)) {
+        if (key.length > matchedKey.length) matchedKey = key
+      }
+    }
+
+    if (!matchedKey) return undefined
+    const value = obj[matchedKey]
+    if (remaining === matchedKey) return value
+    current = value
+    remaining = remaining.slice(matchedKey.length + 1)
+  }
+
+  return current
 }
 
 function readSeries(path?: string): number[] | null {
   const value = getPathValue(sourceObject.value, path)
-  return isNumericArray(value) ? value : null
+  if (!isNumericArray(value)) return null
+  return value.map((entry) => (Number.isFinite(entry) ? entry : Number.NaN))
 }
 
 function toAxisLabel(path?: string): string {
   if (!path) return ''
   const parts = path.split('.')
   return parts[parts.length - 1] || path
+}
+
+function toAxisUnit(path?: string): string {
+  if (!path) return ''
+  const units = props.pathUnits
+  if (!units || typeof units !== 'object') return ''
+  const raw = units[path]
+  if (typeof raw !== 'string') return ''
+  return raw.trim()
 }
 
 const chartList = computed(() =>
