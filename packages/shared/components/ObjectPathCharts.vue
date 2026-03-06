@@ -77,6 +77,7 @@
                 <ListChart
                   v-if="chart.value !== undefined"
                   :value="chart.value"
+                  :title="chart.title"
                   :show-controls="false"
                   :enable-data-zoom="false"
                   :show-axis-ticks="false"

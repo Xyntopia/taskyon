@@ -217,7 +217,7 @@
       v-model:tf="simTfModel"
       v-model:dt="simDtModel"
       mode="simple"
-      :solver-label="selectedSolverKey"
+      :solver-label="solverDisplayLabel"
       :predicted-steps="predictedSteps"
       :actual-steps="actualSteps ?? null"
       :event-count="eventCount ?? null"
@@ -256,6 +256,7 @@ import { mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
 import type { JSONSchema7 } from 'json-schema'
 import { computed, ref } from 'vue'
 import ObjectView from 'src/components/varViews/ObjectView.vue'
+import { solverIdFromKey } from 'src/modules/modelica/modelica'
 import SimulationRunControls from './SimulationRunControls.vue'
 
 type ExportTarget = 'modelica' | 'template' | 'js' | 'daePretty' | 'daeJson'
@@ -371,5 +372,16 @@ const simulationControlsOpenModel = computed({
 const solverOptionsModel = computed({
   get: () => props.solverOptions,
   set: (v: Record<string, unknown>) => emit('update:solver-options', v),
+})
+
+const solverDisplayLabel = computed(() => {
+  const key = String(props.selectedSolverKey || '')
+  const solverId = solverIdFromKey(key) || key || '-'
+  const options = props.solverOptions && typeof props.solverOptions === 'object' ? props.solverOptions : {}
+  const integratorRaw = (options.timeIntegrator ?? options.integrator) as unknown
+  const integrator = typeof integratorRaw === 'string' && integratorRaw.trim() ? integratorRaw.trim() : ''
+  const prefix =
+    key.startsWith('builtin:') ? 'builtin' : key.startsWith('project:') ? 'project' : 'solver'
+  return integrator ? `${integrator} (${prefix}:${solverId})` : `${prefix}:${solverId}`
 })
 </script>

@@ -94,11 +94,11 @@
 
           <div class="text-caption text-grey-7">
             {{
-              `Predicted steps: ${formatMaybe(predictedStepsEffective)} | Solver: ${solverLabel || '-'}`
+              `N~${formatMaybe(predictedStepsEffective)} | S=${solverLabel || '-'}`
             }}
           </div>
           <div v-if="hasResult" class="text-caption text-grey-7">
-            {{ `Actual steps: ${formatMaybe(actualSteps)} | Events: ${formatMaybe(eventCount)}` }}
+            {{ `N=${formatMaybe(actualSteps)} | E=${formatMaybe(eventCount)}` }}
           </div>
 
           <q-expansion-item
@@ -181,11 +181,11 @@ const predictedStepsEffective = computed(() => {
 
 const summaryLabel = computed(
   () =>
-    `t0=${formatMaybe(t0Model.value)} tf=${formatMaybe(tfModel.value)} dt=${formatMaybe(dtModel.value)} N~${formatMaybe(predictedStepsEffective.value)} solver=${props.solverLabel || '-'}`,
+    `t0:${formatMaybe(t0Model.value)} tf:${formatMaybe(tfModel.value)} dt:${formatMaybe(dtModel.value)} N~${formatMaybe(predictedStepsEffective.value)} S:${props.solverLabel || '-'}`,
 )
 
 const resultLabel = computed(
-  () => `steps=${formatMaybe(props.actualSteps)} events=${formatMaybe(props.eventCount)}`,
+  () => `N:${formatMaybe(props.actualSteps)} E:${formatMaybe(props.eventCount)}`,
 )
 
 const compactInfoLabel = computed(() =>

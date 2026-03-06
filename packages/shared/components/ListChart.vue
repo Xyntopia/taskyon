@@ -1,6 +1,14 @@
 <!-- packages/shared/components/ListChart.vue -->
 <template>
   <div class="list-chart column q-gutter-sm">
+    <div
+      v-if="hasChartTitle"
+      class="list-chart__title"
+      :class="{ 'list-chart__title--compact': isCompactPreview }"
+    >
+      {{ chartTitle }}
+    </div>
+
     <!-- Chart type buttons -->
     <div v-if="showControls" class="row q-gutter-xs items-center">
       <template v-if="is1D">
@@ -63,7 +71,7 @@
       :style="{
         width: '100%',
         maxWidth: '100%',
-        height: isFullscreen ? '90vh' : chartHeightResolved,
+        height: isFullscreen ? '90vh' : chartBodyHeightResolved,
       }"
     />
   </div>
@@ -79,6 +87,7 @@ import {
   VisualMapComponent,
   DataZoomComponent,
   GraphicComponent,
+  TitleComponent,
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { matFullscreen } from '@quasar/extras/material-icons'
@@ -91,6 +100,7 @@ echarts.use([
   GridComponent,
   TooltipComponent,
   VisualMapComponent,
+  TitleComponent,
   CanvasRenderer,
   DataZoomComponent,
   GraphicComponent,
@@ -140,6 +150,8 @@ const showControls = computed(() => props.showControls !== false)
 const enableDataZoom = computed(() => props.enableDataZoom !== false)
 const showAxisTicks = computed(() => props.showAxisTicks !== false)
 const showAxisUnits = computed(() => props.showAxisUnits !== false)
+const chartTitle = computed(() => String(props.title || '').trim())
+const hasChartTitle = computed(() => chartTitle.value.length > 0)
 const isCompactPreview = computed(
   () => !showControls.value && !enableDataZoom.value && !showAxisTicks.value,
 )
@@ -167,8 +179,14 @@ const chartHeightResolved = computed(() => {
   if (typeof raw === 'string' && raw.trim().length > 0) return raw
   return '260px'
 })
+const chartBodyHeightResolved = computed(() => {
+  if (!hasChartTitle.value) return chartHeightResolved.value
+  const titleHeight = isCompactPreview.value ? '16px' : '28px'
+  return `calc(${chartHeightResolved.value} - ${titleHeight})`
+})
 
 const chartEl = ref<HTMLDivElement | null>(null)
+const containerWidth = ref(0)
 let chart: echarts.ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
 
@@ -316,7 +334,6 @@ const buildOption = (): echarts.EChartsCoreOption => {
       tooltip: { trigger: 'axis' },
       grid: cartesianGrid.value,
       graphic: bottomXAxisTitleGraphic.value,
-      title: props.title ? { text: props.title, left: 'center' } : undefined,
       xAxis: {
         type: 'value',
         scale: true,
@@ -382,7 +399,6 @@ const buildOption = (): echarts.EChartsCoreOption => {
       },
       grid: heatmapGrid.value,
       graphic: bottomXAxisTitleGraphic.value,
-      title: props.title ? { text: props.title, left: 'center' } : undefined,
 
       xAxis: {
         type: 'category',
@@ -465,7 +481,6 @@ const buildOption = (): echarts.EChartsCoreOption => {
       tooltip: { position: 'top' },
       grid: heatmapGrid.value,
       graphic: bottomXAxisTitleGraphic.value,
-      title: props.title ? { text: props.title, left: 'center' } : undefined,
 
       xAxis: {
         type: 'category',
@@ -536,7 +551,6 @@ const buildOption = (): echarts.EChartsCoreOption => {
       tooltip: { trigger: 'axis' },
       grid: cartesianGrid.value,
       graphic: bottomXAxisTitleGraphic.value,
-      title: props.title ? { text: props.title, left: 'center' } : undefined,
       xAxis: {
         type: 'category',
         data: x.map(String),
@@ -601,12 +615,15 @@ const renderChart = () => {
 
 onMounted(() => {
   if (!chartEl.value) return
+  containerWidth.value = chartEl.value.clientWidth || 0
 
   // Initial render (might be 0x0, that's ok; we'll resize when it becomes visible)
   renderChart()
 
   // Observe container size and resize chart when it changes
   resizeObserver = new ResizeObserver(() => {
+    if (chartEl.value) containerWidth.value = chartEl.value.clientWidth || 0
+    renderChart()
     if (chart) {
       chart.resize()
     }
@@ -616,7 +633,21 @@ onMounted(() => {
 })
 
 watch(
-  () => [props.value, chartType.value],
+  () => [
+    props.value,
+    props.title,
+    props.showControls,
+    props.enableDataZoom,
+    props.showAxisTicks,
+    props.showAxisUnits,
+    props.chartHeight,
+    props.xAxis?.label,
+    props.xAxis?.unit,
+    props.yAxis?.label,
+    props.yAxis?.unit,
+    containerWidth.value,
+    chartType.value,
+  ],
   () => {
     renderChart()
   },
@@ -659,5 +690,22 @@ const toggleFullscreen = async () => {
   min-width: 0;
   max-width: 100%;
   overflow-x: hidden;
+}
+
+.list-chart__title {
+  width: 100%;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.list-chart__title--compact {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.15;
 }
 </style>

@@ -98,35 +98,46 @@
           <template #logs>
             <!-- logs -->
             <q-card bordered flat square style="min-height: 1.5rem">
-              <div class="row items-center q-pa-xs">
-                <div class="text-caption text-grey-7">Modelica Log</div>
-                <q-space />
-                <q-btn
-                  flat
-                  dense
-                  color="grey-7"
-                  label="Copy Logs"
-                  :disable="modelicaLog.length === 0"
-                  @click="copyLogsToClipboard()"
-                />
-                <q-btn
-                  flat
-                  dense
-                  color="grey-7"
-                  label="Clear"
-                  :disable="modelicaLog.length === 0"
-                  @click="clearModelicaLog()"
-                />
+              <div class="row no-wrap">
+                <div class="col">
+                  <q-expansion-item
+                    v-for="(entry, idx) in modelicaLog"
+                    :key="idx"
+                    dense
+                    dense-toggle
+                    :label="entry.message"
+                  >
+                    <pre class="q-ma-none q-pa-xs text-caption">{{ safeYamlDump(entry) }}</pre>
+                  </q-expansion-item>
+                </div>
+                <div class="column items-center q-gutter-xs q-pa-xs">
+                  <q-chip dense square color="grey-3" text-color="grey-8" style="font-size: 11px">
+                    Log
+                  </q-chip>
+                  <q-btn
+                    flat
+                    dense
+                    round
+                    color="grey-7"
+                    :icon="matContentCopy"
+                    :disable="modelicaLog.length === 0"
+                    @click="copyLogsToClipboard()"
+                  >
+                    <q-tooltip>Copy Logs</q-tooltip>
+                  </q-btn>
+                  <q-btn
+                    flat
+                    dense
+                    round
+                    color="grey-7"
+                    :icon="matDelete"
+                    :disable="modelicaLog.length === 0"
+                    @click="clearModelicaLog()"
+                  >
+                    <q-tooltip>Clear Logs</q-tooltip>
+                  </q-btn>
+                </div>
               </div>
-              <q-separator />
-              <q-expansion-item
-                v-for="(entry, idx) in modelicaLog"
-                :key="idx"
-                dense
-                :label="entry.message"
-              >
-                <pre>{{ safeYamlDump(entry) }}</pre>
-              </q-expansion-item>
             </q-card>
           </template>
 
@@ -469,14 +480,15 @@
         </DockView>
       </FixedHeightPage>
     </q-page-container>
-
   </q-layout>
 </template>
 
 <script setup lang="ts">
 import {
   matCode,
+  matContentCopy,
   matDescription,
+  matDelete,
   matPlayArrow,
   matRocketLaunch,
   matShowChart,
@@ -616,7 +628,8 @@ const predictedStepCount = computed(() => {
   const t0 = Number(simT0.value)
   const tf = Number(simTf.value)
   const dt = Number(simDt.value)
-  if (!Number.isFinite(t0) || !Number.isFinite(tf) || !Number.isFinite(dt) || dt <= 0 || tf < t0) return 0
+  if (!Number.isFinite(t0) || !Number.isFinite(tf) || !Number.isFinite(dt) || dt <= 0 || tf < t0)
+    return 0
   return Math.max(1, Math.floor((tf - t0) / dt) + 1)
 })
 
@@ -638,7 +651,8 @@ const actualEventCount = computed<number | null>(() => {
     executionResult.value.meta && typeof executionResult.value.meta === 'object'
       ? (executionResult.value.meta as Record<string, unknown>)
       : {}
-  if (typeof meta.eventCount === 'number' && Number.isFinite(meta.eventCount)) return meta.eventCount
+  if (typeof meta.eventCount === 'number' && Number.isFinite(meta.eventCount))
+    return meta.eventCount
   if (Array.isArray(meta.events)) return meta.events.length
   if (Array.isArray(meta.eventTimes)) return meta.eventTimes.length
   return null
@@ -1475,8 +1489,9 @@ const runCompilation = async (): Promise<{ ok: boolean; message?: string }> => {
 compileNowFn = runCompilation
 
 watchDebounced(
-  [modelicaSource, templateSource, useModelicaStandardLibrary, mslLoaded],
+  [modelicaSource, templateSource, useModelicaStandardLibrary, mslLoaded, wasmLoaded],
   async () => {
+    if (!wasmLoaded.value) return
     await runCompilation()
   },
   { debounce: 500, maxWait: 1000 },
@@ -1578,12 +1593,43 @@ equation
   der(vy) = -mu * ry / (inv_r ^ 3);
   annotation(experiment(StartTime = 0, StopTime = 6000, Interval = 1));
 end SatelliteOrbit2D;`,
+  drivenPendulumPhaseMap: `model DrivenPendulumPhaseMap
+  parameter Real delta = 0.2 "Linear damping";
+  parameter Real driveAmp = 1.2 "Drive amplitude";
+  parameter Real driveOmega = 2/3 "Drive angular frequency";
+  Real theta(start = 0.2, fixed = true) "Angle [rad]";
+  Real omega(start = 0.0, fixed = true) "Angular velocity [rad/s]";
+  Real phaseEnergy "Kinetic + potential-like scalar for color mapping";
+equation
+  der(theta) = omega;
+  der(omega) = -sin(theta) - delta * omega + driveAmp * sin(driveOmega * time);
+  phaseEnergy = 0.5 * omega * omega + (1 - cos(theta));
+  annotation(experiment(StartTime = 0, StopTime = 200, Interval = 0.02));
+end DrivenPendulumPhaseMap;`,
 } as const
+
+const exampleCharts: Partial<Record<keyof typeof exampleModels, PlotChartSelection[]>> = {
+  drivenPendulumPhaseMap: [
+    {
+      x: 'x.theta',
+      y: 'x.omega',
+      title: 'Driven Pendulum Phase-Space Heatmap (theta, omega, phaseEnergy)',
+    },
+    {
+      x: 't',
+      y: 'x.theta',
+      title: 'theta(t)',
+    },
+  ],
+}
 
 const applyExample = async (choice: unknown) => {
   const key = String(choice) as keyof typeof exampleModels
   modelicaSource.value = exampleModels[key] ?? exampleModels.bouncingBall
   applySimulationHintsFromModelica(modelicaSource.value)
+  const presetCharts = exampleCharts[key]
+  plotCharts.value = presetCharts ? [...presetCharts] : []
+  plotViewOptions.value = { viewMode: 'full' }
 
   // select template that contains "javascript"
   const sel = Object.keys(jinjaTemplateUrls).find((tplKey) => tplKey.includes('javascript.jinja'))
@@ -1605,6 +1651,7 @@ const loadExample = () => {
         { label: 'BouncingBall (classic)', value: 'bouncingBall' },
         { label: 'MSL Resistor (extends)', value: 'resistorMsl' },
         { label: 'Satellite Orbit (2D)', value: 'orbit' },
+        { label: 'Driven Pendulum (phase-space heatmap)', value: 'drivenPendulumPhaseMap' },
       ],
     },
     cancel: true,
@@ -1876,6 +1923,7 @@ onMounted(async () => {
       phase: 'general',
       message: 'WASM module loaded successfully! Ready to compile.',
     })
+    await runCompilation()
   } catch (error) {
     appendModelicaLog({
       level: 'error',
