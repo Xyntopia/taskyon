@@ -6,6 +6,8 @@ import {
   createDefaultProjectSolvers,
   discoverSolverMetadata,
   extractDefaultsFromJsonSchema,
+  isSourceKeyScope,
+  makeSourceKey,
   solverIdFromKey,
 } from 'src/modules/modelica/modelica'
 
@@ -16,7 +18,7 @@ export function useSolverRegistry(params: {
   allowApplySolverSimDefaults?: Ref<boolean>
 }) {
   const solverOptionsSchema = ref<Record<string, unknown> | undefined>(undefined)
-  const selectedSolverKey = ref<string>('builtin:default')
+  const selectedSolverKey = ref<string>(makeSourceKey('builtin', 'default'))
   const newSolverId = ref<string>('solver2')
   const solverOptionsByKey = ref<Record<string, Record<string, unknown>>>({})
   const solverOptions = computed<Record<string, unknown>>({
@@ -41,26 +43,26 @@ export function useSolverRegistry(params: {
   const solverKeyOptions = computed(() => {
     const builtins = Object.keys(builtinSolvers)
       .sort()
-      .map((id) => ({ label: `builtin:${id}`, value: `builtin:${id}` }))
+      .map((id) => ({ label: makeSourceKey('builtin', id), value: makeSourceKey('builtin', id) }))
 
     const projects = Object.keys(projectSolvers.value)
       .sort()
-      .map((id) => ({ label: `project:${id}`, value: `project:${id}` }))
+      .map((id) => ({ label: makeSourceKey('project', id), value: makeSourceKey('project', id) }))
 
     return [...builtins, ...projects]
   })
 
   const isSolverBuiltin = computed(() =>
-    String(selectedSolverKey.value || '').startsWith('builtin:'),
+    isSourceKeyScope(String(selectedSolverKey.value || ''), 'builtin'),
   )
 
   const activeSolverSource = computed({
     get: () => {
       const key = String(selectedSolverKey.value || '')
-      if (key.startsWith('builtin:')) {
+      if (isSourceKeyScope(key, 'builtin')) {
         return builtinSolvers[solverIdFromKey(key)] ?? ''
       }
-      if (key.startsWith('project:')) {
+      if (isSourceKeyScope(key, 'project')) {
         return projectSolvers.value[solverIdFromKey(key)] ?? ''
       }
       return builtinSolvers[key] ?? ''
@@ -78,11 +80,11 @@ export function useSolverRegistry(params: {
     if (!id) return
     if (projectSolvers.value[id] != null) {
       Notify.create({ type: 'warning', message: `Solver '${id}' already exists in the project` })
-      selectedSolverKey.value = `project:${id}`
+      selectedSolverKey.value = makeSourceKey('project', id)
       return
     }
     projectSolvers.value = { ...projectSolvers.value, [id]: defaultBuiltinSolverSource }
-    selectedSolverKey.value = `project:${id}`
+    selectedSolverKey.value = makeSourceKey('project', id)
   }
 
   function deleteActiveProjectSolver() {
@@ -95,7 +97,7 @@ export function useSolverRegistry(params: {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { [id]: _removed, ...rest } = projectSolvers.value
     projectSolvers.value = rest
-    const deletedKey = `project:${id}`
+    const deletedKey = makeSourceKey('project', id)
     if (solverOptionsByKey.value[deletedKey]) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { [deletedKey]: _deletedOptions, ...restOptions } = solverOptionsByKey.value
@@ -103,7 +105,7 @@ export function useSolverRegistry(params: {
     }
 
     const nextId = Object.keys(projectSolvers.value).sort()[0] ?? 'solver1'
-    selectedSolverKey.value = `project:${nextId}`
+    selectedSolverKey.value = makeSourceKey('project', nextId)
   }
 
   async function refreshActiveSolverMetadata() {
@@ -155,7 +157,9 @@ export function useSolverRegistry(params: {
     (options) => {
       const selected = String(selectedSolverKey.value || '')
       if (options.some((opt) => opt.value === selected)) return
-      const fallback = options.find((opt) => opt.value === 'builtin:default')?.value ?? options[0]?.value
+      const fallback =
+        options.find((opt) => opt.value === makeSourceKey('builtin', 'default'))?.value ??
+        options[0]?.value
       selectedSolverKey.value = fallback ?? ''
     },
     { debounce: 50, maxWait: 200, immediate: true },

@@ -891,11 +891,33 @@ export function createDefaultProjectSolvers(): Record<string, string> {
   return { solver1: defaultSolverSource }
 }
 
-export function solverIdFromKey(key: string): string {
+export type SourceKeyScope = 'builtin' | 'project' | 'custom'
+
+const SOURCE_KEY_SCOPES: SourceKeyScope[] = ['builtin', 'project', 'custom']
+
+export function makeSourceKey(scope: SourceKeyScope, id: string): string {
+  return `${scope}:${String(id || '')}`
+}
+
+export function parseSourceKey(key: string): { scope?: SourceKeyScope; id: string } {
   const k = String(key || '')
-  if (k.startsWith('builtin:')) return k.slice('builtin:'.length)
-  if (k.startsWith('project:')) return k.slice('project:'.length)
-  return k
+  const scope = SOURCE_KEY_SCOPES.find((s) => k.startsWith(`${s}:`))
+  if (!scope) return { id: k }
+  return { scope, id: k.slice(scope.length + 1) }
+}
+
+export function isSourceKeyScope(key: string, scope: SourceKeyScope): boolean {
+  return parseSourceKey(key).scope === scope
+}
+
+export function ensureSourceKeyScope(key: string, scope: SourceKeyScope): string {
+  const parsed = parseSourceKey(key)
+  if (parsed.scope) return key
+  return makeSourceKey(scope, parsed.id)
+}
+
+export function solverIdFromKey(key: string): string {
+  return parseSourceKey(key).id
 }
 
 type JsonSchemaPropertyWithDefault = { default?: unknown }

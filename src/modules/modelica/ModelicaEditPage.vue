@@ -239,7 +239,7 @@
             <q-card flat>
               <div class="row items-center q-gutter-xs q-pa-xs">
                 <q-select
-                  v-model="selectedUiTemplateId"
+                  v-model="selectedUiTemplateKey"
                   :options="uiTemplateOptions"
                   dense
                   outlined
@@ -291,16 +291,28 @@
                   flat
                   dense
                   label="Delete"
-                  :disable="uiTemplateOptions.length <= 1"
+                  :disable="!canDeleteSelectedUiTemplate"
                   @click="deleteActiveUiTemplate()"
                 />
               </div>
 
-              <CodeEditor
-                v-model="activeUiTemplateSource"
-                placeholder="Enter your UI template source here..."
-                language="jinja2"
-              />
+              <div style="position: relative">
+                <CodeEditor
+                  v-model="activeUiTemplateSource"
+                  placeholder="Enter your UI template source here..."
+                  language="jinja2"
+                />
+                <div
+                  v-if="isUiTemplateBuiltin"
+                  style="
+                    position: absolute;
+                    inset: 0;
+                    background: rgba(255, 255, 255, 0.01);
+                    pointer-events: all;
+                  "
+                  title="Built-in UI templates are read-only"
+                />
+              </div>
             </q-card>
           </template>
 
@@ -519,6 +531,9 @@ import {
   exportGeneratedUiJinjaTemplate,
   renderUiHtml,
   builtinSolvers,
+  isSourceKeyScope,
+  makeSourceKey,
+  parseSourceKey,
   packProjectFile as packModelicaProjectFile,
   unpackProjectFile,
   compileModelicaToJs,
@@ -1031,22 +1046,35 @@ const selectedTemplateKey = ref<string>('')
 const templateOptions = computed(() => {
   const builtins = Object.keys(jinjaTemplateUrls)
     .sort()
-    .map((key) => ({ label: `builtin:${key.split('/').pop() ?? key}`, value: `builtin:${key}` }))
+    .map((key) => ({
+      label: makeSourceKey('builtin', key.split('/').pop() ?? key),
+      value: makeSourceKey('builtin', key),
+    }))
 
   const customs = Object.keys(customTemplates.value)
     .sort()
-    .map((id) => ({ label: `custom:${id}`, value: `custom:${id}` }))
+    .map((id) => ({ label: makeSourceKey('custom', id), value: makeSourceKey('custom', id) }))
 
   return [...builtins, ...customs]
 })
 
 const isTemplateBuiltin = computed(() =>
-  String(selectedTemplateKey.value || '').startsWith('builtin:'),
+  isSourceKeyScope(String(selectedTemplateKey.value || ''), 'builtin'),
 )
 
 const canDeleteSelectedTemplate = computed(() =>
-  String(selectedTemplateKey.value).startsWith('custom:'),
+  isSourceKeyScope(String(selectedTemplateKey.value || ''), 'custom'),
 )
+
+function normalizeTemplateSelectionKey(input: string): string {
+  const raw = String(input || '')
+  if (!raw) return ''
+  const parsed = parseSourceKey(raw)
+  if (parsed.scope) return raw
+  if (jinjaTemplateUrls[raw]) return makeSourceKey('builtin', raw)
+  if (customTemplates.value[raw] != null) return makeSourceKey('custom', raw)
+  return raw
+}
 
 // Prevent template auto-reload while restoring persisted state.
 const isHydratingState = ref(true)
@@ -1067,14 +1095,14 @@ function addCustomTemplate() {
   const initial = templateSource.value || ''
   customTemplates.value = { ...customTemplates.value, [id]: initial }
 
-  selectedTemplateKey.value = `custom:${id}`
+  selectedTemplateKey.value = makeSourceKey('custom', id)
   Notify.create({ type: 'positive', message: `Template added: ${id}` })
 }
 
 function deleteSelectedTemplate() {
   const key = String(selectedTemplateKey.value || '')
-  if (!key.startsWith('custom:')) return
-  const id = key.slice('custom:'.length)
+  if (!isSourceKeyScope(key, 'custom')) return
+  const id = parseSourceKey(key).id
 
   const keys = Object.keys(customTemplates.value)
   if (customTemplates.value[id] == null) return
@@ -1088,7 +1116,7 @@ function deleteSelectedTemplate() {
   customTemplates.value = rest
 
   const nextId = Object.keys(customTemplates.value).sort()[0]
-  selectedTemplateKey.value = nextId ? `custom:${nextId}` : ''
+  selectedTemplateKey.value = nextId ? makeSourceKey('custom', nextId) : ''
 }
 
 // Keep templateSource in sync when editing a custom template
@@ -1096,8 +1124,8 @@ watchDebounced(
   templateSource,
   (src) => {
     const key = String(selectedTemplateKey.value || '')
-    if (!key.startsWith('custom:')) return
-    const id = key.slice('custom:'.length)
+    if (!isSourceKeyScope(key, 'custom')) return
+    const id = parseSourceKey(key).id
     if (!id) return
     customTemplates.value = { ...customTemplates.value, [id]: String(src ?? '') }
   },
@@ -1142,42 +1170,93 @@ function handleCreateNewVersionClick() {
   createNewVersion()
 }
 
+const builtinUiTemplates = { default: defaultUiTemplateSource } as const
 const uiTemplates = ref<Record<string, string>>({})
-const selectedUiTemplateId = ref<string>('default')
+const selectedUiTemplateKey = ref<string>(makeSourceKey('builtin', 'default'))
 const newUiTemplateId = ref<string>('ui2')
 
-const uiTemplateOptions = computed(() =>
-  Object.keys(uiTemplates.value)
+const uiTemplateOptions = computed(() => {
+  const builtins = Object.keys(builtinUiTemplates)
     .sort()
-    .map((id) => ({ label: id, value: id })),
+    .map((id) => ({ label: makeSourceKey('builtin', id), value: makeSourceKey('builtin', id) }))
+  const projects = Object.keys(uiTemplates.value)
+    .sort()
+    .map((id) => ({ label: makeSourceKey('project', id), value: makeSourceKey('project', id) }))
+  return [...builtins, ...projects]
+})
+
+const isUiTemplateBuiltin = computed(() =>
+  isSourceKeyScope(String(selectedUiTemplateKey.value || ''), 'builtin'),
 )
+
+const canDeleteSelectedUiTemplate = computed(() => {
+  const key = String(selectedUiTemplateKey.value || '')
+  return isSourceKeyScope(key, 'project') && Object.keys(uiTemplates.value).length > 0
+})
+
 const activeUiTemplateSource = computed({
-  get: () => uiTemplates.value[selectedUiTemplateId.value] ?? '',
+  get: () => {
+    const key = String(selectedUiTemplateKey.value || '')
+    if (isSourceKeyScope(key, 'builtin')) {
+      const id = parseSourceKey(key).id
+      return builtinUiTemplates[id as keyof typeof builtinUiTemplates] ?? ''
+    }
+    if (isSourceKeyScope(key, 'project')) {
+      return uiTemplates.value[parseSourceKey(key).id] ?? ''
+    }
+    return uiTemplates.value[key] ?? ''
+  },
   set: (v: string) => {
-    uiTemplates.value = { ...uiTemplates.value, [selectedUiTemplateId.value]: v }
+    const key = String(selectedUiTemplateKey.value || '')
+    if (isSourceKeyScope(key, 'builtin')) return
+    const id = parseSourceKey(key).id
+    if (!id) return
+    uiTemplates.value = { ...uiTemplates.value, [id]: String(v ?? '') }
   },
 })
 
 function addUiTemplate() {
   const id = String(newUiTemplateId.value || '').trim()
   if (!id) return
+  if ((builtinUiTemplates as Record<string, string>)[id] != null) {
+    Notify.create({ type: 'warning', message: `UI template '${id}' is reserved by built-ins` })
+    selectedUiTemplateKey.value = makeSourceKey('builtin', id)
+    return
+  }
   if (uiTemplates.value[id] != null) {
     Notify.create({ type: 'warning', message: `UI template '${id}' already exists` })
+    selectedUiTemplateKey.value = makeSourceKey('project', id)
     return
   }
   uiTemplates.value = { ...uiTemplates.value, [id]: defaultUiTemplateSource }
-  selectedUiTemplateId.value = id
+  selectedUiTemplateKey.value = makeSourceKey('project', id)
 }
 
 function deleteActiveUiTemplate() {
+  const key = String(selectedUiTemplateKey.value || '')
+  if (!isSourceKeyScope(key, 'project')) return
+  const id = parseSourceKey(key).id
+  if (!id || uiTemplates.value[id] == null) return
+
   const keys = Object.keys(uiTemplates.value)
-  if (keys.length <= 1) return
-  const id = selectedUiTemplateId.value
-  const next = keys.find((k) => k !== id) ?? keys[0]!
+  const nextProject = keys.find((k) => k !== id)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { [id]: _removed, ...rest } = uiTemplates.value
   uiTemplates.value = rest
-  selectedUiTemplateId.value = next
+  selectedUiTemplateKey.value = nextProject
+    ? makeSourceKey('project', nextProject)
+    : makeSourceKey('builtin', 'default')
+}
+
+function resolveUiTemplateKey(idOrKey: string): string {
+  const raw = String(idOrKey || '')
+  if (!raw) return makeSourceKey('builtin', 'default')
+  const parsed = parseSourceKey(raw)
+  if (parsed.scope === 'builtin' || parsed.scope === 'project') return raw
+  const id = parsed.id
+  if (uiTemplates.value[id] != null) return makeSourceKey('project', id)
+  if ((builtinUiTemplates as Record<string, string>)[id] != null) return makeSourceKey('builtin', id)
+  return makeSourceKey('builtin', 'default')
 }
 
 function clearModelicaLog() {
@@ -1217,7 +1296,7 @@ function packProjectFile(): TyModelicaProjectFileV1 {
     projectId: currentProjectId.value,
     modelicaSource: modelicaSource.value,
     uiTemplates: uiTemplates.value,
-    activeUiTemplateId: selectedUiTemplateId.value,
+    activeUiTemplateId: parseSourceKey(selectedUiTemplateKey.value).id,
     projectSolvers: projectSolvers.value,
     sim: {
       t0: simT0.value,
@@ -1244,7 +1323,7 @@ function applyProjectFile(pf: TyModelicaProjectFileV1) {
   allowApplySolverSimDefaults.value = !hasHydratedSimulationSettings.value
   modelicaSource.value = state.modelicaSource
   uiTemplates.value = state.uiTemplates
-  selectedUiTemplateId.value = state.selectedUiTemplateId
+  selectedUiTemplateKey.value = resolveUiTemplateKey(state.selectedUiTemplateId)
   if (state.projectSolvers) projectSolvers.value = state.projectSolvers
   if (typeof state.sim.t0 === 'number') simT0.value = state.sim.t0
   if (typeof state.sim.tf === 'number') simTf.value = state.sim.tf
@@ -1285,8 +1364,8 @@ const {
 
 async function refreshBuiltinTemplateIfSelected() {
   const key = String(selectedTemplateKey.value || '')
-  if (!key.startsWith('builtin:')) return
-  const path = key.slice('builtin:'.length)
+  if (!isSourceKeyScope(key, 'builtin')) return
+  const path = parseSourceKey(key).id
   const loader = jinjaTemplateUrls[path]
   if (!loader) return
   const content = (await loader()) as string
@@ -1542,8 +1621,8 @@ watchDebounced(
     }
 
     const k = String(key)
-    if (k.startsWith('builtin:')) {
-      const path = k.slice('builtin:'.length)
+    if (isSourceKeyScope(k, 'builtin')) {
+      const path = parseSourceKey(k).id
       const loader = jinjaTemplateUrls[path]
       if (!loader) return
       const content = (await loader()) as string
@@ -1551,8 +1630,8 @@ watchDebounced(
       return
     }
 
-    if (k.startsWith('custom:')) {
-      const id = k.slice('custom:'.length)
+    if (isSourceKeyScope(k, 'custom')) {
+      const id = parseSourceKey(k).id
       templateSource.value = customTemplates.value[id] ?? ''
     }
   },
@@ -1669,7 +1748,7 @@ const applyExample = async (choice: unknown) => {
   const sel = Object.keys(jinjaTemplateUrls).find((tplKey) => tplKey.includes('javascript.jinja'))
   if (!sel) return
 
-  selectedTemplateKey.value = sel
+  selectedTemplateKey.value = makeSourceKey('builtin', sel)
   const exampleTemplate = (await jinjaTemplateUrls[sel]!()) as string
   templateSource.value = exampleTemplate || ''
 }
@@ -1841,6 +1920,7 @@ onMounted(async () => {
     showAllInPrompt,
     currentProjectId,
   })
+  selectedTemplateKey.value = normalizeTemplateSelectionKey(selectedTemplateKey.value)
   ensurePlotViewInLayout(initialLayout.value)
 
   // 2) Project file (model-specific). One JSON object, synced via OPFS.
@@ -1858,8 +1938,8 @@ onMounted(async () => {
       applyProjectFile(pf)
     } else {
       // First-time project initialization
-      uiTemplates.value = { default: defaultUiTemplateSource }
-      selectedUiTemplateId.value = 'default'
+      uiTemplates.value = {}
+      selectedUiTemplateKey.value = makeSourceKey('builtin', 'default')
       modelicaSource.value = ''
       plotCharts.value = []
       executionResult.value = {}
@@ -1875,8 +1955,8 @@ onMounted(async () => {
     }
   } catch (e) {
     console.warn('Project hydration failed, resetting project file:', e)
-    uiTemplates.value = { default: defaultUiTemplateSource }
-    selectedUiTemplateId.value = 'default'
+    uiTemplates.value = {}
+    selectedUiTemplateKey.value = makeSourceKey('builtin', 'default')
     modelicaSource.value = ''
     plotCharts.value = []
     executionResult.value = {}
@@ -1897,7 +1977,7 @@ onMounted(async () => {
     [
       modelicaSource,
       uiTemplates,
-      selectedUiTemplateId,
+      selectedUiTemplateKey,
       projectSolvers,
       simT0,
       simTf,

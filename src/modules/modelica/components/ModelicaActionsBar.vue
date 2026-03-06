@@ -300,7 +300,7 @@ import { mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
 import type { JSONSchema7 } from 'json-schema'
 import { computed, ref } from 'vue'
 import ObjectView from 'src/components/varViews/ObjectView.vue'
-import { solverIdFromKey } from 'src/modules/modelica/modelica'
+import { isSourceKeyScope, solverIdFromKey } from 'src/modules/modelica/modelica'
 import SimulationRunControls from './SimulationRunControls.vue'
 
 type ExportTarget = 'modelica' | 'template' | 'js' | 'daePretty' | 'daeJson'
@@ -426,9 +426,9 @@ const solverDisplayLabel = computed(() => {
   const integratorRaw = options.timeIntegrator ?? options.integrator
   const integrator =
     typeof integratorRaw === 'string' && integratorRaw.trim() ? integratorRaw.trim() : ''
-  const prefix = key.startsWith('builtin:')
+  const prefix = isSourceKeyScope(key, 'builtin')
     ? 'builtin'
-    : key.startsWith('project:')
+    : isSourceKeyScope(key, 'project')
       ? 'project'
       : 'solver'
   return integrator ? `${integrator} (${prefix}:${solverId})` : `${prefix}:${solverId}`
