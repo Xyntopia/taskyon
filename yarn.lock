@@ -19922,10 +19922,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rumoca@https://assets.taskyon.space/rumoca-0.8.0.a7.tgz":
+"rumoca@https://assets.taskyon.space/rumoca-0.8.0.a8.tgz":
   version: 0.8.0
-  resolution: "rumoca@https://assets.taskyon.space/rumoca-0.8.0.a7.tgz"
-  checksum: 10c0/45504cda2d0ad3abaa2c75e4d2b8ffbc22d072e5bc445b71ad40db370352d37363a1c351ad3011128e53f18abd21348934d63cfab03e93b6776f772865ae4456
+  resolution: "rumoca@https://assets.taskyon.space/rumoca-0.8.0.a8.tgz"
+  checksum: 10c0/9d145d69b7853c18a4b8346bd5b2c47a006cbe8844628abbab57ce073f215fe169acce374699066b17dcd682af2839cb037edbea91586fe06b621e527e3c6afa
   languageName: node
   linkType: hard
 
@@ -21742,7 +21742,7 @@ __metadata:
     pyodide: "npm:^0.29.3"
     qrcode: "npm:^1.5.4"
     quasar: "npm:^2.17.0"
-    rumoca: "https://assets.taskyon.space/rumoca-0.8.0.a7.tgz"
+    rumoca: "https://assets.taskyon.space/rumoca-0.8.0.a8.tgz"
     sort-package-json: "npm:^3.0.0"
     sqlocal: "npm:^0.6.2"
     stopword: "npm:^2.0.8"
