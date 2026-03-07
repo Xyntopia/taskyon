@@ -251,13 +251,24 @@ export default defineConfig((ctx) => {
           exclude: [...(viteConf.optimizeDeps?.exclude ?? []), '@electric-sql/pglite', 'pyodide'],
         }
         viteConf.resolve = viteConf.resolve || {}
-        viteConf.resolve.alias = viteConf.resolve.alias || {}
-        viteConf.resolve.alias['@taskyon/client'] = fileURLToPath(
+        const clientAliasPath = fileURLToPath(
           new URL('./packages/tyclient/src/index.ts', import.meta.url),
         )
-        viteConf.resolve.alias['@taskyon/shared'] = fileURLToPath(
-          new URL('./packages/shared', import.meta.url),
-        )
+        const sharedAliasPath = fileURLToPath(new URL('./packages/shared', import.meta.url))
+        const existingAliases = viteConf.resolve.alias
+
+        if (Array.isArray(existingAliases)) {
+          existingAliases.push(
+            { find: '@taskyon/client', replacement: clientAliasPath },
+            { find: '@taskyon/shared', replacement: sharedAliasPath },
+          )
+        } else {
+          viteConf.resolve.alias = {
+            ...(existingAliases || {}),
+            '@taskyon/client': clientAliasPath,
+            '@taskyon/shared': sharedAliasPath,
+          }
+        }
 
         viteConf.plugins = [
           viteConf.plugins,
