@@ -5,7 +5,7 @@
 
 import { lockMap } from '@taskyon/taskyon'
 import axios from 'axios'
-import { asyncLruCache } from 'src/modules/utils'
+import { asyncLruCache } from '../../packages/shared/modules/utils'
 
 type gDriveFile = {
   id: string
@@ -42,7 +42,10 @@ function buildNameProps(names: string[]) {
 }
 
 // --- unified ID resolver ---
-export const resolveDriveId = asyncLruCache(200, [2])(async (
+export const resolveDriveId = asyncLruCache(
+  200,
+  [2],
+)(async (
   path: string[],
   type: 'file' | 'directory',
   accessToken: string,

@@ -6,13 +6,13 @@ import { defineStore } from 'pinia'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
 import defaultSettings from 'src/assets/taskyon_settings.json?raw'
 import { TyProfile } from 'src/modules/taskyon/types'
-import type { MergeOptions } from 'src/modules/utils'
+import type { MergeOptions } from '../../packages/shared/modules/utils'
 import {
   clearBrowserCaches,
   clearCookies,
   clearServiceWorkers,
   deepMergeReactive,
-} from 'src/modules/utils'
+} from '../../packages/shared/modules/utils'
 import type { DeepReadonly } from 'vue'
 import { computed, reactive, ref, toRefs, unref, watch, type Reactive } from 'vue'
 // TODO: remove, to make this file here faster...

@@ -10,12 +10,12 @@
 </template>
 
 <script setup lang="ts">
-import type { DockNode } from 'src/components/DockView.vue'
-import DockView from 'src/components/DockView.vue'
-import { syncRefsWithLocalStorage } from 'src/modules/saveState'
-import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
+import type { DockNode } from './DockView.vue'
+import DockView from './DockView.vue'
+import { syncRefsWithLocalStorage } from '../modules/saveState'
+import type { partialTyConfiguration } from '../../tyclient/src'
 import { ref } from 'vue'
-import { type ClientTool } from '../../packages/tyclient/src'
+import { type ClientTool } from '../../tyclient/src'
 import TaskyonIframe from './TaskyonIframe.vue'
 
 const {

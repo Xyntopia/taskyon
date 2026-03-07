@@ -18,9 +18,9 @@
 
 <script setup lang="ts">
 import { watchEffect } from 'vue'
-import { deepMerge } from '../../packages/taskyon/src/utils/objHelpers'
-import type { partialTyConfiguration, TyClient } from '../../packages/tyclient/src'
-import { type ClientTool, initializeTaskyon } from '../../packages/tyclient/src'
+import { deepMerge } from '../../taskyon/src/utils/objHelpers'
+import type { partialTyConfiguration, TyClient } from '../../tyclient/src'
+import { type ClientTool, initializeTaskyon } from '../../tyclient/src'
 
 const {
   tools = [],

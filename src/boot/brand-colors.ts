@@ -1,7 +1,7 @@
 // $
 import { defineBoot } from '#q-app/wrappers'
 import { setCssVar } from 'quasar'
-import { hexToRgb } from 'src/modules/utils'
+import { hexToRgb } from '../../packages/shared/modules/utils'
 import { initialStoredStateObj } from '../modules/ui/initialState'
 
 export function setColors(primary: string | undefined, secondary: string | undefined) {

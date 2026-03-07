@@ -6,7 +6,7 @@ import { ref } from 'vue'
 import { Notify } from 'quasar'
 import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
 import { validateJavaScriptInSandbox } from '../../../packages/taskyon/src/utils/checkJsSyntax'
-import { serializeObject } from 'src/modules/serializeObject'
+import { serializeObject } from '../../../packages/shared/modules/serializeObject'
 
 // Zod v3 vs v4 compatibility: some builds do not expose z.function().args().returns().
 // We use z.custom to type-check "is a function" while keeping strong TS inference.

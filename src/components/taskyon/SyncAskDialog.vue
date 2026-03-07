@@ -123,7 +123,7 @@ import { matContentCopy, matDevices, matKeyOff, matSync } from '@quasar/extras/m
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computedAsync } from '@vueuse/core'
 import QrCode from '../QrCode.vue'
-import { copyToClipboard } from 'src/modules/utils'
+import { copyToClipboard } from '../../../packages/shared/modules/utils'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()

@@ -182,7 +182,7 @@ import { chat2Md, chatToYaml, type TaskNode } from '@taskyon/taskyon'
 import { asyncComputed } from 'src/modules/vueUtils'
 import QrCode from '../QrCode.vue'
 import InfoDialog from '../InfoDialog.vue'
-import { copyToClipboard } from 'src/modules/utils'
+import { copyToClipboard } from '../../../packages/shared/modules/utils'
 
 const showDialog = defineModel({ type: Boolean, default: false })
 

@@ -47,7 +47,7 @@
 
 <script setup lang="ts">
 import { matRestartAlt, matContentCopy } from '@quasar/extras/material-icons'
-import InfoDialog from 'components/InfoDialog.vue'
+import InfoDialog from '../InfoDialog.vue'
 
 const emit = defineEmits<{
   (e: 'reset'): void

@@ -121,7 +121,7 @@
 
 <script setup lang="ts">
 import { type JSONSchema7 } from 'json-schema'
-import { copyToClipboard, countLeaves } from 'src/modules/utils'
+import { copyToClipboard, countLeaves } from '../../modules/utils'
 import { computed, ref, toRef } from 'vue'
 import type z from 'zod'
 import SearchInput from '../SearchInput.vue'
@@ -135,7 +135,7 @@ import {
   useVariableGraph,
 } from './useVariableGraph'
 import type { CustomRenderer } from './VariableField.vue'
-import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
+import { safeYamlDump } from '../../../taskyon/src/utils/yamlUtils'
 import { matContentCopy } from '@quasar/extras/material-icons'
 
 export type iconMap = {

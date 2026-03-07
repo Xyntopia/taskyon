@@ -10,7 +10,7 @@ import baseDaeTemplate from 'src/modules/modelica/base_dae.jinja?raw'
 import javascriptTemplate from 'src/modules/modelica/javascript.jinja?raw'
 import standaloneHtmlTemplate from 'src/modules/modelica/standalone_html.jinja?raw'
 import bouncingBallTemplate from 'src/modules/modelica/bouncing_ball_animation.jinja?raw'
-import { serializeObject } from 'src/modules/serializeObject'
+import { serializeObject } from '../../../packages/shared/modules/serializeObject'
 import { strFromU8, unzipSync } from 'fflate'
 import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
 
@@ -999,10 +999,7 @@ end MslConstRamp;
         xLen,
         serializedResult: serializedRunResult,
       },
-      generatedCodeSerialized: serializeObject(
-        rendered,
-        MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
-      ),
+      generatedCodeSerialized: serializeObject(rendered, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
       renderedPreview: rendered.slice(0, 120),
       prettyPreview: String(compiled.pretty ?? '').slice(0, 120),
     }
@@ -1354,9 +1351,9 @@ end MslResistorExample;
       new Set(String(rendered).match(/\bunit:\s*"[^"]*"/g) ?? []),
     )
     const generatedUnitAccessMarkers = [
-      'meta.states.map((v) => ({ name: v.name, kind: \'state\', start: v.start, unit: v.unit }))',
-      'meta.algebraics.map((v) => ({ name: v.name, kind: \'algebraic\', start: v.start, unit: v.unit }))',
-      'meta.inputs.map((v) => ({ name: v.name, kind: \'input\', unit: v.unit }))',
+      "meta.states.map((v) => ({ name: v.name, kind: 'state', start: v.start, unit: v.unit }))",
+      "meta.algebraics.map((v) => ({ name: v.name, kind: 'algebraic', start: v.start, unit: v.unit }))",
+      "meta.inputs.map((v) => ({ name: v.name, kind: 'input', unit: v.unit }))",
     ]
     debug.unitDiagnostics = {
       compile: {
@@ -1736,15 +1733,15 @@ end MslResistorExample;
     }
 
     const compileUnitAttrCount =
-      (
-        (debug.unitDiagnostics as { compile?: { prettyUnitAttrCount?: number } })?.compile
-          ?.prettyUnitAttrCount ?? 0
-      ) || 0
+      ((debug.unitDiagnostics as { compile?: { prettyUnitAttrCount?: number } })?.compile
+        ?.prettyUnitAttrCount ??
+        0) ||
+      0
     const templateUnitPropCount =
-      (
-        (debug.unitDiagnostics as { template?: { generatedUnitPropertyCount?: number } })?.template
-          ?.generatedUnitPropertyCount ?? 0
-      ) || 0
+      ((debug.unitDiagnostics as { template?: { generatedUnitPropertyCount?: number } })?.template
+        ?.generatedUnitPropertyCount ??
+        0) ||
+      0
     if (totalPhysicalUnitCount <= 0) {
       throw new Error(
         [
@@ -1853,10 +1850,7 @@ end MslResistorExample;
         serializedResult: serializedRunResult,
       },
       generatedCode: rendered,
-      generatedCodeSerialized: serializeObject(
-        rendered,
-        MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
-      ),
+      generatedCodeSerialized: serializeObject(rendered, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
       prettyPreview: String(compiled.pretty ?? '').slice(0, 120),
     }
   } catch (err) {
@@ -2856,10 +2850,7 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
     ok: true,
     model: 'SatelliteOrbit2D',
     sim: simParams,
-    debugSummarySerialized: serializeObject(
-      debugSummary,
-      MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
-    ),
+    debugSummarySerialized: serializeObject(debugSummary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
     currentSolver: {
       id: 'sdirk2',
       invariants: currentInv,

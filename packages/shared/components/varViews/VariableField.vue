@@ -282,8 +282,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { matBarChart } from '@quasar/extras/material-icons'
-import { serializeObject } from 'src/modules/serializeObject'
-import { countLeaves } from 'src/modules/utils'
+import { serializeObject } from '../../modules/serializeObject'
+import { countLeaves } from '../../modules/utils'
 
 import FieldView from './FieldView.vue'
 import JsonInput from './JsonInput.vue'

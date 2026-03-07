@@ -84,7 +84,9 @@
                           flat
                           size="sm"
                           label="run all"
-                          @click.stop="runTests(section.tests[groupName] ?? {}, state.detailedTests)"
+                          @click.stop="
+                            runTests(section.tests[groupName] ?? {}, state.detailedTests)
+                          "
                         />
                       </q-item-section>
                     </template>
@@ -130,10 +132,10 @@ import { exportFile } from 'quasar'
 import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
 import * as ModelicaDiagnostics from 'src/modules/modelica/modelicaDiagnostics'
-import { syncRefsWithLocalStorage } from 'src/modules/saveState'
+import { syncRefsWithLocalStorage } from '../../packages/shared/modules/saveState'
 import { runMarkdownDetectionTests } from 'src/modules/taskyon/runMarkdownDetectionTests'
 import * as TaskyonTests from 'src/modules/taskyon/tests'
-import { copyToClipboard, getEnvironmentInfo } from 'src/modules/utils'
+import { copyToClipboard, getEnvironmentInfo } from '../../packages/shared/modules/utils'
 import { testBuildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
@@ -250,7 +252,12 @@ function dirname(path: string): string {
   return path.slice(0, idx)
 }
 
-function addToGroup(group: Record<string, TestRecord>, name: string, fn: TaskyonTestFn, key: string) {
+function addToGroup(
+  group: Record<string, TestRecord>,
+  name: string,
+  fn: TaskyonTestFn,
+  key: string,
+) {
   if (!group[key]) group[key] = {}
   group[key][name] = fn
 }
@@ -268,14 +275,21 @@ function registerTest(testName: string, func: TaskyonTestFn, sourcePath: string)
 
 registerTest('testBuildSlimView', testBuildSlimView, 'src/pages/DiagnosticsPage.vue')
 registerTest('getEnvironmentInfo', getEnvironmentInfo, 'src/pages/DiagnosticsPage.vue')
-registerTest('runMarkdownDetectionTests', runMarkdownDetectionTests, 'src/pages/DiagnosticsPage.vue')
+registerTest(
+  'runMarkdownDetectionTests',
+  runMarkdownDetectionTests,
+  'src/pages/DiagnosticsPage.vue',
+)
 
 const modules = Object.entries(testModules).map(([path, mod]) => ({
   sourcePath: normalizeSourcePath(path),
   mod,
 }))
 modules.push({ sourcePath: 'src/modules/taskyon/tests.ts', mod: TaskyonTests })
-modules.push({ sourcePath: 'src/modules/modelica/modelicaDiagnostics.ts', mod: ModelicaDiagnostics })
+modules.push({
+  sourcePath: 'src/modules/modelica/modelicaDiagnostics.ts',
+  mod: ModelicaDiagnostics,
+})
 
 modules.forEach(({ sourcePath, mod }) => {
   if (!mod || typeof mod !== 'object') return

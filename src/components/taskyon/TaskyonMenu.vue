@@ -103,7 +103,7 @@
 <script setup lang="ts">
 import { matHelpOutline, matSettings } from '@quasar/extras/material-icons'
 import { mdiGithub, mdiHospital, mdiInformationVariant, mdiWrench } from '@quasar/extras/mdi-v6'
-import { getEnvironmentInfo } from 'src/modules/utils'
+import { getEnvironmentInfo } from '../../../packages/shared/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { ref } from 'vue'
 import DarkModeButton from '../DarkModeButton.vue'

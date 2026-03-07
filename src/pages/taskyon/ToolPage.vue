@@ -184,7 +184,7 @@ import {
 } from '@quasar/extras/mdi-v6'
 import type { InternalTool, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { craeteToolJsonSchema, createTaskNode, ToolBase } from '@taskyon/taskyon'
-import { copyToClipboard } from 'src/modules/utils'
+import { copyToClipboard } from '../../../packages/shared/modules/utils'
 import type { DockNode } from 'src/components/DockView.vue'
 import DockView from 'src/components/DockView.vue'
 import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'

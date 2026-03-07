@@ -291,16 +291,11 @@ import {
   matVisibility,
 } from '@quasar/extras/material-icons'
 import { mdiNewBox, mdiRenameBox, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
-import {
-  createChatCompletionTask,
-  createTool,
-  makeTaskResult,
-  toolCall,
-} from '@taskyon/taskyon'
+import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 import { watchThrottled } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'
-import { copyToClipboard } from 'src/modules/utils'
+import { copyToClipboard } from '../../../packages/shared/modules/utils'
 import CodeEditor from 'src/components/CodeEditor.vue'
 import FileDropzone from 'src/components/FileDropzone.vue'
 import SplitTaskyonView from 'src/components/SplitTaskyonView.vue'

@@ -52,7 +52,7 @@ import tyMarkdownCss from 'src/css/markdown.sass?inline'
 import { uid } from 'quasar'
 import { generateKaTeXIframeCss } from './katexFonts'
 import { svgStringToPngUint8 } from './svgUtils'
-import { copyPngToClipboard, copyToClipboard, hexToRgb } from './utils'
+import { copyPngToClipboard, copyToClipboard, hexToRgb } from '../../packages/shared/modules/utils'
 
 type MditToken = ReturnType<InstanceType<typeof MarkdownIt>['parse']>[number]
 

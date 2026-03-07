@@ -3,7 +3,7 @@
 import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'
-import { serializeObject } from 'src/modules/serializeObject'
+import { serializeObject } from '../../../packages/shared/modules/serializeObject'
 import { type Ref } from 'vue'
 
 /**
@@ -109,12 +109,7 @@ function extractCompileStatus(logs: ModelicaLogEntry[]) {
 
   const idxSuccess = lastSuccess ? taggedCompileLogs.lastIndexOf(lastSuccess) : -1
   const idxFailure = lastFailure ? taggedCompileLogs.lastIndexOf(lastFailure) : -1
-  const state =
-    idxSuccess > idxFailure
-      ? 'success'
-      : idxFailure > idxSuccess
-        ? 'error'
-        : 'unknown'
+  const state = idxSuccess > idxFailure ? 'success' : idxFailure > idxSuccess ? 'error' : 'unknown'
 
   return {
     state,

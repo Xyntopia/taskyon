@@ -541,12 +541,12 @@ import {
 } from 'src/modules/modelica/modelica'
 import defaultUiTemplateSource from 'src/modules/modelica/ui_template_placeholders.html?raw'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
-import { copyToClipboard } from 'src/modules/utils'
+import { copyToClipboard } from '../../../packages/shared/modules/utils'
 import FixedHeightPage from 'src/pages/FixedHeightPage.vue'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
-import { syncStateWithOPFSFolder } from '../saveState'
+import { syncStateWithOPFSFolder } from '../../../packages/shared/modules/saveState'
 import ModelicaActionsBar from './components/ModelicaActionsBar.vue'
 import { createModelicatools } from './modelicaTools'
 import { useProjectFileStore } from './useProjectFileStore'
@@ -1255,7 +1255,8 @@ function resolveUiTemplateKey(idOrKey: string): string {
   if (parsed.scope === 'builtin' || parsed.scope === 'project') return raw
   const id = parsed.id
   if (uiTemplates.value[id] != null) return makeSourceKey('project', id)
-  if ((builtinUiTemplates as Record<string, string>)[id] != null) return makeSourceKey('builtin', id)
+  if ((builtinUiTemplates as Record<string, string>)[id] != null)
+    return makeSourceKey('builtin', id)
   return makeSourceKey('builtin', 'default')
 }
 

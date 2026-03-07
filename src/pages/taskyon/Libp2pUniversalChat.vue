@@ -48,7 +48,7 @@ import Libp2pStatus from 'components/taskyon/Libp2pStatus.vue'
 import InfoDialog from 'src/components/InfoDialog.vue'
 import CreateNewTask from 'src/components/taskyon/CreateNewTask.vue'
 import SimpleChatView from 'src/components/taskyon/SimpleChatView.vue'
-import { syncRefsWithLocalStorage } from 'src/modules/saveState'
+import { syncRefsWithLocalStorage } from '../../../packages/shared/modules/saveState'
 import { onMounted, ref, watch } from 'vue'
 
 const showStatus = ref(false)

@@ -131,7 +131,7 @@ import {
 } from '@quasar/extras/material-icons'
 import { mdiFileTree, mdiForumPlus, mdiLanguageMarkdown } from '@quasar/extras/mdi-v6'
 import type { TaskNode } from '@taskyon/taskyon'
-import { copyToClipboard } from 'src/modules/utils'
+import { copyToClipboard } from '../../../packages/shared/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 
 const state = useAppStateStore()
