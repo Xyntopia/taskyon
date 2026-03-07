@@ -48,9 +48,9 @@
 <script setup lang="ts">
 import { matVisibility } from '@quasar/extras/material-icons'
 import { mdiKeyLink } from '@quasar/extras/mdi-v6'
+import ToggleButton from '@taskyon/shared/components/ToggleButton.vue'
 import { levenshteinDistance } from 'src/modules/string_utils'
 import { computed, ref } from 'vue'
-import ToggleButton from '../ToggleButton.vue'
 
 const props = defineProps<{
   selectedModel: string | null

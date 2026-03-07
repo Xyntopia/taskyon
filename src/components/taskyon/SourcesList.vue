@@ -80,10 +80,9 @@
 </template>
 
 <script lang="ts" setup>
+import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
 import type { Annotation } from '@taskyon/taskyon'
-import { computed } from 'vue'
-import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 const MAX_INLINE = 10
 

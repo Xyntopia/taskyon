@@ -182,21 +182,21 @@ import {
   mdiMagicStaff,
   mdiToolbox,
 } from '@quasar/extras/mdi-v6'
+import type { DockNode } from '@taskyon/shared/components/DockView.vue'
+import DockView from '@taskyon/shared/components/DockView.vue'
+import FadeAwayScrollPage from '@taskyon/shared/components/FadeAwayScrollPage.vue'
+import JsonInput from '@taskyon/shared/components/varViews/JsonInput.vue'
+import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
+import { copyToClipboard } from '@taskyon/shared/modules/utils'
 import type { InternalTool, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { craeteToolJsonSchema, createTaskNode, ToolBase } from '@taskyon/taskyon'
-import { copyToClipboard } from '../../../packages/shared/modules/utils'
-import type { DockNode } from 'src/components/DockView.vue'
-import DockView from 'src/components/DockView.vue'
-import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 import TaskChainPublishDialog from 'src/components/taskyon/TaskChainPublishDialog.vue'
 import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
-import JsonInput from 'src/components/varViews/JsonInput.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
+import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAppStateStore } from 'src/stores/appState'
-import ObjectView from 'src/components/varViews/ObjectView.vue'
 
 const { name = undefined } = defineProps<{ name?: string }>()
 

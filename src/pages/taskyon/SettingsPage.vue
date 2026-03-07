@@ -93,13 +93,13 @@
 </template>
 
 <script setup lang="ts">
+import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
 import { convertZodToJsonSchemaCached } from '@taskyon/taskyon'
 import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
 import LLMProviders from 'components/taskyon/LLMProviders.vue'
 import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'
 import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 import PasswordManager from 'src/components/taskyon/PasswordManager.vue'
-import ObjectView from 'src/components/varViews/ObjectView.vue'
 import type { iconMap } from 'src/modules/icons'
 import { iconRegistry, settingsIcons } from 'src/modules/icons'
 import { TyProfile } from 'src/modules/taskyon/types'

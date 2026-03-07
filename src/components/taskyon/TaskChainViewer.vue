@@ -118,10 +118,10 @@
 
 <script setup lang="ts">
 import { matArrowDropDown } from '@quasar/extras/material-icons'
+import tyMarkdown from '@taskyon/shared/components/tyMarkdown.vue'
 import type { TaskTreeNode } from '@taskyon/taskyon'
 import { type TaskNode } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
-import tyMarkdown from 'components/tyMarkdown.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'

@@ -1,7 +1,7 @@
 import { type RouteRecordRaw } from 'vue-router'
 import { mdRoutes } from './routes_default'
 import { defineAsyncComponent } from 'vue'
-import LoadCircle from 'components/LoadingCircle.vue'
+import LoadCircle from '@taskyon/shared/components/LoadingCircle.vue'
 
 export const universalTyRoutes: RouteRecordRaw[] = [
   {

@@ -174,15 +174,15 @@ import {
   mdiHeadCog,
   mdiTools,
 } from '@quasar/extras/mdi-v6'
+import tyMarkdown from '@taskyon/shared/components/tyMarkdown.vue'
 import { humanizeError, safeYamlDump, type FileMapping, type TaskNode } from '@taskyon/taskyon'
 import { dump } from 'js-yaml'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { ref } from 'vue'
-import tyMarkdown from '../tyMarkdown.vue'
 import FileBrowser from './FileBrowser.vue'
-import TaskField from './TaskField.vue'
 import SourcesList from './SourcesList.vue'
+import TaskField from './TaskField.vue'
 
 const { task, nextTask = undefined } = defineProps<{
   task: TaskNode

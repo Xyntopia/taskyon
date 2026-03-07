@@ -284,12 +284,11 @@ import { computed } from 'vue'
 import { matBarChart } from '@quasar/extras/material-icons'
 import { serializeObject } from '../../modules/serializeObject'
 import { countLeaves } from '../../modules/utils'
-
 import FieldView from './FieldView.vue'
 import JsonInput from './JsonInput.vue'
 import InfoDialog from '../InfoDialog.vue'
 import type { VariableNode } from './useVariableGraph'
-import ListChart from '../../../packages/shared/components/ListChart.vue'
+import ListChart from '@taskyon/shared/components/ListChart.vue'
 
 export type CustomRenderer = {
   match: (node: VariableNode) => boolean

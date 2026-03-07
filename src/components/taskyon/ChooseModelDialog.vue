@@ -72,13 +72,13 @@
 
 <script setup lang="ts">
 import { matSmartToy } from '@quasar/extras/material-icons'
+import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
+import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import ModelSelection from './ModelSelection.vue'
 import { toRefs } from 'vue'
-import InfoDialog from '../InfoDialog.vue'
-import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
 import ApiSelect from './ApiSelect.vue'
+import ModelSelection from './ModelSelection.vue'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()

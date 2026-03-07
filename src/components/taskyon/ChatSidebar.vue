@@ -104,9 +104,9 @@
 <script setup lang="ts">
 import { matAutorenew, matFileUpload, matSearch } from '@quasar/extras/material-icons'
 import { mdiForumPlus, mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
+import FileDropzone from '@taskyon/shared/components/FileDropzone.vue'
 import { generateTaskKeyWords, sleep } from '@taskyon/taskyon'
 import { watchThrottled } from '@vueuse/core'
-import FileDropzone from 'components/FileDropzone.vue'
 import { useQuasar } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'

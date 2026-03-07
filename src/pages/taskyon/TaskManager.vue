@@ -107,12 +107,6 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
-import Search from 'components/SearchInput.vue'
-import type { TaskNode } from '@taskyon/taskyon'
-import { TaskContent } from '@taskyon/taskyon'
-import Task from 'components/taskyon/TaskWidget.vue'
-import { useTaskyonStore } from 'src/stores/taskyonState'
 import {
   mdiApproximatelyEqual,
   mdiDatabase,
@@ -121,12 +115,17 @@ import {
   mdiForum,
   mdiRefresh,
 } from '@quasar/extras/mdi-v6'
-import { useRouter, useRoute } from 'vue-router'
-import { onMounted } from 'vue'
+import Search from '@taskyon/shared/components/SearchInput.vue'
+import type { TaskNode } from '@taskyon/taskyon'
+import { TaskContent } from '@taskyon/taskyon'
+import Task from 'components/taskyon/TaskWidget.vue'
 import { type QTableProps } from 'quasar'
-import type { PartialDeep } from 'type-fest'
-import { useAppStateStore } from 'src/stores/appState'
 import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
+import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import type { PartialDeep } from 'type-fest'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 // TODO:  do some search caching ;) so that we can move faster back & forth between
 //        pages in the browser...

@@ -160,29 +160,29 @@ No one else can access or remove your files without your permission.`"
 
 <script setup lang="ts">
 import {
-  matShare,
-  matLink,
-  matCopyAll,
-  matContentCopy,
-  matWarning,
   matClose,
+  matContentCopy,
+  matCopyAll,
+  matLink,
+  matShare,
+  matWarning,
 } from '@quasar/extras/material-icons'
-import { exportFile, useQuasar } from 'quasar'
-import { ref, computed, watch } from 'vue'
 import {
   symOutlinedDriveExport,
   symOutlinedFileSave,
   symOutlinedMarkdown,
   symOutlinedPublic,
 } from '@quasar/extras/material-symbols-outlined'
+import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
+import QrCode from '@taskyon/shared/components/QrCode.vue'
+import { copyToClipboard } from '@taskyon/shared/modules/utils'
+import { chat2Md, chatToYaml, type TaskNode } from '@taskyon/taskyon'
+import { exportFile, useQuasar } from 'quasar'
 import { getFileId, useGdrive } from 'src/modules/gdrive'
+import { asyncComputed } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { chat2Md, chatToYaml, type TaskNode } from '@taskyon/taskyon'
-import { asyncComputed } from 'src/modules/vueUtils'
-import QrCode from '../QrCode.vue'
-import InfoDialog from '../InfoDialog.vue'
-import { copyToClipboard } from '../../../packages/shared/modules/utils'
+import { computed, ref, watch } from 'vue'
 
 const showDialog = defineModel({ type: Boolean, default: false })
 

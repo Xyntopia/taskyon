@@ -297,10 +297,10 @@ import {
   matSave,
 } from '@quasar/extras/material-icons'
 import { mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
+import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
 import type { JSONSchema7 } from 'json-schema'
-import { computed, ref } from 'vue'
-import ObjectView from 'src/components/varViews/ObjectView.vue'
 import { isSourceKeyScope, solverIdFromKey } from 'src/modules/modelica/modelica'
+import { computed, ref } from 'vue'
 import SimulationRunControls from './SimulationRunControls.vue'
 
 type ExportTarget = 'modelica' | 'template' | 'js' | 'daePretty' | 'daeJson'

@@ -124,9 +124,9 @@ export default defineComponent({
 </template>
 
 <script setup lang="ts">
+import type { AddViewContext, AddViewDone, DockNode } from '@taskyon/shared/components/DockView.vue'
+import DockView from '@taskyon/shared/components/DockView.vue'
 import { defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { DockNode, AddViewContext, AddViewDone } from 'components/DockView.vue'
-import DockView from 'components/DockView.vue'
 
 import { matAutoAwesomeMosaic } from '@quasar/extras/material-icons'
 

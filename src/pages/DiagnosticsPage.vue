@@ -126,20 +126,20 @@
 
 <script setup lang="ts">
 import { matContentCopy } from '@quasar/extras/material-icons'
+import PasswordRequestDialog from '@taskyon/shared/components/PasswordRequestDialog.vue'
 import { randomString } from '@taskyon/taskyon'
 import { dump } from 'js-yaml'
 import { exportFile } from 'quasar'
-import PasswordRequestDialog from 'src/components/PasswordRequestDialog.vue'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
 import * as ModelicaDiagnostics from 'src/modules/modelica/modelicaDiagnostics'
-import { syncRefsWithLocalStorage } from '../../packages/shared/modules/saveState'
 import { runMarkdownDetectionTests } from 'src/modules/taskyon/runMarkdownDetectionTests'
 import * as TaskyonTests from 'src/modules/taskyon/tests'
-import { copyToClipboard, getEnvironmentInfo } from '../../packages/shared/modules/utils'
 import { testBuildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { onMounted, ref } from 'vue'
+import { syncRefsWithLocalStorage } from '../../packages/shared/modules/saveState'
+import { copyToClipboard, getEnvironmentInfo } from '../../packages/shared/modules/utils'
 
 const testModules = import.meta.glob(
   '../../packages/taskyon/src/tests/**/*.ts',

@@ -17,9 +17,9 @@
 </template>
 
 <script setup lang="ts">
+import tyMarkdown from '@taskyon/shared/components/tyMarkdown.vue'
 import { type TaskNode } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
-import tyMarkdown from 'components/tyMarkdown.vue'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 
 const tystate = useTaskyonStore()

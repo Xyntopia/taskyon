@@ -201,6 +201,11 @@ export default defineConfig((ctx) => {
             ts.compilerOptions.paths.taskyon = ['./../packages/taskyon/src']
             ts.compilerOptions.paths['taskyon/*'] = ['./../packages/taskyon/src/*']
           }*/
+          ts.compilerOptions ??= {}
+          ts.compilerOptions.paths ??= {}
+          ts.compilerOptions.paths['@taskyon/client'] = ['./../packages/tyclient/src/index.ts']
+          ts.compilerOptions.paths['@taskyon/shared'] = ['./../packages/shared']
+          ts.compilerOptions.paths['@taskyon/shared/*'] = ['./../packages/shared/*']
           return ts
         },
       },
@@ -245,6 +250,14 @@ export default defineConfig((ctx) => {
           ...viteConf.optimizeDeps,
           exclude: [...(viteConf.optimizeDeps?.exclude ?? []), '@electric-sql/pglite', 'pyodide'],
         }
+        viteConf.resolve = viteConf.resolve || {}
+        viteConf.resolve.alias = viteConf.resolve.alias || {}
+        viteConf.resolve.alias['@taskyon/client'] = fileURLToPath(
+          new URL('./packages/tyclient/src/index.ts', import.meta.url),
+        )
+        viteConf.resolve.alias['@taskyon/shared'] = fileURLToPath(
+          new URL('./packages/shared', import.meta.url),
+        )
 
         viteConf.plugins = [
           viteConf.plugins,

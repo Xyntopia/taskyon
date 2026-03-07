@@ -30,6 +30,8 @@
 
 <script setup lang="ts">
 import { matMoreHoriz } from '@quasar/extras/material-icons'
+import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
+import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
 import { chatCompletionToolParameters, llmSettings } from '@taskyon/taskyon'
 import type { JSONSchema7 } from 'json-schema'
 import type { iconMap } from 'src/modules/icons'
@@ -39,8 +41,6 @@ import { buildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { computed } from 'vue'
 import z from 'zod'
-import ResponsiveMenuDialogBtn from '../ResponsiveMenuDialogBtn.vue'
-import ObjectView from '../varViews/ObjectView.vue'
 
 const state = useAppStateStore()
 

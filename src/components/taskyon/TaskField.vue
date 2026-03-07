@@ -167,16 +167,16 @@ import {
   matMoreHoriz,
   matShield,
 } from '@quasar/extras/material-icons'
+import ResponsiveMenuDialog from '@taskyon/shared/components/ResponsiveMenuDialog.vue'
 import type { TaskNode } from '@taskyon/taskyon'
 import { useTextSelection } from '@vueuse/core'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
 import { type QMenu } from 'quasar'
-import { openrouterPricing } from '../../../packages/shared/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, defineAsyncComponent, ref, useTemplateRef } from 'vue'
 import { useRouter } from 'vue-router'
-import ResponsiveMenuDialog from '../ResponsiveMenuDialog.vue'
+import { openrouterPricing } from '../../../packages/shared/modules/utils'
 import TaskDebugTabs from './TaskDebugTabs.vue'
 import TaskMenu from './TaskMenu.vue'
 
