@@ -95,7 +95,11 @@
               <Task
                 v-if="taskDataMap[rows.row.taskId]"
                 :task="taskDataMap[rows.row.taskId]!"
+                :message-debug="!!state.messageDebug[taskDataMap[rows.row.taskId]!.id]"
                 show-meta
+                @update:message-debug="
+                  (value) => (state.messageDebug[taskDataMap[rows.row.taskId]!.id] = value)
+                "
               />
               <div v-else>We could not find the task, is it possible that it was deleted?</div>
             </div>

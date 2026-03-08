@@ -14,6 +14,7 @@
           v-if="prop.node.task"
           :id="prop.node.task.id"
           :task="prop.node.task"
+          :message-debug="!!state.messageDebug[prop.node.task.id]"
           short
           :class="[
             prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
@@ -22,6 +23,7 @@
           ]"
           :show-meta="!!showIds"
           @click.stop
+          @update:message-debug="(value) => (state.messageDebug[prop.node.task.id] = value)"
         />
         <div v-else class="text-bold">{{ prop.node.taskid.slice(0, 12) }}</div>
       </template>
@@ -38,6 +40,7 @@
         <Task
           :id="prop.node.task.id"
           :task="prop.node.task"
+          :message-debug="!!state.messageDebug[prop.node.task.id]"
           short
           :class="[
             prop.node.task.role === 'user' ? 'user-message q-pr-sm q-ml-lg' : '',
@@ -46,6 +49,7 @@
           ]"
           :show-meta="!!showIds"
           @click.stop
+          @update:message-debug="(value) => (state.messageDebug[prop.node.task.id] = value)"
         />
       </template>
     </q-tree>
@@ -123,11 +127,13 @@ import type { TaskTreeNode } from '@taskyon/taskyon'
 import { type TaskNode } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
+import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import SimpleChatView from './SimpleChatView.vue'
 
 const tystate = useTaskyonStore()
+const state = useAppStateStore()
 const showLogs = ref(false)
 
 const lastWorkerEvent = computed(() => {

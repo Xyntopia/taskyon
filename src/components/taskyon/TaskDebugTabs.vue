@@ -1,6 +1,6 @@
 <template>
   <div>
-    <q-tabs v-model="state.messageDebug[task.id]" dense no-caps>
+    <q-tabs v-model="activeTab" dense no-caps>
       <q-tab v-if="taskMeta?.error" name="ERROR" label="Error" />
       <q-tab name="TASKNODE" label="raw task data" />
       <q-tab v-if="taskMeta?.taskPrompt" name="TASKPROMPT" label="raw conversation" />
@@ -8,7 +8,7 @@
       <q-tab name="DEBUGGING" label="debugging" />
     </q-tabs>
     <q-tab-panels
-      v-model="state.messageDebug[task.id]"
+      v-model="activeTab"
       animated
       swipeable
       horizontal
@@ -16,68 +16,24 @@
       transition-next="jump-left"
     >
       <q-tab-panel name="ERROR">
-        <textarea
-          :value="JSON.stringify(taskMeta?.error, null, 2)"
-          readonly
-          wrap="soft"
-          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
-        >
-        </textarea>
+        <ObjectView :model-value="toObject(taskMeta?.error)" read-only copy-object-btn copy-btn />
       </q-tab-panel>
       <q-tab-panel name="TASKNODE">
-        <textarea
-          :value="JSON.stringify(task, null, 2)"
-          readonly
-          wrap="soft"
-          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
-        >
-        </textarea>
+        <ObjectView :model-value="toObject(task)" read-only copy-object-btn copy-btn />
       </q-tab-panel>
       <q-tab-panel v-if="taskMetaPrevious?.rawOutput" name="RAW_INPUT">
-        <textarea
-          :value="JSON.stringify(taskMetaPrevious.rawOutput, null, 2)"
-          readonly
-          wrap="soft"
-          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
-        >
-        </textarea>
+        <ObjectView
+          :model-value="toObject(taskMetaPrevious.rawOutput)"
+          read-only
+          copy-object-btn
+          copy-btn
+        />
       </q-tab-panel>
       <q-tab-panel v-if="taskMeta?.taskPrompt" name="TASKPROMPT">
-        <template v-for="(tp, idx) in taskMeta.taskPrompt as ModelMessage[]" :key="idx">
-          <div class="text-caption q-pt-sm">{{ tp.role }}</div>
-          <textarea
-            :value="typeof tp.content === 'string' ? tp.content : ''"
-            readonly
-            wrap="soft"
-            style="width: 100%; height: 200px; background-color: inherit; color: inherit"
-          >
-          </textarea>
-        </template>
-        <div></div>
-        <div class="text-caption">reasoning:</div>
-        <textarea
-          :value="taskReason"
-          readonly
-          wrap="soft"
-          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
-        />
-        <div class="text-caption">finished completion:</div>
-        <textarea
-          :value="taskChoice || null"
-          readonly
-          wrap="soft"
-          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
-        >
-        </textarea>
+        <ObjectView :model-value="taskPromptDebug" read-only copy-object-btn copy-btn />
       </q-tab-panel>
       <q-tab-panel name="DEBUGGING">
-        <textarea
-          :value="JSON.stringify(taskMeta, null, 2)"
-          readonly
-          wrap="soft"
-          style="width: 100%; height: 200px; background-color: inherit; color: inherit"
-        >
-        </textarea>
+        <ObjectView :model-value="toObject(taskMeta)" read-only copy-object-btn copy-btn />
       </q-tab-panel>
     </q-tab-panels>
   </div>
@@ -85,10 +41,10 @@
 
 <script setup lang="ts">
 import type { ChatResponseType, TaskNode } from '@taskyon/taskyon'
+import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
 import type { ModelMessage } from 'ai'
-import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
-import { computed, onUnmounted } from 'vue'
+import { computed, onUnmounted, ref, watchEffect } from 'vue'
 
 const props = defineProps<{
   task: TaskNode
@@ -97,13 +53,17 @@ const props = defineProps<{
 const { task } = props
 
 const tystate = useTaskyonStore()
-const state = useAppStateStore()
+const activeTab = ref<'ERROR' | 'TASKNODE' | 'TASKPROMPT' | 'RAW_INPUT' | 'DEBUGGING'>('TASKNODE')
 
 const subscriptions: Array<() => void> = []
 onUnmounted(() => subscriptions.forEach((unsub) => unsub()))
 
 const taskMeta = tystate.getTaskMetaRef(task.id)
 const taskMetaPrevious = tystate.getTaskMetaRef(task.priorID ?? task.parentID)
+const toObject = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : { value }
 
 const taskChoice = computed(() => {
   try {
@@ -122,6 +82,23 @@ const taskReason = computed(() => {
     )
   } catch {
     return '<no reasoning output available>'
+  }
+})
+
+const taskPromptDebug = computed<Record<string, unknown>>(() => ({
+  taskPrompt: (taskMeta.value?.taskPrompt as ModelMessage[] | undefined) ?? [],
+  reasoning: taskReason.value,
+  finishedCompletion: taskChoice.value ?? null,
+}))
+
+watchEffect(() => {
+  const available = new Set<string>(['TASKNODE', 'DEBUGGING'])
+  if (taskMeta.value?.error) available.add('ERROR')
+  if (taskMeta.value?.taskPrompt) available.add('TASKPROMPT')
+  if (taskMetaPrevious.value?.rawOutput) available.add('RAW_INPUT')
+
+  if (!available.has(activeTab.value)) {
+    activeTab.value = available.has('ERROR') ? 'ERROR' : 'TASKNODE'
   }
 })
 </script>

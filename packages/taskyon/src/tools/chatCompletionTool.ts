@@ -43,7 +43,7 @@ import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import type { ToolBase } from '../types/tools'
 import { FunctionArguments, FunctionCall } from '../types/tools'
 import { charHash } from '../utils/crypto'
-import { humanizeError } from '../utils/error'
+import { humanizeError, serializeError } from '../utils/error'
 import { createStream } from '../utils/frpBus'
 import { convertFileToText } from '../utils/loadFiles'
 import {
@@ -1332,6 +1332,37 @@ export function createChatCompletionTool(
           declaredToolCount: Object.keys(chatInfo.tools).length,
         })
         const partialContent = partialTextOutput.trim() || cleanupRawStreamOutput(rawOutput)
+        if (currentTask) {
+          void taskManager.metaUpsert(
+            currentTask.id,
+            {
+              error: {
+                humanized: humanizeError(effectiveErr),
+                serialized: serializeError(effectiveErr),
+                ...(effectiveErr instanceof Error
+                  ? {
+                      name: effectiveErr.name,
+                      message: effectiveErr.message,
+                      stack: effectiveErr.stack,
+                      cause: serializeError(effectiveErr.cause),
+                    }
+                  : {}),
+                context: {
+                  phase: 'chatCompletion.stream',
+                  shortReason: failure.shortReason,
+                  selectedApi,
+                  selectedModel,
+                  llmTools,
+                  declaredToolCount: Object.keys(chatInfo.tools).length,
+                  failureDetails,
+                  rawOutput,
+                  partialTextOutput,
+                },
+              },
+            },
+            'shallow_merge',
+          )
+        }
         console.log('chat completion error', {
           rawOutput,
           partialTextOutput,
@@ -1353,7 +1384,7 @@ export function createChatCompletionTool(
           {
             role: 'system',
             content: {
-              type: 'message',
+              type: 'error',
               data: `${failure.systemNote}${partialContent ? '' : ' No partial output was available.'}\n\n${failureDetails}`,
             },
           },

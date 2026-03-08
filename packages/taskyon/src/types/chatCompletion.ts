@@ -88,6 +88,18 @@ export const ChatResponseType = z.object({
 })
 export type ChatResponseType = z.infer<typeof ChatResponseType>
 
+export const TaskDebugError = z
+  .object({
+    humanized: z.string().optional(),
+    serialized: z.unknown().optional(),
+    name: z.string().optional(),
+    message: z.string().optional(),
+    stack: z.string().optional(),
+    cause: z.unknown().optional(),
+    context: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough()
+
 export const TaskNodeMeta = z
   .object({
     threadMessage: z.any().optional(), // Replace with the correct Zod schema if available
@@ -113,7 +125,7 @@ export const TaskNodeMeta = z
       description:
         'We can optionally add some raw result data for debugging purposes, e.g. chatcompletion ...',
     }), // Replace with the correct Zod schema if available
-    error: z.unknown().optional(),
+    error: z.union([TaskDebugError, z.unknown()]).optional(),
     taskPrompt: z.record(z.string(), z.unknown()).array().optional().meta({
       description: 'add any prompts that were used for a task...',
     }),

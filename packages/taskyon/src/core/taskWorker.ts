@@ -6,7 +6,7 @@ import type { FunctionArguments, FunctionCall } from '../types/tools'
 import { createAsyncQueue, sleep } from '../utils/asyncUtils'
 import type { SecretStore } from '../utils/crudWrapper'
 import { sha256UrlSafeHash } from '../utils/encoding'
-import { humanizeError } from '../utils/error'
+import { humanizeError, serializeError } from '../utils/error'
 import type { TaskMessageStream } from '../utils/frpBus'
 import { createMessagePortAdapter, createStream } from '../utils/frpBus'
 import { serializeForJson } from '../utils/objHelpers'
@@ -352,6 +352,14 @@ function createHandleError(
     // this makes sure that results are still saved, even if we stop any
     // further execution
     if (!currentTaskCtrl.signal.aborted && errorTaskId) {
+      void taskManager.metaUpsert(
+        errorTaskId,
+        {
+          error: debugInfo.error,
+          summary: `Error originated in task ${task.id}`,
+        },
+        'shallow_merge',
+      )
       // we need processTasksQueue as an argument here!!!
       queueTask(errorTaskId)
     }
@@ -438,6 +446,44 @@ const createTaskProcessor = (
         newTasks = await Promise.all(
           partialTasks.map((taskChain) => taskManager.addTaskChain(taskChain, undefined, task.id)),
         )
+        // If this tool emitted error tasks, copy error debug metadata from the source task
+        // so error nodes can be inspected directly in the debug panel.
+        const createdErrorTasks = newTasks
+          .flat()
+          .filter((createdTask) => createdTask.content.type === 'error')
+        if (createdErrorTasks.length > 0) {
+          void (async () => {
+            let sourceErrorMeta: unknown
+            for (let i = 0; i < 5; i += 1) {
+              const sourceMeta = await taskManager.getMeta(task.id)
+              if (sourceMeta?.error !== undefined) {
+                sourceErrorMeta = sourceMeta.error
+                break
+              }
+              await sleep(50)
+            }
+
+            await Promise.all(
+              createdErrorTasks.map(async (errorTask) => {
+                const fallbackDebug =
+                  sourceErrorMeta !== undefined
+                    ? sourceErrorMeta
+                    : {
+                        humanized: humanizeError(errorTask.content.data),
+                        serialized: serializeForJson(errorTask.content.data),
+                      }
+                return taskManager.metaUpsert(
+                  errorTask.id,
+                  {
+                    error: fallbackDebug,
+                    summary: `Error originated in task ${task.id}`,
+                  },
+                  'shallow_merge',
+                )
+              }),
+            )
+          })()
+        }
 
         // if all subtasks in this chain are finished (means
         // there are no functions tasks in it), we can set this task as finished
@@ -554,17 +600,23 @@ const setupRun = (
 }
 
 function createDebugInfoFromError(error: unknown) {
-  const debugInfo = { error }
+  const humanized = humanizeError(error)
+  const serialized = serializeError(error)
 
-  if (error instanceof Error) {
-    // preserve full debug info
-    debugInfo.error = {
-      message: error.message,
-      stack: error.stack,
-      cause: error.cause,
-    }
+  return {
+    error: {
+      humanized,
+      serialized,
+      ...(error instanceof Error
+        ? {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+            cause: serializeError(error.cause),
+          }
+        : {}),
+    },
   }
-  return debugInfo
 }
 
 export function runTaskWorker(

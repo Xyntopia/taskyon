@@ -148,7 +148,7 @@
 
     <!--task debugging-->
     <q-slide-transition class="debug-container">
-      <div v-show="state.messageDebug[task.id]">
+      <div v-show="messageDebug">
         <TaskDebugTabs :task="task" />
       </div>
     </q-slide-transition>
@@ -186,6 +186,10 @@ const props = defineProps<{
   iconColor?: string | undefined
   short?: boolean | undefined
   showMeta: boolean | undefined
+  messageDebug: boolean
+}>()
+const emit = defineEmits<{
+  (e: 'update:messageDebug', value: boolean): void
 }>()
 
 const taskMenu = useTemplateRef<QMenu>('taskMenuRef')
@@ -203,6 +207,7 @@ const ShareDialogBtn = defineAsyncComponent(
 )
 
 const { short = true, task } = props
+const messageDebug = computed(() => props.messageDebug)
 
 const tystate = useTaskyonStore()
 
@@ -258,13 +263,8 @@ async function createNewConversation(taskId: string) {
 }
 
 function toggleMessageDebug(id: string) {
-  if (state.messageDebug[id] === undefined) {
-    // If the message ID doesn't exist, default to true since we're opening it.
-    state.messageDebug[id] = 'RAW'
-  } else {
-    // If it does exist, toggle the boolean.
-    state.messageDebug[id] = undefined
-  }
+  if (id !== task.id) return
+  emit('update:messageDebug', !props.messageDebug)
 }
 
 function toggleMarkdown(id: string) {

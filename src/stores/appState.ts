@@ -152,7 +152,7 @@ function getInitialState() {
     // TODO:
     initWSession: undefined as string | undefined,
 
-    messageDebug: {} as Record<string, 'RAW' | 'MESSAGECONTENT' | 'RAWTASK' | 'ERROR' | undefined>, // whether message with ID should be open or not...
+    messageDebug: {} as Record<string, boolean | undefined>, // whether message with ID should be open or not...
 
     // taskyon.space-specific section, TODO: move this somewhere else!
     keyDraft: {

@@ -961,6 +961,41 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
     loadYamlConversation,
   }
 
+  const metaUpsertLogged = async (
+    id: string | number,
+    data: TaskNodeMeta,
+    strategy?: 'shallow_merge' | 'replace' | 'deepmerge' | 'native_shallow',
+  ) => {
+    const payload = data as Record<string, unknown>
+    const hasError = Object.prototype.hasOwnProperty.call(payload ?? {}, 'error')
+    const keys = payload ? Object.keys(payload) : []
+    console.log('[DEBUGDB] metaUpsert:start', {
+      taskId: id,
+      strategy: strategy ?? 'replace',
+      keys,
+      hasError,
+      errorType: hasError ? typeof payload?.['error'] : undefined,
+    })
+    try {
+      const out = await metaDb.upsert(id, data, strategy)
+      const outKeys = out && typeof out === 'object' ? Object.keys(out as Record<string, unknown>) : []
+      console.log('[DEBUGDB] metaUpsert:done', {
+        taskId: id,
+        strategy: strategy ?? 'replace',
+        outKeys,
+        hasError: !!(out && typeof out === 'object' && 'error' in (out as Record<string, unknown>)),
+      })
+      return out
+    } catch (error) {
+      console.error('[DEBUGDB] metaUpsert:failed', {
+        taskId: id,
+        strategy: strategy ?? 'replace',
+        error,
+      })
+      throw error
+    }
+  }
+
   return {
     ...defaultMode,
     ...fm,
@@ -974,7 +1009,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
     addMdTaskChain,
     getMeta: metaDb.get,
     metaLiveRead: metaDb.readLive,
-    metaUpsert: metaDb.upsert,
+    metaUpsert: metaUpsertLogged,
   }
 }
 export type TyTaskManager = Awaited<ReturnType<typeof useTyTaskManager>>
