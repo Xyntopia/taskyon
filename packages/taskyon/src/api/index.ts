@@ -21,6 +21,9 @@ export {
 
 export { createTool, makeTaskResult, partialTaskDraft, toolCall }
 export type { Port }
+export * from '../mcp/bridge'
+export * from '../mcp/taskyonBridge'
+export * from '../mcp/types'
 export type processTasksOpts = {
   timeoutMs?: number
   signal?: AbortSignal

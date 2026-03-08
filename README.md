@@ -58,16 +58,19 @@ You can find an alternative documentation here: [![Ask DeepWiki](https://deepwik
 - 👑 _Data Sovereignty:_ Users retain full ownership of their information and workflows and knowhow.
 - 💰 _Cost Efficiency:_ Local execution cuts cloud bills; only external calls happen when needed.
 - 🚀 _Scalable Tools Ecosystem:_ Add unlimited tools —from LLM providers to custom Python/JavaScript functions— as branches in your task tree, enabling infinite hyper-individualization.
+- 🔌 _MCP-Friendly Tooling:_ Import and adapt MCP-style tools while keeping Taskyon's native local tool flow.
 
 ## Features
 
 - **Local First Architecture:** User autonomy, security, and offline capability.
 - **Seamless Web Integration:** Enhance your app or webpage with Taskyons agent capabilities with a single snippet — no backend needed.
 - **Infinite Tool Scalability:** Create and integrate unlimited tools and services into your workflows, powering hyper-individualized experiences.
+- **MCP Tool Support:** Import MCP tool definitions and use them through Taskyon's tool system.
 - **Service & LLM Integration:** Interface with multiple LLM endpoints, including OpenAI-compatible and self-hosted models.
 - **Task-Based Conversations:** Each message is a task node, forming a navigable tree.
 - **Function Tasks:** Define, parameterize, and execute tasks as function calls within the interface.
 - **Sandboxed Code Execution:** Securely run Python/JavaScript in-browser, with access to vector stores and dynamic tool generation.
+- **Local Tool Runtime:** Many tools can run directly in the browser without hosting a separate server, while still allowing server-backed tools when needed.
 - **Contextual Task Management:** Attach files, data sources, and task contexts for rich execution environments.
 - **Format Translation:** Export task trees to formats compatible with external services and APIs.
 - **Dedicated Task Interfaces:** Fine-tune parameters and manage execution state per task.

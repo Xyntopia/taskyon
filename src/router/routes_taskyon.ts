@@ -140,6 +140,12 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         props: true,
       },
       {
+        path: '/mcp-tool',
+        component: () => import('src/pages/taskyon/McpToolPage.vue'),
+        meta: { title: 'MCP Tool Page', description: 'Import MCP tools as Taskyon tools' },
+        props: true,
+      },
+      {
         path: '/fm/:pathMatch(.*)*',
         component: () => import('pages/FileManagerPage.vue'),
         props: (route) => ({ initialPath: route.params.pathMatch }),

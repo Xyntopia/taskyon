@@ -28,6 +28,7 @@
         </template>
       </q-select>
       <q-btn flat dense label="New Tool" @click="switchTool()" />
+      <q-btn flat dense label="Add MCP Tool" to="/mcp-tool" />
     </div>
     <q-separator class="q-my-md" />
     <div v-if="selectedTool || !name" class="col column q-gutter-sm">
@@ -191,7 +192,7 @@ import { copyToClipboard } from '@taskyon/shared/modules/utils'
 import type { InternalTool, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { craeteToolJsonSchema, createTaskNode, ToolBase } from '@taskyon/taskyon'
 import TaskChainPublishDialog from 'src/components/taskyon/TaskChainPublishDialog.vue'
-import UnderConstructionHint from 'src/components/UnderConstructionHint.vue'
+import UnderConstructionHint from '@taskyon/shared/components/UnderConstructionHint.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
@@ -232,7 +233,7 @@ const CodeEditor = defineAsyncComponent(
       /* webpackChunkName: "codemirror" */
       /* webpackMode: "lazy" */
       /* webpackFetchPriority: "low" */
-      'src/components/CodeEditor.vue'
+      '@taskyon/shared/components/CodeEditor.vue'
     ),
 )
 
