@@ -307,8 +307,14 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
       hasLlmSettings: !!newConfig.llmSettings,
       hasAppConfiguration: !!newConfig.appConfiguration,
       hasToolchainConfig: !!newConfig.toolchainConfig,
+      incomingPrimaryColor: newConfig.appConfiguration?.primaryColor,
+      incomingSecondaryColor: newConfig.appConfiguration?.secondaryColor,
     })
     saveToLocalStorage = persist
+    const previousColors = {
+      primaryColor: stateRefs.appConfiguration.primaryColor,
+      secondaryColor: stateRefs.appConfiguration.secondaryColor,
+    }
     if (newConfig.llmSettings) {
       // TODO: make sure, this function is only temporary and doesn't overwrite our actual llmSettings...
       deepMergeReactive(stateRefs.llmSettings, newConfig.llmSettings)
@@ -325,6 +331,13 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
         console.log('[PERSIST] re-enabled local persistence after transient override')
       })
     }
+    console.log('[PERSIST] overRideSettings colors merged', {
+      before: previousColors,
+      after: {
+        primaryColor: stateRefs.appConfiguration.primaryColor,
+        secondaryColor: stateRefs.appConfiguration.secondaryColor,
+      },
+    })
   }
 
   return { overRideSettings, stateRefs }

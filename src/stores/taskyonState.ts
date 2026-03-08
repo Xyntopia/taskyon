@@ -231,9 +231,13 @@ function dynamicQuasarTheming(stateRefs: ReturnType<typeof useAppStateStore>) {
       () => stateRefs.appConfiguration.secondaryColor,
     ],
     ([primary, secondary]) => {
-      console.log('Set new brand colors!!', primary, secondary)
+      console.log('[THEME] state watcher triggered', {
+        primary,
+        secondary,
+      })
       setColors(primary, secondary)
     },
+    { immediate: true },
   )
 }
 
@@ -1037,6 +1041,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         configurationMessage: async (msg) => {
           const newConfig = msg.conf
           const llmCfg = newConfig.llmSettings as Partial<TyProfile['llmSettings']> | undefined
+          const appCfg = newConfig.appConfiguration as Partial<TyProfile['appConfiguration']> | undefined
           console.log('[IFRAME CONFIG] setting configuration', {
             persist: !!msg.persist,
             peerId: msg.peerId,
@@ -1047,8 +1052,14 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
             hasSignatureOrKey: !!newConfig.signatureOrKey,
             selectedTaskId: llmCfg?.selectedTaskId,
             selectedApi: llmCfg?.selectedApi,
+            incomingPrimaryColor: appCfg?.primaryColor,
+            incomingSecondaryColor: appCfg?.secondaryColor,
           })
           stateRefs.overRideSettings(newConfig, !!msg.persist)
+          console.log('[IFRAME CONFIG] effective colors after merge', {
+            primaryColor: stateRefs.appConfiguration.primaryColor,
+            secondaryColor: stateRefs.appConfiguration.secondaryColor,
+          })
           // let taskyon do more configurations
 
           // and also set a possible signature as the api key!
