@@ -216,39 +216,6 @@ const classifyStreamingFailure = (
   }
 }
 
-const buildStreamingFailureDetails = (
-  err: unknown,
-  context: {
-    selectedApi: string
-    selectedModel: string
-    llmTools: boolean
-    declaredToolCount: number
-  },
-): string => {
-  const message = humanizeError(err)
-  const lower = message.toLowerCase()
-  const lines = message
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-  const informativeLine =
-    lines.find((line) => !/^chat completion failed!?$/i.test(line)) ?? lines[0] ?? 'Unknown error'
-
-  if (/no endpoints found that support tool use/i.test(lower)) {
-    const docsUrl =
-      message.match(/https?:\/\/\S+/i)?.[0] ??
-      'https://openrouter.ai/docs/guides/routing/provider-selection'
-    return [
-      'Provider routing failed: no endpoint supports tool use for this request.',
-      `Request context: api=${context.selectedApi}, model=${context.selectedModel}, llmTools=${context.llmTools}, declaredTools=${context.declaredToolCount}.`,
-      'Suggested fix: use a model/provider route with tool-call support, relax provider filters, or disable tool use for this run.',
-      `Reference: ${docsUrl}`,
-    ].join('\n')
-  }
-
-  return `Error details: ${informativeLine}`
-}
-
 async function llmRequest(
   openAIConversationThread: ModelMessage[],
   tools: ToolSet,
@@ -1325,19 +1292,23 @@ export function createChatCompletionTool(
       } catch (err) {
         const effectiveErr = errorCapture ?? err
         const failure = classifyStreamingFailure(effectiveErr, context.stopSignal?.aborted ?? false)
-        const failureDetails = buildStreamingFailureDetails(effectiveErr, {
-          selectedApi,
-          selectedModel,
-          llmTools,
-          declaredToolCount: Object.keys(chatInfo.tools).length,
-        })
+        const humanized = humanizeError(effectiveErr)
+        const lower = humanized.toLowerCase()
+        const failureDetails = lower.includes('no endpoints found that support tool use')
+          ? [
+              'Provider routing failed: no endpoint supports tool use for this request.',
+              `Request context: api=${selectedApi}, model=${selectedModel}, llmTools=${llmTools}, declaredTools=${Object.keys(chatInfo.tools).length}.`,
+              'Suggested fix: use a model/provider route with tool-call support, relax provider filters, or disable tool use for this run.',
+              'Reference: https://openrouter.ai/docs/guides/routing/provider-selection',
+            ].join('\n')
+          : humanized
         const partialContent = partialTextOutput.trim() || cleanupRawStreamOutput(rawOutput)
         if (currentTask) {
           void taskManager.metaUpsert(
             currentTask.id,
             {
               error: {
-                humanized: humanizeError(effectiveErr),
+                humanized,
                 serialized: serializeError(effectiveErr),
                 ...(effectiveErr instanceof Error
                   ? {

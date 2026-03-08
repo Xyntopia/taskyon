@@ -18,6 +18,18 @@ interface SerializedNonError {
 
 type SerializableError = SerializedError | SerializedNonError
 
+const tryParseJsonMessage = (text: unknown): string | undefined => {
+  if (typeof text !== 'string' || !text.trim()) return undefined
+  try {
+    const parsed = JSON.parse(text) as Record<string, unknown>
+    const msg = (parsed.error as Record<string, unknown> | undefined)?.message
+    if (typeof msg === 'string' && msg.trim()) return msg.trim()
+  } catch {
+    // ignore non-json strings
+  }
+  return undefined
+}
+
 // ----- Serialize -----
 
 /**
@@ -103,7 +115,7 @@ export function humanizeError(errorInput: unknown): string {
 
   // Prevent infinite recursion, but allow enough depth for:
   // WrapperError -> CauseObj -> APIError -> InnerDetails
-  const MAX_DEPTH = 5
+  const MAX_DEPTH = 12
 
   /* ---------- helpers --------------------------------------------------- */
   const toYaml = (val: unknown): string =>
@@ -142,6 +154,7 @@ export function humanizeError(errorInput: unknown): string {
     }
 
     const obj = value as Record<string, unknown>
+    const linesBefore = lines.length
 
     /* #1 message fields */
     const message =
@@ -151,6 +164,19 @@ export function humanizeError(errorInput: unknown): string {
           ? obj.msg
           : undefined
     if (message) append(message)
+
+    // Pull actionable provider message out of embedded JSON payloads.
+    const providerRaw =
+      (obj.metadata as Record<string, unknown> | undefined)?.raw ??
+      ((obj.error as Record<string, unknown> | undefined)?.metadata as Record<string, unknown>)
+        ?.raw ??
+      (((obj.data as Record<string, unknown> | undefined)?.error as Record<string, unknown> | undefined)
+        ?.metadata as Record<string, unknown> | undefined)?.raw
+    const providerRawMsg = tryParseJsonMessage(providerRaw)
+    if (providerRawMsg) append(providerRawMsg)
+
+    const responseBodyMsg = tryParseJsonMessage(obj.responseBody)
+    if (responseBodyMsg) append(responseBodyMsg)
 
     /* #2 HTTP hints */
     if (typeof obj.status === 'number') {
@@ -182,6 +208,7 @@ export function humanizeError(errorInput: unknown): string {
     })
 
     /* #5 cause (descend deeper) */
+    let handledCause = false
     if (level < MAX_DEPTH) {
       const causeKeys = ['cause', 'originalError', 'inner', 'error'] as const
       for (const key of causeKeys) {
@@ -197,7 +224,33 @@ export function humanizeError(errorInput: unknown): string {
           append('Caused by →')
           traverse(causeVal, level + 1)
         }
+        handledCause = true
         break // handle only the first found cause path to avoid tree explosion
+      }
+    }
+
+    // Some wrappers (for example { cause: { serialized: { error: ... } } }) hide
+    // the informative payload one level deeper. If this level contributed no
+    // details and no cause path matched, unwrap common wrapper objects.
+    if (!handledCause && level < MAX_DEPTH && lines.length === linesBefore) {
+      const wrapperCandidates: unknown[] = []
+
+      const serialized = obj['serialized']
+      if (serialized && typeof serialized === 'object') {
+        const serializedObj = serialized as Record<string, unknown>
+        if (serializedObj['error'] !== undefined) wrapperCandidates.push(serializedObj['error'])
+        wrapperCandidates.push(serialized)
+      }
+
+      ;(['error', 'response', 'result'] as const).forEach((key) => {
+        const candidate = obj[key]
+        if (candidate && typeof candidate === 'object') wrapperCandidates.push(candidate)
+      })
+
+      for (const candidate of wrapperCandidates) {
+        const prior = lines.length
+        traverse(candidate, level + 1)
+        if (lines.length > prior) break
       }
     }
   }
@@ -205,3 +258,8 @@ export function humanizeError(errorInput: unknown): string {
   traverse(errorInput)
   return lines.join('\n')
 }
+
+/**
+ * Selects the most informative line from a `humanizeError(...)` result,
+ * using the same filtering strategy as chatCompletion error presentation.
+ */

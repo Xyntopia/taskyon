@@ -111,6 +111,96 @@ export function testHumanizeErr(): TestSummary {
       },
     },
     {
+      name: 'Taskyon chatCompletion stream error with invalid tool schema',
+      input: {
+        message: 'Chat completion failed!',
+        cause: {
+          serialized: {
+            error: {
+              url: 'https://share.taskyon.space/chatCompletion/api/v1/chat/completions',
+              data: {
+                id: '11bdf798-acdf-4cc8-97aa-31497ef72070',
+                error: {
+                  code: 400,
+                  type: null,
+                  param: null,
+                  message: 'Provider returned error',
+                  metadata: {
+                    raw: `{
+  "error": {
+    "message": "Invalid schema for function 'runOptimization': In context=('properties', 'optimizeVariable', 'properties', 'values'), array schema missing items.",
+    "type": "invalid_request_error",
+    "param": "tools[0].parameters",
+    "code": "invalid_function_parameters"
+  }
+}`,
+                    provider_name: 'Azure',
+                    is_byok: false,
+                  },
+                },
+                user_id: 'user_2X7gbEmjbrTZ4UZ4IpGKhSaq7yy',
+              },
+              name: 'AI_APICallError',
+              message: 'Provider returned error',
+              statusCode: 400,
+            },
+          },
+        },
+      },
+      mustContain: [
+        "Invalid schema for function 'runOptimization'",
+        'array schema missing items',
+        'tools[0].parameters',
+        'invalid_function_parameters',
+        'Provider returned error',
+      ],
+    },
+    {
+      name: 'Deeply nested serialized error wrappers (5 levels)',
+      input: {
+        message: 'Chat completion failed!',
+        cause: {
+          serialized: {
+            error: {
+              serialized: {
+                error: {
+                  serialized: {
+                    error: {
+                      serialized: {
+                        error: {
+                          serialized: {
+                            error: {
+                              name: 'AI_APICallError',
+                              message: 'Provider returned error',
+                              data: {
+                                error: {
+                                  code: 'invalid_function_parameters',
+                                  param: 'tools[0].parameters',
+                                  message:
+                                    "Invalid schema for function 'runOptimization': array schema missing items.",
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      mustContain: [
+        'Provider returned error',
+        'Invalid schema for function',
+        'array schema missing items',
+        'tools[0].parameters',
+        'invalid_function_parameters',
+      ],
+    },
+    {
       name: 'Plain Error instance',
       input: new Error('Something went wrong'),
       mustContain: ['Something went wrong', 'name=Error'],
@@ -209,9 +299,13 @@ export function testHumanizeErr(): TestSummary {
     const details = failedResults
       .map(
         (r) =>
-          `- ${r.name}: missing keywords -> ${JSON.stringify(r.missingKeywords)}\n` +
-          `  Input was:\n${JSON.stringify(r.input)}\n` +
-          `  Output was:\n${r.output}\n`,
+          `- ${r.name}\n` +
+          `  Missing keywords: ${JSON.stringify(r.missingKeywords)}\n` +
+          `  Expected keywords: ${JSON.stringify(
+            tests.find((t) => t.name === r.name)?.mustContain ?? [],
+          )}\n` +
+          `  Original error:\n${JSON.stringify(r.input)}\n` +
+          `  Humanized output:\n${r.output}\n`,
       )
       .join('\n')
 
