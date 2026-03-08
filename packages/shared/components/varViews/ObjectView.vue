@@ -15,7 +15,7 @@
       />
 
       <q-btn
-        v-if="copyObjectBtn && enableExpertMode"
+        v-if="copyObjectBtn"
         class="col-auto"
         flat
         stretch
