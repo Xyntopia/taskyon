@@ -1,6 +1,6 @@
 // modelicaTools.ts
 
-import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/taskyon'
+import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/client'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'
 import { serializeObject } from '../../../packages/shared/modules/serializeObject'

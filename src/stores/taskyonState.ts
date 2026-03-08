@@ -32,10 +32,10 @@ import {
   TaskNode,
   TaskyonMessage,
   TOKEN_SERVICE_BASE_URL,
-  toolCall,
   tyCore,
   usePyodideWebworker,
 } from '@taskyon/taskyon'
+import { toolCall } from '@taskyon/client'
 import type { AuthenticationOptions } from '@taskyon/taskyon/browser'
 import { usePersistentOauth, type TokenGetter } from '@taskyon/taskyon/browser'
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'

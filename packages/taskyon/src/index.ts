@@ -1,6 +1,7 @@
 // types exports
-export * from './api'
-export * from './api/index'
+export { BaseMessage, TaskyonMessage, TyP2P } from './types/apiTypes'
+export { llmSettings, TyToolchainConfig } from './types/profiles'
+export { sendTasks } from './api/index'
 export { createTaskNode, ensureValidTaskId, forgeTaskChain } from './core/createTasks'
 export { tyCore, type Taskyon } from './core/init'
 export * from './core/taskManager'
@@ -22,7 +23,13 @@ export * from './types/chatCompletionService'
 export type * from './types/node'
 export { partialTaskDraft, TaskContent, TaskNode } from './types/node'
 export * from './utils/oauth'
-export * from './types/toolApi'
+export type {
+  ClientTool,
+  InternalTool,
+  internalToolFunctionSchema,
+  toolContext,
+} from './types/toolApi'
+export { taskResult } from './types/toolApi'
 export * from './types/tools'
 export * from './types/tyKey'
 export * from './utils/asyncUtils'

@@ -507,7 +507,7 @@ import {
   matShowChart,
 } from '@quasar/extras/material-icons'
 import { mdiFunctionVariant } from '@quasar/extras/mdi-v6'
-import { toolCall } from '@taskyon/taskyon'
+import { toolCall } from '@taskyon/client'
 import { watchDebounced } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { Dialog, Notify } from 'quasar'

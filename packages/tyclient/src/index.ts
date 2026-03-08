@@ -7,12 +7,12 @@ import {
   createDuplexChannel, // utis/frpbus
   MessageChannelBridge, // utils/frpbus
 
-  // "processTasks" currently has the following dependencies:
-  // - immer
-  processTasks, // types/apiTypes
   type ClientTool,
   type TaskyonMessage,
 } from '@taskyon/taskyon/api'
+import type { partialTaskDraft } from '@taskyon/taskyon/api'
+import type { TaskContentType, TaskNode } from '@taskyon/taskyon'
+import type { ByType } from '@taskyon/taskyon'
 // TODO: move this into some other part as well..  maybe into "GUI" types or somthing like that?
 import type {
   partialTyConfiguration,
@@ -23,11 +23,57 @@ export {
   createChatCompletionTask,
   createTool, // toolApi
   makeTaskResult, // toolApi
-  processTasks, // api/index, types/apiTypes
   toolCall, // toolApi
   type partialTaskDraft,
 } from '@taskyon/taskyon/api'
 export type { ClientTool, partialTyConfiguration, TaskyonGuiMessage, TaskyonMessage }
+
+export type processTasksOpts = {
+  timeoutMs?: number
+  signal?: AbortSignal
+  show?: boolean
+}
+
+// we make the opts mandatory on purpose so that people think about
+// some sort of quit condition.
+export const processTasks = <T extends { type: string }>(tyPort: Port<T | TaskyonMessage>) => {
+  const send = sendTasks<T>(tyPort)
+  return async (
+    taskList: partialTaskDraft[][],
+    quitCondition: ((t: TaskNode) => boolean) | TaskContentType | TaskContentType[],
+    opts: processTasksOpts,
+  ) => {
+    const { initialIds } = await send(taskList, opts)
+    const subTasks = new Set<string>(initialIds)
+    const subTaskStream = tyPort.receive
+      .narrow((m): m is ByType<'taskCreated', TaskyonMessage> & { task: { id: string } } => {
+        if (
+          m.type === 'taskCreated' &&
+          'task' in m &&
+          !!m.task?.id &&
+          !!m.task?.parentID &&
+          subTasks.has(m.task.parentID)
+        ) {
+          subTasks.add(m.task.id)
+          return true
+        }
+        return false
+      })
+      .map((msg) => msg.task)
+
+    const condition =
+      typeof quitCondition === 'string'
+        ? subTaskStream.filter((t) => t.content.type === quitCondition)
+        : typeof quitCondition === 'object' && Array.isArray(quitCondition)
+          ? subTaskStream.filter((t) => quitCondition.includes(t.content.type))
+          : subTaskStream.filter(quitCondition)
+
+    const unsub = condition((m) => console.log('received matching message on port:', m))
+    const lastMsg = await condition.wait(opts)
+    unsub()
+    return lastMsg
+  }
+}
 
 function safeClone<T>(data: T): T {
   try {

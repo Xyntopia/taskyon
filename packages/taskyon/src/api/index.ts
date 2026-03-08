@@ -52,18 +52,14 @@ export const sendTasks =
     // filter for all subtasks
     const subTaskStream = tyPort.receive
       .narrow((m): m is ByType<'taskCreated', TaskyonMessage> & { task: { id: string } } => {
-        console.log('api received', m)
-        /*const valid =
-          m.type === 'taskCreated' && 'task' in m && !!m.task?.id && subTasks.has(m.task?.parentID)*/
-        //console.log(valid)
         if (
           m.type === 'taskCreated' &&
           'task' in m &&
           !!m.task?.id &&
           !!m.task?.parentID &&
-          subTasks.has(m.task?.parentID)
+          subTasks.has(m.task.parentID)
         ) {
-          subTasks.add(m.task?.id)
+          subTasks.add(m.task.id)
           return true
         }
         return false
@@ -73,8 +69,8 @@ export const sendTasks =
     return { initialIds, subTaskStream }
   }
 
-// we make the opts mandatory on purpose so that poeple thing about
-// some sort of quitcondition.
+// we make the opts mandatory on purpose so that people think about
+// some sort of quit condition.
 export const processTasks = <T extends { type: string }>(tyPort: Port<T | TaskyonMessage>) => {
   const send = sendTasks<T>(tyPort)
   return async (
@@ -92,7 +88,6 @@ export const processTasks = <T extends { type: string }>(tyPort: Port<T | Taskyo
 
     const unsub = condition((m) => console.log('received matching message on port:', m))
     const lastMsg = await condition.wait(opts)
-    console.log('finished processin all tasks!')
     unsub()
     return lastMsg
   }
