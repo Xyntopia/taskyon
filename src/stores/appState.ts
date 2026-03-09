@@ -17,11 +17,20 @@ import type { DeepReadonly } from 'vue'
 import { computed, reactive, ref, toRefs, unref, watch, type Reactive } from 'vue'
 // TODO: remove, to make this file here faster...
 import type { KeyString, Thunk, tyPublicKeyDraft } from '@taskyon/taskyon'
-import { deepMerge, sleep, type FunctionCall } from '@taskyon/taskyon'
+import {
+  base64ToPublixX25519,
+  cryptoKeyToBase64,
+  deepMerge,
+  generateAssymetricKeyDeriver,
+  sleep,
+  type FunctionCall,
+} from '@taskyon/taskyon'
 import {
   getCurrentActiveProfileName,
+  getMappedProfileForSessionId,
   getProfileStorageKey,
   getTaskyonUiProfile,
+  mapSessionToProfile,
   setTaskyonUiProfile,
   switchCurrentActiveProfilePointer,
 } from 'src/modules/ui/initialState'
@@ -235,6 +244,21 @@ const useSessionKey = () => {
   }
 }
 
+const getIframeProfileBindingKeyStorageKey = (profileName: string) =>
+  `iframe_profile_binding_key:${profileName}`
+
+async function getOrCreateIframeProfileBindingKey(profileName: string): Promise<CryptoKey> {
+  const keyStorage = getIframeProfileBindingKeyStorageKey(profileName)
+  const existingB64 = LocalStorage.getItem(keyStorage)
+  if (typeof existingB64 === 'string' && existingB64.trim()) {
+    return await base64ToPublixX25519(existingB64, false)
+  }
+  const kp = await generateAssymetricKeyDeriver()
+  const pb64 = await cryptoKeyToBase64(kp.publicKey)
+  LocalStorage.setItem(keyStorage, pb64)
+  return kp.publicKey
+}
+
 const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null>) => {
   const initialProfileName = pname()
   const initialStoredStateObjTyped = getTaskyonUiProfile(initialProfileName) as
@@ -348,15 +372,48 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
 // because we want to this to also work on tyServer and in a "minimal gui" setting.
 // So we only want data to be loaded & saved here, and not any taskyon logic or other fancy things...
 export const useAppStateStore = defineStore('ui-state', () => {
+  const defaultProfileName = 'defaultProfile'
   // configuration from the URL!
   const { initialState, defaultStorableSettings } = getInitialState()
   const urlConfig = getUrlConfig()
-  const getCurrentActiveProfileNameOrUrlProfile = () =>
-    urlConfig.profile ?? getCurrentActiveProfileName()
+  const { bindingKey, setBindingKey } = useSessionKey()
+  const iframeProfileName =
+    urlConfig.isInIframe && typeof urlConfig.profile === 'string' && urlConfig.profile.length > 0
+      ? urlConfig.profile
+      : null
+  if (iframeProfileName) {
+    // Set this immediately so taskyon startup can wait for the derived iframe binding key.
+    initialState.initWBindingKey = true
+    void getOrCreateIframeProfileBindingKey(iframeProfileName)
+      .then((iframeBindingKey) => {
+        setBindingKey(iframeBindingKey)
+        console.log('[IFRAME] derived binding key from profile', {
+          profile: iframeProfileName,
+        })
+      })
+      .catch((error) => {
+        console.error('[IFRAME] failed to derive binding key from profile', {
+          profile: iframeProfileName,
+          error,
+        })
+      })
+  }
+  const hasExplicitUrlProfile = typeof urlConfig.profile === 'string' && urlConfig.profile.length > 0
+  const profileMode = hasExplicitUrlProfile ? 'explicit' : 'session-driven'
+  const activeProfileNameRef = ref<string>(
+    hasExplicitUrlProfile ? (urlConfig.profile as string) : getCurrentActiveProfileName() ?? defaultProfileName,
+  )
+  if (!hasExplicitUrlProfile && !getCurrentActiveProfileName()) {
+    switchCurrentActiveProfilePointer(activeProfileNameRef.value)
+  }
   const { overRideSettings, stateRefs } = saveAndLoadState(
     initialState,
-    getCurrentActiveProfileNameOrUrlProfile,
+    () => activeProfileNameRef.value,
   )
+  if (iframeProfileName) {
+    // Keep waiting behavior stable even if persisted state had `initWBindingKey: false`.
+    stateRefs.initWBindingKey = true
+  }
 
   // this file could potentially be replaced in kubernetes or docker using a configmap!
   // that way we can configure our webapp even if its already compiled...
@@ -395,7 +452,6 @@ export const useAppStateStore = defineStore('ui-state', () => {
 
   // these are refs that we don't save:
   const sessionId = ref<string | null>(null)
-  const { bindingKey, setBindingKey } = useSessionKey()
   watch(
     bindingKey,
     () => {
@@ -408,12 +464,25 @@ export const useAppStateStore = defineStore('ui-state', () => {
   const setSessionId = (newId: string) => {
     if (newId === sessionId.value) return
     sessionId.value = newId
-    console.log('switch Profile to new sessionId:', newId)
-    if (newId) {
-      // we don't need to save our old state, as it should have been persisted automatically
-      switchCurrentActiveProfilePointer(newId)
+    const profileToLoad =
+      profileMode === 'explicit'
+        ? (urlConfig.profile as string)
+        : newId
+          ? getMappedProfileForSessionId(newId)
+          : getCurrentActiveProfileName() ?? defaultProfileName
+    if (profileMode === 'session-driven' && newId) {
+      mapSessionToProfile(newId, profileToLoad)
+      switchCurrentActiveProfilePointer(profileToLoad)
     }
-    const profileToLoad = getCurrentActiveProfileNameOrUrlProfile()
+    activeProfileNameRef.value = profileToLoad
+    console.log('[PERSIST] resolve profile after session update', {
+      sessionId: newId,
+      profileMode,
+      profileToLoad,
+      currentProfilePointer: getCurrentActiveProfileName(),
+      urlProfile: urlConfig.profile,
+    })
+    console.log('switch Profile to new sessionId:', newId)
     console.log('[PERSIST] setSessionId reloading profile', {
       sessionId: newId,
       profileToLoad,
@@ -421,7 +490,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
       urlProfile: urlConfig.profile,
     })
     // re-load state with new profile!
-    Object.assign(stateRefs, getTaskyonUiProfile(profileToLoad))
+    Object.assign(stateRefs, getTaskyonUiProfile(profileToLoad) ?? {})
   }
 
   // we do this funny next line, because our store is currently "reactive" which means
@@ -463,6 +532,8 @@ export const useAppStateStore = defineStore('ui-state', () => {
     authToken,
     iframeApiKey,
     sessionId: computed(() => sessionId.value),
+    activeProfileName: computed(() => activeProfileNameRef.value),
+    profileMode: computed(() => profileMode),
     setSessionId,
     bindingKey,
     setBindingKey,

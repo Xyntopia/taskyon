@@ -8,7 +8,9 @@
           <table-of-chat-content />
         </q-expansion-item>
       </div-->
-      <div v-if="localDev">{{ state.sessionId?.slice(0, 10) }}</div>
+      <div v-if="localDev" class="text-caption text-grey-7 q-px-sm q-pb-xs">
+        profile: {{ state.activeProfileName }} | session: {{ state.sessionId?.slice(0, 10) || 'N/A' }}
+      </div>
       <div class="q-pa-xs text-caption row justify-center items-center q-gutter-md">
         <q-icon
           v-if="state.minimalGui === 'default'"
