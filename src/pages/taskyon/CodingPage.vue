@@ -6,7 +6,7 @@
       :configuration="configuration"
       :tools="tools"
       :name="tystate.usingFreeTaskyonKey ? 'codingpage_free' : 'codingpage'"
-      :profile-name="state.activeProfileName"
+      profile-name="coding_page"
       :binding-key="state.bindingKey"
       missing-binding-key-policy="noBindingKey"
       persist
@@ -799,7 +799,7 @@ const configuration = computed<partialTyConfiguration | null>(() => {
       expertMode: true,
       showLogo: false,
       chatSuggestions: [],
-      welcomeMsg: 'I see all your files! Select a file to view it, or ask me to edit any of them.',
+      welcomeMsg: 'I can help edit files in this coding workspace. Upload or create files here to get started.',
     },
     signatureOrKey: taskyonKey,
   }

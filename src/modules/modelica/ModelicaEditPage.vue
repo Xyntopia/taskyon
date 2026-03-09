@@ -486,7 +486,7 @@
             <TaskyonIframe
               :tools="tools"
               :configuration="configuration"
-              :profile-name="appState.activeProfileName"
+              profile-name="modelica_edit_page"
               :binding-key="appState.bindingKey"
               missing-binding-key-policy="noBindingKey"
               name="modelica-chat"

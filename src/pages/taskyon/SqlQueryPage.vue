@@ -5,7 +5,7 @@
       :configuration="configuration"
       :tools="tools"
       name="sql"
-      :profile-name="state.activeProfileName"
+      profile-name="sql_query_page"
       :binding-key="state.bindingKey"
       missing-binding-key-policy="noBindingKey"
       persist

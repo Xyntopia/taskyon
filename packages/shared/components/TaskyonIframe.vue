@@ -76,7 +76,16 @@ const iframeDomKey = computed(
           : 'no-key'
     }:${iframeReloadSeed.value}`,
 )
-const iframeSrc = computed(() => `${taskyonUrl}?iframe=true&profile=${resolvedProfileName.value}`)
+const iframeSrc = computed(() => {
+  const params = new URLSearchParams({
+    iframe: 'true',
+    profile: resolvedProfileName.value,
+  })
+  if (props.missingBindingKeyPolicy === 'noBindingKey' && !effectiveBindingKey.value) {
+    params.set('nobindingkey', '1')
+  }
+  return `${taskyonUrl}?${params.toString()}`
+})
 let tyAgent: TyClient | undefined = undefined
 
 const toTransportBindingKey = async (

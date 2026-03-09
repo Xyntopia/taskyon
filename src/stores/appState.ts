@@ -102,16 +102,19 @@ export function getUrlConfig() {
     const isVscodeParam =
       searchParams.get('vscode') === 'true' || searchParams.get('vscode') === '1'
     const profile = searchParams.get('profile')
+    const noBindingKeyParam =
+      searchParams.get('nobindingkey') === '1' || searchParams.get('nobindingkey') === 'true'
     if (isVscodeParam) installVscodeConsoleBridge()
     console.log('we are in an iframe via param:', isIframeParam)
     const isInIframe = window.self !== window.top || isIframeParam
     console.log('we are in an iframe:', window.self !== window.top, isInIframe)
-    return { isInIframe, isInVscode: isVscodeParam, profile }
+    return { isInIframe, isInVscode: isVscodeParam, profile, noBindingKeyParam }
   } else
     return {
       isInIframe: false,
       isInVscode: false,
       profile: null,
+      noBindingKeyParam: false,
     }
 }
 
@@ -406,7 +409,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
     urlConfig.profile.length > 0
       ? urlConfig.profile
       : null
-  if (iframeProfileName) {
+  if (iframeProfileName && !urlConfig.noBindingKeyParam) {
     // Set this immediately so taskyon startup can wait for the derived iframe binding key.
     initialState.initWBindingKey = true
     void getOrCreateIframeProfileBindingKey(iframeProfileName)
@@ -429,6 +432,11 @@ export const useAppStateStore = defineStore('ui-state', () => {
         })
       })
   }
+  if (iframeProfileName && urlConfig.noBindingKeyParam) {
+    console.log('[IFRAME] noBindingKey URL flag detected; skip profile-derived binding key')
+    setBindingKey(null, 'host')
+    initialState.initWBindingKey = false
+  }
   const hasExplicitUrlProfile = typeof urlConfig.profile === 'string' && urlConfig.profile.length > 0
   const profileMode = hasExplicitUrlProfile ? 'explicit' : 'session-driven'
   const activeProfileNameRef = ref<string>(
@@ -441,7 +449,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
     initialState,
     () => activeProfileNameRef.value,
   )
-  if (iframeProfileName) {
+  if (iframeProfileName && !urlConfig.noBindingKeyParam) {
     // Keep waiting behavior stable even if persisted state had `initWBindingKey: false`.
     stateRefs.initWBindingKey = true
   }
