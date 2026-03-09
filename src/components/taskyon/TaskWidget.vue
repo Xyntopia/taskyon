@@ -177,6 +177,27 @@
         >
           <q-tooltip>Inspect source task</q-tooltip>
         </q-btn>
+        <q-dialog v-model="showSourceTaskDialog" maximized>
+          <q-card>
+            <q-card-section class="row items-center">
+              <div class="text-subtitle2">Source task details</div>
+              <q-space />
+              <q-btn v-close-popup flat dense size="sm" :icon="matClose" />
+            </q-card-section>
+            <q-separator />
+            <q-card-section class="scroll" style="max-height: calc(100vh - 72px)">
+              <TaskWidget
+                v-if="sourceTaskForDialog"
+                :task="sourceTaskForDialog"
+                :short="false"
+                show-meta
+                :message-debug="!!state.messageDebug[sourceTaskForDialog.id]"
+                @update:message-debug="onUpdateSourceTaskMessageDebug"
+              />
+              <div v-else class="text-caption text-negative">Source task not found.</div>
+            </q-card-section>
+          </q-card>
+        </q-dialog>
       </div>
     </template>
     <template #default="{ showTaskMenu }">
@@ -194,27 +215,6 @@
       </div>
     </template>
   </TaskField>
-  <q-dialog v-model="showSourceTaskDialog" maximized>
-    <q-card>
-      <q-card-section class="row items-center">
-        <div class="text-subtitle2">Source task details</div>
-        <q-space />
-        <q-btn v-close-popup flat dense size="sm" :icon="matClose" />
-      </q-card-section>
-      <q-separator />
-      <q-card-section class="scroll" style="max-height: calc(100vh - 72px)">
-        <TaskWidget
-          v-if="sourceTaskForDialog"
-          :task="sourceTaskForDialog"
-          :short="false"
-          show-meta
-          :message-debug="!!state.messageDebug[sourceTaskForDialog.id]"
-          @update:message-debug="onUpdateSourceTaskMessageDebug"
-        />
-        <div v-else class="text-caption text-negative">Source task not found.</div>
-      </q-card-section>
-    </q-card>
-  </q-dialog>
 </template>
 
 <script setup lang="ts">

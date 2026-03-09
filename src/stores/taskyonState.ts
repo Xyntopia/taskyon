@@ -169,7 +169,9 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
   const maxLogRows = 50
   const lastActiveTaskId = ref<string | null>(null)
   const lastTaskState = ref(new Map<string, TyTaskStreamData['stage']>())
+  const activeTaskIds = ref(new Set<string>())
   const taskFinishedStages = new Set<TyTaskStreamData['stage']>(['processed', 'error', 'aborted'])
+  const taskActiveStages = new Set<TyTaskStreamData['stage']>(['processing', 'in loop', 'subtasks'])
 
   void taskyon.then(({ workerStream }) => {
     void workerStream((data) => {
@@ -193,6 +195,7 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
       if (data.stage === 'all finished' || (data.stage === 'aborted' && !id)) {
         // "all finished" and global abort do not carry a task id, so clear stale in-progress states.
         lastTaskState.value.clear()
+        activeTaskIds.value.clear()
         return
       }
 
@@ -201,6 +204,10 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
       if (taskFinishedStages.has(data.stage)) {
         // we don't need the task anymore once we're done processing with it :)
         lastTaskState.value.delete(id)
+        activeTaskIds.value.delete(id)
+      } else if (taskActiveStages.has(data.stage)) {
+        activeTaskIds.value.add(id)
+        lastTaskState.value.set(id, data.stage)
       } else {
         lastTaskState.value.set(id, data.stage)
       }
@@ -222,6 +229,7 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
     taskWorkerWaiting: readonly(taskWorkerWaiting),
     lastActiveTaskId: readonly(lastActiveTaskId),
     workerStreamLogs: readonly(workerStreamLogs),
+    activeTaskIds: readonly(activeTaskIds),
     lastTaskState: readonly(lastTaskState),
   }
 }
@@ -1207,7 +1215,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     ;(await taskyon).queueTask(taskId)
   }
 
-  const { taskWorkerWaiting, lastActiveTaskId, lastTaskState, workerStreamLogs } =
+  const { taskWorkerWaiting, lastActiveTaskId, lastTaskState, workerStreamLogs, activeTaskIds } =
     connectWorkerStream(taskyon)
 
   watch(lastActiveTaskId, (newTaskId) => {
@@ -1360,6 +1368,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     lastActiveTaskId,
     lastTaskState,
     workerStreamLogs,
+    activeTaskIds,
     addToProcessQueue,
     chatCompletionStream,
     connectMessageIframe,
