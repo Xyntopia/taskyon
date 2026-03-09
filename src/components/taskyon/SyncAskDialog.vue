@@ -115,15 +115,15 @@
 </template>
 
 <script setup lang="ts">
-import { mdiConnection, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
-import { ref } from 'vue'
-import InfoDialog from '../InfoDialog.vue'
-import { useAppStateStore } from 'src/stores/appState'
 import { matContentCopy, matDevices, matKeyOff, matSync } from '@quasar/extras/material-icons'
-import { useTaskyonStore } from 'src/stores/taskyonState'
+import { mdiConnection, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
+import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
+import QrCode from '@taskyon/shared/components/QrCode.vue'
+import { copyToClipboard } from '@taskyon/shared/modules/utils'
 import { computedAsync } from '@vueuse/core'
-import QrCode from '../QrCode.vue'
-import { copyToClipboard } from '../../../packages/shared/modules/utils'
+import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import { ref } from 'vue'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()

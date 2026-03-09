@@ -41,13 +41,10 @@ import type {
   ClientTool,
   TyClient,
   partialTaskDraft,
-} from '../../packages/tyclient/src'
-import {
-  initializeTaskyon,
-  createTool,
-  createChatCompletionTask,
-} from '../../packages/tyclient/src'
+} from '@taskyon/client'
+import { initializeTaskyon, createTool, createChatCompletionTask } from '@taskyon/client'
 import { freeKey } from 'src/assets/taskyon_free_key'
+import type { JSONSchema7 } from 'json-schema'
 
 const dev = ref(true)
 const taskyonUrl = computed(() => (dev.value ? window.location.origin : 'https://taskyon.space'))
@@ -101,7 +98,7 @@ const tools: ClientTool[] = [
       },
       required: ['parameter1'],
       additionalProperties: false,
-    } as const,
+    } as const satisfies JSONSchema7,
     function: (data) => {
       console.log('client received function call with data:', data)
       const result = `${data.parameter1}${data.parameter2}`

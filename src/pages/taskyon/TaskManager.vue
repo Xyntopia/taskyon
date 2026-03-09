@@ -119,12 +119,12 @@ import {
   mdiForum,
   mdiRefresh,
 } from '@quasar/extras/mdi-v6'
+import FadeAwayScrollPage from '@taskyon/shared/components/FadeAwayScrollPage.vue'
 import Search from '@taskyon/shared/components/SearchInput.vue'
 import type { TaskNode } from '@taskyon/taskyon'
 import { TaskContent } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
 import { type QTableProps } from 'quasar'
-import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import type { PartialDeep } from 'type-fest'

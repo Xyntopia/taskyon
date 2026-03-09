@@ -1085,7 +1085,7 @@ export const testChatCompletionWebSearch = async () => {
     [
       {
         role: 'user',
-        content: { type: 'message', data: 'hi!..   can you please search for for "taskyon" is?' },
+        content: { type: 'message', data: 'hi!..   can you please search for what "taskyon" is?' },
       },
       createChatCompletionTask({
         goal: 'WebSearch',

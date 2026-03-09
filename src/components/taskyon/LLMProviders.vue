@@ -199,19 +199,19 @@ insert into the settings below."
 
 <script setup lang="ts">
 import { matEdit } from '@quasar/extras/material-icons'
+import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
+import TyMarkdown from '@taskyon/shared/components/tyMarkdown.vue'
+import JsonInput from '@taskyon/shared/components/varViews/JsonInput.vue'
 import { freeKey } from 'src/assets/taskyon_free_key'
 import { useAppStateStore } from 'src/stores/appState'
 import { AiProvideKeyStoreName, useTaskyonStore } from 'src/stores/taskyonState'
-import InfoDialog from '../InfoDialog.vue'
-import TyMarkdown from '../tyMarkdown.vue'
-import JsonInput from '../varViews/JsonInput.vue'
 // TODO: separate user from supabase and only update the "user" from supabase...
 //       this way we can make this component independent from supabase.
 import type { KeyString } from '@taskyon/taskyon'
 import { useQuasar } from 'quasar'
 import { ref, useTemplateRef } from 'vue'
-import DialogButton from '../DialogButton.vue'
-import SecretInput from '../varViews/SecretInput.vue'
+import DialogButton from '@taskyon/shared/components/DialogButton.vue'
+import SecretInput from '@taskyon/shared/components/varViews/SecretInput.vue'
 import ApiSelect from './ApiSelect.vue'
 import PasswordManager from './PasswordManager.vue'
 
