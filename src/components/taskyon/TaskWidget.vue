@@ -238,7 +238,7 @@ import { humanizeError, safeYamlDump, type FileMapping, type TaskNode } from '@t
 import { dump } from 'js-yaml'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
-import { computed, ref } from 'vue'
+import { computed, ref, toRefs } from 'vue'
 import FileBrowser from './FileBrowser.vue'
 import SourcesList from './SourcesList.vue'
 import TaskField from './TaskField.vue'
@@ -258,19 +258,19 @@ const emit = defineEmits<{
 const tystate = useTaskyonStore()
 
 const state = useAppStateStore()
-const { task, nextTask = undefined, isWorking, short, showMeta } = props
+const { task, nextTask, isWorking, short, showMeta } = toRefs(props)
 const showSourceTaskDialog = ref(false)
 const sourceTaskForDialog = ref<TaskNode>()
-const resolvedMessageDebug = computed(() => props.messageDebug ?? !!state.messageDebug[task.id])
+const resolvedMessageDebug = computed(() => props.messageDebug ?? !!state.messageDebug[task.value.id])
 const sourceTaskId = computed(() =>
-  task.content.type === 'error' ? (task.parentID ?? task.priorID) : undefined,
+  task.value.content.type === 'error' ? (task.value.parentID ?? task.value.priorID) : undefined,
 )
 const onUpdateMessageDebug = (value: boolean) => {
   if (props.messageDebug !== undefined) {
     emit('update:messageDebug', value)
     return
   }
-  state.messageDebug[task.id] = value
+  state.messageDebug[task.value.id] = value
 }
 const onUpdateSourceTaskMessageDebug = (value: boolean) => {
   const sourceId = sourceTaskForDialog.value?.id
@@ -298,7 +298,7 @@ const onIframeMessage = (el: HTMLIFrameElement, id: string) => {
   void tystate.connectMessageIframe(id, el)
 }
 
-if (task.content.type === 'files') {
+if (task.value.content.type === 'files') {
   console.log('get uploaded files')
   void (async (fileUuids: string[]) => {
     const ty = await tystate.taskyon
@@ -308,6 +308,6 @@ if (task.content.type === 'files') {
       const newfm = { ...x, xinfo: { uuid: x?.uuid } };
       return newfm;
     });*/
-  })(task.content.data)
+  })(task.value.content.data)
 }
 </script>
