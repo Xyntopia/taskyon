@@ -183,8 +183,8 @@ watch(
 
 const isProcessing = (id: string) => {
   const lts = tystate.lastTaskState.get(id)
-  if (lts) return lts !== 'processed' && lts !== 'all finished' && lts !== 'aborted'
-  else return false
+  if (!lts) return false
+  return !['processed', 'all finished', 'aborted', 'error'].includes(lts)
 }
 
 function formatTimeStamp(timestamp: string | number | Date): string {

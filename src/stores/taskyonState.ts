@@ -169,6 +169,7 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
   const maxLogRows = 50
   const lastActiveTaskId = ref<string | null>(null)
   const lastTaskState = ref(new Map<string, TyTaskStreamData['stage']>())
+  const taskFinishedStages = new Set<TyTaskStreamData['stage']>(['processed', 'error', 'aborted'])
 
   void taskyon.then(({ workerStream }) => {
     void workerStream((data) => {
@@ -189,12 +190,19 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
 
     void workerStream((data) => {
       const id = data.task?.id || data.taskId
-      if (id) {
+      if (data.stage === 'all finished' || (data.stage === 'aborted' && !id)) {
+        // "all finished" and global abort do not carry a task id, so clear stale in-progress states.
+        lastTaskState.value.clear()
+        return
+      }
+
+      if (!id) return
+
+      if (taskFinishedStages.has(data.stage)) {
+        // we don't need the task anymore once we're done processing with it :)
+        lastTaskState.value.delete(id)
+      } else {
         lastTaskState.value.set(id, data.stage)
-        if (data.stage === 'processed') {
-          // we don't need the task anymore once we're done processing with it :)
-          lastTaskState.value.delete(id)
-        }
       }
     })
 

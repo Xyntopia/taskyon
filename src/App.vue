@@ -4,13 +4,13 @@
 
 <script setup lang="ts">
 // we are using lang=js here in order to integrate g analytics
-import { watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { generateTaskyonMeta } from './modules/meta'
 import { useMeta } from 'quasar'
 
 if (process.env.CLIENT) {
   const route = useRoute()
+  useMeta(() => generateTaskyonMeta(route))
 
   if (process.env.DEV) {
     const CHII_PORT = 8090 // or 8090, but must match how you run `chii`
@@ -82,16 +82,6 @@ if (process.env.CLIENT) {
     })()
   }
 
-  watch(
-    () => route.fullPath,
-    () => {
-      const meta = generateTaskyonMeta(route)
-      useMeta(meta)
-    },
-    {
-      immediate: true,
-    },
-  )
 }
 
 defineOptions({
