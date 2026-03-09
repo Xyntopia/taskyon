@@ -161,6 +161,9 @@ export interface TyClient {
     persist?: boolean
     tools: ClientTool[]
     configuration: partialTyConfiguration
+    bindingKey?: CryptoKey | string
+    profileName?: string
+    missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
   }) => void
 }
 
@@ -169,6 +172,9 @@ export async function initializeTaskyon(options: {
   persist?: boolean
   tools: ClientTool[]
   configuration: partialTyConfiguration
+  bindingKey?: CryptoKey | string
+  profileName?: string
+  missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
   iframeId?: string
 }): Promise<TyClient> {
   console.log('initialize taskyon tyclient...')
@@ -203,6 +209,9 @@ export async function initializeTaskyon(options: {
     type: 'configurationMessage',
     conf: options.configuration,
     persist: options.persist,
+    bindingKey: options.bindingKey,
+    profileName: options.profileName,
+    missingBindingKeyPolicy: options.missingBindingKeyPolicy,
     origin: window.location.origin,
     peerId: options?.name,
   })
@@ -239,11 +248,17 @@ export async function initializeTaskyon(options: {
       persist?: boolean
       tools: ClientTool[]
       configuration: partialTyConfiguration
+      bindingKey?: CryptoKey | string
+      profileName?: string
+      missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
     }) => {
       send({
         type: 'configurationMessage',
         conf: options.configuration,
         persist: options.persist,
+        bindingKey: options.bindingKey,
+        profileName: options.profileName,
+        missingBindingKeyPolicy: options.missingBindingKeyPolicy,
         origin: window.location.origin,
         peerId: options?.name,
       })

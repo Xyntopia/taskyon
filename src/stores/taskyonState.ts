@@ -13,6 +13,7 @@ import type {
 } from '@taskyon/taskyon'
 import {
   availableModels,
+  base64ToPublixX25519,
   chatCompletionToolParameters,
   createDuplexChannel,
   createPortApi,
@@ -1058,10 +1059,34 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           const newConfig = msg.conf
           const llmCfg = newConfig.llmSettings as Partial<TyProfile['llmSettings']> | undefined
           const appCfg = newConfig.appConfiguration as Partial<TyProfile['appConfiguration']> | undefined
+          if (typeof msg.profileName === 'string' && msg.profileName.trim()) {
+            stateRefs.setActiveProfile(msg.profileName)
+          }
+          const explicitNoBindingKey = msg.missingBindingKeyPolicy === 'noBindingKey'
+          if (explicitNoBindingKey) {
+            stateRefs.setBindingKey(null, 'unknown')
+          }
+          if (msg.bindingKey !== undefined && msg.bindingKey !== null) {
+            if (msg.bindingKey instanceof CryptoKey) {
+              stateRefs.setBindingKey(msg.bindingKey, 'unknown')
+            } else if (typeof msg.bindingKey === 'string' && msg.bindingKey.trim()) {
+              try {
+                const importedBindingKey = await base64ToPublixX25519(msg.bindingKey, false)
+                stateRefs.setBindingKey(importedBindingKey, 'unknown')
+              } catch (error) {
+                console.warn('[IFRAME CONFIG] failed to import binding key from host', error)
+              }
+            } else {
+              console.warn('[IFRAME CONFIG] unsupported binding key payload received')
+            }
+          }
           console.log('[IFRAME CONFIG] setting configuration', {
             persist: !!msg.persist,
             peerId: msg.peerId,
             origin: msg.origin,
+            profileName: msg.profileName,
+            hasBindingKey: !!msg.bindingKey,
+            missingBindingKeyPolicy: msg.missingBindingKeyPolicy,
             hasLlmSettings: !!newConfig.llmSettings,
             hasAppConfiguration: !!newConfig.appConfiguration,
             hasToolchainConfig: !!newConfig.toolchainConfig,

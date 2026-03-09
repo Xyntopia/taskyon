@@ -4,7 +4,7 @@
       <slot name="default" />
     </template>
     <template #chat>
-      <TaskyonIframe :configuration="config" :tools="tools" :persist="persist" :name="name" />
+      <TaskyonIframe v-bind="taskyonIframeProps" />
     </template>
   </DockView>
 </template>
@@ -14,21 +14,51 @@ import type { DockNode } from './DockView.vue'
 import DockView from './DockView.vue'
 import { syncRefsWithLocalStorage } from '../modules/saveState'
 import type { partialTyConfiguration } from '../../tyclient/src'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { type ClientTool } from '../../tyclient/src'
 import TaskyonIframe from './TaskyonIframe.vue'
 
-const {
-  tools = [],
-  configuration: config = {},
-  persist = false,
-  name,
-} = defineProps<{
+const props = withDefaults(
+  defineProps<{
   tools?: ClientTool[]
   configuration?: partialTyConfiguration | null
   persist?: boolean
   name: string
-}>()
+  profileName?: string
+  bindingKey?: CryptoKey | string | null
+  missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
+  }>(),
+  {
+    tools: () => [],
+    configuration: () => ({}),
+    persist: false,
+    bindingKey: null,
+    missingBindingKeyPolicy: 'deriveFromProfile',
+  },
+)
+
+const taskyonIframeProps = computed(() => {
+  const nextProps: {
+    configuration: partialTyConfiguration | null
+    tools: ClientTool[]
+    persist: boolean
+    name: string
+    profileName?: string
+    bindingKey?: CryptoKey | string | null
+    missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
+  } = {
+    configuration: props.configuration,
+    tools: props.tools,
+    persist: props.persist,
+    name: props.name,
+  }
+  if (typeof props.profileName === 'string') nextProps.profileName = props.profileName
+  if (props.bindingKey !== null) nextProps.bindingKey = props.bindingKey
+  if (props.missingBindingKeyPolicy !== 'deriveFromProfile') {
+    nextProps.missingBindingKeyPolicy = props.missingBindingKeyPolicy
+  }
+  return nextProps
+})
 
 const layout = ref<DockNode>({
   id: 'root',
@@ -57,7 +87,7 @@ const layout = ref<DockNode>({
 })
 
 syncRefsWithLocalStorage(
-  `SplitTaskyonView:${name}`,
+  `SplitTaskyonView:${props.name}`,
   {
     layout,
   },

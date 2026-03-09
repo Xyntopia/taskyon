@@ -1,7 +1,15 @@
 <!-- SqlQueryPage.vue -->
 <template>
   <q-page class="row">
-    <SplitTaskyonView :configuration="configuration" :tools="tools" name="sql" persist>
+    <SplitTaskyonView
+      :configuration="configuration"
+      :tools="tools"
+      name="sql"
+      :profile-name="state.activeProfileName"
+      :binding-key="state.bindingKey"
+      missing-binding-key-policy="noBindingKey"
+      persist
+    >
       <!-- SQL Card -->
       <q-card class="col q-ma-md" style="min-width: 200px">
         <q-card-section>
@@ -82,13 +90,13 @@
 <script setup lang="ts">
 import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
 import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/client'
+import SplitTaskyonView from '@taskyon/shared/components/SplitTaskyonView.vue'
+import { copyToClipboard } from '@taskyon/shared/modules/utils'
 import type { TyPGDB } from '@taskyon/taskyon/db'
 import { getDatabase } from '@taskyon/taskyon/db'
 import { dump } from 'js-yaml'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'
-import { copyToClipboard } from '../../../packages/shared/modules/utils'
-import SplitTaskyonView from 'src/components/SplitTaskyonView.vue'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'

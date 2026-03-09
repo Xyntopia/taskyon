@@ -6,6 +6,9 @@
       :configuration="configuration"
       :tools="tools"
       :name="tystate.usingFreeTaskyonKey ? 'codingpage_free' : 'codingpage'"
+      :profile-name="state.activeProfileName"
+      :binding-key="state.bindingKey"
+      missing-binding-key-policy="noBindingKey"
       persist
     >
       <!-- Document Editor Card -->

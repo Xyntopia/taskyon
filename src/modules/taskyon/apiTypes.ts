@@ -13,6 +13,16 @@ const tyConfigurationMessage = z.object({
     description:
       'persist the configuration on the disk, so that it is loaded faster on subsequent sessions.',
   }),
+  profileName: z.string().optional().meta({
+    description: 'Optional profile name provided by iframe host app.',
+  }),
+  bindingKey: z.any().optional().meta({
+    description:
+      'Optional binding key from iframe host app. Can be a base64 public key string or CryptoKey.',
+  }),
+  missingBindingKeyPolicy: z.enum(['deriveFromProfile', 'noBindingKey']).optional().meta({
+    description: 'How to handle undefined binding key in iframe mode.',
+  }),
   conf: z.union([z.record(z.string(), z.unknown()), TyProfile]),
 })
 

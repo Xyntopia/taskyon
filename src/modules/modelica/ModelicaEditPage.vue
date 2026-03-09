@@ -486,6 +486,9 @@
             <TaskyonIframe
               :tools="tools"
               :configuration="configuration"
+              :profile-name="appState.activeProfileName"
+              :binding-key="appState.bindingKey"
+              missing-binding-key-policy="noBindingKey"
               name="modelica-chat"
               :persist="true"
             />
@@ -543,6 +546,7 @@ import defaultUiTemplateSource from 'src/modules/modelica/ui_template_placeholde
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { copyToClipboard } from '@taskyon/shared/modules/utils'
 import FixedHeightPage from 'src/pages/FixedHeightPage.vue'
+import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
@@ -923,6 +927,7 @@ onBeforeUnmount(() => {
 })
 
 const tystate = useTaskyonStore()
+const appState = useAppStateStore()
 
 const configuration = computed<partialTyConfiguration | null>(() => {
   const taskyonKey = tystate.getTaskyonKeyString()

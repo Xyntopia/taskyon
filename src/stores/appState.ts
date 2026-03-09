@@ -234,12 +234,35 @@ function loadConfigurationFile(initialState: initialState, stateRefs: Reactive<i
 
 const useSessionKey = () => {
   const bindingKey = ref<CryptoKey | null>(null)
+  const bindingKeySource = ref<
+    'none' | 'derived' | 'host' | 'unknown' | 'host-none' | 'unknown-none'
+  >('none')
 
   return {
     bindingKey: computed(() => bindingKey.value),
-    setBindingKey: (k: CryptoKey | null) => {
+    bindingKeySource: computed(() => bindingKeySource.value),
+    setBindingKey: (k: CryptoKey | null, source: 'derived' | 'host' | 'unknown' = 'unknown') => {
+      const explicitSources: Array<typeof bindingKeySource.value> = [
+        'host',
+        'unknown',
+        'host-none',
+        'unknown-none',
+      ]
+      if (source === 'derived' && explicitSources.includes(bindingKeySource.value)) {
+        console.log('ignore derived bindingKey because an explicit bindingKey source is already active')
+        return
+      }
       console.log('set new session bindingKey!', k ? 'add new key...' : 'delete key...')
       bindingKey.value = k
+      if (k) {
+        bindingKeySource.value = source === 'unknown' ? 'unknown' : source
+      } else if (source === 'host') {
+        bindingKeySource.value = 'host-none'
+      } else if (source === 'unknown') {
+        bindingKeySource.value = 'unknown-none'
+      } else {
+        bindingKeySource.value = 'none'
+      }
     },
   }
 }
@@ -376,9 +399,11 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // configuration from the URL!
   const { initialState, defaultStorableSettings } = getInitialState()
   const urlConfig = getUrlConfig()
-  const { bindingKey, setBindingKey } = useSessionKey()
+  const { bindingKey, bindingKeySource, setBindingKey } = useSessionKey()
   const iframeProfileName =
-    urlConfig.isInIframe && typeof urlConfig.profile === 'string' && urlConfig.profile.length > 0
+    urlConfig.isInIframe &&
+    typeof urlConfig.profile === 'string' &&
+    urlConfig.profile.length > 0
       ? urlConfig.profile
       : null
   if (iframeProfileName) {
@@ -386,10 +411,16 @@ export const useAppStateStore = defineStore('ui-state', () => {
     initialState.initWBindingKey = true
     void getOrCreateIframeProfileBindingKey(iframeProfileName)
       .then((iframeBindingKey) => {
-        setBindingKey(iframeBindingKey)
-        console.log('[IFRAME] derived binding key from profile', {
-          profile: iframeProfileName,
-        })
+        if (bindingKey.value === null) {
+          setBindingKey(iframeBindingKey, 'derived')
+          console.log('[IFRAME] derived binding key from profile', {
+            profile: iframeProfileName,
+          })
+        } else {
+          console.log('[IFRAME] skipped profile-derived binding key because host key is already set', {
+            profile: iframeProfileName,
+          })
+        }
       })
       .catch((error) => {
         console.error('[IFRAME] failed to derive binding key from profile', {
@@ -459,6 +490,15 @@ export const useAppStateStore = defineStore('ui-state', () => {
     },
     { immediate: true },
   )
+
+  const setActiveProfile = (profileName: string) => {
+    if (!profileName || profileName === activeProfileNameRef.value) return
+    activeProfileNameRef.value = profileName
+    if (profileMode === 'session-driven') {
+      switchCurrentActiveProfilePointer(profileName)
+    }
+    Object.assign(stateRefs, getTaskyonUiProfile(profileName) ?? {})
+  }
 
   // our sessions only get saved once we have a legitimate session key!
   const setSessionId = (newId: string) => {
@@ -534,8 +574,10 @@ export const useAppStateStore = defineStore('ui-state', () => {
     sessionId: computed(() => sessionId.value),
     activeProfileName: computed(() => activeProfileNameRef.value),
     profileMode: computed(() => profileMode),
+    setActiveProfile,
     setSessionId,
     bindingKey,
+    bindingKeySource,
     setBindingKey,
     isInIframe: urlConfig.isInIframe,
     isInVscode: urlConfig.isInVscode,
