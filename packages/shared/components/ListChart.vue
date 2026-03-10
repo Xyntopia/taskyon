@@ -60,8 +60,26 @@
         <q-btn dense outline size="sm" color="primary" label="Heatmap" disable />
       </template>
 
+      <q-btn-dropdown
+        dense
+        flat
+        size="sm"
+        no-caps
+        :icon="matContentCopy"
+        label="Copy"
+      >
+        <q-list dense>
+          <q-item clickable v-close-popup @click="copyChartAs('png')">
+            <q-item-section>PNG</q-item-section>
+          </q-item>
+          <q-item clickable v-close-popup @click="copyChartAs('svg')">
+            <q-item-section>SVG</q-item-section>
+          </q-item>
+        </q-list>
+      </q-btn-dropdown>
+
       <span class="text-caption text-grey-7">
-        {{ description }}
+        {{ copyMessage || description }}
       </span>
     </div>
 
@@ -89,8 +107,8 @@ import {
   GraphicComponent,
   TitleComponent,
 } from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
-import { matFullscreen } from '@quasar/extras/material-icons'
+import { CanvasRenderer, SVGRenderer } from 'echarts/renderers'
+import { matContentCopy, matFullscreen } from '@quasar/extras/material-icons'
 
 echarts.use([
   LineChart,
@@ -102,6 +120,7 @@ echarts.use([
   VisualMapComponent,
   TitleComponent,
   CanvasRenderer,
+  SVGRenderer,
   DataZoomComponent,
   GraphicComponent,
 ])
@@ -190,8 +209,20 @@ const chartEl = ref<HTMLDivElement | null>(null)
 const containerWidth = ref(0)
 let chart: echarts.ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
+let copyMessageTimer: ReturnType<typeof setTimeout> | null = null
 
 const chartType = ref<'line' | 'bar' | 'heatmap' | 'scatter'>('bar')
+const copyMessage = ref('')
+
+const setCopyMessage = (message: string) => {
+  copyMessage.value = message
+  if (copyMessageTimer) {
+    clearTimeout(copyMessageTimer)
+  }
+  copyMessageTimer = setTimeout(() => {
+    copyMessage.value = ''
+  }, 2200)
+}
 
 const is2D = computed(() => {
   const v = props.value
@@ -614,6 +645,80 @@ const renderChart = () => {
   chart?.setOption(option, true)
 }
 
+const buildSvgDataUrl = () => {
+  if (!chartEl.value || !chart) return null
+
+  const width = chart.getWidth() || chartEl.value.clientWidth || 600
+  const height = chart.getHeight() || chartEl.value.clientHeight || 300
+  const tempEl = document.createElement('div')
+  tempEl.style.position = 'fixed'
+  tempEl.style.left = '-99999px'
+  tempEl.style.top = '-99999px'
+  tempEl.style.width = `${width}px`
+  tempEl.style.height = `${height}px`
+  document.body.appendChild(tempEl)
+
+  const tempChart = echarts.init(tempEl, undefined, {
+    renderer: 'svg',
+    width,
+    height,
+  })
+
+  try {
+    tempChart.setOption(
+      {
+        ...buildOption(),
+        animation: false,
+      },
+      true,
+    )
+    return tempChart.getDataURL({
+      type: 'svg',
+      pixelRatio: 1,
+      backgroundColor: '#fff',
+    })
+  } finally {
+    tempChart.dispose()
+    document.body.removeChild(tempEl)
+  }
+}
+
+const copyChartAs = async (format: 'png' | 'svg') => {
+  if (!chart) return
+  if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+    setCopyMessage('Clipboard not supported')
+    return
+  }
+
+  try {
+    const dataUrl =
+      format === 'png'
+        ? chart.getDataURL({
+            type: 'png',
+            pixelRatio: 2,
+            backgroundColor: '#fff',
+          })
+        : buildSvgDataUrl()
+
+    if (!dataUrl) {
+      setCopyMessage('Copy failed')
+      return
+    }
+
+    const blob = await (await fetch(dataUrl)).blob()
+    const blobType = blob.type || (format === 'png' ? 'image/png' : 'image/svg+xml')
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        [blobType]: blob,
+      }),
+    ])
+    setCopyMessage(`Copied ${format.toUpperCase()}`)
+  } catch (error) {
+    console.error('Failed to copy chart image:', error)
+    setCopyMessage(`Copy ${format.toUpperCase()} failed`)
+  }
+}
+
 onMounted(() => {
   if (!chartEl.value) return
   containerWidth.value = chartEl.value.clientWidth || 0
@@ -657,6 +762,9 @@ watch(
 
 onBeforeUnmount(() => {
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  if (copyMessageTimer) {
+    clearTimeout(copyMessageTimer)
+  }
   if (resizeObserver && chartEl.value) {
     resizeObserver.unobserve(chartEl.value)
     resizeObserver.disconnect()
