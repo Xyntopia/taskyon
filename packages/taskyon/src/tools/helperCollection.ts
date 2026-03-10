@@ -1,5 +1,6 @@
 import type { JSONSchema7 } from 'json-schema'
 import { createTool } from '../types/toolApi'
+import { canUseTauriHttpPlugin, tauriHttpGetText } from '../utils/tauriHttpPlugin'
 
 const jinaMarkdownReader = createTool({
   description: 'A tool that reads websites as markdown using the jina ai reader.',
@@ -25,6 +26,43 @@ const jinaMarkdownReader = createTool({
       .then(response => response.text())
       .then(data => data);
   }`,
+})
+
+const tauriHttpWebReader = createTool({
+  description: 'A tool that downloads webpages using Tauri HTTP plugin (desktop-only).',
+  longDescription:
+    'This tool uses Tauri HTTP plugin to download webpage content directly from HTTPS endpoints. It is available only in Tauri desktop runtime and is intended for environments where browser CORS restrictions should be bypassed.',
+  name: 'tauriHttpWebReader',
+  renderOptions: {
+    hideChat: false,
+    hideLlm: false,
+  },
+  parameters: {
+    type: 'object',
+    required: ['url'],
+    properties: {
+      url: {
+        type: 'string',
+        description: 'The absolute URL of the website resource to download.',
+      },
+    },
+  },
+  function: async ({ url }) => {
+    if (!canUseTauriHttpPlugin()) {
+      throw new Error('tauriHttpWebReader is only available in Tauri desktop runtime')
+    }
+
+    const target = String(url).trim()
+    if (!/^https?:\/\//i.test(target)) {
+      throw new Error(`Invalid URL '${target}'. Please provide an absolute http(s) URL.`)
+    }
+
+    const response = await tauriHttpGetText(target)
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`Tauri HTTP request failed: ${response.status} ${response.statusText}`)
+    }
+    return response.body
+  },
 })
 
 // TODO: add more functionality from here:   https://r.jina.ai/docs
@@ -329,4 +367,5 @@ const notification = createTool({
   }`,
 })
 
-export const smallHelperTools = [jinaMarkdownReader, clock, location, notification]
+const webReaderTool = canUseTauriHttpPlugin() ? tauriHttpWebReader : jinaMarkdownReader
+export const smallHelperTools = [webReaderTool, clock, location, notification]

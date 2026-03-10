@@ -28,6 +28,7 @@
           cairo
           gdk-pixbuf
           glib
+          glib-networking
           gobject-introspection
           gobject-introspection.dev
           gtk3
@@ -126,6 +127,7 @@
 
           # helpers
           graphviz # we are using this with "madge" in order to display dependency graphs...
+          xorg.xorgserver # provides Xvfb / xvfb-run for headless tauri diagnostics on servers
 
           # supabase
           docker-compose
@@ -187,6 +189,14 @@
               pkgs.lib.makeLibraryPath libraries
             }:$LD_LIBRARY_PATH
             export XDG_DATA_DIRS=${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}:$XDG_DATA_DIRS
+
+            # Ensure WebKitGTK/libsoup can load the TLS backend on NixOS.
+            export GIO_MODULE_DIR="${pkgs.glib-networking}/lib/gio/modules"
+            export GIO_EXTRA_MODULES="${pkgs.glib-networking}/lib/gio/modules''${GIO_EXTRA_MODULES:+:}$GIO_EXTRA_MODULES"
+
+            # Ensure certificate bundle is available for HTTPS validation.
+            export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+            export NIX_SSL_CERT_FILE="$SSL_CERT_FILE"
 
 
             # ── Corepack cache location ─────────────────────────────────────────────────────

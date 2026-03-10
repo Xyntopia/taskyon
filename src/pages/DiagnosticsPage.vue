@@ -11,8 +11,16 @@
             data-cy="run-tests"
             outline
             label="Run all tests"
+            :disable="isRunning"
             @click="generateReport(state.detailedTests, state.noGuiTests)"
           ></q-btn>
+          <q-btn
+            v-if="isRunning"
+            color="negative"
+            outline
+            label="Abort tests"
+            @click="abortRunningTests"
+          />
           <div>
             <q-toggle v-model="state.noGuiTests" label="no GUI Input"></q-toggle>
             <q-toggle v-model="state.detailedTests" label="detailed"></q-toggle>
@@ -138,6 +146,12 @@ import { testBuildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { onMounted, ref } from 'vue'
+import {
+  buildDiagnosticsRegistry,
+  runDiagnosticsTests,
+  type TaskyonTestFn,
+  type TestRecord,
+} from '../../packages/shared/modules/diagnosticsRunner'
 import { syncRefsWithLocalStorage } from '../../packages/shared/modules/saveState'
 import { copyToClipboard, getEnvironmentInfo } from '../../packages/shared/modules/utils'
 
@@ -152,18 +166,8 @@ const state = useAppStateStore()
 const diagnostics = ref<string>('')
 const showPassWordDialog = ref(false)
 const testFinished = ref(false)
-
-function camelToNormal(input: string): string {
-  if (!input) return ''
-
-  // Insert a space before all caps
-  const withSpaces = input
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2') // fooBar → foo Bar
-    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2') // HTMLParser → HTML Parser
-
-  // Optionally lowercase everything except first character
-  return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1)
-}
+const isRunning = ref(false)
+const abortRequested = ref(false)
 
 const infoText = ref('get password')
 let resolveSecret: (secret: string) => void
@@ -180,56 +184,40 @@ onMounted(async () => {
   })
 })
 
-async function runTest(name: string, testFunc: TaskyonTestFn, details = false) {
-  const tyauth = tystate.getTaskyonKeyString()
-  const isCypress = typeof window !== 'undefined' && 'Cypress' in window
-  const result: Record<string, unknown> = {}
-  console.log('run test:', name)
-  try {
-    const res = await testFunc({ tyauth, isCypress })
-    if (details) {
-      result[name] = {
-        status: 'OK',
-        result: res,
-      }
-    } else {
-      result[name] = 'OK'
-    }
-  } catch (error) {
-    console.log(error)
-    result[name] = {
-      status: 'ERROR',
-      message: 'an error occured during this test...',
-      error:
-        error instanceof Error
-          ? { message: error.message, stack: error.stack, cause: error.cause, name: error.name }
-          : JSON.parse(JSON.stringify(error)),
-    }
-  }
-  return dump(result, { skipInvalid: true, noRefs: true })
-}
+const modules = Object.entries(testModules).map(([sourcePath, mod]) => ({ sourcePath, mod }))
+modules.push({ sourcePath: 'src/modules/taskyon/tests.ts', mod: TaskyonTests })
+modules.push({
+  sourcePath: 'src/modules/modelica/modelicaDiagnostics.ts',
+  mod: ModelicaDiagnostics,
+})
 
-export interface TaskyonTestFn {
-  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
-  (opts?: { tyauth?: string | undefined; isCypress?: boolean | undefined }): Promise<unknown> | unknown
-  description?: string
-  gui?: boolean
-  experimental?: boolean
-  helper?: boolean
-}
+const registry = buildDiagnosticsRegistry({
+  modules,
+  builtins: [
+    {
+      testName: 'testBuildSlimView',
+      func: testBuildSlimView as TaskyonTestFn,
+      sourcePath: 'src/pages/DiagnosticsPage.vue',
+    },
+    {
+      testName: 'getEnvironmentInfo',
+      func: getEnvironmentInfo as TaskyonTestFn,
+      sourcePath: 'src/pages/DiagnosticsPage.vue',
+    },
+    {
+      testName: 'runMarkdownDetectionTests',
+      func: runMarkdownDetectionTests as TaskyonTestFn,
+      sourcePath: 'src/pages/DiagnosticsPage.vue',
+    },
+  ],
+})
 
-type TestRecord = Record<string, TaskyonTestFn>
-
-const guiTests = {} as Record<string, TaskyonTestFn>
-const tests = {} as TestRecord
-const experimentalTests = {} as TestRecord
-const testsByFolder = {} as Record<string, TestRecord>
-const testsByFile = {} as Record<string, TestRecord>
-const testLists = {
-  tests,
-  experimentalTests,
-  guiTests,
-}
+const guiTests = registry.guiTests
+const tests = registry.tests
+const experimentalTests = registry.experimentalTests
+const testsByFolder = registry.testsByFolder
+const testsByFile = registry.testsByFile
+const testLists = { tests, experimentalTests, guiTests }
 const testListKeys = Object.keys(testLists) as Array<keyof typeof testLists>
 
 type GroupedSection = {
@@ -242,63 +230,6 @@ type GroupedSection = {
   showGroupRunButton: boolean
   showRunAllButton: boolean
 }
-
-function normalizeSourcePath(path: string): string {
-  return path.replace(/^(\.\.\/)+/, '')
-}
-
-function dirname(path: string): string {
-  const idx = path.lastIndexOf('/')
-  if (idx < 0) return '.'
-  return path.slice(0, idx)
-}
-
-function addToGroup(
-  group: Record<string, TestRecord>,
-  name: string,
-  fn: TaskyonTestFn,
-  key: string,
-) {
-  if (!group[key]) group[key] = {}
-  group[key][name] = fn
-}
-
-function registerTest(testName: string, func: TaskyonTestFn, sourcePath: string) {
-  const name = camelToNormal(String(testName))
-  if ('helper' in func) return
-  if ('gui' in func) guiTests[name] = func
-  else if ('experimental' in func) experimentalTests[name] = func
-  else tests[name] = func
-
-  addToGroup(testsByFile, name, func, sourcePath)
-  addToGroup(testsByFolder, name, func, dirname(sourcePath))
-}
-
-registerTest('testBuildSlimView', testBuildSlimView, 'src/pages/DiagnosticsPage.vue')
-registerTest('getEnvironmentInfo', getEnvironmentInfo, 'src/pages/DiagnosticsPage.vue')
-registerTest(
-  'runMarkdownDetectionTests',
-  runMarkdownDetectionTests,
-  'src/pages/DiagnosticsPage.vue',
-)
-
-const modules = Object.entries(testModules).map(([path, mod]) => ({
-  sourcePath: normalizeSourcePath(path),
-  mod,
-}))
-modules.push({ sourcePath: 'src/modules/taskyon/tests.ts', mod: TaskyonTests })
-modules.push({
-  sourcePath: 'src/modules/modelica/modelicaDiagnostics.ts',
-  mod: ModelicaDiagnostics,
-})
-
-modules.forEach(({ sourcePath, mod }) => {
-  if (!mod || typeof mod !== 'object') return
-  Object.entries(mod).forEach(([name, func]) => {
-    if (typeof func !== 'function') return
-    registerTest(name, func, sourcePath)
-  })
-})
 
 function toGroupedTests(source: TestRecord): Record<string, TestRecord> {
   return { all: source }
@@ -379,25 +310,75 @@ syncRefsWithLocalStorage('taskyon.diagnostics.expansion', {
 })
 
 async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
+  if (isRunning.value) return
+  isRunning.value = true
+  abortRequested.value = false
   testFinished.value = false
 
   diagnostics.value = ''
   const startTime = Date.now() // milliseconds since epoch
   diagnostics.value = `report_date: ${new Date().toISOString()}\n`
+  let total = 0
+  let failed = 0
+  let aborted = false
 
-  /*diagnostics.value += (
-    await Promise.all(Object.entries(tests).map(([name, f]) => runTest(name, f, details)))
-  ).join('\n')*/
-  for (const [name, f] of Object.entries(tests)) {
-    diagnostics.value += await runTest(name, f, details)
-    console.log('running test:', name)
+  const tyauth = tystate.getTaskyonKeyString()
+  const isCypress = typeof window !== 'undefined' && 'Cypress' in window
+  const runOptions: Parameters<typeof runDiagnosticsTests>[1] = {
+    details,
+    isCypress,
+    shouldAbort: () => abortRequested.value,
+    onAbort: (nextTest) => {
+      aborted = true
+      diagnostics.value += `\nabort requested - skipped remaining tests (next: ${nextTest})\n`
+    },
+    onProgress: ({ phase, test }) => {
+      console.log(`diagnostics test ${phase}:`, test)
+    },
+    onResult: (result) => {
+      total += 1
+      if (!result.ok) failed += 1
+      if (result.ok) {
+        diagnostics.value += dump(
+          {
+            [result.name]: details
+              ? {
+                  status: 'OK',
+                  result: result.details,
+                }
+              : 'OK',
+          },
+          { skipInvalid: true, noRefs: true },
+        )
+      } else {
+        diagnostics.value += dump(
+          {
+            [result.name]: {
+              status: 'ERROR',
+              message: 'an error occured during this test...',
+              error: result.error,
+            },
+          },
+          { skipInvalid: true, noRefs: true },
+        )
+      }
+    },
   }
+  if (typeof tyauth === 'string') runOptions.tyauth = tyauth
 
-  testFinished.value = true
-  diagnostics.value += `\n\ntime to run tests: ${(Date.now() - startTime) / 1000}s`
-  diagnostics.value += '\nfinished all tests!'
-  console.log('diagnostics:', diagnostics.value)
-  testFinished.value = true
+  try {
+    await runDiagnosticsTests(tests, runOptions)
+
+    diagnostics.value += `\n\ntime to run tests: ${(Date.now() - startTime) / 1000}s`
+    diagnostics.value += `\nfailed tests: ${failed}/${total}`
+    diagnostics.value += aborted
+      ? '\naborted before all tests were finished'
+      : '\nfinished all tests!'
+    console.log('diagnostics:', diagnostics.value)
+    testFinished.value = true
+  } finally {
+    isRunning.value = false
+  }
 }
 
 async function generateReport(details = false, noGui = true) {
@@ -414,6 +395,11 @@ function downloadReport() {
   const mimeType = 'application/json'
 
   exportFile(fileName, fileContent, mimeType)
+}
+
+function abortRunningTests() {
+  if (!isRunning.value) return
+  abortRequested.value = true
 }
 
 //const stateView = {...state}

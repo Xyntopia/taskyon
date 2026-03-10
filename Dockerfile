@@ -223,6 +223,36 @@ ENV HOME="/root"
 RUN yarn tauri build
 
 # ───────────────────────────────────────────────────────
+# Runtime container for headless Tauri mode
+# ───────────────────────────────────────────────────────
+FROM debian:bookworm-slim AS tauri-headless-runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      glib-networking \
+      xvfb \
+      libwebkit2gtk-4.1-0 \
+      libjavascriptcoregtk-4.1-0 \
+      libsoup-3.0-0 \
+      libgtk-3-0 \
+      libglib2.0-0 \
+      libayatana-appindicator3-1 \
+      libxdo3 \
+      libdbus-1-3 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Ensure GIO finds the TLS backend module in slim environments.
+ENV GIO_MODULE_DIR=/usr/lib/x86_64-linux-gnu/gio/modules
+
+COPY --from=tauri-builder /app/src-tauri/target/release/app /usr/local/bin/taskyon
+
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["xvfb-run", "-a", "/usr/local/bin/taskyon", "--headless"]
+
+# ───────────────────────────────────────────────────────
 # Extract Tauri 
 # ───────────────────────────────────────────────────────
 # FROM scratch AS export # we can't do this, because we need the "copy" command

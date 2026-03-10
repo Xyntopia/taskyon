@@ -87,6 +87,14 @@ services:
     volumes:
       - ./dist-desktop:/out
 
+  taskyon-headless:
+    image: xyntopia/taskyon-headless
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: tauri-headless-runtime
+    restart: unless-stopped
+
   relay:
     image: xyntopia/taskyon-relay:latest
     build:

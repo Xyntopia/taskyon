@@ -7,6 +7,7 @@
 import { useRoute } from 'vue-router'
 import { generateTaskyonMeta } from './modules/meta'
 import { useMeta } from 'quasar'
+import { enableTauriStdoutBridge } from './modules/tauriStdoutBridge'
 
 type LogMethod = 'log' | 'info' | 'warn' | 'error' | 'debug'
 type TaskyonLogsSource = 'url' | 'storage' | 'none'
@@ -39,6 +40,13 @@ if (process.env.CLIENT) {
   useMeta(() => generateTaskyonMeta(route))
 
   if (process.env.DEV) {
+    const params = new URLSearchParams(window.location.search)
+    const enableChii =
+      params.get('chii') === '1' || window.localStorage.getItem('taskyon.enableChii') === '1'
+
+    if (!enableChii) {
+      console.log('Skipping chii/eruda devtools. Enable with ?chii=1 or localStorage taskyon.enableChii=1')
+    } else {
     const CHII_PORT = 8090 // or 8090, but must match how you run `chii`
 
     console.warn(
@@ -58,38 +66,39 @@ if (process.env.CLIENT) {
     devScript.onload = () => console.log('Chii devtools script loaded successfully')
     devScript.onerror = () => console.error('Failed to load chii devtools script')
 
-    document.head.appendChild(devScript)
+      document.head.appendChild(devScript)
 
     // ---- Eruda dev console (only if NOT on localhost) ----
-    const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(host)
+      const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(host)
 
-    if (!isLocalhost) {
-      const erudaScript = document.createElement('script')
-      erudaScript.src = 'https://cdn.jsdelivr.net/npm/eruda'
-      erudaScript.async = true
+      if (!isLocalhost) {
+        const erudaScript = document.createElement('script')
+        erudaScript.src = 'https://cdn.jsdelivr.net/npm/eruda'
+        erudaScript.async = true
 
-      erudaScript.onload = () => {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const eruda = (window as any).eruda
-          if (eruda && typeof eruda.init === 'function') {
-            eruda.init()
-            console.log('Eruda dev console initialized')
-          } else {
-            console.error('Eruda loaded but not available on window.eruda')
+        erudaScript.onload = () => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const eruda = (window as any).eruda
+            if (eruda && typeof eruda.init === 'function') {
+              eruda.init()
+              console.log('Eruda dev console initialized')
+            } else {
+              console.error('Eruda loaded but not available on window.eruda')
+            }
+          } catch (e) {
+            console.error('Error while initializing Eruda', e)
           }
-        } catch (e) {
-          console.error('Error while initializing Eruda', e)
         }
-      }
 
-      erudaScript.onerror = () => {
-        console.error('Failed to load Eruda dev console script')
-      }
+        erudaScript.onerror = () => {
+          console.error('Failed to load Eruda dev console script')
+        }
 
-      document.head.appendChild(erudaScript)
-    } else {
-      console.log('Skipping Eruda: running on localhost')
+        document.head.appendChild(erudaScript)
+      } else {
+        console.log('Skipping Eruda: running on localhost')
+      }
     }
 
     // better logging for dev
@@ -229,6 +238,9 @@ if (process.env.CLIENT) {
       }
     })()
   }
+
+  // Conditionally bridge console.* to Rust stdout in Tauri (headless or ?stdout=1).
+  void enableTauriStdoutBridge()
 }
 
 defineOptions({

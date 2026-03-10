@@ -1,0 +1,7 @@
+{
+  "build": {
+    "devUrl": "https://localhost:9000",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "build": {
+    "devUrl": null,
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  }
+}

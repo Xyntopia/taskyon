@@ -217,13 +217,13 @@ For in in-depth comparison check out webpages like the following
 
 <script setup lang="ts">
 import { matBlock, matCheck, matFilterList } from '@quasar/extras/material-icons'
-import type { ModelCard } from '@taskyon/taskyon'
 import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
-import ApiSelect from 'components/taskyon/ApiSelect.vue'
 import tyMarkdown from '@taskyon/shared/components/tyMarkdown.vue'
-import { type QTableProps, exportFile } from 'quasar'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
-import { humanReadablePrice, openrouterPricing } from '../../../packages/shared/modules/utils'
+import { humanReadablePrice, openrouterPricing } from '@taskyon/shared/modules/utils'
+import type { ModelCard } from '@taskyon/taskyon'
+import ApiSelect from 'components/taskyon/ApiSelect.vue'
+import { type QTableProps, exportFile } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, ref } from 'vue'

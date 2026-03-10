@@ -3,6 +3,7 @@ import { humanizeError } from '../utils/error'
 import { getTyJwtPublicKey, mintToken, returnToken, verifyServiceToken } from '../taskyon.space/taskyon.space_api'
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
 import { sleep } from '../utils/asyncUtils'
+import { canUseTauriHttpPlugin, tauriHttpGetText } from '../utils/tauriHttpPlugin'
 import axios from 'axios'
 
 async function expectThrows(
@@ -482,6 +483,58 @@ export const testTyProxy = async (ctx: { tyauth: string; isCypress?: boolean }) 
 }
 
 testSecureFetch.experimental = true
+
+export const testTauriHttpPluginHttpsFetch = async () => {
+  if (!canUseTauriHttpPlugin()) {
+    return {
+      skipped: true,
+      reason: 'Tauri HTTP plugin is not available in this runtime',
+    }
+  }
+
+  const jsonUrl = 'https://jsonplaceholder.typicode.com/todos/1'
+  const htmlUrl = 'https://example.com'
+  let usedInsecureTlsFallback = false
+  let strictTlsError: string | null = null
+
+  const jsonRes = await tauriHttpGetText(jsonUrl)
+  if (jsonRes.status < 200 || jsonRes.status >= 300) {
+    throw new Error(`Plugin HTTP JSON request failed: ${jsonRes.status} ${jsonRes.statusText}`)
+  }
+  const json = JSON.parse(jsonRes.body) as { id?: number; title?: string; completed?: boolean }
+  if (json.id !== 1 || typeof json.title !== 'string') {
+    throw new Error(`Unexpected JSON payload from plugin HTTP: ${jsonRes.body.slice(0, 300)}`)
+  }
+
+  let htmlRes
+  try {
+    htmlRes = await tauriHttpGetText(htmlUrl)
+  } catch (err) {
+    strictTlsError = humanizeError(err)
+    // Some environments (notably certain NSS/CA bundles) currently reject
+    // example.com's certificate chain. Retry insecurely so this test still
+    // validates plugin transport behavior while surfacing the trust failure.
+    htmlRes = await tauriHttpGetText(htmlUrl, { insecureTls: true })
+    usedInsecureTlsFallback = true
+  }
+  if (htmlRes.status < 200 || htmlRes.status >= 300) {
+    throw new Error(`Plugin HTTP HTML request failed: ${htmlRes.status} ${htmlRes.statusText}`)
+  }
+  if (!htmlRes.body.includes('Example Domain')) {
+    throw new Error('Plugin HTTP HTML response did not contain expected content')
+  }
+
+  return {
+    jsonUrl,
+    htmlUrl,
+    jsonStatus: jsonRes.status,
+    htmlStatus: htmlRes.status,
+    title: json.title,
+    htmlSample: htmlRes.body.slice(0, 120),
+    usedInsecureTlsFallback,
+    strictTlsError,
+  }
+}
 
 /*
 // 1) Get the wasm file URL as a string (Vite will copy it and give you a URL).

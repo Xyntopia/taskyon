@@ -159,8 +159,8 @@ export async function verifyServiceToken(
 export const getTyJwtPublicKey = async () => {
   console.log('[getTyJwtPublicKey] Fetching public key for JWT verification')
 
-  const PROXY_JWT_PUBLIC_KEY =
-    (await axios.get(`${TOKEN_SERVICE_BASE_URL}${TOKEN_SERVICE_ROUTES.pkey}`)).data ?? process.env
+  const pkeyUrl = `${TOKEN_SERVICE_BASE_URL}${TOKEN_SERVICE_ROUTES.pkey}`
+  const PROXY_JWT_PUBLIC_KEY = (await axios.get(pkeyUrl)).data ?? process.env
 
   console.log('[getTyJwtPublicKey] Retrieved public key:', PROXY_JWT_PUBLIC_KEY)
 

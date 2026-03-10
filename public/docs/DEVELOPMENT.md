@@ -209,6 +209,75 @@ Navigate to `http://localhost:9000/diagnostics` while the dev server is running.
 
 > _Tip:_ Write unit tests for core logic under `src/core/` and expose them via the diagnostics UI for quick feedback.
 
+The diagnostics UI supports:
+
+- running all registered diagnostics tests,
+- filtering tests by substring,
+- aborting currently running tests with the **Abort** button,
+- downloading/copying the generated YAML report.
+
+### Headless Tauri Diagnostics
+
+For CI-style diagnostics without a Quasar dev server:
+
+```bash
+yarn tauri:dev:diagnostics
+```
+
+This performs a fast debug frontend build first (`build:app:diagnostics`) and then starts Tauri headless diagnostics.
+
+For local iteration with an already-running dev server:
+
+```bash
+yarn tauri:dev:diagnostics:devserver
+# or
+yarn tauri:dev:diagnostics:devserver:https
+```
+
+On Linux servers/CI without a desktop session, use the `:xvfb` variants:
+
+```bash
+yarn tauri:dev:diagnostics:devserver:xvfb
+yarn tauri:dev:diagnostics:devserver:all-logs:xvfb
+```
+
+(`:xvfb` scripts use `scripts/run-with-xvfb.sh`, which prefers `xvfb-run` when available and falls back to direct `Xvfb`.)
+
+For non-diagnostics headless mode:
+
+```bash
+yarn tauri:dev:headless:xvfb
+yarn tauri:dev:headless:all-logs:xvfb
+```
+
+Headless diagnostics capabilities:
+
+- default test-centric log output (mostly `[HEADLESS][TEST]`, warnings/errors, and final result markers),
+- explicit keep-tags for important diagnostics lines (for example failed tests are logged as `[HEADLESS][KEEP][TEST][FAIL] ...`),
+- test filtering via `--test-filter "<text>"` (case-insensitive, whitespace-insensitive substring match),
+- machine-readable result marker: `HEADLESS_DIAGNOSTICS_RESULT ...`,
+- full diagnostics YAML emitted between `HEADLESS_DIAGNOSTICS_YAML_START` and `HEADLESS_DIAGNOSTICS_YAML_END`.
+
+Run only one diagnostics test (example):
+
+```bash
+yarn tauri:dev:diagnostics:devserver -- --test-filter "indexed db key storage"
+```
+
+Log policy defaults by mode:
+
+- diagnostics mode: only explicitly tagged keep-lines (`[HEADLESS][KEEP]`) plus warnings/errors,
+- headless server mode (non-diagnostics): only explicitly tagged keep-lines (`[HEADLESS][KEEP]`) plus warnings/errors,
+- warnings/errors are always printed.
+
+To bypass tag filtering and print all forwarded headless logs, pass:
+
+```bash
+tauri dev -c src-tauri/tauri.diagnostics.conf.json --no-watch -- -- --headless --run-diagnostics --all-logs
+```
+
+Alias: `--diagnostics-all-logs`.
+
 ---
 
 ## Branching & Preview Deployments

@@ -7,11 +7,13 @@
     "frontendDist": "../dist/spa",
     "devUrl": "http://localhost:9000",
     "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "beforeBuildCommand": "yarn quasar build"
   },
   "app": {
     "windows": [
       {
+        "label": "main",
+        "create": false,
         "title": "taskyon",
         "width": 800,
         "height": 600,

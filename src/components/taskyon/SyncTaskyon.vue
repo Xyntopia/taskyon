@@ -232,6 +232,23 @@ and verify the authenticity of messages sent by other users."
           />
         </q-item-section>
       </q-item>
+      <q-item v-if="isTauriApp">
+        <q-item-section>
+          <q-btn
+            :icon="matRestartAlt"
+            label="Reset Tauri Storage (Full)"
+            outline
+            color="red"
+            class="q-mb-md"
+            @click="onRequestTauriStorageReset"
+          >
+            <q-tooltip>
+              Clears Tauri WebView storage (IndexedDB, LocalStorage, CacheStorage, WebKitCache)
+              and exits the app. Cleanup is applied on next launch.
+            </q-tooltip>
+          </q-btn>
+        </q-item-section>
+      </q-item>
     </q-expansion-item>
   </q-list>
 </template>
@@ -241,6 +258,7 @@ import {
   matContentCopy,
   matDeleteForever,
   matDownload,
+  matRestartAlt,
   matSave,
   matSync,
   matUpload,
@@ -249,10 +267,11 @@ import {
 import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
 import FileDropzone from '@taskyon/shared/components/FileDropzone.vue'
 import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { copyToClipboard, deepMergeReactive } from '@taskyon/shared/modules/utils'
 import { generateSeedPhrase, keyPairFromMnemonic } from '@taskyon/taskyon'
 import yaml from 'js-yaml'
-import { exportFile, extend } from 'quasar'
+import { exportFile, extend, useQuasar } from 'quasar'
 import { useGdrive } from 'src/modules/gdrive'
 import { TyProfile } from 'src/modules/taskyon/types'
 import { asyncComputed } from 'src/modules/vueUtils'
@@ -265,6 +284,8 @@ import TyResetButton from './TyResetButton.vue'
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 const { saveObjToGdrive, loadObjFromGdrive } = useGdrive(tystate.getGdriveToken)
+const $q = useQuasar()
+const isTauriApp = process.env.CLIENT ? isTauri() : false
 
 const showSeedPhrase = ref(false)
 const pressedSeedPhraseCopyButton = ref(false)
@@ -396,6 +417,34 @@ async function onUploadTaskyonData(newFiles: File[]) {
     location.reload() // reload browser window to update app state...
   } catch (error) {
     console.error('Error processing file', error)
+  }
+}
+
+async function onRequestTauriStorageReset() {
+  if (!isTauriApp) return
+  const confirmed = await new Promise<boolean>((resolve) => {
+    $q.dialog({
+      title: 'Reset Tauri Storage',
+      message:
+        'This will clear Tauri WebView storage (IndexedDB, LocalStorage, CacheStorage, WebKitCache) on next launch and exit the app now. Continue?',
+      cancel: true,
+      persistent: true,
+      ok: { label: 'Reset & Exit', color: 'negative' },
+    })
+      .onOk(() => resolve(true))
+      .onCancel(() => resolve(false))
+      .onDismiss(() => resolve(false))
+  })
+  if (!confirmed) return
+
+  try {
+    await invoke('request_tauri_storage_reset')
+  } catch (error) {
+    console.error('Failed to schedule Tauri storage reset', error)
+    $q.notify({
+      type: 'negative',
+      message: 'Failed to schedule Tauri storage reset.',
+    })
   }
 }
 </script>

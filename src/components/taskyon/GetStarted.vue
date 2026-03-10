@@ -2,7 +2,7 @@
   <div class="text-h6 col-auto column items-center no-wrap">
     <!-- eslint-disable vue/no-v-html -->
     <div
-      v-if="state.appConfiguration.showLogo"
+      v-if="state.appConfiguration.showLogo && !isTauriApp"
       class="svg-container q-pa-lg"
       :style="{
         '--icon-primary': $q.dark.isActive ? 'white' : 'var(--q-primary)',
@@ -12,6 +12,18 @@
         display: 'inline-block',
       }"
       v-html="logoSvg"
+    />
+    <div
+      v-else-if="state.appConfiguration.showLogo"
+      class="svg-container q-pa-lg"
+      :style="{
+        '--icon-primary': $q.dark.isActive ? 'white' : 'var(--q-primary)',
+        '--icon-secondary': $q.dark.isActive ? 'var(--q-secondary)' : 'var(--q-primary)',
+        width: '10rem',
+        height: 'auto',
+        display: 'inline-block',
+      }"
+      v-html="logoSvgStatic"
     />
     <p v-if="state.appConfiguration.welcomeMsg" class="welcome-message-text text-center">
       {{ state.appConfiguration.welcomeMsg }}
@@ -47,11 +59,14 @@
 </template>
 
 <script setup lang="ts">
+import { isTauri } from '@tauri-apps/api/core'
 import { useAppStateStore } from 'src/stores/appState'
 import CreateTaskButton from './CreateTaskButton.vue'
 import logoSvg from 'src/assets/taskyon_logo_complex_animated.svg?raw'
+import logoSvgStatic from 'src/assets/taskyon_logo_complex_static.svg?raw'
 
 const state = useAppStateStore()
+const isTauriApp = process.env.CLIENT ? isTauri() : false
 </script>
 
 <style scoped>

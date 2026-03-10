@@ -178,6 +178,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           description: 'libp2p chat',
         },
       },
+      {
+        path: '/headless',
+        component: () => import('pages/taskyon/HeadlessPage.vue'),
+        meta: {
+          title: 'taskyon headless',
+          description: 'headless runtime bootstrap',
+        },
+      },
 
       /*{
         path: '/componenttests',

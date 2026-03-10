@@ -3,9 +3,17 @@
   "identifier": "default",
   "description": "enables the default permissions",
   "windows": [
-    "main"
+    "main",
+    "headless"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        "https://*:*",
+        "http://*:*"
+      ]
+    }
   ]
 }

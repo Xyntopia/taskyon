@@ -106,9 +106,31 @@ export default defineConfig((ctx) => {
     copyFiles(filesToCopy)
   }*/
 
-  const droplogging = ctx.prod && process.env.LOGGING !== 'true'
+  const isTauriBuild = Boolean(process.env.TAURI_ENV_PLATFORM || process.env.TAURI_ENV_TARGET_TRIPLE)
+  const fastDevBuild = process.env.TASKYON_FAST_DEV_BUILD === '1'
+  const keepConsoleLogging = process.env.LOGGING === 'true' || isTauriBuild
+  const droplogging = ctx.prod && !keepConsoleLogging
   console.log('drop logging:', droplogging)
   console.log('generate sourcemap:', process.env.SOURCEMAP)
+  if (fastDevBuild) {
+    console.log('using fast dev bundle mode')
+  }
+  const checkerPlugin: [string, Record<string, unknown>, { server: false }] = [
+    'vite-plugin-checker',
+    {
+      vueTsc: true,
+      eslint: {
+        lintCommand: [
+          'eslint',
+          '-c ./eslint.config.js',
+          '"./src/**/*.{ts,js,mjs,cjs,vue}"',
+          '"./packages/{taskyon,tyclient,secure-tunnel}/src/**/*.{ts,js,mjs,cjs,vue}"',
+        ].join(' '),
+        useFlatConfig: true,
+      },
+    },
+    { server: false },
+  ]
 
   return {
     // https://v2.quasar.dev/quasar-cli-vite/prefetch-feature
@@ -219,7 +241,8 @@ export default defineConfig((ctx) => {
       // rebuildCache: true, // rebuilds Vite/linter/etc cache on startup
 
       // publicPath: '/',
-      analyze: true,
+      analyze: !fastDevBuild,
+      ...(fastDevBuild ? { minify: false } : {}),
 
       // not sure, if we need this here...
       // we need the as unknown as boolean due to a bug in quasar
@@ -337,22 +360,7 @@ export default defineConfig((ctx) => {
           },
         ],
 
-        [
-          'vite-plugin-checker',
-          {
-            vueTsc: true,
-            eslint: {
-              lintCommand: [
-                'eslint',
-                '-c ./eslint.config.js',
-                '"./src/**/*.{ts,js,mjs,cjs,vue}"',
-                '"./packages/{taskyon,tyclient,secure-tunnel}/src/**/*.{ts,js,mjs,cjs,vue}"',
-              ].join(' '),
-              useFlatConfig: true,
-            },
-          },
-          { server: false },
-        ],
+        ...(fastDevBuild ? [] : [checkerPlugin]),
       ],
     },
 
