@@ -8,6 +8,32 @@ import { useRoute } from 'vue-router'
 import { generateTaskyonMeta } from './modules/meta'
 import { useMeta } from 'quasar'
 
+type LogMethod = 'log' | 'info' | 'warn' | 'error' | 'debug'
+type TaskyonLogsSource = 'url' | 'storage' | 'none'
+type TaskyonLogsApi = {
+  enable: (group: string) => ReturnType<TaskyonLogsApi['list']>
+  disable: (group: string) => ReturnType<TaskyonLogsApi['list']>
+  set: (csv: string) => ReturnType<TaskyonLogsApi['list']>
+  list: () => {
+    source: TaskyonLogsSource
+    enabled: string[]
+    wildcard: boolean
+    storageKey: string
+    urlParam: string
+    filteringActive: boolean
+  }
+  clear: () => ReturnType<TaskyonLogsApi['list']>
+}
+
+declare global {
+  interface Window {
+    __taskyonLogs?: TaskyonLogsApi
+    __taskyonConsolePatch?: {
+      originals: Record<LogMethod, (...args: unknown[]) => void>
+    }
+  }
+}
+
 if (process.env.CLIENT) {
   const route = useRoute()
   useMeta(() => generateTaskyonMeta(route))
@@ -68,20 +94,141 @@ if (process.env.CLIENT) {
 
     // better logging for dev
     ;(() => {
+      const LOG_STORAGE_KEY = 'debugLogs'
+      const LOG_QUERY_PARAM = 'logs'
+      const TAG_RE = /^\s*\[([^\]]+)\]\s*/
+      const methods = ['log', 'info', 'warn', 'error', 'debug'] as const
+
       const isTop = window === window.top
       const prefix = isTop ? '[TOP]' : '[IFRAME]'
       const style = isTop ? 'color:#2e8b57;font-weight:bold' : 'color:#1e90ff;font-weight:bold'
+      const normalizeGroup = (value: string) => value.trim().toLowerCase()
 
-      type LogMethod = 'log' | 'info' | 'warn' | 'error'
-      ;(['log', 'info', 'warn', 'error'] as const).forEach((k) => {
-        const orig = console[k] // keep original
+      const parseGroups = (value: string | null | undefined) => {
+        const groups = new Set<string>()
+        if (!value) return groups
 
-        // Prepend "%c[prefix]" + style without a JS wrapper
-        console[k] = orig.bind(console, `%c${prefix}`, style) as (typeof console)[LogMethod]
+        value
+          .split(',')
+          .map((token) => normalizeGroup(token))
+          .filter((token) => token.length > 0)
+          .forEach((token) => groups.add(token))
+
+        return groups
+      }
+
+      let enabledGroups = new Set<string>()
+      let wildcardEnabled = false
+      let source: TaskyonLogsSource = 'none'
+
+      const refreshFilters = () => {
+        const urlValue = new URLSearchParams(window.location.search).get(LOG_QUERY_PARAM)?.trim()
+        const storageValue = window.localStorage.getItem(LOG_STORAGE_KEY)?.trim()
+        const isUrlActive = Boolean(urlValue)
+
+        source = isUrlActive ? 'url' : storageValue ? 'storage' : 'none'
+        enabledGroups = parseGroups(isUrlActive ? urlValue : storageValue)
+        wildcardEnabled = enabledGroups.has('*')
+      }
+
+      const persistGroups = (groups: Set<string>) => {
+        const serialized = [...groups].sort().join(',')
+        if (serialized.length === 0) window.localStorage.removeItem(LOG_STORAGE_KEY)
+        else window.localStorage.setItem(LOG_STORAGE_KEY, serialized)
+      }
+
+      const currentState = () => ({
+        source,
+        enabled: [...enabledGroups].sort(),
+        wildcard: wildcardEnabled,
+        storageKey: LOG_STORAGE_KEY,
+        urlParam: LOG_QUERY_PARAM,
+        filteringActive: source !== 'none' && enabledGroups.size > 0,
       })
+
+      refreshFilters()
+
+      const consolePatch =
+        window.__taskyonConsolePatch ??
+        ({
+          originals: methods.reduce(
+            (acc, method) => {
+              acc[method] = console[method].bind(console)
+              return acc
+            },
+            {} as Record<LogMethod, (...args: unknown[]) => void>,
+          ),
+        } satisfies Window['__taskyonConsolePatch'])
+
+      window.__taskyonConsolePatch = consolePatch
+      const { originals } = consolePatch
+
+      const applyConsolePatch = () => {
+        const filteringActive = source !== 'none' && enabledGroups.size > 0
+
+        methods.forEach((method) => {
+          if (!filteringActive) {
+            // Preserve native callsite behavior when no tag filtering is active.
+            console[method] = originals[method].bind(console, `%c${prefix}`, style) as (typeof console)[LogMethod]
+            return
+          }
+
+          console[method] = ((...args: unknown[]) => {
+            if (typeof args[0] === 'string') {
+              const match = args[0].match(TAG_RE)
+              if (match) {
+                const group = normalizeGroup(match[1] ?? '')
+                const canLog = wildcardEnabled || enabledGroups.has(group)
+                if (!canLog) return
+              }
+            }
+
+            originals[method](`%c${prefix}`, style, ...args)
+          }) as (typeof console)[LogMethod]
+        })
+      }
+
+      applyConsolePatch()
+
+      window.__taskyonLogs = {
+        enable(group: string) {
+          const normalized = normalizeGroup(group)
+          if (!normalized) return currentState()
+          const next = new Set(enabledGroups)
+          next.add(normalized)
+          persistGroups(next)
+          refreshFilters()
+          applyConsolePatch()
+          return currentState()
+        },
+        disable(group: string) {
+          const normalized = normalizeGroup(group)
+          if (!normalized) return currentState()
+          const next = new Set(enabledGroups)
+          next.delete(normalized)
+          persistGroups(next)
+          refreshFilters()
+          applyConsolePatch()
+          return currentState()
+        },
+        set(csv: string) {
+          persistGroups(parseGroups(csv))
+          refreshFilters()
+          applyConsolePatch()
+          return currentState()
+        },
+        list() {
+          return currentState()
+        },
+        clear() {
+          window.localStorage.removeItem(LOG_STORAGE_KEY)
+          refreshFilters()
+          applyConsolePatch()
+          return currentState()
+        },
+      }
     })()
   }
-
 }
 
 defineOptions({
