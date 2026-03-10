@@ -93,6 +93,52 @@
       >
         <q-tooltip> Open Taskyon Documentation </q-tooltip>
       </q-btn>
+      <ResponsiveMenuDialogBtn
+        v-if="!hideRightSide"
+        flat
+        dense
+        round
+        :size="btnSize"
+        :icon="matApps"
+        maximized
+        auto-close
+        aria-label="Open apps menu"
+      >
+        <template #btnContent><q-tooltip>Apps</q-tooltip></template>
+        <template #default="{ close }">
+          <q-list dense style="min-width: 190px">
+            <q-item clickable to="/" @click="close">
+              <q-item-section avatar>
+                <q-icon :name="matChat" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>Normal Chat</q-item-label>
+                <q-item-label caption>Main Taskyon chat interface</q-item-label>
+              </q-item-section>
+            </q-item>
+
+            <q-item clickable to="/editor" @click="close">
+              <q-item-section avatar>
+                <q-icon :name="matCode" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>Coding App</q-item-label>
+                <q-item-label caption>Code editor with AI tools</q-item-label>
+              </q-item-section>
+            </q-item>
+
+            <q-item clickable to="/modelica" @click="close">
+              <q-item-section avatar>
+                <q-icon :name="matAccountTree" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>Modelica App</q-item-label>
+                <q-item-label caption>Modelica editor and simulator</q-item-label>
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </template>
+      </ResponsiveMenuDialogBtn>
       <q-separator
         v-if="!minMode && (!hideMenu || !hideRightSide)"
         class="desktop-only"
@@ -117,8 +163,17 @@
 </template>
 
 <script setup lang="ts">
-import { matHelpOutline, matMenu, matSearch } from '@quasar/extras/material-icons'
+import {
+  matAccountTree,
+  matApps,
+  matChat,
+  matCode,
+  matHelpOutline,
+  matMenu,
+  matSearch,
+} from '@quasar/extras/material-icons'
 import { mdiForum, mdiForumPlus } from '@quasar/extras/mdi-v6'
+import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
 import { QToolbar } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
 import { defineAsyncComponent } from 'vue'
