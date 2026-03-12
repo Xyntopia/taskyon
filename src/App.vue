@@ -109,7 +109,13 @@ if (process.env.CLIENT) {
       const methods = ['log', 'info', 'warn', 'error', 'debug'] as const
 
       const isTop = window === window.top
-      const prefix = isTop ? '[TOP]' : '[IFRAME]'
+      const frameLabel =
+        new URLSearchParams(window.location.search).get('taskyonFrameLabel')?.trim() || ''
+      const prefix = isTop
+        ? '[TOP]'
+        : frameLabel
+          ? `[IFRAME ${frameLabel}]`
+          : '[IFRAME]'
       const style = isTop ? 'color:#2e8b57;font-weight:bold' : 'color:#1e90ff;font-weight:bold'
       const normalizeGroup = (value: string) => value.trim().toLowerCase()
 

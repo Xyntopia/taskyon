@@ -20,7 +20,6 @@ here: [universal-connectivity](https://universal-connectivity.on-fleek.app/)"
       <div>chat:</div>
       <SimpleChatView
         :selected-thread="[]"
-        :show-task="() => true"
         :is-processing="() => false"
         :show-ids="false"
         :show-all-tasks="false"

@@ -4,6 +4,7 @@ export interface TaskyonTestFn {
   gui?: boolean
   experimental?: boolean
   helper?: boolean
+  timeoutMs?: number
 }
 
 export type TestRecord = Record<string, TaskyonTestFn>
@@ -109,6 +110,7 @@ export async function runDiagnosticsTests(
   opts?: {
     details?: boolean
     tyauth?: string
+    timeoutMs?: number
     isCypress?: boolean
     onProgress?: (progress: {
       phase: 'start' | 'finish'
@@ -122,7 +124,24 @@ export async function runDiagnosticsTests(
   },
 ): Promise<DiagnosticsRunResult[]> {
   const details = opts?.details ?? false
+  const defaultTimeoutMs = opts?.timeoutMs ?? 60_000
   const out: DiagnosticsRunResult[] = []
+
+  const withTimeout = async (name: string, timeoutMs: number, fn: () => Promise<unknown>) => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    try {
+      return await Promise.race([
+        fn(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error(`Test timed out after ${timeoutMs}ms: ${name}`))
+          }, timeoutMs)
+        }),
+      ])
+    } finally {
+      if (timer !== null) clearTimeout(timer)
+    }
+  }
 
   for (const [name, testFn] of Object.entries(tests)) {
     if (opts?.shouldAbort?.()) {
@@ -131,11 +150,15 @@ export async function runDiagnosticsTests(
     }
     opts?.onProgress?.({ phase: 'start', test: name })
     try {
-      const testOpts =
-        opts?.tyauth !== undefined || opts?.isCypress !== undefined
-          ? { tyauth: opts.tyauth, isCypress: opts.isCypress }
-          : undefined
-      const result = await testFn(testOpts)
+      let testOpts: { tyauth?: string; isCypress?: boolean } | undefined
+      if (opts?.tyauth !== undefined || opts?.isCypress !== undefined) {
+        testOpts = {}
+        if (opts?.tyauth !== undefined) testOpts.tyauth = opts.tyauth
+        if (opts?.isCypress !== undefined) testOpts.isCypress = opts.isCypress
+      }
+      const timeoutMs = testFn.timeoutMs ?? defaultTimeoutMs
+      const run = () => Promise.resolve(testFn(testOpts))
+      const result = timeoutMs !== undefined ? await withTimeout(name, timeoutMs, run) : await run()
       out.push({
         name,
         ok: true,

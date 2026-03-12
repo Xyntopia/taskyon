@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": false,
+    "skipLibCheck": true,
+    "preserveSymlinks": true,
+    "baseUrl": ".",
+    "rootDirs": ["./"],
+    "lib": ["esnext", "dom", "dom.iterable", "dom.asynciterable"],
+    "types": []
+  }
+}

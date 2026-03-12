@@ -1,22 +1,17 @@
 {
-    "name": "@taskyon/relay",
-    "version": "0.1.0",
-    "private": true,
-    "type": "module",
-    "main": "relay.js",
-    "scripts": {
-        "start": "node relay.js",
-        "build": "vite build --config vite.config.relay.ts"
-    },
-    "dependencies": {
-        "@chainsafe/libp2p-gossipsub": "*",
-        "@chainsafe/libp2p-noise": "*",
-        "@chainsafe/libp2p-yamux": "*",
-        "@libp2p/autonat": "*",
-        "@libp2p/circuit-relay-v2": "*",
-        "@libp2p/identify": "*",
-        "@libp2p/tcp": "*",
-        "@libp2p/websockets": "*",
-        "libp2p": "*"
-    }
+  "name": "@taskyon/relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/relay.mjs",
+  "scripts": {
+    "start": "yarn build && node dist/relay.mjs",
+    "build": "vite build --config vite.config.relay.ts"
+  },
+  "dependencies": {
+    "@taskyon/p2p-core": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^7.0.3"
+  }
 }

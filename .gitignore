@@ -9,6 +9,8 @@ node_modules
 /dist
 /dist-desktop
 /quasar.config.*.temporary.compiled*
+/packages/p2p-core/dist
+/packages/relay/dist
 
 # Cordova related directories and files
 /src-cordova/node_modules

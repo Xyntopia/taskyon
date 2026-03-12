@@ -1,9 +1,18 @@
-import type { PeerId, Stream, Connection, Startable } from '@libp2p/interface'
-import { TypedEventEmitter } from '@libp2p/interface'
+import type {
+  Connection,
+  ConnectionManager,
+  PeerId,
+  Registrar,
+  Startable,
+  Stream,
+} from '@taskyon/p2p-core'
+import {
+  streamToDuplex,
+  TypedEventEmitter,
+  serviceCapabilities,
+  serviceDependencies,
+} from '@taskyon/p2p-core'
 import { DIRECT_MESSAGE_PROTOCOL, MIME_TEXT_PLAIN } from './constants'
-import { serviceCapabilities, serviceDependencies } from '@libp2p/interface'
-import type { ConnectionManager } from '@libp2p/interface-internal'
-import type { Registrar } from '@libp2p/interface-internal'
 import { dm } from './protobuf/direct-message'
 import { pbStream } from 'it-protobuf-stream'
 
@@ -64,8 +73,7 @@ export class DirectMessage extends TypedEventEmitter<DirectMessageEvents> implem
   async afterStart(): Promise<void> {
     await this.components.registrar.handle(
       DIRECT_MESSAGE_PROTOCOL,
-      // eslint-disable-next-line @typescript-eslint/no-misused-promises
-      async ({ stream, connection }) => {
+      async (stream, connection) => {
         await this.receive(stream, connection)
       },
     )
@@ -106,7 +114,7 @@ export class DirectMessage extends TypedEventEmitter<DirectMessageEvents> implem
       }
 
       // Single protocols can skip full negotiation
-      const stream = await conn.newStream(DIRECT_MESSAGE_PROTOCOL, {
+      stream = await conn.newStream(DIRECT_MESSAGE_PROTOCOL, {
         negotiateFully: false,
       })
 
@@ -114,7 +122,7 @@ export class DirectMessage extends TypedEventEmitter<DirectMessageEvents> implem
         throw new Error(ERRORS.NO_STREAM)
       }
 
-      const datastream = pbStream(stream)
+      const datastream = pbStream(streamToDuplex(stream))
 
       const req: dm.DirectMessageRequest = {
         content: message,
@@ -162,7 +170,7 @@ export class DirectMessage extends TypedEventEmitter<DirectMessageEvents> implem
 
   async receive(stream: Stream, connection: Connection): Promise<void> {
     try {
-      const datastream = pbStream(stream)
+      const datastream = pbStream(streamToDuplex(stream))
 
       const signal = AbortSignal.timeout(5000)
 

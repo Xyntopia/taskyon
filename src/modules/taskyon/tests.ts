@@ -41,6 +41,7 @@ import z from 'zod'
 import { useGdrive } from '../gdrive'
 import { getCurrentActiveProfileName, getStoredStateString } from '../ui/initialState'
 import { initCryptoSessionFromBrowser } from './browserCryptoSession'
+import { runLibp2pBrowserMessageExchangeTest } from './libp2pBrowserDiagnostics'
 import { gDriveSyncPort } from './sync'
 
 // Assuming hasMarkdownElements and containsHtmlTags are in scope
@@ -1809,6 +1810,13 @@ export const testIPFS = () => {
   //throw { message: 'could not found the task we just loaded!!' };
 }
 
+export const testLibp2pBrowserMessageExchange = async () => {
+  return await runLibp2pBrowserMessageExchangeTest()
+}
+testLibp2pBrowserMessageExchange.experimental = true
+testLibp2pBrowserMessageExchange.description =
+  'Starts a browser libp2p node and validates two-way browser message exchange via pubsub.'
+
 const mockTask: TaskNode = {
   role: 'assistant',
   id: 'test',
@@ -2136,3 +2144,5 @@ export async function getTestMetaData() {
     CurrentChat: await completionMessage(),
   })
 }
+
+getTestMetaData.timeoutMs = 60_000

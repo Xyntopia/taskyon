@@ -1,12 +1,12 @@
 import {
+  type Libp2p,
+  Circuit,
   WebRTC,
+  WebRTCDirect,
   WebSockets,
   WebSocketsSecure,
   WebTransport,
-  Circuit,
-  WebRTCDirect,
-} from '@multiformats/multiaddr-matcher'
-import type { Libp2p } from 'libp2p'
+} from '@taskyon/p2p-core'
 
 export const bootstrapPeers = [
   '/ip4/127.0.0.1/tcp/9001/ws',
@@ -36,17 +36,18 @@ export function getPeerTypes(libp2p: Libp2p) {
     .getConnections()
     .map((conn) => conn.remoteAddr)
     .forEach((ma) => {
-      if (WebRTC.exactMatch(ma)) {
+      const maCompat = ma as unknown as Parameters<typeof WebRTC.exactMatch>[0]
+      if (WebRTC.exactMatch(maCompat)) {
         types['WebRTC']++
-      } else if (WebRTCDirect.exactMatch(ma)) {
+      } else if (WebRTCDirect.exactMatch(maCompat)) {
         types['WebRTC Direct']++
-      } else if (WebSockets.exactMatch(ma)) {
+      } else if (WebSockets.exactMatch(maCompat)) {
         types['WebSockets']++
-      } else if (WebSocketsSecure.exactMatch(ma)) {
+      } else if (WebSocketsSecure.exactMatch(maCompat)) {
         types['WebSockets (secure)']++
-      } else if (WebTransport.exactMatch(ma)) {
+      } else if (WebTransport.exactMatch(maCompat)) {
         types['WebTransport']++
-      } else if (Circuit.exactMatch(ma)) {
+      } else if (Circuit.exactMatch(maCompat)) {
         types['Circuit Relay']++
       } else {
         types['Other']++
@@ -67,7 +68,9 @@ export function getPeerDetails(libp2p: Libp2p) {
       nodeType.push('bootstrap')
     }
 
-    const relayMultiaddrs = libp2p.getMultiaddrs().filter((ma) => Circuit.exactMatch(ma))
+    const relayMultiaddrs = libp2p
+      .getMultiaddrs()
+      .filter((ma) => Circuit.exactMatch(ma as unknown as Parameters<typeof Circuit.exactMatch>[0]))
     const relayPeers = relayMultiaddrs
       .map((ma) => {
         return ma

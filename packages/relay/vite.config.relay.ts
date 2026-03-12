@@ -2,14 +2,16 @@ import path from 'node:path'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
+  resolve: {
+    alias: [
+      { find: /^@taskyon\/p2p-core$/, replacement: path.resolve(__dirname, '../p2p-core/src/index.ts') },
+      { find: /^@taskyon\/p2p-core\/(.*)$/, replacement: path.resolve(__dirname, '../p2p-core/src/$1') },
+    ],
+  },
   build: {
-    target: 'node18',
+    target: 'node22',
     outDir: 'dist',
-    lib: {
-      entry: path.resolve(__dirname, 'relay.js'),
-      formats: ['cjs'],
-      fileName: 'relay',
-    },
+    ssr: path.resolve(__dirname, 'relay.ts'),
     commonjsOptions: {
       transformMixedEsModules: true,
     },
@@ -22,11 +24,11 @@ export default defineConfig({
         'stream',
         'buffer',
         'events',
-        '@libp2p/tcp',
-        '@libp2p/mplex', // or yamux if used
-        '@libp2p/noise', // etc
-        '@libp2p/websockets', // optional, if you mix
       ],
+      output: {
+        format: 'es',
+        entryFileNames: 'relay.mjs',
+      },
     },
     minify: false,
   },

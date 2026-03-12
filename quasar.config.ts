@@ -226,6 +226,8 @@ export default defineConfig((ctx) => {
           ts.compilerOptions ??= {}
           ts.compilerOptions.paths ??= {}
           ts.compilerOptions.paths['@taskyon/client'] = ['./../packages/tyclient/src/index.ts']
+          ts.compilerOptions.paths['@taskyon/p2p-core'] = ['./../packages/p2p-core/src/index.ts']
+          ts.compilerOptions.paths['@taskyon/p2p-core/*'] = ['./../packages/p2p-core/src/*']
           ts.compilerOptions.paths['@taskyon/shared'] = ['./../packages/shared']
           ts.compilerOptions.paths['@taskyon/shared/*'] = ['./../packages/shared/*']
           return ts
@@ -277,20 +279,30 @@ export default defineConfig((ctx) => {
         const clientAliasPath = fileURLToPath(
           new URL('./packages/tyclient/src/index.ts', import.meta.url),
         )
+        const p2pCoreAliasPath = fileURLToPath(new URL('./packages/p2p-core/src/index.ts', import.meta.url))
+        const p2pCoreSrcPath = fileURLToPath(new URL('./packages/p2p-core/src', import.meta.url))
         const sharedAliasPath = fileURLToPath(new URL('./packages/shared', import.meta.url))
         const existingAliases = viteConf.resolve.alias
 
         if (Array.isArray(existingAliases)) {
           existingAliases.push(
             { find: '@taskyon/client', replacement: clientAliasPath },
+            { find: /^@taskyon\/p2p-core$/, replacement: p2pCoreAliasPath },
+            { find: /^@taskyon\/p2p-core\/(.*)$/, replacement: `${p2pCoreSrcPath}/$1` },
             { find: '@taskyon/shared', replacement: sharedAliasPath },
           )
         } else {
-          viteConf.resolve.alias = {
-            ...(existingAliases || {}),
-            '@taskyon/client': clientAliasPath,
-            '@taskyon/shared': sharedAliasPath,
-          }
+          const aliasEntries = Object.entries(existingAliases || {}).map(([find, replacement]) => ({
+            find,
+            replacement,
+          }))
+          viteConf.resolve.alias = [
+            ...aliasEntries,
+            { find: '@taskyon/client', replacement: clientAliasPath },
+            { find: /^@taskyon\/p2p-core$/, replacement: p2pCoreAliasPath },
+            { find: /^@taskyon\/p2p-core\/(.*)$/, replacement: `${p2pCoreSrcPath}/$1` },
+            { find: '@taskyon/shared', replacement: sharedAliasPath },
+          ]
         }
 
         viteConf.plugins = [

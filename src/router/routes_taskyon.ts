@@ -179,6 +179,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         },
       },
       {
+        path: '/p2pmonitor-dual',
+        component: () => import('pages/taskyon/Libp2pDualIframePage.vue'),
+        meta: {
+          title: 'dual p2p monitor',
+          description: 'two iframe p2p monitor test harness',
+        },
+      },
+      {
         path: '/headless',
         component: () => import('pages/taskyon/HeadlessPage.vue'),
         meta: {
