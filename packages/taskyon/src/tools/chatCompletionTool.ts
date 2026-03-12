@@ -44,7 +44,7 @@ import type { ToolBase } from '../types/tools'
 import { FunctionArguments, FunctionCall } from '../types/tools'
 import { charHash } from '../utils/crypto'
 import { humanizeError, serializeError } from '../utils/error'
-import { createStream } from '../utils/frpBus'
+import { createStream } from '@taskyon/shared/modules/frpBus'
 import { convertFileToText } from '../utils/loadFiles'
 import {
   createDeepTransformer,

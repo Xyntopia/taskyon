@@ -6,7 +6,7 @@ import type { TaskyonMessage } from '../types/apiTypes'
 import type { TaskContentType, TaskNode } from '../types/node'
 import { partialTaskDraft } from '../types/node'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
-import { type Port } from '../utils/frpBus'
+import { type Port } from '@taskyon/shared/modules/frpBus'
 import type { ByType } from '../utils/tsHelpers'
 
 export { BaseMessage, TaskyonMessage, TyP2P } from '../types/apiTypes'
@@ -17,7 +17,7 @@ export {
   createDuplexChannel, // utils/frpbus
   createPortApi, // utis/frpbus
   MessageChannelBridge,
-} from '../utils/frpBus'
+} from '@taskyon/shared/modules/frpBus'
 
 export { createTool, makeTaskResult, partialTaskDraft, toolCall }
 export type { Port }

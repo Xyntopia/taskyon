@@ -42,14 +42,14 @@ import type {
   IframeMultiPlexer,
   Port,
   TaskMessageStream,
-} from '../utils/frpBus'
+} from '@taskyon/shared/modules/frpBus'
 import {
   createDuplexChannel,
   createIframeMux,
   createPortApi,
   createStream,
   createTypeFilteredPort,
-} from '../utils/frpBus'
+} from '@taskyon/shared/modules/frpBus'
 import { createProxyApi, createProxyFunction } from '../utils/objHelpers'
 import { getDatabase } from '../utils/pglite.api'
 import type { Thunk } from '../utils/tsHelpers'

@@ -8,7 +8,7 @@ import { CHAT_FILE_TOPIC, FILE_EXCHANGE_PROTOCOL, PUBSUB_PEER_DISCOVERY } from '
 import type { libP2pNode } from './libp2p'
 import { log, startLibp2p } from './libp2p'
 import { getAddresses, getPeerDetails, getPeerTypes } from './p2putils'
-import { createStream } from '../utils/frpBus'
+import { createStream } from '@taskyon/shared/modules/frpBus'
 
 export type P2pNodeInfo = {
   id: string
