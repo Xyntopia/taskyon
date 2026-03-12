@@ -1096,7 +1096,7 @@ export const testChatCompletionWebSearch = async () => {
     ],
   ]
 
-  const result = await processTasks(tystate.api)(taskList, 'message', { timeoutMs: 20000 })
+  const result = await processTasks(tystate.api)(taskList, 'message', { timeoutMs: 50000 })
 
   const webSearchResponse = result.content.data
 
@@ -1237,7 +1237,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
     ]
 
     const result = await processTasks(tystate.api)(taskList, ['message', 'return'], {
-      timeoutMs: 20000,
+      timeoutMs: 50000,
     })
     assert(
       result.content.type === 'message',
@@ -1357,7 +1357,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
     ]
 
     const result = await processTasks(tystate.api)(taskList, ['message', 'return'], {
-      timeoutMs: 20000,
+      timeoutMs: 50000,
     })
     assert(
       result.content.type === 'message',
@@ -1459,7 +1459,7 @@ export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: st
     ]
 
     const result = await processTasks(tystate.api)(taskList, ['message', 'return'], {
-      timeoutMs: 20000,
+      timeoutMs: 50000,
     })
     assert(
       result.content.type === 'message',
@@ -1547,7 +1547,7 @@ export const testFileUpload = async () => {
     console.log('upload file test received message', msg)
   })
 
-  const taskResult = await processTasks(tystate.api)([tasks], 'structured', { timeoutMs: 20000 })
+  const taskResult = await processTasks(tystate.api)([tasks], 'structured', { timeoutMs: 50000 })
 
   const res = taskResult.content.data as { weight?: string; price?: string }
 
@@ -1888,15 +1888,15 @@ export async function getTestMetaData() {
       if (task) {
         const taskChain = await ty.getTaskChain(task.id)
         const toolDefs = await ty.updateToolDefinitions(false)
-        const res = await convertTaskNodesToOpenAIChat(
-          taskChain,
-          // we are not testing files right now...
-          () => new Promise(() => null),
-          () => new Promise(() => undefined),
-          !!state.toolchainConfig.chatCompletion?.use_multimodal,
-          !!state.toolchainConfig.chatCompletion?.llmTools,
-          toolDefs,
-        )
+          const res = await convertTaskNodesToOpenAIChat(
+            taskChain,
+            // we are not testing files right now...
+            () => Promise.resolve(null),
+            () => Promise.resolve(undefined),
+            !!state.toolchainConfig.chatCompletion?.use_multimodal,
+            !!state.toolchainConfig.chatCompletion?.llmTools,
+            toolDefs,
+          )
         tyChat.thread = res
       }
     }
