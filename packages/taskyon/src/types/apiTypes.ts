@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { sha256UrlSafeHashFromFile } from '../utils/encoding'
 import type { ByType } from '../utils/tsHelpers'
 import { RemoteFunctionCall, RemoteFunctionResponse } from './messages'
-import { partialTaskDraft, TaskNode } from './node'
+import { partialTaskDraft, TaskNode } from './taskNode'
 import { ToolBase } from './tools'
 
 // TODO: most of the messages here should have an equivalent encrypted version!

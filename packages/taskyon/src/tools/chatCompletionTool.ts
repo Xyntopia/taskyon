@@ -36,7 +36,7 @@ import {
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
 import type { apiConfig, TaskNodeMeta } from '../types/chatCompletion'
 import { getCurrentModel } from '../types/chatCompletion'
-import type { Annotation, FileMapping, partialTaskDraft, TaskNode } from '../types/node'
+import type { Annotation, FileMapping, partialTaskDraft, TaskNode } from '../types/taskNode'
 import type { llmSettings } from '../types/profiles'
 import type { toolContext } from '../types/toolApi'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'

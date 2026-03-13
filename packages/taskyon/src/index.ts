@@ -22,8 +22,8 @@ export * from './tools/chatCompletionTool'
 export { convertTaskNodesToOpenAIChat } from './tools/chatCompletionTool'
 export * from './types/chatCompletion'
 export * from './types/chatCompletionService'
-export type * from './types/node'
-export { partialTaskDraft, TaskContent, TaskNode } from './types/node'
+export type * from './types/taskNode'
+export { partialTaskDraft, TaskContent, TaskNode } from './types/taskNode'
 export * from './utils/oauth'
 export type {
   ClientTool,

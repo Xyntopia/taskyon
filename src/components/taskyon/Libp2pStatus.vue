@@ -1,6 +1,6 @@
 <template>
   <q-card-section>
-    <div class="text-h4 text-primary q-mb-md">WebRTC Connectivity with js-libp2p</div>
+    <div class="text-h4 q-mb-md">WebRTC Connectivity with js-libp2p</div>
     <!---btn flat label="connect" @click="p2p.start({})" />-->
     <!-- Statistics Section -->
     <!--TODO: <q-list dense class="q-mb-md">
@@ -22,7 +22,7 @@
 
     <!-- Node Section -->
     <div class="q-mb-lg">
-      <div class="text-h5 text-primary q-mb-sm">Node Info</div>
+      <div class="text-h5 q-mb-sm">Node Info</div>
       Address: {{ info.id }}
       <div>
         peer types:
@@ -71,7 +71,7 @@
 
     <!-- Peers Section -->
     <div class="q-mb-lg">
-      <div class="text-h5 text-primary q-mb-sm">Peers</div>
+      <div class="text-h5 q-mb-sm">Peers</div>
       <div class="row q-gutter-md items-center q-mb-md">
         <div class="col">
           <q-input
@@ -86,19 +86,21 @@
         <div class="col-auto">
           <template v-if="!runningExperimentalTest">
             <q-btn
-              color="positive"
               label="Connect"
               :disable="isBusy"
               @click="connectToPeer(multiaddrInput)"
             />
             <q-btn
-              color="positive"
               label="Connect localhost + run test"
               :disable="isBusy"
               @click="connectLocalhostAndRunTest"
             />
             <q-btn
-              color="warning"
+              label="Connect remote relay + run test"
+              :disable="isBusy"
+              @click="connectRemoteRelayAndRunTest"
+            />
+            <q-btn
               label="Run Experimental Browser Test"
               :disable="isBusy"
               @click="runExperimentalBrowserTestFromUi"
@@ -106,7 +108,6 @@
           </template>
           <q-btn
             v-if="runningExperimentalTest"
-            color="negative"
             label="Stop Experimental Test"
             @click="stopExperimentalBrowserTest"
           />
@@ -116,18 +117,16 @@
 
     <!-- Output Section -->
     <div class="row items-center q-gutter-sm q-mb-sm">
-      <div class="text-h5 text-primary">Output</div>
+      <div class="text-h5">Output</div>
       <ToggleButton
         v-model="verboseLogsEnabled"
         flat
         dense
-        color="primary"
         label="Verbose libp2p Logs"
       />
       <q-btn
         flat
         dense
-        color="primary"
         label="Copy Logs"
         :disable="output.length === 0"
         @click="copyLogs"
@@ -284,6 +283,14 @@ const connectLocalhostAndRunTest = async () => {
   appendOutput('[local-test] connect localhost relay and auto-run experimental test')
   await connectToPeer('/ip4/127.0.0.1/tcp/9111/ws')
   await startPersistentExperimentalBrowserTest(['/ip4/127.0.0.1/tcp/9111/ws'])
+}
+
+const connectRemoteRelayAndRunTest = async () => {
+  appendOutput(
+    `[remote-test] connect remote relay ${PRIMARY_RELAY_WS_MULTIADDR} and auto-run experimental test`,
+  )
+  await connectToPeer(PRIMARY_RELAY_WS_MULTIADDR)
+  await startPersistentExperimentalBrowserTest([PRIMARY_RELAY_WS_MULTIADDR])
 }
 const output = ref('')
 

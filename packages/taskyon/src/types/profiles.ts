@@ -1,6 +1,6 @@
 import z from 'zod'
 import { apiConfig } from './chatCompletion'
-import { partialTaskDraft } from './node'
+import { partialTaskDraft } from './taskNode'
 import { FunctionArguments } from './tools'
 
 // TODO: rename llmSettings to "tyOptions"

@@ -1,6 +1,6 @@
 import type { JSONSchema7 } from 'json-schema'
 import type { TyTaskManager } from '../core/taskManager'
-import { taskTypeOptions } from '../types/node'
+import { taskTypeOptions } from '../types/taskNode'
 import { createTool } from '../types/toolApi'
 
 // TODO: provide a link to the search page from the result!

@@ -174,8 +174,8 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         path: '/p2pmonitor',
         component: () => import('pages/taskyon/Libp2pStatusPage.vue'),
         meta: {
-          title: 'p2p chat',
-          description: 'libp2p chat',
+          title: 'p2p monitor',
+          description: 'libp2p connection status monitor',
         },
       },
       {
@@ -213,8 +213,8 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         path: '/dockview',
         component: () => import('pages/DockViewTest.vue'),
         meta: {
-          title: 'p2p chat',
-          description: 'libp2p chat',
+          title: 'dockview test',
+          description: 'testing dockview integration',
         },
       },
     ],
@@ -237,14 +237,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       description: 'Error & Diagnostics display',
     },
   },
-  /*{
-    path: '/p2pmonitor',
-    component: () => import('pages/taskyon/Libp2pStatusPage.vue'),
-    meta: {
-      title: 'p2p connection status',
-      description: 'libp2p connection status monitor',
-    },
-  },*/
   {
     path: '/clienttest',
     component: () => import('pages/TaskyonClientTest.vue'),

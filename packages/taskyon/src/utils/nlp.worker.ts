@@ -1,7 +1,7 @@
 import { expose } from 'comlink'
 import { mapFunctionNames } from '../core/tools'
 import type { TaskNodeMeta } from '../types/chatCompletion'
-import type { TaskNode } from '../types/node'
+import type { TaskNode } from '../types/taskNode'
 import type { ToolBase } from '../types/tools'
 import { getVector, loadModel, loadTokenizer } from './nlp'
 

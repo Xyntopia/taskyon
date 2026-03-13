@@ -2,8 +2,8 @@ import { safeYamlDump } from '../utils/yamlUtils'
 import { load } from 'js-yaml'
 import { usePyodideWebworker } from '../utils/webWorkerApi'
 import { match, P } from 'ts-pattern'
-import type { TaskNode } from '../types/node'
-import { partialTaskDraft } from '../types/node'
+import type { TaskNode } from '../types/taskNode'
+import { partialTaskDraft } from '../types/taskNode'
 import { deepCopy } from '../utils/objHelpers'
 
 export function findAllFilesInTasks(taskList: TaskNode[]): string[] {

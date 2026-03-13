@@ -1,5 +1,5 @@
 import z from 'zod'
-import { Annotation } from './node'
+import { Annotation } from './taskNode'
 
 export const OpenAIMessage = z.object({
   content: z.string().nullish(),

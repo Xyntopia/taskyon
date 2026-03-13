@@ -1,7 +1,7 @@
 import type { JSONSchema, FromSchema } from 'json-schema-to-ts'
 import z from 'zod'
 import type { WithRequired } from '../utils/tsHelpers'
-import { partialTaskDraft, type TaskNode } from './node'
+import { partialTaskDraft, type TaskNode } from './taskNode'
 import type { FunctionCall } from './tools'
 import { ToolBase, taskMarker } from './tools'
 

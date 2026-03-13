@@ -2,8 +2,8 @@ import { load } from 'js-yaml'
 import type { PartialDeep } from 'type-fest'
 import z from 'zod'
 import type { TaskNodeMeta } from '../types/chatCompletion'
-import type { FileMapping, TaskNodeType, TaskTreeNode } from '../types/node'
-import { TaskNode, partialTaskDraft } from '../types/node'
+import type { FileMapping, TaskNodeType, TaskTreeNode } from '../types/taskNode'
+import { TaskNode, partialTaskDraft } from '../types/taskNode'
 import type { InternalTool } from '../types/toolApi'
 import { ToolBase } from '../types/tools'
 import { lockMap, sleep } from '../utils/asyncUtils'
@@ -978,7 +978,8 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
     })
     try {
       const out = await metaDb.upsert(id, data, strategy)
-      const outKeys = out && typeof out === 'object' ? Object.keys(out as Record<string, unknown>) : []
+      const outKeys =
+        out && typeof out === 'object' ? Object.keys(out as Record<string, unknown>) : []
       console.log('[DEBUGDB] metaUpsert:done', {
         taskId: id,
         strategy: strategy ?? 'replace',

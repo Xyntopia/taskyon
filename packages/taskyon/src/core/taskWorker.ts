@@ -1,5 +1,5 @@
 import type { ReadonlyDeep } from 'type-fest'
-import type { TaskNode, TaskNodeType, partialTaskDraft } from '../types/node'
+import type { TaskNode, TaskNodeType, partialTaskDraft } from '../types/taskNode'
 import type { InternalTool, toolContext } from '../types/toolApi'
 import { taskResult } from '../types/toolApi'
 import type { FunctionArguments, FunctionCall } from '../types/tools'
