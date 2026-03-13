@@ -28,6 +28,7 @@ export type processTasksOpts = {
   timeoutMs?: number
   signal?: AbortSignal
   show?: boolean
+  throwOnError?: boolean
 }
 
 export const createChatCompletionTask = (args: chatCompletionParams) =>
@@ -79,16 +80,70 @@ export const processTasks = <T extends { type: string }>(tyPort: Port<T | Taskyo
     opts: processTasksOpts,
   ) => {
     const { subTaskStream } = await send(taskList, opts)
-    const condition =
+    const expectsError =
+      quitCondition === 'error' ||
+      (Array.isArray(quitCondition) && quitCondition.includes('error'))
+    const throwOnError = opts.throwOnError !== false && !expectsError
+    const matchesQuitCondition =
       typeof quitCondition === 'string'
-        ? subTaskStream.filter((t) => t.content.type === quitCondition)
+        ? (task: TaskNode) => task.content.type === quitCondition
         : typeof quitCondition === 'object' && Array.isArray(quitCondition)
-          ? subTaskStream.filter((t) => quitCondition.includes(t.content.type))
-          : subTaskStream.filter(quitCondition)
+          ? (task: TaskNode) => quitCondition.includes(task.content.type)
+          : quitCondition
 
-    const unsub = condition((m) => console.log('received matching message on port:', m))
-    const lastMsg = await condition.wait(opts)
-    unsub()
-    return lastMsg
+    return await new Promise<TaskNode>((resolve, reject) => {
+      if (opts.signal?.aborted) {
+        const err = new Error('Aborted')
+        err.name = 'AbortError'
+        reject(err)
+        return
+      }
+
+      let settled = false
+      let timeout: ReturnType<typeof setTimeout> | undefined
+
+      const cleanup = (unsub: () => void, onAbort: () => void) => {
+        unsub()
+        clearTimeout(timeout)
+        opts.signal?.removeEventListener('abort', onAbort)
+      }
+
+      const onAbort = () => {
+        if (settled) return
+        settled = true
+        cleanup(unsub, onAbort)
+        const err = new Error('Aborted')
+        err.name = 'AbortError'
+        reject(err)
+      }
+
+      const unsub = subTaskStream((task) => {
+        if (settled) return
+
+        if (throwOnError && task.content.type === 'error') {
+          settled = true
+          cleanup(unsub, onAbort)
+          reject(new Error(`Task processing failed on task ${task.id}`, { cause: task.content.data }))
+          return
+        }
+
+        if (matchesQuitCondition(task)) {
+          settled = true
+          cleanup(unsub, onAbort)
+          resolve(task)
+        }
+      })
+
+      if (opts.timeoutMs) {
+        timeout = setTimeout(() => {
+          if (settled) return
+          settled = true
+          cleanup(unsub, onAbort)
+          reject(new Error(`Timeout after ${opts.timeoutMs}ms`))
+        }, opts.timeoutMs)
+      }
+
+      opts.signal?.addEventListener('abort', onAbort)
+    })
   }
 }
