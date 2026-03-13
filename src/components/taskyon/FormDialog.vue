@@ -24,7 +24,7 @@
 import { type JSONSchema7 } from 'json-schema'
 import { ref } from 'vue'
 import type z from 'zod'
-import ObjectView from '../varViews/ObjectView.vue'
+import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
 
 defineOptions({ inheritAttrs: false })
 
