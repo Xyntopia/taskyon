@@ -236,6 +236,10 @@ export async function initializeTaskyon(options: {
   iframeId?: string
 }): Promise<TyClient> {
   console.log('initialize taskyon tyclient...')
+  const resolvedName = options.name ?? 'taskyon'
+  const resolvedProfileName = options.profileName ?? resolvedName
+  const resolvedPersist = options.persist ?? true
+  const resolvedMissingBindingKeyPolicy = options.missingBindingKeyPolicy ?? 'noBindingKey'
 
   const toolMap = options.tools.reduce<Record<string, ClientTool>>((p, c) => {
     p[c.name] = c
@@ -266,13 +270,47 @@ export async function initializeTaskyon(options: {
   send({
     type: 'configurationMessage',
     conf: options.configuration,
-    persist: options.persist,
+    persist: resolvedPersist,
     bindingKey: options.bindingKey,
-    profileName: options.profileName,
-    missingBindingKeyPolicy: options.missingBindingKeyPolicy,
+    profileName: resolvedProfileName,
+    missingBindingKeyPolicy: resolvedMissingBindingKeyPolicy,
     origin: window.location.origin,
-    peerId: options?.name,
+    peerId: resolvedName,
   })
+
+  const pendingToolAcks = new Set(options.tools.map((tool) => tool.name))
+  const toolAckTimeoutMs = 10_000
+  const toolAckPromise =
+    pendingToolAcks.size === 0
+      ? Promise.resolve()
+      : new Promise<void>((resolve, reject) => {
+          const statusStream = clientSidePort.receive.narrow(
+            (
+              msg: TaskyonGuiMessage,
+            ): msg is ByType<'status', TaskyonGuiMessage> & { data: { type: 'newtool'; id: string } } =>
+              msg.type === 'status' && msg.data.type === 'newtool' && typeof msg.data.id === 'string',
+          )
+
+          const timeout = setTimeout(() => {
+            unsub()
+            reject(
+              new Error(
+                `Timed out after ${toolAckTimeoutMs}ms waiting for tool registration: ${[
+                  ...pendingToolAcks,
+                ].join(', ')}`,
+              ),
+            )
+          }, toolAckTimeoutMs)
+
+          const unsub = statusStream((msg) => {
+            pendingToolAcks.delete(msg.data.id)
+            if (pendingToolAcks.size === 0) {
+              clearTimeout(timeout)
+              unsub()
+              resolve()
+            }
+          })
+        })
 
   console.log('tyclient sending our functions!')
   options.tools.forEach((t) => {
@@ -281,8 +319,10 @@ export async function initializeTaskyon(options: {
     send({
       type: 'functionDescription',
       ...fdescr,
-    })
+      })
   })
+
+  await toolAckPromise
 
   console.log('tyclient set up function listener!')
 
@@ -313,15 +353,17 @@ export async function initializeTaskyon(options: {
       profileName?: string
       missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
     }) => {
+      const nextName = options.name ?? resolvedName
       send({
         type: 'configurationMessage',
         conf: options.configuration,
-        persist: options.persist,
+        persist: options.persist ?? resolvedPersist,
         bindingKey: options.bindingKey,
-        profileName: options.profileName,
-        missingBindingKeyPolicy: options.missingBindingKeyPolicy,
+        profileName: options.profileName ?? nextName,
+        missingBindingKeyPolicy:
+          options.missingBindingKeyPolicy ?? resolvedMissingBindingKeyPolicy,
         origin: window.location.origin,
-        peerId: options?.name,
+        peerId: nextName,
       })
     },
   }

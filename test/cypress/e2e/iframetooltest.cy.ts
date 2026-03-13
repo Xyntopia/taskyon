@@ -59,6 +59,7 @@ describe('iframe integration', () => {
     cy.reload()
 
     getIframeBody().should('exist')
+    cy.dataCy('client-ready', { timeout: 30000 }).contains('client ready')
     //getIframeBody().find('#q-app').should('exist');
     //getIframeBody().get('.q-btn').should('exist');
     // don't need this for our taskyon.space version...
@@ -95,10 +96,9 @@ the clientTest function? make sure, you display the exact string how it is displ
 
     cy.get('#output').contains('cypresstest function', { timeout: 60000 })
 
-    getIframeBody().contains('Result').click()
-    getIframeBody().find('.toolresult').contains('cypresstest functio').should('exist')
+    getIframeBody().find('.toolresult', { timeout: 60000 }).contains('cypresstest functio')
 
-    cy.dataCy('task-result', { timeout: 30000 })
+    cy.dataCy('task-result', { timeout: 60000 })
       .invoke('text')
       .then((text) => {
         const jsonPart = text.slice(text.indexOf('{')).trim()

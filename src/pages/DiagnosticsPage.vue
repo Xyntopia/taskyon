@@ -182,10 +182,11 @@ onMounted(async () => {
 
 async function runTest(name: string, testFunc: TaskyonTestFn, details = false) {
   const tyauth = tystate.getTaskyonKeyString()
+  const isCypress = typeof window !== 'undefined' && 'Cypress' in window
   const result: Record<string, unknown> = {}
   console.log('run test:', name)
   try {
-    const res = await testFunc({ tyauth })
+    const res = await testFunc({ tyauth, isCypress })
     if (details) {
       result[name] = {
         status: 'OK',
@@ -210,7 +211,7 @@ async function runTest(name: string, testFunc: TaskyonTestFn, details = false) {
 
 export interface TaskyonTestFn {
   // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
-  (opts?: { tyauth?: string | undefined }): Promise<unknown> | unknown
+  (opts?: { tyauth?: string | undefined; isCypress?: boolean | undefined }): Promise<unknown> | unknown
   description?: string
   gui?: boolean
   experimental?: boolean

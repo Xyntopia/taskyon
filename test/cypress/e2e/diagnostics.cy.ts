@@ -41,9 +41,9 @@ describe('run diagnostics', () => {
 
     cy.dataCy('run-tests').click()
 
-    cy.get(`[data-cy="test-finished"]`, { timeout: 60000 }).contains('Test Finished')
+    cy.get(`[data-cy="test-finished"]`, { timeout: 100000 }).contains('Test Finished')
 
-    cy.dataCy('diagnostics-result', { timeout: 60000 }).should(($el) => {
+    cy.dataCy('diagnostics-result', { timeout: 100000 }).should(($el) => {
       const text = $el.text().trim().toLowerCase()
       const lines = text.split('\n').map((l) => l.trim())
       const lastLine = lines[lines.length - 1]

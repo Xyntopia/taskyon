@@ -5,7 +5,7 @@
       <iframe
         id="taskyon"
         frameborder="0"
-        :src="`${taskyonUrl}?iframe=true&profile=test`"
+        :src="iframeSrc"
         width="100%"
         height="500px"
       ></iframe>
@@ -14,7 +14,13 @@
       <div class="col-6">
         <q-toggle v-model="dev" label="switch between taskyon.space <-> dev versions" />
         <div>Function Call Output</div>
-        <q-btn outline label="Execute Client Test Function" @click="startClientTest" />
+        <q-btn
+          outline
+          label="Execute Client Test Function"
+          :disable="!clientReady"
+          @click="startClientTest"
+        />
+        <div v-if="clientReady" data-cy="client-ready" class="text-caption">client ready</div>
         <div id="output" class="q-pa-lg">function result: {{ functionResult }}</div>
         received async result.
         <pre
@@ -45,13 +51,27 @@ import type {
 import { initializeTaskyon, createTool, createChatCompletionTask } from '@taskyon/client'
 import { freeKey } from 'src/assets/taskyon_free_key'
 import type { JSONSchema7 } from 'json-schema'
+import { useAppStateStore } from 'src/stores/appState'
 
 const dev = ref(true)
 const taskyonUrl = computed(() => (dev.value ? window.location.origin : 'https://taskyon.space'))
+const profileName = 'client_test_page'
+const state = useAppStateStore()
+const iframeSrc = computed(() => {
+  const params = new URLSearchParams({
+    iframe: 'true',
+    profile: profileName,
+  })
+  if (!state.bindingKey) {
+    params.set('nobindingkey', '1')
+  }
+  return `${taskyonUrl.value}?${params.toString()}`
+})
 
 const functionResult = ref<string>()
 const tyclient = ref<TyClient>()
 const taskResult = ref<unknown>()
+const clientReady = ref(false)
 
 // Configuration
 const configuration: partialTyConfiguration = {
@@ -112,9 +132,11 @@ onMounted(async () => {
   tyclient.value = await initializeTaskyon({
     tools,
     configuration,
-    name: 'taskyon client test',
+    name: profileName,
     iframeId: 'taskyon',
+    ...(state.bindingKey ? { bindingKey: state.bindingKey } : {}),
   })
+  clientReady.value = true
 })
 
 async function startClientTest() {
