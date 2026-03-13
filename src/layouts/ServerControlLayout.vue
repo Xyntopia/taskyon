@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import DarkModeButton from 'src/components/DarkModeButton.vue'
+import DarkModeButton from '@taskyon/shared/components/DarkModeButton.vue'
 import { useAppStateStore } from 'src/stores/appState'
 
 if (process.env.CLIENT) {

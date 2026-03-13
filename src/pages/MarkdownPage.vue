@@ -11,8 +11,8 @@
 </template>
 
 <script setup lang="ts">
-import TyMarkdown from 'components/tyMarkdown.vue'
-import FadeAwayScrollPage from 'src/components/FadeAwayScrollPage.vue'
+import TyMarkdown from '@taskyon/shared/components/tyMarkdown.vue'
+import FadeAwayScrollPage from '@taskyon/shared/components/FadeAwayScrollPage.vue'
 import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 

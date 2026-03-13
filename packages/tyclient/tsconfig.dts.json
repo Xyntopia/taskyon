@@ -19,8 +19,9 @@
 
     "paths": {
       //"src/*": ["../../src/*"],
-      //"@taskyon/taskyon": ["../taskyon/src/index.ts"],
-      "@taskyon/taskyon/api": ["../taskyon/src/api/index.ts"]
+      "@taskyon/taskyon": ["../taskyon/src/api/index.ts"],
+      "@taskyon/taskyon/api": ["../taskyon/src/api/index.ts"],
+      "@taskyon/shared/*": ["../shared/*"]
     },
 
     "lib": ["esnext", "dom", "dom.iterable", "dom.asynciterable"],

@@ -11,8 +11,8 @@ import {
   type TaskyonMessage,
 } from '@taskyon/taskyon/api'
 import type { partialTaskDraft } from '@taskyon/taskyon/api'
-import type { TaskContentType, TaskNode } from '@taskyon/taskyon'
-import type { ByType } from '@taskyon/taskyon'
+import type { TaskContentType, TaskNode } from '../../taskyon/src/types/node'
+import type { ByType } from '../../taskyon/src/utils/tsHelpers'
 // TODO: move this into some other part as well..  maybe into "GUI" types or somthing like that?
 import type {
   partialTyConfiguration,
@@ -47,20 +47,24 @@ export const processTasks = <T extends { type: string }>(tyPort: Port<T | Taskyo
     const { initialIds } = await send(taskList, opts)
     const subTasks = new Set<string>(initialIds)
     const subTaskStream = tyPort.receive
-      .narrow((m): m is ByType<'taskCreated', TaskyonMessage> & { task: { id: string } } => {
-        if (
-          m.type === 'taskCreated' &&
-          'task' in m &&
-          !!m.task?.id &&
-          !!m.task?.parentID &&
-          subTasks.has(m.task.parentID)
-        ) {
-          subTasks.add(m.task.id)
-          return true
-        }
-        return false
-      })
-      .map((msg) => msg.task)
+      .narrow(
+        (
+          m: T | TaskyonMessage,
+        ): m is ByType<'taskCreated', TaskyonMessage> & { task: { id: string } } => {
+          if (
+            m.type === 'taskCreated' &&
+            'task' in m &&
+            !!m.task?.id &&
+            !!m.task?.parentID &&
+            subTasks.has(m.task.parentID)
+          ) {
+            subTasks.add(m.task.id)
+            return true
+          }
+          return false
+        },
+      )
+      .map((msg: ByType<'taskCreated', TaskyonMessage> & { task: { id: string } }) => msg.task)
     const expectsError =
       quitCondition === 'error' ||
       (Array.isArray(quitCondition) && quitCondition.includes('error'))
@@ -98,7 +102,7 @@ export const processTasks = <T extends { type: string }>(tyPort: Port<T | Taskyo
         reject(err)
       }
 
-      const unsub = subTaskStream((task) => {
+      const unsub = subTaskStream((task: TaskNode) => {
         if (settled) return
 
         if (throwOnError && task.content.type === 'error') {
@@ -282,8 +286,11 @@ export async function initializeTaskyon(options: {
 
   console.log('tyclient set up function listener!')
 
-  clientSidePort.receive((msg) => console.log('tyclient received message', msg))
-  clientSidePort.receive.narrow((msg) => msg.type === 'functionCall')(async (msg) => {
+  clientSidePort.receive((msg: TaskyonGuiMessage) => console.log('tyclient received message', msg))
+  clientSidePort.receive.narrow(
+    (msg: TaskyonGuiMessage): msg is ByType<'functionCall', TaskyonGuiMessage> =>
+      msg.type === 'functionCall',
+  )(async (msg: ByType<'functionCall', TaskyonGuiMessage>) => {
     const tool = toolMap[msg.functionName]
     if (tool) {
       const res = await handleFunctionExecution(msg.arguments ?? {}, tool, controller.signal)

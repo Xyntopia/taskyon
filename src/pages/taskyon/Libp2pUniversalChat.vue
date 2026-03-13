@@ -45,7 +45,7 @@ here: [universal-connectivity](https://universal-connectivity.on-fleek.app/)"
 import type { ChatMessage, partialTaskDraft } from '@taskyon/taskyon'
 import { CHAT_TOPIC, createTaskNode, getActiveP2pNode, safeYamlDump } from '@taskyon/taskyon'
 import Libp2pStatus from 'components/taskyon/Libp2pStatus.vue'
-import InfoDialog from 'src/components/InfoDialog.vue'
+import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
 import CreateNewTask from 'src/components/taskyon/CreateNewTask.vue'
 import SimpleChatView from 'src/components/taskyon/SimpleChatView.vue'
 import { syncRefsWithLocalStorage } from '../../../packages/shared/modules/saveState'
