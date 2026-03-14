@@ -11,7 +11,7 @@ import {
   type TaskyonMessage,
 } from '@taskyon/taskyon/api'
 import type { partialTaskDraft } from '@taskyon/taskyon/api'
-import type { TaskContentType, TaskNode } from '../../taskyon/src/types/node'
+import type { TaskContentType, TaskNode } from '../../taskyon/src/types/taskNode'
 import type { ByType } from '../../taskyon/src/utils/tsHelpers'
 // TODO: move this into some other part as well..  maybe into "GUI" types or somthing like that?
 import type {

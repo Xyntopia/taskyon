@@ -81,6 +81,17 @@ const DEFAULT_SEEN_TTL_MS = 120_000
 const DEFAULT_MAX_HOPS = 6
 const log = prefixLogger('p2p-core').forComponent('topic-router')
 
+function isIgnorableStreamCloseError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('unexpected eof') ||
+    normalized.includes('stream closed while reading') ||
+    normalized.includes('stream reset') ||
+    normalized.includes('aborted')
+  )
+}
+
 function bytesToBase64(bytes: Uint8Array): string {
   if (typeof Buffer !== 'undefined') {
     return Buffer.from(bytes).toString('base64')
@@ -158,6 +169,7 @@ export class TopicRouter extends TypedEventEmitter<TopicRouterEvents> implements
   private readonly connectedPeers = new Map<string, PeerId>()
   private readonly seenMessages = new Map<string, number>()
   private pruneInterval?: ReturnType<typeof setInterval>
+  private stopped = false
 
   constructor(components: TopicRouterComponents, init: TopicRouterInit = {}) {
     super()
@@ -171,6 +183,7 @@ export class TopicRouter extends TypedEventEmitter<TopicRouterEvents> implements
   }
 
   async start(): Promise<void> {
+    this.stopped = false
     this.topologyId = await this.components.registrar.register(this.protocol, {
       onConnect: (peerId) => {
         this.connectedPeers.set(peerId.toString(), peerId)
@@ -199,6 +212,7 @@ export class TopicRouter extends TypedEventEmitter<TopicRouterEvents> implements
   }
 
   stop(): void {
+    this.stopped = true
     if (this.topologyId != null) {
       this.components.registrar.unregister(this.topologyId)
     }
@@ -208,6 +222,7 @@ export class TopicRouter extends TypedEventEmitter<TopicRouterEvents> implements
   }
 
   subscribe(topic: string): void {
+    if (this.stopped) return
     if (this.localSubscriptions.has(topic)) return
     this.localSubscriptions.add(topic)
     log('local subscribe topic=%s connectedPeers=%o', topic, [...this.connectedPeers.keys()])
@@ -221,6 +236,7 @@ export class TopicRouter extends TypedEventEmitter<TopicRouterEvents> implements
   }
 
   unsubscribe(topic: string): void {
+    if (this.stopped) return
     if (topic === this.discoveryTopic) return
     if (!this.localSubscriptions.delete(topic)) return
     log('local unsubscribe topic=%s connectedPeers=%o', topic, [...this.connectedPeers.keys()])
@@ -244,6 +260,9 @@ export class TopicRouter extends TypedEventEmitter<TopicRouterEvents> implements
   }
 
   async publish(topic: string, data: Uint8Array): Promise<{ recipients: PeerId[] }> {
+    if (this.stopped) {
+      return { recipients: [] }
+    }
     const msgId = this.createMessageId(topic, data)
     this.seenMessages.set(msgId, Date.now())
 
@@ -378,10 +397,12 @@ export class TopicRouter extends TypedEventEmitter<TopicRouterEvents> implements
   }
 
   private async broadcastControlMessage(envelope: Extract<RouterEnvelope, { type: 'subscribe' | 'unsubscribe' }>) {
+    if (this.stopped) return
     await this.forwardEnvelope(envelope, this.getPropagationTargets())
   }
 
   private async forwardEnvelope(envelope: RouterEnvelope, peers: PeerId[]): Promise<PeerId[]> {
+    if (this.stopped) return []
     const delivered: PeerId[] = []
     for (const peerId of peers) {
       const sent = await this.sendEnvelope(peerId, envelope)
@@ -420,6 +441,7 @@ export class TopicRouter extends TypedEventEmitter<TopicRouterEvents> implements
   }
 
   private async sendEnvelope(peerId: PeerId, envelope: RouterEnvelope): Promise<boolean> {
+    if (this.stopped) return false
     try {
       const connection = await this.components.connectionManager.openConnection(peerId, {
         signal: AbortSignal.timeout(5_000),
@@ -438,6 +460,10 @@ export class TopicRouter extends TypedEventEmitter<TopicRouterEvents> implements
       log('send envelope ok type=%s peer=%s', envelope.type, peerId.toString())
       return true
     } catch (error) {
+      if (this.stopped || isIgnorableStreamCloseError(error)) {
+        log('send envelope ignored during shutdown type=%s peer=%s', envelope.type, peerId.toString())
+        return false
+      }
       log(
         'send envelope failed type=%s peer=%s error=%s',
         envelope.type,

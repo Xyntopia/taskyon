@@ -5396,6 +5396,12 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@taskyon/taskyon-headless@workspace:packages/taskyon-headless":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/taskyon-headless@workspace:packages/taskyon-headless"
+  languageName: unknown
+  linkType: soft
+
 "@taskyon/taskyon@workspace:packages/taskyon":
   version: 0.0.0-use.local
   resolution: "@taskyon/taskyon@workspace:packages/taskyon"

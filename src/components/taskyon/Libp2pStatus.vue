@@ -1,345 +1,210 @@
 <template>
-  <q-card-section>
-    <div class="text-h4 q-mb-md">WebRTC Connectivity with js-libp2p</div>
-    <!---btn flat label="connect" @click="p2p.start({})" />-->
-    <!-- Statistics Section -->
-    <!--TODO: <q-list dense class="q-mb-md">
-          <q-item>
-            <q-item-section>
-              <q-item-label>
-                Opened sessions in the last {{ openedPerUnit }}s: {{ openedPerMinute }}
-              </q-item-label>
-            </q-item-section>
-          </q-item>
-          <q-item>
-            <q-item-section>
-              <q-item-label>
-                Max opened connections per minute: {{ maxOpenedPerMinute }}
-              </q-item-label>
-            </q-item-section>
-          </q-item>
-        </q-list>-->
-
-    <!-- Node Section -->
-    <div class="q-mb-lg">
-      <div class="text-h5 q-mb-sm">Node Info</div>
-      Address: {{ info.id }}
-      <div>
-        peer types:
-        <pre>{{ safeYamlDump(info?.peerTypes) }}</pre>
+  <q-card flat bordered>
+    <q-card-section class="row items-center q-col-gutter-sm q-pa-sm">
+      <div class="col">
+        <div class="text-subtitle1">Subnetwork Discovery</div>
+        <div class="text-caption text-grey-7">
+          Compact overview of the current browser libp2p discovery state.
+        </div>
       </div>
-      <q-expansion-item label="addresses of this node" expand-separator>
-        <div class="overflow-auto" style="max-height: 300px">
-          <q-list>
-            <q-item v-for="addr in info?.nodeAddresses" :key="addr">
-              {{ addr }}
-            </q-item>
-          </q-list>
-        </div>
-      </q-expansion-item>
-      <q-expansion-item label="peers" expand-separator>
-        <div class="overflow-auto">
-          <q-list>
-            <q-item v-for="peer in info?.nodePeerDetails" :key="peer.peerConnections[0]!">
-              <q-item-section side>{{ peer.nodeType[0] }}</q-item-section>
-              <q-item-section>{{ peer.peerConnections }}</q-item-section>
-            </q-item>
-          </q-list>
-        </div>
-      </q-expansion-item>
-      <q-expansion-item label="connections" expand-separator>
-        <div class="overflow-auto">
-          <q-list>
-            <q-item v-for="c in info.connections" :key="c.id">
-              {{ c.id }}
-              {{ c.remotePeer.toString() }}
-              {{ c.remoteAddr.toString() }}
-            </q-item>
-          </q-list>
-        </div>
-      </q-expansion-item>
-      <q-expansion-item label="subscribers" expand-separator>
-        <div class="overflow-auto">
-          <q-list>
-            <q-item v-for="s in info.subscribers" :key="s.toString()">
-              {{ s.toString() }}
-            </q-item>
-          </q-list>
-        </div>
-      </q-expansion-item>
-    </div>
+      <div class="col-auto">
+        <q-chip :color="busy ? 'warning' : 'positive'" text-color="white" square>
+          {{ busy ? 'Updating' : 'Ready' }}
+        </q-chip>
+      </div>
+      <div class="col-auto">
+        <q-btn flat dense color="primary" label="State" @click="openDetail('fullState')" />
+      </div>
+    </q-card-section>
 
-    <!-- Peers Section -->
-    <div class="q-mb-lg">
-      <div class="text-h5 q-mb-sm">Peers</div>
-      <div class="row q-gutter-md items-center q-mb-md">
-        <div class="col">
-          <q-input
-            v-model="multiaddrInput"
-            label="Multiaddr"
-            placeholder="/ip4/..."
-            outlined
-            dense
-            :disable="isBusy"
-          />
-        </div>
+    <q-separator />
+
+    <q-list separator dense>
+      <q-item
+        v-for="item in summaryItems"
+        :key="item.id"
+        clickable
+        @click="openDetail(item.id)"
+      >
+        <q-item-section avatar>
+          <q-icon :name="item.icon" color="primary" />
+        </q-item-section>
+        <q-item-section>
+          <q-item-label>{{ item.label }}</q-item-label>
+          <q-item-label caption>{{ item.caption }}</q-item-label>
+        </q-item-section>
+        <q-item-section side>
+          <q-chip outline color="primary" square>
+            {{ item.value }}
+          </q-chip>
+        </q-item-section>
+      </q-item>
+    </q-list>
+
+    <q-dialog v-model="detailsDialogOpen" maximized>
+      <q-card>
+        <q-card-section class="row items-center q-col-gutter-sm q-pa-sm">
+          <div class="col">
+            <div class="text-h6">{{ activeDetail?.title ?? 'Details' }}</div>
+            <div class="text-caption text-grey-7">
+              {{ activeDetail?.caption ?? 'No detail selected.' }}
+            </div>
+          </div>
         <div class="col-auto">
-          <template v-if="!runningExperimentalTest">
-            <q-btn
-              label="Connect"
-              :disable="isBusy"
-              @click="connectToPeer(multiaddrInput)"
-            />
-            <q-btn
-              label="Connect localhost + run test"
-              :disable="isBusy"
-              @click="connectLocalhostAndRunTest"
-            />
-            <q-btn
-              label="Connect remote relay + run test"
-              :disable="isBusy"
-              @click="connectRemoteRelayAndRunTest"
-            />
-            <q-btn
-              label="Run Experimental Browser Test"
-              :disable="isBusy"
-              @click="runExperimentalBrowserTestFromUi"
-            />
-          </template>
-          <q-btn
-            v-if="runningExperimentalTest"
-            label="Stop Experimental Test"
-            @click="stopExperimentalBrowserTest"
+            <q-btn v-close-popup flat round :icon="matClose" />
+          </div>
+        </q-card-section>
+        <q-separator />
+        <q-card-section>
+          <ObjectView
+            :model-value="activeDetail?.data"
+            read-only
+            copy-object-btn
+            enable-expert-mode
           />
-        </div>
-      </div>
-    </div>
-
-    <!-- Output Section -->
-    <div class="row items-center q-gutter-sm q-mb-sm">
-      <div class="text-h5">Output</div>
-      <ToggleButton
-        v-model="verboseLogsEnabled"
-        flat
-        dense
-        label="Verbose libp2p Logs"
-      />
-      <q-btn
-        flat
-        dense
-        label="Copy Logs"
-        :disable="output.length === 0"
-        @click="copyLogs"
-      />
-    </div>
-    <div class="q-mb-sm text-caption">
-      test stats: sent hello={{ testStats.helloSent }}, sent ack={{ testStats.ackSent }}, received
-      hello={{ testStats.helloReceived }}, received ack={{ testStats.ackReceived }}
-    </div>
-    <q-scroll-area style="height: 300px">
-      <pre class="q-pa-md rounded-borders text-caption">{{ output }}</pre>
-    </q-scroll-area>
-  </q-card-section>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
+  </q-card>
 </template>
 
 <script setup lang="ts">
-import { type getActiveP2pNode, type P2pNodeInfo } from '@taskyon/taskyon'
-import { enableVerboseBrowserLibp2pLogs, setBrowserLibp2pLogNamespaces } from '@taskyon/taskyon'
-import { PRIMARY_RELAY_WS_MULTIADDR } from '@taskyon/p2p-core/constants'
-import ToggleButton from '@taskyon/shared/components/ToggleButton.vue'
-import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
 import {
-  startLibp2pBrowserMessageExchangeTest,
-  runLibp2pBrowserMessageExchangeTest,
-  type Libp2pBrowserTestStats,
-  type Libp2pBrowserTestSession,
-} from 'src/modules/taskyon/libp2pBrowserDiagnostics'
-import { copyToClipboard } from 'quasar'
-import { computed, ref, watch } from 'vue'
+  matDeviceHub,
+  matHub,
+  matKey,
+  matLink,
+  matClose,
+  matSubject,
+  matTravelExplore,
+} from '@quasar/extras/material-icons'
+import type { P2pManagerSnapshot } from '@taskyon/p2p-core'
+import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
+import { computed, ref } from 'vue'
 
-const { p2p } = defineProps<{ p2p: ReturnType<typeof getActiveP2pNode> }>()
+const { status, busy = false } = defineProps<{
+  status: P2pManagerSnapshot
+  busy?: boolean
+}>()
 
-const info = ref<Partial<P2pNodeInfo>>(p2p.getInfo())
-p2p.stream((infoUpdate) => {
-  console.log('infoUpdate', infoUpdate)
-  info.value = { ...info.value, ...infoUpdate }
-})
+const detailsDialogOpen = ref(false)
+const activeDetailId = ref<string | null>(null)
 
-// Methods
-const connecting = ref(false)
-const multiaddrInput = ref(PRIMARY_RELAY_WS_MULTIADDR)
-const isBusy = computed(() => connecting.value || runningExperimentalTest.value)
-
-const formatError = (error: unknown) =>
-  error instanceof Error ? error.message : safeYamlDump(error)
-
-const createEmptyTestStats = (): Libp2pBrowserTestStats => ({
-  helloSent: 0,
-  ackSent: 0,
-  helloReceived: 0,
-  ackReceived: 0,
-})
-
-const appendOutput = (message: string) => {
-  const timestamp = new Date().toISOString()
-  output.value += `[${timestamp}] ${message}\n`
-}
-
-const withBusyFlag = async (target: typeof connecting, task: () => Promise<void>) => {
-  if (target.value) return
-  target.value = true
-  try {
-    await task()
-  } finally {
-    target.value = false
-  }
-}
-
-const connectToPeer = async (addr: string) => {
-  await withBusyFlag(connecting, async () => {
-    appendOutput(`[connect] dialing ${addr}`)
-    try {
-      await p2p.connectToPeer(addr)
-    } catch (error) {
-      appendOutput(`[connect] error: ${formatError(error)}`)
-    }
-  })
-}
-
-const runningExperimentalTest = ref(false)
-const experimentalTestSession = ref<Libp2pBrowserTestSession | null>(null)
-const testStats = ref<Libp2pBrowserTestStats>(createEmptyTestStats())
-const updateTestStats = (stats: Libp2pBrowserTestStats) => {
-  testStats.value = stats
-}
-const resetTestStats = () => {
-  testStats.value = createEmptyTestStats()
-}
-const attachPersistentResultLogging = (session: Libp2pBrowserTestSession) => {
-  void session.resultPromise
-    .then((result) => {
-      appendOutput(`Experimental test OK (continuing to run):\n${safeYamlDump(result)}`)
-    })
-    .catch((error) => {
-      appendOutput(`Experimental test ERROR: ${formatError(error)}`)
-      runningExperimentalTest.value = false
-      experimentalTestSession.value = null
-    })
-}
-
-const runExperimentalBrowserTest = async (relayAddrs?: string[]) => {
-  if (runningExperimentalTest.value) return
-  runningExperimentalTest.value = true
-  resetTestStats()
-  appendOutput('Starting experimental libp2p browser message exchange test...')
-  try {
-    const result = await runLibp2pBrowserMessageExchangeTest({
-      onLog: appendOutput,
-      onStats: updateTestStats,
-      ...(relayAddrs ? { relayAddrs } : {}),
-    })
-    appendOutput(`Experimental test OK:\n${safeYamlDump(result)}`)
-  } catch (error) {
-    appendOutput(`Experimental test ERROR: ${formatError(error)}`)
-  } finally {
-    runningExperimentalTest.value = false
-  }
-}
-
-const startPersistentExperimentalBrowserTest = async (relayAddrs?: string[]) => {
-  if (runningExperimentalTest.value) return
-  runningExperimentalTest.value = true
-  resetTestStats()
-  appendOutput('Starting persistent experimental libp2p browser message exchange test...')
-  try {
-    const session = await startLibp2pBrowserMessageExchangeTest({
-      onLog: appendOutput,
-      onStats: updateTestStats,
-      ...(relayAddrs ? { relayAddrs } : {}),
-      keepRunningAfterSuccess: true,
-    })
-    experimentalTestSession.value = session
-    attachPersistentResultLogging(session)
-  } catch (error) {
-    appendOutput(`Experimental test ERROR: ${formatError(error)}`)
-    runningExperimentalTest.value = false
-    experimentalTestSession.value = null
-  }
-}
-
-const stopExperimentalBrowserTest = async () => {
-  const session = experimentalTestSession.value
-  if (session == null) return
-  appendOutput('Stopping experimental libp2p browser message exchange test...')
-  experimentalTestSession.value = null
-  runningExperimentalTest.value = false
-  await session.stop()
-}
-const runExperimentalBrowserTestFromUi = async () => {
-  await runExperimentalBrowserTest()
-}
-
-const connectLocalhostAndRunTest = async () => {
-  appendOutput('[local-test] connect localhost relay and auto-run experimental test')
-  await connectToPeer('/ip4/127.0.0.1/tcp/9111/ws')
-  await startPersistentExperimentalBrowserTest(['/ip4/127.0.0.1/tcp/9111/ws'])
-}
-
-const connectRemoteRelayAndRunTest = async () => {
-  appendOutput(
-    `[remote-test] connect remote relay ${PRIMARY_RELAY_WS_MULTIADDR} and auto-run experimental test`,
-  )
-  await connectToPeer(PRIMARY_RELAY_WS_MULTIADDR)
-  await startPersistentExperimentalBrowserTest([PRIMARY_RELAY_WS_MULTIADDR])
-}
-const output = ref('')
-
-const DEFAULT_BROWSER_LOG_NAMESPACES = 'p2p-core:*,libp2p:*,-libp2p:connection-manager:*,-*:trace'
-const verboseLogsEnabled = ref(true)
-const applyLibp2pLoggingMode = (verbose: boolean) => {
-  const namespaces = verbose
-    ? enableVerboseBrowserLibp2pLogs()
-    : setBrowserLibp2pLogNamespaces(DEFAULT_BROWSER_LOG_NAMESPACES)
-  appendOutput(`[libp2p] logger namespaces set: ${namespaces}`)
-}
-watch(
-  verboseLogsEnabled,
-  (enabled, prev) => {
-    applyLibp2pLoggingMode(enabled)
-    if (prev !== undefined) {
-      appendOutput(`[libp2p] verbose logging ${enabled ? 'enabled' : 'disabled'}`)
-    }
+const detailSections = computed(() => ({
+  fullState: {
+    title: 'Full Network State',
+    caption: 'Complete functional p2p state snapshot, including subnetwork and action metadata.',
+    data: status.state,
   },
-  { immediate: true },
+  runtime: {
+    title: 'Runtime',
+    caption: 'Current browser discovery settings and runtime state.',
+    data: status.runtime,
+  },
+  node: {
+    title: 'Node',
+    caption: 'Local node identity, addresses, and peer transport mix.',
+    data: {
+      nodeId: status.nodeId,
+      nodeAddresses: status.nodeAddresses,
+      peerTypes: status.peerTypes,
+      peerDetails: status.peerDetails,
+      relayAddresses: status.relayAddresses,
+      subnetworkTokens: status.subnetworkTokens,
+    },
+  },
+  discovery: {
+    title: 'Discovery',
+    caption: 'Subnet-matching peers discovered through the global discovery network.',
+    data: {
+      discoveredPeers: status.discoveredPeers,
+      subscribers: status.subscribers,
+      subnetworkTokens: status.subnetworkTokens,
+    },
+  },
+  neighbors: {
+    title: 'Immediate Neighbors',
+    caption: 'Live neighbor health derived from current connections and active ping checks.',
+    data: {
+      neighborHealth: status.neighborHealth,
+      connections: status.connections,
+    },
+  },
+  connections: {
+    title: 'Connections',
+    caption: 'Active transport connections and current subscribers.',
+    data: {
+      connections: status.connections,
+      subscribers: status.subscribers,
+    },
+  },
+  logs: {
+    title: 'Logs',
+    caption: 'Captured browser-side libp2p activity and debug output.',
+    data: {
+      logs: status.logs,
+    },
+  },
+}))
+
+const onlineNeighbors = computed(
+  () => status.neighborHealth.filter((neighbor) => neighbor.status === 'online').length,
+)
+const degradedNeighbors = computed(
+  () => status.neighborHealth.filter((neighbor) => neighbor.status === 'degraded').length,
 )
 
-const copyLogs = async () => {
-  try {
-    await copyToClipboard(output.value)
-    appendOutput('Copied output logs to clipboard.')
-  } catch (error) {
-    appendOutput(`Failed to copy output logs: ${formatError(error)}`)
-  }
+const summaryItems = computed(() => [
+  {
+    id: 'runtime',
+    label: 'Node',
+    caption: status.nodeId || 'No active node yet',
+    value: status.nodeId ? 'active' : 'idle',
+    icon: matHub,
+  },
+  {
+    id: 'neighbors',
+    label: 'Neighbors',
+    caption: `${onlineNeighbors.value} online, ${degradedNeighbors.value} degraded, ${status.neighborHealth.length} tracked`,
+    icon: matDeviceHub,
+    value: String(onlineNeighbors.value),
+  },
+  {
+    id: 'discovery',
+    label: 'Discovered Members',
+    caption: `${status.discoveredPeers.length} matching peer(s) seen for this subnetwork`,
+    value: String(status.discoveredPeers.length),
+    icon: matTravelExplore,
+  },
+  {
+    id: 'connections',
+    label: 'Connections',
+    caption: `${status.connections.length} live transport connection(s)`,
+    value: String(status.connections.length),
+    icon: matLink,
+  },
+  {
+    id: 'discovery',
+    label: 'Discovery Tokens',
+    caption: `${status.subnetworkTokens.length} opaque token(s) currently announced`,
+    value: String(status.subnetworkTokens.length),
+    icon: matKey,
+  },
+  {
+    id: 'logs',
+    label: 'Logs',
+    caption: `${status.logs.trim() ? status.logs.trim().split('\n').length : 0} captured log line(s)`,
+    value: status.logs.trim() ? 'ready' : 'empty',
+    icon: matSubject,
+  },
+])
+
+const activeDetail = computed(() =>
+  activeDetailId.value ? detailSections.value[activeDetailId.value as keyof typeof detailSections.value] : null,
+)
+
+function openDetail(id: string) {
+  activeDetailId.value = id
+  detailsDialogOpen.value = true
 }
-
-p2p.activityStream((msg) => {
-  console.log('activityStream msg', msg)
-  appendOutput(safeYamlDump(msg))
-})
-
-// Lifecycle
-/*onMounted(async () => {
-  const n = await libp2pPromise
-  await n.start()
-
-  n.port.receive((m) => {
-    console.log(m)
-    addToOutput(safeYamlDump(m))
-  })
-
-  useIntervalFn(() => {
-    nodeInfo.value = nw.state.value?.info()
-    //addToOutput('.$')
-  }, 5000)
-})*/
 </script>

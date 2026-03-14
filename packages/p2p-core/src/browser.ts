@@ -5,6 +5,7 @@ import type { PeerId, Stream } from '@libp2p/interface'
 import { identify } from '@libp2p/identify'
 import { enable, prefixLogger } from '@libp2p/logger'
 import { ping } from '@libp2p/ping'
+import type { Ping } from '@libp2p/ping'
 import { webRTC, webRTCDirect } from '@libp2p/webrtc'
 import { webSockets } from '@libp2p/websockets'
 import { webTransport } from '@libp2p/webtransport'
@@ -12,18 +13,20 @@ import type { Multiaddr } from '@multiformats/multiaddr'
 import { multiaddr } from '@multiformats/multiaddr'
 import { createLibp2p, type Libp2p } from 'libp2p'
 import weald from 'weald'
-import { PUBSUB_PEER_DISCOVERY, TOPIC_ROUTER_PROTOCOL, getRelayDialFallbacks } from './constants'
+import {
+  PUBSUB_PEER_DISCOVERY,
+  SUBNETWORK_PEER_DISCOVERY_EVENT,
+  TOPIC_ROUTER_PROTOCOL,
+  getRelayDialFallbacks,
+} from './constants'
+import { deriveDiscoveryTokens, type DiscoverySecretInput } from './discovery'
 import { topicRouter, type TopicRouterService } from './topic-router'
-
-type BrowserPeer = {
-  Addrs: Multiaddr[]
-  ID: PeerId
-}
 
 type DiscoveryAnnouncement = {
   peerId: string
   multiaddrs: string[]
   publishedAt: number
+  subnetworkTokens: string[]
 }
 
 type BrowserConnectionLike = {
@@ -48,6 +51,7 @@ export type BrowserPubsubService = TopicRouterService
 export type BrowserLibp2pNode = Libp2p & {
   services: Libp2p['services'] & {
     pubsub: BrowserPubsubService
+    ping: Ping
   }
   dialProtocol: (peerId: unknown, protocol: string) => Promise<Stream>
   components?: {
@@ -101,11 +105,15 @@ function getNodeMultiaddrs(libp2p: BrowserLibp2pNode): string[] {
   return libp2p.getMultiaddrs().map((addr) => addr.toString())
 }
 
-function createDiscoveryAnnouncement(libp2p: BrowserLibp2pNode): DiscoveryAnnouncement {
+function createDiscoveryAnnouncement(
+  libp2p: BrowserLibp2pNode,
+  subnetworkTokens: string[],
+): DiscoveryAnnouncement {
   return {
     peerId: libp2p.peerId.toString(),
     multiaddrs: getNodeMultiaddrs(libp2p),
     publishedAt: Date.now(),
+    subnetworkTokens,
   }
 }
 
@@ -121,12 +129,12 @@ function parseDiscoveryAnnouncement(data: Uint8Array): DiscoveryAnnouncement | n
   }
 }
 
-function publishDiscoveryAnnouncement(libp2p: BrowserLibp2pNode) {
+function publishDiscoveryAnnouncement(libp2p: BrowserLibp2pNode, subnetworkTokens: string[]) {
   return async () => {
     try {
       await libp2p.services.pubsub.publish(
         PUBSUB_PEER_DISCOVERY,
-        encodeDiscoveryAnnouncement(createDiscoveryAnnouncement(libp2p)),
+        encodeDiscoveryAnnouncement(createDiscoveryAnnouncement(libp2p, subnetworkTokens)),
       )
     } catch (error) {
       log.error('failed to publish peer discovery announcement', error)
@@ -134,15 +142,22 @@ function publishDiscoveryAnnouncement(libp2p: BrowserLibp2pNode) {
   }
 }
 
-function dispatchPeerDiscovery(libp2p: BrowserLibp2pNode, peerId: string, multiaddrs: Multiaddr[]) {
+function dispatchPeerDiscovery(
+  libp2p: BrowserLibp2pNode,
+  peerId: string,
+  multiaddrs: Multiaddr[],
+  matchedToken?: string,
+) {
+  const detail = matchedToken
+    ? { id: peerId, multiaddrs, matchedToken }
+    : { id: peerId, multiaddrs }
   ;(libp2p as unknown as {
-    dispatchEvent?: (event: CustomEvent<{ id: string; multiaddrs: Multiaddr[] }>) => void
+    dispatchEvent?: (
+      event: CustomEvent<{ id: string; multiaddrs: Multiaddr[]; matchedToken?: string }>,
+    ) => void
   }).dispatchEvent?.(
-    new CustomEvent('peer:discovery', {
-      detail: {
-        id: peerId,
-        multiaddrs,
-      },
+    new CustomEvent(SUBNETWORK_PEER_DISCOVERY_EVENT, {
+      detail,
     }),
   )
 }
@@ -151,24 +166,34 @@ function registerBrowserLifecycleLogging(
   libp2p: BrowserLibp2pNode,
   publishAnnouncement: () => void | Promise<void>,
 ) {
-  libp2p.addEventListener('self:peer:update', ({ detail: { peer } }) => {
+  const onSelfPeerUpdate = ({ detail: { peer } }: CustomEvent<{ peer: { id: PeerId; addresses: Array<{ multiaddr: Multiaddr }> } }>) => {
     const multiaddrs = peer.addresses.map(({ multiaddr }) => multiaddr.toString())
     log('changed multiaddrs: peer %s multiaddrs: %s', peer.id.toString(), multiaddrs.join(', '))
     void publishAnnouncement()
-  })
+  }
 
-  libp2p.addEventListener('connection:open', (event: CustomEvent<BrowserConnectionLike>) => {
+  const onConnectionOpen = (event: CustomEvent<BrowserConnectionLike>) => {
     log('connection opened: %o', describeConnection(event.detail))
     log('current self multiaddrs: %o', getNodeMultiaddrs(libp2p))
     void publishAnnouncement()
-  })
+  }
 
-  libp2p.addEventListener('connection:close', (event: CustomEvent<BrowserConnectionLike>) => {
+  const onConnectionClose = (event: CustomEvent<BrowserConnectionLike>) => {
     log('connection closed: %o', describeConnection(event.detail))
-  })
+  }
+
+  libp2p.addEventListener('self:peer:update', onSelfPeerUpdate as EventListener)
+  libp2p.addEventListener('connection:open', onConnectionOpen as EventListener)
+  libp2p.addEventListener('connection:close', onConnectionClose as EventListener)
+
+  return () => {
+    libp2p.removeEventListener('self:peer:update', onSelfPeerUpdate as EventListener)
+    libp2p.removeEventListener('connection:open', onConnectionOpen as EventListener)
+    libp2p.removeEventListener('connection:close', onConnectionClose as EventListener)
+  }
 }
 
-function registerPeerDiscoverySubscription(libp2p: BrowserLibp2pNode) {
+function registerPeerDiscoverySubscription(libp2p: BrowserLibp2pNode, subnetworkTokens: Set<string>) {
   const onTopicRouterMessage = (event: CustomEvent<BrowserPubsubMessage>) => {
     if (event.detail.topic !== PUBSUB_PEER_DISCOVERY) {
       return
@@ -176,6 +201,12 @@ function registerPeerDiscoverySubscription(libp2p: BrowserLibp2pNode) {
 
     const announcement = parseDiscoveryAnnouncement(event.detail.data)
     if (announcement == null || announcement.peerId === libp2p.peerId.toString()) {
+      return
+    }
+
+    const matchedToken =
+      announcement.subnetworkTokens.find((token) => subnetworkTokens.has(token)) ?? null
+    if (subnetworkTokens.size > 0 && matchedToken == null) {
       return
     }
 
@@ -187,11 +218,12 @@ function registerPeerDiscoverySubscription(libp2p: BrowserLibp2pNode) {
       return
     }
 
-    dispatchPeerDiscovery(libp2p, announcement.peerId, multiaddrs)
+    dispatchPeerDiscovery(libp2p, announcement.peerId, multiaddrs, matchedToken ?? undefined)
     void dialDiscoveredMaddrs(libp2p, multiaddrs)
   }
 
   libp2p.services.pubsub.addEventListener('message', onTopicRouterMessage)
+  return () => libp2p.services.pubsub.removeEventListener('message', onTopicRouterMessage)
 }
 
 function ensureVisibleBrowserLoggerTransport() {
@@ -233,12 +265,14 @@ export function enableVerboseBrowserLibp2pLogs(opts: { persist?: boolean } = {})
 export async function startBrowserLibp2p(opts: {
   additionalServices?: Record<string, unknown>
   logNamespaces?: string
+  subnetworkSecrets?: DiscoverySecretInput[]
 } = {}): Promise<BrowserLibp2pNode> {
-  const { additionalServices = {}, logNamespaces } = opts
+  const { additionalServices = {}, logNamespaces, subnetworkSecrets = [] } = opts
   const namespaces = logNamespaces ?? getStoredBrowserLogNamespaces() ?? DEFAULT_BROWSER_LOG_NAMESPACES
   ensureVisibleBrowserLoggerTransport()
   enable(namespaces)
   log('libp2p logger namespaces active: %s', namespaces)
+  const subnetworkTokens = new Set(await deriveDiscoveryTokens(subnetworkSecrets))
 
   const relayListenAddrs: string[] = []
   log('starting libp2p with relayListenAddrs: %o', relayListenAddrs)
@@ -264,20 +298,28 @@ export async function startBrowserLibp2p(opts: {
     },
   } as unknown as Parameters<typeof createLibp2p>[0])) as BrowserLibp2pNode
 
-  const publishSelfAnnouncement = publishDiscoveryAnnouncement(libp2p)
-  registerBrowserLifecycleLogging(libp2p, publishSelfAnnouncement)
-  registerPeerDiscoverySubscription(libp2p)
+  const publishSelfAnnouncement = publishDiscoveryAnnouncement(libp2p, [...subnetworkTokens])
+  const unregisterLifecycleLogging = registerBrowserLifecycleLogging(libp2p, publishSelfAnnouncement)
+  const unregisterDiscovery = registerPeerDiscoverySubscription(libp2p, subnetworkTokens)
 
   void dialRelayFallbacks(libp2p)
   void publishSelfAnnouncement()
-  setInterval(() => {
+  const announcementTimer = setInterval(() => {
     void publishSelfAnnouncement()
   }, DISCOVERY_ANNOUNCEMENT_INTERVAL_MS)
+
+  const originalStop = libp2p.stop.bind(libp2p)
+  libp2p.stop = async () => {
+    clearInterval(announcementTimer)
+    unregisterLifecycleLogging()
+    unregisterDiscovery()
+    await originalStop()
+  }
 
   return libp2p
 }
 
-export async function msgIdFnStrictNoSign(msg: BrowserPubsubMessage) {
+export function msgIdFnStrictNoSign(msg: BrowserPubsubMessage) {
   return msg.data
 }
 

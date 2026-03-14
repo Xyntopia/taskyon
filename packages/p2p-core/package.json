@@ -14,6 +14,10 @@
       "import": "./dist/browser.js",
       "require": "./dist/browser.cjs"
     },
+    "./node": {
+      "import": "./dist/node.js",
+      "require": "./dist/node.cjs"
+    },
     "./relay": {
       "import": "./dist/relay.js",
       "require": "./dist/relay.cjs"
@@ -21,6 +25,22 @@
     "./constants": {
       "import": "./dist/constants.js",
       "require": "./dist/constants.cjs"
+    },
+    "./discovery": {
+      "import": "./dist/discovery.js",
+      "require": "./dist/discovery.cjs"
+    },
+    "./p2pBus": {
+      "import": "./dist/p2pBus.js",
+      "require": "./dist/p2pBus.cjs"
+    },
+    "./p2pManager": {
+      "import": "./dist/p2pManager.js",
+      "require": "./dist/p2pManager.cjs"
+    },
+    "./testNetworks": {
+      "import": "./dist/testNetworks.js",
+      "require": "./dist/testNetworks.cjs"
     }
   },
   "files": [
