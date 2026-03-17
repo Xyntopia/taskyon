@@ -5,6 +5,14 @@ import { TyProfile } from './types'
 
 export type partialTyConfiguration = PartialDeep<TyProfile>
 
+const pastedFilePayload = z.object({
+  name: z.string(),
+  type: z.string(),
+  data: z.string().meta({
+    description: 'Base64-encoded file payload bridged from the VS Code host webview.',
+  }),
+})
+
 const tyConfigurationMessage = z.object({
   type: z.literal('configurationMessage').meta({
     description: 'Field to indicate that this is a function description message.',
@@ -26,10 +34,20 @@ const tyConfigurationMessage = z.object({
   conf: z.union([z.record(z.string(), z.unknown()), TyProfile]),
 })
 
+const tyPasteMessage = z.object({
+  type: z.literal('pasteMessage').meta({
+    description: 'Clipboard paste payload forwarded by the host iframe client.',
+  }),
+  text: z.string().optional(),
+  html: z.string().optional(),
+  files: z.array(pastedFilePayload).optional(),
+})
+
 export const TaskyonGuiMessage = z.discriminatedUnion('type', [
   // TODO: can we unify the task message with the SyncApi?
   ...TaskyonMessage.options,
   z.object({ ...BaseMessage.shape, ...tyConfigurationMessage.shape }),
+  z.object({ ...BaseMessage.shape, ...tyPasteMessage.shape }),
 ])
 
 // If you want to map them to { label, value } for q-select:

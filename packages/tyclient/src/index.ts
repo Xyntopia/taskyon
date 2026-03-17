@@ -1,12 +1,11 @@
 // we can compile this file to js to js using "yarn build:lib"
 
 import type { FunctionCall, Port } from '@taskyon/taskyon/api'
-import { sendTasks } from '@taskyon/taskyon/api'
+import { REMOTE_FUNCTION_TIMEOUT_MS, sendTasks } from '@taskyon/taskyon/api'
 import {
   // from frp bux with only very few dependencies
   createDuplexChannel, // utis/frpbus
   MessageChannelBridge, // utils/frpbus
-
   type ClientTool,
   type TaskyonMessage,
 } from '@taskyon/taskyon/api'
@@ -27,6 +26,7 @@ export {
   type partialTaskDraft,
 } from '@taskyon/taskyon/api'
 export type { ClientTool, partialTyConfiguration, TaskyonGuiMessage, TaskyonMessage }
+export { REMOTE_FUNCTION_TIMEOUT_MS }
 
 export type processTasksOpts = {
   timeoutMs?: number
@@ -66,8 +66,7 @@ export const processTasks = <T extends { type: string }>(tyPort: Port<T | Taskyo
       )
       .map((msg: ByType<'taskCreated', TaskyonMessage> & { task: { id: string } }) => msg.task)
     const expectsError =
-      quitCondition === 'error' ||
-      (Array.isArray(quitCondition) && quitCondition.includes('error'))
+      quitCondition === 'error' || (Array.isArray(quitCondition) && quitCondition.includes('error'))
     const throwOnError = opts.throwOnError !== false && !expectsError
     const matchesQuitCondition =
       typeof quitCondition === 'string'
@@ -108,7 +107,9 @@ export const processTasks = <T extends { type: string }>(tyPort: Port<T | Taskyo
         if (throwOnError && task.content.type === 'error') {
           settled = true
           cleanup(unsub, onAbort)
-          reject(new Error(`Task processing failed on task ${task.id}`, { cause: task.content.data }))
+          reject(
+            new Error(`Task processing failed on task ${task.id}`, { cause: task.content.data }),
+          )
           return
         }
 
@@ -287,8 +288,12 @@ export async function initializeTaskyon(options: {
           const statusStream = clientSidePort.receive.narrow(
             (
               msg: TaskyonGuiMessage,
-            ): msg is ByType<'status', TaskyonGuiMessage> & { data: { type: 'newtool'; id: string } } =>
-              msg.type === 'status' && msg.data.type === 'newtool' && typeof msg.data.id === 'string',
+            ): msg is ByType<'status', TaskyonGuiMessage> & {
+              data: { type: 'newtool'; id: string }
+            } =>
+              msg.type === 'status' &&
+              msg.data.type === 'newtool' &&
+              typeof msg.data.id === 'string',
           )
 
           const timeout = setTimeout(() => {
@@ -319,7 +324,7 @@ export async function initializeTaskyon(options: {
     send({
       type: 'functionDescription',
       ...fdescr,
-      })
+    })
   })
 
   await toolAckPromise
@@ -332,11 +337,40 @@ export async function initializeTaskyon(options: {
       msg.type === 'functionCall',
   )(async (msg: ByType<'functionCall', TaskyonGuiMessage>) => {
     const tool = toolMap[msg.functionName]
+    let tyres: TaskyonGuiMessage
+
     if (tool) {
-      const res = await handleFunctionExecution(msg.arguments ?? {}, tool, controller.signal)
-      send({ type: 'functionResponse', functionName: tool.name, response: res })
-      console.log('tyclient tool send functionResponse to iframe', res, tool)
+      try {
+        const res = await handleFunctionExecution(msg.arguments ?? {}, tool, controller.signal)
+        tyres = {
+          type: 'functionResponse',
+          functionName: tool.name,
+          requestId: msg.requestId,
+          response: res,
+        }
+        console.log('tyclient tool send functionResponse to iframe', res, tool)
+      } catch (error) {
+        tyres = {
+          type: 'functionResponse',
+          functionName: tool.name,
+          requestId: msg.requestId,
+          error:
+            typeof error === 'object' && error !== null && 'message' in error
+              ? error.message
+              : JSON.stringify(error),
+        }
+        console.error('tyclient tool error occurred', error)
+      }
+    } else {
+      tyres = {
+        type: 'functionResponse',
+        functionName: msg.functionName,
+        requestId: msg.requestId,
+        error: `Tool not found: ${msg.functionName}`,
+      }
+      console.warn('tyclient received function call for unknown tool', msg.functionName)
     }
+    send(tyres)
   })
 
   return {
@@ -360,8 +394,7 @@ export async function initializeTaskyon(options: {
         persist: options.persist ?? resolvedPersist,
         bindingKey: options.bindingKey,
         profileName: options.profileName ?? nextName,
-        missingBindingKeyPolicy:
-          options.missingBindingKeyPolicy ?? resolvedMissingBindingKeyPolicy,
+        missingBindingKeyPolicy: options.missingBindingKeyPolicy ?? resolvedMissingBindingKeyPolicy,
         origin: window.location.origin,
         peerId: nextName,
       })

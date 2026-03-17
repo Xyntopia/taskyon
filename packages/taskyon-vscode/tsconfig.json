@@ -1,13 +1,20 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "CommonJS",
-    "lib": ["ES2022"],
-    "strict": true,
+    "module": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": false,
+    "skipLibCheck": true,
     "esModuleInterop": true,
-    "moduleResolution": "Node",
-    "types": ["vscode"],
-    "rootDir": "src"
+    "moduleResolution": "Bundler",
+    "types": ["vscode", "node"],
+    "baseUrl": "..",
+    "paths": {
+      "@taskyon/tyclient": ["tyclient/src/index.ts"],
+      "@taskyon/taskyon/api": ["taskyon/src/api/index.ts"],
+      "@taskyon/shared": ["shared"],
+      "@taskyon/shared/*": ["shared/*"]
+    }
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts"]
 }

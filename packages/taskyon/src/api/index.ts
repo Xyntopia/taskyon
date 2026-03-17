@@ -10,6 +10,7 @@ import { type Port } from '@taskyon/shared/modules/frpBus'
 import type { ByType } from '../utils/tsHelpers'
 
 export { BaseMessage, TaskyonMessage, TyP2P } from '../types/apiTypes'
+export { REMOTE_FUNCTION_TIMEOUT_MS } from '../types/messages'
 export { llmSettings, TyToolchainConfig } from '../types/profiles'
 export type { ClientTool } from '../types/toolApi'
 export type { FunctionCall } from '../types/tools'

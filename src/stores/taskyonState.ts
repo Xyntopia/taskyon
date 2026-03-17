@@ -99,6 +99,15 @@ function maybeAwait<T>(value: T | Promise<T>): Promise<T> {
   return Promise.resolve(value)
 }
 
+function decodeBase64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes.buffer
+}
+
 export function asyncProxy<T extends object>(initializer: () => Promise<T>): Asyncify<T> {
   const instancePromise = initializer()
 
@@ -1058,7 +1067,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         configurationMessage: async (msg) => {
           const newConfig = msg.conf
           const llmCfg = newConfig.llmSettings as Partial<TyProfile['llmSettings']> | undefined
-          const appCfg = newConfig.appConfiguration as Partial<TyProfile['appConfiguration']> | undefined
+          const appCfg = newConfig.appConfiguration as
+            | Partial<TyProfile['appConfiguration']>
+            | undefined
           if (typeof msg.profileName === 'string' && msg.profileName.trim()) {
             stateRefs.setActiveProfile(msg.profileName)
           }
@@ -1118,6 +1129,21 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
           // TODO:  set taskyon-relevant settings in the "backend"
           //tyInit.outPort.send(msg)
+        },
+        pasteMessage: (msg) => {
+          const pastedText = msg.text ?? msg.html ?? ''
+          if (pastedText) {
+            stateRefs.createTaskType = { type: 'message' }
+            stateRefs.messageDraft = `${stateRefs.messageDraft ?? ''}${pastedText}`
+          }
+
+          if (msg.files?.length) {
+            const pastedFiles = msg.files.map(
+              (file) =>
+                new File([decodeBase64ToArrayBuffer(file.data)], file.name, { type: file.type }),
+            )
+            stateRefs.queueDraftPasteFiles(pastedFiles)
+          }
         },
         task: async (msg) => {
           // push the last task to execution queue right away...

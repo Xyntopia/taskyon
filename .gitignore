@@ -62,4 +62,5 @@ dependency-cruiser-graph-flat-dot.svg
 
 packages/p2p-core/dist
 packages/relay/dist
-
+packages/taskyon-vscode/dist
+packages/taskyon-vscode/media/webview.bundle.js

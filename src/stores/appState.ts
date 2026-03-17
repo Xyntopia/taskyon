@@ -491,6 +491,8 @@ export const useAppStateStore = defineStore('ui-state', () => {
 
   // these are refs that we don't save:
   const sessionId = ref<string | null>(null)
+  const draftPasteFiles = ref<File[]>([])
+  let draftPasteHandler: ((files: File[]) => void) | null = null
   watch(
     bindingKey,
     () => {
@@ -587,6 +589,27 @@ export const useAppStateStore = defineStore('ui-state', () => {
     bindingKey,
     bindingKeySource,
     setBindingKey,
+    queueDraftPasteFiles: (files: File[]) => {
+      if (!files.length) return
+      if (draftPasteHandler) {
+        draftPasteHandler([...files])
+        return
+      }
+      draftPasteFiles.value = [...draftPasteFiles.value, ...files]
+    },
+    takeQueuedDraftPasteFiles: () => {
+      const files = [...draftPasteFiles.value]
+      draftPasteFiles.value = []
+      return files
+    },
+    setDraftPasteHandler: (handler: ((files: File[]) => void) | null) => {
+      draftPasteHandler = handler
+      if (draftPasteHandler && draftPasteFiles.value.length) {
+        const files = [...draftPasteFiles.value]
+        draftPasteFiles.value = []
+        draftPasteHandler(files)
+      }
+    },
     isInIframe: urlConfig.isInIframe,
     isInVscode: urlConfig.isInVscode,
     setSelectedTask: (taskId: string | null | undefined) => {

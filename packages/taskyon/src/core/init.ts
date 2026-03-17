@@ -110,6 +110,8 @@ function createApi(
         const id = await taskManagerInstance().addFiles([msg.file], msg.store ?? 'memory')
         console.log('received file...', id, msg)
       },
+      // dummy function to keep functionResponses from warning..
+      functionResponse: () => {},
       /*configurationMessage: (msg) => {
         const newConfig = msg.conf
         console.log('setting our configuration')

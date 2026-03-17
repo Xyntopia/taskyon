@@ -70,14 +70,13 @@
     }
   },
   "scripts": {
-    "build:webview": "esbuild ../tyclient/dist/tyclient.mjs --bundle --platform=browser --format=esm --target=es2020 --outfile=media/tyclient.bundle.mjs",
-    "build:extension": "esbuild ./src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.js",
-    "build": "npm run build:webview && npm run build:extension",
-    "watch": "esbuild ./src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.js --watch",
+    "build": "node ./scripts/build.mjs",
+    "watch": "node ./scripts/build.mjs --watch",
     "vscode:prepublish": "npm run build",
     "package": "npm run build && npx @vscode/vsce package"
   },
   "devDependencies": {
+    "@taskyon/tyclient": "workspace:*",
     "@types/vscode": "^1.80.0",
     "@vscode/vsce": "^2.15.0",
     "esbuild": "^0.25.0",

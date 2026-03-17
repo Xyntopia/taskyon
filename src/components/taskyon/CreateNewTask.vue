@@ -226,7 +226,7 @@ import { QSelect, useQuasar } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import type { ReadonlyDeep, WritableDeep } from 'type-fest'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import chatMessageEdit from './chatMessageEdit.vue'
 import ChooseModelDialog from './ChooseModelDialog.vue'
 import SimpleSettingsDialog from './SimpleSettingsDialog.vue'
@@ -267,6 +267,14 @@ onMounted(() => {
     },
     [],
   ).then(() => (keywordExtractorReady.value = true))
+
+  state.setDraftPasteHandler((pastedFiles) => {
+    attachFileToDraft(pastedFiles)
+  })
+})
+
+onBeforeUnmount(() => {
+  state.setDraftPasteHandler(null)
 })
 
 // we initialize our taskDraft with the state of this window!

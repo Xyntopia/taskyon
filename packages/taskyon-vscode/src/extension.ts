@@ -2,6 +2,7 @@
 import * as vscode from 'vscode'
 import * as path from 'path'
 import * as fs from 'fs'
+import { applyFileUpdateToContent, normalizeFileUpdate, type FileUpdate } from './patching'
 
 const DEFAULT_URL = 'http://localhost:9000'
 const THEME_QUERY_KEY = 'vscodeTheme'
@@ -11,6 +12,9 @@ const VSCODE_MESSAGE_SOURCE = 'taskyon-vscode'
 const BASE_URL_STATE_KEY = 'taskyon.baseUrlOverride'
 
 type ThemeMode = 'dark' | 'light'
+const CONTENT_SEARCH_CONCURRENCY = 24
+const SUPPORTED_REGEX_FLAGS = new Set(['d', 'g', 'i', 'm', 's', 'u', 'v', 'y'])
+const SEARCH_SAFE_REGEX_FLAGS = new Set(['i', 'm', 's', 'u', 'v'])
 
 function getConfiguredUrl(): string {
   const config = vscode.workspace.getConfiguration('taskyon')
@@ -81,27 +85,6 @@ function buildWebviewHtmlForUrl(options: {
   const themedUrl = appendThemeQuery(baseUrl, theme)
   const vscodeUrl = appendVscodeQuery(themedUrl)
   const framedUrl = appendIframeQuery(vscodeUrl)
-  const tyclientUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(
-      context.extensionUri,
-      '..',
-      '..',
-      'packages',
-      'tyclient',
-      'dist',
-      'tyclient.mjs',
-    ),
-  )
-  const bundledTyclientPath = path.join(
-    context.extensionUri.fsPath,
-    '..',
-    '..',
-    'packages',
-    'taskyon-vscode',
-    'media',
-    'tyclient.bundle.mjs',
-  )
-  const bundledTyclientUri = webview.asWebviewUri(vscode.Uri.file(bundledTyclientPath))
   const webviewScriptUri = webview.asWebviewUri(
     vscode.Uri.joinPath(
       context.extensionUri,
@@ -110,7 +93,7 @@ function buildWebviewHtmlForUrl(options: {
       'packages',
       'taskyon-vscode',
       'media',
-      'webview.js',
+      'webview.bundle.js',
     ),
   )
   const htmlPath = path.join(
@@ -129,7 +112,6 @@ function buildWebviewHtmlForUrl(options: {
     framedUrl,
     theme,
     nonce,
-    tyclientUri: fs.existsSync(bundledTyclientPath) ? bundledTyclientUri : tyclientUri,
     webviewScriptUri,
   })
 }
@@ -140,10 +122,9 @@ function buildWebviewHtml(options: {
   framedUrl: string
   theme: ThemeMode
   nonce: string
-  tyclientUri: vscode.Uri
   webviewScriptUri: vscode.Uri
 }): string {
-  const { webview, htmlPath, framedUrl, theme, nonce, tyclientUri, webviewScriptUri } = options
+  const { webview, htmlPath, framedUrl, theme, nonce, webviewScriptUri } = options
   const csp = [
     "default-src 'none'",
     `style-src ${webview.cspSource} 'unsafe-inline'`,
@@ -173,7 +154,6 @@ function buildWebviewHtml(options: {
     .replace(/__TASKYON_THEME__/g, theme) // TODO: we are not using this currently in the index.html, I am not sure if we need it...
     .replace(/__TASKYON_NONCE__/g, nonce)
     .replace(/__TASKYON_IFRAME_SRC__/g, framedUrl)
-    .replace(/__TASKYON_TYCLIENT_URI__/g, tyclientUri.toString())
     .replace(/__TASKYON_WEBVIEW_SCRIPT__/g, webviewScriptUri.toString())
 }
 
@@ -185,9 +165,10 @@ class TaskyonViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewId = 'taskyon.sidebar'
   private view?: vscode.WebviewView
   private readonly context: vscode.ExtensionContext
-  private pendingMessage?: unknown
+  private pendingMessages: unknown[] = []
   private messageHandler?: (message: unknown) => void
   private lastWebviewUrl: string | undefined
+  private webviewReady = false
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context
@@ -195,6 +176,7 @@ class TaskyonViewProvider implements vscode.WebviewViewProvider {
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView
+    this.webviewReady = false
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [
@@ -207,7 +189,6 @@ class TaskyonViewProvider implements vscode.WebviewViewProvider {
           'taskyon-vscode',
           'media',
         ),
-        vscode.Uri.joinPath(this.context.extensionUri, '..', '..', 'packages', 'tyclient', 'dist'),
       ],
     }
     webviewView.webview.onDidReceiveMessage((message) => {
@@ -235,6 +216,7 @@ class TaskyonViewProvider implements vscode.WebviewViewProvider {
     const theme = getThemeMode(vscode.window.activeColorTheme)
 
     if (!url) {
+      this.webviewReady = false
       webviewView.webview.html = `<!doctype html>
 <html lang="en">
   <body>
@@ -246,15 +228,12 @@ class TaskyonViewProvider implements vscode.WebviewViewProvider {
     }
 
     if (!force && webviewView.webview.html && this.lastWebviewUrl === url) {
-      void webviewView.webview.postMessage({ type: 'theme', theme })
-      if (this.pendingMessage) {
-        void webviewView.webview.postMessage(this.pendingMessage)
-        this.pendingMessage = undefined
-      }
+      void this.postMessage({ type: 'theme', theme })
       return
     }
 
     console.log(`[Taskyon][Webview] resolved url: ${url}`)
+    this.webviewReady = false
     webviewView.webview.html = buildWebviewHtmlForUrl({
       context: this.context,
       webview: webviewView.webview,
@@ -262,23 +241,32 @@ class TaskyonViewProvider implements vscode.WebviewViewProvider {
       theme,
     })
     this.lastWebviewUrl = url
-    if (this.pendingMessage) {
-      void webviewView.webview.postMessage(this.pendingMessage)
-      this.pendingMessage = undefined
+  }
+
+  private flushPendingMessages(): void {
+    if (!this.view || !this.webviewReady || !this.pendingMessages.length) return
+    for (const message of this.pendingMessages) {
+      void this.view.webview.postMessage(message)
     }
+    this.pendingMessages = []
+  }
+
+  markReady(): void {
+    this.webviewReady = true
+    this.flushPendingMessages()
   }
 
   updateTheme(theme: ThemeMode): void {
-    if (!this.view) return
-    this.view.webview.postMessage({ type: 'theme', theme })
+    void this.postMessage({ type: 'theme', theme })
   }
 
-  postMessage(message: unknown): void {
-    if (this.view) {
-      void this.view.webview.postMessage(message)
-    } else {
-      this.pendingMessage = message
+  postMessage(message: unknown): boolean {
+    if (!this.view || !this.webviewReady) {
+      this.pendingMessages.push(message)
+      return false
     }
+    void this.view.webview.postMessage(message)
+    return true
   }
 
   setMessageHandler(handler: (message: unknown) => void): void {
@@ -345,48 +333,20 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const resolveFileUri = (pathOrUri: string): vscode.Uri | undefined => {
     if (!pathOrUri) return undefined
-    try {
-      const parsed = vscode.Uri.parse(pathOrUri)
-      if (parsed.scheme) return parsed
-    } catch {
-      // ignore
-    }
     if (path.isAbsolute(pathOrUri)) {
       return vscode.Uri.file(pathOrUri)
+    }
+    if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(pathOrUri)) {
+      try {
+        const parsed = vscode.Uri.parse(pathOrUri)
+        if (parsed.scheme) return parsed
+      } catch {
+        // ignore malformed URIs and fall back to workspace-relative resolution
+      }
     }
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
     if (workspaceFolder) return vscode.Uri.joinPath(workspaceFolder.uri, pathOrUri)
     return undefined
-  }
-
-  const applyLinePatches = (
-    text: string,
-    patches: Array<{
-      type: 'replace' | 'insert' | 'delete'
-      lineStart: number
-      lineEnd?: number
-      text?: string
-    }>,
-  ): string => {
-    const lines = text.split('\n')
-    const sorted = [...patches].sort((a, b) => b.lineStart - a.lineStart)
-    for (const patch of sorted) {
-      const startIdx = Math.max(0, patch.lineStart - 1)
-      if (patch.type === 'insert') {
-        const newLines = (patch.text || '').split('\n')
-        lines.splice(startIdx, 0, ...newLines)
-        continue
-      }
-      const endLine = patch.lineEnd ?? patch.lineStart
-      const deleteCount = Math.max(0, endLine - patch.lineStart + 1)
-      if (patch.type === 'delete') {
-        lines.splice(startIdx, deleteCount)
-      } else {
-        const newLines = (patch.text || '').split('\n')
-        lines.splice(startIdx, deleteCount, ...newLines)
-      }
-    }
-    return lines.join('\n')
   }
 
   const replaceDocumentContent = async (uri: vscode.Uri, content: string) => {
@@ -405,6 +365,17 @@ export function activate(context: vscode.ExtensionContext): void {
     } catch {
       const buffer = Buffer.from(content, 'utf8')
       await vscode.workspace.fs.writeFile(uri, buffer)
+    }
+  }
+
+  const saveDocumentIfDirty = async (uri: vscode.Uri) => {
+    try {
+      const document = await vscode.workspace.openTextDocument(uri)
+      if (document.isDirty) {
+        await document.save()
+      }
+    } catch {
+      // Ignore save failures for non-text documents or missing files.
     }
   }
 
@@ -468,12 +439,153 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const DEFAULT_FILE_EXCLUDE =
     '**/{node_modules,.git,.hg,.svn,.direnv,.idea,.vscode,.venv,.virtualenv,dist,build,out,coverage,target,bin,obj,logs,log,tmp,temp,.cache,.parcel-cache,.pytest_cache,.mypy_cache,.ruff_cache,.next,.turbo,.svelte-kit,.nuxt,.vercel,.angular,.gradle,.dart_tool}/**'
+  type SearchMode = 'pathRegex' | 'contentRegex'
 
-  const buildSearchGlob = (query?: string, include?: string): string => {
-    if (include) return include
-    if (!query) return '**/*'
-    if (/[*?[\]{}]/.test(query)) return query
-    return `**/*${query}*`
+  const mergeExcludeGlob = (exclude?: string) => {
+    const extraExclude = exclude?.trim()
+    if (!extraExclude) return DEFAULT_FILE_EXCLUDE
+    if (extraExclude === DEFAULT_FILE_EXCLUDE) return DEFAULT_FILE_EXCLUDE
+    return `{${DEFAULT_FILE_EXCLUDE},${extraExclude}}`
+  }
+
+  const readFileText = async (uri: vscode.Uri): Promise<string | undefined> => {
+    try {
+      const buffer = await vscode.workspace.fs.readFile(uri)
+      return Buffer.from(buffer).toString('utf8')
+    } catch {
+      try {
+        const doc = await vscode.workspace.openTextDocument(uri)
+        return doc.getText()
+      } catch {
+        return undefined
+      }
+    }
+  }
+
+  const compileSearchPattern = (query: string): RegExp => {
+    let source = query
+    const flags = new Set<string>()
+
+    while (source.startsWith('(?')) {
+      const inlineFlagMatch = source.match(/^\(\?([A-Za-z]+)\)/)
+      if (!inlineFlagMatch) break
+
+      const inlineFlags = inlineFlagMatch[1] || ''
+      for (const flag of inlineFlags) {
+        if (!SUPPORTED_REGEX_FLAGS.has(flag)) {
+          throw new Error(
+            `Unsupported inline regex flag "${flag}" in ${inlineFlagMatch[0]}. Use JavaScript-compatible flags only.`,
+          )
+        }
+        if (SEARCH_SAFE_REGEX_FLAGS.has(flag)) {
+          flags.add(flag)
+        }
+      }
+
+      source = source.slice(inlineFlagMatch[0].length)
+    }
+
+    return new RegExp(source, Array.from(flags).join(''))
+  }
+
+  const testSearchPattern = (pattern: RegExp, value: string) =>
+    new RegExp(pattern.source, pattern.flags).test(value)
+
+  const searchWorkspaceFiles = async ({
+    query,
+    exclude,
+    maxResults,
+    searchLimit,
+    mode,
+  }: {
+    query: string
+    exclude?: string
+    maxResults: number
+    searchLimit: number
+    mode: SearchMode
+  }) => {
+    const startedAt = Date.now()
+    const pattern = compileSearchPattern(query)
+    const effectiveExclude = mergeExcludeGlob(exclude)
+    console.debug('[Taskyon][VSCode] search start', {
+      mode,
+      queryLength: query.length,
+      maxResults,
+      searchLimit,
+    })
+
+    try {
+      if (mode === 'pathRegex') {
+        const files = await vscode.workspace.findFiles('**/*', effectiveExclude, searchLimit)
+        const results: string[] = []
+        let hitCap = false
+
+        for (const uri of files) {
+          const relativePath = vscode.workspace.asRelativePath(uri, false)
+          if (!testSearchPattern(pattern, relativePath)) continue
+          results.push(relativePath)
+          if (results.length >= maxResults) {
+            hitCap = true
+            break
+          }
+        }
+
+        console.debug('[Taskyon][VSCode] search complete', {
+          mode,
+          queryLength: query.length,
+          elapsedMs: Date.now() - startedAt,
+          resultCount: results.length,
+          hitCap,
+        })
+        return { files: results, hitCap, mode, exclude: effectiveExclude }
+      }
+
+      const files = await vscode.workspace.findFiles('**/*', effectiveExclude, searchLimit)
+      const results: string[] = []
+      let hitCap = false
+
+      for (
+        let index = 0;
+        index < files.length && results.length < maxResults;
+        index += CONTENT_SEARCH_CONCURRENCY
+      ) {
+        const batch = files.slice(index, index + CONTENT_SEARCH_CONCURRENCY)
+        const batchMatches = await Promise.all(
+          batch.map(async (uri) => {
+            const content = await readFileText(uri)
+            if (content === undefined) return undefined
+            if (!testSearchPattern(pattern, content)) return undefined
+            return vscode.workspace.asRelativePath(uri, false)
+          }),
+        )
+
+        for (const relativePath of batchMatches) {
+          if (!relativePath || results.includes(relativePath)) continue
+          results.push(relativePath)
+          if (results.length >= maxResults) {
+            hitCap = true
+            break
+          }
+        }
+      }
+
+      console.debug('[Taskyon][VSCode] search complete', {
+        mode,
+        queryLength: query.length,
+        elapsedMs: Date.now() - startedAt,
+        resultCount: results.length,
+        hitCap,
+      })
+      return { files: results, hitCap, mode, exclude: effectiveExclude }
+    } catch (error) {
+      console.warn('[Taskyon][VSCode] search failed', {
+        mode,
+        queryLength: query.length,
+        elapsedMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      throw error
+    }
   }
 
   const postResponse = (requestId: string, payload: unknown, error?: string) => {
@@ -495,26 +607,17 @@ export function activate(context: vscode.ExtensionContext): void {
         type?: string
         payload?: {
           requestId?: string
+          mode?: SearchMode
           query?: string
-          include?: string
           exclude?: string
-          showAll?: boolean
           maxResults?: number
+          searchLimit?: number
           paths?: string[]
           path?: string
           href?: string
           line?: number | string
           character?: number | string
-          updates?: Array<{
-            filePath: string
-            patches?: Array<{
-              type: 'replace' | 'insert' | 'delete'
-              lineStart: number
-              lineEnd?: number
-              text?: string
-            }>
-            newContent?: string
-          }>
+          updates?: FileUpdate[]
           text?: string
           framedUrl?: string
           level?: 'log' | 'info' | 'warn' | 'error' | 'debug'
@@ -526,6 +629,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!data || data.source !== VSCODE_MESSAGE_SOURCE) return
 
       if (data.type === 'vscodeWebviewReady') {
+        viewProvider.markReady()
         sendActiveFile()
         return
       }
@@ -580,36 +684,29 @@ export function activate(context: vscode.ExtensionContext): void {
         }
         return
       }
-      if (data.type === 'vscodeListFiles') {
-        const requestId = data.payload?.requestId
-        if (!requestId) return
-        const include = data.payload?.include ?? '**/*'
-        const showAll = Boolean(data.payload?.showAll)
-        const exclude = showAll
-          ? data.payload?.exclude
-          : (data.payload?.exclude ?? DEFAULT_FILE_EXCLUDE)
-        const maxResults = data.payload?.maxResults ?? 5000
-        try {
-          const files = await vscode.workspace.findFiles(include, exclude, maxResults)
-          const results = files.map((uri) => vscode.workspace.asRelativePath(uri, false))
-          postResponse(requestId, { files: results })
-        } catch (error) {
-          postResponse(requestId, { files: [] }, (error as Error).message)
-        }
-        return
-      }
       if (data.type === 'vscodeSearchFiles') {
         const requestId = data.payload?.requestId
         if (!requestId) return
-        const include = buildSearchGlob(data.payload?.query, data.payload?.include)
-        const exclude = data.payload?.exclude ?? DEFAULT_FILE_EXCLUDE
-        const maxResults = data.payload?.maxResults ?? 2000
+        const mode = data.payload?.mode ?? 'pathRegex'
+        const query = data.payload?.query ?? ''
+        const exclude = data.payload?.exclude
+        const maxResults = data.payload?.maxResults ?? 50
+        const searchLimit = data.payload?.searchLimit ?? 5000
         try {
-          const files = await vscode.workspace.findFiles(include, exclude, maxResults)
-          const results = files.map((uri) => vscode.workspace.asRelativePath(uri, false))
-          postResponse(requestId, { files: results })
+          const result = await searchWorkspaceFiles({
+            query,
+            exclude,
+            maxResults,
+            searchLimit,
+            mode,
+          })
+          postResponse(requestId, result)
         } catch (error) {
-          postResponse(requestId, { files: [] }, (error as Error).message)
+          postResponse(
+            requestId,
+            { files: [], hitCap: false, mode, exclude: mergeExcludeGlob(exclude) },
+            (error as Error).message,
+          )
         }
         return
       }
@@ -686,20 +783,52 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       if (data.type !== 'vscodeApplyEdits') return
 
-      const updates = data.payload?.updates ?? []
+      const requestId = data.payload?.requestId
+      const updates = (data.payload?.updates ?? []).map(normalizeFileUpdate)
+      const appliedFiles: string[] = []
+      const failedFiles: string[] = []
+      const errorMessages: string[] = []
+
       for (const update of updates) {
-        const uri = resolveFileUri(update.filePath)
-        if (!uri) continue
-        if (typeof update.newContent === 'string' && update.newContent.length >= 0) {
-          await replaceDocumentContent(uri, update.newContent)
-          continue
-        }
-        if (update.patches?.length) {
-          const doc = await vscode.workspace.openTextDocument(uri)
-          const updated = applyLinePatches(doc.getText(), update.patches)
-          await replaceDocumentContent(uri, updated)
+        try {
+          const uri = resolveFileUri(update.filePath)
+          if (!uri) {
+            throw new Error(`Unable to resolve workspace file path "${update.filePath}"`)
+          }
+          if (typeof update.newContent === 'string') {
+            await replaceDocumentContent(uri, update.newContent)
+          } else {
+            const doc = await vscode.workspace.openTextDocument(uri)
+            const updated = applyFileUpdateToContent(doc.getText(), update)
+            await replaceDocumentContent(uri, updated)
+          }
+          await saveDocumentIfDirty(uri)
+          appliedFiles.push(update.filePath)
+        } catch (error) {
+          failedFiles.push(update.filePath)
+          errorMessages.push(
+            `${update.filePath}: ${error instanceof Error ? error.message : String(error)}`,
+          )
         }
       }
+
+      if (!requestId) {
+        if (errorMessages.length) {
+          console.error('[Taskyon][VSCode] apply edits failed', errorMessages)
+        }
+        return
+      }
+
+      if (errorMessages.length) {
+        postResponse(
+          requestId,
+          { ok: false, files: appliedFiles, failedFiles, errors: errorMessages },
+          `Failed to apply VS Code edits.\n${errorMessages.join('\n')}`,
+        )
+        return
+      }
+
+      postResponse(requestId, { ok: true, files: appliedFiles })
     })()
   })
 
@@ -726,7 +855,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }))
     return {
       uri: doc.uri.toString(),
-      path: doc.fileName,
+      path: vscode.workspace.asRelativePath(doc.uri, false),
       content: doc.getText(),
       languageId: doc.languageId,
       version: doc.version,
@@ -747,12 +876,12 @@ export function activate(context: vscode.ExtensionContext): void {
     ) {
       return
     }
-    lastSent = { uri: payload.uri, version: payload.version, selectionHash }
     viewProvider.postMessage({
       source: VSCODE_MESSAGE_SOURCE,
       type: 'vscodeActiveFile',
       payload,
     })
+    lastSent = { uri: payload.uri, version: payload.version, selectionHash }
   }
 
   const editorListener = vscode.window.onDidChangeActiveTextEditor(() => sendActiveFile())

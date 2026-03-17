@@ -5,7 +5,12 @@ const RemoteFunctionBase = z.object({
   functionName: z.string().meta({
     description: 'the name of the function',
   }),
+  requestId: z.string().meta({
+    description: 'unique request id used to correlate a remote function call with its response',
+  }),
 })
+
+export const REMOTE_FUNCTION_TIMEOUT_MS = 30_000
 
 export const RemoteFunctionCall = RemoteFunctionBase.extend({
   type: z.literal('functionCall').meta({

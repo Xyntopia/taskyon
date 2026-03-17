@@ -1,5 +1,6 @@
+import { watchDebounced } from '@vueuse/core'
 import type { Ref } from 'vue'
-import { computed, watch, isRef, toRaw, isReactive } from 'vue'
+import { computed, watch, isRef, isReactive } from 'vue'
 
 /* ------------------------------------------------------------------ */
 /* localStorage version (unchanged)                                   */
@@ -47,6 +48,7 @@ export function syncRefsWithLocalStorage(
     (newVals) => {
       const persist = () => {
         try {
+          console.log('persist to store!', newVals)
           localStorage.setItem(key, JSON.stringify(newVals))
         } catch (e) {
           console.error('Failed to save state to localStorage', e)
@@ -157,32 +159,47 @@ async function deserializeStateWithFiles(
  */
 export async function syncStateWithOPFSFolder(
   folderName: string,
-  state: Record<string, unknown>, // can be reactive or a plain object of refs
+  state: Record<string, unknown>,
+  options?: {
+    debounceMs?: number
+    maxWaitMs?: number
+  },
 ) {
-  const navAny = navigator
+  const debounceMs = options?.debounceMs ?? 700
+  const maxWaitMs = options?.maxWaitMs ?? 4000
 
-  console.log('syc with opfs store', folderName)
+  const navAny = navigator as Navigator & {
+    storage?: NavigatorStorage['storage'] & {
+      getDirectory?: () => Promise<FileSystemDirectoryHandle>
+    }
+  }
+
+  console.log('sync with opfs store', folderName)
 
   if (!navAny.storage?.getDirectory) {
     console.warn('OPFS is not supported in this browser; skipping OPFS sync.')
-    return
+    return {
+      flush: async () => {},
+      stop: () => {},
+    }
   }
 
-  let stateDir: FileSystemDirectoryHandle
   let filesDir: FileSystemDirectoryHandle
   let stateFileHandle: FileSystemFileHandle
 
   try {
-    const rootDir: FileSystemDirectoryHandle = await navAny.storage.getDirectory()
-    stateDir = await rootDir.getDirectoryHandle(folderName, { create: true })
+    const rootDir = await navAny.storage.getDirectory()
+    const stateDir = await rootDir.getDirectoryHandle(folderName, { create: true })
     filesDir = await stateDir.getDirectoryHandle('files', { create: true })
     stateFileHandle = await stateDir.getFileHandle('state.json', { create: true })
   } catch (e) {
     console.error('Failed to access OPFS directory', e)
-    return
+    return {
+      flush: async () => {},
+      stop: () => {},
+    }
   }
 
-  // Load existing state from state.json
   try {
     const file = await stateFileHandle.getFile()
     const text = await file.text()
@@ -190,19 +207,17 @@ export async function syncStateWithOPFSFolder(
       const serialized = JSON.parse(text) as Record<string, unknown>
       const hydrated = await deserializeStateWithFiles(serialized, filesDir)
 
-      // Write back into either refs or reactive props
       for (const key in hydrated) {
         const targetProp = state[key]
         const value = hydrated[key]
 
         if (isRef(targetProp)) {
-          // For refs: assign to .value
           targetProp.value = value
-        } else if (isReactive(targetProp) && value && typeof value === 'object') {
-          // For reactive objects: merge properties into the existing object
+        } else if (Array.isArray(targetProp) && Array.isArray(value)) {
+          targetProp.splice(0, targetProp.length, ...value)
+        } else if (isReactive(targetProp) && value && typeof value === 'object' && !Array.isArray(value)) {
           Object.assign(targetProp as Record<string, unknown>, value as Record<string, unknown>)
         } else {
-          // Fallback: overwrite
           state[key] = value
         }
       }
@@ -211,31 +226,49 @@ export async function syncStateWithOPFSFolder(
     console.warn('Failed to load state from OPFS (starting with defaults)', e)
   }
 
-  // Build a computed snapshot that unwraps refs but also works for reactive.
   const snapshot = computed(() => {
     const out: Record<string, unknown> = {}
-    const raw = toRaw(state)
 
-    for (const key in raw) {
-      const v = raw[key]
-      out[key] = isRef(v) ? v.value : v
+    for (const key in state) {
+      const value = state[key]
+      out[key] = isRef(value) ? value.value : value
     }
+
     return out
   })
 
-  // Watch and persist to OPFS whenever anything changes (deeply).
-  watch(
+  let lastPersistPromise: Promise<void> = Promise.resolve()
+
+  const persistNow = async () => {
+    const newVals = snapshot.value
+
+    try {
+      const serialized = await serializeStateWithFiles(newVals, filesDir)
+      const writable = await stateFileHandle.createWritable()
+      await writable.write(JSON.stringify(serialized))
+      await writable.close()
+    } catch (e) {
+      console.error('Failed to save state to OPFS', e)
+    }
+  }
+
+  const stop = watchDebounced(
     snapshot,
-    async (newVals) => {
-      try {
-        const serialized = await serializeStateWithFiles(newVals, filesDir)
-        const writable = await stateFileHandle.createWritable()
-        await writable.write(JSON.stringify(serialized))
-        await writable.close()
-      } catch (e) {
-        console.error('Failed to save state to OPFS', e)
-      }
+    () => {
+      lastPersistPromise = persistNow()
     },
-    { deep: true },
+    {
+      deep: true,
+      debounce: debounceMs,
+      maxWait: maxWaitMs,
+    },
   )
+
+  return {
+    flush: async () => {
+      await lastPersistPromise
+      await persistNow()
+    },
+    stop,
+  }
 }

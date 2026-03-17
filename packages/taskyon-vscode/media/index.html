@@ -12,7 +12,11 @@
         margin: 0;
         height: 100%;
         width: 100%;
+      }
+      body {
         overflow: hidden;
+        display: flex;
+        flex-direction: column;
       }
       #taskyon-source-toggle {
         position: absolute;
@@ -41,28 +45,60 @@
       }
       #taskyon {
         border: none;
-        height: 100%;
         width: 100%;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+      #taskyon-shell {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      #taskyon-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 8px 10px;
+        border-top: 1px solid rgba(127, 127, 127, 0.25);
+        background: rgba(0, 0, 0, 0.08);
+        font-family: system-ui, sans-serif;
+        font-size: 11px;
+      }
+      #taskyon-clear-context {
+        border: 0;
+        border-radius: 4px;
+        padding: 4px 8px;
+        cursor: pointer;
+        background: #2d8cff;
+        color: #fff;
+      }
+      #taskyon-context-info {
+        opacity: 0.85;
+        white-space: nowrap;
       }
     </style>
   </head>
   <body>
     __TASKYON_CONFIG__
-    <div id="taskyon-source-toggle">
-      <button type="button" data-source="local">Local</button>
-      <button type="button" data-source="prod">Prod</button>
+    <div id="taskyon-shell">
+      <div id="taskyon-source-toggle">
+        <button type="button" data-source="local">Local</button>
+        <button type="button" data-source="prod">Prod</button>
+      </div>
+      <iframe
+        id="taskyon"
+        src="__TASKYON_IFRAME_SRC__"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
+        allow="clipboard-read; clipboard-write; fullscreen"
+      ></iframe>
+      <div id="taskyon-footer">
+        <button id="taskyon-clear-context" type="button">Clear Context</button>
+        <div id="taskyon-context-info">0 files, 0 chars</div>
+      </div>
     </div>
-    <iframe
-      id="taskyon"
-      src="__TASKYON_IFRAME_SRC__"
-      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
-      allow="clipboard-read; clipboard-write; fullscreen"
-    ></iframe>
-    <script nonce="__TASKYON_NONCE__" type="module">
-      import * as tyclient from '__TASKYON_TYCLIENT_URI__'
-      window.tyclient = tyclient
-      window.dispatchEvent(new CustomEvent('taskyon:tyclient-ready'))
-    </script>
     <script nonce="__TASKYON_NONCE__" src="__TASKYON_WEBVIEW_SCRIPT__"></script>
   </body>
 </html>

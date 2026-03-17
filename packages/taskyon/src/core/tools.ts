@@ -1,6 +1,10 @@
 import Ajv from 'ajv'
 import type { JSONSchema7, JSONSchema7Object, JSONSchema7Type } from 'json-schema'
-import { RemoteFunctionCall, RemoteFunctionResponse } from '../types/messages'
+import {
+  REMOTE_FUNCTION_TIMEOUT_MS,
+  RemoteFunctionCall,
+  RemoteFunctionResponse,
+} from '../types/messages'
 import type { InternalTool, toolContext } from '../types/toolApi'
 import type { FunctionArguments, FunctionCall, ParamType } from '../types/tools'
 import { ToolBase } from '../types/tools'
@@ -12,6 +16,11 @@ import { jsonSchemaToYamlString } from '../utils/yamlUtils'
 import type { ReadonlyDeep } from 'type-fest'
 
 export type RemoteFunctionPort = Port<RemoteFunctionCall, RemoteFunctionResponse>
+
+let remoteFunctionRequestCounter = 0
+
+const createRemoteFunctionRequestId = (name: string) =>
+  `${name}-${Date.now()}-${remoteFunctionRequestCounter++}`
 
 // the following doesn't really work ;) thats why we're doing the custom schema above..
 /*const internalToolFunctionSchema = z
@@ -39,14 +48,51 @@ async function handleRemoteFunction(
   args: ReadonlyDeep<FunctionArguments>,
   duplexPort: RemoteFunctionPort,
 ) {
+  const requestId = createRemoteFunctionRequestId(name)
   const funcRP: Promise<RemoteFunctionResponse> = new Promise((resolve, reject) => {
+    let settled = false
+    let unsub = () => {}
+
+    const cleanup = () => {
+      clearTimeout(timeout)
+      unsub()
+    }
+
+    const timeout = setTimeout(() => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(
+        new Error(
+          `Remote function bridge timed out after ${REMOTE_FUNCTION_TIMEOUT_MS}ms while waiting for ${name} (request ${requestId})`,
+        ),
+      )
+    }, REMOTE_FUNCTION_TIMEOUT_MS)
+
     const listener = (msg: RemoteFunctionResponse) => {
-      console.log('remote function handler received message', msg)
       const response = RemoteFunctionResponse.safeParse(msg)
       if (response.success) {
-        if (response.data.functionName === name) {
-          unsub()
-          if (response.data.error) reject(new Error('Remote function error:', response.data.error))
+        if (response.data.requestId === requestId) {
+          if (settled) return
+          settled = true
+          cleanup()
+          if (response.data.error) {
+            let errorMessage = 'Unknown error'
+            if (typeof response.data.error === 'string') {
+              errorMessage = response.data.error
+            } else {
+              try {
+                errorMessage = JSON.stringify(response.data.error) ?? errorMessage
+              } catch {
+                errorMessage = 'Non-serializable error'
+              }
+            }
+            reject(
+              new Error(`Remote function ${name} failed for request ${requestId}: ${errorMessage}`),
+            )
+            return
+          }
+
           resolve(response.data)
         }
       } else {
@@ -54,24 +100,16 @@ async function handleRemoteFunction(
       }
     }
 
-    // Set a timeout to reject the promise if no response is received within a certain time frame
-    const timeoutSeconds = 10
-    setTimeout(() => {
-      reject(
-        new Error(
-          `Response timeout (${timeoutSeconds}). Waiting for function ${name} more than ${timeoutSeconds}s`,
-        ),
-      )
-      unsub()
-    }, timeoutSeconds * 1000) // 100 seconds timeout for example
-    const unsub = duplexPort.receive(listener)
+    unsub = duplexPort.receive(listener)
   })
 
   // we do this also in order to make sure we have a defined object
+
   // which we can send through postMessage without any functions etc...
   const message = RemoteFunctionCall.parse({
     type: 'functionCall',
     functionName: name,
+    requestId,
     arguments: args,
   })
   console.log('no tool code found, posting a function message to', message)
