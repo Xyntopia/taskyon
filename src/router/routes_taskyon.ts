@@ -245,6 +245,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       description: 'We are testing taskyons client library here.',
     },
   },
+  {
+    path: '/spaceships',
+    component: () => import('@taskyon/shared/spaceships/ProceduralSpaceshipLabPage.vue'),
+    meta: {
+      title: 'Procedural Spaceship Lab',
+      description: 'Inspect deterministic procedural spaceships generated from seed strings.',
+    },
+  },
 ]
 
 export const routes: RouteRecordRaw[] = [
