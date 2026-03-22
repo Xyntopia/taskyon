@@ -119,6 +119,70 @@ const schemaTypeMatchesValue = (schema: JSONSchema7, value: unknown): boolean =>
   return schemaTypes.includes(runtimeAsJsonSchemaType as never)
 }
 
+const normalizeSchemaDefDeep = (def: JSONSchema7Definition): JSONSchema7 | undefined => {
+  if (!def || typeof def === 'boolean') return undefined
+  return def
+}
+
+const getAdditionalPropertyCandidates = (schema: JSONSchema7): JSONSchema7[] => {
+  const raw = schema.additionalProperties
+  if (!raw || typeof raw === 'boolean') return []
+  const normalized = normalizeSchemaDefDeep(raw)
+  if (!normalized) return []
+  return getUnionOptions(normalized).length ? getUnionOptions(normalized) : [normalized]
+}
+
+const scoreSchemaFit = (schema: JSONSchema7, value: unknown): number => {
+  let score = 0
+
+  if (!schemaTypeMatchesValue(schema, value)) return -100
+  score += 1
+
+  if (Array.isArray(schema.enum) && schema.enum.some((v) => v === value)) score += 100
+
+  const c = (schema as unknown as { const?: unknown }).const
+  if (c !== undefined && c === value) score += 100
+
+  if (
+    schema.type === 'object' &&
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    !Array.isArray(schema.enum)
+  ) {
+    const obj = value as Record<string, unknown>
+    const props = (schema.properties ?? {}) as Record<string, JSONSchema7Definition>
+    const propKeys = new Set(Object.keys(props))
+    const valueKeys = Object.keys(obj)
+
+    if (propKeys.size > 0) {
+      for (const key of valueKeys) {
+        if (propKeys.has(key)) {
+          score += 6
+          continue
+        }
+        if (schema.additionalProperties === false) score -= 20
+        else score -= 2
+      }
+    }
+
+    const additionalCandidates = getAdditionalPropertyCandidates(schema)
+    if (additionalCandidates.length > 0) {
+      for (const key of valueKeys) {
+        const v = obj[key]
+        const propSchema = normalizeSchemaDefDeep(props[key] as JSONSchema7Definition)
+        if (propSchema) continue
+        const bestAdditionalScore = additionalCandidates.reduce((best, candidate) => {
+          return Math.max(best, scoreSchemaFit(candidate, v))
+        }, -100)
+        score += bestAdditionalScore > -100 ? Math.min(6, bestAdditionalScore) : -12
+      }
+    }
+  }
+
+  return score
+}
+
 const getConstOrSingleEnum = (schema: unknown): string | number | undefined => {
   if (!schema || typeof schema !== 'object') return undefined
   const s = schema as Record<string, unknown>
@@ -255,22 +319,23 @@ const resolveUnionSchemaForValue = (schema: SchemaWithMeta, value: unknown): Uni
 
   // 2) Non-discriminated union: pick the first that matches value reasonably well
   const scored = options.map((opt) => {
-    let score = 0
-
-    if (!schemaTypeMatchesValue(opt, value)) score -= 10
-    else score += 1
-
-    // enum match
-    if (Array.isArray(opt.enum) && opt.enum.some((v) => v === value)) score += 100
-
-    // const match
-    const c = (opt as unknown as { const?: unknown }).const
-    if (c !== undefined && c === value) score += 100
-
-    return { opt, score }
+    return { opt, score: scoreSchemaFit(opt, value) }
   })
 
-  scored.sort((a, b) => b.score - a.score)
+  const typePreference = (opt: JSONSchema7) => {
+    const t = Array.isArray(opt.type) ? opt.type[0] : opt.type
+    if (t === 'number' || t === 'integer') return 0
+    if (t === 'string') return 1
+    if (t === 'boolean') return 2
+    if (t === 'array') return 3
+    if (t === 'object') return 4
+    return 5
+  }
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return typePreference(a.opt) - typePreference(b.opt)
+  })
   const selected = scored[0]?.opt ?? schema
   return {
     schema: withInheritedDescription(selected, parentDescription),
@@ -487,7 +552,7 @@ const buildVariableNodes = (
     effectiveSchema &&
     'type' in effectiveSchema &&
     (effectiveSchema as JSONSchema7).type === 'object' &&
-    'properties' in effectiveSchema
+    ('properties' in effectiveSchema || 'additionalProperties' in effectiveSchema)
   ) {
     const s = effectiveSchema as JSONSchema7
     const schemaProps = (s.properties ?? {}) as Record<string, JSONSchema7Definition>

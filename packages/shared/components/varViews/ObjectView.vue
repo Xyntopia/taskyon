@@ -68,6 +68,27 @@
       @toggle-full-view="({ id, value }) => toggleFullView(id, value)"
     >
       <template #header-extra="slotProps">
+        <q-btn
+          v-if="shouldShowAddKey(slotProps.node)"
+          flat
+          dense
+          size="sm"
+          :icon="matAdd"
+          @click.stop="addObjectKeyAtNode(slotProps.node)"
+        >
+          <q-tooltip>Add key</q-tooltip>
+        </q-btn>
+        <q-btn
+          v-if="shouldShowDeleteKey(slotProps.node)"
+          flat
+          dense
+          size="sm"
+          :icon="matDelete"
+          color="negative"
+          @click.stop="deleteNodeAtPath(slotProps.node)"
+        >
+          <q-tooltip>Delete key</q-tooltip>
+        </q-btn>
         <slot name="header-extra" v-bind="slotProps" />
       </template>
       <template #custom="slotProps">
@@ -96,6 +117,27 @@
       @toggle-full-view="({ id, value }) => toggleFullView(id, value)"
     >
       <template #header-extra="slotProps">
+        <q-btn
+          v-if="shouldShowAddKey(slotProps.node)"
+          flat
+          dense
+          size="sm"
+          :icon="matAdd"
+          @click.stop="addObjectKeyAtNode(slotProps.node)"
+        >
+          <q-tooltip>Add key</q-tooltip>
+        </q-btn>
+        <q-btn
+          v-if="shouldShowDeleteKey(slotProps.node)"
+          flat
+          dense
+          size="sm"
+          :icon="matDelete"
+          color="negative"
+          @click.stop="deleteNodeAtPath(slotProps.node)"
+        >
+          <q-tooltip>Delete key</q-tooltip>
+        </q-btn>
         <slot name="header-extra" v-bind="slotProps" />
       </template>
       <template #custom="slotProps">
@@ -122,7 +164,7 @@
 <script setup lang="ts">
 import { type JSONSchema7 } from 'json-schema'
 import { copyToClipboard, countLeaves } from '../../modules/utils'
-import { computed, ref, toRef } from 'vue'
+import { computed, ref, toRaw, toRef } from 'vue'
 import type z from 'zod'
 import SearchInput from '../SearchInput.vue'
 import FlatVariablesView from './FlatVariablesView.vue'
@@ -136,7 +178,7 @@ import {
 } from './useVariableGraph'
 import type { CustomRenderer } from './VariableField.vue'
 import { safeYamlDump } from '../../../taskyon/src/utils/yamlUtils'
-import { matContentCopy } from '@quasar/extras/material-icons'
+import { matAdd, matContentCopy, matDelete } from '@quasar/extras/material-icons'
 
 export type iconMap = {
   [key: string]: string | iconMap
@@ -168,6 +210,7 @@ const {
   showMissingModeSelect = false,
   copyObjectBtn = false,
   copyObjectWarnLeavesLimit = 5000,
+  allowObjectStructureEditing = false,
 } = defineProps<{
   readOnly?: boolean
   inputFieldBehavior?: 'auto' | 'textarea' | 'autogrow'
@@ -199,6 +242,11 @@ const {
    * If the object is large (approx leaf count above this), ask for confirmation before copying.
    */
   copyObjectWarnLeavesLimit?: number
+
+  /**
+   * Enables editing object structure in tree/flat views (add/delete keys).
+   */
+  allowObjectStructureEditing?: boolean
 }>()
 
 const modelValue = defineModel<Record<string, unknown> | undefined>({ required: true })
@@ -249,6 +297,10 @@ const filteredFlatNodes = computed(() =>
 
 const showHeaderRow = computed(() => enableExpertMode || copyObjectBtn || showMissingModeSelect)
 
+const logObjectEdit = (action: string, payload: Record<string, unknown>) => {
+  console.debug('[ObjectView]', action, payload)
+}
+
 const copyWholeObject = () => {
   if (!modelValue.value) return
 
@@ -263,10 +315,23 @@ const copyWholeObject = () => {
   void copyToClipboard(JSON.stringify(modelValue.value, null, 2))
 }
 
-const updateByPath = (keyPath: string[], value: unknown) => {
-  if (!modelValue.value) return
+function cloneModelRoot(): Record<string, unknown> | undefined {
+  if (!modelValue.value) return undefined
+  try {
+    // `modelValue` can be a Vue reactive proxy, which may throw DataCloneError with structuredClone.
+    // JSON clone is sufficient for our schema-edited library metadata objects.
+    return JSON.parse(JSON.stringify(toRaw(modelValue.value))) as Record<string, unknown>
+  } catch (error) {
+    console.error('[ObjectView] cloneModelRoot failed', error)
+    return undefined
+  }
+}
 
-  let target: Record<string, unknown> = modelValue.value
+const updateByPath = (keyPath: string[], value: unknown) => {
+  const nextRoot = cloneModelRoot()
+  if (!nextRoot) return
+
+  let target: Record<string, unknown> = nextRoot
   for (let i = 0; i < keyPath.length - 1; i++) {
     const segment = keyPath[i]!
     const cur = target[segment]
@@ -276,6 +341,164 @@ const updateByPath = (keyPath: string[], value: unknown) => {
     target = target[segment] as Record<string, unknown>
   }
   target[keyPath[keyPath.length - 1]!] = value
+  logObjectEdit('updateByPath', {
+    path: keyPath.join('.'),
+    value,
+  })
+  modelValue.value = nextRoot
+}
+
+function resolveJsonSchemaDefinition(
+  definition: unknown,
+): JSONSchema7 | z.core.JSONSchema.BaseSchema | undefined {
+  if (!definition || typeof definition !== 'object') return undefined
+  if (typeof definition === 'boolean') return undefined
+  return definition as JSONSchema7 | z.core.JSONSchema.BaseSchema
+}
+
+function defaultValueFromSchema(schemaNode: JSONSchema7 | z.core.JSONSchema.BaseSchema | undefined): unknown {
+  if (!schemaNode || typeof schemaNode !== 'object') return {}
+  const record = schemaNode as Record<string, unknown>
+  if (Object.prototype.hasOwnProperty.call(record, 'default')) return record.default
+
+  const unionDefs = [
+    ...(Array.isArray(record.oneOf) ? record.oneOf : []),
+    ...(Array.isArray(record.anyOf) ? record.anyOf : []),
+  ].filter((entry) => entry && typeof entry === 'object') as Array<Record<string, unknown>>
+  if (unionDefs.length) {
+    // For structural add-key scaffolding, prefer object branches so required child keys
+    // (for example min/max) appear as schema-driven missing placeholders immediately.
+    const preferredTypeOrder = ['object', 'array', 'number', 'integer', 'string', 'boolean']
+    const selectedSchema =
+      preferredTypeOrder
+        .map((expectedType) =>
+          unionDefs.find((entry) => {
+            const entryType = Array.isArray(entry.type) ? entry.type[0] : entry.type
+            return entryType === expectedType
+          }),
+        )
+        .find(Boolean) ?? unionDefs[0]
+    return defaultValueFromSchema(selectedSchema as JSONSchema7)
+  }
+
+  const schemaType = Array.isArray(record.type) ? record.type[0] : record.type
+  if (schemaType === 'object') {
+    const properties =
+      record.properties && typeof record.properties === 'object'
+        ? (record.properties as Record<string, unknown>)
+        : undefined
+    const requiredKeys = Array.isArray(record.required)
+      ? record.required
+          .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+          .filter((entry) => entry.length > 0)
+      : []
+
+    if (!requiredKeys.length || !properties) return {}
+
+    const scaffold: Record<string, unknown> = {}
+    for (const key of requiredKeys) {
+      const propertySchema = resolveJsonSchemaDefinition(properties[key])
+      const propertyRecord =
+        propertySchema && typeof propertySchema === 'object'
+          ? (propertySchema as Record<string, unknown>)
+          : undefined
+      if (propertyRecord && Object.prototype.hasOwnProperty.call(propertyRecord, 'default')) {
+        scaffold[key] = propertyRecord.default
+        continue
+      }
+      scaffold[key] = null
+    }
+    return scaffold
+  }
+  if (schemaType === 'array') return []
+  if (schemaType === 'string') return ''
+  if (schemaType === 'number' || schemaType === 'integer') return 0
+  if (schemaType === 'boolean') return false
+  return {}
+}
+
+const addObjectKeyAtNode = (node: VariableNode) => {
+  if (readOnly || !allowObjectStructureEditing || !modelValue.value) return
+  if (node.kind !== 'object') return
+
+  const nextRoot = cloneModelRoot()
+  if (!nextRoot) return
+  const targetValue = getValueByPath(nextRoot, node.path)
+  if (!targetValue || typeof targetValue !== 'object' || Array.isArray(targetValue)) return
+  const targetObject = targetValue as Record<string, unknown>
+
+  const rawKey = window.prompt(`Add key to "${node.label}"`, '')
+  const key = `${rawKey ?? ''}`.trim()
+  if (!key) return
+  if (Object.prototype.hasOwnProperty.call(targetObject, key)) {
+    window.alert(`Key "${key}" already exists.`)
+    return
+  }
+
+  const nodeSchema = node.schema as JSONSchema7 | undefined
+  const properties =
+    nodeSchema && typeof nodeSchema === 'object' && nodeSchema.properties
+      ? (nodeSchema.properties as Record<string, unknown>)
+      : undefined
+  const propertySchema = resolveJsonSchemaDefinition(properties?.[key])
+  const additionalPropertiesSchema = resolveJsonSchemaDefinition(
+    nodeSchema && typeof nodeSchema === 'object'
+      ? (nodeSchema as Record<string, unknown>).additionalProperties
+      : undefined,
+  )
+  const valueSchema = propertySchema ?? additionalPropertiesSchema
+  const nextValue = defaultValueFromSchema(valueSchema)
+  targetObject[key] = nextValue
+  logObjectEdit('addObjectKeyAtNode', {
+    path: [...node.path, key].join('.'),
+    initializedWith: nextValue,
+  })
+  modelValue.value = nextRoot
+}
+
+const shouldShowAddKey = (node: VariableNode | undefined) => {
+  if (!allowObjectStructureEditing || readOnly) return false
+  if (!node || node.kind !== 'object') return false
+  const hasMissingChild = (node.children ?? []).some((child) => child.missing)
+  return !hasMissingChild
+}
+
+const deleteNodeAtPath = (node: VariableNode) => {
+  if (readOnly || !allowObjectStructureEditing || !modelValue.value) return
+  const path = node.path ?? []
+  if (!path.length) return
+
+  const nextRoot = cloneModelRoot()
+  if (!nextRoot) return
+
+  const parentPath = path.slice(0, -1)
+  const leafKey = path[path.length - 1]!
+  const parent = parentPath.length
+    ? getValueByPath(nextRoot, parentPath)
+    : nextRoot
+
+  if (!parent || typeof parent !== 'object') return
+  if (Array.isArray(parent)) {
+    const index = Number(leafKey)
+    if (!Number.isFinite(index) || index < 0 || index >= parent.length) return
+    parent.splice(index, 1)
+    logObjectEdit('deleteNodeAtPath', {
+      path: path.join('.'),
+    })
+    modelValue.value = nextRoot
+    return
+  }
+  delete (parent as Record<string, unknown>)[leafKey]
+  logObjectEdit('deleteNodeAtPath', {
+    path: path.join('.'),
+  })
+  modelValue.value = nextRoot
+}
+
+const shouldShowDeleteKey = (node: VariableNode | undefined) => {
+  if (!allowObjectStructureEditing || readOnly) return false
+  if (!node) return false
+  return node.path.length > 0 && !node.missing
 }
 
 const resetNode = (node: VariableNode) => {

@@ -379,12 +379,40 @@ const updateDateTime = (date: string | null, time: string | null) => {
 }
 
 const getInitValue = (): unknown => {
-  const def =
-    props.node.schema && 'default' in props.node.schema ? props.node.schema.default : undefined
-  if (def !== undefined) return def
+  const schema = props.node.schema as Record<string, unknown> | undefined
+  if (!schema || typeof schema !== 'object') return ''
 
-  const schemaType =
-    props.node.schema && 'type' in props.node.schema ? props.node.schema.type : undefined
+  const withDefault = schema.default
+  if (withDefault !== undefined) return withDefault
+
+  const schemaType = Array.isArray(schema.type) ? schema.type[0] : schema.type
+
+  if (!schemaType) {
+    const unionDefs = [
+      ...(Array.isArray(schema.oneOf) ? schema.oneOf : []),
+      ...(Array.isArray(schema.anyOf) ? schema.anyOf : []),
+    ].filter((entry) => entry && typeof entry === 'object') as Array<Record<string, unknown>>
+    if (unionDefs.length) {
+      const preferredTypeOrder = ['number', 'integer', 'string', 'boolean', 'array', 'object']
+      const selectedSchema =
+        preferredTypeOrder
+          .map((expectedType) =>
+            unionDefs.find((entry) => {
+              const entryType = Array.isArray(entry.type) ? entry.type[0] : entry.type
+              return entryType === expectedType
+            }),
+          )
+          .find(Boolean) ?? unionDefs[0]
+      const childType = Array.isArray(selectedSchema?.type)
+        ? selectedSchema?.type[0]
+        : selectedSchema?.type
+      if (childType === 'object') return {}
+      if (childType === 'array') return []
+      if (childType === 'boolean') return false
+      if (childType === 'number' || childType === 'integer') return 0
+      if (childType === 'string') return ''
+    }
+  }
 
   switch (schemaType) {
     case 'object':
@@ -402,7 +430,6 @@ const getInitValue = (): unknown => {
 }
 
 const enableField = () => {
-  console.log('enabling field with init value', getInitValue())
   emitUpdate(getInitValue())
 }
 </script>
