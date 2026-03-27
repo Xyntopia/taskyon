@@ -97,6 +97,11 @@
                 neighbor(s)
               </div>
             </div>
+            <ProceduralSpaceshipIdenticon
+              v-if="snapshot.nodeId"
+              :seed-text="snapshot.nodeId"
+              class="col-auto"
+            />
             <div class="col-auto">
               <q-chip square>{{ shortId(snapshot.nodeId || 'offline') }}</q-chip>
             </div>
@@ -106,6 +111,9 @@
           <q-scroll-area style="height: calc(100vh - 250px)">
             <q-list separator>
               <q-item v-for="message in currentMessages" :key="message.id">
+                <q-item-section avatar>
+                  <ProceduralSpaceshipIdenticon :seed-text="message.senderPeerId" />
+                </q-item-section>
                 <q-item-section>
                   <q-item-label>{{ message.body }}</q-item-label>
                   <q-item-label caption>
@@ -158,9 +166,10 @@ import {
   type P2pChatMessage,
   type P2pManagerSnapshot,
 } from '@taskyon/p2p-core'
+import ProceduralSpaceshipIdenticon from '@taskyon/shared/spaceships/ProceduralSpaceshipIdenticon.vue'
+import { copyToClipboard } from 'quasar'
 import Libp2pStatus from 'src/components/taskyon/Libp2pStatus.vue'
 import NetworkManager from 'src/components/taskyon/NetworkManager.vue'
-import { copyToClipboard } from 'quasar'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 
 const p2pBus = createP2pBus()
