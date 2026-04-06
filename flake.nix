@@ -36,6 +36,7 @@
           librsvg
           libsoup_3
           pango
+          gh
           webkitgtk_4_1
           webkitgtk_4_1.dev
           #webkitgtk

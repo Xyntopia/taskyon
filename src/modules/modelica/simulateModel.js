@@ -144,8 +144,6 @@ const simulateModel = (params, context, model) => {
     return values.map((raw) => {
       const v = Number(raw)
       if (!Number.isFinite(v)) return minAbs
-      if (v === 0) return minAbs
-      if (Math.abs(v) < minAbs) return v < 0 ? -minAbs : minAbs
       return v
     })
   }
@@ -1133,9 +1131,10 @@ const simulateModel = (params, context, model) => {
         const uEnd = f_u(tTarget) || new Array(nu).fill(0)
         const cEnd = evalConditionsSafe(tTarget, flow.xNext, flow.yNext, uEnd, cCur)
         if (!conditionsChanged(cCur, cEnd)) {
-          xCur = flow.xNext
-          yCur = flow.yNext
-          cCur = cEnd
+          const applied = applyResetsSafe(tTarget, flow.xNext, flow.yNext, uEnd, cCur, cEnd)
+          xCur = applied.xNext
+          yCur = applied.yNext
+          cCur = applied.cNext
           xDotCur = flow.xDotNext
           tCur = tTarget
           break
@@ -1240,6 +1239,20 @@ const simulateModel = (params, context, model) => {
         out[i] = typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN
       }
       return out
+    }
+
+    if (haveEvents) {
+      try {
+        const settled0 = settleEventAtTime(t, x, y, c)
+        x = settled0.x
+        y = settled0.y
+        c = settled0.c
+      } catch (e) {
+        log('Initial event settling failed', {
+          error: (e && e.message) || String(e),
+          stack: e && e.stack,
+        })
+      }
     }
 
     log('Simulation started', { t0, tf, dt, nx, ny, nu, haveEvents })

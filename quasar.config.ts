@@ -273,7 +273,12 @@ export default defineConfig((ctx) => {
         // Extend the Vite configuration to exclude dependencies from optimization
         viteConf.optimizeDeps = {
           ...viteConf.optimizeDeps,
-          exclude: [...(viteConf.optimizeDeps?.exclude ?? []), '@electric-sql/pglite', 'pyodide'],
+          exclude: [
+            ...(viteConf.optimizeDeps?.exclude ?? []),
+            '@electric-sql/pglite',
+            'pyodide',
+            'rumoca',
+          ],
         }
         viteConf.resolve = viteConf.resolve || {}
         const clientAliasPath = fileURLToPath(

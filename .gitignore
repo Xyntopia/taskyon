@@ -2,6 +2,7 @@
 .thumbs.db
 .corepack
 .yarn
+.tmp
 node_modules
 
 # Quasar core related directories

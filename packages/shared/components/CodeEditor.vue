@@ -27,7 +27,16 @@ const content = defineModel<string>({
   default: '',
 })
 
-const props = defineProps<{ language?: string }>()
+const props = withDefaults(
+  defineProps<{
+    language?: string
+    extraExtensions?: Extension[]
+  }>(),
+  {
+    language: '',
+    extraExtensions: () => [],
+  },
+)
 
 const $q = useQuasar()
 const langExtension = ref<Extension | null>()
@@ -161,8 +170,9 @@ watchEffect(
 // Compute extensions
 // ---------------------------
 const extensions = computed(() => {
+  const extras = Array.isArray(props.extraExtensions) ? props.extraExtensions : []
   return $q.dark.isActive
-    ? [basicSetup, ...(langExtension.value ? [langExtension.value] : []), oneDark]
-    : [basicSetup, ...(langExtension.value ? [langExtension.value] : [])]
+    ? [basicSetup, ...(langExtension.value ? [langExtension.value] : []), ...extras, oneDark]
+    : [basicSetup, ...(langExtension.value ? [langExtension.value] : []), ...extras]
 })
 </script>

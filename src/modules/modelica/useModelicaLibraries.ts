@@ -1,9 +1,9 @@
-import { strFromU8, unzipSync } from 'fflate'
 import { nextTick, ref, type Ref } from 'vue'
 import { Notify } from 'quasar'
-import { DEFAULT_MSL_ZIP_URL, appendModelicaLog, normalizeLibraryEntryPath, type RumocaModule } from './modelica'
+import { DEFAULT_MSL_ZIP_URL, appendModelicaLog } from './modelica'
+import type { ModelicaWorkerClient } from './modelicaWorkerClient'
 
-export function useModelicaLibraries(params: { wasm: Ref<RumocaModule | null> }) {
+export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient | null> }) {
   const useModelicaStandardLibrary = ref(false)
   const mslImportEl = ref<HTMLInputElement | null>(null)
   const mslLoaded = ref(false)
@@ -65,14 +65,20 @@ export function useModelicaLibraries(params: { wasm: Ref<RumocaModule | null> })
     return await fileHandle.getFile()
   }
 
-  async function loadMslArchiveFile(file: File) {
-    const m = params.wasm.value
-    if (!m) throw new Error('WASM module not loaded')
-    const canLoadSourceRoots = typeof m.load_source_roots === 'function'
-    const canLoadLibraries = typeof m.load_libraries === 'function'
-    if (!canLoadSourceRoots && !canLoadLibraries) {
-      throw new Error('Rumoca build does not support source-root/library loading')
+  function normalizeCachedZipPath(raw: unknown): string {
+    if (typeof raw === 'string') return raw.trim()
+    if (raw && typeof raw === 'object') {
+      const maybeRef = raw as { value?: unknown; path?: unknown }
+      if (typeof maybeRef.value === 'string') return maybeRef.value.trim()
+      if (typeof maybeRef.path === 'string') return maybeRef.path.trim()
     }
+    const typeLabel = Object.prototype.toString.call(raw)
+    throw new Error(`Cached MSL ZIP path has invalid type: ${typeLabel}`)
+  }
+
+  async function loadMslArchiveFile(file: File) {
+    const worker = params.worker.value
+    if (!worker) throw new Error('Modelica worker not loaded')
 
     mslLoading.value = true
     await nextTick()
@@ -82,44 +88,17 @@ export function useModelicaLibraries(params: { wasm: Ref<RumocaModule | null> })
       message: `Loading Modelica library archive: ${file.name}`,
     })
 
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    const archive = unzipSync(bytes)
-    const libraries: Record<string, string> = {}
-
-    for (const [rawPath, content] of Object.entries(archive)) {
-      const lowerPath = rawPath.toLowerCase()
-      if (!lowerPath.endsWith('.mo')) continue
-      if (rawPath.includes('Test') || rawPath.includes('Obsolete')) continue
-      const normalizedPath = normalizeLibraryEntryPath(rawPath)
-      libraries[normalizedPath] = strFromU8(content)
-    }
-
-    const fileCount = Object.keys(libraries).length
-    if (fileCount === 0) {
-      throw new Error('No usable .mo files found in archive')
-    }
-
-    const loadFn = canLoadSourceRoots ? m.load_source_roots : m.load_libraries
-    if (typeof loadFn !== 'function') {
-      throw new Error('Rumoca build does not support source-root/library loading')
-    }
-    const resultRaw = loadFn(JSON.stringify(libraries))
-    let parsedCount = fileCount
-    try {
-      const result = JSON.parse(String(resultRaw)) as { parsed_count?: number }
-      if (typeof result.parsed_count === 'number') parsedCount = result.parsed_count
-    } catch {
-      // no-op: keep fallback parsedCount
-    }
+    const bytes = await file.arrayBuffer()
+    const result = await worker.loadMslZip(file.name, bytes)
 
     mslLoaded.value = true
-    mslArchiveName.value = file.name
-    mslFileCount.value = fileCount
+    mslArchiveName.value = result.archiveName
+    mslFileCount.value = result.fileCount
 
     appendModelicaLog({
       level: 'success',
       phase: 'general',
-      message: `Modelica libraries loaded: ${parsedCount} files parsed`,
+      message: `Modelica libraries loaded: ${result.parsedCount} files parsed`,
     })
   }
 
@@ -174,12 +153,13 @@ export function useModelicaLibraries(params: { wasm: Ref<RumocaModule | null> })
     try {
       mslLoading.value = true
       await nextTick()
-      if (!mslCachedZipPath.value) throw new Error('No cached MSL ZIP path set')
-      const file = await readFileFromOpfs(mslCachedZipPath.value)
+      const cachedPath = normalizeCachedZipPath(mslCachedZipPath.value)
+      if (!cachedPath) throw new Error('No cached MSL ZIP path set')
+      const file = await readFileFromOpfs(cachedPath)
       await loadMslArchiveFile(file)
       Notify.create({
         type: 'positive',
-        message: `Loaded cached MSL from ${mslCachedZipPath.value}`,
+        message: `Loaded cached MSL from ${cachedPath}`,
       })
     } catch (err) {
       const msg = (err as Error).message
@@ -219,20 +199,11 @@ export function useModelicaLibraries(params: { wasm: Ref<RumocaModule | null> })
     }
   }
 
-  function clearModelicaLibraries() {
+  async function clearModelicaLibraries() {
     try {
-      const m = params.wasm.value
-      if (!m) {
-        throw new Error('WASM module not loaded')
-      }
-
-      if (typeof m.clear_source_root_cache === 'function') {
-        m.clear_source_root_cache()
-      } else if (typeof m.clear_library_cache === 'function') {
-        m.clear_library_cache()
-      } else {
-        throw new Error('Rumoca build does not support clearing source-root/library cache')
-      }
+      const worker = params.worker.value
+      if (!worker) throw new Error('Modelica worker not loaded')
+      await worker.clearLibraries()
       mslLoaded.value = false
       mslArchiveName.value = ''
       mslFileCount.value = 0

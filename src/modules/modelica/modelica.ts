@@ -1,6 +1,5 @@
 import defaultSolverSource from 'src/modules/modelica/simulateModel?raw'
 import type * as WasmTypes from 'rumoca'
-import rumocaWasmUrl from 'rumoca/rumoca_bg.wasm?url'
 import { z } from 'zod'
 import { ref } from 'vue'
 import { Notify } from 'quasar'
@@ -455,13 +454,22 @@ export const loadWasm = async () => {
   const wasmModule = await import('rumoca')
 
   if (typeof wasmModule.default === 'function') {
-    await wasmModule.default(rumocaWasmUrl)
+    await wasmModule.default()
   }
 
   if ('wasm_init' in wasmModule && typeof wasmModule.wasm_init === 'function') {
+    const hardwareThreads =
+      typeof navigator !== 'undefined' &&
+      typeof navigator.hardwareConcurrency === 'number' &&
+      Number.isFinite(navigator.hardwareConcurrency)
+        ? navigator.hardwareConcurrency
+        : 2
+    const canUseThreadedWasm = globalThis.crossOriginIsolated === true
+    const requestedThreads = canUseThreadedWasm ? Math.max(1, Math.min(hardwareThreads, 4)) : 0
+
     try {
       // Newer rumoca builds may expose wasm_init as sync; normalize to Promise.
-      await Promise.resolve(wasmModule.wasm_init(1))
+      await Promise.resolve(wasmModule.wasm_init(requestedThreads))
     } catch (e) {
       console.warn('Rumoca wasm_init failed – single-threaded mode:', e)
     }
@@ -1162,6 +1170,21 @@ type CompiledDaePayload = {
   dae?: unknown
   dae_native?: unknown
   dae_prepared?: unknown
+  dae_prepared_status?: unknown
+  dae_prepared_diagnostics?: unknown
+}
+
+export function getPreparedDaeStatus(daeObj: unknown): string | null {
+  if (!daeObj || typeof daeObj !== 'object' || Array.isArray(daeObj)) return null
+  const status = (daeObj as Record<string, unknown>).__rumoca_prepared_status
+  return typeof status === 'string' && status.trim().length > 0 ? status : null
+}
+
+export function getPreparedDaeDiagnostics(daeObj: unknown): string[] {
+  if (!daeObj || typeof daeObj !== 'object' || Array.isArray(daeObj)) return []
+  const raw = (daeObj as Record<string, unknown>).__rumoca_prepared_diagnostics
+  if (!Array.isArray(raw)) return []
+  return raw.filter((entry): entry is string => typeof entry === 'string')
 }
 
 export function selectDaeForTemplate(
@@ -1189,6 +1212,30 @@ export function selectDaeForTemplate(
     const clauses = daeObj.when_clauses
     return Array.isArray(clauses) ? clauses.length : 0
   }
+  const countEquations = (daeObj: Record<string, unknown> | null): number => {
+    if (!daeObj) return 0
+    const fx = daeObj.f_x ?? daeObj.fx
+    return Array.isArray(fx) ? fx.length : 0
+  }
+  const countConditions = (daeObj: Record<string, unknown> | null): number => {
+    if (!daeObj) return 0
+    const countKey = (key: string): number => {
+      const value = daeObj[key]
+      return Array.isArray(value) ? value.length : 0
+    }
+    const fC = countKey('f_c') + countKey('fc') + countKey('cond')
+    const relation = countKey('relation')
+    const syntheticRoots = countKey('synthetic_root_conditions')
+    return fC + relation + syntheticRoots
+  }
+  const countResetEquations = (daeObj: Record<string, unknown> | null): number => {
+    if (!daeObj) return 0
+    const fZ = daeObj.f_z
+    const fM = daeObj.f_m
+    const countFz = Array.isArray(fZ) ? fZ.length : 0
+    const countFm = Array.isArray(fM) ? fM.length : 0
+    return countFz + countFm
+  }
 
   const nativeDae = asRecord(nativeDaeRaw)
   const preparedDae = asRecord(preparedDaeRaw)
@@ -1202,6 +1249,12 @@ export function selectDaeForTemplate(
     const preparedAlgebraics = countVarMapEntries(preparedDae, 'y')
     const nativeWhenClauses = countWhenClauses(nativeDae)
     const preparedWhenClauses = countWhenClauses(preparedDae)
+    const nativeEquationCount = countEquations(nativeDae)
+    const preparedEquationCount = countEquations(preparedDae)
+    const nativeConditionCount = countConditions(nativeDae)
+    const preparedConditionCount = countConditions(preparedDae)
+    const nativeResetCount = countResetEquations(nativeDae)
+    const preparedResetCount = countResetEquations(preparedDae)
     const rumocaObservables = preparedDae.__rumoca_observables
     const observables = Array.isArray(rumocaObservables) && rumocaObservables.length > 0
     if (nativeAlgebraics > preparedAlgebraics && !observables) {
@@ -1210,6 +1263,15 @@ export function selectDaeForTemplate(
       daeForTemplate = nativeDae
     } else if (nativeWhenClauses > preparedWhenClauses) {
       // Preserve event reset semantics if prepared DAE dropped when-clause payload.
+      daeForTemplate = nativeDae
+    } else if (nativeEquationCount > 0 && preparedEquationCount <= 0) {
+      // Prepared DAE is unusable for simulation templates if it carries no residual equations.
+      daeForTemplate = nativeDae
+    } else if (nativeConditionCount > preparedConditionCount) {
+      // Preserve event indicators/conditions for runtime templates.
+      daeForTemplate = nativeDae
+    } else if (nativeResetCount > preparedResetCount) {
+      // Preserve event reset semantics even when reset equations route through f_m.
       daeForTemplate = nativeDae
     }
   }
@@ -1384,6 +1446,8 @@ export async function compileModelicaToJs(params: {
       dae?: unknown
       dae_native?: unknown
       dae_prepared?: unknown
+      dae_prepared_status?: unknown
+      dae_prepared_diagnostics?: unknown
       dae_prepared_error?: unknown
       pretty?: string
     }
@@ -1402,6 +1466,10 @@ export async function compileModelicaToJs(params: {
       usePreparedDae: params.usePreparedDae,
     })
     if (!daeForTemplate) throw new Error('Compilation did not return a DAE object')
+    const preparedStatus = getPreparedDaeStatus(daeForTemplate)
+    const preparedDiagnostics = getPreparedDaeDiagnostics(daeForTemplate)
+    compileDebug.preparedStatus = preparedStatus ?? null
+    compileDebug.preparedDiagnostics = preparedDiagnostics
 
     if (params.usePreparedDae && compiled.dae_prepared) {
       const nativeAlgebraics = countVarMapEntries(nativeDae, 'y')
@@ -1422,6 +1490,20 @@ export async function compileModelicaToJs(params: {
             `If algebraic outputs are missing, update Rumoca prepared DAE observable retention.`,
         })
       }
+    }
+    if (params.usePreparedDae && preparedStatus === 'fallback_native') {
+      const details = preparedDiagnostics.length > 0 ? ` (${preparedDiagnostics.join(' | ')})` : ''
+      appendModelicaLog({
+        level: 'warning',
+        phase: 'compile',
+        message: `Prepared DAE unavailable; using native fallback${details}`,
+      })
+    } else if (params.usePreparedDae && preparedStatus === 'prepared') {
+      appendModelicaLog({
+        level: 'info',
+        phase: 'compile',
+        message: 'Prepared DAE selected for template rendering.',
+      })
     }
 
     if (params.usePreparedDae && compiled.dae_prepared_error) {

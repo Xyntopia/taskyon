@@ -59,69 +59,6 @@
       </div>
     </q-btn-dropdown>
 
-    <q-btn-dropdown dense flat color="grey-7" label="Libraries" dropdown-icon="">
-      <div class="q-pa-sm" style="min-width: 460px; max-width: 95vw">
-        <div class="text-caption text-grey-7 q-mb-sm">
-          {{
-            mslLoaded
-              ? `MSL loaded: ${mslArchiveName || 'archive'} (${mslFileCount} files)`
-              : 'MSL not loaded'
-          }}
-        </div>
-        <div
-          v-if="mslLoading || mslDownloading"
-          class="row items-center q-gutter-xs q-mb-sm text-caption text-grey-7"
-        >
-          <q-spinner color="primary" size="16px" />
-          <span>{{
-            mslDownloading ? 'Downloading Modelica library ZIP...' : 'Loading library ZIP...'
-          }}</span>
-        </div>
-        <ObjectView
-          v-model="libraryMenuModel"
-          :schema="libraryMenuSchema"
-          class="fit"
-          dense
-          missing-mode="hide"
-        />
-        <div class="row items-center q-gutter-xs q-mt-sm">
-          <q-btn
-            dense
-            flat
-            color="grey-7"
-            label="Load ZIP"
-            :disable="!wasmLoaded || mslLoading || mslDownloading"
-            @click="mslImportEl?.click()"
-          />
-          <q-btn
-            dense
-            flat
-            color="grey-7"
-            label="Download to OPFS"
-            :disable="mslDownloading || mslLoading"
-            :loading="mslDownloading"
-            @click="emit('download-msl')"
-          />
-          <q-btn
-            dense
-            flat
-            color="grey-7"
-            label="Load Cached"
-            :disable="!mslCachedZipPath || mslLoading || mslDownloading"
-            @click="emit('load-cached-msl')"
-          />
-          <q-btn
-            dense
-            flat
-            color="negative"
-            label="Clear MSL"
-            :disable="!wasmLoaded || mslLoading || !mslLoaded"
-            @click="emit('clear-msl')"
-          />
-        </div>
-      </div>
-    </q-btn-dropdown>
-
     <q-btn-dropdown dense flat color="grey-7" label="Options" dropdown-icon="">
       <div class="q-pa-sm" style="min-width: 420px; max-width: 95vw">
         <ObjectView
@@ -225,14 +162,6 @@
       style="display: none"
       @change="emit('import-project-file', $event)"
     />
-    <input
-      ref="mslImportEl"
-      type="file"
-      accept=".zip,application/zip"
-      style="display: none"
-      @change="emit('import-msl-file', $event)"
-    />
-
     <q-space />
     <q-chip
       v-if="mslLoading || mslDownloading"
@@ -267,7 +196,7 @@
       :event-count="eventCount ?? null"
       :has-result="hasResult"
       :running="running"
-      :can-run="Boolean(jsSource) && !isHtmlOutput"
+      :can-run="canRunModel"
       :show-popup-button="hasUiTemplate"
       :can-open-popup="Boolean(jsSource)"
       @run="emit('run-sandbox')"
@@ -325,6 +254,7 @@ const props = defineProps<{
   currentVersionIndex: number
   documentVersionsLength: number
   jsSource: string
+  canRunModel: boolean
   hasUiTemplate: boolean
   isHtmlOutput: boolean
   running: boolean
@@ -376,16 +306,10 @@ const emit = defineEmits<{
 }>()
 
 const projectImportEl = ref<HTMLInputElement | null>(null)
-const mslImportEl = ref<HTMLInputElement | null>(null)
 
 const projectMenuModel = computed({
   get: () => props.projectMenuOptions,
   set: (v: Record<string, unknown>) => emit('update:projectMenuOptions', v),
-})
-
-const libraryMenuModel = computed({
-  get: () => props.libraryMenuOptions,
-  set: (v: Record<string, unknown>) => emit('update:libraryMenuOptions', v),
 })
 
 const runtimeMenuModel = computed({

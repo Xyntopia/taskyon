@@ -24,6 +24,7 @@
             solver: matCode,
             modelica: matDescription,
             model: mdiFunctionVariant,
+            libraryTree: mdiFileTreeOutline,
           }"
         >
           <template #actions>
@@ -49,6 +50,7 @@
               :js-source="jsSource"
               :has-ui-template="hasUiTemplate"
               :is-html-output="isHtmlOutput"
+              :can-run-model="canRunModel"
               :running="running"
               :simulation-controls-open="showSolverOptionsDialog"
               :sim-t0="simT0"
@@ -67,10 +69,10 @@
               @delete-project="deleteCurrentProject"
               @export-project="exportProjectJson"
               @import-project-file="onImportProjectFile"
-              @import-msl-file="onImportMslZip"
+              @import-msl-file="handleImportMslZip"
               @download-msl="downloadMslZipToOpfs"
-              @load-cached-msl="loadCachedMslZipFromOpfs"
-              @clear-msl="clearModelicaLibraries"
+              @load-cached-msl="handleLoadCachedMslZipFromOpfs"
+              @clear-msl="handleClearModelicaLibraries"
               @clear-all="clearAll"
               @reset-view="resetDockLayout"
               @load-example="loadExample"
@@ -97,9 +99,9 @@
 
           <template #logs>
             <!-- logs -->
-            <q-card bordered flat square style="min-height: 1.5rem">
-              <div class="row no-wrap">
-                <div class="col">
+            <q-card bordered flat square class="modelica-log-card">
+              <div class="row no-wrap fit">
+                <div class="col modelica-log-scroll">
                   <q-expansion-item
                     v-for="(entry, idx) in modelicaLog"
                     :key="idx"
@@ -110,7 +112,7 @@
                     <pre class="q-ma-none q-pa-xs text-caption">{{ safeYamlDump(entry) }}</pre>
                   </q-expansion-item>
                 </div>
-                <div class="column items-center q-gutter-xs q-pa-xs">
+                <div class="column items-center q-gutter-xs q-pa-xs modelica-log-actions">
                   <q-chip dense square color="grey-3" text-color="grey-8" style="font-size: 11px">
                     Log
                   </q-chip>
@@ -156,8 +158,25 @@
                 v-model="modelicaSource"
                 placeholder="Enter your Modelica code here..."
                 language="modelica"
+                :extra-extensions="modelicaEditorExtensions"
               />
             </q-card>
+          </template>
+
+          <template #libraryTree>
+            <ModelicaLibraryTreeView
+              :loading="mslLoading"
+              :msl-loading="mslLoading"
+              :msl-downloading="mslDownloading"
+              :msl-cached-zip-path="mslCachedZipPath"
+              :nodes="libraryTreeNodes"
+              @refresh="refreshLibraryTree"
+              @open-model="openModelFromLibraryTree"
+              @import-library-file="handleImportMslZip"
+              @load-cached-msl="handleLoadCachedMslZipFromOpfs"
+              @download-msl="downloadMslZipToOpfs"
+              @clear-msl="handleClearModelicaLibraries"
+            />
           </template>
 
           <template #template>
@@ -509,7 +528,7 @@ import {
   matRocketLaunch,
   matShowChart,
 } from '@quasar/extras/material-icons'
-import { mdiFunctionVariant } from '@quasar/extras/mdi-v6'
+import { mdiFileTreeOutline, mdiFunctionVariant } from '@quasar/extras/mdi-v6'
 import { toolCall } from '@taskyon/client'
 import { watchDebounced } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
@@ -520,9 +539,7 @@ import DockView from '@taskyon/shared/components/DockView.vue'
 import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import TaskyonIframe from '@taskyon/shared/components/TaskyonIframe.vue'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
-import type { RumocaModule } from 'src/modules/modelica/modelica'
 import {
-  loadWasm,
   DEFAULT_MSL_ZIP_URL,
   validateModelicaProjectFileV1,
   type TyModelicaProjectFileV1,
@@ -539,7 +556,6 @@ import {
   parseSourceKey,
   packProjectFile as packModelicaProjectFile,
   unpackProjectFile,
-  compileModelicaToJs,
   runModelicaSandbox,
 } from 'src/modules/modelica/modelica'
 import defaultUiTemplateSource from 'src/modules/modelica/ui_template_placeholders.html?raw'
@@ -548,14 +564,20 @@ import { copyToClipboard } from '@taskyon/shared/modules/utils'
 import FixedHeightPage from 'src/pages/FixedHeightPage.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import type { Extension } from '@codemirror/state'
 import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
 import { syncStateWithOPFSFolder } from '../../../packages/shared/modules/saveState'
 import ModelicaActionsBar from './components/ModelicaActionsBar.vue'
+import ModelicaLibraryTreeView from './components/libraryTree/ModelicaLibraryTreeView.vue'
+import { mapRumocaClassTree } from './components/libraryTree/mapRumocaClasses'
+import type { ModelicaLibraryTreeNode } from './components/libraryTree/types'
 import { createModelicatools } from './modelicaTools'
 import { useProjectFileStore } from './useProjectFileStore'
 import { useModelicaLibraries } from './useModelicaLibraries'
 import { useSolverRegistry } from './useSolverRegistry'
+import { createModelicaLspCompletionExtension } from './modelicaLspCompletion'
+import { ModelicaWorkerClient } from './modelicaWorkerClient'
 import ObjectPathCharts from '../../../packages/shared/components/ObjectPathCharts.vue'
 import type { ObjectPathChartsViewOptions } from '../../../packages/shared/components/ObjectPathCharts.vue'
 
@@ -569,6 +591,7 @@ type PlotChartSelection = {
 type PlotViewOptions = ObjectPathChartsViewOptions
 
 const modelicaSource = ref('')
+const openedLibraryClassContext = ref<{ qualifiedName: string; sourceSnapshot: string } | null>(null)
 const templateSource = ref('')
 const output = ref('') // legacy raw output if needed
 const jsSource = ref('') // generated JS shown + executed
@@ -580,10 +603,24 @@ const usePreparedDae = ref(true)
 const loading = ref(false)
 const wasmLoaded = ref(false)
 const statusType = ref<StatusType>('loading')
-const wasm = ref<RumocaModule | null>(null)
+const modelicaWorker = shallowRef<ModelicaWorkerClient | null>(null)
+const modelicaEditorExtensions = shallowRef<Extension[]>([])
 const rumocaWasmVersion = ref('unknown')
 const rumocaWasmGitCommit = ref('unknown')
 const rumocaWasmBuildTimeUtc = ref('unknown')
+const libraryTreeNodes = ref<ModelicaLibraryTreeNode[]>([])
+
+function configureModelicaLspExtensions(worker: ModelicaWorkerClient | null) {
+  if (!worker) {
+    modelicaEditorExtensions.value = []
+    return
+  }
+
+  const extension = createModelicaLspCompletionExtension(async ({ source, line, character }) =>
+    JSON.stringify(await worker.lspCompletionWithTiming(source, line, character)),
+  )
+  modelicaEditorExtensions.value = [extension]
+}
 
 // Simulation / execution state
 const simT0 = ref(0)
@@ -604,7 +641,7 @@ const {
   loadCachedMslZipFromOpfs,
   onImportMslZip,
   clearModelicaLibraries,
-} = useModelicaLibraries({ wasm })
+} = useModelicaLibraries({ worker: modelicaWorker })
 
 const {
   solverOptionsSchema,
@@ -924,6 +961,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('message', handleSandboxLogMessage)
+  modelicaWorker.value?.terminate()
+  modelicaWorker.value = null
 })
 
 const tystate = useTaskyonStore()
@@ -975,6 +1014,14 @@ function createDefaultLayout(): DockNode {
             type: 'container',
             direction: 'row',
             children: [
+              {
+                id: 'library-tree',
+                type: 'leaf',
+                size: 25,
+                views: ['libraryTree'],
+                activeViewIndex: 0,
+                collapsed: true,
+              },
               {
                 id: 'editors',
                 type: 'leaf',
@@ -1034,6 +1081,26 @@ function ensurePlotViewInLayout(node: DockNode) {
   if (node.type === 'container' && Array.isArray(node.children)) {
     for (const child of node.children) ensurePlotViewInLayout(child)
   }
+}
+
+function isLibraryTreeLeaf(node: DockNode): boolean {
+  return node.type === 'leaf' && Array.isArray(node.views) && node.views.includes('libraryTree')
+}
+
+function ensureLibraryTreeLayoutDefaults(node: DockNode) {
+  if (node.type === 'leaf') {
+    if (isLibraryTreeLeaf(node) && typeof node.collapsed !== 'boolean') node.collapsed = true
+    return
+  }
+  if (node.type !== 'container' || !Array.isArray(node.children)) return
+
+  for (const child of node.children) ensureLibraryTreeLayoutDefaults(child)
+
+  if (node.direction !== 'row') return
+  const index = node.children.findIndex((child) => isLibraryTreeLeaf(child))
+  if (index <= 0) return
+  const [libraryNode] = node.children.splice(index, 1)
+  if (libraryNode) node.children.unshift(libraryNode)
 }
 
 const jinjaTemplateUrls = import.meta.glob('src/modules/modelica/*.jinja', {
@@ -1382,6 +1449,9 @@ const isHtmlOutput = computed(() => {
   const s = (jsSource.value ?? '').trimStart()
   return /^<!doctype\s+html/i.test(s) || /^<html\b/i.test(s)
 })
+const canRunModel = computed(
+  () => statusType.value === 'success' && Boolean(jsSource.value) && !isHtmlOutput.value,
+)
 
 const hasUiTemplate = computed(() => {
   const src = activeUiTemplateSource.value
@@ -1574,34 +1644,78 @@ const runCompilation = async (): Promise<{ ok: boolean; message?: string }> => {
   output.value = ''
   statusType.value = 'loading'
   try {
-    const result = await compileModelicaToJs({
-      wasm: wasm.value,
-      modelicaSource: modelicaSource.value,
-      templateSource: templateSource.value,
-      useModelicaStandardLibrary: useModelicaStandardLibrary.value,
-      mslLoaded: mslLoaded.value,
-      usePreparedDae: usePreparedDae.value,
-      activeSandboxRunIds: activeSandboxRunIds.value,
-    })
-    if (!result.ok) {
-      if (typeof result.rendered === 'string' && result.rendered.length > 0) {
-        daeJsonOutput.value = result.daeForTemplate ?? {}
-        daePrettyOutput.value = result.daePretty ?? ''
-        output.value = result.rendered
-        jsSource.value = result.rendered
-      } else {
-        output.value = `Error: ${result.message}`
-      }
-      return { ok: false, message: result.message }
+    const worker = modelicaWorker.value
+    if (!worker) throw new Error('Modelica worker not loaded')
+    const match = modelicaSource.value.match(/(?:model|class|block|connector|record)\s+(\w+)/)
+    const localModelName = match?.[1] ?? 'Model'
+    const qualifiedFromSource = inferQualifiedModelNameFromSource(modelicaSource.value)
+    const useSourceRoots = useModelicaStandardLibrary.value && mslLoaded.value
+    const unchangedLibraryClass =
+      openedLibraryClassContext.value != null &&
+      openedLibraryClassContext.value.sourceSnapshot === modelicaSource.value
+    const isModelicaStdlibClass =
+      typeof qualifiedFromSource === 'string' && qualifiedFromSource.startsWith('Modelica.')
+    const compileFromSourceRootsOnly = useSourceRoots && (unchangedLibraryClass || isModelicaStdlibClass)
+
+    const compileSource = compileFromSourceRootsOnly ? '' : modelicaSource.value
+    const compileModelName = compileFromSourceRootsOnly
+      ? openedLibraryClassContext.value?.qualifiedName || qualifiedFromSource || localModelName
+      : qualifiedFromSource || localModelName
+
+    let compile: Awaited<ReturnType<ModelicaWorkerClient['compileRender']>>
+    try {
+      compile = await worker.compileRender({
+        modelicaSource: compileSource,
+        templateSource: templateSource.value,
+        modelName: compileModelName,
+        usePreparedDae: usePreparedDae.value,
+        useSourceRoots,
+      })
+    } catch (error) {
+      const msg = (error as Error).message || ''
+      const shouldRetryWithoutLocalSource =
+        useSourceRoots &&
+        /Duplicate class\s+'[^']+'\s+found in\s+'input\.mo'/i.test(msg) &&
+        Boolean(qualifiedFromSource)
+      if (!shouldRetryWithoutLocalSource) throw error
+      compile = await worker.compileRender({
+        modelicaSource: '',
+        templateSource: templateSource.value,
+        modelName: qualifiedFromSource as string,
+        usePreparedDae: usePreparedDae.value,
+        useSourceRoots,
+      })
     }
-    daeJsonOutput.value = result.daeForTemplate
-    daePrettyOutput.value = result.daePretty
-    output.value = result.rendered
-    jsSource.value = result.rendered
+    daeJsonOutput.value = compile.daeForTemplate ?? {}
+    daePrettyOutput.value = typeof compile.compiled?.pretty === 'string' ? compile.compiled.pretty : ''
+    output.value = String(compile.rendered || '')
+    jsSource.value = String(compile.rendered || '')
+    statusType.value = 'success'
     return { ok: true, message: 'Compilation successful' }
+  } catch (error) {
+    const message = (error as Error).message
+    const compileErrorText = `Error: ${message}`
+    output.value = compileErrorText
+    jsSource.value = compileErrorText
+    statusType.value = 'error'
+    appendModelicaLog({
+      level: 'error',
+      phase: 'compile',
+      message: `Compilation failed: ${message}`,
+    })
+    return { ok: false, message }
   } finally {
     loading.value = false
   }
+}
+
+function inferQualifiedModelNameFromSource(sourceModelica: string): string | null {
+  const source = String(sourceModelica || '')
+  const within = source.match(/^\s*within\s+([A-Za-z_][A-Za-z0-9_.]*)\s*;/m)?.[1]
+  const cls = source.match(/(?:model|class|block|connector|record)\s+([A-Za-z_][A-Za-z0-9_]*)/)?.[1]
+  if (!cls) return null
+  if (!within) return cls
+  return `${within}.${cls}`
 }
 
 // Wire explicit compile entrypoint into tools (autofix cycle).
@@ -1646,6 +1760,7 @@ watchDebounced(
 
 const clearAll = () => {
   modelicaSource.value = ''
+  openedLibraryClassContext.value = null
   templateSource.value = ''
   output.value = ''
   jsSource.value = ''
@@ -1656,6 +1771,103 @@ const clearAll = () => {
   plotViewOptions.value = {}
   hasHydratedSimulationSettings.value = false
   modelicaLog.value = []
+}
+
+async function refreshLibraryTree() {
+  const worker = modelicaWorker.value
+  if (!worker) {
+    libraryTreeNodes.value = []
+    return
+  }
+  try {
+    const raw = await worker.listClasses()
+    libraryTreeNodes.value = mapRumocaClassTree(raw.classes)
+  } catch (error) {
+    appendModelicaLog({
+      level: 'warning',
+      phase: 'general',
+      message: `Failed to refresh library tree: ${(error as Error).message}`,
+    })
+  }
+}
+
+async function openModelFromLibraryTree(qualifiedName: string) {
+  const worker = modelicaWorker.value
+  if (!worker) return
+  try {
+    const info = await worker.getClassInfo(qualifiedName)
+    const qualified =
+      typeof info.qualified_name === 'string' && info.qualified_name.trim().length > 0
+        ? info.qualified_name.trim()
+        : qualifiedName
+    const sourceModelica = typeof info.source_modelica === 'string' ? info.source_modelica : ''
+    if (!sourceModelica.trim()) {
+      throw new Error(`No source available for ${qualifiedName}`)
+    }
+    const normalizedSource = withLibraryContext(qualified, sourceModelica)
+    modelicaSource.value = normalizedSource
+    openedLibraryClassContext.value = {
+      qualifiedName: qualified,
+      sourceSnapshot: normalizedSource,
+    }
+    appendModelicaLog({
+      level: 'info',
+      phase: 'general',
+      message: `Loaded model from library tree: ${qualifiedName}`,
+    })
+  } catch (error) {
+    Notify.create({
+      type: 'negative',
+      message: `Failed to open model ${qualifiedName}: ${(error as Error).message}`,
+    })
+  }
+}
+
+function withLibraryContext(qualifiedName: string, sourceModelica: string): string {
+  const source = String(sourceModelica || '')
+  if (!source.trim()) return source
+  if (/^\s*within\s+[A-Za-z0-9_.]+\s*;/m.test(source)) return source
+
+  const parts = String(qualifiedName || '')
+    .split('.')
+    .filter(Boolean)
+  if (parts.length < 2) return source
+  const parent = parts.slice(0, -1).join('.')
+
+  const needsBlocksAliases =
+    qualifiedName.startsWith('Modelica.Blocks.Examples.') ||
+    /(?:^|\s)(Sources|Math)\./.test(source)
+  if (!needsBlocksAliases) return `within ${parent};\n\n${source}`
+
+  const imports: string[] = []
+  const hasSourcesAlias = /(?:^|\n)\s*import\s+Sources\s*=/.test(source)
+  const hasMathAlias = /(?:^|\n)\s*import\s+Math\s*=/.test(source)
+  if (/\bSources\./.test(source) && !hasSourcesAlias) {
+    imports.push('import Sources = Modelica.Blocks.Sources;')
+  }
+  if (/\bMath\./.test(source) && !hasMathAlias) {
+    imports.push('import Math = Modelica.Blocks.Math;')
+  }
+  const importsBlock = imports.length > 0 ? `${imports.join('\n')}\n\n` : ''
+  return `within ${parent};\n\n${importsBlock}${source}`
+}
+
+async function handleImportMslZip(e: Event) {
+  await onImportMslZip(e)
+  useModelicaStandardLibrary.value = true
+  await refreshLibraryTree()
+}
+
+async function handleLoadCachedMslZipFromOpfs() {
+  await loadCachedMslZipFromOpfs()
+  useModelicaStandardLibrary.value = true
+  await refreshLibraryTree()
+}
+
+async function handleClearModelicaLibraries() {
+  await clearModelicaLibraries()
+  useModelicaStandardLibrary.value = false
+  libraryTreeNodes.value = []
 }
 
 const exampleModels = {
@@ -1844,6 +2056,13 @@ function openGeneratedHtmlPopup() {
 
 // ---------- Run in sandboxed iframe ----------
 function handleRunInSandbox() {
+  if (!canRunModel.value) {
+    Notify.create({
+      type: 'warning',
+      message: 'Run is disabled because the latest compilation failed.',
+    })
+    return
+  }
   void runInSandbox(jsSource.value)
 }
 
@@ -1927,6 +2146,7 @@ onMounted(async () => {
     currentProjectId,
   })
   selectedTemplateKey.value = normalizeTemplateSelectionKey(selectedTemplateKey.value)
+  ensureLibraryTreeLayoutDefaults(initialLayout.value)
   ensurePlotViewInLayout(initialLayout.value)
 
   // 2) Project file (model-specific). One JSON object, synced via OPFS.
@@ -2006,48 +2226,35 @@ onMounted(async () => {
     { debounce: 200, maxWait: 800, deep: true },
   )
 
-  // 3) WASM
+  // 3) Modelica worker
   try {
-    const wasmModule = await loadWasm()
-
-    wasm.value = wasmModule
+    const worker = new ModelicaWorkerClient()
+    modelicaWorker.value = worker
+    const hardwareThreads =
+      typeof navigator !== 'undefined' &&
+      typeof navigator.hardwareConcurrency === 'number' &&
+      Number.isFinite(navigator.hardwareConcurrency)
+        ? navigator.hardwareConcurrency
+        : 2
+    const canUseThreadedWasm = globalThis.crossOriginIsolated === true
+    const requestedThreads = canUseThreadedWasm ? Math.max(1, Math.min(hardwareThreads, 4)) : 0
+    const initInfo = await worker.init(requestedThreads)
+    configureModelicaLspExtensions(worker)
     wasmLoaded.value = true
-    if (typeof wasmModule.get_version === 'function') {
-      const version = String(wasmModule.get_version() || '').trim()
-      if (version) rumocaWasmVersion.value = version
-    }
-    // Use dynamic lookup for optional fields to stay compatible with older WASM package types/builds.
-    const toTrimmedScalarString = (value: unknown): string => {
-      if (typeof value === 'string') return value.trim()
-      if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim()
-      return ''
-    }
-    const wasmExports = wasmModule as unknown as Record<string, unknown>
-    if (typeof wasmExports.get_git_commit === 'function') {
-      const gitCommit = toTrimmedScalarString((wasmExports.get_git_commit as () => unknown)())
-      if (gitCommit) rumocaWasmGitCommit.value = gitCommit
-    }
-    if (typeof wasmExports.get_build_time_utc === 'function') {
-      const buildTime = toTrimmedScalarString((wasmExports.get_build_time_utc as () => unknown)())
-      if (buildTime) rumocaWasmBuildTimeUtc.value = buildTime
-    }
-    const getCountFn =
-      typeof wasmExports.get_source_root_document_count === 'function'
-        ? (wasmExports.get_source_root_document_count as () => unknown)
-        : typeof wasmExports.get_library_count === 'function'
-          ? (wasmExports.get_library_count as () => unknown)
-          : null
-    if (getCountFn) {
-      const n = Number(getCountFn()) || 0
-      if (n > 0) {
-        mslLoaded.value = true
-        mslFileCount.value = n
-      }
+    if (initInfo.version) rumocaWasmVersion.value = initInfo.version
+    if (initInfo.gitCommit) rumocaWasmGitCommit.value = initInfo.gitCommit
+    if (initInfo.buildTimeUtc) rumocaWasmBuildTimeUtc.value = initInfo.buildTimeUtc
+    const documentCount = await worker.getSourceRootDocumentCount()
+    if (documentCount > 0) {
+      mslLoaded.value = true
+      mslFileCount.value = documentCount
+      useModelicaStandardLibrary.value = true
+      await refreshLibraryTree()
     }
     appendModelicaLog({
       level: 'success',
       phase: 'general',
-      message: 'WASM module loaded successfully! Ready to compile.',
+      message: 'Modelica worker loaded successfully! Ready to compile.',
     })
     await runCompilation()
   } catch (error) {
@@ -2059,3 +2266,23 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+.modelica-log-card {
+  min-height: 1.5rem;
+  height: 100%;
+}
+
+.modelica-log-scroll {
+  overflow: auto;
+  min-height: 0;
+}
+
+.modelica-log-actions {
+  flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  background: inherit;
+}
+</style>
