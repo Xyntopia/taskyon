@@ -638,6 +638,12 @@ type MslLoadResult = {
 type SharedMslLoadResult = MslLoadResult & {
   zipBytes: number
 }
+type DiagnosticsMslApi = {
+  compile_with_source_roots?: (source: string, modelName: string, sourceRootsJson: string) => string
+  compile_with_libraries?: (source: string, modelName: string, librariesJson: string) => string
+  load_source_roots?: (sourceRootsJson: string) => string
+  load_libraries?: (librariesJson: string) => string
+}
 
 let sharedDiagnosticsWasmPromise: Promise<DiagnosticsWasm> | null = null
 let sharedDiagnosticsMslLoadPromise: Promise<SharedMslLoadResult> | null = null
@@ -653,9 +659,7 @@ async function getDiagnosticsWasm(): Promise<DiagnosticsWasm> {
 }
 
 async function ensureDiagnosticsMslLoaded(
-  wasm: {
-    load_libraries?: (librariesJson: string) => string
-  },
+  wasm: DiagnosticsMslApi,
   debug: Record<string, unknown>,
 ): Promise<MslLoadResult> {
   if (!sharedDiagnosticsMslLoadPromise) {
@@ -763,13 +767,13 @@ function normalizeLibraryEntryPath(path: string): string {
 }
 
 async function loadLocalMslLibraries(
-  wasm: {
-    load_libraries?: (librariesJson: string) => string
-  },
+  wasm: DiagnosticsMslApi,
   debug: Record<string, unknown>,
 ): Promise<MslLoadResult> {
-  if (typeof wasm.load_libraries !== 'function') {
-    throw new Error('Rumoca wasm export missing: load_libraries')
+  const canLoadSourceRoots = typeof wasm.load_source_roots === 'function'
+  const canLoadLibraries = typeof wasm.load_libraries === 'function'
+  if (!canLoadSourceRoots && !canLoadLibraries) {
+    throw new Error('Rumoca wasm export missing: load_source_roots / load_libraries')
   }
 
   const zipResponse = await fetch(MSL_LOCAL_ZIP_PATH)
@@ -801,7 +805,11 @@ async function loadLocalMslLibraries(
   }
   debug.libraryFileCount = libraryFileCount
 
-  const loadRaw = wasm.load_libraries(JSON.stringify(libraries))
+  const loadFn = canLoadSourceRoots ? wasm.load_source_roots : wasm.load_libraries
+  if (typeof loadFn !== 'function') {
+    throw new Error('Rumoca wasm export missing: load_source_roots / load_libraries')
+  }
+  const loadRaw = loadFn(JSON.stringify(libraries))
   const loadParsed = JSON.parse(String(loadRaw)) as MslLoadParsed
   debug.loadParsed = loadParsed
 
@@ -809,6 +817,20 @@ async function loadLocalMslLibraries(
     libraryFileCount,
     loadParsed,
   }
+}
+
+function compileWithDiagnosticsMsl(
+  wasm: DiagnosticsMslApi,
+  source: string,
+  modelName: string,
+): string {
+  if (typeof wasm.compile_with_source_roots === 'function') {
+    return wasm.compile_with_source_roots(source, modelName, '{}')
+  }
+  if (typeof wasm.compile_with_libraries === 'function') {
+    return wasm.compile_with_libraries(source, modelName, '{}')
+  }
+  throw new Error('Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries')
 }
 
 export async function testModelicaMslCompileAndRunSmoke() {
@@ -822,8 +844,11 @@ export async function testModelicaMslCompileAndRunSmoke() {
     const wasm = await getDiagnosticsWasm()
     debug.phase = 'wasm-loaded'
 
-    if (typeof wasm.compile_with_libraries !== 'function') {
-      throw new Error('Rumoca wasm export missing: compile_with_libraries')
+    if (
+      typeof wasm.compile_with_source_roots !== 'function' &&
+      typeof wasm.compile_with_libraries !== 'function'
+    ) {
+      throw new Error('Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries')
     }
     if (typeof wasm.render_template !== 'function') {
       throw new Error('Rumoca wasm export missing: render_template')
@@ -840,7 +865,7 @@ equation
 end MslConstRamp;
 `.trim()
 
-    const compiledRaw = wasm.compile_with_libraries(source, 'MslConstRamp', '{}')
+    const compiledRaw = compileWithDiagnosticsMsl(wasm, source, 'MslConstRamp')
     debug.phase = 'compiled-with-libraries'
     const compiled = JSON.parse(String(compiledRaw)) as {
       dae?: unknown
@@ -850,7 +875,7 @@ end MslConstRamp;
     }
     const dae = selectDaeForTemplate(compiled, { usePreparedDae: true })
     if (!dae) {
-      throw new Error('compile_with_libraries returned no DAE payload')
+      throw new Error('MSL compile returned no DAE payload')
     }
 
     const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
@@ -1055,8 +1080,11 @@ end MslResistorManualFlattened;
     const wasm = await getDiagnosticsWasm()
     debug.phase = 'wasm-loaded'
 
-    if (typeof wasm.compile_with_libraries !== 'function') {
-      throw new Error('Rumoca wasm export missing: compile_with_libraries')
+    if (
+      typeof wasm.compile_with_source_roots !== 'function' &&
+      typeof wasm.compile_with_libraries !== 'function'
+    ) {
+      throw new Error('Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries')
     }
     if (typeof wasm.render_template !== 'function') {
       throw new Error('Rumoca wasm export missing: render_template')
@@ -1067,7 +1095,7 @@ end MslResistorManualFlattened;
     debug.mslParsedCount = Number(loadParsed.parsed_count ?? 0)
 
     const compileAndSummarize = (source: string, modelName: string) => {
-      const compiledRaw = wasm.compile_with_libraries(source, modelName, '{}')
+      const compiledRaw = compileWithDiagnosticsMsl(wasm, source, modelName)
       const compiled = JSON.parse(String(compiledRaw)) as {
         dae?: unknown
         dae_native?: unknown
@@ -1076,7 +1104,7 @@ end MslResistorManualFlattened;
       }
       const dae = selectDaeForTemplate(compiled, { usePreparedDae: true })
       if (!dae) {
-        throw new Error(`compile_with_libraries returned no DAE payload for ${modelName}`)
+        throw new Error(`MSL compile returned no DAE payload for ${modelName}`)
       }
 
       const daeJson = JSON.stringify(dae)
@@ -1270,8 +1298,11 @@ export async function testModelicaMslResistorExampleSimulation() {
     const wasm = await getDiagnosticsWasm()
     debug.phase = 'wasm-loaded'
 
-    if (typeof wasm.compile_with_libraries !== 'function') {
-      throw new Error('Rumoca wasm export missing: compile_with_libraries')
+    if (
+      typeof wasm.compile_with_source_roots !== 'function' &&
+      typeof wasm.compile_with_libraries !== 'function'
+    ) {
+      throw new Error('Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries')
     }
     if (typeof wasm.render_template !== 'function') {
       throw new Error('Rumoca wasm export missing: render_template')
@@ -1290,7 +1321,7 @@ end MslResistorExample;
 `.trim()
 
     debug.phase = 'compile-with-libraries'
-    const compiledRaw = wasm.compile_with_libraries(source, 'MslResistorExample', '{}')
+    const compiledRaw = compileWithDiagnosticsMsl(wasm, source, 'MslResistorExample')
     debug.phase = 'compiled'
     const compiled = JSON.parse(String(compiledRaw)) as {
       dae?: unknown

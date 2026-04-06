@@ -14,7 +14,25 @@ import { serializeObject } from '../../../packages/shared/modules/serializeObjec
 const zFunction = <T extends (...args: any[]) => any>() =>
   z.custom<T>((v) => typeof v === 'function')
 
-export type RumocaModule = typeof WasmTypes
+type RumocaLegacyLibraryApi = {
+  compile_with_libraries: (source: string, modelName: string, librariesJson: string) => string
+  load_libraries: (librariesJson: string) => string
+  clear_library_cache: () => void
+  get_library_count: () => number
+}
+
+type RumocaSourceRootApi = {
+  compile_with_source_roots: (
+    source: string,
+    modelName: string,
+    sourceRootsJson: string,
+  ) => string
+  load_source_roots: (sourceRootsJson: string) => string
+  clear_source_root_cache: () => void
+  get_source_root_document_count: () => number
+}
+
+export type RumocaModule = typeof WasmTypes & Partial<RumocaLegacyLibraryApi & RumocaSourceRootApi>
 export const DEFAULT_MSL_ZIP_URL = '/msl/ModelicaStandardLibrary-4.1.0.zip'
 export const builtinSolvers: Record<string, string> = {
   default: defaultSolverSource,
@@ -1337,12 +1355,19 @@ export async function compileModelicaToJs(params: {
     let jsonStr = ''
     let usedLibraries = false
     if (params.useModelicaStandardLibrary && params.mslLoaded) {
-      if (typeof m.compile_with_libraries !== 'function') {
-        throw new Error('WASM module is missing compile_with_libraries export')
+      if (typeof m.compile_with_source_roots === 'function') {
+        jsonStr = m.compile_with_source_roots(params.modelicaSource, modelName, '{}')
+        usedLibraries = true
+        compileDebug.phase = 'compiled-with-source-roots'
+      } else if (typeof m.compile_with_libraries === 'function') {
+        jsonStr = m.compile_with_libraries(params.modelicaSource, modelName, '{}')
+        usedLibraries = true
+        compileDebug.phase = 'compiled-with-libraries'
+      } else {
+        throw new Error(
+          'WASM module is missing compile_with_source_roots / compile_with_libraries exports',
+        )
       }
-      jsonStr = m.compile_with_libraries(params.modelicaSource, modelName, '{}')
-      usedLibraries = true
-      compileDebug.phase = 'compiled-with-libraries'
     } else {
       if (params.useModelicaStandardLibrary && !params.mslLoaded) {
         appendModelicaLog({

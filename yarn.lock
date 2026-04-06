@@ -5410,7 +5410,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@taskyon/tyclient@workspace:packages/tyclient":
+"@taskyon/tyclient@workspace:*, @taskyon/tyclient@workspace:packages/tyclient":
   version: 0.0.0-use.local
   resolution: "@taskyon/tyclient@workspace:packages/tyclient"
   dependencies:
@@ -19170,10 +19170,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rumoca@https://assets.taskyon.space/rumoca-0.8.0.a8.tgz":
-  version: 0.8.0
-  resolution: "rumoca@https://assets.taskyon.space/rumoca-0.8.0.a8.tgz"
-  checksum: 10c0/9d145d69b7853c18a4b8346bd5b2c47a006cbe8844628abbab57ce073f215fe169acce374699066b17dcd682af2839cb037edbea91586fe06b621e527e3c6afa
+"rumoca@file:packages/rumoca/crates/rumoca-bind-wasm/bindgen/rumoca-0.8.12.tgz::locator=taskyon%40workspace%3A.":
+  version: 0.8.12
+  resolution: "rumoca@file:packages/rumoca/crates/rumoca-bind-wasm/bindgen/rumoca-0.8.12.tgz#packages/rumoca/crates/rumoca-bind-wasm/bindgen/rumoca-0.8.12.tgz::hash=18ef85&locator=taskyon%40workspace%3A."
+  checksum: 10c0/29fc8895ae93bcafee2b5684c6ac183fde8bccbbdf4dc16e0d97f811d478cd3bef2c1c45f0f0d351080bd631412368d0dbfc9413218d48ae26446c34267480ad
   languageName: node
   linkType: hard
 
@@ -20843,6 +20843,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "taskyon-vscode@workspace:packages/taskyon-vscode"
   dependencies:
+    "@taskyon/tyclient": "workspace:*"
     "@types/vscode": "npm:^1.80.0"
     "@vscode/vsce": "npm:^2.15.0"
     esbuild: "npm:^0.25.0"
@@ -20955,7 +20956,7 @@ __metadata:
     pyodide: "npm:^0.29.3"
     qrcode: "npm:^1.5.4"
     quasar: "npm:^2.17.0"
-    rumoca: "https://assets.taskyon.space/rumoca-0.8.0.a8.tgz"
+    rumoca: "file:packages/rumoca/crates/rumoca-bind-wasm/bindgen/rumoca-0.8.12.tgz"
     sort-package-json: "npm:^3.0.0"
     sqlocal: "npm:^0.6.2"
     stopword: "npm:^2.0.8"

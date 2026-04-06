@@ -68,8 +68,10 @@ export function useModelicaLibraries(params: { wasm: Ref<RumocaModule | null> })
   async function loadMslArchiveFile(file: File) {
     const m = params.wasm.value
     if (!m) throw new Error('WASM module not loaded')
-    if (typeof m.load_libraries !== 'function') {
-      throw new Error('Rumoca build does not support library loading')
+    const canLoadSourceRoots = typeof m.load_source_roots === 'function'
+    const canLoadLibraries = typeof m.load_libraries === 'function'
+    if (!canLoadSourceRoots && !canLoadLibraries) {
+      throw new Error('Rumoca build does not support source-root/library loading')
     }
 
     mslLoading.value = true
@@ -97,7 +99,11 @@ export function useModelicaLibraries(params: { wasm: Ref<RumocaModule | null> })
       throw new Error('No usable .mo files found in archive')
     }
 
-    const resultRaw = m.load_libraries(JSON.stringify(libraries))
+    const loadFn = canLoadSourceRoots ? m.load_source_roots : m.load_libraries
+    if (typeof loadFn !== 'function') {
+      throw new Error('Rumoca build does not support source-root/library loading')
+    }
+    const resultRaw = loadFn(JSON.stringify(libraries))
     let parsedCount = fileCount
     try {
       const result = JSON.parse(String(resultRaw)) as { parsed_count?: number }
@@ -216,10 +222,17 @@ export function useModelicaLibraries(params: { wasm: Ref<RumocaModule | null> })
   function clearModelicaLibraries() {
     try {
       const m = params.wasm.value
-      if (!m || typeof m.clear_library_cache !== 'function') {
-        throw new Error('Rumoca build does not support clearing library cache')
+      if (!m) {
+        throw new Error('WASM module not loaded')
       }
-      m.clear_library_cache()
+
+      if (typeof m.clear_source_root_cache === 'function') {
+        m.clear_source_root_cache()
+      } else if (typeof m.clear_library_cache === 'function') {
+        m.clear_library_cache()
+      } else {
+        throw new Error('Rumoca build does not support clearing source-root/library cache')
+      }
       mslLoaded.value = false
       mslArchiveName.value = ''
       mslFileCount.value = 0

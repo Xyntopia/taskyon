@@ -2031,8 +2031,14 @@ onMounted(async () => {
       const buildTime = toTrimmedScalarString((wasmExports.get_build_time_utc as () => unknown)())
       if (buildTime) rumocaWasmBuildTimeUtc.value = buildTime
     }
-    if (typeof wasmModule.get_library_count === 'function') {
-      const n = Number(wasmModule.get_library_count()) || 0
+    const getCountFn =
+      typeof wasmExports.get_source_root_document_count === 'function'
+        ? (wasmExports.get_source_root_document_count as () => unknown)
+        : typeof wasmExports.get_library_count === 'function'
+          ? (wasmExports.get_library_count as () => unknown)
+          : null
+    if (getCountFn) {
+      const n = Number(getCountFn()) || 0
       if (n > 0) {
         mslLoaded.value = true
         mslFileCount.value = n
