@@ -53,7 +53,7 @@
     "@codemirror/legacy-modes": "^6.5.2",
     "@codemirror/theme-one-dark": "^6.1.2",
     "@electric-sql/pglite": "0.3.14",
-    "@huggingface/transformers": "^3.1.2",
+    "@huggingface/transformers": "^4.0.1",
     "@langchain/codemirror-json-schema": "^0.7.9",
     "@mdit/plugin-katex": "^0.24.1",
     "@mozilla/readability": "^0.5.0",
@@ -117,7 +117,7 @@
     "vue-router": "^4.0.12",
     "wasmagic": "^1.0.3",
     "wavefunctioncollapse": "^2.1.0",
-    "xlsx": "^0.18.2",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^4.0.0-beta.20250505T195954"
   },
   "devDependencies": {
@@ -125,8 +125,7 @@
     "@intlify/unplugin-vue-i18n": "^11.0.3",
     "@quasar/app-vite": "^2.3.0",
     "@quasar/cli": "^2.5.0",
-    "@quasar/icongenie": "^4.0.0",
-    "@quasar/quasar-app-extension-testing-e2e-cypress": "^6.1.0",
+    "@quasar/quasar-app-extension-testing-e2e-cypress": "^6.2.1",
     "@tauri-apps/cli": "^2.10.1",
     "@tauri-apps/tauricon": "github:tauri-apps/tauricon",
     "@types/html-to-text": "^9.0.4",
@@ -176,7 +175,8 @@
   "productName": "Taskyon App",
   "resolutions": {
     "@types/express": "4.17.23",
-    "@types/express-serve-static-core": "4.19.6"
+    "@types/express-serve-static-core": "4.19.6",
+    "axios": "^1.15.0"
   },
   "browserslist": [
     "last 4 Chrome versions",
