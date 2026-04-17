@@ -152,6 +152,24 @@ async function useTaskVectors(
   getTask: (taskId: string) => Promise<TaskNode | null>,
   vectorizerModel?: string,
 ) {
+  if (!vectorizerModel) {
+    return {
+      filterSearch: async (_k = 10, _taskTemplate?: PartialDeep<TaskNode>) => [],
+      syncVectorIndexWithTasks: async (progressCallback: (done: number, total: number) => void) =>
+        progressCallback(0, 0),
+      deleteTaskFromVectorStore: async (_id: string) => {},
+      addtoVectorDB: async (_task: TaskNode) => {},
+      filteredVectorSearch: async (
+        _searchTerm: string,
+        _k = 10,
+        _taskTemplate?: PartialDeep<TaskNode>,
+      ) => [],
+      resetTaskVectors: async () => {},
+      count: async () => 0,
+      searchSimilarTasks: async (_task: Partial<TaskNode>, _k = 10) => [],
+    }
+  }
+
   const vecDb = await createVectorStore<TaskNode>(db, 'tyTaskVectors')
 
   async function syncVectorIndexWithTasks(progressCallback: (done: number, total: number) => void) {

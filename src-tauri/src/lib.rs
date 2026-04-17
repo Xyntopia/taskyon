@@ -6,6 +6,8 @@ use tauri::{webview::NewWindowResponse, webview::Url, Listener, WebviewUrl};
 use tracing_subscriber::EnvFilter;
 use tauri::Manager;
 
+mod commands;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RunMode {
     Gui,
@@ -325,7 +327,13 @@ pub fn run() {
     let run_mode = config.mode;
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![request_tauri_storage_reset])
+        .invoke_handler(tauri::generate_handler![
+            request_tauri_storage_reset,
+            commands::tauri_workspace_list_files,
+            commands::tauri_workspace_read_files,
+            commands::tauri_workspace_write_file,
+            commands::tauri_run_bash_command
+        ])
         .setup(move |app| {
             app.handle().plugin(tauri_plugin_http::init())?;
             apply_pending_storage_reset(app.handle());

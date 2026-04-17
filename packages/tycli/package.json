@@ -1,0 +1,13 @@
+{
+  "name": "@taskyon/tycli",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Node-based Taskyon chat CLI with /keys and /model commands",
+  "bin": "./bin/tycli.cjs",
+  "scripts": {
+    "build": "tsup && chmod +x ./dist/cli.cjs",
+    "run": "yarn build && node ./dist/cli.cjs",
+    "start": "yarn build && node ./dist/cli.cjs"
+  }
+}

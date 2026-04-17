@@ -51,7 +51,7 @@ import {
   createTypeFilteredPort,
 } from '@taskyon/shared/modules/frpBus'
 import { createProxyApi, createProxyFunction } from '../utils/objHelpers'
-import { getDatabase } from '../utils/pglite.api'
+import { configureNodePgLiteDataDir, getDatabase } from '../utils/pglite.api'
 import type { Thunk } from '../utils/tsHelpers'
 import type { TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
@@ -322,8 +322,17 @@ export async function tyCore(
   // it is running in.
   EnvironmentTools: InternalTool[],
   initialCryptoSession?: CryptoSession,
+  options?: {
+    nodePgLiteDataDir?: string
+  },
 ) {
   // TODO: make webpack automatically add all tool files from /tools/*
+
+  configureNodePgLiteDataDir(
+    options?.nodePgLiteDataDir
+      ? (name) => `${options.nodePgLiteDataDir}/${name}`
+      : undefined,
+  )
 
   const { outsidePort, insidePort, iframeMultiPlexer, ToolList } = staticContext()
 

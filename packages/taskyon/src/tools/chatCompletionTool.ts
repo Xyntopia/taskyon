@@ -69,6 +69,18 @@ const convertToChatCompletionTool = (t: ToolBase): Tool => {
   })
 }
 
+const DEFAULT_PROMPT_TEMPLATES = {
+  basePrompt: 'You are a helpful assistant called Taskyon. Return concise and correct Markdown answers.',
+  instruction:
+    'Complete the task accurately. If structured output is requested, follow the required format exactly.',
+  toolResult: 'Evaluate the following tool result and respond in {format}:\n\n{message}',
+  task: 'Complete this task:\n\n{message}',
+  evaluate: 'Evaluate this message and respond in {format}:\n\n{message}',
+  schemaReminder:
+    'Output must strictly match {format} and this schema:\n\n{schema}\n\nDo not add extra text.',
+  tools: 'Available tools:\n\n${tools}',
+}
+
 function generateToolDeclarations(
   allowedTools: string[],
   toolCollection: Record<string, ToolBase>,
@@ -499,6 +511,90 @@ ${errmsg}
     )
   }
   return parsedYaml as Record<string, unknown>
+}
+
+const extractTaggedToolCall = (
+  message: string,
+): { name: string; arguments: FunctionArguments } | undefined => {
+  const toolNameMatch = /<tool_call>\s*([^<\s][^<]*)\s*/i.exec(message)
+  const toolName = toolNameMatch?.[1]?.trim()
+  if (!toolName) return
+
+  const args: FunctionArguments = {}
+  const argRegex =
+    /<arg_key>\s*([\s\S]*?)\s*<\/arg_key>\s*<arg_value>\s*([\s\S]*?)\s*<\/arg_value>/gi
+
+  let match = argRegex.exec(message)
+  while (match) {
+    const key = match[1]?.trim()
+    const value = match[2]?.trim()
+    if (key) args[key] = value ?? ''
+    match = argRegex.exec(message)
+  }
+
+  return { name: toolName, arguments: args }
+}
+
+const createTaggedToolCallId = (input: string): string => {
+  const normalized = input.slice(0, 64)
+  let hash = 0
+  for (let i = 0; i < normalized.length; i += 1) {
+    hash = (hash * 31 + normalized.charCodeAt(i)) >>> 0
+  }
+  return `tagged-${hash.toString(36)}`
+}
+
+const normalizeAssistantMessageForToolCall = (
+  message: AssistantModelMessage | ToolModelMessage,
+  availableTools: Record<string, ToolBase>,
+): AssistantModelMessage | ToolModelMessage => {
+  if (message.role !== 'assistant') return message
+
+  if (!Array.isArray(message.content)) {
+    const taggedToolCall = extractTaggedToolCall(message.content)
+    if (!taggedToolCall) return message
+    if (!availableTools[taggedToolCall.name]) return message
+    return {
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: createTaggedToolCallId(message.content),
+          toolName: taggedToolCall.name,
+          input: taggedToolCall.arguments,
+        },
+      ],
+    } as AssistantModelMessage
+  }
+
+  // If the provider already returned native tool calls, keep them as-is.
+  if (
+    message.content.some(
+      (part): boolean => typeof part !== 'string' && part.type === 'tool-call',
+    )
+  )
+    return message
+
+  const textPart = message.content.find(
+    (part): part is { type: 'text'; text: string } =>
+      typeof part !== 'string' && part.type === 'text',
+  )
+  if (!textPart) return message
+  const taggedToolCall = extractTaggedToolCall(textPart.text)
+  if (!taggedToolCall) return message
+  if (!availableTools[taggedToolCall.name]) return message
+
+  return {
+    role: 'assistant',
+    content: [
+      {
+        type: 'tool-call',
+        toolCallId: createTaggedToolCallId(textPart.text),
+        toolName: taggedToolCall.name,
+        input: taggedToolCall.arguments,
+      },
+    ],
+  } as AssistantModelMessage
 }
 
 const robustKeys = createDeepTransformer({
@@ -1151,9 +1247,7 @@ export function createChatCompletionTool(
       }
       const useArtificialStreaming = artificial_streaming ?? true
       const tools = allowedTools ?? []
-
-      if (!prompt_templates)
-        throw new Error('No prompt templates defined for chat completion tool!')
+      const resolvedPromptTemplates = prompt_templates ?? DEFAULT_PROMPT_TEMPLATES
 
       if (!selectedApi) {
         throw new Error('No API selected!')
@@ -1223,7 +1317,7 @@ export function createChatCompletionTool(
         toolDefs,
         llmTools,
         {
-          taskChatTemplates: prompt_templates,
+          taskChatTemplates: resolvedPromptTemplates,
           tryUsingVisionModels: use_multimodal,
           useBasePrompt: use_baseprompt,
         },
@@ -1452,10 +1546,11 @@ export function createChatCompletionTool(
           cause: chatCompletion,
         })
 
+      const normalizedFirstMessage = normalizeAssistantMessageForToolCall(res.messages[0], toolDefs)
       const newTaskChain = generateFollowUpTasksFromResult(
         sources,
         goal || 'SimpleCompletion',
-        res.messages[0],
+        normalizedFirstMessage,
         allowedTools,
         selectedModel,
         llmTools,

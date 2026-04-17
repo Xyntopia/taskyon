@@ -390,7 +390,6 @@ export const createVectorStore = async <T>(
   name: string,
   additionalColumns?: string[],
 ) => {
-  const { vectorizeText } = useNlpWorker()
   const numDimensions = 384
   const maxStrLength = 10000 // only vectorize approx. the first page.
   const dataColumn = 'data'
@@ -429,6 +428,7 @@ export const createVectorStore = async <T>(
     allowedIDs?: string[],
     filters?: PartialDeep<TaskNode>,
   ) => {
+    const { vectorizeText } = useNlpWorker()
     console.log(`Searching for ${searchText.slice(0, maxStrLength)}`)
     const searchVector = await vectorizeText(searchText.slice(0, maxStrLength), modelName)
     const formattedVector = `[${searchVector.join(',')}]` // Format the array as a string for pgvector
@@ -468,6 +468,7 @@ export const createVectorStore = async <T>(
   }
 
   const upsert = async (id: string, text: string, saveData?: unknown) => {
+    const { vectorizeText } = useNlpWorker()
     const vector = await vectorizeText(text.slice(0, maxStrLength), modelName)
     const formattedVector = `[${vector.join(',')}]` // Format the array as a string for pgvector
     await db.query(

@@ -4924,6 +4924,14 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@taskyon/tycli@workspace:packages/tycli":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/tycli@workspace:packages/tycli"
+  bin:
+    tycli: ./bin/tycli.cjs
+  languageName: unknown
+  linkType: soft
+
 "@taskyon/tyclient@workspace:*, @taskyon/tyclient@workspace:packages/tyclient":
   version: 0.0.0-use.local
   resolution: "@taskyon/tyclient@workspace:packages/tyclient"

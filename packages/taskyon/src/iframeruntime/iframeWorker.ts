@@ -1,5 +1,11 @@
-import * as mod from './iframeIndex?raw'
-const iframeRuntimeString = mod.default ?? mod
+let iframeRuntimeStringPromise: Promise<string> | null = null
+
+async function getIframeRuntimeString() {
+  if (!iframeRuntimeStringPromise) {
+    iframeRuntimeStringPromise = import('./iframeIndex?raw').then((mod) => String(mod.default ?? mod))
+  }
+  return await iframeRuntimeStringPromise
+}
 
 // Store iframe + its dedicated MessagePort by id / toolId
 export const iframes = new Map<string, { iframe: HTMLIFrameElement; port: MessagePort }>()
@@ -11,6 +17,7 @@ export async function createSandboxedIframe(
   id: string,
 ): Promise<{ iframe: HTMLIFrameElement; port: MessagePort }> {
   console.log('create taskyon iframe worker', id)
+  const iframeRuntimeString = await getIframeRuntimeString()
   const iframe = document.createElement('iframe')
   iframe.id = id
   iframe.style.display = 'none'

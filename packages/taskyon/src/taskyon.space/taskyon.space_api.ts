@@ -177,31 +177,32 @@ export const getTyJwtPublicKey = async () => {
 /**
  * Close codes shared between server and client.
  *
- * NOTE: Keep this enum in sync with the client-side version.
+ * NOTE: Keep this constant map in sync with the client-side version.
  */
-export enum WsProxyCloseCode {
+export const WsProxyCloseCode = {
   // 40xx – protocol / auth / validation issues
-  MissingSecWebSocketProtocol = 4000,
-  MissingBearerToken = 4001,
-  InvalidSubprotocol = 4002,
-  AuthFailed = 4003,
+  MissingSecWebSocketProtocol: 4000,
+  MissingBearerToken: 4001,
+  InvalidSubprotocol: 4002,
+  AuthFailed: 4003,
 
-  MissingHost = 4100,
-  InvalidPort = 4101,
+  MissingHost: 4100,
+  InvalidPort: 4101,
 
-  ServiceNotAllowed = 4200,
-  PortNotAllowed = 4201,
+  ServiceNotAllowed: 4200,
+  PortNotAllowed: 4201,
 
-  InvalidHostFormat = 4300,
-  PrivateIpForbidden = 4301,
-  DnsResolutionFailed = 4302,
+  InvalidHostFormat: 4300,
+  PrivateIpForbidden: 4301,
+  DnsResolutionFailed: 4302,
 
   // 45xx – runtime / network issues after connection
-  TcpConnectionFailed = 4500,
+  TcpConnectionFailed: 4500,
 
   // 48xx – generic server-side issues
-  InternalError = 4800,
-}
+  InternalError: 4800,
+} as const
+export type WsProxyCloseCode = (typeof WsProxyCloseCode)[keyof typeof WsProxyCloseCode]
 
 export class WsProxyCloseError extends Error {
   readonly code: number
@@ -215,6 +216,6 @@ export class WsProxyCloseError extends Error {
   }
 
   isKnownProxyCode(): this is { code: WsProxyCloseCode } {
-    return this.code in WsProxyCloseCode
+    return Object.values(WsProxyCloseCode).includes(this.code as WsProxyCloseCode)
   }
 }
