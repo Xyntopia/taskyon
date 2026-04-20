@@ -3,7 +3,6 @@ import {
   cat,
   mean,
   cos_sim,
-  magnitude,
   env,
   type PreTrainedModel,
   type PreTrainedTokenizer,
@@ -51,6 +50,12 @@ const modelStore = {
   models: {} as Record<string, Promise<PreTrainedModel>>,
   tokenizers: {} as Record<string, Promise<PreTrainedTokenizer>>,
 }
+
+const vectorMagnitude = (values: number[]): number =>
+  Math.sqrt(values.reduce((sum, value) => sum + value * value, 0))
+
+const tokenIdsToTokens = (tokenizer: PreTrainedTokenizer, tokenIds: number[]): string[] =>
+  tokenIds.map((id) => tokenizer._tokenizer.id_to_token(id) ?? '')
 
 export async function loadModel(modelName: string) {
   console.log(`load model: ${modelName}`)
@@ -263,7 +268,7 @@ export async function extractKeywords(
 
   // Tokenize the text to get individual words
   const tokenizer = await loadTokenizer(modelName)
-  const tokens = tokenizer.model.convert_ids_to_tokens(token_ids.flatten().tolist())
+  const tokens = tokenIdsToTokens(tokenizer, token_ids.flatten().tolist())
   const { words, wordVectors } = tokenVecsToWordVecs(tokens, individualVectors.squeeze(0))
 
   // remove all stop words from text
@@ -272,7 +277,7 @@ export async function extractKeywords(
   // filter out words with "longest" vectors which
   // are more significant
   const filteredWordVecs = wordVectors.map((v, i) => {
-    return [words[i], magnitude(v.tolist())]
+    return [words[i], vectorMagnitude(v.tolist())]
   })
   filteredWordVecs.sort((a, b) => (b[1] as number) - (a[1] as number))
   const meanVecList = mean(cat(wordVectors, 0), 0).tolist()

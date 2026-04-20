@@ -314,8 +314,8 @@ function setGroupExpanded(sectionKey: string, groupName: string, value: boolean)
   groupExpanded.value[getGroupKey(sectionKey, groupName)] = value
 }
 
-function normalizeSearchKey(value: string): string {
-  return value.toLowerCase().replace(/[\s_]+/g, '')
+function normalizeSearchKey(value: string | null | undefined): string {
+  return (value ?? '').toLowerCase().replace(/[\s_]+/g, '')
 }
 
 function filterTestRecordByName(source: TestRecord, normalizedNeedle: string): TestRecord {
