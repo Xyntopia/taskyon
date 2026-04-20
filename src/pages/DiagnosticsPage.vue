@@ -41,9 +41,18 @@
         </div>
         <q-card flat bordered class="row items-top">
           <div class="column">
+            <q-input
+              v-model="searchQuery"
+              dense
+              clearable
+              filled
+              class="q-mb-sm"
+              label="Filter tests"
+              hint="Matches test function names (case-insensitive; ignores spaces and underscores)"
+            />
             <div class="text-caption">Available Tests:</div>
             <div
-              v-for="(section, sectionIdx) in groupedTestSections"
+              v-for="(section, sectionIdx) in filteredGroupedTestSections"
               :key="`${section.key}-${sectionIdx}`"
               class="col-auto"
             >
@@ -145,7 +154,7 @@ import * as TaskyonTests from 'src/modules/taskyon/tests'
 import { testBuildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   buildDiagnosticsRegistry,
   runDiagnosticsTests,
@@ -166,6 +175,7 @@ const state = useAppStateStore()
 const diagnostics = ref<string>('')
 const showPassWordDialog = ref(false)
 const testFinished = ref(false)
+const searchQuery = ref('')
 const isRunning = ref(false)
 const abortRequested = ref(false)
 
@@ -304,9 +314,50 @@ function setGroupExpanded(sectionKey: string, groupName: string, value: boolean)
   groupExpanded.value[getGroupKey(sectionKey, groupName)] = value
 }
 
+function normalizeSearchKey(value: string): string {
+  return value.toLowerCase().replace(/[\s_]+/g, '')
+}
+
+function filterTestRecordByName(source: TestRecord, normalizedNeedle: string): TestRecord {
+  if (!normalizedNeedle) return source
+  return Object.entries(source).reduce<TestRecord>((acc, [name, fn]) => {
+    if (normalizeSearchKey(name).includes(normalizedNeedle)) acc[name] = fn
+    return acc
+  }, {})
+}
+
+const filteredGroupedTestSections = computed(() => {
+  const normalizedNeedle = normalizeSearchKey(searchQuery.value)
+  if (!normalizedNeedle) return groupedTestSections
+
+  return groupedTestSections
+    .map((section) => {
+      const filteredTests = Object.entries(section.tests).reduce<Record<string, TestRecord>>(
+        (acc, [groupName, groupTests]) => {
+          const filteredGroup = filterTestRecordByName(groupTests, normalizedNeedle)
+          if (Object.keys(filteredGroup).length > 0) acc[groupName] = filteredGroup
+          return acc
+        },
+        {},
+      )
+
+      const groupKeys = section.groupKeys.filter((groupName) => filteredTests[groupName])
+      if (groupKeys.length === 0) return null
+
+      return {
+        ...section,
+        tests: filteredTests,
+        groupKeys,
+        allTests: flattenTestGroups(filteredTests),
+      }
+    })
+    .filter((section): section is GroupedSection => section !== null)
+})
+
 syncRefsWithLocalStorage('taskyon.diagnostics.expansion', {
   sectionExpanded,
   groupExpanded,
+  searchQuery,
 })
 
 async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
