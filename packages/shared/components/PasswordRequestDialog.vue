@@ -15,7 +15,6 @@
         />
       </q-card-section>
       <q-card-actions align="right">
-        <q-btn label="Manage Passwords" to="/settings/secrets" />
         <q-btn label="OK" color="primary" @click="submit" />
       </q-card-actions>
     </q-card>
