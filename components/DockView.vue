@@ -7,6 +7,7 @@
       'dock-row': node.type === 'container' && node.direction === 'row',
       'dock-col': node.type === 'container' && node.direction === 'column',
       'dock-resizing': isResizing,
+      'dock-node--tabs-left': isLeftTabsLayout,
     }"
     :style="nodeStyle"
   >
@@ -17,6 +18,7 @@
       :class="{
         'dock-tabs-header--vertical': isCollapsed && parentDirection === 'row',
         'dock-tabs-header--collapsed': isCollapsed,
+        'dock-tabs-header--left': isLeftTabsLayout,
       }"
     >
       <!-- Plus button still available when not collapsed -->
@@ -98,15 +100,26 @@
           @mousedown="startResize(index, $event)"
           @dblclick.stop="onSplitterDoubleClick(index)"
         >
-          <button
-            class="dock-splitter-toggle"
-            type="button"
-            :data-cy="`dock-splitter-toggle-${node.id}-${index}`"
-            @mousedown.stop
-            @click.stop="toggleChildCollapsedFromSplitter(index)"
-          >
-            {{ getSplitterToggleLabel(index) }}
-          </button>
+          <div class="dock-splitter-controls" @mousedown.stop>
+            <button
+              class="dock-splitter-toggle"
+              type="button"
+              :title="getSplitterSideTitle(index, 'left')"
+              :data-cy="`dock-splitter-toggle-left-${node.id}-${index}`"
+              @click.stop="toggleChildCollapsedFromSplitter(index, 'left')"
+            >
+              {{ getSplitterSideToggleLabel(index, 'left') }}
+            </button>
+            <button
+              class="dock-splitter-toggle"
+              type="button"
+              :title="getSplitterSideTitle(index, 'right')"
+              :data-cy="`dock-splitter-toggle-right-${node.id}-${index}`"
+              @click.stop="toggleChildCollapsedFromSplitter(index, 'right')"
+            >
+              {{ getSplitterSideToggleLabel(index, 'right') }}
+            </button>
+          </div>
           <div
             v-if="isResizing && activeSplitterIndex === index && getSplitterSnapHintLabel(index)"
             class="dock-splitter-hint"
@@ -237,6 +250,7 @@ const {
   tabButtonClass = '',
   addButtonClass = '',
   tabIcons = {},
+  tabPosition = 'top',
 } = defineProps<{
   parentDirection?: DockDirection | undefined
 
@@ -253,6 +267,8 @@ const {
 
   /** Map viewId -> raw SVG string (trusted HTML) for tab icons */
   tabIcons?: Record<string, string>
+  /** position of tab header in leaf nodes */
+  tabPosition?: 'top' | 'left'
 }>()
 
 /* ---------- v-model ---------- */
@@ -418,6 +434,10 @@ const isCollapsed = computed(() => {
   if (n.type !== 'leaf') return false
   return n.collapsed === true || n.size === 0
 })
+
+const isLeftTabsLayout = computed(
+  () => node.value.type === 'leaf' && tabPosition === 'left' && !isCollapsed.value,
+)
 
 const toggleCollapse = () => {
   const n = node.value
@@ -598,7 +618,7 @@ const startResize = (index: number, event: MouseEvent) => {
   document.body.style.cursor = node.value.direction === 'row' ? 'col-resize' : 'row-resize'
 }
 
-const toggleChildCollapsedFromSplitter = (splitterIndex: number) => {
+const toggleChildCollapsedFromSplitter = (splitterIndex: number, side: 'left' | 'right') => {
   const current = node.value
   if (current.type !== 'container' || !current.children) return
 
@@ -614,34 +634,51 @@ const toggleChildCollapsedFromSplitter = (splitterIndex: number) => {
   const restoreWeightThreshold =
     pixelSize > 0 ? (MIN_RESTORE_THICKNESS_PX / pixelSize) * totalWeight : MIN_RESTORE_WEIGHT
 
-  const rightCollapsed = isNodeCollapsed(right)
+  const target = side === 'left' ? left : right
+  const other = side === 'left' ? right : left
+  const targetCollapsed = isNodeCollapsed(target)
 
-  if (rightCollapsed) {
-    const wanted = Math.max(right.lastSize ?? restoreWeightThreshold, restoreWeightThreshold)
+  if (targetCollapsed) {
+    const wanted = Math.max(target.lastSize ?? restoreWeightThreshold, restoreWeightThreshold)
     const maxAllowed = Math.max(collapseWeightThreshold, pairTotal - collapseWeightThreshold)
     const restored = clamp(wanted, collapseWeightThreshold, maxAllowed)
-    const newLeft = Math.max(collapseWeightThreshold, pairTotal - restored)
+    const otherSize = Math.max(collapseWeightThreshold, pairTotal - restored)
 
     const children = [...current.children]
-    children[splitterIndex] = { ...left, collapsed: false, size: newLeft }
-    children[splitterIndex + 1] = { ...right, collapsed: false, size: restored }
+    if (side === 'left') {
+      children[splitterIndex] = { ...target, collapsed: false, size: restored }
+      children[splitterIndex + 1] = { ...other, collapsed: false, size: otherSize }
+    } else {
+      children[splitterIndex] = { ...other, collapsed: false, size: otherSize }
+      children[splitterIndex + 1] = { ...target, collapsed: false, size: restored }
+    }
     node.value = { ...current, children }
     return
   }
 
   const children = [...current.children]
-  children[splitterIndex] = { ...left, collapsed: false, size: pairTotal }
-  children[splitterIndex + 1] = {
-    ...right,
-    collapsed: true,
-    lastSize: Math.max(right.lastSize ?? right.size ?? 1, restoreWeightThreshold),
-    size: 0,
+  if (side === 'left') {
+    children[splitterIndex] = {
+      ...target,
+      collapsed: true,
+      lastSize: Math.max(target.lastSize ?? target.size ?? 1, restoreWeightThreshold),
+      size: 0,
+    }
+    children[splitterIndex + 1] = { ...other, collapsed: false, size: pairTotal }
+  } else {
+    children[splitterIndex] = { ...other, collapsed: false, size: pairTotal }
+    children[splitterIndex + 1] = {
+      ...target,
+      collapsed: true,
+      lastSize: Math.max(target.lastSize ?? target.size ?? 1, restoreWeightThreshold),
+      size: 0,
+    }
   }
   node.value = { ...current, children }
 }
 
 const onSplitterDoubleClick = (splitterIndex: number) => {
-  toggleChildCollapsedFromSplitter(splitterIndex)
+  toggleChildCollapsedFromSplitter(splitterIndex, 'right')
 }
 
 const getSplitterTitle = (splitterIndex: number): string => {
@@ -652,14 +689,39 @@ const getSplitterTitle = (splitterIndex: number): string => {
   return isNodeCollapsed(right) ? 'Restore panel' : 'Minimize panel'
 }
 
-const getSplitterToggleLabel = (splitterIndex: number): string => {
+const getSplitterSideToggleLabel = (splitterIndex: number, side: 'left' | 'right'): string => {
   const current = node.value
-  if (current.type !== 'container' || !current.children || !current.direction) return '▸'
+  if (current.type !== 'container' || !current.children || !current.direction) return '◂'
+  const left = current.children[splitterIndex]
   const right = current.children[splitterIndex + 1]
-  if (!right) return '▸'
-  const collapsed = isNodeCollapsed(right)
-  if (current.direction === 'row') return collapsed ? '◂' : '▸'
+  const target = side === 'left' ? left : right
+  if (!target) return side === 'left' ? '◂' : '▸'
+  const collapsed = isNodeCollapsed(target)
+
+  if (current.direction === 'row') {
+    if (side === 'left') return collapsed ? '▸' : '◂'
+    return collapsed ? '◂' : '▸'
+  }
+
+  if (side === 'left') return collapsed ? '▾' : '▴'
   return collapsed ? '▴' : '▾'
+}
+
+const getSplitterSideTitle = (splitterIndex: number, side: 'left' | 'right'): string => {
+  const current = node.value
+  if (current.type !== 'container' || !current.children || !current.direction) return ''
+  const target = side === 'left' ? current.children[splitterIndex] : current.children[splitterIndex + 1]
+  if (!target) return ''
+  const collapsed = isNodeCollapsed(target)
+  const axis =
+    current.direction === 'row'
+      ? side === 'left'
+        ? 'left'
+        : 'right'
+      : side === 'left'
+        ? 'top'
+        : 'bottom'
+  return collapsed ? `Restore ${axis} pane` : `Minimize ${axis} pane`
 }
 
 const getSplitterSnapClass = (splitterIndex: number): string => {
@@ -733,6 +795,10 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   &.dock-row {
     flex-direction: row;
   }
+
+  &.dock-node--tabs-left {
+    flex-direction: row;
+  }
 }
 
 /* Splitter */
@@ -802,128 +868,55 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   }
 }
 
-.dock-splitter-toggle {
+.dock-splitter-controls {
   position: absolute;
+  top: 38.2%;
+  left: 50%;
   z-index: 2;
-  border: none;
-  background: transparent;
-  color: transparent;
-  font-size: 0;
-  line-height: 0;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.dock-splitter:hover .dock-splitter-controls,
+.dock-splitter:focus-within .dock-splitter-controls,
+.dock-splitter-controls:hover {
+  opacity: 1;
+}
+
+.dock-splitter-toggle {
+  width: 14px;
+  height: 14px;
+  z-index: 2;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 3px;
+  background: rgba(30, 30, 30, 0.55);
+  color: white;
+  font-size: 9px;
+  line-height: 1;
   cursor: pointer;
-  opacity: 0.5;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
   transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
     opacity 0.16s ease,
     filter 0.16s ease;
 }
 
-.dock-splitter-toggle::before {
-  content: '';
-  display: block;
-  position: absolute;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--button-color, currentColor) 72%, transparent);
-  transition:
-    background-color 0.16s ease,
-    width 0.16s ease,
-    height 0.16s ease;
-}
-
-.dock-splitter-toggle::after {
-  content: '';
-  display: block;
-  position: absolute;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--button-color, currentColor) 72%, transparent);
-  transition:
-    background-color 0.16s ease,
-    width 0.16s ease,
-    height 0.16s ease;
-}
-
-.dock-splitter:hover .dock-splitter-toggle,
-.dock-splitter:focus-within .dock-splitter-toggle,
-.dock-splitter--snap-left .dock-splitter-toggle,
-.dock-splitter--snap-right .dock-splitter-toggle {
-  opacity: 0.96;
-}
-
 .dock-splitter-toggle:hover {
-  filter: brightness(1.08);
-}
-
-.dock-splitter.row .dock-splitter-toggle {
-  width: 14px;
-  height: 56px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.dock-splitter.column .dock-splitter-toggle {
-  width: 56px;
-  height: 14px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.dock-splitter.row .dock-splitter-toggle::before {
-  width: 5px;
-  height: 14px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -11px);
-}
-
-.dock-splitter.column .dock-splitter-toggle::before {
-  width: 14px;
-  height: 5px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-11px, -50%);
-}
-
-.dock-splitter.row .dock-splitter-toggle::after {
-  width: 5px;
-  height: 14px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, 3px);
-}
-
-.dock-splitter.column .dock-splitter-toggle::after {
-  width: 14px;
-  height: 5px;
-  top: 50%;
-  left: 50%;
-  transform: translate(3px, -50%);
-}
-
-.dock-splitter.row .dock-splitter-toggle:hover::before,
-.dock-splitter--snap-left.row .dock-splitter-toggle::before,
-.dock-splitter--snap-right.row .dock-splitter-toggle::before,
-.dock-splitter:hover.row .dock-splitter-toggle::before,
-.dock-splitter.row .dock-splitter-toggle:hover::after,
-.dock-splitter--snap-left.row .dock-splitter-toggle::after,
-.dock-splitter--snap-right.row .dock-splitter-toggle::after,
-.dock-splitter:hover.row .dock-splitter-toggle::after {
-  width: 6px;
-  height: 16px;
-  background: color-mix(in srgb, var(--button-color, currentColor) 88%, transparent);
-}
-
-.dock-splitter.column .dock-splitter-toggle:hover::before,
-.dock-splitter--snap-left.column .dock-splitter-toggle::before,
-.dock-splitter--snap-right.column .dock-splitter-toggle::before,
-.dock-splitter:hover.column .dock-splitter-toggle::before,
-.dock-splitter.column .dock-splitter-toggle:hover::after,
-.dock-splitter--snap-left.column .dock-splitter-toggle::after,
-.dock-splitter--snap-right.column .dock-splitter-toggle::after,
-.dock-splitter:hover.column .dock-splitter-toggle::after {
-  width: 16px;
-  height: 6px;
-  background: color-mix(in srgb, var(--button-color, currentColor) 88%, transparent);
+  opacity: 1;
+  filter: brightness(1.12);
+  background: rgba(30, 30, 30, 0.75);
+  border-color: rgba(255, 255, 255, 0.85);
+  color: white;
 }
 
 .dock-splitter-hint {
@@ -977,6 +970,18 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
     overflow-x: visible; /* vertical layout: scroll vertically, not horizontally */
     overflow-y: auto;
     padding-block: 0.25rem; /* Optional: a bit of padding */
+  }
+
+  &.dock-tabs-header--left {
+    text-orientation: mixed;
+    flex-direction: column;
+    align-items: stretch;
+    border-bottom: none;
+    border-right: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+    overflow-x: visible;
+    overflow-y: auto;
+    min-width: 132px;
+    padding-block: 0.25rem;
   }
 }
 
@@ -1066,6 +1071,27 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
     margin-left: 0;
     margin-top: 0.25rem;
   }
+}
+
+.dock-tabs-header--left .dock-tab {
+  border-bottom: none;
+  border-right: 2px solid transparent;
+  padding: 0.35rem 0.6rem;
+}
+
+.dock-tabs-header--left .dock-tab.active {
+  border-right-color: currentColor;
+}
+
+.dock-tabs-header--left .dock-tab-close {
+  margin-left: auto;
+}
+
+.dock-tabs-header--left .dock-tab-add,
+.dock-tabs-header--left .dock-tab-minimize {
+  margin-left: 0;
+  margin-top: 0.25rem;
+  align-self: center;
 }
 
 /* Close and Add buttons inside tabs/header */

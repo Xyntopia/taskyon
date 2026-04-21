@@ -29,9 +29,9 @@
 
 <script setup lang="ts">
 import { getCssVar, useQuasar } from 'quasar'
-import { containsHtmlTags, hasMarkdownElements } from 'src/modules/markdownDetection'
-import { generateIframeSrc, initPrismTheme, md2Html, tyMdCssUrls } from 'src/modules/markdownUtils '
-import { asyncComputed } from 'src/modules/vueUtils'
+import { containsHtmlTags, hasMarkdownElements } from '../modules/markdownDetection'
+import { generateIframeSrc, initPrismTheme, md2Html, tyMdCssUrls } from '../modules/markdownUtils '
+import { asyncComputed } from '../modules/vueUtils'
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 

@@ -1,0 +1,175 @@
+{%- set model_name = dae.model_name if dae.model_name is defined else "GeneratedModel" -%}
+{%- set p_map = dae.p if dae.p is defined else {} -%}
+{%- set cp_map = dae.constants if dae.constants is defined else (dae.cp if dae.cp is defined else {}) -%}
+{%- set x_map = dae.x if dae.x is defined else {} -%}
+{%- set y_map = dae.y if dae.y is defined else {} -%}
+{%- set z_map = dae.z if dae.z is defined else {} -%}
+{%- set obs_list = dae.__rumoca_observables if dae.__rumoca_observables is defined else [] -%}
+{%- set eqs = dae.f_x if dae.f_x is defined else (dae.fx if dae.fx is defined else []) -%}
+{%- set cond_eqs = dae.f_c if dae.f_c is defined else [] -%}
+{%- set when_clauses = dae.when_clauses if dae.when_clauses is defined else [] -%}
+
+{% macro render_cref(cr) -%}
+  {%- if cr is defined and cr.parts is defined and cr.parts|length > 0 -%}
+    {%- for part in cr.parts -%}
+      {{ part.ident.text }}{{ "." if not loop.last }}
+    {%- endfor -%}
+  {%- else -%}
+    [UNKNOWN_CREF]
+  {%- endif -%}
+{%- endmacro -%}
+
+{% macro render_expr(e) -%}
+  {%- if e is none -%}
+    0
+  {%- elif e is string -%}
+    {{ e }}
+  {%- elif e is number -%}
+    {{ e }}
+  {%- elif e is boolean -%}
+    {{ "true" if e else "false" }}
+  {%- elif "Literal" in e -%}
+    {%- if "Integer" in e.Literal -%}{{ e.Literal.Integer }}
+    {%- elif "Real" in e.Literal -%}{{ e.Literal.Real }}
+    {%- elif "Bool" in e.Literal -%}{{ "true" if e.Literal.Bool else "false" }}
+    {%- elif "String" in e.Literal -%}"{{ e.Literal.String }}"
+    {%- else -%}0{%- endif -%}
+  {%- elif "VarRef" in e -%}
+    {{ e.VarRef.name }}
+  {%- elif "BuiltinCall" in e -%}
+    {%- set bc = e.BuiltinCall -%}
+    {%- if bc.function == "Der" and bc.args|length == 1 -%}
+      {{ render_expr(bc.args[0]) }}'
+    {%- elif bc.function == "Pre" and bc.args|length == 1 -%}
+      pre({{ render_expr(bc.args[0]) }})
+    {%- else -%}
+      {{ bc.function }}({%- for a in bc.args -%}{{ render_expr(a) }}{{ ", " if not loop.last }}{%- endfor -%})
+    {%- endif -%}
+  {%- elif "Terminal" in e -%}
+    {{ e.Terminal.token.text }}
+  {%- elif "ComponentReference" in e -%}
+    {{ render_cref(e.ComponentReference) }}
+  {%- elif "Unary" in e -%}
+    {%- set u = e.Unary -%}
+    {%- if "Minus" in u.op -%}
+      -{{ render_expr(u.rhs) }}
+    {%- elif "Not" in u.op -%}
+      not {{ render_expr(u.rhs) }}
+    {%- else -%}
+      {{ render_expr(u.rhs) }}
+    {%- endif -%}
+  {%- elif "Binary" in e -%}
+  {%- set b = e.Binary -%}
+  {%- set op -%}
+      {%- if "Add" in b.op -%}+{%- elif "Sub" in b.op -%}-{%- elif "Mul" in b.op -%}*{%- elif "Div" in b.op -%}/{%- elif "Pow" in b.op or "Power" in b.op or "Caret" in b.op or "Exp" in b.op or "Circumflex" in b.op -%}^{%- elif "LessEq" in b.op or "Le" in b.op -%}<={%- elif "Less" in b.op or "Lt" in b.op -%}<{%- elif "GreaterEq" in b.op or "Ge" in b.op -%}>={%- elif "Greater" in b.op or "Gt" in b.op -%}>{%- elif "Equals" in b.op or "Eq" in b.op -%}=={%- elif "NotEquals" in b.op or "Ne" in b.op -%}!={%- elif "And" in b.op -%}and{%- elif "Or" in b.op -%}or{%- else -%}?{%- endif -%}
+  {%- endset -%}
+    {{ render_expr(b.lhs) }} {{ op }} {{ render_expr(b.rhs) }}
+  {%- elif "FunctionCall" in e -%}
+    {%- set f = e.FunctionCall -%}
+    {%- if f.name is defined and f.name is string -%}
+      {%- set name = f.name -%}
+    {%- elif f.comp is defined and f.comp.parts is defined and f.comp.parts|length > 0 -%}
+      {%- set name -%}{%- for part in f.comp.parts -%}{{ part.ident.text }}{{ "." if not loop.last }}{%- endfor -%}{%- endset -%}
+    {%- else -%}
+      {%- set name = "unknown_function" -%}
+    {%- endif -%}
+    {%- if name == "der" and f.args|length == 1 -%}
+      {{ render_expr(f.args[0]) }}'
+    {%- else -%}
+      {{ name }}({%- for a in f.args -%}{{ render_expr(a) }}{{ ", " if not loop.last }}{%- endfor -%})
+    {%- endif -%}
+  {%- elif "If" in e -%}
+    {%- set ife = e.If -%}
+    {%- if ife.branches is defined and ife.branches|length > 0 -%}
+      {%- set branch = ife.branches[0] -%}
+      (if {{ render_expr(branch[0]) }} then {{ render_expr(branch[1]) }} else {{ render_expr(ife.else_branch if ife.else_branch is defined else 0) }})
+    {%- else -%}
+      {{ render_expr(ife.else_branch if ife.else_branch is defined else 0) }}
+    {%- endif -%}
+  {%- else -%}
+    [UNKNOWN_EXPR {{ e }}]
+  {%- endif -%}
+{%- endmacro -%}
+
+Model: {{ model_name }}
+Time variable: t
+
+Parameters:
+{% if p_map|length == 0 -%}
+  (none)
+{%- else -%}
+{%- for (name, comp) in p_map|items %}
+  {{ name }} = {{ render_expr(comp.start) }}
+{%- endfor -%}
+{%- endif %}
+
+States x(t):
+{% if x_map|length == 0 -%}
+  (none)
+{%- else -%}
+{%- for (name, comp) in x_map|items %}
+  {{ name }}(t) with {{ name }}(0) = {{ render_expr(comp.start) }}
+{%- endfor -%}
+{%- endif %}
+
+Algebraic variables y(t):
+{% if y_map|length == 0 and z_map|length == 0 and obs_list|length == 0 -%}
+  (none)
+{%- else -%}
+{%- for (name, comp) in y_map|items %}
+  {{ name }}(t)
+{%- endfor -%}
+{%- for (name, comp) in z_map|items %}
+  {{ name }}(t)    // discrete / event-related
+{%- endfor -%}
+{%- for obs in obs_list %}
+  {{ obs.name }}(t)    // retained observable
+{%- endfor %}
+{%- endif %}
+
+Differential equations (explicit ODE form x' = f(t, x, p)):
+{%- if x_map|length == 0 -%}
+  (none)
+{%- else -%}
+  (state variables exist, but explicit derivative equations are not directly encoded in this residual form)
+{%- endif %}
+
+Algebraic equations:
+{% set flags = namespace(has_alg=false) %}
+{%- for eq in eqs %}
+  {%- if "Simple" in eq and eq.Simple is defined and eq.Simple.lhs is defined and eq.Simple.rhs is defined -%}
+    {% set flags.has_alg = true %}
+  {{ render_expr(eq.Simple.lhs) }} = {{ render_expr(eq.Simple.rhs) }}
+  {%- elif eq.rhs is defined -%}
+    {% set flags.has_alg = true %}
+  {{ render_expr(eq.lhs if eq.lhs is defined else 0) }} = {{ render_expr(eq.rhs) }}
+  {%- endif -%}
+{%- endfor -%}
+{%- for obs in obs_list %}
+  {% set flags.has_alg = true %}
+  {{ obs.name }} = {{ render_expr(obs.expr) }}
+{%- endfor -%}
+{%- if not flags.has_alg -%}
+  (none)
+{%- endif %}
+
+Events (when-clauses):
+{% if cond_eqs|length == 0 and when_clauses|length == 0 %}
+  (none)
+{%- else -%}
+  Conditions:
+  {%- for ce in cond_eqs %}
+  c{{ loop.index }} = {{ render_expr(ce.rhs) }}
+  {%- endfor %}
+  Resets:
+  {%- if when_clauses|length == 0 %} none
+  {%- else -%}
+    {%- for wc in when_clauses %}
+  when c{{ loop.index }} then
+      {%- for eq in wc.equations %}
+    {{ eq.lhs }} := {{ render_expr(eq.rhs) }}
+      {%- endfor %}
+    end when
+    {%- endfor %}
+  {%- endif %}
+{%- endif %}
