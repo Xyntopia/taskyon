@@ -18,6 +18,11 @@ function extractBearerToken(req: Request): string {
 type ProxyService = {
   id: string
   baseUrl: string
+  /**
+   * Optional allow-list pattern for relative proxy paths.
+   * Pattern is checked against the normalized path prefixed with "/".
+   */
+  pathAllowPattern?: RegExp
   reportCost?: (ctx: { req: Request; res: Response; token: ServiceTokenPayload }) => Promise<void>
 }
 
@@ -34,6 +39,42 @@ const SERVICES: Record<string, ProxyService> = {
 /* ============================================================
  *  PROXY HANDLER
  * ============================================================ */
+
+const DEFAULT_PATH_ALLOW_PATTERN = /^\/[A-Za-z0-9\-._~!$&'()*+,;=:@/%]*$/
+
+function sanitizeProxyPath(rawPath: string | undefined, service: ProxyService): string {
+  const input = String(rawPath ?? '')
+  const hasControlChars = Array.from(input).some((ch) => {
+    const code = ch.charCodeAt(0)
+    return code <= 31 || code === 127
+  })
+
+  // Reject control chars and backslashes to avoid parser and path confusion.
+  if (hasControlChars || input.includes('\\')) {
+    throw new Error('Invalid proxy path')
+  }
+
+  // Reject protocol-relative and absolute forms.
+  if (input.startsWith('//') || /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(input)) {
+    throw new Error('Invalid proxy path')
+  }
+
+  const normalized = new URL(input.startsWith('/') ? input : `/${input}`, 'http://proxy.invalid')
+  const path = normalized.pathname
+
+  // Prevent traversal attempts.
+  if (path.includes('..')) {
+    throw new Error('Invalid proxy path')
+  }
+
+  const allowPattern = service.pathAllowPattern ?? DEFAULT_PATH_ALLOW_PATTERN
+  if (!allowPattern.test(path)) {
+    throw new Error('Proxy path not allowed')
+  }
+
+  // Force relative path for string concatenation below.
+  return path.replace(/^\/+/, '')
+}
 
 const handleProxy = (publicKeyPromise: CryptoKey) => async (req: Request, res: Response) => {
   try {
@@ -52,9 +93,16 @@ const handleProxy = (publicKeyPromise: CryptoKey) => async (req: Request, res: R
       return res.status(403).json({ error: 'service not allowed' })
     }
 
-    const path = req.params[0] ?? ''
+    let path: string
+    try {
+      path = sanitizeProxyPath(req.params[0], service)
+    } catch (err) {
+      console.warn('proxy path rejected:', err)
+      return res.status(400).json({ error: 'invalid proxy path' })
+    }
+
     const qs = req.url.includes('?') ? '?' + req.url.split('?')[1] : ''
-    const targetUrl = service.baseUrl + '/' + path + qs
+    const targetUrl = service.baseUrl.replace(/\/+$/, '') + '/' + path + qs
 
     const upstream = await axios.request({
       url: targetUrl,
