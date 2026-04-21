@@ -127,7 +127,7 @@ import {
   createTreeIndex,
   expandRoots,
   toggleExpandedId,
-} from '@taskyon/shared/modules/tree/flatTree'
+} from '../../../modules/tree/flatTree'
 import { computed, ref } from 'vue'
 import type { ModelicaLibraryTreeNode } from './types'
 

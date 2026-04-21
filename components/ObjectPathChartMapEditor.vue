@@ -130,7 +130,7 @@
 import { computed, ref } from 'vue'
 import type { PlotResolution } from '../modules/plotMath'
 import type { ObjectPathChartDefinition } from './ObjectPathChartAxesEditor.vue'
-import { decodeQueryAxisKey } from '../../compDag/queryPipeline'
+import { decodeQueryAxisKey } from '../compDag/queryPipeline'
 
 type Option = { label: string; value: string }
 type AxisTransformKind = 'scalar' | 'aggregate' | 'index'
@@ -200,7 +200,9 @@ const mapValueTransform = computed<MapValueTransform>(() => {
   if (!axis) return { kind: 'scalar' }
   if (axis.op === 'index') {
     const index =
-      typeof axis.index === 'number' && Number.isInteger(axis.index) && axis.index >= 0 ? axis.index : 0
+      typeof axis.index === 'number' && Number.isInteger(axis.index) && axis.index >= 0
+        ? axis.index
+        : 0
     return { kind: 'index', index }
   }
   if (axis.op === 'sum' || axis.op === 'mean' || axis.op === 'min' || axis.op === 'max') {
@@ -241,7 +243,9 @@ const valueTransformKind = computed<AxisTransformKind>({
 })
 
 const valuePathOptions = computed<Option[]>(() =>
-  valueTransformKind.value === 'scalar' ? props.numericColumnOptions : props.arrayNumericColumnOptions,
+  valueTransformKind.value === 'scalar'
+    ? props.numericColumnOptions
+    : props.arrayNumericColumnOptions,
 )
 
 const effectiveLatPath = computed(() => configModel.value.latPath ?? props.detectedLatPath ?? '')
@@ -292,7 +296,8 @@ const valueAggregateOp = computed<'mean' | 'sum' | 'min' | 'max'>({
   get: () => {
     const transform = mapValueTransform.value
     if (transform.kind !== 'aggregate') return 'mean'
-    if (transform.op === 'sum' || transform.op === 'min' || transform.op === 'max') return transform.op
+    if (transform.op === 'sum' || transform.op === 'min' || transform.op === 'max')
+      return transform.op
     return 'mean'
   },
   set: (op) => {

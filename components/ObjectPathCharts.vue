@@ -398,9 +398,7 @@
           />
 
           <div class="row items-center q-mt-md q-gutter-md">
-            <div class="text-caption text-grey-7">
-              Rows: {{ tableRowCount }}
-            </div>
+            <div class="text-caption text-grey-7">Rows: {{ tableRowCount }}</div>
             <q-space />
             <q-pagination
               v-model="tablePage"
@@ -441,7 +439,7 @@ import {
   normalizeResolvedChartPayload,
   resolveObjectPathChartPayload,
 } from './objectPathChartsResolver'
-import { decodeQueryAxisKey, evaluateQueryAxisValue } from '../../compDag/queryPipeline'
+import { decodeQueryAxisKey, evaluateQueryAxisValue } from '../compDag/queryPipeline'
 
 export type { ObjectPathChartDefinition }
 export type ObjectPathChartsViewOptions = {
@@ -732,27 +730,31 @@ const pathKindOf = (path: string): SchemaPathKind => {
   return kind ?? 'other'
 }
 
-const observedNumericKindsByPath = computed<Record<string, { scalar: boolean; array: boolean }>>(() => {
-  if (mapRows.value.length === 0) return {}
-  const out: Record<string, { scalar: boolean; array: boolean }> = {}
-  const maxRows = Math.min(mapRows.value.length, 5000)
-  for (let i = 0; i < maxRows; i += 1) {
-    const row = mapRows.value[i]
-    if (!row) continue
-    for (const [path, value] of Object.entries(row)) {
-      if (!out[path]) out[path] = { scalar: false, array: false }
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        out[path].scalar = true
-        continue
-      }
-      if (Array.isArray(value)) {
-        const hasFinite = value.some((entry) => typeof entry === 'number' && Number.isFinite(entry))
-        if (hasFinite) out[path].array = true
+const observedNumericKindsByPath = computed<Record<string, { scalar: boolean; array: boolean }>>(
+  () => {
+    if (mapRows.value.length === 0) return {}
+    const out: Record<string, { scalar: boolean; array: boolean }> = {}
+    const maxRows = Math.min(mapRows.value.length, 5000)
+    for (let i = 0; i < maxRows; i += 1) {
+      const row = mapRows.value[i]
+      if (!row) continue
+      for (const [path, value] of Object.entries(row)) {
+        if (!out[path]) out[path] = { scalar: false, array: false }
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          out[path].scalar = true
+          continue
+        }
+        if (Array.isArray(value)) {
+          const hasFinite = value.some(
+            (entry) => typeof entry === 'number' && Number.isFinite(entry),
+          )
+          if (hasFinite) out[path].array = true
+        }
       }
     }
-  }
-  return out
-})
+    return out
+  },
+)
 
 const scalarNumericPathOptions = computed<Option[]>(() => {
   if (mapRows.value.length === 0) {
@@ -1257,7 +1259,8 @@ const resolveMapValueTransform = (
   const sourcePath = legacyAxis?.path ?? rawPath
   const explicit = chartConfig.valueAxisTransform
   if (explicit?.kind === 'aggregate') {
-    const op = explicit.op === 'sum' || explicit.op === 'min' || explicit.op === 'max' ? explicit.op : 'mean'
+    const op =
+      explicit.op === 'sum' || explicit.op === 'min' || explicit.op === 'max' ? explicit.op : 'mean'
     return { sourcePath, transform: { kind: 'aggregate', op } }
   }
   if (explicit?.kind === 'index') {
@@ -1273,14 +1276,22 @@ const resolveMapValueTransform = (
   }
   if (legacyAxis.op === 'index') {
     const index =
-      typeof legacyAxis.index === 'number' && Number.isInteger(legacyAxis.index) && legacyAxis.index >= 0
+      typeof legacyAxis.index === 'number' &&
+      Number.isInteger(legacyAxis.index) &&
+      legacyAxis.index >= 0
         ? legacyAxis.index
         : 0
     return { sourcePath, transform: { kind: 'index', index } }
   }
   return {
     sourcePath,
-    transform: { kind: 'aggregate', op: legacyAxis.op === 'sum' || legacyAxis.op === 'min' || legacyAxis.op === 'max' ? legacyAxis.op : 'mean' },
+    transform: {
+      kind: 'aggregate',
+      op:
+        legacyAxis.op === 'sum' || legacyAxis.op === 'min' || legacyAxis.op === 'max'
+          ? legacyAxis.op
+          : 'mean',
+    },
   }
 }
 
@@ -1336,9 +1347,11 @@ const mapValueLabel = (chartConfig: ObjectPathChartDefinition): string => {
   return base
 }
 
-const axisTransformKey = (
-  transform?: { kind?: unknown; op?: unknown; index?: unknown },
-): string => {
+const axisTransformKey = (transform?: {
+  kind?: unknown
+  op?: unknown
+  index?: unknown
+}): string => {
   if (!transform || typeof transform !== 'object') return 'scalar'
   const kind =
     transform.kind === 'aggregate' || transform.kind === 'index' ? transform.kind : 'scalar'
@@ -1351,7 +1364,9 @@ const axisTransformKey = (
   }
   if (kind === 'index') {
     const idx =
-      typeof transform.index === 'number' && Number.isInteger(transform.index) && transform.index >= 0
+      typeof transform.index === 'number' &&
+      Number.isInteger(transform.index) &&
+      transform.index >= 0
         ? transform.index
         : 0
     return `idx:${idx}`
@@ -1781,15 +1796,16 @@ const selectedTableChart = computed<ChartViewModel | null>(() => {
   return chartList.value[index] ?? null
 })
 
-const selectedTableData = computed<{ columns: string[]; rows: Array<Record<string, unknown>> } | null>(
-  () => {
-    const chart = selectedTableChart.value
-    if (!chart) return null
-    const payload = renderPayloadByKey.value[chart.key]
-    if (!payload?.tableData) return null
-    return payload.tableData
-  },
-)
+const selectedTableData = computed<{
+  columns: string[]
+  rows: Array<Record<string, unknown>>
+} | null>(() => {
+  const chart = selectedTableChart.value
+  if (!chart) return null
+  const payload = renderPayloadByKey.value[chart.key]
+  if (!payload?.tableData) return null
+  return payload.tableData
+})
 
 const tableErrorMessage = computed<string | null>(() => {
   const chart = selectedTableChart.value
@@ -1828,38 +1844,37 @@ watch([tableRowCount, tableRowsPerPage], () => {
 const tableColumns = computed<
   Array<{ name: string; label: string; field: string; align?: 'left' | 'right' | 'center' }>
 >(() => {
-    const tableData = selectedTableData.value
-    if (tableData) {
-      return tableData.columns.map((field) => ({ name: field, label: field, field }))
-    }
+  const tableData = selectedTableData.value
+  if (tableData) {
+    return tableData.columns.map((field) => ({ name: field, label: field, field }))
+  }
 
-    const chart = selectedTableChart.value
-    if (!chart) return []
+  const chart = selectedTableChart.value
+  if (!chart) return []
 
-    const base = [{ name: '__rowIndex', label: '#', field: '__rowIndex' }]
-    if (chart.variant === 'map') {
-      return [
-        ...base,
-        { name: 'lat', label: chart.config.latPath ?? 'lat', field: 'lat' },
-        { name: 'lon', label: chart.config.lonPath ?? 'lon', field: 'lon' },
-        { name: 'value', label: mapValueLabel(chart.config), field: 'value' },
-        { name: 'feature', label: chart.config.featurePath ?? 'feature', field: 'feature' },
-        {
-          name: 'objectFeature',
-          label: chart.config.objectFeaturePath ?? 'objectFeature',
-          field: 'objectFeature',
-        },
-      ]
-    }
-
+  const base = [{ name: '__rowIndex', label: '#', field: '__rowIndex' }]
+  if (chart.variant === 'map') {
     return [
       ...base,
-      { name: 'x', label: chart.config.x ?? 'x', field: 'x' },
-      { name: 'y', label: chart.config.y ?? 'y', field: 'y' },
-      { name: 'z', label: chart.config.z ?? 'z', field: 'z' },
+      { name: 'lat', label: chart.config.latPath ?? 'lat', field: 'lat' },
+      { name: 'lon', label: chart.config.lonPath ?? 'lon', field: 'lon' },
+      { name: 'value', label: mapValueLabel(chart.config), field: 'value' },
+      { name: 'feature', label: chart.config.featurePath ?? 'feature', field: 'feature' },
+      {
+        name: 'objectFeature',
+        label: chart.config.objectFeaturePath ?? 'objectFeature',
+        field: 'objectFeature',
+      },
     ]
-  },
-)
+  }
+
+  return [
+    ...base,
+    { name: 'x', label: chart.config.x ?? 'x', field: 'x' },
+    { name: 'y', label: chart.config.y ?? 'y', field: 'y' },
+    { name: 'z', label: chart.config.z ?? 'z', field: 'z' },
+  ]
+})
 
 const tablePageRows = computed<Array<Record<string, unknown>>>(() => {
   const tableData = selectedTableData.value
@@ -1936,13 +1951,13 @@ const csvEscape = (value: unknown): string => {
             ? value
               ? 'true'
               : 'false'
-          : (() => {
-              try {
-                return JSON.stringify(value)
-              } catch {
-                return '[unserializable]'
-              }
-            })()
+            : (() => {
+                try {
+                  return JSON.stringify(value)
+                } catch {
+                  return '[unserializable]'
+                }
+              })()
   if (!/[",\n]/.test(text)) return text
   return `"${text.replace(/"/g, '""')}"`
 }
@@ -1958,9 +1973,7 @@ const downloadTableCsv = () => {
   if (!chart || tableRowCount.value === 0) return
   const tableData = selectedTableData.value
   const columns = tableData?.columns ?? tableColumns.value.map((c) => c.field)
-  const rows =
-    tableData?.rows ??
-    buildFallbackTableRows(chart, 0, tableRowCount.value)
+  const rows = tableData?.rows ?? buildFallbackTableRows(chart, 0, tableRowCount.value)
   const csv = toCsv(rows, columns)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)

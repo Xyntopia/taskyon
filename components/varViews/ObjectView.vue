@@ -177,7 +177,7 @@ import {
   useVariableGraph,
 } from './useVariableGraph'
 import type { CustomRenderer } from './VariableField.vue'
-import { safeYamlDump } from '../../../taskyon/src/utils/yamlUtils'
+import { safeYamlDump } from '../../modules/utils/yamlUtils'
 import { matAdd, matContentCopy, matDelete } from '@quasar/extras/material-icons'
 
 export type iconMap = {
@@ -356,7 +356,9 @@ function resolveJsonSchemaDefinition(
   return definition as JSONSchema7 | z.core.JSONSchema.BaseSchema
 }
 
-function defaultValueFromSchema(schemaNode: JSONSchema7 | z.core.JSONSchema.BaseSchema | undefined): unknown {
+function defaultValueFromSchema(
+  schemaNode: JSONSchema7 | z.core.JSONSchema.BaseSchema | undefined,
+): unknown {
   if (!schemaNode || typeof schemaNode !== 'object') return {}
   const record = schemaNode as Record<string, unknown>
   if (Object.prototype.hasOwnProperty.call(record, 'default')) return record.default
@@ -473,9 +475,7 @@ const deleteNodeAtPath = (node: VariableNode) => {
 
   const parentPath = path.slice(0, -1)
   const leafKey = path[path.length - 1]!
-  const parent = parentPath.length
-    ? getValueByPath(nextRoot, parentPath)
-    : nextRoot
+  const parent = parentPath.length ? getValueByPath(nextRoot, parentPath) : nextRoot
 
   if (!parent || typeof parent !== 'object') return
   if (Array.isArray(parent)) {

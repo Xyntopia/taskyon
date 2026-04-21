@@ -529,16 +529,16 @@ import {
   matShowChart,
 } from '@quasar/extras/material-icons'
 import { mdiFileTreeOutline, mdiFunctionVariant } from '@quasar/extras/mdi-v6'
-import { toolCall } from '@taskyon/client'
+import { toolCall } from '@taskyon/tyclient'
 import { watchDebounced } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { Dialog, Notify } from 'quasar'
-import CodeEditor from '@taskyon/shared/components/CodeEditor.vue'
-import type { DockNode } from '@taskyon/shared/components/DockView.vue'
-import DockView from '@taskyon/shared/components/DockView.vue'
+import CodeEditor from '../components/CodeEditor.vue'
+import type { DockNode } from '../components/DockView.vue'
+import DockView from '../components/DockView.vue'
 import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
-import TaskyonIframe from '@taskyon/shared/components/TaskyonIframe.vue'
-import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
+import TaskyonIframe from '../components/TaskyonIframe.vue'
+import ObjectView from '../components/varViews/ObjectView.vue'
 import {
   DEFAULT_MSL_ZIP_URL,
   validateModelicaProjectFileV1,
@@ -557,16 +557,16 @@ import {
   packProjectFile as packModelicaProjectFile,
   unpackProjectFile,
   runModelicaSandbox,
-} from '@taskyon/shared/modelica/modelica'
+} from './modelica'
 import defaultUiTemplateSource from './ui_template_placeholders.html?raw'
-import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
-import { copyToClipboard } from '@taskyon/shared/modules/utils'
+import type { partialTyConfiguration } from '@taskyon/tyclient'
+import { copyToClipboard } from '../modules/utils'
 import FixedHeightPage from 'src/pages/FixedHeightPage.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import type { Extension } from '@codemirror/state'
-import { safeYamlDump } from '../../taskyon/src/utils/yamlUtils'
+import { safeYamlDump } from '../modules/yamlUtils'
 import { syncStateWithOPFSFolder } from '../modules/saveState'
 import ModelicaActionsBar from './components/ModelicaActionsBar.vue'
 import ModelicaLibraryTreeView from './components/libraryTree/ModelicaLibraryTreeView.vue'
