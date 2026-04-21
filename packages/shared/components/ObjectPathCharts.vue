@@ -441,7 +441,7 @@ import {
   normalizeResolvedChartPayload,
   resolveObjectPathChartPayload,
 } from './objectPathChartsResolver'
-import { decodeQueryAxisKey, evaluateQueryAxisValue } from '../../compDag/queryPipeline'
+import { decodeQueryAxisKey, evaluateQueryAxisValue } from '../modules/queryPipeline'
 
 export type { ObjectPathChartDefinition }
 export type ObjectPathChartsViewOptions = {

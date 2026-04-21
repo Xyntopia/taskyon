@@ -130,7 +130,7 @@
 import { computed, ref } from 'vue'
 import type { PlotResolution } from '../modules/plotMath'
 import type { ObjectPathChartDefinition } from './ObjectPathChartAxesEditor.vue'
-import { decodeQueryAxisKey } from '../../compDag/queryPipeline'
+import { decodeQueryAxisKey } from '../modules/queryPipeline'
 
 type Option = { label: string; value: string }
 type AxisTransformKind = 'scalar' | 'aggregate' | 'index'

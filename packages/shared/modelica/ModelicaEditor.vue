@@ -1,32 +1,21 @@
-<!--ModelicaEditPage.vue-->
+<!--ModelicaEditor.vue-->
 <template>
-  <q-layout>
-    <TaskyonHeader btn-size="md" min-mode no-chat-button-border>
-      <template #left>
-        <!-- Header -->
-        <div class="text-h6 text-primary q-ma-sm">
-          <q-icon :name="matRocketLaunch" /> Taskyon/Rumoca Modelica Editor
-        </div>
-      </template>
-    </TaskyonHeader>
-    <q-page-container>
-      <FixedHeightPage class="column">
-        <DockView
-          v-model:node="initialLayout"
-          class="col"
-          hide-tab-add
-          hide-tab-close
-          :tab-icons="{
-            simulate: matPlayArrow,
-            plot: matShowChart,
-            template: matCode,
-            uiTemplate: matCode,
-            solver: matCode,
-            modelica: matDescription,
-            model: mdiFunctionVariant,
-            libraryTree: mdiFileTreeOutline,
-          }"
-        >
+  <DockView
+    v-model:node="initialLayout"
+    class="col"
+    hide-tab-add
+    hide-tab-close
+    :tab-icons="{
+      simulate: matPlayArrow,
+      plot: matShowChart,
+      template: matCode,
+      uiTemplate: matCode,
+      solver: matCode,
+      modelica: matDescription,
+      model: mdiFunctionVariant,
+      libraryTree: mdiFileTreeOutline,
+    }"
+  >
           <template #actions>
             <ModelicaActionsBar
               :current-project-id="currentProjectId"
@@ -501,21 +490,18 @@
             </q-card>
           </template>
 
-          <template #assistant>
-            <TaskyonIframe
-              :tools="tools"
-              :configuration="configuration"
-              profile-name="modelica_edit_page"
-              :binding-key="appState.bindingKey"
-              missing-binding-key-policy="noBindingKey"
-              name="modelica-chat"
-              :persist="true"
-            />
-          </template>
-        </DockView>
-      </FixedHeightPage>
-    </q-page-container>
-  </q-layout>
+    <template #assistant>
+      <TaskyonIframe
+        :tools="tools"
+        :configuration="configuration"
+        profile-name="modelica_edit_page"
+        :binding-key="props.bindingKey"
+        missing-binding-key-policy="noBindingKey"
+        name="modelica-chat"
+        :persist="true"
+      />
+    </template>
+  </DockView>
 </template>
 
 <script setup lang="ts">
@@ -525,7 +511,6 @@ import {
   matDescription,
   matDelete,
   matPlayArrow,
-  matRocketLaunch,
   matShowChart,
 } from '@quasar/extras/material-icons'
 import { mdiFileTreeOutline, mdiFunctionVariant } from '@quasar/extras/mdi-v6'
@@ -533,12 +518,11 @@ import { toolCall } from '@taskyon/client'
 import { watchDebounced } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { Dialog, Notify } from 'quasar'
-import CodeEditor from '@taskyon/shared/components/CodeEditor.vue'
-import type { DockNode } from '@taskyon/shared/components/DockView.vue'
-import DockView from '@taskyon/shared/components/DockView.vue'
-import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
-import TaskyonIframe from '@taskyon/shared/components/TaskyonIframe.vue'
-import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
+import CodeEditor from '../components/CodeEditor.vue'
+import type { DockNode } from '../components/DockView.vue'
+import DockView from '../components/DockView.vue'
+import TaskyonIframe from '../components/TaskyonIframe.vue'
+import ObjectView from '../components/varViews/ObjectView.vue'
 import {
   DEFAULT_MSL_ZIP_URL,
   validateModelicaProjectFileV1,
@@ -557,16 +541,13 @@ import {
   packProjectFile as packModelicaProjectFile,
   unpackProjectFile,
   runModelicaSandbox,
-} from '@taskyon/shared/modelica/modelica'
+} from './modelica'
 import defaultUiTemplateSource from './ui_template_placeholders.html?raw'
-import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
-import { copyToClipboard } from '@taskyon/shared/modules/utils'
-import FixedHeightPage from 'src/pages/FixedHeightPage.vue'
-import { useAppStateStore } from 'src/stores/appState'
-import { useTaskyonStore } from 'src/stores/taskyonState'
+import type { partialTyConfiguration } from '../../tyclient/src'
+import { copyToClipboard } from '../modules/utils'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import type { Extension } from '@codemirror/state'
-import { safeYamlDump } from '../../taskyon/src/utils/yamlUtils'
+import { safeYamlDump } from '../modules/yamlUtils'
 import { syncStateWithOPFSFolder } from '../modules/saveState'
 import ModelicaActionsBar from './components/ModelicaActionsBar.vue'
 import ModelicaLibraryTreeView from './components/libraryTree/ModelicaLibraryTreeView.vue'
@@ -578,8 +559,8 @@ import { useModelicaLibraries } from './useModelicaLibraries'
 import { useSolverRegistry } from './useSolverRegistry'
 import { createModelicaLspCompletionExtension } from './modelicaLspCompletion'
 import { ModelicaWorkerClient } from './modelicaWorkerClient'
-import ObjectPathCharts from '../../../packages/shared/components/ObjectPathCharts.vue'
-import type { ObjectPathChartsViewOptions } from '../../../packages/shared/components/ObjectPathCharts.vue'
+import ObjectPathCharts from '../components/ObjectPathCharts.vue'
+import type { ObjectPathChartsViewOptions } from '../components/ObjectPathCharts.vue'
 
 type StatusType = 'loading' | 'success' | 'error' | ''
 type PlotChartSelection = {
@@ -589,6 +570,17 @@ type PlotChartSelection = {
   title?: string | undefined
 }
 type PlotViewOptions = ObjectPathChartsViewOptions
+
+const props = withDefaults(
+  defineProps<{
+    taskyonSignatureOrKey?: string | null
+    bindingKey?: CryptoKey | string | null
+  }>(),
+  {
+    taskyonSignatureOrKey: null,
+    bindingKey: null,
+  },
+)
 
 const modelicaSource = ref('')
 const openedLibraryClassContext = ref<{ qualifiedName: string; sourceSnapshot: string } | null>(
@@ -967,11 +959,8 @@ onBeforeUnmount(() => {
   modelicaWorker.value = null
 })
 
-const tystate = useTaskyonStore()
-const appState = useAppStateStore()
-
 const configuration = computed<partialTyConfiguration | null>(() => {
-  const taskyonKey = tystate.getTaskyonKeyString()
+  const taskyonKey = props.taskyonSignatureOrKey
   if (taskyonKey == null) return null
   return {
     llmSettings: {
@@ -985,7 +974,7 @@ const configuration = computed<partialTyConfiguration | null>(() => {
       chatSuggestions: [],
       welcomeMsg: 'I can edit your Modelica model and template. Ask me to change them.',
     },
-    signatureOrKey: taskyonKey,
+    signatureOrKey: String(taskyonKey),
   }
 })
 

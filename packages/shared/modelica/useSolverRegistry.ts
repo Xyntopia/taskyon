@@ -9,7 +9,7 @@ import {
   isSourceKeyScope,
   makeSourceKey,
   solverIdFromKey,
-} from '@taskyon/shared/modelica/modelica'
+} from './modelica'
 
 export function useSolverRegistry(params: {
   simT0: Ref<number>

@@ -2,8 +2,8 @@
   <!-- Taskyon iframe -->
   <iframe
     v-if="props.configuration"
-    :key="iframeDomKey"
     id="taskyon"
+    :key="iframeDomKey"
     title="Taskyon agent"
     frameborder="0"
     :src="iframeSrc"
@@ -19,10 +19,10 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, watchEffect } from 'vue'
-import { deepMerge } from '../../taskyon/src/utils/objHelpers'
+import { deepMerge } from '../modules/objHelpers'
 import type { partialTyConfiguration, TyClient } from '../../tyclient/src'
 import { type ClientTool, initializeTaskyon } from '../../tyclient/src'
-import { cryptoKeyToBase64 } from '../../taskyon/src/utils/crypto'
+import { cryptoKeyToBase64 } from '../modules/crypto'
 
 const props = withDefaults(
   defineProps<{
@@ -39,6 +39,7 @@ const props = withDefaults(
     configuration: () => ({}),
     persist: false,
     bindingKey: null,
+    profileName: undefined,
     missingBindingKeyPolicy: 'deriveFromProfile',
   },
 )

@@ -226,9 +226,9 @@ import {
   matSave,
 } from '@quasar/extras/material-icons'
 import { mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
-import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
+import ObjectView from '../../components/varViews/ObjectView.vue'
 import type { JSONSchema7 } from 'json-schema'
-import { isSourceKeyScope, solverIdFromKey } from '@taskyon/shared/modelica/modelica'
+import { isSourceKeyScope, solverIdFromKey } from '../modelica'
 import { computed, ref } from 'vue'
 import SimulationRunControls from './SimulationRunControls.vue'
 
