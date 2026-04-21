@@ -8,13 +8,13 @@ import {
   shouldValidateModelAbiForRenderedOutput,
   validateModelAbiValidationResultV1,
 } from '@taskyon/shared/modelica/modelica'
-import baseDaeTemplate from 'src/modules/modelica/base_dae.jinja?raw'
-import javascriptTemplate from 'src/modules/modelica/javascript.jinja?raw'
-import standaloneHtmlTemplate from 'src/modules/modelica/standalone_html.jinja?raw'
-import bouncingBallTemplate from 'src/modules/modelica/bouncing_ball_animation.jinja?raw'
-import { serializeObject } from '../modules/serializeObject'
 import { strFromU8, unzipSync } from 'fflate'
 import { executeCodeInIframeSimple } from '../../taskyon/src/utils/iframeWorker'
+import { serializeObject } from '../modules/serializeObject'
+import baseDaeTemplate from './base_dae.jinja?raw'
+import bouncingBallTemplate from './bouncing_ball_animation.jinja?raw'
+import javascriptTemplate from './javascript.jinja?raw'
+import standaloneHtmlTemplate from './standalone_html.jinja?raw'
 
 const templateChecks = [
   {
