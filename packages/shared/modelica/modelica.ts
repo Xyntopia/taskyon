@@ -1,11 +1,11 @@
-import defaultSolverSource from 'src/modules/modelica/simulateModel?raw'
+import defaultSolverSource from './simulateModel?raw'
 import type * as WasmTypes from 'rumoca'
 import { z } from 'zod'
 import { ref } from 'vue'
 import { Notify } from 'quasar'
-import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
-import { validateJavaScriptInSandbox } from '../../../packages/taskyon/src/utils/checkJsSyntax'
-import { serializeObject } from '../../../packages/shared/modules/serializeObject'
+import { executeCodeInIframeSimple } from '../../taskyon/src/utils/iframeWorker'
+import { validateJavaScriptInSandbox } from '../../taskyon/src/utils/checkJsSyntax'
+import { serializeObject } from '../modules/serializeObject'
 
 // Zod v3 vs v4 compatibility: some builds do not expose z.function().args().returns().
 // We use z.custom to type-check "is a function" while keeping strong TS inference.
@@ -21,11 +21,7 @@ type RumocaLegacyLibraryApi = {
 }
 
 type RumocaSourceRootApi = {
-  compile_with_source_roots: (
-    source: string,
-    modelName: string,
-    sourceRootsJson: string,
-  ) => string
+  compile_with_source_roots: (source: string, modelName: string, sourceRootsJson: string) => string
   load_source_roots: (sourceRootsJson: string) => string
   clear_source_root_cache: () => void
   get_source_root_document_count: () => number

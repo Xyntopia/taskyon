@@ -9,7 +9,7 @@ import {
   isSourceKeyScope,
   makeSourceKey,
   solverIdFromKey,
-} from 'src/modules/modelica/modelica'
+} from '@taskyon/shared/modelica/modelica'
 
 export function useSolverRegistry(params: {
   simT0: Ref<number>
@@ -124,7 +124,11 @@ export function useSolverRegistry(params: {
       if (refreshId !== solverMetadataRefreshId) return
       solverOptionsSchema.value = schema
 
-      if (simDefaults && typeof simDefaults === 'object' && params.allowApplySolverSimDefaults?.value !== false) {
+      if (
+        simDefaults &&
+        typeof simDefaults === 'object' &&
+        params.allowApplySolverSimDefaults?.value !== false
+      ) {
         if (typeof simDefaults.t0 === 'number') params.simT0.value = simDefaults.t0
         if (typeof simDefaults.tf === 'number') params.simTf.value = simDefaults.tf
         if (typeof simDefaults.dt === 'number') params.simDt.value = simDefaults.dt

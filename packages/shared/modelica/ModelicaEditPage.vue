@@ -557,8 +557,8 @@ import {
   packProjectFile as packModelicaProjectFile,
   unpackProjectFile,
   runModelicaSandbox,
-} from 'src/modules/modelica/modelica'
-import defaultUiTemplateSource from 'src/modules/modelica/ui_template_placeholders.html?raw'
+} from '@taskyon/shared/modelica/modelica'
+import defaultUiTemplateSource from './ui_template_placeholders.html?raw'
 import type { partialTyConfiguration } from 'src/modules/taskyon/apiTypes'
 import { copyToClipboard } from '@taskyon/shared/modules/utils'
 import FixedHeightPage from 'src/pages/FixedHeightPage.vue'
@@ -566,8 +566,8 @@ import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import type { Extension } from '@codemirror/state'
-import { safeYamlDump } from '../../../packages/taskyon/src/utils/yamlUtils'
-import { syncStateWithOPFSFolder } from '../../../packages/shared/modules/saveState'
+import { safeYamlDump } from '../../taskyon/src/utils/yamlUtils'
+import { syncStateWithOPFSFolder } from '../modules/saveState'
 import ModelicaActionsBar from './components/ModelicaActionsBar.vue'
 import ModelicaLibraryTreeView from './components/libraryTree/ModelicaLibraryTreeView.vue'
 import { mapRumocaClassTree } from './components/libraryTree/mapRumocaClasses'
@@ -591,7 +591,9 @@ type PlotChartSelection = {
 type PlotViewOptions = ObjectPathChartsViewOptions
 
 const modelicaSource = ref('')
-const openedLibraryClassContext = ref<{ qualifiedName: string; sourceSnapshot: string } | null>(null)
+const openedLibraryClassContext = ref<{ qualifiedName: string; sourceSnapshot: string } | null>(
+  null,
+)
 const templateSource = ref('')
 const output = ref('') // legacy raw output if needed
 const jsSource = ref('') // generated JS shown + executed
@@ -1655,7 +1657,8 @@ const runCompilation = async (): Promise<{ ok: boolean; message?: string }> => {
       openedLibraryClassContext.value.sourceSnapshot === modelicaSource.value
     const isModelicaStdlibClass =
       typeof qualifiedFromSource === 'string' && qualifiedFromSource.startsWith('Modelica.')
-    const compileFromSourceRootsOnly = useSourceRoots && (unchangedLibraryClass || isModelicaStdlibClass)
+    const compileFromSourceRootsOnly =
+      useSourceRoots && (unchangedLibraryClass || isModelicaStdlibClass)
 
     const compileSource = compileFromSourceRootsOnly ? '' : modelicaSource.value
     const compileModelName = compileFromSourceRootsOnly
@@ -1687,7 +1690,8 @@ const runCompilation = async (): Promise<{ ok: boolean; message?: string }> => {
       })
     }
     daeJsonOutput.value = compile.daeForTemplate ?? {}
-    daePrettyOutput.value = typeof compile.compiled?.pretty === 'string' ? compile.compiled.pretty : ''
+    daePrettyOutput.value =
+      typeof compile.compiled?.pretty === 'string' ? compile.compiled.pretty : ''
     output.value = String(compile.rendered || '')
     jsSource.value = String(compile.rendered || '')
     statusType.value = 'success'
@@ -1835,8 +1839,7 @@ function withLibraryContext(qualifiedName: string, sourceModelica: string): stri
   const parent = parts.slice(0, -1).join('.')
 
   const needsBlocksAliases =
-    qualifiedName.startsWith('Modelica.Blocks.Examples.') ||
-    /(?:^|\s)(Sources|Math)\./.test(source)
+    qualifiedName.startsWith('Modelica.Blocks.Examples.') || /(?:^|\s)(Sources|Math)\./.test(source)
   if (!needsBlocksAliases) return `within ${parent};\n\n${source}`
 
   const imports: string[] = []

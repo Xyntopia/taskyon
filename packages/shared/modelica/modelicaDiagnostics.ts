@@ -7,14 +7,14 @@ import {
   selectDaeForTemplate,
   shouldValidateModelAbiForRenderedOutput,
   validateModelAbiValidationResultV1,
-} from 'src/modules/modelica/modelica'
+} from '@taskyon/shared/modelica/modelica'
 import baseDaeTemplate from 'src/modules/modelica/base_dae.jinja?raw'
 import javascriptTemplate from 'src/modules/modelica/javascript.jinja?raw'
 import standaloneHtmlTemplate from 'src/modules/modelica/standalone_html.jinja?raw'
 import bouncingBallTemplate from 'src/modules/modelica/bouncing_ball_animation.jinja?raw'
-import { serializeObject } from '../../../packages/shared/modules/serializeObject'
+import { serializeObject } from '../modules/serializeObject'
 import { strFromU8, unzipSync } from 'fflate'
-import { executeCodeInIframeSimple } from '../../../packages/taskyon/src/utils/iframeWorker'
+import { executeCodeInIframeSimple } from '../../taskyon/src/utils/iframeWorker'
 
 const templateChecks = [
   {
@@ -711,8 +711,12 @@ model BouncingBall             "The bouncing ball model"
   const tSeries = asFiniteSeries(runResult?.data?.t)
   const hSeries = getSeriesByName(runResult?.data?.x, 'h')
   const vSeries = getSeriesByName(runResult?.data?.x, 'v')
-  const minH = hSeries.filter(Number.isFinite).reduce((m, v) => Math.min(m, v), Number.POSITIVE_INFINITY)
-  const maxH = hSeries.filter(Number.isFinite).reduce((m, v) => Math.max(m, v), Number.NEGATIVE_INFINITY)
+  const minH = hSeries
+    .filter(Number.isFinite)
+    .reduce((m, v) => Math.min(m, v), Number.POSITIVE_INFINITY)
+  const maxH = hSeries
+    .filter(Number.isFinite)
+    .reduce((m, v) => Math.max(m, v), Number.NEGATIVE_INFINITY)
   const vSignFlips = countSignFlips(vSeries)
   const events = Array.isArray(runResult?.meta?.events) ? runResult?.meta?.events : []
   const eventCountFromStats = Number(runResult?.meta?.solverStats?.eventCount ?? events.length)
@@ -728,7 +732,9 @@ model BouncingBall             "The bouncing ball model"
     eventCountFromStats: Number.isFinite(eventCountFromStats) ? eventCountFromStats : events.length,
     stopReason: runResult?.meta?.stopReason ?? null,
     stopError: runResult?.meta?.stopError ?? null,
-    stateNames: Array.isArray(runResult?.meta?.model?.stateNames) ? runResult.meta.model.stateNames : [],
+    stateNames: Array.isArray(runResult?.meta?.model?.stateNames)
+      ? runResult.meta.model.stateNames
+      : [],
   }
 
   if (runResult?.meta?.stopReason) {
@@ -841,9 +847,7 @@ end Test;
     return {
       length: rendered.length,
       hasLegacyDotSymbols:
-        rendered.includes('_dot - (') ||
-        rendered.includes('x_dot') ||
-        rendered.includes('v_dot'),
+        rendered.includes('_dot - (') || rendered.includes('x_dot') || rendered.includes('v_dot'),
       head,
       tail,
     }
@@ -1172,7 +1176,10 @@ function collectQualifiedClassNames(
       out.push(node.qualified_name)
     }
     if (!Array.isArray(node.children)) continue
-    collectQualifiedClassNames(node.children as Array<{ qualified_name?: unknown; children?: unknown }>, out)
+    collectQualifiedClassNames(
+      node.children as Array<{ qualified_name?: unknown; children?: unknown }>,
+      out,
+    )
   }
 }
 
@@ -1323,7 +1330,9 @@ export async function testModelicaMslCompileAndRunSmoke() {
       typeof wasm.compile_with_source_roots !== 'function' &&
       typeof wasm.compile_with_libraries !== 'function'
     ) {
-      throw new Error('Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries')
+      throw new Error(
+        'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
+      )
     }
     if (typeof wasm.render_template !== 'function') {
       throw new Error('Rumoca wasm export missing: render_template')
@@ -1559,7 +1568,9 @@ end MslResistorManualFlattened;
       typeof wasm.compile_with_source_roots !== 'function' &&
       typeof wasm.compile_with_libraries !== 'function'
     ) {
-      throw new Error('Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries')
+      throw new Error(
+        'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
+      )
     }
     if (typeof wasm.render_template !== 'function') {
       throw new Error('Rumoca wasm export missing: render_template')
@@ -1777,7 +1788,9 @@ export async function testModelicaMslResistorExampleSimulation() {
       typeof wasm.compile_with_source_roots !== 'function' &&
       typeof wasm.compile_with_libraries !== 'function'
     ) {
-      throw new Error('Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries')
+      throw new Error(
+        'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
+      )
     }
     if (typeof wasm.render_template !== 'function') {
       throw new Error('Rumoca wasm export missing: render_template')

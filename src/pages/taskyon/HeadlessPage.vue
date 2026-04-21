@@ -12,7 +12,7 @@
 import { getActiveP2pNode } from '@taskyon/taskyon'
 import { until } from '@vueuse/core'
 import { dump } from 'js-yaml'
-import * as ModelicaDiagnostics from 'src/modules/modelica/modelicaDiagnostics'
+import * as ModelicaDiagnostics from '@taskyon/shared/modelica/modelicaDiagnostics'
 import { runMarkdownDetectionTests } from 'src/modules/taskyon/runMarkdownDetectionTests'
 import * as TaskyonTests from 'src/modules/taskyon/tests'
 import { testBuildSlimView } from 'src/modules/vueUtils'
@@ -55,7 +55,11 @@ async function emitHeadlessEvent(name: string, payload: Record<string, unknown>)
     const { emit } = await import('@tauri-apps/api/event')
     await emit(name, payload)
   } catch (error) {
-    console.error(`${HEADLESS_KEEP_TAG}[EMIT][ERROR] failed to emit event`, { name, payload, error })
+    console.error(`${HEADLESS_KEEP_TAG}[EMIT][ERROR] failed to emit event`, {
+      name,
+      payload,
+      error,
+    })
   }
 }
 
@@ -106,9 +110,7 @@ function normalizeTestFilter(value: string): string {
 function applyTestFilter(tests: TestRecord, filter: string): TestRecord {
   const normalizedFilter = normalizeTestFilter(filter)
   return Object.fromEntries(
-    Object.entries(tests).filter(([name]) =>
-      normalizeTestFilter(name).includes(normalizedFilter),
-    ),
+    Object.entries(tests).filter(([name]) => normalizeTestFilter(name).includes(normalizedFilter)),
   )
 }
 
