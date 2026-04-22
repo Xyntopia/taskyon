@@ -123,20 +123,24 @@
             <q-btn flat dense color="primary" label="Retry" @click="updateChart(index)" />
           </div>
           <template v-else-if="chart.plotValue !== undefined">
-            <ListChart
-              :value="chart.plotValue"
-              :title="chart.title"
-              :auto-contour-on-sparse-heatmap="props.autoContourOnSparseHeatmap"
-              :show-controls="showControls && !isViewOnly"
-              :enable-data-zoom="showControls && !isViewOnly"
-              :show-axis-ticks="true"
-              :show-axis-units="true"
-              :x-axis="{ label: toAxisLabel(chart.config.x), unit: toAxisUnit(chart.config.x) }"
-              :y-axis="{
-                label: toAxisLabel(chart.config.y),
-                unit: toAxisUnit(chart.config.y),
-              }"
-            />
+            <slot name="plot-renderer" v-bind="buildPlotRendererSlotProps(chart, index, 'full')">
+              <ListChart
+                v-if="props.enableDefaultPlotRenderer !== false"
+                :value="chart.plotValue"
+                :title="chart.title"
+                :auto-contour-on-sparse-heatmap="props.autoContourOnSparseHeatmap"
+                :show-controls="showControls && !isViewOnly"
+                :enable-data-zoom="showControls && !isViewOnly"
+                :show-axis-ticks="true"
+                :show-axis-units="true"
+                :x-axis="{ label: toAxisLabel(chart.config.x), unit: toAxisUnit(chart.config.x) }"
+                :y-axis="{
+                  label: toAxisLabel(chart.config.y),
+                  unit: toAxisUnit(chart.config.y),
+                }"
+              />
+              <div v-else class="text-caption text-grey-7">No plot renderer configured.</div>
+            </slot>
           </template>
           <div v-else class="text-caption text-grey-7 q-gutter-xs row items-center">
             <span v-if="lazyMode">Large dataset: render on demand.</span>
@@ -160,16 +164,14 @@
             {{ chart.renderError || 'Failed to render map.' }}
             <q-btn flat dense color="primary" label="Retry" @click="updateChart(index)" />
           </div>
-          <EnvironmentMap
-            v-else-if="chart.mapValue"
-            class="object-path-charts__map-view"
-            style="height: 420px"
-            :initial-center="chart.mapValue.initialCenter"
-            :initial-zoom="chart.mapValue.initialZoom"
-            :external-feature-layers="chart.mapValue.layers"
-            :show-zoom-to-marked-button="chart.config.showZoomToMarkedButton !== false"
-            :zoom-to-marked-layer-ids="chart.config.zoomToMarkedLayerIds ?? []"
-          />
+          <template v-else-if="chart.mapValue">
+            <slot
+              name="map-renderer"
+              v-bind="buildMapRendererSlotProps(chart, index, 'full') ?? undefined"
+            >
+              <div class="text-caption text-grey-7">No map renderer configured.</div>
+            </slot>
+          </template>
           <div v-else class="text-caption text-grey-7 q-gutter-xs row items-center">
             <span v-if="lazyMode">Large dataset: render on demand.</span>
             <span v-else>Configure contour and/or feature paths to render this map.</span>
@@ -212,31 +214,44 @@
               </div>
 
               <div class="object-path-charts__thumb-chart">
-                <ListChart
+                <slot
                   v-if="chart.variant === 'plot' && chart.plotValue !== undefined"
-                  :value="chart.plotValue"
-                  :title="chart.title"
-                  :auto-contour-on-sparse-heatmap="props.autoContourOnSparseHeatmap"
-                  :show-controls="false"
-                  :enable-data-zoom="false"
-                  :show-axis-ticks="false"
-                  :show-axis-units="false"
-                  chart-height="150px"
-                  :x-axis="{ label: toAxisLabel(chart.config.x), unit: toAxisUnit(chart.config.x) }"
-                  :y-axis="{
-                    label: toAxisLabel(chart.config.y),
-                    unit: toAxisUnit(chart.config.y),
-                  }"
-                />
+                  name="plot-renderer"
+                  v-bind="buildPlotRendererSlotProps(chart, index, 'thumbnail')"
+                >
+                  <ListChart
+                    v-if="props.enableDefaultPlotRenderer !== false"
+                    :value="chart.plotValue"
+                    :title="chart.title"
+                    :auto-contour-on-sparse-heatmap="props.autoContourOnSparseHeatmap"
+                    :show-controls="false"
+                    :enable-data-zoom="false"
+                    :show-axis-ticks="false"
+                    :show-axis-units="false"
+                    chart-height="150px"
+                    :x-axis="{
+                      label: toAxisLabel(chart.config.x),
+                      unit: toAxisUnit(chart.config.x),
+                    }"
+                    :y-axis="{
+                      label: toAxisLabel(chart.config.y),
+                      unit: toAxisUnit(chart.config.y),
+                    }"
+                  />
+                  <div v-else class="text-caption text-grey-7">No plot renderer configured.</div>
+                </slot>
 
-                <EnvironmentMap
+                <div
                   v-else-if="chart.variant === 'map' && chart.mapValue"
                   class="object-path-charts__thumb-map"
-                  style="height: 150px"
-                  :initial-center="chart.mapValue.initialCenter"
-                  :initial-zoom="chart.mapValue.initialZoom"
-                  :external-feature-layers="chart.mapValue.layers"
-                />
+                >
+                  <slot
+                    name="map-renderer"
+                    v-bind="buildMapRendererSlotProps(chart, index, 'thumbnail') ?? undefined"
+                  >
+                    <div class="text-caption text-grey-7">No map renderer configured.</div>
+                  </slot>
+                </div>
 
                 <div
                   v-else
@@ -301,40 +316,57 @@
             <q-btn flat dense color="primary" label="Retry" @click="renderSelectedThumbnail" />
           </div>
 
-          <ListChart
+          <slot
             v-else-if="
               selectedThumbnailChart.variant === 'plot' &&
               selectedThumbnailChart.plotValue !== undefined
             "
-            :value="selectedThumbnailChart.plotValue"
-            :title="selectedThumbnailChart.title"
-            :auto-contour-on-sparse-heatmap="props.autoContourOnSparseHeatmap"
-            :show-controls="showControls && !isViewOnly"
-            :enable-data-zoom="showControls && !isViewOnly"
-            :show-axis-ticks="true"
-            :show-axis-units="true"
-            :x-axis="{
-              label: toAxisLabel(selectedThumbnailChart.config.x),
-              unit: toAxisUnit(selectedThumbnailChart.config.x),
-            }"
-            :y-axis="{
-              label: toAxisLabel(selectedThumbnailChart.config.y),
-              unit: toAxisUnit(selectedThumbnailChart.config.y),
-            }"
-          />
-
-          <EnvironmentMap
-            v-else-if="selectedThumbnailChart.variant === 'map' && selectedThumbnailChart.mapValue"
-            class="object-path-charts__map-view"
-            style="height: 520px"
-            :initial-center="selectedThumbnailChart.mapValue.initialCenter"
-            :initial-zoom="selectedThumbnailChart.mapValue.initialZoom"
-            :external-feature-layers="selectedThumbnailChart.mapValue.layers"
-            :show-zoom-to-marked-button="
-              selectedThumbnailChart.config.showZoomToMarkedButton !== false
+            name="plot-renderer"
+            v-bind="
+              buildPlotRendererSlotProps(
+                selectedThumbnailChart,
+                selectedThumbnailChartIndex,
+                'dialog',
+              )
             "
-            :zoom-to-marked-layer-ids="selectedThumbnailChart.config.zoomToMarkedLayerIds ?? []"
-          />
+          >
+            <ListChart
+              v-if="props.enableDefaultPlotRenderer !== false"
+              :value="selectedThumbnailChart.plotValue"
+              :title="selectedThumbnailChart.title"
+              :auto-contour-on-sparse-heatmap="props.autoContourOnSparseHeatmap"
+              :show-controls="showControls && !isViewOnly"
+              :enable-data-zoom="showControls && !isViewOnly"
+              :show-axis-ticks="true"
+              :show-axis-units="true"
+              :x-axis="{
+                label: toAxisLabel(selectedThumbnailChart.config.x),
+                unit: toAxisUnit(selectedThumbnailChart.config.x),
+              }"
+              :y-axis="{
+                label: toAxisLabel(selectedThumbnailChart.config.y),
+                unit: toAxisUnit(selectedThumbnailChart.config.y),
+              }"
+            />
+            <div v-else class="text-caption text-grey-7">No plot renderer configured.</div>
+          </slot>
+
+          <template
+            v-else-if="selectedThumbnailChart.variant === 'map' && selectedThumbnailChart.mapValue"
+          >
+            <slot
+              name="map-renderer"
+              v-bind="
+                buildMapRendererSlotProps(
+                  selectedThumbnailChart,
+                  selectedThumbnailChartIndex,
+                  'dialog',
+                ) ?? undefined
+              "
+            >
+              <div class="text-caption text-grey-7">No map renderer configured.</div>
+            </slot>
+          </template>
 
           <div v-else class="text-caption text-grey-7 row items-center q-gutter-xs">
             <span v-if="lazyMode">Large dataset: render on demand.</span>
@@ -419,7 +451,6 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import ListChart from './varViews/ListChart.vue'
 import ObjectPathChartAxesEditor from './ObjectPathChartAxesEditor.vue'
 import ObjectPathChartMapEditor from './ObjectPathChartMapEditor.vue'
-import EnvironmentMap from 'src/components/EnvironmentMap.vue'
 import type { PlotFlatRow, PlotResolution, PlotSparseHeatmapValue } from '../modules/plotMath'
 import { buildPlotValueFromRows } from '../modules/plotMath'
 import {
@@ -484,6 +515,36 @@ export type ObjectPathChartsMapResolverArgs = {
   index: number
 }
 
+export type ObjectPathChartsRendererView = 'full' | 'thumbnail' | 'dialog'
+
+type AxisDescriptor = {
+  label: string
+  unit: string | undefined
+}
+
+export type ObjectPathChartsPlotRendererSlotProps = {
+  chart: ChartViewModel
+  config: ObjectPathChartDefinition
+  plotValue: unknown
+  title: string
+  xAxis: AxisDescriptor
+  yAxis: AxisDescriptor
+  view: ObjectPathChartsRendererView
+  showControls: boolean
+  isViewOnly: boolean
+  retry: () => void
+}
+
+export type ObjectPathChartsMapRendererSlotProps = {
+  chart: ChartViewModel
+  config: ObjectPathChartDefinition
+  mapValue: MapChartValue
+  view: ObjectPathChartsRendererView
+  showControls: boolean
+  isViewOnly: boolean
+  retry: () => void
+}
+
 type ChartViewModel = {
   key: string
   config: ObjectPathChartDefinition
@@ -525,11 +586,13 @@ const props = withDefaults(
     favoriteKeys?: string[] | null
     showAddMapButton?: boolean
     showControls?: boolean
+    enableDefaultPlotRenderer?: boolean
     lazy?: boolean
   }>(),
   {
     showAddMapButton: true,
     showControls: true,
+    enableDefaultPlotRenderer: true,
     lazy: false,
   },
 )
@@ -1452,6 +1515,51 @@ const chartList = computed<ChartViewModel[]>(() =>
   }),
 )
 
+const axisDescriptor = (path?: string): AxisDescriptor => ({
+  label: toAxisLabel(path),
+  unit: toAxisUnit(path),
+})
+
+const retryChartAtIndex =
+  (index: number): (() => void) =>
+  () => {
+    void updateChart(index)
+  }
+
+const buildPlotRendererSlotProps = (
+  chart: ChartViewModel,
+  index: number,
+  view: ObjectPathChartsRendererView,
+): ObjectPathChartsPlotRendererSlotProps => ({
+  chart,
+  config: chart.config,
+  plotValue: chart.plotValue,
+  title: chart.title,
+  xAxis: axisDescriptor(chart.config.x),
+  yAxis: axisDescriptor(chart.config.y),
+  view,
+  showControls: showControls.value,
+  isViewOnly: isViewOnly.value,
+  retry: retryChartAtIndex(index),
+})
+
+const buildMapRendererSlotProps = (
+  chart: ChartViewModel,
+  index: number,
+  view: ObjectPathChartsRendererView,
+): ObjectPathChartsMapRendererSlotProps | null => {
+  if (!chart.mapValue) return null
+  return {
+    chart,
+    config: chart.config,
+    mapValue: chart.mapValue,
+    view,
+    showControls: showControls.value,
+    isViewOnly: isViewOnly.value,
+    retry: retryChartAtIndex(index),
+  }
+}
+
 const ensureRenderState = (key: string) => {
   if (!renderStateByKey.value[key]) renderStateByKey.value[key] = 'idle'
   if (!(key in renderErrorByKey.value)) renderErrorByKey.value[key] = null
@@ -1748,10 +1856,16 @@ const updateAllCharts = async () => {
   }
 }
 
-const selectedThumbnailChart = computed<ChartViewModel | null>(() => {
-  if (!Number.isInteger(selectedThumbnailIndex.value)) return null
+const selectedThumbnailChartIndex = computed(() => {
+  if (!Number.isInteger(selectedThumbnailIndex.value)) return -1
   const index = Number(selectedThumbnailIndex.value)
-  if (index < 0 || index >= chartList.value.length) return null
+  if (index < 0 || index >= chartList.value.length) return -1
+  return index
+})
+
+const selectedThumbnailChart = computed<ChartViewModel | null>(() => {
+  const index = selectedThumbnailChartIndex.value
+  if (index < 0) return null
   return chartList.value[index] ?? null
 })
 
@@ -2040,7 +2154,8 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.object-path-charts__map-view {
+.object-path-charts__map-view,
+:deep(.object-path-charts__map-view) {
   border: 1px solid rgba(128, 128, 128, 0.2);
   border-radius: 6px;
   overflow: hidden;
