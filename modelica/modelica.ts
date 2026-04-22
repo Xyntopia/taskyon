@@ -3,8 +3,8 @@ import type * as WasmTypes from 'rumoca'
 import { z } from 'zod'
 import { ref } from 'vue'
 import { Notify } from 'quasar'
-import { executeCodeInIframeSimple } from '../../taskyon/src/utils/iframeWorker'
-import { validateJavaScriptInSandbox } from '../../taskyon/src/utils/checkJsSyntax'
+import { executeCodeInIframeSimple } from '../modules/sandbox/iframeWorker'
+import { validateJavaScriptInSandbox } from '../modules/sandbox/checkJsSyntax'
 import { serializeObject } from '../modules/serializeObject'
 
 // Zod v3 vs v4 compatibility: some builds do not expose z.function().args().returns().

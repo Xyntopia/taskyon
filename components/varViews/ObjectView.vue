@@ -177,7 +177,7 @@ import {
   useVariableGraph,
 } from './useVariableGraph'
 import type { CustomRenderer } from './VariableField.vue'
-import { safeYamlDump } from '../../modules/utils/yamlUtils'
+import { safeYamlDump } from '../../modules/yamlUtils'
 import { matAdd, matContentCopy, matDelete } from '@quasar/extras/material-icons'
 
 export type iconMap = {

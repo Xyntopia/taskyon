@@ -226,7 +226,7 @@ import {
   matSave,
 } from '@quasar/extras/material-icons'
 import { mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
-import ObjectView from '../components/varViews/ObjectView.vue'
+import ObjectView from '../../components/varViews/ObjectView.vue'
 import type { JSONSchema7 } from 'json-schema'
 import { isSourceKeyScope, solverIdFromKey } from '../modelica'
 import { computed, ref } from 'vue'

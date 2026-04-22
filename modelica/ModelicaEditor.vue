@@ -1,521 +1,507 @@
-<!--ModelicaEditPage.vue-->
+<!--ModelicaEditor.vue-->
 <template>
-  <q-layout>
-    <TaskyonHeader btn-size="md" min-mode no-chat-button-border>
-      <template #left>
-        <!-- Header -->
-        <div class="text-h6 text-primary q-ma-sm">
-          <q-icon :name="matRocketLaunch" /> Taskyon/Rumoca Modelica Editor
+  <DockView
+    v-model:node="initialLayout"
+    class="col"
+    hide-tab-add
+    hide-tab-close
+    :tab-icons="{
+      simulate: matPlayArrow,
+      plot: matShowChart,
+      template: matCode,
+      uiTemplate: matCode,
+      solver: matCode,
+      modelica: matDescription,
+      model: mdiFunctionVariant,
+      libraryTree: mdiFileTreeOutline,
+    }"
+  >
+    <template #actions>
+      <ModelicaActionsBar
+        :current-project-id="currentProjectId"
+        :available-project-ids="availableProjectIds"
+        :project-file="projectFile"
+        :project-menu-options="projectMenuOptions"
+        :project-menu-schema="projectMenuSchema"
+        :library-menu-options="libraryMenuOptions"
+        :library-menu-schema="libraryMenuSchema"
+        :runtime-menu-options="runtimeMenuOptions"
+        :runtime-menu-schema="runtimeMenuSchema"
+        :msl-loaded="mslLoaded"
+        :msl-loading="mslLoading"
+        :msl-downloading="mslDownloading"
+        :msl-archive-name="mslArchiveName"
+        :msl-file-count="mslFileCount"
+        :msl-cached-zip-path="mslCachedZipPath"
+        :wasm-loaded="wasmLoaded"
+        :current-version-index="currentVersionIndex"
+        :document-versions-length="documentVersions.length"
+        :js-source="jsSource"
+        :has-ui-template="hasUiTemplate"
+        :is-html-output="isHtmlOutput"
+        :can-run-model="canRunModel"
+        :running="running"
+        :simulation-controls-open="showSolverOptionsDialog"
+        :sim-t0="simT0"
+        :sim-tf="simTf"
+        :sim-dt="simDt"
+        :selected-solver-key="selectedSolverKey"
+        :predicted-steps="predictedStepCount"
+        :actual-steps="actualStepCount"
+        :event-count="actualEventCount"
+        :has-result="hasSimulationResult"
+        :solver-options="solverOptions"
+        :solver-options-schema="solverOptionsSchema"
+        @project-selected="onProjectSelected"
+        @create-project="createNewProjectDialog"
+        @refresh-projects="refreshAvailableProjects"
+        @delete-project="deleteCurrentProject"
+        @export-project="exportProjectJson"
+        @import-project-file="onImportProjectFile"
+        @import-msl-file="handleImportMslZip"
+        @download-msl="downloadMslZipToOpfs"
+        @load-cached-msl="handleLoadCachedMslZipFromOpfs"
+        @clear-msl="handleClearModelicaLibraries"
+        @clear-all="clearAll"
+        @reset-view="resetDockLayout"
+        @load-example="loadExample"
+        @previous-version="goToPreviousVersion"
+        @next-version="goToNextVersion"
+        @create-version="handleCreateNewVersionClick"
+        @export-target="handleExportTarget"
+        @export-ui-html="handleExportUiHtml"
+        @export-ui-jinja="handleExportUiJinjaTemplate"
+        @run-sandbox="handleRunInSandbox"
+        @open-popup="openGeneratedHtmlPopup"
+        @stop-execution="stopExecution"
+        @update:simulation-controls-open="showSolverOptionsDialog = $event"
+        @update:sim-t0="simT0 = Number($event)"
+        @update:sim-tf="simTf = Number($event)"
+        @update:sim-dt="simDt = Number($event)"
+        @update:solver-options="solverOptions = $event"
+        @reset-sim-from-model="resetSimulationSettingsFromModelAnnotations"
+        @update:project-menu-options="onProjectMenuOptionsUpdate"
+        @update:library-menu-options="onLibraryMenuOptionsUpdate"
+        @update:runtime-menu-options="onRuntimeMenuOptionsUpdate"
+      />
+    </template>
+
+    <template #logs>
+      <!-- logs -->
+      <q-card bordered flat square class="modelica-log-card">
+        <div class="row no-wrap fit">
+          <div class="col modelica-log-scroll">
+            <q-expansion-item
+              v-for="(entry, idx) in modelicaLog"
+              :key="idx"
+              dense
+              dense-toggle
+              :label="entry.message"
+            >
+              <pre class="q-ma-none q-pa-xs text-caption">{{ safeYamlDump(entry) }}</pre>
+            </q-expansion-item>
+          </div>
+          <div class="column items-center q-gutter-xs q-pa-xs modelica-log-actions">
+            <q-chip dense square color="grey-3" text-color="grey-8" style="font-size: 11px">
+              Log
+            </q-chip>
+            <q-btn
+              flat
+              dense
+              round
+              color="grey-7"
+              :icon="matContentCopy"
+              :disable="modelicaLog.length === 0"
+              @click="copyLogsToClipboard()"
+            >
+              <q-tooltip>Copy Logs</q-tooltip>
+            </q-btn>
+            <q-btn
+              flat
+              dense
+              round
+              color="grey-7"
+              :icon="matDelete"
+              :disable="modelicaLog.length === 0"
+              @click="clearModelicaLog()"
+            >
+              <q-tooltip>Clear Logs</q-tooltip>
+            </q-btn>
+          </div>
         </div>
-      </template>
-    </TaskyonHeader>
-    <q-page-container>
-      <FixedHeightPage class="column">
-        <DockView
-          v-model:node="initialLayout"
-          class="col"
-          hide-tab-add
-          hide-tab-close
-          :tab-icons="{
-            simulate: matPlayArrow,
-            plot: matShowChart,
-            template: matCode,
-            uiTemplate: matCode,
-            solver: matCode,
-            modelica: matDescription,
-            model: mdiFunctionVariant,
-            libraryTree: mdiFileTreeOutline,
-          }"
-        >
-          <template #actions>
-            <ModelicaActionsBar
-              :current-project-id="currentProjectId"
-              :available-project-ids="availableProjectIds"
-              :project-file="projectFile"
-              :project-menu-options="projectMenuOptions"
-              :project-menu-schema="projectMenuSchema"
-              :library-menu-options="libraryMenuOptions"
-              :library-menu-schema="libraryMenuSchema"
-              :runtime-menu-options="runtimeMenuOptions"
-              :runtime-menu-schema="runtimeMenuSchema"
-              :msl-loaded="mslLoaded"
-              :msl-loading="mslLoading"
-              :msl-downloading="mslDownloading"
-              :msl-archive-name="mslArchiveName"
-              :msl-file-count="mslFileCount"
-              :msl-cached-zip-path="mslCachedZipPath"
-              :wasm-loaded="wasmLoaded"
-              :current-version-index="currentVersionIndex"
-              :document-versions-length="documentVersions.length"
-              :js-source="jsSource"
-              :has-ui-template="hasUiTemplate"
-              :is-html-output="isHtmlOutput"
-              :can-run-model="canRunModel"
-              :running="running"
-              :simulation-controls-open="showSolverOptionsDialog"
-              :sim-t0="simT0"
-              :sim-tf="simTf"
-              :sim-dt="simDt"
-              :selected-solver-key="selectedSolverKey"
-              :predicted-steps="predictedStepCount"
-              :actual-steps="actualStepCount"
-              :event-count="actualEventCount"
-              :has-result="hasSimulationResult"
-              :solver-options="solverOptions"
-              :solver-options-schema="solverOptionsSchema"
-              @project-selected="onProjectSelected"
-              @create-project="createNewProjectDialog"
-              @refresh-projects="refreshAvailableProjects"
-              @delete-project="deleteCurrentProject"
-              @export-project="exportProjectJson"
-              @import-project-file="onImportProjectFile"
-              @import-msl-file="handleImportMslZip"
-              @download-msl="downloadMslZipToOpfs"
-              @load-cached-msl="handleLoadCachedMslZipFromOpfs"
-              @clear-msl="handleClearModelicaLibraries"
-              @clear-all="clearAll"
-              @reset-view="resetDockLayout"
-              @load-example="loadExample"
-              @previous-version="goToPreviousVersion"
-              @next-version="goToNextVersion"
-              @create-version="handleCreateNewVersionClick"
-              @export-target="handleExportTarget"
-              @export-ui-html="handleExportUiHtml"
-              @export-ui-jinja="handleExportUiJinjaTemplate"
-              @run-sandbox="handleRunInSandbox"
-              @open-popup="openGeneratedHtmlPopup"
-              @stop-execution="stopExecution"
-              @update:simulation-controls-open="showSolverOptionsDialog = $event"
-              @update:sim-t0="simT0 = Number($event)"
-              @update:sim-tf="simTf = Number($event)"
-              @update:sim-dt="simDt = Number($event)"
-              @update:solver-options="solverOptions = $event"
-              @reset-sim-from-model="resetSimulationSettingsFromModelAnnotations"
-              @update:project-menu-options="onProjectMenuOptionsUpdate"
-              @update:library-menu-options="onLibraryMenuOptionsUpdate"
-              @update:runtime-menu-options="onRuntimeMenuOptionsUpdate"
-            />
-          </template>
+      </q-card>
+    </template>
 
-          <template #logs>
-            <!-- logs -->
-            <q-card bordered flat square class="modelica-log-card">
-              <div class="row no-wrap fit">
-                <div class="col modelica-log-scroll">
-                  <q-expansion-item
-                    v-for="(entry, idx) in modelicaLog"
-                    :key="idx"
-                    dense
-                    dense-toggle
-                    :label="entry.message"
-                  >
-                    <pre class="q-ma-none q-pa-xs text-caption">{{ safeYamlDump(entry) }}</pre>
-                  </q-expansion-item>
-                </div>
-                <div class="column items-center q-gutter-xs q-pa-xs modelica-log-actions">
-                  <q-chip dense square color="grey-3" text-color="grey-8" style="font-size: 11px">
-                    Log
-                  </q-chip>
-                  <q-btn
-                    flat
-                    dense
-                    round
-                    color="grey-7"
-                    :icon="matContentCopy"
-                    :disable="modelicaLog.length === 0"
-                    @click="copyLogsToClipboard()"
-                  >
-                    <q-tooltip>Copy Logs</q-tooltip>
-                  </q-btn>
-                  <q-btn
-                    flat
-                    dense
-                    round
-                    color="grey-7"
-                    :icon="matDelete"
-                    :disable="modelicaLog.length === 0"
-                    @click="clearModelicaLog()"
-                  >
-                    <q-tooltip>Clear Logs</q-tooltip>
-                  </q-btn>
-                </div>
-              </div>
-            </q-card>
-          </template>
+    <template #modelica>
+      <!-- Modelica source -->
+      <q-card flat>
+        <q-btn
+          color="grey-7"
+          flat
+          dense
+          label="Copy"
+          :disable="!modelicaSource"
+          @click="copyModelicaToClipboard"
+        />
+        <CodeEditor
+          v-model="modelicaSource"
+          placeholder="Enter your Modelica code here..."
+          language="modelica"
+          :extra-extensions="modelicaEditorExtensions"
+        />
+      </q-card>
+    </template>
 
-          <template #modelica>
-            <!-- Modelica source -->
-            <q-card flat>
-              <q-btn
-                color="grey-7"
-                flat
-                dense
-                label="Copy"
-                :disable="!modelicaSource"
-                @click="copyModelicaToClipboard"
-              />
+    <template #libraryTree>
+      <ModelicaLibraryTreeView
+        :loading="mslLoading"
+        :msl-loading="mslLoading"
+        :msl-downloading="mslDownloading"
+        :msl-cached-zip-path="mslCachedZipPath"
+        :nodes="libraryTreeNodes"
+        @refresh="refreshLibraryTree"
+        @open-model="openModelFromLibraryTree"
+        @import-library-file="handleImportMslZip"
+        @load-cached-msl="handleLoadCachedMslZipFromOpfs"
+        @download-msl="downloadMslZipToOpfs"
+        @clear-msl="handleClearModelicaLibraries"
+      />
+    </template>
+
+    <template #template>
+      <q-card flat>
+        <div class="row items-center q-gutter-xs q-pa-xs">
+          <q-select
+            v-model="selectedTemplateKey"
+            :options="templateOptions"
+            dense
+            outlined
+            options-dense
+            label="Template"
+            style="min-width: 220px"
+            :disable="templateOptions.length === 0"
+            option-label="label"
+            option-value="value"
+            emit-value
+            map-options
+          />
+
+          <q-input
+            v-model="newTemplateId"
+            dense
+            outlined
+            label="New template id"
+            style="max-width: 180px"
+          />
+          <q-btn
+            color="grey-7"
+            flat
+            dense
+            label="Add"
+            :disable="!newTemplateId"
+            @click="addCustomTemplate()"
+          />
+
+          <q-space />
+
+          <q-btn
+            color="grey-7"
+            flat
+            dense
+            label="Delete"
+            :disable="!canDeleteSelectedTemplate"
+            @click="deleteSelectedTemplate()"
+          />
+
+          <q-btn
+            color="grey-7"
+            flat
+            dense
+            label="Copy"
+            :disable="!templateSource"
+            @click="copyTemplateToClipboard"
+          />
+        </div>
+
+        <div style="position: relative">
+          <CodeEditor
+            v-model="templateSource"
+            placeholder="Enter your Jinja template here..."
+            language="jinja2"
+          />
+          <div
+            v-if="isTemplateBuiltin"
+            style="
+              position: absolute;
+              inset: 0;
+              background: rgba(255, 255, 255, 0.01);
+              pointer-events: all;
+            "
+            title="Built-in templates are read-only"
+          />
+        </div>
+      </q-card>
+    </template>
+
+    <template #uiTemplate>
+      <q-card flat>
+        <div class="row items-center q-gutter-xs q-pa-xs">
+          <q-select
+            v-model="selectedUiTemplateKey"
+            :options="uiTemplateOptions"
+            dense
+            outlined
+            options-dense
+            label="UI Template"
+            style="min-width: 220px"
+            :disable="uiTemplateOptions.length === 0"
+            option-label="label"
+            option-value="value"
+            emit-value
+            map-options
+          />
+
+          <q-input
+            v-model="newUiTemplateId"
+            dense
+            outlined
+            label="New UI id"
+            style="max-width: 180px"
+          />
+          <q-btn
+            color="grey-7"
+            flat
+            dense
+            label="Add"
+            :disable="!newUiTemplateId"
+            @click="addUiTemplate()"
+          />
+
+          <q-select
+            v-model="selectedSolverKey"
+            :options="solverKeyOptions"
+            dense
+            outlined
+            options-dense
+            label="Solver for UI"
+            style="min-width: 220px"
+            :disable="solverKeyOptions.length === 0"
+            option-label="label"
+            option-value="value"
+            emit-value
+            map-options
+          />
+
+          <q-space />
+
+          <q-btn
+            color="grey-7"
+            flat
+            dense
+            label="Delete"
+            :disable="!canDeleteSelectedUiTemplate"
+            @click="deleteActiveUiTemplate()"
+          />
+        </div>
+
+        <div style="position: relative">
+          <CodeEditor
+            v-model="activeUiTemplateSource"
+            placeholder="Enter your UI template source here..."
+            language="jinja2"
+          />
+          <div
+            v-if="isUiTemplateBuiltin"
+            style="
+              position: absolute;
+              inset: 0;
+              background: rgba(255, 255, 255, 0.01);
+              pointer-events: all;
+            "
+            title="Built-in UI templates are read-only"
+          />
+        </div>
+      </q-card>
+    </template>
+
+    <template #solver>
+      <q-card flat>
+        <div class="row items-center q-gutter-xs q-pa-xs">
+          <q-select
+            v-model="selectedSolverKey"
+            :options="solverKeyOptions"
+            dense
+            outlined
+            options-dense
+            label="Solver"
+            style="min-width: 260px"
+            :disable="solverKeyOptions.length === 0"
+            option-label="label"
+            option-value="value"
+            emit-value
+            map-options
+          />
+
+          <q-input
+            v-model="newSolverId"
+            dense
+            outlined
+            label="New solver id"
+            style="max-width: 180px"
+          />
+          <q-btn
+            color="grey-7"
+            flat
+            dense
+            label="Add"
+            :disable="!newSolverId"
+            @click="addProjectSolver()"
+          />
+
+          <q-btn
+            color="grey-7"
+            flat
+            dense
+            label="Options"
+            :disable="!solverOptionsSchema"
+            @click="showSolverOptionsDialog = true"
+          />
+          <q-space />
+
+          <q-btn
+            color="grey-7"
+            flat
+            dense
+            label="Delete"
+            :disable="isSolverBuiltin || projectSolverIds.length <= 1"
+            @click="deleteActiveProjectSolver()"
+          />
+        </div>
+
+        <div class="q-pa-xs text-caption text-grey-7">
+          Source: <span class="mono">{{ isSolverBuiltin ? 'built-in' : 'project' }}</span>
+        </div>
+
+        <div style="position: relative">
+          <CodeEditor
+            v-model="activeSolverSource"
+            placeholder="Enter solver JS here..."
+            language="javascript"
+          />
+          <div
+            v-if="isSolverBuiltin"
+            style="
+              position: absolute;
+              inset: 0;
+              background: rgba(255, 255, 255, 0.01);
+              pointer-events: all;
+            "
+            title="Built-in solvers are read-only"
+          />
+        </div>
+
+        <div class="q-pa-sm text-caption text-grey-7">
+          Note: solver selection is persisted and used for Popup UI and sandbox execution.
+        </div>
+      </q-card>
+    </template>
+
+    <template #model>
+      <div class="q-gutter-xs">
+        <q-btn flat dense label="Copy JS" :disable="!jsSource" @click="copyJsToClipboard" />
+        <q-btn
+          flat
+          dense
+          label="Copy DAE JSON"
+          :disable="!daeJsonOutput"
+          @click="copyDaeJsonToClipboard"
+        />
+        <q-btn
+          flat
+          dense
+          label="Copy Pretty"
+          :disable="!daePrettyOutput"
+          @click="copyDaePrettyToClipboard"
+        />
+        <q-separator />
+
+        <div>
+          <q-tabs v-model="outputTab" dense narrow-indicator>
+            <q-tab name="js" label="Code" />
+            <q-tab name="daeJson" label="JSON" />
+            <q-tab name="daePretty" label="Pretty" />
+          </q-tabs>
+
+          <q-tab-panels v-model="outputTab" animated>
+            <div name="js">
               <CodeEditor
-                v-model="modelicaSource"
-                placeholder="Enter your Modelica code here..."
-                language="modelica"
-                :extra-extensions="modelicaEditorExtensions"
+                v-model="jsSource"
+                placeholder="Generated Code will appear here..."
+                language="javascript"
               />
-            </q-card>
-          </template>
+            </div>
 
-          <template #libraryTree>
-            <ModelicaLibraryTreeView
-              :loading="mslLoading"
-              :msl-loading="mslLoading"
-              :msl-downloading="mslDownloading"
-              :msl-cached-zip-path="mslCachedZipPath"
-              :nodes="libraryTreeNodes"
-              @refresh="refreshLibraryTree"
-              @open-model="openModelFromLibraryTree"
-              @import-library-file="handleImportMslZip"
-              @load-cached-msl="handleLoadCachedMslZipFromOpfs"
-              @download-msl="downloadMslZipToOpfs"
-              @clear-msl="handleClearModelicaLibraries"
-            />
-          </template>
+            <div name="daeJson">
+              <ObjectView v-model="daeJsonOutput" copy-btn read-only enable-expert-mode />
+            </div>
 
-          <template #template>
-            <q-card flat>
-              <div class="row items-center q-gutter-xs q-pa-xs">
-                <q-select
-                  v-model="selectedTemplateKey"
-                  :options="templateOptions"
-                  dense
-                  outlined
-                  options-dense
-                  label="Template"
-                  style="min-width: 220px"
-                  :disable="templateOptions.length === 0"
-                  option-label="label"
-                  option-value="value"
-                  emit-value
-                  map-options
-                />
-
-                <q-input
-                  v-model="newTemplateId"
-                  dense
-                  outlined
-                  label="New template id"
-                  style="max-width: 180px"
-                />
-                <q-btn
-                  color="grey-7"
-                  flat
-                  dense
-                  label="Add"
-                  :disable="!newTemplateId"
-                  @click="addCustomTemplate()"
-                />
-
-                <q-space />
-
-                <q-btn
-                  color="grey-7"
-                  flat
-                  dense
-                  label="Delete"
-                  :disable="!canDeleteSelectedTemplate"
-                  @click="deleteSelectedTemplate()"
-                />
-
-                <q-btn
-                  color="grey-7"
-                  flat
-                  dense
-                  label="Copy"
-                  :disable="!templateSource"
-                  @click="copyTemplateToClipboard"
-                />
-              </div>
-
-              <div style="position: relative">
-                <CodeEditor
-                  v-model="templateSource"
-                  placeholder="Enter your Jinja template here..."
-                  language="jinja2"
-                />
-                <div
-                  v-if="isTemplateBuiltin"
-                  style="
-                    position: absolute;
-                    inset: 0;
-                    background: rgba(255, 255, 255, 0.01);
-                    pointer-events: all;
-                  "
-                  title="Built-in templates are read-only"
-                />
-              </div>
-            </q-card>
-          </template>
-
-          <template #uiTemplate>
-            <q-card flat>
-              <div class="row items-center q-gutter-xs q-pa-xs">
-                <q-select
-                  v-model="selectedUiTemplateKey"
-                  :options="uiTemplateOptions"
-                  dense
-                  outlined
-                  options-dense
-                  label="UI Template"
-                  style="min-width: 220px"
-                  :disable="uiTemplateOptions.length === 0"
-                  option-label="label"
-                  option-value="value"
-                  emit-value
-                  map-options
-                />
-
-                <q-input
-                  v-model="newUiTemplateId"
-                  dense
-                  outlined
-                  label="New UI id"
-                  style="max-width: 180px"
-                />
-                <q-btn
-                  color="grey-7"
-                  flat
-                  dense
-                  label="Add"
-                  :disable="!newUiTemplateId"
-                  @click="addUiTemplate()"
-                />
-
-                <q-select
-                  v-model="selectedSolverKey"
-                  :options="solverKeyOptions"
-                  dense
-                  outlined
-                  options-dense
-                  label="Solver for UI"
-                  style="min-width: 220px"
-                  :disable="solverKeyOptions.length === 0"
-                  option-label="label"
-                  option-value="value"
-                  emit-value
-                  map-options
-                />
-
-                <q-space />
-
-                <q-btn
-                  color="grey-7"
-                  flat
-                  dense
-                  label="Delete"
-                  :disable="!canDeleteSelectedUiTemplate"
-                  @click="deleteActiveUiTemplate()"
-                />
-              </div>
-
-              <div style="position: relative">
-                <CodeEditor
-                  v-model="activeUiTemplateSource"
-                  placeholder="Enter your UI template source here..."
-                  language="jinja2"
-                />
-                <div
-                  v-if="isUiTemplateBuiltin"
-                  style="
-                    position: absolute;
-                    inset: 0;
-                    background: rgba(255, 255, 255, 0.01);
-                    pointer-events: all;
-                  "
-                  title="Built-in UI templates are read-only"
-                />
-              </div>
-            </q-card>
-          </template>
-
-          <template #solver>
-            <q-card flat>
-              <div class="row items-center q-gutter-xs q-pa-xs">
-                <q-select
-                  v-model="selectedSolverKey"
-                  :options="solverKeyOptions"
-                  dense
-                  outlined
-                  options-dense
-                  label="Solver"
-                  style="min-width: 260px"
-                  :disable="solverKeyOptions.length === 0"
-                  option-label="label"
-                  option-value="value"
-                  emit-value
-                  map-options
-                />
-
-                <q-input
-                  v-model="newSolverId"
-                  dense
-                  outlined
-                  label="New solver id"
-                  style="max-width: 180px"
-                />
-                <q-btn
-                  color="grey-7"
-                  flat
-                  dense
-                  label="Add"
-                  :disable="!newSolverId"
-                  @click="addProjectSolver()"
-                />
-
-                <q-btn
-                  color="grey-7"
-                  flat
-                  dense
-                  label="Options"
-                  :disable="!solverOptionsSchema"
-                  @click="showSolverOptionsDialog = true"
-                />
-                <q-space />
-
-                <q-btn
-                  color="grey-7"
-                  flat
-                  dense
-                  label="Delete"
-                  :disable="isSolverBuiltin || projectSolverIds.length <= 1"
-                  @click="deleteActiveProjectSolver()"
-                />
-              </div>
-
-              <div class="q-pa-xs text-caption text-grey-7">
-                Source: <span class="mono">{{ isSolverBuiltin ? 'built-in' : 'project' }}</span>
-              </div>
-
-              <div style="position: relative">
-                <CodeEditor
-                  v-model="activeSolverSource"
-                  placeholder="Enter solver JS here..."
-                  language="javascript"
-                />
-                <div
-                  v-if="isSolverBuiltin"
-                  style="
-                    position: absolute;
-                    inset: 0;
-                    background: rgba(255, 255, 255, 0.01);
-                    pointer-events: all;
-                  "
-                  title="Built-in solvers are read-only"
-                />
-              </div>
-
-              <div class="q-pa-sm text-caption text-grey-7">
-                Note: solver selection is persisted and used for Popup UI and sandbox execution.
-              </div>
-            </q-card>
-          </template>
-
-          <template #model>
-            <div class="q-gutter-xs">
-              <q-btn flat dense label="Copy JS" :disable="!jsSource" @click="copyJsToClipboard" />
-              <q-btn
-                flat
-                dense
-                label="Copy DAE JSON"
-                :disable="!daeJsonOutput"
-                @click="copyDaeJsonToClipboard"
-              />
-              <q-btn
-                flat
-                dense
-                label="Copy Pretty"
-                :disable="!daePrettyOutput"
-                @click="copyDaePrettyToClipboard"
-              />
-              <q-separator />
-
-              <div>
-                <q-tabs v-model="outputTab" dense narrow-indicator>
-                  <q-tab name="js" label="Code" />
-                  <q-tab name="daeJson" label="JSON" />
-                  <q-tab name="daePretty" label="Pretty" />
-                </q-tabs>
-
-                <q-tab-panels v-model="outputTab" animated>
-                  <div name="js">
-                    <CodeEditor
-                      v-model="jsSource"
-                      placeholder="Generated Code will appear here..."
-                      language="javascript"
-                    />
-                  </div>
-
-                  <div name="daeJson">
-                    <ObjectView v-model="daeJsonOutput" copy-btn read-only enable-expert-mode />
-                  </div>
-
-                  <div name="daePretty">
-                    <pre>
+            <div name="daePretty">
+              <pre>
                 {{ daePrettyOutput }}
                 </pre
-                    >
-                  </div>
-                </q-tab-panels>
-              </div>
+              >
             </div>
-          </template>
-          <template #simulate>
-            <q-card flat>
-              <q-card-section>
-                <div class="row q-col-gutter-sm">
-                  <div class="col-4">
-                    <q-input v-model.number="simT0" type="number" outlined label="t0" />
-                  </div>
-                  <div class="col-4">
-                    <q-input v-model.number="simTf" type="number" outlined label="tf" />
-                  </div>
-                  <div class="col-4">
-                    <q-input v-model.number="simDt" type="number" outlined label="dt" />
-                  </div>
-                </div>
-              </q-card-section>
+          </q-tab-panels>
+        </div>
+      </div>
+    </template>
+    <template #simulate>
+      <q-card flat>
+        <q-card-section>
+          <div class="row q-col-gutter-sm">
+            <div class="col-4">
+              <q-input v-model.number="simT0" type="number" outlined label="t0" />
+            </div>
+            <div class="col-4">
+              <q-input v-model.number="simTf" type="number" outlined label="tf" />
+            </div>
+            <div class="col-4">
+              <q-input v-model.number="simDt" type="number" outlined label="dt" />
+            </div>
+          </div>
+        </q-card-section>
 
-              <q-card-section v-if="executionResult && Object.keys(executionResult).length">
-                <ObjectView v-model="executionResult" dense read-only copy-btn enable-expert-mode />
-              </q-card-section>
-            </q-card>
-          </template>
+        <q-card-section v-if="executionResult && Object.keys(executionResult).length">
+          <ObjectView v-model="executionResult" dense read-only copy-btn enable-expert-mode />
+        </q-card-section>
+      </q-card>
+    </template>
 
-          <template #plot>
-            <q-card flat>
-              <q-card-section>
-                <ObjectPathCharts
-                  v-model="plotCharts"
-                  v-model:options="plotViewOptions"
-                  :source="plotSourceData"
-                  :path-units="plotPathUnits"
-                />
-              </q-card-section>
-            </q-card>
-          </template>
+    <template #plot>
+      <q-card flat>
+        <q-card-section>
+          <ObjectPathCharts
+            v-model="plotCharts"
+            v-model:options="plotViewOptions"
+            :source="plotSourceData"
+            :path-units="plotPathUnits"
+          />
+        </q-card-section>
+      </q-card>
+    </template>
 
-          <template #assistant>
-            <TaskyonIframe
-              :tools="tools"
-              :configuration="configuration"
-              profile-name="modelica_edit_page"
-              :binding-key="appState.bindingKey"
-              missing-binding-key-policy="noBindingKey"
-              name="modelica-chat"
-              :persist="true"
-            />
-          </template>
-        </DockView>
-      </FixedHeightPage>
-    </q-page-container>
-  </q-layout>
+    <template #assistant>
+      <TaskyonIframe
+        :tools="tools"
+        :configuration="configuration"
+        profile-name="modelica_edit_page"
+        :binding-key="props.bindingKey"
+        missing-binding-key-policy="noBindingKey"
+        name="modelica-chat"
+        :persist="true"
+      />
+    </template>
+  </DockView>
 </template>
 
 <script setup lang="ts">
@@ -525,7 +511,6 @@ import {
   matDescription,
   matDelete,
   matPlayArrow,
-  matRocketLaunch,
   matShowChart,
 } from '@quasar/extras/material-icons'
 import { mdiFileTreeOutline, mdiFunctionVariant } from '@quasar/extras/mdi-v6'
@@ -536,7 +521,6 @@ import { Dialog, Notify } from 'quasar'
 import CodeEditor from '../components/CodeEditor.vue'
 import type { DockNode } from '../components/DockView.vue'
 import DockView from '../components/DockView.vue'
-import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import TaskyonIframe from '../components/TaskyonIframe.vue'
 import ObjectView from '../components/varViews/ObjectView.vue'
 import {
@@ -578,8 +562,8 @@ import { useModelicaLibraries } from './useModelicaLibraries'
 import { useSolverRegistry } from './useSolverRegistry'
 import { createModelicaLspCompletionExtension } from './modelicaLspCompletion'
 import { ModelicaWorkerClient } from './modelicaWorkerClient'
-import ObjectPathCharts from '../../../packages/shared/components/ObjectPathCharts.vue'
-import type { ObjectPathChartsViewOptions } from '../../../packages/shared/components/ObjectPathCharts.vue'
+import ObjectPathCharts from '../components/ObjectPathCharts.vue'
+import type { ObjectPathChartsViewOptions } from '../components/ObjectPathCharts.vue'
 
 type StatusType = 'loading' | 'success' | 'error' | ''
 type PlotChartSelection = {
@@ -589,6 +573,17 @@ type PlotChartSelection = {
   title?: string | undefined
 }
 type PlotViewOptions = ObjectPathChartsViewOptions
+
+const props = withDefaults(
+  defineProps<{
+    taskyonSignatureOrKey?: string | null
+    bindingKey?: CryptoKey | string | null
+  }>(),
+  {
+    taskyonSignatureOrKey: null,
+    bindingKey: null,
+  },
+)
 
 const modelicaSource = ref('')
 const openedLibraryClassContext = ref<{ qualifiedName: string; sourceSnapshot: string } | null>(
@@ -967,11 +962,8 @@ onBeforeUnmount(() => {
   modelicaWorker.value = null
 })
 
-const tystate = useTaskyonStore()
-const appState = useAppStateStore()
-
 const configuration = computed<partialTyConfiguration | null>(() => {
-  const taskyonKey = tystate.getTaskyonKeyString()
+  const taskyonKey = props.taskyonSignatureOrKey
   if (taskyonKey == null) return null
   return {
     llmSettings: {
@@ -985,7 +977,7 @@ const configuration = computed<partialTyConfiguration | null>(() => {
       chatSuggestions: [],
       welcomeMsg: 'I can edit your Modelica model and template. Ask me to change them.',
     },
-    signatureOrKey: taskyonKey,
+    signatureOrKey: String(taskyonKey),
   }
 })
 

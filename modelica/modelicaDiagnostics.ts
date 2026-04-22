@@ -7,9 +7,9 @@ import {
   selectDaeForTemplate,
   shouldValidateModelAbiForRenderedOutput,
   validateModelAbiValidationResultV1,
-} from '@taskyon/shared/modelica/modelica'
+} from './modelica'
 import { strFromU8, unzipSync } from 'fflate'
-import { executeCodeInIframeSimple } from '../../taskyon/src/utils/iframeWorker'
+import { executeCodeInIframeSimple } from '../modules/sandbox/iframeWorker'
 import { serializeObject } from '../modules/serializeObject'
 import baseDaeTemplate from './base_dae.jinja?raw'
 import bouncingBallTemplate from './bouncing_ball_animation.jinja?raw'
