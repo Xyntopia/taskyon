@@ -1,11 +1,6 @@
 <template>
   <div class="graph-canvas-wrap">
-    <button
-      type="button"
-      class="copy-btn"
-      :disabled="copying"
-      @click="onCopyPng"
-    >
+    <button type="button" class="copy-btn" :disabled="copying" @click="onCopyPng">
       {{ copyLabel }}
     </button>
     <div ref="containerRef" class="graph-canvas"></div>
@@ -19,7 +14,7 @@ import {
   type LayoutEdge,
   type LayoutNode,
   type RenderOptions,
-} from '@shared/modules/graph'
+} from '../modules/graph'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{

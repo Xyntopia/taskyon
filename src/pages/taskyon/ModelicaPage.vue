@@ -31,5 +31,5 @@ import { computed } from 'vue'
 const tystate = useTaskyonStore()
 const appState = useAppStateStore()
 
-const taskyonSignatureOrKey = computed(() => tystate.getTaskyonKeyString())
+const taskyonSignatureOrKey = computed(() => tystate.getTaskyonKeyString() ?? null)
 </script>

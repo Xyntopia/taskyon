@@ -111,7 +111,7 @@ import {
   type PlotResolution,
   type PlotSparseHeatmapRenderMode,
   type PlotSparseHeatmapValue,
-} from '@shared/modules/plotMath'
+} from '../../modules/plotMath'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts/core'
 import { BarChart, HeatmapChart, LineChart, ScatterChart } from 'echarts/charts'
@@ -272,7 +272,9 @@ const formatAxisValue = (n: number): string => {
   return s.replace(/\.?0+$/, '')
 }
 
-const getTupleValueExtent = (rows: Array<[number, number, number]>): { min: number; max: number } => {
+const getTupleValueExtent = (
+  rows: Array<[number, number, number]>,
+): { min: number; max: number } => {
   let min = Number.POSITIVE_INFINITY
   let max = Number.NEGATIVE_INFINITY
 

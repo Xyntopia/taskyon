@@ -1,5 +1,5 @@
 // error.ts
-import { safeYamlDump } from './yamlUtils'
+import { safeYamlDump } from '../yamlUtils'
 
 interface SerializedError {
   name: string
