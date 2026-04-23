@@ -1097,7 +1097,7 @@ function ensureLibraryTreeLayoutDefaults(node: DockNode) {
   if (libraryNode) node.children.unshift(libraryNode)
 }
 
-const jinjaTemplateUrls = import.meta.glob('src/modules/modelica/*.jinja', {
+const jinjaTemplateUrls = import.meta.glob('./*.jinja', {
   query: '?raw',
   import: 'default',
   eager: false,
@@ -1136,10 +1136,48 @@ function normalizeTemplateSelectionKey(input: string): string {
   const raw = String(input || '')
   if (!raw) return ''
   const parsed = parseSourceKey(raw)
+  if (parsed.scope === 'builtin') {
+    const resolvedBuiltin = resolveBuiltinTemplatePath(parsed.id)
+    return resolvedBuiltin ? makeSourceKey('builtin', resolvedBuiltin) : raw
+  }
   if (parsed.scope) return raw
-  if (jinjaTemplateUrls[raw]) return makeSourceKey('builtin', raw)
+  const resolvedBuiltin = resolveBuiltinTemplatePath(raw)
+  if (resolvedBuiltin) return makeSourceKey('builtin', resolvedBuiltin)
   if (customTemplates.value[raw] != null) return makeSourceKey('custom', raw)
   return raw
+}
+
+function resolveBuiltinTemplatePath(input: string): string {
+  const raw = String(input || '').trim()
+  if (!raw) return ''
+  if (jinjaTemplateUrls[raw]) return raw
+
+  const basename = raw.split('/').filter(Boolean).pop() ?? ''
+  if (!basename) return ''
+  const compactKey = `./${basename}`
+  if (jinjaTemplateUrls[compactKey]) return compactKey
+
+  const fallbackKey = Object.keys(jinjaTemplateUrls).find((key) => key.endsWith(`/${basename}`))
+  return fallbackKey ?? ''
+}
+
+function pickPreferredBuiltinTemplatePath(): string {
+  const builtinKeys = Object.keys(jinjaTemplateUrls)
+  const js = builtinKeys.find((tplKey) => tplKey.includes('javascript.jinja'))
+  if (js) return js
+  return builtinKeys[0] ?? ''
+}
+
+function ensureValidTemplateSelection() {
+  const rawKey = String(selectedTemplateKey.value || '')
+  const normalized = normalizeTemplateSelectionKey(rawKey)
+  const parsed = parseSourceKey(normalized)
+  if (parsed.scope === 'builtin' && !resolveBuiltinTemplatePath(parsed.id)) {
+    const fallback = pickPreferredBuiltinTemplatePath()
+    selectedTemplateKey.value = fallback ? makeSourceKey('builtin', fallback) : ''
+    return
+  }
+  selectedTemplateKey.value = normalized
 }
 
 // Prevent template auto-reload while restoring persisted state.
@@ -1432,7 +1470,7 @@ const {
 async function refreshBuiltinTemplateIfSelected() {
   const key = String(selectedTemplateKey.value || '')
   if (!isSourceKeyScope(key, 'builtin')) return
-  const path = parseSourceKey(key).id
+  const path = resolveBuiltinTemplatePath(parseSourceKey(key).id)
   const loader = jinjaTemplateUrls[path]
   if (!loader) return
   const content = (await loader()) as string
@@ -1738,7 +1776,7 @@ watchDebounced(
 
     const k = String(key)
     if (isSourceKeyScope(k, 'builtin')) {
-      const path = parseSourceKey(k).id
+      const path = resolveBuiltinTemplatePath(parseSourceKey(k).id)
       const loader = jinjaTemplateUrls[path]
       if (!loader) return
       const content = (await loader()) as string
@@ -2140,7 +2178,7 @@ onMounted(async () => {
     showAllInPrompt,
     currentProjectId,
   })
-  selectedTemplateKey.value = normalizeTemplateSelectionKey(selectedTemplateKey.value)
+  ensureValidTemplateSelection()
   ensureLibraryTreeLayoutDefaults(initialLayout.value)
   ensurePlotViewInLayout(initialLayout.value)
 

@@ -12,7 +12,6 @@ import { strFromU8, unzipSync } from 'fflate'
 import { executeCodeInIframeSimple } from '../modules/sandbox/iframeWorker'
 import { serializeObject } from '../modules/serializeObject'
 import baseDaeTemplate from './base_dae.jinja?raw'
-import bouncingBallTemplate from './bouncing_ball_animation.jinja?raw'
 import javascriptTemplate from './javascript.jinja?raw'
 import standaloneHtmlTemplate from './standalone_html.jinja?raw'
 
@@ -26,12 +25,6 @@ const templateChecks = [
   {
     name: 'standalone_html.jinja',
     source: standaloneHtmlTemplate,
-    requiredSnippets: ['<html lang="en">', 'function Model()'],
-    executableAsJs: false,
-  },
-  {
-    name: 'bouncing_ball_animation.jinja',
-    source: bouncingBallTemplate,
     requiredSnippets: ['<html lang="en">', 'function Model()'],
     executableAsJs: false,
   },
@@ -827,11 +820,6 @@ end Test;
     {
       name: 'standalone_html.jinja',
       template: standaloneHtmlTemplate,
-      shouldValidate: false,
-    },
-    {
-      name: 'bouncing_ball_animation.jinja',
-      template: bouncingBallTemplate,
       shouldValidate: false,
     },
     {
