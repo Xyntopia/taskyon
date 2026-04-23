@@ -1,0 +1,9 @@
+{
+  "name": "@taskyon/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "rumoca": "https://assets.taskyon.space/rumoca-0.8.12.b8.tgz"
+  }
+}

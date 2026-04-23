@@ -65,7 +65,7 @@
             flat
             dense
             color="secondary"
-            icon="refresh"
+            :icon="matRefresh"
             @click="updateChart(index)"
           />
           <q-btn
@@ -73,7 +73,7 @@
             flat
             dense
             color="primary"
-            icon="table_view"
+            :icon="matTableView"
             @click="openTablePopup(index)"
           />
           <q-btn
@@ -81,7 +81,7 @@
             flat
             dense
             color="amber-8"
-            :icon="isChartFavorite(chart.config) ? 'star' : 'star_outline'"
+            :icon="isChartFavorite(chart.config) ? matStar : matStarOutline"
             @click="toggleChartFavorite(index, chart.config)"
           />
         </div>
@@ -471,6 +471,7 @@ import {
   resolveObjectPathChartPayload,
 } from './objectPathChartsResolver'
 import { decodeQueryAxisKey, evaluateQueryAxisValue } from '../compDag/queryPipeline'
+import { matRefresh, matTableView, matStar, matStarOutline } from '@quasar/extras/material-icons'
 
 export type { ObjectPathChartDefinition }
 export type ObjectPathChartsViewOptions = {

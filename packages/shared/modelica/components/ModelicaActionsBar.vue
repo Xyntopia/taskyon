@@ -129,27 +129,27 @@
 
     <q-btn-dropdown dense flat color="secondary" :icon="matSave" label="Save" dropdown-icon="">
       <q-list dense style="min-width: 220px">
-        <q-item v-close-popup clickable @click="emit('export-target', 'modelica')">
+        <q-item v-if="showSaveModelica" v-close-popup clickable @click="emit('export-target', 'modelica')">
           <q-item-section>Export Modelica</q-item-section>
         </q-item>
-        <q-item v-close-popup clickable @click="emit('export-target', 'template')">
+        <q-item v-if="showSaveTemplate" v-close-popup clickable @click="emit('export-target', 'template')">
           <q-item-section>Export Template</q-item-section>
         </q-item>
-        <q-separator />
-        <q-item v-close-popup clickable @click="emit('export-target', 'js')">
+        <q-separator v-if="showGeneratedExports && (showSaveModelica || showSaveTemplate)" />
+        <q-item v-if="showGeneratedExports" v-close-popup clickable @click="emit('export-target', 'js')">
           <q-item-section>Export Generated JS</q-item-section>
         </q-item>
-        <q-item v-close-popup clickable @click="emit('export-target', 'daePretty')">
+        <q-item v-if="showGeneratedExports" v-close-popup clickable @click="emit('export-target', 'daePretty')">
           <q-item-section>Export Pretty DAE</q-item-section>
         </q-item>
-        <q-item v-close-popup clickable @click="emit('export-target', 'daeJson')">
+        <q-item v-if="showGeneratedExports" v-close-popup clickable @click="emit('export-target', 'daeJson')">
           <q-item-section>Export DAE JSON</q-item-section>
         </q-item>
-        <q-separator />
-        <q-item v-close-popup clickable @click="emit('export-ui-html')">
+        <q-separator v-if="showUiExports && (showSaveModelica || showSaveTemplate || showGeneratedExports)" />
+        <q-item v-if="showUiExports" v-close-popup clickable @click="emit('export-ui-html')">
           <q-item-section>Export UI HTML</q-item-section>
         </q-item>
-        <q-item v-close-popup clickable @click="emit('export-ui-jinja')">
+        <q-item v-if="showUiExports" v-close-popup clickable @click="emit('export-ui-jinja')">
           <q-item-section>Export UI Jinja Template</q-item-section>
         </q-item>
       </q-list>
@@ -185,6 +185,7 @@
     />
 
     <SimulationRunControls
+      v-if="showSimulationControls"
       v-model:open="simulationControlsOpenModel"
       v-model:t0="simT0Model"
       v-model:tf="simTfModel"
@@ -258,6 +259,10 @@ const props = defineProps<{
   hasUiTemplate: boolean
   isHtmlOutput: boolean
   running: boolean
+  activeWorkbenchView?: string
+  activeWorkspaceTab?: string
+  activeTemplatesTab?: string
+  activeResultsTab?: string
   simulationControlsOpen: boolean
   simT0: number
   simTf: number
@@ -356,5 +361,37 @@ const solverDisplayLabel = computed(() => {
       ? 'project'
       : 'solver'
   return integrator ? `${integrator} (${prefix}:${solverId})` : `${prefix}:${solverId}`
+})
+
+const isTemplatesView = computed(() => props.activeWorkbenchView === 'templates')
+const isResultsView = computed(() => props.activeWorkbenchView === 'results')
+const isWorkspaceView = computed(() => props.activeWorkbenchView === 'workspace')
+const isWorkspaceCodeTab = computed(
+  () => isWorkspaceView.value && props.activeWorkspaceTab === 'modelica',
+)
+const isWorkspaceDiagramTab = computed(
+  () => isWorkspaceView.value && props.activeWorkspaceTab === 'diagram',
+)
+
+const showSimulationControls = computed(
+  () => isResultsView.value || isWorkspaceView.value,
+)
+
+const showSaveModelica = computed(() => isWorkspaceCodeTab.value || isWorkspaceDiagramTab.value)
+
+const showSaveTemplate = computed(() => {
+  if (!isTemplatesView.value) return false
+  return props.activeTemplatesTab === 'template'
+})
+
+const showGeneratedExports = computed(() => {
+  if (!isResultsView.value) return false
+  return props.activeResultsTab === 'model' || props.activeResultsTab === 'simulate'
+})
+
+const showUiExports = computed(() => {
+  if (isTemplatesView.value) return props.activeTemplatesTab === 'uiTemplate'
+  if (isResultsView.value) return props.activeResultsTab === 'model' || props.activeResultsTab === 'plot'
+  return false
 })
 </script>

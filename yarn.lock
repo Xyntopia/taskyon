@@ -4864,6 +4864,14 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@taskyon/shared@workspace:*, @taskyon/shared@workspace:packages/shared":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/shared@workspace:packages/shared"
+  dependencies:
+    rumoca: "https://assets.taskyon.space/rumoca-0.8.12.b8.tgz"
+  languageName: unknown
+  linkType: soft
+
 "@taskyon/taskyon-headless@workspace:packages/taskyon-headless":
   version: 0.0.0-use.local
   resolution: "@taskyon/taskyon-headless@workspace:packages/taskyon-headless"
@@ -18334,10 +18342,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rumoca@https://assets.taskyon.space/rumoca-0.8.12.tgz":
+"rumoca@https://assets.taskyon.space/rumoca-0.8.12.b8.tgz":
   version: 0.8.12
-  resolution: "rumoca@https://assets.taskyon.space/rumoca-0.8.12.tgz"
-  checksum: 10c0/be9f23b576e565657db6a6719f3b85ee2e428218eb0faa9851a3696be683afbe3f246e748e6a90c7a35b209b3d81322514e74b10c20c52e03f7da7bbd83b1394
+  resolution: "rumoca@https://assets.taskyon.space/rumoca-0.8.12.b8.tgz"
+  checksum: 10c0/3b6f0dafafa8e0557ae43e831002eb5a4bf14282f8ec375e2683e338cfba97689492b8ca05fa12c4243d659623f45fc7f31f7d59c669ccbee68056dec3bdcd5e
   languageName: node
   linkType: hard
 
@@ -19966,6 +19974,7 @@ __metadata:
     "@scure/bip39": "npm:^1.5.0"
     "@supabase/supabase-js": "npm:^2.39.0"
     "@taskyon/p2p-core": "workspace:*"
+    "@taskyon/shared": "workspace:*"
     "@tauri-apps/api": "npm:^2.10.1"
     "@tauri-apps/cli": "npm:^2.10.1"
     "@tauri-apps/plugin-http": "npm:^2.5.7"
@@ -20037,7 +20046,6 @@ __metadata:
     pyodide: "npm:^0.29.3"
     qrcode: "npm:^1.5.4"
     quasar: "npm:^2.17.0"
-    rumoca: "https://assets.taskyon.space/rumoca-0.8.12.tgz"
     sort-package-json: "npm:^3.0.0"
     sqlocal: "npm:^0.6.2"
     stopword: "npm:^2.0.8"

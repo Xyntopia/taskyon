@@ -115,6 +115,8 @@
           curl
           wget
           pkg-config
+          systemd.dev
+          systemd
 
           # for running local llm models:
           # not sure, why..  but this isn't working, currently.. so we are using docker

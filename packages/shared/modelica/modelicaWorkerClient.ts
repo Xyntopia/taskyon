@@ -17,6 +17,16 @@ type WorkerRequest =
   | { id: number; type: 'get_class_info'; payload: { qualifiedName: string } }
   | {
       id: number
+      type: 'extract_diagram'
+      payload: { source: string; qualifiedName?: string; fileName?: string }
+    }
+  | {
+      id: number
+      type: 'parse_source_ast'
+      payload: { source: string; fileName?: string }
+    }
+  | {
+      id: number
       type: 'lsp_completion_with_timing'
       payload: { source: string; line: number; character: number }
     }
@@ -38,6 +48,14 @@ type WorkerRequestNoId =
   | { type: 'clear_libraries' }
   | { type: 'list_classes' }
   | { type: 'get_class_info'; payload: { qualifiedName: string } }
+  | {
+      type: 'extract_diagram'
+      payload: { source: string; qualifiedName?: string; fileName?: string }
+    }
+  | {
+      type: 'parse_source_ast'
+      payload: { source: string; fileName?: string }
+    }
   | {
       type: 'lsp_completion_with_timing'
       payload: { source: string; line: number; character: number }
@@ -128,6 +146,21 @@ export class ModelicaWorkerClient {
 
   getClassInfo(qualifiedName: string): Promise<Record<string, unknown>> {
     return this.request({ type: 'get_class_info', payload: { qualifiedName } })
+  }
+
+  extractDiagram(payload: {
+    source: string
+    qualifiedName?: string
+    fileName?: string
+  }): Promise<Record<string, unknown>> {
+    return this.request({ type: 'extract_diagram', payload })
+  }
+
+  parseSourceAst(payload: {
+    source: string
+    fileName?: string
+  }): Promise<Record<string, unknown>> {
+    return this.request({ type: 'parse_source_ast', payload })
   }
 
   lspCompletionWithTiming(source: string, line: number, character: number): Promise<Record<string, unknown>> {

@@ -95,6 +95,8 @@ export type LayoutOptions = {
   crossingMinimizationPasses?: number
   transposePasses?: number
   previousNodePositions?: Record<string, { x: number; y: number }>
+  fixedNodeRects?: Record<string, { x: number; y: number; width?: number; height?: number }>
+  authoredNodePositions?: Record<string, { x: number; y: number; width?: number; height?: number }>
   edgeLabelSize?: { width: number; height: number }
   routeOnGrid?: boolean
   routingGridSize?: number
@@ -136,4 +138,10 @@ export type RenderOptions<N = unknown, E = unknown> = LayoutOptions &
   InteractionOptions<N, E> & {
     theme?: GraphTheme
     nodeHtml?: (node: LayoutNode<N>) => string | HTMLElement | null | undefined
+    nodeSvg?: (node: LayoutNode<N>) => string | SVGElement | null | undefined
+    nodeStyle?: (node: LayoutNode<N>) => NodeStyle | undefined
+    nodeHoverStyle?: (node: LayoutNode<N>) => NodeStyle | undefined
+    edgeStyle?: (edge: LayoutEdge<E>) => EdgeStyle | undefined
+    showDefaultNodeLabel?: boolean
+    nodeHtmlPointerEvents?: 'none' | 'auto'
   }

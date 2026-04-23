@@ -6,13 +6,9 @@
     hide-tab-add
     hide-tab-close
     :tab-icons="{
-      simulate: matPlayArrow,
-      plot: matShowChart,
-      template: matCode,
-      uiTemplate: matCode,
-      solver: matCode,
-      modelica: matDescription,
-      model: mdiFunctionVariant,
+      workspace: matDescription,
+      templates: matCode,
+      results: matShowChart,
       libraryTree: mdiFileTreeOutline,
     }"
   >
@@ -41,6 +37,10 @@
         :is-html-output="isHtmlOutput"
         :can-run-model="canRunModel"
         :running="running"
+        :active-workbench-view="activeWorkbenchView"
+        :active-workspace-tab="workspaceTab"
+        :active-templates-tab="templatesTab"
+        :active-results-tab="resultsTab"
         :simulation-controls-open="showSolverOptionsDialog"
         :sim-t0="simT0"
         :sim-tf="simTf"
@@ -132,23 +132,53 @@
       </q-card>
     </template>
 
-    <template #modelica>
-      <!-- Modelica source -->
-      <q-card flat>
-        <q-btn
-          color="grey-7"
-          flat
+    <template #workspace>
+      <q-card flat class="fit column">
+        <q-tabs
+          v-model="workspaceTab"
           dense
-          label="Copy"
-          :disable="!modelicaSource"
-          @click="copyModelicaToClipboard"
-        />
-        <CodeEditor
-          v-model="modelicaSource"
-          placeholder="Enter your Modelica code here..."
-          language="modelica"
-          :extra-extensions="modelicaEditorExtensions"
-        />
+          align="left"
+          narrow-indicator
+          class="dense-tab-strip"
+        >
+          <q-tab name="modelica" label="Code" no-caps class="dense-tab" />
+          <q-tab name="diagram" label="Diagram" no-caps class="dense-tab" />
+        </q-tabs>
+        <q-separator />
+        <q-tab-panels v-model="workspaceTab" animated class="col">
+          <q-tab-panel name="modelica" class="q-pa-none fit">
+            <q-card flat class="fit column">
+              <div class="q-pa-xs">
+                <q-btn
+                  color="grey-7"
+                  flat
+                  dense
+                  label="Copy"
+                  :disable="!modelicaSource"
+                  @click="copyModelicaToClipboard"
+                />
+              </div>
+              <CodeEditor
+                v-model="modelicaSource"
+                placeholder="Enter your Modelica code here..."
+                language="modelica"
+                :extra-extensions="modelicaEditorExtensions"
+              />
+            </q-card>
+          </q-tab-panel>
+
+          <q-tab-panel name="diagram" class="q-pa-none fit">
+            <q-card flat class="fit">
+              <ModelicaDiagramPane
+                :extractor="diagramExtractor"
+                :source="modelicaSource"
+                :qualified-name="diagramTargetQualifiedName"
+                :wasm-loaded="wasmLoaded"
+                :refresh-key="diagramRefreshKey"
+              />
+            </q-card>
+          </q-tab-panel>
+        </q-tab-panels>
       </q-card>
     </template>
 
@@ -168,325 +198,358 @@
       />
     </template>
 
-    <template #template>
-      <q-card flat>
-        <div class="row items-center q-gutter-xs q-pa-xs">
-          <q-select
-            v-model="selectedTemplateKey"
-            :options="templateOptions"
-            dense
-            outlined
-            options-dense
-            label="Template"
-            style="min-width: 220px"
-            :disable="templateOptions.length === 0"
-            option-label="label"
-            option-value="value"
-            emit-value
-            map-options
-          />
-
-          <q-input
-            v-model="newTemplateId"
-            dense
-            outlined
-            label="New template id"
-            style="max-width: 180px"
-          />
-          <q-btn
-            color="grey-7"
-            flat
-            dense
-            label="Add"
-            :disable="!newTemplateId"
-            @click="addCustomTemplate()"
-          />
-
-          <q-space />
-
-          <q-btn
-            color="grey-7"
-            flat
-            dense
-            label="Delete"
-            :disable="!canDeleteSelectedTemplate"
-            @click="deleteSelectedTemplate()"
-          />
-
-          <q-btn
-            color="grey-7"
-            flat
-            dense
-            label="Copy"
-            :disable="!templateSource"
-            @click="copyTemplateToClipboard"
-          />
-        </div>
-
-        <div style="position: relative">
-          <CodeEditor
-            v-model="templateSource"
-            placeholder="Enter your Jinja template here..."
-            language="jinja2"
-          />
-          <div
-            v-if="isTemplateBuiltin"
-            style="
-              position: absolute;
-              inset: 0;
-              background: rgba(255, 255, 255, 0.01);
-              pointer-events: all;
-            "
-            title="Built-in templates are read-only"
-          />
-        </div>
-      </q-card>
-    </template>
-
-    <template #uiTemplate>
-      <q-card flat>
-        <div class="row items-center q-gutter-xs q-pa-xs">
-          <q-select
-            v-model="selectedUiTemplateKey"
-            :options="uiTemplateOptions"
-            dense
-            outlined
-            options-dense
-            label="UI Template"
-            style="min-width: 220px"
-            :disable="uiTemplateOptions.length === 0"
-            option-label="label"
-            option-value="value"
-            emit-value
-            map-options
-          />
-
-          <q-input
-            v-model="newUiTemplateId"
-            dense
-            outlined
-            label="New UI id"
-            style="max-width: 180px"
-          />
-          <q-btn
-            color="grey-7"
-            flat
-            dense
-            label="Add"
-            :disable="!newUiTemplateId"
-            @click="addUiTemplate()"
-          />
-
-          <q-select
-            v-model="selectedSolverKey"
-            :options="solverKeyOptions"
-            dense
-            outlined
-            options-dense
-            label="Solver for UI"
-            style="min-width: 220px"
-            :disable="solverKeyOptions.length === 0"
-            option-label="label"
-            option-value="value"
-            emit-value
-            map-options
-          />
-
-          <q-space />
-
-          <q-btn
-            color="grey-7"
-            flat
-            dense
-            label="Delete"
-            :disable="!canDeleteSelectedUiTemplate"
-            @click="deleteActiveUiTemplate()"
-          />
-        </div>
-
-        <div style="position: relative">
-          <CodeEditor
-            v-model="activeUiTemplateSource"
-            placeholder="Enter your UI template source here..."
-            language="jinja2"
-          />
-          <div
-            v-if="isUiTemplateBuiltin"
-            style="
-              position: absolute;
-              inset: 0;
-              background: rgba(255, 255, 255, 0.01);
-              pointer-events: all;
-            "
-            title="Built-in UI templates are read-only"
-          />
-        </div>
-      </q-card>
-    </template>
-
-    <template #solver>
-      <q-card flat>
-        <div class="row items-center q-gutter-xs q-pa-xs">
-          <q-select
-            v-model="selectedSolverKey"
-            :options="solverKeyOptions"
-            dense
-            outlined
-            options-dense
-            label="Solver"
-            style="min-width: 260px"
-            :disable="solverKeyOptions.length === 0"
-            option-label="label"
-            option-value="value"
-            emit-value
-            map-options
-          />
-
-          <q-input
-            v-model="newSolverId"
-            dense
-            outlined
-            label="New solver id"
-            style="max-width: 180px"
-          />
-          <q-btn
-            color="grey-7"
-            flat
-            dense
-            label="Add"
-            :disable="!newSolverId"
-            @click="addProjectSolver()"
-          />
-
-          <q-btn
-            color="grey-7"
-            flat
-            dense
-            label="Options"
-            :disable="!solverOptionsSchema"
-            @click="showSolverOptionsDialog = true"
-          />
-          <q-space />
-
-          <q-btn
-            color="grey-7"
-            flat
-            dense
-            label="Delete"
-            :disable="isSolverBuiltin || projectSolverIds.length <= 1"
-            @click="deleteActiveProjectSolver()"
-          />
-        </div>
-
-        <div class="q-pa-xs text-caption text-grey-7">
-          Source: <span class="mono">{{ isSolverBuiltin ? 'built-in' : 'project' }}</span>
-        </div>
-
-        <div style="position: relative">
-          <CodeEditor
-            v-model="activeSolverSource"
-            placeholder="Enter solver JS here..."
-            language="javascript"
-          />
-          <div
-            v-if="isSolverBuiltin"
-            style="
-              position: absolute;
-              inset: 0;
-              background: rgba(255, 255, 255, 0.01);
-              pointer-events: all;
-            "
-            title="Built-in solvers are read-only"
-          />
-        </div>
-
-        <div class="q-pa-sm text-caption text-grey-7">
-          Note: solver selection is persisted and used for Popup UI and sandbox execution.
-        </div>
-      </q-card>
-    </template>
-
-    <template #model>
-      <div class="q-gutter-xs">
-        <q-btn flat dense label="Copy JS" :disable="!jsSource" @click="copyJsToClipboard" />
-        <q-btn
-          flat
+    <template #templates>
+      <q-card flat class="fit column">
+        <q-tabs
+          v-model="templatesTab"
           dense
-          label="Copy DAE JSON"
-          :disable="!daeJsonOutput"
-          @click="copyDaeJsonToClipboard"
-        />
-        <q-btn
-          flat
-          dense
-          label="Copy Pretty"
-          :disable="!daePrettyOutput"
-          @click="copyDaePrettyToClipboard"
-        />
+          align="left"
+          narrow-indicator
+          class="dense-tab-strip"
+        >
+          <q-tab name="template" label="Code Template" no-caps class="dense-tab" />
+          <q-tab name="uiTemplate" label="UI Template" no-caps class="dense-tab" />
+          <q-tab name="solver" label="Solver" no-caps class="dense-tab" />
+        </q-tabs>
         <q-separator />
+        <q-tab-panels v-model="templatesTab" animated class="col">
+          <q-tab-panel name="template" class="q-pa-none fit">
+            <q-card flat class="fit column">
+              <div class="row items-center q-gutter-xs q-pa-xs">
+                <q-select
+                  v-model="selectedTemplateKey"
+                  :options="templateOptions"
+                  dense
+                  outlined
+                  options-dense
+                  label="Template"
+                  style="min-width: 220px"
+                  :disable="templateOptions.length === 0"
+                  option-label="label"
+                  option-value="value"
+                  emit-value
+                  map-options
+                />
 
-        <div>
-          <q-tabs v-model="outputTab" dense narrow-indicator>
-            <q-tab name="js" label="Code" />
-            <q-tab name="daeJson" label="JSON" />
-            <q-tab name="daePretty" label="Pretty" />
-          </q-tabs>
+                <q-input
+                  v-model="newTemplateId"
+                  dense
+                  outlined
+                  label="New template id"
+                  style="max-width: 180px"
+                />
+                <q-btn
+                  color="grey-7"
+                  flat
+                  dense
+                  label="Add"
+                  :disable="!newTemplateId"
+                  @click="addCustomTemplate()"
+                />
 
-          <q-tab-panels v-model="outputTab" animated>
-            <div name="js">
-              <CodeEditor
-                v-model="jsSource"
-                placeholder="Generated Code will appear here..."
-                language="javascript"
-              />
-            </div>
+                <q-space />
 
-            <div name="daeJson">
-              <ObjectView v-model="daeJsonOutput" copy-btn read-only enable-expert-mode />
-            </div>
+                <q-btn
+                  color="grey-7"
+                  flat
+                  dense
+                  label="Delete"
+                  :disable="!canDeleteSelectedTemplate"
+                  @click="deleteSelectedTemplate()"
+                />
 
-            <div name="daePretty">
-              <pre>
-                {{ daePrettyOutput }}
-                </pre
-              >
-            </div>
-          </q-tab-panels>
-        </div>
-      </div>
-    </template>
-    <template #simulate>
-      <q-card flat>
-        <q-card-section>
-          <div class="row q-col-gutter-sm">
-            <div class="col-4">
-              <q-input v-model.number="simT0" type="number" outlined label="t0" />
-            </div>
-            <div class="col-4">
-              <q-input v-model.number="simTf" type="number" outlined label="tf" />
-            </div>
-            <div class="col-4">
-              <q-input v-model.number="simDt" type="number" outlined label="dt" />
-            </div>
-          </div>
-        </q-card-section>
+                <q-btn
+                  color="grey-7"
+                  flat
+                  dense
+                  label="Copy"
+                  :disable="!templateSource"
+                  @click="copyTemplateToClipboard"
+                />
+              </div>
 
-        <q-card-section v-if="executionResult && Object.keys(executionResult).length">
-          <ObjectView v-model="executionResult" dense read-only copy-btn enable-expert-mode />
-        </q-card-section>
+              <div class="col" style="position: relative">
+                <CodeEditor
+                  v-model="templateSource"
+                  placeholder="Enter your Jinja template here..."
+                  language="jinja2"
+                />
+                <div
+                  v-if="isTemplateBuiltin"
+                  style="
+                    position: absolute;
+                    inset: 0;
+                    background: rgba(255, 255, 255, 0.01);
+                    pointer-events: all;
+                  "
+                  title="Built-in templates are read-only"
+                />
+              </div>
+            </q-card>
+          </q-tab-panel>
+
+          <q-tab-panel name="uiTemplate" class="q-pa-none fit">
+            <q-card flat class="fit column">
+              <div class="row items-center q-gutter-xs q-pa-xs">
+                <q-select
+                  v-model="selectedUiTemplateKey"
+                  :options="uiTemplateOptions"
+                  dense
+                  outlined
+                  options-dense
+                  label="UI Template"
+                  style="min-width: 220px"
+                  :disable="uiTemplateOptions.length === 0"
+                  option-label="label"
+                  option-value="value"
+                  emit-value
+                  map-options
+                />
+
+                <q-input
+                  v-model="newUiTemplateId"
+                  dense
+                  outlined
+                  label="New UI id"
+                  style="max-width: 180px"
+                />
+                <q-btn
+                  color="grey-7"
+                  flat
+                  dense
+                  label="Add"
+                  :disable="!newUiTemplateId"
+                  @click="addUiTemplate()"
+                />
+
+                <q-select
+                  v-model="selectedSolverKey"
+                  :options="solverKeyOptions"
+                  dense
+                  outlined
+                  options-dense
+                  label="Solver for UI"
+                  style="min-width: 220px"
+                  :disable="solverKeyOptions.length === 0"
+                  option-label="label"
+                  option-value="value"
+                  emit-value
+                  map-options
+                />
+
+                <q-space />
+
+                <q-btn
+                  color="grey-7"
+                  flat
+                  dense
+                  label="Delete"
+                  :disable="!canDeleteSelectedUiTemplate"
+                  @click="deleteActiveUiTemplate()"
+                />
+              </div>
+
+              <div class="col" style="position: relative">
+                <CodeEditor
+                  v-model="activeUiTemplateSource"
+                  placeholder="Enter your UI template source here..."
+                  language="jinja2"
+                />
+                <div
+                  v-if="isUiTemplateBuiltin"
+                  style="
+                    position: absolute;
+                    inset: 0;
+                    background: rgba(255, 255, 255, 0.01);
+                    pointer-events: all;
+                  "
+                  title="Built-in UI templates are read-only"
+                />
+              </div>
+            </q-card>
+          </q-tab-panel>
+
+          <q-tab-panel name="solver" class="q-pa-none fit">
+            <q-card flat class="fit column">
+              <div class="row items-center q-gutter-xs q-pa-xs">
+                <q-select
+                  v-model="selectedSolverKey"
+                  :options="solverKeyOptions"
+                  dense
+                  outlined
+                  options-dense
+                  label="Solver"
+                  style="min-width: 260px"
+                  :disable="solverKeyOptions.length === 0"
+                  option-label="label"
+                  option-value="value"
+                  emit-value
+                  map-options
+                />
+
+                <q-input
+                  v-model="newSolverId"
+                  dense
+                  outlined
+                  label="New solver id"
+                  style="max-width: 180px"
+                />
+                <q-btn
+                  color="grey-7"
+                  flat
+                  dense
+                  label="Add"
+                  :disable="!newSolverId"
+                  @click="addProjectSolver()"
+                />
+
+                <q-btn
+                  color="grey-7"
+                  flat
+                  dense
+                  label="Options"
+                  :disable="!solverOptionsSchema"
+                  @click="showSolverOptionsDialog = true"
+                />
+                <q-space />
+
+                <q-btn
+                  color="grey-7"
+                  flat
+                  dense
+                  label="Delete"
+                  :disable="isSolverBuiltin || projectSolverIds.length <= 1"
+                  @click="deleteActiveProjectSolver()"
+                />
+              </div>
+
+              <div class="q-pa-xs text-caption text-grey-7">
+                Source: <span class="mono">{{ isSolverBuiltin ? 'built-in' : 'project' }}</span>
+              </div>
+
+              <div class="col" style="position: relative">
+                <CodeEditor
+                  v-model="activeSolverSource"
+                  placeholder="Enter solver JS here..."
+                  language="javascript"
+                />
+                <div
+                  v-if="isSolverBuiltin"
+                  style="
+                    position: absolute;
+                    inset: 0;
+                    background: rgba(255, 255, 255, 0.01);
+                    pointer-events: all;
+                  "
+                  title="Built-in solvers are read-only"
+                />
+              </div>
+
+              <div class="q-pa-sm text-caption text-grey-7">
+                Note: solver selection is persisted and used for Popup UI and sandbox execution.
+              </div>
+            </q-card>
+          </q-tab-panel>
+        </q-tab-panels>
       </q-card>
     </template>
 
-    <template #plot>
-      <q-card flat>
-        <q-card-section>
-          <ObjectPathCharts
-            v-model="plotCharts"
-            v-model:options="plotViewOptions"
-            :source="plotSourceData"
-            :path-units="plotPathUnits"
-          />
-        </q-card-section>
+    <template #results>
+      <q-card flat class="fit column">
+        <q-tabs v-model="resultsTab" dense align="left" narrow-indicator class="dense-tab-strip">
+          <q-tab name="model" label="Generated" no-caps class="dense-tab" />
+          <q-tab name="simulate" label="Simulate" no-caps class="dense-tab" />
+          <q-tab name="plot" label="Plot" no-caps class="dense-tab" />
+        </q-tabs>
+        <q-separator />
+        <q-tab-panels v-model="resultsTab" animated class="col">
+          <q-tab-panel name="model" class="q-pa-none fit">
+            <div class="q-gutter-xs q-pa-xs">
+              <q-btn flat dense label="Copy JS" :disable="!jsSource" @click="copyJsToClipboard" />
+              <q-btn
+                flat
+                dense
+                label="Copy DAE JSON"
+                :disable="!daeJsonOutput"
+                @click="copyDaeJsonToClipboard"
+              />
+              <q-btn
+                flat
+                dense
+                label="Copy Pretty"
+                :disable="!daePrettyOutput"
+                @click="copyDaePrettyToClipboard"
+              />
+              <q-btn
+                flat
+                dense
+                label="Copy AST"
+                :disable="!canCopyAst"
+                @click="copyAstToClipboard"
+              />
+              <q-separator />
+
+              <q-tabs v-model="outputTab" dense narrow-indicator class="dense-tab-strip">
+                <q-tab name="js" label="Code" no-caps class="dense-tab" />
+                <q-tab name="daeJson" label="JSON" no-caps class="dense-tab" />
+                <q-tab name="daePretty" label="Pretty" no-caps class="dense-tab" />
+              </q-tabs>
+
+              <q-tab-panels v-model="outputTab" animated>
+                <q-tab-panel name="js" class="q-pa-none">
+                  <CodeEditor
+                    v-model="jsSource"
+                    placeholder="Generated Code will appear here..."
+                    language="javascript"
+                  />
+                </q-tab-panel>
+
+                <q-tab-panel name="daeJson" class="q-pa-none">
+                  <ObjectView v-model="daeJsonOutput" copy-btn read-only enable-expert-mode />
+                </q-tab-panel>
+
+                <q-tab-panel name="daePretty" class="q-pa-none">
+                  <pre class="q-ma-sm">{{ daePrettyOutput }}</pre>
+                </q-tab-panel>
+              </q-tab-panels>
+            </div>
+          </q-tab-panel>
+
+          <q-tab-panel name="simulate" class="q-pa-none fit">
+            <q-card flat>
+              <q-card-section>
+                <div class="row q-col-gutter-sm">
+                  <div class="col-4">
+                    <q-input v-model.number="simT0" type="number" outlined label="t0" />
+                  </div>
+                  <div class="col-4">
+                    <q-input v-model.number="simTf" type="number" outlined label="tf" />
+                  </div>
+                  <div class="col-4">
+                    <q-input v-model.number="simDt" type="number" outlined label="dt" />
+                  </div>
+                </div>
+              </q-card-section>
+
+              <q-card-section v-if="executionResult && Object.keys(executionResult).length">
+                <ObjectView v-model="executionResult" dense read-only copy-btn enable-expert-mode />
+              </q-card-section>
+            </q-card>
+          </q-tab-panel>
+
+          <q-tab-panel name="plot" class="q-pa-none fit">
+            <q-card flat>
+              <q-card-section>
+                <ObjectPathCharts
+                  v-model="plotCharts"
+                  v-model:options="plotViewOptions"
+                  :source="plotSourceData"
+                  :path-units="plotPathUnits"
+                />
+              </q-card-section>
+            </q-card>
+          </q-tab-panel>
+        </q-tab-panels>
       </q-card>
     </template>
 
@@ -510,10 +573,9 @@ import {
   matContentCopy,
   matDescription,
   matDelete,
-  matPlayArrow,
   matShowChart,
 } from '@quasar/extras/material-icons'
-import { mdiFileTreeOutline, mdiFunctionVariant } from '@quasar/extras/mdi-v6'
+import { mdiFileTreeOutline } from '@quasar/extras/mdi-v6'
 import { toolCall } from '@taskyon/tyclient'
 import { watchDebounced } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
@@ -545,15 +607,13 @@ import {
 import defaultUiTemplateSource from './ui_template_placeholders.html?raw'
 import type { partialTyConfiguration } from '@taskyon/tyclient'
 import { copyToClipboard } from '../modules/utils'
-import FixedHeightPage from 'src/pages/FixedHeightPage.vue'
-import { useAppStateStore } from 'src/stores/appState'
-import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import type { Extension } from '@codemirror/state'
 import { safeYamlDump } from '../modules/yamlUtils'
 import { syncStateWithOPFSFolder } from '../modules/saveState'
 import ModelicaActionsBar from './components/ModelicaActionsBar.vue'
 import ModelicaLibraryTreeView from './components/libraryTree/ModelicaLibraryTreeView.vue'
+import ModelicaDiagramPane from './components/ModelicaDiagramPane.vue'
 import { mapRumocaClassTree } from './components/libraryTree/mapRumocaClasses'
 import type { ModelicaLibraryTreeNode } from './components/libraryTree/types'
 import { createModelicatools } from './modelicaTools'
@@ -564,6 +624,7 @@ import { createModelicaLspCompletionExtension } from './modelicaLspCompletion'
 import { ModelicaWorkerClient } from './modelicaWorkerClient'
 import ObjectPathCharts from '../components/ObjectPathCharts.vue'
 import type { ObjectPathChartsViewOptions } from '../components/ObjectPathCharts.vue'
+import { createRumocaModelicaDiagramExtractor } from './diagram/rumocaModelicaDiagramExtractor'
 
 type StatusType = 'loading' | 'success' | 'error' | ''
 type PlotChartSelection = {
@@ -594,6 +655,10 @@ const output = ref('') // legacy raw output if needed
 const jsSource = ref('') // generated JS shown + executed
 const daeJsonOutput = ref<Record<string, unknown>>({}) // DAE JSON (pretty-printed)
 const daePrettyOutput = ref('') // Pretty DAE textual representation (from WASM)
+const astOutput = ref<unknown>(null) // Parsed AST candidate extracted from compile payload
+const workspaceTab = ref<'modelica' | 'diagram'>('modelica')
+const templatesTab = ref<'template' | 'uiTemplate' | 'solver'>('template')
+const resultsTab = ref<'model' | 'simulate' | 'plot'>('model')
 const outputTab = ref<'js' | 'daeJson' | 'daePretty'>('js')
 const verbose = ref(false)
 const usePreparedDae = ref(true)
@@ -601,11 +666,62 @@ const loading = ref(false)
 const wasmLoaded = ref(false)
 const statusType = ref<StatusType>('loading')
 const modelicaWorker = shallowRef<ModelicaWorkerClient | null>(null)
+const diagramExtractor = createRumocaModelicaDiagramExtractor(() => modelicaWorker.value)
 const modelicaEditorExtensions = shallowRef<Extension[]>([])
 const rumocaWasmVersion = ref('unknown')
 const rumocaWasmGitCommit = ref('unknown')
 const rumocaWasmBuildTimeUtc = ref('unknown')
+const formatLocalBuildTime = (buildTimeUtc: string): string => {
+  if (!buildTimeUtc || buildTimeUtc === 'unknown') return 'unknown'
+  const date = new Date(buildTimeUtc)
+  if (Number.isNaN(date.getTime())) return buildTimeUtc
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short',
+  }).format(date)
+}
+const rumocaWasmBuildTimeLocal = computed(() =>
+  formatLocalBuildTime(rumocaWasmBuildTimeUtc.value),
+)
 const libraryTreeNodes = ref<ModelicaLibraryTreeNode[]>([])
+const asObjectRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+
+const astCandidateFromCompiled = (compiled: unknown): unknown => {
+  const record = asObjectRecord(compiled)
+  if (!record) return null
+  const keys = [
+    'ast',
+    'source_root_ast',
+    'parsed_source_root',
+    'parsed_ast',
+    'source_ast',
+    'parser_output',
+  ]
+  for (const key of keys) {
+    if (key in record) return record[key]
+  }
+  return null
+}
+
+const canCopyAst = computed(() => wasmLoaded.value && modelicaSource.value.trim().length > 0)
+
+const astFileNameFromQualifiedName = (qualifiedName: string | null): string => {
+  if (!qualifiedName) return 'Model.mo'
+  const normalized = qualifiedName
+    .split('.')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join('/')
+  return normalized ? `${normalized}.mo` : 'Model.mo'
+}
 
 function configureModelicaLspExtensions(worker: ModelicaWorkerClient | null) {
   if (!worker) {
@@ -671,6 +787,15 @@ const abortController = ref<AbortController | null>(null)
 
 const hasSimulationResult = computed(
   () => !!executionResult.value && Object.keys(executionResult.value).length > 0,
+)
+const diagramTargetQualifiedName = computed<string | null>(() => {
+  if (openedLibraryClassContext.value?.qualifiedName) {
+    return openedLibraryClassContext.value.qualifiedName
+  }
+  return inferQualifiedModelNameFromSource(modelicaSource.value)
+})
+const diagramRefreshKey = computed<string>(
+  () => `${mslLoaded.value ? '1' : '0'}|${mslArchiveName.value}|${mslFileCount.value}`,
 )
 const plotSourceData = computed<Record<string, unknown> | null>(() => {
   const data = executionResult.value?.data
@@ -1017,16 +1142,10 @@ function createDefaultLayout(): DockNode {
                 collapsed: true,
               },
               {
-                id: 'editors',
-                type: 'leaf',
-                views: ['modelica', 'template', 'uiTemplate', 'solver'],
-                activeViewIndex: 0,
-              },
-              {
-                id: 'simulation',
+                id: 'workbench',
                 type: 'leaf',
                 size: 85,
-                views: ['model', 'simulate', 'plot'],
+                views: ['workspace', 'templates', 'results'],
                 activeViewIndex: 0,
               },
             ],
@@ -1058,24 +1177,56 @@ function createDefaultLayout(): DockNode {
 
 const initialLayout = ref<DockNode>(createDefaultLayout())
 
-function ensurePlotViewInLayout(node: DockNode) {
+function layoutContainsLegacyWorkbenchViews(node: DockNode): boolean {
+  const legacyViews = [
+    'modelica',
+    'diagram',
+    'template',
+    'uiTemplate',
+    'solver',
+    'model',
+    'simulate',
+    'plot',
+  ]
+  if (node.type === 'leaf') {
+    return legacyViews.some((view) => Array.isArray(node.views) && node.views.includes(view))
+  }
+  if (node.type !== 'container' || !Array.isArray(node.children)) return false
+  return node.children.some((child) => layoutContainsLegacyWorkbenchViews(child))
+}
+
+type WorkbenchView = 'workspace' | 'templates' | 'results'
+const workbenchViews: WorkbenchView[] = ['workspace', 'templates', 'results']
+
+const asWorkbenchView = (value: unknown): WorkbenchView | null => {
+  if (typeof value !== 'string') return null
+  const raw = value
+  return workbenchViews.includes(raw as WorkbenchView) ? (raw as WorkbenchView) : null
+}
+
+function findActiveWorkbenchView(node: DockNode): WorkbenchView | null {
   if (node.type === 'leaf') {
     const views = Array.isArray(node.views) ? node.views : []
-    const hasSimulate = views.includes('simulate')
-    const hasPlot = views.includes('plot')
-    if (hasSimulate && !hasPlot) {
-      const nextViews = [...views]
-      const simulateIndex = nextViews.indexOf('simulate')
-      if (simulateIndex >= 0) nextViews.splice(simulateIndex + 1, 0, 'plot')
-      else nextViews.push('plot')
-      node.views = nextViews
+    const activeIndex = Number.isInteger(node.activeViewIndex) ? Number(node.activeViewIndex) : 0
+    const activeView = asWorkbenchView(views[activeIndex])
+    if (activeView) return activeView
+    for (const view of views) {
+      const normalized = asWorkbenchView(view)
+      if (normalized) return normalized
     }
-    return
+    return null
   }
-  if (node.type === 'container' && Array.isArray(node.children)) {
-    for (const child of node.children) ensurePlotViewInLayout(child)
+  if (node.type !== 'container' || !Array.isArray(node.children)) return null
+  for (const child of node.children) {
+    const active = findActiveWorkbenchView(child)
+    if (active) return active
   }
+  return null
 }
+
+const activeWorkbenchView = computed<WorkbenchView>(
+  () => findActiveWorkbenchView(initialLayout.value) ?? 'workspace',
+)
 
 function isLibraryTreeLeaf(node: DockNode): boolean {
   return node.type === 'leaf' && Array.isArray(node.views) && node.views.includes('libraryTree')
@@ -1505,7 +1656,7 @@ const runtimeMenuOptions = ref<Record<string, unknown>>({
   dt: simDt.value,
   rumocaWasmVersion: rumocaWasmVersion.value,
   rumocaWasmGitCommit: rumocaWasmGitCommit.value,
-  rumocaWasmBuildTimeUtc: rumocaWasmBuildTimeUtc.value,
+  rumocaWasmBuildTimeLocal: rumocaWasmBuildTimeLocal.value,
 })
 
 const projectMenuSchema: JSONSchema7 = {
@@ -1533,9 +1684,9 @@ const runtimeMenuSchema: JSONSchema7 = {
     dt: { type: 'number', title: 'Simulation dt (must be > 0)' },
     rumocaWasmVersion: { type: 'string', title: 'Rumoca WASM version', readOnly: true },
     rumocaWasmGitCommit: { type: 'string', title: 'Rumoca WASM git commit', readOnly: true },
-    rumocaWasmBuildTimeUtc: {
+    rumocaWasmBuildTimeLocal: {
       type: 'string',
-      title: 'Rumoca WASM build time (UTC)',
+      title: 'Rumoca WASM build time (local)',
       readOnly: true,
     },
   },
@@ -1637,7 +1788,7 @@ watch(
 )
 
 watch(
-  [simT0, simTf, simDt, rumocaWasmVersion, rumocaWasmGitCommit, rumocaWasmBuildTimeUtc],
+  [simT0, simTf, simDt, rumocaWasmVersion, rumocaWasmGitCommit, rumocaWasmBuildTimeLocal],
   () => {
     runtimeMenuOptions.value = {
       t0: Number(simT0.value),
@@ -1645,7 +1796,7 @@ watch(
       dt: Number(simDt.value),
       rumocaWasmVersion: rumocaWasmVersion.value,
       rumocaWasmGitCommit: rumocaWasmGitCommit.value,
-      rumocaWasmBuildTimeUtc: rumocaWasmBuildTimeUtc.value,
+      rumocaWasmBuildTimeLocal: rumocaWasmBuildTimeLocal.value,
     }
   },
   { immediate: true },
@@ -1722,6 +1873,7 @@ const runCompilation = async (): Promise<{ ok: boolean; message?: string }> => {
     daeJsonOutput.value = compile.daeForTemplate ?? {}
     daePrettyOutput.value =
       typeof compile.compiled?.pretty === 'string' ? compile.compiled.pretty : ''
+    astOutput.value = astCandidateFromCompiled(compile.compiled)
     output.value = String(compile.rendered || '')
     jsSource.value = String(compile.rendered || '')
     statusType.value = 'success'
@@ -1800,6 +1952,7 @@ const clearAll = () => {
   jsSource.value = ''
   daeJsonOutput.value = {}
   daePrettyOutput.value = ''
+  astOutput.value = null
   executionResult.value = {}
   plotCharts.value = []
   plotViewOptions.value = {}
@@ -2045,6 +2198,21 @@ const copyDaePrettyToClipboard = async () => {
   await copyToClipboard(daePrettyOutput.value)
 }
 
+const copyAstToClipboard = async () => {
+  if (astOutput.value == null) {
+    const worker = modelicaWorker.value
+    if (!worker) return
+    const qualifiedFromSource = inferQualifiedModelNameFromSource(modelicaSource.value)
+    const astFileName = astFileNameFromQualifiedName(qualifiedFromSource)
+    astOutput.value = await worker.parseSourceAst({
+      source: modelicaSource.value,
+      fileName: astFileName,
+    })
+  }
+  if (astOutput.value == null) return
+  await copyToClipboard(JSON.stringify(astOutput.value, null, 2))
+}
+
 const copyLogsToClipboard = async () => {
   await copyToClipboard(safeYamlDump(modelicaLog.value))
 }
@@ -2166,6 +2334,7 @@ onMounted(async () => {
   //    - current project id
   await syncStateWithOPFSFolder('modelicaEditPage_global', {
     initialLayout,
+    workspaceTab,
     selectedTemplateKey,
     templateSource,
     customTemplates,
@@ -2174,13 +2343,17 @@ onMounted(async () => {
     useModelicaStandardLibrary,
     mslDownloadUrl,
     mslCachedZipPath,
+    templatesTab,
+    resultsTab,
     outputTab,
     showAllInPrompt,
     currentProjectId,
   })
+  if (layoutContainsLegacyWorkbenchViews(initialLayout.value)) {
+    initialLayout.value = createDefaultLayout()
+  }
   ensureValidTemplateSelection()
   ensureLibraryTreeLayoutDefaults(initialLayout.value)
-  ensurePlotViewInLayout(initialLayout.value)
 
   // 2) Project file (model-specific). One JSON object, synced via OPFS.
   //    Folder name depends on the selected project.
@@ -2317,5 +2490,19 @@ onMounted(async () => {
   top: 0;
   align-self: flex-start;
   background: inherit;
+}
+
+.dense-tab-strip {
+  min-height: 28px;
+}
+
+.dense-tab {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.dense-tab-strip :deep(.q-tab__label) {
+  line-height: 1.1;
 }
 </style>

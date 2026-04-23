@@ -11,9 +11,17 @@ import {
 import { strFromU8, unzipSync } from 'fflate'
 import { executeCodeInIframeSimple } from '../modules/sandbox/iframeWorker'
 import { serializeObject } from '../modules/serializeObject'
+import { createGraphController } from '../modules/graph'
 import baseDaeTemplate from './base_dae.jinja?raw'
 import javascriptTemplate from './javascript.jinja?raw'
 import standaloneHtmlTemplate from './standalone_html.jinja?raw'
+import {
+  mapDiagramToGraph,
+  type DiagramEdgeData,
+  type DiagramNodeData,
+} from './diagram/mapDiagramToGraph'
+import type { ModelicaDiagramDto } from './diagram/types'
+import { ModelicaWorkerClient } from './modelicaWorkerClient'
 
 const templateChecks = [
   {
@@ -52,6 +60,86 @@ const MODELICA_DIAGNOSTICS_EXTENDED_SERIALIZE_OPTIONS = {
   maxObjectKeys: 250,
   maxStringLength: 200000,
   indent: 2,
+}
+
+const MODELICA_DIAGRAM_SMOKE_SOURCE = `
+model DiagramSmoke
+  connector Pin
+    Real v;
+    flow Real i;
+  end Pin;
+
+  model SourceBlock
+    Pin p annotation(Placement(transformation(extent={{90,-10},{110,10}})));
+  equation
+    p.v = 1;
+    p.i = 0;
+  end SourceBlock;
+
+  model SinkBlock
+    Pin p annotation(Placement(transformation(extent={{-110,-10},{-90,10}})));
+  equation
+    p.v = 0;
+    p.i = 0;
+  end SinkBlock;
+
+  SourceBlock src annotation(Placement(transformation(extent={{-80,-20},{-40,20}})));
+  SinkBlock dst annotation(Placement(transformation(extent={{40,-20},{80,20}})));
+equation
+  connect(src.p, dst.p) annotation(Line(points={{-40,0},{40,0}}, color={0,0,255}));
+end DiagramSmoke;
+`.trim()
+
+function ensureDiagramDto(value: unknown): ModelicaDiagramDto {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('extract_diagram returned invalid payload: expected object')
+  }
+  const record = value as Record<string, unknown>
+  if (!Array.isArray(record.components)) {
+    throw new Error('extract_diagram payload missing components array')
+  }
+  if (!Array.isArray(record.connections)) {
+    throw new Error('extract_diagram payload missing connections array')
+  }
+  return {
+    className: typeof record.className === 'string' ? record.className : 'Model',
+    components: record.components as ModelicaDiagramDto['components'],
+    connections: record.connections as ModelicaDiagramDto['connections'],
+  }
+}
+
+function createOffscreenGraphHost(): HTMLDivElement {
+  if (typeof document === 'undefined' || !document.body) {
+    throw new Error('Diagram diagnostics requires a browser DOM (document.body missing)')
+  }
+  const host = document.createElement('div')
+  host.style.position = 'fixed'
+  host.style.left = '-20000px'
+  host.style.top = '-20000px'
+  host.style.width = '1200px'
+  host.style.height = '800px'
+  host.style.pointerEvents = 'none'
+  document.body.appendChild(host)
+  return host
+}
+
+function summarizeDiagram(diagram: ModelicaDiagramDto) {
+  const iconComponentCount = diagram.components.filter(
+    (component) => (component.icon?.graphics?.length ?? 0) > 0,
+  ).length
+  const iconGraphicCount = diagram.components.reduce(
+    (sum, component) => sum + (component.icon?.graphics?.length ?? 0),
+    0,
+  )
+  const portCount = diagram.components.reduce((sum, component) => sum + (component.ports?.length ?? 0), 0)
+  return {
+    className: diagram.className,
+    components: diagram.components.length,
+    connections: diagram.connections.length,
+    componentsWithIcons: iconComponentCount,
+    iconGraphics: iconGraphicCount,
+    ports: portCount,
+  }
 }
 
 function extractModelicaRefsFromText(text: string, limit = 80): string[] {
@@ -187,6 +275,96 @@ end Test;
 `.trim()
 
   return runTemplateCoverage(source, 'Test')
+}
+
+export async function testModelicaDiagramSvgRenderSmoke() {
+  const debug: Record<string, unknown> = {
+    phase: 'init',
+    sourceLength: MODELICA_DIAGRAM_SMOKE_SOURCE.length,
+  }
+  const worker = new ModelicaWorkerClient()
+  let host: HTMLDivElement | null = null
+  let controller:
+    | ReturnType<typeof createGraphController<DiagramNodeData, DiagramEdgeData>>
+    | null = null
+
+  try {
+    debug.phase = 'worker-init'
+    await worker.init(0)
+
+    debug.phase = 'extract-diagram'
+    const rawDiagram = await worker.extractDiagram({
+      source: MODELICA_DIAGRAM_SMOKE_SOURCE,
+      qualifiedName: 'DiagramSmoke',
+      fileName: 'DiagramSmoke.mo',
+    })
+    const diagram = ensureDiagramDto(rawDiagram)
+    const diagramSummary = summarizeDiagram(diagram)
+    debug.diagram = diagramSummary
+
+    if (diagram.components.length === 0) {
+      throw new Error('extract_diagram produced zero components')
+    }
+
+    debug.phase = 'map-graph'
+    const mapped = mapDiagramToGraph(diagram, 'authored')
+    debug.graph = {
+      nodes: mapped.graph.nodes.length,
+      edges: mapped.graph.edges.length,
+      hasFixedNodeRects:
+        typeof mapped.options.fixedNodeRects === 'object' && mapped.options.fixedNodeRects != null,
+    }
+
+    debug.phase = 'render-svg'
+    host = createOffscreenGraphHost()
+    const localController = createGraphController<DiagramNodeData, DiagramEdgeData>(
+      host,
+      mapped.graph,
+      mapped.options,
+    )
+    controller = localController
+    const svg = localController.exportSvgString({
+      cropToContent: true,
+      cropPadding: 18,
+      backgroundColor: 'rgb(229, 231, 235)',
+    })
+
+    const hasSvgTag = svg.includes('<svg')
+    const hasNodeMarker = svg.includes('data-graph-node="1"')
+    const hasInvalidTokens = /\b(?:NaN|undefined)\b/.test(svg)
+    const pathCount = (svg.match(/<path\b/g) ?? []).length
+    const rectCount = (svg.match(/<rect\b/g) ?? []).length
+    const svgSummary = {
+      length: svg.length,
+      hasSvgTag,
+      hasNodeMarker,
+      hasInvalidTokens,
+      pathCount,
+      rectCount,
+      preview: svg.slice(0, 600),
+    }
+    debug.svg = svgSummary
+
+    if (!hasSvgTag) throw new Error('Rendered output does not contain an <svg> root')
+    if (!hasNodeMarker) throw new Error('Rendered SVG does not contain any graph nodes')
+    if (hasInvalidTokens) throw new Error('Rendered SVG contains NaN/undefined tokens')
+    if (svg.length < 400) throw new Error(`Rendered SVG unexpectedly short (${svg.length} chars)`)
+
+    return {
+      ok: true,
+      diagramSerialized: serializeObject(diagramSummary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
+      graphSerialized: serializeObject(debug.graph, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
+      svgSerialized: serializeObject(svgSummary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
+    }
+  } catch (error) {
+    const baseMessage = error instanceof Error ? error.message : String(error)
+    const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_EXTENDED_SERIALIZE_OPTIONS)
+    throw new Error([baseMessage, `Diagram SVG render smoke debug:\n${debugDump}`].join('\n'))
+  } finally {
+    controller?.destroy()
+    if (host && host.parentNode) host.parentNode.removeChild(host)
+    worker.terminate()
+  }
 }
 
 export async function testModelicaPreparedMetadataContract() {
@@ -958,6 +1136,8 @@ type DiagnosticsMslApi = {
   load_source_roots?: (sourceRootsJson: string) => string
   load_libraries?: (librariesJson: string) => string
   list_classes?: () => string
+  get_class_info?: (qualifiedName: string) => string
+  parse_source_root_file?: (source: string, filename: string) => string
   wasm_init?: (numThreads: number) => unknown
   lsp_diagnostics?: (source: string) => string
   lsp_completion_with_timing?: (source: string, line: number, character: number) => string
@@ -1149,6 +1329,84 @@ function compileWithDiagnosticsMsl(
     return wasm.compile_with_libraries(source, modelName, '{}')
   }
   throw new Error('Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries')
+}
+
+function parseSourceRootAstOrError(
+  wasm: DiagnosticsMslApi,
+  source: string,
+  fileName: string,
+): { ok: true; ast: Record<string, unknown> } | { ok: false; error: string } {
+  if (typeof wasm.parse_source_root_file !== 'function') {
+    return { ok: false, error: 'Rumoca wasm export missing: parse_source_root_file' }
+  }
+  try {
+    const raw = wasm.parse_source_root_file(source, fileName)
+    const ast = JSON.parse(String(raw))
+    if (!ast || typeof ast !== 'object' || Array.isArray(ast)) {
+      return { ok: false, error: 'parse_source_root_file returned non-object AST payload' }
+    }
+    return { ok: true, ast: ast as Record<string, unknown> }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+function asStringOrEmpty(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function readMslSourceFromZipByPath(
+  archiveEntries: Record<string, string>,
+  requestedPath: string,
+): { path: string; source: string } | null {
+  const trimmedRequestedPath = requestedPath.trim()
+  if (!trimmedRequestedPath) return null
+  const normalized = normalizeLibraryEntryPath(trimmedRequestedPath)
+  const exactMatch = normalized ? archiveEntries[normalized] : undefined
+  if (normalized && typeof exactMatch === 'string') {
+    return { path: normalized, source: exactMatch }
+  }
+  const wantedSuffix = normalized || trimmedRequestedPath
+  const fallbackPath = Object.keys(archiveEntries).find((entry) => entry.endsWith(wantedSuffix))
+  if (!fallbackPath) return null
+  const source = archiveEntries[fallbackPath]
+  return source ? { path: fallbackPath, source } : null
+}
+
+async function loadMslSourcesFromZip(): Promise<Record<string, string>> {
+  const zipResponse = await fetch(MSL_LOCAL_ZIP_PATH)
+  if (!zipResponse.ok) {
+    throw new Error(
+      `Failed to fetch local MSL archive at ${MSL_LOCAL_ZIP_PATH}: HTTP ${zipResponse.status}`,
+    )
+  }
+  const zipBytes = new Uint8Array(await zipResponse.arrayBuffer())
+  const archive = unzipSync(zipBytes)
+  const files: Record<string, string> = {}
+  for (const [rawPath, content] of Object.entries(archive)) {
+    if (!rawPath.toLowerCase().endsWith('.mo')) continue
+    files[normalizeLibraryEntryPath(rawPath)] = strFromU8(content)
+  }
+  return files
+}
+
+function findResistorSineVoltageType(info: Record<string, unknown>): string {
+  const components = info.components
+  if (!components || typeof components !== 'object' || Array.isArray(components)) {
+    return 'Modelica.Electrical.Analog.Sources.SineVoltage'
+  }
+  const componentMap = components as Record<string, unknown>
+  const sineByName = componentMap.SineVoltage1
+  if (sineByName && typeof sineByName === 'object' && !Array.isArray(sineByName)) {
+    const typeName = asStringOrEmpty((sineByName as Record<string, unknown>).type_name)
+    if (typeName) return typeName
+  }
+  for (const value of Object.values(componentMap)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+    const typeName = asStringOrEmpty((value as Record<string, unknown>).type_name)
+    if (typeName.endsWith('.SineVoltage') || typeName === 'SineVoltage') return typeName
+  }
+  return 'Modelica.Electrical.Analog.Sources.SineVoltage'
 }
 
 function asNumberOrNull(value: unknown): number | null {
@@ -3385,4 +3643,186 @@ export async function testModelicaOrbitInvariantsCompareSolvers() {
 
 export async function testModelicaOrbitInvariantsSdirkOnly() {
   return runModelicaOrbitInvariantTest('sdirk-only')
+}
+
+export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
+  const debug: Record<string, unknown> = {
+    phase: 'init',
+    mslZipPath: MSL_LOCAL_ZIP_PATH,
+  }
+  try {
+    const wasm = await getDiagnosticsWasm()
+    debug.phase = 'wasm-loaded'
+    if (typeof wasm.get_class_info !== 'function') {
+      throw new Error('Rumoca wasm export missing: get_class_info')
+    }
+    if (typeof wasm.parse_source_root_file !== 'function') {
+      throw new Error('Rumoca wasm export missing: parse_source_root_file')
+    }
+
+    await ensureDiagnosticsMslLoaded(wasm, debug)
+    debug.phase = 'msl-loaded'
+
+    const resistorInfo = JSON.parse(
+      String(wasm.get_class_info('Modelica.Electrical.Analog.Examples.Resistor')),
+    ) as Record<string, unknown>
+    const sineVoltageType = findResistorSineVoltageType(resistorInfo)
+    const sineVoltageQualified = sineVoltageType.includes('.')
+      ? sineVoltageType
+      : `Modelica.Electrical.Analog.Sources.${sineVoltageType}`
+
+    const sineInfo = JSON.parse(String(wasm.get_class_info(sineVoltageQualified))) as Record<
+      string,
+      unknown
+    >
+    const sourceModelica = asStringOrEmpty(sineInfo.source_modelica)
+    const sourceFile = asStringOrEmpty(sineInfo.source_file)
+    const fallbackSourceFile = `${sineVoltageQualified.replaceAll('.', '/')}.mo`
+    const resolvedSourceFile = sourceFile.trim() || fallbackSourceFile
+    const sourceModelicaFileName = `${sineVoltageQualified.replaceAll('.', '/')}.mo`
+
+    const sourceModelicaParse = parseSourceRootAstOrError(wasm, sourceModelica, sourceModelicaFileName)
+    const mslFiles = await loadMslSourcesFromZip()
+    const sourceFileEntry = readMslSourceFromZipByPath(mslFiles, resolvedSourceFile)
+    if (!sourceFileEntry) {
+      throw new Error(`Could not locate SineVoltage source file in MSL zip: ${resolvedSourceFile}`)
+    }
+    const sourceFileParse = parseSourceRootAstOrError(
+      wasm,
+      sourceFileEntry.source,
+      sourceFileEntry.path,
+    )
+    if (!sourceFileParse.ok) {
+      throw new Error(
+        [
+          `Failed to parse SineVoltage source file from MSL archive (${sourceFileEntry.path})`,
+          sourceFileParse.error,
+        ].join(': '),
+      )
+    }
+
+    const iconHintInClassInfoSource = /annotation\s*\(\s*Icon\b|Icon\s*\(/.test(sourceModelica)
+    const iconHintInSourceFile = /annotation\s*\(\s*Icon\b|Icon\s*\(/.test(sourceFileEntry.source)
+    if (!iconHintInClassInfoSource && !iconHintInSourceFile) {
+      throw new Error('No Icon annotation hint found for SineVoltage in class info or source file')
+    }
+    if (!sourceModelicaParse.ok && !sourceFileParse.ok) {
+      throw new Error('Unable to parse SineVoltage from class_info source or source-root file')
+    }
+
+    return {
+      ok: true,
+      sineVoltageQualified,
+      sourceFile,
+      resolvedSourceFile,
+      sourceModelicaLength: sourceModelica.length,
+      classInfoRoundtripParseable: sourceModelicaParse.ok,
+      sourceRootFileParseable: sourceFileParse.ok,
+      classInfoParseError: sourceModelicaParse.ok ? null : sourceModelicaParse.error,
+      iconHintInClassInfoSource,
+      iconHintInSourceFile,
+      note:
+        sourceModelicaParse.ok
+          ? 'class_info source is round-trippable'
+          : 'class_info source parse failed; source-root fallback remains valid',
+    }
+  } catch (err) {
+    const baseMessage = err instanceof Error ? err.message : String(err)
+    const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
+    throw new Error([baseMessage, `MSL SineVoltage icon source debug:\n${debugDump}`].join('\n'))
+  }
+}
+
+export async function testModelicaMslResistorSineVoltageClassInfoRoundtripStrict() {
+  const debug: Record<string, unknown> = {
+    phase: 'init',
+    mslZipPath: MSL_LOCAL_ZIP_PATH,
+  }
+  try {
+    const wasm = await getDiagnosticsWasm()
+    debug.phase = 'wasm-loaded'
+    if (typeof wasm.get_class_info !== 'function') {
+      throw new Error('Rumoca wasm export missing: get_class_info')
+    }
+    if (typeof wasm.parse_source_root_file !== 'function') {
+      throw new Error('Rumoca wasm export missing: parse_source_root_file')
+    }
+    if (
+      typeof wasm.compile_with_source_roots !== 'function' &&
+      typeof wasm.compile_with_libraries !== 'function'
+    ) {
+      throw new Error(
+        'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
+      )
+    }
+
+    await ensureDiagnosticsMslLoaded(wasm, debug)
+    debug.phase = 'msl-loaded'
+
+    const source = `
+model MslResistorStrictIconProbe
+  extends Modelica.Electrical.Analog.Examples.Resistor;
+end MslResistorStrictIconProbe;
+`.trim()
+    const compiledRaw = compileWithDiagnosticsMsl(wasm, source, 'MslResistorStrictIconProbe')
+    const compiled = JSON.parse(String(compiledRaw)) as {
+      dae?: unknown
+      dae_native?: unknown
+      dae_prepared?: unknown
+    }
+    const dae = selectDaeForTemplate(compiled, { usePreparedDae: true })
+    if (!dae || typeof dae !== 'object' || Array.isArray(dae)) {
+      throw new Error('Top-level resistor compile did not return a DAE object')
+    }
+    debug.phase = 'compiled-top-level-resistor'
+
+    const resistorInfo = JSON.parse(
+      String(wasm.get_class_info('Modelica.Electrical.Analog.Examples.Resistor')),
+    ) as Record<string, unknown>
+    const sineVoltageType = findResistorSineVoltageType(resistorInfo)
+    const sineVoltageQualified = sineVoltageType.includes('.')
+      ? sineVoltageType
+      : `Modelica.Electrical.Analog.Sources.${sineVoltageType}`
+    debug.sineVoltageQualified = sineVoltageQualified
+
+    const sineInfo = JSON.parse(String(wasm.get_class_info(sineVoltageQualified))) as Record<
+      string,
+      unknown
+    >
+    const sourceModelica = asStringOrEmpty(sineInfo.source_modelica)
+    if (!sourceModelica.trim()) {
+      throw new Error(`Class info source_modelica is empty for ${sineVoltageQualified}`)
+    }
+
+    const classInfoFileName = `${sineVoltageQualified.replaceAll('.', '/')}.mo`
+    const sourceModelicaParse = parseSourceRootAstOrError(wasm, sourceModelica, classInfoFileName)
+    if (!sourceModelicaParse.ok) {
+      throw new Error(
+        [
+          `Class info source_modelica is not round-trippable for ${sineVoltageQualified}`,
+          sourceModelicaParse.error,
+        ].join(': '),
+      )
+    }
+
+    const iconHintInClassInfoSource = /annotation\s*\(\s*Icon\b|Icon\s*\(/.test(sourceModelica)
+    if (!iconHintInClassInfoSource) {
+      throw new Error(`Class info source_modelica has no Icon annotation hint for ${sineVoltageQualified}`)
+    }
+
+    return {
+      ok: true,
+      sineVoltageQualified,
+      sourceModelicaLength: sourceModelica.length,
+      classInfoRoundtripParseable: true,
+      iconHintInClassInfoSource: true,
+      note: 'Strict rumoca class_info-only roundtrip check passed',
+    }
+  } catch (err) {
+    const baseMessage = err instanceof Error ? err.message : String(err)
+    const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
+    throw new Error(
+      [baseMessage, `MSL SineVoltage strict class_info roundtrip debug:\n${debugDump}`].join('\n'),
+    )
+  }
 }
