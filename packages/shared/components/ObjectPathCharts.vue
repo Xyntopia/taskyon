@@ -56,7 +56,7 @@
       bordered
       class="object-path-charts__card"
     >
-      <q-card-section class="q-gutter-sm">
+      <q-card-section class="q-gutter-y-sm">
         <div class="row items-center">
           <div class="text-caption text-grey-7">{{ chart.title }}</div>
           <q-space />
@@ -277,7 +277,7 @@
         </q-card-section>
         <q-separator />
 
-        <q-card-section v-if="selectedThumbnailChart" class="q-gutter-sm">
+        <q-card-section v-if="selectedThumbnailChart" class="q-gutter-y-sm">
           <ObjectPathChartAxesEditor
             v-if="selectedThumbnailChart.variant === 'plot' && showControls && !isViewOnly"
             :config="selectedThumbnailConfig"
