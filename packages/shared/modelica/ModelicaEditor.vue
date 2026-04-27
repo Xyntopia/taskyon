@@ -576,7 +576,7 @@ import {
   matShowChart,
 } from '@quasar/extras/material-icons'
 import { mdiFileTreeOutline } from '@quasar/extras/mdi-v6'
-import { toolCall } from '@taskyon/tyclient'
+import { toolCall } from '../../tyclient/src'
 import { watchDebounced } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { Dialog, Notify } from 'quasar'
@@ -605,7 +605,7 @@ import {
   runModelicaSandbox,
 } from './modelica'
 import defaultUiTemplateSource from './ui_template_placeholders.html?raw'
-import type { partialTyConfiguration } from '@taskyon/tyclient'
+import type { partialTyConfiguration } from '../../tyclient/src'
 import { copyToClipboard } from '../modules/utils'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import type { Extension } from '@codemirror/state'

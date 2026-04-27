@@ -253,6 +253,10 @@
     der_{{ render_symbol_expr(bc.args[0]) }}
   {%- elif bc.function|lower == "pre" and bc.args|length == 1 -%}
     {{ render_expr(bc.args[0]) }}
+  {%- elif bc.function|lower == "edge" and bc.args|length == 1 -%}
+    {{ render_expr(bc.args[0]) }}
+  {%- elif bc.function|lower == "change" and bc.args|length == 1 -%}
+    {{ render_expr(bc.args[0]) }}
   {%- elif bc.function|lower == "noevent" and bc.args|length >= 1 -%}
     {{ render_expr(bc.args[0]) }}
   {%- elif bc.function|lower == "homotopy" and bc.args|length >= 1 -%}
@@ -318,6 +322,10 @@
   {%- if fname|lower == "der" and args|length == 1 -%}
     der_{{ render_symbol_expr(args[0]) }}
   {%- elif fname|lower == "pre" and args|length == 1 -%}
+    {{ render_expr(args[0]) }}
+  {%- elif fname|lower == "edge" and args|length == 1 -%}
+    {{ render_expr(args[0]) }}
+  {%- elif fname|lower == "change" and args|length == 1 -%}
     {{ render_expr(args[0]) }}
   {%- elif fname|lower == "noevent" and args|length >= 1 -%}
     {{ render_expr(args[0]) }}
