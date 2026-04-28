@@ -73,7 +73,7 @@
             flat
             dense
             color="primary"
-            :icon="matTableView"
+            :icon="matTableChart"
             @click="openTablePopup(index)"
           />
           <q-btn
@@ -447,31 +447,31 @@
 </template>
 
 <script setup lang="ts">
+import { matRefresh, matStar, matStarOutline, matTableChart } from '@quasar/extras/material-icons'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import ListChart from './varViews/ListChart.vue'
-import ObjectPathChartAxesEditor from './ObjectPathChartAxesEditor.vue'
-import ObjectPathChartMapEditor from './ObjectPathChartMapEditor.vue'
-import type { PlotFlatRow, PlotResolution, PlotSparseHeatmapValue } from '../modules/plotMath'
-import { buildPlotValueFromRows } from '../modules/plotMath'
+import { decodeQueryAxisKey, evaluateQueryAxisValue } from '../compDag/queryPipeline'
+import {
+  generateDefaultCandidates,
+  rankInterestingPlots,
+  type SimulationData,
+} from '../modules/interestingPlots'
 import {
   buildContourLayerFromSparseHeatmap,
   buildFeatureValueLayer,
   pickCoordinatePaths,
   type MapExternalFeatureLayer,
 } from '../modules/plotMapLayers'
-import type { ObjectPathChartDefinition } from './ObjectPathChartAxesEditor.vue'
-import {
-  generateDefaultCandidates,
-  rankInterestingPlots,
-  type SimulationData,
-} from '../modules/interestingPlots'
+import type { PlotFlatRow, PlotResolution, PlotSparseHeatmapValue } from '../modules/plotMath'
+import { buildPlotValueFromRows } from '../modules/plotMath'
 import { useSharedRunLogs } from '../modules/runLogs'
+import type { ObjectPathChartDefinition } from './ObjectPathChartAxesEditor.vue'
+import ObjectPathChartAxesEditor from './ObjectPathChartAxesEditor.vue'
+import ObjectPathChartMapEditor from './ObjectPathChartMapEditor.vue'
 import {
   normalizeResolvedChartPayload,
   resolveObjectPathChartPayload,
 } from './objectPathChartsResolver'
-import { decodeQueryAxisKey, evaluateQueryAxisValue } from '../compDag/queryPipeline'
-import { matRefresh, matTableView, matStar, matStarOutline } from '@quasar/extras/material-icons'
+import ListChart from './varViews/ListChart.vue'
 
 export type { ObjectPathChartDefinition }
 export type ObjectPathChartsViewOptions = {
