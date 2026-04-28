@@ -179,6 +179,47 @@ const simulateModel = (params, context, model) => {
       return v
     })
   }
+  function projectAlgebraicsWithFixedY(tEval, xEval, yEval, uEval, fixedY, newtonOpts, pOverride) {
+    const yWork = Array.isArray(yEval) ? yEval.slice() : []
+    const fixed = fixedY instanceof Set ? fixedY : new Set()
+    const xDotZero = new Array(nx).fill(0)
+    const tol = Number.isFinite(newtonOpts?.tol) ? Math.max(1e-10, newtonOpts.tol) : 1e-8
+    const epsBase = Number.isFinite(newtonOpts?.epsBase) ? Math.max(1e-10, newtonOpts.epsBase) : 1e-6
+    const lambda = Math.max(1e-8, Number(newtonOpts?.lambda) || 1e-6)
+    const maxIter = Math.max(1, Math.min(8, Number(newtonOpts?.maxIter) || 6))
+
+    const residualAt = (yVec) => model.residual(tEval, xEval, xDotZero, yVec, uEval, pOverride)
+    for (let iter = 0; iter < maxIter; iter++) {
+      const r = residualAt(yWork)
+      if (!Array.isArray(r) || r.length === 0) break
+      let rInf = 0
+      for (const rv of r) rInf = Math.max(rInf, Math.abs(Number(rv) || 0))
+      if (rInf <= tol) break
+      const freeCols = []
+      for (let j = 0; j < yWork.length; j++) if (!fixed.has(j)) freeCols.push(j)
+      if (freeCols.length === 0) break
+      const J = Array.from({ length: r.length }, () => new Array(freeCols.length).fill(0))
+      for (let c = 0; c < freeCols.length; c++) {
+        const j = freeCols[c]
+        const zj = Number(yWork[j]) || 0
+        const eps = epsBase * (1 + Math.abs(zj))
+        const step = (zj > 0 ? 1 : -1) * eps
+        yWork[j] = zj + step
+        const rp = residualAt(yWork)
+        yWork[j] = zj
+        if (!Array.isArray(rp) || rp.length !== r.length) continue
+        for (let i = 0; i < r.length; i++) J[i][c] = (rp[i] - r[i]) / step
+      }
+      const deltaFree = solveDampedLeastSquares(J, r, lambda)
+      if (!Array.isArray(deltaFree) || deltaFree.length !== freeCols.length) break
+      for (let c = 0; c < freeCols.length; c++) {
+        const j = freeCols[c]
+        const d = Number(deltaFree[c])
+        if (Number.isFinite(d)) yWork[j] += d
+      }
+    }
+    return snapNearBinaryValues(yWork)
+  }
 
   // ---------- Newton solver ----------
   function newtonSolve(residualFn, z0, newtonOpts, trace) {
@@ -913,6 +954,7 @@ const simulateModel = (params, context, model) => {
     let t = t0
     let x = (opts.x0 || x0_model).slice()
     let y = y0_model.slice()
+    const heldAlgebraicIndices = new Set()
     let c = c0.slice()
     let xDotPrev = new Array(nx).fill(0)
 
@@ -1080,44 +1122,15 @@ const simulateModel = (params, context, model) => {
       }
       // Best-effort algebraic consistency correction for reset-heavy/discrete models.
       try {
-        const xDotZero = new Array(nx).fill(0)
         const fixedY = new Set()
         const compareLen = Math.min(yLocal.length, yNext.length)
         for (let i = 0; i < compareLen; i++) {
-          if (Math.abs((Number(yNext[i]) || 0) - (Number(yLocal[i]) || 0)) > 1e-12) fixedY.add(i)
-        }
-        const r0 = model.residual(tLocal, xNext, xDotZero, yNext, uLocal, pOverride)
-        if (Array.isArray(r0) && r0.length > 0) {
-          const z = xDotZero.concat(yNext)
-          const n = z.length
-          const m = r0.length
-          const epsBase = Number.isFinite(newtonOpts?.epsBase) ? Math.max(1e-10, newtonOpts.epsBase) : 1e-6
-          const J = Array.from({ length: m }, () => new Array(n).fill(0))
-          for (let j = 0; j < n; j++) {
-            const yIdx = j - nx
-            if (j < nx || fixedY.has(yIdx)) {
-              for (let i = 0; i < m; i++) J[i][j] = 0
-              continue
-            }
-            const zj = z[j]
-            const eps = epsBase * (1 + Math.abs(zj))
-            const step = (zj > 0 ? 1 : -1) * eps
-            z[j] = zj + step
-            const rp = model.residual(tLocal, xNext, z.slice(0, nx), z.slice(nx), uLocal, pOverride)
-            z[j] = zj
-            if (!Array.isArray(rp) || rp.length !== m) continue
-            for (let i = 0; i < m; i++) J[i][j] = (rp[i] - r0[i]) / step
-          }
-          const delta = solveDampedLeastSquares(J, r0, Math.max(1e-6, newtonOpts?.lambda || 1e-6))
-          if (Array.isArray(delta) && delta.length === n) {
-            for (let j = 0; j < n; j++) {
-              const yIdx = j - nx
-              if (j < nx || fixedY.has(yIdx)) continue
-              z[j] += Number.isFinite(delta[j]) ? delta[j] : 0
-            }
-            yNext = snapNearBinaryValues(z.slice(nx))
+          if (Math.abs((Number(yNext[i]) || 0) - (Number(yLocal[i]) || 0)) > 1e-12) {
+            fixedY.add(i)
+            heldAlgebraicIndices.add(i)
           }
         }
+        yNext = projectAlgebraicsWithFixedY(tLocal, xNext, yNext, uLocal, fixedY, newtonOpts, pOverride)
       } catch (e) {
         log(`post-reset least-squares correction threw at t=${tLocal}`, {
           error: (e && e.message) || String(e),
@@ -1152,21 +1165,19 @@ const simulateModel = (params, context, model) => {
       solverStats.flowStepCalls += 1
       const uLocal = f_u(tLocal) || new Array(nu).fill(0)
       if (hasOnlyDummyState) {
-        const xDotGuess = Array.isArray(xDotSeed) && xDotSeed.length === nx ? xDotSeed : [0]
-        const projected = solveFlowAtState(
+        const projectedY = projectAlgebraicsWithFixedY(
           tLocal + dtLocal,
           xLocal,
           yLocal,
-          xDotGuess,
           uLocal,
-          pOverride,
+          heldAlgebraicIndices,
           newtonOpts,
-          'algebraic_projection',
+          pOverride,
         )
         return {
           xNext: xLocal.slice(),
-          yNext: projected.y.slice(),
-          xDotNext: projected.xDot.slice(),
+          yNext: projectedY.slice(),
+          xDotNext: new Array(nx).fill(0),
           xEmbedded: null,
         }
       }
