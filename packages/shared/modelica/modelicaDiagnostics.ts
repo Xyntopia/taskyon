@@ -90,6 +90,47 @@ equation
 end DiagramSmoke;
 `.trim()
 
+const MODELICA_BOOLEAN_NETWORK_SIZE_SHIM_SOURCE = `
+model BooleanNetworkSizeShimSmoke
+  import Sources = Modelica.Blocks.Sources;
+  Sources.BooleanTable booleanTable(table = {2, 4, 6, 6.5, 7, 9, 11});
+  Modelica.Blocks.MathBoolean.OnDelay onDelay(delayTime = 1);
+equation
+  connect(booleanTable.y, onDelay.u);
+end BooleanNetworkSizeShimSmoke;
+`.trim()
+
+const MODELICA_BOOLEAN_NETWORK_BLOCKS_SHIM_SOURCE = `
+model BooleanNetworkBlocksShimSmoke
+  import Sources = Modelica.Blocks.Sources;
+  Sources.BooleanPulse booleanPulse1(width = 20, period = 1);
+  Sources.BooleanPulse booleanPulse2(period = 1, width = 80);
+  Sources.BooleanStep booleanStep(startTime = 1.5);
+  Modelica.Blocks.MathBoolean.And and1(nu = 3);
+  Modelica.Blocks.MathBoolean.Or or1(nu = 2);
+  Modelica.Blocks.MathBoolean.Xor xor1(nu = 2);
+  Modelica.Blocks.MathBoolean.Nand nand1(nu = 2);
+  Modelica.Blocks.MathBoolean.Nor or2(nu = 2);
+  Modelica.Blocks.MathBoolean.Not not1;
+  Sources.BooleanTable booleanTable(table = {2, 4, 6, 6.5, 7, 9, 11});
+  Modelica.Blocks.MathBoolean.OnDelay onDelay(delayTime = 1);
+equation
+  connect(booleanPulse1.y, and1.u[1]);
+  connect(booleanStep.y, and1.u[2]);
+  connect(booleanPulse2.y, and1.u[3]);
+  connect(and1.y, or1.u[1]);
+  connect(booleanPulse2.y, or1.u[2]);
+  connect(or1.y, xor1.u[1]);
+  connect(booleanPulse2.y, xor1.u[2]);
+  connect(xor1.y, nand1.u[1]);
+  connect(booleanPulse2.y, nand1.u[2]);
+  connect(nand1.y, or2.u[1]);
+  connect(booleanPulse2.y, or2.u[2]);
+  connect(or2.y, not1.u);
+  connect(booleanTable.y, onDelay.u);
+end BooleanNetworkBlocksShimSmoke;
+`.trim()
+
 function ensureDiagramDto(value: unknown): ModelicaDiagramDto {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('extract_diagram returned invalid payload: expected object')
@@ -429,6 +470,150 @@ model BouncingBall             "The bouncing ball model"
 `.trim()
 
   return runTemplateCoverage(source, 'BouncingBall')
+}
+
+export async function testModelicaBooleanNetworkSizeShimRegression() {
+  const wasm = await getDiagnosticsWasm()
+  if (typeof wasm.compile_to_json !== 'function') {
+    throw new Error('Rumoca wasm export missing: compile_to_json')
+  }
+  if (typeof wasm.render_template !== 'function') {
+    throw new Error('Rumoca wasm export missing: render_template')
+  }
+
+  const compiled = wasm.compile_to_json(
+    MODELICA_BOOLEAN_NETWORK_SIZE_SHIM_SOURCE,
+    'BooleanNetworkSizeShimSmoke',
+  )
+  const parsed = JSON.parse(compiled) as {
+    dae?: unknown
+    dae_native?: unknown
+    dae_prepared?: unknown
+  }
+  const dae = selectDaeForTemplate(parsed, { usePreparedDae: true })
+  if (!dae) {
+    throw new Error('Rumoca compile_to_json returned no DAE payload')
+  }
+
+  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  if (!/\bSize\s*\(/.test(rendered)) {
+    throw new Error('Expected generated JS to contain Size(...) calls for regression coverage')
+  }
+
+  const runId = 'modelica-size-shim-regression'
+  const runAbort = new AbortController()
+  try {
+    const rawAbiResult = await executeCodeInIframeSimple(
+      {
+        id: runId,
+        code: buildModelAbiValidationIframeCode(rendered),
+        sourceURL: `${runId}.js`,
+        stopSignal: runAbort.signal,
+      },
+      {},
+      {
+        source: 'ModelicaDiagnostics',
+        enforceModelAbi: true,
+        __rumocaRunId: runId,
+      },
+    )
+    const abiResult = validateModelAbiValidationResultV1(rawAbiResult)
+    if (abiResult.ok !== true) {
+      throw new Error(abiResult.errorMessage || 'ABI validation failed in sandbox')
+    }
+
+    return {
+      ok: true,
+      resultPreview: serializeObject(abiResult, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
+      renderedPreview: rendered.slice(0, 300),
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Size shim regression failed: ${message}`)
+  } finally {
+    runAbort.abort()
+  }
+}
+
+export async function testModelicaBooleanNetworkBlocksShimRegression() {
+  const wasm = await getDiagnosticsWasm()
+  if (typeof wasm.compile_to_json !== 'function') {
+    throw new Error('Rumoca wasm export missing: compile_to_json')
+  }
+  if (typeof wasm.render_template !== 'function') {
+    throw new Error('Rumoca wasm export missing: render_template')
+  }
+
+  const compiled = wasm.compile_to_json(
+    MODELICA_BOOLEAN_NETWORK_BLOCKS_SHIM_SOURCE,
+    'BooleanNetworkBlocksShimSmoke',
+  )
+  const parsed = JSON.parse(compiled) as {
+    dae?: unknown
+    dae_native?: unknown
+    dae_prepared?: unknown
+  }
+  const dae = selectDaeForTemplate(parsed, { usePreparedDae: true })
+  if (!dae) {
+    throw new Error('Rumoca compile_to_json returned no DAE payload')
+  }
+
+  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  if (!/\bBlocks\b/.test(rendered) && !/\bModelica\b/.test(rendered)) {
+    throw new Error('Expected generated JS to reference Blocks/Modelica for regression coverage')
+  }
+  if (!/\b__rumocaResolveExternalSymbol\b/.test(rendered)) {
+    throw new Error('Expected generated JS to include generic external symbol resolution')
+  }
+  if (/\b__RUMOCA_SYMBOL_OVERRIDES__\b/.test(rendered)) {
+    throw new Error('Generated JS must not contain hardcoded symbol override tables')
+  }
+
+  const runId = 'modelica-blocks-shim-regression'
+  const runAbort = new AbortController()
+  try {
+    const result = await executeCodeInIframeSimple(
+      {
+        id: runId,
+        code: `
+          () => {
+            ${rendered}
+            if (typeof Model !== 'function') throw new Error('Model() missing')
+            const model = Model()
+            const nx = Number(model.description?.nx ?? 0)
+            const ny = Number(model.description?.ny ?? 0)
+            const nu = Number(model.description?.nu ?? 0)
+            const residual = model.residual(
+              0,
+              model.x0,
+              new Array(nx).fill(0),
+              model.y0,
+              new Array(nu).fill(0),
+              null,
+            )
+            return {
+              nx,
+              ny,
+              residualLength: Array.isArray(residual) ? residual.length : -1,
+            }
+          }
+        `,
+        sourceURL: `${runId}.js`,
+        stopSignal: runAbort.signal,
+      },
+    )
+
+    return {
+      ok: true,
+      resultPreview: serializeObject(result, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
+      renderedPreview: rendered.slice(0, 300),
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Blocks shim regression failed: ${message}`)
+  } finally {
+    runAbort.abort()
+  }
 }
 
 export async function testModelicaBouncingBallEventLocalizationRegression() {
