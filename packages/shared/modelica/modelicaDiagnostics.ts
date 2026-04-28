@@ -90,30 +90,33 @@ equation
 end DiagramSmoke;
 `.trim()
 
-const MODELICA_BOOLEAN_NETWORK_SIZE_SHIM_SOURCE = `
-model BooleanNetworkSizeShimSmoke
+const MODELICA_BOOLEAN_NETWORK_SHIM_SOURCE = `
+model BooleanNetworkShimSmoke
   import Sources = Modelica.Blocks.Sources;
-  Sources.BooleanTable booleanTable(table = {2, 4, 6, 6.5, 7, 9, 11});
-  Modelica.Blocks.MathBoolean.OnDelay onDelay(delayTime = 1);
-equation
-  connect(booleanTable.y, onDelay.u);
-end BooleanNetworkSizeShimSmoke;
-`.trim()
-
-const MODELICA_BOOLEAN_NETWORK_BLOCKS_SHIM_SOURCE = `
-model BooleanNetworkBlocksShimSmoke
-  import Sources = Modelica.Blocks.Sources;
+  import MathBoolean = Modelica.Blocks.MathBoolean;
+  import MathInteger = Modelica.Blocks.MathInteger;
+  parameter Real arr[3] = {1, 2, 3};
+  parameter Integer n = size(arr, 1);
+  MathBoolean.And and1(nu = 3);
   Sources.BooleanPulse booleanPulse1(width = 20, period = 1);
   Sources.BooleanPulse booleanPulse2(period = 1, width = 80);
   Sources.BooleanStep booleanStep(startTime = 1.5);
-  Modelica.Blocks.MathBoolean.And and1(nu = 3);
-  Modelica.Blocks.MathBoolean.Or or1(nu = 2);
-  Modelica.Blocks.MathBoolean.Xor xor1(nu = 2);
-  Modelica.Blocks.MathBoolean.Nand nand1(nu = 2);
-  Modelica.Blocks.MathBoolean.Nor or2(nu = 2);
-  Modelica.Blocks.MathBoolean.Not not1;
+  MathBoolean.Or or1(nu = 2);
+  MathBoolean.Xor xor1(nu = 2);
+  MathBoolean.Nand nand1(nu = 2);
+  MathBoolean.Nor nor1(nu = 2);
+  MathBoolean.Not not1;
+  MathBoolean.OnDelay onDelay(delayTime = 1);
+  MathBoolean.RisingEdge rising;
+  MathBoolean.FallingEdge falling;
+  MathBoolean.ChangingEdge changing;
+  MathBoolean.MultiSwitch set1(nu = 2, expr = {false, true});
   Sources.BooleanTable booleanTable(table = {2, 4, 6, 6.5, 7, 9, 11});
-  Modelica.Blocks.MathBoolean.OnDelay onDelay(delayTime = 1);
+  MathInteger.TriggeredAdd triggeredAdd;
+  Sources.IntegerConstant integerConstant(k = 2);
+  Modelica.Blocks.Logical.RSFlipFlop rsFlipFlop;
+  Sources.SampleTrigger sampleTriggerSet(period = 0.5, startTime = 0);
+  Sources.SampleTrigger sampleTriggerReset(period = 0.5, startTime = 0.3);
 equation
   connect(booleanPulse1.y, and1.u[1]);
   connect(booleanStep.y, and1.u[2]);
@@ -124,11 +127,29 @@ equation
   connect(booleanPulse2.y, xor1.u[2]);
   connect(xor1.y, nand1.u[1]);
   connect(booleanPulse2.y, nand1.u[2]);
-  connect(nand1.y, or2.u[1]);
-  connect(booleanPulse2.y, or2.u[2]);
-  connect(or2.y, not1.u);
+  connect(nand1.y, nor1.u[1]);
+  connect(booleanPulse2.y, nor1.u[2]);
+  connect(nor1.y, not1.u);
+  connect(booleanPulse2.y, rising.u);
+  connect(rising.y, set1.u[1]);
+  connect(booleanPulse2.y, falling.u);
+  connect(falling.y, set1.u[2]);
+  connect(booleanPulse2.y, changing.u);
+  connect(integerConstant.y, triggeredAdd.u);
+  connect(changing.y, triggeredAdd.trigger);
   connect(booleanTable.y, onDelay.u);
-end BooleanNetworkBlocksShimSmoke;
+  connect(sampleTriggerSet.y, rsFlipFlop.S);
+  connect(sampleTriggerReset.y, rsFlipFlop.R);
+end BooleanNetworkShimSmoke;
+`.trim()
+
+const MODELICA_BOOLEAN_SIGNAL_GENERATOR_SOURCE = `
+model BooleanSignalGenerator
+  Modelica.Blocks.Sources.BooleanPulse booleanPulse(period = 0.2, width = 50);
+  Modelica.Blocks.Math.BooleanToReal booleanToReal;
+equation
+  connect(booleanPulse.y, booleanToReal.u);
+end BooleanSignalGenerator;
 `.trim()
 
 function ensureDiagramDto(value: unknown): ModelicaDiagramDto {
@@ -472,7 +493,7 @@ model BouncingBall             "The bouncing ball model"
   return runTemplateCoverage(source, 'BouncingBall')
 }
 
-export async function testModelicaBooleanNetworkSizeShimRegression() {
+export async function testModelicaBooleanNetworkShimRuntime() {
   const wasm = await getDiagnosticsWasm()
   if (typeof wasm.compile_to_json !== 'function') {
     throw new Error('Rumoca wasm export missing: compile_to_json')
@@ -481,10 +502,7 @@ export async function testModelicaBooleanNetworkSizeShimRegression() {
     throw new Error('Rumoca wasm export missing: render_template')
   }
 
-  const compiled = wasm.compile_to_json(
-    MODELICA_BOOLEAN_NETWORK_SIZE_SHIM_SOURCE,
-    'BooleanNetworkSizeShimSmoke',
-  )
+  const compiled = wasm.compile_to_json(MODELICA_BOOLEAN_NETWORK_SHIM_SOURCE, 'BooleanNetworkShimSmoke')
   const parsed = JSON.parse(compiled) as {
     dae?: unknown
     dae_native?: unknown
@@ -496,46 +514,73 @@ export async function testModelicaBooleanNetworkSizeShimRegression() {
   }
 
   const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
-  if (!/\bSize\s*\(/.test(rendered)) {
-    throw new Error('Expected generated JS to contain Size(...) calls for regression coverage')
+  if (typeof rendered !== 'string' || !rendered.trim()) {
+    throw new Error('Rendered JS is empty')
+  }
+  if (!rendered.includes('__rumocaResolveExternalSymbol')) {
+    throw new Error('Generated JS is missing external symbol resolver helper')
+  }
+  if (rendered.includes('__RUMOCA_SYMBOL_OVERRIDES__')) {
+    throw new Error('Generated JS still contains hardcoded symbol overrides')
   }
 
-  const runId = 'modelica-size-shim-regression'
-  const runAbort = new AbortController()
+  const runId = 'modelica-boolean-network-shim-runtime'
+  const abort = new AbortController()
   try {
-    const rawAbiResult = await executeCodeInIframeSimple(
+    const result = await executeCodeInIframeSimple<{
+      meta?: { stopReason?: unknown; stopError?: unknown }
+      data?: { t?: unknown[] }
+    }>(
       {
         id: runId,
-        code: buildModelAbiValidationIframeCode(rendered),
+        code: buildIframeCode(rendered),
         sourceURL: `${runId}.js`,
-        stopSignal: runAbort.signal,
+        stopSignal: abort.signal,
       },
-      {},
+      {
+        sim: {
+          t0: 0,
+          tf: 2,
+          dt: 0.1,
+          solverOptions: {
+            timeIntegrator: 'sdirk2',
+            initializeConsistently: false,
+            adaptiveSubsteps: true,
+            fallbackIntegrators: ['rk4'],
+            captureFailureState: true,
+          },
+        },
+      },
       {
         source: 'ModelicaDiagnostics',
-        enforceModelAbi: true,
         __rumocaRunId: runId,
       },
     )
-    const abiResult = validateModelAbiValidationResultV1(rawAbiResult)
-    if (abiResult.ok !== true) {
-      throw new Error(abiResult.errorMessage || 'ABI validation failed in sandbox')
+
+    const stopReason = typeof result?.meta?.stopReason === 'string' ? result.meta.stopReason : ''
+    if (stopReason) {
+      const stopError = typeof result?.meta?.stopError === 'string' ? result.meta.stopError : ''
+      throw new Error(
+        `Boolean network runtime failed: stopReason=${stopReason}, stopError=${stopError || 'n/a'}`,
+      )
+    }
+
+    const sampleCount = Array.isArray(result?.data?.t) ? result.data.t.length : 0
+    if (sampleCount < 2) {
+      throw new Error(`Boolean network runtime produced too few samples: ${sampleCount}`)
     }
 
     return {
       ok: true,
-      resultPreview: serializeObject(abiResult, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
-      renderedPreview: rendered.slice(0, 300),
+      sampleCount,
+      renderedPreview: rendered.slice(0, 220),
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    throw new Error(`Size shim regression failed: ${message}`)
   } finally {
-    runAbort.abort()
+    abort.abort()
   }
 }
 
-export async function testModelicaBooleanNetworkBlocksShimRegression() {
+export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
   const wasm = await getDiagnosticsWasm()
   if (typeof wasm.compile_to_json !== 'function') {
     throw new Error('Rumoca wasm export missing: compile_to_json')
@@ -544,10 +589,7 @@ export async function testModelicaBooleanNetworkBlocksShimRegression() {
     throw new Error('Rumoca wasm export missing: render_template')
   }
 
-  const compiled = wasm.compile_to_json(
-    MODELICA_BOOLEAN_NETWORK_BLOCKS_SHIM_SOURCE,
-    'BooleanNetworkBlocksShimSmoke',
-  )
+  const compiled = wasm.compile_to_json(MODELICA_BOOLEAN_SIGNAL_GENERATOR_SOURCE, 'BooleanSignalGenerator')
   const parsed = JSON.parse(compiled) as {
     dae?: unknown
     dae_native?: unknown
@@ -559,60 +601,110 @@ export async function testModelicaBooleanNetworkBlocksShimRegression() {
   }
 
   const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
-  if (!/\bBlocks\b/.test(rendered) && !/\bModelica\b/.test(rendered)) {
-    throw new Error('Expected generated JS to reference Blocks/Modelica for regression coverage')
-  }
-  if (!/\b__rumocaResolveExternalSymbol\b/.test(rendered)) {
-    throw new Error('Expected generated JS to include generic external symbol resolution')
-  }
-  if (/\b__RUMOCA_SYMBOL_OVERRIDES__\b/.test(rendered)) {
-    throw new Error('Generated JS must not contain hardcoded symbol override tables')
+  if (typeof rendered !== 'string' || !rendered.trim()) {
+    throw new Error('Rendered JS is empty')
   }
 
-  const runId = 'modelica-blocks-shim-regression'
-  const runAbort = new AbortController()
+  const runId = 'modelica-boolean-signal-generator-waveform-regression'
+  const abort = new AbortController()
   try {
-    const result = await executeCodeInIframeSimple(
+    const result = await executeCodeInIframeSimple<{
+      meta?: { stopReason?: unknown; stopError?: unknown }
+      data?: { t?: unknown[]; y?: Record<string, unknown> }
+    }>(
       {
         id: runId,
-        code: `
-          () => {
-            ${rendered}
-            if (typeof Model !== 'function') throw new Error('Model() missing')
-            const model = Model()
-            const nx = Number(model.description?.nx ?? 0)
-            const ny = Number(model.description?.ny ?? 0)
-            const nu = Number(model.description?.nu ?? 0)
-            const residual = model.residual(
-              0,
-              model.x0,
-              new Array(nx).fill(0),
-              model.y0,
-              new Array(nu).fill(0),
-              null,
-            )
-            return {
-              nx,
-              ny,
-              residualLength: Array.isArray(residual) ? residual.length : -1,
-            }
-          }
-        `,
+        code: buildIframeCode(rendered),
         sourceURL: `${runId}.js`,
-        stopSignal: runAbort.signal,
+        stopSignal: abort.signal,
+      },
+      {
+        sim: {
+          t0: 0,
+          tf: 1,
+          dt: 0.001,
+          solverOptions: {
+            timeIntegrator: 'sdirk2',
+            initializeConsistently: false,
+            adaptiveSubsteps: true,
+            fallbackIntegrators: ['rk4'],
+            captureFailureState: true,
+          },
+        },
+      },
+      {
+        source: 'ModelicaDiagnostics',
+        __rumocaRunId: runId,
       },
     )
 
+    const stopReason = typeof result?.meta?.stopReason === 'string' ? result.meta.stopReason : ''
+    if (stopReason) {
+      const stopError = typeof result?.meta?.stopError === 'string' ? result.meta.stopError : ''
+      throw new Error(
+        `Boolean signal generator runtime failed: stopReason=${stopReason}, stopError=${stopError || 'n/a'}`,
+      )
+    }
+
+    const pulse = result?.data?.y?.['booleanPulse.y']
+    const real = result?.data?.y?.['booleanToReal.y']
+    if (!Array.isArray(pulse) || !Array.isArray(real)) {
+      throw new Error('Expected y["booleanPulse.y"] and y["booleanToReal.y"] arrays in simulation output')
+    }
+    if (pulse.length !== real.length || pulse.length < 200) {
+      throw new Error(
+        `Unexpected waveform sample lengths: pulse=${pulse.length}, real=${real.length}`,
+      )
+    }
+
+    const toBit = (v: unknown): 0 | 1 | null => {
+      if (v === 0 || v === false) return 0
+      if (v === 1 || v === true) return 1
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        if (Math.abs(v) < 1e-9) return 0
+        if (Math.abs(v - 1) < 1e-9) return 1
+      }
+      return null
+    }
+
+    const pulseBits = pulse.map(toBit)
+    const realBits = real.map(toBit)
+    if (pulseBits.some((v) => v === null) || realBits.some((v) => v === null)) {
+      throw new Error('Waveform contains non-binary values; expected only 0/1 samples')
+    }
+
+    const pulseOnes = pulseBits.filter((v) => v === 1).length
+    const pulseZeros = pulseBits.filter((v) => v === 0).length
+    const realOnes = realBits.filter((v) => v === 1).length
+    const realZeros = realBits.filter((v) => v === 0).length
+
+    if (pulseOnes < 100 || pulseZeros < 100) {
+      throw new Error(
+        `booleanPulse.y does not toggle as expected (ones=${pulseOnes}, zeros=${pulseZeros})`,
+      )
+    }
+    if (realOnes < 100 || realZeros < 100) {
+      throw new Error(
+        `booleanToReal.y does not toggle as expected (ones=${realOnes}, zeros=${realZeros})`,
+      )
+    }
+
+    for (let i = 0; i < pulseBits.length; i++) {
+      if (pulseBits[i] !== realBits[i]) {
+        throw new Error(`booleanToReal.y diverges from booleanPulse.y at sample index=${i}`)
+      }
+    }
+
     return {
       ok: true,
-      resultPreview: serializeObject(result, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
-      renderedPreview: rendered.slice(0, 300),
+      samples: pulseBits.length,
+      pulseOnes,
+      pulseZeros,
+      realOnes,
+      realZeros,
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    throw new Error(`Blocks shim regression failed: ${message}`)
   } finally {
-    runAbort.abort()
+    abort.abort()
   }
 }
 

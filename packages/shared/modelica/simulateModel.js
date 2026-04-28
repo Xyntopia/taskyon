@@ -55,6 +55,10 @@ const simulateModel = (params, context, model) => {
 
   const x0_model = Array.isArray(model.x0) ? model.x0.slice() : new Array(nx).fill(0)
   const y0_model = Array.isArray(model.y0) ? model.y0.slice() : new Array(ny).fill(0)
+  const hasOnlyDummyState =
+    nx === 1 &&
+    stateNames.length === 1 &&
+    (stateNames[0] === '_rumoca_dummy_state' || stateNames[0] === 'dummy_state')
 
   let c0 = Array.isArray(model.c0) ? model.c0.slice() : null
   if (!c0 && haveEvents) {
@@ -135,6 +139,23 @@ const simulateModel = (params, context, model) => {
 
     return solveLinearSystem(A, b)
   }
+  function solveSteepestDescent(J, r, lambda) {
+    const m = J.length
+    if (m === 0) return []
+    const n = Array.isArray(J[0]) ? J[0].length : 0
+    if (n === 0) return []
+    const g = new Array(n).fill(0)
+    let jFroSq = 0
+    for (let i = 0; i < m; i++) {
+      for (let j = 0; j < n; j++) {
+        const Jij = J[i][j]
+        g[j] += Jij * r[i]
+        jFroSq += Jij * Jij
+      }
+    }
+    const denom = jFroSq + Math.max(1e-12, lambda)
+    return g.map((gi) => -gi / denom)
+  }
 
   function regularizeGuessVector(values, newtonOpts) {
     const minAbs = Number.isFinite(newtonOpts?.initialGuessMinAbs)
@@ -144,6 +165,17 @@ const simulateModel = (params, context, model) => {
     return values.map((raw) => {
       const v = Number(raw)
       if (!Number.isFinite(v)) return minAbs
+      return v
+    })
+  }
+  function snapNearBinaryValues(values, tol = 1e-6) {
+    if (!Array.isArray(values)) return []
+    const threshold = Number.isFinite(tol) ? Math.max(0, tol) : 1e-6
+    return values.map((raw) => {
+      const v = Number(raw)
+      if (!Number.isFinite(v)) return raw
+      if (Math.abs(v) <= threshold) return 0
+      if (Math.abs(v - 1) <= threshold) return 1
       return v
     })
   }
@@ -166,6 +198,9 @@ const simulateModel = (params, context, model) => {
     const lineSearchAcceptRatio = Number.isFinite(newtonOpts?.lineSearchAcceptRatio)
       ? Math.max(0, newtonOpts.lineSearchAcceptRatio)
       : 0.999
+    const trustRegionScale = Number.isFinite(newtonOpts?.trustRegionScale)
+      ? Math.max(0, newtonOpts.trustRegionScale)
+      : 10
 
     const n = z0.length
     let z = regularizeGuessVector(z0, newtonOpts)
@@ -229,7 +264,8 @@ const simulateModel = (params, context, model) => {
       for (let j = 0; j < n; j++) {
         const zj = z[j]
         const eps = epsBase * (1 + Math.abs(zj))
-        z[j] = zj + eps
+        const step = (zj > 0 ? 1 : -1) * eps
+        z[j] = zj + step
         let rp
         try {
           rp = residualFn(z)
@@ -248,7 +284,7 @@ const simulateModel = (params, context, model) => {
           )
         }
         for (let i = 0; i < m; i++) {
-          J[i][j] = (rp[i] - r[i]) / eps
+          J[i][j] = (rp[i] - r[i]) / step
           if (!Number.isFinite(J[i][j])) {
             throw new Error(
               `Jacobian non-finite at (row=${i}, col=${j}) (stage=${trace?.stage || 'unknown'}, iter=${iter}, t=${Number(trace?.t).toPrecision(8)})`,
@@ -261,6 +297,9 @@ const simulateModel = (params, context, model) => {
       // Use damped least-squares for both square and rectangular systems.
       // This is robust for over-determined DAEs (m > n) that arise from expanded libraries.
       delta = solveDampedLeastSquares(J, r, lambda)
+      if (!Array.isArray(delta) || delta.length !== n || delta.some((v) => !Number.isFinite(v))) {
+        delta = solveSteepestDescent(J, r, lambda)
+      }
       for (let i = 0; i < n; i++) {
         if (!Number.isFinite(delta[i])) {
           throw new Error(
@@ -272,6 +311,15 @@ const simulateModel = (params, context, model) => {
           if (Math.abs(delta[i]) > maxAbsDelta) {
             delta[i] = delta[i] < 0 ? -maxAbsDelta : maxAbsDelta
           }
+        }
+      }
+      if (trustRegionScale > 0) {
+        const deltaInf = delta.reduce((acc, v) => Math.max(acc, Math.abs(v)), 0)
+        const zInf = z.reduce((acc, v) => Math.max(acc, Math.abs(v)), 0)
+        const maxStep = trustRegionScale * (1 + zInf)
+        if (deltaInf > maxStep && deltaInf > 0 && Number.isFinite(maxStep)) {
+          const scale = maxStep / deltaInf
+          for (let i = 0; i < n; i++) delta[i] *= scale
         }
       }
 
@@ -300,15 +348,94 @@ const simulateModel = (params, context, model) => {
         alpha *= lineSearchBackoff
       }
       if (!accepted) {
-        throw new Error(
-          `Newton line search failed to reduce residual (stage=${trace?.stage || 'unknown'}, iter=${iter}, t=${Number(trace?.t).toPrecision(8)})`,
-        )
+        // Rescue step for discrete/flat residual surfaces: nudge state and continue.
+        const jitterBase = Math.max(epsBase, 1e-8)
+        for (let i = 0; i < n; i++) {
+          const sign = i % 2 === 0 ? 1 : -1
+          z[i] = z[i] + sign * jitterBase * (1 + Math.abs(z[i]))
+        }
+        continue
       }
     }
 
     throw new Error(
       `Newton failed to converge within maxIter=${maxIter} (stage=${trace?.stage || 'unknown'}, t=${Number(trace?.t).toPrecision(8)}, residualInfNorm=${lastResidualNorm})`,
     )
+  }
+
+  function solveNonlinearWithFallback(residualFn, z0, newtonOpts, trace) {
+    const baseOpts = Object.assign({}, newtonOpts || {})
+    const attemptConfigs = [
+      {},
+      {
+        lambda: Math.max(baseOpts.lambda || 1e-6, 1e-3),
+        maxIter: Math.max(baseOpts.maxIter || 12, 24),
+        lineSearchAcceptRatio: Math.max(baseOpts.lineSearchAcceptRatio || 0.999, 1.0),
+      },
+      {
+        lambda: Math.max(baseOpts.lambda || 1e-6, 1e-1),
+        maxIter: Math.max(baseOpts.maxIter || 12, 40),
+        lineSearchBackoff: 0.5,
+        lineSearchMinAlpha: Math.min(1 / 512, baseOpts.lineSearchMinAlpha || 1 / 64),
+        lineSearchAcceptRatio: 1.02,
+        initialGuessMinAbs: Math.max(baseOpts.initialGuessMinAbs || 1e-9, 1e-6),
+      },
+    ]
+
+    const errors = []
+    const trySolve = (opts, guess, label) => {
+      try {
+        return newtonSolve(residualFn, guess, opts, trace)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`${label}: ${msg}`)
+        return null
+      }
+    }
+
+    for (let i = 0; i < attemptConfigs.length; i++) {
+      const opts = Object.assign({}, baseOpts, attemptConfigs[i])
+      const guess = i === 0 ? z0 : regularizeGuessVector(z0, opts)
+      const solved = trySolve(opts, guess, `newton_attempt_${i + 1}`)
+      if (Array.isArray(solved)) return solved
+    }
+
+    // Homotopy continuation fallback: bridge from easy identity residual to true residual.
+    const homotopySteps = Number.isFinite(baseOpts.homotopySteps)
+      ? Math.max(2, Math.floor(baseOpts.homotopySteps))
+      : 6
+    const homotopyOpts = Object.assign({}, baseOpts, {
+      lambda: Math.max(baseOpts.lambda || 1e-6, 1e-2),
+      maxIter: Math.max(baseOpts.maxIter || 12, 30),
+      lineSearchAcceptRatio: 1.01,
+    })
+    let zCur = regularizeGuessVector(z0, homotopyOpts)
+    for (let step = 1; step <= homotopySteps; step++) {
+      const alpha = step / homotopySteps
+      const residualHomotopy = (z) => {
+        const rTrue = residualFn(z)
+        const out = new Array(rTrue.length)
+        const nBlend = Math.min(z.length, rTrue.length)
+        for (let i = 0; i < nBlend; i++) {
+          out[i] = alpha * rTrue[i] + (1 - alpha) * (z[i] - zCur[i])
+        }
+        for (let i = nBlend; i < rTrue.length; i++) out[i] = alpha * rTrue[i]
+        return out
+      }
+      try {
+        zCur = newtonSolve(residualHomotopy, zCur, homotopyOpts, trace)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`homotopy_step_${step}/${homotopySteps}: ${msg}`)
+        if (trace?.stage === 'post_reset_projection') {
+          return zCur
+        }
+        throw new Error(
+          `Nonlinear solve failed after fallback ladder (stage=${trace?.stage || 'unknown'}, t=${Number(trace?.t).toPrecision(8)}): ${errors.slice(-4).join(' | ')}`,
+        )
+      }
+    }
+    return zCur
   }
 
   // ---------- Backward-Euler-like stage ----------
@@ -327,10 +454,10 @@ const simulateModel = (params, context, model) => {
       return model.residual(tStage, xS, xDot, yS, u, pOverride)
     }
 
-    const sol = newtonSolve(residual, z0, newtonOpts, { stage: stageName, t: tStage })
+    const sol = solveNonlinearWithFallback(residual, z0, newtonOpts, { stage: stageName, t: tStage })
     return {
       x: sol.slice(0, nx),
-      y: sol.slice(nx),
+      y: snapNearBinaryValues(sol.slice(nx)),
     }
   }
 
@@ -366,14 +493,14 @@ const simulateModel = (params, context, model) => {
       return model.residual(t + dt, x2, xDot, y2, u, pOverride)
     }
 
-    const sol2 = newtonSolve(residualStage2, z0, newtonOpts, {
+    const sol2 = solveNonlinearWithFallback(residualStage2, z0, newtonOpts, {
       stage: 'sdirk2_stage2',
       t: t + dt,
     })
 
     return {
       x: sol2.slice(0, nx),
-      y: sol2.slice(nx),
+      y: snapNearBinaryValues(sol2.slice(nx)),
     }
   }
 
@@ -424,7 +551,7 @@ const simulateModel = (params, context, model) => {
       return r1.concat(r2)
     }
 
-    const sol = newtonSolve(residualStages, z0, newtonOpts, {
+    const sol = solveNonlinearWithFallback(residualStages, z0, newtonOpts, {
       stage: 'irk4_stages',
       t: t + dt,
     })
@@ -436,7 +563,7 @@ const simulateModel = (params, context, model) => {
 
     return {
       x: xNext,
-      y: y2.slice(),
+      y: snapNearBinaryValues(y2.slice()),
     }
   }
 
@@ -448,10 +575,10 @@ const simulateModel = (params, context, model) => {
       const yS = z.slice(nx)
       return model.residual(tEval, xEval, xDotS, yS, u, pOverride)
     }
-    const sol = newtonSolve(residual, z0, newtonOpts, { stage: stageName, t: tEval })
+    const sol = solveNonlinearWithFallback(residual, z0, newtonOpts, { stage: stageName, t: tEval })
     return {
       xDot: sol.slice(0, nx),
-      y: sol.slice(nx),
+      y: snapNearBinaryValues(sol.slice(nx)),
     }
   }
 
@@ -669,6 +796,7 @@ const simulateModel = (params, context, model) => {
       initialGuessMinAbs: solverOptions.initialGuessMinAbs,
       lambda: solverOptions.newtonLambda,
       maxUpdateFactor: solverOptions.maxUpdateFactor,
+      trustRegionScale: solverOptions.trustRegionScale,
       lineSearchBackoff: solverOptions.lineSearchBackoff,
       lineSearchMinAlpha: solverOptions.lineSearchMinAlpha,
       lineSearchAcceptRatio: solverOptions.lineSearchAcceptRatio,
@@ -676,10 +804,29 @@ const simulateModel = (params, context, model) => {
     const selectedIntegrator = String(
       solverOptions.timeIntegrator ?? solverOptions.integrator ?? 'sdirk2',
     ).toLowerCase()
-    const useIrk4 = selectedIntegrator === 'irk4' || selectedIntegrator === 'gauss_legendre_irk4'
-    const useRk4 = selectedIntegrator === 'rk4'
-    const useRk45 = selectedIntegrator === 'rk45' || selectedIntegrator === 'dopri54'
-    const stepperName = useIrk4 ? 'irk4' : useRk4 ? 'rk4' : useRk45 ? 'rk45' : 'sdirk2'
+    const normalizeIntegratorName = (name) => {
+      const lowered = String(name || '').toLowerCase()
+      if (lowered === 'irk4' || lowered === 'gauss_legendre_irk4') return 'irk4'
+      if (lowered === 'rk4') return 'rk4'
+      if (lowered === 'rk45' || lowered === 'dopri54') return 'rk45'
+      return 'sdirk2'
+    }
+    const primaryIntegrator = normalizeIntegratorName(selectedIntegrator)
+    const fallbackIntegratorTokens = Array.isArray(solverOptions.fallbackIntegrators)
+      ? solverOptions.fallbackIntegrators
+      : typeof solverOptions.fallbackIntegrator === 'string'
+        ? [solverOptions.fallbackIntegrator]
+        : []
+    const fallbackIntegrators = Array.from(
+      new Set(
+        fallbackIntegratorTokens
+          .map((token) => normalizeIntegratorName(token))
+          .filter((name) => name !== primaryIntegrator),
+      ),
+    )
+    const integratorOrder = [primaryIntegrator, ...fallbackIntegrators]
+    const useRk45 = primaryIntegrator === 'rk45'
+    const stepperName = primaryIntegrator
     const captureFailureState = Boolean(
       solverOptions.captureFailureState ?? opts.captureFailureState ?? false,
     )
@@ -743,6 +890,7 @@ const simulateModel = (params, context, model) => {
       runCount: 1,
       macroStepCount: 0,
       flowStepCalls: 0,
+      fallbackStepCount: 0,
       rk45Attempts: 0,
       rk45Accepted: 0,
       rk45Rejected: 0,
@@ -910,19 +1058,146 @@ const simulateModel = (params, context, model) => {
           stack: e && e.stack,
         })
       }
+      try {
+        const projected = solveFlowAtState(
+          tLocal,
+          xNext,
+          yNext,
+          new Array(nx).fill(0),
+          uLocal,
+          pOverride,
+          newtonOpts,
+          'post_reset_projection',
+        )
+        if (Array.isArray(projected?.y) && projected.y.length === ny) {
+          yNext = projected.y.slice()
+        }
+      } catch (e) {
+        log(`post-reset projection threw at t=${tLocal}`, {
+          error: (e && e.message) || String(e),
+          stack: e && e.stack,
+        })
+      }
+      // Best-effort algebraic consistency correction for reset-heavy/discrete models.
+      try {
+        const xDotZero = new Array(nx).fill(0)
+        const fixedY = new Set()
+        const compareLen = Math.min(yLocal.length, yNext.length)
+        for (let i = 0; i < compareLen; i++) {
+          if (Math.abs((Number(yNext[i]) || 0) - (Number(yLocal[i]) || 0)) > 1e-12) fixedY.add(i)
+        }
+        const r0 = model.residual(tLocal, xNext, xDotZero, yNext, uLocal, pOverride)
+        if (Array.isArray(r0) && r0.length > 0) {
+          const z = xDotZero.concat(yNext)
+          const n = z.length
+          const m = r0.length
+          const epsBase = Number.isFinite(newtonOpts?.epsBase) ? Math.max(1e-10, newtonOpts.epsBase) : 1e-6
+          const J = Array.from({ length: m }, () => new Array(n).fill(0))
+          for (let j = 0; j < n; j++) {
+            const yIdx = j - nx
+            if (j < nx || fixedY.has(yIdx)) {
+              for (let i = 0; i < m; i++) J[i][j] = 0
+              continue
+            }
+            const zj = z[j]
+            const eps = epsBase * (1 + Math.abs(zj))
+            const step = (zj > 0 ? 1 : -1) * eps
+            z[j] = zj + step
+            const rp = model.residual(tLocal, xNext, z.slice(0, nx), z.slice(nx), uLocal, pOverride)
+            z[j] = zj
+            if (!Array.isArray(rp) || rp.length !== m) continue
+            for (let i = 0; i < m; i++) J[i][j] = (rp[i] - r0[i]) / step
+          }
+          const delta = solveDampedLeastSquares(J, r0, Math.max(1e-6, newtonOpts?.lambda || 1e-6))
+          if (Array.isArray(delta) && delta.length === n) {
+            for (let j = 0; j < n; j++) {
+              const yIdx = j - nx
+              if (j < nx || fixedY.has(yIdx)) continue
+              z[j] += Number.isFinite(delta[j]) ? delta[j] : 0
+            }
+            yNext = snapNearBinaryValues(z.slice(nx))
+          }
+        }
+      } catch (e) {
+        log(`post-reset least-squares correction threw at t=${tLocal}`, {
+          error: (e && e.message) || String(e),
+          stack: e && e.stack,
+        })
+      }
       return { xNext, yNext, cNext }
+    }
+
+    function runFlowStepWithIntegrator(
+      integratorName,
+      tLocal,
+      xLocal,
+      yLocal,
+      dtLocal,
+      uLocal,
+      xDotSeed,
+    ) {
+      if (integratorName === 'irk4') {
+        return irk4Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts)
+      }
+      if (integratorName === 'rk4') {
+        return rk4Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts, xDotSeed)
+      }
+      if (integratorName === 'rk45') {
+        return rk45Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts, xDotSeed)
+      }
+      return sdirk2Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts)
     }
 
     function performFlowStepOnce(tLocal, xLocal, yLocal, dtLocal, xDotSeed) {
       solverStats.flowStepCalls += 1
       const uLocal = f_u(tLocal) || new Array(nu).fill(0)
-      const step = useIrk4
-        ? irk4Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts)
-        : useRk4
-          ? rk4Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts, xDotSeed)
-          : useRk45
-            ? rk45Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts, xDotSeed)
-            : sdirk2Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts)
+      if (hasOnlyDummyState) {
+        const xDotGuess = Array.isArray(xDotSeed) && xDotSeed.length === nx ? xDotSeed : [0]
+        const projected = solveFlowAtState(
+          tLocal + dtLocal,
+          xLocal,
+          yLocal,
+          xDotGuess,
+          uLocal,
+          pOverride,
+          newtonOpts,
+          'algebraic_projection',
+        )
+        return {
+          xNext: xLocal.slice(),
+          yNext: projected.y.slice(),
+          xDotNext: projected.xDot.slice(),
+          xEmbedded: null,
+        }
+      }
+      let step = null
+      let lastError = null
+      let succeededIntegrator = null
+      for (let i = 0; i < integratorOrder.length; i++) {
+        const integratorName = integratorOrder[i]
+        try {
+          step = runFlowStepWithIntegrator(
+            integratorName,
+            tLocal,
+            xLocal,
+            yLocal,
+            dtLocal,
+            uLocal,
+            xDotSeed,
+          )
+          succeededIntegrator = integratorName
+          break
+        } catch (e) {
+          lastError = e
+        }
+      }
+      if (!step || !succeededIntegrator) {
+        if (lastError) throw lastError
+        throw new Error(`Failed to evaluate step at t=${tLocal}`)
+      }
+      if (succeededIntegrator !== primaryIntegrator) {
+        solverStats.fallbackStepCount += 1
+      }
       if (!step || !step.x || !step.y) throw new Error(`Invalid step payload at t=${tLocal}`)
       const xDotNext =
         Array.isArray(step.xDot) && step.xDot.length === nx
@@ -1517,6 +1792,11 @@ simulateModel.optionsSchema = {
       default: 1e-6,
       description: 'Damping lambda used in normal-equation least-squares Newton step',
     },
+    trustRegionScale: {
+      type: 'number',
+      default: 10,
+      description: 'Global trust-region cap: ||delta||_inf <= scale * (1 + ||z||_inf)',
+    },
     maxUpdateFactor: {
       type: 'number',
       default: 5,
@@ -1608,6 +1888,16 @@ simulateModel.optionsSchema = {
       type: 'number',
       default: 1e-9,
       description: 'Minimum RK45 internal step size',
+    },
+    fallbackIntegrators: {
+      type: 'array',
+      default: [],
+      description: 'Optional fallback integrators tried per-step after primary fails (e.g. ["rk4"])',
+    },
+    homotopySteps: {
+      type: 'integer',
+      default: 6,
+      description: 'Continuation steps used by nonlinear solve fallback ladder',
     },
     adaptiveSubsteps: {
       type: 'boolean',

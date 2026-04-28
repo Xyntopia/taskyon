@@ -511,6 +511,20 @@ function Model() {
         if (!Number.isFinite(idx) || idx < 0) return 0;
         return idx < shape.length ? shape[idx] : 0;
       };
+  let __rumocaCurrentTime = 0;
+  const __rumocaTimeTol = 1e-9;
+  const Initial = () => Math.abs(Number(__rumocaCurrentTime) || 0) <= __rumocaTimeTol;
+  const Sample = (startTime, period) => {
+    const t = Number(__rumocaCurrentTime);
+    const s = Number(startTime);
+    const p = Number(period);
+    if (!Number.isFinite(t) || !Number.isFinite(s) || !Number.isFinite(p) || p <= 0) return false;
+    if (t + __rumocaTimeTol < s) return false;
+    const k = Math.round((t - s) / p);
+    if (k < 0) return false;
+    const tk = s + k * p;
+    return Math.abs(t - tk) <= Math.max(__rumocaTimeTol, Math.abs(p) * 1e-12);
+  };
 
   function __rumocaMissingRef(name) {
     const key = String(name || '');
@@ -745,6 +759,7 @@ function Model() {
   };
 
   function residual(t, xVec, xDotVec, yVec, uVec, pOverride) {
+    __rumocaCurrentTime = t;
     const p = Object.assign({}, pDefaults, pOverride || {});
 
   {%- for (name, comp) in p_map|items %}
@@ -785,6 +800,7 @@ function Model() {
   }
 
   function evalConditions(t, xVec, yVec, uVec, pOverride) {
+    __rumocaCurrentTime = t;
     const p = Object.assign({}, pDefaults, pOverride || {});
 
   {%- for (name, comp) in p_map|items %}
@@ -824,6 +840,7 @@ function Model() {
   }
 
   function evalEventIndicators(t, xVec, yVec, uVec, pOverride) {
+    __rumocaCurrentTime = t;
     const p = Object.assign({}, pDefaults, pOverride || {});
 
   {%- for (name, comp) in p_map|items %}
@@ -863,6 +880,7 @@ function Model() {
   }
 
   function evalAlgebraics(t, xVec, yVec, uVec, pOverride) {
+    __rumocaCurrentTime = t;
     var p = Object.assign({}, pDefaults, pOverride || {});
 
   {%- for (name, comp) in p_map|items %}
@@ -926,6 +944,7 @@ function Model() {
   }
 
   function applyResets(t, xVec, yVec, uVec, pOverride, cPrev, cCurr) {
+    __rumocaCurrentTime = t;
     const p = Object.assign({}, pDefaults, pOverride || {});
 
   {%- for (name, comp) in p_map|items %}
@@ -980,10 +999,6 @@ function Model() {
   {%- endfor %}
 
   {%- if when_clauses|length == 0 and reset_eqs|length > 0 %}
-    const firedAny = Array.isArray(cPrev) && Array.isArray(cCurr)
-      ? cCurr.some((value, idx) => !Boolean(cPrev[idx]) && Boolean(value))
-      : false;
-    if (firedAny) {
     {%- for eq in reset_eqs %}
       {%- if eq.lhs is defined %}
       if (stateIndex["{{ eq.lhs }}"] !== undefined) {
@@ -993,7 +1008,6 @@ function Model() {
       }
       {%- endif %}
     {%- endfor %}
-    }
   {%- endif %}
 
     return { x: xNew, y: yNew, c: cNew };
