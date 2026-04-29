@@ -143,6 +143,15 @@ equation
 end BooleanNetworkShimSmoke;
 `.trim()
 
+const MODELICA_BOOLEAN_SIGNAL_GENERATOR_SOURCE = `
+model BooleanSignalGenerator
+  Modelica.Blocks.Sources.BooleanPulse booleanPulse(period = 0.2, width = 50);
+  Modelica.Blocks.Math.BooleanToReal booleanToReal;
+equation
+  connect(booleanPulse.y, booleanToReal.u);
+end BooleanSignalGenerator;
+`.trim()
+
 function ensureDiagramDto(value: unknown): ModelicaDiagramDto {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('extract_diagram returned invalid payload: expected object')
@@ -573,6 +582,139 @@ export async function testModelicaBooleanNetworkShimRuntime() {
 
 export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
   const wasm = await getDiagnosticsWasm()
+  if (typeof wasm.compile_to_json !== 'function') {
+    throw new Error('Rumoca wasm export missing: compile_to_json')
+  }
+  if (typeof wasm.render_template !== 'function') {
+    throw new Error('Rumoca wasm export missing: render_template')
+  }
+
+  const compiled = wasm.compile_to_json(MODELICA_BOOLEAN_SIGNAL_GENERATOR_SOURCE, 'BooleanSignalGenerator')
+  const parsed = JSON.parse(compiled) as {
+    dae?: unknown
+    dae_native?: unknown
+    dae_prepared?: unknown
+  }
+  const dae = selectDaeForTemplate(parsed, { usePreparedDae: true })
+  if (!dae) {
+    throw new Error('Rumoca compile_to_json returned no DAE payload')
+  }
+
+  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  if (typeof rendered !== 'string' || !rendered.trim()) {
+    throw new Error('Rendered JS is empty')
+  }
+
+  const runId = 'modelica-boolean-signal-generator-waveform-regression'
+  const abort = new AbortController()
+  try {
+    const result = await executeCodeInIframeSimple<{
+      meta?: { stopReason?: unknown; stopError?: unknown }
+      data?: { t?: unknown[]; y?: Record<string, unknown> }
+    }>(
+      {
+        id: runId,
+        code: buildIframeCode(rendered),
+        sourceURL: `${runId}.js`,
+        stopSignal: abort.signal,
+      },
+      {
+        sim: {
+          t0: 0,
+          tf: 1,
+          dt: 0.001,
+          solverOptions: {
+            timeIntegrator: 'sdirk2',
+            initializeConsistently: false,
+            adaptiveSubsteps: true,
+            fallbackIntegrators: ['rk4'],
+            captureFailureState: true,
+          },
+        },
+      },
+      {
+        source: 'ModelicaDiagnostics',
+        __rumocaRunId: runId,
+      },
+    )
+
+    const stopReason = typeof result?.meta?.stopReason === 'string' ? result.meta.stopReason : ''
+    if (stopReason) {
+      const stopError = typeof result?.meta?.stopError === 'string' ? result.meta.stopError : ''
+      throw new Error(
+        `Boolean signal generator runtime failed: stopReason=${stopReason}, stopError=${stopError || 'n/a'}`,
+      )
+    }
+
+    const pulse = result?.data?.y?.['booleanPulse.y']
+    const real = result?.data?.y?.['booleanToReal.y']
+    if (!Array.isArray(pulse) || !Array.isArray(real)) {
+      throw new Error('Expected y["booleanPulse.y"] and y["booleanToReal.y"] arrays in simulation output')
+    }
+    if (pulse.length !== real.length || pulse.length < 200) {
+      throw new Error(`Unexpected waveform sample lengths: pulse=${pulse.length}, real=${real.length}`)
+    }
+
+    const toBit = (v: unknown): 0 | 1 | null => {
+      if (v === 0 || v === false) return 0
+      if (v === 1 || v === true) return 1
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        if (Math.abs(v) < 1e-9) return 0
+        if (Math.abs(v - 1) < 1e-9) return 1
+      }
+      return null
+    }
+
+    const pulseBits = pulse.map(toBit)
+    const realBits = real.map(toBit)
+    if (pulseBits.some((v) => v === null) || realBits.some((v) => v === null)) {
+      throw new Error('Waveform contains non-binary values; expected only 0/1 samples')
+    }
+
+    const pulseOnes = pulseBits.filter((v) => v === 1).length
+    const pulseZeros = pulseBits.filter((v) => v === 0).length
+    const realOnes = realBits.filter((v) => v === 1).length
+    const realZeros = realBits.filter((v) => v === 0).length
+
+    if (pulseOnes < 100 || pulseZeros < 100) {
+      throw new Error(`booleanPulse.y does not toggle as expected (ones=${pulseOnes}, zeros=${pulseZeros})`)
+    }
+    if (realOnes < 100 || realZeros < 100) {
+      throw new Error(`booleanToReal.y does not toggle as expected (ones=${realOnes}, zeros=${realZeros})`)
+    }
+
+    const transitions = pulseBits.reduce<number>(
+      (count, bit, idx) => (idx > 0 && bit !== pulseBits[idx - 1] ? count + 1 : count),
+      0,
+    )
+    const mismatches = pulseBits.reduce<number>(
+      (count, bit, idx) => (realBits[idx] !== bit ? count + 1 : count),
+      0,
+    )
+    const maxAllowedMismatches = Math.max(2, transitions + 2)
+    if (mismatches > maxAllowedMismatches) {
+      throw new Error(
+        `booleanToReal.y diverges too much from booleanPulse.y (mismatches=${mismatches}, transitions=${transitions}, allowed=${maxAllowedMismatches})`,
+      )
+    }
+
+    return {
+      ok: true,
+      samples: pulseBits.length,
+      pulseOnes,
+      pulseZeros,
+      realOnes,
+      realZeros,
+      transitions,
+      mismatches,
+    }
+  } finally {
+    abort.abort()
+  }
+}
+
+export async function testModelicaBooleanNetwork1RuntimeRegression() {
+  const wasm = await getDiagnosticsWasm()
   if (
     typeof wasm.compile_with_source_roots !== 'function' &&
     typeof wasm.compile_with_libraries !== 'function'
@@ -678,6 +820,7 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
         throw new Error(`BooleanNetwork1 channel ${key} has unexpected shape`)
       }
     }
+
     const countBit = (key: string, bit: 0 | 1) => {
       const values = yChannels[key]
       if (!Array.isArray(values)) return 0

@@ -5,7 +5,6 @@
         dense
         flat
         no-caps
-        color="grey-7"
         :icon="matTune"
         :label="compactInfoLabel"
         style="max-width: 620px"
@@ -48,28 +47,36 @@
     </template>
 
     <q-btn
+      v-if="canRun"
       dense
       flat
-      color="secondary"
+      color="green-4"
       :icon="matPlayArrow"
       label="Run"
-      :disable="!canRun"
       :loading="running"
       @click="emit('run')"
     />
 
     <q-btn
-      v-if="showPopupButton"
+      v-if="canRun"
       dense
       flat
-      color="secondary"
       :icon="matOpenInNew"
-      label="Popup window"
+      title="Run in Popup window"
       :disable="!canOpenPopup"
       @click="emit('open-popup')"
     />
 
-    <q-btn v-if="running" flat dense color="negative" label="Stop" outline @click="emit('stop')" />
+    <q-btn
+      v-if="running"
+      flat
+      dense
+      color="negative"
+      label="Stop"
+      :icon="matStop"
+      outline
+      @click="emit('stop')"
+    />
 
     <q-dialog v-model="openModel">
       <q-card style="min-width: 660px; max-width: 95vw">
@@ -93,9 +100,7 @@
           </div>
 
           <div class="text-caption text-grey-7">
-            {{
-              `N~${formatMaybe(predictedStepsEffective)} | S=${solverLabel || '-'}`
-            }}
+            {{ `N~${formatMaybe(predictedStepsEffective)} | S=${solverLabel || '-'}` }}
           </div>
           <div v-if="hasResult" class="text-caption text-grey-7">
             {{ `N=${formatMaybe(actualSteps)} | E=${formatMaybe(eventCount)}` }}
@@ -126,7 +131,13 @@
 </template>
 
 <script setup lang="ts">
-import { matClose, matOpenInNew, matPlayArrow, matTune } from '@quasar/extras/material-icons'
+import {
+  matClose,
+  matOpenInNew,
+  matPlayArrow,
+  matStop,
+  matTune,
+} from '@quasar/extras/material-icons'
 import { computed, ref } from 'vue'
 
 const props = withDefaults(

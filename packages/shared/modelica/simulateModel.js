@@ -210,7 +210,9 @@ const simulateModel = (params, context, model) => {
     const fixed = fixedY instanceof Set ? fixedY : new Set()
     const xDotZero = new Array(nx).fill(0)
     const tol = Number.isFinite(newtonOpts?.tol) ? Math.max(1e-10, newtonOpts.tol) : 1e-8
-    const epsBase = Number.isFinite(newtonOpts?.epsBase) ? Math.max(1e-10, newtonOpts.epsBase) : 1e-6
+    const epsBase = Number.isFinite(newtonOpts?.epsBase)
+      ? Math.max(1e-10, newtonOpts.epsBase)
+      : 1e-6
     const lambda = Math.max(1e-8, Number(newtonOpts?.lambda) || 1e-6)
     const maxIter = Math.max(1, Math.min(8, Number(newtonOpts?.maxIter) || 6))
 
@@ -521,7 +523,10 @@ const simulateModel = (params, context, model) => {
       return model.residual(tStage, xS, xDot, yS, u, pOverride)
     }
 
-    const sol = solveNonlinearWithFallback(residual, z0, newtonOpts, { stage: stageName, t: tStage })
+    const sol = solveNonlinearWithFallback(residual, z0, newtonOpts, {
+      stage: stageName,
+      t: tStage,
+    })
     return {
       x: sol.slice(0, nx),
       y: snapNearBinaryValues(sol.slice(nx)),
@@ -986,11 +991,14 @@ const simulateModel = (params, context, model) => {
     let xDotPrev = new Array(nx).fill(0)
 
     if (executionMode === 'static_model') {
-      log('Static Modelica model has no dynamic or algebraic equations; emitting constant trajectory', {
-        nx,
-        ny,
-        nu,
-      })
+      log(
+        'Static Modelica model has no dynamic or algebraic equations; emitting constant trajectory',
+        {
+          nx,
+          ny,
+          nu,
+        },
+      )
     }
 
     const shouldInitializeConsistently = initializeConsistently && executionMode === 'dynamic_dae'
@@ -1169,7 +1177,15 @@ const simulateModel = (params, context, model) => {
             heldAlgebraicIndices.add(i)
           }
         }
-        yNext = projectAlgebraicsWithFixedY(tLocal, xNext, yNext, uLocal, fixedY, newtonOpts, pOverride)
+        yNext = projectAlgebraicsWithFixedY(
+          tLocal,
+          xNext,
+          yNext,
+          uLocal,
+          fixedY,
+          newtonOpts,
+          pOverride,
+        )
       } catch (e) {
         log(`post-reset least-squares correction threw at t=${tLocal}`, {
           error: (e && e.message) || String(e),
@@ -1975,7 +1991,7 @@ simulateModel.optionsSchema = {
       default: 40,
       description: 'Maximum bisection iterations used to localize each event',
     },
-      eventIterationMaxIter: {
+    eventIterationMaxIter: {
       type: 'integer',
       default: 8,
       description: 'Maximum event-iteration passes at a single localized event instant',
@@ -2030,7 +2046,8 @@ simulateModel.optionsSchema = {
     fallbackIntegrators: {
       type: 'array',
       default: [],
-      description: 'Optional fallback integrators tried per-step after primary fails (e.g. ["rk4"])',
+      description:
+        'Optional fallback integrators tried per-step after primary fails (e.g. ["rk4"])',
     },
     homotopySteps: {
       type: 'integer',

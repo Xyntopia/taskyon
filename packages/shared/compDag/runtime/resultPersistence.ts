@@ -38,6 +38,7 @@ export type RunManifestRow = {
   rowKey: RunRowKey
   params: Record<string, unknown>
   objectives?: Record<string, number | null>
+  captured?: Record<string, unknown>
   status?: string
   comboIndex?: number
   comboRowIndex?: number
@@ -131,6 +132,11 @@ export const buildRunManifestRows = (args: {
       objectivesRaw && typeof objectivesRaw === 'object' && !Array.isArray(objectivesRaw)
         ? (objectivesRaw as Record<string, number | null>)
         : undefined
+    const capturedRaw = source.captured
+    const captured =
+      capturedRaw && typeof capturedRaw === 'object' && !Array.isArray(capturedRaw)
+        ? (capturedRaw as Record<string, unknown>)
+        : undefined
 
     out.push({
       runIndex,
@@ -138,6 +144,7 @@ export const buildRunManifestRows = (args: {
       rowKey,
       params,
       ...(objectives ? { objectives } : {}),
+      ...(captured ? { captured } : {}),
       ...(typeof source.status === 'string' ? { status: source.status } : {}),
       ...(typeof source.comboIndex === 'number' ? { comboIndex: source.comboIndex } : {}),
       ...(typeof source.comboRowIndex === 'number' ? { comboRowIndex: source.comboRowIndex } : {}),

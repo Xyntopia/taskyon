@@ -153,8 +153,20 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
     try {
       mslLoading.value = true
       await nextTick()
-      const cachedPath = normalizeCachedZipPath(mslCachedZipPath.value)
-      if (!cachedPath) throw new Error('No cached MSL ZIP path set')
+      let cachedPath = normalizeCachedZipPath(mslCachedZipPath.value)
+      if (!cachedPath) {
+        const fallbackUrl = String(mslDownloadUrl.value || DEFAULT_MSL_ZIP_URL).trim()
+        appendModelicaLog({
+          level: 'warning',
+          phase: 'general',
+          message: `No cached MSL ZIP path set; downloading from ${fallbackUrl}`,
+        })
+        await downloadMslZipToOpfs()
+        cachedPath = normalizeCachedZipPath(mslCachedZipPath.value)
+      }
+      if (!cachedPath) {
+        throw new Error('No cached MSL ZIP path set')
+      }
       const file = await readFileFromOpfs(cachedPath)
       await loadMslArchiveFile(file)
       Notify.create({

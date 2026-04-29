@@ -65,9 +65,6 @@
         @clear-all="clearAll"
         @reset-view="resetDockLayout"
         @load-example="loadExample"
-        @previous-version="goToPreviousVersion"
-        @next-version="goToNextVersion"
-        @create-version="handleCreateNewVersionClick"
         @export-target="handleExportTarget"
         @export-ui-html="handleExportUiHtml"
         @export-ui-jinja="handleExportUiJinjaTemplate"
@@ -134,13 +131,7 @@
 
     <template #workspace>
       <q-card flat class="fit column">
-        <q-tabs
-          v-model="workspaceTab"
-          dense
-          align="left"
-          narrow-indicator
-          class="dense-tab-strip"
-        >
+        <q-tabs v-model="workspaceTab" dense align="left" narrow-indicator class="dense-tab-strip">
           <q-tab name="modelica" label="Code" no-caps class="dense-tab" />
           <q-tab name="diagram" label="Diagram" no-caps class="dense-tab" />
         </q-tabs>
@@ -148,7 +139,7 @@
         <q-tab-panels v-model="workspaceTab" animated class="col">
           <q-tab-panel name="modelica" class="q-pa-none fit">
             <q-card flat class="fit column">
-              <div class="q-pa-xs">
+              <div class="q-pa-xs row items-center q-gutter-xs">
                 <q-btn
                   color="grey-7"
                   flat
@@ -157,6 +148,39 @@
                   :disable="!modelicaSource"
                   @click="copyModelicaToClipboard"
                 />
+                <q-separator vertical spaced />
+                <q-btn
+                  flat
+                  dense
+                  round
+                  color="grey-7"
+                  :icon="matNavigateBefore"
+                  title="Previous Version"
+                  :disable="currentVersionIndex === 0"
+                  @click="goToPreviousVersion"
+                />
+                <q-btn
+                  flat
+                  dense
+                  round
+                  color="grey-7"
+                  :icon="matNavigateNext"
+                  title="Next Version"
+                  :disable="currentVersionIndex === documentVersions.length - 1"
+                  @click="goToNextVersion"
+                />
+                <q-btn
+                  flat
+                  dense
+                  round
+                  color="secondary"
+                  :icon="mdiTextBoxPlus"
+                  title="Create New Version Snapshot"
+                  @click="handleCreateNewVersionClick"
+                />
+                <q-chip dense square color="grey-3" text-color="grey-8">
+                  {{ `Version ${currentVersionIndex + 1} / ${documentVersions.length}` }}
+                </q-chip>
               </div>
               <CodeEditor
                 v-model="modelicaSource"
@@ -200,13 +224,7 @@
 
     <template #templates>
       <q-card flat class="fit column">
-        <q-tabs
-          v-model="templatesTab"
-          dense
-          align="left"
-          narrow-indicator
-          class="dense-tab-strip"
-        >
+        <q-tabs v-model="templatesTab" dense align="left" narrow-indicator class="dense-tab-strip">
           <q-tab name="template" label="Code Template" no-caps class="dense-tab" />
           <q-tab name="uiTemplate" label="UI Template" no-caps class="dense-tab" />
           <q-tab name="solver" label="Solver" no-caps class="dense-tab" />
@@ -560,6 +578,7 @@
 
     <template #assistant>
       <TaskyonIframe
+        :url="props.taskyonUrl"
         :tools="tools"
         :configuration="configuration"
         profile-name="modelica_edit_page"
@@ -578,10 +597,12 @@ import {
   matContentCopy,
   matDescription,
   matDelete,
+  matNavigateBefore,
+  matNavigateNext,
   matShowChart,
 } from '@quasar/extras/material-icons'
-import { mdiFileTreeOutline } from '@quasar/extras/mdi-v6'
-import { toolCall } from '../../tyclient/src'
+import { mdiFileTreeOutline, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
+import { toolCall } from '@taskyon/tyclient'
 import { watchDebounced } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { Dialog, Notify } from 'quasar'
@@ -646,11 +667,15 @@ type PlotViewOptions = ObjectPathChartsViewOptions
 const props = withDefaults(
   defineProps<{
     taskyonSignatureOrKey?: string | null
+    taskyonUrl?: string
     bindingKey?: CryptoKey | string | null
+    taskyonConfiguration?: partialTyConfiguration | null
   }>(),
   {
     taskyonSignatureOrKey: null,
+    taskyonUrl: 'https://taskyon.space',
     bindingKey: null,
+    taskyonConfiguration: null,
   },
 )
 
@@ -693,9 +718,7 @@ const formatLocalBuildTime = (buildTimeUtc: string): string => {
     timeZoneName: 'short',
   }).format(date)
 }
-const rumocaWasmBuildTimeLocal = computed(() =>
-  formatLocalBuildTime(rumocaWasmBuildTimeUtc.value),
-)
+const rumocaWasmBuildTimeLocal = computed(() => formatLocalBuildTime(rumocaWasmBuildTimeUtc.value))
 const libraryTreeNodes = ref<ModelicaLibraryTreeNode[]>([])
 const asObjectRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -852,7 +875,8 @@ const countObjectKeys = (value: unknown): number =>
 const countArray = (value: unknown): number => (Array.isArray(value) ? value.length : 0)
 
 const daeAnalysis = computed<ModelicaDaeAnalysis>(() => {
-  const dae = daeJsonOutput.value && typeof daeJsonOutput.value === 'object' ? daeJsonOutput.value : {}
+  const dae =
+    daeJsonOutput.value && typeof daeJsonOutput.value === 'object' ? daeJsonOutput.value : {}
   const resultMeta =
     executionResult.value.meta && typeof executionResult.value.meta === 'object'
       ? (executionResult.value.meta as Record<string, unknown>)
@@ -868,7 +892,8 @@ const daeAnalysis = computed<ModelicaDaeAnalysis>(() => {
   const neqs = Number(modelShape.residualEquationCount ?? countArray(dae.f_x ?? dae.fx))
   const hasDummyState = Boolean(
     modelShape.hasOnlyDummyState ||
-      (nx === 1 && Object.prototype.hasOwnProperty.call((dae.x ?? {}) as object, '_rumoca_dummy_state')),
+    (nx === 1 &&
+      Object.prototype.hasOwnProperty.call((dae.x ?? {}) as object, '_rumoca_dummy_state')),
   )
   const executionMode =
     typeof resultMeta.executionMode === 'string'
@@ -885,10 +910,18 @@ const daeAnalysis = computed<ModelicaDaeAnalysis>(() => {
         ? 'Step time directly, evaluate algebraic/event equations, and iterate resets until stable.'
         : 'Emit a constant trajectory for parameters/constants because no equations need solving.'
   const hints = []
-  if (executionMode === 'dynamic_dae') hints.push('Continuous states are present; initialization and step solves may be required.')
-  if (executionMode === 'algebraic_discrete') hints.push('No meaningful continuous dynamics detected; Newton flow solves should stay at zero.')
-  if (executionMode === 'static_model') hints.push('The model is static; this is runnable as a constant time series.')
-  if (neqs > 0 && ny === 0 && executionMode !== 'dynamic_dae') hints.push('Residual equations exist without algebraic unknowns; check generated prepared DAE shape.')
+  if (executionMode === 'dynamic_dae')
+    hints.push('Continuous states are present; initialization and step solves may be required.')
+  if (executionMode === 'algebraic_discrete')
+    hints.push(
+      'No meaningful continuous dynamics detected; Newton flow solves should stay at zero.',
+    )
+  if (executionMode === 'static_model')
+    hints.push('The model is static; this is runnable as a constant time series.')
+  if (neqs > 0 && ny === 0 && executionMode !== 'dynamic_dae')
+    hints.push(
+      'Residual equations exist without algebraic unknowns; check generated prepared DAE shape.',
+    )
   return {
     executionMode,
     strategy,
@@ -1162,6 +1195,7 @@ onBeforeUnmount(() => {
 const configuration = computed<partialTyConfiguration | null>(() => {
   const taskyonKey = props.taskyonSignatureOrKey
   if (taskyonKey == null) return null
+  const customAppConfiguration = props.taskyonConfiguration?.appConfiguration ?? {}
   return {
     llmSettings: {
       enableToolChooser: true,
@@ -1173,6 +1207,7 @@ const configuration = computed<partialTyConfiguration | null>(() => {
       showLogo: false,
       chatSuggestions: [],
       welcomeMsg: 'I can edit your Modelica model and template. Ask me to change them.',
+      ...customAppConfiguration,
     },
     signatureOrKey: String(taskyonKey),
   }

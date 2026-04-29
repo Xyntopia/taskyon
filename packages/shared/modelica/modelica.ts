@@ -612,6 +612,24 @@ interface ModelicaLogEntry {
   level: ModelicaLogLevel
   message: string
   details?: unknown
+  callSite?: string
+}
+
+const resolveModelicaLogCallSite = (stack: string | undefined): string | undefined => {
+  if (!stack) return undefined
+  const lines = stack
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+
+  const appendIndex = lines.findIndex((line) => line.includes('appendModelicaLog'))
+  if (appendIndex >= 0 && appendIndex + 1 < lines.length) {
+    const callerLine = lines[appendIndex + 1]
+    if (callerLine) return callerLine.replace(/^at\s+/, '')
+  }
+
+  const firstFrame = lines.find((line) => line !== 'Error')
+  return firstFrame?.replace(/^at\s+/, '')
 }
 
 /**
@@ -627,14 +645,18 @@ export const modelicaLog = ref<ModelicaLogEntry[]>([])
 export function appendModelicaLog(
   entry: Omit<ModelicaLogEntry, 'timestamp'> & { timestamp?: string },
 ) {
-  console.log(entry)
-  modelicaLog.value.push({
+  const callSite = resolveModelicaLogCallSite(new Error().stack)
+  const nextEntry: ModelicaLogEntry = {
     timestamp: entry.timestamp ?? new Date().toISOString(),
     phase: entry.phase,
     level: entry.level,
     message: entry.message,
     details: entry.details,
-  })
+    ...(callSite ? { callSite } : {}),
+  }
+
+  console.log('[ModelicaLog]', nextEntry, callSite ? `caller: ${callSite}` : '')
+  modelicaLog.value.push(nextEntry)
 }
 
 export function renderUiHtml({

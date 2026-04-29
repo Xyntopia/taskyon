@@ -1,6 +1,6 @@
 // modelicaTools.ts
 
-import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/client'
+import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/tyclient'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'
 import { serializeObject } from '../modules/serializeObject'
@@ -28,6 +28,12 @@ type LinePatchOperation = {
   lineStart: number
   lineEnd?: number
   text?: string
+}
+
+type ModelicaDocumentUpdate = {
+  filePath: ModelicaFilePath
+  patches?: LinePatchOperation[]
+  newContent?: string
 }
 
 const MODELICA_AGENT_SERIALIZE_OPTIONS = {
@@ -499,7 +505,13 @@ Constraints:
       required: ['updates'],
       additionalProperties: false,
     } as const satisfies JSONSchema7,
-    function: async ({ updates, description }) => {
+    function: async ({
+      updates,
+      description,
+    }: {
+      updates: ModelicaDocumentUpdate[]
+      description?: string
+    }) => {
       const totalEdits = updates.reduce((acc, update) => {
         const patchCount = Array.isArray(update.patches) ? update.patches.length : 0
         const newContentStr = typeof update.newContent === 'string' ? update.newContent : ''
@@ -525,31 +537,30 @@ Constraints:
 
       // Merge updates by filePath to enforce stable application.
       // Safety: ignore empty-string newContent to prevent accidental wiping.
-      const mergedUpdates = updates.reduce(
-        (acc, update) => {
-          const key = update.filePath as ModelicaFilePath
-          const existing = acc[key]
+      const mergedUpdates = updates.reduce<
+        Partial<Record<ModelicaFilePath, ModelicaDocumentUpdate>>
+      >((acc, update) => {
+        const key = update.filePath
+        const existing = acc[key]
 
-          const incomingNewContent =
-            typeof update.newContent === 'string' ? update.newContent : undefined
-          const hasIncomingNewContent =
-            typeof incomingNewContent === 'string' && incomingNewContent.trim().length > 0
-          const incomingPatches = Array.isArray(update.patches) ? update.patches : []
+        const incomingNewContent =
+          typeof update.newContent === 'string' ? update.newContent : undefined
+        const hasIncomingNewContent =
+          typeof incomingNewContent === 'string' && incomingNewContent.trim().length > 0
+        const incomingPatches = Array.isArray(update.patches) ? update.patches : []
 
-          if (existing) {
-            if (hasIncomingNewContent) existing.newContent = incomingNewContent
-            existing.patches = [...(existing.patches || []), ...incomingPatches]
-          } else {
-            acc[key] = {
-              filePath: key,
-              newContent: hasIncomingNewContent ? incomingNewContent : undefined,
-              patches: incomingPatches,
-            } as (typeof updates)[0]
+        if (existing) {
+          if (hasIncomingNewContent) existing.newContent = incomingNewContent
+          existing.patches = [...(existing.patches || []), ...incomingPatches]
+        } else {
+          acc[key] = {
+            filePath: key,
+            ...(hasIncomingNewContent ? { newContent: incomingNewContent } : {}),
+            patches: incomingPatches,
           }
-          return acc
-        },
-        {} as Record<ModelicaFilePath, (typeof updates)[0]>,
-      )
+        }
+        return acc
+      }, {})
 
       const beforeModelica = modelicaSource.value
       const beforeTemplate = templateSource.value
@@ -557,10 +568,10 @@ Constraints:
       const beforeSolver = solverSource.value
       const changesLog: string[] = []
 
-      for (const [filePath, update] of Object.entries(mergedUpdates) as [
-        ModelicaFilePath,
-        (typeof updates)[0],
-      ][]) {
+      for (const filePath of Object.keys(mergedUpdates) as ModelicaFilePath[]) {
+        const update = mergedUpdates[filePath]
+        if (!update) continue
+
         const originalContent =
           filePath === 'modelica'
             ? beforeModelica
@@ -580,7 +591,7 @@ Constraints:
         }
 
         if (update.patches && update.patches.length > 0) {
-          updatedContent = applyLinePatches(updatedContent, update.patches as LinePatchOperation[])
+          updatedContent = applyLinePatches(updatedContent, update.patches)
           changesLog.push(`Patched ${filePath} (${update.patches.length} ops)`)
         }
 

@@ -1,7 +1,7 @@
 <template>
   <q-bar flat class="rounded-borders bg-transparent q-ma-xs">
-    <q-btn-dropdown dense flat color="grey-7" label="Project" dropdown-icon="">
-      <div class="q-pa-sm" style="min-width: 420px; max-width: 92vw">
+    <q-btn-dropdown dense flat label="Project" dropdown-icon="">
+      <div class="q-pa-sm" style="min-width: 520px; max-width: 95vw">
         <q-select
           :model-value="currentProjectId"
           :options="availableProjectIds"
@@ -11,44 +11,78 @@
           :disable="availableProjectIds.length === 0"
           @update:model-value="emit('project-selected', String($event || ''))"
         />
-        <div class="row items-center q-gutter-xs q-mt-sm">
+
+        <div class="row items-center justify-around q-gutter-xs q-mt-sm">
+          <q-btn dense flat label="New" @click="emit('create-project')" />
+          <q-btn dense flat label="Import" @click="projectImportEl?.click()" />
           <q-btn
             dense
             flat
-            color="secondary"
-            label="New"
-            title="Create a new project"
-            @click="emit('create-project')"
+            :icon="matDescription"
+            label="Load Example"
+            @click="emit('load-example')"
           />
-          <q-btn
-            dense
-            flat
-            color="grey-7"
-            :icon="matRefresh"
-            title="Refresh project list"
-            @click="emit('refresh-projects')"
-          />
+          <q-btn dense flat :icon="matRefresh" label="Refresh" @click="emit('refresh-projects')" />
+        </div>
+
+        <q-separator class="q-my-sm" />
+
+        <q-list dense>
+          <q-item v-close-popup clickable @click="emit('export-project')">
+            <q-item-section>Export Project JSON</q-item-section>
+          </q-item>
+          <q-separator />
+          <q-item v-close-popup clickable @click="emit('export-target', 'modelica')">
+            <q-item-section>Export Modelica</q-item-section>
+          </q-item>
+          <q-item v-close-popup clickable @click="emit('export-target', 'template')">
+            <q-item-section>Export Template</q-item-section>
+          </q-item>
+          <q-separator />
+          <q-item v-close-popup clickable @click="emit('export-ui-jinja')">
+            <q-item-section>Export UI Jinja Template</q-item-section>
+          </q-item>
+          <q-item v-close-popup clickable @click="emit('export-ui-html')">
+            <q-item-section>Export UI HTML</q-item-section>
+          </q-item>
+          <q-separator />
+          <q-item v-close-popup clickable @click="emit('export-target', 'js')">
+            <q-item-section>Export Generated JS</q-item-section>
+          </q-item>
+          <q-item v-close-popup clickable @click="emit('export-target', 'daePretty')">
+            <q-item-section>Export Pretty DAE</q-item-section>
+          </q-item>
+          <q-item v-close-popup clickable @click="emit('export-target', 'daeJson')">
+            <q-item-section>Export DAE JSON</q-item-section>
+          </q-item>
+        </q-list>
+
+        <q-separator class="q-my-sm" />
+
+        <div class="row items-center q-gutter-xs">
           <q-btn
             dense
             flat
             color="negative"
             :icon="matDelete"
-            title="Delete current project"
+            label="Delete Project"
             :disable="!currentProjectId"
             @click="emit('delete-project')"
           />
-          <q-space />
           <q-btn
             dense
             flat
-            color="grey-7"
-            label="Export"
-            :disable="!projectFile"
-            @click="emit('export-project')"
+            color="negative"
+            :icon="matDeleteSweep"
+            label="Clear All"
+            @click="emit('clear-all')"
           />
-          <q-btn dense flat color="grey-7" label="Import" @click="projectImportEl?.click()" />
         </div>
-        <q-separator class="q-my-sm" />
+      </div>
+    </q-btn-dropdown>
+
+    <q-btn-dropdown dense flat label="Options" dropdown-icon="">
+      <div class="q-pa-sm" style="min-width: 360px; max-width: 92vw">
         <ObjectView
           v-model="projectMenuModel"
           :schema="projectMenuSchema"
@@ -56,103 +90,33 @@
           dense
           missing-mode="hide"
         />
-      </div>
-    </q-btn-dropdown>
-
-    <q-btn-dropdown dense flat color="grey-7" label="Options" dropdown-icon="">
-      <div class="q-pa-sm" style="min-width: 420px; max-width: 95vw">
-        <ObjectView
-          v-model="runtimeMenuModel"
-          :schema="runtimeMenuSchema"
-          class="fit"
-          dense
-          missing-mode="hide"
-        />
         <div class="row items-center q-gutter-xs q-mt-sm">
+          <q-btn
+            dense
+            flat
+            color="grey-7"
+            :icon="matTune"
+            label="Runtime"
+            @click="emit('update:simulation-controls-open', true)"
+          />
           <q-btn dense flat color="grey-7" label="Reset View" @click="emit('reset-view')" />
-          <q-btn
-            dense
-            flat
-            color="grey-7"
-            :icon="matDelete"
-            label="Clear All"
-            @click="emit('clear-all')"
-          />
-          <q-btn
-            dense
-            flat
-            color="grey-7"
-            :icon="matDescription"
-            label="Load Example"
-            @click="emit('load-example')"
-          />
         </div>
       </div>
     </q-btn-dropdown>
 
-    <q-btn-dropdown dense flat color="grey-7" label="Versions" dropdown-icon="">
-      <div class="q-pa-sm" style="min-width: 280px">
-        <div class="text-caption text-grey-7 q-mb-sm">
-          Version {{ currentVersionIndex + 1 }} / {{ documentVersionsLength }}
-        </div>
-        <div class="row items-center q-gutter-xs">
-          <q-btn
-            flat
-            dense
-            round
-            :icon="matNavigateBefore"
-            title="Previous Version"
-            :disable="currentVersionIndex === 0"
-            @click="emit('previous-version')"
-          />
-          <q-btn
-            flat
-            dense
-            round
-            :icon="matNavigateNext"
-            title="Next Version"
-            :disable="currentVersionIndex === documentVersionsLength - 1"
-            @click="emit('next-version')"
-          />
-          <q-btn
-            flat
-            dense
-            round
-            :icon="mdiTextBoxPlus"
-            color="secondary"
-            title="Create New Version Snapshot"
-            @click="emit('create-version')"
-          />
-        </div>
+    <q-btn-dropdown dense flat label="About" dropdown-icon="">
+      <div class="q-pa-sm" style="min-width: 360px; max-width: 92vw">
+        <div class="text-caption text-grey-7">Modelica Runtime</div>
+        <div class="text-body2 q-mb-sm">{{ runtimeInfo.modelicaVersion }}</div>
+        <div class="text-caption text-grey-7">MSL</div>
+        <div class="text-body2 q-mb-sm">{{ runtimeInfo.mslStatus }}</div>
+        <div class="text-caption text-grey-7">Rumoca Version</div>
+        <div class="text-body2 q-mb-sm">{{ runtimeInfo.rumocaVersion }}</div>
+        <div class="text-caption text-grey-7">Rumoca Commit</div>
+        <div class="text-body2 q-mb-sm">{{ runtimeInfo.rumocaCommit }}</div>
+        <div class="text-caption text-grey-7">Rumoca Build Time</div>
+        <div class="text-body2">{{ runtimeInfo.rumocaBuildTime }}</div>
       </div>
-    </q-btn-dropdown>
-
-    <q-btn-dropdown dense flat color="secondary" :icon="matSave" label="Save" dropdown-icon="">
-      <q-list dense style="min-width: 220px">
-        <q-item v-if="showSaveModelica" v-close-popup clickable @click="emit('export-target', 'modelica')">
-          <q-item-section>Export Modelica</q-item-section>
-        </q-item>
-        <q-item v-if="showSaveTemplate" v-close-popup clickable @click="emit('export-target', 'template')">
-          <q-item-section>Export Template</q-item-section>
-        </q-item>
-        <q-separator v-if="showGeneratedExports && (showSaveModelica || showSaveTemplate)" />
-        <q-item v-if="showGeneratedExports" v-close-popup clickable @click="emit('export-target', 'js')">
-          <q-item-section>Export Generated JS</q-item-section>
-        </q-item>
-        <q-item v-if="showGeneratedExports" v-close-popup clickable @click="emit('export-target', 'daePretty')">
-          <q-item-section>Export Pretty DAE</q-item-section>
-        </q-item>
-        <q-item v-if="showGeneratedExports" v-close-popup clickable @click="emit('export-target', 'daeJson')">
-          <q-item-section>Export DAE JSON</q-item-section>
-        </q-item>
-        <q-separator v-if="showUiExports && (showSaveModelica || showSaveTemplate || showGeneratedExports)" />
-        <q-item v-if="showUiExports" v-close-popup clickable @click="emit('export-ui-html')">
-          <q-item-section>Export UI HTML</q-item-section>
-        </q-item>
-        <q-item v-if="showUiExports" v-close-popup clickable @click="emit('export-ui-jinja')">
-          <q-item-section>Export UI Jinja Template</q-item-section>
-        </q-item>
-      </q-list>
     </q-btn-dropdown>
 
     <input
@@ -162,30 +126,28 @@
       style="display: none"
       @change="emit('import-project-file', $event)"
     />
+
     <q-space />
+
     <q-chip
       v-if="mslLoading || mslDownloading"
       dense
       square
-      color="grey-3"
-      text-color="grey-8"
       style="font-size: 11px; padding: 0 4px; min-height: 20px"
     >
-      <q-spinner class="q-mr-xs" color="primary" size="10px" />
+      <q-spinner class="q-mr-xs" color="secondary" size="10px" />
       {{ mslDownloading ? 'MSL' : 'MSL' }}
     </q-chip>
     <q-chip
       v-else-if="mslLoaded"
       dense
       square
-      color="positive"
-      text-color="white"
+      color="secondary"
       style="font-size: 11px; padding: 0 4px; min-height: 20px"
       :label="`MSL ${mslFileCount}`"
     />
 
     <SimulationRunControls
-      v-if="showSimulationControls"
       v-model:open="simulationControlsOpenModel"
       v-model:t0="simT0Model"
       v-model:tf="simTfModel"
@@ -198,8 +160,8 @@
       :has-result="hasResult"
       :running="running"
       :can-run="canRunModel"
-      :show-popup-button="hasUiTemplate"
-      :can-open-popup="Boolean(jsSource)"
+      :show-popup-button="true"
+      :can-open-popup="canRunModel"
       @run="emit('run-sandbox')"
       @open-popup="emit('open-popup')"
       @stop="emit('stop-execution')"
@@ -220,13 +182,11 @@
 <script setup lang="ts">
 import {
   matDelete,
+  matDeleteSweep,
   matDescription,
-  matNavigateBefore,
-  matNavigateNext,
   matRefresh,
-  matSave,
+  matTune,
 } from '@quasar/extras/material-icons'
-import { mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
 import ObjectView from '../../components/varViews/ObjectView.vue'
 import type { JSONSchema7 } from 'json-schema'
 import { isSourceKeyScope, solverIdFromKey } from '../modelica'
@@ -290,9 +250,6 @@ const emit = defineEmits<{
   (e: 'clear-all'): void
   (e: 'reset-view'): void
   (e: 'load-example'): void
-  (e: 'previous-version'): void
-  (e: 'next-version'): void
-  (e: 'create-version'): void
   (e: 'export-target', target: ExportTarget): void
   (e: 'export-ui-html'): void
   (e: 'export-ui-jinja'): void
@@ -305,21 +262,16 @@ const emit = defineEmits<{
   (e: 'update:sim-tf', value: number): void
   (e: 'update:sim-dt', value: number): void
   (e: 'update:solver-options', value: Record<string, unknown>): void
-  (e: 'update:projectMenuOptions', value: Record<string, unknown>): void
-  (e: 'update:libraryMenuOptions', value: Record<string, unknown>): void
-  (e: 'update:runtimeMenuOptions', value: Record<string, unknown>): void
+  (e: 'update:project-menu-options', value: Record<string, unknown>): void
+  (e: 'update:library-menu-options', value: Record<string, unknown>): void
+  (e: 'update:runtime-menu-options', value: Record<string, unknown>): void
 }>()
 
 const projectImportEl = ref<HTMLInputElement | null>(null)
 
 const projectMenuModel = computed({
   get: () => props.projectMenuOptions,
-  set: (v: Record<string, unknown>) => emit('update:projectMenuOptions', v),
-})
-
-const runtimeMenuModel = computed({
-  get: () => props.runtimeMenuOptions,
-  set: (v: Record<string, unknown>) => emit('update:runtimeMenuOptions', v),
+  set: (v: Record<string, unknown>) => emit('update:project-menu-options', v),
 })
 
 const simT0Model = computed({
@@ -363,35 +315,20 @@ const solverDisplayLabel = computed(() => {
   return integrator ? `${integrator} (${prefix}:${solverId})` : `${prefix}:${solverId}`
 })
 
-const isTemplatesView = computed(() => props.activeWorkbenchView === 'templates')
-const isResultsView = computed(() => props.activeWorkbenchView === 'results')
-const isWorkspaceView = computed(() => props.activeWorkbenchView === 'workspace')
-const isWorkspaceCodeTab = computed(
-  () => isWorkspaceView.value && props.activeWorkspaceTab === 'modelica',
-)
-const isWorkspaceDiagramTab = computed(
-  () => isWorkspaceView.value && props.activeWorkspaceTab === 'diagram',
-)
-
-const showSimulationControls = computed(
-  () => isResultsView.value || isWorkspaceView.value,
-)
-
-const showSaveModelica = computed(() => isWorkspaceCodeTab.value || isWorkspaceDiagramTab.value)
-
-const showSaveTemplate = computed(() => {
-  if (!isTemplatesView.value) return false
-  return props.activeTemplatesTab === 'template'
-})
-
-const showGeneratedExports = computed(() => {
-  if (!isResultsView.value) return false
-  return props.activeResultsTab === 'model' || props.activeResultsTab === 'simulate'
-})
-
-const showUiExports = computed(() => {
-  if (isTemplatesView.value) return props.activeTemplatesTab === 'uiTemplate'
-  if (isResultsView.value) return props.activeResultsTab === 'model' || props.activeResultsTab === 'plot'
-  return false
+const runtimeInfo = computed(() => {
+  const opts = props.runtimeMenuOptions ?? {}
+  const version = String(opts.rumocaWasmVersion ?? 'unknown')
+  const commit = String(opts.rumocaWasmGitCommit ?? 'unknown')
+  const buildTime = String(opts.rumocaWasmBuildTimeLocal ?? 'unknown')
+  const mslStatus = props.mslLoaded
+    ? `${props.mslArchiveName || 'MSL loaded'} (${props.mslFileCount} files)`
+    : 'MSL not loaded'
+  return {
+    modelicaVersion: version,
+    mslStatus,
+    rumocaVersion: version,
+    rumocaCommit: commit,
+    rumocaBuildTime: buildTime,
+  }
 })
 </script>
