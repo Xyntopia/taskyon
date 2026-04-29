@@ -194,6 +194,19 @@ export const optimizationInputSpecSchema = z.object({
 
 export type OptimizationInputSpec = z.infer<typeof optimizationInputSpecSchema>
 
+export const optimizationCaptureSpecSchema = z.object({
+  path: z
+    .string()
+    .describe(
+      'Explicit value to capture per row. Supported roots: params.*, outputs.*, or an input alias such as parcel.*.',
+    ),
+  as: z
+    .string()
+    .optional()
+    .describe('Optional output key inside row.captured. Defaults to the capture path.'),
+})
+export type OptimizationCaptureSpec = z.infer<typeof optimizationCaptureSpecSchema>
+
 export const optimizationConfigSchema = z
   .object({
     mode: z
@@ -218,6 +231,12 @@ export const optimizationConfigSchema = z
       })
       .optional()
       .describe('Optional execution budget forwarded to study(...).'),
+    capture: z
+      .array(optimizationCaptureSpecSchema)
+      .optional()
+      .describe(
+        'Optional internal values to persist per row. Values are written to row.captured using their path or `as` alias.',
+      ),
     rngSeed: z.number().int().optional().describe('Optional deterministic RNG seed.'),
   })
   .describe('Study-like optimization/exploration definition.')
@@ -416,6 +435,7 @@ export const createOptimizationConfig = (args: {
     inputs,
     objective: undefined,
     budget: undefined,
+    capture: undefined,
     rngSeed: undefined,
   }
 }
@@ -585,6 +605,7 @@ export const createOptimizationConfigUiJsonSchema = (args: {
       .describe('Parameter variables. Use kind=constant for fixed call() values.'),
     inputs: z.object(inputShape).passthrough().default({}).describe('Per-input DAG options.'),
     budget: optimizationConfigSchema.shape.budget,
+    capture: optimizationConfigSchema.shape.capture,
     rngSeed: optimizationConfigSchema.shape.rngSeed,
   })
 
@@ -868,6 +889,10 @@ export const optimizationRunRecordSchema = z.object({
     .any()
     .describe('Outputs of the run. Typically the output of the selected output node.'),
   objectives: objectiveMapSchema.describe('Objective values computed from the node output.'),
+  captured: z
+    .record(z.string(), z.any())
+    .optional()
+    .describe('Explicitly captured internal values requested by the execution config.'),
 })
 export type OptimizationRunRecord = z.infer<typeof optimizationRunRecordSchema>
 
@@ -912,6 +937,10 @@ export const createOptimizationResultsUiJsonSchema = (args: {
         params: args.nodeParamsSchema.describe('Params used for this run.'),
         outputs: outputsSchema,
         objectives: objectiveMapSchema,
+        captured: z
+          .record(z.string(), z.any())
+          .optional()
+          .describe('Explicitly captured internal values requested by the execution config.'),
       }),
     ),
   })

@@ -1,6 +1,9 @@
 import initRumoca from 'rumoca'
 import * as rumoca from 'rumoca'
 import { strFromU8, unzipSync } from 'fflate'
+import { handleExtractDiagram } from './modelicadiagramGeneration'
+
+let loadedSourceRootFiles: Record<string, string> = {}
 
 type WorkerRequest =
   | { id: number; type: 'init'; payload?: { threads?: number } }
@@ -19,6 +22,16 @@ type WorkerRequest =
   | { id: number; type: 'clear_libraries' }
   | { id: number; type: 'list_classes' }
   | { id: number; type: 'get_class_info'; payload: { qualifiedName: string } }
+  | {
+      id: number
+      type: 'extract_diagram'
+      payload: { source: string; qualifiedName?: string; fileName?: string }
+    }
+  | {
+      id: number
+      type: 'parse_source_ast'
+      payload: { source: string; fileName?: string }
+    }
   | {
       id: number
       type: 'lsp_completion_with_timing'
@@ -90,7 +103,13 @@ function countConditions(daeObj: Record<string, unknown> | null): number {
     const value = daeObj[key]
     return Array.isArray(value) ? value.length : 0
   }
-  return countKey('f_c') + countKey('fc') + countKey('cond') + countKey('relation') + countKey('synthetic_root_conditions')
+  return (
+    countKey('f_c') +
+    countKey('fc') +
+    countKey('cond') +
+    countKey('relation') +
+    countKey('synthetic_root_conditions')
+  )
 }
 
 function countResetEquations(daeObj: Record<string, unknown> | null): number {
@@ -184,6 +203,7 @@ function handleLoadMslZip(payload: { fileName: string; bytes: ArrayBuffer }): un
   if (fileCount === 0) {
     throw new Error('No usable .mo files found in archive')
   }
+  loadedSourceRootFiles = libraries
   const resultRaw = rumoca.load_source_roots(JSON.stringify(libraries))
   let parsedCount = fileCount
   try {
@@ -212,6 +232,52 @@ function handleListClasses(): unknown {
 function handleGetClassInfo(payload: { qualifiedName: string }): unknown {
   const raw = rumoca.get_class_info(payload.qualifiedName)
   return JSON.parse(String(raw))
+}
+
+const removeTopLevelImportsForDiagramParse = (source: string): string => {
+  const lines = source.split('\n')
+  let encounteredClassDeclaration = false
+  const classStart = /^\s*(?:model|class|package|block|record|connector|type|function|operator)\b/i
+  const importLine = /^\s*import\b.*;\s*$/
+  const out: string[] = []
+  for (const line of lines) {
+    if (classStart.test(line)) encounteredClassDeclaration = true
+    if (!encounteredClassDeclaration && importLine.test(line)) continue
+    out.push(line)
+  }
+  return out.join('\n')
+}
+
+const parseSourceRootAst = (source: string, fileName: string): Record<string, unknown> => {
+  const parseJson = (input: string): Record<string, unknown> =>
+    JSON.parse(String(rumoca.parse_source_root_file(input, fileName))) as Record<string, unknown>
+  try {
+    return parseJson(source)
+  } catch (firstError) {
+    const fallback = removeTopLevelImportsForDiagramParse(source)
+    const firstMessage = firstError instanceof Error ? firstError.message : String(firstError)
+    if (fallback === source) {
+      throw new Error(`Cannot parse Modelica source for diagram extraction: ${firstMessage}`)
+    }
+    try {
+      return parseJson(fallback)
+    } catch (secondError) {
+      const secondMessage = secondError instanceof Error ? secondError.message : String(secondError)
+      throw new Error(
+        `Cannot parse Modelica source for diagram extraction: primary=${firstMessage}; fallback=${secondMessage}`,
+      )
+    }
+  }
+}
+
+function handleParseSourceAst(payload: {
+  source: string
+  fileName?: string
+}): Record<string, unknown> {
+  const source = asString(payload.source)
+  if (!source.trim()) throw new Error('Cannot parse AST: source is empty')
+  const fileName = asString(payload.fileName) || 'Model.mo'
+  return parseSourceRootAst(source, fileName)
 }
 
 function handleLspCompletionWithTiming(payload: {
@@ -243,6 +309,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break
       case 'clear_libraries':
         rumoca.clear_source_root_cache()
+        loadedSourceRootFiles = {}
         result = { ok: true }
         break
       case 'list_classes':
@@ -250,6 +317,12 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break
       case 'get_class_info':
         result = handleGetClassInfo(msg.payload)
+        break
+      case 'extract_diagram':
+        result = handleExtractDiagram(msg.payload, () => loadedSourceRootFiles)
+        break
+      case 'parse_source_ast':
+        result = handleParseSourceAst(msg.payload)
         break
       case 'lsp_completion_with_timing':
         result = handleLspCompletionWithTiming(msg.payload)

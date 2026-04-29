@@ -262,6 +262,9 @@ export const createRunExecutorService = (deps?: { now?: () => number }) => {
       const commonStudyOpts: StudyOptions = {
         ...(dagInputs ? { inputs: dagInputs } : {}),
         ...(Object.keys(cleanedBudget).length > 0 ? { budget: cleanedBudget } : {}),
+        ...(Array.isArray(config.capture) && config.capture.length > 0
+          ? { capture: config.capture }
+          : {}),
         ...(typeof config.rngSeed === 'number' && Number.isInteger(config.rngSeed)
           ? { rngSeed: config.rngSeed }
           : {}),
@@ -327,6 +330,7 @@ export const createRunExecutorService = (deps?: { now?: () => number }) => {
               params: validated,
               outputs,
               objectives: objMap,
+              ...(event.captured ? { captured: event.captured } : {}),
               rowKey,
               comboIndex: i,
               comboRowIndex: comboRowCounter,

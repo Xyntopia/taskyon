@@ -596,115 +596,11 @@ async function runSolverForModel({ modelName, sourceModelica, templateSource, so
       `compile returned no DAE for ${modelName}: dae_prepared_status=${preparedStatus || 'n/a'}, dae_prepared_error=${preparedError || 'n/a'}, diagnostics=${JSON.stringify(diagnostics).slice(0, 500)}`,
     )
   }
-  const renderedRaw = String(rumoca.render_template(JSON.stringify(dae), templateSource) || '')
-  const rendered = renderedRaw.replace(
-    /function\s+__rumocaMissingRef\s*\(\s*name\s*\)\s*\{[\s\S]*?\}/,
-    `function __rumocaMissingRef(name) {
-    const key = String(name || "");
-    if (Object.prototype.hasOwnProperty.call(__RUMOCA_SYMBOL_OVERRIDES__, key)) {
-      return __RUMOCA_SYMBOL_OVERRIDES__[key];
-    }
-    const tail = key.includes(".") ? key.split(".").pop() : key;
-    if (tail && Object.prototype.hasOwnProperty.call(__RUMOCA_SYMBOL_OVERRIDES__, tail)) {
-      return __RUMOCA_SYMBOL_OVERRIDES__[tail];
-    }
-    throw new Error("Generated residual references an unresolved symbol: " + key);
-  }`,
-  )
-  const runtimeShim = `
-const __rumocaNamespaceProxy = (() => {
-  const targetFn = function () {
-    return 0
-  }
-  const proxy = new Proxy(targetFn, {
-    get(_target, prop) {
-      if (prop === Symbol.toPrimitive) return () => 0
-      if (prop === 'valueOf') return () => 0
-      if (prop === 'toString') return () => '0'
-      return proxy
-    },
-    apply() {
-      return 0
-    },
-    construct() {
-      return proxy
-    },
-  })
-  return proxy
-})()
-const Blocks = typeof globalThis.Blocks !== 'undefined' ? globalThis.Blocks : __rumocaNamespaceProxy
-const Modelica = typeof globalThis.Modelica !== 'undefined' ? globalThis.Modelica : __rumocaNamespaceProxy
-const SI = typeof globalThis.SI !== 'undefined' ? globalThis.SI : __rumocaNamespaceProxy
-const Integer = (x) => Math.trunc(Number(x) || 0)
-const Boolean = (x) => globalThis.Boolean(x)
-const String = (x) => globalThis.String(x)
-const noEvent = (x) => x
-const smooth = (_p, x) => x
-const homotopy = (actual, _simplified) => actual
-const semiLinear = (x, positiveSlope, negativeSlope) => {
-  const xv = Number(x) || 0
-  return xv >= 0 ? xv * (Number(positiveSlope) || 0) : xv * (Number(negativeSlope) || 0)
-}
-const Fill = (value, ...dims) => {
-  const sizes = dims
-    .map((d) => Math.max(0, Math.floor(Number(d) || 0)))
-    .filter((d) => Number.isFinite(d))
-  if (sizes.length === 0) return value
-  const build = (depth) => {
-    const n = sizes[depth]
-    const arr = new Array(n)
-    if (depth === sizes.length - 1) {
-      for (let i = 0; i < n; i += 1) arr[i] = value
-      return arr
-    }
-    for (let i = 0; i < n; i += 1) arr[i] = build(depth + 1)
-    return arr
-  }
-  return build(0)
-}
-const zeros = (...dims) => Fill(0, ...dims)
-const ones = (...dims) => Fill(1, ...dims)
-const __RUMOCA_SYMBOL_OVERRIDES__ = Object.freeze({
-  'Modelica.Blocks.Types.Smoothness.LinearSegments': 1,
-  'Modelica.Blocks.Types.Smoothness.ContinuousDerivative': 2,
-  'Modelica.Blocks.Types.Smoothness.ConstantSegments': 3,
-  'Modelica.Blocks.Types.Smoothness.MonotoneContinuousDerivative1': 4,
-  'Modelica.Blocks.Types.Smoothness.MonotoneContinuousDerivative2': 5,
-  'Modelica.Blocks.Types.Extrapolation.HoldLastPoint': 1,
-  'Modelica.Blocks.Types.Extrapolation.LastTwoPoints': 2,
-  'Modelica.Blocks.Types.Extrapolation.Periodic': 3,
-  'Modelica.Blocks.Types.Extrapolation.NoExtrapolation': 4,
-  'Modelica.Blocks.Types.Init.NoInit': 1,
-  'Modelica.Blocks.Types.Init.SteadyState': 2,
-  'Modelica.Blocks.Types.Init.InitialState': 3,
-  'Modelica.Blocks.Types.Init.InitialOutput': 4,
-  'Modelica.Blocks.Types.Init.DoNotUse_InitialIntegratorState': 5,
-  'Modelica.Blocks.Types.TimeEvents.NoTimeEvents': 1,
-  'Modelica.Blocks.Types.TimeEvents.Always': 2,
-  'Modelica.Blocks.Types.TimeEvents.AtDiscontinuities': 3,
-  'Smoothness.LinearSegments': 1,
-  'Smoothness.ContinuousDerivative': 2,
-  'Smoothness.ConstantSegments': 3,
-  'Smoothness.MonotoneContinuousDerivative1': 4,
-  'Smoothness.MonotoneContinuousDerivative2': 5,
-})
-const Size = (value, dim) => {
-  const dims = []
-  let cur = value
-  while (Array.isArray(cur)) {
-    dims.push(cur.length)
-    cur = cur.length > 0 ? cur[0] : undefined
-  }
-  if (dim == null) return dims
-  const idx = Math.floor(Number(dim)) - 1
-  if (!Number.isFinite(idx) || idx < 0) return 0
-  return idx < dims.length ? dims[idx] : 0
-}
-`
+  const rendered = String(rumoca.render_template(JSON.stringify(dae), templateSource) || '')
   const runFn = new Function(
     'params',
     'context',
-    `${runtimeShim}\n${rendered}\n${solverSource}\nif (typeof Model !== 'function') throw new Error('Model() missing'); if (typeof simulateModel !== 'function') throw new Error('simulateModel() missing'); return simulateModel(params, context, Model());`,
+    `${rendered}\n${solverSource}\nif (typeof Model !== 'function') throw new Error('Model() missing'); if (typeof simulateModel !== 'function') throw new Error('simulateModel() missing'); return simulateModel(params, context, Model());`,
   )
   const result = runFn(
     { sim: { t0: sim.t0, tf: sim.tf, dt: sim.dt, solverOptions: sim.solverOptions || {} } },

@@ -420,6 +420,8 @@ const layoutNodes = <N = unknown, E = unknown>(
 
   const sizeById = byId(nodeSize)
 
+  const fixedNodeRects = opts.fixedNodeRects ?? opts.authoredNodePositions ?? {}
+
   const layerByNode = assignLayers(graph.nodes, graph.edges)
   const layerNodes = new Map<number, string[]>()
   for (const node of graph.nodes) {
@@ -469,7 +471,85 @@ const layoutNodes = <N = unknown, E = unknown>(
     })
   }
 
-  return laidOut
+  if (Object.keys(fixedNodeRects).length === 0) return laidOut
+
+  const nodesById = byId(
+    laidOut.map((node) => {
+      const fixed = fixedNodeRects[node.id]
+      if (!fixed) return { ...node }
+      return {
+        ...node,
+        x: fixed.x,
+        y: fixed.y,
+        width: fixed.width ?? node.width,
+        height: fixed.height ?? node.height,
+      }
+    }),
+  )
+  const fixedIds = new Set(Object.keys(fixedNodeRects))
+  const undirectedNeighbors = new Map<string, string[]>()
+  graph.edges.forEach((edge) => {
+    const a = undirectedNeighbors.get(edge.source) ?? []
+    a.push(edge.target)
+    undirectedNeighbors.set(edge.source, a)
+    const b = undirectedNeighbors.get(edge.target) ?? []
+    b.push(edge.source)
+    undirectedNeighbors.set(edge.target, b)
+  })
+  const repulsionGap = 16
+  const pullGain = 0.11
+  const repelGain = 0.2
+  const maxStep = 18
+  const unclamped = (value: number): number => (Number.isFinite(value) ? value : 0)
+  const deterministicSign = (id: string, otherId: string): number => {
+    let sum = 0
+    const key = `${id}:${otherId}`
+    for (let i = 0; i < key.length; i += 1) sum += key.charCodeAt(i) * (i + 1)
+    return sum % 2 === 0 ? 1 : -1
+  }
+  for (let iter = 0; iter < 120; iter += 1) {
+    for (const node of nodesById.values()) {
+      if (fixedIds.has(node.id)) continue
+      const centerX = node.x + node.width / 2
+      const centerY = node.y + node.height / 2
+      let dx = 0
+      let dy = 0
+      const neighbors = undirectedNeighbors.get(node.id) ?? []
+      if (neighbors.length > 0) {
+        const target = neighbors
+          .map((id) => nodesById.get(id))
+          .filter((item): item is LayoutNode<N> => item != null)
+          .reduce(
+            (acc, item) => ({
+              x: acc.x + item.x + item.width / 2,
+              y: acc.y + item.y + item.height / 2,
+            }),
+            { x: 0, y: 0 },
+          )
+        const tx = target.x / neighbors.length
+        const ty = target.y / neighbors.length
+        dx += (tx - centerX) * pullGain
+        dy += (ty - centerY) * pullGain
+      }
+      for (const other of nodesById.values()) {
+        if (other.id === node.id) continue
+        const overlapX = Math.min(node.x + node.width, other.x + other.width) - Math.max(node.x, other.x)
+        const overlapY = Math.min(node.y + node.height, other.y + other.height) - Math.max(node.y, other.y)
+        if (overlapX <= -repulsionGap || overlapY <= -repulsionGap) continue
+        const ox = centerX - (other.x + other.width / 2)
+        const oy = centerY - (other.y + other.height / 2)
+        const safeX = Math.abs(ox) < 0.001 ? deterministicSign(node.id, other.id) : ox
+        const safeY = Math.abs(oy) < 0.001 ? deterministicSign(other.id, node.id) : oy
+        const inv = 1 / Math.max(1, Math.hypot(safeX, safeY))
+        const strength = repelGain * (1 + Math.max(0, overlapX) + Math.max(0, overlapY)) * 0.2
+        dx += safeX * inv * strength
+        dy += safeY * inv * strength
+      }
+      node.x += clamp(unclamped(dx), -maxStep, maxStep)
+      node.y += clamp(unclamped(dy), -maxStep, maxStep)
+    }
+  }
+  return Array.from(nodesById.values())
 }
 
 const edgeAnchorPoints = <E = unknown>(
@@ -479,17 +559,56 @@ const edgeAnchorPoints = <E = unknown>(
 ): { start: Point; end: Point; sourceLayer: number; targetLayer: number } => {
   const source = nodesById.get(edge.source)!
   const target = nodesById.get(edge.target)!
+  const edgeData = (edge as { data?: { fromPort?: unknown; toPort?: unknown } }).data
+  const findPortAnchor = (
+    node: LayoutNode,
+    portNameRaw: unknown,
+  ): Point | null => {
+    const portName = typeof portNameRaw === 'string' ? portNameRaw.trim() : ''
+    if (!portName) return null
+    const nodeData = node.data as
+      | {
+          ports?: Array<{ name: string; xRatio: number; yRatio: number }>
+          flipX?: boolean
+          flipY?: boolean
+          instanceRotation?: number
+        }
+      | undefined
+    const ports = nodeData?.ports ?? []
+    const match =
+      ports.find((port) => port.name === portName) ??
+      ports.find((port) => portName.startsWith(`${port.name}.`))
+    if (!match) return null
+    const rawXRatio = nodeData?.flipX ? 1 - match.xRatio : match.xRatio
+    const rawYRatio = nodeData?.flipY ? 1 - match.yRatio : match.yRatio
+    const unrotated = {
+      x: node.x + node.width * rawXRatio,
+      y: node.y + node.height * rawYRatio,
+    }
+    const center = { x: node.x + node.width / 2, y: node.y + node.height / 2 }
+    const angle = ((-(nodeData?.instanceRotation ?? 0)) * Math.PI) / 180
+    const cos = Math.cos(angle)
+    const sin = Math.sin(angle)
+    const dx = unrotated.x - center.x
+    const dy = unrotated.y - center.y
+    return {
+      x: center.x + dx * cos - dy * sin,
+      y: center.y + dx * sin + dy * cos,
+    }
+  }
+  const sourcePortAnchor = findPortAnchor(source, edgeData?.fromPort)
+  const targetPortAnchor = findPortAnchor(target, edgeData?.toPort)
   if (direction === 'TB') {
     return {
-      start: { x: source.x + source.width / 2, y: source.y + source.height },
-      end: { x: target.x + target.width / 2, y: target.y },
+      start: sourcePortAnchor ?? { x: source.x + source.width / 2, y: source.y + source.height },
+      end: targetPortAnchor ?? { x: target.x + target.width / 2, y: target.y },
       sourceLayer: source.layer,
       targetLayer: target.layer,
     }
   }
   return {
-    start: { x: source.x + source.width, y: source.y + source.height / 2 },
-    end: { x: target.x, y: target.y + target.height / 2 },
+    start: sourcePortAnchor ?? { x: source.x + source.width, y: source.y + source.height / 2 },
+    end: targetPortAnchor ?? { x: target.x, y: target.y + target.height / 2 },
     sourceLayer: source.layer,
     targetLayer: target.layer,
   }
@@ -809,6 +928,43 @@ const earlyFanoutPenalty = (
   return 1 - keptTogetherRatio
 }
 
+const asPreferredPoints = (value: unknown): Point[] => {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((point) => {
+      if (!point || typeof point !== 'object') return null
+      const x = Number((point as { x?: unknown }).x)
+      const y = Number((point as { y?: unknown }).y)
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+      return { x, y }
+    })
+    .filter((point): point is Point => point != null)
+}
+
+const preferredEdgePoints = (
+  edge: { data?: unknown },
+  start: Point,
+  end: Point,
+  forceLock: boolean,
+): Point[] | null => {
+  const data = edge.data as
+    | {
+        preferredPoints?: unknown
+        preservePreferredEndpoints?: boolean
+      }
+    | undefined
+  const points = asPreferredPoints(data?.preferredPoints)
+  if (points.length < 2) return null
+  if (!forceLock) {
+    const first = points[0]!
+    const last = points[points.length - 1]!
+    if (pointDistance(first, start) > 40 || pointDistance(last, end) > 40) return null
+  }
+  if (data?.preservePreferredEndpoints) return points
+  const middle = points.slice(1, -1)
+  return [start, ...middle, end]
+}
+
 export const routeLayoutEdges = <N = unknown, E = unknown>(
   nodes: LayoutNode<N>[],
   edges: Array<{
@@ -1067,6 +1223,8 @@ export const routeLayoutEdges = <N = unknown, E = unknown>(
 
   return edges.map((edge) => {
     const { start, end } = edgeAnchorPoints(edge, nodesById, direction)
+    const edgeData = edge.data as { lockPreferredPath?: boolean } | undefined
+    const lockedPreferred = preferredEdgePoints(edge, start, end, edgeData?.lockPreferredPath === true)
     const edgeType = edge.type ?? '__default__'
     const laneOffset = laneOffsetByEdgeId.get(edge.id) ?? 0
     const sourceFanout = outgoingCountBySource.get(edge.source) ?? 1
@@ -1085,18 +1243,28 @@ export const routeLayoutEdges = <N = unknown, E = unknown>(
     const obstacles = nodes
       .filter((n) => n.id !== edge.source && n.id !== edge.target)
       .map((n) => expandRect(n, obstaclePadding))
-    const candidates = routeEdgeCandidates(start, end, direction, laneOffset, obstacles, splitBias, gridOffsets)
-    const emergency = emergencyDetourCandidates(start, end, direction, obstacles, gridOffsets)
-    const allCandidates = [...candidates, ...emergency]
-    const unblockedCandidates = allCandidates.filter((c) => !polylineHitsAnyRect(c, obstacles))
-    const candidatePool = unblockedCandidates.length > 0 ? unblockedCandidates : allCandidates
-    let points = candidatePool[0]!
-    let bestScore = Number.POSITIVE_INFINITY
-    for (const candidate of candidatePool) {
-      const score = scoreCandidate(candidate, edge, laneOffset, obstacles)
-      if (score < bestScore) {
-        bestScore = score
-        points = candidate
+    let points: Point[]
+    if (edgeData?.lockPreferredPath === true && lockedPreferred && lockedPreferred.length >= 2) {
+      points = lockedPreferred
+    } else {
+      const preferredPoints = preferredEdgePoints(edge, start, end, false)
+      const candidates = routeEdgeCandidates(start, end, direction, laneOffset, obstacles, splitBias, gridOffsets)
+      const emergency = emergencyDetourCandidates(start, end, direction, obstacles, gridOffsets)
+      const allCandidates = [
+        ...(preferredPoints ? [preferredPoints] : []),
+        ...candidates,
+        ...emergency,
+      ]
+      const unblockedCandidates = allCandidates.filter((c) => !polylineHitsAnyRect(c, obstacles))
+      const candidatePool = unblockedCandidates.length > 0 ? unblockedCandidates : allCandidates
+      points = candidatePool[0]!
+      let bestScore = Number.POSITIVE_INFINITY
+      for (const candidate of candidatePool) {
+        const score = scoreCandidate(candidate, edge, laneOffset, obstacles)
+        if (score < bestScore) {
+          bestScore = score
+          points = candidate
+        }
       }
     }
 
@@ -1133,12 +1301,31 @@ export const routeLayoutEdges = <N = unknown, E = unknown>(
   })
 }
 
-const computeBounds = (nodes: LayoutNode[]) => {
-  if (nodes.length === 0) return { x: 0, y: 0, width: 1, height: 1 }
-  const left = Math.min(...nodes.map((n) => n.x))
-  const top = Math.min(...nodes.map((n) => n.y))
-  const right = Math.max(...nodes.map((n) => n.x + n.width))
-  const bottom = Math.max(...nodes.map((n) => n.y + n.height))
+const computeBounds = (nodes: LayoutNode[], edges: LayoutEdge[]) => {
+  if (nodes.length === 0 && edges.length === 0) return { x: 0, y: 0, width: 1, height: 1 }
+  const nodeLeft = nodes.length > 0 ? Math.min(...nodes.map((n) => n.x)) : Number.POSITIVE_INFINITY
+  const nodeTop = nodes.length > 0 ? Math.min(...nodes.map((n) => n.y)) : Number.POSITIVE_INFINITY
+  const nodeRight =
+    nodes.length > 0 ? Math.max(...nodes.map((n) => n.x + n.width)) : Number.NEGATIVE_INFINITY
+  const nodeBottom =
+    nodes.length > 0 ? Math.max(...nodes.map((n) => n.y + n.height)) : Number.NEGATIVE_INFINITY
+  const edgePoints = edges.flatMap((edge) => edge.points)
+  const edgeLeft =
+    edgePoints.length > 0 ? Math.min(...edgePoints.map((point) => point.x)) : Number.POSITIVE_INFINITY
+  const edgeTop =
+    edgePoints.length > 0 ? Math.min(...edgePoints.map((point) => point.y)) : Number.POSITIVE_INFINITY
+  const edgeRight =
+    edgePoints.length > 0
+      ? Math.max(...edgePoints.map((point) => point.x))
+      : Number.NEGATIVE_INFINITY
+  const edgeBottom =
+    edgePoints.length > 0
+      ? Math.max(...edgePoints.map((point) => point.y))
+      : Number.NEGATIVE_INFINITY
+  const left = Math.min(nodeLeft, edgeLeft)
+  const top = Math.min(nodeTop, edgeTop)
+  const right = Math.max(nodeRight, edgeRight)
+  const bottom = Math.max(nodeBottom, edgeBottom)
   return { x: left, y: top, width: right - left, height: bottom - top }
 }
 
@@ -1152,6 +1339,6 @@ export const layoutGraph = <N = unknown, E = unknown>(
   return {
     nodes,
     edges,
-    bounds: computeBounds(nodes),
+    bounds: computeBounds(nodes, edges),
   }
 }

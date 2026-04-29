@@ -1,4 +1,5 @@
 import { layoutGraph, routeLayoutEdges } from './layout'
+import { svgStringToPngUint8 } from '../svgUtils'
 import {
   applyWheelZoom,
   fitGraphToViewport,
@@ -41,6 +42,14 @@ const mergeNodeStyle = (theme: GraphTheme | undefined, node: LayoutNode): Requir
   }
 }
 
+const mergePartialNodeStyle = (
+  base: Required<NodeStyle>,
+  patch: NodeStyle | undefined,
+): Required<NodeStyle> => ({
+  ...base,
+  ...(patch ?? {}),
+})
+
 const mergeEdgeStyle = (theme: GraphTheme | undefined, edge: LayoutEdge): Required<EdgeStyle> => {
   const base = theme?.defaultEdgeStyle ?? {}
   const custom = edge.type ? (theme?.edgeStyles?.[edge.type] ?? {}) : {}
@@ -63,6 +72,11 @@ const setAttrs = (el: Element, attrs: Record<string, string | number | undefined
 
 const clearChildren = (el: Element) => {
   while (el.firstChild) el.removeChild(el.firstChild)
+}
+
+const px = (value: string): number => {
+  const numeric = Number.parseFloat(value)
+  return Number.isFinite(numeric) ? numeric : 0
 }
 
 const createTooltip = (container: HTMLElement) => {
@@ -88,7 +102,19 @@ type GraphController<N = unknown, E = unknown> = {
   setOptions: (options: RenderOptions<N, E>) => void
   resize: () => void
   fit: () => void
-  copyAsPng: () => Promise<boolean>
+  copyAsPng: (options?: {
+    scale?: number
+    cropToContent?: boolean
+    cropPadding?: number
+    backgroundColor?: string
+  }) => Promise<boolean>
+  exportSvgString: (options?: {
+    includeHtmlLayer?: boolean
+    cropToContent?: boolean
+    cropPadding?: number
+    backgroundColor?: string
+  }) => string
+  downloadSvg: (fileName?: string) => void
   destroy: () => void
 }
 
@@ -174,7 +200,10 @@ export const createGraphController = <N = unknown, E = unknown>(
     let markerIndex = 0
     layout.edges.forEach((edge) => {
       const pathEl = createSvgEl('path')
-      const style = mergeEdgeStyle(options.theme, edge)
+      const style = {
+        ...mergeEdgeStyle(options.theme, edge),
+        ...(options.edgeStyle?.(edge) ?? {}),
+      }
       const markerKey = `${style.stroke}|${style.opacity}`
       let markerId = markerByKey.get(markerKey)
       if (!markerId) {
@@ -237,7 +266,7 @@ export const createGraphController = <N = unknown, E = unknown>(
     host.style.top = `${node.y}px`
     host.style.width = `${node.width}px`
     host.style.height = `${node.height}px`
-    host.style.pointerEvents = 'auto'
+    host.style.pointerEvents = options.nodeHtmlPointerEvents ?? 'auto'
     if (typeof html === 'string') {
       host.innerHTML = html
     } else {
@@ -254,9 +283,12 @@ export const createGraphController = <N = unknown, E = unknown>(
       renderNodeHtml(node)
 
       const group = createSvgEl('g')
+      group.setAttribute('data-graph-node', '1')
       const rect = createSvgEl('rect')
+      const hitRect = createSvgEl('rect')
       const text = createSvgEl('text')
-      const style = mergeNodeStyle(options.theme, node)
+      const baseStyle = mergeNodeStyle(options.theme, node)
+      const style = mergePartialNodeStyle(baseStyle, options.nodeStyle?.(node))
 
       setAttrs(rect, {
         x: node.x,
@@ -275,26 +307,78 @@ export const createGraphController = <N = unknown, E = unknown>(
         rect.style.filter = ''
       }
 
-      setAttrs(text, {
-        x: node.x + 10,
-        y: node.y + 28,
-        fill: style.textColor,
-        'font-size': style.fontSize,
-        'font-family': style.fontFamily,
-        'font-weight': style.fontWeight,
+      setAttrs(hitRect, {
+        x: node.x,
+        y: node.y,
+        width: node.width,
+        height: node.height,
+        fill: 'transparent',
+        stroke: 'transparent',
+        'stroke-width': 0,
+        rx: style.rx,
+        ry: style.ry,
       })
-      text.textContent = node.label ?? node.id
+      hitRect.style.pointerEvents = 'all'
 
-      group.append(rect, text)
+      if (options.showDefaultNodeLabel !== false) {
+        setAttrs(text, {
+          x: node.x + 10,
+          y: node.y + 28,
+          fill: style.textColor,
+          'font-size': style.fontSize,
+          'font-family': style.fontFamily,
+          'font-weight': style.fontWeight,
+        })
+        text.textContent = node.label ?? node.id
+      }
+
+      group.append(rect)
+      const svgOverlay = options.nodeSvg?.(node)
+      if (svgOverlay) {
+        if (typeof svgOverlay === 'string') {
+          const svgOverlayHost = createSvgEl('g')
+          svgOverlayHost.innerHTML = svgOverlay
+          group.append(svgOverlayHost)
+        } else {
+          group.append(svgOverlay)
+        }
+      }
+      if (options.showDefaultNodeLabel !== false) group.append(text)
+      group.append(hitRect)
       if (options.enableNodeDrag !== false) {
-        group.style.cursor = 'grab'
-        group.addEventListener('pointerdown', (evt) => {
+        const startNodeDrag = (evt: PointerEvent) => {
           if (evt.button !== 0) return
           evt.stopPropagation()
           draggedNodeId = node.id
           draggedNodeMoved = false
           nodeDragStart = { x: evt.clientX, y: evt.clientY, nodeX: node.x, nodeY: node.y }
           svg.setPointerCapture(evt.pointerId)
+          group.style.cursor = 'grabbing'
+        }
+        group.style.cursor = 'grab'
+        group.addEventListener('pointerdown', startNodeDrag)
+        hitRect.addEventListener('pointerdown', startNodeDrag)
+        group.addEventListener('pointerup', () => {
+          if (draggedNodeId !== node.id) group.style.cursor = 'grab'
+        })
+      }
+      const hoverStyle = options.nodeHoverStyle?.(node)
+      if (hoverStyle) {
+        group.addEventListener('mouseenter', () => {
+          const applied = mergePartialNodeStyle(style, hoverStyle)
+          setAttrs(rect, {
+            fill: applied.fill,
+            stroke: applied.stroke,
+            'stroke-width': applied.strokeWidth,
+          })
+        })
+        group.addEventListener('mouseleave', () => {
+          setAttrs(rect, {
+            fill: style.fill,
+            stroke: style.stroke,
+            'stroke-width': style.strokeWidth,
+          })
+          if (options.enableNodeDrag !== false) group.style.cursor = 'grab'
         })
       }
       if (options.onNodeClick) {
@@ -327,51 +411,126 @@ export const createGraphController = <N = unknown, E = unknown>(
     updateTransforms()
   }
 
-  const copyAsPng = async (): Promise<boolean> => {
+  const exportFrame = (config?: {
+    cropToContent?: boolean
+    cropPadding?: number
+  }): { x: number; y: number; width: number; height: number } => {
     const { width, height } = getSize()
+    if (!config?.cropToContent || layout.nodes.length === 0) return { x: 0, y: 0, width, height }
+    const padding = Math.max(0, config.cropPadding ?? 24)
+    const x = layout.bounds.x * viewport.scale + viewport.tx - padding
+    const y = layout.bounds.y * viewport.scale + viewport.ty - padding
+    const croppedWidth = Math.max(1, layout.bounds.width * viewport.scale + padding * 2)
+    const croppedHeight = Math.max(1, layout.bounds.height * viewport.scale + padding * 2)
+    return { x, y, width: croppedWidth, height: croppedHeight }
+  }
+
+  const exportSvg = (config?: {
+    includeHtmlLayer?: boolean
+    cropToContent?: boolean
+    cropPadding?: number
+    backgroundColor?: string
+  }): { markup: string; width: number } => {
     const serializer = new XMLSerializer()
-    const svgMarkup = serializer.serializeToString(svg)
+    const clone = svg.cloneNode(true) as SVGSVGElement
+    const frame = exportFrame(config)
+    const includeHtmlLayer = config?.includeHtmlLayer !== false
+    const backgroundColor = config?.backgroundColor?.trim()
+    if (backgroundColor) {
+      const bg = createSvgEl('rect')
+      setAttrs(bg, {
+        x: frame.x,
+        y: frame.y,
+        width: frame.width,
+        height: frame.height,
+        fill: backgroundColor,
+      })
+      clone.insertBefore(bg, clone.firstChild)
+    }
+    if (includeHtmlLayer && htmlLayer.childElementCount > 0) {
+      const foreignLayer = createSvgEl('g')
+      setAttrs(foreignLayer, { transform: viewportTransform(viewport) })
+      Array.from(htmlLayer.children).forEach((child) => {
+        if (!(child instanceof HTMLElement)) return
+        const foreign = createSvgEl('foreignObject')
+        const left = px(child.style.left)
+        const top = px(child.style.top)
+        const w = px(child.style.width)
+        const h = px(child.style.height)
+        setAttrs(foreign, { x: left, y: top, width: w, height: h })
+        const wrapper = document.createElement('div')
+        wrapper.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml')
+        wrapper.style.width = `${w}px`
+        wrapper.style.height = `${h}px`
+        wrapper.style.pointerEvents = 'none'
+        wrapper.innerHTML = child.innerHTML
+        foreign.appendChild(wrapper)
+        foreignLayer.appendChild(foreign)
+      })
+      clone.appendChild(foreignLayer)
+    }
+    setAttrs(clone, {
+      xmlns: SVG_NS,
+      width: frame.width,
+      height: frame.height,
+      viewBox: `${frame.x} ${frame.y} ${frame.width} ${frame.height}`,
+    })
+    return { markup: serializer.serializeToString(clone), width: frame.width }
+  }
+
+  const exportSvgString = (config?: {
+    includeHtmlLayer?: boolean
+    cropToContent?: boolean
+    cropPadding?: number
+    backgroundColor?: string
+  }): string => {
+    const exported = exportSvg(config)
+    return exported.markup
+  }
+
+  const copyAsPng = async (config?: {
+    scale?: number
+    cropToContent?: boolean
+    cropPadding?: number
+    backgroundColor?: string
+  }): Promise<boolean> => {
+    const requestedScale = config?.scale ?? window.devicePixelRatio ?? 1
+    const scale = Math.max(1, Math.min(6, requestedScale))
+    const exportConfig = {
+      ...(config?.cropToContent !== undefined ? { cropToContent: config.cropToContent } : {}),
+      ...(config?.cropPadding !== undefined ? { cropPadding: config.cropPadding } : {}),
+      ...(config?.backgroundColor !== undefined ? { backgroundColor: config.backgroundColor } : {}),
+    }
+    const exported = exportSvg(exportConfig)
+    const pngBytes = await svgStringToPngUint8(exported.markup, Math.ceil(exported.width * scale))
+    const pngBytesForBlob = new Uint8Array(pngBytes)
+    const pngBlob = new Blob([pngBytesForBlob], { type: 'image/png' })
+
+    const clipboardItemCtor = (window as Window & { ClipboardItem?: typeof ClipboardItem })
+      .ClipboardItem
+    if (navigator.clipboard?.write && clipboardItemCtor) {
+      await navigator.clipboard.write([new clipboardItemCtor({ 'image/png': pngBlob })])
+      return true
+    }
+
+    const a = document.createElement('a')
+    const pngUrl = URL.createObjectURL(pngBlob)
+    a.href = pngUrl
+    a.download = 'graph.png'
+    a.click()
+    URL.revokeObjectURL(pngUrl)
+    return false
+  }
+
+  const downloadSvg = (fileName = 'graph.svg') => {
+    const svgMarkup = exportSvgString()
     const svgBlob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' })
     const svgUrl = URL.createObjectURL(svgBlob)
-    try {
-      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const img = new Image()
-        img.onload = () => resolve(img)
-        img.onerror = () => reject(new Error('Failed to load SVG for PNG export'))
-        img.src = svgUrl
-      })
-
-      const scale = Math.max(1, Math.min(2, window.devicePixelRatio || 1))
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.ceil(width * scale)
-      canvas.height = Math.ceil(height * scale)
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return false
-      ctx.setTransform(scale, 0, 0, scale, 0, 0)
-      ctx.drawImage(image, 0, 0, width, height)
-
-      const pngBlob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob((blob) => resolve(blob), 'image/png'),
-      )
-      if (!pngBlob) return false
-
-      const clipboardItemCtor = (window as Window & { ClipboardItem?: typeof ClipboardItem })
-        .ClipboardItem
-      if (navigator.clipboard?.write && clipboardItemCtor) {
-        await navigator.clipboard.write([new clipboardItemCtor({ 'image/png': pngBlob })])
-        return true
-      }
-
-      const a = document.createElement('a')
-      const pngUrl = URL.createObjectURL(pngBlob)
-      a.href = pngUrl
-      a.download = 'graph.png'
-      a.click()
-      URL.revokeObjectURL(pngUrl)
-      return false
-    } finally {
-      URL.revokeObjectURL(svgUrl)
-    }
+    const a = document.createElement('a')
+    a.href = svgUrl
+    a.download = fileName
+    a.click()
+    URL.revokeObjectURL(svgUrl)
   }
 
   const relayout = () => {
@@ -406,6 +565,7 @@ export const createGraphController = <N = unknown, E = unknown>(
   const onPointerDown = (evt: PointerEvent) => {
     if (draggedNodeId) return
     if (evt.button !== 0 || options.enablePanZoom === false) return
+    if (evt.target instanceof SVGElement && evt.target.closest('[data-graph-node="1"]')) return
     isDragging = true
     dragStart = { x: evt.clientX, y: evt.clientY, tx: viewport.tx, ty: viewport.ty }
     svg.setPointerCapture(evt.pointerId)
@@ -443,6 +603,10 @@ export const createGraphController = <N = unknown, E = unknown>(
       draggedNodeId = null
       draggedNodeMoved = false
       svg.releasePointerCapture(evt.pointerId)
+      const groups = nodeLayer.querySelectorAll('g')
+      groups.forEach((group) => {
+        group.style.cursor = options.enableNodeDrag !== false ? 'grab' : 'default'
+      })
       return
     }
     if (!isDragging) return
@@ -480,6 +644,8 @@ export const createGraphController = <N = unknown, E = unknown>(
     resize,
     fit,
     copyAsPng,
+    exportSvgString,
+    downloadSvg,
     destroy: () => {
       svg.removeEventListener('pointerdown', onPointerDown)
       svg.removeEventListener('pointermove', onPointerMove)

@@ -80,6 +80,7 @@ export type StudyHistoryEntry<O = unknown> = {
   rowKey: Record<string, string | number>
   sourceIndexByAlias: Record<string, number>
   objectiveValue: number | null
+  captured?: Record<string, unknown>
 }
 
 export type StudyInputStrategyContext<O = unknown> = {
@@ -122,12 +123,18 @@ export type StudyBudget = {
   timeMs?: number
 }
 
+export type StudyCaptureSpec = {
+  path: string
+  as?: string | undefined
+}
+
 export type StudyOptions = {
   mode?: 'explore' | 'optimize'
   objective?: StudyObjective
   variables?: Record<string, StudyVariableSpec>
   inputs?: Record<string, StudyInputOption>
   budget?: StudyBudget
+  capture?: StudyCaptureSpec[]
   dryRun?: boolean
   plan?: StudyPlan
   rngSeed?: number
@@ -156,6 +163,7 @@ export type StudyRowEvent<O = unknown> = {
   rowKey: Record<string, string | number>
   sourceIndexByAlias: Record<string, number>
   objectiveValue: number | null
+  captured?: Record<string, unknown>
 }
 
 export type StudyResult<O> = {
@@ -418,6 +426,78 @@ const getObjectPathValue = (source: unknown, path: string): unknown => {
   }
 
   return current
+}
+
+const splitCapturePath = (path: string): { root: string; nestedPath: string } => {
+  const firstDot = path.indexOf('.')
+  if (firstDot === -1) return { root: path, nestedPath: '' }
+  return {
+    root: path.slice(0, firstDot),
+    nestedPath: path.slice(firstDot + 1),
+  }
+}
+
+const resolveExposedCaptureValue = async (args: {
+  node: DagNode
+  alias: string
+  runParams: Record<string, unknown>
+  combo: Record<string, { sourceIndex: number; runOrderIndex: number }>
+  byAlias: Map<string, ResolvedExplodedInput>
+  actualCtx: NodeContext
+  actualEngineConfig: EngineConfig
+}): Promise<unknown> => {
+  const comboEntry = args.combo[args.alias]
+  const resolved = args.byAlias.get(args.alias)
+  if (comboEntry && resolved) {
+    return resolved.arr[comboEntry.sourceIndex]
+  }
+
+  const inputDef = args.node.exposedInputs?.[args.alias]
+  if (!inputDef) return undefined
+
+  const aliasParamsRaw = args.runParams[args.alias]
+  const aliasParams =
+    typeof aliasParamsRaw === 'object' && aliasParamsRaw !== null
+      ? (aliasParamsRaw as Record<string, unknown>)
+      : {}
+  const childNode = selectInputNodeByParams(inputDef, undefined, [aliasParams, args.runParams, {}])
+  if (!childNode) return undefined
+
+  const { value } = await executeNode(childNode, aliasParams, args.actualCtx, args.actualEngineConfig)
+  return value
+}
+
+const resolveCapturedValue = async (args: {
+  node: DagNode
+  path: string
+  runParams: Record<string, unknown>
+  resultRow: unknown
+  combo: Record<string, { sourceIndex: number; runOrderIndex: number }>
+  byAlias: Map<string, ResolvedExplodedInput>
+  actualCtx: NodeContext
+  actualEngineConfig: EngineConfig
+}): Promise<unknown> => {
+  const { root, nestedPath } = splitCapturePath(args.path)
+  if (root === 'params') return getObjectPathValue(args.runParams, nestedPath)
+  if (root === 'outputs') return getObjectPathValue(args.resultRow, nestedPath)
+
+  if (args.node.exposedInputs?.[root]) {
+    const value = await resolveExposedCaptureValue({
+      node: args.node,
+      alias: root,
+      runParams: args.runParams,
+      combo: args.combo,
+      byAlias: args.byAlias,
+      actualCtx: args.actualCtx,
+      actualEngineConfig: args.actualEngineConfig,
+    })
+    return getObjectPathValue(value, nestedPath)
+  }
+
+  const hiddenNode = args.node.hiddenInputs?.[root]
+  if (!hiddenNode) return undefined
+  const { value } = await executeNode(hiddenNode, args.runParams, args.actualCtx, args.actualEngineConfig)
+  return getObjectPathValue(value, nestedPath)
 }
 
 const cloneValue = <T>(value: T): T => {
@@ -1022,7 +1102,7 @@ export function createNode<
         if (executionMode === 'worker' && runNodeInRunner) {
           const backend = actualEngineConfig.storageBackend ?? getDefaultInMemoryBackend()
           const validatedParams = node.paramsSchema.parse(paramsValue as Record<string, unknown>)
-          const paramsHash = await canonicalHash(validatedParams)
+          const paramsHash = canonicalHash(validatedParams)
           const nodeCodeHash = getNodeCodeHash(node)
           const key = makeNodeKey(node, paramsHash, nodeCodeHash)
           const policy = actualEngineConfig.nodePolicies?.[node.name] ?? node.defaultPolicy
@@ -1224,6 +1304,23 @@ export function createNode<
           completedEvals += 1
           rows.push(result.value)
           rowKeys.push(keyRow)
+          const capturedEntries = await Promise.all(
+            (opts?.capture ?? []).map(async (spec) => [
+              spec.as ?? spec.path,
+              await resolveCapturedValue({
+                node,
+                path: spec.path,
+                runParams,
+                resultRow: result.value,
+                combo,
+                byAlias,
+                actualCtx,
+                actualEngineConfig,
+              }),
+            ]),
+          )
+          const captured =
+            capturedEntries.length > 0 ? Object.fromEntries(capturedEntries) : undefined
           const objectiveRaw = objective
             ? getObjectPathValue(result.value as unknown as Record<string, unknown>, objective.path)
             : undefined
@@ -1252,6 +1349,7 @@ export function createNode<
             rowKey: keyRow,
             sourceIndexByAlias,
             objectiveValue,
+            ...(captured ? { captured } : {}),
           })
 
           await opts?.onRow?.({
@@ -1260,6 +1358,7 @@ export function createNode<
             rowKey: keyRow,
             sourceIndexByAlias,
             objectiveValue,
+            ...(captured ? { captured } : {}),
           })
           await maybeYieldToUi()
         }
@@ -1434,7 +1533,7 @@ export async function executeNode(
 
   // TODO: it might make sense to make validation optional  for speed ups!
   const validatedParams = node.paramsSchema.parse(paramsValue)
-  const paramsHash = await canonicalHash(validatedParams)
+  const paramsHash = canonicalHash(validatedParams)
   const nodeCodeHash = getNodeCodeHash(node)
   const key = makeNodeKey(node, paramsHash, nodeCodeHash)
 

@@ -56,7 +56,7 @@
       bordered
       class="object-path-charts__card"
     >
-      <q-card-section class="q-gutter-sm">
+      <q-card-section class="q-gutter-y-sm">
         <div class="row items-center">
           <div class="text-caption text-grey-7">{{ chart.title }}</div>
           <q-space />
@@ -65,7 +65,7 @@
             flat
             dense
             color="secondary"
-            icon="refresh"
+            :icon="matRefresh"
             @click="updateChart(index)"
           />
           <q-btn
@@ -73,7 +73,7 @@
             flat
             dense
             color="primary"
-            icon="table_view"
+            :icon="matTableChart"
             @click="openTablePopup(index)"
           />
           <q-btn
@@ -81,7 +81,7 @@
             flat
             dense
             color="amber-8"
-            :icon="isChartFavorite(chart.config) ? 'star' : 'star_outline'"
+            :icon="isChartFavorite(chart.config) ? matStar : matStarOutline"
             @click="toggleChartFavorite(index, chart.config)"
           />
         </div>
@@ -277,7 +277,7 @@
         </q-card-section>
         <q-separator />
 
-        <q-card-section v-if="selectedThumbnailChart" class="q-gutter-sm">
+        <q-card-section v-if="selectedThumbnailChart" class="q-gutter-y-sm">
           <ObjectPathChartAxesEditor
             v-if="selectedThumbnailChart.variant === 'plot' && showControls && !isViewOnly"
             :config="selectedThumbnailConfig"
@@ -447,30 +447,31 @@
 </template>
 
 <script setup lang="ts">
+import { matRefresh, matStar, matStarOutline, matTableChart } from '@quasar/extras/material-icons'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import ListChart from './varViews/ListChart.vue'
-import ObjectPathChartAxesEditor from './ObjectPathChartAxesEditor.vue'
-import ObjectPathChartMapEditor from './ObjectPathChartMapEditor.vue'
-import type { PlotFlatRow, PlotResolution, PlotSparseHeatmapValue } from '../modules/plotMath'
-import { buildPlotValueFromRows } from '../modules/plotMath'
+import { decodeQueryAxisKey, evaluateQueryAxisValue } from '../compDag/queryPipeline'
+import {
+  generateDefaultCandidates,
+  rankInterestingPlots,
+  type SimulationData,
+} from '../modules/interestingPlots'
 import {
   buildContourLayerFromSparseHeatmap,
   buildFeatureValueLayer,
   pickCoordinatePaths,
   type MapExternalFeatureLayer,
 } from '../modules/plotMapLayers'
-import type { ObjectPathChartDefinition } from './ObjectPathChartAxesEditor.vue'
-import {
-  generateDefaultCandidates,
-  rankInterestingPlots,
-  type SimulationData,
-} from '../modules/interestingPlots'
+import type { PlotFlatRow, PlotResolution, PlotSparseHeatmapValue } from '../modules/plotMath'
+import { buildPlotValueFromRows } from '../modules/plotMath'
 import { useSharedRunLogs } from '../modules/runLogs'
+import type { ObjectPathChartDefinition } from './ObjectPathChartAxesEditor.vue'
+import ObjectPathChartAxesEditor from './ObjectPathChartAxesEditor.vue'
+import ObjectPathChartMapEditor from './ObjectPathChartMapEditor.vue'
 import {
   normalizeResolvedChartPayload,
   resolveObjectPathChartPayload,
 } from './objectPathChartsResolver'
-import { decodeQueryAxisKey, evaluateQueryAxisValue } from '../compDag/queryPipeline'
+import ListChart from './varViews/ListChart.vue'
 
 export type { ObjectPathChartDefinition }
 export type ObjectPathChartsViewOptions = {

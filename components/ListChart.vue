@@ -1,6 +1,6 @@
 <!-- packages/shared/components/ListChart.vue -->
 <template>
-  <div class="list-chart column q-gutter-sm">
+  <div class="list-chart column q-gutter-y-sm">
     <div
       v-if="hasChartTitle"
       class="list-chart__title"
@@ -84,14 +84,16 @@
     </div>
 
     <!-- Chart DOM -->
-    <div
-      ref="chartEl"
-      :style="{
-        width: '100%',
-        maxWidth: '100%',
-        height: isFullscreen ? '90vh' : chartBodyHeightResolved,
-      }"
-    />
+    <div ref="chartHost" class="list-chart__host">
+      <div
+        ref="chartEl"
+        :style="{
+          width: '100%',
+          maxWidth: '100%',
+          height: isFullscreen ? '90vh' : chartBodyHeightResolved,
+        }"
+      />
+    </div>
   </div>
 </template>
 
@@ -206,7 +208,7 @@ const chartBodyHeightResolved = computed(() => {
 })
 
 const chartEl = ref<HTMLDivElement | null>(null)
-const containerWidth = ref(0)
+const chartHost = ref<HTMLDivElement | null>(null)
 let chart: echarts.ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
 let copyMessageTimer: ReturnType<typeof setTimeout> | null = null
@@ -720,21 +722,21 @@ const copyChartAs = async (format: 'png' | 'svg') => {
 }
 
 onMounted(() => {
-  if (!chartEl.value) return
-  containerWidth.value = chartEl.value.clientWidth || 0
+  if (!chartEl.value || !chartHost.value) return
 
   // Initial render (might be 0x0, that's ok; we'll resize when it becomes visible)
   renderChart()
 
   // Observe container size and resize chart when it changes
-  resizeObserver = new ResizeObserver(() => {
-    if (chartEl.value) containerWidth.value = chartEl.value.clientWidth || 0
-    renderChart()
+  resizeObserver = new ResizeObserver((entries) => {
+    const entry = entries[0]
+    const nextWidth = entry ? Math.round(entry.contentRect.width) : chartHost.value?.clientWidth ?? 0
+    const nextHeight = entry ? Math.round(entry.contentRect.height) : chartHost.value?.clientHeight ?? 0
     if (chart) {
-      chart.resize()
+      chart.resize({ width: nextWidth, height: nextHeight })
     }
   })
-  resizeObserver.observe(chartEl.value)
+  resizeObserver.observe(chartHost.value)
   document.addEventListener('fullscreenchange', handleFullscreenChange)
 })
 
@@ -751,7 +753,6 @@ watch(
     props.xAxis?.unit,
     props.yAxis?.label,
     props.yAxis?.unit,
-    containerWidth.value,
     chartType.value,
   ],
   () => {
@@ -765,8 +766,8 @@ onBeforeUnmount(() => {
   if (copyMessageTimer) {
     clearTimeout(copyMessageTimer)
   }
-  if (resizeObserver && chartEl.value) {
-    resizeObserver.unobserve(chartEl.value)
+  if (resizeObserver && chartHost.value) {
+    resizeObserver.unobserve(chartHost.value)
     resizeObserver.disconnect()
   }
   if (chart) {
@@ -816,5 +817,12 @@ const toggleFullscreen = async () => {
   font-size: 11px;
   font-weight: 500;
   line-height: 1.15;
+}
+
+.list-chart__host {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 </style>

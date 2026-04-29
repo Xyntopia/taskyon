@@ -31,7 +31,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import mapLibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-csp-worker.js?url'
 import { PMTiles, Protocol } from 'pmtiles'
-import { createPmtilesOpfsSource } from '@shared/modules/pmtilesOpfsCache'
+import { createPmtilesOpfsSource } from '../modules/pmtilesOpfsCache'
 import { onBeforeUnmount, onMounted, ref, useSlots } from 'vue'
 
 const WORLD_PM_URL =

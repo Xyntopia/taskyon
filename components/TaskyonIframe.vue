@@ -39,7 +39,6 @@ const props = withDefaults(
     configuration: () => ({}),
     persist: false,
     bindingKey: null,
-    profileName: undefined,
     missingBindingKeyPolicy: 'deriveFromProfile',
   },
 )

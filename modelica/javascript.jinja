@@ -253,6 +253,10 @@
     der_{{ render_symbol_expr(bc.args[0]) }}
   {%- elif bc.function|lower == "pre" and bc.args|length == 1 -%}
     {{ render_expr(bc.args[0]) }}
+  {%- elif bc.function|lower == "edge" and bc.args|length == 1 -%}
+    {{ render_expr(bc.args[0]) }}
+  {%- elif bc.function|lower == "change" and bc.args|length == 1 -%}
+    {{ render_expr(bc.args[0]) }}
   {%- elif bc.function|lower == "noevent" and bc.args|length >= 1 -%}
     {{ render_expr(bc.args[0]) }}
   {%- elif bc.function|lower == "homotopy" and bc.args|length >= 1 -%}
@@ -318,6 +322,10 @@
   {%- if fname|lower == "der" and args|length == 1 -%}
     der_{{ render_symbol_expr(args[0]) }}
   {%- elif fname|lower == "pre" and args|length == 1 -%}
+    {{ render_expr(args[0]) }}
+  {%- elif fname|lower == "edge" and args|length == 1 -%}
+    {{ render_expr(args[0]) }}
+  {%- elif fname|lower == "change" and args|length == 1 -%}
     {{ render_expr(args[0]) }}
   {%- elif fname|lower == "noevent" and args|length >= 1 -%}
     {{ render_expr(args[0]) }}
@@ -431,9 +439,96 @@
 
 function Model() {
   const __rumocaHasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+  const __rumocaExternalSymbols = {};
+  const __rumocaResolveExternalSymbol = (name) => {
+    const key = String(name || '');
+    if (!key.includes('.')) {
+      throw new Error("Generated residual references an unresolved symbol: " + key);
+    }
+    if (!__rumocaHasOwn(__rumocaExternalSymbols, key)) {
+      __rumocaExternalSymbols[key] = Object.keys(__rumocaExternalSymbols).length + 1;
+    }
+    return __rumocaExternalSymbols[key];
+  };
+  const __rumocaNamespaceProxy = (path) =>
+    new Proxy(function(){}, {
+      get(_target, prop) {
+        if (prop === Symbol.toPrimitive) return () => __rumocaResolveExternalSymbol(path);
+        if (prop === 'valueOf') return () => __rumocaResolveExternalSymbol(path);
+        if (prop === 'toString') return () => path;
+        return __rumocaNamespaceProxy(path ? path + '.' + String(prop) : String(prop));
+      },
+      apply() {
+        return 0;
+      },
+      construct() {
+        return __rumocaNamespaceProxy(path);
+      },
+    });
+  const Blocks = typeof globalThis.Blocks !== 'undefined' ? globalThis.Blocks : __rumocaNamespaceProxy('Blocks');
+  const Modelica = typeof globalThis.Modelica !== 'undefined' ? globalThis.Modelica : __rumocaNamespaceProxy('Modelica');
+  const SI = typeof globalThis.SI !== 'undefined' ? globalThis.SI : __rumocaNamespaceProxy('SI');
+  const Integer = (x) => Math.trunc(Number(x) || 0);
+  const Boolean = (x) => globalThis.Boolean(x);
+  const String = (x) => globalThis.String(x);
+  const noEvent = (x) => x;
+  const smooth = (_p, x) => x;
+  const homotopy = (actual, _simplified) => actual;
+  const semiLinear = (x, positiveSlope, negativeSlope) => {
+    const xv = Number(x) || 0;
+    return xv >= 0 ? xv * (Number(positiveSlope) || 0) : xv * (Number(negativeSlope) || 0);
+  };
+  const Fill = (value, ...dims) => {
+    const sizes = dims
+      .map((d) => Math.max(0, Math.floor(Number(d) || 0)))
+      .filter((d) => Number.isFinite(d));
+    if (sizes.length === 0) return value;
+    const build = (depth) => {
+      const n = sizes[depth];
+      const arr = new Array(n);
+      if (depth === sizes.length - 1) {
+        for (let i = 0; i < n; i += 1) arr[i] = value;
+        return arr;
+      }
+      for (let i = 0; i < n; i += 1) arr[i] = build(depth + 1);
+      return arr;
+    };
+    return build(0);
+  };
+  const zeros = (...dims) => Fill(0, ...dims);
+  const ones = (...dims) => Fill(1, ...dims);
+  const Size = typeof globalThis.Size === 'function'
+    ? globalThis.Size
+    : (value, dim) => {
+        const shape = [];
+        let cur = value;
+        while (Array.isArray(cur)) {
+          shape.push(cur.length);
+          cur = cur.length > 0 ? cur[0] : undefined;
+        }
+        if (dim == null) return shape;
+        const idx = Math.floor(Number(dim)) - 1;
+        if (!Number.isFinite(idx) || idx < 0) return 0;
+        return idx < shape.length ? shape[idx] : 0;
+      };
+  let __rumocaCurrentTime = 0;
+  const __rumocaTimeTol = 1e-9;
+  const Initial = () => Math.abs(Number(__rumocaCurrentTime) || 0) <= __rumocaTimeTol;
+  const Sample = (startTime, period) => {
+    const t = Number(__rumocaCurrentTime);
+    const s = Number(startTime);
+    const p = Number(period);
+    if (!Number.isFinite(t) || !Number.isFinite(s) || !Number.isFinite(p) || p <= 0) return false;
+    if (t + __rumocaTimeTol < s) return false;
+    const k = Math.round((t - s) / p);
+    if (k < 0) return false;
+    const tk = s + k * p;
+    return Math.abs(t - tk) <= Math.max(__rumocaTimeTol, Math.abs(p) * 1e-12);
+  };
 
   function __rumocaMissingRef(name) {
-    throw new Error("Generated residual references an unresolved symbol: " + String(name));
+    const key = String(name || '');
+    return __rumocaResolveExternalSymbol(key);
   }
 
   function __rumocaFiniteOr(value, fallback = 0) {
@@ -664,6 +759,7 @@ function Model() {
   };
 
   function residual(t, xVec, xDotVec, yVec, uVec, pOverride) {
+    __rumocaCurrentTime = t;
     const p = Object.assign({}, pDefaults, pOverride || {});
 
   {%- for (name, comp) in p_map|items %}
@@ -704,6 +800,7 @@ function Model() {
   }
 
   function evalConditions(t, xVec, yVec, uVec, pOverride) {
+    __rumocaCurrentTime = t;
     const p = Object.assign({}, pDefaults, pOverride || {});
 
   {%- for (name, comp) in p_map|items %}
@@ -743,6 +840,7 @@ function Model() {
   }
 
   function evalEventIndicators(t, xVec, yVec, uVec, pOverride) {
+    __rumocaCurrentTime = t;
     const p = Object.assign({}, pDefaults, pOverride || {});
 
   {%- for (name, comp) in p_map|items %}
@@ -782,6 +880,7 @@ function Model() {
   }
 
   function evalAlgebraics(t, xVec, yVec, uVec, pOverride) {
+    __rumocaCurrentTime = t;
     var p = Object.assign({}, pDefaults, pOverride || {});
 
   {%- for (name, comp) in p_map|items %}
@@ -845,6 +944,7 @@ function Model() {
   }
 
   function applyResets(t, xVec, yVec, uVec, pOverride, cPrev, cCurr) {
+    __rumocaCurrentTime = t;
     const p = Object.assign({}, pDefaults, pOverride || {});
 
   {%- for (name, comp) in p_map|items %}
@@ -899,10 +999,6 @@ function Model() {
   {%- endfor %}
 
   {%- if when_clauses|length == 0 and reset_eqs|length > 0 %}
-    const firedAny = Array.isArray(cPrev) && Array.isArray(cCurr)
-      ? cCurr.some((value, idx) => !Boolean(cPrev[idx]) && Boolean(value))
-      : false;
-    if (firedAny) {
     {%- for eq in reset_eqs %}
       {%- if eq.lhs is defined %}
       if (stateIndex["{{ eq.lhs }}"] !== undefined) {
@@ -912,7 +1008,6 @@ function Model() {
       }
       {%- endif %}
     {%- endfor %}
-    }
   {%- endif %}
 
     return { x: xNew, y: yNew, c: cNew };
