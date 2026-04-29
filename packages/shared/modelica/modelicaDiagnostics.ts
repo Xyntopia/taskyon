@@ -143,15 +143,6 @@ equation
 end BooleanNetworkShimSmoke;
 `.trim()
 
-const MODELICA_BOOLEAN_SIGNAL_GENERATOR_SOURCE = `
-model BooleanSignalGenerator
-  Modelica.Blocks.Sources.BooleanPulse booleanPulse(period = 0.2, width = 50);
-  Modelica.Blocks.Math.BooleanToReal booleanToReal;
-equation
-  connect(booleanPulse.y, booleanToReal.u);
-end BooleanSignalGenerator;
-`.trim()
-
 function ensureDiagramDto(value: unknown): ModelicaDiagramDto {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('extract_diagram returned invalid payload: expected object')
@@ -454,7 +445,7 @@ end TestPreparedMeta;
   }
 
   const status = getPreparedDaeStatus(dae)
-  if (status !== 'prepared' && status !== 'fallback_native') {
+  if (status !== 'prepared') {
     throw new Error(`Unexpected __rumoca_prepared_status value: ${String(status)}`)
   }
   const diagnostics = getPreparedDaeDiagnostics(dae)
@@ -582,14 +573,28 @@ export async function testModelicaBooleanNetworkShimRuntime() {
 
 export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
   const wasm = await getDiagnosticsWasm()
-  if (typeof wasm.compile_to_json !== 'function') {
-    throw new Error('Rumoca wasm export missing: compile_to_json')
+  if (
+    typeof wasm.compile_with_source_roots !== 'function' &&
+    typeof wasm.compile_with_libraries !== 'function'
+  ) {
+    throw new Error('Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries')
   }
   if (typeof wasm.render_template !== 'function') {
     throw new Error('Rumoca wasm export missing: render_template')
   }
 
-  const compiled = wasm.compile_to_json(MODELICA_BOOLEAN_SIGNAL_GENERATOR_SOURCE, 'BooleanSignalGenerator')
+  const debug: Record<string, unknown> = {
+    phase: 'init',
+    model: 'Modelica.Blocks.Examples.BooleanNetwork1',
+  }
+  await ensureDiagnosticsMslLoaded(wasm, debug)
+  const target = await getMslClassSourceForCompile(wasm, 'Modelica.Blocks.Examples.BooleanNetwork1')
+  debug.phase = 'source-loaded'
+  debug.sourcePath = target.sourcePath
+  debug.sourceLength = target.source.length
+  const sourcePath = target.sourcePath
+
+  const compiled = compileWithDiagnosticsMsl(wasm, target.source, target.className)
   const parsed = JSON.parse(compiled) as {
     dae?: unknown
     dae_native?: unknown
@@ -605,11 +610,16 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
     throw new Error('Rendered JS is empty')
   }
 
-  const runId = 'modelica-boolean-signal-generator-waveform-regression'
+  const runId = 'modelica-boolean-network1-runtime-regression'
   const abort = new AbortController()
   try {
     const result = await executeCodeInIframeSimple<{
-      meta?: { stopReason?: unknown; stopError?: unknown }
+      meta?: {
+        stopReason?: unknown
+        stopError?: unknown
+        executionMode?: unknown
+        solverStats?: Record<string, unknown>
+      }
       data?: { t?: unknown[]; y?: Record<string, unknown> }
     }>(
       {
@@ -621,11 +631,10 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
       {
         sim: {
           t0: 0,
-          tf: 1,
-          dt: 0.001,
+          tf: 10,
+          dt: 0.01,
           solverOptions: {
             timeIntegrator: 'sdirk2',
-            initializeConsistently: false,
             adaptiveSubsteps: true,
             fallbackIntegrators: ['rk4'],
             captureFailureState: true,
@@ -642,77 +651,160 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
     if (stopReason) {
       const stopError = typeof result?.meta?.stopError === 'string' ? result.meta.stopError : ''
       throw new Error(
-        `Boolean signal generator runtime failed: stopReason=${stopReason}, stopError=${stopError || 'n/a'}`,
+        `BooleanNetwork1 runtime failed: stopReason=${stopReason}, stopError=${stopError || 'n/a'}, sourcePath=${sourcePath}`,
       )
     }
 
-    const pulse = result?.data?.y?.['booleanPulse.y']
-    const real = result?.data?.y?.['booleanToReal.y']
-    if (!Array.isArray(pulse) || !Array.isArray(real)) {
-      throw new Error('Expected y["booleanPulse.y"] and y["booleanToReal.y"] arrays in simulation output')
+    const samples = Array.isArray(result?.data?.t) ? result.data.t.length : 0
+    if (samples < 100) {
+      throw new Error(`BooleanNetwork1 produced too few samples: ${samples}`)
     }
-    if (pulse.length !== real.length || pulse.length < 200) {
+    if (result?.meta?.executionMode !== 'algebraic_discrete') {
       throw new Error(
-        `Unexpected waveform sample lengths: pulse=${pulse.length}, real=${real.length}`,
+        `BooleanNetwork1 expected algebraic_discrete execution mode, got ${String(result?.meta?.executionMode)}`,
       )
     }
 
-    const toBit = (v: unknown): 0 | 1 | null => {
-      if (v === 0 || v === false) return 0
-      if (v === 1 || v === true) return 1
-      if (typeof v === 'number' && Number.isFinite(v)) {
-        if (Math.abs(v) < 1e-9) return 0
-        if (Math.abs(v - 1) < 1e-9) return 1
+    const yChannels: Record<string, unknown> =
+      result?.data?.y && typeof result.data.y === 'object' ? result.data.y : {}
+    const channelKeys = Object.keys(yChannels)
+    const requiredChannels = ['booleanPulse1.y', 'booleanPulse2.y', 'booleanStep.y', 'triggeredAdd.y']
+    for (const key of requiredChannels) {
+      if (!channelKeys.includes(key)) {
+        throw new Error(`BooleanNetwork1 output missing required channel: ${key}`)
       }
-      return null
+      const values = yChannels[key]
+      if (!Array.isArray(values) || values.length !== samples) {
+        throw new Error(`BooleanNetwork1 channel ${key} has unexpected shape`)
+      }
     }
-
-    const pulseBits = pulse.map(toBit)
-    const realBits = real.map(toBit)
-    if (pulseBits.some((v) => v === null) || realBits.some((v) => v === null)) {
-      throw new Error('Waveform contains non-binary values; expected only 0/1 samples')
+    const countBit = (key: string, bit: 0 | 1) => {
+      const values = yChannels[key]
+      if (!Array.isArray(values)) return 0
+      return values.filter((value) => value === bit || value === Boolean(bit)).length
     }
-
-    const pulseOnes = pulseBits.filter((v) => v === 1).length
-    const pulseZeros = pulseBits.filter((v) => v === 0).length
-    const realOnes = realBits.filter((v) => v === 1).length
-    const realZeros = realBits.filter((v) => v === 0).length
-
-    if (pulseOnes < 100 || pulseZeros < 100) {
+    const pulse1Ones = countBit('booleanPulse1.y', 1)
+    const pulse1Zeros = countBit('booleanPulse1.y', 0)
+    const pulse2Ones = countBit('booleanPulse2.y', 1)
+    const pulse2Zeros = countBit('booleanPulse2.y', 0)
+    const stepOnes = countBit('booleanStep.y', 1)
+    const stepZeros = countBit('booleanStep.y', 0)
+    if (pulse1Ones < 50 || pulse1Zeros < 50) {
+      throw new Error(`booleanPulse1.y does not toggle (ones=${pulse1Ones}, zeros=${pulse1Zeros})`)
+    }
+    if (pulse2Ones < 50 || pulse2Zeros < 50) {
+      throw new Error(`booleanPulse2.y does not toggle (ones=${pulse2Ones}, zeros=${pulse2Zeros})`)
+    }
+    if (stepOnes < 50 || stepZeros < 50) {
+      throw new Error(`booleanStep.y does not step (ones=${stepOnes}, zeros=${stepZeros})`)
+    }
+    const solverStats = result?.meta?.solverStats ?? {}
+    if (Number(solverStats.initAttempts ?? 0) !== 0 || Number(solverStats.flowStepCalls ?? 0) !== 0) {
       throw new Error(
-        `booleanPulse.y does not toggle as expected (ones=${pulseOnes}, zeros=${pulseZeros})`,
-      )
-    }
-    if (realOnes < 100 || realZeros < 100) {
-      throw new Error(
-        `booleanToReal.y does not toggle as expected (ones=${realOnes}, zeros=${realZeros})`,
-      )
-    }
-
-    const transitions = pulseBits.reduce<number>(
-      (count, bit, idx) => (idx > 0 && bit !== pulseBits[idx - 1] ? count + 1 : count),
-      0,
-    )
-    const mismatches = pulseBits.reduce<number>(
-      (count, bit, idx) => (realBits[idx] !== bit ? count + 1 : count),
-      0,
-    )
-    const maxAllowedMismatches = Math.max(2, transitions + 2)
-    if (mismatches > maxAllowedMismatches) {
-      throw new Error(
-        `booleanToReal.y diverges too much from booleanPulse.y (mismatches=${mismatches}, transitions=${transitions}, allowed=${maxAllowedMismatches})`,
+        `BooleanNetwork1 should not use init/flow solves in algebraic_discrete mode (initAttempts=${String(solverStats.initAttempts)}, flowStepCalls=${String(solverStats.flowStepCalls)})`,
       )
     }
 
     return {
       ok: true,
-      samples: pulseBits.length,
-      pulseOnes,
-      pulseZeros,
-      realOnes,
-      realZeros,
-      transitions,
-      mismatches,
+      model: 'Modelica.Blocks.Examples.BooleanNetwork1',
+      sourcePath: target.sourcePath,
+      executionMode: result.meta.executionMode,
+      samples,
+      channelCount: channelKeys.length,
+      pulse1Ones,
+      pulse1Zeros,
+      pulse2Ones,
+      pulse2Zeros,
+      stepOnes,
+      stepZeros,
+      channelsPreview: channelKeys.slice(0, 20),
+    }
+  } finally {
+    abort.abort()
+  }
+}
+
+export async function testModelicaStaticModelExecutionModeRegression() {
+  const source = `
+function Model() {
+  return {
+    name: 'StaticOnly',
+    meta: {
+      name: 'StaticOnly',
+      parameters: [{ name: 'p', start: 2 }],
+      constants: [{ name: 'c', value: 3 }],
+      states: [],
+      algebraics: [],
+      inputs: [],
+      conditions: [],
+      solverAlgebraics: [],
+      summary: { nx: 0, ny: 0, nc: 0, neqs: 0 },
+    },
+    x0: [],
+    y0: [],
+    c0: [],
+  }
+}
+`.trim()
+  const runId = 'modelica-static-model-execution-mode-regression'
+  const abort = new AbortController()
+  try {
+    const result = await executeCodeInIframeSimple<{
+      meta?: {
+        executionMode?: unknown
+        warnings?: unknown
+        stopReason?: unknown
+      }
+      data?: { t?: unknown[]; p?: Record<string, unknown>; constants?: Record<string, unknown> }
+    }>(
+      {
+        id: runId,
+        code: buildIframeCode(source),
+        sourceURL: `${runId}.js`,
+        stopSignal: abort.signal,
+      },
+      {
+        sim: {
+          t0: 0,
+          tf: 1,
+          dt: 0.25,
+          solverOptions: {},
+        },
+      },
+      {
+        source: 'ModelicaDiagnostics',
+        __rumocaRunId: runId,
+      },
+    )
+
+    const stopReason =
+      typeof result?.meta?.stopReason === 'string'
+        ? result.meta.stopReason
+        : result?.meta?.stopReason
+          ? serializeObject(result.meta.stopReason, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
+          : ''
+    if (stopReason) {
+      throw new Error(`Static model stopped unexpectedly: ${stopReason}`)
+    }
+    if (result?.meta?.executionMode !== 'static_model') {
+      throw new Error(`Expected static_model execution mode, got ${String(result?.meta?.executionMode)}`)
+    }
+    const times = Array.isArray(result?.data?.t) ? result.data.t : []
+    const p = result?.data?.p?.p
+    const c = result?.data?.constants?.c
+    if (times.length !== 5 || !Array.isArray(p) || !Array.isArray(c)) {
+      throw new Error(`Unexpected static output shape (t=${times.length})`)
+    }
+    if (p.some((value) => value !== 2) || c.some((value) => value !== 3)) {
+      throw new Error('Static parameter/constant series is not constant')
+    }
+
+    return {
+      ok: true,
+      executionMode: result.meta.executionMode,
+      samples: times.length,
+      warnings: result.meta.warnings,
     }
   } finally {
     abort.abort()
@@ -1641,6 +1733,75 @@ function parseSourceRootAstOrError(
 
 function asStringOrEmpty(value: unknown): string {
   return typeof value === 'string' ? value : ''
+}
+
+function withLibraryContext(qualifiedName: string, sourceModelica: string): string {
+  const source = String(sourceModelica || '')
+  if (!source.trim()) return source
+  if (/^\s*within\s+[A-Za-z0-9_.]+\s*;/m.test(source)) return source
+  const parts = String(qualifiedName || '')
+    .split('.')
+    .filter(Boolean)
+  if (parts.length < 2) return source
+  return `within ${parts.slice(0, -1).join('.')};\n\n${source}`
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function extractClassSourceFromFile(fileSource: string, className: string): string {
+  const escapedClassName = escapeRegExp(className)
+  const startRegex = new RegExp(
+    `(?:^|\\n)\\s*(?:model|block|record|type|package|connector|function)\\s+${escapedClassName}\\b`,
+    'm',
+  )
+  const startMatch = startRegex.exec(fileSource)
+  if (!startMatch || startMatch.index < 0) {
+    throw new Error(`Could not locate class declaration for ${className} in source file`)
+  }
+  const startIndex = startMatch.index + (startMatch[0].startsWith('\n') ? 1 : 0)
+  const endRegex = new RegExp(`(?:^|\\n)\\s*end\\s+${escapedClassName}\\s*;`, 'm')
+  const endMatch = endRegex.exec(fileSource.slice(startIndex))
+  if (!endMatch || endMatch.index < 0) {
+    throw new Error(`Could not locate class end for ${className} in source file`)
+  }
+  const endIndex = startIndex + endMatch.index + endMatch[0].length
+  return fileSource.slice(startIndex, endIndex).trim()
+}
+
+async function getMslClassSourceForCompile(
+  wasm: DiagnosticsMslApi,
+  qualifiedName: string,
+): Promise<{ source: string; sourcePath: string; className: string }> {
+  if (typeof wasm.get_class_info !== 'function') {
+    throw new Error('Rumoca wasm export missing: get_class_info')
+  }
+  const info = JSON.parse(String(wasm.get_class_info(qualifiedName))) as Record<string, unknown>
+  const className = qualifiedName.split('.').filter(Boolean).at(-1) || 'Model'
+  const sourceModelica = asStringOrEmpty(info.source_modelica)
+  const sourceFile = asStringOrEmpty(info.source_file).trim()
+
+  if (sourceModelica.trim()) {
+    return {
+      source: withLibraryContext(qualifiedName, sourceModelica),
+      sourcePath: sourceFile || `${qualifiedName.replaceAll('.', '/')}.mo`,
+      className,
+    }
+  }
+
+  const mslFiles = await loadMslSourcesFromZip()
+  const fallbackPath = `${qualifiedName.replaceAll('.', '/')}.mo`
+  const sourceFileEntry = readMslSourceFromZipByPath(mslFiles, sourceFile || fallbackPath)
+  if (!sourceFileEntry) {
+    throw new Error(`Could not locate source file in MSL zip for ${qualifiedName}`)
+  }
+  const extractedClassSource = extractClassSourceFromFile(sourceFileEntry.source, className)
+  return {
+    source: withLibraryContext(qualifiedName, extractedClassSource),
+    sourcePath: sourceFileEntry.path,
+    className,
+  }
 }
 
 function readMslSourceFromZipByPath(

@@ -43,6 +43,8 @@ const simulateModel = (params, context, model) => {
   const algebraicVariables = sanitizeVariableMeta(meta.algebraics)
   const inputVariables = sanitizeVariableMeta(meta.inputs)
   const conditionVariables = sanitizeVariableMeta(meta.conditions)
+  const parameterVariables = sanitizeVariableMeta(meta.parameters)
+  const constantVariables = sanitizeVariableMeta(meta.constants)
 
   const nx = Array.isArray(model.x0) ? model.x0.length : 0
   const ny = Array.isArray(model.y0) ? model.y0.length : 0
@@ -59,6 +61,30 @@ const simulateModel = (params, context, model) => {
     nx === 1 &&
     stateNames.length === 1 &&
     (stateNames[0] === '_rumoca_dummy_state' || stateNames[0] === 'dummy_state')
+  const modelSummary = meta.summary && typeof meta.summary === 'object' ? meta.summary : {}
+  const residualEquationCount = Number.isFinite(modelSummary.neqs)
+    ? Math.max(0, Math.floor(modelSummary.neqs))
+    : null
+  const hasRealDynamicState = nx > 0 && !hasOnlyDummyState
+  const hasAlgebraicOrEventWork =
+    ny > 0 || haveAlgebraicEval || haveEvents || conditionNames.length > 0
+  const executionMode = hasRealDynamicState
+    ? 'dynamic_dae'
+    : hasAlgebraicOrEventWork
+      ? 'algebraic_discrete'
+      : 'static_model'
+  const modelShape = {
+    nx,
+    ny,
+    nu,
+    nc: conditionNames.length,
+    residualEquationCount,
+    hasOnlyDummyState,
+    hasRealDynamicState,
+    haveEvents,
+    haveEventIndicators,
+    haveAlgebraicEval,
+  }
 
   let c0 = Array.isArray(model.c0) ? model.c0.slice() : null
   if (!c0 && haveEvents) {
@@ -945,6 +971,7 @@ const simulateModel = (params, context, model) => {
       eventSampleSkippedDuplicates: 0,
       initAttempts: 0,
       initFailures: 0,
+      staticSampleCount: 0,
     }
     let stopReason = null
     let stopError = null
@@ -958,7 +985,16 @@ const simulateModel = (params, context, model) => {
     let c = c0.slice()
     let xDotPrev = new Array(nx).fill(0)
 
-    if (initializeConsistently) {
+    if (executionMode === 'static_model') {
+      log('Static Modelica model has no dynamic or algebraic equations; emitting constant trajectory', {
+        nx,
+        ny,
+        nu,
+      })
+    }
+
+    const shouldInitializeConsistently = initializeConsistently && executionMode === 'dynamic_dae'
+    if (shouldInitializeConsistently) {
       const u0 = f_u(t) || new Array(nu).fill(0)
       const retryCount = Number.isFinite(solverOptions.initRetryCount)
         ? Math.max(1, Math.floor(solverOptions.initRetryCount))
@@ -1099,6 +1135,9 @@ const simulateModel = (params, context, model) => {
           error: (e && e.message) || String(e),
           stack: e && e.stack,
         })
+      }
+      if (hasOnlyDummyState) {
+        return { xNext, yNext, cNext }
       }
       try {
         const projected = solveFlowAtState(
@@ -1384,9 +1423,81 @@ const simulateModel = (params, context, model) => {
       return { x: xCurr, y: yCurr, c: cCurr, iterations: eventIterationMaxIter, clipped: true }
     }
 
+    function evaluateAlgebraicVector(tLocal, xLocal, yLocal, uLocal) {
+      if (haveAlgebraicEval) {
+        try {
+          const yEval = model.evalAlgebraics(tLocal, xLocal, yLocal, uLocal, pOverride)
+          if (Array.isArray(yEval) && yEval.length === algebraicNames.length) {
+            return yEval
+          }
+        } catch (e) {
+          log(`evalAlgebraics threw at t=${tLocal}`, {
+            error: (e && e.message) || String(e),
+            stack: e && e.stack,
+          })
+        }
+      }
+      const out = new Array(algebraicNames.length).fill(0)
+      const n = Math.min(out.length, Array.isArray(yLocal) ? yLocal.length : 0)
+      for (let i = 0; i < n; i++) out[i] = yLocal[i]
+      return out
+    }
+
+    function evaluateAlgebraicState(tLocal, xLocal, yLocal, uLocal) {
+      return evaluateAlgebraicVector(tLocal, xLocal, yLocal, uLocal).slice(0, ny)
+    }
+
     function advanceMacroStep(tLocal, xLocal, yLocal, cLocal, dtLocal, xDotSeed, stepIndex) {
       solverStats.macroStepCount += 1
       const tTarget = tLocal + dtLocal
+      if (executionMode === 'static_model') {
+        solverStats.staticSampleCount += 1
+        return {
+          xNext: Array.isArray(xLocal) ? xLocal.slice() : [],
+          yNext: Array.isArray(yLocal) ? yLocal.slice() : [],
+          cNext: Array.isArray(cLocal) ? cLocal.slice() : [],
+          xDotNext:
+            Array.isArray(xDotSeed) && xDotSeed.length === nx
+              ? xDotSeed.slice()
+              : new Array(nx).fill(0),
+          eventSamples: [],
+        }
+      }
+      if (executionMode === 'algebraic_discrete') {
+        const xNext = Array.isArray(xLocal) ? xLocal.slice() : new Array(nx).fill(0)
+        let yNext = evaluateAlgebraicState(
+          tTarget,
+          xNext,
+          Array.isArray(yLocal) ? yLocal : new Array(ny).fill(0),
+          f_u(tTarget) || new Array(nu).fill(0),
+        )
+        let cNext = Array.isArray(cLocal) ? cLocal.slice() : []
+        const uNext = f_u(tTarget) || new Array(nu).fill(0)
+
+        if (haveEvents) {
+          const cEval = evalConditionsSafe(tTarget, xNext, yNext, uNext, cNext)
+          const settled = settleEventAtTime(tTarget, xNext, yNext, cNext)
+          const applied = applyResetsSafe(tTarget, settled.x, settled.y, uNext, cNext, cEval)
+          yNext = evaluateAlgebraicState(
+            tTarget,
+            applied.xNext,
+            Array.isArray(applied.yNext) ? applied.yNext : yNext,
+            uNext,
+          )
+          cNext = Array.isArray(applied.cNext) ? applied.cNext : cNext
+        }
+
+        return {
+          xNext,
+          yNext,
+          cNext,
+          xDotNext:
+            Array.isArray(xDotSeed) && xDotSeed.length === nx
+              ? xDotSeed.slice()
+              : new Array(nx).fill(0),
+          eventSamples: [],
+        }
+      }
       if (!haveEvents || !enableEventLocalization) {
         const flow = advanceFlowInterval(tLocal, xLocal, yLocal, dtLocal, xDotSeed)
         const uNext = f_u(tTarget) || new Array(nu).fill(0)
@@ -1505,26 +1616,16 @@ const simulateModel = (params, context, model) => {
     }
 
     function evaluateAlgebraicsAtSample(tLocal, xLocal, yLocal, uLocal) {
-      if (haveAlgebraicEval) {
-        try {
-          const yEval = model.evalAlgebraics(tLocal, xLocal, yLocal, uLocal, pOverride)
-          if (Array.isArray(yEval) && yEval.length === algebraicNames.length) {
-            return yEval.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
-          }
-        } catch (e) {
-          log(`evalAlgebraics threw at t=${tLocal}`, {
-            error: (e && e.message) || String(e),
-            stack: e && e.stack,
-          })
-        }
+      const sampleValue = (v) => {
+        if (typeof v === 'boolean') return v ? 1 : 0
+        return typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN
       }
-      const out = new Array(algebraicNames.length).fill(Number.NaN)
-      const n = Math.min(out.length, Array.isArray(yLocal) ? yLocal.length : 0)
-      for (let i = 0; i < n; i++) {
-        const v = yLocal[i]
-        out[i] = typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN
-      }
-      return out
+      return evaluateAlgebraicVector(tLocal, xLocal, yLocal, uLocal).map(sampleValue)
+    }
+
+    if (haveAlgebraicEval) {
+      const u0 = f_u(t) || new Array(nu).fill(0)
+      y = evaluateAlgebraicState(t, x, y, u0)
     }
 
     if (haveEvents) {
@@ -1638,6 +1739,12 @@ const simulateModel = (params, context, model) => {
         ...solverStats,
         eventCount: eventLog.length,
       },
+      executionMode,
+      modelShape,
+      warnings:
+        executionMode === 'static_model'
+          ? ['No dynamic or algebraic equations; emitted constant trajectory.']
+          : [],
       stopReason,
       stopError,
       stopStack,
@@ -1688,6 +1795,7 @@ const simulateModel = (params, context, model) => {
         n,
         rows.map((r) => {
           const v = r[i]
+          if (typeof v === 'boolean') return v ? 1 : 0
           return typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN
         }),
       ]),
@@ -1703,6 +1811,18 @@ const simulateModel = (params, context, model) => {
           return null
         }),
       ]),
+    )
+  const projectStaticSeries = (vars) =>
+    Object.fromEntries(
+      (Array.isArray(vars) ? vars : [])
+        .map((variable) => {
+          const name = typeof variable?.name === 'string' ? variable.name : ''
+          if (!name) return null
+          const rawValue = variable.start ?? variable.value ?? 0
+          const value = typeof rawValue === 'number' && Number.isFinite(rawValue) ? rawValue : 0
+          return [name, raw.t.map(() => value)]
+        })
+        .filter((entry) => entry !== null),
     )
 
   // Return ONLY structured-cloneable data.
@@ -1721,6 +1841,9 @@ const simulateModel = (params, context, model) => {
       dt: sim.dt ?? 0.1,
       nSteps: raw.t.length,
       events: raw.eventLog || [],
+      executionMode: raw.executionMode,
+      modelShape: raw.modelShape,
+      warnings: Array.isArray(raw.warnings) ? raw.warnings : [],
       solverStats: raw.solverStats || null,
       stopReason: raw.stopReason,
       stopError: raw.stopError,
@@ -1737,6 +1860,8 @@ const simulateModel = (params, context, model) => {
         algebraicVariables,
         inputVariables,
         conditionVariables,
+        parameterVariables,
+        constantVariables,
       },
       context: contextInfo,
     },
@@ -1744,6 +1869,8 @@ const simulateModel = (params, context, model) => {
       t: raw.t,
       x: projectSeries(raw.x, stateNames),
       y: projectSeries(raw.yObserved, algebraicNames),
+      p: projectStaticSeries(meta.parameters),
+      constants: projectStaticSeries(meta.constants),
       u: projectSeries(raw.u, inputNames),
       c: projectSeries(raw.z, conditionNames),
       cBoolean: projectConditionSeries(raw.c, conditionNames),

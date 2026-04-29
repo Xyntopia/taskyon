@@ -587,13 +587,13 @@ async function runSolverForModel({ modelName, sourceModelica, templateSource, so
   const shortName = resolveModelName(modelName)
   const compiledRaw = rumoca.compile_with_source_roots(normalizedSource, shortName, '{}')
   const compiled = parseJson(compiledRaw)
-  const dae = asObj(compiled?.dae_prepared) ?? asObj(compiled?.dae_native) ?? asObj(compiled?.dae)
+  const dae = asObj(compiled?.dae_prepared)
   if (!dae) {
     const preparedStatus = asString(compiled?.dae_prepared_status)
     const preparedError = asString(compiled?.dae_prepared_error)
     const diagnostics = asObj(compiled?.dae_prepared_diagnostics) ?? {}
     throw new Error(
-      `compile returned no DAE for ${modelName}: dae_prepared_status=${preparedStatus || 'n/a'}, dae_prepared_error=${preparedError || 'n/a'}, diagnostics=${JSON.stringify(diagnostics).slice(0, 500)}`,
+      `compile returned no prepared DAE for ${modelName}: dae_prepared_status=${preparedStatus || 'n/a'}, dae_prepared_error=${preparedError || 'n/a'}, diagnostics=${JSON.stringify(diagnostics).slice(0, 500)}`,
     )
   }
   const rendered = String(rumoca.render_template(JSON.stringify(dae), templateSource) || '')

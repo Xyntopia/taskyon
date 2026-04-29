@@ -468,6 +468,57 @@ function Model() {
   const Blocks = typeof globalThis.Blocks !== 'undefined' ? globalThis.Blocks : __rumocaNamespaceProxy('Blocks');
   const Modelica = typeof globalThis.Modelica !== 'undefined' ? globalThis.Modelica : __rumocaNamespaceProxy('Modelica');
   const SI = typeof globalThis.SI !== 'undefined' ? globalThis.SI : __rumocaNamespaceProxy('SI');
+  const __rumocaBoolVecSlice = (value, n) => {
+    const arr = Array.isArray(value) ? value.slice() : [value];
+    const count = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : arr.length;
+    const trimmed = arr.slice(0, count);
+    return trimmed.map((v) => Boolean(v));
+  };
+  const __rumocaBooleanVectorsFallback = {
+    anyTrue(value, n) {
+      const xs = __rumocaBoolVecSlice(value, n);
+      for (let i = 0; i < xs.length; i += 1) if (xs[i]) return true;
+      return false;
+    },
+    andTrue(value, n) {
+      const xs = __rumocaBoolVecSlice(value, n);
+      if (xs.length === 0) return false;
+      for (let i = 0; i < xs.length; i += 1) if (!xs[i]) return false;
+      return true;
+    },
+    oneTrue(value, n) {
+      const xs = __rumocaBoolVecSlice(value, n);
+      let count = 0;
+      for (let i = 0; i < xs.length; i += 1) {
+        if (xs[i]) count += 1;
+        if (count > 1) return false;
+      }
+      return count === 1;
+    },
+    firstTrueIndex(value, n) {
+      const xs = __rumocaBoolVecSlice(value, n);
+      for (let i = 0; i < xs.length; i += 1) if (xs[i]) return i + 1;
+      return 0;
+    },
+    countTrue(value, n) {
+      const xs = __rumocaBoolVecSlice(value, n);
+      let count = 0;
+      for (let i = 0; i < xs.length; i += 1) if (xs[i]) count += 1;
+      return count;
+    },
+  };
+  const __rumocaGlobalBooleanVectors =
+    typeof globalThis.BooleanVectors === 'object' && globalThis.BooleanVectors !== null
+      ? globalThis.BooleanVectors
+      : null;
+  const BooleanVectors = new Proxy(__rumocaBooleanVectorsFallback, {
+    get(target, prop) {
+      const gv = __rumocaGlobalBooleanVectors && __rumocaGlobalBooleanVectors[prop];
+      if (typeof gv === 'function') return gv.bind(__rumocaGlobalBooleanVectors);
+      if (prop in target) return target[prop];
+      return __rumocaNamespaceProxy('BooleanVectors.' + String(prop));
+    },
+  });
   const Integer = (x) => Math.trunc(Number(x) || 0);
   const Boolean = (x) => globalThis.Boolean(x);
   const String = (x) => globalThis.String(x);
@@ -535,6 +586,12 @@ function Model() {
     return typeof value === "number" && Number.isFinite(value) ? value : fallback;
   }
 
+  function __rumocaSignalOr(value, fallback = 0) {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    return fallback;
+  }
+
   var __rumocaFallbackSymbols = {};
 
   function __rumocaResolveSymbol(name) {
@@ -586,7 +643,7 @@ function Model() {
   {%- for (name, comp) in p_map|items %}
   {
     const __rumocaP = {{ comp_expr_or_value(comp) }};
-    pDefaults["{{ name }}"] = __rumocaFiniteOr(__rumocaP, pDefaults["{{ name }}"]);
+    pDefaults["{{ name }}"] = __rumocaSignalOr(__rumocaP, pDefaults["{{ name }}"]);
     __rumocaFallbackSymbols["{{ name }}"] = pDefaults["{{ name }}"];
   }
   {%- endfor %}
@@ -599,7 +656,7 @@ function Model() {
   {%- for (name, comp) in cp_map|items %}
   {
     const __rumocaC = {{ comp_expr_or_value(comp) }};
-    constants["{{ name }}"] = __rumocaFiniteOr(__rumocaC, constants["{{ name }}"]);
+    constants["{{ name }}"] = __rumocaSignalOr(__rumocaC, constants["{{ name }}"]);
     __rumocaFallbackSymbols["{{ name }}"] = constants["{{ name }}"];
   }
   {%- endfor %}
@@ -617,28 +674,28 @@ function Model() {
   {%- for (name, comp) in y_map|items %}
   {
     const __rumocaY0 = {{ comp_expr_or_value(comp) }};
-    y0.push(__rumocaFiniteOr(__rumocaY0, 0));
+    y0.push(__rumocaSignalOr(__rumocaY0, 0));
     __rumocaFallbackSymbols["{{ name }}"] = y0[{{ loop.index0 }}];
   }
   {%- endfor %}
   {%- for (name, comp) in z_map|items %}
   {
     const __rumocaY0 = {{ comp_expr_or_value(comp) }};
-    y0.push(__rumocaFiniteOr(__rumocaY0, 0));
+    y0.push(__rumocaSignalOr(__rumocaY0, 0));
     __rumocaFallbackSymbols["{{ name }}"] = y0[{{ y_map|length + loop.index0 }}];
   }
   {%- endfor %}
   {%- for (name, comp) in m_map|items %}
   {
     const __rumocaY0 = {{ comp_expr_or_value(comp) }};
-    y0.push(__rumocaFiniteOr(__rumocaY0, 0));
+    y0.push(__rumocaSignalOr(__rumocaY0, 0));
     __rumocaFallbackSymbols["{{ name }}"] = y0[{{ y_map|length + z_map|length + loop.index0 }}];
   }
   {%- endfor %}
   {%- for (name, comp) in w_map|items %}
   {
     const __rumocaY0 = {{ comp_expr_or_value(comp) }};
-    y0.push(__rumocaFiniteOr(__rumocaY0, 0));
+    y0.push(__rumocaSignalOr(__rumocaY0, 0));
     __rumocaFallbackSymbols["{{ name }}"] = y0[{{ y_map|length + z_map|length + m_map|length + loop.index0 }}];
   }
   {%- endfor %}
@@ -651,7 +708,7 @@ function Model() {
   {%- for obs in obs_list %}
   {
     const __rumocaObs0 = {% if obs.start is defined %}{{ render_expr(obs.start) }}{% else %}0{% endif %};
-    __rumocaFallbackSymbols["{{ obs.name }}"] = __rumocaFiniteOr(__rumocaObs0, 0);
+    __rumocaFallbackSymbols["{{ obs.name }}"] = __rumocaSignalOr(__rumocaObs0, 0);
   }
   {%- endfor %}
 
@@ -696,7 +753,7 @@ function Model() {
       { name: "{{ name }}", start: y0[{{ y_map|length + z_map|length + m_map|length + loop.index0 }}]{{ comp_unit_prop(comp) }} }{% if not loop.last or obs_list|length > 0 %},{% endif %}
     {%- endfor %}
     {%- for obs in obs_list %}
-      { name: "{{ obs.name }}", start: {% if obs.start is defined %}__rumocaFiniteOr({{ render_expr(obs.start) }}, 0){% else %}0{% endif %}{% if obs.unit is defined and obs.unit is not none and (obs.unit|string)|trim != '' and (obs.unit|string)|trim|lower != 'none' and (obs.unit|string)|trim|lower != 'null' %}, unit: "{{ (obs.unit|string)|trim|replace('\\', '\\\\')|replace('"', '\\"') }}"{% else %}{% set __u = inferred_unit_from_name(obs.name)|trim %}{% if __u != '' %}, unit: "{{ __u|replace('\\', '\\\\')|replace('"', '\\"') }}"{% endif %}{% endif %} }{% if not loop.last %},{% endif %}
+      { name: "{{ obs.name }}", start: {% if obs.start is defined %}__rumocaSignalOr({{ render_expr(obs.start) }}, 0){% else %}0{% endif %}{% if obs.unit is defined and obs.unit is not none and (obs.unit|string)|trim != '' and (obs.unit|string)|trim|lower != 'none' and (obs.unit|string)|trim|lower != 'null' %}, unit: "{{ (obs.unit|string)|trim|replace('\\', '\\\\')|replace('"', '\\"') }}"{% else %}{% set __u = inferred_unit_from_name(obs.name)|trim %}{% if __u != '' %}, unit: "{{ __u|replace('\\', '\\\\')|replace('"', '\\"') }}"{% endif %}{% endif %} }{% if not loop.last %},{% endif %}
     {%- endfor %}
     ],
 
@@ -915,24 +972,24 @@ function Model() {
 
     var out = new Array(meta.algebraics.length).fill(0);
   {%- for (name, comp) in y_map|items %}
-    out[{{ loop.index0 }}] = __rumocaFiniteOr({{ js_ident(name) }}, 0);
+    out[{{ loop.index0 }}] = __rumocaSignalOr({{ js_ident(name) }}, 0);
   {%- endfor %}
   {%- for (name, comp) in z_map|items %}
-    out[{{ y_map|length + loop.index0 }}] = __rumocaFiniteOr({{ js_ident(name) }}, 0);
+    out[{{ y_map|length + loop.index0 }}] = __rumocaSignalOr({{ js_ident(name) }}, 0);
   {%- endfor %}
   {%- for (name, comp) in m_map|items %}
-    out[{{ y_map|length + z_map|length + loop.index0 }}] = __rumocaFiniteOr({{ js_ident(name) }}, 0);
+    out[{{ y_map|length + z_map|length + loop.index0 }}] = __rumocaSignalOr({{ js_ident(name) }}, 0);
   {%- endfor %}
   {%- for (name, comp) in w_map|items %}
-    out[{{ y_map|length + z_map|length + m_map|length + loop.index0 }}] = __rumocaFiniteOr({{ js_ident(name) }}, 0);
+    out[{{ y_map|length + z_map|length + m_map|length + loop.index0 }}] = __rumocaSignalOr({{ js_ident(name) }}, 0);
   {%- endfor %}
   {%- for obs in obs_list %}
-    var {{ js_ident(obs.name) }} = __rumocaFiniteOr(__rumocaResolveSymbol("{{ obs.name|string|replace('\\', '\\\\')|replace('"', '\\"') }}"), 0);
+    var {{ js_ident(obs.name) }} = __rumocaSignalOr(__rumocaResolveSymbol("{{ obs.name|string|replace('\\', '\\\\')|replace('"', '\\"') }}"), 0);
   {%- endfor %}
   {%- if obs_list|length > 0 %}
     for (let __rumocaObsPass = 0; __rumocaObsPass < {{ obs_list|length }}; __rumocaObsPass++) {
     {%- for obs in obs_list %}
-      {{ js_ident(obs.name) }} = __rumocaFiniteOr({{ render_expr(obs.expr) }}, 0);
+      {{ js_ident(obs.name) }} = __rumocaSignalOr({{ render_expr(obs.expr) }}, 0);
       __rumocaFallbackSymbols["{{ obs.name }}"] = {{ js_ident(obs.name) }};
     {%- endfor %}
     }

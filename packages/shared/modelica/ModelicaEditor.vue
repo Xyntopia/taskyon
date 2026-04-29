@@ -458,6 +458,7 @@
       <q-card flat class="fit column">
         <q-tabs v-model="resultsTab" dense align="left" narrow-indicator class="dense-tab-strip">
           <q-tab name="model" label="Generated" no-caps class="dense-tab" />
+          <q-tab name="analysis" label="DAE Analysis" no-caps class="dense-tab" />
           <q-tab name="simulate" label="Simulate" no-caps class="dense-tab" />
           <q-tab name="plot" label="Plot" no-caps class="dense-tab" />
         </q-tabs>
@@ -513,6 +514,10 @@
                 </q-tab-panel>
               </q-tab-panels>
             </div>
+          </q-tab-panel>
+
+          <q-tab-panel name="analysis" class="q-pa-none fit">
+            <ModelicaDaeAnalysisPane :analysis="daeAnalysis" />
           </q-tab-panel>
 
           <q-tab-panel name="simulate" class="q-pa-none fit">
@@ -612,6 +617,9 @@ import type { Extension } from '@codemirror/state'
 import { safeYamlDump } from '../modules/yamlUtils'
 import { syncStateWithOPFSFolder } from '../modules/saveState'
 import ModelicaActionsBar from './components/ModelicaActionsBar.vue'
+import ModelicaDaeAnalysisPane, {
+  type ModelicaDaeAnalysis,
+} from './components/ModelicaDaeAnalysisPane.vue'
 import ModelicaLibraryTreeView from './components/libraryTree/ModelicaLibraryTreeView.vue'
 import ModelicaDiagramPane from './components/ModelicaDiagramPane.vue'
 import { mapRumocaClassTree } from './components/libraryTree/mapRumocaClasses'
@@ -658,7 +666,7 @@ const daePrettyOutput = ref('') // Pretty DAE textual representation (from WASM)
 const astOutput = ref<unknown>(null) // Parsed AST candidate extracted from compile payload
 const workspaceTab = ref<'modelica' | 'diagram'>('modelica')
 const templatesTab = ref<'template' | 'uiTemplate' | 'solver'>('template')
-const resultsTab = ref<'model' | 'simulate' | 'plot'>('model')
+const resultsTab = ref<'model' | 'analysis' | 'simulate' | 'plot'>('model')
 const outputTab = ref<'js' | 'daeJson' | 'daePretty'>('js')
 const verbose = ref(false)
 const usePreparedDae = ref(true)
@@ -833,6 +841,68 @@ const plotPathUnits = computed<Record<string, string>>(() => {
     ...mapFromVariables('u', model.inputVariables),
     ...mapFromVariables('z', model.conditionVariables),
     ...mapFromVariables('c', model.conditionVariables),
+  }
+})
+
+const countObjectKeys = (value: unknown): number =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.keys(value as Record<string, unknown>).length
+    : 0
+
+const countArray = (value: unknown): number => (Array.isArray(value) ? value.length : 0)
+
+const daeAnalysis = computed<ModelicaDaeAnalysis>(() => {
+  const dae = daeJsonOutput.value && typeof daeJsonOutput.value === 'object' ? daeJsonOutput.value : {}
+  const resultMeta =
+    executionResult.value.meta && typeof executionResult.value.meta === 'object'
+      ? (executionResult.value.meta as Record<string, unknown>)
+      : {}
+  const modelShape =
+    resultMeta.modelShape && typeof resultMeta.modelShape === 'object'
+      ? (resultMeta.modelShape as Record<string, unknown>)
+      : {}
+  const nx = Number(modelShape.nx ?? countObjectKeys(dae.x))
+  const ny = Number(modelShape.ny ?? countObjectKeys(dae.y))
+  const nu = Number(modelShape.nu ?? countObjectKeys(dae.u))
+  const nc = Number(modelShape.nc ?? countArray(dae.f_c) + countArray(dae.relation))
+  const neqs = Number(modelShape.residualEquationCount ?? countArray(dae.f_x ?? dae.fx))
+  const hasDummyState = Boolean(
+    modelShape.hasOnlyDummyState ||
+      (nx === 1 && Object.prototype.hasOwnProperty.call((dae.x ?? {}) as object, '_rumoca_dummy_state')),
+  )
+  const executionMode =
+    typeof resultMeta.executionMode === 'string'
+      ? resultMeta.executionMode
+      : nx > 0 && !hasDummyState
+        ? 'dynamic_dae'
+        : ny > 0 || nc > 0 || neqs > 0
+          ? 'algebraic_discrete'
+          : 'static_model'
+  const strategy =
+    executionMode === 'dynamic_dae'
+      ? 'Integrate continuous states and close residual equations with the selected time integrator.'
+      : executionMode === 'algebraic_discrete'
+        ? 'Step time directly, evaluate algebraic/event equations, and iterate resets until stable.'
+        : 'Emit a constant trajectory for parameters/constants because no equations need solving.'
+  const hints = []
+  if (executionMode === 'dynamic_dae') hints.push('Continuous states are present; initialization and step solves may be required.')
+  if (executionMode === 'algebraic_discrete') hints.push('No meaningful continuous dynamics detected; Newton flow solves should stay at zero.')
+  if (executionMode === 'static_model') hints.push('The model is static; this is runnable as a constant time series.')
+  if (neqs > 0 && ny === 0 && executionMode !== 'dynamic_dae') hints.push('Residual equations exist without algebraic unknowns; check generated prepared DAE shape.')
+  return {
+    executionMode,
+    strategy,
+    counts: [
+      { label: 'States', value: nx },
+      { label: 'Algebraics', value: ny },
+      { label: 'Inputs', value: nu },
+      { label: 'Conditions', value: nc },
+      { label: 'Residual equations', value: neqs },
+      { label: 'When clauses', value: countArray(dae.when_clauses) },
+      { label: 'Reset equations', value: countArray(dae.f_z) + countArray(dae.f_m) },
+      { label: 'Observables', value: countArray(dae.__rumoca_observables) },
+    ],
+    hints,
   }
 })
 
@@ -1011,6 +1081,8 @@ function normalizeSimulationResultForDisplay(
   data.y = normalizeSeriesMap(data.y, algebraicNames)
   data.u = normalizeSeriesMap(data.u, inputNames)
   data.c = normalizeSeriesMap(data.c, conditionNames)
+  data.p = normalizeSeriesMap(data.p, [])
+  data.constants = normalizeSeriesMap(data.constants, [])
 
   return {
     ...resultObject,

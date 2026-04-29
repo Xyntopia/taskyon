@@ -208,7 +208,7 @@
                   flat
                   dense
                   color="amber-8"
-                  :icon="isChartFavorite(chart.config) ? 'star' : 'star_outline'"
+                  :icon="isChartFavorite(chart.config) ? matStar : matStarOutline"
                   @click.stop="toggleChartFavorite(index, chart.config)"
                 />
               </div>

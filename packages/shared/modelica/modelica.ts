@@ -1189,88 +1189,16 @@ export function selectDaeForTemplate(
     usePreparedDae?: boolean
   },
 ): Record<string, unknown> | null {
-  const usePreparedDae = options?.usePreparedDae ?? true
-  const nativeDaeRaw = compiled.dae_native ?? compiled.dae
+  void options
   const preparedDaeRaw = compiled.dae_prepared
 
   const asRecord = (value: unknown): Record<string, unknown> | null =>
     value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : null
-  const countVarMapEntries = (daeObj: Record<string, unknown> | null, key: string): number => {
-    if (!daeObj) return 0
-    const map = daeObj[key]
-    if (!map || typeof map !== 'object' || Array.isArray(map)) return 0
-    return Object.keys(map as Record<string, unknown>).length
-  }
-  const countWhenClauses = (daeObj: Record<string, unknown> | null): number => {
-    if (!daeObj) return 0
-    const clauses = daeObj.when_clauses
-    return Array.isArray(clauses) ? clauses.length : 0
-  }
-  const countEquations = (daeObj: Record<string, unknown> | null): number => {
-    if (!daeObj) return 0
-    const fx = daeObj.f_x ?? daeObj.fx
-    return Array.isArray(fx) ? fx.length : 0
-  }
-  const countConditions = (daeObj: Record<string, unknown> | null): number => {
-    if (!daeObj) return 0
-    const countKey = (key: string): number => {
-      const value = daeObj[key]
-      return Array.isArray(value) ? value.length : 0
-    }
-    const fC = countKey('f_c') + countKey('fc') + countKey('cond')
-    const relation = countKey('relation')
-    const syntheticRoots = countKey('synthetic_root_conditions')
-    return fC + relation + syntheticRoots
-  }
-  const countResetEquations = (daeObj: Record<string, unknown> | null): number => {
-    if (!daeObj) return 0
-    const fZ = daeObj.f_z
-    const fM = daeObj.f_m
-    const countFz = Array.isArray(fZ) ? fZ.length : 0
-    const countFm = Array.isArray(fM) ? fM.length : 0
-    return countFz + countFm
-  }
 
-  const nativeDae = asRecord(nativeDaeRaw)
   const preparedDae = asRecord(preparedDaeRaw)
-
-  let daeForTemplate: Record<string, unknown> | null = usePreparedDae
-    ? (preparedDae ?? nativeDae)
-    : nativeDae
-
-  if (usePreparedDae && preparedDae && nativeDae) {
-    const nativeAlgebraics = countVarMapEntries(nativeDae, 'y')
-    const preparedAlgebraics = countVarMapEntries(preparedDae, 'y')
-    const nativeWhenClauses = countWhenClauses(nativeDae)
-    const preparedWhenClauses = countWhenClauses(preparedDae)
-    const nativeEquationCount = countEquations(nativeDae)
-    const preparedEquationCount = countEquations(preparedDae)
-    const nativeConditionCount = countConditions(nativeDae)
-    const preparedConditionCount = countConditions(preparedDae)
-    const nativeResetCount = countResetEquations(nativeDae)
-    const preparedResetCount = countResetEquations(preparedDae)
-    const rumocaObservables = preparedDae.__rumoca_observables
-    const observables = Array.isArray(rumocaObservables) && rumocaObservables.length > 0
-    if (nativeAlgebraics > preparedAlgebraics && !observables) {
-      // Backward-compatible fallback: older prepared DAEs may drop algebraic observables.
-      // Prefer native DAE to keep template outputs stable.
-      daeForTemplate = nativeDae
-    } else if (nativeWhenClauses > preparedWhenClauses) {
-      // Preserve event reset semantics if prepared DAE dropped when-clause payload.
-      daeForTemplate = nativeDae
-    } else if (nativeEquationCount > 0 && preparedEquationCount <= 0) {
-      // Prepared DAE is unusable for simulation templates if it carries no residual equations.
-      daeForTemplate = nativeDae
-    } else if (nativeConditionCount > preparedConditionCount) {
-      // Preserve event indicators/conditions for runtime templates.
-      daeForTemplate = nativeDae
-    } else if (nativeResetCount > preparedResetCount) {
-      // Preserve event reset semantics even when reset equations route through f_m.
-      daeForTemplate = nativeDae
-    }
-  }
+  const daeForTemplate: Record<string, unknown> | null = preparedDae
 
   if (!daeForTemplate || typeof daeForTemplate !== 'object' || Array.isArray(daeForTemplate)) {
     return null
@@ -1450,51 +1378,20 @@ export async function compileModelicaToJs(params: {
     compileDebug.usedLibraries = usedLibraries
     partialUsedLibraries = usedLibraries
 
-    const countVarMapEntries = (daeObj: unknown, key: string): number => {
-      if (!daeObj || typeof daeObj !== 'object' || Array.isArray(daeObj)) return 0
-      const map = (daeObj as Record<string, unknown>)[key]
-      if (!map || typeof map !== 'object' || Array.isArray(map)) return 0
-      return Object.keys(map as Record<string, unknown>).length
-    }
-
-    const nativeDae = compiled.dae_native ?? compiled.dae
     const daeForTemplate = selectDaeForTemplate(compiled, {
       usePreparedDae: params.usePreparedDae,
     })
-    if (!daeForTemplate) throw new Error('Compilation did not return a DAE object')
+    if (!daeForTemplate) throw new Error('Compilation did not return a prepared DAE object')
     const preparedStatus = getPreparedDaeStatus(daeForTemplate)
     const preparedDiagnostics = getPreparedDaeDiagnostics(daeForTemplate)
     compileDebug.preparedStatus = preparedStatus ?? null
     compileDebug.preparedDiagnostics = preparedDiagnostics
 
-    if (params.usePreparedDae && compiled.dae_prepared) {
-      const nativeAlgebraics = countVarMapEntries(nativeDae, 'y')
-      const preparedAlgebraics = countVarMapEntries(compiled.dae_prepared, 'y')
-      const nativeStates = countVarMapEntries(compiled.dae_native ?? compiled.dae, 'x')
-      const preparedStates = countVarMapEntries(compiled.dae_prepared, 'x')
-      compileDebug.preparedReduction = {
-        nativeAlgebraics,
-        preparedAlgebraics,
-      }
-      if (preparedAlgebraics < nativeAlgebraics) {
-        appendModelicaLog({
-          level: 'info',
-          phase: 'compile',
-          message:
-            `Prepared DAE reduced algebraics (${nativeAlgebraics} -> ${preparedAlgebraics})` +
-            ` and states (${nativeStates} -> ${preparedStates}). ` +
-            `If algebraic outputs are missing, update Rumoca prepared DAE observable retention.`,
-        })
-      }
-    }
-    if (params.usePreparedDae && preparedStatus === 'fallback_native') {
+    if (preparedStatus === 'fallback_native') {
       const details = preparedDiagnostics.length > 0 ? ` (${preparedDiagnostics.join(' | ')})` : ''
-      appendModelicaLog({
-        level: 'warning',
-        phase: 'compile',
-        message: `Prepared DAE unavailable; using native fallback${details}`,
-      })
-    } else if (params.usePreparedDae && preparedStatus === 'prepared') {
+      throw new Error(`Prepared DAE unavailable; native/raw fallback is not supported${details}`)
+    }
+    if (preparedStatus === 'prepared') {
       appendModelicaLog({
         level: 'info',
         phase: 'compile',
@@ -1502,7 +1399,7 @@ export async function compileModelicaToJs(params: {
       })
     }
 
-    if (params.usePreparedDae && compiled.dae_prepared_error) {
+    if (compiled.dae_prepared_error) {
       const preparedErrorText =
         typeof compiled.dae_prepared_error === 'string'
           ? compiled.dae_prepared_error
@@ -1517,7 +1414,7 @@ export async function compileModelicaToJs(params: {
       appendModelicaLog({
         level: 'warning',
         phase: 'compile',
-        message: `DAE prepare pass failed, falling back to raw DAE: ${preparedErrorText}`,
+        message: `DAE prepare pass reported diagnostics: ${preparedErrorText}`,
       })
     }
     partialDaeForTemplate = daeForTemplate

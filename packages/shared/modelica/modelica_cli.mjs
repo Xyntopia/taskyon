@@ -239,13 +239,12 @@ async function compileModel({ model, sourceFile, useSourceRoots }) {
       ? rumoca.compile_with_source_roots(normalized, shortName, '{}')
       : rumoca.compile_to_json(normalized, shortName)
   const compiled = parseJson(compileRaw)
-  const dae = asObject(compiled?.dae_prepared) ?? asObject(compiled?.dae_native) ?? asObject(compiled?.dae)
+  const dae = asObject(compiled?.dae_prepared)
   return {
     model,
     sourcePath,
     usedSourceRoots: Boolean(useSourceRoots),
     hasDaePrepared: Boolean(asObject(compiled?.dae_prepared)),
-    hasDaeNative: Boolean(asObject(compiled?.dae_native) ?? asObject(compiled?.dae)),
     hasDaeSelected: Boolean(dae),
     varCounts: dae
       ? {
