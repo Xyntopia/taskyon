@@ -22,12 +22,10 @@ function usage() {
 Modelica solver-vs-OMC comparator (Node CLI)
 
 Usage:
-  node src/modules/modelica/modelica_compare_cli.mjs run [options]
-
-Required:
-  --msl-zip <path>                     MSL zip file for rumoca source roots
+  node packages/shared/modelica/modelica_compare_cli.mjs run [options]
 
 Options:
+  --msl-zip <path>                     MSL zip file (default: packages/rumoca/target/msl/ModelicaStandardLibrary-4.1.0.zip)
   --model <qualified.name>             Single model (overrides --targets-file)
   --targets-file <path>                JSON model list (array or object.model_names)
   --max-models <n>                     Limit model count
@@ -38,9 +36,9 @@ Options:
   --tf <n>                             Solver tf (default: 5)
   --dt <n>                             Solver dt (default: 0.01)
   --solver-options-json <json>         Solver options JSON (e.g. '{"timeIntegrator":"irk4"}')
-  --solver-file <path>                 JS solver file (default: src/modules/modelica/simulateModel.js)
-  --template-file <path>               Jinja template file (default: src/modules/modelica/javascript.jinja)
-  --omc-wrapper <path>                 OMC podman wrapper (default: src/modules/modelica/scripts/omc-via-podman.sh)
+  --solver-file <path>                 JS solver file (default: packages/shared/modelica/simulateModel.js)
+  --template-file <path>               Jinja template file (default: packages/shared/modelica/javascript.jinja)
+  --omc-wrapper <path>                 OMC podman wrapper (default: packages/shared/modelica/scripts/omc-via-podman.sh)
   --omc-msl-dir <path>                 OMC MSL directory (default: packages/rumoca/target/msl/ModelicaStandardLibrary-4.1.0)
   --json                               Emit final JSON summary
   --help                               Show help
@@ -50,7 +48,7 @@ Options:
 function parseArgs(argv) {
   const options = {
     command: '',
-    mslZip: '',
+    mslZip: join(PROJECT_ROOT, 'packages/rumoca/target/msl/ModelicaStandardLibrary-4.1.0.zip'),
     modelName: '',
     targetsFile: '',
     maxModels: 0,
@@ -61,9 +59,9 @@ function parseArgs(argv) {
     tf: 5,
     dt: 0.01,
     solverOptionsJson: '',
-    solverFile: join(PROJECT_ROOT, 'src/modules/modelica/simulateModel.js'),
-    templateFile: join(PROJECT_ROOT, 'src/modules/modelica/javascript.jinja'),
-    omcWrapper: join(PROJECT_ROOT, 'src/modules/modelica/scripts/omc-via-podman.sh'),
+    solverFile: join(PROJECT_ROOT, 'packages/shared/modelica/simulateModel.js'),
+    templateFile: join(PROJECT_ROOT, 'packages/shared/modelica/javascript.jinja'),
+    omcWrapper: join(PROJECT_ROOT, 'packages/shared/modelica/scripts/omc-via-podman.sh'),
     omcMslDir: join(PROJECT_ROOT, 'packages/rumoca/target/msl/ModelicaStandardLibrary-4.1.0'),
     json: false,
     help: false,
@@ -655,8 +653,89 @@ function recordSummary(records) {
   return { total, compared, compileFailed, runtimeFailed, missingChannels, maxDeviationPercent }
 }
 
+function percentile(sortedValues, p) {
+  if (!sortedValues.length) return 0
+  const idx = Math.min(sortedValues.length - 1, Math.max(0, Math.floor((p / 100) * sortedValues.length)))
+  return Number(sortedValues[idx]) || 0
+}
+
+function formatCompareReport(summary) {
+  const records = Array.isArray(summary?.records) ? summary.records : []
+  const compared = records.filter((r) => r.status === 'compared')
+  const runFails = records.filter((r) => r.status === 'run_fail')
+  const compileFails = records.filter((r) => r.status === 'compile_fail')
+  const missingChannels = records.filter((r) => r.status === 'missing_channels')
+  const elapsed = records.map((r) => Number(r.elapsedMs) || 0).filter((v) => v > 0)
+  const deviations = compared
+    .map((r) => Number(r.maxDeviationPercent) || 0)
+    .filter((v) => Number.isFinite(v))
+    .sort((a, b) => a - b)
+
+  const avgDeviation = deviations.length
+    ? deviations.reduce((acc, value) => acc + value, 0) / deviations.length
+    : 0
+  const avgElapsedMs = elapsed.length ? elapsed.reduce((acc, value) => acc + value, 0) / elapsed.length : 0
+  const topOutliers = compared
+    .slice()
+    .sort((a, b) => (Number(b.maxDeviationPercent) || 0) - (Number(a.maxDeviationPercent) || 0))
+    .slice(0, 10)
+
+  const lines = [
+    'Modelica Compare Report',
+    `Generated: ${new Date().toISOString()}`,
+    `Mode: ${String(summary.mode || '')}`,
+    `Seed: ${String(summary.seed ?? '')}`,
+    '',
+    'Summary',
+    `- Total models: ${summary.summary.total}`,
+    `- Compared: ${summary.summary.compared}`,
+    `- Compile failed: ${summary.summary.compileFailed}`,
+    `- Runtime failed: ${summary.summary.runtimeFailed}`,
+    `- Missing channels: ${summary.summary.missingChannels}`,
+    `- Max deviation (%): ${Number(summary.summary.maxDeviationPercent || 0).toFixed(6)}`,
+    `- Avg deviation (%): ${avgDeviation.toFixed(6)}`,
+    `- Median deviation (%): ${percentile(deviations, 50).toFixed(6)}`,
+    `- P95 deviation (%): ${percentile(deviations, 95).toFixed(6)}`,
+    `- Avg model elapsed (ms): ${avgElapsedMs.toFixed(2)}`,
+    '',
+    'Top Deviation Outliers',
+    ...(topOutliers.length
+      ? topOutliers.map(
+          (r, idx) =>
+            `${idx + 1}. ${String(r.modelName)} | max=${Number(r.maxDeviationPercent || 0).toFixed(6)}% | avg=${Number(r.avgDeviationPercent || 0).toFixed(6)}%`,
+        )
+      : ['(none)']),
+    '',
+    'Runtime Failures',
+    ...(runFails.length
+      ? runFails.map((r, idx) => `${idx + 1}. ${String(r.modelName)} | ${String(r.error || 'unknown error')}`)
+      : ['(none)']),
+    '',
+    'Compile Failures',
+    ...(compileFails.length
+      ? compileFails.map((r, idx) => `${idx + 1}. ${String(r.modelName)} | ${String(r.error || 'unknown error')}`)
+      : ['(none)']),
+    '',
+    'Missing Channels',
+    ...(missingChannels.length ? missingChannels.map((r, idx) => `${idx + 1}. ${String(r.modelName)}`) : ['(none)']),
+    '',
+    `Progress JSON: ${String(summary.progressPath || '')}`,
+    `OMC Cache Dir: ${String(summary.omcCacheDir || '')}`,
+  ]
+  return `${lines.join('\n')}\n`
+}
+
+async function writeCompareReport(summary) {
+  const stamp = new Date().toISOString().replaceAll(':', '-')
+  const latestPath = join(PROJECT_ROOT, 'modelica_compare_report_latest.txt')
+  const timestampedPath = join(PROJECT_ROOT, `modelica_compare_report_${stamp}.txt`)
+  const reportText = formatCompareReport(summary)
+  await writeFile(latestPath, reportText, 'utf8')
+  await writeFile(timestampedPath, reportText, 'utf8')
+  return { latestPath, timestampedPath }
+}
+
 async function runComparison(options) {
-  if (!options.mslZip) throw new Error('Missing required --msl-zip <path>')
   if (options.mode !== 'full' && options.mode !== 'random-stop') {
     throw new Error(`Unsupported --mode ${options.mode}`)
   }
@@ -852,6 +931,7 @@ async function main() {
     throw new Error(`OMC MSL dir not found: ${options.omcMslDir}`)
   }
   const summary = await runComparison(options)
+  const report = await writeCompareReport(summary)
   if (options.json) {
     console.log(JSON.stringify(summary, null, 2))
   } else {
@@ -859,6 +939,8 @@ async function main() {
     console.log(`Max deviation: ${summary.summary.maxDeviationPercent.toFixed(3)}%`)
     console.log(`Progress file: ${summary.progressPath}`)
     console.log(`OMC cache dir: ${summary.omcCacheDir}`)
+    console.log(`Report file: ${report.latestPath}`)
+    console.log(`Timestamped report: ${report.timestampedPath}`)
     if (summary.debugPath) console.log(`Debug bundle: ${summary.debugPath}`)
   }
 }

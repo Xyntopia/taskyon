@@ -185,6 +185,39 @@ This analysis helps maintain a clean structure as Taskyon grows and evolves.
 
 ## Testing & Diagnostics
 
+## Modelica: Compare + OMC Traces
+
+`modelica:compare` compares the JS solver against OMC traces. It now runs from:
+
+```bash
+yarn run modelica:compare run --help
+```
+
+Run with defaults (auto-ensures MSL zip in the default location):
+
+```bash
+yarn run modelica:compare run
+```
+
+Typical single-model run:
+
+```bash
+yarn run modelica:compare run \
+  --model Modelica.Electrical.Analog.Examples.ChuaCircuit \
+  --json
+```
+
+To generate OMC simulation references + trace JSON files for the MSL target set:
+
+```bash
+bash ./packages/shared/modelica/scripts/generate-omc-traces-via-podman.sh
+```
+
+Notes:
+- Requires `podman`, `cargo`, and `curl`.
+- Uses `OMC_PODMAN_IMAGE` (default `openmodelica/openmodelica:v1.26.1-gui`).
+- Output traces are written to `packages/rumoca/target/msl/results/sim_traces/omc`.
+
 ### End-to-End (E2E) with Cypress
 
 - **Run headless**:

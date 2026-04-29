@@ -3,7 +3,7 @@ set -euo pipefail
 
 TASKYON_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 RUMOCA_DIR="$TASKYON_ROOT/packages/rumoca"
-WRAPPER="$TASKYON_ROOT/src/modules/modelica/scripts/omc-via-podman.sh"
+WRAPPER="$TASKYON_ROOT/packages/shared/modelica/scripts/omc-via-podman.sh"
 MSL_VERSION="${MSL_VERSION:-4.1.0}"
 MSL_CACHE_ROOT="${RUMOCA_MSL_CACHE_DIR:-$RUMOCA_DIR/target/msl}"
 MSL_DIR="$MSL_CACHE_ROOT/ModelicaStandardLibrary-$MSL_VERSION"
