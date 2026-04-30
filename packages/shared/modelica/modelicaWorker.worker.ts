@@ -59,6 +59,17 @@ function asString(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
+async function readRumocaPackageBuiltTimeUtc(): Promise<string> {
+  try {
+    const module = await import('rumoca/rumoca_package_meta.json')
+    const meta = (module as { default?: Record<string, unknown> }).default ?? {}
+    const raw = meta.packageBuiltTimeUtc
+    return typeof raw === 'string' && raw.trim() ? raw : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
 function sanitizeLibraryPath(path: string): string {
   const parts = String(path || '')
     .split('/')
@@ -123,9 +134,10 @@ function selectDaeForTemplate(
   compiled: Record<string, unknown>,
   usePreparedDae: boolean,
 ): Record<string, unknown> | null {
-  void usePreparedDae
-  const preparedDae = asRecord(compiled.dae_prepared)
-  return preparedDae
+  const preferred = usePreparedDae ? asRecord(compiled.dae_prepared) : null
+  if (preferred) return preferred
+  const dae = asRecord(compiled.dae)
+  return dae
 }
 
 async function handleInit(payload: { threads?: number } | undefined): Promise<unknown> {
@@ -145,7 +157,9 @@ async function handleInit(payload: { threads?: number } | undefined): Promise<un
     typeof rumoca.get_git_commit === 'function' ? asString(rumoca.get_git_commit()) : ''
   const buildTimeUtc =
     typeof rumoca.get_build_time_utc === 'function' ? asString(rumoca.get_build_time_utc()) : ''
-  return { version, gitCommit, buildTimeUtc, rayonEnabled }
+  const rustBuildTimeUtc = buildTimeUtc
+  const packageBuiltTimeUtc = await readRumocaPackageBuiltTimeUtc()
+  return { version, gitCommit, buildTimeUtc, rustBuildTimeUtc, packageBuiltTimeUtc, rayonEnabled }
 }
 
 function handleCompileRender(payload: CompileRenderPayload): unknown {
@@ -159,7 +173,7 @@ function handleCompileRender(payload: CompileRenderPayload): unknown {
   const compiled = JSON.parse(String(compileRaw)) as Record<string, unknown>
   const daeForTemplate = selectDaeForTemplate(compiled, payload.usePreparedDae)
   if (!daeForTemplate) {
-    throw new Error('Compilation did not return a prepared DAE object')
+    throw new Error('Compilation did not return a usable DAE object (expected dae)')
   }
   const rendered = rumoca.render_template(JSON.stringify(daeForTemplate), payload.templateSource)
   return {

@@ -1,11 +1,20 @@
 <template>
   <q-card flat class="fit column">
-    <div class="row items-center q-pa-sm q-gutter-sm">
-      <q-input v-model="filterText" dense outlined clearable label="Filter classes" class="col" />
+    <div class="row items-center justify-around q-pa-sm q-gutter-sm">
+      <q-input
+        :model-value="filterText"
+        dense
+        outlined
+        clearable
+        label="Filter classes"
+        class="col-12"
+        @update:model-value="onFilterInput"
+        @clear="clearFilter"
+      />
       <q-btn
         flat
         dense
-        round
+        size="sm"
         :disable="loading || mslLoading || mslDownloading"
         :loading="loading || mslLoading || mslDownloading"
         :icon="mdiFolderOpenOutline"
@@ -16,7 +25,7 @@
       <q-btn
         flat
         dense
-        round
+        size="sm"
         :disable="loading || mslLoading || mslDownloading"
         :icon="mdiCached"
         @click="emit('load-cached-msl')"
@@ -26,7 +35,7 @@
       <q-btn-dropdown
         flat
         dense
-        round
+        size="sm"
         :disable="loading || mslLoading || mslDownloading"
         :icon="mdiDotsVertical"
         dropdown-icon=""
@@ -59,8 +68,8 @@
           </q-item>
         </q-list>
       </q-btn-dropdown>
-      <q-btn flat dense :icon="mdiUnfoldMoreHorizontal" @click="expandRootNodes" />
-      <q-btn flat dense :icon="mdiUnfoldLessHorizontal" @click="collapseAllNodes" />
+      <q-btn flat dense size="sm" :icon="mdiUnfoldMoreHorizontal" @click="expandRootNodes" />
+      <q-btn flat dense size="sm" :icon="mdiUnfoldLessHorizontal" @click="collapseAllNodes" />
     </div>
     <input
       ref="libraryImportEl"
@@ -202,6 +211,14 @@ function expandRootNodes() {
 
 function triggerLibraryImport() {
   libraryImportEl.value?.click()
+}
+
+function onFilterInput(value: string | number | null) {
+  filterText.value = value == null ? '' : String(value)
+}
+
+function clearFilter() {
+  filterText.value = ''
 }
 
 function onLibraryImportChange(ev: Event) {

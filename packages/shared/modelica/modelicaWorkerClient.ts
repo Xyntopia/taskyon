@@ -73,6 +73,8 @@ export type ModelicaWorkerInitInfo = {
   version: string
   gitCommit: string
   buildTimeUtc: string
+  rustBuildTimeUtc?: string
+  packageBuiltTimeUtc?: string
   rayonEnabled: boolean
 }
 

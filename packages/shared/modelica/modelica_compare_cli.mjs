@@ -16,6 +16,10 @@ const PROJECT_ROOT = resolve(SCRIPT_DIR, '../../..')
 const TMP_ROOT = join(PROJECT_ROOT, '.tmp')
 const OMC_CACHE_DIR = join(TMP_ROOT, 'modelica-omc-cache')
 const RUN_CACHE_DIR = join(TMP_ROOT, 'modelica-compare')
+const DEFAULT_TARGETS_FILE = join(
+  PROJECT_ROOT,
+  'packages/rumoca/crates/rumoca-test-msl/tests/msl_tests/msl_simulation_targets_180.json',
+)
 
 function usage() {
   return `
@@ -41,6 +45,8 @@ Options:
   --omc-wrapper <path>                 OMC podman wrapper (default: packages/shared/modelica/scripts/omc-via-podman.sh)
   --omc-msl-dir <path>                 OMC MSL directory (default: packages/rumoca/target/msl/ModelicaStandardLibrary-4.1.0)
   --json                               Emit final JSON summary
+  --debug-bundle                       Write debug bundle(s); auto-enabled for single-model runs
+  --event-debug-vars <csv>             Comma-separated variable names to trace in solver event log
   --help                               Show help
 `.trim()
 }
@@ -64,6 +70,8 @@ function parseArgs(argv) {
     omcWrapper: join(PROJECT_ROOT, 'packages/shared/modelica/scripts/omc-via-podman.sh'),
     omcMslDir: join(PROJECT_ROOT, 'packages/rumoca/target/msl/ModelicaStandardLibrary-4.1.0'),
     json: false,
+    debugBundle: false,
+    eventDebugVarsCsv: '',
     help: false,
   }
   const positional = []
@@ -75,6 +83,10 @@ function parseArgs(argv) {
     }
     if (token === '--json') {
       options.json = true
+      continue
+    }
+    if (token === '--debug-bundle') {
+      options.debugBundle = true
       continue
     }
     if (token === '--help') {
@@ -101,6 +113,7 @@ function parseArgs(argv) {
     else if (key === 'template-file') options.templateFile = resolve(value)
     else if (key === 'omc-wrapper') options.omcWrapper = resolve(value)
     else if (key === 'omc-msl-dir') options.omcMslDir = resolve(value)
+    else if (key === 'event-debug-vars') options.eventDebugVarsCsv = value
     else throw new Error(`Unknown option: --${key}`)
   }
   options.command = positional[0] ?? ''
@@ -109,6 +122,16 @@ function parseArgs(argv) {
 
 function asObj(v) {
   return v && typeof v === 'object' && !Array.isArray(v) ? v : null
+}
+
+function selectDaeForTemplate(compiled, usePreparedDae = true) {
+  if (usePreparedDae) {
+    const prepared = asObj(compiled?.dae_prepared)
+    if (prepared) return prepared
+  }
+  const dae = asObj(compiled?.dae)
+  if (dae) return dae
+  return null
 }
 
 function asString(v) {
@@ -217,6 +240,12 @@ function isRootStandaloneExampleModel(modelName) {
 async function loadTargetModels({ targetsFile, modelName }) {
   if (String(modelName || '').trim()) return [String(modelName).trim()]
   if (!targetsFile) {
+    if (await fileExists(DEFAULT_TARGETS_FILE)) {
+      const raw = parseJson(await readFile(DEFAULT_TARGETS_FILE, 'utf8'))
+      const modelNames = Array.isArray(raw?.model_names) ? raw.model_names : []
+      const fromCurated = modelNames.filter((x) => typeof x === 'string')
+      if (fromCurated.length > 0) return fromCurated
+    }
     const listRaw = parseJson(rumoca.list_classes())
     const classes = flattenClasses(Array.isArray(listRaw?.classes) ? listRaw.classes : [])
     return classes.filter((name) => isRootStandaloneExampleModel(name))
@@ -449,6 +478,10 @@ function compareTraces(omc, solver) {
     let maxAtTime = Number.NaN
     let maxAtOmc = Number.NaN
     let maxAtSolver = Number.NaN
+    let omcMin = Number.POSITIVE_INFINITY
+    let omcMax = Number.NEGATIVE_INFINITY
+    let solverMin = Number.POSITIVE_INFINITY
+    let solverMax = Number.NEGATIVE_INFINITY
     let samples = 0
     const n = Math.min(omc.times.length, oSeries.length)
     for (let i = 0; i < n; i += 1) {
@@ -458,6 +491,10 @@ function compareTraces(omc, solver) {
       if (!Number.isFinite(t) || !Number.isFinite(ov) || !Number.isFinite(sv)) continue
       const d = Math.abs(sv - ov) / Math.max(1, Math.abs(ov))
       const absErr = Math.abs(sv - ov)
+      if (ov < omcMin) omcMin = ov
+      if (ov > omcMax) omcMax = ov
+      if (sv < solverMin) solverMin = sv
+      if (sv > solverMax) solverMax = sv
       if (d > maxDev) maxDev = d
       if (absErr > maxAbs) {
         maxAbs = absErr
@@ -475,6 +512,10 @@ function compareTraces(omc, solver) {
         maxAtTime,
         maxAtOmc,
         maxAtSolver,
+        omcMin,
+        omcMax,
+        solverMin,
+        solverMax,
         samples,
       })
     }
@@ -489,6 +530,39 @@ function compareTraces(omc, solver) {
     .slice()
     .sort((a, b) => b.maxDeviationPercent - a.maxDeviationPercent)
     .slice(0, 8)
+  const mismatchedChannels = perChannel
+    .filter((c) => Number(c.maxDeviationPercent) > 10)
+    .slice()
+    .sort((a, b) => b.maxDeviationPercent - a.maxDeviationPercent)
+    .map((c) => ({
+      name: c.name,
+      maxDeviationPercent: c.maxDeviationPercent,
+      maxAbsError: c.maxAbsError,
+      maxAtTime: c.maxAtTime,
+      maxAtOmc: c.maxAtOmc,
+      maxAtSolver: c.maxAtSolver,
+      omcMin: c.omcMin,
+      omcMax: c.omcMax,
+      solverMin: c.solverMin,
+      solverMax: c.solverMax,
+      samples: c.samples,
+    }))
+  const binaryScaleSuspects = perChannel
+    .filter((c) => c.samples > 0)
+    .filter(
+      (c) =>
+        Number.isFinite(c.omcMin) &&
+        Number.isFinite(c.omcMax) &&
+        Number.isFinite(c.solverMin) &&
+        Number.isFinite(c.solverMax) &&
+        c.omcMin >= -1e-9 &&
+        c.omcMax <= 1 + 1e-9 &&
+        c.solverMin >= -1e-9 &&
+        c.solverMax <= 4 + 1e-9 &&
+        c.solverMax > 1.5,
+    )
+    .map((c) => c.name)
+    .slice(0, 20)
   return {
     maxDeviationPercent,
     meanDeviationPercent,
@@ -496,6 +570,8 @@ function compareTraces(omc, solver) {
     severeChannels,
     comparedChannels: perChannel.length,
     topChannels,
+    mismatchedChannels,
+    binaryScaleSuspects,
   }
 }
 
@@ -518,7 +594,16 @@ function traceDiagnosticHint(omcTrace, solverTrace, comparison) {
 
 async function runOmcScript(omcWrapper, mosPath, cwd) {
   return await new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(omcWrapper, [mosPath], { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(omcWrapper, [mosPath], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        OMC_PODMAN_WORKSPACE_ROOT: PROJECT_ROOT,
+        OMC_PODMAN_CONTAINER_ROOT: '/workspace',
+        OMC_PODMAN_WORKDIR: '',
+      },
+    })
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', (chunk) => {
@@ -580,29 +665,66 @@ async function loadOrCreateOmcTrace({ modelName, sim, omcWrapper, omcMslDir }) {
   return { trace, cachePath, fromCache: false }
 }
 
-async function runSolverForModel({ modelName, sourceModelica, templateSource, solverSource, sim }) {
+async function runSolverForModel({ modelName, sourceModelica, templateSource, solverSource, sim, debug }) {
   const normalizedSource = withLibraryContext(modelName, sourceModelica)
   const shortName = resolveModelName(modelName)
-  const compiledRaw = rumoca.compile_with_source_roots(normalizedSource, shortName, '{}')
-  const compiled = parseJson(compiledRaw)
-  const dae = asObj(compiled?.dae_prepared)
+  let compiledRaw = rumoca.compile_with_source_roots(normalizedSource, shortName, '{}')
+  let compiled = parseJson(compiledRaw)
+  let dae = selectDaeForTemplate(compiled, true)
+
+  if (!dae) {
+    const preparedError = asString(compiled?.dae_prepared_error)
+    const diagnostics = asObj(compiled?.dae_prepared_diagnostics) ?? {}
+    const compileFailureText = `${preparedError}\n${JSON.stringify(diagnostics)}`
+    if (/Duplicate class\s+'[^']+'\s+found in\s+'input\.mo'/i.test(compileFailureText)) {
+      compiledRaw = rumoca.compile_with_source_roots('', modelName, '{}')
+      compiled = parseJson(compiledRaw)
+      dae = selectDaeForTemplate(compiled, true)
+    }
+  }
+
   if (!dae) {
     const preparedStatus = asString(compiled?.dae_prepared_status)
     const preparedError = asString(compiled?.dae_prepared_error)
     const diagnostics = asObj(compiled?.dae_prepared_diagnostics) ?? {}
     throw new Error(
-      `compile returned no prepared DAE for ${modelName}: dae_prepared_status=${preparedStatus || 'n/a'}, dae_prepared_error=${preparedError || 'n/a'}, diagnostics=${JSON.stringify(diagnostics).slice(0, 500)}`,
+      `compile returned no usable DAE for ${modelName}: dae_prepared_status=${preparedStatus || 'n/a'}, dae_prepared_error=${preparedError || 'n/a'}, diagnostics=${JSON.stringify(diagnostics).slice(0, 500)}`,
     )
   }
   const rendered = String(rumoca.render_template(JSON.stringify(dae), templateSource) || '')
-  const runFn = new Function(
-    'params',
-    'context',
-    `${rendered}\n${solverSource}\nif (typeof Model !== 'function') throw new Error('Model() missing'); if (typeof simulateModel !== 'function') throw new Error('simulateModel() missing'); return simulateModel(params, context, Model());`,
-  )
+  let runFn
+  try {
+    runFn = new Function(
+      'params',
+      'context',
+      `${rendered}\n${solverSource}\nif (typeof Model !== 'function') throw new Error('Model() missing'); if (typeof simulateModel !== 'function') throw new Error('simulateModel() missing'); const __model = Model(); if (__model && typeof __model.configureDebug === 'function') { __model.configureDebug({ enabled: !!context.enableEventDebug, vars: Array.isArray(context.debugVars) ? context.debugVars : [], maxEvents: context.maxDebugEvents }); } const __result = simulateModel(params, context, __model); if (__result && __model && typeof __model.getDebugEvents === 'function') { __result.__debugEvents = __model.getDebugEvents(); } return __result;`,
+    )
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    let dumpPath = ''
+    try {
+      dumpPath = join(RUN_CACHE_DIR, `failed_render_${safeName(modelName)}_${Date.now()}.js`)
+      await ensureDir(dirname(dumpPath))
+      await writeFile(dumpPath, rendered, 'utf8')
+    } catch {
+      dumpPath = ''
+    }
+    const head = String(rendered || '')
+      .split('\n')
+      .slice(0, 30)
+      .join('\n')
+    throw new Error(
+      `generated JS failed to compile for ${modelName}: ${msg}; rendered_length=${rendered.length}; dump_path=${dumpPath || 'n/a'}; rendered_head=\n${head}`,
+    )
+  }
   const result = runFn(
     { sim: { t0: sim.t0, tf: sim.tf, dt: sim.dt, solverOptions: sim.solverOptions || {} } },
-    { log: () => {} },
+    {
+      log: () => {},
+      enableEventDebug: Boolean(debug?.enabled),
+      debugVars: Array.isArray(debug?.vars) ? debug.vars : [],
+      maxDebugEvents: Number(debug?.maxEvents) || 100000,
+    },
   )
   const stopReason = asString(result?.meta?.stopReason)
   if (stopReason) {
@@ -613,7 +735,7 @@ async function runSolverForModel({ modelName, sourceModelica, templateSource, so
       `solver stopped for ${modelName}: stopReason=${stopReason}, stopError=${stopError || 'n/a'}, stepIndex=${details.stepIndex ?? 'n/a'}, time=${details.time ?? 'n/a'}, flowStepCalls=${stats.flowStepCalls ?? 'n/a'}`,
     )
   }
-  return { result, rendered }
+  return { result, rendered, dae, debugEvents: Array.isArray(result?.__debugEvents) ? result.__debugEvents : [] }
 }
 
 async function promptChoice(modelName, deviationPercent) {
@@ -632,9 +754,46 @@ async function writeDebugBundle(payload) {
   await writeFile(join(dir, 'summary.json'), JSON.stringify(payload.summary, null, 2), 'utf8')
   await writeFile(join(dir, 'modelica.mo'), payload.sourceModelica || '', 'utf8')
   await writeFile(join(dir, 'generated_model.js'), payload.renderedJs || '', 'utf8')
+  await writeFile(join(dir, 'dae_prepared.json'), JSON.stringify(payload.daePrepared ?? null, null, 2), 'utf8')
   await writeFile(join(dir, 'solver.js'), payload.solverSource || '', 'utf8')
   await writeFile(join(dir, 'solver_trace.json'), JSON.stringify(payload.solverTrace, null, 2), 'utf8')
   await writeFile(join(dir, 'omc_trace.json'), JSON.stringify(payload.omcTrace, null, 2), 'utf8')
+  if (Array.isArray(payload.solverEventLog)) {
+    await writeFile(join(dir, 'solver_event_log.json'), JSON.stringify(payload.solverEventLog, null, 2), 'utf8')
+  }
+  if (payload.comparison) {
+    await writeFile(join(dir, 'comparison.json'), JSON.stringify(payload.comparison, null, 2), 'utf8')
+    const mismatches = Array.isArray(payload.comparison.mismatchedChannels)
+      ? payload.comparison.mismatchedChannels
+      : []
+    const lines = [
+      'Mismatch Report',
+      `Model: ${String(payload.modelName || '')}`,
+      `Mismatch threshold: >10% max deviation`,
+      `Total mismatched channels: ${mismatches.length}`,
+      '',
+      'name | maxDev% | maxAbsErr | t@maxAbsErr | omc@maxAbsErr | solver@maxAbsErr | omc[min,max] | solver[min,max] | samples',
+      ...mismatches.map(
+        (m) =>
+          `${m.name} | ${Number(m.maxDeviationPercent || 0).toFixed(6)} | ${Number(m.maxAbsError || 0).toFixed(6)} | ${Number(m.maxAtTime || 0).toFixed(6)} | ${Number(m.maxAtOmc || 0).toFixed(6)} | ${Number(m.maxAtSolver || 0).toFixed(6)} | [${Number(m.omcMin || 0).toFixed(6)}, ${Number(m.omcMax || 0).toFixed(6)}] | [${Number(m.solverMin || 0).toFixed(6)}, ${Number(m.solverMax || 0).toFixed(6)}] | ${Number(m.samples || 0)}`,
+      ),
+    ]
+    await writeFile(join(dir, 'mismatch_report.txt'), `${lines.join('\n')}\n`, 'utf8')
+  }
+  if (String(payload.renderedJs || '').trim()) {
+    const guardLines = String(payload.renderedJs)
+      .split('\n')
+      .map((line, idx) => ({ line: idx + 1, text: line }))
+      .filter((entry) => /\(\s*0\s*\)\s*\?/.test(entry.text))
+    const guardReport = [
+      'Collapsed Guard Report',
+      `Model: ${String(payload.modelName || '')}`,
+      `Total collapsed guards: ${guardLines.length}`,
+      '',
+      ...guardLines.map((entry) => `${entry.line}: ${entry.text.trim()}`),
+    ].join('\n')
+    await writeFile(join(dir, 'collapsed_guards.txt'), `${guardReport}\n`, 'utf8')
+  }
   return dir
 }
 
@@ -702,7 +861,7 @@ function formatCompareReport(summary) {
     ...(topOutliers.length
       ? topOutliers.map(
           (r, idx) =>
-            `${idx + 1}. ${String(r.modelName)} | max=${Number(r.maxDeviationPercent || 0).toFixed(6)}% | avg=${Number(r.avgDeviationPercent || 0).toFixed(6)}%`,
+            `${idx + 1}. ${String(r.modelName)} | max=${Number(r.maxDeviationPercent || 0).toFixed(6)}% | avg=${Number(r.meanDeviationPercent || 0).toFixed(6)}%`,
         )
       : ['(none)']),
     '',
@@ -761,6 +920,10 @@ async function runComparison(options) {
   })
   const limited = options.maxModels > 0 ? allTargets.slice(0, options.maxModels) : allTargets
   const targets = options.mode === 'random-stop' ? shuffled(limited, options.seed) : limited
+  const eventDebugVars = String(options.eventDebugVarsCsv || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
   const progressPath = join(RUN_CACHE_DIR, 'latest_run.json')
 
   const records = []
@@ -770,9 +933,10 @@ async function runComparison(options) {
     const modelName = targets[i]
     const startedAt = Date.now()
     let sourceModelica = ''
-    let renderedJs = ''
-    let solverTraceSnapshot = null
-    let omcTraceSnapshot = null
+      let renderedJs = ''
+      let solverTraceSnapshot = null
+      let solverEventLogSnapshot = null
+      let omcTraceSnapshot = null
     process.stdout.write(`[${i + 1}/${targets.length}] ${modelName}\n`)
     try {
       const classInfo = parseJson(rumoca.get_class_info(modelName))
@@ -789,6 +953,11 @@ async function runComparison(options) {
           templateSource,
           solverSource,
           sim: { t0: options.t0, tf: options.tf, dt: options.dt, solverOptions },
+          debug: {
+            enabled: Boolean(options.debugBundle || options.modelName),
+            vars: eventDebugVars,
+            maxEvents: 100000,
+          },
         }),
         loadOrCreateOmcTrace({
           modelName,
@@ -798,6 +967,7 @@ async function runComparison(options) {
         }),
       ])
       renderedJs = solverRun.rendered
+      solverEventLogSnapshot = Array.isArray(solverRun.debugEvents) ? solverRun.debugEvents : []
       omcTraceSnapshot = omcRun.trace
 
       const solverTrace = normalizeSolverTrace(solverRun.result)
@@ -813,6 +983,21 @@ async function runComparison(options) {
         })
       } else {
         const hint = traceDiagnosticHint(omcRun.trace, solverTrace, comparison)
+        let comparedDebugPath = ''
+        if (options.debugBundle || options.modelName) {
+          comparedDebugPath = await writeDebugBundle({
+            modelName,
+            sourceModelica,
+            renderedJs: solverRun.rendered,
+            daePrepared: solverRun.dae,
+            solverSource,
+            solverTrace,
+            solverEventLog: solverEventLogSnapshot,
+            omcTrace: omcRun.trace,
+            comparison,
+            summary: { comparison, thresholdPercent: options.stopThresholdPercent },
+          })
+        }
         records.push({
           modelName,
           status: 'compared',
@@ -821,6 +1006,7 @@ async function runComparison(options) {
           omcFromCache: omcRun.fromCache,
           ...comparison,
           ...(hint ? { diagnosticHint: hint } : {}),
+          ...(comparedDebugPath ? { debugPath: comparedDebugPath } : {}),
         })
       }
 
@@ -837,8 +1023,10 @@ async function runComparison(options) {
             modelName,
             sourceModelica,
             renderedJs: solverRun.rendered,
+            daePrepared: solverRun.dae,
             solverSource,
             solverTrace,
+            solverEventLog: solverEventLogSnapshot,
             omcTrace: omcRun.trace,
             summary: { record, thresholdPercent: options.stopThresholdPercent },
           })
@@ -860,6 +1048,7 @@ async function runComparison(options) {
           renderedJs,
           solverSource,
           solverTrace: solverTraceSnapshot,
+          solverEventLog: solverEventLogSnapshot,
           omcTrace: omcTraceSnapshot,
           summary: {
             status: 'run_fail',
@@ -871,9 +1060,10 @@ async function runComparison(options) {
       } catch {
         failureDebugPath = ''
       }
+      const status = /^Compilation error:/i.test(message) ? 'compile_fail' : 'run_fail'
       records.push({
         modelName,
-        status: 'run_fail',
+        status,
         elapsedMs: Date.now() - startedAt,
         error: message,
         ...(stack ? { stack } : {}),

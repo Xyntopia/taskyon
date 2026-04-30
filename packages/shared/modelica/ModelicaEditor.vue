@@ -137,9 +137,9 @@
         </q-tabs>
         <q-separator />
         <q-tab-panels v-model="workspaceTab" animated class="col">
-          <q-tab-panel name="modelica" class="q-pa-none fit">
-            <q-card flat class="fit column">
-              <div class="q-pa-xs row items-center q-gutter-xs">
+          <q-tab-panel name="modelica" class="q-pa-none">
+            <div flat class="column">
+              <div class="col-auto q-pa-xs row items-center q-gutter-xs">
                 <q-btn
                   color="grey-7"
                   flat
@@ -188,7 +188,7 @@
                 language="modelica"
                 :extra-extensions="modelicaEditorExtensions"
               />
-            </q-card>
+            </div>
           </q-tab-panel>
 
           <q-tab-panel name="diagram" class="q-pa-none fit">
@@ -704,6 +704,8 @@ const modelicaEditorExtensions = shallowRef<Extension[]>([])
 const rumocaWasmVersion = ref('unknown')
 const rumocaWasmGitCommit = ref('unknown')
 const rumocaWasmBuildTimeUtc = ref('unknown')
+const rumocaWasmRustBuildTimeUtc = ref('unknown')
+const rumocaWasmPackageBuiltTimeUtc = ref('unknown')
 const formatLocalBuildTime = (buildTimeUtc: string): string => {
   if (!buildTimeUtc || buildTimeUtc === 'unknown') return 'unknown'
   const date = new Date(buildTimeUtc)
@@ -719,6 +721,12 @@ const formatLocalBuildTime = (buildTimeUtc: string): string => {
   }).format(date)
 }
 const rumocaWasmBuildTimeLocal = computed(() => formatLocalBuildTime(rumocaWasmBuildTimeUtc.value))
+const rumocaWasmRustBuildTimeLocal = computed(() =>
+  formatLocalBuildTime(rumocaWasmRustBuildTimeUtc.value),
+)
+const rumocaWasmPackageBuiltTimeLocal = computed(() =>
+  formatLocalBuildTime(rumocaWasmPackageBuiltTimeUtc.value),
+)
 const libraryTreeNodes = ref<ModelicaLibraryTreeNode[]>([])
 const asObjectRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -1764,6 +1772,8 @@ const runtimeMenuOptions = ref<Record<string, unknown>>({
   rumocaWasmVersion: rumocaWasmVersion.value,
   rumocaWasmGitCommit: rumocaWasmGitCommit.value,
   rumocaWasmBuildTimeLocal: rumocaWasmBuildTimeLocal.value,
+  rumocaWasmRustBuildTimeLocal: rumocaWasmRustBuildTimeLocal.value,
+  rumocaWasmPackageBuiltTimeLocal: rumocaWasmPackageBuiltTimeLocal.value,
 })
 
 const projectMenuSchema: JSONSchema7 = {
@@ -1794,6 +1804,16 @@ const runtimeMenuSchema: JSONSchema7 = {
     rumocaWasmBuildTimeLocal: {
       type: 'string',
       title: 'Rumoca WASM build time (local)',
+      readOnly: true,
+    },
+    rumocaWasmRustBuildTimeLocal: {
+      type: 'string',
+      title: 'Rumoca WASM Rust compile time (local)',
+      readOnly: true,
+    },
+    rumocaWasmPackageBuiltTimeLocal: {
+      type: 'string',
+      title: 'Rumoca WASM package build time (local)',
       readOnly: true,
     },
   },
@@ -1895,7 +1915,16 @@ watch(
 )
 
 watch(
-  [simT0, simTf, simDt, rumocaWasmVersion, rumocaWasmGitCommit, rumocaWasmBuildTimeLocal],
+  [
+    simT0,
+    simTf,
+    simDt,
+    rumocaWasmVersion,
+    rumocaWasmGitCommit,
+    rumocaWasmBuildTimeLocal,
+    rumocaWasmRustBuildTimeLocal,
+    rumocaWasmPackageBuiltTimeLocal,
+  ],
   () => {
     runtimeMenuOptions.value = {
       t0: Number(simT0.value),
@@ -1904,6 +1933,8 @@ watch(
       rumocaWasmVersion: rumocaWasmVersion.value,
       rumocaWasmGitCommit: rumocaWasmGitCommit.value,
       rumocaWasmBuildTimeLocal: rumocaWasmBuildTimeLocal.value,
+      rumocaWasmRustBuildTimeLocal: rumocaWasmRustBuildTimeLocal.value,
+      rumocaWasmPackageBuiltTimeLocal: rumocaWasmPackageBuiltTimeLocal.value,
     }
   },
   { immediate: true },
@@ -2557,6 +2588,9 @@ onMounted(async () => {
     if (initInfo.version) rumocaWasmVersion.value = initInfo.version
     if (initInfo.gitCommit) rumocaWasmGitCommit.value = initInfo.gitCommit
     if (initInfo.buildTimeUtc) rumocaWasmBuildTimeUtc.value = initInfo.buildTimeUtc
+    if (initInfo.rustBuildTimeUtc) rumocaWasmRustBuildTimeUtc.value = initInfo.rustBuildTimeUtc
+    if (initInfo.packageBuiltTimeUtc)
+      rumocaWasmPackageBuiltTimeUtc.value = initInfo.packageBuiltTimeUtc
     const documentCount = await worker.getSourceRootDocumentCount()
     if (documentCount > 0) {
       mslLoaded.value = true

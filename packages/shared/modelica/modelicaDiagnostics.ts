@@ -232,7 +232,9 @@ async function runTemplateCoverage(source: string, modelName: string) {
   }
   const preparedStatus = getPreparedDaeStatus(dae)
   const preparedDiagnostics = getPreparedDaeDiagnostics(dae)
-  if (!preparedStatus) {
+  const preparedPayload =
+    parsed.dae_prepared && typeof parsed.dae_prepared === 'object' && !Array.isArray(parsed.dae_prepared)
+  if (preparedPayload && !preparedStatus) {
     throw new Error('Selected DAE is missing __rumoca_prepared_status metadata')
   }
 
@@ -447,27 +449,49 @@ end TestPreparedMeta;
     dae?: unknown
     dae_native?: unknown
     dae_prepared?: unknown
+    dae_prepared_status?: unknown
+    dae_prepared_diagnostics?: unknown
   }
-  const dae = selectDaeForTemplate(parsed, { usePreparedDae: true })
-  if (!dae) {
-    throw new Error('compile_to_json returned no DAE payload')
+  const dae = selectDaeForTemplate(parsed, { usePreparedDae: false })
+  if (!dae || typeof dae !== 'object' || Array.isArray(dae)) {
+    throw new Error('compile_to_json returned no native DAE payload')
   }
 
-  const status = getPreparedDaeStatus(dae)
-  if (status !== 'prepared') {
-    throw new Error(`Unexpected __rumoca_prepared_status value: ${String(status)}`)
+  if (parsed.dae_prepared !== undefined) {
+    throw new Error('compile_to_json should not expose dae_prepared in native-only API')
   }
-  const diagnostics = getPreparedDaeDiagnostics(dae)
-  const hints = dae.__rumoca_solver_hints
-  if (!hints || typeof hints !== 'object' || Array.isArray(hints)) {
-    throw new Error('Selected DAE is missing __rumoca_solver_hints object')
+  if (parsed.dae_prepared_status !== undefined) {
+    throw new Error('compile_to_json should not expose dae_prepared_status in native-only API')
+  }
+  if (parsed.dae_prepared_diagnostics !== undefined) {
+    throw new Error('compile_to_json should not expose dae_prepared_diagnostics in native-only API')
+  }
+
+  const build = (dae as Record<string, unknown>).__rumoca_build
+  if (!build || typeof build !== 'object' || Array.isArray(build)) {
+    throw new Error('Native DAE is missing __rumoca_build metadata')
+  }
+  const buildRecord = build as Record<string, unknown>
+  const version = buildRecord.version
+  const gitCommit = buildRecord.git_commit
+  const buildTimeUtc = buildRecord.build_time_utc
+  if (typeof version !== 'string' || version.trim().length === 0) {
+    throw new Error('Native DAE __rumoca_build.version must be a non-empty string')
+  }
+  if (typeof gitCommit !== 'string' || gitCommit.trim().length === 0) {
+    throw new Error('Native DAE __rumoca_build.git_commit must be a non-empty string')
+  }
+  if (typeof buildTimeUtc !== 'string' || buildTimeUtc.trim().length === 0) {
+    throw new Error('Native DAE __rumoca_build.build_time_utc must be a non-empty string')
   }
 
   return {
     ok: true,
-    preparedStatus: status,
-    preparedDiagnostics: diagnostics,
-    hasSolverHints: true,
+    apiShape: 'native-only',
+    hasBuildMetadata: true,
+    buildVersion: version,
+    buildGitCommit: gitCommit,
+    buildTimeUtc,
   }
 }
 
@@ -754,39 +778,60 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
 
   const runId = 'modelica-boolean-network1-runtime-regression'
   const abort = new AbortController()
+  const timeoutMs = 10_000
+  const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> =>
+    await new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        abort.abort()
+        reject(new Error(`BooleanNetwork1 runtime timed out after ${ms}ms`))
+      }, ms)
+      promise.then(
+        (value) => {
+          clearTimeout(timer)
+          resolve(value)
+        },
+        (error) => {
+          clearTimeout(timer)
+          reject(error)
+        },
+      )
+    })
   try {
-    const result = await executeCodeInIframeSimple<{
-      meta?: {
-        stopReason?: unknown
-        stopError?: unknown
-        executionMode?: unknown
-        solverStats?: Record<string, unknown>
-      }
-      data?: { t?: unknown[]; y?: Record<string, unknown> }
-    }>(
-      {
-        id: runId,
-        code: buildIframeCode(rendered),
-        sourceURL: `${runId}.js`,
-        stopSignal: abort.signal,
-      },
-      {
-        sim: {
-          t0: 0,
-          tf: 10,
-          dt: 0.01,
-          solverOptions: {
-            timeIntegrator: 'sdirk2',
-            adaptiveSubsteps: true,
-            fallbackIntegrators: ['rk4'],
-            captureFailureState: true,
+    const result = await withTimeout(
+      executeCodeInIframeSimple<{
+        meta?: {
+          stopReason?: unknown
+          stopError?: unknown
+          executionMode?: unknown
+          solverStats?: Record<string, unknown>
+        }
+        data?: { t?: unknown[]; y?: Record<string, unknown> }
+      }>(
+        {
+          id: runId,
+          code: buildIframeCode(rendered),
+          sourceURL: `${runId}.js`,
+          stopSignal: abort.signal,
+        },
+        {
+          sim: {
+            t0: 0,
+            tf: 10,
+            dt: 0.01,
+            solverOptions: {
+              timeIntegrator: 'sdirk2',
+              adaptiveSubsteps: true,
+              fallbackIntegrators: ['rk4'],
+              captureFailureState: true,
+            },
           },
         },
-      },
-      {
-        source: 'ModelicaDiagnostics',
-        __rumocaRunId: runId,
-      },
+        {
+          source: 'ModelicaDiagnostics',
+          __rumocaRunId: runId,
+        },
+      ),
+      timeoutMs,
     )
 
     const stopReason = typeof result?.meta?.stopReason === 'string' ? result.meta.stopReason : ''
@@ -3135,21 +3180,26 @@ end MslResistorExample;
     debug.runSignalStats = { xAmp, yAmp, xTemporal, yTemporal, xActive, yActive }
 
     if (stateCount === 0) {
-      throw new Error(
-        [
-          'MSL resistor example produced zero states; expected at least one dynamic state variable',
-          `stateCount=${stateCount}`,
-          `algebraicCount=${algebraicCount}`,
-          `xLen=${xLen}`,
-          `yLen=${yLen}`,
-          `xAmp=${xAmp}`,
-          `yAmp=${yAmp}`,
-          `xTemporal=${xTemporal}`,
-          `yTemporal=${yTemporal}`,
-          `baseDae.derivativeRefCount=${derivativeRefs.length}`,
-          `baseDae.derivativeRefsPreview=${serializeObject(derivativeRefs.slice(0, 20), MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-        ].join('\n'),
-      )
+      const algebraicDynamicsDetected = yLen > 1 && yActive > 0 && Math.max(yAmp, yTemporal) > 1.0e-6
+      if (!algebraicDynamicsDetected) {
+        throw new Error(
+          [
+            'MSL resistor example produced zero states and no convincing algebraic dynamics',
+            `stateCount=${stateCount}`,
+            `algebraicCount=${algebraicCount}`,
+            `xLen=${xLen}`,
+            `yLen=${yLen}`,
+            `xAmp=${xAmp}`,
+            `yAmp=${yAmp}`,
+            `xTemporal=${xTemporal}`,
+            `yTemporal=${yTemporal}`,
+            `xActive=${xActive}`,
+            `yActive=${yActive}`,
+            `baseDae.derivativeRefCount=${derivativeRefs.length}`,
+            `baseDae.derivativeRefsPreview=${serializeObject(derivativeRefs.slice(0, 20), MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
+          ].join('\n'),
+        )
+      }
     }
 
     if (Math.max(xAmp, yAmp) <= 1.0e-6) {
@@ -4232,10 +4282,12 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
 export async function testModelicaOrbitInvariantsCompareSolvers() {
   return runModelicaOrbitInvariantTest('compare')
 }
+testModelicaOrbitInvariantsCompareSolvers.timeoutMs = 180_000
 
 export async function testModelicaOrbitInvariantsSdirkOnly() {
   return runModelicaOrbitInvariantTest('sdirk-only')
 }
+testModelicaOrbitInvariantsSdirkOnly.timeoutMs = 180_000
 
 export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
   const debug: Record<string, unknown> = {

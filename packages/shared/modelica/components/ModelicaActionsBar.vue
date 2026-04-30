@@ -114,8 +114,12 @@
         <div class="text-body2 q-mb-sm">{{ runtimeInfo.rumocaVersion }}</div>
         <div class="text-caption text-grey-7">Rumoca Commit</div>
         <div class="text-body2 q-mb-sm">{{ runtimeInfo.rumocaCommit }}</div>
-        <div class="text-caption text-grey-7">Rumoca Build Time</div>
-        <div class="text-body2">{{ runtimeInfo.rumocaBuildTime }}</div>
+        <div class="text-caption text-grey-7">Rumoca Build Time (legacy)</div>
+        <div class="text-body2 q-mb-sm">{{ runtimeInfo.rumocaBuildTime }}</div>
+        <div class="text-caption text-grey-7">Rumoca Rust Compile Time</div>
+        <div class="text-body2 q-mb-sm">{{ runtimeInfo.rumocaRustBuildTime }}</div>
+        <div class="text-caption text-grey-7">Rumoca Package Build Time</div>
+        <div class="text-body2">{{ runtimeInfo.rumocaPackageBuiltTime }}</div>
       </div>
     </q-btn-dropdown>
 
@@ -320,6 +324,8 @@ const runtimeInfo = computed(() => {
   const version = String(opts.rumocaWasmVersion ?? 'unknown')
   const commit = String(opts.rumocaWasmGitCommit ?? 'unknown')
   const buildTime = String(opts.rumocaWasmBuildTimeLocal ?? 'unknown')
+  const rustBuildTime = String(opts.rumocaWasmRustBuildTimeLocal ?? buildTime)
+  const packageBuiltTime = String(opts.rumocaWasmPackageBuiltTimeLocal ?? 'unknown')
   const mslStatus = props.mslLoaded
     ? `${props.mslArchiveName || 'MSL loaded'} (${props.mslFileCount} files)`
     : 'MSL not loaded'
@@ -329,6 +335,8 @@ const runtimeInfo = computed(() => {
     rumocaVersion: version,
     rumocaCommit: commit,
     rumocaBuildTime: buildTime,
+    rumocaRustBuildTime: rustBuildTime,
+    rumocaPackageBuiltTime: packageBuiltTime,
   }
 })
 </script>

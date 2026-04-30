@@ -1211,21 +1211,18 @@ export function selectDaeForTemplate(
     usePreparedDae?: boolean
   },
 ): Record<string, unknown> | null {
-  void options
-  const preparedDaeRaw = compiled.dae_prepared
-
   const asRecord = (value: unknown): Record<string, unknown> | null =>
     value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : null
 
-  const preparedDae = asRecord(preparedDaeRaw)
-  const daeForTemplate: Record<string, unknown> | null = preparedDae
-
-  if (!daeForTemplate || typeof daeForTemplate !== 'object' || Array.isArray(daeForTemplate)) {
-    return null
+  const usePreparedDae = Boolean(options?.usePreparedDae)
+  if (usePreparedDae) {
+    const preparedDae = asRecord(compiled.dae_prepared)
+    if (preparedDae) return preparedDae
   }
-  return daeForTemplate
+  const dae = asRecord(compiled.dae)
+  return dae
 }
 
 export function buildModelConstructionProbeIframeCode(compiledJs: string): string {
@@ -1403,7 +1400,7 @@ export async function compileModelicaToJs(params: {
     const daeForTemplate = selectDaeForTemplate(compiled, {
       usePreparedDae: params.usePreparedDae,
     })
-    if (!daeForTemplate) throw new Error('Compilation did not return a prepared DAE object')
+    if (!daeForTemplate) throw new Error('Compilation did not return a usable DAE object')
     const preparedStatus = getPreparedDaeStatus(daeForTemplate)
     const preparedDiagnostics = getPreparedDaeDiagnostics(daeForTemplate)
     compileDebug.preparedStatus = preparedStatus ?? null

@@ -205,6 +205,101 @@ const simulateModel = (params, context, model) => {
       return v
     })
   }
+
+  function summarizeTopMagnitude(entries, maxItems = 8) {
+    if (!Array.isArray(entries)) return []
+    return entries
+      .filter((e) => Number.isFinite(e?.magnitude))
+      .sort((a, b) => b.magnitude - a.magnitude)
+      .slice(0, Math.max(1, maxItems))
+  }
+
+  function buildNewtonFailurePayload(args) {
+    const residual = Array.isArray(args?.residual) ? args.residual : []
+    const unknowns = Array.isArray(args?.unknowns) ? args.unknowns : []
+    const delta = Array.isArray(args?.delta) ? args.delta : []
+    const unknownNames = Array.isArray(args?.unknownNames) ? args.unknownNames : []
+    const residualRanking = summarizeTopMagnitude(
+      residual.map((rv, i) => ({
+        index: i,
+        value: rv,
+        magnitude: Math.abs(Number(rv) || 0),
+      })),
+    )
+    const unknownRanking = summarizeTopMagnitude(
+      unknowns.map((zv, i) => ({
+        index: i,
+        name: unknownNames[i] || `z[${i}]`,
+        value: zv,
+        magnitude: Math.abs(Number(zv) || 0),
+      })),
+    )
+    const deltaRanking = summarizeTopMagnitude(
+      delta.map((dv, i) => ({
+        index: i,
+        name: unknownNames[i] || `z[${i}]`,
+        value: dv,
+        magnitude: Math.abs(Number(dv) || 0),
+      })),
+    )
+    return {
+      stage: args?.trace?.stage || 'unknown',
+      t: Number(args?.trace?.t),
+      iteration: Number(args?.iteration),
+      residualInfNorm: Number(args?.residualInfNorm),
+      residualTop: residualRanking,
+      unknownTop: unknownRanking,
+      deltaTop: deltaRanking,
+      sizes: {
+        unknownCount: unknowns.length,
+        residualCount: residual.length,
+      },
+    }
+  }
+
+  function parseNewtonFailureError(errorValue) {
+    const message = errorValue instanceof Error ? errorValue.message : String(errorValue || '')
+    const out = {
+      message,
+      stage: null,
+      t: null,
+      residualInfNorm: null,
+      debug: null,
+    }
+    const stageMatch = /stage=([^,)\s]+)/.exec(message)
+    if (stageMatch) out.stage = stageMatch[1]
+    const tMatch = /t=([0-9eE+\-.]+)/.exec(message)
+    if (tMatch) out.t = Number(tMatch[1])
+    const resMatch = /residualInfNorm=([0-9eE+\-.]+)/.exec(message)
+    if (resMatch) out.residualInfNorm = Number(resMatch[1])
+    const debugPos = message.indexOf('debug=')
+    if (debugPos >= 0) {
+      const raw = message.slice(debugPos + 'debug='.length).trim()
+      try {
+        out.debug = JSON.parse(raw)
+      } catch {
+        out.debug = null
+      }
+    }
+    return out
+  }
+  function seedAlgebraicGuessFromState(yValues, xValues, minAbs = 1e-6) {
+    const y = Array.isArray(yValues) ? yValues.slice() : []
+    const xs = Array.isArray(xValues) ? xValues : []
+    let xScale = 1
+    for (const xv of xs) {
+      const n = Math.abs(Number(xv))
+      if (Number.isFinite(n)) xScale = Math.max(xScale, n)
+    }
+    const floor = Number.isFinite(minAbs) ? Math.max(0, minAbs) : 1e-6
+    for (let i = 0; i < y.length; i++) {
+      const v = Number(y[i])
+      if (!Number.isFinite(v) || Math.abs(v) <= floor) {
+        y[i] = xScale
+      }
+    }
+    return y
+  }
   function projectAlgebraicsWithFixedY(tEval, xEval, yEval, uEval, fixedY, newtonOpts, pOverride) {
     const yWork = Array.isArray(yEval) ? yEval.slice() : []
     const fixed = fixedY instanceof Set ? fixedY : new Set()
@@ -284,7 +379,14 @@ const simulateModel = (params, context, model) => {
     }
 
     let lastResidualNorm = Number.POSITIVE_INFINITY
+    let lastResidualVec = []
+    let lastDeltaVec = new Array(n).fill(0)
+    let lastIter = -1
+    let firstResidualNorm = Number.NaN
+    let stagnationCount = 0
+    let prevResidualNorm = Number.POSITIVE_INFINITY
     for (let iter = 0; iter < maxIter; iter++) {
+      lastIter = iter
       let r
       try {
         r = residualFn(z)
@@ -326,6 +428,8 @@ const simulateModel = (params, context, model) => {
 
       const maxAbs = residualInfNorm(r)
       lastResidualNorm = maxAbs
+      lastResidualVec = r.slice()
+      if (!Number.isFinite(firstResidualNorm)) firstResidualNorm = maxAbs
       if (maxAbs < tol) return z
 
       const J = Array.from({ length: m }, () => new Array(n).fill(0))
@@ -369,6 +473,7 @@ const simulateModel = (params, context, model) => {
       if (!Array.isArray(delta) || delta.length !== n || delta.some((v) => !Number.isFinite(v))) {
         delta = solveSteepestDescent(J, r, lambda)
       }
+      lastDeltaVec = Array.isArray(delta) ? delta.slice() : new Array(n).fill(0)
       for (let i = 0; i < n; i++) {
         if (!Number.isFinite(delta[i])) {
           throw new Error(
@@ -390,6 +495,28 @@ const simulateModel = (params, context, model) => {
           const scale = maxStep / deltaInf
           for (let i = 0; i < n; i++) delta[i] *= scale
         }
+      }
+      const deltaInf = delta.reduce((acc, v) => Math.max(acc, Math.abs(v)), 0)
+      const zInf = z.reduce((acc, v) => Math.max(acc, Math.abs(v)), 0)
+      const nearTolResidual = maxAbs <= tol * 10
+      const tinyUpdate = deltaInf <= Math.max(1e-12, Math.sqrt(tol) * (1 + zInf))
+      const stronglyReduced =
+        Number.isFinite(firstResidualNorm) &&
+        firstResidualNorm > 0 &&
+        maxAbs <= firstResidualNorm * 1e-10
+      if ((nearTolResidual && tinyUpdate) || (stronglyReduced && tinyUpdate)) {
+        return z
+      }
+      const improved = maxAbs <= prevResidualNorm * 0.99
+      stagnationCount = improved ? 0 : stagnationCount + 1
+      prevResidualNorm = maxAbs
+      const maxStagnationIters = Number.isFinite(newtonOpts?.maxStagnationIters)
+        ? Math.max(2, Math.floor(newtonOpts.maxStagnationIters))
+        : 6
+      if (stagnationCount >= maxStagnationIters && tinyUpdate) {
+        throw new Error(
+          `Newton stagnated (stage=${trace?.stage || 'unknown'}, t=${Number(trace?.t).toPrecision(8)}, iter=${iter}, residualInfNorm=${maxAbs}, stagnationCount=${stagnationCount})`,
+        )
       }
 
       let accepted = false
@@ -427,8 +554,17 @@ const simulateModel = (params, context, model) => {
       }
     }
 
+    const debugPayload = buildNewtonFailurePayload({
+      trace,
+      iteration: lastIter,
+      residualInfNorm: lastResidualNorm,
+      residual: lastResidualVec,
+      unknowns: z,
+      delta: lastDeltaVec,
+      unknownNames: trace?.unknownNames,
+    })
     throw new Error(
-      `Newton failed to converge within maxIter=${maxIter} (stage=${trace?.stage || 'unknown'}, t=${Number(trace?.t).toPrecision(8)}, residualInfNorm=${lastResidualNorm})`,
+      `Newton failed to converge within maxIter=${maxIter} (stage=${trace?.stage || 'unknown'}, t=${Number(trace?.t).toPrecision(8)}, residualInfNorm=${lastResidualNorm}, debug=${JSON.stringify(debugPayload)})`,
     )
   }
 
@@ -508,8 +644,24 @@ const simulateModel = (params, context, model) => {
   }
 
   // ---------- Backward-Euler-like stage ----------
-  function implicitStage(tStage, xBase, yGuess, u, dtStage, pOverride, newtonOpts, stageName) {
-    const z0 = regularizeGuessVector(xBase.concat(yGuess), newtonOpts)
+  const stageUnknownNames = stateNames.concat(solverAlgebraicNames)
+  const flowUnknownNames = stateNames.map((name) => `${name}_dot`).concat(solverAlgebraicNames)
+
+  function implicitStage(
+    tStage,
+    xBase,
+    yGuess,
+    u,
+    dtStage,
+    pOverride,
+    newtonOpts,
+    stageName,
+    xDotGuess,
+  ) {
+    const xSeed = Array.isArray(xDotGuess) && xDotGuess.length === nx
+      ? xBase.map((xi, i) => xi + dtStage * (Number(xDotGuess[i]) || 0))
+      : xBase
+    const z0 = regularizeGuessVector(xSeed.concat(yGuess), newtonOpts)
 
     function residual(z) {
       const xS = z.slice(0, nx)
@@ -526,6 +678,7 @@ const simulateModel = (params, context, model) => {
     const sol = solveNonlinearWithFallback(residual, z0, newtonOpts, {
       stage: stageName,
       t: tStage,
+      unknownNames: stageUnknownNames,
     })
     return {
       x: sol.slice(0, nx),
@@ -534,7 +687,7 @@ const simulateModel = (params, context, model) => {
   }
 
   // ---------- SDIRK-2 (Alexander) ----------
-  function sdirk2Step(t, x, y, u, dt, pOverride, newtonOpts) {
+  function sdirk2Step(t, x, y, u, dt, pOverride, newtonOpts, xDotPrev) {
     const gamma = 1 - 1 / Math.sqrt(2)
 
     // ---- Stage 1 ----
@@ -547,6 +700,7 @@ const simulateModel = (params, context, model) => {
       pOverride,
       newtonOpts,
       'sdirk2_stage1',
+      xDotPrev,
     )
 
     // ---- Stage 2 ----
@@ -568,6 +722,7 @@ const simulateModel = (params, context, model) => {
     const sol2 = solveNonlinearWithFallback(residualStage2, z0, newtonOpts, {
       stage: 'sdirk2_stage2',
       t: t + dt,
+      unknownNames: stageUnknownNames,
     })
 
     return {
@@ -587,7 +742,17 @@ const simulateModel = (params, context, model) => {
     const a22 = 0.25
     const detA = a11 * a22 - a12 * a21
 
-    const z0 = regularizeGuessVector(x.concat(y).concat(x).concat(y), newtonOpts)
+    const xDotSeed =
+      Array.isArray(newtonOpts?.xDotSeed) && newtonOpts.xDotSeed.length === nx
+        ? newtonOpts.xDotSeed
+        : new Array(nx).fill(0)
+    const x1Guess = new Array(nx)
+    const x2Guess = new Array(nx)
+    for (let i = 0; i < nx; i++) {
+      x1Guess[i] = x[i] + c1 * dt * (Number(xDotSeed[i]) || 0)
+      x2Guess[i] = x[i] + c2 * dt * (Number(xDotSeed[i]) || 0)
+    }
+    const z0 = regularizeGuessVector(x1Guess.concat(y).concat(x2Guess).concat(y), newtonOpts)
 
     function unpack(z) {
       const i0 = 0
@@ -623,9 +788,13 @@ const simulateModel = (params, context, model) => {
       return r1.concat(r2)
     }
 
+    const stageUnknowns = stageUnknownNames
+      .map((name) => `${name}@s1`)
+      .concat(stageUnknownNames.map((name) => `${name}@s2`))
     const sol = solveNonlinearWithFallback(residualStages, z0, newtonOpts, {
       stage: 'irk4_stages',
       t: t + dt,
+      unknownNames: stageUnknowns,
     })
     const { x2, y2, x1 } = unpack(sol)
     const { k1, k2 } = stageDerivativesFromStates(x1, x2)
@@ -647,7 +816,11 @@ const simulateModel = (params, context, model) => {
       const yS = z.slice(nx)
       return model.residual(tEval, xEval, xDotS, yS, u, pOverride)
     }
-    const sol = solveNonlinearWithFallback(residual, z0, newtonOpts, { stage: stageName, t: tEval })
+    const sol = solveNonlinearWithFallback(residual, z0, newtonOpts, {
+      stage: stageName,
+      t: tEval,
+      unknownNames: flowUnknownNames,
+    })
     return {
       xDot: sol.slice(0, nx),
       y: snapNearBinaryValues(sol.slice(nx)),
@@ -828,7 +1001,7 @@ const simulateModel = (params, context, model) => {
       {
         timeIntegrator: 'sdirk2',
         captureFailureState: false,
-        newtonTol: 1e-8,
+        newtonTol: 1e-7,
         newtonMaxIter: 12,
         jacEpsBase: 1e-6,
         initialGuessMinAbs: 1e-9,
@@ -855,12 +1028,25 @@ const simulateModel = (params, context, model) => {
         adaptiveSubsteps: true,
         maxSubstepDepth: 6,
         minSubstepDt: dt / 128,
+        maxAdaptiveRetriesTotal: 12000,
+        logAdaptiveRetryEvery: 0,
         includeEventSamples: true,
         eventSampleDedupTol: 0,
       },
       opts.solverOptions || {},
     )
 
+    const solverOptionsHas = (key) =>
+      Boolean(
+        opts?.solverOptions &&
+          typeof opts.solverOptions === 'object' &&
+          Object.prototype.hasOwnProperty.call(opts.solverOptions, key),
+      )
+    const resolveIntegratorTol = (integratorName) => {
+      if (solverOptionsHas('newtonTol')) return solverOptions.newtonTol
+      if (integratorName === 'sdirk2') return 1e-6
+      return 1e-7
+    }
     const newtonOpts = {
       tol: solverOptions.newtonTol,
       maxIter: solverOptions.newtonMaxIter,
@@ -897,6 +1083,7 @@ const simulateModel = (params, context, model) => {
       ),
     )
     const integratorOrder = [primaryIntegrator, ...fallbackIntegrators]
+    newtonOpts.tol = resolveIntegratorTol(primaryIntegrator)
     const useRk45 = primaryIntegrator === 'rk45'
     const stepperName = primaryIntegrator
     const captureFailureState = Boolean(
@@ -911,6 +1098,20 @@ const simulateModel = (params, context, model) => {
     const maxSubstepDepth = Number.isFinite(solverOptions.maxSubstepDepth)
       ? Math.max(0, Math.floor(solverOptions.maxSubstepDepth))
       : 6
+    const maxAdaptiveRetriesTotal = Number.isFinite(solverOptions.maxAdaptiveRetriesTotal)
+      ? Math.max(1, Math.floor(solverOptions.maxAdaptiveRetriesTotal))
+      : 12000
+    const logAdaptiveRetryEvery = Number.isFinite(solverOptions.logAdaptiveRetryEvery)
+      ? Math.max(0, Math.floor(solverOptions.logAdaptiveRetryEvery))
+      : 0
+    const failOnExcessiveAdaptiveSplits = Boolean(
+      solverOptions.failOnExcessiveAdaptiveSplits ?? true,
+    )
+    const maxAdaptiveRetriesPerMacroStep = Number.isFinite(
+      solverOptions.maxAdaptiveRetriesPerMacroStep,
+    )
+      ? Math.max(1, Math.floor(solverOptions.maxAdaptiveRetriesPerMacroStep))
+      : 200
     const minSubstepDt = Number.isFinite(solverOptions.minSubstepDt)
       ? Math.max(1e-9, solverOptions.minSubstepDt)
       : Math.max(1e-9, dt / 128)
@@ -1004,6 +1205,7 @@ const simulateModel = (params, context, model) => {
     const shouldInitializeConsistently = initializeConsistently && executionMode === 'dynamic_dae'
     if (shouldInitializeConsistently) {
       const u0 = f_u(t) || new Array(nu).fill(0)
+      y = seedAlgebraicGuessFromState(y, x, Math.max(newtonOpts.initialGuessMinAbs || 0, 1e-6))
       const retryCount = Number.isFinite(solverOptions.initRetryCount)
         ? Math.max(1, Math.floor(solverOptions.initRetryCount))
         : 5
@@ -1204,16 +1406,28 @@ const simulateModel = (params, context, model) => {
       uLocal,
       xDotSeed,
     ) {
+      const stepNewtonOpts =
+        solverOptionsHas('newtonTol') || integratorName === primaryIntegrator
+          ? newtonOpts
+          : Object.assign({}, newtonOpts, { tol: resolveIntegratorTol(integratorName) })
       if (integratorName === 'irk4') {
-        return irk4Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts)
+        return irk4Step(
+          tLocal,
+          xLocal,
+          yLocal,
+          uLocal,
+          dtLocal,
+          pOverride,
+          Object.assign({}, stepNewtonOpts, { xDotSeed }),
+        )
       }
       if (integratorName === 'rk4') {
-        return rk4Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts, xDotSeed)
+        return rk4Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, stepNewtonOpts, xDotSeed)
       }
       if (integratorName === 'rk45') {
-        return rk45Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts, xDotSeed)
+        return rk45Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, stepNewtonOpts, xDotSeed)
       }
-      return sdirk2Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, newtonOpts)
+      return sdirk2Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, stepNewtonOpts, xDotSeed)
     }
 
     function performFlowStepOnce(tLocal, xLocal, yLocal, dtLocal, xDotSeed) {
@@ -1277,15 +1491,73 @@ const simulateModel = (params, context, model) => {
       }
     }
 
-    function advanceAdaptiveOnFailure(tLocal, xLocal, yLocal, dtLocal, xDotSeed, depth) {
+    function advanceAdaptiveOnFailure(
+      tLocal,
+      xLocal,
+      yLocal,
+      dtLocal,
+      xDotSeed,
+      depth,
+      retryState,
+    ) {
       try {
         return performFlowStepOnce(tLocal, xLocal, yLocal, dtLocal, xDotSeed)
       } catch (e) {
         if (!adaptiveSubsteps || depth >= maxSubstepDepth || dtLocal * 0.5 < minSubstepDt) throw e
+        const state = retryState && typeof retryState === 'object' ? retryState : { count: 0, failures: [] }
+        const nextRetryCount = Number(state.count || 0) + 1
+        const parsed = parseNewtonFailureError(e)
+        const nextFailures = Array.isArray(state.failures) ? state.failures : []
+        nextFailures.push({
+          depth,
+          dt: dtLocal,
+          stage: parsed.stage,
+          residualInfNorm: parsed.residualInfNorm,
+          t: parsed.t,
+          debug: parsed.debug,
+        })
+        state.count = nextRetryCount
+        state.failures = nextFailures
+        if (failOnExcessiveAdaptiveSplits && nextRetryCount > maxAdaptiveRetriesPerMacroStep) {
+          const stageCounts = Object.create(null)
+          for (const f of nextFailures) {
+            const key = f.stage || 'unknown'
+            stageCounts[key] = (stageCounts[key] || 0) + 1
+          }
+          const rankedStages = Object.entries(stageCounts).sort((a, b) => b[1] - a[1]).slice(0, 5)
+          const representative = nextFailures.slice(-5)
+          throw new Error(
+            `Non-convergence detected: exceeded maxAdaptiveRetriesPerMacroStep=${maxAdaptiveRetriesPerMacroStep}. ` +
+              `Newton repeatedly failed while halving dt (t=${Number(tLocal).toPrecision(8)}, dt=${dtLocal}, depth=${depth}). ` +
+              `Likely causes: ill-conditioned Jacobian, over-constrained DAE slice, or residual scaling mismatch. ` +
+              `stageHistogram=${JSON.stringify(rankedStages)}, representativeFailures=${JSON.stringify(representative)}`,
+          )
+        }
         solverStats.adaptiveRetryCount += 1
         solverStats.adaptiveSplitCount += 1
+        if (logAdaptiveRetryEvery > 0 && solverStats.adaptiveRetryCount % logAdaptiveRetryEvery === 0) {
+          log('Adaptive retry progress', {
+            retriesTotal: solverStats.adaptiveRetryCount,
+            macroStepCount: solverStats.macroStepCount,
+            time: tLocal,
+            dt: dtLocal,
+          })
+        }
+        if (solverStats.adaptiveRetryCount > maxAdaptiveRetriesTotal) {
+          throw new Error(
+            `Non-convergence detected: exceeded maxAdaptiveRetriesTotal=${maxAdaptiveRetriesTotal} (retries=${solverStats.adaptiveRetryCount}, macroSteps=${solverStats.macroStepCount}, t=${Number(tLocal).toPrecision(8)}, dt=${dtLocal})`,
+          )
+        }
         const half = dtLocal * 0.5
-        const a = advanceAdaptiveOnFailure(tLocal, xLocal, yLocal, half, xDotSeed, depth + 1)
+        const a = advanceAdaptiveOnFailure(
+          tLocal,
+          xLocal,
+          yLocal,
+          half,
+          xDotSeed,
+          depth + 1,
+          state,
+        )
         return advanceAdaptiveOnFailure(
           tLocal + half,
           a.xNext,
@@ -1293,6 +1565,7 @@ const simulateModel = (params, context, model) => {
           half,
           a.xDotNext,
           depth + 1,
+          state,
         )
       }
     }
@@ -1309,7 +1582,12 @@ const simulateModel = (params, context, model) => {
     }
 
     function advanceFlowInterval(tLocal, xLocal, yLocal, dtLocal, xDotSeed) {
-      if (!useRk45) return advanceAdaptiveOnFailure(tLocal, xLocal, yLocal, dtLocal, xDotSeed, 0)
+      if (!useRk45) {
+        return advanceAdaptiveOnFailure(tLocal, xLocal, yLocal, dtLocal, xDotSeed, 0, {
+          count: 0,
+          failures: [],
+        })
+      }
       const tEnd = tLocal + dtLocal
       let tCur = tLocal
       let xCur = xLocal.slice()
@@ -1632,9 +1910,15 @@ const simulateModel = (params, context, model) => {
     }
 
     function evaluateAlgebraicsAtSample(tLocal, xLocal, yLocal, uLocal) {
+      const binarySnapTol = Math.max(1e-9, Number(newtonOpts?.tol) || 1e-8)
       const sampleValue = (v) => {
         if (typeof v === 'boolean') return v ? 1 : 0
-        return typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN
+        if (typeof v === 'number' && Number.isFinite(v)) {
+          if (Math.abs(v) <= binarySnapTol) return 0
+          if (Math.abs(v - 1) <= binarySnapTol) return 1
+          return v
+        }
+        return Number.NaN
       }
       return evaluateAlgebraicVector(tLocal, xLocal, yLocal, uLocal).map(sampleValue)
     }
@@ -1849,6 +2133,14 @@ const simulateModel = (params, context, model) => {
     compiledAt: context?.compiledAt,
     runId: context?.__rumocaRunId ?? context?.runId,
   }
+  const inferredAlgebraicInitials = Array.isArray(raw?.yObserved?.[0]) ? raw.yObserved[0] : null
+  const resolvedAlgebraicVariables = algebraicVariables.map((variable, idx) => {
+    const inferred = inferredAlgebraicInitials?.[idx]
+    if (typeof inferred === 'number' && Number.isFinite(inferred)) {
+      return { ...variable, start: inferred, inferredStart: true }
+    }
+    return { ...variable, inferredStart: false }
+  })
 
   return {
     meta: {
@@ -1873,7 +2165,7 @@ const simulateModel = (params, context, model) => {
         solverAlgebraicNames,
         conditionNames,
         stateVariables,
-        algebraicVariables,
+        algebraicVariables: resolvedAlgebraicVariables,
         inputVariables,
         conditionVariables,
         parameterVariables,
@@ -1924,7 +2216,7 @@ simulateModel.optionsSchema = {
       default: false,
       description: 'Include full model state in meta.stopDetails when a timestep fails',
     },
-    newtonTol: { type: 'number', default: 1e-8, description: 'Newton solver tolerance' },
+    newtonTol: { type: 'number', default: 1e-7, description: 'Newton solver tolerance' },
     newtonMaxIter: {
       type: 'integer',
       default: 12,

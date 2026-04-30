@@ -4868,33 +4868,45 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@taskyon/shared@workspace:packages/shared"
   dependencies:
+    "@codemirror/lang-cpp": "npm:^6.0.3"
+    "@codemirror/lang-html": "npm:^6.4.11"
+    "@codemirror/lang-javascript": "npm:^6.2.2"
+    "@codemirror/lang-jinja": "npm:^6.0.0"
+    "@codemirror/lang-json": "npm:^6.0.1"
+    "@codemirror/lang-python": "npm:^6.2.1"
+    "@codemirror/lang-rust": "npm:^6.0.2"
+    "@codemirror/lang-sql": "npm:^6.10.0"
     "@codemirror/language": "npm:^6.9.0"
+    "@codemirror/legacy-modes": "npm:^6.5.2"
     "@codemirror/state": "npm:^6.5.0"
     "@codemirror/theme-one-dark": "npm:^6.1.2"
     "@mdit/plugin-katex": "npm:^0.24.1"
-    "@quasar/extras": "npm:^1.17.0"
     "@resvg/resvg-wasm": "npm:^2.6.2"
-    "@taskyon/taskyon": "workspace:*"
-    "@taskyon/tyclient": "workspace:*"
-    "@vueuse/core": "npm:^10.10.0"
-    axios: "npm:^1.15.0"
+    "@vueuse/core": "npm:^14.2.1"
     codemirror: "npm:^6.0.1"
+    codemirror-lang-mermaid: "npm:^0.5.0"
     echarts: "npm:^6.0.0"
     fast-equals: "npm:^5.0.1"
     fflate: "npm:^0.8.2"
-    js-yaml: "npm:^4.1.0"
-    json-schema: "npm:^0.4.0"
     leaflet: "npm:^1.9.4"
     maplibre-gl: "npm:^5.23.0"
+    markdown-it: "npm:^14.1.0"
+    markdown-it-abbr: "npm:^2.0.0"
+    markdown-it-container: "npm:^4.0.0"
+    markdown-it-deflist: "npm:^3.0.0"
+    markdown-it-emoji: "npm:^3.0.0"
+    markdown-it-footnote: "npm:^4.0.0"
+    markdown-it-ins: "npm:^4.0.0"
+    markdown-it-mark: "npm:^4.0.0"
+    markdown-it-sub: "npm:^2.0.0"
+    markdown-it-sup: "npm:^2.0.0"
+    mathjs: "npm:^11.8.2"
+    mermaid: "npm:^11.6.0"
     pmtiles: "npm:^4.4.1"
     prismjs: "npm:^1.30.0"
     qrcode: "npm:^1.5.4"
-    quasar: "npm:^2.17.0"
-    rumoca: "https://assets.taskyon.space/rumoca-0.8.12.b8.tgz"
-    vue: "npm:^3.5.22"
+    rumoca: "npm:^0.8.13"
     vue-codemirror: "npm:^6.1.1"
-    yaml: "npm:^2.3.4"
-    zod: "npm:^4.0.0-beta.20250505T195954"
   languageName: unknown
   linkType: soft
 
@@ -4904,7 +4916,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@taskyon/taskyon@workspace:*, @taskyon/taskyon@workspace:packages/taskyon":
+"@taskyon/taskyon@workspace:packages/taskyon":
   version: 0.0.0-use.local
   resolution: "@taskyon/taskyon@workspace:packages/taskyon"
   dependencies:
@@ -5850,6 +5862,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/web-bluetooth@npm:^0.0.21":
+  version: 0.0.21
+  resolution: "@types/web-bluetooth@npm:0.0.21"
+  checksum: 10c0/5f47c5ec452ca31e6a9b44c8aaa54b66c4f57d4aca00166c45902a3883139580e14b254b774172ff982ba4458cc444b5aa59bb4573c2fd34562cfa599721f8e4
+  languageName: node
+  linkType: hard
+
 "@types/wicg-file-system-access@npm:^2023.10.3":
   version: 2023.10.6
   resolution: "@types/wicg-file-system-access@npm:2023.10.6"
@@ -6716,10 +6735,30 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@vueuse/core@npm:^14.2.1":
+  version: 14.2.1
+  resolution: "@vueuse/core@npm:14.2.1"
+  dependencies:
+    "@types/web-bluetooth": "npm:^0.0.21"
+    "@vueuse/metadata": "npm:14.2.1"
+    "@vueuse/shared": "npm:14.2.1"
+  peerDependencies:
+    vue: ^3.5.0
+  checksum: 10c0/cd6f01fb074d423bdab324d8f262ff2597d6ce397d6fd139f3fe741e3e4f636b3481456e12b265021bf3626026410df1c3635981c1912648d80581cf066a3bf4
+  languageName: node
+  linkType: hard
+
 "@vueuse/metadata@npm:10.11.1":
   version: 10.11.1
   resolution: "@vueuse/metadata@npm:10.11.1"
   checksum: 10c0/c252056aa7e7bd5d207791a2e3b415dcb81fef5b24bfe18cefdec026ae9b7e5a5813100d2e55262fc66feafe15ccdc11a69351d724d848fafe4b3b052e559283
+  languageName: node
+  linkType: hard
+
+"@vueuse/metadata@npm:14.2.1":
+  version: 14.2.1
+  resolution: "@vueuse/metadata@npm:14.2.1"
+  checksum: 10c0/f36571b6898876242dd20a621d343caa1804fabeb14cacd89571fedd0d56885066587aa6b0c6f98108d3d26e1876e61913629cbc70e3776949326f312e6ad769
   languageName: node
   linkType: hard
 
@@ -6729,6 +6768,15 @@ __metadata:
   dependencies:
     vue-demi: "npm:>=0.14.8"
   checksum: 10c0/22c4f04be8fdb5e95535cf20f13956fc1f3707540f3730282905e6f9b24f314ada28292e82f4401d88b2c1fcf7fc7203011260958f517abc2b756779243147e3
+  languageName: node
+  linkType: hard
+
+"@vueuse/shared@npm:14.2.1":
+  version: 14.2.1
+  resolution: "@vueuse/shared@npm:14.2.1"
+  peerDependencies:
+    vue: ^3.5.0
+  checksum: 10c0/c646b6313ba1092f858dfda13aa84750844661919632346202a2ed9e640febd0898953d2cdaa3e42ea174bea95ad0ba61295ce5bc32a49502f1583f1f3471bd7
   languageName: node
   linkType: hard
 
@@ -18368,10 +18416,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rumoca@https://assets.taskyon.space/rumoca-0.8.12.b8.tgz":
-  version: 0.8.12
-  resolution: "rumoca@https://assets.taskyon.space/rumoca-0.8.12.b8.tgz"
-  checksum: 10c0/3b6f0dafafa8e0557ae43e831002eb5a4bf14282f8ec375e2683e338cfba97689492b8ca05fa12c4243d659623f45fc7f31f7d59c669ccbee68056dec3bdcd5e
+"rumoca@npm:^0.8.13":
+  version: 0.8.13
+  resolution: "rumoca@npm:0.8.13"
+  checksum: 10c0/3eb46d002aa23fbaf718375e21b52e506310c7b267ad8a125a1e9e892cdc1310db9e5672ce0370ebd21edb3f58946174fdffcdea3bde8fd21846c87638c01b98
   languageName: node
   linkType: hard
 
@@ -19971,21 +20019,11 @@ __metadata:
   dependencies:
     "@ai-sdk/openai": "npm:^3.0.13"
     "@ai-sdk/openai-compatible": "npm:^2.0.16"
-    "@codemirror/lang-cpp": "npm:^6.0.3"
-    "@codemirror/lang-html": "npm:^6.4.11"
-    "@codemirror/lang-javascript": "npm:^6.2.2"
-    "@codemirror/lang-jinja": "npm:^6.0.0"
-    "@codemirror/lang-json": "npm:^6.0.1"
-    "@codemirror/lang-python": "npm:^6.2.1"
-    "@codemirror/lang-rust": "npm:^6.0.2"
-    "@codemirror/lang-sql": "npm:^6.10.0"
-    "@codemirror/legacy-modes": "npm:^6.5.2"
     "@electric-sql/pglite": "npm:0.3.14"
     "@eslint/js": "npm:^9.17.0"
     "@huggingface/transformers": "npm:^4.0.1"
     "@intlify/unplugin-vue-i18n": "npm:^11.0.3"
     "@langchain/codemirror-json-schema": "npm:^0.7.9"
-    "@mdit/plugin-katex": "npm:^0.24.1"
     "@mozilla/readability": "npm:^0.5.0"
     "@msgpack/msgpack": "npm:^3.1.2"
     "@noble/ed25519": "npm:^2.1.0"
@@ -20025,7 +20063,6 @@ __metadata:
     ai: "npm:^6.0.42"
     autoprefixer: "npm:^10.4.2"
     axios: "npm:^1.15.0"
-    codemirror-lang-mermaid: "npm:^0.5.0"
     comlink: "npm:^4.4.1"
     cypress: "npm:^15.9.0"
     dependency-cruiser: "npm:^16.8.0"
@@ -20043,24 +20080,11 @@ __metadata:
     lz-string: "npm:^1.5.0"
     madge: "npm:^8.0.0"
     mammoth: "npm:^1.6.0"
-    markdown-it: "npm:^14.1.0"
-    markdown-it-abbr: "npm:^2.0.0"
-    markdown-it-container: "npm:^4.0.0"
-    markdown-it-deflist: "npm:^3.0.0"
-    markdown-it-emoji: "npm:^3.0.0"
-    markdown-it-footnote: "npm:^4.0.0"
-    markdown-it-ins: "npm:^4.0.0"
-    markdown-it-mark: "npm:^4.0.0"
-    markdown-it-sub: "npm:^2.0.0"
-    markdown-it-sup: "npm:^2.0.0"
-    mathjs: "npm:^11.8.2"
-    mermaid: "npm:^11.6.0"
     openai: "npm:^6.16.0"
     path: "npm:^0.12.7"
     pdfjs-dist: "npm:^4.3.136"
     pinia: "npm:^3.0.1"
     prettier: "npm:^3.3.3"
-    prismjs: "npm:^1.30.0"
     pyodide: "npm:^0.29.3"
     quasar: "npm:^2.17.0"
     sort-package-json: "npm:^3.0.0"
