@@ -5450,7 +5450,7 @@ __metadata:
     pmtiles: "npm:^4.4.1"
     prismjs: "npm:^1.30.0"
     qrcode: "npm:^1.5.4"
-    rumoca: "npm:^0.8.13"
+    rumoca: "file:../rumoca/pkg/dev-core"
     vue-codemirror: "npm:^6.1.1"
   languageName: unknown
   linkType: soft
@@ -19477,10 +19477,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rumoca@npm:^0.8.13":
+"rumoca@file:../rumoca/pkg/dev-core::locator=%40taskyon%2Fshared%40workspace%3Apackages%2Fshared":
   version: 0.8.13
-  resolution: "rumoca@npm:0.8.13"
-  checksum: 10c0/3eb46d002aa23fbaf718375e21b52e506310c7b267ad8a125a1e9e892cdc1310db9e5672ce0370ebd21edb3f58946174fdffcdea3bde8fd21846c87638c01b98
+  resolution: "rumoca@file:../rumoca/pkg/dev-core#../rumoca/pkg/dev-core::hash=3bd53c&locator=%40taskyon%2Fshared%40workspace%3Apackages%2Fshared"
+  checksum: 10c0/656a5fe1fa807cbc7f97b39d7d2d1a2f4ec1da043ea434c91e30e6a7c0996a9ea8bb8ea5629f4a8e65262ffba0420711d18f319a1b77a61393b6e881686d44ce
   languageName: node
   linkType: hard
 

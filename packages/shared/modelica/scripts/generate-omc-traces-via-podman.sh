@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TASKYON_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+TASKYON_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 RUMOCA_DIR="$TASKYON_ROOT/packages/rumoca"
 WRAPPER="$TASKYON_ROOT/packages/shared/modelica/scripts/omc-via-podman.sh"
 MSL_VERSION="${MSL_VERSION:-4.1.0}"

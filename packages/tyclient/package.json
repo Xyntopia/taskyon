@@ -1,6 +1,6 @@
 {
   "name": "@taskyon/tyclient",
-  "version": "0.5.1",
+  "version": "0.5.3",
   "license": "MIT",
   "main": "./dist/tyclient.js",
   "module": "./dist/tyclient.mjs",
@@ -15,6 +15,10 @@
   "files": [
     "dist/**/*"
   ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "sideEffects": false,
   "peerDependencies": {
     "zod": "^4.0.0"

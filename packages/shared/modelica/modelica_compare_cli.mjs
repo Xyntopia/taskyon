@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createRequire } from 'node:module'
-import { readFile, writeFile, mkdir, access } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, access, readdir } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
 import readline from 'node:readline/promises'
@@ -11,7 +11,8 @@ import * as rumoca from 'rumoca'
 import { strFromU8, unzipSync } from 'fflate'
 
 const require = createRequire(import.meta.url)
-const SCRIPT_DIR = dirname(new URL(import.meta.url).pathname)
+const SCRIPT_PATH = new URL(import.meta.url).pathname
+const SCRIPT_DIR = dirname(SCRIPT_PATH)
 const PROJECT_ROOT = resolve(SCRIPT_DIR, '../../..')
 const TMP_ROOT = join(PROJECT_ROOT, '.tmp')
 const OMC_CACHE_DIR = join(TMP_ROOT, 'modelica-omc-cache')
@@ -20,6 +21,7 @@ const DEFAULT_TARGETS_FILE = join(
   PROJECT_ROOT,
   'packages/rumoca/crates/rumoca-test-msl/tests/msl_tests/msl_simulation_targets_180.json',
 )
+const DEFAULT_RANDOM_SEED = 20260507
 
 function usage() {
   return `
@@ -27,6 +29,8 @@ Modelica solver-vs-OMC comparator (Node CLI)
 
 Usage:
   node packages/shared/modelica/modelica_compare_cli.mjs run [options]
+  node packages/shared/modelica/modelica_compare_cli.mjs probe-compile --model <qualified.name> [options]
+  node packages/shared/modelica/modelica_compare_cli.mjs probe-source --model <qualified.name> --source-file <path> [options]
 
 Options:
   --msl-zip <path>                     MSL zip file (default: packages/rumoca/target/msl/ModelicaStandardLibrary-4.1.0.zip)
@@ -34,8 +38,12 @@ Options:
   --targets-file <path>                JSON model list (array or object.model_names)
   --max-models <n>                     Limit model count
   --mode <full|random-stop>            Evaluation mode (default: full)
-  --seed <n>                           Random seed for random-stop (default: current time)
+  --seed <n>                           Random seed for random-stop (default: 20260507)
   --stop-threshold-percent <n>         Stop threshold (default: 25)
+  --always-continue                    Never stop for prompts/failures in random-stop mode
+  --compile-only                       Only validate Rumoca compilation (skip OMC/solver/compare)
+  --compile-isolate                    Compile-only: force per-model subprocess isolation (slower)
+  --compile-debug                      Compile-only: include per-plan compile timing/details in logs
   --t0 <n>                             Solver t0 (default: 0)
   --tf <n>                             Solver tf (default: 5)
   --dt <n>                             Solver dt (default: 0.01)
@@ -47,6 +55,7 @@ Options:
   --json                               Emit final JSON summary
   --debug-bundle                       Write debug bundle(s); auto-enabled for single-model runs
   --event-debug-vars <csv>             Comma-separated variable names to trace in solver event log
+  --source-file <path>                 Used by probe-source: Modelica source file path
   --help                               Show help
 `.trim()
 }
@@ -59,8 +68,12 @@ function parseArgs(argv) {
     targetsFile: '',
     maxModels: 0,
     mode: 'full',
-    seed: Date.now(),
+    seed: DEFAULT_RANDOM_SEED,
     stopThresholdPercent: 25,
+    alwaysContinue: false,
+    compileOnly: false,
+    compileIsolate: false,
+    compileDebug: false,
     t0: 0,
     tf: 5,
     dt: 0.01,
@@ -72,6 +85,7 @@ function parseArgs(argv) {
     json: false,
     debugBundle: false,
     eventDebugVarsCsv: '',
+    sourceFile: '',
     help: false,
   }
   const positional = []
@@ -91,6 +105,22 @@ function parseArgs(argv) {
     }
     if (token === '--help') {
       options.help = true
+      continue
+    }
+    if (token === '--always-continue') {
+      options.alwaysContinue = true
+      continue
+    }
+    if (token === '--compile-only') {
+      options.compileOnly = true
+      continue
+    }
+    if (token === '--compile-isolate') {
+      options.compileIsolate = true
+      continue
+    }
+    if (token === '--compile-debug') {
+      options.compileDebug = true
       continue
     }
     const key = token.slice(2)
@@ -114,6 +144,7 @@ function parseArgs(argv) {
     else if (key === 'omc-wrapper') options.omcWrapper = resolve(value)
     else if (key === 'omc-msl-dir') options.omcMslDir = resolve(value)
     else if (key === 'event-debug-vars') options.eventDebugVarsCsv = value
+    else if (key === 'source-file') options.sourceFile = resolve(value)
     else throw new Error(`Unknown option: --${key}`)
   }
   options.command = positional[0] ?? ''
@@ -215,6 +246,60 @@ async function loadMslZip(mslZipPath) {
   }
 }
 
+async function ensureOmcMslDirFromZip({ omcMslDir, mslZip }) {
+  const targetDir = resolve(omcMslDir)
+  const zipPath = resolve(mslZip)
+  const targetParent = dirname(targetDir)
+  logRaw(`OMC MSL target dir: ${targetDir}`)
+  logRaw(`OMC MSL target parent: ${targetParent}`)
+  logRaw(`MSL zip source: ${zipPath}`)
+
+  if (await fileExists(targetDir)) {
+    const existingBase = await resolveOmcMslBaseDir(targetDir)
+    if (await hasRequiredOmcMslFiles(existingBase)) {
+      logRaw(`OMC MSL dir already exists, reusing: ${targetDir}`)
+      logRaw(`OMC MSL validated at base: ${existingBase}`)
+      return targetDir
+    }
+    logRaw(`Existing OMC MSL dir is incomplete, re-extracting from zip`)
+  }
+
+  if (!(await fileExists(zipPath))) {
+    throw new Error(`OMC MSL dir not found and MSL zip missing: dir=${targetDir}, zip=${zipPath}`)
+  }
+
+  logRaw(`OMC MSL dir missing, extracting zip into: ${targetParent}`)
+  const zipBytes = new Uint8Array(await readFile(zipPath))
+  const archive = unzipSync(zipBytes)
+  await ensureDir(targetDir)
+
+  let extractedFiles = 0
+  for (const [entryPath, content] of Object.entries(archive)) {
+    if (!entryPath || entryPath.endsWith('/')) {
+      continue
+    }
+    const outPath = join(targetParent, entryPath)
+    await ensureDir(dirname(outPath))
+    await writeFile(outPath, content)
+    extractedFiles += 1
+  }
+
+  if (!(await fileExists(targetDir))) {
+    throw new Error(`Failed to materialize OMC MSL dir from zip: ${targetDir}`)
+  }
+  const extractedBase = await resolveOmcMslBaseDir(targetDir)
+  if (!(await hasRequiredOmcMslFiles(extractedBase))) {
+    const required = requiredOmcMslRelativePaths().map((p) => join(extractedBase, p))
+    throw new Error(
+      `OMC MSL extracted but required files are missing.\nbase=${extractedBase}\nmissing_any_of=${required.join(', ')}`,
+    )
+  }
+  logRaw(`Extracted ${extractedFiles} files into: ${targetParent}`)
+  logRaw(`OMC MSL dir ready: ${targetDir}`)
+  logRaw(`OMC MSL validated at base: ${extractedBase}`)
+  return targetDir
+}
+
 function flattenClasses(nodes, out = []) {
   for (const raw of nodes) {
     const node = asObj(raw)
@@ -225,6 +310,12 @@ function flattenClasses(nodes, out = []) {
     flattenClasses(children, out)
   }
   return out
+}
+
+function collectKnownClassNames(listClassesRaw) {
+  const listParsed = parseJson(listClassesRaw)
+  const roots = Array.isArray(listParsed?.classes) ? listParsed.classes : []
+  return new Set(flattenClasses(roots))
 }
 
 function isRootStandaloneExampleModel(modelName) {
@@ -282,6 +373,28 @@ function safeName(text) {
   return String(text || '')
     .replaceAll(/[^a-zA-Z0-9_.-]/g, '_')
     .slice(0, 200)
+}
+
+function nowIso() {
+  return new Date().toISOString()
+}
+
+const RUN_LOG_BUFFER = []
+const MAX_RUN_LOG_LINES = 20000
+
+function pushRunLog(line) {
+  RUN_LOG_BUFFER.push(line)
+  if (RUN_LOG_BUFFER.length > MAX_RUN_LOG_LINES) RUN_LOG_BUFFER.shift()
+}
+
+function logRaw(message) {
+  const line = `[modelica_compare_cli] ${message}`
+  console.log(line)
+  pushRunLog(line)
+}
+
+function logInfo(message) {
+  logRaw(`${nowIso()} ${message}`)
 }
 
 function parseCsvRow(line) {
@@ -620,6 +733,34 @@ async function runOmcScript(omcWrapper, mosPath, cwd) {
   })
 }
 
+async function resolveOmcMslBaseDir(mslDir) {
+  const direct = resolve(mslDir)
+  const nestedHuman = join(direct, 'Modelica 4.1.0')
+  const nestedArchive = join(direct, 'ModelicaStandardLibrary-4.1.0')
+  if (await fileExists(join(direct, 'Modelica/package.mo'))) return direct
+  if (await fileExists(join(nestedHuman, 'Modelica/package.mo'))) return nestedHuman
+  if (await fileExists(join(nestedArchive, 'Modelica/package.mo'))) return nestedArchive
+  return direct
+}
+
+function requiredOmcMslRelativePaths() {
+  return [
+    'Complex.mo',
+    'Modelica/package.mo',
+    'ModelicaServices/package.mo',
+    'ModelicaReference/package.mo',
+    'ModelicaTestOverdetermined.mo',
+  ]
+}
+
+async function hasRequiredOmcMslFiles(mslBaseDir) {
+  const required = requiredOmcMslRelativePaths()
+  for (const rel of required) {
+    if (!(await fileExists(join(mslBaseDir, rel)))) return false
+  }
+  return true
+}
+
 function mslLoadLines(mslDir) {
   return [
     join(mslDir, 'Complex.mo'),
@@ -640,9 +781,11 @@ async function loadOrCreateOmcTrace({ modelName, sim, omcWrapper, omcMslDir }) {
     const trace = normalizeOmcTrace(raw)
     try {
       validateTraceShape(trace, { modelName, t0: sim.t0, tf: sim.tf, dt: sim.dt, sourcePath: cachePath })
+      logInfo(`[${modelName}] OMC cache hit: valid cached reference found, skipping OMC recomputation`)
       return { trace, cachePath, fromCache: true }
     } catch {
       // stale or malformed cache entry; regenerate
+      logInfo(`[${modelName}] OMC cache hit but invalid trace shape, regenerating reference`)
     }
   }
   const runDir = join(OMC_CACHE_DIR, `${safeName(modelName)}__run`)
@@ -650,14 +793,36 @@ async function loadOrCreateOmcTrace({ modelName, sim, omcWrapper, omcMslDir }) {
   const fileNamePrefix = safeName(modelName)
   const csvName = `${fileNamePrefix}_res.csv`
   const mosPath = join(runDir, `run_${Date.now()}.mos`)
+  const mslBaseDir = await resolveOmcMslBaseDir(omcMslDir)
+  logRaw(`OMC MSL load base: ${mslBaseDir}`)
+  if (!(await hasRequiredOmcMslFiles(mslBaseDir))) {
+    const required = requiredOmcMslRelativePaths().map((p) => join(mslBaseDir, p))
+    throw new Error(
+      `OMC MSL base is missing required files before simulation.\nbase=${mslBaseDir}\nrequired=${required.join(', ')}`,
+    )
+  }
   const script = [
-    ...mslLoadLines(omcMslDir),
+    ...mslLoadLines(mslBaseDir),
     `simulate(${modelName}, startTime=${sim.t0}, stopTime=${sim.tf}, outputFormat="csv", fileNamePrefix="${fileNamePrefix}");`,
     'getErrorString();',
   ].join('\n')
   await writeFile(mosPath, script, 'utf8')
-  await runOmcScript(omcWrapper, mosPath, runDir)
+  const omcRun = await runOmcScript(omcWrapper, mosPath, runDir)
   const csvPath = join(runDir, csvName)
+  if (!(await fileExists(csvPath))) {
+    const runDirEntries = await readDirSafe(runDir)
+    throw new Error(
+      [
+        `OMC did not produce expected CSV: ${csvPath}`,
+        `model=${modelName}`,
+        `mos=${mosPath}`,
+        `run_dir=${runDir}`,
+        `run_dir_entries=${runDirEntries.join(', ') || '(empty)'}`,
+        `omc_stdout=${(omcRun.stdout || '').trim() || '(empty)'}`,
+        `omc_stderr=${(omcRun.stderr || '').trim() || '(empty)'}`,
+      ].join('\n'),
+    )
+  }
   const csvContent = await readFile(csvPath, 'utf8')
   const trace = normalizeOmcTrace(parseOmcCsv(csvContent))
   validateTraceShape(trace, { modelName, t0: sim.t0, tf: sim.tf, dt: sim.dt, sourcePath: csvPath })
@@ -665,30 +830,24 @@ async function loadOrCreateOmcTrace({ modelName, sim, omcWrapper, omcMslDir }) {
   return { trace, cachePath, fromCache: false }
 }
 
-async function runSolverForModel({ modelName, sourceModelica, templateSource, solverSource, sim, debug }) {
-  const normalizedSource = withLibraryContext(modelName, sourceModelica)
-  const shortName = resolveModelName(modelName)
-  let compiledRaw = rumoca.compile_with_source_roots(normalizedSource, shortName, '{}')
-  let compiled = parseJson(compiledRaw)
-  let dae = selectDaeForTemplate(compiled, true)
-
-  if (!dae) {
-    const preparedError = asString(compiled?.dae_prepared_error)
-    const diagnostics = asObj(compiled?.dae_prepared_diagnostics) ?? {}
-    const compileFailureText = `${preparedError}\n${JSON.stringify(diagnostics)}`
-    if (/Duplicate class\s+'[^']+'\s+found in\s+'input\.mo'/i.test(compileFailureText)) {
-      compiledRaw = rumoca.compile_with_source_roots('', modelName, '{}')
-      compiled = parseJson(compiledRaw)
-      dae = selectDaeForTemplate(compiled, true)
-    }
+async function readDirSafe(path) {
+  try {
+    return await readdir(path)
+  } catch {
+    return []
   }
+}
+
+async function runSolverForModel({ modelName, sourceModelica, templateSource, solverSource, sim, debug }) {
+  const { compiled, dae } = compileModelForTemplate({ modelName, sourceModelica })
 
   if (!dae) {
     const preparedStatus = asString(compiled?.dae_prepared_status)
     const preparedError = asString(compiled?.dae_prepared_error)
     const diagnostics = asObj(compiled?.dae_prepared_diagnostics) ?? {}
+    const planErrors = Array.isArray(compiled?.__compile_plan_errors) ? compiled.__compile_plan_errors : []
     throw new Error(
-      `compile returned no usable DAE for ${modelName}: dae_prepared_status=${preparedStatus || 'n/a'}, dae_prepared_error=${preparedError || 'n/a'}, diagnostics=${JSON.stringify(diagnostics).slice(0, 500)}`,
+      `compile returned no usable DAE for ${modelName}: dae_prepared_status=${preparedStatus || 'n/a'}, dae_prepared_error=${preparedError || 'n/a'}, diagnostics=${JSON.stringify(diagnostics).slice(0, 500)}${planErrors.length ? `, plan_errors=${planErrors.join(' || ')}` : ''}`,
     )
   }
   const rendered = String(rumoca.render_template(JSON.stringify(dae), templateSource) || '')
@@ -697,7 +856,7 @@ async function runSolverForModel({ modelName, sourceModelica, templateSource, so
     runFn = new Function(
       'params',
       'context',
-      `${rendered}\n${solverSource}\nif (typeof Model !== 'function') throw new Error('Model() missing'); if (typeof simulateModel !== 'function') throw new Error('simulateModel() missing'); const __model = Model(); if (__model && typeof __model.configureDebug === 'function') { __model.configureDebug({ enabled: !!context.enableEventDebug, vars: Array.isArray(context.debugVars) ? context.debugVars : [], maxEvents: context.maxDebugEvents }); } const __result = simulateModel(params, context, __model); if (__result && __model && typeof __model.getDebugEvents === 'function') { __result.__debugEvents = __model.getDebugEvents(); } return __result;`,
+      `${rendered}\n${solverSource}\nif (typeof Model !== 'function') throw new Error('Model() missing'); if (typeof simulateModel !== 'function') throw new Error('simulateModel() missing'); const __rumoca_named_arg__ = (value, fallback) => (typeof value === 'undefined' ? fallback : value); const __rumocaIntervalDt = Number(params?.sim?.dt); const interval = () => __rumocaIntervalDt; const __model = Model(); if (__model && typeof __model.configureDebug === 'function') { __model.configureDebug({ enabled: !!context.enableEventDebug, vars: Array.isArray(context.debugVars) ? context.debugVars : [], maxEvents: context.maxDebugEvents }); } const __result = simulateModel(params, context, __model); if (__result && __model && typeof __model.getDebugEvents === 'function') { __result.__debugEvents = __model.getDebugEvents(); } return __result;`,
     )
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
@@ -738,12 +897,340 @@ async function runSolverForModel({ modelName, sourceModelica, templateSource, so
   return { result, rendered, dae, debugEvents: Array.isArray(result?.__debugEvents) ? result.__debugEvents : [] }
 }
 
+function compileModelForTemplateDetailed({ modelName, sourceModelica }) {
+  const normalizedSource = withLibraryContext(modelName, sourceModelica)
+  const shortName = resolveModelName(modelName)
+  const compilePlans = [
+    { source: normalizedSource, target: shortName },
+    { source: normalizedSource, target: modelName },
+    { source: '', target: modelName },
+    { source: '', target: shortName },
+  ]
+  let compiled = null
+  let dae = null
+  let lastCompiled = null
+  const planErrors = []
+  const planStats = []
+  for (const plan of compilePlans) {
+    const startedAt = Date.now()
+    const label = `plan(source=${plan.source ? 'inline' : 'loaded'}, target=${plan.target})`
+    try {
+      const compiledRaw = rumoca.compile_with_source_roots(plan.source, plan.target, '{}')
+      const candidate = parseJson(compiledRaw)
+      lastCompiled = candidate
+      const candidateDae = selectDaeForTemplate(candidate, true)
+      planStats.push({
+        label,
+        elapsedMs: Date.now() - startedAt,
+        result: candidateDae ? 'dae_ok' : 'no_usable_dae',
+        daePreparedStatus: asString(candidate?.dae_prepared_status) || '',
+        daePreparedError: asString(candidate?.dae_prepared_error) || '',
+      })
+      if (candidateDae) {
+        compiled = candidate
+        dae = candidateDae
+        break
+      }
+      planErrors.push(`${label} returned no usable DAE`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      planStats.push({
+        label,
+        elapsedMs: Date.now() - startedAt,
+        result: 'crashed',
+        error: message,
+      })
+      planErrors.push(`${label} crashed: ${message}`)
+    }
+  }
+  if (!compiled) compiled = lastCompiled
+  if (!compiled) {
+    const error = new Error(
+      `all compile plans failed for ${modelName}: ${planErrors.join(' | ') || 'no diagnostics'}`,
+    )
+    error.planStats = planStats
+    throw error
+  }
+  if (!dae && planErrors.length > 0) {
+    compiled.__compile_plan_errors = planErrors
+  }
+  return { compiled, dae, planStats, planErrors }
+}
+
+function compileModelForTemplate({ modelName, sourceModelica }) {
+  const { compiled, dae } = compileModelForTemplateDetailed({ modelName, sourceModelica })
+  return { compiled, dae }
+}
+
+function isCompilePanicLikeMessage(message) {
+  const text = String(message || '').toLowerCase()
+  return (
+    text.includes('unreachable') ||
+    text.includes('allocation failure') ||
+    text.includes('invalid malloc request')
+  )
+}
+
+async function runCompileProbeInSubprocess({ modelName, mslZip, timeoutMs }) {
+  const args = [SCRIPT_PATH, 'probe-compile', '--msl-zip', resolve(mslZip), '--model', modelName]
+  return await new Promise((resolveProbe, rejectProbe) => {
+    const child = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      child.kill('SIGKILL')
+      rejectProbe(new Error(`compile probe timeout after ${timeoutMs}ms for ${modelName}`))
+    }, timeoutMs)
+    child.stdout.on('data', (buf) => {
+      stdout += String(buf)
+    })
+    child.stderr.on('data', (buf) => {
+      stderr += String(buf)
+    })
+    child.on('error', (error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      rejectProbe(error)
+    })
+    child.on('close', (code) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (code !== 0) {
+        rejectProbe(
+          new Error(
+            `compile probe process failed for ${modelName}: exit=${code}, stderr=${stderr.trim() || '(empty)'}, stdout=${stdout.trim() || '(empty)'}`,
+          ),
+        )
+        return
+      }
+      try {
+        const stdoutLines = String(stdout || '')
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+        const stderrLines = String(stderr || '')
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+        const jsonLine =
+          stdoutLines.length > 0
+            ? stdoutLines[stdoutLines.length - 1]
+            : stderrLines.length > 0
+              ? stderrLines[stderrLines.length - 1]
+              : ''
+        resolveProbe(parseJson(jsonLine))
+      } catch {
+        rejectProbe(
+          new Error(
+            `compile probe returned non-JSON output for ${modelName}: stdout=${(stdout || '').trim().slice(0, 500) || '(empty)'} stderr=${(stderr || '').trim().slice(0, 500) || '(empty)'}`,
+          ),
+        )
+      }
+    })
+  })
+}
+
+async function runCompileProbeWithRetry({ modelName, mslZip, timeoutMs }) {
+  try {
+    return await runCompileProbeInSubprocess({ modelName, mslZip, timeoutMs })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const shouldRetry =
+      message.includes('compile probe returned non-JSON output') || message.includes('compile probe timeout')
+    if (!shouldRetry) throw error
+    logInfo(`[${modelName}] Compile probe retry after transient subprocess output/timeout failure`)
+    return await runCompileProbeInSubprocess({ modelName, mslZip, timeoutMs })
+  }
+}
+
+async function runSingleModelCompileProbe(options) {
+  if (!String(options.modelName || '').trim()) {
+    throw new Error('probe-compile requires --model <qualified.name>')
+  }
+  const init = await initRumocaEngine()
+  const msl = await loadMslZip(options.mslZip)
+  const classInfo = parseJson(rumoca.get_class_info(options.modelName))
+  const sourceModelica = asString(classInfo?.source_modelica)
+  if (!sourceModelica.trim()) {
+    return { status: 'compile_fail', modelName: options.modelName, error: 'missing source_modelica', init, msl }
+  }
+  if (typeof rumoca.compile_check_with_source_roots === 'function') {
+    try {
+      rumoca.compile_check_with_source_roots('', options.modelName, '{}')
+      return { status: 'compiled', modelName: options.modelName, init, msl }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      const stack = error instanceof Error ? error.stack : null
+      return {
+        status: 'compile_fail',
+        modelName: options.modelName,
+        error: message,
+        ...(stack ? { stack } : {}),
+        init,
+        msl,
+      }
+    }
+  }
+  try {
+    const { compiled, dae, planStats } = compileModelForTemplateDetailed({
+      modelName: options.modelName,
+      sourceModelica,
+    })
+    if (!dae) {
+      const preparedStatus = asString(compiled?.dae_prepared_status)
+      const preparedError = asString(compiled?.dae_prepared_error)
+      return {
+        status: 'compile_fail',
+        modelName: options.modelName,
+        error: `compile returned no usable DAE: dae_prepared_status=${preparedStatus || 'n/a'}, dae_prepared_error=${preparedError || 'n/a'}`,
+        init,
+        msl,
+        planStats,
+      }
+    }
+    return { status: 'compiled', modelName: options.modelName, init, msl, planStats }
+  } catch (error) {
+    return {
+      status: 'compile_fail',
+      modelName: options.modelName,
+      error: error instanceof Error ? error.message : String(error),
+      ...(Array.isArray(error?.planStats) ? { planStats: error.planStats } : {}),
+      init,
+      msl,
+    }
+  }
+}
+
+async function runSourceCompileProbe(options) {
+  if (!String(options.modelName || '').trim()) {
+    throw new Error('probe-source requires --model <qualified.name>')
+  }
+  if (!String(options.sourceFile || '').trim()) {
+    throw new Error('probe-source requires --source-file <path>')
+  }
+  const init = await initRumocaEngine()
+  const msl = await loadMslZip(options.mslZip)
+  const sourceModelica = await readFile(resolve(options.sourceFile), 'utf8')
+  if (typeof rumoca.compile_check_with_source_roots === 'function') {
+    try {
+      rumoca.compile_check_with_source_roots(sourceModelica, options.modelName, '{}')
+      return { status: 'compiled', modelName: options.modelName, init, msl }
+    } catch (error) {
+      return {
+        status: 'compile_fail',
+        modelName: options.modelName,
+        error: error instanceof Error ? error.message : String(error),
+        init,
+        msl,
+      }
+    }
+  }
+  try {
+    const { compiled, dae, planStats } = compileModelForTemplateDetailed({
+      modelName: options.modelName,
+      sourceModelica,
+    })
+    if (!dae) {
+      const preparedStatus = asString(compiled?.dae_prepared_status)
+      const preparedError = asString(compiled?.dae_prepared_error)
+      return {
+        status: 'compile_fail',
+        modelName: options.modelName,
+        error: `compile returned no usable DAE: dae_prepared_status=${preparedStatus || 'n/a'}, dae_prepared_error=${preparedError || 'n/a'}`,
+        init,
+        msl,
+        planStats,
+      }
+    }
+    return { status: 'compiled', modelName: options.modelName, init, msl, planStats }
+  } catch (error) {
+    return {
+      status: 'compile_fail',
+      modelName: options.modelName,
+      error: error instanceof Error ? error.message : String(error),
+      ...(Array.isArray(error?.planStats) ? { planStats: error.planStats } : {}),
+      init,
+      msl,
+    }
+  }
+}
+
+function compileCurrentModelInLoadedSession(modelName) {
+  if (typeof rumoca.compile_check_with_source_roots === 'function') {
+    const startedAt = Date.now()
+    try {
+      rumoca.compile_check_with_source_roots('', modelName, '{}')
+      return {
+        status: 'compiled',
+        modelName,
+        planStats: [
+          {
+            label: 'plan(source=loaded,target=qualified,mode=compile_check)',
+            elapsedMs: Date.now() - startedAt,
+            result: 'compiled',
+          },
+        ],
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return {
+        status: 'compile_fail',
+        modelName,
+        error: message,
+        planStats: [
+          {
+            label: 'plan(source=loaded,target=qualified,mode=compile_check)',
+            elapsedMs: Date.now() - startedAt,
+            result: 'crashed',
+            error: message,
+          },
+        ],
+      }
+    }
+  }
+  const classInfo = parseJson(rumoca.get_class_info(modelName))
+  const sourceModelica = asString(classInfo?.source_modelica)
+  if (!sourceModelica.trim()) {
+    return { status: 'compile_fail', modelName, error: 'missing source_modelica' }
+  }
+  try {
+    const { compiled, dae, planStats } = compileModelForTemplateDetailed({
+      modelName,
+      sourceModelica,
+    })
+    if (!dae) {
+      const preparedStatus = asString(compiled?.dae_prepared_status)
+      const preparedError = asString(compiled?.dae_prepared_error)
+      return {
+        status: 'compile_fail',
+        modelName,
+        error: `compile returned no usable DAE: dae_prepared_status=${preparedStatus || 'n/a'}, dae_prepared_error=${preparedError || 'n/a'}`,
+        planStats,
+      }
+    }
+    return { status: 'compiled', modelName, planStats }
+  } catch (error) {
+    return {
+      status: 'compile_fail',
+      modelName,
+      error: error instanceof Error ? error.message : String(error),
+      ...(Array.isArray(error?.planStats) ? { planStats: error.planStats } : {}),
+    }
+  }
+}
+
 async function promptChoice(modelName, deviationPercent) {
   const rl = readline.createInterface({ input, output })
-  const prompt = `High diff for ${modelName} (max ${deviationPercent.toFixed(3)}%). [c]ontinue, [d]ebug+stop, [s]top: `
+  const prompt = `High diff for ${modelName} (max ${deviationPercent.toFixed(3)}%). [c]ontinue, [a]lways continue, [d]ebug+stop, [s]top: `
   const answer = (await rl.question(prompt)).trim().toLowerCase()
   rl.close()
   if (answer === 'c') return 'continue'
+  if (answer === 'a') return 'always_continue'
   if (answer === 'd') return 'debug'
   return 'stop'
 }
@@ -804,12 +1291,13 @@ async function saveProgress(path, data) {
 
 function recordSummary(records) {
   const total = records.length
+  const compiled = records.filter((r) => r.status === 'compiled').length
   const compared = records.filter((r) => r.status === 'compared').length
   const compileFailed = records.filter((r) => r.status === 'compile_fail').length
   const runtimeFailed = records.filter((r) => r.status === 'run_fail').length
   const missingChannels = records.filter((r) => r.status === 'missing_channels').length
   const maxDeviationPercent = records.reduce((acc, r) => Math.max(acc, Number(r.maxDeviationPercent) || 0), 0)
-  return { total, compared, compileFailed, runtimeFailed, missingChannels, maxDeviationPercent }
+  return { total, compiled, compared, compileFailed, runtimeFailed, missingChannels, maxDeviationPercent }
 }
 
 function percentile(sortedValues, p) {
@@ -839,14 +1327,29 @@ function formatCompareReport(summary) {
     .sort((a, b) => (Number(b.maxDeviationPercent) || 0) - (Number(a.maxDeviationPercent) || 0))
     .slice(0, 10)
 
+  const formatFailureLine = (r, idx) => {
+    const modelName = String(r.modelName)
+    const errorText = String(r.error || 'unknown error')
+    const stackFirstLine = String(r.stack || '').split('\n').map((x) => x.trim()).find(Boolean) || ''
+    const debugPath = String(r.debugPath || '')
+    const details = [
+      `${idx + 1}. ${modelName} | ${errorText}`,
+      ...(stackFirstLine ? [`   stack: ${stackFirstLine}`] : []),
+      ...(debugPath ? [`   debug: ${debugPath}`] : []),
+    ]
+    return details.join('\n')
+  }
+
   const lines = [
     'Modelica Compare Report',
+    'NOTE: AI/debug agents should follow the testing strategy in packages/shared/modelica/README.md',
     `Generated: ${new Date().toISOString()}`,
     `Mode: ${String(summary.mode || '')}`,
     `Seed: ${String(summary.seed ?? '')}`,
     '',
     'Summary',
     `- Total models: ${summary.summary.total}`,
+    `- Compiled only: ${Number(summary.summary.compiled || 0)}`,
     `- Compared: ${summary.summary.compared}`,
     `- Compile failed: ${summary.summary.compileFailed}`,
     `- Runtime failed: ${summary.summary.runtimeFailed}`,
@@ -867,12 +1370,12 @@ function formatCompareReport(summary) {
     '',
     'Runtime Failures',
     ...(runFails.length
-      ? runFails.map((r, idx) => `${idx + 1}. ${String(r.modelName)} | ${String(r.error || 'unknown error')}`)
+      ? runFails.map((r, idx) => formatFailureLine(r, idx))
       : ['(none)']),
     '',
     'Compile Failures',
     ...(compileFails.length
-      ? compileFails.map((r, idx) => `${idx + 1}. ${String(r.modelName)} | ${String(r.error || 'unknown error')}`)
+      ? compileFails.map((r, idx) => formatFailureLine(r, idx))
       : ['(none)']),
     '',
     'Missing Channels',
@@ -880,6 +1383,14 @@ function formatCompareReport(summary) {
     '',
     `Progress JSON: ${String(summary.progressPath || '')}`,
     `OMC Cache Dir: ${String(summary.omcCacheDir || '')}`,
+    '',
+    'CLI Log Transcript',
+    ...(Array.isArray(summary.cliLogs) && summary.cliLogs.length > 0 ? summary.cliLogs : ['(none)']),
+    '',
+    'Run JSON',
+    '```json',
+    JSON.stringify(summary, null, 2),
+    '```',
   ]
   return `${lines.join('\n')}\n`
 }
@@ -909,17 +1420,49 @@ async function runComparison(options) {
       )
     }
   }
+  const runId = `run_${Date.now()}_${options.seed}`
+  logInfo(`Starting compare run id=${runId}`)
+  logInfo(
+    `Config mode=${options.mode} seed=${options.seed} maxModels=${options.maxModels || 0} stopThreshold=${options.stopThresholdPercent}% alwaysContinue=${options.alwaysContinue ? 'yes' : 'no'} compileOnly=${options.compileOnly ? 'yes' : 'no'}`,
+  )
+  logInfo(`Config sim t0=${options.t0} tf=${options.tf} dt=${options.dt}`)
+  logInfo(`Path mslZip=${resolve(options.mslZip)}`)
+  logInfo(`Path omcWrapper=${resolve(options.omcWrapper)}`)
 
   const init = await initRumocaEngine()
   const msl = await loadMslZip(options.mslZip)
   const templateSource = await readFile(resolve(options.templateFile), 'utf8')
   const solverSource = await readFile(resolve(options.solverFile), 'utf8')
-  const allTargets = await loadTargetModels({
+  const rawTargets = await loadTargetModels({
     targetsFile: options.targetsFile,
     modelName: options.modelName,
   })
-  const limited = options.maxModels > 0 ? allTargets.slice(0, options.maxModels) : allTargets
-  const targets = options.mode === 'random-stop' ? shuffled(limited, options.seed) : limited
+  const knownClassNames = collectKnownClassNames(rumoca.list_classes())
+  if (String(options.modelName || '').trim()) {
+    if (!knownClassNames.has(options.modelName)) {
+      throw new Error(`Requested --model not found in loaded classes: ${options.modelName}`)
+    }
+  }
+  const allTargets = rawTargets.filter((name) => knownClassNames.has(name))
+  const skippedTargets = rawTargets.length - allTargets.length
+  if (skippedTargets > 0) {
+    const missing = rawTargets.filter((name) => !knownClassNames.has(name))
+    logInfo(`Skipped ${skippedTargets} missing targets (not found in loaded classes)`)
+    logInfo(`Missing targets sample: ${missing.slice(0, 10).join(', ')}`)
+  }
+  const targets =
+    options.mode === 'random-stop'
+      ? shuffled(allTargets, options.seed).slice(0, options.maxModels > 0 ? options.maxModels : allTargets.length)
+      : options.maxModels > 0
+        ? allTargets.slice(0, options.maxModels)
+        : allTargets
+  logInfo(
+    `Selection mode=${options.mode} seed=${options.seed} totalTargets=${allTargets.length} selected=${targets.length}`,
+  )
+  if (options.mode === 'random-stop') {
+    logInfo('Deterministic random selection active (override with --seed <n>)')
+  }
+  logInfo(`Selected targets sample: ${targets.slice(0, 10).join(', ')}`)
   const eventDebugVars = String(options.eventDebugVarsCsv || '')
     .split(',')
     .map((v) => v.trim())
@@ -929,6 +1472,8 @@ async function runComparison(options) {
   const records = []
   let stoppedAtModel = ''
   let debugPath = ''
+  let alwaysContinue = Boolean(options.alwaysContinue)
+  let compileIsolationFallbackActive = false
   for (let i = 0; i < targets.length; i += 1) {
     const modelName = targets[i]
     const startedAt = Date.now()
@@ -939,6 +1484,44 @@ async function runComparison(options) {
       let omcTraceSnapshot = null
     process.stdout.write(`[${i + 1}/${targets.length}] ${modelName}\n`)
     try {
+      if (options.compileOnly) {
+        logInfo(`[${modelName}] Compile-only mode: validating Rumoca compile`)
+        const shouldIsolateCompile = options.compileIsolate || compileIsolationFallbackActive
+        if (compileIsolationFallbackActive) {
+          logInfo(`[${modelName}] Compile-only isolation fallback active after prior panic-like failure`)
+        }
+        const probe = shouldIsolateCompile
+          ? await runCompileProbeWithRetry({
+              modelName,
+              mslZip: options.mslZip,
+              timeoutMs: 120000,
+            })
+          : compileCurrentModelInLoadedSession(modelName)
+        if (options.compileDebug && Array.isArray(probe.planStats)) {
+          for (const stat of probe.planStats) {
+            const base = `[${modelName}] compile-debug ${stat.label} => ${stat.result} in ${Number(stat.elapsedMs) || 0}ms`
+            if (stat.error) {
+              logInfo(`${base}; error=${stat.error}`)
+            } else if (stat.daePreparedStatus || stat.daePreparedError) {
+              logInfo(
+                `${base}; dae_prepared_status=${stat.daePreparedStatus || 'n/a'}; dae_prepared_error=${stat.daePreparedError || 'n/a'}`,
+              )
+            } else {
+              logInfo(base)
+            }
+          }
+        }
+        if (probe.status !== 'compiled') {
+          throw new Error(probe.error || `compile probe failed for ${modelName}`)
+        }
+        records.push({
+          modelName,
+          status: 'compiled',
+          elapsedMs: Date.now() - startedAt,
+        })
+        logInfo(`[${modelName}] Compile-only success`)
+        continue
+      }
       const classInfo = parseJson(rumoca.get_class_info(modelName))
       sourceModelica = asString(classInfo?.source_modelica)
       if (!sourceModelica.trim()) {
@@ -946,26 +1529,33 @@ async function runComparison(options) {
         continue
       }
 
-      const [solverRun, omcRun] = await Promise.all([
-        runSolverForModel({
-          modelName,
-          sourceModelica,
-          templateSource,
-          solverSource,
-          sim: { t0: options.t0, tf: options.tf, dt: options.dt, solverOptions },
-          debug: {
-            enabled: Boolean(options.debugBundle || options.modelName),
-            vars: eventDebugVars,
-            maxEvents: 100000,
-          },
-        }),
-        loadOrCreateOmcTrace({
-          modelName,
-          sim: { t0: options.t0, tf: options.tf, dt: options.dt },
-          omcWrapper: resolve(options.omcWrapper),
-          omcMslDir: resolve(options.omcMslDir),
-        }),
-      ])
+      const omcStart = Date.now()
+      logInfo(`[${modelName}] Step 1/4 running OMC reference simulation`)
+      const omcRun = await loadOrCreateOmcTrace({
+        modelName,
+        sim: { t0: options.t0, tf: options.tf, dt: options.dt },
+        omcWrapper: resolve(options.omcWrapper),
+        omcMslDir: resolve(options.omcMslDir),
+      })
+      logInfo(
+        `[${modelName}] OMC done in ${Date.now() - omcStart}ms (cache=${omcRun.fromCache ? 'hit' : 'miss'}) -> ${omcRun.cachePath}`,
+      )
+
+      const solverStart = Date.now()
+      logInfo(`[${modelName}] Step 2/4 running Rumoca template-based simulation`)
+      const solverRun = await runSolverForModel({
+        modelName,
+        sourceModelica,
+        templateSource,
+        solverSource,
+        sim: { t0: options.t0, tf: options.tf, dt: options.dt, solverOptions },
+        debug: {
+          enabled: Boolean(options.debugBundle || options.modelName),
+          vars: eventDebugVars,
+          maxEvents: 100000,
+        },
+      })
+      logInfo(`[${modelName}] Rumoca run done in ${Date.now() - solverStart}ms`)
       renderedJs = solverRun.rendered
       solverEventLogSnapshot = Array.isArray(solverRun.debugEvents) ? solverRun.debugEvents : []
       omcTraceSnapshot = omcRun.trace
@@ -973,7 +1563,10 @@ async function runComparison(options) {
       const solverTrace = normalizeSolverTrace(solverRun.result)
       solverTraceSnapshot = solverTrace
       validateSolverTrace(solverTrace, { modelName })
+      const compareStart = Date.now()
+      logInfo(`[${modelName}] Step 3/4 comparing Rumoca vs OMC traces`)
       const comparison = compareTraces(omcRun.trace, solverTrace)
+      logInfo(`[${modelName}] Trace comparison done in ${Date.now() - compareStart}ms`)
       if (!comparison) {
         records.push({
           modelName,
@@ -1009,37 +1602,82 @@ async function runComparison(options) {
           ...(comparedDebugPath ? { debugPath: comparedDebugPath } : {}),
         })
       }
+      logInfo(`[${modelName}] Step 4/4 storing progress/results`)
 
       const record = records[records.length - 1]
       const isBad =
         record.status !== 'compared' ||
         Number(record.maxDeviationPercent) >= Number(options.stopThresholdPercent)
       if (options.mode === 'random-stop' && isBad) {
-        const choice = await promptChoice(modelName, Number(record.maxDeviationPercent) || 0)
-        if (choice === 'continue') {
-          // continue
-        } else if (choice === 'debug') {
-          debugPath = await writeDebugBundle({
-            modelName,
-            sourceModelica,
-            renderedJs: solverRun.rendered,
-            daePrepared: solverRun.dae,
-            solverSource,
-            solverTrace,
-            solverEventLog: solverEventLogSnapshot,
-            omcTrace: omcRun.trace,
-            summary: { record, thresholdPercent: options.stopThresholdPercent },
-          })
-          stoppedAtModel = modelName
-          break
+        if (alwaysContinue) {
+          logInfo(`[${modelName}] random-stop guard triggered but continuing due to --always-continue`)
         } else {
-          stoppedAtModel = modelName
-          break
+          const choice = await promptChoice(modelName, Number(record.maxDeviationPercent) || 0)
+          if (choice === 'continue') {
+            // continue
+          } else if (choice === 'always_continue') {
+            alwaysContinue = true
+            options.alwaysContinue = true
+            logInfo(`[${modelName}] Interactive mode switched to always-continue for remaining models`)
+          } else if (choice === 'debug') {
+            debugPath = await writeDebugBundle({
+              modelName,
+              sourceModelica,
+              renderedJs: solverRun.rendered,
+              daePrepared: solverRun.dae,
+              solverSource,
+              solverTrace,
+              solverEventLog: solverEventLogSnapshot,
+              omcTrace: omcRun.trace,
+              summary: { record, thresholdPercent: options.stopThresholdPercent },
+            })
+            stoppedAtModel = modelName
+            break
+          } else {
+            stoppedAtModel = modelName
+            break
+          }
         }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const stack = error instanceof Error ? error.stack : undefined
+      if (options.compileOnly && /unreachable/i.test(message)) {
+        try {
+          logInfo(`[${modelName}] Compile-only panic recovery: reset source roots + retry once`)
+          if (typeof rumoca.clear_source_root_cache === 'function') {
+            rumoca.clear_source_root_cache()
+          }
+          await loadMslZip(options.mslZip)
+          const retryClassInfo = parseJson(rumoca.get_class_info(modelName))
+          const retrySource = asString(retryClassInfo?.source_modelica)
+          if (!retrySource.trim()) {
+            throw new Error('missing source_modelica after panic recovery reset')
+          }
+          const { compiled: retryCompiled, dae: retryDae } = compileModelForTemplate({
+            modelName,
+            sourceModelica: retrySource,
+          })
+          if (!retryDae) {
+            const preparedStatus = asString(retryCompiled?.dae_prepared_status)
+            const preparedError = asString(retryCompiled?.dae_prepared_error)
+            throw new Error(
+              `retry compile produced no DAE: dae_prepared_status=${preparedStatus || 'n/a'}, dae_prepared_error=${preparedError || 'n/a'}`,
+            )
+          }
+          records.push({
+            modelName,
+            status: 'compiled',
+            elapsedMs: Date.now() - startedAt,
+          })
+          logInfo(`[${modelName}] Compile-only recovery retry succeeded`)
+          continue
+        } catch (recoveryError) {
+          const recoveryMessage = recoveryError instanceof Error ? recoveryError.message : String(recoveryError)
+          logInfo(`[${modelName}] Compile-only recovery retry failed: ${recoveryMessage}`)
+        }
+      }
+      logInfo(`[${modelName}] Failure captured: ${message}`)
       let failureDebugPath = ''
       try {
         failureDebugPath = await writeDebugBundle({
@@ -1060,7 +1698,12 @@ async function runComparison(options) {
       } catch {
         failureDebugPath = ''
       }
-      const status = /^Compilation error:/i.test(message) ? 'compile_fail' : 'run_fail'
+      const status =
+        options.compileOnly || /^Compilation error:/i.test(message) ? 'compile_fail' : 'run_fail'
+      if (options.compileOnly && isCompilePanicLikeMessage(message) && !compileIsolationFallbackActive) {
+        compileIsolationFallbackActive = true
+        logInfo(`[${modelName}] Compile-only panic-like failure detected; switching remaining models to isolate mode`)
+      }
       records.push({
         modelName,
         status,
@@ -1069,11 +1712,18 @@ async function runComparison(options) {
         ...(stack ? { stack } : {}),
         ...(failureDebugPath ? { debugPath: failureDebugPath } : {}),
       })
-      if (options.mode === 'random-stop') {
+      if (failureDebugPath) {
+        logInfo(`[${modelName}] Failure debug bundle: ${failureDebugPath}`)
+      }
+      if (options.mode === 'random-stop' && !alwaysContinue) {
         stoppedAtModel = modelName
         break
       }
+      if (options.mode === 'random-stop' && alwaysContinue) {
+        logInfo(`[${modelName}] Failure recorded; continuing due to --always-continue`)
+      }
     } finally {
+      logInfo(`[${modelName}] Writing progress snapshot -> ${progressPath}`)
       await saveProgress(progressPath, {
         startedAt: records[0]?.startedAt || null,
         updatedAt: new Date().toISOString(),
@@ -1098,28 +1748,41 @@ async function runComparison(options) {
     records,
     progressPath,
     omcCacheDir: OMC_CACHE_DIR,
+    cliLogs: RUN_LOG_BUFFER.slice(),
   }
   await saveProgress(progressPath, summary)
   return summary
 }
 
 async function main() {
+  RUN_LOG_BUFFER.length = 0
   const options = parseArgs(process.argv.slice(2))
   if (options.help || !options.command) {
     console.log(usage())
     process.exit(0)
   }
-  if (options.command !== 'run') {
+  if (options.command !== 'run' && options.command !== 'probe-compile' && options.command !== 'probe-source') {
     console.error(`Unsupported command: ${options.command}\n`)
     console.log(usage())
     process.exit(1)
   }
+  if (options.command === 'probe-compile') {
+    process.title = `modelica-compare:probe:${safeName(options.modelName || 'unknown')}`
+    const probe = await runSingleModelCompileProbe(options)
+    console.log(JSON.stringify(probe))
+    return
+  }
+  if (options.command === 'probe-source') {
+    process.title = `modelica-compare:probe-source:${safeName(options.modelName || 'unknown')}`
+    const probe = await runSourceCompileProbe(options)
+    console.log(JSON.stringify(probe))
+    return
+  }
+  process.title = `modelica-compare:run:${safeName(options.mode || 'full')}`
   if (!(await fileExists(resolve(options.omcWrapper)))) {
     throw new Error(`OMC wrapper not found: ${options.omcWrapper}`)
   }
-  if (!(await fileExists(resolve(options.omcMslDir)))) {
-    throw new Error(`OMC MSL dir not found: ${options.omcMslDir}`)
-  }
+  await ensureOmcMslDirFromZip({ omcMslDir: options.omcMslDir, mslZip: options.mslZip })
   const summary = await runComparison(options)
   const report = await writeCompareReport(summary)
   if (options.json) {
