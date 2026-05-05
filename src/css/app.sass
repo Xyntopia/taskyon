@@ -13,11 +13,26 @@ body.body--light
   --button-color: rgb(#{$primary})
   --button-color-rgb: var(--q-primary-rgb)
   --background-color: white
+  --control-button-border: var(--q-primary)
+  --control-button-color: var(--q-primary)
+  --control-button-bg: color-mix(in oklch, var(--q-primary) 6%, transparent)
+  --control-button-pattern-color: color-mix(in oklch, var(--q-primary) 70%, transparent)
 
 body.body--dark
   --button-color: rgb(#{$secondary})
   --button-color-rgb: var(--q-secondary-rgb)
   --background-color: #{$dark}
+  --control-button-border: var(--q-secondary)
+  --control-button-color: white
+  --control-button-bg: color-mix(in oklch, var(--q-primary) 10%, transparent)
+  --control-button-pattern-color: color-mix(in oklch, var(--q-secondary) 75%, transparent)
+
+body
+  --control-button-pattern-scale: 0.5
+  --control-button-pattern-size: calc(180px * var(--control-button-pattern-scale)) calc(180px * var(--control-button-pattern-scale))
+  --control-button-pattern-ring-width: 2px
+  --control-button-pattern-ring-outset: 2px
+  --control-button-pattern-image: repeating-linear-gradient(36deg, transparent 0 calc(38px * var(--control-button-pattern-scale)), var(--control-button-pattern-color) calc(38px * var(--control-button-pattern-scale)) calc(80px * var(--control-button-pattern-scale)), transparent calc(80px * var(--control-button-pattern-scale)) calc(138px * var(--control-button-pattern-scale))), repeating-linear-gradient(-52deg, transparent 0 calc(40px * var(--control-button-pattern-scale)), var(--control-button-pattern-color) calc(20px * var(--control-button-pattern-scale)) calc(78px * var(--control-button-pattern-scale)), transparent calc(78px * var(--control-button-pattern-scale)) calc(90px * var(--control-button-pattern-scale))), repeating-linear-gradient(88deg, transparent 0 calc(70px * var(--control-button-pattern-scale)), color-mix(in oklch, var(--control-button-pattern-color) 58%, transparent) calc(112px * var(--control-button-pattern-scale)) calc(124px * var(--control-button-pattern-scale)), transparent calc(124px * var(--control-button-pattern-scale)) calc(238px * var(--control-button-pattern-scale))), radial-gradient(circle at calc(22px * var(--control-button-pattern-scale)) calc(36px * var(--control-button-pattern-scale)), var(--control-button-pattern-color) 0 calc(60px * var(--control-button-pattern-scale)), transparent calc(60px * var(--control-button-pattern-scale))), radial-gradient(circle at calc(142px * var(--control-button-pattern-scale)) calc(118px * var(--control-button-pattern-scale)), color-mix(in oklch, var(--control-button-pattern-color) 68%, transparent) 0 calc(20px * var(--control-button-pattern-scale)), transparent calc(20px * var(--control-button-pattern-scale)))
 
 // this makes our app disable reload when overscrolling down
 // we simply need to dynamically attach no-ptr to base <html> tag if we want to disable
@@ -138,8 +153,31 @@ html.no-ptr
     color: var(--button-color)
 
   .taskyon-control-button
-    background-color: rgba(var(--button-color-rgb),0.7)
-    color: white
+    position: relative
+    margin-right: 20px
+    background-color: var(--control-button-bg)
+    color: var(--control-button-color)
+    border: 1px solid color-mix(in oklch, var(--control-button-border) 75%, transparent)
+    border-radius: 50%
+    overflow: visible
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--control-button-border) 75%, transparent), inset 0 0 8px color-mix(in oklch, var(--control-button-border) 30%, transparent), 0 0 3px color-mix(in oklch, var(--control-button-border) 45%, transparent), 0 0 8px color-mix(in oklch, var(--control-button-border) 18%, transparent)
+
+    &::before
+      content: ''
+      position: absolute
+      inset: calc(-1 * var(--control-button-pattern-ring-outset))
+      border-radius: inherit
+      padding: var(--control-button-pattern-ring-width)
+      pointer-events: none
+      background-image: var(--control-button-pattern-image)
+      background-attachment: fixed
+      background-position: 0 0
+      background-repeat: repeat
+      background-size: var(--control-button-pattern-size)
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+      -webkit-mask-composite: xor
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+      mask-composite: exclude
 
   .button-group
     border: 1px solid rgb($primary)
@@ -180,6 +218,19 @@ html.no-ptr
   body.body--dark::before
     background-color: black !important
     background: $app-bg-dark
+
+  body.taskyon-control-pattern-debug:not(.within-iframe)::after
+    content: ''
+    position: fixed
+    inset: 0
+    z-index: 9999
+    pointer-events: none
+    opacity: 0.75
+    background-image: var(--control-button-pattern-image)
+    background-attachment: fixed
+    background-position: 0 0
+    background-repeat: repeat
+    background-size: var(--control-button-pattern-size)
 
     // common settings for both:  dark & light  
   body.body--light
