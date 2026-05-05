@@ -59,13 +59,13 @@
               :icons="iconRegistry.chatCompletion as iconMap"
               missing-mode="hide"
               copy-btn
-              @update:model-value="(val) => console.log('updated', val)"
+              @update:model-value="(nextVal) => applyToolchainUpdate(key, nextVal)"
             />
           </template>
           <q-separator size="xl" spaced class="self-stretch" />
           other settings:
           <ObjectView
-            v-model="state.llmSettings"
+            v-model="llmSettingsModel"
             :schema="
               convertZodToJsonSchemaCached(TyProfile.shape.llmSettings, {
                 unrepresentable: 'any',
@@ -113,6 +113,20 @@ const state = useAppStateStore()
 const tystate = useTaskyonStore()
 
 const tabPanelClass = 'column items-center'
+
+const applyToolchainUpdate = (key: string, nextValue: Record<string, unknown> | undefined) => {
+  if (!nextValue) return
+  const target = state.toolchainConfig[key]
+  if (!target) return
+  Object.assign(target, nextValue)
+}
+
+const llmSettingsModel = computed({
+  get: () => state.llmSettings as Record<string, unknown>,
+  set: (nextValue) => {
+    state.patchLLMSettings(nextValue)
+  },
+})
 
 const selectedTab = computed(() => {
   return (route.params.tab as string) || 'aiserviceprovider'

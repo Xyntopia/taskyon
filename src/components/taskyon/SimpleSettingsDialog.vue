@@ -11,7 +11,7 @@
     <template #btnContent><q-tooltip> More AI Settings</q-tooltip></template>
     <div class="q-pa-sm" @click.stop>
       <ObjectView
-        v-model="slimView.reactiveView"
+        v-model="slimViewModel"
         :schema="slimView.jsonSchema as JSONSchema7"
         dense
         :icons="{
@@ -39,39 +39,68 @@ import { iconRegistry, settingsIcons } from 'src/modules/icons'
 import { appConfiguration } from 'src/modules/taskyon/types'
 import { buildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
-import { computed } from 'vue'
+import { computed, reactive } from 'vue'
 import z from 'zod'
 
 const state = useAppStateStore()
 
 const em = computed(() => state.appConfiguration.expertMode)
-const slimView = computed(() => {
-  const sources = [
+const llmPickKeys = ['enableToolChooser'] as const
+const chatCompletionPickKeys = [
+  'use_baseprompt',
+  'use_multimodal',
+  'reasoning_effort',
+  'max_results',
+  'llmTools',
+] as const
+const slimChatKeys = computed(() => (em.value ? chatCompletionPickKeys : ['reasoning_effort']))
+
+const writableLlmSettings = reactive({
+  enableToolChooser: computed({
+    get: () => state.llmSettings.enableToolChooser,
+    set: (value) => state.setLLMSettings('enableToolChooser', value),
+  }),
+})
+
+const slimView = computed(() =>
+  buildSlimView(
     {
       obj: state.appConfiguration,
       schema: z.toJSONSchema(appConfiguration, { unrepresentable: 'any' }),
       pickKeys: ['expertMode'],
     },
     {
-      obj: state.llmSettings,
+      obj: writableLlmSettings,
       schema: z.toJSONSchema(llmSettings, { unrepresentable: 'any' }),
-      pickKeys: [...(em.value ? ['enableToolChooser'] : ['enableToolChooser'])],
+      pickKeys: [...llmPickKeys],
     },
     {
       obj: state.toolchainConfig.chatCompletion!,
       schema: chatCompletionToolParameters,
-      pickKeys: [
-        ...(em.value
-          ? ['use_baseprompt', 'use_multimodal', 'reasoning_effort', 'max_results', 'llmTools']
-          : ['reasoning_effort']),
-      ],
+      pickKeys: [...slimChatKeys.value],
     },
     {
       obj: state.appConfiguration,
       schema: z.toJSONSchema(appConfiguration, { unrepresentable: 'any' }),
       pickKeys: ['primaryColor', 'secondaryColor'],
     },
-  ]
-  return buildSlimView(...sources)
+  ),
+)
+
+const slimViewModel = computed({
+  get: () => {
+    const view = slimView.value.reactiveView as Record<string, unknown>
+    return Object.keys(view).reduce(
+      (acc, key) => {
+        acc[key] = view[key]
+        return acc
+      },
+      {} as Record<string, unknown>,
+    )
+  },
+  set: (nextValue) => {
+    if (!nextValue) return
+    Object.assign(slimView.value.reactiveView, nextValue)
+  },
 })
 </script>
