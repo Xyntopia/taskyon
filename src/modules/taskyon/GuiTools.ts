@@ -1,7 +1,7 @@
 import type { QDialogInputPrompt, QDialogOptions, QDialogSelectionPrompt } from 'quasar'
 import { Dialog } from 'quasar'
 import type { JSONSchema7 } from 'json-schema'
-import { createTool } from '@taskyon/client'
+import { createTool } from '@taskyon/tyclient'
 import { tauriLocalTools } from './TauriLocalTools'
 
 export const simpleDialogSchema = {

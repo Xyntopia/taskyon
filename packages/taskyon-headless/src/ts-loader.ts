@@ -1,4 +1,4 @@
-import { access } from 'node:fs/promises'
+import { access, readFile, stat } from 'node:fs/promises'
 import { dirname, resolve as resolvePath } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -13,6 +13,15 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    const st = await stat(path)
+    return st.isFile()
+  } catch {
+    return false
+  }
+}
+
 async function tryResolveRelative(
   specifier: string,
   parentURL?: string,
@@ -21,10 +30,10 @@ async function tryResolveRelative(
   const parentPath = dirname(fileURLToPath(parentURL))
   const basePath = resolvePath(parentPath, specifier)
 
-  if (await pathExists(basePath)) return pathToFileURL(basePath).href
+  if (await fileExists(basePath)) return pathToFileURL(basePath).href
 
   for (const ext of localExtensions) {
-    if (await pathExists(basePath + ext)) return pathToFileURL(basePath + ext).href
+    if (await fileExists(basePath + ext)) return pathToFileURL(basePath + ext).href
   }
 
   for (const ext of localExtensions) {
@@ -44,6 +53,22 @@ type ResolveResult = {
   url: string
 }
 
+type LoadContext = {
+  format?: string
+}
+
+type LoadResult = {
+  format: string
+  source: string | ArrayBuffer | Uint8Array
+  shortCircuit?: boolean
+}
+
+type DefaultLoad = (
+  url: string,
+  context: LoadContext,
+  nextLoad: DefaultLoad,
+) => Promise<LoadResult>
+
 type DefaultResolve = (
   specifier: string,
   context: ResolveContext,
@@ -55,10 +80,54 @@ export async function resolve(
   context: ResolveContext,
   defaultResolve: DefaultResolve,
 ): Promise<ResolveResult> {
+  if (specifier.endsWith('?raw')) {
+    const bare = specifier.slice(0, -'?raw'.length)
+    if (bare.startsWith('./') || bare.startsWith('../')) {
+      const resolved = await tryResolveRelative(bare, context.parentURL)
+      if (resolved) {
+        return {
+          shortCircuit: true,
+          url: `${resolved}?raw`,
+        }
+      }
+    }
+  }
+
   if (specifier === '@taskyon/taskyon') {
     return {
       shortCircuit: true,
       url: new URL('./shims/taskyon.ts', import.meta.url).href,
+    }
+  }
+
+  if (
+    specifier === '../modules/graph' ||
+    specifier === '../../shared/modules/graph' ||
+    specifier.endsWith('/modules/graph')
+  ) {
+    return {
+      shortCircuit: true,
+      url: new URL('./shims/graph.ts', import.meta.url).href,
+    }
+  }
+
+  if (
+    specifier === '../modules/sandbox/iframeWorker' ||
+    specifier.endsWith('/modules/sandbox/iframeWorker')
+  ) {
+    return {
+      shortCircuit: true,
+      url: new URL('./shims/iframeWorker.ts', import.meta.url).href,
+    }
+  }
+
+  if (
+    specifier === './modelicaLibraryCatalog' ||
+    specifier.endsWith('/modelicaLibraryCatalog')
+  ) {
+    return {
+      shortCircuit: true,
+      url: new URL('./shims/modelicaLibraryCatalog.ts', import.meta.url).href,
     }
   }
 
@@ -73,4 +142,30 @@ export async function resolve(
   }
 
   return defaultResolve(specifier, context, defaultResolve)
+}
+
+export async function load(
+  url: string,
+  context: LoadContext,
+  defaultLoad: DefaultLoad,
+): Promise<LoadResult> {
+  if (url.endsWith('?raw')) {
+    const fileUrl = url.slice(0, -'?raw'.length)
+    const filePath = fileURLToPath(fileUrl)
+    const text = await readFile(filePath, 'utf8')
+    return {
+      format: 'module',
+      shortCircuit: true,
+      source: `export default ${JSON.stringify(text)};`,
+    }
+  }
+  try {
+    return await defaultLoad(url, context, defaultLoad)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message.includes('EISDIR')) {
+      console.error('[ts-loader] EISDIR while loading url:', url)
+    }
+    throw error
+  }
 }

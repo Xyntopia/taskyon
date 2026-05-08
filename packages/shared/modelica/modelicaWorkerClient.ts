@@ -69,6 +69,15 @@ type WorkerResponse = { id: number; ok: true; result: unknown } | { id: number; 
 type Pending = {
   resolve: (value: unknown) => void
   reject: (reason: Error) => void
+  requestType: WorkerRequestNoId['type']
+}
+
+export type ModelicaWorkerActivityEvent = {
+  requestId: number
+  requestType: WorkerRequestNoId['type']
+  label: string
+  status: 'started' | 'finished' | 'failed'
+  error?: string
 }
 
 export type ModelicaWorkerInitInfo = {
@@ -84,6 +93,7 @@ export class ModelicaWorkerClient {
   private worker: Worker
   private nextId = 1
   private pending = new Map<number, Pending>()
+  private activityListeners = new Set<(event: ModelicaWorkerActivityEvent) => void>()
 
   constructor() {
     this.worker = new Worker(new URL('./modelicaWorker.worker.ts', import.meta.url), {
@@ -94,23 +104,95 @@ export class ModelicaWorkerClient {
       const req = this.pending.get(msg.id)
       if (!req) return
       this.pending.delete(msg.id)
-      if (msg.ok) req.resolve(msg.result)
-      else req.reject(new Error(msg.error))
+      if (msg.ok) {
+        this.emitActivity({
+          requestId: msg.id,
+          requestType: req.requestType,
+          label: this.activityLabel(req.requestType),
+          status: 'finished',
+        })
+        req.resolve(msg.result)
+      } else {
+        this.emitActivity({
+          requestId: msg.id,
+          requestType: req.requestType,
+          label: this.activityLabel(req.requestType),
+          status: 'failed',
+          error: msg.error,
+        })
+        req.reject(new Error(msg.error))
+      }
     }
   }
 
   terminate() {
     this.worker.terminate()
-    for (const [, req] of this.pending) {
+    for (const [requestId, req] of this.pending) {
+      this.emitActivity({
+        requestId,
+        requestType: req.requestType,
+        label: this.activityLabel(req.requestType),
+        status: 'failed',
+        error: 'Modelica worker terminated',
+      })
       req.reject(new Error('Modelica worker terminated'))
     }
     this.pending.clear()
   }
 
+  onActivity(listener: (event: ModelicaWorkerActivityEvent) => void): () => void {
+    this.activityListeners.add(listener)
+    return () => {
+      this.activityListeners.delete(listener)
+    }
+  }
+
+  private emitActivity(event: ModelicaWorkerActivityEvent) {
+    this.activityListeners.forEach((listener) => listener(event))
+  }
+
+  private activityLabel(type: WorkerRequestNoId['type']): string {
+    switch (type) {
+      case 'compile_render':
+        return 'Compiling Modelica'
+      case 'extract_diagram':
+        return 'Building diagram'
+      case 'get_class_info':
+        return 'Loading class info'
+      case 'load_msl_zip':
+      case 'merge_msl_zip':
+        return 'Loading libraries'
+      case 'list_classes':
+        return 'Listing classes'
+      case 'parse_source_ast':
+        return 'Parsing AST'
+      case 'clear_libraries':
+        return 'Clearing libraries'
+      case 'init':
+        return 'Initializing worker'
+      case 'get_source_root_document_count':
+        return 'Inspecting source roots'
+      case 'lsp_completion_with_timing':
+        return 'Computing completion'
+      default:
+        return 'Running worker task'
+    }
+  }
+
   private request<T = unknown>(msg: WorkerRequestNoId, transfer: Transferable[] = []): Promise<T> {
     const id = this.nextId++
+    this.emitActivity({
+      requestId: id,
+      requestType: msg.type,
+      label: this.activityLabel(msg.type),
+      status: 'started',
+    })
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject })
+      this.pending.set(id, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+        requestType: msg.type,
+      })
       const withId = { id, ...msg } as WorkerRequest
       this.worker.postMessage(withId, transfer)
     })

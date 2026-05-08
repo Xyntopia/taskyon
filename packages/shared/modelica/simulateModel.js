@@ -1191,6 +1191,43 @@ const simulateModel = (params, context, model) => {
     let c = c0.slice()
     let xDotPrev = new Array(nx).fill(0)
 
+    const collectInvalidVectorEntries = (values, expectedLength) => {
+      if (!Array.isArray(values)) {
+        return { reason: 'non_array', invalid: [{ index: -1, value: values }] }
+      }
+      if (values.length !== expectedLength) {
+        return { reason: 'length_mismatch', invalid: [{ index: -1, value: values.length }] }
+      }
+      const invalid = []
+      for (let i = 0; i < values.length; i++) {
+        const value = values[i]
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          invalid.push({ index: i, value })
+          if (invalid.length >= 12) break
+        }
+      }
+      return { reason: invalid.length > 0 ? 'non_finite' : null, invalid }
+    }
+
+    const assertRuntimeVectors = (phase, tEval, xEval, yEval, uEval) => {
+      const xCheck = collectInvalidVectorEntries(xEval, nx)
+      const yCheck = collectInvalidVectorEntries(yEval, ny)
+      const uCheck = collectInvalidVectorEntries(uEval, nu)
+      const hasError = xCheck.reason || yCheck.reason || uCheck.reason
+      if (!hasError) return
+      const payload = {
+        phase,
+        t: Number(tEval),
+        expected: { nx, ny, nu },
+        issues: {
+          x: xCheck.reason ? { reason: xCheck.reason, invalid: xCheck.invalid } : null,
+          y: yCheck.reason ? { reason: yCheck.reason, invalid: yCheck.invalid } : null,
+          u: uCheck.reason ? { reason: uCheck.reason, invalid: uCheck.invalid } : null,
+        },
+      }
+      throw new Error(`Runtime vector contract failed: ${JSON.stringify(payload)}`)
+    }
+
     if (executionMode === 'static_model') {
       log(
         'Static Modelica model has no dynamic or algebraic equations; emitting constant trajectory',
@@ -1277,6 +1314,7 @@ const simulateModel = (params, context, model) => {
           `Consistent initialization failed (stage=initial_consistent_state, t=${Number(t).toPrecision(8)}): ${tailErrors}`,
         )
       }
+      assertRuntimeVectors('post_initial_consistent_solve', t, x, y, u0)
 
       if (haveEvents) {
         try {
@@ -1286,6 +1324,7 @@ const simulateModel = (params, context, model) => {
           /* empty */
         }
       }
+      assertRuntimeVectors('post_initial_condition_eval', t, x, y, u0)
     }
 
     function conditionsChanged(cPrev, cNext) {
@@ -1394,6 +1433,7 @@ const simulateModel = (params, context, model) => {
           stack: e && e.stack,
         })
       }
+      assertRuntimeVectors('post_reset_projection', tLocal, xNext, yNext, uLocal)
       return { xNext, yNext, cNext }
     }
 
@@ -1483,6 +1523,7 @@ const simulateModel = (params, context, model) => {
         Array.isArray(step.xDot) && step.xDot.length === nx
           ? step.xDot.slice()
           : step.x.map((xv, i) => (xv - xLocal[i]) / dtLocal)
+      assertRuntimeVectors('post_flow_step', tLocal + dtLocal, step.x, step.y, uLocal)
       return {
         xNext: step.x.slice(),
         yNext: step.y.slice(),

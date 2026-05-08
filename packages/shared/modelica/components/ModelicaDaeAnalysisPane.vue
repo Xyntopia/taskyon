@@ -32,6 +32,21 @@
             <q-item-label>{{ hint }}</q-item-label>
           </q-item-section>
         </q-item>
+        <q-item v-if="analysis.constraintBalance">
+          <q-item-section>
+            <q-item-label caption>Constraint balance (dynamic solve slice)</q-item-label>
+            <q-item-label>
+              Unknowns = {{ analysis.constraintBalance.unknownCountDynamic }}, equations =
+              {{ analysis.constraintBalance.equationCountDynamic ?? 'n/a' }},
+              Δ(eq-unk) = {{ analysis.constraintBalance.equationMinusUnknown ?? 'n/a' }}
+            </q-item-label>
+            <q-item-label caption>
+              Partition x/y/z/m/w =
+              {{ analysis.constraintBalance.partitionCounts.x }}/{{ analysis.constraintBalance.partitionCounts.y }}/{{ analysis.constraintBalance.partitionCounts.z }}/{{ analysis.constraintBalance.partitionCounts.m }}/{{ analysis.constraintBalance.partitionCounts.w }}
+            </q-item-label>
+            <q-item-label caption>{{ analysis.constraintBalance.note }}</q-item-label>
+          </q-item-section>
+        </q-item>
       </q-list>
     </q-card-section>
   </q-card>
@@ -43,6 +58,19 @@ export type ModelicaDaeAnalysis = {
   strategy: string
   counts: Array<{ label: string; value: number | string }>
   hints: string[]
+  constraintBalance?: {
+    unknownCountDynamic: number
+    equationCountDynamic: number | null
+    equationMinusUnknown: number | null
+    note: string
+    partitionCounts: {
+      x: number
+      y: number
+      z: number
+      m: number
+      w: number
+    }
+  }
 }
 
 defineProps<{

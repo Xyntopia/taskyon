@@ -201,7 +201,7 @@ export default defineConfig((ctx) => {
 
           ts.compilerOptions ??= {}
           ts.compilerOptions.paths ??= {}
-          ts.compilerOptions.paths['@taskyon/client'] = ['./../packages/tyclient/src/index.ts']
+          ts.compilerOptions.paths['@taskyon/tyclient'] = ['./../packages/tyclient/src/index.ts']
           ts.compilerOptions.paths['@taskyon/p2p-core'] = ['./../packages/p2p-core/src/index.ts']
           ts.compilerOptions.paths['@taskyon/p2p-core/*'] = ['./../packages/p2p-core/src/*']
           ts.compilerOptions.paths['@taskyon/shared'] = ['./../packages/shared']
@@ -237,6 +237,16 @@ export default defineConfig((ctx) => {
       // distDir
 
       extendViteConf(viteConf) {
+        const ignoredWatchGlobs = [
+          '**/.direnv/**',
+          '**/.git/**',
+          '**/.quasar/**',
+          '**/dist/**',
+          '**/dist-*/**',
+          '**/coverage/**',
+          '**/.tmp/**',
+        ]
+
         // *******  get rid of console.log in prod mode ****
         // Add this for dropping console and debugger in production:
         // TODO: https://github.com/evanw/esbuild/issues/3656  only drop console.log/info
@@ -269,7 +279,7 @@ export default defineConfig((ctx) => {
 
         if (Array.isArray(existingAliases)) {
           existingAliases.push(
-            { find: '@taskyon/client', replacement: clientAliasPath },
+            { find: '@taskyon/tyclient', replacement: clientAliasPath },
             { find: /^@taskyon\/p2p-core$/, replacement: p2pCoreAliasPath },
             { find: /^@taskyon\/p2p-core\/(.*)$/, replacement: `${p2pCoreSrcPath}/$1` },
             { find: '@taskyon/shared', replacement: sharedAliasPath },
@@ -281,7 +291,7 @@ export default defineConfig((ctx) => {
           }))
           viteConf.resolve.alias = [
             ...aliasEntries,
-            { find: '@taskyon/client', replacement: clientAliasPath },
+            { find: '@taskyon/tyclient', replacement: clientAliasPath },
             { find: /^@taskyon\/p2p-core$/, replacement: p2pCoreAliasPath },
             { find: /^@taskyon\/p2p-core\/(.*)$/, replacement: `${p2pCoreSrcPath}/$1` },
             { find: '@taskyon/shared', replacement: sharedAliasPath },
@@ -313,6 +323,16 @@ export default defineConfig((ctx) => {
         // [vite:worker-import-meta-url] Invalid value "iife" for option "worker.format" - UMD and IIFE output formats are not supported for code-splitting builds.
         // check https://github.com/vitejs/vite/issues/18585 for more infos
         viteConf.worker.format = 'es' // Ensure workers use ES module format
+
+        viteConf.server = viteConf.server || {}
+        viteConf.server.watch = viteConf.server.watch || {}
+        const existingIgnored = viteConf.server.watch.ignored
+        const normalizedIgnored = Array.isArray(existingIgnored)
+          ? existingIgnored
+          : existingIgnored
+            ? [existingIgnored]
+            : []
+        viteConf.server.watch.ignored = [...normalizedIgnored, ...ignoredWatchGlobs]
         //*******    end of worker config */
       },
       // viteVuePluginOptions: {},

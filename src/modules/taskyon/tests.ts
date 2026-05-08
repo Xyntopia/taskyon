@@ -30,7 +30,7 @@ import {
   usePyodideWebworker,
   zodToYamlString,
 } from '@taskyon/taskyon'
-import { createChatCompletionTask, processTasks } from '@taskyon/client'
+import { createChatCompletionTask, processTasks } from '@taskyon/tyclient'
 import { authenticateWithPopup } from '@taskyon/taskyon/browser'
 import { getDatabase } from '@taskyon/taskyon/db'
 import { until } from '@vueuse/core'

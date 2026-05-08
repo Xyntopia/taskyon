@@ -11,6 +11,8 @@
       results: matShowChart,
       libraryTree: mdiFileTreeOutline,
     }"
+    :tab-titles="dockTabTitles"
+    :tab-title-tooltips="dockTabTitleTooltips"
   >
     <template #actions>
       <ModelicaActionsBar
@@ -48,6 +50,8 @@
         :actual-steps="actualStepCount"
         :event-count="actualEventCount"
         :has-result="hasSimulationResult"
+        :process-busy="globalProcessBusy"
+        :process-label="globalProcessLabel"
         :solver-options="solverOptions"
         :solver-options-schema="solverOptionsSchema"
         @project-selected="onProjectSelected"
@@ -86,12 +90,17 @@
         <div class="row no-wrap fit">
           <div class="col modelica-log-scroll">
             <q-expansion-item
-              v-for="(entry, idx) in modelicaLog"
+              v-for="(entry, idx) in displayedModelicaLog"
               :key="idx"
               dense
               dense-toggle
-              :label="entry.message"
             >
+              <template #header>
+                <div class="row items-center no-wrap full-width q-gutter-xs">
+                  <q-spinner v-if="entry.pending" size="14px" color="primary" />
+                  <div class="ellipsis">{{ entry.message }}</div>
+                </div>
+              </template>
               <pre class="q-ma-none q-pa-xs text-caption">{{ safeYamlDump(entry) }}</pre>
             </q-expansion-item>
           </div>
@@ -131,6 +140,7 @@
         <q-tabs v-model="workspaceTab" dense align="left" narrow-indicator class="dense-tab-strip">
           <q-tab name="modelica" label="Code" no-caps class="dense-tab" />
           <q-tab name="diagram" label="Diagram" no-caps class="dense-tab" />
+          <q-tab name="icon" label="Icon" no-caps class="dense-tab" />
           <q-tab name="help" label="Help" no-caps class="dense-tab" />
         </q-tabs>
         <q-separator />
@@ -197,6 +207,20 @@
                 :qualified-name="diagramTargetQualifiedName"
                 :wasm-loaded="wasmLoaded"
                 :refresh-key="diagramRefreshKey"
+                view-mode="diagram"
+              />
+            </q-card>
+          </q-tab-panel>
+
+          <q-tab-panel name="icon" class="q-pa-none fit">
+            <q-card flat class="fit">
+              <ModelicaDiagramPane
+                :extractor="diagramExtractor"
+                :source="modelicaSource"
+                :qualified-name="diagramTargetQualifiedName"
+                :wasm-loaded="wasmLoaded"
+                :refresh-key="diagramRefreshKey"
+                view-mode="icon"
               />
             </q-card>
           </q-tab-panel>
@@ -225,10 +249,11 @@
                   {{ modelHelpError }}
                 </q-banner>
 
-                <div
+                <SanitizedMarkup
                   v-if="modelHelpHtml.trim().length > 0"
                   class="model-help-doc"
-                  v-html="modelHelpHtml"
+                  :markup="modelHelpHtml"
+                  :sanitize="sanitizeModelHelpHtml"
                 />
                 <pre v-else class="model-help-raw q-ma-none">{{
                   modelHelpRaw || 'No model documentation available.'
@@ -245,10 +270,14 @@
         :loading="mslLoading"
         :msl-loading="mslLoading"
         :msl-downloading="mslDownloading"
+        :active-library-loads="activeLibraryLoads"
         :msl-cached-zip-path="mslCachedZipPath"
         :library-menu-options="libraryMenuOptions"
         :library-menu-schema="libraryMenuSchema"
         :nodes="libraryTreeNodes"
+        :current-qualified-name="diagramTargetQualifiedName || ''"
+        :root-library-metadata="libraryRootMetadata"
+        :show-root-metadata="libraryTreeShowRootMetadata"
         @refresh="refreshLibraryTree"
         @open-model="openModelFromLibraryTree"
         @import-library-file="handleImportMslZip"
@@ -256,6 +285,7 @@
         @download-msl="downloadMslZipToOpfs"
         @clear-msl="handleClearModelicaLibraries"
         @load-library-preset="handleLoadLibraryPreset"
+        @update:show-root-metadata="libraryTreeShowRootMetadata = $event"
         @update:library-menu-options="onLibraryMenuOptionsUpdate"
       />
     </template>
@@ -630,6 +660,7 @@
 </template>
 
 <script setup lang="ts">
+import DOMPurify from 'dompurify'
 import {
   matCode,
   matContentCopy,
@@ -679,6 +710,7 @@ import ModelicaDaeAnalysisPane, {
   type ModelicaDaeAnalysis,
 } from './components/ModelicaDaeAnalysisPane.vue'
 import ModelicaLibraryTreeView from './components/libraryTree/ModelicaLibraryTreeView.vue'
+import SanitizedMarkup from './components/SanitizedMarkup.vue'
 import ModelicaDiagramPane from './components/ModelicaDiagramPane.vue'
 import { mapRumocaClassTree } from './components/libraryTree/mapRumocaClasses'
 import type { ModelicaLibraryTreeNode } from './components/libraryTree/types'
@@ -687,7 +719,10 @@ import { useProjectFileStore } from './useProjectFileStore'
 import { useModelicaLibraries } from './useModelicaLibraries'
 import { useSolverRegistry } from './useSolverRegistry'
 import { createModelicaLspCompletionExtension } from './modelicaLspCompletion'
-import { ModelicaWorkerClient } from './modelicaWorkerClient'
+import {
+  ModelicaWorkerClient,
+  type ModelicaWorkerActivityEvent,
+} from './modelicaWorkerClient'
 import {
   DEFAULT_MODELICA_LIBRARY_ID,
   detectedModelicaLibraryPresets,
@@ -721,6 +756,31 @@ const props = withDefaults(
 )
 
 const modelicaSource = ref('')
+type WorkerLiveLogEntry = {
+  requestId: number
+  timestamp: string
+  phase: 'compile' | 'run' | 'loadWasm' | 'abi' | 'general'
+  level: 'info' | 'success' | 'warning' | 'error'
+  message: string
+  pending: true
+  details?: unknown
+}
+
+const workerLiveEntries = ref<WorkerLiveLogEntry[]>([])
+const workerActivityById = ref<Map<number, { label: string; type: string; startedAt: string }>>(
+  new Map(),
+)
+const workerBusy = computed(() => workerActivityById.value.size > 0)
+const workerBusyLabel = computed(() => {
+  const entries = Array.from(workerActivityById.value.values())
+  if (entries.length === 0) return ''
+  if (entries.length === 1) return entries[0]?.label || 'Worker busy'
+  return `${entries[0]?.label || 'Worker busy'} (+${entries.length - 1})`
+})
+const displayedModelicaLog = computed(() => [
+  ...modelicaLog.value.map((entry) => ({ ...entry, pending: false as const })),
+  ...workerLiveEntries.value,
+])
 const openedLibraryClassContext = ref<{ qualifiedName: string; sourceSnapshot: string } | null>(
   null,
 )
@@ -730,13 +790,14 @@ const jsSource = ref('') // generated JS shown + executed
 const daeJsonOutput = ref<Record<string, unknown>>({}) // DAE JSON (pretty-printed)
 const daePrettyOutput = ref('') // Pretty DAE textual representation (from WASM)
 const astOutput = ref<unknown>(null) // Parsed AST candidate extracted from compile payload
-const workspaceTab = ref<'modelica' | 'diagram' | 'help'>('modelica')
+const workspaceTab = ref<'modelica' | 'diagram' | 'icon' | 'help'>('modelica')
 const templatesTab = ref<'template' | 'uiTemplate' | 'solver'>('template')
 const resultsTab = ref<'model' | 'analysis' | 'simulate' | 'plot'>('model')
 const outputTab = ref<'js' | 'daeJson' | 'daePretty'>('js')
 const verbose = ref(false)
 const usePreparedDae = ref(true)
 const loading = ref(false)
+const compileRunToken = ref(0)
 const wasmLoaded = ref(false)
 const statusType = ref<StatusType>('loading')
 const modelicaWorker = shallowRef<ModelicaWorkerClient | null>(null)
@@ -769,10 +830,19 @@ const rumocaWasmPackageBuiltTimeLocal = computed(() =>
   formatLocalBuildTime(rumocaWasmPackageBuiltTimeUtc.value),
 )
 const libraryTreeNodes = ref<ModelicaLibraryTreeNode[]>([])
+const libraryTreeShowRootMetadata = ref(false)
 const asObjectRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null
+
+const countNodeClasses = (node: ModelicaLibraryTreeNode): number =>
+  1 + (node.children ?? []).reduce((sum, child) => sum + countNodeClasses(child), 0)
+
+const countNodeClassType = (node: ModelicaLibraryTreeNode, type: string): number => {
+  const own = String(node.classType || '').toLowerCase() === type.toLowerCase() ? 1 : 0
+  return own + (node.children ?? []).reduce((sum, child) => sum + countNodeClassType(child, type), 0)
+}
 
 const astCandidateFromCompiled = (compiled: unknown): unknown => {
   const record = asObjectRecord(compiled)
@@ -826,6 +896,7 @@ const {
   mslLoaded,
   mslLoading,
   mslDownloading,
+  activeLibraryLoads,
   mslArchiveName,
   mslFileCount,
   mslCachedZipPath,
@@ -840,6 +911,53 @@ const {
   onImportMslZip,
   clearModelicaLibraries,
 } = useModelicaLibraries({ worker: modelicaWorker })
+
+const libraryBusyLabel = computed(() => {
+  if (mslDownloading.value) return 'Downloading library archive'
+  if (activeLibraryLoads.value.length > 0) {
+    const first = activeLibraryLoads.value[0] || 'Loading libraries'
+    return activeLibraryLoads.value.length > 1
+      ? `${first} (+${activeLibraryLoads.value.length - 1})`
+      : first
+  }
+  if (mslLoading.value) return 'Loading libraries'
+  return ''
+})
+
+const globalProcessBusy = computed(() => workerBusy.value || Boolean(libraryBusyLabel.value))
+const globalProcessLabel = computed(() =>
+  libraryBusyLabel.value || workerBusyLabel.value || 'Processing',
+)
+
+const fileNameFromPath = (path: string): string => {
+  const normalized = String(path || '').trim().replaceAll('\\', '/')
+  if (!normalized) return ''
+  const parts = normalized.split('/').filter(Boolean)
+  return parts[parts.length - 1] || normalized
+}
+
+const libraryRootMetadata = computed<Record<string, string>>(() => {
+  const byRoot: Record<string, string> = {}
+  const roots = libraryTreeNodes.value.filter((node) => !node.qualifiedName.includes('.'))
+  const archiveNames = loadedLibraryCachePaths.value.map((path) => fileNameFromPath(path))
+  roots.forEach((rootNode) => {
+    const root = rootNode.qualifiedName
+    const rootLower = root.toLowerCase()
+    const modelCount = countNodeClassType(rootNode, 'model')
+    const blockCount = countNodeClassType(rootNode, 'block')
+    const totalCount = countNodeClasses(rootNode)
+    const countPart = `${totalCount} classes${modelCount > 0 ? `, ${modelCount} models` : ''}${blockCount > 0 ? `, ${blockCount} blocks` : ''}`
+    if (root === 'Modelica' && mslLoaded.value) {
+      const archive = String(mslArchiveName.value || 'MSL')
+      byRoot[root] = `${archive} · ${mslFileCount.value} files · ${countPart}`
+      return
+    }
+    const matchedArchive =
+      archiveNames.find((name) => name.toLowerCase().includes(rootLower)) || 'loaded archive'
+    byRoot[root] = `${matchedArchive} · ${countPart}`
+  })
+  return byRoot
+})
 
 const {
   solverOptionsSchema,
@@ -880,6 +998,23 @@ const diagramTargetQualifiedName = computed<string | null>(() => {
   }
   return inferQualifiedModelNameFromSource(modelicaSource.value)
 })
+
+const compactModelTabTitle = (qualifiedName: string | null, maxTailChars = 14): string => {
+  const full = String(qualifiedName || '').trim()
+  if (!full) return '(none)'
+  if (full.length <= maxTailChars) return full
+  return `...${full.slice(-maxTailChars)}`
+}
+
+const workspaceModelTitle = computed(() => {
+  return compactModelTabTitle(diagramTargetQualifiedName.value, 14)
+})
+const dockTabTitles = computed<Record<string, string>>(() => ({
+  workspace: workspaceModelTitle.value,
+}))
+const dockTabTitleTooltips = computed<Record<string, string>>(() => ({
+  workspace: String(diagramTargetQualifiedName.value || '(none)'),
+}))
 const modelHelpQualifiedName = ref('')
 const modelHelpRestriction = ref('')
 const modelHelpClassType = ref('')
@@ -889,6 +1024,10 @@ const modelHelpError = ref('')
 let modelHelpRequestId = 0
 
 const asDocString = (value: unknown): string => (typeof value === 'string' ? value : '')
+const sanitizeModelHelpHtml = (markup: string): string =>
+  DOMPurify.sanitize(markup, {
+    USE_PROFILES: { html: true },
+  })
 
 const pickFirstNonEmptyDocString = (record: Record<string, unknown>, keys: string[]): string => {
   for (const key of keys) {
@@ -999,11 +1138,40 @@ const daeAnalysis = computed<ModelicaDaeAnalysis>(() => {
     resultMeta.modelShape && typeof resultMeta.modelShape === 'object'
       ? (resultMeta.modelShape as Record<string, unknown>)
       : {}
-  const nx = Number(modelShape.nx ?? countObjectKeys(dae.x))
-  const ny = Number(modelShape.ny ?? countObjectKeys(dae.y))
+  const nx = countObjectKeys(dae.x) || Number(modelShape.nx ?? 0)
+  const yCount = countObjectKeys(dae.y)
+  const ny = yCount || Number(modelShape.ny ?? 0)
   const nu = Number(modelShape.nu ?? countObjectKeys(dae.u))
   const nc = Number(modelShape.nc ?? countArray(dae.f_c) + countArray(dae.relation))
   const neqs = Number(modelShape.residualEquationCount ?? countArray(dae.f_x ?? dae.fx))
+  const zCount = countObjectKeys(dae.z)
+  const mCount = countObjectKeys(dae.m)
+  const wCount = countObjectKeys(dae.w)
+  const constraintBalanceMeta =
+    modelShape.constraintBalance && typeof modelShape.constraintBalance === 'object'
+      ? (modelShape.constraintBalance as Record<string, unknown>)
+      : null
+  const solverNy = yCount + wCount
+  const unknownCountDynamic = Number(
+    constraintBalanceMeta?.unknownCountDynamic ?? nx + solverNy,
+  )
+  const equationCountDynamicRaw = constraintBalanceMeta?.equationCountDynamic
+  const equationCountDynamic =
+    typeof equationCountDynamicRaw === 'number' && Number.isFinite(equationCountDynamicRaw)
+      ? equationCountDynamicRaw
+      : Number.isFinite(neqs)
+        ? neqs
+        : null
+  const equationMinusUnknown =
+    equationCountDynamic === null ? null : equationCountDynamic - unknownCountDynamic
+  const constraintNote =
+    equationMinusUnknown === null
+      ? 'Residual equation count unavailable.'
+      : equationMinusUnknown === 0
+        ? 'Square solve slice.'
+        : equationMinusUnknown > 0
+          ? 'Overdetermined solve slice.'
+          : 'Underdetermined solve slice (likely partitioning issue).'
   const hasDummyState = Boolean(
     modelShape.hasOnlyDummyState ||
     (nx === 1 &&
@@ -1036,6 +1204,10 @@ const daeAnalysis = computed<ModelicaDaeAnalysis>(() => {
     hints.push(
       'Residual equations exist without algebraic unknowns; check generated prepared DAE shape.',
     )
+  if (equationMinusUnknown !== null && equationMinusUnknown < 0)
+    hints.push(
+      'Equation/unknown imbalance detected in runtime solve slice; inspect DAE partitioning of discrete/event-memory variables.',
+    )
   return {
     executionMode,
     strategy,
@@ -1049,6 +1221,19 @@ const daeAnalysis = computed<ModelicaDaeAnalysis>(() => {
       { label: 'Reset equations', value: countArray(dae.f_z) + countArray(dae.f_m) },
       { label: 'Observables', value: countArray(dae.__rumoca_observables) },
     ],
+    constraintBalance: {
+      unknownCountDynamic,
+      equationCountDynamic,
+      equationMinusUnknown,
+      note: constraintNote,
+      partitionCounts: {
+        x: nx,
+        y: yCount,
+        z: zCount,
+        m: mCount,
+        w: wCount,
+      },
+    },
     hints,
   }
 })
@@ -1244,6 +1429,7 @@ function normalizeSimulationResultForDisplay(
 
 const activeSandboxRunIds = ref<Set<string>>(new Set())
 const seenSandboxLogKeys = ref<string[]>([])
+let unsubscribeWorkerActivity: (() => void) | null = null
 
 function rememberLogKey(key: string) {
   const arr = seenSandboxLogKeys.value
@@ -1296,12 +1482,46 @@ function handleSandboxLogMessage(ev: MessageEvent) {
   })
 }
 
+const phaseForWorkerRequestType = (type: string): WorkerLiveLogEntry['phase'] => {
+  if (type === 'compile_render') return 'compile'
+  if (type === 'init') return 'loadWasm'
+  return 'general'
+}
+
+function onWorkerActivity(event: ModelicaWorkerActivityEvent) {
+  if (event.requestType === 'lsp_completion_with_timing') return
+  if (event.status === 'started') {
+    const startedAt = new Date().toISOString()
+    workerActivityById.value.set(event.requestId, {
+      label: event.label,
+      type: event.requestType,
+      startedAt,
+    })
+    workerLiveEntries.value = workerLiveEntries.value
+      .filter((entry) => entry.requestId !== event.requestId)
+      .concat({
+        requestId: event.requestId,
+        timestamp: startedAt,
+        phase: phaseForWorkerRequestType(event.requestType),
+        level: 'info',
+        message: `${event.label}...`,
+        pending: true,
+      })
+    return
+  }
+
+  workerActivityById.value.delete(event.requestId)
+  workerLiveEntries.value = workerLiveEntries.value.filter((entry) => entry.requestId !== event.requestId)
+}
+
 onMounted(() => {
   window.addEventListener('message', handleSandboxLogMessage)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('message', handleSandboxLogMessage)
+  unsubscribeWorkerActivity?.()
+  unsubscribeWorkerActivity = null
   modelicaWorker.value?.terminate()
   modelicaWorker.value = null
 })
@@ -1791,6 +2011,11 @@ function packProjectFile(): TyModelicaProjectFileV1 {
       plotViewOptions: plotViewOptions.value,
       result: executionResult.value,
     },
+    ui: {
+      libraryTree: {
+        showRootMetadata: libraryTreeShowRootMetadata.value,
+      },
+    },
     documentVersions: documentVersions.value,
     currentVersionIndex: currentVersionIndex.value,
   })
@@ -1824,7 +2049,7 @@ function applyProjectFile(pf: TyModelicaProjectFileV1) {
     const zipUrl = requiredZip.slice('zip:'.length).trim()
     if (zipUrl) mslDownloadUrl.value = zipUrl
   }
-  if (hasRequiredLibrarySettings) useModelicaStandardLibrary.value = true
+  useModelicaStandardLibrary.value = hasRequiredLibrarySettings
   uiTemplates.value = state.uiTemplates
   selectedUiTemplateKey.value = resolveUiTemplateKey(state.selectedUiTemplateId)
   if (state.projectSolvers) projectSolvers.value = state.projectSolvers
@@ -1840,6 +2065,9 @@ function applyProjectFile(pf: TyModelicaProjectFileV1) {
   }
   if (state.sim.result && typeof state.sim.result === 'object') {
     executionResult.value = state.sim.result
+  }
+  if (typeof state.ui?.libraryTree?.showRootMetadata === 'boolean') {
+    libraryTreeShowRootMetadata.value = state.ui.libraryTree.showRootMetadata
   }
   if (!hasHydratedSimulationSettings.value) {
     applySimulationHintsFromModelica(state.modelicaSource, { force: true })
@@ -2165,17 +2393,30 @@ watch([simT0, simTf, simDt], () => {
 
 // ---------- Compile Modelica → JS & DAE via new API ----------
 const runCompilation = async (): Promise<{ ok: boolean; message?: string }> => {
+  const runToken = ++compileRunToken.value
   loading.value = true
   output.value = ''
   statusType.value = 'loading'
   try {
+    const sourceText = String(modelicaSource.value || '')
+    if (!sourceText.trim()) {
+      loading.value = false
+      statusType.value = ''
+      output.value = ''
+      jsSource.value = ''
+      daeJsonOutput.value = {}
+      daePrettyOutput.value = ''
+      astOutput.value = {}
+      return { ok: false, message: 'Skipped compilation: empty Modelica source' }
+    }
+
     const shouldAutoLoadStandardMsl =
-      /\bModelica\./.test(modelicaSource.value) &&
+      /\bModelica\./.test(sourceText) &&
       Boolean(modelicaWorker.value) &&
       !standardMslLoaded.value
     if (shouldAutoLoadStandardMsl) {
       useModelicaStandardLibrary.value = true
-      await loadStandardMslZipFromOpfs()
+      await loadStandardMslZipFromOpfs('auto-detect: source references Modelica.*')
       await refreshLibraryTree()
     }
 
@@ -2222,6 +2463,9 @@ const runCompilation = async (): Promise<{ ok: boolean; message?: string }> => {
         useSourceRoots,
       })
     }
+    if (runToken !== compileRunToken.value) {
+      return { ok: false, message: 'Compilation cancelled (model switched)' }
+    }
     daeJsonOutput.value = compile.daeForTemplate ?? {}
     daePrettyOutput.value =
       typeof compile.compiled?.pretty === 'string' ? compile.compiled.pretty : ''
@@ -2231,6 +2475,9 @@ const runCompilation = async (): Promise<{ ok: boolean; message?: string }> => {
     statusType.value = 'success'
     return { ok: true, message: 'Compilation successful' }
   } catch (error) {
+    if (runToken !== compileRunToken.value) {
+      return { ok: false, message: 'Compilation cancelled (model switched)' }
+    }
     const message = (error as Error).message
     const compileErrorText = `Error: ${message}`
     output.value = compileErrorText
@@ -2243,7 +2490,7 @@ const runCompilation = async (): Promise<{ ok: boolean; message?: string }> => {
     })
     return { ok: false, message }
   } finally {
-    loading.value = false
+    if (runToken === compileRunToken.value) loading.value = false
   }
 }
 
@@ -2335,9 +2582,18 @@ async function refreshLibraryTree() {
 }
 
 async function openModelFromLibraryTree(qualifiedName: string) {
-  const worker = modelicaWorker.value
-  if (!worker) return
   try {
+    if (loading.value) {
+      compileRunToken.value += 1
+      appendModelicaLog({
+        level: 'warning',
+        phase: 'compile',
+        message: 'Cancelling in-flight compilation because model selection changed.',
+      })
+    }
+
+    const worker = modelicaWorker.value
+    if (!worker) return
     const info = await worker.getClassInfo(qualifiedName)
     const qualified =
       typeof info.qualified_name === 'string' && info.qualified_name.trim().length > 0
@@ -2410,7 +2666,7 @@ async function handleImportMslZip(e: Event) {
 }
 
 async function handleLoadCachedMslZipFromOpfs() {
-  await loadStandardMslZipFromOpfs()
+  await loadStandardMslZipFromOpfs('user action: load standard MSL')
   useModelicaStandardLibrary.value = true
   await refreshLibraryTree()
 }
@@ -2434,7 +2690,7 @@ async function handleLoadLibraryPreset(url: string) {
   }
 
   await downloadMslZipToOpfs(nextUrl)
-  await loadCachedMslZipFromOpfs()
+  await loadCachedMslZipFromOpfs('user action: load selected library preset')
   await refreshLibraryTree()
 }
 
@@ -2561,23 +2817,23 @@ const loadExample = () => {
 }
 
 const copyJsToClipboard = () => {
-  copyToClipboard(jsSource.value)
+  void copyToClipboard(jsSource.value)
 }
 
 const copyModelicaToClipboard = () => {
-  copyToClipboard(modelicaSource.value)
+  void copyToClipboard(modelicaSource.value)
 }
 
 const copyTemplateToClipboard = () => {
-  copyToClipboard(templateSource.value)
+  void copyToClipboard(templateSource.value)
 }
 
 const copyDaeJsonToClipboard = () => {
-  copyToClipboard(JSON.stringify(daeJsonOutput.value, null, 2))
+  void copyToClipboard(JSON.stringify(daeJsonOutput.value, null, 2))
 }
 
 const copyDaePrettyToClipboard = () => {
-  copyToClipboard(daePrettyOutput.value)
+  void copyToClipboard(daePrettyOutput.value)
 }
 
 const copyAstToClipboard = async () => {
@@ -2592,11 +2848,11 @@ const copyAstToClipboard = async () => {
     })
   }
   if (astOutput.value == null) return
-  copyToClipboard(JSON.stringify(astOutput.value, null, 2))
+  void copyToClipboard(JSON.stringify(astOutput.value, null, 2))
 }
 
 const copyLogsToClipboard = () => {
-  copyToClipboard(safeYamlDump(modelicaLog.value))
+  void copyToClipboard(safeYamlDump(modelicaLog.value))
 }
 
 function openGeneratedHtmlPopup() {
@@ -2753,6 +3009,8 @@ onMounted(async () => {
       applyProjectFile(pf)
     } else {
       // First-time project initialization
+      useModelicaStandardLibrary.value = false
+      requiredLibraries.value = []
       uiTemplates.value = {}
       selectedUiTemplateKey.value = makeSourceKey('builtin', 'default')
       modelicaSource.value = ''
@@ -2770,6 +3028,8 @@ onMounted(async () => {
     }
   } catch (e) {
     console.warn('Project hydration failed, resetting project file:', e)
+    useModelicaStandardLibrary.value = false
+    requiredLibraries.value = []
     uiTemplates.value = {}
     selectedUiTemplateKey.value = makeSourceKey('builtin', 'default')
     modelicaSource.value = ''
@@ -2788,8 +3048,8 @@ onMounted(async () => {
   // Initial project discovery
   await refreshAvailableProjects()
   // Keep projectFile updated when the editor changes (OPFS will persist it)
-  watchDebounced(
-    [
+watchDebounced(
+  [
       modelicaSource,
       uiTemplates,
       selectedUiTemplateKey,
@@ -2801,11 +3061,12 @@ onMounted(async () => {
       solverOptionsByKey,
       requiredLibraries,
       plotCharts,
-      plotViewOptions,
-      executionResult,
-      documentVersions,
-      currentVersionIndex,
-    ],
+    plotViewOptions,
+    executionResult,
+    libraryTreeShowRootMetadata,
+    documentVersions,
+    currentVersionIndex,
+  ],
     () => {
       try {
         projectFile.value = packProjectFile()
@@ -2816,10 +3077,7 @@ onMounted(async () => {
     { debounce: 200, maxWait: 800, deep: true },
   )
 
-  // 3) Modelica worker
-  try {
-    const worker = new ModelicaWorkerClient()
-    modelicaWorker.value = worker
+  const getRequestedWorkerThreads = (): number => {
     const hardwareThreads =
       typeof navigator !== 'undefined' &&
       typeof navigator.hardwareConcurrency === 'number' &&
@@ -2827,22 +3085,42 @@ onMounted(async () => {
         ? navigator.hardwareConcurrency
         : 2
     const canUseThreadedWasm = globalThis.crossOriginIsolated === true
-    const requestedThreads = canUseThreadedWasm ? Math.max(1, Math.min(hardwareThreads, 4)) : 0
-    const initInfo = await worker.init(requestedThreads)
+    return canUseThreadedWasm ? Math.max(1, Math.min(hardwareThreads, 4)) : 0
+  }
+
+  const initModelicaWorker = async (): Promise<ModelicaWorkerClient> => {
+    const worker = new ModelicaWorkerClient()
+    modelicaWorker.value = worker
+    unsubscribeWorkerActivity?.()
+    unsubscribeWorkerActivity = worker.onActivity(onWorkerActivity)
+    const initInfo = await worker.init(getRequestedWorkerThreads())
     configureModelicaLspExtensions(worker)
     wasmLoaded.value = true
     if (initInfo.version) rumocaWasmVersion.value = initInfo.version
     if (initInfo.gitCommit) rumocaWasmGitCommit.value = initInfo.gitCommit
     if (initInfo.buildTimeUtc) rumocaWasmBuildTimeUtc.value = initInfo.buildTimeUtc
     if (initInfo.rustBuildTimeUtc) rumocaWasmRustBuildTimeUtc.value = initInfo.rustBuildTimeUtc
-    if (initInfo.packageBuiltTimeUtc)
+    if (initInfo.packageBuiltTimeUtc) {
       rumocaWasmPackageBuiltTimeUtc.value = initInfo.packageBuiltTimeUtc
+    }
+    return worker
+  }
+
+  // 3) Modelica worker
+  try {
+    const worker = await initModelicaWorker()
     const documentCount = await worker.getSourceRootDocumentCount()
-    if (documentCount > 0) {
+    const persistedLibraryLoadRequested =
+      Boolean(useModelicaStandardLibrary.value) || requiredLibraries.value.length > 0
+    if (documentCount > 0 && persistedLibraryLoadRequested) {
       mslLoaded.value = true
       mslFileCount.value = documentCount
-      useModelicaStandardLibrary.value = true
       await refreshLibraryTree()
+      appendModelicaLog({
+        level: 'info',
+        phase: 'general',
+        message: `Using already-loaded source-root libraries from worker cache (reason: persisted project settings, documents=${documentCount})`,
+      })
     } else if (useModelicaStandardLibrary.value) {
       const requiredOpfsPaths = normalizeRequiredLibraries(
         requiredLibraries.value
@@ -2850,12 +3128,18 @@ onMounted(async () => {
           .map((entry) => entry.slice('opfs:'.length)),
       )
       if (requiredOpfsPaths.length > 0) {
-        await loadLibraryArchivesFromOpfs(requiredOpfsPaths)
+        await loadLibraryArchivesFromOpfs(requiredOpfsPaths, 'project settings: persisted OPFS archives')
         await refreshLibraryTree()
       } else if (String(mslCachedZipPath.value || '').trim()) {
-        await loadCachedMslZipFromOpfs()
+        await loadCachedMslZipFromOpfs('project settings: useMSL with cached zip path')
         await refreshLibraryTree()
       }
+    } else if (documentCount > 0) {
+      appendModelicaLog({
+        level: 'info',
+        phase: 'general',
+        message: `Detected preloaded worker source-root libraries but skipped attaching them (reason: no persisted library requirement, documents=${documentCount})`,
+      })
     }
     appendModelicaLog({
       level: 'success',

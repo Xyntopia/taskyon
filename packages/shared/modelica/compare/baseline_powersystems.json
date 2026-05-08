@@ -1,0 +1,1794 @@
+{
+  "compile": {
+    "records": [
+      {
+        "compileElapsedMs": 6050,
+        "elapsedMs": 6050,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Drives.BLDC",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 3048,
+        "elapsedMs": 3048,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Drives.BLDCcharSpeed",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 2568,
+        "elapsedMs": 2568,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Drives.DCcharSpeed",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3565,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_par: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_par) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_par failed in ToDae: unresolved reference: TableDir",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_par",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 2885,
+        "elapsedMs": 2885,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_pm",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3570,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_ser: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_ser) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_ser failed in ToDae: unresolved reference: TableDir",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_ser",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2656,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Elementary.Breaker: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Elementary.Breaker) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Elementary.Breaker failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Breaker",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3109,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Elementary.DoubleLine: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Elementary.DoubleLine) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Elementary.DoubleLine failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.DoubleLine",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2714,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Elementary.Fault: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Elementary.Fault) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Elementary.Fault failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Fault",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 2597,
+        "elapsedMs": 2597,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Impedance",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 2656,
+        "elapsedMs": 2656,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.ImpedanceOneTerm",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2605,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Elementary.Inverter: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Elementary.Inverter) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Elementary.Inverter failed in ToDae: internal todae error: MLS §8.3.5 violation: duplicate assignment to 'dc_ac.modulator.gates[?]' in when-equation branch",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Inverter",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2621,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Elementary.Line: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Elementary.Line) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Elementary.Line failed in ToDae: unresolved reference: line.par.b_pg",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Line",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 2740,
+        "elapsedMs": 2740,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.LoadAC",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 1880,
+        "elapsedMs": 1881,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.LoadDC",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 2097,
+        "elapsedMs": 2097,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Machines",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 2783,
+        "elapsedMs": 2783,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Rectifier",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 2596,
+        "elapsedMs": 2596,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Sensor",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 2586,
+        "elapsedMs": 2586,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Source",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2723,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Elementary.Transformer: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Elementary.Transformer) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Elementary.Transformer failed in ToDae: invalid Appendix B discrete solved form: f_m assignment `tapChanger.cnt_1` has direct self-dependency",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Transformer",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 1790,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Inverters.Chopper: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Inverters.Chopper) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Inverters.Chopper failed in Flatten: unsupported equation form: if-equation branches have mismatched equation counts",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Inverters.Chopper",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 2894,
+        "elapsedMs": 2894,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Inverters.InverterAvToGrid",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2843,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Inverters.InverterToGrid: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Inverters.InverterToGrid) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Inverters.InverterToGrid failed in ToDae: internal todae error: MLS §8.3.5 violation: duplicate assignment to 'inverter.modulator.gates[?]' in when-equation branch",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Inverters.InverterToGrid",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 1997,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Inverters.InverterToLoad: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Inverters.InverterToLoad) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Inverters.InverterToLoad failed in ToDae: internal todae error: MLS §8.3.5 violation: duplicate assignment to 'inverter.modulator.gates[?]' in when-equation branch",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Inverters.InverterToLoad",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 2816,
+        "elapsedMs": 2816,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Inverters.Rectifier",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2711,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Transformation.OnePhase: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Transformation.OnePhase) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Transformation.OnePhase failed in ToDae: unresolved reference: trafo.par.r",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Transformation.OnePhase",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2927,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Transformation.TapChanger: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Transformation.TapChanger) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Transformation.TapChanger failed in ToDae: invalid Appendix B discrete solved form: f_m assignment `tapRelay1.cnt_2` has direct self-dependency",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Transformation.TapChanger",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 1780,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Drives.ASM: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Drives.ASM) crashed: Compilation error: PowerSystems.Examples.AC3ph.Drives.ASM failed in Typecheck: unevaluable array dimensions for 'asm.term.v': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.term.i': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.term.theta': dimension expression could not be evaluated: [Expression(PhaseSystem.m)]; unevaluable array dimensions for 'asm.motor.top.v_term': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.top.i_term': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.top.v_cond': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.top.i_cond': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.v': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.i': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.term.v': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.motor.term.i': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.motor.term.theta': dimension expression could not be evaluated: [Expression(PhaseSystem.m)]",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.ASM",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 4665,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Drives.ASM_Y_D: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Drives.ASM_Y_D) crashed: Compilation error: PowerSystems.Examples.AC3ph.Drives.ASM_Y_D failed in ToDae: invalid Appendix B discrete solved form: f_m assignment `relay1.cnt` has direct self-dependency",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.ASM_Y_D",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 4970,
+        "elapsedMs": 4970,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.ASM_ctrl",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 4945,
+        "elapsedMs": 4945,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.ASM_ctrlAv",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 1727,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Drives.ASMav: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Drives.ASMav) crashed: Compilation error: PowerSystems.Examples.AC3ph.Drives.ASMav failed in Typecheck: unevaluable array dimensions for 'asm.term.v': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.term.i': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.term.theta': dimension expression could not be evaluated: [Expression(PhaseSystem.m)]; unevaluable array dimensions for 'asm.motor.top.v_term': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.top.i_term': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.top.v_cond': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.top.i_cond': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.v': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.i': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.term.v': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.motor.term.i': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.motor.term.theta': dimension expression could not be evaluated: [Expression(PhaseSystem.m)]",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.ASMav",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 5479,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Drives.ASMav_icontrol: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Drives.ASMav_icontrol) crashed: Compilation error: PowerSystems.Examples.AC3ph.Drives.ASMav_icontrol failed in ToDae: unresolved reference: TableDir",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.ASMav_icontrol",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 4525,
+        "elapsedMs": 4525,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.ASMcharacteristic",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 3586,
+        "elapsedMs": 3586,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.SM_ctrl",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 3497,
+        "elapsedMs": 3497,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.SM_ctrlAv",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3183,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Elementary.Breaker: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Elementary.Breaker) crashed: Compilation error: PowerSystems.Examples.AC3ph.Elementary.Breaker failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Breaker",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3355,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Elementary.Fault: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Elementary.Fault) crashed: Compilation error: PowerSystems.Examples.AC3ph.Elementary.Fault failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Fault",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 3102,
+        "elapsedMs": 3102,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Impedance",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 3203,
+        "elapsedMs": 3203,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.ImpedanceYD",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2097,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Elementary.Inverter: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Elementary.Inverter) crashed: Compilation error: PowerSystems.Examples.AC3ph.Elementary.Inverter failed in Flatten: incompatible connector types in connection: ac_dc.DC.v (dims: [3]) and meterDC.term_p.v (dims: [2])",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Inverter",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3189,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Elementary.Line: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Elementary.Line) crashed: Compilation error: PowerSystems.Examples.AC3ph.Elementary.Line failed in ToDae: unresolved reference: line.par.g_pg",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Line",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 3094,
+        "elapsedMs": 3094,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Load",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 4875,
+        "elapsedMs": 4875,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Machines",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2143,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Elementary.Rectifier: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Elementary.Rectifier) crashed: Compilation error: PowerSystems.Examples.AC3ph.Elementary.Rectifier failed in Flatten: incompatible connector types in connection: rectifier.DC.v (dims: [3]) and meterDC.term_p.v (dims: [2])",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Rectifier",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 3438,
+        "elapsedMs": 3438,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Sensor",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 3258,
+        "elapsedMs": 3258,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Source",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3385,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Elementary.Transformer: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Elementary.Transformer) crashed: Compilation error: PowerSystems.Examples.AC3ph.Elementary.Transformer failed in ToDae: invalid Appendix B discrete solved form: f_m assignment `tapChanger.cnt_2` has direct self-dependency",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Transformer",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3679,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Generation.GenOrder3and7: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Generation.GenOrder3and7) crashed: Compilation error: PowerSystems.Examples.AC3ph.Generation.GenOrder3and7 failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relayGrd (statement=ForRangeNotConstant(VarRef { name: VarName(\"relayGrd.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.GenOrder3and7",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 1828,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Generation.Islanding: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Generation.Islanding) crashed: Compilation error: PowerSystems.Examples.AC3ph.Generation.Islanding failed in Typecheck: unevaluable array dimensions for 'turboGen.term.v': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'turboGen.term.i': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'turboGen.term.theta': dimension expression could not be evaluated: [Expression(PhaseSystem.m)]; unevaluable array dimensions for 'turboGen.generator.top.v_term': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'turboGen.generator.top.i_term': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'turboGen.generator.top.v_cond': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'turboGen.generator.top.i_cond': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'turboGen.generator.v': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'turboGen.generator.i': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'turboGen.generator.term.v': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'turboGen.generator.term.i': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'turboGen.generator.term.theta': dimension expression could not be evaluated: [Expression(PhaseSystem.m)]",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.Islanding",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 3612,
+        "elapsedMs": 3612,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.LocalGeneration",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 2872,
+        "elapsedMs": 2872,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.PQsource",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 2853,
+        "elapsedMs": 2853,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.PVsource",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 3616,
+        "elapsedMs": 3616,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.PowerAngle",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 4154,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Generation.TieLine: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Generation.TieLine) crashed: Compilation error: PowerSystems.Examples.AC3ph.Generation.TieLine failed in ToDae: unresolved reference: turboGen1.excitation.generator.par.V_nom",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.TieLine",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 3513,
+        "elapsedMs": 3513,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.TurbineGenerator",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 3623,
+        "elapsedMs": 3623,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.TurbineGeneratorLine",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3824,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Generation.TurboGeneratorLine: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Generation.TurboGeneratorLine) crashed: Compilation error: PowerSystems.Examples.AC3ph.Generation.TurboGeneratorLine failed in ToDae: unresolved reference: turboGen.excitation.generator.par.V_nom",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.TurboGeneratorLine",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3696,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Generation.TurboGroupGenerator: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Generation.TurboGroupGenerator) crashed: Compilation error: PowerSystems.Examples.AC3ph.Generation.TurboGroupGenerator failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relayGrd (statement=ForRangeNotConstant(VarRef { name: VarName(\"relayGrd.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.TurboGroupGenerator",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 2978,
+        "elapsedMs": 2978,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.Vsource",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 6010,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Generation.WindGeneratorLine: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Generation.WindGeneratorLine) crashed: Compilation error: PowerSystems.Examples.AC3ph.Generation.WindGeneratorLine failed in ToDae: unresolved reference: WT.par.w_nom",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.WindGeneratorLine",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2174,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Inverters.InverterAvToGrid: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Inverters.InverterAvToGrid) crashed: Compilation error: PowerSystems.Examples.AC3ph.Inverters.InverterAvToGrid failed in Flatten: incompatible connector types in connection: meterDC.term_n.v (dims: [2]) and inverter.DC.v (dims: [3])",
+        "modelName": "PowerSystems.Examples.AC3ph.Inverters.InverterAvToGrid",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2173,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Inverters.InverterToGrid: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Inverters.InverterToGrid) crashed: Compilation error: PowerSystems.Examples.AC3ph.Inverters.InverterToGrid failed in Flatten: incompatible connector types in connection: meterDC.term_n.v (dims: [2]) and inverter.DC.v (dims: [3])",
+        "modelName": "PowerSystems.Examples.AC3ph.Inverters.InverterToGrid",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2234,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Inverters.InverterToLoad: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Inverters.InverterToLoad) crashed: Compilation error: PowerSystems.Examples.AC3ph.Inverters.InverterToLoad failed in Flatten: incompatible connector types in connection: meterDC.term_n.v (dims: [2]) and inverter.DC.v (dims: [3])",
+        "modelName": "PowerSystems.Examples.AC3ph.Inverters.InverterToLoad",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2152,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Inverters.Rectifier: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Inverters.Rectifier) crashed: Compilation error: PowerSystems.Examples.AC3ph.Inverters.Rectifier failed in Flatten: incompatible connector types in connection: rectifier.DC.v (dims: [3]) and meterDC.term_p.v (dims: [2])",
+        "modelName": "PowerSystems.Examples.AC3ph.Inverters.Rectifier",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 3318,
+        "elapsedMs": 3318,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.EqCircFromTransDat",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 2285,
+        "elapsedMs": 2285,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.TransDatFromEqCirc",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 1825,
+        "elapsedMs": 1825,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixEqCirc0",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 1880,
+        "elapsedMs": 1880,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixEqCirc1",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 1820,
+        "elapsedMs": 1820,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixEqCirc2",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 1844,
+        "elapsedMs": 1844,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixEqCirc3",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 3364,
+        "elapsedMs": 3364,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixTrDat0",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 3411,
+        "elapsedMs": 3411,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixTrDat1",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 3224,
+        "elapsedMs": 3224,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixTrDat2",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 3219,
+        "elapsedMs": 3219,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixTrDat3",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3895,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transformation.PhaseShifts: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transformation.PhaseShifts) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transformation.PhaseShifts failed in ToDae: unresolved reference: trafo1.par.r",
+        "modelName": "PowerSystems.Examples.AC3ph.Transformation.PhaseShifts",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3760,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transformation.TapChanger: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transformation.TapChanger) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transformation.TapChanger failed in ToDae: invalid Appendix B discrete solved form: f_m assignment `tapRelay1.cnt_1` has direct self-dependency",
+        "modelName": "PowerSystems.Examples.AC3ph.Transformation.TapChanger",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3585,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transformation.ThreeWinding: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transformation.ThreeWinding) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transformation.ThreeWinding failed in ToDae: unresolved reference: trafo3Stray.par.r",
+        "modelName": "PowerSystems.Examples.AC3ph.Transformation.ThreeWinding",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3900,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.DoubleLine: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.DoubleLine) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.DoubleLine failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.DoubleLine",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 4612,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.DoubleLineTG: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.DoubleLineTG) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.DoubleLineTG failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.DoubleLineTG",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3759,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.DoubleRXline: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.DoubleRXline) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.DoubleRXline failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.DoubleRXline",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 4232,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.DoubleRXlineTG: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.DoubleRXlineTG) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.DoubleRXlineTG failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.DoubleRXlineTG",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3508,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.FaultRXline: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.FaultRXline) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.FaultRXline failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.FaultRXline",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3838,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.FaultTline: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.FaultTline) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.FaultTline failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.FaultTline",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 3016,
+        "elapsedMs": 3016,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.PowerTransfer",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3327,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.RXline: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.RXline) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.RXline failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.RXline",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3376,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.Tline: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.Tline) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.Tline failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.Tline",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 3996,
+        "elapsedMs": 3996,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.VoltageStability",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 9632,
+        "error": "all compile plans failed for PowerSystems.Examples.Generic.Network.NetworkControlled: plan(source=loaded, target=PowerSystems.Examples.Generic.Network.NetworkControlled) crashed: Compilation error: PowerSystems.Examples.Generic.Network.NetworkControlled failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.Generic.Network.NetworkControlled",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 23062,
+        "error": "all compile plans failed for PowerSystems.Examples.Generic.Network.NetworkLoop: plan(source=loaded, target=PowerSystems.Examples.Generic.Network.NetworkLoop) crashed: Compilation error: PowerSystems.Examples.Generic.Network.NetworkLoop failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.Generic.Network.NetworkLoop",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 1492,
+        "error": "all compile plans failed for PowerSystems.Examples.Generic.Network.NetworkLoop_d: plan(source=loaded, target=PowerSystems.Examples.Generic.Network.NetworkLoop_d) crashed: Compilation error: PowerSystems.Examples.Generic.Network.NetworkLoop_d failed in Instantiate: redeclaration of `PhaseSystem` violates constrainedby: `PowerSystems.PhaseSystems.ThreePhase_d` is not a subtype of `PhaseSystems.ThreePhase_dq`",
+        "modelName": "PowerSystems.Examples.Generic.Network.NetworkLoop_d",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 23061,
+        "error": "all compile plans failed for PowerSystems.Examples.Generic.Network.NetworkLoop_dq: plan(source=loaded, target=PowerSystems.Examples.Generic.Network.NetworkLoop_dq) crashed: Compilation error: PowerSystems.Examples.Generic.Network.NetworkLoop_dq failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.Generic.Network.NetworkLoop_dq",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 22864,
+        "error": "all compile plans failed for PowerSystems.Examples.Generic.Network.NetworkLoop_dq0: plan(source=loaded, target=PowerSystems.Examples.Generic.Network.NetworkLoop_dq0) crashed: Compilation error: PowerSystems.Examples.Generic.Network.NetworkLoop_dq0 failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.Generic.Network.NetworkLoop_dq0",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 8568,
+        "error": "all compile plans failed for PowerSystems.Examples.Generic.Network.NetworkOpened: plan(source=loaded, target=PowerSystems.Examples.Generic.Network.NetworkOpened) crashed: Compilation error: PowerSystems.Examples.Generic.Network.NetworkOpened failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.Generic.Network.NetworkOpened",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 3202,
+        "elapsedMs": 3202,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Introductory.Display",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 2763,
+        "elapsedMs": 2763,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Introductory.Frequency",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 3141,
+        "elapsedMs": 3141,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Introductory.InitialSteadyState",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 3027,
+        "elapsedMs": 3027,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Introductory.ReferenceInertial",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 3135,
+        "elapsedMs": 3135,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Introductory.ReferenceSynchron",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3265,
+        "error": "all compile plans failed for PowerSystems.Examples.Introductory.SimulationFixedInitial: plan(source=loaded, target=PowerSystems.Examples.Introductory.SimulationFixedInitial) crashed: Compilation error: PowerSystems.Examples.Introductory.SimulationFixedInitial failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relayNet (statement=ForRangeNotConstant(VarRef { name: VarName(\"relayNet.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.Introductory.SimulationFixedInitial",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3269,
+        "error": "all compile plans failed for PowerSystems.Examples.Introductory.SimulationSteadyInitial: plan(source=loaded, target=PowerSystems.Examples.Introductory.SimulationSteadyInitial) crashed: Compilation error: PowerSystems.Examples.Introductory.SimulationSteadyInitial failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relayNet (statement=ForRangeNotConstant(VarRef { name: VarName(\"relayNet.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.Introductory.SimulationSteadyInitial",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3241,
+        "error": "all compile plans failed for PowerSystems.Examples.Introductory.SimulationSteadyState: plan(source=loaded, target=PowerSystems.Examples.Introductory.SimulationSteadyState) crashed: Compilation error: PowerSystems.Examples.Introductory.SimulationSteadyState failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relayNet (statement=ForRangeNotConstant(VarRef { name: VarName(\"relayNet.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.Introductory.SimulationSteadyState",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2586,
+        "error": "all compile plans failed for PowerSystems.Examples.Introductory.Tables: plan(source=loaded, target=PowerSystems.Examples.Introductory.Tables) crashed: Compilation error: PowerSystems.Examples.Introductory.Tables failed in ToDae: unresolved reference: TableDir",
+        "modelName": "PowerSystems.Examples.Introductory.Tables",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 3104,
+        "elapsedMs": 3104,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Introductory.Units",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3549,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Components.City: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Components.City) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Components.City failed in ToDae: unresolved reference: PowerWorldResources",
+        "modelName": "PowerSystems.Examples.PowerWorld.Components.City",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 3242,
+        "elapsedMs": 3242,
+        "error": "",
+        "modelName": "PowerSystems.Examples.PowerWorld.Components.HydroPlant",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3549,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Components.LoadDispatcher: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Components.LoadDispatcher) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Components.LoadDispatcher failed in ToDae: unresolved reference: PowerWorldResources",
+        "modelName": "PowerSystems.Examples.PowerWorld.Components.LoadDispatcher",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 3379,
+        "elapsedMs": 3379,
+        "error": "",
+        "modelName": "PowerSystems.Examples.PowerWorld.Components.PowerPlant",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3918,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Components.WindFarm: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Components.WindFarm) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Components.WindFarm failed in ToDae: unresolved reference: PowerWorldResources",
+        "modelName": "PowerSystems.Examples.PowerWorld.Components.WindFarm",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2288,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.PowerWorld: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.PowerWorld) crashed: Compilation error: PowerSystems.Examples.PowerWorld.PowerWorld failed in Typecheck: unevaluable array dimensions for 'city.v_start': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'city.p': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'powerPlant.p': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'hydroPlant.p': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]",
+        "modelName": "PowerSystems.Examples.PowerWorld.PowerWorld",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3989,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.CityTest: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.CityTest) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.CityTest failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.CityTest",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3445,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.HydroPlantTest1: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.HydroPlantTest1) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.HydroPlantTest1 failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.HydroPlantTest1",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3636,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.HydroPlantTest2: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.HydroPlantTest2) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.HydroPlantTest2 failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.HydroPlantTest2",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3760,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.LoadDispatcherTest: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.LoadDispatcherTest) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.LoadDispatcherTest failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.LoadDispatcherTest",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3602,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.PowerPlantTest1: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.PowerPlantTest1) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.PowerPlantTest1 failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.PowerPlantTest1",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3573,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.PowerPlantTest2: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.PowerPlantTest2) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.PowerPlantTest2 failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.PowerPlantTest2",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3725,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.PowerPlantTest3: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.PowerPlantTest3) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.PowerPlantTest3 failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.PowerPlantTest3",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3984,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.WindFarmGridTest: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.WindFarmGridTest) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.WindFarmGridTest failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.WindFarmGridTest",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 4273,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.WindFarmHVDCTest: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.WindFarmHVDCTest) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.WindFarmHVDCTest failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.WindFarmHVDCTest",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 1813,
+        "elapsedMs": 1813,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Wind.Components.Rotor",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 5670,
+        "error": "all compile plans failed for PowerSystems.Examples.Wind.Components.WindTurbine: plan(source=loaded, target=PowerSystems.Examples.Wind.Components.WindTurbine) crashed: Compilation error: PowerSystems.Examples.Wind.Components.WindTurbine failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.Wind.Components.WindTurbine",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 1830,
+        "elapsedMs": 1830,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Wind.Test.RotorTest",
+        "status": "compiled"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 10664,
+        "error": "all compile plans failed for PowerSystems.Examples.Wind.WindFarm: plan(source=loaded, target=PowerSystems.Examples.Wind.WindFarm) crashed: Compilation error: PowerSystems.Examples.Wind.WindFarm failed in ToDae: unresolved reference: line.par.g_pg",
+        "modelName": "PowerSystems.Examples.Wind.WindFarm",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2483,
+        "error": "all compile plans failed for PowerSystems.Examples.Wind.WindTurbine_DFIG: plan(source=loaded, target=PowerSystems.Examples.Wind.WindTurbine_DFIG) crashed: Compilation error: PowerSystems.Examples.Wind.WindTurbine_DFIG failed in Flatten: incompatible connector types in connection: inverter1.DC.v (dims: [3]) and meterDC.term_p.v (dims: [2])",
+        "modelName": "PowerSystems.Examples.Wind.WindTurbine_DFIG",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 5742,
+        "error": "all compile plans failed for PowerSystems.Examples.Wind.WindTurbine_IG: plan(source=loaded, target=PowerSystems.Examples.Wind.WindTurbine_IG) crashed: Compilation error: PowerSystems.Examples.Wind.WindTurbine_IG failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.Wind.WindTurbine_IG",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2465,
+        "error": "all compile plans failed for PowerSystems.Examples.Wind.WindTurbine_PSGI: plan(source=loaded, target=PowerSystems.Examples.Wind.WindTurbine_PSGI) crashed: Compilation error: PowerSystems.Examples.Wind.WindTurbine_PSGI failed in Flatten: incompatible connector types in connection: inverter1.DC.v (dims: [3]) and meterDC.term_p.v (dims: [2])",
+        "modelName": "PowerSystems.Examples.Wind.WindTurbine_PSGI",
+        "status": "compile_fail"
+      },
+      {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2510,
+        "error": "all compile plans failed for PowerSystems.Examples.Wind.WindTurbine_PSGR: plan(source=loaded, target=PowerSystems.Examples.Wind.WindTurbine_PSGR) crashed: Compilation error: PowerSystems.Examples.Wind.WindTurbine_PSGR failed in Flatten: incompatible connector types in connection: rectifier1.DC.v (dims: [3]) and meterDC.term_p.v (dims: [2])",
+        "modelName": "PowerSystems.Examples.Wind.WindTurbine_PSGR",
+        "status": "compile_fail"
+      }
+    ],
+    "recordsByModel": {
+      "PowerSystems.Examples.AC1ph_DC.Drives.BLDC": {
+        "compileElapsedMs": 6050,
+        "elapsedMs": 6050,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Drives.BLDC",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Drives.BLDCcharSpeed": {
+        "compileElapsedMs": 3048,
+        "elapsedMs": 3048,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Drives.BLDCcharSpeed",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Drives.DCcharSpeed": {
+        "compileElapsedMs": 2568,
+        "elapsedMs": 2568,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Drives.DCcharSpeed",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_par": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3565,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_par: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_par) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_par failed in ToDae: unresolved reference: TableDir",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_par",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_pm": {
+        "compileElapsedMs": 2885,
+        "elapsedMs": 2885,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_pm",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_ser": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3570,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_ser: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_ser) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_ser failed in ToDae: unresolved reference: TableDir",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Drives.DCmotor_ser",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Elementary.Breaker": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2656,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Elementary.Breaker: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Elementary.Breaker) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Elementary.Breaker failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Breaker",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Elementary.DoubleLine": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3109,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Elementary.DoubleLine: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Elementary.DoubleLine) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Elementary.DoubleLine failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.DoubleLine",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Elementary.Fault": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2714,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Elementary.Fault: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Elementary.Fault) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Elementary.Fault failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Fault",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Elementary.Impedance": {
+        "compileElapsedMs": 2597,
+        "elapsedMs": 2597,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Impedance",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Elementary.ImpedanceOneTerm": {
+        "compileElapsedMs": 2656,
+        "elapsedMs": 2656,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.ImpedanceOneTerm",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Elementary.Inverter": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2605,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Elementary.Inverter: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Elementary.Inverter) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Elementary.Inverter failed in ToDae: internal todae error: MLS §8.3.5 violation: duplicate assignment to 'dc_ac.modulator.gates[?]' in when-equation branch",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Inverter",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Elementary.Line": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2621,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Elementary.Line: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Elementary.Line) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Elementary.Line failed in ToDae: unresolved reference: line.par.b_pg",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Line",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Elementary.LoadAC": {
+        "compileElapsedMs": 2740,
+        "elapsedMs": 2740,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.LoadAC",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Elementary.LoadDC": {
+        "compileElapsedMs": 1880,
+        "elapsedMs": 1881,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.LoadDC",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Elementary.Machines": {
+        "compileElapsedMs": 2097,
+        "elapsedMs": 2097,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Machines",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Elementary.Rectifier": {
+        "compileElapsedMs": 2783,
+        "elapsedMs": 2783,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Rectifier",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Elementary.Sensor": {
+        "compileElapsedMs": 2596,
+        "elapsedMs": 2596,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Sensor",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Elementary.Source": {
+        "compileElapsedMs": 2586,
+        "elapsedMs": 2586,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Source",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Elementary.Transformer": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2723,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Elementary.Transformer: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Elementary.Transformer) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Elementary.Transformer failed in ToDae: invalid Appendix B discrete solved form: f_m assignment `tapChanger.cnt_1` has direct self-dependency",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Elementary.Transformer",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Inverters.Chopper": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 1790,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Inverters.Chopper: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Inverters.Chopper) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Inverters.Chopper failed in Flatten: unsupported equation form: if-equation branches have mismatched equation counts",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Inverters.Chopper",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Inverters.InverterAvToGrid": {
+        "compileElapsedMs": 2894,
+        "elapsedMs": 2894,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Inverters.InverterAvToGrid",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Inverters.InverterToGrid": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2843,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Inverters.InverterToGrid: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Inverters.InverterToGrid) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Inverters.InverterToGrid failed in ToDae: internal todae error: MLS §8.3.5 violation: duplicate assignment to 'inverter.modulator.gates[?]' in when-equation branch",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Inverters.InverterToGrid",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Inverters.InverterToLoad": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 1997,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Inverters.InverterToLoad: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Inverters.InverterToLoad) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Inverters.InverterToLoad failed in ToDae: internal todae error: MLS §8.3.5 violation: duplicate assignment to 'inverter.modulator.gates[?]' in when-equation branch",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Inverters.InverterToLoad",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Inverters.Rectifier": {
+        "compileElapsedMs": 2816,
+        "elapsedMs": 2816,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Inverters.Rectifier",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Transformation.OnePhase": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2711,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Transformation.OnePhase: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Transformation.OnePhase) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Transformation.OnePhase failed in ToDae: unresolved reference: trafo.par.r",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Transformation.OnePhase",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC1ph_DC.Transformation.TapChanger": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2927,
+        "error": "all compile plans failed for PowerSystems.Examples.AC1ph_DC.Transformation.TapChanger: plan(source=loaded, target=PowerSystems.Examples.AC1ph_DC.Transformation.TapChanger) crashed: Compilation error: PowerSystems.Examples.AC1ph_DC.Transformation.TapChanger failed in ToDae: invalid Appendix B discrete solved form: f_m assignment `tapRelay1.cnt_2` has direct self-dependency",
+        "modelName": "PowerSystems.Examples.AC1ph_DC.Transformation.TapChanger",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Drives.ASM": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 1780,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Drives.ASM: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Drives.ASM) crashed: Compilation error: PowerSystems.Examples.AC3ph.Drives.ASM failed in Typecheck: unevaluable array dimensions for 'asm.term.v': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.term.i': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.term.theta': dimension expression could not be evaluated: [Expression(PhaseSystem.m)]; unevaluable array dimensions for 'asm.motor.top.v_term': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.top.i_term': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.top.v_cond': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.top.i_cond': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.v': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.i': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.term.v': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.motor.term.i': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.motor.term.theta': dimension expression could not be evaluated: [Expression(PhaseSystem.m)]",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.ASM",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Drives.ASM_ctrl": {
+        "compileElapsedMs": 4970,
+        "elapsedMs": 4970,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.ASM_ctrl",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Drives.ASM_ctrlAv": {
+        "compileElapsedMs": 4945,
+        "elapsedMs": 4945,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.ASM_ctrlAv",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Drives.ASM_Y_D": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 4665,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Drives.ASM_Y_D: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Drives.ASM_Y_D) crashed: Compilation error: PowerSystems.Examples.AC3ph.Drives.ASM_Y_D failed in ToDae: invalid Appendix B discrete solved form: f_m assignment `relay1.cnt` has direct self-dependency",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.ASM_Y_D",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Drives.ASMav": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 1727,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Drives.ASMav: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Drives.ASMav) crashed: Compilation error: PowerSystems.Examples.AC3ph.Drives.ASMav failed in Typecheck: unevaluable array dimensions for 'asm.term.v': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.term.i': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.term.theta': dimension expression could not be evaluated: [Expression(PhaseSystem.m)]; unevaluable array dimensions for 'asm.motor.top.v_term': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.top.i_term': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.top.v_cond': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.top.i_cond': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.v': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.i': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'asm.motor.term.v': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.motor.term.i': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'asm.motor.term.theta': dimension expression could not be evaluated: [Expression(PhaseSystem.m)]",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.ASMav",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Drives.ASMav_icontrol": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 5479,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Drives.ASMav_icontrol: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Drives.ASMav_icontrol) crashed: Compilation error: PowerSystems.Examples.AC3ph.Drives.ASMav_icontrol failed in ToDae: unresolved reference: TableDir",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.ASMav_icontrol",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Drives.ASMcharacteristic": {
+        "compileElapsedMs": 4525,
+        "elapsedMs": 4525,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.ASMcharacteristic",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Drives.SM_ctrl": {
+        "compileElapsedMs": 3586,
+        "elapsedMs": 3586,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.SM_ctrl",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Drives.SM_ctrlAv": {
+        "compileElapsedMs": 3497,
+        "elapsedMs": 3497,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Drives.SM_ctrlAv",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Elementary.Breaker": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3183,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Elementary.Breaker: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Elementary.Breaker) crashed: Compilation error: PowerSystems.Examples.AC3ph.Elementary.Breaker failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Breaker",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Elementary.Fault": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3355,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Elementary.Fault: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Elementary.Fault) crashed: Compilation error: PowerSystems.Examples.AC3ph.Elementary.Fault failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Fault",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Elementary.Impedance": {
+        "compileElapsedMs": 3102,
+        "elapsedMs": 3102,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Impedance",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Elementary.ImpedanceYD": {
+        "compileElapsedMs": 3203,
+        "elapsedMs": 3203,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.ImpedanceYD",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Elementary.Inverter": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2097,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Elementary.Inverter: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Elementary.Inverter) crashed: Compilation error: PowerSystems.Examples.AC3ph.Elementary.Inverter failed in Flatten: incompatible connector types in connection: ac_dc.DC.v (dims: [3]) and meterDC.term_p.v (dims: [2])",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Inverter",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Elementary.Line": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3189,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Elementary.Line: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Elementary.Line) crashed: Compilation error: PowerSystems.Examples.AC3ph.Elementary.Line failed in ToDae: unresolved reference: line.par.g_pg",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Line",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Elementary.Load": {
+        "compileElapsedMs": 3094,
+        "elapsedMs": 3094,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Load",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Elementary.Machines": {
+        "compileElapsedMs": 4875,
+        "elapsedMs": 4875,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Machines",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Elementary.Rectifier": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2143,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Elementary.Rectifier: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Elementary.Rectifier) crashed: Compilation error: PowerSystems.Examples.AC3ph.Elementary.Rectifier failed in Flatten: incompatible connector types in connection: rectifier.DC.v (dims: [3]) and meterDC.term_p.v (dims: [2])",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Rectifier",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Elementary.Sensor": {
+        "compileElapsedMs": 3438,
+        "elapsedMs": 3438,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Sensor",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Elementary.Source": {
+        "compileElapsedMs": 3258,
+        "elapsedMs": 3258,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Source",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Elementary.Transformer": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3385,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Elementary.Transformer: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Elementary.Transformer) crashed: Compilation error: PowerSystems.Examples.AC3ph.Elementary.Transformer failed in ToDae: invalid Appendix B discrete solved form: f_m assignment `tapChanger.cnt_2` has direct self-dependency",
+        "modelName": "PowerSystems.Examples.AC3ph.Elementary.Transformer",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Generation.GenOrder3and7": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3679,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Generation.GenOrder3and7: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Generation.GenOrder3and7) crashed: Compilation error: PowerSystems.Examples.AC3ph.Generation.GenOrder3and7 failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relayGrd (statement=ForRangeNotConstant(VarRef { name: VarName(\"relayGrd.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.GenOrder3and7",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Generation.Islanding": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 1828,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Generation.Islanding: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Generation.Islanding) crashed: Compilation error: PowerSystems.Examples.AC3ph.Generation.Islanding failed in Typecheck: unevaluable array dimensions for 'turboGen.term.v': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'turboGen.term.i': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'turboGen.term.theta': dimension expression could not be evaluated: [Expression(PhaseSystem.m)]; unevaluable array dimensions for 'turboGen.generator.top.v_term': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'turboGen.generator.top.i_term': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'turboGen.generator.top.v_cond': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'turboGen.generator.top.i_cond': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'turboGen.generator.v': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'turboGen.generator.i': dimension expression could not be evaluated: [Expression(PS.n)]; unevaluable array dimensions for 'turboGen.generator.term.v': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'turboGen.generator.term.i': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'turboGen.generator.term.theta': dimension expression could not be evaluated: [Expression(PhaseSystem.m)]",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.Islanding",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Generation.LocalGeneration": {
+        "compileElapsedMs": 3612,
+        "elapsedMs": 3612,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.LocalGeneration",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Generation.PowerAngle": {
+        "compileElapsedMs": 3616,
+        "elapsedMs": 3616,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.PowerAngle",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Generation.PQsource": {
+        "compileElapsedMs": 2872,
+        "elapsedMs": 2872,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.PQsource",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Generation.PVsource": {
+        "compileElapsedMs": 2853,
+        "elapsedMs": 2853,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.PVsource",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Generation.TieLine": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 4154,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Generation.TieLine: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Generation.TieLine) crashed: Compilation error: PowerSystems.Examples.AC3ph.Generation.TieLine failed in ToDae: unresolved reference: turboGen1.excitation.generator.par.V_nom",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.TieLine",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Generation.TurbineGenerator": {
+        "compileElapsedMs": 3513,
+        "elapsedMs": 3513,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.TurbineGenerator",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Generation.TurbineGeneratorLine": {
+        "compileElapsedMs": 3623,
+        "elapsedMs": 3623,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.TurbineGeneratorLine",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Generation.TurboGeneratorLine": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3824,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Generation.TurboGeneratorLine: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Generation.TurboGeneratorLine) crashed: Compilation error: PowerSystems.Examples.AC3ph.Generation.TurboGeneratorLine failed in ToDae: unresolved reference: turboGen.excitation.generator.par.V_nom",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.TurboGeneratorLine",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Generation.TurboGroupGenerator": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3696,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Generation.TurboGroupGenerator: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Generation.TurboGroupGenerator) crashed: Compilation error: PowerSystems.Examples.AC3ph.Generation.TurboGroupGenerator failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relayGrd (statement=ForRangeNotConstant(VarRef { name: VarName(\"relayGrd.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.TurboGroupGenerator",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Generation.Vsource": {
+        "compileElapsedMs": 2978,
+        "elapsedMs": 2978,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.Vsource",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Generation.WindGeneratorLine": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 6010,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Generation.WindGeneratorLine: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Generation.WindGeneratorLine) crashed: Compilation error: PowerSystems.Examples.AC3ph.Generation.WindGeneratorLine failed in ToDae: unresolved reference: WT.par.w_nom",
+        "modelName": "PowerSystems.Examples.AC3ph.Generation.WindGeneratorLine",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Inverters.InverterAvToGrid": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2174,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Inverters.InverterAvToGrid: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Inverters.InverterAvToGrid) crashed: Compilation error: PowerSystems.Examples.AC3ph.Inverters.InverterAvToGrid failed in Flatten: incompatible connector types in connection: meterDC.term_n.v (dims: [2]) and inverter.DC.v (dims: [3])",
+        "modelName": "PowerSystems.Examples.AC3ph.Inverters.InverterAvToGrid",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Inverters.InverterToGrid": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2173,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Inverters.InverterToGrid: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Inverters.InverterToGrid) crashed: Compilation error: PowerSystems.Examples.AC3ph.Inverters.InverterToGrid failed in Flatten: incompatible connector types in connection: meterDC.term_n.v (dims: [2]) and inverter.DC.v (dims: [3])",
+        "modelName": "PowerSystems.Examples.AC3ph.Inverters.InverterToGrid",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Inverters.InverterToLoad": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2234,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Inverters.InverterToLoad: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Inverters.InverterToLoad) crashed: Compilation error: PowerSystems.Examples.AC3ph.Inverters.InverterToLoad failed in Flatten: incompatible connector types in connection: meterDC.term_n.v (dims: [2]) and inverter.DC.v (dims: [3])",
+        "modelName": "PowerSystems.Examples.AC3ph.Inverters.InverterToLoad",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Inverters.Rectifier": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2152,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Inverters.Rectifier: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Inverters.Rectifier) crashed: Compilation error: PowerSystems.Examples.AC3ph.Inverters.Rectifier failed in Flatten: incompatible connector types in connection: rectifier.DC.v (dims: [3]) and meterDC.term_p.v (dims: [2])",
+        "modelName": "PowerSystems.Examples.AC3ph.Inverters.Rectifier",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Precalculation.EqCircFromTransDat": {
+        "compileElapsedMs": 3318,
+        "elapsedMs": 3318,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.EqCircFromTransDat",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Precalculation.TransDatFromEqCirc": {
+        "compileElapsedMs": 2285,
+        "elapsedMs": 2285,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.TransDatFromEqCirc",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixEqCirc0": {
+        "compileElapsedMs": 1825,
+        "elapsedMs": 1825,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixEqCirc0",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixEqCirc1": {
+        "compileElapsedMs": 1880,
+        "elapsedMs": 1880,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixEqCirc1",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixEqCirc2": {
+        "compileElapsedMs": 1820,
+        "elapsedMs": 1820,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixEqCirc2",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixEqCirc3": {
+        "compileElapsedMs": 1844,
+        "elapsedMs": 1844,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixEqCirc3",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixTrDat0": {
+        "compileElapsedMs": 3364,
+        "elapsedMs": 3364,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixTrDat0",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixTrDat1": {
+        "compileElapsedMs": 3411,
+        "elapsedMs": 3411,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixTrDat1",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixTrDat2": {
+        "compileElapsedMs": 3224,
+        "elapsedMs": 3224,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixTrDat2",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixTrDat3": {
+        "compileElapsedMs": 3219,
+        "elapsedMs": 3219,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Precalculation.Z_matrixTrDat3",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Transformation.PhaseShifts": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3895,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transformation.PhaseShifts: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transformation.PhaseShifts) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transformation.PhaseShifts failed in ToDae: unresolved reference: trafo1.par.r",
+        "modelName": "PowerSystems.Examples.AC3ph.Transformation.PhaseShifts",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Transformation.TapChanger": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3760,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transformation.TapChanger: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transformation.TapChanger) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transformation.TapChanger failed in ToDae: invalid Appendix B discrete solved form: f_m assignment `tapRelay1.cnt_1` has direct self-dependency",
+        "modelName": "PowerSystems.Examples.AC3ph.Transformation.TapChanger",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Transformation.ThreeWinding": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3585,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transformation.ThreeWinding: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transformation.ThreeWinding) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transformation.ThreeWinding failed in ToDae: unresolved reference: trafo3Stray.par.r",
+        "modelName": "PowerSystems.Examples.AC3ph.Transformation.ThreeWinding",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Transmission.DoubleLine": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3900,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.DoubleLine: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.DoubleLine) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.DoubleLine failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.DoubleLine",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Transmission.DoubleLineTG": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 4612,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.DoubleLineTG: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.DoubleLineTG) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.DoubleLineTG failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.DoubleLineTG",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Transmission.DoubleRXline": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3759,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.DoubleRXline: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.DoubleRXline) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.DoubleRXline failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.DoubleRXline",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Transmission.DoubleRXlineTG": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 4232,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.DoubleRXlineTG: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.DoubleRXlineTG) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.DoubleRXlineTG failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.DoubleRXlineTG",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Transmission.FaultRXline": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3508,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.FaultRXline: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.FaultRXline) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.FaultRXline failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.FaultRXline",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Transmission.FaultTline": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3838,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.FaultTline: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.FaultTline) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.FaultTline failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.FaultTline",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Transmission.PowerTransfer": {
+        "compileElapsedMs": 3016,
+        "elapsedMs": 3016,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.PowerTransfer",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.AC3ph.Transmission.RXline": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3327,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.RXline: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.RXline) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.RXline failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.RXline",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Transmission.Tline": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3376,
+        "error": "all compile plans failed for PowerSystems.Examples.AC3ph.Transmission.Tline: plan(source=loaded, target=PowerSystems.Examples.AC3ph.Transmission.Tline) crashed: Compilation error: PowerSystems.Examples.AC3ph.Transmission.Tline failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relay1 (statement=ForRangeNotConstant(VarRef { name: VarName(\"relay1.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.Tline",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.AC3ph.Transmission.VoltageStability": {
+        "compileElapsedMs": 3996,
+        "elapsedMs": 3996,
+        "error": "",
+        "modelName": "PowerSystems.Examples.AC3ph.Transmission.VoltageStability",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.Generic.Network.NetworkControlled": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 9632,
+        "error": "all compile plans failed for PowerSystems.Examples.Generic.Network.NetworkControlled: plan(source=loaded, target=PowerSystems.Examples.Generic.Network.NetworkControlled) crashed: Compilation error: PowerSystems.Examples.Generic.Network.NetworkControlled failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.Generic.Network.NetworkControlled",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Generic.Network.NetworkLoop": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 23062,
+        "error": "all compile plans failed for PowerSystems.Examples.Generic.Network.NetworkLoop: plan(source=loaded, target=PowerSystems.Examples.Generic.Network.NetworkLoop) crashed: Compilation error: PowerSystems.Examples.Generic.Network.NetworkLoop failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.Generic.Network.NetworkLoop",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Generic.Network.NetworkLoop_d": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 1492,
+        "error": "all compile plans failed for PowerSystems.Examples.Generic.Network.NetworkLoop_d: plan(source=loaded, target=PowerSystems.Examples.Generic.Network.NetworkLoop_d) crashed: Compilation error: PowerSystems.Examples.Generic.Network.NetworkLoop_d failed in Instantiate: redeclaration of `PhaseSystem` violates constrainedby: `PowerSystems.PhaseSystems.ThreePhase_d` is not a subtype of `PhaseSystems.ThreePhase_dq`",
+        "modelName": "PowerSystems.Examples.Generic.Network.NetworkLoop_d",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Generic.Network.NetworkLoop_dq": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 23061,
+        "error": "all compile plans failed for PowerSystems.Examples.Generic.Network.NetworkLoop_dq: plan(source=loaded, target=PowerSystems.Examples.Generic.Network.NetworkLoop_dq) crashed: Compilation error: PowerSystems.Examples.Generic.Network.NetworkLoop_dq failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.Generic.Network.NetworkLoop_dq",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Generic.Network.NetworkLoop_dq0": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 22864,
+        "error": "all compile plans failed for PowerSystems.Examples.Generic.Network.NetworkLoop_dq0: plan(source=loaded, target=PowerSystems.Examples.Generic.Network.NetworkLoop_dq0) crashed: Compilation error: PowerSystems.Examples.Generic.Network.NetworkLoop_dq0 failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.Generic.Network.NetworkLoop_dq0",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Generic.Network.NetworkOpened": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 8568,
+        "error": "all compile plans failed for PowerSystems.Examples.Generic.Network.NetworkOpened: plan(source=loaded, target=PowerSystems.Examples.Generic.Network.NetworkOpened) crashed: Compilation error: PowerSystems.Examples.Generic.Network.NetworkOpened failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.Generic.Network.NetworkOpened",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Introductory.Display": {
+        "compileElapsedMs": 3202,
+        "elapsedMs": 3202,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Introductory.Display",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.Introductory.Frequency": {
+        "compileElapsedMs": 2763,
+        "elapsedMs": 2763,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Introductory.Frequency",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.Introductory.InitialSteadyState": {
+        "compileElapsedMs": 3141,
+        "elapsedMs": 3141,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Introductory.InitialSteadyState",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.Introductory.ReferenceInertial": {
+        "compileElapsedMs": 3027,
+        "elapsedMs": 3027,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Introductory.ReferenceInertial",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.Introductory.ReferenceSynchron": {
+        "compileElapsedMs": 3135,
+        "elapsedMs": 3135,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Introductory.ReferenceSynchron",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.Introductory.SimulationFixedInitial": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3265,
+        "error": "all compile plans failed for PowerSystems.Examples.Introductory.SimulationFixedInitial: plan(source=loaded, target=PowerSystems.Examples.Introductory.SimulationFixedInitial) crashed: Compilation error: PowerSystems.Examples.Introductory.SimulationFixedInitial failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relayNet (statement=ForRangeNotConstant(VarRef { name: VarName(\"relayNet.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.Introductory.SimulationFixedInitial",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Introductory.SimulationSteadyInitial": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3269,
+        "error": "all compile plans failed for PowerSystems.Examples.Introductory.SimulationSteadyInitial: plan(source=loaded, target=PowerSystems.Examples.Introductory.SimulationSteadyInitial) crashed: Compilation error: PowerSystems.Examples.Introductory.SimulationSteadyInitial failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relayNet (statement=ForRangeNotConstant(VarRef { name: VarName(\"relayNet.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.Introductory.SimulationSteadyInitial",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Introductory.SimulationSteadyState": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3241,
+        "error": "all compile plans failed for PowerSystems.Examples.Introductory.SimulationSteadyState: plan(source=loaded, target=PowerSystems.Examples.Introductory.SimulationSteadyState) crashed: Compilation error: PowerSystems.Examples.Introductory.SimulationSteadyState failed in ToDae: unsupported model algorithm in solver-facing DAE: algorithm from relayNet (statement=ForRangeNotConstant(VarRef { name: VarName(\"relayNet.switched\"), subscripts: [] }))",
+        "modelName": "PowerSystems.Examples.Introductory.SimulationSteadyState",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Introductory.Tables": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2586,
+        "error": "all compile plans failed for PowerSystems.Examples.Introductory.Tables: plan(source=loaded, target=PowerSystems.Examples.Introductory.Tables) crashed: Compilation error: PowerSystems.Examples.Introductory.Tables failed in ToDae: unresolved reference: TableDir",
+        "modelName": "PowerSystems.Examples.Introductory.Tables",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Introductory.Units": {
+        "compileElapsedMs": 3104,
+        "elapsedMs": 3104,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Introductory.Units",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.PowerWorld.Components.City": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3549,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Components.City: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Components.City) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Components.City failed in ToDae: unresolved reference: PowerWorldResources",
+        "modelName": "PowerSystems.Examples.PowerWorld.Components.City",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.PowerWorld.Components.HydroPlant": {
+        "compileElapsedMs": 3242,
+        "elapsedMs": 3242,
+        "error": "",
+        "modelName": "PowerSystems.Examples.PowerWorld.Components.HydroPlant",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.PowerWorld.Components.LoadDispatcher": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3549,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Components.LoadDispatcher: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Components.LoadDispatcher) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Components.LoadDispatcher failed in ToDae: unresolved reference: PowerWorldResources",
+        "modelName": "PowerSystems.Examples.PowerWorld.Components.LoadDispatcher",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.PowerWorld.Components.PowerPlant": {
+        "compileElapsedMs": 3379,
+        "elapsedMs": 3379,
+        "error": "",
+        "modelName": "PowerSystems.Examples.PowerWorld.Components.PowerPlant",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.PowerWorld.Components.WindFarm": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3918,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Components.WindFarm: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Components.WindFarm) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Components.WindFarm failed in ToDae: unresolved reference: PowerWorldResources",
+        "modelName": "PowerSystems.Examples.PowerWorld.Components.WindFarm",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.PowerWorld.PowerWorld": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2288,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.PowerWorld: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.PowerWorld) crashed: Compilation error: PowerSystems.Examples.PowerWorld.PowerWorld failed in Typecheck: unevaluable array dimensions for 'city.v_start': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'city.p': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'powerPlant.p': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]; unevaluable array dimensions for 'hydroPlant.p': dimension expression could not be evaluated: [Expression(PhaseSystem.n)]",
+        "modelName": "PowerSystems.Examples.PowerWorld.PowerWorld",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.PowerWorld.Test.CityTest": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3989,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.CityTest: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.CityTest) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.CityTest failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.CityTest",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.PowerWorld.Test.HydroPlantTest1": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3445,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.HydroPlantTest1: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.HydroPlantTest1) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.HydroPlantTest1 failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.HydroPlantTest1",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.PowerWorld.Test.HydroPlantTest2": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3636,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.HydroPlantTest2: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.HydroPlantTest2) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.HydroPlantTest2 failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.HydroPlantTest2",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.PowerWorld.Test.LoadDispatcherTest": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3760,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.LoadDispatcherTest: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.LoadDispatcherTest) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.LoadDispatcherTest failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.LoadDispatcherTest",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.PowerWorld.Test.PowerPlantTest1": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3602,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.PowerPlantTest1: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.PowerPlantTest1) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.PowerPlantTest1 failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.PowerPlantTest1",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.PowerWorld.Test.PowerPlantTest2": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3573,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.PowerPlantTest2: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.PowerPlantTest2) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.PowerPlantTest2 failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.PowerPlantTest2",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.PowerWorld.Test.PowerPlantTest3": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3725,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.PowerPlantTest3: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.PowerPlantTest3) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.PowerPlantTest3 failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.PowerPlantTest3",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.PowerWorld.Test.WindFarmGridTest": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 3984,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.WindFarmGridTest: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.WindFarmGridTest) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.WindFarmGridTest failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.WindFarmGridTest",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.PowerWorld.Test.WindFarmHVDCTest": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 4273,
+        "error": "all compile plans failed for PowerSystems.Examples.PowerWorld.Test.WindFarmHVDCTest: plan(source=loaded, target=PowerSystems.Examples.PowerWorld.Test.WindFarmHVDCTest) crashed: Compilation error: PowerSystems.Examples.PowerWorld.Test.WindFarmHVDCTest failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.PowerWorld.Test.WindFarmHVDCTest",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Wind.Components.Rotor": {
+        "compileElapsedMs": 1813,
+        "elapsedMs": 1813,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Wind.Components.Rotor",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.Wind.Components.WindTurbine": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 5670,
+        "error": "all compile plans failed for PowerSystems.Examples.Wind.Components.WindTurbine: plan(source=loaded, target=PowerSystems.Examples.Wind.Components.WindTurbine) crashed: Compilation error: PowerSystems.Examples.Wind.Components.WindTurbine failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.Wind.Components.WindTurbine",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Wind.Test.RotorTest": {
+        "compileElapsedMs": 1830,
+        "elapsedMs": 1830,
+        "error": "",
+        "modelName": "PowerSystems.Examples.Wind.Test.RotorTest",
+        "status": "compiled"
+      },
+      "PowerSystems.Examples.Wind.WindFarm": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 10664,
+        "error": "all compile plans failed for PowerSystems.Examples.Wind.WindFarm: plan(source=loaded, target=PowerSystems.Examples.Wind.WindFarm) crashed: Compilation error: PowerSystems.Examples.Wind.WindFarm failed in ToDae: unresolved reference: line.par.g_pg",
+        "modelName": "PowerSystems.Examples.Wind.WindFarm",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Wind.WindTurbine_DFIG": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2483,
+        "error": "all compile plans failed for PowerSystems.Examples.Wind.WindTurbine_DFIG: plan(source=loaded, target=PowerSystems.Examples.Wind.WindTurbine_DFIG) crashed: Compilation error: PowerSystems.Examples.Wind.WindTurbine_DFIG failed in Flatten: incompatible connector types in connection: inverter1.DC.v (dims: [3]) and meterDC.term_p.v (dims: [2])",
+        "modelName": "PowerSystems.Examples.Wind.WindTurbine_DFIG",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Wind.WindTurbine_IG": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 5742,
+        "error": "all compile plans failed for PowerSystems.Examples.Wind.WindTurbine_IG: plan(source=loaded, target=PowerSystems.Examples.Wind.WindTurbine_IG) crashed: Compilation error: PowerSystems.Examples.Wind.WindTurbine_IG failed in ToDae: invalid runtime contract: duplicate f_z assignment target `system.initime` (new origin='guarded when equation assignment to system.initime', prior origin='guarded when equation assignment to system.initime')",
+        "modelName": "PowerSystems.Examples.Wind.WindTurbine_IG",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Wind.WindTurbine_PSGI": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2465,
+        "error": "all compile plans failed for PowerSystems.Examples.Wind.WindTurbine_PSGI: plan(source=loaded, target=PowerSystems.Examples.Wind.WindTurbine_PSGI) crashed: Compilation error: PowerSystems.Examples.Wind.WindTurbine_PSGI failed in Flatten: incompatible connector types in connection: inverter1.DC.v (dims: [3]) and meterDC.term_p.v (dims: [2])",
+        "modelName": "PowerSystems.Examples.Wind.WindTurbine_PSGI",
+        "status": "compile_fail"
+      },
+      "PowerSystems.Examples.Wind.WindTurbine_PSGR": {
+        "compileElapsedMs": 0,
+        "elapsedMs": 2510,
+        "error": "all compile plans failed for PowerSystems.Examples.Wind.WindTurbine_PSGR: plan(source=loaded, target=PowerSystems.Examples.Wind.WindTurbine_PSGR) crashed: Compilation error: PowerSystems.Examples.Wind.WindTurbine_PSGR failed in Flatten: incompatible connector types in connection: rectifier1.DC.v (dims: [3]) and meterDC.term_p.v (dims: [2])",
+        "modelName": "PowerSystems.Examples.Wind.WindTurbine_PSGR",
+        "status": "compile_fail"
+      }
+    },
+    "updatedAt": "2026-05-15T23:34:47.396Z"
+  },
+  "libraryTag": "powersystems",
+  "runtime": {
+    "records": [],
+    "recordsByModel": {},
+    "updatedAt": "2026-05-15T23:34:47.397Z"
+  },
+  "schemaVersion": 1
+}

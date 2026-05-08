@@ -41,8 +41,8 @@ import type {
   ClientTool,
   TyClient,
   partialTaskDraft,
-} from '@taskyon/client'
-import { initializeTaskyon, createTool, createChatCompletionTask } from '@taskyon/client'
+} from '@taskyon/tyclient'
+import { initializeTaskyon, createTool, createChatCompletionTask } from '@taskyon/tyclient'
 import { freeKey } from 'src/assets/taskyon_free_key'
 import type { JSONSchema7 } from 'json-schema'
 import { useAppStateStore } from 'src/stores/appState'

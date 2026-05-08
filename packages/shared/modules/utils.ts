@@ -33,16 +33,16 @@ export function countElements(arr: unknown): number {
   return n
 }
 
-export function copyToClipboard(text: string | undefined) {
-  if (text)
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        console.log('Copied to clipboard')
-      })
-      .catch((err) => {
-        console.error('Error in copying text: ', err)
-      })
+export async function copyToClipboard(text: string | undefined): Promise<boolean> {
+  if (!text) return false
+  try {
+    await navigator.clipboard.writeText(text)
+    console.log('Copied to clipboard')
+    return true
+  } catch (err) {
+    console.error('Error in copying text: ', err)
+    return false
+  }
 }
 
 export async function copyPngToClipboard(png: Uint8Array) {

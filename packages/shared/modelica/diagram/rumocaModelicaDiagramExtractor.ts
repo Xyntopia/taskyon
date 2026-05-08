@@ -10,8 +10,13 @@ const ensureDiagramShape = (value: unknown): ModelicaDiagramDto => {
   const record = value as Record<string, unknown>
   const components = Array.isArray(record.components) ? record.components : []
   const connections = Array.isArray(record.connections) ? record.connections : []
+  const classIcon =
+    record.classIcon && typeof record.classIcon === 'object'
+      ? (record.classIcon as ModelicaDiagramDto['classIcon'])
+      : null
   return {
     className: asString(record.className) || 'Model',
+    ...(classIcon ? { classIcon } : {}),
     components: components as ModelicaDiagramDto['components'],
     connections: connections as ModelicaDiagramDto['connections'],
   }

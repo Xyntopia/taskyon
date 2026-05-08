@@ -8,8 +8,10 @@ import {
   shouldValidateModelAbiForRenderedOutput,
   validateModelAbiValidationResultV1,
 } from './modelica'
+import { hasRumocaTemplateRenderer, renderRumocaTemplate } from './rumocaTemplateRender'
 import { strFromU8, unzipSync } from 'fflate'
 import { executeCodeInIframeSimple } from '../modules/sandbox/iframeWorker'
+import { validateJavaScriptInSandbox } from '../modules/sandbox/checkJsSyntax'
 import { serializeObject } from '../modules/serializeObject'
 import { createGraphController } from '../modules/graph'
 import baseDaeTemplate from './base_dae.jinja?raw'
@@ -143,6 +145,39 @@ equation
 end BooleanNetworkShimSmoke;
 `.trim()
 
+function getTemplateModelName(dae: Record<string, unknown>, fallback = 'Model'): string {
+  const raw = dae.model_name
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw : fallback
+}
+
+function assertTemplateRendererAvailable(wasm: DiagnosticsWasm): void {
+  if (!hasRumocaTemplateRenderer(wasm)) {
+    throw new Error('Rumoca wasm export missing: render_template / render_target')
+  }
+}
+
+function renderDiagnosticsTemplate(
+  wasm: DiagnosticsWasm,
+  dae: Record<string, unknown>,
+  templateSource: string,
+  templatePath: string,
+  outputPath: string,
+): string {
+  const rendered = renderRumocaTemplate({
+    wasm,
+    daeJson: JSON.stringify(dae),
+    templateSource,
+    modelName: getTemplateModelName(dae),
+    templatePath,
+    outputPath,
+    targetName: 'template',
+  })
+  if (!rendered.length) {
+    throw new Error(`Rumoca template render returned empty output for ${templatePath}`)
+  }
+  return rendered
+}
+
 const MODELICA_BOOLEAN_SIGNAL_GENERATOR_SOURCE = `
 model BooleanSignalGenerator
   Modelica.Blocks.Sources.BooleanPulse booleanPulse(period = 0.2, width = 50);
@@ -217,9 +252,7 @@ async function runTemplateCoverage(source: string, modelName: string) {
   if (typeof wasm.compile_to_json !== 'function') {
     throw new Error('Rumoca wasm export missing: compile_to_json')
   }
-  if (typeof wasm.render_template !== 'function') {
-    throw new Error('Rumoca wasm export missing: render_template')
-  }
+  assertTemplateRendererAvailable(wasm)
 
   const compiled = wasm.compile_to_json(source, modelName)
   const parsed = JSON.parse(compiled) as {
@@ -243,23 +276,20 @@ async function runTemplateCoverage(source: string, modelName: string) {
     throw new Error('Selected DAE is missing __rumoca_prepared_status metadata')
   }
 
-  const rendered = wasm.render_template(
-    JSON.stringify(dae),
+  const rendered = renderDiagnosticsTemplate(
+    wasm,
+    dae,
     '{{ dae.model_name | default("unknown") }}',
+    'template-check.jinja',
+    'template-check.txt',
   )
-  if (typeof rendered !== 'string' || rendered.length === 0) {
-    throw new Error('Rumoca render_template returned empty output')
-  }
 
   const templateResults: Record<
     string,
     { ok: boolean; preview: string; jsExecutable: boolean; expectedJs: boolean; abiOk?: boolean }
   > = {}
   for (const check of templateChecks) {
-    const out = wasm.render_template(JSON.stringify(dae), check.source)
-    if (typeof out !== 'string' || out.length === 0) {
-      throw new Error(`Template render failed or empty output: ${check.name}`)
-    }
+    const out = renderDiagnosticsTemplate(wasm, dae, check.source, check.name, check.name)
     for (const snippet of check.requiredSnippets) {
       if (!out.includes(snippet)) {
         throw new Error(`Template ${check.name} missing expected snippet: ${snippet}`)
@@ -327,7 +357,8 @@ async function runTemplateCoverage(source: string, modelName: string) {
     preparedDiagnostics,
     exports: {
       compile_to_json: true,
-      render_template: true,
+      render_template: typeof wasm.render_template === 'function',
+      render_target: typeof wasm.render_target === 'function',
     },
     renderedPreview: rendered.slice(0, 80),
     templates: templateResults,
@@ -347,6 +378,13 @@ end Test;
 }
 
 export async function testModelicaDiagramSvgRenderSmoke() {
+  if (typeof Worker === 'undefined' || typeof document === 'undefined') {
+    return {
+      ok: true,
+      skipped: 'diagram-render-smoke requires browser Worker + DOM',
+    }
+  }
+
   const debug: Record<string, unknown> = {
     phase: 'init',
     sourceLength: MODELICA_DIAGRAM_SMOKE_SOURCE.length,
@@ -472,7 +510,7 @@ end TestPreparedMeta;
     throw new Error('compile_to_json should not expose dae_prepared_diagnostics in native-only API')
   }
 
-  const build = (dae as Record<string, unknown>).__rumoca_build
+  const build = (dae).__rumoca_build
   if (!build || typeof build !== 'object' || Array.isArray(build)) {
     throw new Error('Native DAE is missing __rumoca_build metadata')
   }
@@ -527,9 +565,7 @@ export async function testModelicaBooleanNetworkShimRuntime() {
   if (typeof wasm.compile_to_json !== 'function') {
     throw new Error('Rumoca wasm export missing: compile_to_json')
   }
-  if (typeof wasm.render_template !== 'function') {
-    throw new Error('Rumoca wasm export missing: render_template')
-  }
+  assertTemplateRendererAvailable(wasm)
 
   const compiled = wasm.compile_to_json(
     MODELICA_BOOLEAN_NETWORK_SHIM_SOURCE,
@@ -545,7 +581,13 @@ export async function testModelicaBooleanNetworkShimRuntime() {
     throw new Error('Rumoca compile_to_json returned no DAE payload')
   }
 
-  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  const rendered = renderDiagnosticsTemplate(
+    wasm,
+    dae,
+    javascriptTemplate,
+    'javascript.jinja',
+    'model.js',
+  )
   if (typeof rendered !== 'string' || !rendered.trim()) {
     throw new Error('Rendered JS is empty')
   }
@@ -559,13 +601,14 @@ export async function testModelicaBooleanNetworkShimRuntime() {
   const runId = 'modelica-boolean-network-shim-runtime'
   const abort = new AbortController()
   try {
+    const runCode = await buildIframeCodeChecked(rendered, runId)
     const result = await executeCodeInIframeSimple<{
       meta?: { stopReason?: unknown; stopError?: unknown }
       data?: { t?: unknown[] }
     }>(
       {
         id: runId,
-        code: buildIframeCode(rendered),
+        code: runCode,
         sourceURL: `${runId}.js`,
         stopSignal: abort.signal,
       },
@@ -614,16 +657,17 @@ export async function testModelicaBooleanNetworkShimRuntime() {
 
 export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
   const wasm = await getDiagnosticsWasm()
-  if (typeof wasm.compile_to_json !== 'function') {
-    throw new Error('Rumoca wasm export missing: compile_to_json')
-  }
-  if (typeof wasm.render_template !== 'function') {
-    throw new Error('Rumoca wasm export missing: render_template')
-  }
+  assertTemplateRendererAvailable(wasm)
 
-  const compiled = wasm.compile_to_json(
+  const debug: Record<string, unknown> = {
+    phase: 'compile',
+    model: 'BooleanSignalGenerator',
+  }
+  const compiled = await compileToJsonWithAutoMsl(
+    wasm,
     MODELICA_BOOLEAN_SIGNAL_GENERATOR_SOURCE,
     'BooleanSignalGenerator',
+    debug,
   )
   const parsed = JSON.parse(compiled) as {
     dae?: unknown
@@ -635,7 +679,13 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
     throw new Error('Rumoca compile_to_json returned no DAE payload')
   }
 
-  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  const rendered = renderDiagnosticsTemplate(
+    wasm,
+    dae,
+    javascriptTemplate,
+    'javascript.jinja',
+    'model.js',
+  )
   if (typeof rendered !== 'string' || !rendered.trim()) {
     throw new Error('Rendered JS is empty')
   }
@@ -643,13 +693,14 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
   const runId = 'modelica-boolean-signal-generator-waveform-regression'
   const abort = new AbortController()
   try {
+    const runCode = await buildIframeCodeChecked(rendered, runId)
     const result = await executeCodeInIframeSimple<{
       meta?: { stopReason?: unknown; stopError?: unknown }
       data?: { t?: unknown[]; y?: Record<string, unknown> }
     }>(
       {
         id: runId,
-        code: buildIframeCode(rendered),
+        code: runCode,
         sourceURL: `${runId}.js`,
         stopSignal: abort.signal,
       },
@@ -771,9 +822,7 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
       'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
     )
   }
-  if (typeof wasm.render_template !== 'function') {
-    throw new Error('Rumoca wasm export missing: render_template')
-  }
+  assertTemplateRendererAvailable(wasm)
 
   const debug: Record<string, unknown> = {
     phase: 'init',
@@ -797,7 +846,13 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
     throw new Error('Rumoca compile_to_json returned no DAE payload')
   }
 
-  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  const rendered = renderDiagnosticsTemplate(
+    wasm,
+    dae,
+    javascriptTemplate,
+    'javascript.jinja',
+    'model.js',
+  )
   if (typeof rendered !== 'string' || !rendered.trim()) {
     throw new Error('Rendered JS is empty')
   }
@@ -818,11 +873,12 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
         },
         (error) => {
           clearTimeout(timer)
-          reject(error)
+          reject(error instanceof Error ? error : new Error(String(error)))
         },
       )
     })
   try {
+    const runCode = await buildIframeCodeChecked(rendered, runId)
     const result = await withTimeout(
       executeCodeInIframeSimple<{
         meta?: {
@@ -835,7 +891,7 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
       }>(
         {
           id: runId,
-          code: buildIframeCode(rendered),
+          code: runCode,
           sourceURL: `${runId}.js`,
           stopSignal: abort.signal,
         },
@@ -1058,9 +1114,7 @@ model BouncingBall             "The bouncing ball model"
   if (typeof wasm.compile_to_json !== 'function') {
     throw new Error('Rumoca wasm export missing: compile_to_json')
   }
-  if (typeof wasm.render_template !== 'function') {
-    throw new Error('Rumoca wasm export missing: render_template')
-  }
+  assertTemplateRendererAvailable(wasm)
 
   const compiled = wasm.compile_to_json(source, 'BouncingBall')
   const parsed = JSON.parse(compiled) as {
@@ -1083,14 +1137,43 @@ model BouncingBall             "The bouncing ball model"
       const value = asObj[key]
       return Array.isArray(value) ? value.length : 0
     }
+    const mapLen = (key: string) => {
+      if (!asObj) return 0
+      const value = asObj[key]
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return 0
+      return Object.keys(value as Record<string, unknown>).length
+    }
+    const xCount = mapLen('x')
+    const yCount = mapLen('y')
+    const zCount = mapLen('z')
+    const mCount = mapLen('m')
+    const wCount = mapLen('w')
+    const fxCount = len('f_x')
+    const solverNyCurrentTemplate = yCount + zCount + mCount + wCount
+    const dynamicUnknownsCurrentTemplate = xCount + solverNyCurrentTemplate
+    const dynamicUnknownsNoM = xCount + yCount + zCount + wCount
     return {
-      f_x: len('f_x'),
+      f_x: fxCount,
       f_c: len('f_c'),
       relation: len('relation'),
       synthetic_root_conditions: len('synthetic_root_conditions'),
       when_clauses: len('when_clauses'),
       f_z: len('f_z'),
       f_m: len('f_m'),
+      variableCounts: {
+        x: xCount,
+        y: yCount,
+        z: zCount,
+        m: mCount,
+        w: wCount,
+      },
+      dynamicBalance: {
+        solverNyCurrentTemplate,
+        dynamicUnknownsCurrentTemplate,
+        dynamicUnknownsNoM,
+        fxMinusDynamicUnknownsCurrentTemplate: fxCount - dynamicUnknownsCurrentTemplate,
+        fxMinusDynamicUnknownsNoM: fxCount - dynamicUnknownsNoM,
+      },
       prepared_status: getPreparedDaeStatus(asObj),
       prepared_diagnostics: getPreparedDaeDiagnostics(asObj),
     }
@@ -1100,7 +1183,13 @@ model BouncingBall             "The bouncing ball model"
   const nativeDaeSummary = summarizeDaeEventShape(parsed.dae_native ?? parsed.dae)
   const preparedDaeSummary = summarizeDaeEventShape(parsed.dae_prepared)
 
-  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  const rendered = renderDiagnosticsTemplate(
+    wasm,
+    dae,
+    javascriptTemplate,
+    'javascript.jinja',
+    'model.js',
+  )
   if (!rendered || typeof rendered !== 'string') {
     throw new Error('Rendering javascript.jinja failed for BouncingBall')
   }
@@ -1130,8 +1219,8 @@ model BouncingBall             "The bouncing ball model"
     )
   }
 
-  const runCode = buildIframeCode(rendered)
   const runId = 'modelica-bouncing-ball-event-localization'
+  const runCode = await buildIframeCodeChecked(rendered, runId)
   const runAbort = new AbortController()
 
   type SimResult = {
@@ -1395,9 +1484,7 @@ model BouncingBall             "The bouncing ball model"
   if (typeof wasm.compile_to_json !== 'function') {
     throw new Error('Rumoca wasm export missing: compile_to_json')
   }
-  if (typeof wasm.render_template !== 'function') {
-    throw new Error('Rumoca wasm export missing: render_template')
-  }
+  assertTemplateRendererAvailable(wasm)
 
   const compiled = wasm.compile_to_json(source, 'BouncingBall')
   const parsed = JSON.parse(compiled) as {
@@ -1410,13 +1497,19 @@ model BouncingBall             "The bouncing ball model"
     throw new Error('Rumoca compile_to_json returned no DAE payload for BouncingBall')
   }
 
-  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  const rendered = renderDiagnosticsTemplate(
+    wasm,
+    dae,
+    javascriptTemplate,
+    'javascript.jinja',
+    'model.js',
+  )
   if (!rendered || typeof rendered !== 'string') {
     throw new Error('Rendering javascript.jinja failed for BouncingBall')
   }
 
-  const runCode = buildIframeCode(rendered)
   const runId = 'modelica-bouncing-ball-standard-settings'
+  const runCode = await buildIframeCodeChecked(rendered, runId)
   const runAbort = new AbortController()
   type SimResult = {
     meta?: {
@@ -1635,7 +1728,15 @@ end Test;
   > = {}
 
   for (const c of cases) {
-    const rendered = wasm.render_template(daeJson, c.template)
+    const rendered = renderRumocaTemplate({
+      wasm,
+      daeJson,
+      templateSource: c.template,
+      modelName: getTemplateModelName(dae),
+      templatePath: c.name,
+      outputPath: c.name,
+      targetName: 'template',
+    })
     const decision = shouldValidateModelAbiForRenderedOutput(rendered)
     const renderedSummary = summarizeRenderedPreview(rendered)
     if (decision.shouldValidate !== c.shouldValidate) {
@@ -1735,6 +1836,7 @@ type SharedMslLoadResult = MslLoadResult & {
   zipBytes: number
 }
 type DiagnosticsMslApi = {
+  compile_to_json?: (source: string, modelName: string) => string
   compile_with_source_roots?: (source: string, modelName: string, sourceRootsJson: string) => string
   compile_with_libraries?: (source: string, modelName: string, librariesJson: string) => string
   load_source_roots?: (sourceRootsJson: string) => string
@@ -1749,6 +1851,33 @@ type DiagnosticsMslApi = {
 
 let sharedDiagnosticsWasmPromise: Promise<DiagnosticsWasm> | null = null
 let sharedDiagnosticsMslLoadPromise: Promise<SharedMslLoadResult> | null = null
+
+async function assertGeneratedJsSyntaxOrThrow(rendered: string, context: string): Promise<void> {
+  const check = await validateJavaScriptInSandbox(rendered)
+  if (check.valid) return
+  const details = [
+    `Generated JavaScript syntax check failed (${context})`,
+    `phase=${String(check.phase || 'unknown')}`,
+    `errorName=${String(check.errorName || 'unknown')}`,
+    `message=${String(check.message || 'unknown')}`,
+    `line=${String(check.line ?? 'n/a')}`,
+    `column=${String(check.column ?? 'n/a')}`,
+    check.snippet ? `snippet:\n${check.snippet}` : '',
+    check.rawError ? `rawError:\n${check.rawError}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+  throw new Error(details)
+}
+
+async function buildIframeCodeChecked(
+  rendered: string,
+  context: string,
+  solverSource?: string,
+): Promise<string> {
+  await assertGeneratedJsSyntaxOrThrow(rendered, context)
+  return buildIframeCode(rendered, solverSource)
+}
 
 async function getDiagnosticsWasm(): Promise<DiagnosticsWasm> {
   if (!sharedDiagnosticsWasmPromise) {
@@ -1933,6 +2062,33 @@ function compileWithDiagnosticsMsl(
     return wasm.compile_with_libraries(source, modelName, '{}')
   }
   throw new Error('Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries')
+}
+
+function sourceNeedsMsl(source: string): boolean {
+  return String(source || '').includes('Modelica.')
+}
+
+async function compileToJsonWithAutoMsl(
+  wasm: DiagnosticsMslApi,
+  source: string,
+  modelName: string,
+  debug: Record<string, unknown>,
+): Promise<string> {
+  if (typeof wasm.compile_to_json !== 'function') {
+    throw new Error('Rumoca wasm export missing: compile_to_json')
+  }
+
+  if (sourceNeedsMsl(source)) {
+    await ensureDiagnosticsMslLoaded(wasm, debug)
+    if (
+      typeof wasm.compile_with_source_roots === 'function' ||
+      typeof wasm.compile_with_libraries === 'function'
+    ) {
+      return compileWithDiagnosticsMsl(wasm, source, modelName)
+    }
+  }
+
+  return wasm.compile_to_json(source, modelName)
 }
 
 function parseSourceRootAstOrError(
@@ -2253,9 +2409,7 @@ export async function testModelicaMslCompileAndRunSmoke() {
         'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
       )
     }
-    if (typeof wasm.render_template !== 'function') {
-      throw new Error('Rumoca wasm export missing: render_template')
-    }
+    assertTemplateRendererAvailable(wasm)
 
     const { libraryFileCount, loadParsed } = await ensureDiagnosticsMslLoaded(wasm, debug)
 
@@ -2281,7 +2435,13 @@ end MslConstRamp;
       throw new Error('MSL compile returned no DAE payload')
     }
 
-    const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+    const rendered = renderDiagnosticsTemplate(
+      wasm,
+      dae,
+      javascriptTemplate,
+      'javascript.jinja',
+      'model.js',
+    )
     if (!rendered || typeof rendered !== 'string') {
       throw new Error('Rendering javascript.jinja failed for MSL smoke model')
     }
@@ -2357,8 +2517,8 @@ end MslConstRamp;
       abiAbort.abort()
     }
 
-    const runCode = buildIframeCode(rendered)
     const runId = 'modelica-msl-smoke-run'
+    const runCode = await buildIframeCodeChecked(rendered, runId)
     const runAbort = new AbortController()
     const getSeriesSampleLength = (seriesData: unknown): number => {
       if (Array.isArray(seriesData)) return seriesData.length
@@ -2491,9 +2651,7 @@ end MslResistorManualFlattened;
         'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
       )
     }
-    if (typeof wasm.render_template !== 'function') {
-      throw new Error('Rumoca wasm export missing: render_template')
-    }
+    assertTemplateRendererAvailable(wasm)
 
     const { libraryFileCount, loadParsed } = await ensureDiagnosticsMslLoaded(wasm, debug)
     debug.mslLibraryFiles = libraryFileCount
@@ -2579,7 +2737,15 @@ end MslResistorManualFlattened;
       let baseDaeRendered = ''
       let baseDaeRenderError = ''
       try {
-        baseDaeRendered = wasm.render_template(daeJson, baseDaeTemplate)
+        baseDaeRendered = renderRumocaTemplate({
+          wasm,
+          daeJson,
+          templateSource: baseDaeTemplate,
+          modelName: getTemplateModelName(dae),
+          templatePath: 'base_dae.jinja',
+          outputPath: 'base_dae.txt',
+          targetName: 'template',
+        })
       } catch (err) {
         baseDaeRenderError = err instanceof Error ? err.message : String(err)
       }
@@ -2711,9 +2877,7 @@ export async function testModelicaMslResistorExampleSimulation() {
         'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
       )
     }
-    if (typeof wasm.render_template !== 'function') {
-      throw new Error('Rumoca wasm export missing: render_template')
-    }
+    assertTemplateRendererAvailable(wasm)
 
     const { libraryFileCount, loadParsed } = await ensureDiagnosticsMslLoaded(wasm, debug)
     debug.mslLibraryFiles = libraryFileCount
@@ -2749,7 +2913,15 @@ end MslResistorExample;
     const derivativeRefsFromPretty = Array.from(new Set(prettyText.match(/der\([^)]+\)/g) ?? []))
     let derivativeRefs = derivativeRefsFromPretty
     try {
-      const baseDaeRendered = wasm.render_template(daeJson, baseDaeTemplate)
+      const baseDaeRendered = renderRumocaTemplate({
+        wasm,
+        daeJson,
+        templateSource: baseDaeTemplate,
+        modelName: getTemplateModelName(dae),
+        templatePath: 'base_dae.jinja',
+        outputPath: 'base_dae.txt',
+        targetName: 'template',
+      })
       const derivativeRefsFromTemplate: string[] = Array.from(
         new Set(String(baseDaeRendered).match(/der\([^)]+\)/g) ?? []),
       )
@@ -2772,7 +2944,15 @@ end MslResistorExample;
     }
 
     debug.phase = 'render-javascript-template'
-    const rendered = wasm.render_template(daeJson, javascriptTemplate)
+    const rendered = renderRumocaTemplate({
+      wasm,
+      daeJson,
+      templateSource: javascriptTemplate,
+      modelName: getTemplateModelName(dae),
+      templatePath: 'javascript.jinja',
+      outputPath: 'model.js',
+      targetName: 'template',
+    })
     if (!rendered || typeof rendered !== 'string') {
       throw new Error('Rendering javascript.jinja failed for MSL resistor example')
     }
@@ -2810,8 +2990,8 @@ end MslResistorExample;
     }
 
     debug.phase = 'build-iframe-code'
-    const runCode = buildIframeCode(rendered)
     const runId = 'modelica-msl-resistor-example-run'
+    const runCode = await buildIframeCodeChecked(rendered, runId)
     const runAbort = new AbortController()
     type SimResult = {
       meta?: {
@@ -3513,9 +3693,7 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
   if (typeof wasm.compile_to_json !== 'function') {
     throw new Error('Rumoca wasm export missing: compile_to_json')
   }
-  if (typeof wasm.render_template !== 'function') {
-    throw new Error('Rumoca wasm export missing: render_template')
-  }
+  assertTemplateRendererAvailable(wasm)
 
   const compiled = wasm.compile_to_json(source, 'SatelliteOrbit2D')
   const parsed = JSON.parse(compiled) as {
@@ -3528,13 +3706,19 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
     throw new Error('Rumoca compile_to_json returned no DAE payload for SatelliteOrbit2D')
   }
 
-  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  const rendered = renderDiagnosticsTemplate(
+    wasm,
+    dae,
+    javascriptTemplate,
+    'javascript.jinja',
+    'model.js',
+  )
   if (!rendered || typeof rendered !== 'string') {
     throw new Error('Rendering javascript.jinja failed for SatelliteOrbit2D')
   }
   const generatedCodeDebug = summarizeGeneratedCodeForDebug(rendered)
 
-  const runCode = buildIframeCode(rendered)
+  const runCode = await buildIframeCodeChecked(rendered, 'modelica-satellite-orbit-2d-runtime')
   const mu = 398600.4418
   const r0 = 7000
   const v0 = Math.sqrt(mu / r0)

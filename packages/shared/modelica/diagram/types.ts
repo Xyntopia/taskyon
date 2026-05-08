@@ -112,6 +112,7 @@ export type DiagramConnection = {
 
 export type ModelicaDiagramDto = {
   className: string
+  classIcon?: DiagramIconSpec
   components: DiagramComponent[]
   connections: DiagramConnection[]
 }

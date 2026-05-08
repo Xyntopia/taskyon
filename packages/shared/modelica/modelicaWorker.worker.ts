@@ -2,6 +2,7 @@ import initRumoca from 'rumoca'
 import * as rumoca from 'rumoca'
 import { strFromU8, unzipSync } from 'fflate'
 import { handleExtractDiagram } from './modelicadiagramGeneration'
+import { renderRumocaTemplate } from './rumocaTemplateRender'
 
 let loadedSourceRootFiles: Record<string, string> = {}
 
@@ -135,7 +136,15 @@ function handleCompileRender(payload: CompileRenderPayload): unknown {
   if (!daeForTemplate) {
     throw new Error('Compilation did not return a usable DAE object (expected dae)')
   }
-  const rendered = rumoca.render_template(JSON.stringify(daeForTemplate), payload.templateSource)
+  const rendered = renderRumocaTemplate({
+    wasm: rumoca,
+    daeJson: JSON.stringify(daeForTemplate),
+    templateSource: payload.templateSource,
+    modelName,
+    templatePath: 'template.jinja',
+    outputPath: `${modelName}.txt`,
+    targetName: 'template',
+  })
   return {
     compiled,
     daeForTemplate,
@@ -250,25 +259,61 @@ const removeTopLevelImportsForDiagramParse = (source: string): string => {
   return out.join('\n')
 }
 
+const normalizeLegacyDeclarationModifiersForDiagramParse = (source: string): string =>
+  source.replace(
+    /(\b(?:parameter|constant|discrete|input|output)\s+[A-Za-z_][A-Za-z0-9_.]*\s+[A-Za-z_][A-Za-z0-9_]*)\s*\(([^()]*)\)\s*\(([^()]*)\)/g,
+    '$1($2, $3)',
+  )
+
+const stripEquationSectionsForDiagramParse = (source: string): string => {
+  const lines = source.split('\n')
+  const result: string[] = []
+  let inEquationBlock = false
+  for (const line of lines) {
+    const trimmed = line.trim().toLowerCase()
+    if (!inEquationBlock && (trimmed === 'equation' || trimmed === 'algorithm')) {
+      inEquationBlock = true
+      continue
+    }
+    if (inEquationBlock) {
+      if (trimmed.startsWith('annotation(') || trimmed.startsWith('end ')) {
+        inEquationBlock = false
+      } else {
+        continue
+      }
+    }
+    result.push(line)
+  }
+  return result.join('\n')
+}
+
 const parseSourceRootAst = (source: string, fileName: string): Record<string, unknown> => {
   const parseJson = (input: string): Record<string, unknown> =>
     JSON.parse(String(rumoca.parse_source_root_file(input, fileName))) as Record<string, unknown>
+  const fallbacks = [
+    removeTopLevelImportsForDiagramParse(source),
+    normalizeLegacyDeclarationModifiersForDiagramParse(source),
+    stripEquationSectionsForDiagramParse(source),
+    stripEquationSectionsForDiagramParse(normalizeLegacyDeclarationModifiersForDiagramParse(source)),
+  ]
   try {
     return parseJson(source)
   } catch (firstError) {
-    const fallback = removeTopLevelImportsForDiagramParse(source)
     const firstMessage = firstError instanceof Error ? firstError.message : String(firstError)
-    if (fallback === source) {
-      throw new Error(`Cannot parse Modelica source for diagram extraction: ${firstMessage}`)
+    let lastError: unknown = firstError
+    for (const fallback of fallbacks) {
+      if (fallback === source) continue
+      try {
+        return parseJson(fallback)
+      } catch (error) {
+        lastError = error
+      }
     }
-    try {
-      return parseJson(fallback)
-    } catch (secondError) {
-      const secondMessage = secondError instanceof Error ? secondError.message : String(secondError)
-      throw new Error(
-        `Cannot parse Modelica source for diagram extraction: primary=${firstMessage}; fallback=${secondMessage}`,
-      )
-    }
+    const secondMessage =
+      lastError instanceof Error ? lastError.message : String(lastError ?? firstError)
+    throw new Error(
+      `Cannot parse Modelica source for diagram extraction: primary=${firstMessage}; fallback=${secondMessage}`,
+    )
   }
 }
 

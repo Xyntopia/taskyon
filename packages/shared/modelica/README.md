@@ -13,42 +13,253 @@ This package contains the JS Modelica CLI and helper scripts to generate OMC ref
 - Script: `packages/shared/modelica/scripts/generate-omc-traces-via-podman.sh`
 - Wrapper used for `omc`: `packages/shared/modelica/scripts/omc-via-podman.sh`
 
-## Run Compare For 10 Random Examples (package.json script)
+## Primary Runtime-Debug Tactic (Mandatory First Step)
+
+When a model compiles but runtime/solver behavior is wrong, **you must start with a generated pure JS model first**.
+Do not jump directly to solver/template/compiler edits until this loop has been attempted and documented.
+
+1. Compile/render one model to JS (`javascript.jinja`).
+2. Run only generated JS + `simulateModel.js`.
+3. Modify generated JS until behavior is understood/fixed.
+4. Backport only minimal/generalizable fixes to templates/compiler.
+
+Required workflow gate before broader fixes:
+
+- Reproduce the failure in generated JS.
+- Validate a candidate fix in generated JS first.
+- Compare against cached OMC trace (from `.tmp/modelica-omc-cache` when available).
+- Only then backport the minimal fix into template/solver/compiler layers.
+
+Why this is primary:
+
+- It decouples runtime diagnosis from the rest of the compile pipeline.
+- It gives a direct place to inspect residuals/events/initialization behavior.
+- It avoids guessing whether failure is from template glue vs solver behavior vs DAE partitioning.
+
+## PR Checklist (Required For Runtime/Solver Fixes)
+
+Before merging runtime/solver-related changes, include all items below in the PR description:
+
+- [ ] Failing model and command used to reproduce.
+- [ ] Generated JS debug attempt was performed first.
+- [ ] Candidate fix was validated in generated JS before backport.
+- [ ] OMC trace comparison was run (using cached `.tmp/modelica-omc-cache` trace when available).
+- [ ] Backport scope is minimal and generalizable (no model-specific hacks unless explicitly documented).
+- [ ] Residual risk and any remaining mismatch to OMC are explicitly listed.
+
+## Template Source Of Truth Policy
+
+For AI-agent development in this repo:
+
+- Treat `packages/shared/modelica/javascript.jinja` as the **single source of truth**.
+- Edit only this local template while iterating/debugging.
+- Do not edit the duplicate template in `packages/rumoca` during AI-agent iterations.
+- Copy/backport stable changes to `packages/rumoca` afterwards as a separate manual step.
+
+Reason: this avoids drift between duplicated templates and reduces token usage during iterative debugging.
+
+## Rumoca Structure (Rough Map)
+
+When debugging compiler behavior, this is the practical high-level flow in `packages/rumoca`:
+
+1. Parse + resolve
+
+- Parsing and name/type resolution happen in phase crates like:
+  - `rumoca-phase-resolve`
+  - `rumoca-phase-typecheck`
+
+2. Instantiate + inheritance flattening
+
+- Class inheritance/extends handling and instance elaboration happen in:
+  - `rumoca-phase-instantiate`
+
+3. DAE lowering and transformations
+
+- Equations/algorithms are lowered into DAE-friendly scalar forms in:
+  - `rumoca-phase-dae`
+
+4. Compile/session orchestration
+
+- End-to-end compile APIs and diagnostics wrappers are in:
+  - `rumoca-compile`
+
+5. JS rendering/runtime integration (Taskyon side)
+
+- DAE is rendered to JS via:
+  - `packages/shared/modelica/javascript.jinja`
+- Runtime solve/execution is handled in:
+  - `packages/shared/modelica/simulateModel.js`
+
+Use this map for triage: if the issue is semantic correctness, push fix to phases (1)-(3), not only (5).
+
+## Readable JS Generation Goal
+
+Generated JS should prioritize equation readability and low overhead in the hot path.
+
+- Use fast indexed access in solver hot paths (`xVec[i]`, `xDotVec[i]`, `yVec[i]`, `uVec[i]`).
+- Avoid mass rebinding/assignment of locals inside residual/evaluation functions.
+- Keep equation rows explicit (`const eq_001 = ...`) and return vectors only at API boundaries.
+- Add comments above equations and index maps to preserve readability of symbolic intent.
+
+Identifier notation modes:
+
+- `unicode` (default): index marker `ᵢ`  
+  Example: `x[1,2] -> xᵢ1ᵢ2`
+- `ascii`: index marker `ii`  
+  Example: `x[1,2] -> xii1ii2`
+
+Base identifier mapping:
+
+- `.` -> `_`
+- `_` -> `__`
+
+Index mode can be selected by setting `dae.__rumoca_js_index_notation` to `"unicode"` or `"ascii"` before template rendering.
+
+## Compare + Baseline Workflow
 
 From repo root:
 
 ```bash
 set -euo pipefail
 
-yarn modelica:trace-compare:random10
+# Run compare (auto-target discovery, always writes JSON + text reports)
+yarn modelica:compare
+
+# Optional: run against an extra library zip (for example PowerSystems)
+node packages/shared/modelica/modelica_compare_cli.mjs run --library-zip /abs/path/PowerSystems.zip
+
+# Diff current run against baseline
+yarn modelica:baseline:diff
+
+# Accept current run as new baseline
+yarn modelica:baseline:update
 ```
 
 Notes:
-- `--mode random-stop` now samples from the full target list first, then applies `--max-models`.
-- Random mode is deterministic by default (`seed=20260507`).
-- Override deterministically with `--seed <n>` when needed.
-- This command performs OMC-vs-solver comparison and writes compare reports in the repo root.
+
+- Source of truth files:
+  - Latest run JSON: `packages/shared/modelica/compare/run_latest_<library>.json` (plus global pointer `run_latest_default.json`)
+  - Dated run JSON: `packages/shared/modelica/compare/run_<library>_<timestamp>.json`
+  - Baseline JSON: `packages/shared/modelica/compare/baseline_<library>.json`
+  - Diff JSON: `packages/shared/modelica/compare/diff_<library>.json`
+  - Diff CSV: `packages/shared/modelica/compare/diff_<library>.csv`
+- `run` now auto-discovers targets from loaded library roots (no `--targets-file` required in normal usage).
+- JSON run artifact is always written; explicit `--json` flag is no longer required.
+- `baseline-update` merges into the library-specific baseline:
+  - compile info is always refreshed from the candidate run.
+  - runtime/solver info is only refreshed when the candidate run includes runtime execution (non-`--compile-only` runs).
 
 ## Testing Strategy
 
 This is our testing strategy and should be followed for debugging and triage:
 
 1. Compile and run broad samples first.
+
 - Run the compare workflow against a batch (for example 10 random models) so we exercise compilation and runtime together.
+- Do not dilute test scope to improve pass rates. If a target set includes base classes, interfaces, records, or generic models, keep them in scope unless the test objective explicitly defines a narrower set in advance.
+- Do not "fix" failures by excluding failing targets post-hoc. Prefer root-cause analysis and real compiler/runtime fixes.
 
 2. If compilation fails, debug at compiler level.
+
 - Inspect Rumoca compiler internals in `packages/rumoca` first.
+- If source is invalid per Modelica standard, prefer explicit compiler failure (strict mode) over silent acceptance.
+- If a model/library is non-standard and we still need it to run, add an explicit compatibility option/flag, never implicit behavior.
 - Rumoca sources are available for direct inspection and modification under `packages/rumoca`; patch there when compiler fixes are required.
 - Treat compile failures as compiler/model-front-end problems before touching solver logic.
+- For third-party library onboarding, default to strict behavior: keep failing models visible, classify failures into (a) valid model rejected by Rumoca vs (b) invalid/non-standard model correctly rejected, and only suppress categories when explicitly approved and documented.
+- If compile time is unexpectedly high (many timeouts or very slow single-model compile), profile Rumoca compiler phases with Rust profiling tooling before raising timeouts blindly. Use a targeted single-model probe first (for example `modelica_compare_cli.mjs probe-compile --model ... --compile-debug`) and then inspect hot paths in Rumoca crates with `cargo` profiling tools.
+
+## Upstream-First AI Workflow Policy
+
+For AI-agent implementation decisions:
+
+1. Push fixes upstream as far as possible
+
+- Prefer root-cause fixes in Rumoca core phases (`resolve`/`typecheck`/`instantiate`/`dae`) before patching template/runtime layers.
+- Do not add top-layer workaround code when a lower-layer invariant is broken.
+
+2. Keep compatibility explicit
+
+- Default behavior should stay as strict Modelica as possible.
+- Any deviation for library compatibility must be behind an explicit option and documented with:
+  - why deviation is required
+  - which library/models require it
+  - default value (`off` unless explicitly approved otherwise)
+- Current practical examples to document when encountered in tests:
+  - `PowerSystems` library integration edge cases
+  - selected `Modelica Standard Library (MSL)` examples that rely on non-canonical patterns
+
+3. Avoid hidden policy in tests/tooling
+
+- Diagnostics/compare tooling should not silently switch compile strategies.
+- If non-standard fallback is used, it must be opt-in and visible in logs/reports.
+
+4. Single source of truth for generated JS logic
+
+- Keep JS generation policy in `packages/shared/modelica/javascript.jinja`.
+- Avoid duplicate logic paths for expression rendering/comment rendering; prefer shared macros/data paths.
+
+## Bug Triage Proof Requirements (Mandatory)
+
+For every compiler/runtime bug investigation, include all of the following before proposing a fix:
+
+1. Exact model/library location
+
+- Provide the precise source location in the third-party library or model under test.
+- Minimum required detail:
+  - library name + version
+  - fully-qualified model/class name
+  - source file path
+  - relevant line(s) or snippet
+
+2. Exact Modelica spec cross-check
+
+- Quote or reference the exact normative wording from the Modelica specification that applies to the case.
+- Explicitly map source snippet -> spec requirement, not only error-code interpretation.
+
+3. Explicit verdict
+
+- State one of:
+  - `Rumoca bug` (valid Modelica rejected / transformed incorrectly), or
+  - `Non-standard library pattern` (strict rejection is correct), or
+  - `Ambiguous / requires policy decision`.
+
+4. Fix policy from verdict
+
+- If `Rumoca bug`: fix upstream in Rumoca core phase (resolve/typecheck/instantiate/dae) first.
+- If `Non-standard library pattern`: keep strict default, add explicit opt-in compatibility option, and document affected libraries/models.
+
+## Local Rumoca Dev Build (For Modelica Testing)
+
+When testing compiler changes locally, `yarn install` is not enough by itself.
+Build the Rumoca npm dev artifact first, then install dependencies:
+
+```bash
+set -euo pipefail
+
+cd packages/rumoca/packaging/npm
+npm run build:dev
+cd /workspace
+yarn install
+```
+
+Notes:
+
+- `npm run build:dev` produces the local package under `packages/rumoca/pkg/dev-core`.
+- For normal usage we install the production Rumoca package from npm.
+- For this testing phase we are temporarily pointing to the local `pkg` output directory; this temporary local linkage should be reverted after testing/validation.
 
 3. If solving/runtime fails, isolate via generated JS.
+
 - Compile the failing model into pure JS using the Modelica CLI and the JS template.
 - Run only the generated JS and iterate directly on that generated file until the model runs there.
+- If runtime limitations are caused by the upstream Rumoca-produced DAE, it is acceptable to patch Rumoca compiler sources directly under `packages/rumoca` and then continue solver debugging.
 
 4. Backport runtime fixes through the template.
+
 - Keep a backup copy of the generated JS before edits.
 - Diff edited JS vs backup to identify exactly what changed.
-- Backport those minimal, generalizable changes into the shared JS template (not as one-off model hacks).
+- Backport those minimal, generalizable changes into `packages/shared/modelica/javascript.jinja` first (not as one-off model hacks), then copy to `packages/rumoca` later.
 
 ## Run OMC Reference Traces For 10 Random Examples (direct script)
 
@@ -90,3 +301,46 @@ export OMC_PODMAN_DEBUG=1
 ```
 
 This prints host/container path mapping and OMC argument wiring from the podman wrapper.
+
+## Node Debugger Workflow (Generated JS Runtime)
+
+Use this workflow when a model compiles but fails in solver/runtime and you need step-by-step JS debugging.
+
+1. Compile and render a single model to generated JS using the CLI/template path.
+2. Run the generated JS + `packages/shared/modelica/simulateModel.js` in Node.
+3. Iterate on the generated JS until the model runs.
+4. Backport minimal/general fixes to `packages/shared/modelica/javascript.jinja`.
+
+Example debugger entrypoint:
+
+```bash
+set -euo pipefail
+
+node --inspect-brk /workspace/.tmp/run_cp_lambda_debug.mjs
+```
+
+Suggested `run_cp_lambda_debug.mjs` behavior:
+
+- Load Rumoca wasm.
+- Load source roots from:
+  - `packages/rumoca/target/msl/ModelicaStandardLibrary-4.1.0.zip`
+  - `public/modelica-libraries/WindPowerPlants.zip`
+- Compile:
+  - `WindPowerPlants.Examples.CpLambdaWindTurbine`
+- Render with:
+  - `packages/shared/modelica/javascript.jinja`
+- Evaluate generated `Model()` + `simulateModel(...)`.
+- Write artifacts under `/workspace/.tmp/cp_lambda_debug/`:
+  - `model.generated.js`
+  - `dae_prepared.json`
+  - `run_result.json`
+
+Useful debugger breakpoints:
+
+- generated model:
+  - `Model()`
+  - `residual(...)`
+  - `evalAlgebraics(...)`
+  - `applyResets(...)`
+- solver:
+  - `simulate()` and `solveFlowAtState(...)` in `packages/shared/modelica/simulateModel.js`

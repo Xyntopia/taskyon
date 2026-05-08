@@ -17,11 +17,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, watchEffect } from 'vue'
-import { deepMerge } from '@shared/modules/objHelpers'
-import type { ClientTool, partialTyConfiguration, TyClient } from '@taskyon/tyclient'
+import { computed, ref, watch } from 'vue'
+import { deepMerge } from '../modules/objHelpers'
+import type { ClientTool, partialTyConfiguration } from '@taskyon/tyclient'
 import { initializeTaskyon } from '@taskyon/tyclient'
-import { cryptoKeyToBase64 } from '@shared/modules/crypto'
+import { cryptoKeyToBase64 } from '../modules/crypto'
 
 const props = withDefaults(
   defineProps<{
@@ -69,7 +69,7 @@ const taskyonBaseUrl = computed(() => {
 const resolvedProfileName = computed(() => props.profileName ?? props.name)
 const effectiveBindingKey = ref<CryptoKey | string | undefined>(undefined)
 const iframeReloadSeed = ref(0)
-const iframeDomId = `taskyon-${Math.floor(Math.random() * 1e9).toString(36)}`
+const iframeDomId = 'taskyon'
 const iframeDomKey = computed(
   () =>
     `${resolvedProfileName.value}:${
@@ -90,7 +90,6 @@ const iframeSrc = computed(() => {
   }
   return `${taskyonBaseUrl.value}?${params.toString()}`
 })
-let tyAgent: TyClient | undefined = undefined
 
 const toTransportBindingKey = async (
   key: CryptoKey | string | null,
@@ -119,9 +118,37 @@ watch([resolvedProfileName, effectiveBindingKey], ([nextProfile, nextBinding], o
   const [oldProfile, oldBinding] = oldValues ?? [undefined, undefined]
   if (oldProfile === undefined && oldBinding === undefined) return
   if (nextProfile === oldProfile && nextBinding === oldBinding) return
-  tyAgent = undefined
   iframeReloadSeed.value += 1
 })
+
+watch(
+  () => props.configuration,
+  (nextConfig, prevConfig) => {
+    if (prevConfig === undefined) return
+    if (nextConfig === prevConfig) return
+    iframeReloadSeed.value += 1
+  },
+  { deep: true },
+)
+
+watch(
+  () => props.tools,
+  (nextTools, prevTools) => {
+    if (prevTools === undefined) return
+    if (nextTools === prevTools) return
+    iframeReloadSeed.value += 1
+  },
+  { deep: true },
+)
+
+watch(
+  () => props.persist,
+  (nextPersist, prevPersist) => {
+    if (prevPersist === undefined) return
+    if (nextPersist === prevPersist) return
+    iframeReloadSeed.value += 1
+  },
+)
 
 const onIframeLoaded = async () => {
   const initOptions: {
@@ -149,35 +176,6 @@ const onIframeLoaded = async () => {
   if (effectiveBindingKey.value) {
     initOptions.bindingKey = effectiveBindingKey.value
   }
-  tyAgent = await initializeTaskyon(initOptions)
+  await initializeTaskyon(initOptions)
 }
-
-watchEffect(() => {
-  if (tyAgent) {
-    const reconfigureOptions: {
-      tools: ClientTool[]
-      configuration: partialTyConfiguration
-      name: string
-      persist: boolean
-      profileName?: string
-      bindingKey?: CryptoKey | string
-      missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
-    } = {
-      tools: props.tools,
-      configuration: mergeConfig(props.configuration),
-      name: props.name,
-      persist: props.persist,
-    }
-    if (!effectiveBindingKey.value && props.missingBindingKeyPolicy) {
-      reconfigureOptions.missingBindingKeyPolicy = props.missingBindingKeyPolicy
-    }
-    if (typeof resolvedProfileName.value === 'string') {
-      reconfigureOptions.profileName = resolvedProfileName.value
-    }
-    if (effectiveBindingKey.value) {
-      reconfigureOptions.bindingKey = effectiveBindingKey.value
-    }
-    tyAgent.reconfigure(reconfigureOptions)
-  }
-})
 </script>

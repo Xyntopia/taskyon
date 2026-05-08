@@ -101,13 +101,13 @@
           pango
           cairo
           alsa-lib
-          xorg.libX11
-          xorg.libXcomposite
-          xorg.libXdamage
-          xorg.libXext
-          xorg.libXfixes
-          xorg.libXrandr
-          xorg.libxcb
+          libX11
+          libXcomposite
+          libXdamage
+          libXext
+          libXfixes
+          libXrandr
+          libxcb
           libxkbcommon
           #xorg
           mesa
@@ -147,7 +147,8 @@
 
           # helpers
           graphviz # we are using this with "madge" in order to display dependency graphs...
-          xorg.xorgserver # provides Xvfb / xvfb-run for headless tauri diagnostics on servers
+          perf # needed for cargo flamegraph (perf-based sampling)
+          xorgserver # provides Xvfb / xvfb-run for headless tauri diagnostics on servers
 
           # supabase
           docker-compose

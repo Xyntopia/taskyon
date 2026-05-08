@@ -9,6 +9,9 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
   const mslLoaded = ref(false)
   const mslLoading = ref(false)
   const mslDownloading = ref(false)
+  const activeLibraryLoads = ref<string[]>([])
+  const activeLoadCount = ref(0)
+  const activeDownloadCount = ref(0)
   const mslArchiveName = ref('')
   const mslFileCount = ref(0)
   const mslCachedZipPath = ref('')
@@ -108,7 +111,40 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
     ])
   }
 
-  async function loadMslArchiveFile(file: File) {
+  function addActiveLibraryLoad(label: string): void {
+    const nextLabel = String(label || '').trim()
+    if (!nextLabel) return
+    if (activeLibraryLoads.value.includes(nextLabel)) return
+    activeLibraryLoads.value = [...activeLibraryLoads.value, nextLabel]
+  }
+
+  function removeActiveLibraryLoad(label: string): void {
+    activeLibraryLoads.value = activeLibraryLoads.value.filter((entry) => entry !== label)
+  }
+
+  function startLoading(label: string): void {
+    activeLoadCount.value += 1
+    mslLoading.value = true
+    addActiveLibraryLoad(label)
+  }
+
+  function finishLoading(label: string): void {
+    activeLoadCount.value = Math.max(0, activeLoadCount.value - 1)
+    removeActiveLibraryLoad(label)
+    mslLoading.value = activeLoadCount.value > 0
+  }
+
+  function startDownloading(): void {
+    activeDownloadCount.value += 1
+    mslDownloading.value = true
+  }
+
+  function finishDownloading(): void {
+    activeDownloadCount.value = Math.max(0, activeDownloadCount.value - 1)
+    mslDownloading.value = activeDownloadCount.value > 0
+  }
+
+  async function loadLibraryArchiveFile(file: File) {
     const worker = params.worker.value
     if (!worker) throw new Error('Modelica worker not loaded')
     const fingerprint = buildArchiveFingerprint(file)
@@ -127,7 +163,7 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
     }
 
     const loadPromise = (async () => {
-      mslLoading.value = true
+      startLoading(file.name)
       await nextTick()
       appendModelicaLog({
         level: 'info',
@@ -149,7 +185,9 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
         phase: 'general',
         message: `Modelica libraries ${effectiveMode}: ${result.parsedCount} files parsed`,
       })
-    })()
+    })().finally(() => {
+      finishLoading(file.name)
+    })
     inFlightArchiveLoads.set(fingerprint, loadPromise)
     try {
       await loadPromise
@@ -174,7 +212,7 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
     }
 
     const downloadPromise = (async (): Promise<string> => {
-      mslDownloading.value = true
+      startDownloading()
       appendModelicaLog({
         level: 'info',
         phase: 'general',
@@ -224,15 +262,24 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
       throw err
     } finally {
       inFlightDownloads.delete(url)
-      mslDownloading.value = false
+      finishDownloading()
     }
   }
 
-  async function loadCachedMslZipFromOpfs() {
+  function formatLoadReason(reason: string | undefined): string {
+    const normalized = String(reason || '').trim()
+    return normalized ? ` (reason: ${normalized})` : ''
+  }
+
+  async function loadCachedMslZipFromOpfs(reason?: string) {
     try {
-      mslLoading.value = true
       await nextTick()
       let cachedPath = normalizeCachedZipPath(mslCachedZipPath.value)
+      appendModelicaLog({
+        level: 'info',
+        phase: 'general',
+        message: `Loading cached MSL ZIP from OPFS${formatLoadReason(reason)}`,
+      })
       if (!cachedPath) {
         const fallbackUrl = String(mslDownloadUrl.value || DEFAULT_MSL_ZIP_URL).trim()
         appendModelicaLog({
@@ -246,9 +293,7 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
       if (!cachedPath) {
         throw new Error('No cached MSL ZIP path set')
       }
-      const file = await readFileFromOpfs(cachedPath)
-      await loadMslArchiveFile(file)
-      trackLoadedLibraryCachePath(cachedPath)
+      await loadLibraryArchiveFromOpfsPath(cachedPath)
       Notify.create({
         type: 'positive',
         message: `Loaded cached Modelica library from ${cachedPath}`,
@@ -261,24 +306,26 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
         phase: 'general',
         message: `Failed to load cached MSL ZIP: ${msg}`,
       })
-    } finally {
-      mslLoading.value = false
     }
   }
 
-  async function loadStandardMslZipFromOpfs() {
+  async function loadStandardMslZipFromOpfs(reason?: string) {
     if (standardMslLoaded.value) return
     if (inFlightStandardMslLoad) {
       await inFlightStandardMslLoad
       return
     }
     inFlightStandardMslLoad = (async () => {
-      mslLoading.value = true
       await nextTick()
       const standardUrl = String(DEFAULT_MSL_ZIP_URL).trim()
       const knownPath = normalizeCachedZipPath(standardMslCachedZipPath.value)
       const inferredPath = inferCachedZipPathFromUrl(standardUrl)
       const candidatePaths = [knownPath, inferredPath].filter(Boolean)
+      appendModelicaLog({
+        level: 'info',
+        phase: 'general',
+        message: `Loading standard MSL${formatLoadReason(reason)}`,
+      })
       let cachedPath = ''
       for (const candidate of candidatePaths) {
         if (await opfsFileExists(candidate)) {
@@ -298,9 +345,7 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
         standardMslCachedZipPath.value = cachedPath
       }
       if (!cachedPath) throw new Error('No cached standard MSL ZIP path set')
-      const file = await readFileFromOpfs(cachedPath)
-      await loadMslArchiveFile(file)
-      trackLoadedLibraryCachePath(cachedPath)
+      await loadLibraryArchiveFromOpfsPath(cachedPath)
       standardMslLoaded.value = true
       Notify.create({
         type: 'positive',
@@ -319,7 +364,6 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
       })
     } finally {
       inFlightStandardMslLoad = null
-      mslLoading.value = false
     }
   }
 
@@ -331,7 +375,7 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
     try {
       const persistedPath = await writeBlobToOpfsMslCache(file, file.name)
       mslCachedZipPath.value = persistedPath
-      await loadMslArchiveFile(file)
+      await loadLibraryArchiveFile(file)
       trackLoadedLibraryCachePath(persistedPath)
       Notify.create({ type: 'positive', message: `Loaded MSL archive: ${file.name}` })
     } catch (err) {
@@ -346,7 +390,6 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
       })
       Notify.create({ type: 'negative', message: `Failed to load MSL: ${msg}` })
     } finally {
-      mslLoading.value = false
       el.value = ''
     }
   }
@@ -367,6 +410,11 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
       inFlightArchiveLoads.clear()
       inFlightDownloads.clear()
       inFlightStandardMslLoad = null
+      activeLoadCount.value = 0
+      activeDownloadCount.value = 0
+      activeLibraryLoads.value = []
+      mslLoading.value = false
+      mslDownloading.value = false
       appendModelicaLog({
         level: 'info',
         phase: 'general',
@@ -381,14 +429,25 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
     }
   }
 
-  async function loadLibraryArchivesFromOpfs(paths: string[]) {
+  async function loadLibraryArchivesFromOpfs(paths: string[], reason?: string) {
     const normalizedPaths = normalizeLibraryCachePaths(paths)
     if (normalizedPaths.length === 0) return
+    appendModelicaLog({
+      level: 'info',
+      phase: 'general',
+      message: `Loading ${normalizedPaths.length} persisted Modelica library archive(s)${formatLoadReason(reason)}`,
+    })
     for (const path of normalizedPaths) {
-      const file = await readFileFromOpfs(path)
-      await loadMslArchiveFile(file)
-      trackLoadedLibraryCachePath(path)
+      await loadLibraryArchiveFromOpfsPath(path)
     }
+  }
+
+  async function loadLibraryArchiveFromOpfsPath(path: string) {
+    const normalizedPath = String(path || '').trim()
+    if (!normalizedPath) throw new Error('Missing OPFS library path')
+    const file = await readFileFromOpfs(normalizedPath)
+    await loadLibraryArchiveFile(file)
+    trackLoadedLibraryCachePath(normalizedPath)
   }
 
   return {
@@ -397,6 +456,7 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
     mslLoaded,
     mslLoading,
     mslDownloading,
+    activeLibraryLoads,
     mslArchiveName,
     mslFileCount,
     mslCachedZipPath,

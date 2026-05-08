@@ -91,7 +91,7 @@
               flat
               label="Change Theme"
               :size="btnSize"
-              @theme-changed="(newMode) => (darkMode = newMode)"
+              @theme-changed="onThemeChanged"
             />
           </q-item-section>
         </q-item>
@@ -112,10 +112,12 @@ defineProps<{
   btnSize: 'md' | 'sm' | 'xs' | 'lg' | 'xl'
 }>()
 
-const darkMode = defineModel<boolean | 'auto'>()
-
 const showAboutDialog = ref(false)
 const state = useAppStateStore()
 const environmentInfo = getEnvironmentInfo()
 console.log(environmentInfo)
+
+function onThemeChanged(newMode: boolean | 'auto') {
+  state.appConfiguration.darkTheme = newMode
+}
 </script>

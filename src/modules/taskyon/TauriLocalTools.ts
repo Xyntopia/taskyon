@@ -1,4 +1,4 @@
-import { createTool, makeTaskResult, toolCall } from '@taskyon/client'
+import { createTool, makeTaskResult, toolCall } from '@taskyon/tyclient'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import type { JSONSchema7 } from 'json-schema'
 import { serializeObject } from '@taskyon/shared/modules/serializeObject'

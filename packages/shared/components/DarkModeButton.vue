@@ -15,6 +15,8 @@
 import { useQuasar } from 'quasar'
 import { matContrast, matDarkMode, matLightMode } from '@quasar/extras/material-icons'
 
+const model = defineModel<boolean | 'auto'>({ required: false })
+
 // Emits an event when the theme is changed
 const emit = defineEmits<{
   themeChanged: [newMode: boolean | 'auto']
@@ -25,6 +27,7 @@ const $q = useQuasar()
 function toggleTheme() {
   const newMode = $q.dark.mode === 'auto' ? true : $q.dark.mode == true ? false : 'auto'
   $q.dark.set(newMode)
+  model.value = newMode
   emit('themeChanged', newMode)
 }
 </script>

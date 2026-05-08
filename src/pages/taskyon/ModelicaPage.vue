@@ -13,6 +13,7 @@
           class="col"
           :taskyon-signature-or-key="taskyonSignatureOrKey"
           :binding-key="appState.bindingKey"
+          :taskyon-configuration="taskyonConfiguration"
         />
       </FixedHeightPage>
     </q-page-container>
@@ -21,6 +22,7 @@
 
 <script setup lang="ts">
 import { matRocketLaunch } from '@quasar/extras/material-icons'
+import type { partialTyConfiguration } from '@taskyon/tyclient'
 import ModelicaEditor from '@taskyon/shared/modelica/ModelicaEditor.vue'
 import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import FixedHeightPage from 'src/pages/FixedHeightPage.vue'
@@ -32,4 +34,11 @@ const tystate = useTaskyonStore()
 const appState = useAppStateStore()
 
 const taskyonSignatureOrKey = computed(() => tystate.getTaskyonKeyString() ?? null)
+const taskyonConfiguration = computed<partialTyConfiguration>(() => ({
+  appConfiguration: {
+    darkTheme: appState.appConfiguration.darkTheme,
+    primaryColor: appState.appConfiguration.primaryColor,
+    secondaryColor: appState.appConfiguration.secondaryColor,
+  },
+}))
 </script>

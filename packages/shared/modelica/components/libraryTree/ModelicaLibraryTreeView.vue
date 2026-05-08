@@ -16,20 +16,13 @@
         dense
         size="sm"
         label="MSL"
-        :disable="loading || mslLoading || mslDownloading"
-        :loading="mslLoading || mslDownloading"
+        :disable="loading || mslBusy"
+        :loading="mslBusy"
         @click="emit('load-cached-msl')"
       >
         <q-tooltip>Load standard Modelica Standard Library</q-tooltip>
       </q-btn>
-      <q-btn-dropdown
-        flat
-        dense
-        size="sm"
-        :disable="loading || mslLoading || mslDownloading"
-        :icon="mdiDotsVertical"
-        dropdown-icon=""
-      >
+      <q-btn-dropdown flat dense size="sm" :icon="mdiDotsVertical" dropdown-icon="">
         <q-tooltip>Library options</q-tooltip>
         <div class="q-pa-sm" style="min-width: 360px; max-width: 95vw">
           <ObjectView
@@ -42,19 +35,12 @@
         </div>
         <q-separator />
         <q-list dense style="min-width: 260px">
-          <q-item-label header>Detected libraries</q-item-label>
-          <q-item
-            v-for="preset in detectedLibraryPresets"
-            :key="preset.id"
-            v-close-popup
-            clickable
-            @click="emit('load-library-preset', preset.url)"
-          >
-            <q-item-section>{{ preset.label }}</q-item-section>
+          <q-item v-close-popup clickable @click="openLibrariesDialog">
+            <q-item-section avatar>
+              <q-icon :name="mdiTableSearch" />
+            </q-item-section>
+            <q-item-section>Open Library Installer (Browse & Install)</q-item-section>
           </q-item>
-        </q-list>
-        <q-separator />
-        <q-list dense style="min-width: 260px">
           <q-item v-close-popup clickable @click="triggerLibraryImport">
             <q-item-section avatar>
               <q-icon :name="mdiFolderOpenOutline" />
@@ -77,6 +63,22 @@
       </q-btn-dropdown>
       <q-btn flat dense size="sm" :icon="mdiUnfoldMoreHorizontal" @click="expandRootNodes" />
       <q-btn flat dense size="sm" :icon="mdiUnfoldLessHorizontal" @click="collapseAllNodes" />
+      <q-btn
+        flat
+        dense
+        size="sm"
+        :icon="matMyLocation"
+        @click="revealCurrentClassOrPackage"
+      >
+        <q-tooltip>Reveal current class/package in tree</q-tooltip>
+      </q-btn>
+      <q-btn
+        flat
+        dense
+        size="sm"
+        :label="showRootMetadata ? 'Meta On' : 'Meta Off'"
+        @click="showRootMetadata = !showRootMetadata"
+      />
     </div>
     <input
       ref="libraryImportEl"
@@ -86,21 +88,29 @@
       @change="onLibraryImportChange"
     />
     <q-separator />
-
     <div class="col" style="overflow: hidden">
       <q-virtual-scroll
         v-if="visibleRows.length > 0"
         :items="visibleRows"
         class="fit"
-        :virtual-scroll-item-size="32"
+        :virtual-scroll-item-size="48"
       >
         <template #default="{ item }">
+          <div
+            v-if="showRootMetadata && item.depth === 0 && item.rootMetadata"
+            class="library-root-meta text-caption text-grey-6"
+            :style="{ paddingLeft: `${item.depth * 14 + 6}px` }"
+          >
+            {{ item.rootMetadata }}
+          </div>
           <div
             class="library-tree-row row items-center no-wrap"
             :class="{ 'library-tree-row--branch': item.hasChildren && !hasFilter }"
             :style="{ paddingLeft: `${item.depth * 14 + 6}px` }"
+            :data-qualified-name="item.qualifiedName"
             @click="onRowClick(item)"
             @dblclick="emit('openModel', item.qualifiedName)"
+            @contextmenu.prevent="onRowContextMenu(item, $event)"
           >
             <div class="library-tree-row__icon">
               <q-icon
@@ -109,11 +119,12 @@
                 :name="item.expanded ? mdiChevronDown : mdiChevronRight"
               />
             </div>
+            <q-icon size="16px" class="q-mr-xs text-grey-6" :name="item.classIconName" />
 
             <div class="ellipsis">{{ item.label }}</div>
             <q-space />
             <q-chip v-if="item.classType" dense size="sm" color="grey-3" text-color="grey-8">
-              {{ item.classType }}
+              {{ item.classType }} · {{ item.descendantCount }}
             </q-chip>
           </div>
         </template>
@@ -121,6 +132,73 @@
 
       <div v-else class="q-pa-md text-grey-7">No classes loaded</div>
     </div>
+    <q-dialog v-model="showLibrariesDialog">
+      <q-card class="column library-installer-dialog">
+        <q-card-section class="col" style="overflow: auto">
+          <div class="row no-wrap items-center">
+            <div class="col text-h6">Modelica Library Installer</div>
+            <q-btn v-close-popup flat dense :icon="matClose" />
+          </div>
+          <q-table
+            flat
+            dense
+            row-key="id"
+            :rows="downloadableLibraries"
+            :columns="downloadableLibraryColumns"
+            table-style="table-layout: fixed; width: 100%;"
+            :wrap-cells="true"
+            :pagination="{ rowsPerPage: 25 }"
+          >
+            <template #body-cell-action="scope">
+              <q-td :props="scope" class="table-cell-wrap">
+                <q-btn
+                  dense
+                  size="sm"
+                  color="primary"
+                  label="Install"
+                  :disable="!scope.row.installUrl"
+                  @click="emit('load-library-preset', scope.row.installUrl)"
+                />
+              </q-td>
+            </template>
+            <template #body-cell-name="scope">
+              <q-td :props="scope" class="table-cell-wrap">{{ String(scope.value || '') }}</q-td>
+            </template>
+            <template #body-cell-license="scope">
+              <q-td :props="scope" class="table-cell-wrap">{{ String(scope.value || '') }}</q-td>
+            </template>
+            <template #body-cell-description="scope">
+              <q-td :props="scope" class="table-cell-wrap">{{ String(scope.value || '') }}</q-td>
+            </template>
+            <template #body-cell-link="scope">
+              <q-td :props="scope" class="table-cell-wrap">
+                <a :href="String(scope.value || '')" target="_blank" rel="noopener noreferrer">
+                  {{ String(scope.value || '') }}
+                </a>
+              </q-td>
+            </template>
+          </q-table>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
+    <ResponsiveMenuDialog
+      v-model="showRowContextMenu"
+      :context-menu="true"
+      :target="contextMenuTarget"
+      auto-close
+      data-cy="modelica-library-tree-context-menu"
+    >
+      <template #default="{ close }">
+        <q-list dense style="min-width: 180px">
+          <q-item clickable @click="onContextMenuOpen(close)">
+            <q-item-section>Open</q-item-section>
+          </q-item>
+          <q-item clickable @click="onContextMenuCopyPath(close)">
+            <q-item-section>Copy Path</q-item-section>
+          </q-item>
+        </q-list>
+      </template>
+    </ResponsiveMenuDialog>
   </q-card>
 </template>
 
@@ -132,10 +210,12 @@ import {
   mdiDotsVertical,
   mdiDownloadOutline,
   mdiFolderOpenOutline,
+  mdiTableSearch,
   mdiUnfoldLessHorizontal,
   mdiUnfoldMoreHorizontal,
 } from '@quasar/extras/mdi-v6'
 import type { JSONSchema7 } from 'json-schema'
+import { Notify, type QTableColumn } from 'quasar'
 import {
   buildFilteredRows,
   buildVisibleRows,
@@ -144,19 +224,40 @@ import {
   expandRoots,
   toggleExpandedId,
 } from '../../../modules/tree/flatTree'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import ObjectView from '../../../components/varViews/ObjectView.vue'
-import { detectedModelicaLibraryPresets } from '../../modelicaLibraryCatalog'
+import ResponsiveMenuDialog from '../../../components/ResponsiveMenuDialog.vue'
+import {
+  detectedModelicaLibraryPresets,
+  downloadableModelicaLibraries,
+} from '../../modelicaLibraryCatalog'
 import type { ModelicaLibraryTreeNode } from './types'
+import {
+  matAccountTree,
+  matArchitecture,
+  matCallSplit,
+  matDataObject,
+  matFunctions,
+  matInventory2,
+  matSettingsEthernet,
+  matWidgets,
+  matClose,
+  matMyLocation,
+} from '@quasar/extras/material-icons'
+import { copyToClipboard } from '../../../modules/utils'
 
 const props = defineProps<{
   loading: boolean
   mslLoading: boolean
   mslDownloading: boolean
+  activeLibraryLoads: string[]
   mslCachedZipPath: string
   libraryMenuOptions: Record<string, unknown>
   libraryMenuSchema: JSONSchema7
   nodes: ModelicaLibraryTreeNode[]
+  currentQualifiedName?: string
+  rootLibraryMetadata?: Record<string, string>
+  showRootMetadata?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -167,21 +268,48 @@ const emit = defineEmits<{
   (e: 'download-msl'): void
   (e: 'clear-msl'): void
   (e: 'load-library-preset', url: string): void
+  (e: 'update:show-root-metadata', value: boolean): void
   (e: 'update:library-menu-options', value: Record<string, unknown>): void
 }>()
 
 const filterText = ref('')
 const expandedIds = ref<string[]>([])
 const libraryImportEl = ref<HTMLInputElement | null>(null)
+const showLibrariesDialog = ref(false)
+const showRowContextMenu = ref(false)
+const contextMenuTarget = ref<string | boolean | Element | undefined>(undefined)
+const contextMenuItem = ref<{
+  qualifiedName: string
+  hasChildren: boolean
+} | null>(null)
 
 const treeIndex = computed(() => createTreeIndex(props.nodes))
 const hasFilter = computed(() => filterText.value.trim().length > 0)
-const mslLoading = computed(() => props.mslLoading)
 const mslDownloading = computed(() => props.mslDownloading)
+const activeLibraryLoads = computed(() => props.activeLibraryLoads)
+const mslBusy = computed(() => mslDownloading.value || activeLibraryLoads.value.length > 0)
 const detectedLibraryPresets = computed(() => detectedModelicaLibraryPresets)
+const downloadableLibraries = computed(() => downloadableModelicaLibraries)
+const downloadableLibraryColumns: QTableColumn[] = [
+  { name: 'action', label: '', field: 'action', sortable: false, align: 'left' },
+  { name: 'name', label: 'Name', field: 'name', sortable: true, align: 'left' },
+  { name: 'license', label: 'License', field: 'license', sortable: true, align: 'left' },
+  {
+    name: 'description',
+    label: 'Description',
+    field: 'description',
+    sortable: false,
+    align: 'left',
+  },
+  { name: 'link', label: 'Link', field: 'link', sortable: false, align: 'left' },
+]
 const libraryMenuModel = computed({
   get: () => props.libraryMenuOptions,
   set: (value: Record<string, unknown>) => emit('update:library-menu-options', value),
+})
+const showRootMetadata = computed({
+  get: () => Boolean(props.showRootMetadata),
+  set: (value: boolean) => emit('update:show-root-metadata', Boolean(value)),
 })
 
 onMounted(() => {
@@ -204,6 +332,20 @@ watch(
 )
 
 const visibleRows = computed(() => {
+  const descendantCount = (node: ModelicaLibraryTreeNode): number =>
+    1 + (node.children ?? []).reduce((sum, child) => sum + descendantCount(child), 0)
+  const iconForClassType = (classType: string | undefined): string => {
+    const normalized = String(classType || '').toLowerCase()
+    if (normalized === 'model') return matWidgets
+    if (normalized === 'block') return matCallSplit
+    if (normalized === 'package') return matInventory2
+    if (normalized === 'function') return matFunctions
+    if (normalized === 'record') return matDataObject
+    if (normalized === 'connector') return matSettingsEthernet
+    if (normalized === 'type') return matArchitecture
+    if (normalized === 'class') return matAccountTree
+    return matInventory2
+  }
   const toRow = (
     node: ModelicaLibraryTreeNode,
     id: string,
@@ -215,9 +357,13 @@ const visibleRows = computed(() => {
     label: node.label,
     qualifiedName: node.qualifiedName,
     classType: node.classType,
+    classIconName: iconForClassType(node.classType),
+    descendantCount: descendantCount(node),
     depth,
     hasChildren,
     expanded,
+    rootMetadata:
+      depth === 0 ? String(props.rootLibraryMetadata?.[node.qualifiedName] || '').trim() : '',
   })
 
   if (hasFilter.value) {
@@ -250,6 +396,10 @@ function triggerLibraryImport() {
   libraryImportEl.value?.click()
 }
 
+function openLibrariesDialog() {
+  showLibrariesDialog.value = true
+}
+
 function onFilterInput(value: string | number | null) {
   filterText.value = value == null ? '' : String(value)
 }
@@ -266,6 +416,95 @@ function onRowClick(item: { id: string; hasChildren: boolean }) {
   if (!item.hasChildren || hasFilter.value) return
   toggleNode(item.id)
 }
+
+function onRowContextMenu(
+  item: { qualifiedName: string; hasChildren: boolean },
+  event: MouseEvent,
+) {
+  contextMenuItem.value = item
+  contextMenuTarget.value = (event.currentTarget as Element | null) ?? undefined
+  showRowContextMenu.value = true
+}
+
+function onContextMenuOpen(close: () => void) {
+  const item = contextMenuItem.value
+  if (item?.qualifiedName) emit('openModel', item.qualifiedName)
+  close()
+}
+
+function onContextMenuCopyPath(close: () => void) {
+  const item = contextMenuItem.value
+  if (item?.qualifiedName) void copyToClipboard(item.qualifiedName)
+  close()
+}
+
+const findClosestVisiblePathTarget = (qualifiedName: string): string | null => {
+  const normalized = String(qualifiedName || '').trim()
+  if (!normalized) return null
+  const ids = Object.keys(treeIndex.value.nodeById)
+  if (ids.includes(normalized)) return normalized
+  const byLower = new Map(ids.map((id) => [id.toLowerCase(), id] as const))
+  const exactLower = byLower.get(normalized.toLowerCase())
+  if (exactLower) return exactLower
+  const parts = normalized.split('.').map((part) => part.trim()).filter(Boolean)
+  for (let i = parts.length; i >= 1; i -= 1) {
+    const candidate = parts.slice(0, i).join('.')
+    if (treeIndex.value.nodeById[candidate]) return candidate
+    const candidateLower = byLower.get(candidate.toLowerCase())
+    if (candidateLower) return candidateLower
+  }
+  const targetLower = normalized.toLowerCase()
+  const suffixHit = ids.find((id) => {
+    const idLower = id.toLowerCase()
+    return idLower === targetLower || idLower.endsWith(`.${targetLower}`)
+  })
+  if (suffixHit) return suffixHit
+  for (let i = parts.length - 1; i >= 1; i -= 1) {
+    const tail = parts.slice(i).join('.').toLowerCase()
+    const tailHit = ids.find((id) => {
+      const idLower = id.toLowerCase()
+      return idLower === tail || idLower.endsWith(`.${tail}`)
+    })
+    if (tailHit) return tailHit
+  }
+  return null
+}
+
+const collectAncestorIds = (id: string): string[] => {
+  const ancestors: string[] = []
+  let cursor = treeIndex.value.parentById[id] ?? null
+  while (cursor) {
+    ancestors.push(cursor)
+    cursor = treeIndex.value.parentById[cursor] ?? null
+  }
+  return ancestors
+}
+
+async function revealCurrentClassOrPackage() {
+  const targetId = findClosestVisiblePathTarget(props.currentQualifiedName || '')
+  if (!targetId) {
+    Notify.create({
+      type: 'info',
+      message: `Could not find current class/package in loaded libraries: ${String(props.currentQualifiedName || '(empty)')}`,
+    })
+    return
+  }
+  filterText.value = ''
+  const ancestorIds = collectAncestorIds(targetId)
+  expandedIds.value = Array.from(new Set([...expandedIds.value, ...ancestorIds]))
+  await nextTick()
+  const escaped = CSS.escape(targetId)
+  let row = document.querySelector<HTMLElement>(`[data-qualified-name="${escaped}"]`)
+  if (!row) row = document.querySelector<HTMLElement>(`[data-qualified-name="${targetId}"]`)
+  if (!row) {
+    Notify.create({
+      type: 'info',
+      message: `Found ${targetId}, but its row is not currently visible.`,
+    })
+    return
+  }
+  row.scrollIntoView({ block: 'center', behavior: 'smooth' })
+}
 </script>
 
 <style scoped>
@@ -278,6 +517,12 @@ function onRowClick(item: { id: string; hasChildren: boolean }) {
   transition:
     background-color 120ms ease,
     box-shadow 120ms ease;
+}
+
+.library-root-meta {
+  padding-top: 4px;
+  padding-bottom: 2px;
+  opacity: 0.85;
 }
 
 .library-tree-row::before {
@@ -311,5 +556,26 @@ function onRowClick(item: { id: string; hasChildren: boolean }) {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.library-installer-dialog {
+  width: min(1200px, 100vw);
+  max-width: 100vw;
+  max-height: 95vh;
+}
+
+.table-cell-wrap {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+:deep(.q-table__middle) {
+  overflow-x: hidden;
+}
+
+:deep(.q-table) {
+  width: 100%;
 }
 </style>

@@ -17,6 +17,10 @@ function assertIsBrowser(): void {
   }
 }
 
+function isBrowserEnv(): boolean {
+  return typeof window !== 'undefined' && typeof document !== 'undefined'
+}
+
 function getOrCreateJsCheckerIframe(): HTMLIFrameElement {
   assertIsBrowser()
 
@@ -92,6 +96,39 @@ function makeCodeSnippet(
 }
 
 export function validateJavaScriptInSandbox(code: string): Promise<JsValidationResult> {
+  if (!isBrowserEnv()) {
+    return import('node:vm')
+      .then(({ Script }) => {
+        // Parse/compile only in Node-like environments.
+        new Script(`${code}\n//# sourceURL=userCode.js`, { filename: 'userCode.js' })
+        return {
+          valid: true,
+          phase: null,
+        } satisfies JsValidationResult
+      })
+      .catch((error: unknown) => {
+        const err = error instanceof Error ? error : new Error(String(error))
+        const stack = typeof err.stack === 'string' ? err.stack : ''
+        const match = stack.match(/userCode\.js:(\d+):(\d+)/)
+        const line = match ? Number(match[1]) : undefined
+        const column = match ? Number(match[2]) : undefined
+        const snippet =
+          line !== undefined && column !== undefined
+            ? makeCodeSnippet(code, line, column, 10)
+            : undefined
+        return {
+          valid: false,
+          phase: 'syntax',
+          errorName: err.name || 'SyntaxError',
+          message: err.message || 'Unknown syntax error',
+          line,
+          column,
+          snippet,
+          rawError: stack || err.message,
+        } satisfies JsValidationResult
+      })
+  }
+
   return new Promise<JsValidationResult>((resolve) => {
     const iframe = getOrCreateJsCheckerIframe()
     const { win, doc } = resetIframeDocument(iframe)
@@ -137,7 +174,7 @@ export function validateJavaScriptInSandbox(code: string): Promise<JsValidationR
 
       const snippet =
         line !== undefined && column !== undefined
-          ? makeCodeSnippet(code, line, column, 2)
+          ? makeCodeSnippet(code, line, column, 10)
           : undefined
 
       const rawError = errorObject?.stack ?? messageText

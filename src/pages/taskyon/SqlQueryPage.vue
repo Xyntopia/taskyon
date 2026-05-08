@@ -89,7 +89,7 @@
 
 <script setup lang="ts">
 import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
-import { createChatCompletionTask, createTool, makeTaskResult } from '@taskyon/client'
+import { createChatCompletionTask, createTool, makeTaskResult } from '@taskyon/tyclient'
 import SplitTaskyonView from '@taskyon/shared/components/SplitTaskyonView.vue'
 import { copyToClipboard } from '@taskyon/shared/modules/utils'
 import type { TyPGDB } from '@taskyon/taskyon/db'

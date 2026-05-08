@@ -7,6 +7,11 @@ import { executeCodeInIframeSimple } from '../modules/sandbox/iframeWorker'
 import { validateJavaScriptInSandbox } from '../modules/sandbox/checkJsSyntax'
 import { serializeObject } from '../modules/serializeObject'
 import { DEFAULT_MODELICA_LIBRARY_URL } from './modelicaLibraryCatalog'
+import {
+  hasRumocaTemplateRenderer,
+  renderRumocaTemplate,
+  type RumocaTemplateRenderApi,
+} from './rumocaTemplateRender'
 
 // Zod v3 vs v4 compatibility: some builds do not expose z.function().args().returns().
 // We use z.custom to type-check "is a function" while keeping strong TS inference.
@@ -28,7 +33,9 @@ type RumocaSourceRootApi = {
   get_source_root_document_count: () => number
 }
 
-export type RumocaModule = typeof WasmTypes & Partial<RumocaLegacyLibraryApi & RumocaSourceRootApi>
+export type RumocaModule = typeof WasmTypes &
+  Partial<RumocaLegacyLibraryApi & RumocaSourceRootApi> &
+  RumocaTemplateRenderApi
 export const DEFAULT_MSL_ZIP_URL = DEFAULT_MODELICA_LIBRARY_URL
 export const builtinSolvers: Record<string, string> = {
   default: defaultSolverSource,
@@ -586,6 +593,16 @@ export const TyModelicaProjectFileV1 = z.object({
     })
     .optional(),
 
+  ui: z
+    .object({
+      libraryTree: z
+        .object({
+          showRootMetadata: z.boolean().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+
   // Optional: store model-local version history
   documentVersions: z
     .array(
@@ -1056,6 +1073,11 @@ export function packProjectFile(input: {
     }
     result?: Record<string, unknown>
   }
+  ui?: {
+    libraryTree?: {
+      showRootMetadata?: boolean
+    }
+  }
   documentVersions: ModelicaVersion[]
   currentVersionIndex: number
 }): TyModelicaProjectFileV1 {
@@ -1080,6 +1102,7 @@ export function packProjectFile(input: {
       plotViewOptions: input.sim.plotViewOptions,
       result: input.sim.result,
     },
+    ui: input.ui,
     documentVersions:
       input.documentVersions as unknown as TyModelicaProjectFileV1['documentVersions'],
     currentVersionIndex: input.currentVersionIndex,
@@ -1115,9 +1138,32 @@ export function unpackProjectFile(
     }
     result?: Record<string, unknown>
   }
+  ui?: {
+    libraryTree?: {
+      showRootMetadata?: boolean
+    }
+  }
   documentVersions?: ModelicaVersion[]
   currentVersionIndex?: number
 } {
+  const uiState =
+    pf.ui && typeof pf.ui === 'object'
+      ? ({
+          libraryTree:
+            pf.ui.libraryTree && typeof pf.ui.libraryTree === 'object'
+              ? {
+                  ...(typeof pf.ui.libraryTree.showRootMetadata === 'boolean'
+                    ? { showRootMetadata: pf.ui.libraryTree.showRootMetadata }
+                    : {}),
+                }
+              : undefined,
+        } as {
+          libraryTree?: {
+            showRootMetadata?: boolean
+          }
+        })
+      : null
+
   const out: ReturnType<typeof unpackProjectFile> = {
     modelicaSource: pf.modelicaSource ?? '',
     requiredLibraries: Array.isArray(pf.requiredLibraries) ? pf.requiredLibraries : [],
@@ -1125,6 +1171,7 @@ export function unpackProjectFile(
     selectedUiTemplateId:
       pf.activeUiTemplateId || Object.keys(pf.uiTemplates ?? {})[0] || 'default',
     sim: {},
+    ...(uiState ? { ui: uiState } : {}),
   }
   if (pf.solvers && typeof pf.solvers === 'object') out.projectSolvers = pf.solvers
 
@@ -1356,8 +1403,8 @@ export async function compileModelicaToJs(params: {
   try {
     const m = params.wasm
     if (!m) throw new Error('WASM module not loaded')
-    if (typeof m.compile_to_json !== 'function' || typeof m.render_template !== 'function') {
-      throw new Error('WASM module is missing compile_to_json / render_template exports')
+    if (typeof m.compile_to_json !== 'function' || !hasRumocaTemplateRenderer(m)) {
+      throw new Error('WASM module is missing compile_to_json / render_template / render_target exports')
     }
 
     const match = params.modelicaSource.match(/(?:model|class|block|connector|record)\s+(\w+)/)
@@ -1449,7 +1496,15 @@ export async function compileModelicaToJs(params: {
 
     const daeJson = JSON.stringify(daeForTemplate)
     compileDebug.daeJsonLength = daeJson.length
-    const rendered = m.render_template(daeJson, params.templateSource)
+    const rendered = renderRumocaTemplate({
+      wasm: m,
+      daeJson,
+      templateSource: params.templateSource,
+      modelName,
+      templatePath: 'template.jinja',
+      outputPath: `${modelName}.txt`,
+      targetName: 'template',
+    })
     partialRendered = String(rendered ?? '')
     compileDebug.renderedPreview = String(rendered).slice(0, 220)
 

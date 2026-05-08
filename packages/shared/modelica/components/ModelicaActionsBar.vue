@@ -134,22 +134,14 @@
     <q-space />
 
     <q-chip
-      v-if="mslLoading || mslDownloading"
+      v-if="processBusy"
       dense
       square
-      style="font-size: 11px; padding: 0 4px; min-height: 20px"
+      style="font-size: 11px; padding: 0 6px; min-height: 20px"
     >
       <q-spinner class="q-mr-xs" color="secondary" size="10px" />
-      {{ mslDownloading ? 'MSL' : 'MSL' }}
+      {{ processLabel || 'Processing' }}
     </q-chip>
-    <q-chip
-      v-else-if="mslLoaded"
-      dense
-      square
-      color="secondary"
-      style="font-size: 11px; padding: 0 4px; min-height: 20px"
-      :label="`MSL ${mslFileCount}`"
-    />
 
     <SimulationRunControls
       v-model:open="simulationControlsOpenModel"
@@ -234,6 +226,8 @@ const props = defineProps<{
   actualSteps?: number | null
   eventCount?: number | null
   hasResult: boolean
+  processBusy?: boolean
+  processLabel?: string
   solverOptions: Record<string, unknown>
   solverOptionsSchema?: JSONSchema7 | undefined
 }>()

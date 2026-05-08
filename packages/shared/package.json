@@ -42,7 +42,7 @@
     "pmtiles": "^4.4.1",
     "prismjs": "^1.30.0",
     "qrcode": "^1.5.4",
-    "rumoca": "^0.8.13",
+    "rumoca": "^0.9.1",
     "vue-codemirror": "^6.1.1"
   }
 }

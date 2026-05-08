@@ -294,7 +294,7 @@ import {
   matVisibility,
 } from '@quasar/extras/material-icons'
 import { mdiNewBox, mdiRenameBox, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
-import { createChatCompletionTask, createTool, makeTaskResult } from '@taskyon/client'
+import { createChatCompletionTask, createTool, makeTaskResult } from '@taskyon/tyclient'
 import { watchThrottled } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'

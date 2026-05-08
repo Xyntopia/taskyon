@@ -45,7 +45,11 @@
         @click="isCollapsed ? onCollapsedTabClick(index) : onTabClick(index)"
       >
         <q-icon v-if="tabIcons?.[viewId]" class="dock-tab-icon" :name="tabIcons[viewId]" />
-        <span class="dock-tab-title">{{ viewId }}</span>
+        <span
+          class="dock-tab-title"
+          :title="tabTitleTooltips?.[viewId] || tabTitles?.[viewId] || viewId"
+          >{{ tabTitles?.[viewId] || viewId }}</span
+        >
 
         <button
           v-if="!hideTabClose && !isCollapsed"
@@ -83,6 +87,8 @@
           :tab-button-class="tabButtonClass"
           :add-button-class="addButtonClass"
           :tab-icons="tabIcons"
+          :tab-titles="tabTitles"
+          :tab-title-tooltips="tabTitleTooltips"
           @add-view="onChildAddView"
         >
           <!-- Forward all slots -->
@@ -250,6 +256,8 @@ const {
   tabButtonClass = '',
   addButtonClass = '',
   tabIcons = {},
+  tabTitles = {},
+  tabTitleTooltips = {},
   tabPosition = 'top',
 } = defineProps<{
   parentDirection?: DockDirection | undefined
@@ -267,6 +275,10 @@ const {
 
   /** Map viewId -> raw SVG string (trusted HTML) for tab icons */
   tabIcons?: Record<string, string>
+  /** Map viewId -> display title */
+  tabTitles?: Record<string, string>
+  /** Map viewId -> title tooltip */
+  tabTitleTooltips?: Record<string, string>
   /** position of tab header in leaf nodes */
   tabPosition?: 'top' | 'left'
 }>()

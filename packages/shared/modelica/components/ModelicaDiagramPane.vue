@@ -1,6 +1,6 @@
 <template>
   <div class="modelica-diagram-pane">
-    <div class="row items-center q-gutter-xs q-pa-xs">
+    <div v-if="viewMode === 'diagram'" class="row items-center q-gutter-xs q-pa-xs">
       <q-btn-toggle
         v-model="layoutMode"
         dense
@@ -67,14 +67,25 @@
     <div v-if="errorText" class="q-px-sm q-pb-xs text-negative text-caption">{{ errorText }}</div>
     <div v-else-if="loading" class="q-px-sm q-pb-xs text-grey-7 text-caption">Loading diagram…</div>
 
-    <div ref="containerRef" class="diagram-canvas"></div>
+    <div v-if="viewMode === 'diagram'" ref="containerRef" class="diagram-canvas"></div>
+    <div v-else class="q-pa-sm fit">
+      <SanitizedMarkup
+        v-if="classIconMarkup"
+        class="class-icon-view"
+        :markup="classIconMarkup"
+        :sanitize="sanitizeSvgMarkup"
+      />
+      <div v-else class="text-caption text-grey-7">No icon available for this class.</div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { watchDebounced } from '@vueuse/core'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { sanitizeSvgMarkup } from '../../spaceships/sanitizeSvgMarkup'
 import ToggleButton from '../../components/ToggleButton.vue'
+import SanitizedMarkup from './SanitizedMarkup.vue'
 import {
   createGraphController,
   type GraphData,
@@ -101,6 +112,7 @@ const props = defineProps<{
   qualifiedName?: string | null
   wasmLoaded: boolean
   refreshKey?: string | number | null
+  viewMode?: 'diagram' | 'icon'
 }>()
 
 const emptyGraph: GraphData<DiagramNodeData, DiagramEdgeData> = { nodes: [], edges: [] }
@@ -109,6 +121,7 @@ const emptyOptions: RenderOptions<DiagramNodeData, DiagramEdgeData> = {}
 const containerRef = ref<HTMLElement | null>(null)
 const diagram = ref<ModelicaDiagramDto | null>(null)
 const layoutMode = ref<DiagramLayoutMode>('authored')
+const viewMode = computed<'diagram' | 'icon'>(() => props.viewMode ?? 'diagram')
 const showLabels = ref(true)
 const showModelicaNativeLabels = ref(true)
 const showLibraryPaths = ref(false)
@@ -201,6 +214,20 @@ const runtimeOptions = computed<RenderOptions<DiagramNodeData, DiagramEdgeData>>
     nodeSvg: (node: LayoutNode<DiagramNodeData>) =>
       renderNodeSvg(node, labelsEnabled, nativeLabelsEnabled, libraryPathsEnabled),
   }
+})
+
+const classIconMarkup = computed(() => {
+  const icon = diagram.value?.classIcon
+  if (!icon || !Array.isArray(icon.graphics) || icon.graphics.length === 0) return ''
+  return renderIconSvg(
+    icon,
+    { x: 0, y: 0, width: 420, height: 420 },
+    props.qualifiedName ?? 'Model',
+    undefined,
+    true,
+    false,
+    false,
+  ).markup
 })
 
 let controller: ReturnType<typeof createGraphController<DiagramNodeData, DiagramEdgeData>> | null =
@@ -695,9 +722,14 @@ onBeforeUnmount(() => {
 
 .diagram-canvas {
   width: 100%;
-  height: calc(100% - 44px);
+  height: 100%;
   min-height: 460px;
   background: rgb(229 231 235);
+}
+
+.class-icon-view {
+  width: min(100%, 520px);
+  height: min(100%, 520px);
 }
 
 :deep(.diagram-node-html) {

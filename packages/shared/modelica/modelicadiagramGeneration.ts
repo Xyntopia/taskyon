@@ -1,6 +1,8 @@
 import { get_class_info, parse_source_root_file } from 'rumoca'
 import type { Thunk } from '../modules/tsHelpers'
 
+const ENABLE_DIAGRAM_ICON_DIAGNOSTICS = true
+
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
@@ -141,9 +143,12 @@ type DiagramConnection = {
 
 type DiagramDto = {
   className: string
+  classIcon?: DiagramIconSpec
   components: DiagramComponent[]
   connections: DiagramConnection[]
 }
+
+type ImportAliasMap = Record<string, string>
 
 const targetName = (value: unknown): string => {
   const record = asRecord(value)
@@ -718,25 +723,61 @@ const removeTopLevelImportsForDiagramParse = (source: string): string => {
   return out.join('\n')
 }
 
+const normalizeLegacyDeclarationModifiersForDiagramParse = (source: string): string =>
+  source.replace(
+    /(\b(?:parameter|constant|discrete|input|output)\s+[A-Za-z_][A-Za-z0-9_.]*\s+[A-Za-z_][A-Za-z0-9_]*)\s*\(([^()]*)\)\s*\(([^()]*)\)/g,
+    '$1($2, $3)',
+  )
+
+const stripEquationSectionsForDiagramParse = (source: string): string => {
+  const lines = source.split('\n')
+  const result: string[] = []
+  let inEquationBlock = false
+  for (const line of lines) {
+    const trimmed = line.trim().toLowerCase()
+    if (!inEquationBlock && (trimmed === 'equation' || trimmed === 'algorithm')) {
+      inEquationBlock = true
+      continue
+    }
+    if (inEquationBlock) {
+      if (trimmed.startsWith('annotation(') || trimmed.startsWith('end ')) {
+        inEquationBlock = false
+      } else {
+        continue
+      }
+    }
+    result.push(line)
+  }
+  return result.join('\n')
+}
+
 const parseSourceRootAst = (source: string, fileName: string): Record<string, unknown> => {
   const parseJson = (input: string): Record<string, unknown> =>
     JSON.parse(String(parse_source_root_file(input, fileName))) as Record<string, unknown>
+  const fallbacks = [
+    removeTopLevelImportsForDiagramParse(source),
+    normalizeLegacyDeclarationModifiersForDiagramParse(source),
+    stripEquationSectionsForDiagramParse(source),
+    stripEquationSectionsForDiagramParse(normalizeLegacyDeclarationModifiersForDiagramParse(source)),
+  ]
   try {
     return parseJson(source)
   } catch (firstError) {
-    const fallback = removeTopLevelImportsForDiagramParse(source)
     const firstMessage = firstError instanceof Error ? firstError.message : String(firstError)
-    if (fallback === source) {
-      throw new Error(`Cannot parse Modelica source for diagram extraction: ${firstMessage}`)
+    let lastError: unknown = firstError
+    for (const fallback of fallbacks) {
+      if (fallback === source) continue
+      try {
+        return parseJson(fallback)
+      } catch (error) {
+        lastError = error
+      }
     }
-    try {
-      return parseJson(fallback)
-    } catch (secondError) {
-      const secondMessage = secondError instanceof Error ? secondError.message : String(secondError)
-      throw new Error(
-        `Cannot parse Modelica source for diagram extraction: primary=${firstMessage}; fallback=${secondMessage}`,
-      )
-    }
+    const secondMessage =
+      lastError instanceof Error ? lastError.message : String(lastError ?? firstError)
+    throw new Error(
+      `Cannot parse Modelica source for diagram extraction: primary=${firstMessage}; fallback=${secondMessage}`,
+    )
   }
 }
 
@@ -762,10 +803,8 @@ const parseClassInfoAst = (source: string, qualifiedName: string): Record<string
     : new Error('Cannot parse Modelica source for diagram extraction')
 }
 
-const extractAnnotationStatement = (source: string): string => {
-  const marker = 'annotation('
-  const start = source.indexOf(marker)
-  if (start < 0) return ''
+const extractBalancedAnnotationAt = (source: string, start: number): string => {
+  if (start < 0 || start >= source.length) return ''
   let depth = 0
   let i = start
   let end = -1
@@ -786,6 +825,29 @@ const extractAnnotationStatement = (source: string): string => {
   const semicolonOffset = tail.indexOf(';')
   if (semicolonOffset < 0) return ''
   return source.slice(start, end + 1 + semicolonOffset + 1)
+}
+
+const extractAnnotationStatement = (source: string): string => {
+  const iconMarker = 'annotation(Icon('
+  const iconStart = source.lastIndexOf(iconMarker)
+  if (iconStart >= 0) {
+    const iconAnnotation = extractBalancedAnnotationAt(source, iconStart)
+    if (iconAnnotation) return iconAnnotation
+  }
+  const marker = 'annotation('
+  const starts: number[] = []
+  let from = 0
+  while (from < source.length) {
+    const found = source.indexOf(marker, from)
+    if (found < 0) break
+    starts.push(found)
+    from = found + marker.length
+  }
+  for (let i = starts.length - 1; i >= 0; i -= 1) {
+    const annotation = extractBalancedAnnotationAt(source, starts[i] ?? -1)
+    if (annotation) return annotation
+  }
+  return ''
 }
 
 const extractExtendsStatements = (source: string): string[] =>
@@ -871,25 +933,58 @@ const shouldIncludeDiagramComponent = (
   return false
 }
 
+const extractImportAliases = (source: string): ImportAliasMap => {
+  const aliases: ImportAliasMap = {}
+  const regex = /^\s*import\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_.]*)\s*;/gm
+  for (const match of source.matchAll(regex)) {
+    const alias = String(match[1] || '').trim()
+    const target = String(match[2] || '').trim()
+    if (alias && target) aliases[alias] = target
+  }
+  return aliases
+}
+
+const expandImportAlias = (typeName: string, importAliases: ImportAliasMap): string[] => {
+  const normalized = typeName.trim()
+  if (!normalized) return []
+  const first = normalized.split('.')[0] || ''
+  const target = importAliases[first]
+  if (!target) return [normalized]
+  if (!normalized.includes('.')) return [normalized, target]
+  const suffix = normalized.slice(first.length + 1)
+  return [normalized, `${target}.${suffix}`]
+}
+
 const buildTypeLookupCandidates = (
   typeName: string,
   classQualifiedName: string | undefined,
+  importAliases: ImportAliasMap = {},
 ): string[] => {
   const normalized = typeName.trim()
   if (!normalized) return []
-  const candidates: string[] = [normalized]
-  if (!normalized.startsWith('Modelica.')) {
-    candidates.push(`Modelica.${normalized}`)
-  }
   const classParts = (classQualifiedName ?? '')
     .split('.')
     .map((part) => part.trim())
     .filter(Boolean)
   const packageParts = classParts.slice(0, -1)
+  const baseCandidates = expandImportAlias(normalized, importAliases)
+  const candidates: string[] = [...baseCandidates]
+  for (const baseCandidate of baseCandidates) {
+    for (let i = packageParts.length; i >= 1; i -= 1) {
+      candidates.push(`${packageParts.slice(0, i).join('.')}.${baseCandidate}`)
+    }
+  }
+  const isQualified = normalized.includes('.')
+  if (!isQualified && !normalized.startsWith('Modelica.')) candidates.push(`Modelica.${normalized}`)
   for (let i = packageParts.length; i >= 1; i -= 1) {
     candidates.push(`${packageParts.slice(0, i).join('.')}.${normalized}`)
   }
   return Array.from(new Set(candidates))
+}
+
+const extractExtendsBaseNamesFromSource = (sourceModelica: string): string[] => {
+  const matches = sourceModelica.matchAll(/^\s*extends\s+([A-Za-z_][A-Za-z0-9_.]*)\s*(?:\(|;)/gm)
+  return Array.from(new Set(Array.from(matches, (match) => String(match[1] || '').trim()).filter(Boolean)))
 }
 
 const extractExtendsBaseNames = (classDef: Record<string, unknown>): string[] => {
@@ -923,6 +1018,7 @@ const resolveTypeIcon = (
   classQualifiedName: string | undefined,
   cache: Map<string, DiagramIconSpec | null>,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
+  importAliases: ImportAliasMap = {},
   visited: Set<string> = new Set<string>(),
 ): DiagramIconSpec | undefined => {
   const normalizedType = typeName.trim()
@@ -931,7 +1027,7 @@ const resolveTypeIcon = (
     normalizedType.includes('SineVoltage') ||
     normalizedType.toLowerCase().includes('simplecell') ||
     normalizedType.toLowerCase().includes('power10')
-  const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName)
+  const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName, importAliases)
   if (traceIconResolve) {
     console.log('[diagram][icon] resolveTypeIcon start', {
       typeName: normalizedType,
@@ -984,10 +1080,18 @@ const resolveTypeIcon = (
       }
       let inheritedIcon: DiagramIconSpec | undefined
       if (iconClass) {
-        const bases = extractExtendsBaseNames(iconClass)
+        const basesFromAst = extractExtendsBaseNames(iconClass)
+        const bases = basesFromAst.length > 0 ? basesFromAst : extractExtendsBaseNamesFromSource(sourceModelica)
         const parentIcons = bases
           .map((baseName) =>
-            resolveTypeIcon(baseName, qualified, cache, loadedSourceRootFiles, visited),
+            resolveTypeIcon(
+              baseName,
+              qualified,
+              cache,
+              loadedSourceRootFiles,
+              importAliases,
+              visited,
+            ),
           )
           .filter((entry): entry is DiagramIconSpec => entry != null)
         if (parentIcons.length > 0) {
@@ -1027,10 +1131,11 @@ const diagnoseTypeIconResolution = (
   typeName: string,
   classQualifiedName: string | undefined,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
+  importAliases: ImportAliasMap = {},
 ): void => {
   const normalizedType = typeName.trim()
   if (!normalizedType) return
-  const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName)
+  const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName, importAliases)
   const diagnostics = candidates.map((candidate) => {
     try {
       const rawInfo = get_class_info(candidate)
@@ -1110,10 +1215,11 @@ const isConnectorType = (
   typeName: string,
   classQualifiedName: string | undefined,
   cache: Map<string, boolean>,
+  importAliases: ImportAliasMap = {},
 ): boolean => {
   const normalized = typeName.trim()
   if (!normalized) return false
-  const candidates = buildTypeLookupCandidates(normalized, classQualifiedName)
+  const candidates = buildTypeLookupCandidates(normalized, classQualifiedName, importAliases)
   for (const candidate of candidates) {
     if (cache.has(candidate)) {
       if (cache.get(candidate)) return true
@@ -1145,11 +1251,12 @@ const resolveTypePorts = (
   portCache: Map<string, DiagramPort[] | null>,
   connectorTypeCache: Map<string, boolean>,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
+  importAliases: ImportAliasMap = {},
   visited: Set<string> = new Set<string>(),
 ): DiagramPort[] => {
   const normalizedType = typeName.trim()
   if (!normalizedType) return []
-  const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName)
+  const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName, importAliases)
   for (const candidate of candidates) {
     if (visited.has(candidate)) continue
     if (portCache.has(candidate)) {
@@ -1191,6 +1298,7 @@ const resolveTypePorts = (
           portCache,
           connectorTypeCache,
           loadedSourceRootFiles,
+          importAliases,
           visited,
         ),
       )
@@ -1198,7 +1306,12 @@ const resolveTypePorts = (
       const ownPorts: DiagramPort[] = Object.entries(ownComponents)
         .map(([componentId, value]) => ({ componentId, component: asRecord(value) ?? {} }))
         .filter(({ component }) =>
-          isConnectorType(extractTypeName(component.type_name), qualified, connectorTypeCache),
+          isConnectorType(
+            extractTypeName(component.type_name),
+            qualified,
+            connectorTypeCache,
+            importAliases,
+          ),
         )
         .map(({ componentId, component }) => {
           const portTypeName = extractTypeName(component.type_name)
@@ -1210,6 +1323,7 @@ const resolveTypePorts = (
             qualified,
             iconCache,
             loadedSourceRootFiles,
+            importAliases,
           )
           const port: DiagramPort = {
             name: asString(component.name) || componentId,
@@ -1246,10 +1360,12 @@ export function handleExtractDiagram(
   if (!source.trim()) throw new Error('Cannot build diagram: source is empty')
   const fileName = asString(payload.fileName) || 'Model.mo'
   const parsed = parseSourceRootAst(source, fileName)
+  const importAliases = extractImportAliases(source)
   const classDef = classByName(parsed, payload.qualifiedName)
   if (!classDef) throw new Error('Cannot build diagram: no class found in source')
 
   const className = asString(classDef.name) || 'Model'
+  const classIcon = extractIconFromClass(classDef)
   const componentsMap = asRecord(classDef.components) ?? {}
   const iconCache = new Map<string, DiagramIconSpec | null>()
   const portCache = new Map<string, DiagramPort[] | null>()
@@ -1292,11 +1408,18 @@ export function handleExtractDiagram(
       const placement = extractPlacement(component.annotation)
       const typeName = extractTypeName(component.type_name)
       const iconRef = typeName
-      const icon = resolveTypeIcon(iconRef, payload.qualifiedName, iconCache, loadedSourceRootFiles)
+      const icon = resolveTypeIcon(
+        iconRef,
+        payload.qualifiedName,
+        iconCache,
+        loadedSourceRootFiles,
+        importAliases,
+      )
       const traceComponentIcon =
-        componentId.toLowerCase().includes('cell') ||
-        componentId.toLowerCase().includes('power10') ||
-        !icon
+        ENABLE_DIAGRAM_ICON_DIAGNOSTICS &&
+        (componentId.toLowerCase().includes('cell') ||
+          componentId.toLowerCase().includes('power10') ||
+          !icon)
       if (traceComponentIcon) {
         console.log('[diagram][component] icon resolution', {
           className: payload.qualifiedName || className,
@@ -1307,7 +1430,12 @@ export function handleExtractDiagram(
           iconHasExtent: Boolean(icon?.coordinateExtent),
         })
         if (!icon) {
-          diagnoseTypeIconResolution(typeName, payload.qualifiedName, loadedSourceRootFiles)
+          diagnoseTypeIconResolution(
+            typeName,
+            payload.qualifiedName,
+            loadedSourceRootFiles,
+            importAliases,
+          )
         }
       }
       const ports = resolveTypePorts(
@@ -1317,6 +1445,7 @@ export function handleExtractDiagram(
         portCache,
         connectorTypeCache,
         loadedSourceRootFiles,
+        importAliases,
       )
       const item: DiagramComponent = {
         id: componentId,
@@ -1356,6 +1485,7 @@ export function handleExtractDiagram(
 
   return {
     className,
+    ...(classIcon ? { classIcon } : {}),
     components,
     connections,
   }
