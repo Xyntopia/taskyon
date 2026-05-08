@@ -762,6 +762,63 @@ const parseClassInfoAst = (source: string, qualifiedName: string): Record<string
     : new Error('Cannot parse Modelica source for diagram extraction')
 }
 
+const extractAnnotationStatement = (source: string): string => {
+  const marker = 'annotation('
+  const start = source.indexOf(marker)
+  if (start < 0) return ''
+  let depth = 0
+  let i = start
+  let end = -1
+  while (i < source.length) {
+    const ch = source[i]
+    if (ch === '(') depth += 1
+    else if (ch === ')') {
+      depth -= 1
+      if (depth === 0) {
+        end = i
+        break
+      }
+    }
+    i += 1
+  }
+  if (end < 0) return ''
+  const tail = source.slice(end + 1)
+  const semicolonOffset = tail.indexOf(';')
+  if (semicolonOffset < 0) return ''
+  return source.slice(start, end + 1 + semicolonOffset + 1)
+}
+
+const extractExtendsStatements = (source: string): string[] =>
+  source
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('extends ') && line.endsWith(';'))
+
+const parseClassInfoAstWithIconStubFallback = (
+  source: string,
+  qualifiedName: string,
+): Record<string, unknown> => {
+  try {
+    return parseClassInfoAst(source, qualifiedName)
+  } catch {
+    const className =
+      qualifiedName
+        .split('.')
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .pop() || 'Model'
+    const extendsStatements = extractExtendsStatements(source)
+    const annotationStatement = extractAnnotationStatement(source)
+    if (extendsStatements.length === 0 && !annotationStatement) {
+      throw new Error('Cannot parse Modelica source for diagram extraction')
+    }
+    const bodyLines = [...extendsStatements]
+    if (annotationStatement) bodyLines.push(annotationStatement)
+    const fallbackSource = `model ${className}\n  ${bodyLines.join('\n  ')}\nend ${className};\n`
+    return parseClassInfoAst(fallbackSource, qualifiedName)
+  }
+}
+
 const parseQualifiedFromLoadedSourceRoots = (
   qualifiedName: string,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
@@ -870,9 +927,12 @@ const resolveTypeIcon = (
 ): DiagramIconSpec | undefined => {
   const normalizedType = typeName.trim()
   if (!normalizedType) return undefined
-  const traceSine = normalizedType.includes('SineVoltage')
+  const traceIconResolve =
+    normalizedType.includes('SineVoltage') ||
+    normalizedType.toLowerCase().includes('simplecell') ||
+    normalizedType.toLowerCase().includes('power10')
   const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName)
-  if (traceSine) {
+  if (traceIconResolve) {
     console.log('[diagram][icon] resolveTypeIcon start', {
       typeName: normalizedType,
       classQualifiedName,
@@ -891,7 +951,7 @@ const resolveTypeIcon = (
       const rawInfo = get_class_info(candidate)
       const info = JSON.parse(String(rawInfo)) as Record<string, unknown>
       const sourceModelica = asString(info.source_modelica)
-      if (traceSine) {
+      if (traceIconResolve) {
         console.log('[diagram][icon] candidate class_info', {
           candidate,
           qualified: asString(info.qualified_name) || candidate,
@@ -906,7 +966,7 @@ const resolveTypeIcon = (
       const qualified = asString(info.qualified_name) || candidate
       let parsed: Record<string, unknown>
       try {
-        parsed = parseClassInfoAst(sourceModelica, qualified)
+        parsed = parseClassInfoAstWithIconStubFallback(sourceModelica, qualified)
       } catch {
         const fallbackParsed = parseQualifiedFromLoadedSourceRoots(qualified, loadedSourceRootFiles)
         if (!fallbackParsed) throw new Error('Cannot parse Modelica source for diagram extraction')
@@ -914,7 +974,7 @@ const resolveTypeIcon = (
       }
       const iconClass = classByName(parsed, qualified) ?? classByName(parsed, candidate)
       const ownIcon = iconClass ? extractIconFromClass(iconClass) : undefined
-      if (traceSine) {
+      if (traceIconResolve) {
         console.log('[diagram][icon] own icon extracted', {
           candidate,
           hasIconClass: Boolean(iconClass),
@@ -938,7 +998,7 @@ const resolveTypeIcon = (
         }
       }
       const icon = mergeIcons(inheritedIcon, ownIcon)
-      if (traceSine) {
+      if (traceIconResolve) {
         console.log('[diagram][icon] merge icon result', {
           candidate,
           inheritedGraphics: inheritedIcon?.graphics.length ?? 0,
@@ -949,7 +1009,7 @@ const resolveTypeIcon = (
       cache.set(candidate, icon ?? null)
       if (icon) return icon
     } catch (error) {
-      if (traceSine) {
+      if (traceIconResolve) {
         console.log('[diagram][icon] candidate failed', {
           candidate,
           error: error instanceof Error ? error.message : String(error),
@@ -961,6 +1021,79 @@ const resolveTypeIcon = (
     }
   }
   return undefined
+}
+
+const diagnoseTypeIconResolution = (
+  typeName: string,
+  classQualifiedName: string | undefined,
+  loadedSourceRootFiles: Thunk<Record<string, string>>,
+): void => {
+  const normalizedType = typeName.trim()
+  if (!normalizedType) return
+  const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName)
+  const diagnostics = candidates.map((candidate) => {
+    try {
+      const rawInfo = get_class_info(candidate)
+      const info = JSON.parse(String(rawInfo)) as Record<string, unknown>
+      const qualified = asString(info.qualified_name) || candidate
+      const sourceModelica = asString(info.source_modelica)
+      if (!sourceModelica.trim()) {
+        return {
+          candidate,
+          qualified,
+          status: 'empty-source-modelica',
+        }
+      }
+      try {
+        const parsed = parseClassInfoAstWithIconStubFallback(sourceModelica, qualified)
+        const iconClass = classByName(parsed, qualified) ?? classByName(parsed, candidate)
+        const ownIcon = iconClass ? extractIconFromClass(iconClass) : undefined
+        return {
+          candidate,
+          qualified,
+          status: 'ok',
+          ownGraphics: ownIcon?.graphics.length ?? 0,
+          ownHasExtent: Boolean(ownIcon?.coordinateExtent),
+        }
+      } catch (parseErr) {
+        const fallbackParsed = parseQualifiedFromLoadedSourceRoots(qualified, loadedSourceRootFiles)
+        if (fallbackParsed) {
+          const iconClass =
+            classByName(fallbackParsed, qualified) ?? classByName(fallbackParsed, candidate)
+          const ownIcon = iconClass ? extractIconFromClass(iconClass) : undefined
+          return {
+            candidate,
+            qualified,
+            status: 'fallback-source-root',
+            ownGraphics: ownIcon?.graphics.length ?? 0,
+            ownHasExtent: Boolean(ownIcon?.coordinateExtent),
+            parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
+          }
+        }
+        return {
+          candidate,
+          qualified,
+          status: 'parse-failed',
+          parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
+        }
+      }
+    } catch (error) {
+      return {
+        candidate,
+        status: 'class-info-failed',
+        error: error instanceof Error ? error.message : String(error),
+      }
+    }
+  })
+  console.warn('[diagram][icon] unresolved type diagnostic summary', {
+    typeName: normalizedType,
+    classQualifiedName,
+    candidateCount: candidates.length,
+    diagnosticCount: diagnostics.length,
+  })
+  diagnostics.forEach((entry, index) => {
+    console.warn(`[diagram][icon] unresolved type diagnostic #${index + 1}`, entry)
+  })
 }
 
 const endpointPortName = (endpoint: string): string | undefined => {
@@ -1160,6 +1293,23 @@ export function handleExtractDiagram(
       const typeName = extractTypeName(component.type_name)
       const iconRef = typeName
       const icon = resolveTypeIcon(iconRef, payload.qualifiedName, iconCache, loadedSourceRootFiles)
+      const traceComponentIcon =
+        componentId.toLowerCase().includes('cell') ||
+        componentId.toLowerCase().includes('power10') ||
+        !icon
+      if (traceComponentIcon) {
+        console.log('[diagram][component] icon resolution', {
+          className: payload.qualifiedName || className,
+          componentId,
+          typeName,
+          iconResolved: Boolean(icon),
+          iconGraphics: icon?.graphics.length ?? 0,
+          iconHasExtent: Boolean(icon?.coordinateExtent),
+        })
+        if (!icon) {
+          diagnoseTypeIconResolution(typeName, payload.qualifiedName, loadedSourceRootFiles)
+        }
+      }
       const ports = resolveTypePorts(
         typeName,
         payload.qualifiedName,

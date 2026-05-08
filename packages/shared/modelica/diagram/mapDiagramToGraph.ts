@@ -54,6 +54,12 @@ type Size = { width: number; height: number }
 const DIAGRAM_SCALE = 3
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value))
+const shortTypeName = (typeName: string): string => {
+  const trimmed = typeName.trim()
+  if (!trimmed) return ''
+  const parts = trimmed.split('.').filter(Boolean)
+  return parts.at(-1) ?? trimmed
+}
 
 const toGraphPoint = (point: DiagramPoint): { x: number; y: number } => ({
   x: point.x * DIAGRAM_SCALE,
@@ -67,9 +73,10 @@ const centerOfRect = (rect: Rect): { x: number; y: number } => ({
 
 const fallbackTextSize = (name: string, description: string): Size => {
   const nameWidth = name.length * 7.2 + 24
-  const descriptionWidth = description.length * 5.6 + 24
-  const width = clamp(Math.max(nameWidth, descriptionWidth, 120), 120, 340)
-  return { width, height: 70 }
+  const shortDescription = shortTypeName(description)
+  const descriptionWidth = shortDescription.length * 5.6 + 20
+  const width = clamp(Math.max(nameWidth, descriptionWidth, 56), 56, 120)
+  return { width, height: 56 }
 }
 
 const sizeFromPlacementExtent = (

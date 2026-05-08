@@ -1,5 +1,4 @@
-//import equal from 'fast-deep-equal/es6';
-import type { AnyFunction, CacheEntry } from '@taskyon/taskyon'
+import { deepEqual } from 'fast-equals'
 
 export function countLeaves(value: unknown): number {
   const seen = new Set<unknown>()
@@ -27,41 +26,23 @@ export function countLeaves(value: unknown): number {
   return count
 }
 
-export async function copyToClipboard(text: string | undefined): Promise<boolean> {
-  if (!text) return false
-  if (typeof window === 'undefined') return false
+export function countElements(arr: unknown): number {
+  if (!Array.isArray(arr)) return 1
+  let n = 0
+  for (const v of arr) n += countElements(v)
+  return n
+}
 
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch (err) {
-    console.warn('Clipboard write failed; trying bridge', err)
-  }
-
-  if (window.parent && window.parent !== window) {
-    const requestId = `clipboard-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const response = new Promise<boolean>((resolve) => {
-      const timeout = window.setTimeout(() => {
-        window.removeEventListener('message', onMessage)
-        resolve(false)
-      }, 1500)
-
-      const onMessage = (event: MessageEvent) => {
-        const data = event.data || {}
-        if (data.type !== 'taskyonClipboardWriteResult' || data.requestId !== requestId) return
-        window.clearTimeout(timeout)
-        window.removeEventListener('message', onMessage)
-        resolve(Boolean(data.ok))
-      }
-
-      window.addEventListener('message', onMessage)
-    })
-
-    window.parent.postMessage({ type: 'taskyonClipboardWrite', text, requestId }, '*')
-    return response
-  }
-
-  return false
+export function copyToClipboard(text: string | undefined) {
+  if (text)
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        console.log('Copied to clipboard')
+      })
+      .catch((err) => {
+        console.error('Error in copying text: ', err)
+      })
 }
 
 export async function copyPngToClipboard(png: Uint8Array) {
@@ -76,53 +57,12 @@ export async function copyPngToClipboard(png: Uint8Array) {
   // 2. Build the Blob
   const blob = new Blob([ab], { type: 'image/png' })
 
-  // 3. Copy to clipboard (or fall back to webview bridge)
-  if (typeof window === 'undefined') return false
+  // 3. Copy to clipboard
   if ('ClipboardItem' in globalThis) {
-    try {
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-      return true
-    } catch (err) {
-      console.warn('Clipboard image write failed; trying bridge', err)
-    }
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+  } else {
+    alert('ClipboardItem not supported in this browser')
   }
-
-  if (window.parent && window.parent !== window) {
-    const requestId = `clipboard-img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const response = new Promise<boolean>((resolve) => {
-      const timeout = window.setTimeout(() => {
-        window.removeEventListener('message', onMessage)
-        resolve(false)
-      }, 1500)
-
-      const onMessage = (event: MessageEvent) => {
-        const data = event.data || {}
-        if (data.type !== 'taskyonClipboardWriteImageResult' || data.requestId !== requestId) return
-        window.clearTimeout(timeout)
-        window.removeEventListener('message', onMessage)
-        resolve(Boolean(data.ok))
-      }
-
-      window.addEventListener('message', onMessage)
-    })
-
-    const bytes = new Uint8Array(ab)
-    let binary = ''
-    const chunkSize = 0x8000
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(i, i + chunkSize)
-      binary += String.fromCharCode(...chunk)
-    }
-    const base64 = btoa(binary)
-
-    window.parent.postMessage(
-      { type: 'taskyonClipboardWriteImage', mime: 'image/png', data: base64, requestId },
-      '*',
-    )
-    return response
-  }
-
-  return false
 }
 
 export function openrouterPricing(price: number | string, digits = 1) {
@@ -153,6 +93,17 @@ export function humanReadablePrice(price: number | string | undefined, digits: n
   } else {
     return 'N/A'
   }
+}
+
+/**
+ * Type describing a generic function.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyFunction<ReturnType> = (...args: any[]) => ReturnType
+
+// Async sleep function
+export function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**
@@ -209,6 +160,11 @@ export function lruCache(size: number, ignoreIndices: number[] = []) {
   }
 }
 
+type CacheEntry<ReturnType> = {
+  value: ReturnType
+  timestamp: number
+}
+
 export function timeLruCache<ReturnType>(
   size: number,
   maxAge: number, // Maximum age in milliseconds
@@ -254,6 +210,57 @@ export function timeLruCache<ReturnType>(
       return result
     }
   }
+}
+
+function isObject(item: unknown): item is Record<string, unknown> {
+  return item !== null && typeof item === 'object' && !Array.isArray(item)
+}
+
+function unionArrays(arr1: unknown[], arr2: unknown[]) {
+  const combined = arr1.concat(arr2)
+  return combined.filter(
+    (item, index) => combined.findIndex((obj) => deepEqual(obj, item)) === index,
+  )
+}
+
+/**
+ * Deeply merges two objects.
+ * For objects, it recursively merges their properties.
+ * For arrays, it either overwrites (obj1's array is replaced by obj2's) or
+ * performs a union (combines arrays without duplicates) based on the strategy specified.
+ *
+ * @param obj1 - The first object to merge.
+ * @param obj2 - The second object to merge.
+ * @param arrayMergeStrategy - The strategy for merging arrays: 'overwrite' or 'union'. Defaults to 'overwrite'.
+ * @returns The deeply merged object.
+ */
+export function deepMerge<A, B>(
+  obj1: A,
+  obj2: B,
+  arrayMergeStrategy: 'overwrite' | 'union' = 'overwrite',
+): A & B {
+  const output: Record<string, unknown> = Object.assign({}, obj1) // Start with a shallow copy of obj1
+  if (isObject(obj1) && isObject(obj2)) {
+    Object.keys(obj2).forEach((key) => {
+      const obj2Value = obj2[key]
+      const obj1Value = obj1[key]
+      if (Array.isArray(obj1Value) && Array.isArray(obj2Value)) {
+        output[key] = arrayMergeStrategy === 'union' ? unionArrays(obj1Value, obj2Value) : obj2Value
+      } else if (isObject(obj2Value)) {
+        if (isObject(obj1Value)) {
+          // Recursively call deepMerge only if both obj1[key] and obj2[key] are objects
+          output[key] = deepMerge(obj1Value, obj2Value, arrayMergeStrategy)
+        } else {
+          // If obj1[key] is not an object, simply assign obj2[key]
+          output[key] = obj2Value
+        }
+      } else {
+        // For non-object properties, overwrite with the value from obj2
+        output[key] = obj2Value
+      }
+    })
+  }
+  return output as A & B
 }
 
 // TODO: add a small test to this :)

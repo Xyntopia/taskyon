@@ -205,8 +205,6 @@ const props = defineProps<{
   projectFile: unknown
   projectMenuOptions: Record<string, unknown>
   projectMenuSchema: JSONSchema7
-  libraryMenuOptions: Record<string, unknown>
-  libraryMenuSchema: JSONSchema7
   runtimeMenuOptions: Record<string, unknown>
   runtimeMenuSchema: JSONSchema7
   mslLoaded: boolean
@@ -267,7 +265,6 @@ const emit = defineEmits<{
   (e: 'update:sim-dt', value: number): void
   (e: 'update:solver-options', value: Record<string, unknown>): void
   (e: 'update:project-menu-options', value: Record<string, unknown>): void
-  (e: 'update:library-menu-options', value: Record<string, unknown>): void
   (e: 'update:runtime-menu-options', value: Record<string, unknown>): void
 }>()
 
@@ -350,11 +347,11 @@ const normalizeRuntimeMenuOptions = (
 
 const runtimeInfo = computed(() => {
   const opts = normalizeRuntimeMenuOptions(props.runtimeMenuOptions)
-  const version = opts.rumocaWasmVersion ?? 'unknown'
-  const commit = opts.rumocaWasmGitCommit ?? 'unknown'
-  const buildTime = opts.rumocaWasmBuildTimeLocal ?? 'unknown'
-  const rustBuildTime = opts.rumocaWasmRustBuildTimeLocal ?? buildTime
-  const packageBuiltTime = opts.rumocaWasmPackageBuiltTimeLocal ?? 'unknown'
+  const version = String(opts.rumocaWasmVersion ?? 'unknown')
+  const commit = String(opts.rumocaWasmGitCommit ?? 'unknown')
+  const buildTime = String(opts.rumocaWasmBuildTimeLocal ?? 'unknown')
+  const rustBuildTime = String(opts.rumocaWasmRustBuildTimeLocal ?? buildTime)
+  const packageBuiltTime = String(opts.rumocaWasmPackageBuiltTimeLocal ?? 'unknown')
   const mslStatus = props.mslLoaded
     ? `${props.mslArchiveName || 'MSL loaded'} (${props.mslFileCount} files)`
     : 'MSL not loaded'

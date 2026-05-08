@@ -6,6 +6,7 @@ import { Notify } from 'quasar'
 import { executeCodeInIframeSimple } from '../modules/sandbox/iframeWorker'
 import { validateJavaScriptInSandbox } from '../modules/sandbox/checkJsSyntax'
 import { serializeObject } from '../modules/serializeObject'
+import { DEFAULT_MODELICA_LIBRARY_URL } from './modelicaLibraryCatalog'
 
 // Zod v3 vs v4 compatibility: some builds do not expose z.function().args().returns().
 // We use z.custom to type-check "is a function" while keeping strong TS inference.
@@ -28,7 +29,7 @@ type RumocaSourceRootApi = {
 }
 
 export type RumocaModule = typeof WasmTypes & Partial<RumocaLegacyLibraryApi & RumocaSourceRootApi>
-export const DEFAULT_MSL_ZIP_URL = '/msl/ModelicaStandardLibrary-4.1.0.zip'
+export const DEFAULT_MSL_ZIP_URL = DEFAULT_MODELICA_LIBRARY_URL
 export const builtinSolvers: Record<string, string> = {
   default: defaultSolverSource,
 }
@@ -538,6 +539,9 @@ export const TyModelicaProjectFileV1 = z.object({
   // Main authored Modelica source (typically model.mo)
   modelicaSource: z.string(),
 
+  // Explicit project-level library requirements for diagram/compile reproducibility.
+  requiredLibraries: z.array(z.string().min(1)).default([]),
+
   // Model-specific UI templates (AI editable). Values are template source strings.
   // The UI template language is not enforced here (could be HTML, JS, Jinja, etc.).
   uiTemplates: z.record(z.string().min(1), z.string()),
@@ -1029,6 +1033,7 @@ export async function discoverSolverMetadata(solverJs: string): Promise<{
 export function packProjectFile(input: {
   projectId: string
   modelicaSource: string
+  requiredLibraries: string[]
   uiTemplates: Record<string, string>
   activeUiTemplateId: string
   projectSolvers: Record<string, string>
@@ -1059,6 +1064,7 @@ export function packProjectFile(input: {
     version: 1,
     projectId: input.projectId,
     modelicaSource: input.modelicaSource,
+    requiredLibraries: input.requiredLibraries,
     uiTemplates: input.uiTemplates,
     activeUiTemplateId: input.activeUiTemplateId,
     solvers: input.projectSolvers,
@@ -1086,6 +1092,7 @@ export function unpackProjectFile(
   builtins: Record<string, string>,
 ): {
   modelicaSource: string
+  requiredLibraries: string[]
   uiTemplates: Record<string, string>
   selectedUiTemplateId: string
   projectSolvers?: Record<string, string>
@@ -1113,6 +1120,7 @@ export function unpackProjectFile(
 } {
   const out: ReturnType<typeof unpackProjectFile> = {
     modelicaSource: pf.modelicaSource ?? '',
+    requiredLibraries: Array.isArray(pf.requiredLibraries) ? pf.requiredLibraries : [],
     uiTemplates: pf.uiTemplates ?? {},
     selectedUiTemplateId:
       pf.activeUiTemplateId || Object.keys(pf.uiTemplates ?? {})[0] || 'default',

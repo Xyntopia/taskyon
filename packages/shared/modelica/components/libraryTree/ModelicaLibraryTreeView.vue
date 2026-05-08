@@ -15,22 +15,12 @@
         flat
         dense
         size="sm"
+        label="MSL"
         :disable="loading || mslLoading || mslDownloading"
-        :loading="loading || mslLoading || mslDownloading"
-        :icon="mdiFolderOpenOutline"
-        @click="triggerLibraryImport"
-      >
-        <q-tooltip>Load library</q-tooltip>
-      </q-btn>
-      <q-btn
-        flat
-        dense
-        size="sm"
-        :disable="loading || mslLoading || mslDownloading"
-        :icon="mdiCached"
+        :loading="mslLoading || mslDownloading"
         @click="emit('load-cached-msl')"
       >
-        <q-tooltip>Load cached MSL</q-tooltip>
+        <q-tooltip>Load standard Modelica Standard Library</q-tooltip>
       </q-btn>
       <q-btn-dropdown
         flat
@@ -41,18 +31,35 @@
         dropdown-icon=""
       >
         <q-tooltip>Library options</q-tooltip>
-        <q-list dense style="min-width: 220px">
+        <div class="q-pa-sm" style="min-width: 360px; max-width: 95vw">
+          <ObjectView
+            v-model="libraryMenuModel"
+            :schema="libraryMenuSchema"
+            class="fit"
+            dense
+            missing-mode="hide"
+          />
+        </div>
+        <q-separator />
+        <q-list dense style="min-width: 260px">
+          <q-item-label header>Detected libraries</q-item-label>
+          <q-item
+            v-for="preset in detectedLibraryPresets"
+            :key="preset.id"
+            v-close-popup
+            clickable
+            @click="emit('load-library-preset', preset.url)"
+          >
+            <q-item-section>{{ preset.label }}</q-item-section>
+          </q-item>
+        </q-list>
+        <q-separator />
+        <q-list dense style="min-width: 260px">
           <q-item v-close-popup clickable @click="triggerLibraryImport">
             <q-item-section avatar>
               <q-icon :name="mdiFolderOpenOutline" />
             </q-item-section>
             <q-item-section>Load library ZIP file</q-item-section>
-          </q-item>
-          <q-item v-close-popup clickable @click="emit('load-cached-msl')">
-            <q-item-section avatar>
-              <q-icon :name="mdiCached" />
-            </q-item-section>
-            <q-item-section>Load cached MSL</q-item-section>
           </q-item>
           <q-item v-close-popup clickable @click="emit('download-msl')">
             <q-item-section avatar>
@@ -119,7 +126,6 @@
 
 <script setup lang="ts">
 import {
-  mdiCached,
   mdiChevronDown,
   mdiChevronRight,
   mdiDeleteOutline,
@@ -129,6 +135,7 @@ import {
   mdiUnfoldLessHorizontal,
   mdiUnfoldMoreHorizontal,
 } from '@quasar/extras/mdi-v6'
+import type { JSONSchema7 } from 'json-schema'
 import {
   buildFilteredRows,
   buildVisibleRows,
@@ -137,7 +144,9 @@ import {
   expandRoots,
   toggleExpandedId,
 } from '../../../modules/tree/flatTree'
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import ObjectView from '../../../components/varViews/ObjectView.vue'
+import { detectedModelicaLibraryPresets } from '../../modelicaLibraryCatalog'
 import type { ModelicaLibraryTreeNode } from './types'
 
 const props = defineProps<{
@@ -145,6 +154,8 @@ const props = defineProps<{
   mslLoading: boolean
   mslDownloading: boolean
   mslCachedZipPath: string
+  libraryMenuOptions: Record<string, unknown>
+  libraryMenuSchema: JSONSchema7
   nodes: ModelicaLibraryTreeNode[]
 }>()
 
@@ -155,6 +166,8 @@ const emit = defineEmits<{
   (e: 'load-cached-msl'): void
   (e: 'download-msl'): void
   (e: 'clear-msl'): void
+  (e: 'load-library-preset', url: string): void
+  (e: 'update:library-menu-options', value: Record<string, unknown>): void
 }>()
 
 const filterText = ref('')
@@ -165,6 +178,30 @@ const treeIndex = computed(() => createTreeIndex(props.nodes))
 const hasFilter = computed(() => filterText.value.trim().length > 0)
 const mslLoading = computed(() => props.mslLoading)
 const mslDownloading = computed(() => props.mslDownloading)
+const detectedLibraryPresets = computed(() => detectedModelicaLibraryPresets)
+const libraryMenuModel = computed({
+  get: () => props.libraryMenuOptions,
+  set: (value: Record<string, unknown>) => emit('update:library-menu-options', value),
+})
+
+onMounted(() => {
+  console.info(
+    '[modelica-library-tree] mounted, detected preset count:',
+    detectedLibraryPresets.value.length,
+  )
+  console.info(
+    '[modelica-library-tree] detected presets:',
+    detectedLibraryPresets.value.map((preset) => ({ id: preset.id, url: preset.url })),
+  )
+})
+
+watch(
+  detectedLibraryPresets,
+  (next) => {
+    console.info('[modelica-library-tree] detected presets updated:', next.length)
+  },
+  { immediate: false },
+)
 
 const visibleRows = computed(() => {
   const toRow = (

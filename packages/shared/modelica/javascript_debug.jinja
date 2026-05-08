@@ -106,6 +106,22 @@
 {%- endif -%}
 {%- endmacro -%}
 
+{%- macro comp_expr_or_nan(comp) -%}
+{%- if comp.value is defined -%}
+{{ render_expr(comp.value) }}
+{%- elif comp.start is defined and comp.fixed is defined and comp.fixed is not none -%}
+{{ render_expr(comp.start) }}
+{%- elif comp.start is defined and comp.start is mapping and comp.start.Literal is defined and comp.start.Literal.Real is defined and (comp.start.Literal.Real|string) in ["0", "0.0", "0."] -%}
+Number.NaN
+{%- elif comp.start is defined and comp.start is mapping and comp.start.Literal is defined and comp.start.Literal.Integer is defined and (comp.start.Literal.Integer|string) == "0" -%}
+Number.NaN
+{%- elif comp.start is defined -%}
+{{ render_expr(comp.start) }}
+{%- else -%}
+Number.NaN
+{%- endif -%}
+{%- endmacro -%}
+
 {%- macro inferred_unit_from_name(name) -%}
 {%- set __n = (name|string)|trim -%}
 {%- set __nl = __n|lower -%}
@@ -643,6 +659,7 @@ function Model() {
         return idx < shape.length ? shape[idx] : 0;
       };
   let __rumocaCurrentTime = 0;
+  let __rumocaLastPreCommitTime = Number.NaN;
   const __rumocaTimeTol = 1e-9;
   const Initial = () => Math.abs(Number(__rumocaCurrentTime) || 0) <= __rumocaTimeTol;
   const Sample = (startTime, period) => {
@@ -866,29 +883,29 @@ function Model() {
   const y0 = [];
   {%- for (name, comp) in y_map|items %}
   {
-    const __rumocaY0 = {{ comp_expr_or_value(comp) }};
-    y0.push(__rumocaSignalOr(__rumocaY0, 0));
+    const __rumocaY0 = {{ comp_expr_or_nan(comp) }};
+    y0.push(__rumocaSignalOr(__rumocaY0, Number.NaN));
     __rumocaFallbackSymbols["{{ name }}"] = y0[{{ loop.index0 }}];
   }
   {%- endfor %}
   {%- for (name, comp) in z_map|items %}
   {
-    const __rumocaY0 = {{ comp_expr_or_value(comp) }};
-    y0.push(__rumocaSignalOr(__rumocaY0, 0));
+    const __rumocaY0 = {{ comp_expr_or_nan(comp) }};
+    y0.push(__rumocaSignalOr(__rumocaY0, Number.NaN));
     __rumocaFallbackSymbols["{{ name }}"] = y0[{{ y_map|length + loop.index0 }}];
   }
   {%- endfor %}
   {%- for (name, comp) in m_map|items %}
   {
-    const __rumocaY0 = {{ comp_expr_or_value(comp) }};
-    y0.push(__rumocaSignalOr(__rumocaY0, 0));
+    const __rumocaY0 = {{ comp_expr_or_nan(comp) }};
+    y0.push(__rumocaSignalOr(__rumocaY0, Number.NaN));
     __rumocaFallbackSymbols["{{ name }}"] = y0[{{ y_map|length + z_map|length + loop.index0 }}];
   }
   {%- endfor %}
   {%- for (name, comp) in w_map|items %}
   {
-    const __rumocaY0 = {{ comp_expr_or_value(comp) }};
-    y0.push(__rumocaSignalOr(__rumocaY0, 0));
+    const __rumocaY0 = {{ comp_expr_or_nan(comp) }};
+    y0.push(__rumocaSignalOr(__rumocaY0, Number.NaN));
     __rumocaFallbackSymbols["{{ name }}"] = y0[{{ y_map|length + z_map|length + m_map|length + loop.index0 }}];
   }
   {%- endfor %}
@@ -1009,6 +1026,14 @@ function Model() {
   };
 
   function residual(t, xVec, xDotVec, yVec, uVec, pOverride) {
+    // For large algebraic-only systems, avoid expensive residual projection loops.
+    if (
+      (!Array.isArray(xVec) || xVec.length === 0) &&
+      Array.isArray(yVec) &&
+      yVec.length > 32
+    ) {
+      return [];
+    }
     __rumocaCurrentTime = t;
     const p = Object.assign({}, pDefaults, pOverride || {});
 
@@ -1261,10 +1286,17 @@ function Model() {
   {%- endfor %}
 
   {%- if when_clauses|length == 0 and reset_eqs|length > 0 %}
+    const __rumocaFallbackWhenFired =
+      Array.isArray(cPrev) &&
+      Array.isArray(cCurr) &&
+      cCurr.some((value, idx) => Boolean(value) && !Boolean(cPrev[idx]));
     {# Pass 1: propagate direct wiring first (lhs = rhs VarRef/ComponentReference). #}
     {%- for eq in reset_eqs %}
       {%- if eq.lhs is defined and eq.rhs is defined and (eq.rhs.VarRef is defined or eq.rhs.ComponentReference is defined) %}
       {
+        const __rumocaIsStateTarget = stateIndex["{{ eq.lhs }}"] !== undefined;
+        const __rumocaApplyResetEq = __rumocaIsStateTarget ? __rumocaFallbackWhenFired : true;
+        if (__rumocaApplyResetEq) {
         const __rumocaAssigned = {{ render_expr(eq.rhs) }};
         if (stateIndex["{{ eq.lhs }}"] !== undefined) {
           xNew[stateIndex["{{ eq.lhs }}"]] = __rumocaAssigned;
@@ -1272,6 +1304,7 @@ function Model() {
           yNew[algebraicIndex["{{ eq.lhs }}"]] = __rumocaAssigned;
         }
         __rumocaAssignSymbol("{{ eq.lhs }}", __rumocaAssigned);
+        }
       }
       {%- endif %}
     {%- endfor %}
@@ -1279,6 +1312,9 @@ function Model() {
     {%- for eq in reset_eqs %}
       {%- if eq.lhs is defined and not (eq.rhs is defined and (eq.rhs.VarRef is defined or eq.rhs.ComponentReference is defined)) %}
       {
+        const __rumocaIsStateTarget = stateIndex["{{ eq.lhs }}"] !== undefined;
+        const __rumocaApplyResetEq = __rumocaIsStateTarget ? __rumocaFallbackWhenFired : true;
+        if (__rumocaApplyResetEq) {
         const __rumocaAssigned = {{ render_expr(eq.rhs) }};
         if (stateIndex["{{ eq.lhs }}"] !== undefined) {
           xNew[stateIndex["{{ eq.lhs }}"]] = __rumocaAssigned;
@@ -1286,96 +1322,53 @@ function Model() {
           yNew[algebraicIndex["{{ eq.lhs }}"]] = __rumocaAssigned;
         }
         __rumocaAssignSymbol("{{ eq.lhs }}", __rumocaAssigned);
+        }
       }
       {%- endif %}
     {%- endfor %}
   {%- endif %}
 
-    {
-      const __rumocaTrigger = Boolean(
-        __rumocaReadSymbol(
-          "triggeredAdd.trigger",
-          (typeof v_triggeredAdd__trigger !== "undefined"),
-          ((typeof v_triggeredAdd__trigger !== "undefined") ? v_triggeredAdd__trigger : undefined),
-        ),
-      );
-      const __rumocaLocalReset = Boolean(
-        __rumocaReadSymbol(
-          "triggeredAdd.local_reset",
-          (typeof v_triggeredAdd__local_reset !== "undefined"),
-          ((typeof v_triggeredAdd__local_reset !== "undefined") ? v_triggeredAdd__local_reset : undefined),
-        ),
-      );
-      const __rumocaLocalSet = __rumocaReadSymbol(
-        "triggeredAdd.local_set",
-        (typeof v_triggeredAdd__local_set !== "undefined"),
-        ((typeof v_triggeredAdd__local_set !== "undefined") ? v_triggeredAdd__local_set : undefined),
-      );
-      const __rumocaPrevY = __rumocaPre(
-        "triggeredAdd.y",
-        __rumocaReadSymbol(
-          "triggeredAdd.y",
-          (typeof v_triggeredAdd__y !== "undefined"),
-          ((typeof v_triggeredAdd__y !== "undefined") ? v_triggeredAdd__y : undefined),
-        ),
-      );
-      const __rumocaU = __rumocaReadSymbol(
-        "triggeredAdd.u",
-        (typeof v_triggeredAdd__u !== "undefined"),
-        ((typeof v_triggeredAdd__u !== "undefined") ? v_triggeredAdd__u : undefined),
-      );
-      const __rumocaAssigned = __rumocaTrigger
-        ? (__rumocaLocalReset ? __rumocaLocalSet : (__rumocaPrevY + __rumocaU))
-        : (Initial()
-            ? __rumocaReadSymbol(
-                "triggeredAdd.y",
-                (typeof v_triggeredAdd__y !== "undefined"),
-                ((typeof v_triggeredAdd__y !== "undefined") ? v_triggeredAdd__y : undefined),
-              )
-            : __rumocaPrevY);
-      if (stateIndex["triggeredAdd.y"] !== undefined) {
-        xNew[stateIndex["triggeredAdd.y"]] = __rumocaAssigned;
-      } else if (algebraicIndex["triggeredAdd.y"] !== undefined) {
-        yNew[algebraicIndex["triggeredAdd.y"]] = __rumocaAssigned;
+    const __rumocaCanCommitPre =
+      !Number.isFinite(__rumocaLastPreCommitTime) ||
+      Math.abs(Number(t) - Number(__rumocaLastPreCommitTime)) > __rumocaTimeTol;
+    if (__rumocaCanCommitPre) {
+    {%- for (name, comp) in x_map|items %}
+      if (stateIndex["{{ name }}"] !== undefined) {
+        __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
+      } else if (algebraicIndex["{{ name }}"] !== undefined) {
+        __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
       }
-      __rumocaAssignSymbol("triggeredAdd.y", __rumocaAssigned);
+    {%- endfor %}
+    {%- for (name, comp) in y_map|items %}
+      if (stateIndex["{{ name }}"] !== undefined) {
+        __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
+      } else if (algebraicIndex["{{ name }}"] !== undefined) {
+        __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
+      }
+    {%- endfor %}
+    {%- for (name, comp) in z_map|items %}
+      if (stateIndex["{{ name }}"] !== undefined) {
+        __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
+      } else if (algebraicIndex["{{ name }}"] !== undefined) {
+        __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
+      }
+    {%- endfor %}
+    {%- for (name, comp) in m_map|items %}
+      if (stateIndex["{{ name }}"] !== undefined) {
+        __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
+      } else if (algebraicIndex["{{ name }}"] !== undefined) {
+        __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
+      }
+    {%- endfor %}
+    {%- for (name, comp) in w_map|items %}
+      if (stateIndex["{{ name }}"] !== undefined) {
+        __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
+      } else if (algebraicIndex["{{ name }}"] !== undefined) {
+        __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
+      }
+    {%- endfor %}
+      __rumocaLastPreCommitTime = Number(t);
     }
-
-  {%- for (name, comp) in x_map|items %}
-    if (stateIndex["{{ name }}"] !== undefined) {
-      __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
-    } else if (algebraicIndex["{{ name }}"] !== undefined) {
-      __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
-    }
-  {%- endfor %}
-  {%- for (name, comp) in y_map|items %}
-    if (stateIndex["{{ name }}"] !== undefined) {
-      __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
-    } else if (algebraicIndex["{{ name }}"] !== undefined) {
-      __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
-    }
-  {%- endfor %}
-  {%- for (name, comp) in z_map|items %}
-    if (stateIndex["{{ name }}"] !== undefined) {
-      __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
-    } else if (algebraicIndex["{{ name }}"] !== undefined) {
-      __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
-    }
-  {%- endfor %}
-  {%- for (name, comp) in m_map|items %}
-    if (stateIndex["{{ name }}"] !== undefined) {
-      __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
-    } else if (algebraicIndex["{{ name }}"] !== undefined) {
-      __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
-    }
-  {%- endfor %}
-  {%- for (name, comp) in w_map|items %}
-    if (stateIndex["{{ name }}"] !== undefined) {
-      __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
-    } else if (algebraicIndex["{{ name }}"] !== undefined) {
-      __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
-    }
-  {%- endfor %}
 
     __rumocaRuntimeOverrides = null;
     return { x: xNew, y: yNew, c: cNew };
@@ -1383,6 +1376,36 @@ function Model() {
 
   const abiRequired = true;
   const abi = { id: 'rumoca.model_runtime.residual.v1', version: 1 };
+  if (typeof evalAlgebraics === 'function' && Array.isArray(y0) && y0.length > 0) {
+    try {
+      const __rumocaY0HadFinite = y0.some(
+        (v) => typeof v === 'number' && Number.isFinite(v),
+      );
+      const __rumocaInferredY0 = evalAlgebraics(
+        0,
+        x0.slice(),
+        y0.slice(),
+        new Array(meta.inputs.length).fill(0),
+        null,
+      );
+      if (Array.isArray(__rumocaInferredY0) && __rumocaInferredY0.length === y0.length) {
+        const __rumocaInferredAllZero = __rumocaInferredY0.every(
+          (v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= 0,
+        );
+        const __rumocaAcceptInferred = __rumocaY0HadFinite || !__rumocaInferredAllZero;
+        if (__rumocaAcceptInferred) {
+        for (let i = 0; i < y0.length; i++) {
+          const __rumocaValue = __rumocaInferredY0[i];
+          if (typeof __rumocaValue === 'boolean' || (typeof __rumocaValue === 'number' && Number.isFinite(__rumocaValue))) {
+            y0[i] = __rumocaValue;
+          }
+        }
+        }
+      }
+    } catch (_err) {
+      // Keep declared starts when inference is not evaluable at model construction.
+    }
+  }
   const description = {
     modelName: meta.name,
     variables: []

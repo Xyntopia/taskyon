@@ -1,8 +1,7 @@
 <template>
-  <!-- Taskyon iframe -->
   <iframe
     v-if="props.configuration"
-    id="taskyon"
+    :id="iframeDomId"
     :key="iframeDomKey"
     title="Taskyon agent"
     frameborder="0"
@@ -19,10 +18,10 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, watchEffect } from 'vue'
-import { deepMerge } from '../modules/objHelpers'
-import type { partialTyConfiguration, TyClient } from '../../tyclient/src'
-import { type ClientTool, initializeTaskyon } from '../../tyclient/src'
-import { cryptoKeyToBase64 } from '../modules/crypto'
+import { deepMerge } from '@shared/modules/objHelpers'
+import type { ClientTool, partialTyConfiguration, TyClient } from '@taskyon/tyclient'
+import { initializeTaskyon } from '@taskyon/tyclient'
+import { cryptoKeyToBase64 } from '@shared/modules/crypto'
 
 const props = withDefaults(
   defineProps<{
@@ -30,6 +29,7 @@ const props = withDefaults(
     configuration?: partialTyConfiguration | null
     persist?: boolean
     name: string
+    url?: string
     profileName?: string | undefined
     bindingKey?: CryptoKey | string | null
     missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
@@ -38,6 +38,7 @@ const props = withDefaults(
     tools: () => [],
     configuration: () => ({}),
     persist: false,
+    url: '',
     profileName: undefined,
     bindingKey: null,
     missingBindingKeyPolicy: 'deriveFromProfile',
@@ -48,13 +49,11 @@ const mergeConfig = (config: partialTyConfiguration | null) => {
   const configuration: partialTyConfiguration = deepMerge(
     {
       llmSettings: {
-        //selectedApi: 'taskyon',
         enableToolChooser: true,
       },
       appConfiguration: {
         guiMode: 'minChat',
         showLogo: false,
-        // TODO: chatSuggestions: [gettingStarted],
         welcomeMsg: 'Taskyon Split View!',
       },
     },
@@ -63,10 +62,14 @@ const mergeConfig = (config: partialTyConfiguration | null) => {
   return configuration
 }
 
-const taskyonUrl = window.location.origin
+const taskyonBaseUrl = computed(() => {
+  const candidate = props.url?.trim()
+  return candidate && candidate.length > 0 ? candidate : window.location.origin
+})
 const resolvedProfileName = computed(() => props.profileName ?? props.name)
 const effectiveBindingKey = ref<CryptoKey | string | undefined>(undefined)
 const iframeReloadSeed = ref(0)
+const iframeDomId = `taskyon-${Math.floor(Math.random() * 1e9).toString(36)}`
 const iframeDomKey = computed(
   () =>
     `${resolvedProfileName.value}:${
@@ -85,7 +88,7 @@ const iframeSrc = computed(() => {
   if (props.missingBindingKeyPolicy === 'noBindingKey' && !effectiveBindingKey.value) {
     params.set('nobindingkey', '1')
   }
-  return `${taskyonUrl}?${params.toString()}`
+  return `${taskyonBaseUrl.value}?${params.toString()}`
 })
 let tyAgent: TyClient | undefined = undefined
 
@@ -95,10 +98,8 @@ const toTransportBindingKey = async (
   if (typeof key === 'string' && key.trim()) return key
   if (key instanceof CryptoKey) {
     try {
-      // Prefer string payload for deterministic transport when key is exportable.
       return await cryptoKeyToBase64(key)
     } catch (error) {
-      // Non-extractable keys cannot be exported; use structured-clone transport.
       console.warn('binding key export failed; falling back to raw CryptoKey transport', error)
       return key
     }
@@ -118,7 +119,6 @@ watch([resolvedProfileName, effectiveBindingKey], ([nextProfile, nextBinding], o
   const [oldProfile, oldBinding] = oldValues ?? [undefined, undefined]
   if (oldProfile === undefined && oldBinding === undefined) return
   if (nextProfile === oldProfile && nextBinding === oldBinding) return
-  // Force a clean iframe bootstrap when session context changes.
   tyAgent = undefined
   iframeReloadSeed.value += 1
 })
@@ -138,7 +138,7 @@ const onIframeLoaded = async () => {
     configuration: mergeConfig(props.configuration),
     name: props.name,
     persist: props.persist,
-    iframeId: 'taskyon',
+    iframeId: iframeDomId,
   }
   if (!effectiveBindingKey.value && props.missingBindingKeyPolicy) {
     initOptions.missingBindingKeyPolicy = props.missingBindingKeyPolicy

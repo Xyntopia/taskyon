@@ -13,9 +13,9 @@
 import type { DockNode } from './DockView.vue'
 import DockView from './DockView.vue'
 import { syncRefsWithLocalStorage } from '../modules/saveState'
-import type { partialTyConfiguration } from '../../tyclient/src'
+import type { partialTyConfiguration } from '@taskyon/tyclient'
 import { computed, ref } from 'vue'
-import { type ClientTool } from '../../tyclient/src'
+import { type ClientTool } from '@taskyon/tyclient'
 import TaskyonIframe from './TaskyonIframe.vue'
 
 const props = withDefaults(
@@ -24,6 +24,7 @@ const props = withDefaults(
     configuration?: partialTyConfiguration | null
     persist?: boolean
     name: string
+    url?: string
     profileName?: string | undefined
     bindingKey?: CryptoKey | string | null
     missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
@@ -32,6 +33,7 @@ const props = withDefaults(
     tools: () => [],
     configuration: () => ({}),
     persist: false,
+    url: '',
     profileName: undefined,
     bindingKey: null,
     missingBindingKeyPolicy: 'deriveFromProfile',
@@ -44,6 +46,7 @@ const taskyonIframeProps = computed(() => {
     tools: ClientTool[]
     persist: boolean
     name: string
+    url?: string
     profileName?: string
     bindingKey?: CryptoKey | string | null
     missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
@@ -53,6 +56,7 @@ const taskyonIframeProps = computed(() => {
     persist: props.persist,
     name: props.name,
   }
+  if (typeof props.url === 'string' && props.url.trim().length > 0) nextProps.url = props.url
   if (typeof props.profileName === 'string') nextProps.profileName = props.profileName
   if (props.bindingKey !== null) nextProps.bindingKey = props.bindingKey
   if (props.missingBindingKeyPolicy !== 'deriveFromProfile') {
@@ -82,10 +86,28 @@ const layout = ref<DockNode>({
       keepAliveViews: ['chat'],
       size: 30,
       activeViewIndex: 0,
-      collapsed: true, // start with the chat collapsed
+      collapsed: true,
     },
   ],
 })
+
+const migrateLegacyLayout = (node: DockNode): DockNode => {
+  if (node.type === 'container') {
+    return {
+      ...node,
+      children: (node.children ?? []).map(migrateLegacyLayout),
+    }
+  }
+  const views = (node.views ?? []).map((view) => (view === 'joulios-chat' ? 'chat' : view))
+  const keepAliveViews = (node.keepAliveViews ?? []).map((view) =>
+    view === 'joulios-chat' ? 'chat' : view,
+  )
+  return {
+    ...node,
+    views,
+    keepAliveViews,
+  }
+}
 
 syncRefsWithLocalStorage(
   `SplitTaskyonView:${props.name}`,
@@ -94,4 +116,6 @@ syncRefsWithLocalStorage(
   },
   { debounceMs: 250 },
 )
+
+layout.value = migrateLegacyLayout(layout.value)
 </script>

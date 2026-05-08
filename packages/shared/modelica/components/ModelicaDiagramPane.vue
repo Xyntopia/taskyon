@@ -21,6 +21,14 @@
         color="grey-7"
         label="Modelica Labels"
       />
+      <ToggleButton
+        v-model="showLibraryPaths"
+        dense
+        flat
+        no-caps
+        color="grey-7"
+        label="Library Paths"
+      />
       <q-btn
         dense
         flat
@@ -103,6 +111,7 @@ const diagram = ref<ModelicaDiagramDto | null>(null)
 const layoutMode = ref<DiagramLayoutMode>('authored')
 const showLabels = ref(true)
 const showModelicaNativeLabels = ref(true)
+const showLibraryPaths = ref(false)
 const showBlockHints = ref(false)
 const loading = ref(false)
 const errorText = ref('')
@@ -115,6 +124,31 @@ const mapped = computed(() =>
     ? mapDiagramToGraph(diagram.value, layoutMode.value)
     : { graph: emptyGraph, options: emptyOptions },
 )
+
+const stableStringify = (value: unknown): string => {
+  if (value == null) return 'null'
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (typeof value === 'string') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(',')}]`
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    const keys = Object.keys(record).sort()
+    const entries = keys.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+    return `{${entries.join(',')}}`
+  }
+  return JSON.stringify(typeof value)
+}
+
+const hashString = (value: string): string => {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+const diagramIrHash = computed(() => hashString(stableStringify(mapped.value.graph)))
 
 const colorToCss = (color: DiagramColor | undefined, fallback: string): string =>
   color ? `rgb(${color[0]}, ${color[1]}, ${color[2]})` : fallback
@@ -150,6 +184,7 @@ const iconNodeHoverStyle = (node: LayoutNode<DiagramNodeData>): NodeStyle | unde
 const runtimeOptions = computed<RenderOptions<DiagramNodeData, DiagramEdgeData>>(() => {
   const labelsEnabled = showLabels.value
   const nativeLabelsEnabled = showModelicaNativeLabels.value
+  const libraryPathsEnabled = showLibraryPaths.value
   const hintsEnabled = showBlockHints.value
   return {
     ...mapped.value.options,
@@ -164,13 +199,14 @@ const runtimeOptions = computed<RenderOptions<DiagramNodeData, DiagramEdgeData>>
         ? { stroke: colorToCss(edge.data.color, 'rgba(55, 65, 81, 0.95)') }
         : undefined,
     nodeSvg: (node: LayoutNode<DiagramNodeData>) =>
-      renderNodeSvg(node, labelsEnabled, nativeLabelsEnabled),
+      renderNodeSvg(node, labelsEnabled, nativeLabelsEnabled, libraryPathsEnabled),
   }
 })
 
 let controller: ReturnType<typeof createGraphController<DiagramNodeData, DiagramEdgeData>> | null =
   null
 let resizeObserver: ResizeObserver | null = null
+let lastAppliedGraphHash = ''
 
 const derivedFileName = (qualifiedName: string | null | undefined): string => {
   if (!qualifiedName) return 'Model.mo'
@@ -512,9 +548,11 @@ const renderNodeSvg = (
   node: LayoutNode<DiagramNodeData>,
   labelsEnabled: boolean,
   nativeLabelsEnabled: boolean,
+  libraryPathsEnabled: boolean,
 ): string => {
   const label = escapeHtml(node.label ?? node.id)
-  const description = escapeHtml(node.data?.description ?? node.data?.typeName ?? '')
+  const description = escapeHtml(node.data?.description ?? '')
+  const typeName = escapeHtml(node.data?.typeName ?? '')
   const centerX = node.x + node.width / 2
   const centerY = node.y + node.height / 2
   if (node.data?.hasIcon) {
@@ -545,7 +583,10 @@ const renderNodeSvg = (
     return `<g transform="${transform}">${iconRender.markup}${ports}</g>${labelOut}`
   }
   if (!labelsEnabled) return ''
-  return `<text x="${centerX}" y="${centerY - 6}" text-anchor="middle" dominant-baseline="middle" fill="rgb(17 24 39)" font-size="12" font-weight="700">${label}</text><text x="${centerX}" y="${centerY + 10}" text-anchor="middle" dominant-baseline="middle" fill="rgb(75 85 99)" font-size="10">${description}</text>`
+  if (!libraryPathsEnabled) {
+    return `<text x="${centerX}" y="${centerY}" text-anchor="middle" dominant-baseline="middle" fill="rgb(17 24 39)" font-size="12" font-weight="700">${label}</text>`
+  }
+  return `<text x="${centerX}" y="${centerY - 6}" text-anchor="middle" dominant-baseline="middle" fill="rgb(17 24 39)" font-size="12" font-weight="700">${label}</text><text x="${centerX}" y="${centerY + 10}" text-anchor="middle" dominant-baseline="middle" fill="rgb(75 85 99)" font-size="10">${description || typeName}</text>`
 }
 
 const loadDiagram = async () => {
@@ -563,6 +604,16 @@ const loadDiagram = async () => {
     }
     if (props.qualifiedName != null) request.qualifiedName = props.qualifiedName
     diagram.value = await props.extractor.extract(request)
+    const components = Array.isArray(diagram.value?.components) ? diagram.value.components : []
+    const missingIcons = components
+      .filter((component) => !component.icon || !Array.isArray(component.icon.graphics))
+      .map((component) => ({ id: component.id, typeName: component.typeName }))
+    console.info('[diagram][pane] extracted', {
+      qualifiedName: props.qualifiedName ?? 'unknown',
+      components: components.length,
+      connections: Array.isArray(diagram.value?.connections) ? diagram.value.connections.length : 0,
+      missingIcons,
+    })
   } catch (error) {
     diagram.value = null
     errorText.value = (error as Error).message || 'Failed to build block diagram'
@@ -580,13 +631,15 @@ watchDebounced(
 )
 
 watch(
-  [mapped, runtimeOptions],
+  [diagramIrHash, runtimeOptions],
   () => {
     if (!controller) return
-    controller.setGraph(mapped.value.graph)
+    if (diagramIrHash.value !== lastAppliedGraphHash) {
+      controller.setGraph(mapped.value.graph)
+      lastAppliedGraphHash = diagramIrHash.value
+    }
     controller.setOptions(runtimeOptions.value)
   },
-  { deep: true },
 )
 
 const onCopyPng = async () => {
@@ -620,6 +673,7 @@ onMounted(() => {
   const container = containerRef.value
   if (!container) return
   controller = createGraphController(container, mapped.value.graph, runtimeOptions.value)
+  lastAppliedGraphHash = diagramIrHash.value
   resizeObserver = new ResizeObserver(() => controller?.resize())
   resizeObserver.observe(container)
 })

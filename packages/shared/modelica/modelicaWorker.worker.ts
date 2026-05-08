@@ -19,6 +19,7 @@ type WorkerRequest =
       }
     }
   | { id: number; type: 'load_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
+  | { id: number; type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
   | { id: number; type: 'clear_libraries' }
   | { id: number; type: 'list_classes' }
   | { id: number; type: 'get_class_info'; payload: { qualifiedName: string } }
@@ -180,6 +181,51 @@ function handleLoadMslZip(payload: { fileName: string; bytes: ArrayBuffer }): un
   }
 }
 
+function handleMergeMslZip(payload: { fileName: string; bytes: ArrayBuffer }): unknown {
+  const archive = unzipSync(new Uint8Array(payload.bytes))
+  const libraries: Record<string, string> = {}
+  for (const [rawPath, content] of Object.entries(archive)) {
+    const lowerPath = rawPath.toLowerCase()
+    if (!lowerPath.endsWith('.mo')) continue
+    if (rawPath.includes('Test') || rawPath.includes('Obsolete')) continue
+    libraries[sanitizeLibraryPath(rawPath)] = strFromU8(content)
+  }
+
+  const fileCount = Object.keys(libraries).length
+  if (fileCount === 0) {
+    throw new Error('No usable .mo files found in archive')
+  }
+
+  // Incremental add: parse each file and merge parsed definitions into the existing session.
+  const defs: Array<[string, string]> = []
+  for (const [fileName, source] of Object.entries(libraries)) {
+    try {
+      const parsed = rumoca.parse_source_root_file(source, fileName)
+      defs.push([fileName, String(parsed)])
+    } catch {
+      // Ignore parse failures per-file to match legacy permissive load behavior.
+    }
+  }
+  if (defs.length === 0) {
+    throw new Error('No parseable .mo files found in archive')
+  }
+
+  const mergedCount = Number(rumoca.merge_parsed_source_roots(JSON.stringify(defs))) || 0
+  loadedSourceRootFiles = {
+    ...loadedSourceRootFiles,
+    ...libraries,
+  }
+  return {
+    fileCount,
+    parsedCount: mergedCount,
+    archiveName: payload.fileName,
+    documentCount:
+      typeof rumoca.get_source_root_document_count === 'function'
+        ? Number(rumoca.get_source_root_document_count()) || 0
+        : 0,
+  }
+}
+
 function handleListClasses(): unknown {
   const raw = rumoca.list_classes()
   return JSON.parse(String(raw))
@@ -262,6 +308,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break
       case 'load_msl_zip':
         result = handleLoadMslZip(msg.payload)
+        break
+      case 'merge_msl_zip':
+        result = handleMergeMslZip(msg.payload)
         break
       case 'clear_libraries':
         rumoca.clear_source_root_cache()

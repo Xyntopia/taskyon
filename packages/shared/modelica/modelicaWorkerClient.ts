@@ -12,6 +12,7 @@ type WorkerRequest =
       }
     }
   | { id: number; type: 'load_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
+  | { id: number; type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
   | { id: number; type: 'clear_libraries' }
   | { id: number; type: 'list_classes' }
   | { id: number; type: 'get_class_info'; payload: { qualifiedName: string } }
@@ -45,6 +46,7 @@ type WorkerRequestNoId =
       }
     }
   | { type: 'load_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
+  | { type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
   | { type: 'clear_libraries' }
   | { type: 'list_classes' }
   | { type: 'get_class_info'; payload: { qualifiedName: string } }
@@ -136,6 +138,10 @@ export class ModelicaWorkerClient {
 
   loadMslZip(fileName: string, bytes: ArrayBuffer): Promise<{ fileCount: number; parsedCount: number; archiveName: string; documentCount: number }> {
     return this.request({ type: 'load_msl_zip', payload: { fileName, bytes } }, [bytes])
+  }
+
+  mergeMslZip(fileName: string, bytes: ArrayBuffer): Promise<{ fileCount: number; parsedCount: number; archiveName: string; documentCount: number }> {
+    return this.request({ type: 'merge_msl_zip', payload: { fileName, bytes } }, [bytes])
   }
 
   clearLibraries(): Promise<{ ok: true }> {

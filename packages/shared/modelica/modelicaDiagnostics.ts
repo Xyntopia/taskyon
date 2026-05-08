@@ -472,7 +472,7 @@ end TestPreparedMeta;
     throw new Error('compile_to_json should not expose dae_prepared_diagnostics in native-only API')
   }
 
-  const build = dae.__rumoca_build
+  const build = (dae as Record<string, unknown>).__rumoca_build
   if (!build || typeof build !== 'object' || Array.isArray(build)) {
     throw new Error('Native DAE is missing __rumoca_build metadata')
   }
@@ -693,6 +693,11 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
         `Unexpected waveform sample lengths: pulse=${pulse.length}, real=${real.length}`,
       )
     }
+    if (pulse.length !== real.length || pulse.length < 200) {
+      throw new Error(
+        `Unexpected waveform sample lengths: pulse=${pulse.length}, real=${real.length}`,
+      )
+    }
 
     const toBit = (v: unknown): 0 | 1 | null => {
       if (v === 0 || v === false) return 0
@@ -813,7 +818,7 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
         },
         (error) => {
           clearTimeout(timer)
-          reject(error instanceof Error ? error : new Error(String(error)))
+          reject(error)
         },
       )
     })
@@ -1713,7 +1718,7 @@ export async function testModelicaForcedAbiValidationFailureModes() {
   return testModelicaAbiValidationRoutingRegression()
 }
 
-const MSL_LOCAL_ZIP_PATH = '/msl/ModelicaStandardLibrary-4.1.0.zip'
+const MSL_LOCAL_ZIP_PATH = '/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip'
 type DiagnosticsWasm = Awaited<ReturnType<typeof loadWasm>>
 type MslLoadParsed = {
   parsed_count?: number
