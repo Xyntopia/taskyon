@@ -2,9 +2,9 @@
  * Headless diagnostics for the Taskyon Surrogate Model helpers.
  *
  * The tests in this file are picked up automatically by
- * `packages/taskyon-headless/src/cli.ts` (it scans
- * `src/tests/*.ts` for `export const testXxx = ...` and treats the
- * function name as the test ID).
+ * `packages/tycli/src/diagnostics/runDiagnostics.ts` (it scans test
+ * modules for `export const testXxx = ...` and treats the function
+ * name as the test ID).
  *
  * Tests are grouped roughly by review-priority:
  *

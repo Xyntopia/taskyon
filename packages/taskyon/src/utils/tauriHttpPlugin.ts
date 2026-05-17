@@ -6,11 +6,7 @@ type TauriHttpHeader = [string, string]
 function formatInvokeError(error: unknown): string {
   if (error instanceof Error) {
     const causeText =
-      typeof error.cause === 'string'
-        ? error.cause
-        : error.cause
-          ? JSON.stringify(error.cause)
-          : ''
+      typeof error.cause === 'string' ? error.cause : error.cause ? JSON.stringify(error.cause) : ''
     return [error.name, error.message, causeText].filter(Boolean).join(': ')
   }
   try {
@@ -32,9 +28,11 @@ export function canUseTauriHttpPlugin(): boolean {
   return isTauriIpcAvailable()
 }
 
-export async function tauriHttpGetText(
+export async function tauriHttpRequestText(
   url: string,
   opts?: {
+    method?: string
+    headers?: Record<string, string>
     insecureTls?: boolean
   },
 ): Promise<{ status: number; statusText: string; headers: TauriHttpHeader[]; body: string }> {
@@ -45,7 +43,8 @@ export async function tauriHttpGetText(
   let response: Response
   try {
     response = await tauriFetch(url, {
-      method: 'GET',
+      method: opts?.method ?? 'GET',
+      ...(opts?.headers ? { headers: opts.headers } : {}),
       ...(opts?.insecureTls
         ? {
             danger: {
@@ -67,4 +66,13 @@ export async function tauriHttpGetText(
     headers,
     body,
   }
+}
+
+export async function tauriHttpGetText(
+  url: string,
+  opts?: {
+    insecureTls?: boolean
+  },
+) {
+  return await tauriHttpRequestText(url, opts)
 }

@@ -1,6 +1,7 @@
-export type HeadlessTestMetadata = {
+export type DiagnosticsTestMetadata = {
   requiresAuth?: boolean
   requiresNetwork?: boolean
+  requiresLargeTokens?: boolean
 }
 
 export type UnsupportedModuleFallback = {
@@ -11,7 +12,7 @@ export type UnsupportedModuleFallback = {
   }>
 }
 
-export const headlessTestMetadata: Record<string, HeadlessTestMetadata> = {
+export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = {
   testTimeQuestionConversationUsesClockTool: {
     requiresNetwork: true,
   },
@@ -55,12 +56,15 @@ export const headlessTestMetadata: Record<string, HeadlessTestMetadata> = {
   testEntryNodeRecoversFromMalformedPythonToolCall: {
     requiresNetwork: true,
   },
+  testWebResearchPlannerEnablesBrowserSetupAndWebSearchByDefault: {
+    requiresLargeTokens: true,
+  },
 }
 
 export const unsupportedModuleFallbacks: Record<string, UnsupportedModuleFallback> = {
   'test_taskyon.space_api.ts': {
     reason:
-      'Skipped in the Node headless harness: this module currently depends on TypeScript syntax/runtime paths that are not portable through Node strip-types alone.',
+      'Skipped in the Node diagnostics harness: this module currently depends on TypeScript syntax/runtime paths that are not portable through Node strip-types alone.',
     tests: [
       { exportName: 'testTokenMinting' },
       { exportName: 'testTokenMintClaims' },

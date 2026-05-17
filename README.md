@@ -73,6 +73,10 @@ Taskyon already provides the foundations for open-source design automation:
 - **Task-based conversations**: each message can become a task node in a navigable tree.
 - **Local-first storage**: user data and task state stay local unless explicitly shared.
 - **Tool execution**: tasks can call tools, functions, and model providers.
+- **Research orchestration**: structured browser-research branches can delegate web search, page
+  crawling, MCP-imported browser tools, and proxy-backed fetch fallbacks.
+- **Browser access controls**: a dedicated Browser Access page configures browser MCP endpoints,
+  startup guidance, chatCompletion web search, and proxy fallbacks for research workflows.
 - **Sandboxed code execution**: run JavaScript/Python-style workflows in controlled environments.
 - **File and context attachment**: attach artifacts and data to the working context.
 - **Markdown and visual output**: render MathJax, Mermaid, SVG, HTML widgets, and rich technical

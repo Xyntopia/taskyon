@@ -1,7 +1,160 @@
 import type { JSONSchema7 } from 'json-schema'
 import type { TyTaskManager } from '../core/taskManager'
+import { createChatCompletionTask } from '../api'
+import type { partialTaskDraft, TaskNode } from '../types/taskNode'
 import { taskTypeOptions } from '../types/taskNode'
-import { createTool } from '../types/toolApi'
+import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
+import { safeYamlDump } from '../utils/yamlUtils'
+
+type PlannedTaskConfig = {
+  task: string
+  allowedTools?: string[]
+}
+
+type PlannedTaskInput = string | PlannedTaskConfig
+
+const plannerTaskObjectSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    task: {
+      type: 'string',
+      description: 'Broad objective for this subtask. Keep it short and goal-oriented.',
+    },
+    allowedTools: {
+      type: 'array',
+      items: {
+        type: 'string',
+      },
+      description:
+        'Optional restrictive override for the exact tools this subtask may use. Only set this when you are truly certain no other tools are needed.',
+    },
+  },
+  required: ['task'],
+} as const satisfies JSONSchema7
+
+const plannerTaskItemSchema = {
+  anyOf: [{ type: 'string' }, plannerTaskObjectSchema],
+} as const satisfies JSONSchema7
+
+const plannerTaskChainPrompt = [
+  'You are starting a delegated subtask.',
+  'Read the previous user message and expand it into a more detailed local objective and execution strategy for this subtask.',
+  'Keep the original intent intact, but make the next execution phase more concrete.',
+  'Do not call any tools yet.',
+  'Respond only with the detailed objective and short execution strategy as assistant text.',
+].join('\n')
+
+const plannerContinuationPrompt = (allowedTools?: string[]) =>
+  [
+    'Continue this delegated subtask using the detailed objective above.',
+    'Carry out the work autonomously and continue the chain normally.',
+    ...(allowedTools && allowedTools.length > 0
+      ? [
+          `Important: the available tools for this subtask are intentionally restricted to: ${allowedTools.join(', ')}.`,
+        ]
+      : []),
+  ].join('\n')
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string')
+
+export const normalizePlannedTaskInput = (value: unknown): PlannedTaskConfig => {
+  if (typeof value === 'string') {
+    const task = value.trim()
+    if (task.length === 0) {
+      throw new Error('Planner task strings must not be empty.')
+    }
+    return { task }
+  }
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Planner tasks must be either a string or an object with a task field.')
+  }
+
+  const candidate: { task?: unknown; allowedTools?: unknown } = value
+  const rawTask = candidate.task
+  if (typeof rawTask !== 'string' || rawTask.trim().length === 0) {
+    throw new Error('Planner task objects require a non-empty "task" string.')
+  }
+
+  const rawAllowedTools = candidate.allowedTools
+  if (rawAllowedTools !== undefined && !isStringArray(rawAllowedTools)) {
+    throw new Error('Planner task "allowedTools" must be an array of strings when provided.')
+  }
+
+  return {
+    task: rawTask.trim(),
+    ...(rawAllowedTools && rawAllowedTools.length > 0 ? { allowedTools: rawAllowedTools } : {}),
+  }
+}
+
+const summarizePlannerContext = (taskChain: TaskNode[]) => {
+  const contextItems = taskChain
+    .filter((task) => ['message', 'toolresult', 'structured', 'error'].includes(task.content.type))
+    .slice(-6)
+    .map((task) => ({
+      role: task.role,
+      type: task.content.type,
+      data: task.content.data,
+    }))
+
+  return contextItems.length > 0 ? safeYamlDump(contextItems) : 'No additional context provided.'
+}
+
+const createPlannerBootstrapMessage = (task: PlannedTaskConfig, plannerContext: string) =>
+  [
+    `Subtask objective: ${task.task}`,
+    '',
+    'Shared planner context:',
+    plannerContext,
+    '',
+    'First, expand this into a more detailed local objective and execution strategy before continuing.',
+  ].join('\n')
+
+const createPlannerTaskChain = (
+  task: PlannedTaskConfig,
+  plannerContext: string,
+): partialTaskDraft[] => [
+  {
+    role: 'user',
+    content: {
+      type: 'message',
+      data: createPlannerBootstrapMessage(task, plannerContext),
+    },
+  },
+  createChatCompletionTask({
+    goal: 'SimpleCompletion',
+    prompts: [plannerTaskChainPrompt],
+  }),
+  {
+    role: 'user',
+    content: {
+      type: 'message',
+      data: plannerContinuationPrompt(task.allowedTools),
+    },
+  },
+  toolCall({
+    name: 'entryNode',
+    arguments: {
+      ...(task.allowedTools && task.allowedTools.length > 0
+        ? { allowedTools: task.allowedTools }
+        : {}),
+    },
+  }),
+]
+
+export const buildTaskPlannerTaskChains = (
+  taskGroups: readonly (readonly PlannedTaskInput[])[],
+  taskChain: readonly TaskNode[],
+) => {
+  const plannerContext = summarizePlannerContext([...taskChain])
+  return taskGroups.map((group) =>
+    group.flatMap((item) =>
+      createPlannerTaskChain(normalizePlannedTaskInput(item), plannerContext),
+    ),
+  )
+}
 
 // TODO: provide a link to the search page from the result!
 export const taskSearcher = (taskManager: TyTaskManager) =>
@@ -49,52 +202,67 @@ export const taskSearcher = (taskManager: TyTaskManager) =>
 export const taskPlanner = createTool({
   name: 'taskPlanner',
   description:
-    'Organizes complex tasks into groups that can be worked on independently. Use this tool only when breaking down a task into subtasks makes sense—not for simple tasks.',
-  longDescription: `This tool accepts a list of groups of tasks. Each group is a series of tasks that should be completed in order.
-Only use this tool when the task is complex enough to need a breakdown into multiple steps. For simple tasks, no breakdown is required.
+    'Launches delegated subtasks. Use one outer group per parallel branch and one inner list for sequential work inside that branch.',
+  longDescription: `Use this tool only when a task is complex enough to benefit from delegated subtasks.
 
-When using this tool, please explain why it is necessary to split the task into subtasks. If you have different sets of tasks that can be done concurrently, provide each set as a separate group.
-Note: This tool only supports one level of grouping. For further breakdown, use another planning step.`,
+The "tasks" parameter is a list of groups:
+- Each outer group runs in parallel with the other groups.
+- Each inner list runs in sequence from left to right.
+
+Each task item should usually be a short plain string that states the broad objective. Keep these broad and compact so the delegated agent can refine the task locally.
+
+Optionally, a task item may instead be:
+{ task: string, allowedTools?: string[] }
+
+Only use "allowedTools" when you are truly certain that no other tools are needed. It is restrictive and should remain rare.
+
+For every delegated task, Taskyon first creates a fresh local context, expands the broad objective into a more detailed local plan, and then launches entryNode to continue the subtask normally.`,
   parameters: {
     type: 'object',
+    additionalProperties: false,
     properties: {
       tasks: {
         type: 'array',
         items: {
           type: 'array',
-          items: { type: 'string' },
+          items: plannerTaskItemSchema,
         },
         description:
-          'A list of groups of tasks. Each inner list represents tasks that need to be done in sequence. Multiple groups indicate that these tasks can be worked on in parallel.',
+          'Parallel groups of delegated work. Each outer array item runs in parallel. Each inner array item runs sequentially. Each task item is usually a short string objective, or optionally an object with { task, allowedTools }.',
       },
     },
     required: ['tasks'],
   } as const satisfies JSONSchema7,
-  code: `
-    async ({ tasks }) => {
-      // Format each group for clarity.
-      const groupsFormatted = tasks
-        .map((group, index) => \`Group \${index + 1}: \${group.join(' -> ')}\`)
-        .join('\\n');
+  function: ({ tasks }, context) => {
+    const normalizedGroups = tasks.map((group) =>
+      group.map((item) => normalizePlannedTaskInput(item)),
+    )
+    const groupsFormatted = normalizedGroups
+      .map((group, index) => {
+        const description = group
+          .map((item) =>
+            item.allowedTools && item.allowedTools.length > 0
+              ? `${item.task} [allowedTools: ${item.allowedTools.join(', ')}]`
+              : item.task,
+          )
+          .join(' -> ')
+        return `Group ${index + 1}: ${description}`
+      })
+      .join('\n')
 
-      return makeTaskResult([
-        [
-          {
-            role: 'assistant',
-            content: {
-              type: 'message',
-              data: \`Task Breakdown:\\n\${groupsFormatted}\`,
-            },
+    return makeTaskResult([
+      [
+        {
+          role: 'assistant',
+          content: {
+            type: 'message',
+            data: `Task Breakdown:\n${groupsFormatted}`,
           },
-          createChatCompletionTask({
-            prompts: [
-              \`Review the following task breakdown:\\n\${groupsFormatted}\\nExplain why it is necessary to break this task into multiple subtasks. Confirm if the plan works or suggest improvements.\`,
-            ],
-          }),
-        ],
-      ]);
-    }
-  `,
+        },
+      ],
+      ...buildTaskPlannerTaskChains(tasks, context.taskChain),
+    ])
+  },
 })
 
 export const taskOrganizationTools = [taskPlanner]

@@ -179,6 +179,42 @@ export const apiConfig = z
     defaultHeaders: z.record(z.string(), z.string()).optional().meta({
       description: 'If the API needs some special headers for communication (e.g. an API key.)',
     }),
+    auth: z
+      .object({
+        type: z.enum(['oauth', 'apikey', 'none']).optional().meta({
+          description: 'Optional auth strategy metadata for UI/client flows.',
+        }),
+        oauth: z
+          .object({
+            authorizationUrl: z.string().optional(),
+            tokenUrl: z.string().optional(),
+            clientId: z.string().optional(),
+            scope: z.string().optional(),
+            authorizeQuery: z.record(z.string(), z.string()).optional().meta({
+              description: 'Additional query parameters added to the OAuth authorize request.',
+            }),
+            tokenExchange: z
+              .object({
+                tokenUrl: z.string().optional(),
+                requestedToken: z.string().optional(),
+                subjectTokenType: z.string().optional(),
+              })
+              .optional()
+              .meta({
+                description:
+                  'Optional post-login token exchange settings (for providers that mint API tokens from id_token).',
+              }),
+          })
+          .optional()
+          .meta({
+            description: 'OAuth configuration for interactive login flows.',
+          }),
+      })
+      .optional()
+      .meta({
+        description:
+          'Optional authentication configuration. Keep request headers in defaultHeaders; keep login settings here.',
+      }),
     routes: z.object({
       chatCompletion: z.string().meta({
         description: 'Endpoint for chatcompletion.',

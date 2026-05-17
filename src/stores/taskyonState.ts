@@ -13,7 +13,6 @@ import type {
   TyTaskStreamData,
 } from '@taskyon/taskyon'
 import {
-  availableModels,
   base64ToPublixX25519,
   createDuplexChannel,
   createPortApi,
@@ -26,17 +25,19 @@ import {
   getCurrentModel,
   getDefaultParametersForTool,
   isTaskyonKey,
-  joinUrl,
   latestOnly,
+  fetchModelsForSelectedApi,
   OAUTH_PROVIDERS,
   randomString,
   TaskNode,
   TaskyonMessage,
-  TOKEN_SERVICE_BASE_URL,
   tyCore,
 } from '@taskyon/taskyon'
-import type { AuthenticationOptions } from '@taskyon/taskyon/browser'
-import { usePersistentOauth, type TokenGetter } from '@taskyon/taskyon/browser'
+import {
+  createPersistentOauthTokenGetter,
+  OAUTH_CREDENTIALS_SECRET_PREFIX,
+} from '@taskyon/taskyon/browser'
+import type { AuthenticationOptions, TokenGetter } from '@taskyon/taskyon/browser'
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
 import type { chunkStreamType } from '@taskyon/taskyon/tools/chatCompletionTool'
 import {
@@ -140,39 +141,10 @@ async function updateLlmModels(
   getApiKey: (name: string) => Promise<string | null>,
 ) {
   console.log('downloading models...')
-  const api = llmSettings.llmApis[llmSettings.selectedApi || '']
-  if (api) {
-    // and also get a "fresh" list of models from the server...
-    let baseURL: string
-    try {
-      baseURL = joinUrl(api.baseURL, api.routes.models)
-    } catch (err) {
-      console.warn('Invalid model URL', err)
-      return {}
-    }
-    const taskyonApi = llmSettings.llmApis['taskyon']
-    let key: string
-    // we are doing this, because openrouter currently
-    // blocks access to models from browser origins through CORS restrictions.
-    if (taskyonApi && api.name === 'openrouter.ai') {
-      baseURL = TOKEN_SERVICE_BASE_URL + '/api/models_openrouter'
-      key = (await getApiKey('taskyon')) || (await getApiKey(api?.name)) || ''
-    } else if (api.name === 'taskyon') {
-      baseURL = TOKEN_SERVICE_BASE_URL + '/api/models'
-      key = (await getApiKey('taskyon')) || ''
-    } else {
-      key = (await getApiKey(api.name)) || ''
-    }
-    try {
-      const res = await availableModels(baseURL, key, api.defaultHeaders ?? {})
-      return res
-    } catch {
-      console.log("couldn't download models from", baseURL)
-      return {}
-    }
-  } else {
-    return {}
-  }
+  return await fetchModelsForSelectedApi(llmSettings, getApiKey, {
+    useTokenServiceForOpenrouter: true,
+    useTokenServiceForTaskyon: true,
+  })
 }
 
 function connectWorkerStream(taskyon: Promise<Taskyon>) {
@@ -1301,11 +1273,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // an oauth token getter function which persists secrets in our local secretstore!
   const getToken: TokenGetter = async (...args) => {
-    const STORAGE_PREFIX = 'oauth:credentials:'
     const ty = await taskyon
-    const tg = usePersistentOauth({
-      getSecret: async (name) => await ty.getSecret(STORAGE_PREFIX, name, false),
-      setSecret: async (name, data) => await ty.setSecret(STORAGE_PREFIX, name, data as KeyString),
+    const tg = createPersistentOauthTokenGetter({
+      getSecret: async (name) => await ty.getSecret(OAUTH_CREDENTIALS_SECRET_PREFIX, name, false),
+      setSecret: async (name, data) =>
+        await ty.setSecret(OAUTH_CREDENTIALS_SECRET_PREFIX, name, data as KeyString),
     })
     return await tg(...args)
   }

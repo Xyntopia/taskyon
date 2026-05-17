@@ -2,33 +2,28 @@ import {
   buildDiagnosticsRegistry,
   runDiagnosticsTests,
   type DiagnosticsRunResult,
+  type DiagnosticsTestContext,
   type TaskyonTestFn,
   type TestRecord,
-} from '../../shared/modules/diagnosticsRunner'
-import { freeKey as taskyonDevFreeKey } from '../../../src/assets/taskyon_free_key'
+} from '../../../shared/modules/diagnosticsRunner'
 import { readdir } from 'node:fs/promises'
 import { basename } from 'node:path'
-import { headlessTestMetadata, unsupportedModuleFallbacks } from './testMetadata'
+import process from 'node:process'
+import { bootstrapCliTaskyon } from '../cli/runtime'
+import { diagnosticsTestMetadata, unsupportedModuleFallbacks } from './testMetadata'
 
 type CliOptions = {
   listOnly: boolean
   details: boolean
   includeExperimental: boolean
+  includeLargeTokens: boolean
   online: boolean
   json: boolean
   allowLongRun: boolean
   filter: string
   tyauth: string | undefined
-}
-
-const runtimeEnv = {
-  args: process.argv.slice(2),
-  getEnv(name: string) {
-    return process.env[name]
-  },
-  exit(code: number) {
-    process.exit(code)
-  },
+  provider?: string
+  model?: string
 }
 
 type WrappedSkippedResult = {
@@ -48,8 +43,11 @@ type Summary = {
   options: {
     filter: string
     includeExperimental: boolean
+    includeLargeTokens?: boolean
     online: boolean
     details: boolean
+    provider?: string
+    model?: string
   }
   results: Array<{
     name: string
@@ -71,11 +69,14 @@ function parseArgs(args: string[]): CliOptions {
     listOnly: false,
     details: false,
     includeExperimental: false,
+    includeLargeTokens: false,
     online: false,
     json: false,
     allowLongRun: false,
     filter: '',
-    tyauth: runtimeEnv.getEnv('TYAUTH') ?? runtimeEnv.getEnv('TASKYON_TYAUTH') ?? taskyonDevFreeKey,
+    tyauth: process.env.TYAUTH ?? process.env.TASKYON_TYAUTH ?? undefined,
+    provider: process.env.TASKYON_SELECTED_API?.trim() || undefined,
+    model: process.env.TASKYON_MODEL?.trim() || undefined,
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -85,6 +86,7 @@ function parseArgs(args: string[]): CliOptions {
     if (arg === '--list') opts.listOnly = true
     else if (arg === '--details') opts.details = true
     else if (arg === '--experimental') opts.includeExperimental = true
+    else if (arg === '--large-tokens') opts.includeLargeTokens = true
     else if (arg === '--online') opts.online = true
     else if (arg === '--json') opts.json = true
     else if (arg === '--allow-long-run') opts.allowLongRun = true
@@ -92,6 +94,10 @@ function parseArgs(args: string[]): CliOptions {
     else if (arg.startsWith('--filter=')) opts.filter = arg.slice('--filter='.length)
     else if (arg === '--tyauth') opts.tyauth = args[++i] ?? undefined
     else if (arg.startsWith('--tyauth=')) opts.tyauth = arg.slice('--tyauth='.length)
+    else if (arg === '--provider') opts.provider = args[++i]?.trim() || undefined
+    else if (arg.startsWith('--provider=')) opts.provider = arg.slice('--provider='.length).trim()
+    else if (arg === '--model') opts.model = args[++i]?.trim() || undefined
+    else if (arg.startsWith('--model=')) opts.model = arg.slice('--model='.length).trim()
   }
 
   return opts
@@ -122,16 +128,16 @@ async function listTestFiles(dirUrl: URL, relativeDir = ''): Promise<string[]> {
 async function loadTestModules() {
   const testDirs = [
     {
-      dirUrl: new URL('../../taskyon/src/tests/', import.meta.url),
-      sourcePrefix: 'frontend/packages/taskyon/src/tests/',
+      dirUrl: new URL('../../../taskyon/src/tests/', import.meta.url),
+      sourcePrefix: 'packages/taskyon/src/tests/',
     },
     {
       dirUrl: new URL('./tests/', import.meta.url),
-      sourcePrefix: 'frontend/packages/taskyon-headless/src/tests/',
+      sourcePrefix: 'packages/tycli/src/diagnostics/tests/',
     },
     {
-      dirUrl: new URL('../../shared/surrogate/', import.meta.url),
-      sourcePrefix: 'frontend/packages/shared/surrogate/',
+      dirUrl: new URL('../../../shared/surrogate/', import.meta.url),
+      sourcePrefix: 'packages/shared/surrogate/',
     },
   ]
 
@@ -186,7 +192,8 @@ function filterTests(tests: TestRecord, filter: string): TestRecord {
 }
 
 function testIdentifier(name: string): string {
-  const camelName = name
+  const normalizedName = name.replace(/^Test\s+/i, '')
+  const camelName = normalizedName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
@@ -195,9 +202,19 @@ function testIdentifier(name: string): string {
   return camelName.replace(/^([a-z])/, (_, chr: string) => `test${chr.toUpperCase()}`)
 }
 
+function filterLargeTokenTests(tests: TestRecord, includeLargeTokens: boolean): TestRecord {
+  if (includeLargeTokens) return tests
+  return Object.fromEntries(
+    Object.entries(tests).filter(([name]) => {
+      const metadata = headlessTestMetadata[testIdentifier(name)]
+      return !metadata?.requiresLargeTokens
+    }),
+  )
+}
+
 function shouldSkipTest(name: string, opts: CliOptions): WrappedSkippedResult | null {
   const id = testIdentifier(name)
-  const metadata = headlessTestMetadata[id]
+  const metadata = diagnosticsTestMetadata[id]
   if (!metadata) return null
 
   if (metadata.requiresNetwork && !opts.online) {
@@ -216,21 +233,30 @@ function shouldSkipTest(name: string, opts: CliOptions): WrappedSkippedResult | 
     }
   }
 
+  if (metadata.requiresLargeTokens && !opts.includeLargeTokens) {
+    return {
+      skipped: true,
+      reason: 'Requires larger token usage. Re-run with --large-tokens to enable.',
+      testId: id,
+    }
+  }
+
   return null
 }
 
 function wrapTests(tests: TestRecord, opts: CliOptions): TestRecord {
   return Object.fromEntries(
     Object.entries(tests).map(([name, fn]) => {
-      const wrapped: TaskyonTestFn = async () => {
+      const wrapped: TaskyonTestFn = async (ctx) => {
         const skipped = shouldSkipTest(name, opts)
         if (skipped) return skipped
 
-        const ctx = {
-          tyauth: opts.tyauth ?? '',
+        const nextContext: DiagnosticsTestContext = {
+          ...(ctx ?? {}),
+          ...(opts.tyauth ? { tyauth: opts.tyauth } : {}),
           allowLongRun: opts.allowLongRun,
         }
-        return await Promise.resolve(fn(ctx))
+        return await Promise.resolve(fn(nextContext))
       }
       if (fn.description !== undefined) wrapped.description = fn.description
       if (fn.setup !== undefined) wrapped.setup = fn.setup
@@ -243,11 +269,12 @@ function wrapTests(tests: TestRecord, opts: CliOptions): TestRecord {
 function listTests(tests: TestRecord, experimentalTests: TestRecord) {
   const render = (name: string, kind: 'default' | 'experimental') => {
     const id = testIdentifier(name)
-    const metadata = headlessTestMetadata[id]
+    const metadata = diagnosticsTestMetadata[id]
     const tags = [
       kind === 'experimental' ? 'experimental' : '',
       metadata?.requiresNetwork ? 'network' : '',
       metadata?.requiresAuth ? 'auth' : '',
+      metadata?.requiresLargeTokens ? 'large-tokens' : '',
     ].filter(Boolean)
     const tagText = tags.length ? ` [${tags.join(', ')}]` : ''
     console.log(`${name}${tagText}`)
@@ -292,6 +319,9 @@ function buildSummary(
   results: DiagnosticsRunResult[],
   opts: CliOptions,
   durationMs: number,
+  discoveredCount: number,
+  selectedProvider?: string,
+  selectedModel?: string,
 ): Summary {
   const skipped = results.filter(isSkippedResult).length
   const failed = results.filter((result) => !result.ok).length
@@ -299,7 +329,7 @@ function buildSummary(
 
   return {
     ok: failed === 0,
-    discovered: results.length,
+    discovered: discoveredCount,
     selected: results.length,
     passed,
     failed,
@@ -308,8 +338,11 @@ function buildSummary(
     options: {
       filter: opts.filter,
       includeExperimental: opts.includeExperimental,
+      includeLargeTokens: opts.includeLargeTokens,
       online: opts.online,
       details: opts.details,
+      ...(selectedProvider ? { provider: selectedProvider } : {}),
+      ...(selectedModel ? { model: selectedModel } : {}),
     },
     results: results.map((result) => ({
       name: result.name,
@@ -321,8 +354,38 @@ function buildSummary(
   }
 }
 
+function applyDiagnosticsEnvironment(context: DiagnosticsTestContext) {
+  if (context.selectedApi) process.env.TASKYON_SELECTED_API = context.selectedApi
+  if (context.model) {
+    process.env.TASKYON_MODEL = context.model
+    process.env.TASKYON_TEST_MODEL = context.model
+  }
+  if (context.tyauth) {
+    process.env.TYAUTH = context.tyauth
+    process.env.TASKYON_TYAUTH = context.tyauth
+  }
+  if (context.selectedApi === 'openai' && context.providerKey) {
+    process.env.TASKYON_OPENAI_API_KEY = context.providerKey
+    process.env.OPENAI_API_KEY = context.providerKey
+  }
+  if (context.selectedApi === 'taskyon' && context.providerKey) {
+    process.env.TASKYON_API_KEY = context.providerKey
+  }
+  if (context.selectedApi === 'openrouter.ai' && context.providerKey) {
+    process.env.TASKYON_OPENROUTER_API_KEY = context.providerKey
+    process.env.OPENROUTER_API_KEY = context.providerKey
+  }
+  if (context.selectedApi === 'chatgpt-codex' && context.providerKey) {
+    process.env.TASKYON_CHATGPT_CODEX_API_KEY = context.providerKey
+    process.env.CHATGPT_CODEX_API_KEY = context.providerKey
+  }
+  if (context.selectedApi === 'chatgpt-codex' && context.accountId) {
+    process.env.TASKYON_CHATGPT_CODEX_ACCOUNT_ID = context.accountId
+  }
+}
+
 async function main() {
-  const opts = parseArgs(runtimeEnv.args)
+  const opts = parseArgs(process.argv.slice(2))
   const { modules, discoveredFiles } = await loadTestModules()
   const registry = buildDiagnosticsRegistry({ modules })
 
@@ -337,24 +400,43 @@ async function main() {
   const selectedSource = opts.includeExperimental
     ? { ...registry.tests, ...registry.experimentalTests }
     : registry.tests
-  const filtered = filterTests(selectedSource, opts.filter)
+  const filtered = filterTests(
+    filterLargeTokenTests(selectedSource, opts.includeLargeTokens),
+    opts.filter,
+  )
   const wrapped = wrapTests(filtered, opts)
   const selectedNames = Object.keys(wrapped)
 
-  console.log(`[taskyon-headless] discovered ${discoveredFiles.length} test files`)
+  console.log(`[tycli-diagnostics] discovered ${discoveredFiles.length} test files`)
   console.log(
-    `[taskyon-headless] selected ${selectedNames.length} tests` +
+    `[tycli-diagnostics] selected ${selectedNames.length} tests` +
       (opts.filter ? ` (filter="${opts.filter}")` : ''),
   )
 
   if (selectedNames.length === 0) {
-    console.error('[taskyon-headless] no tests matched the current selection')
-    runtimeEnv.exit(1)
+    console.error('[tycli-diagnostics] no tests matched the current selection')
+    process.exit(1)
   }
+
+  const runtime = await bootstrapCliTaskyon({
+    ...(opts.provider ? { selectedApi: opts.provider } : {}),
+    ...(opts.model ? { model: opts.model } : {}),
+  })
+  const context: DiagnosticsTestContext = {
+    ...(opts.tyauth ? { tyauth: opts.tyauth } : {}),
+    allowLongRun: opts.allowLongRun,
+    selectedApi: runtime.selectedApi,
+    model: runtime.model,
+    providerKey: runtime.providerKey,
+    providerAccessToken: runtime.oauthSession?.accessToken,
+    accountId: runtime.oauthSession?.accountId,
+  }
+  applyDiagnosticsEnvironment(context)
 
   const startedAt = Date.now()
   const results = await runDiagnosticsTests(wrapped, {
     details: true,
+    context,
     onProgress: (progress) => {
       if (progress.phase === 'start') console.log(`[RUN ] ${progress.test}`)
     },
@@ -366,19 +448,26 @@ async function main() {
     },
   })
   const durationMs = Date.now() - startedAt
-  const summary = buildSummary(results, opts, durationMs)
+  const summary = buildSummary(
+    results,
+    opts,
+    durationMs,
+    discoveredFiles.length,
+    runtime.selectedApi,
+    runtime.model,
+  )
 
   console.log('')
   console.log(
-    `[taskyon-headless] completed in ${durationMs}ms: ${summary.passed} passed, ${summary.failed} failed, ${summary.skipped} skipped`,
+    `[tycli-diagnostics] completed in ${durationMs}ms: ${summary.passed} passed, ${summary.failed} failed, ${summary.skipped} skipped`,
   )
-  console.log('TASKYON_HEADLESS_SUMMARY_START')
+  console.log('TYCLI_DIAGNOSTICS_SUMMARY_START')
   console.log(
     JSON.stringify(opts.details || opts.json ? summary : { ...summary, results: [] }, null, 2),
   )
-  console.log('TASKYON_HEADLESS_SUMMARY_END')
+  console.log('TYCLI_DIAGNOSTICS_SUMMARY_END')
 
-  if (!summary.ok) runtimeEnv.exit(1)
+  if (!summary.ok) process.exit(1)
 }
 
 await main()

@@ -27,12 +27,23 @@
         class="col-12 col-md"
         dense
         filled
-        :options="mcpToolOptions"
-        :model-value="selectedMcpToolName"
+        :options="importedMcpToolOptions"
+        :model-value="selectedImportedMcpToolName"
         label="Select Parsed MCP Tool"
-        @update:model-value="selectMcpTool"
+        @update:model-value="selectImportedMcpTool"
       />
       <q-btn flat dense label="Load Example" @click="loadExample" />
+      <q-btn flat dense label="Fetch MCP Tools" @click="fetchMcpTools" />
+    </div>
+    <div class="row q-col-gutter-sm">
+      <q-input
+        v-model="serverUrl"
+        class="col-12"
+        dense
+        filled
+        label="MCP Server URL"
+        placeholder="https://.../mcp"
+      />
     </div>
     <div v-if="selectedExampleMeta" class="text-caption">
       Source:
@@ -40,6 +51,7 @@
       | Server URL: <code>{{ selectedExampleMeta.serverUrl }}</code>
       <span v-if="selectedExampleMeta.authHint"> | Auth: {{ selectedExampleMeta.authHint }}</span>
     </div>
+    <div v-if="fetchStatus" class="text-caption">{{ fetchStatus }}</div>
 
     <DockView
       v-model:node="initialLayout"
@@ -226,7 +238,9 @@ const router = useRouter()
 const serverName = ref('')
 const mcpPayload = ref<Record<string, unknown>>({})
 const selectedExampleId = ref<string>(mcpExamples[0]?.id ?? '')
-const selectedMcpToolName = ref<string | undefined>(undefined)
+const selectedImportedMcpToolName = ref<string | undefined>(undefined)
+const serverUrl = ref('')
+const fetchStatus = ref('')
 const toolDraft = ref<ToolBase>({
   name: '',
   description: '',
@@ -266,18 +280,24 @@ function normalizeMcpInputTool(input: RawMcpInputTool): McpInputTool {
   }
 }
 
-function parseToolsFromPayload(payload: unknown): McpInputTool[] {
-  const parsed = McpToolsPayloadSchema.safeParse(payload)
-  if (!parsed.success) return []
-  const rawTools = Array.isArray(parsed.data)
-    ? parsed.data
-    : 'tools' in parsed.data
-      ? parsed.data.tools
-      : parsed.data.result.tools
-  return rawTools.map(normalizeMcpInputTool)
+function parseMcpToolsFromPayload(payload: unknown): McpInputTool[] {
+  if (Array.isArray(payload)) {
+    return payload.filter(
+      (item): item is McpInputTool => isRecord(item) && typeof item.name === 'string',
+    )
+  }
+  if (!isRecord(payload)) return []
+  const maybeToolsArray = payload.tools
+  if (Array.isArray(maybeToolsArray)) return parseMcpToolsFromPayload(maybeToolsArray)
+
+  const maybeResult = payload.result
+  if (isRecord(maybeResult) && Array.isArray(maybeResult.tools)) {
+    return parseMcpToolsFromPayload(maybeResult.tools)
+  }
+  return []
 }
 
-function toTaskyonTool(input: McpInputTool, sourceName?: string): ToolBase {
+function mapImportedMcpToolToTaskyonTool(input: McpInputTool, sourceName?: string): ToolBase {
   const normalizedName = normalizeToolName(input.name)
   const mappedDescription =
     input.description || `Imported MCP tool ${input.name}${sourceName ? ` from ${sourceName}` : ''}`
@@ -291,23 +311,25 @@ function toTaskyonTool(input: McpInputTool, sourceName?: string): ToolBase {
   }
 }
 
-const parsedMcpTools = computed(() => parseToolsFromPayload(mcpPayload.value))
+const parsedImportedMcpTools = computed(() => parseMcpToolsFromPayload(mcpPayload.value))
 
-const mcpToolOptions = computed(() => parsedMcpTools.value.map((t) => t.name))
+const importedMcpToolOptions = computed(() => parsedImportedMcpTools.value.map((t) => t.name))
 const exampleOptions = computed(() => mcpExamples.map((e) => ({ label: e.label, value: e.id })))
 const selectedExampleMeta = computed(() =>
   mcpExamples.find((example) => example.id === selectedExampleId.value),
 )
 
 function syncToolDraftFromSelection() {
-  const selected = parsedMcpTools.value.find((t) => t.name === selectedMcpToolName.value)
+  const selected = parsedImportedMcpTools.value.find(
+    (t) => t.name === selectedImportedMcpToolName.value,
+  )
   if (!selected) return
-  toolDraft.value = toTaskyonTool(selected, serverName.value || undefined)
+  toolDraft.value = mapImportedMcpToolToTaskyonTool(selected, serverName.value || undefined)
 }
 
-function selectMcpTool(value: string | null) {
+function selectImportedMcpTool(value: string | null) {
   if (!value) return
-  selectedMcpToolName.value = value
+  selectedImportedMcpToolName.value = value
   syncToolDraftFromSelection()
 }
 
@@ -315,16 +337,18 @@ function loadExample() {
   const selected = selectedExampleMeta.value
   if (!selected) return
   serverName.value = selected.serverName
+  serverUrl.value = selected.serverUrl
   mcpPayload.value = selected.payload
   const firstTool = selected.payload.tools[0]
   if (!firstTool) return
-  selectedMcpToolName.value = firstTool.name
+  selectedImportedMcpToolName.value = firstTool.name
   syncToolDraftFromSelection()
 }
 
 function selectExample(value: string | null) {
   if (!value) return
   selectedExampleId.value = value
+  loadExample()
 }
 
 const toolParser = computed(() => {
@@ -362,5 +386,63 @@ async function saveTool() {
   if (!preliminaryTaskNode.value || !isValidTool.value) return
   const task = await addNewTask(preliminaryTaskNode.value)
   void router.push(`/tool/${task.id}`)
+}
+
+async function mcpRpcRequest(url: string, id: number, method: string, params?: unknown) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id,
+      method,
+      ...(params !== undefined ? { params } : {}),
+    }),
+  })
+
+  const body = (await response.json()) as Record<string, unknown>
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${JSON.stringify(body)}`)
+  }
+  if (body.error) {
+    throw new Error(String(JSON.stringify(body.error)))
+  }
+  return body
+}
+
+async function fetchMcpTools() {
+  if (!serverUrl.value.trim() && selectedExampleMeta.value?.serverUrl) {
+    serverUrl.value = selectedExampleMeta.value.serverUrl
+  }
+  const url = serverUrl.value.trim()
+  if (!url) {
+    fetchStatus.value = 'Missing MCP server URL.'
+    return
+  }
+
+  fetchStatus.value = 'Connecting to MCP server...'
+  try {
+    await mcpRpcRequest(url, 1, 'initialize', {
+      protocolVersion: '2024-11-05',
+      clientInfo: { name: 'taskyon-ui', version: '0.5.1' },
+      capabilities: {},
+    })
+    await mcpRpcRequest(url, 2, 'notifications/initialized')
+    const toolsResponse = await mcpRpcRequest(url, 3, 'tools/list')
+    mcpPayload.value = toolsResponse
+
+    const tools = parseMcpToolsFromPayload(toolsResponse)
+    if (tools.length > 0) {
+      selectedImportedMcpToolName.value = tools[0]?.name
+      syncToolDraftFromSelection()
+    }
+    fetchStatus.value = `Loaded ${tools.length} tools from ${url}`
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    fetchStatus.value = `Failed to fetch MCP tools: ${message}`
+  }
 }
 </script>

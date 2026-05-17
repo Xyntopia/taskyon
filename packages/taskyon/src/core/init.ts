@@ -10,11 +10,17 @@ import { localVectorStore } from '../tools/localVectorStore'
 import { proceduralTools } from '../tools/proceduralGraphics'
 import { taskOrganizationTools, taskSearcher } from '../tools/TaskPlannerTool'
 import { testingTools } from '../tools/testTools'
-import { createAddNewToolTool, createToolSearcher, toolCreationWizard } from '../tools/toolTools'
+import {
+  createAddNewToolTool,
+  createMcpToolImporter,
+  createToolSearcher,
+  toolCreationWizard,
+} from '../tools/toolTools'
 import { useFullSmallTools } from '../tools/usefulSmallTools'
+import { webResearchTools } from '../tools/webResearchTool'
 import { wfcGenerator } from '../tools/wavefunctioncollapse'
 import { appDevTools } from '../tools/webAppDev'
-import { createTaskyonMcpBridge } from '../mcp/taskyonBridge'
+import { createTaskyonToMcpBridge } from '../mcp/taskyonToMcpBridge'
 import { TaskyonMessage } from '../types/apiTypes'
 import type { llmSettings } from '../types/profiles'
 import type { InternalTool } from '../types/toolApi'
@@ -173,6 +179,7 @@ const staticContext = () => {
     ...testingTools,
     ...fileTools,
     ...taskOrganizationTools,
+    ...webResearchTools,
     ...proceduralTools,
     createAddNewToolTool(),
     wfcGenerator,
@@ -260,6 +267,7 @@ const dynamicContext =
       localVectorStore(db),
       chatCompletion,
       createToolSearcher(taskManagerInstance),
+      createMcpToolImporter(taskManagerInstance),
       taskSearcher(taskManagerInstance),
     )
     taskManagerInstance.addDefaultTools(ToolList)
@@ -418,7 +426,7 @@ export async function tyCore(
             createEmptyTaskMessageStream(),
           ),
       }
-      return createTaskyonMcpBridge(
+      return createTaskyonToMcpBridge(
         options?.protocolVersion
           ? { ...baseBridgeOptions, protocolVersion: options.protocolVersion }
           : baseBridgeOptions,

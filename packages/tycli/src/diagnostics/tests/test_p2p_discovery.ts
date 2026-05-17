@@ -1,8 +1,8 @@
-import { startNodeLibp2p } from '../../../p2p-core/src/node'
-import { startRelayLibp2p } from '../../../p2p-core/src/relay'
-import { SUBNETWORK_PEER_DISCOVERY_EVENT } from '../../../p2p-core/src/constants'
-import { deriveDiscoveryTokens } from '../../../p2p-core/src/discovery'
-import { headlessBrowserDiscoveryTestNetwork } from '../../../p2p-core/src/testNetworks'
+import { startNodeLibp2p } from '../../../../p2p-core/src/node'
+import { startRelayLibp2p } from '../../../../p2p-core/src/relay'
+import { SUBNETWORK_PEER_DISCOVERY_EVENT } from '../../../../p2p-core/src/constants'
+import { deriveDiscoveryTokens } from '../../../../p2p-core/src/discovery'
+import { headlessBrowserDiscoveryTestNetwork } from '../../../../p2p-core/src/testNetworks'
 
 function waitForPeerDiscovery(
   node: EventTarget,
@@ -30,12 +30,11 @@ function waitForPeerDiscovery(
 
       clearTimeout(timer)
       node.removeEventListener(SUBNETWORK_PEER_DISCOVERY_EVENT, onDiscovery as EventListener)
-      const resolved = {
+      resolve({
         id: targetPeerId,
         multiaddrs: (event.detail?.multiaddrs ?? []).map((addr) => addr.toString()),
         ...(event.detail?.matchedToken ? { matchedToken: event.detail.matchedToken } : {}),
-      }
-      resolve(resolved)
+      })
     }
 
     node.addEventListener(SUBNETWORK_PEER_DISCOVERY_EVENT, onDiscovery as EventListener)
@@ -70,7 +69,7 @@ function assertNoPeerDiscovery(node: EventTarget, forbiddenPeerIds: string[], wi
 
 export const testNodeDiscoveryThroughLocalRelay = async () => {
   const relay = await startRelayLibp2p({
-    logName: 'headless-discovery-relay',
+    logName: 'tycli-discovery-relay',
     listenAddrs: ['/ip4/127.0.0.1/tcp/0/ws'],
     autoNatPollMs: 60_000,
   })

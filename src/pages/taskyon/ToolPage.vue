@@ -28,7 +28,7 @@
         </template>
       </q-select>
       <q-btn flat dense label="New Tool" @click="switchTool()" />
-      <q-btn flat dense label="Add MCP Tool" to="/mcp-tool" />
+      <q-btn flat dense label="Add MCP Tool" to="/mcp-tool-import" />
     </div>
     <q-separator class="q-my-md" />
     <div v-if="selectedTool || !name" class="col column q-gutter-sm">

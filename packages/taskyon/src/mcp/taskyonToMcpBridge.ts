@@ -1,8 +1,8 @@
 import type { ToolBase } from '../types/tools'
-import { createMcpBridge } from './bridge'
+import { createMcpProtocolBridge } from './mcpProtocolBridge'
 import type { McpServerInfo, McpTool } from './types'
 
-export type TaskyonMcpBridgeDeps = {
+export type TaskyonToMcpBridgeDeps = {
   listTaskyonTools: () => Promise<Record<string, ToolBase>>
   callTaskyonTool: (name: string, args: Record<string, unknown>) => Promise<unknown>
   serverInfo?: McpServerInfo
@@ -23,19 +23,19 @@ function mapToolToMcpTool(tool: ToolBase): McpTool {
 }
 
 async function listMcpTools(
-  listTaskyonTools: TaskyonMcpBridgeDeps['listTaskyonTools'],
+  listTaskyonTools: TaskyonToMcpBridgeDeps['listTaskyonTools'],
 ): Promise<McpTool[]> {
   const tools = await listTaskyonTools()
   return Object.values(tools).map(mapToolToMcpTool)
 }
 
-export function createTaskyonMcpBridge(deps: TaskyonMcpBridgeDeps) {
+export function createTaskyonToMcpBridge(deps: TaskyonToMcpBridgeDeps) {
   const baseDeps = {
     serverInfo: deps.serverInfo ?? defaultServerInfo,
     listTools: () => listMcpTools(deps.listTaskyonTools),
     callTool: deps.callTaskyonTool,
   }
-  return createMcpBridge(
+  return createMcpProtocolBridge(
     deps.protocolVersion ? { ...baseDeps, protocolVersion: deps.protocolVersion } : baseDeps,
   )
 }

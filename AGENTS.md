@@ -12,6 +12,7 @@
 - If a fix starts cascading into broad type churn, readonly workarounds, or many unrelated file edits, stop and step back. Revert the speculative path and choose the smallest boundary fix instead of spreading the workaround through the codebase.
 - No generic `isRecord`-style guards. Narrow at the domain boundary, then pass typed values downstream.
 - No fake no-op implementations. Model unavailable capabilities as optional.
+- Before creating or refactoring a tool, first search for similar tools in `packages/taskyon/src/tools/` and inspect how they are implemented. Reuse local patterns like `makeTaskResult`, `toolCall`, `chatCompletion`, and re-entry chains instead of inventing a new orchestration style.
 - Do not auto-run `yarn lint` or `yarn lint:fix` (neither repo-wide nor targeted) unless the user explicitly asks. Linting is intentionally not default because it is comparatively expensive. Instead, remind the user to run `yarn lint` themselves before committing, or ask whether they want you to run it when wrapping up. Targeted `yarn eslint <path>` is fine only when needed to verify a specific change and only when explicitly requested.
 - Always run the formatter on every file you edited yourself, without waiting for the user to ask. Format only the edited files: `yarn format:file <path...>`
 - When adding a test, make sure it is part of the diagnostics suite. Prefer locations already discovered by `packages/taskyon-headless` (for example `packages/taskyon/src/tests/test*.ts`) or wire the new test into the appropriate diagnostics runner.
@@ -78,9 +79,8 @@
 - **Monorepo**: Yarn 4 workspaces. Root `package.json` is the Quasar/Tauri app (Vue 3 + Pinia + Vue Router).
 - **`packages/taskyon`** (`@taskyon/taskyon`) — core task engine. Exports raw TS via `exports` map (no build step). Entry points: `index.ts`, `browser.ts`, `tools/index.ts`, `db.ts`, `api/index.ts`.
 - **`packages/shared`** (`@taskyon/shared`) — shared Vue components, Modelica tooling, UI utilities.
-- **`packages/tycli`** (`@taskyon/tycli`) — Node CLI chat client. Built with tsup. Has its own tsconfig/lint/typecheck.
+- **`packages/tycli`** (`@taskyon/tycli`) — Node CLI surface for chat and Node diagnostics. Built with tsup for the chat bundle; diagnostics scripts run directly via `--experimental-strip-types`.
 - **`packages/tyclient`** (`@taskyon/tyclient`) — published client library (npm). Built with tsup.
-- **`packages/taskyon-headless`** — headless diagnostics runner. No build step; uses `--experimental-strip-types`.
 - **`packages/p2p-core`** — libp2p networking. Built with tsup.
 - **`packages/relay`** — P2P relay server. Built with Vite.
 - **`packages/secure-tunnel`** — secure tunnel. Built with Vite.
@@ -100,7 +100,7 @@
 - Modelica library archives are not bundled by app builds. Do not put large library files such as the MSL archive in `public/`, GitHub Pages, or other repository-published static assets. Mirror them to external object storage such as S3 instead, and use `yarn modelica:libraries:publish` manually to update `packages/shared/modelica/modelica_libraries.json`.
 - Builds need `--max-old-space-size=8192` (set in Nix shell; set manually if not using Nix: `export NODE_OPTIONS="--max-old-space-size=8192"`).
 - `packages/rumoca` and `packages/yatra` are separate git repos. Changes there should follow their own workflows, not root-level commands.
-- Headless packages use `--experimental-strip-types` instead of a compile step. Don't add a build step to them.
+- `packages/tycli` diagnostics scripts use `--experimental-strip-types` instead of a compile step. Don't add a separate build step for them.
 - `COREPACK_HOME` must be outside the repo (ESM/CJS conflict). The Nix shell handles this; if bypassing Nix, set `COREPACK_HOME` to a path outside any `type: "module"` package boundary.
 - The `packages/taskyon` package exports TS source files directly. Import it via the `exports` map paths, not by relative file paths.
 - Keep browser UI mode and Node headless mode aligned. Changes in shared runtime paths must work in both environments; do not fix headless by introducing a Node-only shortcut into code that is also used by the browser UI.

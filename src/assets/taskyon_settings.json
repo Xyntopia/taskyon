@@ -38,6 +38,37 @@
         "schemaReminder": "Your output must strictly follow these rules:\n\n1. **Exact Format:** Output exactly in {format} with no additional text, commentary, or formatting.\n2. **Strict Schema:** Include only the specified schema below—every property (including any questions) must be present and exactly as defined.\n3. **No Deviations:** Do not add, omit, or alter any parts of the schema. Extra keys, explanations, or commentary are forbidden.\n4. **Full Parseability:** The final output must be fully parseable as {format}. Any deviation from the schema renders the response invalid.\n5. **Single Schema:** Fill in the schema exactly once without repeating it.\n6. **JSON Schema Instance:** If `schemaType: json schema` is specified, output a valid instance that conforms to the JSON Schema rather than reproducing the schema definition itself.\n\nSchema: \n\n{schema}",
         "tools": "Choose one of the following tools if it helps you to complete the task:\n\n${tools}"
       }
+    },
+    "importBrowserMcpTools": {
+      "serverUrl": "http://127.0.0.1:8931/mcp",
+      "serverName": "local-browser-mcp"
+    },
+    "ensureBrowserMcpTools": {
+      "serverUrl": "http://127.0.0.1:8931/mcp",
+      "serverName": "local-browser-mcp",
+      "startupInstructions": "Start your browser MCP server manually so it exposes an HTTP MCP endpoint.\nThis can be a local process or a container such as Podman, as long as it binds to the configured MCP URL.\nAfter the endpoint is reachable, click Continue in chat or retry import from the Browser Access page."
+    },
+    "webResearchPlanner": {
+      "supportTools": ["proxyWebReader", "tauriHttpWebReader"],
+      "enableWebSearch": true,
+      "webSearchMaxResults": 5,
+      "maxSourcesPerQuery": 5,
+      "mustDownload": true,
+      "fileTypeHints": ["pdf"],
+      "deliverable": "manufacturer, product name, source page URL, direct document URL"
+    },
+    "proxyWebReader": {
+      "providerPreset": "scraperapi",
+      "providerLabel": "ScraperAPI",
+      "docsUrl": "https://docs.scraperapi.com/",
+      "pricingUrl": "https://www.scraperapi.com/pricing/",
+      "serviceUrl": "https://api.scraperapi.com/",
+      "apiKeySecretName": "API_KEY",
+      "apiKeyHeader": "",
+      "apiKeyScheme": "",
+      "apiKeyLocation": "query",
+      "apiKeyQueryParam": "api_key",
+      "targetUrlParam": "url"
     }
   },
   "llmSettings": {

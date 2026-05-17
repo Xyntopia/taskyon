@@ -61,6 +61,29 @@ export async function persistConfigPatch(patch: Partial<StoredConfig>) {
   await saveStoredConfig({ ...current, ...patch })
 }
 
+export function resolveStoredModel(stored: StoredConfig, provider: string): string | undefined {
+  const providerModel = stored.providerModels?.[provider]?.trim()
+  if (providerModel) return providerModel
+  if (stored.selectedApi === provider) {
+    const legacyModel = stored.taskyonModel?.trim()
+    if (legacyModel) return legacyModel
+  }
+  return undefined
+}
+
+export async function persistProviderModel(provider: string, model: string) {
+  const current = await loadStoredConfig()
+  const providerModels = {
+    ...(current.providerModels ?? {}),
+    [provider]: model,
+  }
+  await saveStoredConfig({
+    ...current,
+    providerModels,
+    ...(current.selectedApi === provider ? { taskyonModel: model } : {}),
+  })
+}
+
 async function importDeviceKeyPair(
   jwk: NonNullable<StoredConfig['deviceKeyPairJwk']>,
 ): Promise<CryptoKeyPair> {
@@ -141,6 +164,8 @@ export function resolveProviderSelection(stored: StoredConfig): string {
   if (explicitApi) return explicitApi
   if (stored.selectedApi) return stored.selectedApi
   if (process.env.OPENAI_API_KEY) return 'openai'
+  if (process.env.TASKYON_CHATGPT_CODEX_API_KEY || process.env.CHATGPT_CODEX_API_KEY)
+    return 'chatgpt-codex'
   if (process.env.OPENROUTER_API_KEY) return 'openrouter.ai'
   if (process.env.TASKYON_API_KEY) return 'taskyon'
   return 'local'
@@ -148,6 +173,9 @@ export function resolveProviderSelection(stored: StoredConfig): string {
 
 export function resolveKeyForProvider(provider: string): string | undefined {
   if (provider === 'openai') return process.env.TASKYON_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY
+  if (provider === 'chatgpt-codex') {
+    return process.env.TASKYON_CHATGPT_CODEX_API_KEY ?? process.env.CHATGPT_CODEX_API_KEY
+  }
   if (provider === 'openrouter.ai') {
     return process.env.TASKYON_OPENROUTER_API_KEY ?? process.env.OPENROUTER_API_KEY
   }

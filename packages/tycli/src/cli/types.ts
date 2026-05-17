@@ -3,6 +3,7 @@ export type StoredConfig = {
     privateJwk: JsonWebKey
     publicJwk: JsonWebKey
   }
+  providerModels?: Record<string, string>
   selectedApi?: string
   taskyonModel?: string
   wrappedSessionKey?: string
@@ -41,7 +42,13 @@ export type LlmModel = {
 }
 
 export const API_KEY_STORE_NAME = 'AiProviderKey'
-export const SUPPORTED_PROVIDERS = ['openai', 'openrouter.ai', 'taskyon', 'local'] as const
+export const SUPPORTED_PROVIDERS = [
+  'openai',
+  'openrouter.ai',
+  'taskyon',
+  'local',
+  'chatgpt-codex',
+] as const
 export const MAX_MODEL_OPTIONS = 10
 export const SLASH_COMMANDS = [
   'keys',

@@ -26,13 +26,16 @@ export async function authenticateWithPopup(
     clientId: string
     scope: string
     tokenUrl?: string
+    authorizeQuery?: Record<string, string>
+    redirectUri?: string
   },
   signal?: AbortSignal,
   timeoutMs: number = OAUTH_TIMEOUT_MS,
   options: AuthenticationOptions = {},
 ): Promise<OAuthCredentials> {
-  const { oauthURL, clientId, scope, tokenUrl } = params
+  const { oauthURL, clientId, scope, tokenUrl, authorizeQuery, redirectUri: customRedirectUri } = params
   const { forceReauth = false, forceAccountSelection = false } = options
+  const effectiveRedirectUri = customRedirectUri || redirectUri
 
   // Check if already aborted
   if (signal?.aborted) {
@@ -45,7 +48,7 @@ export async function authenticateWithPopup(
 
     const urlParams = new URLSearchParams({
       client_id: clientId,
-      redirect_uri: redirectUri,
+      redirect_uri: effectiveRedirectUri,
       scope: scope,
       ...(tokenUrl
         ? { code_challenge: challenge, code_challenge_method: 'S256', response_type: 'code' }
@@ -74,6 +77,13 @@ export async function authenticateWithPopup(
       // Request offline access to get refresh token
       if (tokenUrl) {
         urlParams.set('access_type', 'offline')
+      }
+    }
+
+    // Add provider-specific query params (Codex-style or any custom provider flags).
+    if (authorizeQuery) {
+      for (const [key, value] of Object.entries(authorizeQuery)) {
+        urlParams.set(key, value)
       }
     }
 
@@ -132,6 +142,7 @@ export async function authenticateWithPopup(
       clientId,
       code: qparams.code,
       tokenUrl,
+      redirectUri: effectiveRedirectUri,
     })
     console.log('received credentials', creds)
     return creds
@@ -254,11 +265,13 @@ async function getAccessTokenFromCode({
   clientId,
   code,
   tokenUrl,
+  redirectUri,
 }: {
   verifier: string
   clientId: string
   code: string
   tokenUrl: string
+  redirectUri: string
 }): Promise<OAuthCredentials> {
   const body = new URLSearchParams({
     client_id: clientId,
@@ -323,6 +336,8 @@ export type TokenGetter = (
     clientId: string
     scope: string
     tokenUrl?: string
+    authorizeQuery?: Record<string, string>
+    redirectUri?: string
   },
   signal?: AbortSignal,
   options?: AuthenticationOptions,

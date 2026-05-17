@@ -6,6 +6,33 @@ import {
 } from '@taskyon/taskyon'
 import type { CliApiConfig, LlmModel } from './types'
 
+export const CHATGPT_CODEX_ALLOWED_MODELS = new Set([
+  'gpt-5.5',
+  'gpt-5.4',
+  'gpt-5.4-mini',
+  'gpt-5.3-codex-spark',
+])
+
+export function isChatgptCodexModelSupported(model: string): boolean {
+  if (CHATGPT_CODEX_ALLOWED_MODELS.has(model)) return true
+  const match = model.match(/^gpt-(\d+\.\d+)/)
+  return match ? Number.parseFloat(match[1] ?? '') > 5.4 : false
+}
+
+export function codexModelOptions(): { label: string; value: string }[] {
+  return [...CHATGPT_CODEX_ALLOWED_MODELS].map((model) => ({ label: model, value: model }))
+}
+
+export function normalizeStoredModelForProvider(
+  provider: string,
+  model: string | undefined,
+): string | undefined {
+  const normalized = model?.trim()
+  if (!normalized) return undefined
+  if (provider !== 'chatgpt-codex') return normalized
+  return isChatgptCodexModelSupported(normalized) ? normalized : undefined
+}
+
 export const DEFAULT_PROMPT_TEMPLATES = {
   basePrompt:
     'You are a helpful assistant called Taskyon. Return concise and correct Markdown answers.',
@@ -41,6 +68,29 @@ export const baseApiDefinitions: Record<string, apiConfig> = {
     routes: {
       chatCompletion: '/v1/',
       models: '/v1/models',
+    },
+  },
+  'chatgpt-codex': {
+    name: 'chatgpt-codex',
+    baseURL: 'https://chatgpt.com/backend-api/codex',
+    defaultModel: 'gpt-5.4',
+    streamSupport: true,
+    auth: {
+      type: 'oauth',
+      oauth: {
+        authorizationUrl: 'https://auth.openai.com/oauth/authorize',
+        tokenUrl: 'https://auth.openai.com/oauth/token',
+        clientId: 'app_EMoamEEZ73f0CkXaXp7hrann',
+        scope: 'openid profile email offline_access',
+        authorizeQuery: {
+          id_token_add_organizations: 'true',
+          codex_cli_simplified_flow: 'true',
+        },
+      },
+    },
+    routes: {
+      chatCompletion: '/responses',
+      models: '/models',
     },
   },
   'openrouter.ai': {
@@ -82,6 +132,18 @@ export function createCliLlmSettings(config: CliApiConfig): llmSettings {
     siteUrl: 'https://tycli.local',
     entryFunction: 'entryNode',
   }
+}
+
+export function applyCodexAccountHeader(
+  llmState: llmSettings,
+  accountId: string | undefined,
+): void {
+  const codexApi = llmState.llmApis['chatgpt-codex']
+  if (!codexApi) return
+  const nextHeaders = { ...(codexApi.defaultHeaders ?? {}) }
+  if (accountId) nextHeaders['ChatGPT-Account-Id'] = accountId
+  else delete nextHeaders['ChatGPT-Account-Id']
+  codexApi.defaultHeaders = nextHeaders
 }
 
 function joinUrl(base: string, path: string): string {

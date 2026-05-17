@@ -23,6 +23,8 @@
           name="app config"
         />
       </q-tabs>
+      <q-space />
+      <q-btn flat dense label="Browser Access" to="/browser-access" />
     </q-toolbar>
     <div class="fit text-center"><ExpertEnable /></div>
     <q-card flat class="q-ma-xs">

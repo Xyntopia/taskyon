@@ -5,49 +5,12 @@ import { tyCore } from '../core/init'
 import { toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
 import { createStandardEntryNodeTool } from '../tools/entryNode'
-
-const resolveApiKey = () =>
-  process.env.TASKYON_API_KEY?.trim() ||
-  process.env.OPENAI_API_KEY?.trim() ||
-  process.env.OPENROUTER_API_KEY?.trim() ||
-  ''
-
-const resolveApiConfig = (apiKey: string, model: string) => {
-  if (process.env.TASKYON_API_KEY?.trim() === apiKey) {
-    return {
-      selectedApi: 'taskyon',
-      llmApis: {
-        taskyon: {
-          name: 'taskyon',
-          baseURL: 'https://share.taskyon.space/chatCompletion/api/v1',
-          defaultModel: model,
-          selectedModel: model,
-          streamSupport: true,
-          routes: {
-            chatCompletion: '/chat/completions',
-            models: '/models',
-          },
-        },
-      },
-    }
-  }
-  return {
-    selectedApi: 'openai',
-    llmApis: {
-      openai: {
-        name: 'openai',
-        baseURL: 'https://api.openai.com/v1',
-        defaultModel: model,
-        selectedModel: model,
-        streamSupport: true,
-        routes: {
-          chatCompletion: '/chat/completions',
-          models: '/models',
-        },
-      },
-    },
-  }
-}
+import {
+  buildLinkedTaskChain,
+  resolveApiConfig,
+  resolveApiKey,
+  resolveOnlineModel,
+} from './onlineProviderSupport'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -58,11 +21,12 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async () => {
   if (!apiKey) {
     return {
       skipped: true,
-      reason: 'No API key found. Set TASKYON_API_KEY or OPENAI_API_KEY or OPENROUTER_API_KEY.',
+      reason:
+        'No provider credential found. Set TASKYON_SELECTED_API plus the matching provider key environment.',
     }
   }
 
-  const model = process.env.TASKYON_TEST_MODEL?.trim() || 'gpt-4o-mini'
+  const model = resolveOnlineModel()
   const apiConfig = resolveApiConfig(apiKey, model)
   const dataDir = join(tmpdir(), `taskyon-entrynode-test-${Date.now()}`)
   await mkdir(dataDir, { recursive: true })
@@ -120,29 +84,33 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async () => {
           }
         }
       })
-      ty.port.send({
-        type: 'tasks',
-        execute: true,
-        show: false,
-        tasks: [
-          {
-            role: 'user',
-            content: {
-              type: 'message',
-              data: [
-                'Use executePythonScript and do exactly this sequence:',
-                '1) First call it with wrong parameters: {"script":"print(\\"broken\\")"} so it fails.',
-                '2) Then recover from the error and call it correctly with {"code":"print(\\"recovered-ok\\")"}.',
-                '3) After successful execution, respond with a short assistant message.',
-              ].join('\n'),
-            },
+      void buildLinkedTaskChain([
+        {
+          role: 'user',
+          content: {
+            type: 'message',
+            data: [
+              'Use executePythonScript and do exactly this sequence:',
+              '1) First call it with wrong parameters: {"script":"print(\\"broken\\")"} so it fails.',
+              '2) Then recover from the error and call it correctly with {"code":"print(\\"recovered-ok\\")"}.',
+              '3) After successful execution, respond with a short assistant message.',
+            ].join('\n'),
           },
-          toolCall({
-            name: 'entryNode',
-            arguments: {},
+        },
+        toolCall({
+          name: 'entryNode',
+          arguments: {},
+        }),
+      ])
+        .then((tasks) =>
+          ty.port.send({
+            type: 'tasks',
+            execute: true,
+            show: false,
+            tasks,
           }),
-        ],
-      })
+        )
+        .catch(reject)
     },
   )
 

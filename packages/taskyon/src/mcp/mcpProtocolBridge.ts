@@ -13,7 +13,7 @@ import type {
   McpToolsListResult,
 } from './types'
 
-export type McpBridgeDependencies = {
+export type McpProtocolBridgeDependencies = {
   serverInfo: McpServerInfo
   listTools: () => Promise<McpTool[]>
   callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>
@@ -22,7 +22,7 @@ export type McpBridgeDependencies = {
 
 type McpMethodHandler = (
   req: JsonRpcRequest,
-  deps: McpBridgeDependencies,
+  deps: McpProtocolBridgeDependencies,
 ) => Promise<unknown>
 
 const JSON_RPC_VERSION = '2.0' as const
@@ -98,7 +98,7 @@ function mapToolCallResult(result: unknown): McpToolsCallResult {
   }
 }
 
-function initializeResult(deps: McpBridgeDependencies): McpInitializeResult {
+function initializeResult(deps: McpProtocolBridgeDependencies): McpInitializeResult {
   return {
     protocolVersion: deps.protocolVersion ?? DEFAULT_PROTOCOL_VERSION,
     capabilities: {
@@ -136,7 +136,7 @@ const methodHandlers: Record<string, McpMethodHandler> = {
   },
 }
 
-async function runMethod(req: JsonRpcRequest, deps: McpBridgeDependencies): Promise<unknown> {
+async function runMethod(req: JsonRpcRequest, deps: McpProtocolBridgeDependencies): Promise<unknown> {
   const handler = methodHandlers[req.method]
   if (!handler) {
     throw new JsonRpcMethodError({
@@ -183,7 +183,7 @@ function shouldRespond(req: JsonRpcRequest): req is JsonRpcRequest & { id: JsonR
   return 'id' in req
 }
 
-export function createMcpBridge(deps: McpBridgeDependencies) {
+export function createMcpProtocolBridge(deps: McpProtocolBridgeDependencies) {
   async function handleRequest(raw: unknown): Promise<JsonRpcResponse | null> {
     let req: JsonRpcRequest
     try {

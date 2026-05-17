@@ -11,6 +11,8 @@ The GUI is divided into several sections, each corresponding to a different aspe
 - [**LLM Settings**](https://taskyon.space/settings/agent%20config): This section allows you to configure the Large Language Model (LLM) settings, such as the selected API, task template, and function descriptions.
 - [**App Configuration**](https://taskyon.space/settings/app%20config): This section allows you to configure the app settings, such as the app configuration URL, gDrive configuration file, and expert mode.
 
+Within the LLM provider settings, Taskyon can also connect directly to ChatGPT Codex through an OAuth login flow. After logging in, the `chatgpt-codex` provider becomes selectable like the other configured providers.
+
 ### Iframe Integration
 
 Taskyon can be integrated into a webpage as an iframe. This allows you to embed Taskyon into your own application and customize its behavior.

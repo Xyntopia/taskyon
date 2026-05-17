@@ -212,3 +212,144 @@ It leverages examples from existing tools—including their source code when ava
  Use this tool to streamline and standardize the creation of new tools.`,
   name: 'toolCreationWizard',
 })
+
+type McpInputTool = {
+  name: string
+  description?: string
+  inputSchema?: unknown
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function parseMcpToolsFromPayload(payload: unknown): McpInputTool[] {
+  if (Array.isArray(payload)) {
+    return payload.filter(
+      (item): item is McpInputTool => isRecord(item) && typeof item.name === 'string',
+    )
+  }
+
+  if (!isRecord(payload)) return []
+  if (Array.isArray(payload.tools)) return parseMcpToolsFromPayload(payload.tools)
+  if (isRecord(payload.result) && Array.isArray(payload.result.tools)) {
+    return parseMcpToolsFromPayload(payload.result.tools)
+  }
+  return []
+}
+
+function normalizeToolName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '_')
+}
+
+function toJsonSchema(value: unknown): Readonly<JSONSchema7> {
+  if (!isRecord(value)) return { type: 'object', additionalProperties: true }
+  return value as JSONSchema7
+}
+
+function mapImportedMcpToolToTaskyonTool(input: McpInputTool, sourceName?: string) {
+  return ToolBase.parse({
+    name: normalizeToolName(input.name),
+    description:
+      input.description || `Imported MCP tool ${input.name}${sourceName ? ` from ${sourceName}` : ''}`,
+    longDescription: sourceName
+      ? `Imported from MCP server: ${sourceName}. Original tool name: ${input.name}.`
+      : `Imported MCP tool. Original tool name: ${input.name}.`,
+    parameters: toJsonSchema(input.inputSchema),
+  })
+}
+
+async function mcpRpcRequest(url: string, id: number, method: string, params?: unknown) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id,
+      method,
+      ...(params !== undefined ? { params } : {}),
+    }),
+  })
+
+  const body = (await response.json()) as Record<string, unknown>
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${JSON.stringify(body)}`)
+  if (body.error) throw new Error(String(JSON.stringify(body.error)))
+  return body
+}
+
+export const createMcpToolImporter = (taskManager: TyTaskManager) =>
+  createTool({
+    name: 'importMcpTools',
+    description:
+      'Fetch tools from an MCP server and register them as Taskyon tools so they can be used in chat.',
+    longDescription: `Use this tool when the user asks to add or install tools from an MCP server.
+It calls initialize + tools/list on the provided MCP endpoint, maps MCP tool schemas
+to Taskyon tooldefinitions, and stores them in the task tree.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        serverUrl: {
+          type: 'string',
+          description: 'MCP server URL, e.g. https://.../mcp',
+        },
+        serverName: {
+          type: 'string',
+          description: 'Optional source label used in imported tool descriptions.',
+        },
+        toolNames: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Optional list of tool names to import. If omitted, all tools from the MCP server are imported.',
+        },
+      },
+      required: ['serverUrl'],
+      additionalProperties: false,
+    } as const satisfies JSONSchema7,
+    function: async ({ serverUrl, serverName, toolNames }) => {
+      await taskManager.updateToolDefinitions()
+      await mcpRpcRequest(serverUrl, 1, 'initialize', {
+        protocolVersion: '2024-11-05',
+        clientInfo: { name: 'taskyon-tool-importer', version: '0.5.1' },
+        capabilities: {},
+      })
+      await mcpRpcRequest(serverUrl, 2, 'notifications/initialized')
+      const toolsResponse = await mcpRpcRequest(serverUrl, 3, 'tools/list')
+
+      const allTools = parseMcpToolsFromPayload(toolsResponse)
+      const requestedNames = new Set((toolNames || []).map((n) => n.toLowerCase()))
+      const selectedTools =
+        requestedNames.size === 0
+          ? allTools
+          : allTools.filter((tool) => requestedNames.has(tool.name.toLowerCase()))
+
+      const taskyonTools = selectedTools.map((tool) =>
+        mapImportedMcpToolToTaskyonTool(tool, serverName || serverUrl),
+      )
+
+      return makeTaskResult([
+        [
+          ...taskyonTools.map((toolDefinition) => ({
+            role: 'assistant' as const,
+            content: { type: 'tooldefinition' as const, data: toolDefinition },
+          })),
+          {
+            role: 'assistant',
+            content: {
+              type: 'structured',
+              data: {
+                serverUrl,
+                totalToolsOnServer: allTools.length,
+                importedToolsCount: taskyonTools.length,
+                importedToolNames: taskyonTools.map((t) => t.name),
+                requestedToolNames: toolNames || [],
+              },
+            },
+          },
+        ],
+      ])
+    },
+  })

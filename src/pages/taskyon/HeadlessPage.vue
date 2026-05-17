@@ -43,6 +43,7 @@ const started = ref(false)
 const runDiagnostics = computed(() => route.query.runDiagnostics === '1')
 const diagnosticsDetailed = computed(() => route.query.details === '1')
 const diagnosticsNoGui = computed(() => route.query.nogui !== '0')
+const diagnosticsIncludeLargeTokens = computed(() => route.query.largeTokens === '1')
 
 const chatTopic = computed(() => {
   const topic = route.query.topic
@@ -121,12 +122,18 @@ function getDiagnosticsTests() {
     builtins,
   })
 
-  return diagnosticsNoGui.value
+  const selectedTests = diagnosticsNoGui.value
     ? registry.tests
     : {
         ...registry.tests,
         ...registry.guiTests,
       }
+
+  if (diagnosticsIncludeLargeTokens.value) return selectedTests
+
+  return Object.fromEntries(
+    Object.entries(selectedTests).filter(([, fn]) => !fn.requiresLargeTokens),
+  )
 }
 
 function normalizeTestFilter(value: string): string {

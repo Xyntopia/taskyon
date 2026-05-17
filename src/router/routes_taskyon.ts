@@ -134,6 +134,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'browser-access',
+        component: () => import('pages/taskyon/BrowserAccessPage.vue'),
+        meta: {
+          title: 'Browser Access',
+          description: 'Configure browser MCP, proxy fallback, and research web access.',
+        },
+      },
+      {
         path: 'docindex',
         component: () => import('pages/DocumentationIndex.vue'),
         meta: { title: 'Documentation', description: 'Taskyon Documentation' },
@@ -182,10 +190,17 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         props: true,
       },
       {
-        path: '/mcp-tool',
-        component: () => import('src/pages/taskyon/McpToolPage.vue'),
-        meta: { title: 'MCP Tool Page', description: 'Import MCP tools as Taskyon tools' },
+        path: '/mcp-tool-import',
+        component: () => import('src/pages/taskyon/McpToolImportPage.vue'),
+        meta: {
+          title: 'MCP Tool Import Page',
+          description: 'Import external MCP tools as Taskyon tools',
+        },
         props: true,
+      },
+      {
+        path: '/mcp-tool',
+        redirect: '/mcp-tool-import',
       },
       {
         path: '/fm/:pathMatch(.*)*',

@@ -90,6 +90,16 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
                         "
                       />
                     </q-card-section>
+                    <q-card-section v-if="providerHasOauth(api)">
+                      <q-btn
+                        flat
+                        no-caps
+                        icon="login"
+                        :label="'Login with OAuth for ' + api.name"
+                        :loading="oauthLoadingByProvider[api.name] === true"
+                        @click="loginProviderWithOauth(api.name, close)"
+                      />
+                    </q-card-section>
                     <q-card-actions align="evenly">
                       <q-btn flat label="Cancel" />
                       <q-btn flat label="OK" @click="addNewPw(api.name, currentNewPassword)" />
@@ -193,11 +203,44 @@ insert into the settings below."
         </div>
       </q-expansion-item>
     </q-expansion-item>
+    <q-expansion-item v-if="oauthProviders.length > 0">
+      <template #header>
+        <q-item-section class="text-bold"> Connect providers with OAuth </q-item-section>
+      </template>
+      <div class="row justify-around q-gutter-sm">
+        <q-card v-for="api in oauthProviders" :key="api.name" flat bordered class="col-grow">
+          <q-card-section class="text-weight-medium">
+            {{ api.name }}
+          </q-card-section>
+          <q-card-section class="q-pt-none">
+            Sign in using the provider's OAuth flow. Taskyon will store the resulting token and
+            activate this provider like any other configured LLM API.
+          </q-card-section>
+          <q-card-actions align="left">
+            <q-btn
+              flat
+              no-caps
+              :icon="providerOauthIcon()"
+              :label="'Login with ' + api.name"
+              :loading="oauthLoadingByProvider[api.name] === true"
+              @click="loginProviderWithOauth(api.name, undefined, true)"
+            />
+            <q-btn
+              v-if="providerIsAvailable(api.name)"
+              flat
+              no-caps
+              :label="'Use ' + api.name"
+              @click="activateProvider(api.name)"
+            />
+          </q-card-actions>
+        </q-card>
+      </div>
+    </q-expansion-item>
   </div>
 </template>
 
 <script setup lang="ts">
-import { matEdit } from '@quasar/extras/material-icons'
+import { matEdit, matKey } from '@quasar/extras/material-icons'
 import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
 import TyMarkdown from '@taskyon/shared/components/tyMarkdown.vue'
 import JsonInput from '@taskyon/shared/components/varViews/JsonInput.vue'
@@ -206,9 +249,19 @@ import { useAppStateStore } from 'src/stores/appState'
 import { AiProvideKeyStoreName, useTaskyonStore } from 'src/stores/taskyonState'
 // TODO: separate user from supabase and only update the "user" from supabase...
 //       this way we can make this component independent from supabase.
-import type { KeyString } from '@taskyon/taskyon'
+import {
+  getProviderOauthConfig,
+  hasProviderOauthConfig,
+  resolveProviderAccessToken,
+} from '@taskyon/taskyon'
+import type { KeyString, apiConfig } from '@taskyon/taskyon'
+import {
+  createPersistentOauthTokenGetter,
+  loginWithProviderOauth,
+  OAUTH_CREDENTIALS_SECRET_PREFIX,
+} from '@taskyon/taskyon/browser'
 import { useQuasar } from 'quasar'
-import { ref, useTemplateRef } from 'vue'
+import { computed, ref, useTemplateRef } from 'vue'
 import DialogButton from '@taskyon/shared/components/DialogButton.vue'
 import SecretInput from '@taskyon/shared/components/varViews/SecretInput.vue'
 import ApiSelect from './ApiSelect.vue'
@@ -227,9 +280,48 @@ async function initFreeMode() {
 }
 
 const currentNewPassword = ref<string>()
+const oauthLoadingByProvider = ref<Record<string, boolean>>({})
+const oauthProviders = computed(() =>
+  Object.values(state.llmSettings.llmApis).filter((api) => !!getProviderOauthConfig(api)),
+)
+
+const providerHasOauth = (api: apiConfig) => hasProviderOauthConfig(api)
+const providerIsAvailable = (providerName: string) =>
+  tystate.availableProviders.includes(providerName)
+const activateProvider = (providerName: string) => state.setLLMSettings('selectedApi', providerName)
+const providerOauthIcon = () => matKey
+
 const addNewPw = async (name: string, newPw: string | undefined) => {
   await tystate.setProviderApiKey(name, newPw as KeyString)
   await passwords.value?.reloadSecrets()
   currentNewPassword.value = ''
+}
+
+const loginProviderWithOauth = async (
+  providerName: string,
+  close?: () => void,
+  selectProvider = false,
+) => {
+  oauthLoadingByProvider.value[providerName] = true
+  try {
+    const provider = state.llmSettings.llmApis[providerName]
+    if (!provider) throw new Error(`Unknown provider: ${providerName}`)
+    const ty = await tystate.taskyon
+    const getToken = createPersistentOauthTokenGetter({
+      getSecret: async (name) => await ty.getSecret(OAUTH_CREDENTIALS_SECRET_PREFIX, name, false),
+      setSecret: async (name, data) =>
+        await ty.setSecret(OAUTH_CREDENTIALS_SECRET_PREFIX, name, data as KeyString),
+    })
+    const creds = await loginWithProviderOauth(providerName, provider, getToken)
+    const providerAccessToken = await resolveProviderAccessToken(creds, provider)
+    await tystate.setProviderApiKey(providerName, providerAccessToken as KeyString)
+    if (selectProvider) activateProvider(providerName)
+    await passwords.value?.reloadSecrets()
+    close?.()
+  } catch (error) {
+    console.error('OAuth login failed:', providerName, error)
+  } finally {
+    oauthLoadingByProvider.value[providerName] = false
+  }
 }
 </script>

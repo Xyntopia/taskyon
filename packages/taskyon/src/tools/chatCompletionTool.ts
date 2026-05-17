@@ -245,6 +245,20 @@ const cleanupRawStreamOutput = (rawOutput: string): string => {
   return cleaned
 }
 
+const collectSystemInstructions = (messages: ModelMessage[]): string | undefined => {
+  const instructions = messages
+    .filter((message): message is SystemModelMessage => message.role === 'system')
+    .map((message) => message.content.trim())
+    .filter((content) => content.length > 0)
+    .join('\n\n')
+    .trim()
+
+  return instructions.length > 0 ? instructions : undefined
+}
+
+const hasNonSystemMessages = (messages: ModelMessage[]): boolean =>
+  messages.some((message) => message.role !== 'system')
+
 const serializeRawChunkValue = (value: unknown): string => {
   if (typeof value === 'string') return value
   if (value === undefined) return ''
@@ -316,10 +330,19 @@ async function llmRequest(
   const overrideOpts: Record<string, unknown> = {}
   switch (api.name) {
     case 'openai':
+    case 'chatgpt-codex':
       {
         const { createOpenAI } = await import('@ai-sdk/openai')
         const openai = createOpenAI({
           apiKey,
+          ...(api.defaultHeaders ? { headers: api.defaultHeaders } : {}),
+          ...(api.name === 'chatgpt-codex'
+            ? {
+                // Use Codex base URL with OpenAI provider so GPT-5 style calls use
+                // the responses API pathing, instead of OpenAI-compatible chat/completions.
+                baseURL: api.baseURL,
+              }
+            : {}),
         })
         model = openai(selectedModel)
 
@@ -332,6 +355,15 @@ async function llmRequest(
           openai: {
             reasoningEffort: gptReasoning,
             reasoningSummary: 'auto', // 'auto' for condensed or 'detailed' for comprehensive
+            ...(api.name === 'chatgpt-codex'
+              ? {
+                  instructions: collectSystemInstructions(openAIConversationThread),
+                  ...(hasNonSystemMessages(openAIConversationThread)
+                    ? { systemMessageMode: 'remove' as const }
+                    : {}),
+                  store: false,
+                }
+              : {}),
           },
         }
         if (webSearch?.maxResults) {

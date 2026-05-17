@@ -21,8 +21,8 @@ export {
 
 export { createTool, makeTaskResult, partialTaskDraft, toolCall }
 export type { Port }
-export * from '../mcp/bridge'
-export * from '../mcp/taskyonBridge'
+export * from '../mcp/mcpProtocolBridge'
+export * from '../mcp/taskyonToMcpBridge'
 export * from '../mcp/types'
 
 export type ObserveSubTaskStreamDetailedResult =

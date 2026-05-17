@@ -38,6 +38,26 @@ export const iconRegistry: iconMap = {
       max_results: mdiFormatListNumbered,
     },
   },
+  importBrowserMcpTools: {
+    serverUrl: mdiSearchWeb,
+    toolNames: mdiTools,
+  },
+  ensureBrowserMcpTools: {
+    serverUrl: mdiSearchWeb,
+    toolNames: mdiTools,
+    startupInstructions: mdiTools,
+  },
+  webResearchPlanner: {
+    searchQueries: mdiSearchWeb,
+    browserTools: mdiTools,
+    supportTools: mdiTools,
+    maxSourcesPerQuery: mdiFormatListNumbered,
+    webSearchMaxResults: mdiFormatListNumbered,
+  },
+  proxyWebReader: {
+    providerPreset: mdiTools,
+    serviceUrl: mdiSearchWeb,
+  },
 }
 
 export const settingsIcons: iconMap = {

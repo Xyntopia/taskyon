@@ -1,9 +1,21 @@
+export type DiagnosticsTestContext = {
+  tyauth?: string
+  allowLongRun?: boolean
+  isCypress?: boolean
+  selectedApi?: string
+  model?: string
+  providerKey?: string
+  providerAccessToken?: string
+  accountId?: string
+}
+
 export interface TaskyonTestFn {
-  (opts?: { tyauth?: string; isCypress?: boolean }): unknown
-  setup?: (opts?: { tyauth?: string; isCypress?: boolean }) => unknown
+  (opts?: DiagnosticsTestContext): unknown
+  setup?: (opts?: DiagnosticsTestContext) => unknown
   description?: string
   gui?: boolean
   experimental?: boolean
+  requiresLargeTokens?: boolean
   helper?: boolean
   timeoutMs?: number
 }
@@ -115,6 +127,7 @@ export async function runDiagnosticsTests(
     tyauth?: string
     timeoutMs?: number
     isCypress?: boolean
+    context?: DiagnosticsTestContext
     onProgress?: (progress: {
       phase: 'start' | 'finish'
       test: string
@@ -154,12 +167,14 @@ export async function runDiagnosticsTests(
     }
     opts?.onProgress?.({ phase: 'start', test: name })
     try {
-      let testOpts: { tyauth?: string; isCypress?: boolean } | undefined
-      if (opts?.tyauth !== undefined || opts?.isCypress !== undefined) {
-        testOpts = {}
-        if (opts?.tyauth !== undefined) testOpts.tyauth = opts.tyauth
-        if (opts?.isCypress !== undefined) testOpts.isCypress = opts.isCypress
-      }
+      const fallbackContext =
+        opts?.tyauth !== undefined || opts?.isCypress !== undefined
+          ? {
+              ...(opts?.tyauth !== undefined ? { tyauth: opts.tyauth } : {}),
+              ...(opts?.isCypress !== undefined ? { isCypress: opts.isCypress } : {}),
+            }
+          : undefined
+      const testOpts: DiagnosticsTestContext | undefined = opts?.context ?? fallbackContext
       if (typeof testFn.setup === 'function') {
         await Promise.resolve(testFn.setup(testOpts))
       }

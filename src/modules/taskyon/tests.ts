@@ -42,6 +42,7 @@ import z from 'zod'
 import { useGdrive } from '../gdrive'
 import { getCurrentActiveProfileName, getStoredStateString } from '../ui/initialState'
 import { initCryptoSessionFromBrowser } from './browserCryptoSession'
+import { extractBrowserAccessActivity } from './browserAccess'
 import { runLibp2pBrowserMessageExchangeTest } from './libp2pBrowserDiagnostics'
 import { gDriveSyncPort } from './sync'
 
@@ -2285,3 +2286,52 @@ export async function getTestMetaData() {
 }
 
 getTestMetaData.timeoutMs = 60_000
+
+export const testBrowserAccessActivityExtraction = async () => {
+  const proxyTask = await createTaskNode({
+    role: 'function',
+    content: {
+      type: 'functioncall',
+      data: {
+        name: 'proxyWebReader',
+        arguments: {
+          url: 'https://example.com/spec.pdf',
+        },
+      },
+    },
+  })
+
+  const proxyActivity = extractBrowserAccessActivity(proxyTask)
+  assert(proxyActivity?.kind === 'proxy', 'Expected proxy tool calls to map to proxy activity')
+  assert(
+    proxyActivity?.url === 'https://example.com/spec.pdf',
+    'Expected proxy activity extraction to preserve the target URL',
+  )
+
+  const webSearchTask = await createTaskNode({
+    role: 'function',
+    content: {
+      type: 'functioncall',
+      data: {
+        name: 'chatCompletion',
+        arguments: {
+          websearch: {
+            enabled: true,
+            max_results: 5,
+          },
+        },
+      },
+    },
+  })
+
+  const webSearchActivity = extractBrowserAccessActivity(webSearchTask)
+  assert(
+    webSearchActivity?.kind === 'websearch',
+    'Expected chatCompletion websearch calls to map to websearch activity',
+  )
+
+  return { success: true }
+}
+
+testBrowserAccessActivityExtraction.description =
+  'Maps browser-access related task executions into page activity records for proxy and chatCompletion web-search flows.'
