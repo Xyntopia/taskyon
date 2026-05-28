@@ -161,9 +161,19 @@ export async function generatePKCE() {
   return { challenge, verifier }
 }
 export class OAuthError extends Error {
+  code:
+    | 'POPUP_BLOCKED'
+    | 'USER_CANCELLED'
+    | 'TIMEOUT'
+    | 'NETWORK_ERROR'
+    | 'INVALID_RESPONSE'
+    | 'POPUP_CLOSED'
+    | 'ABORTED'
+    | 'REFRESH_FAILED'
+
   constructor(
     message: string,
-    public code:
+    code:
       | 'POPUP_BLOCKED'
       | 'USER_CANCELLED'
       | 'TIMEOUT'
@@ -175,5 +185,6 @@ export class OAuthError extends Error {
   ) {
     super(message)
     this.name = 'OAuthError'
+    this.code = code
   }
 }

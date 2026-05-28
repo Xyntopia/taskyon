@@ -2,7 +2,11 @@
 import * as vscode from 'vscode'
 import * as path from 'path'
 import * as fs from 'fs'
-import { applyFileUpdateToContent, normalizeFileUpdate, type FileUpdate } from './patching'
+import {
+  applyFileUpdateToContent,
+  normalizeFileUpdate,
+  type FileUpdate,
+} from '@taskyon/taskyon/tools/filePatching'
 
 const DEFAULT_URL = 'http://localhost:9000'
 const THEME_QUERY_KEY = 'vscodeTheme'

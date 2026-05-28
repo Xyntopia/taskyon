@@ -298,6 +298,7 @@ import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '
 import { watchThrottled } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'
+import { applyLinePatches } from '@taskyon/taskyon/tools/filePatching'
 import { copyToClipboard } from '../../../packages/shared/modules/utils'
 import CodeEditor from '@taskyon/shared/components/CodeEditor.vue'
 import FileDropzone from '@taskyon/shared/components/FileDropzone.vue'
@@ -329,13 +330,6 @@ interface ProjectVersion {
   files: FilesMap
   timestamp: Date
   description?: string
-}
-
-interface LinePatchOperation {
-  type: 'replace' | 'insert' | 'delete'
-  lineStart: number
-  lineEnd?: number
-  text?: string
 }
 
 // --- State ---
@@ -708,7 +702,8 @@ If you do not want to make any changes to the document, don't call \`updateDocum
           if (originalContent === undefined) {
             if (hasNewContent && newContent !== '') {
               let createdContent = newContent
-              if (hasPatches) createdContent = applyLinePatches(createdContent, patches || [])
+              if (hasPatches)
+                createdContent = applyLinePatches(createdContent, patches || [], { validate: true })
               currentFilesSnapshot[filePath] = createdContent
               changesLog.push(`Created file ${filePath}`)
             } else if (hasNewContent && newContent === '') {
@@ -732,7 +727,7 @@ If you do not want to make any changes to the document, don't call \`updateDocum
           }
 
           if (hasPatches) {
-            updatedContent = applyLinePatches(updatedContent, patches || [])
+            updatedContent = applyLinePatches(updatedContent, patches || [], { validate: true })
             changesLog.push(`Patched ${filePath} (${patches!.length} ops)`)
           }
 
@@ -878,75 +873,6 @@ function formatContentWithLineNumbers(content: string, maxLines?: number): strin
       .join('\n') +
     (maxLines && totalLines > maxLines ? `\n... (${totalLines - maxLines} more)` : '')
   )
-}
-
-function applyLinePatches(text: string, patches: LinePatchOperation[]): string {
-  const lines = text.split('\n')
-  // Sort patches reverse to avoid index shifts
-  const sortedPatches = [...patches].sort((a, b) => b.lineStart - a.lineStart)
-
-  // Validate first so we never partially apply a patch set and then throw.
-  let firstLine = Infinity
-  for (const patch of sortedPatches) {
-    const lineStart = patch.lineStart
-    if (!Number.isInteger(lineStart) || lineStart < 1) {
-      throw new Error(`Invalid patch lineStart: ${String(lineStart)}`)
-    }
-
-    const endLine = patch.type === 'insert' ? lineStart : (patch.lineEnd ?? lineStart)
-    if (!Number.isInteger(endLine) || endLine < lineStart) {
-      throw new Error(`Invalid patch lineEnd for range ${lineStart} to ${String(patch.lineEnd)}`)
-    }
-
-    // With patches sorted by descending lineStart, any patch whose end reaches into the
-    // previously-seen (lower) lineStart is overlapping.
-    if (endLine >= firstLine) {
-      throw new Error('Overlapping or unsorted patches detected')
-    }
-
-    if (patch.type === 'insert') {
-      if (lineStart > lines.length + 1) {
-        throw new Error(`Insert lineStart out of range: ${lineStart}`)
-      }
-      if (patch.text === undefined || patch.text === null) {
-        throw new Error('Insert patch requires text')
-      }
-    } else {
-      if (lineStart > lines.length || endLine > lines.length) {
-        throw new Error(
-          `Patch range out of range: ${lineStart} to ${endLine} for ${lines.length} lines`,
-        )
-      }
-      if (patch.type === 'replace' && (patch.text === undefined || patch.text === null)) {
-        throw new Error('Replace patch requires text')
-      }
-    }
-
-    firstLine = lineStart
-  }
-
-  const nextLines = [...lines]
-  for (const patch of sortedPatches) {
-    const startIdx = patch.lineStart - 1
-
-    if (patch.type === 'insert') {
-      const newLines = (patch.text ?? '').split('\n')
-      nextLines.splice(startIdx, 0, ...newLines)
-      continue
-    }
-
-    const endLine = patch.lineEnd ?? patch.lineStart
-    const deleteCount = endLine - patch.lineStart + 1
-
-    if (patch.type === 'delete') {
-      nextLines.splice(startIdx, deleteCount)
-    } else if (patch.type === 'replace') {
-      const newLines = (patch.text ?? '').split('\n')
-      nextLines.splice(startIdx, deleteCount, ...newLines)
-    }
-  }
-
-  return nextLines.join('\n')
 }
 
 // --- Actions (UI) ---

@@ -69,4 +69,6 @@ const pythonWorker = {
 
 export type pythonWorker = typeof pythonWorker
 
-expose(pythonWorker)
+if (typeof self !== 'undefined' && typeof (self as { addEventListener?: unknown }).addEventListener === 'function') {
+  expose(pythonWorker)
+}

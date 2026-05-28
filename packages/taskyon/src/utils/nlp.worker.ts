@@ -100,4 +100,6 @@ const nlpWorker = {
 
 export type NlpWorkerInterface = typeof nlpWorker
 
-expose(nlpWorker)
+if (typeof self !== 'undefined' && typeof (self as { addEventListener?: unknown }).addEventListener === 'function') {
+  expose(nlpWorker)
+}

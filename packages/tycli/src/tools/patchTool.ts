@@ -1,13 +1,13 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
-import { createTool } from '../../../taskyon/src/types/toolApi.ts'
+import { createTool } from '@taskyon/taskyon/api'
 import {
   applyFileUpdateToContent,
   getFileUpdateMode,
   normalizeFileUpdate,
   type FileUpdate,
-} from '../../../taskyon-vscode/src/patching.ts'
+} from '@taskyon/taskyon/tools/filePatching'
 
 type UpdateFilesArgs = {
   updates: FileUpdate[]

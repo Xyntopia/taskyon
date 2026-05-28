@@ -39,7 +39,10 @@
     "tauri:dev:diagnostics:devserver:https:all-logs": "tauri dev -c src-tauri/tauri.diagnostics.devserver.https.conf.json --no-watch --no-dev-server-wait -- -- --headless --run-diagnostics --all-logs",
     "tauri:build": "tauri build",
     "tycli:build": "yarn workspace @taskyon/tycli build",
-    "tycli": "yarn tycli:build && node packages/tycli/dist/cli.cjs"
+    "tycli:lint": "yarn workspace @taskyon/tycli lint",
+    "tycli:typecheck": "yarn workspace @taskyon/tycli typecheck",
+    "tycli:prod": "yarn tycli:build && node packages/tycli/dist/cli.cjs",
+    "tycli": "yarn workspace @taskyon/tycli dev"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.13",

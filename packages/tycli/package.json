@@ -6,8 +6,14 @@
   "description": "Node-based Taskyon chat CLI with /keys and /model commands",
   "bin": "./bin/tycli.cjs",
   "scripts": {
+    "dev": "yarn node --import ./src/register.ts --experimental-strip-types ./src/cli.ts",
     "build": "tsup && chmod +x ./dist/cli.cjs",
-    "run": "yarn build && node ./dist/cli.cjs",
-    "start": "yarn build && node ./dist/cli.cjs"
+    "lint": "eslint -c ../../eslint.config.js './src/**/*.{ts,js,mjs,cjs}'",
+    "typecheck": "bash -lc 'set -o pipefail; out=$(tsc -p ./tsconfig.lint.json --noEmit 2>&1 || true); cli=$(printf \"%s\\n\" \"$out\" | grep -E \"^src/cli(\\.ts|/)\" || true); if [ -n \"$cli\" ]; then printf \"%s\\n\" \"$cli\"; exit 2; fi'",
+    "test:e2e": "yarn node --import ./src/register.ts --experimental-strip-types ./src/tests/runCliDiagnostics.ts",
+    "test:e2e:all": "TYCLI_E2E_INCLUDE_EXPERIMENTAL=1 yarn node --import ./src/register.ts --experimental-strip-types ./src/tests/runCliDiagnostics.ts",
+    "test": "yarn test:e2e",
+    "run": "yarn node --import ./src/register.ts --experimental-strip-types ./src/cli.ts",
+    "start": "node ./dist/cli.cjs"
   }
 }

@@ -3,89 +3,70 @@ import './node-shims.ts'
 import { createInterface } from 'node:readline/promises'
 import { emitKeypressEvents } from 'node:readline'
 import { spawn } from 'node:child_process'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-import { homedir } from 'node:os'
+import { mkdir, readdir, readFile, stat } from 'node:fs/promises'
+import { join, relative, resolve } from 'node:path'
 import process from 'node:process'
-import { createDuplexChannel } from '../../shared/modules/frpBus.ts'
-import { createTaskNode } from '../../taskyon/src/core/createTasks.ts'
-import { tyCore } from '../../taskyon/src/core/init.ts'
-import type { Taskyon } from '../../taskyon/src/core/init.ts'
-import { isTaskyonKey } from '../../taskyon/src/core/tyCrypto.ts'
-import { TOKEN_SERVICE_BASE_URL } from '../../taskyon/src/taskyon.space/tokenservice.types.ts'
-import type { TaskyonMessage } from '../../taskyon/src/types/apiTypes.ts'
-import type { RemoteFunctionCall } from '../../taskyon/src/types/messages.ts'
-import type { llmSettings } from '../../taskyon/src/types/profiles.ts'
-import type {
-  partialTaskDraft,
-  TaskContentType,
-  TaskNode,
-} from '../../taskyon/src/types/taskNode.ts'
-import { createTool, makeTaskResult, toolCall } from '../../taskyon/src/types/toolApi.ts'
-import { createCryptoSession } from '../../taskyon/src/utils/cryptoSession.ts'
-import { serializeObject } from '../../shared/modules/serializeObject.ts'
-import { formatExplorationContext, createExplorationTool } from './tools/explorationTool.ts'
-import { updateFilesTool } from './tools/patchTool.ts'
-
-type StoredConfig = {
-  deviceKeyPairJwk?: {
-    privateJwk: JsonWebKey
-    publicJwk: JsonWebKey
-  }
-  selectedApi?: string
-  taskyonModel?: string
-  wrappedSessionKey?: string
-}
-
-type CliApiConfig = {
-  key?: string
-  model?: string
-  selectedApi: string
-}
-
-type BashToolArgs = {
-  command?: string
-  cwd?: string
-  timeoutMs?: number
-}
-
-type SlashParsed = {
-  name: string
-  args: string
-}
-
-type ChatCompletionTaskArgs = {
-  allowedTools: string[]
-  goal?: 'SimpleCompletion' | 'ChooseTool'
-  prompts?: string[]
-}
-
-type LlmModel = {
-  id: string
-  architecture?: { modality?: string }
-  pricing?: { prompt?: string; completion?: string }
-}
-
-const PREFERRED_CONFIG_DIR = join(homedir(), '.config', 'tycli')
-const FALLBACK_CONFIG_DIR = join('/tmp', 'tycli')
-const API_KEY_STORE_NAME = 'AiProviderKey'
-const SUPPORTED_PROVIDERS = ['openai', 'openrouter.ai', 'taskyon', 'local'] as const
-let cachedConfigFile: string | null = null
-const DEFAULT_PROMPT_TEMPLATES = {
-  basePrompt:
-    'You are a helpful assistant called Taskyon. Return concise and correct Markdown answers.',
-  instruction:
-    'Complete the task accurately. If structured output is requested, follow the required format exactly.',
-  toolResult: 'Evaluate the following tool result and respond in {format}:\\n\\n{message}',
-  task: 'Complete this task:\\n\\n{message}',
-  evaluate: 'Evaluate this message and respond in {format}:\\n\\n{message}',
-  schemaReminder:
-    'Output must strictly match {format} and this schema:\\n\\n{schema}\\n\\nDo not add extra text.',
-  tools: 'Available tools:\\n\\n${tools}',
-}
+import { createDuplexChannel } from '@taskyon/shared/modules/frpBus.ts'
+import { createTaskNode } from '@taskyon/taskyon/core/createTasks.ts'
+import { tyCore } from '@taskyon/taskyon/core/init.ts'
+import type { Taskyon } from '@taskyon/taskyon/core/init.ts'
+import type { TaskyonMessage } from '@taskyon/taskyon/types/apiTypes.ts'
+import type { llmSettings } from '@taskyon/taskyon/types/profiles.ts'
+import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon/types/taskNode.ts'
+import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon/api'
+import type { RemoteFunctionCall } from '@taskyon/taskyon/types/messages.ts'
+import {
+  API_KEY_STORE_NAME,
+  MAX_MODEL_OPTIONS,
+  SLASH_COMMANDS,
+  SUPPORTED_PROVIDERS,
+  type BashToolArgs,
+  type ChatCompletionTaskArgs,
+  type CliApiConfig,
+  type LlmModel,
+  type SlashParsed,
+} from './cli/types.ts'
+import {
+  initPersistentCryptoSession,
+  persistConfigPatch,
+  resolveConfigDirectoryPath,
+  resolveKeyForProvider,
+  resolveProviderSelection,
+  setSelectedApi,
+} from './cli/config.ts'
+import {
+  DEFAULT_PROMPT_TEMPLATES,
+  baseApiDefinitions,
+  canReachLocalApi,
+  createCliLlmSettings,
+  fetchProviderModels,
+  getAllowedTaskyonModels,
+  modelOptionsForProvider,
+} from './cli/models.ts'
+import { renderTaskProgress, renderWorkerProgress, type WorkerEvent } from './cli/taskRenderer.ts'
+import { createConversationPersistence } from './cli/conversationPersistence.ts'
 const ENTRY_NODE_TOOL_NAME = 'entryNode'
-const ENABLE_DEBUG_LOGS = process.env.TYCLI_DEBUG === '1'
-const MAX_MODEL_OPTIONS = 10
+let debugLogsEnabled = process.env.TYCLI_DEBUG === '1'
+const EXPLORATION_TOOL_NAME = 'exploration'
+const UPDATE_FILES_TOOL_NAME = 'updateFiles'
+const FILE_PICKER_MAX_DEPTH = 3
+const FILE_PICKER_MAX_ENTRIES = 5000
+const FILE_PICKER_MAX_OPTIONS = 30
+const FILE_PICKER_EXCLUDED_DIRS = new Set([
+  '.git',
+  'node_modules',
+  'dist',
+  'build',
+  '.next',
+  '.turbo',
+  '.yarn',
+  '.pnpm-store',
+  '.quasar',
+  '.direnv',
+  '.corepack',
+  'target',
+])
+const fileIndexCache = new Map<string, string[]>()
 
 function writeLine(text: string) {
   process.stdout.write(`${text}\n`)
@@ -96,21 +77,8 @@ function writeError(text: string) {
 }
 
 function writeDebug(text: string) {
-  if (!ENABLE_DEBUG_LOGS) return
+  if (!debugLogsEnabled) return
   process.stderr.write(`[debug] ${text}\n`)
-}
-
-function writeDebugYaml(label: string, value: unknown) {
-  if (!ENABLE_DEBUG_LOGS) return
-  const dumped = serializeObject(value, {
-    format: 'yaml',
-    maxDepth: 5,
-    maxArrayLength: 12,
-    maxObjectKeys: 30,
-    maxStringLength: 300,
-    includeTruncationMeta: true,
-  }).trim()
-  process.stderr.write(`[debug] ${label}\n${dumped}\n`)
 }
 
 process.title = 'tycli'
@@ -119,6 +87,49 @@ function maskKey(key: string | undefined): string {
   if (!key) return 'missing'
   if (key.length <= 6) return '******'
   return `***${key.slice(-4)}`
+}
+
+type CliStartupMeta = {
+  version: string
+  commit: string
+  buildDate: string
+}
+
+async function runGit(args: string[]): Promise<string | null> {
+  return await new Promise((resolve) => {
+    const child = spawn('git', args, { stdio: ['ignore', 'pipe', 'ignore'] })
+    const chunks: Buffer[] = []
+    child.stdout.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
+    child.on('error', () => resolve(null))
+    child.on('close', (code) => {
+      if (code !== 0) return resolve(null)
+      const out = Buffer.concat(chunks).toString('utf8').trim()
+      resolve(out.length > 0 ? out : null)
+    })
+  })
+}
+
+async function loadStartupMeta(): Promise<CliStartupMeta> {
+  const envVersion = process.env.TYCLI_VERSION?.trim()
+  const envCommit = process.env.TYCLI_COMMIT?.trim()
+  const envBuildDate = process.env.TYCLI_BUILD_DATE?.trim()
+
+  let version = envVersion || 'unknown'
+  if (!envVersion) {
+    try {
+      const raw = await readFile(new URL('../package.json', import.meta.url), 'utf8')
+      const parsed = JSON.parse(raw) as { version?: string }
+      version = parsed.version?.trim() || version
+    } catch {
+      // Keep fallback value.
+    }
+  }
+
+  const commit = envCommit || (await runGit(['rev-parse', '--short', 'HEAD'])) || 'unknown'
+  const buildDate =
+    envBuildDate || (await runGit(['log', '-1', '--format=%cI'])) || new Date().toISOString()
+
+  return { version, commit, buildDate }
 }
 
 function parseSlashName(line: string): SlashParsed | null {
@@ -135,121 +146,6 @@ function parseSlashName(line: string): SlashParsed | null {
   if (!name) return null
   const args = stripped.slice(nameEnd).trimStart()
   return { name, args }
-}
-
-async function resolveConfigFilePath() {
-  if (cachedConfigFile) return cachedConfigFile
-  try {
-    await mkdir(PREFERRED_CONFIG_DIR, { recursive: true })
-    cachedConfigFile = join(PREFERRED_CONFIG_DIR, 'config.json')
-    return cachedConfigFile
-  } catch {
-    await mkdir(FALLBACK_CONFIG_DIR, { recursive: true })
-    cachedConfigFile = join(FALLBACK_CONFIG_DIR, 'config.json')
-    return cachedConfigFile
-  }
-}
-
-async function resolveConfigDirectoryPath() {
-  const configFile = await resolveConfigFilePath()
-  return dirname(configFile)
-}
-
-async function loadStoredConfig(): Promise<StoredConfig> {
-  try {
-    const configFile = await resolveConfigFilePath()
-    const raw = await readFile(configFile, 'utf8')
-    const parsed = JSON.parse(raw) as StoredConfig
-    return parsed ?? {}
-  } catch {
-    return {}
-  }
-}
-
-async function saveStoredConfig(next: StoredConfig) {
-  const configFile = await resolveConfigFilePath()
-  await mkdir(dirname(configFile), { recursive: true })
-  await writeFile(configFile, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
-}
-
-async function persistConfigPatch(patch: Partial<StoredConfig>) {
-  const current = await loadStoredConfig()
-  await saveStoredConfig({ ...current, ...patch })
-}
-
-async function importDeviceKeyPair(
-  jwk: NonNullable<StoredConfig['deviceKeyPairJwk']>,
-): Promise<CryptoKeyPair> {
-  const privateKey = await crypto.subtle.importKey(
-    'jwk',
-    jwk.privateJwk,
-    { name: 'X25519' },
-    true,
-    ['deriveKey', 'deriveBits'],
-  )
-  const publicKey = await crypto.subtle.importKey(
-    'jwk',
-    jwk.publicJwk,
-    { name: 'X25519' },
-    true,
-    [],
-  )
-  return { privateKey, publicKey }
-}
-
-async function exportDeviceKeyPair(keyPair: CryptoKeyPair) {
-  if (!keyPair.privateKey.extractable || !keyPair.publicKey.extractable) {
-    throw new Error('Device key pair is not extractable')
-  }
-  const privateJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey)
-  const publicJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey)
-  return { privateJwk, publicJwk }
-}
-
-async function createPersistableDeviceKeyPair(): Promise<CryptoKeyPair> {
-  return (await crypto.subtle.generateKey({ name: 'X25519' }, true, [
-    'deriveKey',
-    'deriveBits',
-  ])) as CryptoKeyPair
-}
-
-async function initPersistentCryptoSession() {
-  const stored = await loadStoredConfig()
-  const persistedDevice = stored.deviceKeyPairJwk
-    ? await importDeviceKeyPair(stored.deviceKeyPairJwk)
-    : await createPersistableDeviceKeyPair()
-
-  const cs = await createCryptoSession({
-    deviceKeyPair: persistedDevice,
-    wrappedSK: stored.wrappedSessionKey,
-  })
-
-  let exported: Awaited<ReturnType<typeof exportDeviceKeyPair>>
-  try {
-    exported = await exportDeviceKeyPair(cs.getDeviceKey())
-  } catch {
-    const freshPair = await createPersistableDeviceKeyPair()
-    const refreshed = await createCryptoSession({
-      deviceKeyPair: freshPair,
-      wrappedSK: stored.wrappedSessionKey,
-    })
-    exported = await exportDeviceKeyPair(refreshed.getDeviceKey())
-    const wrappedSessionKey = await refreshed.exportSessionKey()
-    await saveStoredConfig({
-      ...stored,
-      deviceKeyPairJwk: exported,
-      wrappedSessionKey,
-    })
-    return { cryptoSession: refreshed, stored }
-  }
-  const wrappedSessionKey = await cs.exportSessionKey()
-  await saveStoredConfig({
-    ...stored,
-    deviceKeyPairJwk: exported,
-    wrappedSessionKey,
-  })
-
-  return { cryptoSession: cs, stored }
 }
 
 const cliBashTool = createTool({
@@ -276,7 +172,7 @@ const cliBashTool = createTool({
     },
   } as const,
 })
-const ACTIVE_LLM_TOOLS = [cliBashTool.name, 'exploration', updateFilesTool.name] as const
+const ACTIVE_LLM_TOOLS = [cliBashTool.name, EXPLORATION_TOOL_NAME, UPDATE_FILES_TOOL_NAME] as const
 
 function buildCliEnvironmentContext(
   toolResultSection = '(none)',
@@ -313,159 +209,6 @@ function buildCliEnvironmentContext(
   ].join('\n')
 }
 
-function renderTaskProgressLine(task: TaskNode): string | null {
-  if (task.content.type === 'functioncall') {
-    const name = task.content.data.name
-    return `[tool call] ${name}`
-  }
-  if (task.content.type === 'toolresult') {
-    const toolName = task.content.data.name ?? 'tool'
-    return `[tool result] ${toolName}`
-  }
-  if (task.content.type === 'error') {
-    return `[error] ${String(task.content.data?.message ?? 'task error')}`
-  }
-  return null
-}
-
-function summarizeTask(task: TaskNode): string {
-  const role = task.role ?? 'unknown'
-  if (task.content.type === 'functioncall') {
-    return `[${role}|functioncall]\n${serializeObject(task.content.data, {
-      format: 'yaml',
-      maxDepth: 5,
-      maxArrayLength: 12,
-      maxObjectKeys: 30,
-      maxStringLength: 300,
-      includeTruncationMeta: true,
-    }).trim()}`
-  }
-  if (task.content.type === 'toolresult') {
-    return `[${role}|toolresult]\n${serializeObject(task.content.data, {
-      format: 'yaml',
-      maxDepth: 5,
-      maxArrayLength: 12,
-      maxObjectKeys: 30,
-      maxStringLength: 300,
-      includeTruncationMeta: true,
-    }).trim()}`
-  }
-  if (task.content.type === 'message') {
-    const txt = String(task.content.data ?? '')
-    return `[${role}|message] ${txt}`
-  }
-  if (task.content.type === 'error') {
-    return `[${role}|error]\n${serializeObject(task.content.data, {
-      format: 'yaml',
-      maxDepth: 5,
-      maxArrayLength: 12,
-      maxObjectKeys: 30,
-      maxStringLength: 300,
-      includeTruncationMeta: true,
-    }).trim()}`
-  }
-  return `[${role}|${task.content.type}]`
-}
-
-function summarizeWorkerEvent(event: {
-  stage: string
-  taskId?: string | null
-  task?: TaskNode | null
-  info?: string
-}): string {
-  const taskId = event.task?.id ?? event.taskId ?? 'n/a'
-  const toolName =
-    event.task?.content.type === 'functioncall' ? event.task.content.data.name : undefined
-  const info = event.info ? ` info=${event.info}` : ''
-  const tool = toolName ? ` tool=${toolName}` : ''
-  return `stage=${event.stage} task=${taskId}${tool}${info}`
-}
-
-const baseApiDefinitions: NonNullable<llmSettings['llmApis']> = {
-  taskyon: {
-    name: 'taskyon',
-    baseURL: 'https://share.taskyon.space',
-    defaultModel: 'google/gemini-2.5-flash-lite',
-    streamSupport: true,
-    defaultHeaders: {
-      apiKey: 'sb_publishable_WrQ1aIRvl9BrMtpMQ9TocQ_JN7I9kJm',
-    },
-    routes: {
-      chatCompletion: '/chatCompletion/api/v1/',
-      models: '/chatCompletion/api/v1/models',
-    },
-  },
-  openai: {
-    name: 'openai',
-    baseURL: 'https://api.openai.com',
-    defaultModel: 'gpt-5.1',
-    streamSupport: true,
-    routes: {
-      chatCompletion: '/v1/',
-      models: '/v1/models',
-    },
-  },
-  'openrouter.ai': {
-    name: 'openrouter.ai',
-    baseURL: 'https://openrouter.ai',
-    defaultModel: 'google/gemini-2.5-flash-lite',
-    streamSupport: true,
-    routes: {
-      chatCompletion: '/api/v1/',
-      models: '/api/v1/models',
-    },
-  },
-  local: {
-    name: 'local LLM server',
-    baseURL: 'http://localhost:8080',
-    defaultModel: 'qwen3-4b',
-    streamSupport: true,
-    routes: {
-      chatCompletion: '/v1/',
-      models: '/v1/models',
-    },
-  },
-}
-
-function resolveProviderSelection(stored: StoredConfig): string {
-  const explicitApi = process.env.TASKYON_SELECTED_API
-  if (explicitApi) return explicitApi
-  if (stored.selectedApi) return stored.selectedApi
-  if (process.env.OPENAI_API_KEY) return 'openai'
-  if (process.env.OPENROUTER_API_KEY) return 'openrouter.ai'
-  if (process.env.TASKYON_API_KEY) return 'taskyon'
-  return 'local'
-}
-
-function resolveKeyForProvider(provider: string): string | undefined {
-  if (provider === 'openai') return process.env.TASKYON_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY
-  if (provider === 'openrouter.ai') {
-    return process.env.TASKYON_OPENROUTER_API_KEY ?? process.env.OPENROUTER_API_KEY
-  }
-  if (provider === 'taskyon') return process.env.TASKYON_API_KEY
-  if (provider === 'local') return process.env.TASKYON_LOCAL_API_KEY ?? 'local'
-  return undefined
-}
-
-function createCliLlmSettings(config: CliApiConfig): llmSettings {
-  const selectedApiConfig = baseApiDefinitions[config.selectedApi]
-  return {
-    selectedApi: config.selectedApi,
-    llmApis: {
-      ...baseApiDefinitions,
-      [config.selectedApi]: {
-        ...selectedApiConfig,
-        ...(config.model ? { selectedModel: config.model } : {}),
-      },
-    },
-    siteUrl: 'https://tycli.local',
-    summaryModel: 'Xenova/distilbart-cnn-6-6',
-    vectorizationModel: undefined,
-    maxAutonomousTasks: 5,
-    enableToolChooser: true,
-  }
-}
-
 function levenshteinDistance(a: string, b: string): number {
   const m = a.length
   const n = b.length
@@ -483,17 +226,19 @@ function levenshteinDistance(a: string, b: string): number {
   return dp[m]![n]!
 }
 
-function fuzzyFilterModelOptions(
+function fuzzyFilterOptions<T>(
   query: string,
-  options: { label: string; value: string }[],
-): { label: string; value: string }[] {
+  options: T[],
+  getValue: (option: T) => string,
+  maxResults: number = MAX_MODEL_OPTIONS,
+): T[] {
   const keyword = query.toLowerCase().trim()
-  if (!keyword) return options.slice(0, MAX_MODEL_OPTIONS)
+  if (!keyword) return options.slice(0, maxResults)
   const threshold = 0.7 * 1.1
   const maxLen = (x: string, y: string) => (x.length > y.length ? x.length : y.length)
   return options
     .map((option) => {
-      const optionValue = option.value.toLowerCase()
+      const optionValue = getValue(option).toLowerCase()
       const distance = levenshteinDistance(keyword, optionValue)
       const matches = maxLen(keyword, optionValue) - distance
       const score =
@@ -503,90 +248,15 @@ function fuzzyFilterModelOptions(
     })
     .filter((option) => option.score > threshold)
     .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_MODEL_OPTIONS)
-    .map(({ label, value }) => ({ label, value }))
+    .slice(0, maxResults)
+    .map((option) => option as T)
 }
 
-function joinUrl(base: string, path: string): string {
-  if (/^https?:\/\//.test(path)) return path
-  const left = base.replace(/\/+$/, '')
-  const right = path.replace(/^\/+/, '')
-  return `${left}/${right}`
-}
-
-async function fetchProviderModels(
-  provider: string,
-  api: NonNullable<llmSettings['llmApis']>[string],
-  key: string,
-): Promise<Record<string, LlmModel>> {
-  let modelsUrl = joinUrl(api.baseURL, api.routes.models)
-  if (provider === 'openrouter.ai') modelsUrl = `${TOKEN_SERVICE_BASE_URL}/api/models_openrouter`
-  if (provider === 'taskyon') modelsUrl = `${TOKEN_SERVICE_BASE_URL}/api/models`
-  const response = await fetch(modelsUrl, {
-    method: 'GET',
-    headers: {
-      ...(api.defaultHeaders ?? {}),
-      Authorization: `Bearer ${key}`,
-      'Cache-Control': 'no-cache',
-    },
-  })
-  if (!response.ok) throw new Error(`Failed to fetch models (${response.status}) from ${modelsUrl}`)
-  const raw = (await response.json()) as { data?: LlmModel[] } | LlmModel[]
-  const list = Array.isArray(raw) ? raw : (raw.data ?? [])
-  return list.reduce<Record<string, LlmModel>>((acc, m) => {
-    if (m?.id) acc[m.id] = m
-    return acc
-  }, {})
-}
-
-function getAllowedTaskyonModels(key: string | undefined): string[] | undefined {
-  const parsed = isTaskyonKey(key, false)
-  if (!parsed || !parsed.model || parsed.model.length <= 0 || parsed.model.includes('*'))
-    return undefined
-  return parsed.model
-}
-
-function modelOptionsForProvider(
-  provider: string,
-  modelMap: Record<string, LlmModel>,
-  allowedModels?: string[],
-  onlyVision = false,
+function fuzzyFilterModelOptions(
+  query: string,
+  options: { label: string; value: string }[],
 ): { label: string; value: string }[] {
-  const all = Object.values(modelMap)
-  if (provider === 'openai') {
-    return all.sort((a, b) => a.id.localeCompare(b.id)).map((m) => ({ label: m.id, value: m.id }))
-  }
-  let filtered = all
-  if (allowedModels) filtered = filtered.filter((m) => allowedModels.includes(m.id))
-  if (onlyVision) filtered = filtered.filter((m) => m.architecture?.modality === 'text+image->text')
-  return filtered
-    .map((m) => {
-      const p = Number.parseFloat(m.pricing?.prompt || '')
-      const c = Number.parseFloat(m.pricing?.completion || '')
-      const total = (Number.isFinite(p) ? p : 0) + (Number.isFinite(c) ? c : 0)
-      return { m, total }
-    })
-    .sort((a, b) => a.total - b.total)
-    .map(({ m }) => ({
-      label: `${m.architecture?.modality === 'text+image->text' ? '[vision] ' : ''}${m.id}`,
-      value: m.id,
-    }))
-}
-
-async function canReachLocalApi(baseUrl: string): Promise<boolean> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 1500)
-  try {
-    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/v1/models`, {
-      method: 'GET',
-      signal: controller.signal,
-    })
-    return response.ok
-  } catch {
-    return false
-  } finally {
-    clearTimeout(timer)
-  }
+  return fuzzyFilterOptions(query, options, (option) => option.value, MAX_MODEL_OPTIONS)
 }
 
 function createChatCompletionTask(args: ChatCompletionTaskArgs) {
@@ -607,8 +277,9 @@ function createChatCompletionTask(args: ChatCompletionTaskArgs) {
 
 function isTaskCreatedMessage(
   msg: TaskyonMessage,
-): msg is Extract<TaskyonMessage, { type: 'taskCreated' }> & { task: TaskNode } {
-  return msg.type === 'taskCreated' && !!msg.task
+): msg is { type: 'taskCreated'; task: TaskNode; parentID?: string } {
+  const candidate = msg as { type?: unknown; task?: unknown }
+  return candidate.type === 'taskCreated' && !!candidate.task
 }
 
 function isRemoteFunctionCall(msg: TaskyonMessage): msg is RemoteFunctionCall {
@@ -635,7 +306,7 @@ async function createPreparedTaskChain(
 async function waitForTaskResult(
   port: ReturnType<typeof createDuplexChannel<TaskyonMessage, TaskyonMessage>>['x'],
   initialIds: string[],
-  quitCondition: TaskContentType | TaskContentType[],
+  quitCondition: string | string[],
   timeoutMs: number,
 ) {
   const subTasks = new Set<string>(initialIds)
@@ -756,21 +427,6 @@ async function executeBashCommand({ command, cwd, timeoutMs = 120000 }: BashTool
   throw lastError ?? new Error('No usable shell found for bash tool execution')
 }
 
-function renderTask(task: TaskNode): string {
-  switch (task.content.type) {
-    case 'message':
-      return task.content.data
-    case 'structured':
-    case 'toolresult':
-    case 'error':
-      return JSON.stringify(task.content.data, null, 2)
-    case 'return':
-      return task.content.data
-    default:
-      return JSON.stringify(task.content, null, 2)
-  }
-}
-
 function normalizeThinkingChunk(chunk: unknown): string {
   const c = chunk as Record<string, unknown>
   const type = typeof c['type'] === 'string' ? c['type'] : ''
@@ -792,15 +448,217 @@ async function selectFromList(
   rl: ReturnType<typeof createInterface>,
   title: string,
   options: string[],
+  config?: {
+    filterable?: boolean
+    initialQuery?: string
+    maxVisible?: number
+    optionsForQuery?: (query: string) => string[]
+  },
 ) {
-  writeLine(title)
-  options.forEach((option, idx) => writeLine(`${idx + 1}. ${option}`))
-  const answerRaw = await askQuestion(rl, 'Select: ')
-  if (answerRaw === null) return null
-  const answer = answerRaw.trim()
-  const num = Number(answer)
-  if (!Number.isInteger(num) || num < 1 || num > options.length) return null
-  return num - 1
+  const filterable = config?.filterable ?? false
+  const initialQuery = config?.initialQuery ?? ''
+  const maxVisible = config?.maxVisible
+  const optionsForQuery = config?.optionsForQuery
+  const stdin = process.stdin
+  const stdout = process.stdout
+  const optionsFor = (query: string) => optionsForQuery?.(query) ?? options
+  if (!stdin.isTTY || !stdout.isTTY || typeof stdin.setRawMode !== 'function') {
+    const currentOptions = optionsFor(initialQuery)
+    writeLine(title)
+    currentOptions.forEach((option, idx) => writeLine(`${idx + 1}. ${option}`))
+    const answerRaw = await askQuestion(rl, 'Select: ')
+    if (answerRaw === null) return null
+    const answer = answerRaw.trim()
+    const num = Number(answer)
+    if (!Number.isInteger(num) || num < 1 || num > currentOptions.length) return null
+    return num - 1
+  }
+
+  emitKeypressEvents(stdin)
+  const prevRaw = stdin.isRaw ?? false
+  stdin.setRawMode(true)
+  stdin.resume()
+
+  let selectedIdx = 0
+  let query = initialQuery
+  let cleanedUp = false
+  let renderedLines = 0
+  const width = Math.max(20, (stdout.columns ?? 80) - 1)
+  const fitLine = (line: string) =>
+    line.length > width ? `${line.slice(0, Math.max(0, width - 1))}…` : line
+
+  const clear = () => {
+    for (let i = 0; i < renderedLines; i += 1) stdout.write('\x1b[1A\x1b[2K')
+    renderedLines = 0
+  }
+
+  const indexedOptions = (query: string) => optionsFor(query).map((label, index) => ({ label, index }))
+  const filteredOptions = () => {
+    const indexed = indexedOptions(query)
+    if (!filterable) return indexed
+    const list = fuzzyFilterOptions(query, indexed, (option) => option.label, indexed.length)
+    const result = list.length > 0 ? list : indexed
+    return maxVisible ? result.slice(0, maxVisible) : result
+  }
+
+  const render = () => {
+    clear()
+    const list = filteredOptions()
+    if (selectedIdx >= list.length) selectedIdx = Math.max(0, list.length - 1)
+    const rows = list.map((option, idx) => `${idx === selectedIdx ? '>' : ' '} ${option.label}`)
+    const help = filterable
+      ? 'Use ↑/↓, type to filter, Enter (Esc/Ctrl+C to cancel)'
+      : 'Use ↑/↓ and Enter (Esc/Ctrl+C to cancel)'
+    const queryLine = filterable ? `filter: ${query}` : null
+    const lines = [title, help, queryLine, ...rows]
+      .filter(Boolean)
+      .map((line) => fitLine(String(line)))
+    stdout.write(`${lines.join('\n')}\n`)
+    renderedLines = lines.length
+  }
+
+  render()
+  const result = await new Promise<number | null>((resolve) => {
+    const cleanup = () => {
+      if (cleanedUp) return
+      cleanedUp = true
+      stdin.off('keypress', onKeypress)
+      process.off('SIGINT', onSigint)
+      process.off('SIGTERM', onSigterm)
+      clear()
+      stdin.setRawMode(prevRaw)
+    }
+    const finish = (value: number | null) => {
+      cleanup()
+      resolve(value)
+    }
+    const onSigint = () => finish(null)
+    const onSigterm = () => finish(null)
+    const onKeypress = (str: string, key: { name?: string; ctrl?: boolean }) => {
+      if (key.ctrl && key.name === 'c') return finish(null)
+      if (key.name === 'escape') return finish(null)
+      if (key.name === 'return' || key.name === 'enter') {
+        const list = filteredOptions()
+        return finish(list[selectedIdx]?.index ?? null)
+      }
+      if (key.name === 'up') {
+        selectedIdx = Math.max(0, selectedIdx - 1)
+        render()
+        return
+      }
+      if (key.name === 'down') {
+        selectedIdx = Math.min(filteredOptions().length - 1, selectedIdx + 1)
+        render()
+        return
+      }
+      const num = Number(str)
+      if (Number.isInteger(num) && num >= 1 && num <= options.length) {
+        selectedIdx = num - 1
+        render()
+        return
+      }
+      if (!filterable) return
+      if (key.name === 'backspace') {
+        query = query.slice(0, -1)
+        selectedIdx = 0
+        render()
+        return
+      }
+      if (str && !key.ctrl && str >= ' ' && str !== '\x7f') {
+        query += str
+        selectedIdx = 0
+        render()
+      }
+    }
+    stdin.on('keypress', onKeypress)
+    process.on('SIGINT', onSigint)
+    process.on('SIGTERM', onSigterm)
+  })
+
+  return result
+}
+
+async function selectSlashCommand(
+  rl: ReturnType<typeof createInterface>,
+  initialQuery: string = '',
+) {
+  const options = SLASH_COMMANDS.map((name) => `/${name}`)
+  const idx = await selectFromList(rl, '\nSlash commands', options, {
+    filterable: true,
+    initialQuery,
+  })
+  if (idx === null) return null
+  return options[idx] ?? null
+}
+
+function normalizeFilePickerQuery(input: string): string {
+  return input.trim().replace(/^@+/, '')
+}
+
+function parseFilePickerQuery(input: string): { baseRel: string; nameQuery: string } {
+  const q = normalizeFilePickerQuery(input)
+  const slashIdx = q.lastIndexOf('/')
+  if (slashIdx < 0) return { baseRel: '', nameQuery: q }
+  const baseRel = q.slice(0, slashIdx).replace(/^\/+|\/+$/g, '')
+  const nameQuery = q.slice(slashIdx + 1)
+  return { baseRel, nameQuery }
+}
+
+async function indexFilesFromBase(baseRel: string): Promise<string[]> {
+  const cached = fileIndexCache.get(baseRel)
+  if (cached) return cached
+  const cwd = process.cwd()
+  const baseAbs = resolve(cwd, baseRel || '.')
+  const files: string[] = []
+
+  const walk = async (absDir: string, depth: number): Promise<void> => {
+    if (files.length >= FILE_PICKER_MAX_ENTRIES) return
+    let entries
+    try {
+      entries = await readdir(absDir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (files.length >= FILE_PICKER_MAX_ENTRIES) break
+      const full = join(absDir, entry.name)
+      if (entry.isDirectory()) {
+        if (FILE_PICKER_EXCLUDED_DIRS.has(entry.name)) continue
+        if (depth >= FILE_PICKER_MAX_DEPTH) continue
+        await walk(full, depth + 1)
+        continue
+      }
+      if (!entry.isFile()) continue
+      const rel = relative(cwd, full).replace(/\\/g, '/')
+      files.push(rel)
+    }
+  }
+
+  await walk(baseAbs, 0)
+  fileIndexCache.set(baseRel, files)
+  return files
+}
+
+async function fileExistsInWorkspace(path: string): Promise<boolean> {
+  try {
+    const full = resolve(process.cwd(), path)
+    const info = await stat(full)
+    return info.isFile()
+  } catch {
+    return false
+  }
+}
+
+async function selectFileReference(rl: ReturnType<typeof createInterface>, initialQuery = '') {
+  const { baseRel, nameQuery } = parseFilePickerQuery(initialQuery)
+  const currentOptions = (await indexFilesFromBase(baseRel)).slice(0, FILE_PICKER_MAX_ENTRIES)
+  const idx = await selectFromList(rl, '\nFiles (@)', currentOptions, {
+    filterable: true,
+    initialQuery: nameQuery,
+    maxVisible: FILE_PICKER_MAX_OPTIONS,
+  })
+  if (idx === null) return null
+  return currentOptions[idx] ?? null
 }
 
 async function selectModelInteractive(
@@ -906,14 +764,6 @@ async function selectModelInteractive(
   return result
 }
 
-async function setSelectedApi(ty: Taskyon, nextApi: string) {
-  await persistConfigPatch({ selectedApi: nextApi })
-  const key =
-    (await ty.getSecret(API_KEY_STORE_NAME, nextApi, false, false)) ??
-    resolveKeyForProvider(nextApi)
-  await ty.updateChatCompletionApiKey(nextApi, key ?? undefined)
-}
-
 function isInterruptError(error: unknown): boolean {
   return (
     error instanceof Error &&
@@ -943,6 +793,64 @@ async function askQuestion(
 
 function getCurrentInputText(rl: ReturnType<typeof createInterface>): string {
   return ((rl as unknown as { line?: string }).line ?? '').trim()
+}
+
+async function promptForMainInput(
+  rl: ReturnType<typeof createInterface>,
+  onSlashRequested: () => Promise<string | null>,
+  onFileRequested: () => Promise<string | null>,
+): Promise<string | null> {
+  const stdin = process.stdin
+  if (!stdin.isTTY) return askQuestion(rl, '\n> ')
+  if (process.env.TYCLI_HOTKEY_MENUS === '0') return askQuestion(rl, '\n> ')
+
+  emitKeypressEvents(stdin, rl)
+  rl.setPrompt('\n> ')
+  rl.prompt()
+
+  return await new Promise<string | null>((resolve) => {
+    let settled = false
+    let menuOpen = false
+
+    const finish = (value: string | null) => {
+      if (settled) return
+      settled = true
+      stdin.off('keypress', onKeypress)
+      rl.off('line', onLine)
+      rl.off('close', onClose)
+      resolve(value)
+    }
+
+    const onLine = (line: string) => {
+      if (menuOpen) return
+      finish(line)
+    }
+    const onClose = () => finish(null)
+    const onKeypress = (str: string, key: { ctrl?: boolean; sequence?: string }) => {
+      if (key.ctrl) return
+      const typedSlash = str === '/' || key.sequence === '/'
+      const typedAt = str === '@' || key.sequence === '@'
+      if (!typedSlash && !typedAt) return
+      const current = getCurrentInputText(rl)
+      const triggerChar = typedSlash ? '/' : '@'
+      if (current.length > 1) return
+      if (current.length === 1 && current !== triggerChar) return
+      ;(async () => {
+        menuOpen = true
+        rl.write('', { ctrl: true, name: 'u' })
+        const selected = typedSlash ? await onSlashRequested() : await onFileRequested()
+        menuOpen = false
+        finish(selected ?? '')
+      })().catch(() => {
+        menuOpen = false
+        finish('')
+      })
+    }
+
+    stdin.on('keypress', onKeypress)
+    rl.on('line', onLine)
+    rl.on('close', onClose)
+  })
 }
 
 async function handleKeysCommand(
@@ -1002,31 +910,21 @@ async function handleModelCommand(
   ty: Taskyon,
   llmState: llmSettings,
 ) {
-  writeLine(`Current provider: ${llmState.selectedApi}`)
+  const apis = llmState.llmApis
+  const selectedApi = String(llmState.selectedApi ?? 'local')
+  writeLine(`Current provider: ${selectedApi}`)
   writeLine(
-    `Current model: ${llmState.llmApis[llmState.selectedApi]?.selectedModel ?? llmState.llmApis[llmState.selectedApi]?.defaultModel ?? 'unknown'}`,
+    `Current model: ${apis[selectedApi]?.selectedModel ?? apis[selectedApi]?.defaultModel ?? 'unknown'}`,
   )
   const action = await selectFromList(rl, '\nModel menu', [
-    'change provider',
     'select model from provider list',
     'set model id manually',
     'back',
   ])
-  if (action === null || action === 3) return
+  if (action === null || action === 2) return
 
   if (action === 0) {
-    const idx = await selectFromList(rl, '\nSelect provider', [...SUPPORTED_PROVIDERS])
-    if (idx === null) return
-    const nextApi = SUPPORTED_PROVIDERS[idx]!
-    llmState.selectedApi = nextApi
-    await setSelectedApi(ty, nextApi)
-    writeLine(`Selected provider: ${nextApi}`)
-    return
-  }
-
-  if (action === 1) {
-    const selectedApi = llmState.selectedApi
-    const api = llmState.llmApis[selectedApi]
+    const api = apis[selectedApi]
     if (!api) {
       writeError(`No API definition for '${selectedApi}'.`)
       return
@@ -1080,8 +978,8 @@ async function handleModelCommand(
       writeLine('Model selection cancelled.')
       return
     }
-    llmState.llmApis[selectedApi] = {
-      ...llmState.llmApis[selectedApi],
+    apis[selectedApi] = {
+      ...apis[selectedApi],
       selectedModel: model,
     }
     await persistConfigPatch({ taskyonModel: model })
@@ -1089,7 +987,7 @@ async function handleModelCommand(
     return
   }
 
-  if (action === 2) {
+  if (action === 1) {
     const modelInput = await askQuestion(rl, 'Enter model id: ')
     if (modelInput === null) return
     const model = modelInput.trim()
@@ -1097,14 +995,26 @@ async function handleModelCommand(
       writeError('Model id cannot be empty.')
       return
     }
-    const selectedApi = llmState.selectedApi
-    llmState.llmApis[selectedApi] = {
-      ...llmState.llmApis[selectedApi],
+    apis[selectedApi] = {
+      ...apis[selectedApi],
       selectedModel: model,
     }
     await persistConfigPatch({ taskyonModel: model })
     writeLine(`Selected model for ${selectedApi}: ${model}`)
   }
+}
+
+async function handleProviderCommand(
+  rl: ReturnType<typeof createInterface>,
+  ty: Taskyon,
+  llmState: llmSettings,
+) {
+  const idx = await selectFromList(rl, '\nSelect provider', [...SUPPORTED_PROVIDERS])
+  if (idx === null) return
+  const nextApi = String(SUPPORTED_PROVIDERS[idx]!)
+  llmState.selectedApi = nextApi
+  await setSelectedApi(ty, nextApi)
+  writeLine(`Selected provider: ${nextApi}`)
 }
 
 async function handleToolsCommand(ty: Taskyon) {
@@ -1121,11 +1031,51 @@ async function handleToolsCommand(ty: Taskyon) {
   })
 }
 
+async function handleDebugCommand(rl: ReturnType<typeof createInterface>, parsedArgs: string) {
+  const arg = parsedArgs.trim().toLowerCase()
+  if (arg === 'on') {
+    debugLogsEnabled = true
+    writeLine('Debug logs: ON')
+    return
+  }
+  if (arg === 'off') {
+    debugLogsEnabled = false
+    writeLine('Debug logs: OFF')
+    return
+  }
+  const options = ['toggle', 'on', 'off', 'back']
+  const choice = await selectFromList(rl, '\nDebug logging', options)
+  if (choice === null || choice === 3) return
+  if (choice === 0) debugLogsEnabled = !debugLogsEnabled
+  if (choice === 1) debugLogsEnabled = true
+  if (choice === 2) debugLogsEnabled = false
+  writeLine(`Debug logs: ${debugLogsEnabled ? 'ON' : 'OFF'}`)
+}
+
+async function handleSettingsCommand(
+  rl: ReturnType<typeof createInterface>,
+  uiSettings: { showRoleTag: boolean },
+) {
+  const choice = await selectFromList(rl, '\nSettings', [
+    `toggle role/type tags ([user|message]): ${uiSettings.showRoleTag ? 'ON' : 'OFF'}`,
+    'back',
+  ])
+  if (choice === null || choice === 1) return
+  uiSettings.showRoleTag = !uiSettings.showRoleTag
+  await persistConfigPatch({
+    cliUi: {
+      showRoleTag: uiSettings.showRoleTag,
+    },
+  })
+  writeLine(`Role/type tags: ${uiSettings.showRoleTag ? 'ON' : 'OFF'}`)
+}
+
 async function handleSlashCommand(
   parsed: SlashParsed,
   rl: ReturnType<typeof createInterface>,
   ty: Taskyon,
   llmState: llmSettings,
+  uiSettings: { showRoleTag: boolean },
 ): Promise<boolean> {
   if (parsed.name === 'keys') {
     await handleKeysCommand(rl, ty, llmState)
@@ -1137,8 +1087,23 @@ async function handleSlashCommand(
     return true
   }
 
+  if (parsed.name === 'provider') {
+    await handleProviderCommand(rl, ty, llmState)
+    return true
+  }
+
   if (parsed.name === 'tools') {
     await handleToolsCommand(ty)
+    return true
+  }
+
+  if (parsed.name === 'debug') {
+    await handleDebugCommand(rl, parsed.args)
+    return true
+  }
+
+  if (parsed.name === 'settings') {
+    await handleSettingsCommand(rl, uiSettings)
     return true
   }
 
@@ -1146,11 +1111,14 @@ async function handleSlashCommand(
     return false
   }
 
-  writeError(`Unknown command '/${parsed.name}'. Supported: /keys, /model, /tools, /exit, /quit`)
+  writeError(
+    `Unknown command '/${parsed.name}'. Supported: /keys, /provider, /model, /tools, /debug, /settings, /exit, /quit`,
+  )
   return true
 }
 
 async function main() {
+  const startupMeta = await loadStartupMeta()
   const { cryptoSession, stored } = await initPersistentCryptoSession()
   const configDir = await resolveConfigDirectoryPath()
   const pgliteNodeDir = join(configDir, 'pglite')
@@ -1164,15 +1132,22 @@ async function main() {
   }
 
   const model = process.env.TASKYON_MODEL ?? stored.taskyonModel
-  const config: CliApiConfig = {
+  const providerKey = resolveKeyForProvider(selectedApi)
+  const config = {
     selectedApi,
-    model,
-    key: resolveKeyForProvider(selectedApi),
-  }
+    ...(model ? { model } : {}),
+    ...(providerKey ? { key: providerKey } : {}),
+  } as CliApiConfig
   const explorationContextFiles: Record<string, string> = {}
+  const { formatExplorationContext, createExplorationTool } =
+    await import('./tools/explorationTool.ts')
+  const { updateFilesTool } = await import('./tools/patchTool.ts')
   const explorationTool = createExplorationTool(explorationContextFiles)
 
   let llmState = createCliLlmSettings(config)
+  const uiSettings = {
+    showRoleTag: stored.cliUi?.showRoleTag ?? true,
+  }
   const cliEntryNodeTool = createTool({
     name: ENTRY_NODE_TOOL_NAME,
     description:
@@ -1216,12 +1191,16 @@ async function main() {
         llmTools: true,
       },
     }),
-    [cliEntryNodeTool, explorationTool, updateFilesTool],
+    [cliEntryNodeTool, explorationTool, updateFilesTool] as unknown as [],
     cryptoSession,
     {
       nodePgLiteDataDir: pgliteNodeDir,
     },
   )
+  const conversationPersistence = await createConversationPersistence({
+    taskyon,
+    configDir,
+  })
 
   const persistedKey = await taskyon.getSecret(API_KEY_STORE_NAME, selectedApi, false, false)
   const bootstrapKey = persistedKey ?? config.key
@@ -1244,7 +1223,7 @@ async function main() {
         )
       } else {
         writeLine(
-          'Warning: local provider selected but http://localhost:8080 is unreachable. Configure a provider via /keys and switch with /model.',
+          'Warning: local provider selected but http://localhost:8080 is unreachable. Configure a provider via /keys and switch with /provider.',
         )
       }
     }
@@ -1254,7 +1233,7 @@ async function main() {
   const unsubscribeBridgeToTaskyon = bridgePort.receive((msg) => taskyon.port.send(msg))
   const unsubscribeTaskyonToBridge = taskyon.port.receive((msg) => bridgePort.send(msg))
 
-  const unsubscribeFunctionCalls = clientPort.receive(async (msg) => {
+  const unsubscribeFunctionCalls = clientPort.receive(async (msg: TaskyonMessage) => {
     if (!isRemoteFunctionCall(msg) || msg.functionName !== cliBashTool.name) return
     try {
       const response = await executeBashCommand((msg.arguments ?? {}) as BashToolArgs)
@@ -1274,14 +1253,25 @@ async function main() {
     }
   })
 
-  clientPort.send({ type: 'functionDescription', ...cliBashTool })
+  clientPort.send({ type: 'functionDescription', ...cliBashTool } as unknown as TaskyonMessage)
 
-  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: true,
+    historySize: 500,
+    removeHistoryDuplicates: false,
+  })
   let currentLeafId: string | undefined
   let waitingForTask = false
   let interruptedCurrentTask = false
   let requestQuitOnNextPrompt = false
   let inMenuInteraction = false
+  let shuttingDown = false
+  let stopMainLoop = false
+  let requestedExitCode = 0
+  let shutdownForceTimer: ReturnType<typeof setTimeout> | null = null
+  let lastSigintAt = 0
   let thinkingLines: string[] = []
   let thinkingPanelHeight = 0
   const taskFeed: TaskNode[] = []
@@ -1293,6 +1283,11 @@ async function main() {
       process.stdout.write('\x1b[1A\x1b[2K')
     }
     thinkingPanelHeight = 0
+  }
+
+  const clearLastPromptLine = () => {
+    if (!process.stdout.isTTY) return
+    process.stdout.write('\x1b[1A\x1b[2K')
   }
 
   const resetThinking = () => {
@@ -1321,7 +1316,37 @@ async function main() {
     renderThinkingPanel()
   }
 
+  const requestImmediateShutdown = (reason: string, exitCode = 0) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    stopMainLoop = true
+    requestedExitCode = exitCode
+    interruptedCurrentTask = true
+    requestQuitOnNextPrompt = false
+    clearThinkingPanel()
+    try {
+      taskyon.workerStop(reason)
+    } catch {
+      // best effort
+    }
+    if (shutdownForceTimer === null) {
+      shutdownForceTimer = setTimeout(() => {
+        process.exit(exitCode === 0 ? 1 : exitCode)
+      }, 2000)
+      shutdownForceTimer.unref()
+    }
+    if (!isReadlineClosed(rl)) rl.close()
+  }
+
   const onSigint = () => {
+    if (shuttingDown) return
+    const now = Date.now()
+    if (now - lastSigintAt <= 1500) {
+      writeLine('\nForce exiting...')
+      requestImmediateShutdown('Forced by double Ctrl+C', 130)
+      return
+    }
+    lastSigintAt = now
     if (waitingForTask) {
       interruptedCurrentTask = true
       writeLine('\nInterrupting current task...')
@@ -1337,12 +1362,18 @@ async function main() {
     requestQuitOnNextPrompt = true
     writeLine('\nQuit tycli? (y/N)')
   }
+  const onSigterm = () => requestImmediateShutdown('Received SIGTERM', 143)
+  const onSighup = () => requestImmediateShutdown('Received SIGHUP', 129)
   process.on('SIGINT', onSigint)
-  const unsubscribeThinkingStream = taskyon.chatCompletionStream(({ chunk }) => {
-    if (!waitingForTask) return
-    appendThinkingText(normalizeThinkingChunk(chunk))
-  })
-  const unsubscribeTaskProgress = clientPort.receive((msg) => {
+  process.on('SIGTERM', onSigterm)
+  process.on('SIGHUP', onSighup)
+  const unsubscribeThinkingStream = taskyon.chatCompletionStream(
+    ({ chunk }: { chunk: unknown }) => {
+      if (!waitingForTask) return
+      appendThinkingText(normalizeThinkingChunk(chunk))
+    },
+  )
+  const unsubscribeTaskProgress = clientPort.receive((msg: TaskyonMessage) => {
     if (!isTaskCreatedMessage(msg)) return
     const task = msg.task
     const snapshot = JSON.stringify(task.content)
@@ -1352,71 +1383,130 @@ async function main() {
     const existingIdx = taskFeed.findIndex((t) => t.id === task.id)
     if (existingIdx >= 0) taskFeed[existingIdx] = task
     else taskFeed.push(task)
-    const line = summarizeTask(task)
-    clearThinkingPanel()
-    writeLine(prev ? `[task updated] ${line}` : `[task] ${line}`)
-    if (ENABLE_DEBUG_LOGS && task.content.type === 'functioncall') {
-      writeDebugYaml(`toolcall ${task.content.data.name}`, task.content.data)
-    }
-    if (ENABLE_DEBUG_LOGS && task.content.type === 'toolresult') {
-      writeDebugYaml('toolresult', task.content.data)
-    }
-    if (ENABLE_DEBUG_LOGS && task.content.type === 'error') {
-      writeDebugYaml('error', task.content.data)
-    }
-    renderThinkingPanel()
+    renderTaskProgress(
+      {
+        debugEnabled: () => debugLogsEnabled,
+        showRoleTag: () => uiSettings.showRoleTag,
+        clearThinkingPanel,
+        renderThinkingPanel,
+        writeLine,
+      },
+      task,
+      Boolean(prev),
+    )
   })
-  const unsubscribeWorkerProgress = taskyon.workerStream((event) => {
-    const shouldPrintInNormalMode =
-      event.stage === 'queued' ||
-      event.stage === 'processing' ||
-      event.stage === 'processed' ||
-      event.stage === 'error' ||
-      event.stage === 'aborted'
-    if (!ENABLE_DEBUG_LOGS && !shouldPrintInNormalMode) return
-    clearThinkingPanel()
-    writeLine(`[worker] ${summarizeWorkerEvent(event)}`)
-    if (ENABLE_DEBUG_LOGS) writeDebugYaml('worker event', event)
-    renderThinkingPanel()
+  const unsubscribeWorkerProgress = taskyon.workerStream((event: unknown) => {
+    const workerEvent = event as WorkerEvent
+    renderWorkerProgress(
+      {
+        debugEnabled: () => debugLogsEnabled,
+        showRoleTag: () => uiSettings.showRoleTag,
+        clearThinkingPanel,
+        renderThinkingPanel,
+        writeLine,
+      },
+      workerEvent,
+    )
   })
 
   writeLine(
-    `tycli ready. provider=${llmState.selectedApi} model=${llmState.llmApis[llmState.selectedApi]?.selectedModel ?? baseApiDefinitions[llmState.selectedApi]?.defaultModel}`,
+    `tycli ready. provider=${String(llmState.selectedApi ?? 'local')} model=${(llmState.llmApis as Record<string, { selectedModel?: string }>)[String(llmState.selectedApi ?? 'local')]?.selectedModel ?? baseApiDefinitions[String(llmState.selectedApi ?? 'local')]?.defaultModel}`,
   )
-  writeLine('Slash commands: /keys, /model, /tools, /exit, /quit')
-  if (ENABLE_DEBUG_LOGS) writeLine('Debug logs enabled (TYCLI_DEBUG=1).')
+  writeLine(
+    `tycli version=${startupMeta.version} commit=${startupMeta.commit} buildDate=${startupMeta.buildDate}`,
+  )
+  writeLine('Commands: /keys, /provider, /model, /tools, /debug, /settings, /exit, /quit, @<file>')
+  if (debugLogsEnabled) writeLine('Debug logs enabled (TYCLI_DEBUG=1).')
 
   try {
     while (true) {
+      if (stopMainLoop) break
       let input = ''
       inMenuInteraction = false
       if (requestQuitOnNextPrompt) {
         const answerRaw = await askQuestion(rl, '> ')
         requestQuitOnNextPrompt = false
-        if (answerRaw === null) continue
+        if (answerRaw === null) {
+          if (shuttingDown || isReadlineClosed(rl)) break
+          continue
+        }
         const answer = answerRaw.trim().toLowerCase()
-        if (answer === 'y' || answer === 'yes') break
+        if (answer === 'y' || answer === 'yes') {
+          requestImmediateShutdown('User requested exit', 0)
+          break
+        }
         continue
       }
-      const inputRaw = await askQuestion(rl, '\n> ')
+      const inputRaw = await promptForMainInput(rl, async () => {
+        inMenuInteraction = true
+        const selected = await selectSlashCommand(rl, '')
+        inMenuInteraction = false
+        return selected
+      }, async () => {
+        inMenuInteraction = true
+        const selected = await selectFileReference(rl, '')
+        inMenuInteraction = false
+        return selected ? `@${selected}` : null
+      })
       if (inputRaw === null) {
-        if (isReadlineClosed(rl)) break
+        if (isReadlineClosed(rl)) {
+          requestImmediateShutdown('EOF/Readline closed', 0)
+          break
+        }
         continue
       }
       input = inputRaw.trim()
       if (!input) continue
+      const isChatMessage = !input.startsWith('/') && !input.startsWith('@')
+      if (isChatMessage) clearLastPromptLine()
+      if (input.startsWith('@')) {
+        const rawQuery = input.slice(1).trim()
+        const selectedPath =
+          rawQuery.length > 0 && (await fileExistsInWorkspace(rawQuery))
+            ? rawQuery
+            : await selectFileReference(rl, rawQuery)
+        if (!selectedPath) continue
+        try {
+          const content = await readFile(join(process.cwd(), selectedPath), 'utf8')
+          explorationContextFiles[selectedPath] = content
+          writeLine(`Added file context: ${selectedPath} (${content.length} chars)`)
+        } catch (error) {
+          writeError(
+            `Failed to load file '${selectedPath}': ${error instanceof Error ? error.message : String(error)}`,
+          )
+        }
+        continue
+      }
+      if (input.startsWith('/')) {
+        const parsedDirect = parseSlashName(input)
+        const knownDirect =
+          parsedDirect !== null &&
+          SLASH_COMMANDS.includes(parsedDirect.name as (typeof SLASH_COMMANDS)[number])
+        if (input === '/' || !knownDirect) {
+          const initialQuery = input.slice(1).trim()
+          inMenuInteraction = true
+          const selected = await selectSlashCommand(rl, initialQuery)
+          inMenuInteraction = false
+          if (!selected) continue
+          input = selected
+        }
+      }
 
       const parsed = parseSlashName(input)
       if (parsed) {
         inMenuInteraction = true
-        const keepRunning = await handleSlashCommand(parsed, rl, taskyon, llmState)
+        const keepRunning = await handleSlashCommand(parsed, rl, taskyon, llmState, uiSettings)
         inMenuInteraction = false
-        if (!keepRunning) break
+        if (!keepRunning) {
+          requestImmediateShutdown('Slash command exit', 0)
+          break
+        }
         continue
       }
 
-      if (!(await taskyon.getSecret(API_KEY_STORE_NAME, llmState.selectedApi, false, false))) {
-        writeError(`No key configured for '${llmState.selectedApi}'. Run /keys first.`)
+      const currentProvider = String(llmState.selectedApi ?? 'local')
+      if (!(await taskyon.getSecret(API_KEY_STORE_NAME, currentProvider, false, false))) {
+        writeError(`No key configured for '${currentProvider}'. Run /keys first.`)
         continue
       }
 
@@ -1436,11 +1526,10 @@ async function main() {
         ],
         currentLeafId,
       )
+      currentLeafId = taskChain[taskChain.length - 1]?.id ?? currentLeafId
 
       clientPort.send({ type: 'tasks', tasks: taskChain, execute: true, show: true })
       writeDebug(`queued task chain: ${taskChain.map((task) => task.id).join(', ')}`)
-      activeTaskIds = new Set(taskChain.map((task) => task.id))
-
       try {
         waitingForTask = true
         interruptedCurrentTask = false
@@ -1458,8 +1547,8 @@ async function main() {
           continue
         }
         currentLeafId = result.id
+        await conversationPersistence.persist(currentLeafId)
         writeDebug(`received result task: ${result.id} (${result.content.type})`)
-        writeLine(`\n${renderTask(result)}`)
       } catch (error) {
         waitingForTask = false
         clearThinkingPanel()
@@ -1472,14 +1561,23 @@ async function main() {
     }
   } finally {
     process.off('SIGINT', onSigint)
+    process.off('SIGTERM', onSigterm)
+    process.off('SIGHUP', onSighup)
     unsubscribeThinkingStream()
     unsubscribeTaskProgress()
     unsubscribeWorkerProgress()
-    rl.close()
+    if (!isReadlineClosed(rl)) rl.close()
     unsubscribeFunctionCalls()
     unsubscribeBridgeToTaskyon()
     unsubscribeTaskyonToBridge()
+    await conversationPersistence.persist(currentLeafId).catch(() => {})
     taskyon.workerStop('tycli exit')
+    writeLine(`Conversation saved: ${conversationPersistence.filePath}`)
+    if (shutdownForceTimer !== null) {
+      clearTimeout(shutdownForceTimer)
+      shutdownForceTimer = null
+    }
+    process.exitCode = requestedExitCode
   }
 }
 
@@ -1487,4 +1585,3 @@ void main().catch((error) => {
   writeError(error instanceof Error ? (error.stack ?? error.message) : String(error))
   process.exitCode = 1
 })
-let activeTaskIds = new Set<string>()

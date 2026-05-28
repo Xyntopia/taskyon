@@ -1,0 +1,1 @@
+- As an AI agent, you can try out what you implemented using the `tyc` command.

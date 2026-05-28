@@ -19,6 +19,17 @@ export type FileUpdate = {
   newContent?: string
 }
 
+export type LinePatchOperation = {
+  type: 'replace' | 'insert' | 'delete'
+  lineStart: number
+  lineEnd?: number
+  text?: string
+}
+
+type ApplyLinePatchesOptions = {
+  validate?: boolean
+}
+
 type MatchRange = {
   start: number
   end: number
@@ -87,6 +98,81 @@ const normalizePatch = (patch: SearchReplacePatch): SearchReplacePatch => {
   }
 
   return next
+}
+
+const validateLinePatches = (lines: readonly string[], patches: readonly LinePatchOperation[]) => {
+  let firstLine = Infinity
+
+  for (const patch of patches) {
+    const lineStart = patch.lineStart
+    if (!Number.isInteger(lineStart) || lineStart < 1) {
+      throw new Error(`Invalid patch lineStart: ${String(lineStart)}`)
+    }
+
+    const endLine = patch.type === 'insert' ? lineStart : (patch.lineEnd ?? lineStart)
+    if (!Number.isInteger(endLine) || endLine < lineStart) {
+      throw new Error(`Invalid patch lineEnd for range ${lineStart} to ${String(patch.lineEnd)}`)
+    }
+
+    if (endLine >= firstLine) {
+      throw new Error('Overlapping or unsorted patches detected')
+    }
+
+    if (patch.type === 'insert') {
+      if (lineStart > lines.length + 1) {
+        throw new Error(`Insert lineStart out of range: ${lineStart}`)
+      }
+      if (patch.text === undefined || patch.text === null) {
+        throw new Error('Insert patch requires text')
+      }
+    } else {
+      if (lineStart > lines.length || endLine > lines.length) {
+        throw new Error(`Patch range out of range: ${lineStart} to ${endLine} for ${lines.length} lines`)
+      }
+      if (patch.type === 'replace' && (patch.text === undefined || patch.text === null)) {
+        throw new Error('Replace patch requires text')
+      }
+    }
+
+    firstLine = lineStart
+  }
+}
+
+export const applyLinePatches = (
+  text: string,
+  patches: readonly LinePatchOperation[],
+  options: ApplyLinePatchesOptions = {},
+): string => {
+  const lines = normalizeLineEndings(text ?? '').split('\n')
+  const sortedPatches = [...patches].sort((a, b) => b.lineStart - a.lineStart)
+
+  if (options.validate) {
+    validateLinePatches(lines, sortedPatches)
+  }
+
+  for (const patch of sortedPatches) {
+    const startIdx = patch.lineStart - 1
+    if (startIdx < 0) continue
+
+    if (patch.type === 'insert') {
+      const newLines = normalizeLineEndings(patch.text ?? '').split('\n')
+      lines.splice(startIdx, 0, ...newLines)
+      continue
+    }
+
+    const endLine = patch.lineEnd ?? patch.lineStart
+    const deleteCount = endLine - patch.lineStart + 1
+
+    if (patch.type === 'delete') {
+      lines.splice(startIdx, deleteCount)
+      continue
+    }
+
+    const newLines = normalizeLineEndings(patch.text ?? '').split('\n')
+    lines.splice(startIdx, deleteCount, ...newLines)
+  }
+
+  return lines.join('\n')
 }
 
 const buildLineStarts = (text: string) => {

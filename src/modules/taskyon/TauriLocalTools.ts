@@ -6,7 +6,7 @@ import {
   applyFileUpdateToContent,
   normalizeFileUpdate,
   type FileUpdate,
-} from './tauriPatching'
+} from '@taskyon/taskyon/tools/filePatching'
 
 const SUPPORTED_REGEX_FLAGS = new Set(['d', 'g', 'i', 'm', 's', 'u', 'v', 'y'])
 const SEARCH_SAFE_REGEX_FLAGS = new Set(['i', 'm', 's', 'u', 'v'])

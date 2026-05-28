@@ -1,4 +1,4 @@
-import { access } from 'node:fs/promises'
+import { access, stat } from 'node:fs/promises'
 import { dirname, resolve as resolvePath } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -15,16 +15,30 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
+async function isFilePath(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile()
+  } catch {
+    return false
+  }
+}
+
 async function tryResolveFile(basePath: string): Promise<string | null> {
-  if (await pathExists(basePath)) return pathToFileURL(basePath).href
+  if ((await pathExists(basePath)) && (await isFilePath(basePath))) {
+    return pathToFileURL(basePath).href
+  }
 
   for (const ext of localExtensions) {
-    if (await pathExists(basePath + ext)) return pathToFileURL(basePath + ext).href
+    if ((await pathExists(basePath + ext)) && (await isFilePath(basePath + ext))) {
+      return pathToFileURL(basePath + ext).href
+    }
   }
 
   for (const ext of localExtensions) {
     const indexPath = resolvePath(basePath, `index${ext}`)
-    if (await pathExists(indexPath)) return pathToFileURL(indexPath).href
+    if ((await pathExists(indexPath)) && (await isFilePath(indexPath))) {
+      return pathToFileURL(indexPath).href
+    }
   }
 
   return null

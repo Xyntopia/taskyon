@@ -12,7 +12,7 @@ import {
   getFileUpdateMode,
   normalizeFileUpdate,
   type FileUpdate,
-} from './patching'
+} from '@taskyon/taskyon/tools/filePatching'
 
 type ThemeMode = 'dark' | 'light'
 type ConsoleLevel = 'log' | 'info' | 'warn' | 'error' | 'debug'

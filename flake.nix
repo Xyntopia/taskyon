@@ -18,6 +18,16 @@
         pkgs = import nixpkgs { inherit system; };
         pkgs_unstable = import nixpkgs_unstable { inherit system; };
         python = pkgs.python310;
+        tycliDevBin = pkgs.writeShellScriptBin "tycli" ''
+          set -euo pipefail
+          repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+          exec yarn --cwd "$repo_root" node --import "$repo_root/packages/tycli/src/register.ts" --experimental-strip-types "$repo_root/packages/tycli/src/cli.ts" "$@"
+        '';
+        tycDevBin = pkgs.writeShellScriptBin "tyc" ''
+          set -euo pipefail
+          repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+          exec yarn --cwd "$repo_root" node --import "$repo_root/packages/tycli/src/register.ts" --experimental-strip-types "$repo_root/packages/tycli/src/cli.ts" "$@"
+        '';
 
         # this is all tauri-related stuff
         libraries = with pkgs; [
@@ -151,6 +161,8 @@
           # > nix-index
           # > nix-locate libgbm.so.1
           nix-index
+          tycliDevBin
+          tycDevBin
         ];
       in {
         devShells.default = pkgs.mkShell rec {

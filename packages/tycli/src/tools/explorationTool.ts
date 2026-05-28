@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import process from 'node:process'
-import { createTool } from '../../../taskyon/src/types/toolApi.ts'
+import { createTool } from '@taskyon/taskyon/api'
 
 type ExplorationContext = Record<string, string>
 

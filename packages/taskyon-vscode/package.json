@@ -76,6 +76,7 @@
     "package": "npm run build && npx @vscode/vsce package"
   },
   "devDependencies": {
+    "@taskyon/taskyon": "workspace:*",
     "@taskyon/tyclient": "workspace:*",
     "@types/vscode": "^1.80.0",
     "@vscode/vsce": "^2.15.0",
