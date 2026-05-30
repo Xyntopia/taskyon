@@ -1,4 +1,4 @@
-import './node-shims.ts'
+import './node-shims'
 
 import { createInterface } from 'node:readline/promises'
 import { emitKeypressEvents } from 'node:readline'
@@ -6,26 +6,28 @@ import { spawn } from 'node:child_process'
 import { mkdir, readdir, readFile, stat } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import process from 'node:process'
-import { createDuplexChannel } from '@taskyon/shared/modules/frpBus.ts'
-import { createTaskNode } from '@taskyon/taskyon/core/createTasks.ts'
-import { tyCore } from '@taskyon/taskyon/core/init.ts'
-import type { Taskyon } from '@taskyon/taskyon/core/init.ts'
-import type { TaskyonMessage } from '@taskyon/taskyon/types/apiTypes.ts'
-import type { llmSettings } from '@taskyon/taskyon/types/profiles.ts'
-import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon/types/taskNode.ts'
-import { createTool, makeTaskResult, toolCall } from '@taskyon/taskyon/api'
-import type { RemoteFunctionCall } from '@taskyon/taskyon/types/messages.ts'
+import { createDuplexChannel } from '@taskyon/shared/modules/frpBus'
+import {
+  createTaskNode,
+  tyCore,
+  type Taskyon,
+  type TaskyonMessage,
+  type llmSettings,
+  type partialTaskDraft,
+  type TaskNode,
+} from '@taskyon/taskyon'
+import { createTool, toolCall } from '@taskyon/taskyon/api'
+import { createStandardEntryNodeTool } from '@taskyon/taskyon/tools/entryNode'
 import {
   API_KEY_STORE_NAME,
   MAX_MODEL_OPTIONS,
   SLASH_COMMANDS,
   SUPPORTED_PROVIDERS,
   type BashToolArgs,
-  type ChatCompletionTaskArgs,
   type CliApiConfig,
   type LlmModel,
   type SlashParsed,
-} from './cli/types.ts'
+} from './cli/types'
 import {
   initPersistentCryptoSession,
   persistConfigPatch,
@@ -33,18 +35,18 @@ import {
   resolveKeyForProvider,
   resolveProviderSelection,
   setSelectedApi,
-} from './cli/config.ts'
+} from './cli/config'
 import {
-  DEFAULT_PROMPT_TEMPLATES,
   baseApiDefinitions,
   canReachLocalApi,
   createCliLlmSettings,
+  DEFAULT_PROMPT_TEMPLATES,
   fetchProviderModels,
   getAllowedTaskyonModels,
   modelOptionsForProvider,
-} from './cli/models.ts'
-import { renderTaskProgress, renderWorkerProgress, type WorkerEvent } from './cli/taskRenderer.ts'
-import { createConversationPersistence } from './cli/conversationPersistence.ts'
+} from './cli/models'
+import { renderTaskProgress, renderWorkerProgress, type WorkerEvent } from './cli/taskRenderer'
+import { createConversationPersistence } from './cli/conversationPersistence'
 const ENTRY_NODE_TOOL_NAME = 'entryNode'
 let debugLogsEnabled = process.env.TYCLI_DEBUG === '1'
 const EXPLORATION_TOOL_NAME = 'exploration'
@@ -203,9 +205,10 @@ function buildCliEnvironmentContext(
     explorationContext,
     '',
     '## Tool Usage Rules',
-    '1. Prefer answering directly when no shell action is needed.',
-    '2. Use the bash tool only when command execution is required to answer correctly.',
-    '3. Keep destructive or risky shell commands clearly justified and minimal.',
+    '1. Prefer answering directly when no tool action is needed.',
+    '2. For repository exploration, use the exploration tool first: list/search for files, grep for text, view for focused file chunks, add/context for persistent file context.',
+    '3. Use bash only when command execution is required beyond file discovery, text search, or file viewing.',
+    '4. Keep destructive or risky shell commands clearly justified and minimal.',
   ].join('\n')
 }
 
@@ -259,22 +262,6 @@ function fuzzyFilterModelOptions(
   return fuzzyFilterOptions(query, options, (option) => option.value, MAX_MODEL_OPTIONS)
 }
 
-function createChatCompletionTask(args: ChatCompletionTaskArgs) {
-  const { allowedTools, goal = 'SimpleCompletion', prompts = [] } = args
-  return toolCall({
-    name: 'chatCompletion',
-    arguments: {
-      goal,
-      allowedTools,
-      prompts,
-      llmTools: true,
-      use_baseprompt: true,
-      prompt_templates: DEFAULT_PROMPT_TEMPLATES,
-      reasoning_effort: 'low',
-    },
-  })
-}
-
 function isTaskCreatedMessage(
   msg: TaskyonMessage,
 ): msg is { type: 'taskCreated'; task: TaskNode; parentID?: string } {
@@ -282,8 +269,18 @@ function isTaskCreatedMessage(
   return candidate.type === 'taskCreated' && !!candidate.task
 }
 
-function isRemoteFunctionCall(msg: TaskyonMessage): msg is RemoteFunctionCall {
-  return msg.type === 'functionCall'
+function isRemoteFunctionCall(msg: TaskyonMessage): msg is TaskyonMessage & {
+  type: 'functionCall'
+  functionName: string
+  requestId: string
+  arguments?: Record<string, unknown>
+} {
+  const candidate = msg as { type?: unknown; functionName?: unknown; requestId?: unknown }
+  return (
+    candidate.type === 'functionCall' &&
+    typeof candidate.functionName === 'string' &&
+    typeof candidate.requestId === 'string'
+  )
 }
 
 async function createPreparedTaskChain(
@@ -978,10 +975,9 @@ async function handleModelCommand(
       writeLine('Model selection cancelled.')
       return
     }
-    apis[selectedApi] = {
-      ...apis[selectedApi],
-      selectedModel: model,
-    }
+    const currentApi = apis[selectedApi]
+    if (!currentApi) throw new Error(`Provider config missing: ${selectedApi}`)
+    apis[selectedApi] = { ...currentApi, selectedModel: model }
     await persistConfigPatch({ taskyonModel: model })
     writeLine(`Selected model for ${selectedApi}: ${model}`)
     return
@@ -995,10 +991,9 @@ async function handleModelCommand(
       writeError('Model id cannot be empty.')
       return
     }
-    apis[selectedApi] = {
-      ...apis[selectedApi],
-      selectedModel: model,
-    }
+    const currentApi = apis[selectedApi]
+    if (!currentApi) throw new Error(`Provider config missing: ${selectedApi}`)
+    apis[selectedApi] = { ...currentApi, selectedModel: model }
     await persistConfigPatch({ taskyonModel: model })
     writeLine(`Selected model for ${selectedApi}: ${model}`)
   }
@@ -1017,8 +1012,17 @@ async function handleProviderCommand(
   writeLine(`Selected provider: ${nextApi}`)
 }
 
-async function handleToolsCommand(ty: Taskyon) {
+async function handleToolsCommand(
+  ty: Taskyon,
+  target?: Record<string, { hideChat?: boolean }>,
+) {
   const all = await ty.updateToolDefinitions(true)
+  if (target) {
+    for (const key of Object.keys(target)) delete target[key]
+    for (const [name, def] of Object.entries(all as Record<string, { renderOptions?: { hideChat?: boolean } }>)) {
+      target[name] = { hideChat: Boolean(def.renderOptions?.hideChat) }
+    }
+  }
   const allToolNames = Object.keys(all).sort()
   writeLine('\nActive tool definitions:')
   allToolNames.forEach((toolName, idx) => {
@@ -1029,6 +1033,17 @@ async function handleToolsCommand(ty: Taskyon) {
         : 'internal'
     writeLine(`${idx + 1}. ${toolName} (${kind})`)
   })
+}
+
+async function refreshToolRenderOptions(
+  ty: Taskyon,
+  target: Record<string, { hideChat?: boolean }>,
+) {
+  const all = await ty.updateToolDefinitions(true)
+  for (const key of Object.keys(target)) delete target[key]
+  for (const [name, def] of Object.entries(all as Record<string, { renderOptions?: { hideChat?: boolean } }>)) {
+    target[name] = { hideChat: Boolean(def.renderOptions?.hideChat) }
+  }
 }
 
 async function handleDebugCommand(rl: ReturnType<typeof createInterface>, parsedArgs: string) {
@@ -1054,20 +1069,26 @@ async function handleDebugCommand(rl: ReturnType<typeof createInterface>, parsed
 
 async function handleSettingsCommand(
   rl: ReturnType<typeof createInterface>,
-  uiSettings: { showRoleTag: boolean },
+  uiSettings: { showRoleTag: boolean; showFullFunctionResults: boolean },
 ) {
   const choice = await selectFromList(rl, '\nSettings', [
     `toggle role/type tags ([user|message]): ${uiSettings.showRoleTag ? 'ON' : 'OFF'}`,
+    `toggle full function results (session): ${uiSettings.showFullFunctionResults ? 'ON' : 'OFF'}`,
     'back',
   ])
-  if (choice === null || choice === 1) return
-  uiSettings.showRoleTag = !uiSettings.showRoleTag
-  await persistConfigPatch({
-    cliUi: {
-      showRoleTag: uiSettings.showRoleTag,
-    },
-  })
-  writeLine(`Role/type tags: ${uiSettings.showRoleTag ? 'ON' : 'OFF'}`)
+  if (choice === null || choice === 2) return
+  if (choice === 0) {
+    uiSettings.showRoleTag = !uiSettings.showRoleTag
+    await persistConfigPatch({
+      cliUi: {
+        showRoleTag: uiSettings.showRoleTag,
+      },
+    })
+    writeLine(`Role/type tags: ${uiSettings.showRoleTag ? 'ON' : 'OFF'}`)
+    return
+  }
+  uiSettings.showFullFunctionResults = !uiSettings.showFullFunctionResults
+  writeLine(`Full function results (session): ${uiSettings.showFullFunctionResults ? 'ON' : 'OFF'}`)
 }
 
 async function handleSlashCommand(
@@ -1075,7 +1096,8 @@ async function handleSlashCommand(
   rl: ReturnType<typeof createInterface>,
   ty: Taskyon,
   llmState: llmSettings,
-  uiSettings: { showRoleTag: boolean },
+  uiSettings: { showRoleTag: boolean; showFullFunctionResults: boolean },
+  toolRenderOptions: Record<string, { hideChat?: boolean }>,
 ): Promise<boolean> {
   if (parsed.name === 'keys') {
     await handleKeysCommand(rl, ty, llmState)
@@ -1093,7 +1115,7 @@ async function handleSlashCommand(
   }
 
   if (parsed.name === 'tools') {
-    await handleToolsCommand(ty)
+    await handleToolsCommand(ty, toolRenderOptions)
     return true
   }
 
@@ -1139,43 +1161,26 @@ async function main() {
     ...(providerKey ? { key: providerKey } : {}),
   } as CliApiConfig
   const explorationContextFiles: Record<string, string> = {}
-  const { formatExplorationContext, createExplorationTool } =
-    await import('./tools/explorationTool.ts')
-  const { updateFilesTool } = await import('./tools/patchTool.ts')
+  const { formatExplorationContext, createExplorationTool } = await import('./tools/explorationTool')
+  const { updateFilesTool } = await import('./tools/patchTool')
   const explorationTool = createExplorationTool(explorationContextFiles)
 
   let llmState = createCliLlmSettings(config)
   const uiSettings = {
     showRoleTag: stored.cliUi?.showRoleTag ?? true,
+    showFullFunctionResults: false,
   }
-  const cliEntryNodeTool = createTool({
+  const toolRenderOptions: Record<string, { hideChat?: boolean }> = {}
+  const cliEntryNodeTool = createStandardEntryNodeTool({
     name: ENTRY_NODE_TOOL_NAME,
-    description:
-      'CLI entry node that injects terminal/system context and delegates to chatCompletion.',
-    parameters: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        toolResultSection: {
-          type: 'string',
-          description: 'Internal tool result summary routed back to entryNode.',
-        },
-      },
-    } as const,
-    renderOptions: { hideLlm: true, hideChat: false },
-    function: ({ toolResultSection }: { toolResultSection?: string } = {}) =>
-      makeTaskResult([
-        createChatCompletionTask({
-          goal: 'ChooseTool',
-          allowedTools: [...ACTIVE_LLM_TOOLS],
-          prompts: [
-            buildCliEnvironmentContext(
-              toolResultSection || '(none)',
-              formatExplorationContext(explorationContextFiles),
-            ),
-          ],
-        }),
-      ]),
+    renderOptions: { hideLlm: true, hideChat: true },
+    defaultAllowedTools: [...ACTIVE_LLM_TOOLS],
+    toolChooser: { enabled: true, useTools: true },
+    extraContext: ({ toolResultSection }: { toolResultSection?: string }) =>
+      buildCliEnvironmentContext(
+        toolResultSection || '(none)',
+        formatExplorationContext(explorationContextFiles),
+      ),
   })
   llmState = {
     ...llmState,
@@ -1186,7 +1191,14 @@ async function main() {
   }
   const taskyon = await tyCore(
     () => llmState,
+    () => llmState.entryNode!,
     () => ({
+      entryNode: {
+        llmTools: true,
+        use_baseprompt: true,
+        use_multimodal: true,
+        prompt_templates: DEFAULT_PROMPT_TEMPLATES,
+      },
       chatCompletion: {
         llmTools: true,
       },
@@ -1201,6 +1213,7 @@ async function main() {
     taskyon,
     configDir,
   })
+  await refreshToolRenderOptions(taskyon, toolRenderOptions)
 
   const persistedKey = await taskyon.getSecret(API_KEY_STORE_NAME, selectedApi, false, false)
   const bootstrapKey = persistedKey ?? config.key
@@ -1211,6 +1224,7 @@ async function main() {
 
   if (llmState.selectedApi === 'local') {
     const localApi = llmState.llmApis.local
+    if (!localApi) throw new Error("Local provider config 'llmApis.local' is missing")
     const isReachable = await canReachLocalApi(localApi.baseURL)
     if (!isReachable) {
       const taskyonKey = await taskyon.getSecret(API_KEY_STORE_NAME, 'taskyon', false, false)
@@ -1274,6 +1288,8 @@ async function main() {
   let lastSigintAt = 0
   let thinkingLines: string[] = []
   let thinkingPanelHeight = 0
+  const activeWorkerTasks = new Set<string>()
+  let hasWorkerProcessing = false
   const taskFeed: TaskNode[] = []
   const taskSnapshotById = new Map<string, string>()
 
@@ -1290,19 +1306,46 @@ async function main() {
     process.stdout.write('\x1b[1A\x1b[2K')
   }
 
+  const restorePromptIfIdle = () => {
+    if (waitingForTask || inMenuInteraction || requestQuitOnNextPrompt || shuttingDown) return
+    if (!process.stdin.isTTY || process.env.TYCLI_HOTKEY_MENUS === '0') return
+    if (isReadlineClosed(rl)) return
+    rl.setPrompt('\n> ')
+    rl.prompt()
+  }
+
   const resetThinking = () => {
     clearThinkingPanel()
     thinkingLines = []
+    activeWorkerTasks.clear()
+    hasWorkerProcessing = false
   }
 
   const renderThinkingPanel = () => {
     if (!waitingForTask) return
     const recent = thinkingLines.slice(-5)
     clearThinkingPanel()
-    if (recent.length <= 0) return
-    const panel = ['[thinking]', ...recent.map((line) => `  ${line}`)]
+    const processingLabel =
+      activeWorkerTasks.size > 0 || hasWorkerProcessing ? 'processing tasks...' : ''
+    if (recent.length <= 0 && !processingLabel) return
+    const panel = recent.length > 0 ? ['[thinking]', ...recent.map((line) => `  ${line}`)] : []
+    if (processingLabel) panel.push(`[status] ${processingLabel}`)
     process.stdout.write(`${panel.join('\n')}\n`)
     thinkingPanelHeight = panel.length
+  }
+
+  const trackWorkerProgress = (event: WorkerEvent) => {
+    const taskId = event.task?.id ?? event.taskId ?? null
+    const stage = event.stage ?? ''
+    if (stage === 'queued' || stage === 'processing') {
+      if (taskId) activeWorkerTasks.add(taskId)
+      if (stage === 'processing') hasWorkerProcessing = true
+    }
+    if (stage === 'processed' || stage === 'aborted' || stage === 'error') {
+      if (taskId) activeWorkerTasks.delete(taskId)
+      if (stage !== 'processed') hasWorkerProcessing = false
+      if (activeWorkerTasks.size === 0 && stage === 'processed') hasWorkerProcessing = false
+    }
   }
 
   const appendThinkingText = (delta: string) => {
@@ -1387,6 +1430,8 @@ async function main() {
       {
         debugEnabled: () => debugLogsEnabled,
         showRoleTag: () => uiSettings.showRoleTag,
+        showFullFunctionResults: () => uiSettings.showFullFunctionResults,
+        isFunctionHiddenInChat: (name: string) => Boolean(toolRenderOptions[name]?.hideChat),
         clearThinkingPanel,
         renderThinkingPanel,
         writeLine,
@@ -1394,19 +1439,25 @@ async function main() {
       task,
       Boolean(prev),
     )
+    restorePromptIfIdle()
   })
   const unsubscribeWorkerProgress = taskyon.workerStream((event: unknown) => {
     const workerEvent = event as WorkerEvent
+    trackWorkerProgress(workerEvent)
     renderWorkerProgress(
       {
         debugEnabled: () => debugLogsEnabled,
         showRoleTag: () => uiSettings.showRoleTag,
+        showFullFunctionResults: () => uiSettings.showFullFunctionResults,
+        isFunctionHiddenInChat: () => false,
         clearThinkingPanel,
         renderThinkingPanel,
         writeLine,
       },
       workerEvent,
     )
+    renderThinkingPanel()
+    restorePromptIfIdle()
   })
 
   writeLine(
@@ -1495,7 +1546,14 @@ async function main() {
       const parsed = parseSlashName(input)
       if (parsed) {
         inMenuInteraction = true
-        const keepRunning = await handleSlashCommand(parsed, rl, taskyon, llmState, uiSettings)
+        const keepRunning = await handleSlashCommand(
+          parsed,
+          rl,
+          taskyon,
+          llmState,
+          uiSettings,
+          toolRenderOptions,
+        )
         inMenuInteraction = false
         if (!keepRunning) {
           requestImmediateShutdown('Slash command exit', 0)
@@ -1544,19 +1602,23 @@ async function main() {
         clearThinkingPanel()
         if (interruptedCurrentTask) {
           writeLine('Task interrupted.')
+          restorePromptIfIdle()
           continue
         }
         currentLeafId = result.id
         await conversationPersistence.persist(currentLeafId)
         writeDebug(`received result task: ${result.id} (${result.content.type})`)
+        restorePromptIfIdle()
       } catch (error) {
         waitingForTask = false
         clearThinkingPanel()
         if (interruptedCurrentTask) {
           writeLine('Task interrupted.')
+          restorePromptIfIdle()
           continue
         }
         writeError(error instanceof Error ? error.message : String(error))
+        restorePromptIfIdle()
       }
     }
   } finally {

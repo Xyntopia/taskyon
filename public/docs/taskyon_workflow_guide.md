@@ -308,10 +308,10 @@ Tools **can** intentionally leave chains without a `return`, but:
 **LLM (via `chatCompletion`)**
 
 - Plans within _allowed tools_:
-  - chooses tools (`goal = 'ChooseTool'`),
+  - can choose tools (typically via entry-node-driven routing),
   - parameterizes tool calls,
   - interprets tool results (`AnalyzeToolResult`),
-  - analyzes errors (`AnalyzeError`).
+  - handles recovery prompts provided by the entry node.
 
 **Task worker / tools**
 
@@ -351,13 +351,13 @@ You can **change `allowedTools` dynamically** per `chatCompletion` call to:
 When a tool throws:
 
 1. An `error` task is created as a **subtask** of the failing `functioncall`.
-2. A follow‑up error‑handler task (typically `chatCompletion(goal=AnalyzeError)`) is appended.
+2. A follow‑up `entryNode` task is appended.
 3. That error handler chain is executed like any other subchain.
 
 Workflow authors control via:
 
 - `maxAutonomousTasks` (how many autonomous steps before hard stop),
-- custom `errorTask` (swap out the default `AnalyzeError` handler).
+- custom `entryNode` behavior (define your own error routing and retry policy).
 
 ### 7.2 What Error Handlers May Do
 

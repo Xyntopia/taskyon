@@ -14,7 +14,6 @@ import type {
 import {
   availableModels,
   base64ToPublixX25519,
-  chatCompletionToolParameters,
   createDuplexChannel,
   createPortApi,
   createStream,
@@ -36,11 +35,11 @@ import {
   tyCore,
   usePyodideWebworker,
 } from '@taskyon/taskyon'
-import { toolCall } from '@taskyon/client'
 import type { AuthenticationOptions } from '@taskyon/taskyon/browser'
 import { usePersistentOauth, type TokenGetter } from '@taskyon/taskyon/browser'
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
 import type { chunkStreamType } from '@taskyon/taskyon/tools/chatCompletionTool'
+import { createStandardEntryNodeTool, EntryNodeSettingsSchema } from '@taskyon/taskyon/tools/entryNode'
 import { until } from '@vueuse/core'
 import { default as Ajv } from 'ajv'
 import type { JSONSchema7 } from 'json-schema'
@@ -392,33 +391,30 @@ function defineTyGuiTools(
     {
       function: ({ newPrompts }) => {
         console.log('Modifying prompts in llmSettings...')
-        const promptTemplates = stateRefs.toolchainConfig.chatCompletion?.prompt_templates
+        const promptTemplates = stateRefs.toolchainConfig.entryNode?.prompt_templates
         if (
           !promptTemplates ||
           typeof promptTemplates !== 'object' ||
           Array.isArray(promptTemplates) ||
           !('basePrompt' in promptTemplates) ||
-          !stateRefs.toolchainConfig.chatCompletion
+          !stateRefs.toolchainConfig.entryNode
         ) {
-          throw new Error('No prompt templates defined in chatCompletion!')
+          throw new Error('No prompt templates defined in entryNode settings!')
         }
         const newPromptsMerged = {
           ...promptTemplates,
           ...newPrompts,
         }
         const ajv = new Ajv()
-        const validate = ajv.compile(chatCompletionToolParameters.properties.prompt_templates)
+        const validate = ajv.compile(EntryNodeSettingsSchema.properties.prompt_templates)
         const valid = validate(newPromptsMerged)
         if (valid) {
-          stateRefs.toolchainConfig.chatCompletion.prompt_templates = newPromptsMerged
-          console.log(
-            'Prompts modified:',
-            stateRefs.toolchainConfig.chatCompletion?.prompt_templates,
-          )
+          stateRefs.toolchainConfig.entryNode.prompt_templates = newPromptsMerged
+          console.log('Prompts modified:', stateRefs.toolchainConfig.entryNode?.prompt_templates)
         } else {
           throw new Error(
             `It was not possible to add prompts for ${JSON.stringify(Object.keys(newPrompts))} to
-  ${JSON.stringify(Object.keys(stateRefs.toolchainConfig.chatCompletion?.prompt_templates ?? {}))}. Did you use the wrong
+  ${JSON.stringify(Object.keys(stateRefs.toolchainConfig.entryNode?.prompt_templates ?? {}))}. Did you use the wrong
   keys and are they all defined as string?`,
           )
         }
@@ -432,7 +428,7 @@ function defineTyGuiTools(
           newPrompts: {
             type: 'object',
             description: 'An object containing the new prompts.',
-            properties: chatCompletionToolParameters.properties.prompt_templates.properties,
+            properties: EntryNodeSettingsSchema.properties.prompt_templates.properties,
           },
         },
         required: ['newPrompts'],
@@ -970,6 +966,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // pre-initialize our python webworker, because its very slow to startup :)
   void usePyodideWebworker().preInit()
+  const entryNodeTool = createStandardEntryNodeTool({
+    toolChooser: { enabled: true, useTools: true },
+    defaultAllowedTools: [],
+  })
 
   // this means previously, we have loaded a session with a binding key.
   // so we would like to wait a little bit, if we will get that same binding key...
@@ -992,9 +992,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     }
   })().then(async (cs) => {
     return await tyCore(
-      () => stateRefs.llmSettings,
+      () => ({
+        ...stateRefs.llmSettings,
+        entryNode: stateRefs.llmSettings.entryNode,
+      }),
+      () => stateRefs.llmSettings.entryNode,
       () => stateRefs.toolchainConfig,
-      [],
+      [entryNodeTool],
       cs,
     )
   })
@@ -1382,12 +1386,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   dynamicQuasarTheming(stateRefs)
 
   const entryNode = computed(
-    () =>
-      stateRefs.llmSettings.entryNode ??
-      toolCall({
-        name: 'chooseTool',
-        arguments: {},
-      }),
+    () => stateRefs.llmSettings.entryNode,
   )
 
   const tyready = ref(false)

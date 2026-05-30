@@ -201,8 +201,9 @@ async function useTaskVectors(
     if (existingVector) {
       console.log('vector already exists!', task.id)
     } else if (
+      // TODO:  make this explicit in each task!
       (task.content.type === 'functioncall' &&
-        ['chatCompletion', 'chooseTool'].includes(task.content.data.name)) ||
+        ['chatCompletion', 'chooseTool', 'entryNode'].includes(task.content.data.name)) ||
       (task.content.type === 'return' && task.content.data === 'assistant answered')
     ) {
       console.log('skip indexing of task', task.id)

@@ -42,12 +42,9 @@ export const llmSettings = z.object({
     description:
       'Maximum number of tasks which are allowed to be performed autonomously before stopping.',
   }),
-  entryNode: partialTaskDraft.optional().meta({
+  entryNode: partialTaskDraft.meta({
     description: `A task template which is used as an entry node for taskyon.
 When a user starts a conversation, this is always the first task that is called.
-
-If none is specified, the "chooseTool" tool is used for tool calls and
-simple chatCompletion for non-tool calls.
 `,
   }),
   enableToolChooser: z.boolean().default(true).meta({

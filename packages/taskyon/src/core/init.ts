@@ -1,6 +1,5 @@
 import { dump } from 'js-yaml'
 import z from 'zod'
-import type { ChatCompletionArgs } from '../tools/chatCompletionTool'
 import { chatCompletionToolName, createChatCompletionTool } from '../tools/chatCompletionTool'
 import { devTools } from '../tools/devTools'
 import { executeJavaScript } from '../tools/executeJavaScript'
@@ -27,6 +26,7 @@ import { toolCall, type InternalTool } from '../types/toolApi'
 import { FunctionArguments as FunctionArgumentsSchema } from '../types/tools'
 import type { FunctionArguments } from '../types/tools'
 import { ToolBase } from '../types/tools'
+import { partialTaskDraft } from '../types/taskNode'
 import {
   createCombinedCrudWrapper,
   createMapCrudWrapper,
@@ -219,6 +219,7 @@ const staticContext = () => {
 const dynamicContext =
   (
     llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
+    entryNode: Thunk<ReadonlyDeep<partialTaskDraft>>,
     ToolList: InternalTool[],
     insidePort: Port<TaskyonMessage, TaskyonMessage>,
     iframeMultiPlexer: IframeMultiPlexer,
@@ -277,20 +278,13 @@ const dynamicContext =
       workerport,
       toolchainConfig,
     )
+    const continuationTask = partialTaskDraft.parse(entryNode())
     const { workerStream, stopAllTasks, queueTask } = runTaskWorker(
       taskManagerInstance,
       iframeMultiPlexer.all$,
       llmSettings().maxAutonomousTasks,
-      // TODO: might make sense for us here to add the toolChooser instead!
-      // for the error as well as the tool results!
-      toolCall<ChatCompletionArgs>({
-        name: 'chatCompletion',
-        arguments: { goal: 'AnalyzeToolResult' },
-      }),
-      toolCall<ChatCompletionArgs>({
-        name: 'chatCompletion',
-        arguments: { goal: 'AnalyzeError' },
-      }),
+      continuationTask,
+      continuationTask,
       executor,
     )
     //##################### END INIT CTX #################
@@ -313,6 +307,7 @@ export async function tyCore(
   // TODO: we want to save some settings "internally" and not in the GUI...
   //       but then....   we als want taskyon to be as "stateless" as possible..
   llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
+  entryNode: Thunk<ReadonlyDeep<partialTaskDraft>>,
   toolchainConfig: Thunk<Record<string, FunctionArguments>>,
   // with the Environment Tools we can provide a list of tools as closures which have access
   // to the environment in which taskyon is running (through closure variables
@@ -329,9 +324,7 @@ export async function tyCore(
   // TODO: make webpack automatically add all tool files from /tools/*
 
   configureNodePgLiteDataDir(
-    options?.nodePgLiteDataDir
-      ? (name) => `${options.nodePgLiteDataDir}/${name}`
-      : undefined,
+    options?.nodePgLiteDataDir ? (name) => `${options.nodePgLiteDataDir}/${name}` : undefined,
   )
 
   const { outsidePort, insidePort, iframeMultiPlexer, ToolList } = staticContext()
@@ -345,6 +338,7 @@ export async function tyCore(
   //       more of the dynamic context into the static context..
   const ctxCreator = dynamicContext(
     llmSettings,
+    entryNode,
     [...EnvironmentTools, ...ToolList],
     insidePort,
     iframeMultiPlexer,

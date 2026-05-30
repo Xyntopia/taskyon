@@ -1,9 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
-import { createCryptoSession } from '@taskyon/taskyon/utils/cryptoSession.ts'
-import type { Taskyon } from '@taskyon/taskyon/core/init.ts'
-import { API_KEY_STORE_NAME, type StoredConfig } from './types.ts'
+import { createCryptoSession, type Taskyon } from '@taskyon/taskyon'
+import { API_KEY_STORE_NAME, type StoredConfig } from './types'
 
 const PREFERRED_CONFIG_DIR = join(homedir(), '.config', 'tycli')
 const FALLBACK_CONFIG_DIR = join('/tmp', 'tycli')

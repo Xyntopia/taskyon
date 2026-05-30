@@ -294,7 +294,8 @@ const getUniqueMatch = (text: string, search: string, patchIndex: number): Match
   for (const strategy of matchStrategies) {
     const matches = strategy.find(text, search)
     if (matches.length === 1) {
-      return matches[0]
+      const match = matches[0]
+      if (match) return match
     }
     if (matches.length > 1) {
       throw new Error(
@@ -336,7 +337,8 @@ const getUniqueContextRange = (
     }
 
     if (validRanges.length === 1) {
-      return validRanges[0]
+      const range = validRanges[0]
+      if (range) return range
     }
 
     if (validRanges.length > 1) {
@@ -373,10 +375,11 @@ const assertValidPatch = (patch: SearchReplacePatch, patchIndex: number) => {
       : Number.isFinite(patch.contextLines)
         ? Math.trunc(patch.contextLines)
         : NaN
-  const contextLines = Math.max(
-    MIN_CONTEXT_LINES,
-    Number.isFinite(rawContextLines) ? rawContextLines : MIN_CONTEXT_LINES,
-  )
+  const normalizedContextLines =
+    Number.isFinite(rawContextLines) && rawContextLines !== undefined
+      ? rawContextLines
+      : MIN_CONTEXT_LINES
+  const contextLines = Math.max(MIN_CONTEXT_LINES, normalizedContextLines)
 
   if (!hasSearch && !hasRangeSearch) {
     throw new Error(
@@ -441,6 +444,7 @@ const assertNoOverlaps = (matches: Array<MatchRange & { patchIndex: number }>) =
   for (let index = 1; index < sorted.length; index += 1) {
     const previous = sorted[index - 1]
     const current = sorted[index]
+    if (!previous || !current) continue
 
     if (current.start < previous.end) {
       throw new Error(
@@ -550,7 +554,11 @@ export const getFileUpdateMode = (update: FileUpdate): FileUpdateMode => {
     )
   }
 
-  return modes[0]
+  const mode = modes[0]
+  if (!mode) {
+    throw new Error(`No valid update mode resolved for "${update.filePath}"`)
+  }
+  return mode
 }
 
 export const applyFileUpdateToContent = (text: string, update: FileUpdate): string => {

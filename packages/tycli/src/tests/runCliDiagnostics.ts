@@ -1,8 +1,8 @@
 import process from 'node:process'
 import { writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
-import { buildDiagnosticsRegistry, runDiagnosticsTests } from '@taskyon/shared/modules/diagnosticsRunner.ts'
-import * as cliE2eDiagnostics from './cliE2eDiagnostics.ts'
+import { buildDiagnosticsRegistry, runDiagnosticsTests } from '@taskyon/shared/modules/diagnosticsRunner'
+import * as cliE2eDiagnostics from './cliE2eDiagnostics'
 
 function safeTimestamp(date: Date) {
   return date.toISOString().replace(/[:.]/g, '-')

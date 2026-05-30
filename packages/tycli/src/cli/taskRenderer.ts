@@ -1,5 +1,5 @@
-import { serializeObject } from '@taskyon/shared/modules/serializeObject.ts'
-import type { TaskNode } from '@taskyon/taskyon/types/taskNode.ts'
+import { serializeObject } from '@taskyon/shared/modules/serializeObject'
+import type { TaskNode } from '@taskyon/taskyon'
 
 export type WorkerEvent = {
   stage?: string
@@ -13,6 +13,8 @@ export type RendererWrite = (text: string) => void
 export type RendererState = {
   debugEnabled: () => boolean
   showRoleTag: () => boolean
+  showFullFunctionResults: () => boolean
+  isFunctionHiddenInChat: (name: string) => boolean
   clearThinkingPanel: () => void
   renderThinkingPanel: () => void
   writeLine: RendererWrite
@@ -30,6 +32,50 @@ const toYaml = (value: unknown) =>
     includeTruncationMeta: true,
   }).trim()
 
+const MAX_RESULT_LINES = 3
+const CONTENT_INDENT = '  '
+
+const truncateToLines = (text: string, maxLines: number) => {
+  const lines = text.split('\n')
+  if (lines.length <= maxLines) return { text, truncated: false }
+  return {
+    text: [...lines.slice(0, maxLines), `... (${lines.length - maxLines} more lines)`].join('\n'),
+    truncated: true,
+  }
+}
+
+const indentMultiline = (text: string, indent: string = CONTENT_INDENT) =>
+  text
+    .split('\n')
+    .map((line) => `${indent}${line}`)
+    .join('\n')
+
+const color = (text: string, code: string) =>
+  process.stdout.isTTY ? `\x1b[${code}m${text}\x1b[0m` : text
+
+const supportsBrightColors = () => process.stdout.isTTY && process.env.TERM !== 'dumb'
+
+const roleColorCode = (role: string) => {
+  if (role === 'user') return '39'
+  if (role === 'assistant') return supportsBrightColors() ? '97' : '37'
+  if (role === 'function') return supportsBrightColors() ? '94' : '34'
+  if (role === 'system') return '90'
+  return '37'
+}
+
+const functionCallColorCode = () => '34'
+
+const toolResultColorCode = () => (supportsBrightColors() ? '94' : '34')
+
+const errorColorCode = () => (supportsBrightColors() ? '91' : '31')
+
+const extractToolName = (task: TaskNode): string | undefined => {
+  if (task.content.type === 'functioncall') return task.content.data.name
+  if (task.content.type !== 'toolresult') return undefined
+  const data = task.content.data as { name?: unknown } | undefined
+  return typeof data?.name === 'string' ? data.name : undefined
+}
+
 export const summarizeWorkerEvent = (event: WorkerEvent): string => {
   const taskId = event.task?.id ?? event.taskId ?? 'n/a'
   const toolName =
@@ -42,18 +88,41 @@ export const summarizeWorkerEvent = (event: WorkerEvent): string => {
 const renderTaskSummary = (task: TaskNode, showRoleTag: boolean): string => {
   const role = task.role ?? 'unknown'
   if (task.content.type === 'message')
-    return showRoleTag ? `[${role}|message] ${task.content.data}` : String(task.content.data)
+    return color(
+      showRoleTag
+        ? `[${role}|message]\n${indentMultiline(String(task.content.data))}`
+        : String(task.content.data),
+      roleColorCode(role),
+    )
   if (task.content.type === 'functioncall')
-    return showRoleTag
-      ? `[${role}|functioncall]\n${toYaml(task.content.data)}`
-      : `functioncall\n${toYaml(task.content.data)}`
-  if (task.content.type === 'toolresult')
-    return showRoleTag ? `[${role}|toolresult]\n${toYaml(task.content.data)}` : `toolresult\n${toYaml(task.content.data)}`
+    return color(
+      showRoleTag
+        ? `[${role}|functioncall]\n${indentMultiline(toYaml(task.content.data))}`
+        : `functioncall\n${toYaml(task.content.data)}`,
+      functionCallColorCode(),
+    )
+  if (task.content.type === 'toolresult') {
+    const yaml = toYaml(task.content.data)
+    return color(
+      showRoleTag ? `[${role}|toolresult]\n${indentMultiline(yaml)}` : `toolresult\n${yaml}`,
+      toolResultColorCode(),
+    )
+  }
   if (task.content.type === 'error')
-    return showRoleTag ? `[${role}|error]\n${toYaml(task.content.data)}` : `error\n${toYaml(task.content.data)}`
+    return color(
+      showRoleTag
+        ? `[${role}|error]\n${indentMultiline(toYaml(task.content.data))}`
+        : `error\n${toYaml(task.content.data)}`,
+      errorColorCode(),
+    )
   if (task.content.type === 'return')
-    return showRoleTag ? `[${role}|return] ${task.content.data}` : String(task.content.data)
-  return showRoleTag ? `[${role}|${task.content.type}]` : task.content.type
+    return color(
+      showRoleTag
+        ? `[${role}|return]\n${indentMultiline(String(task.content.data))}`
+        : String(task.content.data),
+      roleColorCode(role),
+    )
+  return color(showRoleTag ? `[${role}|${task.content.type}]` : task.content.type, roleColorCode(role))
 }
 
 const isVisibleMessageRole = (task: TaskNode) =>
@@ -63,6 +132,8 @@ const shouldRenderTask = (task: TaskNode, debugEnabled: boolean) => {
   if (debugEnabled) return true
   if (task.content.type === 'error') return true
   if (isVisibleMessageRole(task)) return true
+  if (task.content.type === 'functioncall') return true
+  if (task.content.type === 'toolresult') return true
   if (task.content.type === 'return') return false
   if (INTERNAL_TASK_TYPES.has(task.content.type)) return false
   return false
@@ -77,10 +148,23 @@ export const renderTaskProgress = (
   previousSnapshotExists: boolean,
 ): void => {
   const debugEnabled = state.debugEnabled()
+  const toolName = extractToolName(task)
+  if (!debugEnabled && task.content.type === 'functioncall' && toolName && state.isFunctionHiddenInChat(toolName)) return
+  if (!debugEnabled && task.content.type === 'toolresult' && toolName && state.isFunctionHiddenInChat(toolName)) return
   if (!shouldRenderTask(task, debugEnabled)) return
   state.clearThinkingPanel()
   const prefix = debugEnabled ? (previousSnapshotExists ? '[task updated] ' : '[task] ') : ''
-  state.writeLine(`${prefix}${renderTaskSummary(task, state.showRoleTag())}`)
+  const summary = renderTaskSummary(task, state.showRoleTag())
+  if (!debugEnabled && task.content.type === 'toolresult' && !state.showFullFunctionResults()) {
+    const [header, ...body] = summary.split('\n')
+    const compact = truncateToLines(body.join('\n'), MAX_RESULT_LINES)
+    state.writeLine(`${prefix}${header}\n${compact.text}`)
+    state.writeLine('')
+    state.renderThinkingPanel()
+    return
+  }
+  state.writeLine(`${prefix}${summary}`)
+  state.writeLine('')
   state.renderThinkingPanel()
 }
 
@@ -90,6 +174,7 @@ export const renderWorkerProgress = (state: RendererState, event: WorkerEvent): 
   state.clearThinkingPanel()
   state.writeLine(`[worker] ${summarizeWorkerEvent(event)}`)
   if (debugEnabled) state.writeLine(`[worker yaml]\n${toYaml(event)}`)
+  state.writeLine('')
   state.renderThinkingPanel()
 }
 

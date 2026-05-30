@@ -1,7 +1,6 @@
-import { TOKEN_SERVICE_BASE_URL } from '@taskyon/taskyon/taskyon.space/tokenservice.types.ts'
-import { isTaskyonKey } from '@taskyon/taskyon/core/tyCrypto.ts'
-import type { llmSettings } from '@taskyon/taskyon/types/profiles.ts'
-import type { CliApiConfig, LlmModel } from './types.ts'
+import { TOKEN_SERVICE_BASE_URL, isTaskyonKey, type apiConfig, type llmSettings } from '@taskyon/taskyon'
+import { toolCall } from '@taskyon/taskyon/api'
+import type { CliApiConfig, LlmModel } from './types'
 
 export const DEFAULT_PROMPT_TEMPLATES = {
   basePrompt:
@@ -16,7 +15,7 @@ export const DEFAULT_PROMPT_TEMPLATES = {
   tools: 'Available tools:\\n\\n${tools}',
 }
 
-export const baseApiDefinitions: NonNullable<llmSettings['llmApis']> = {
+export const baseApiDefinitions: Record<string, apiConfig> = {
   taskyon: {
     name: 'taskyon',
     baseURL: 'https://share.taskyon.space',
@@ -64,6 +63,9 @@ export const baseApiDefinitions: NonNullable<llmSettings['llmApis']> = {
 
 export function createCliLlmSettings(config: CliApiConfig): llmSettings {
   const selectedApiConfig = baseApiDefinitions[config.selectedApi]
+  if (!selectedApiConfig) {
+    throw new Error(`Unsupported provider: ${config.selectedApi}`)
+  }
   return {
     selectedApi: config.selectedApi,
     llmApis: {
@@ -78,6 +80,10 @@ export function createCliLlmSettings(config: CliApiConfig): llmSettings {
     vectorizationModel: '',
     maxAutonomousTasks: 5,
     enableToolChooser: true,
+    entryNode: toolCall({
+      name: 'entryNode',
+      arguments: {},
+    }),
   }
 }
 

@@ -1,7 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { chat2Md } from '@taskyon/taskyon/core/taskUtils.ts'
-import type { Taskyon } from '@taskyon/taskyon/core/init.ts'
+import { chat2Md, type Taskyon } from '@taskyon/taskyon'
 
 export type ConversationPersistence = {
   filePath: string

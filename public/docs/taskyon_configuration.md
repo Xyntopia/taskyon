@@ -21,6 +21,16 @@ To integrate Taskyon into your webpage, you will need to create an iframe elemen
 
 CHeck out this link for taskyons default configuration on this server: [/taskyon_settings.json](/taskyon_settings.json)
 
+### Entry-Node-Centric Prompting
+
+Taskyon now treats `toolchainConfig.entryNode` as the primary orchestration config surface.
+
+- Prompt templates (`prompt_templates`) live under `entryNode` settings.
+- Tool-calling behavior (`llmTools` / native tool-calling preference) is configured at `entryNode`.
+- Optional web search execution flags are configured at `entryNode.websearch`.
+
+`chatCompletion` remains the execution gateway, while entry-node controls workflow/prompt orchestration.
+
 ### Conclusion
 
 Taskyon provides a powerful and flexible configuration system that can be used to customize its behavior. By using the GUI, iframe integration, and configuration options, you can tailor Taskyon to meet the needs of your application.

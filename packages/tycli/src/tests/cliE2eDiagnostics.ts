@@ -150,7 +150,7 @@ async function runTycSession(args: {
         testName,
         steps,
         timeoutMs,
-        env,
+        ...(env ? { env } : {}),
       })
     } catch (error) {
       lastLaunchError = error

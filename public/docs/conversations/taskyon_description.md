@@ -57,9 +57,9 @@ flowchart TB
 
   E --> G{tool returned taskResult?}
   G -- Yes --> H[Append child chains / parentID]
-  G -- No --> I[Append toolresult + AnalyzeToolResult]
+  G -- No --> I[Append toolresult + entryNode]
 
-  E --> J[Error -> error + AnalyzeError]
+  E --> J[Error -> error + entryNode]
   H --> K[Queue new tasks]
   I --> K
 ```
@@ -74,33 +74,30 @@ often, it might make sense
 to define a new tool which works faster on repeated
 or complex tasks then trying to solve a problem
 with the generic tools available.
-In the UI, user messages are typically followed by an **entry node** (a tool call). The default
-entry node is `chooseTool`, which decides whether to run a plain chat completion or route
-into a restricted set of tools. The graph below shows this default workflow.
+In the UI, user messages are typically followed by an **entry node** (a tool call). The entry
+node is now the primary workflow router: it decides the next action and forwards orchestration
+settings (prompts, native tool-calling, web search options, reasoning) to `chatCompletion`.
+The graph below shows this default workflow.
 
 ```mermaid
 ---
-title: Default Workflow (Entry Node + chooseTool)
+title: Default Workflow (Entry Node Driven)
 ---
 %%{init: { "flowchart": { "curve": "cardinal", "wrappingWidth": 420 } } }%%
 flowchart TD
   S([Start]) --> Files[files?]
   Files --> U[User message]
-  U --> Entry{{entryNode: chooseTool}}
+  U --> Entry{{entryNode}}
 
-  Entry --> CTsimple{{chatCompletion<br/>goal=SimpleCompletion}}
-  Entry --> CTpick{{chatCompletion<br/>goal=ChooseTool}}
-
-  CTpick --> ToolCall{{Tool call}}
+  Entry --> CT{{chatCompletion<br/>goal=AnalyzeToolResult or WebSearch}}
+  CT --> ToolCall{{Tool call}}
   ToolCall --> ToolResult[toolresult]
-  ToolResult --> CTanalysis{{chatCompletion<br/>goal=AnalyzeToolResult}}
+  ToolResult --> Entry
 
-  CTsimple --> A[Assistant message]
-  CTanalysis --> A
+  CT --> A[Assistant message]
 
   ToolCall --> Error[error]
-  Error --> CTerror{{chatCompletion<br/>goal=AnalyzeError}}
-  CTerror --> A
+  Error --> Entry
 ```
 
 ### Comparison of taskyon's task sequence to a reduce function

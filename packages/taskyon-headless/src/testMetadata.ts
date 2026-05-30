@@ -46,6 +46,9 @@ export const headlessTestMetadata: Record<string, HeadlessTestMetadata> = {
   testSharedHeadlessBrowserDiscoveryFixture: {
     requiresNetwork: true,
   },
+  testEntryNodeRecoversFromMalformedPythonToolCall: {
+    requiresNetwork: true,
+  },
 }
 
 export const unsupportedModuleFallbacks: Record<string, UnsupportedModuleFallback> = {

@@ -9,6 +9,7 @@
     "dev": "yarn node --import ./src/register.ts --experimental-strip-types ./src/cli.ts",
     "build": "tsup && chmod +x ./dist/cli.cjs",
     "lint": "eslint -c ../../eslint.config.js './src/**/*.{ts,js,mjs,cjs}'",
+    "lint:fix": "eslint -c ../../eslint.config.js './src/**/*.{ts,js,mjs,cjs}' --fix",
     "typecheck": "bash -lc 'set -o pipefail; out=$(tsc -p ./tsconfig.lint.json --noEmit 2>&1 || true); cli=$(printf \"%s\\n\" \"$out\" | grep -E \"^src/cli(\\.ts|/)\" || true); if [ -n \"$cli\" ]; then printf \"%s\\n\" \"$cli\"; exit 2; fi'",
     "test:e2e": "yarn node --import ./src/register.ts --experimental-strip-types ./src/tests/runCliDiagnostics.ts",
     "test:e2e:all": "TYCLI_E2E_INCLUDE_EXPERIMENTAL=1 yarn node --import ./src/register.ts --experimental-strip-types ./src/tests/runCliDiagnostics.ts",

@@ -15,7 +15,6 @@ type yesno = z.infer<typeof yesno>
 //       functionality with different tools while utilizing a very "slim" chatCompletion
 export type Goals =
   | 'SimpleCompletion'
-  | 'AnalyzeError'
   | 'ChooseTool'
   | 'AnalyzeToolResult'
   | 'WebSearch'
@@ -129,17 +128,13 @@ function calculateCompletionVariables(
   const originalMessage = typeof lastMessage !== 'string' ? safeYamlDump(lastMessage) : lastMessage
 
   const requiredSchema =
-    goal === 'AnalyzeError'
-      ? useToolChat
-        ? StructuredResponseTypes.SystemResponseEvaluation.merge(UseToolBase)
-        : StructuredResponseTypes.SystemResponseEvaluation
-      : goal === 'ChooseTool'
-        ? StructuredResponseTypes.ToolSelection.merge(UseToolBase)
-        : goal === 'AnalyzeToolResult'
-          ? useToolChat
-            ? StructuredResponseTypes.ToolResultBase.merge(UseToolBase)
-            : StructuredResponseTypes.ToolResultBase
-          : undefined
+    goal === 'ChooseTool'
+      ? StructuredResponseTypes.ToolSelection.merge(UseToolBase)
+      : goal === 'AnalyzeToolResult'
+        ? useToolChat
+          ? StructuredResponseTypes.ToolResultBase.merge(UseToolBase)
+          : StructuredResponseTypes.ToolResultBase
+        : undefined
 
   const variables = {
     format: 'yaml',
@@ -222,9 +217,7 @@ export function addPrompts(
         // because it will be replaced by our task/evaluate/toolResult messages
         // where we have wrapped the original message...
         modifiedOpenAIConversationThread.pop()
-        if (goal === 'AnalyzeError') {
-          appendMessagesList.push(taskChatTemplates.evaluate)
-        } else if (goal === 'ChooseTool') {
+        if (goal === 'ChooseTool') {
           appendMessagesList.push(taskChatTemplates.task)
         } else if (goal === 'AnalyzeToolResult') {
           appendMessagesList.push(taskChatTemplates.toolResult)

@@ -21,7 +21,6 @@ import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
 import type OpenAI from 'openai'
 import type { ReadonlyDeep } from 'type-fest'
-import { z } from 'zod'
 import type { TyTaskManager } from '../core/taskManager'
 import { mapFunctionNames } from '../core/tools'
 import { isTaskyonKey } from '../core/tyCrypto'
@@ -755,8 +754,7 @@ function generateFollowUpTasksFromResult(
             console.log('No more follow up tasks!')
           } else if (
             goal === 'AnalyzeToolResult' ||
-            goal === 'ChooseTool' ||
-            goal === 'AnalyzeError'
+            goal === 'ChooseTool'
           ) {
             const commands = getCommandFromStructuredResponse(txtContent)
             if (commands.length > 0) {
@@ -1055,7 +1053,7 @@ export const chatCompletionToolParameters = {
         'The name of the model to use for the completion. Optional, will choose default model if not provided',
     },
     goal: {
-      enum: ['SimpleCompletion', 'AnalyzeError', 'ChooseTool', 'AnalyzeToolResult', 'WebSearch'],
+      enum: ['SimpleCompletion', 'ChooseTool', 'AnalyzeToolResult', 'WebSearch'],
       description:
         'Optional Parameter to define the goal of the chat completion. If not set, the goal is dynamically inferred from the input.',
     },
@@ -1140,7 +1138,6 @@ export const chatCompletionToolParameters = {
         'instruction',
         'toolResult',
         'task',
-        'evaluate',
         'schemaReminder',
         'tools',
       ],
@@ -1165,10 +1162,6 @@ export const chatCompletionToolParameters = {
         task: {
           type: 'string',
           description: 'This prompt is used to explain to the AI what to do with a specific task.',
-        },
-        evaluate: {
-          type: 'string',
-          description: 'This prompt is used to evaluate errors',
         },
         schemaReminder: {
           type: 'string',
@@ -1247,7 +1240,10 @@ export function createChatCompletionTool(
       }
       const useArtificialStreaming = artificial_streaming ?? true
       const tools = allowedTools ?? []
-      const resolvedPromptTemplates = prompt_templates ?? DEFAULT_PROMPT_TEMPLATES
+      const resolvedPromptTemplates = {
+        ...DEFAULT_PROMPT_TEMPLATES,
+        ...(prompt_templates ?? {}),
+      }
 
       if (!selectedApi) {
         throw new Error('No API selected!')
@@ -1293,27 +1289,9 @@ export function createChatCompletionTool(
       // refactor this below and make it all explicit, without passing llmSettings...
       // now add goal-specific prompts...
       const lastTaskBeforeChatCompletion = context.taskChain.at(-2)
-      // in case there was an error, we want to make sure, that we allow using the same tool(s)
-      // that were in use when the error was created...
-      const lastTaskBeforeError = context.taskChain.at(-3)
-      let allowedToolsFromError: string[] = []
-      if (goal === 'AnalyzeError' && lastTaskBeforeError?.content.type === 'functioncall') {
-        if (lastTaskBeforeError.content.data.name === 'chatCompletion') {
-          // Check if allowedTools is an array of strings using zod
-          const AllowedToolsSchema = z.array(z.string())
-          const res = AllowedToolsSchema.safeParse(
-            lastTaskBeforeError.content.data.arguments.allowedTools,
-          )
-          if (res.success) allowedToolsFromError = res.data
-        } else {
-          // otherwise we might want to repeat the actual tool call with different parameters!
-          allowedToolsFromError = [lastTaskBeforeError.content.data.name]
-        }
-      }
-
       // TODO: can we get rid of taskManager here in order to make our task more functional :)?
       const chatInfo = await processChatTask(
-        [...tools, ...allowedToolsFromError],
+        tools,
         toolDefs,
         llmTools,
         {

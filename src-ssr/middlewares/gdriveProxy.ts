@@ -53,5 +53,7 @@ const handleProxyRequest = async (req: Request, res: Response) => {
 
 export default defineSsrMiddleware(({ app }) => {
   console.log('prepare gdrive proxy')
-  app.get('/proxy/gdrive/:fileId', handleProxyRequest)
+  app.get('/proxy/gdrive/:fileId', (req, res) => {
+    void handleProxyRequest(req, res)
+  })
 })
