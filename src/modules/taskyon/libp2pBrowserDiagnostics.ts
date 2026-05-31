@@ -170,7 +170,9 @@ export async function startLibp2pBrowserMessageExchangeTest(opts?: {
     const payload = parseWireMessage(evt.detail.data)
     onLog(
       `[pubsub] inbound topic=${evt.detail.topic} from=${from} bytes=${evt.detail.data.byteLength} parsed=${
-        payload ? `${payload.type} runId=${payload.runId} toRunId=${payload.toRunId ?? '-'}` : 'invalid'
+        payload
+          ? `${payload.type} runId=${payload.runId} toRunId=${payload.toRunId ?? '-'}`
+          : 'invalid'
       }`,
     )
     if (!payload) {
@@ -212,7 +214,9 @@ export async function startLibp2pBrowserMessageExchangeTest(opts?: {
       ackReceived += 1
       emitStats()
       onLog(`[pubsub] received ack from ${from}`)
-      onLog(`[visibility] confirmed by ${from}: it heard that peer ${peerId} run ${runId} is online on ${TEST_TOPIC}`)
+      onLog(
+        `[visibility] confirmed by ${from}: it heard that peer ${peerId} run ${runId} is online on ${TEST_TOPIC}`,
+      )
     }
 
     maybeFinish()
@@ -267,7 +271,9 @@ export async function startLibp2pBrowserMessageExchangeTest(opts?: {
         onLog(`[relay] connected ${conn.remotePeer.toString()} via ${conn.remoteAddr.toString()}`)
         return
       } catch (error) {
-        onLog(`[relay] dial failed ${addr}: ${error instanceof Error ? error.message : String(error)}`)
+        onLog(
+          `[relay] dial failed ${addr}: ${error instanceof Error ? error.message : String(error)}`,
+        )
       }
     }
     onLog('[relay] no relay dial succeeded - continuing with peer discovery')
@@ -284,7 +290,9 @@ export async function startLibp2pBrowserMessageExchangeTest(opts?: {
       try {
         onLog(`[relay-circuit] dial attempt ${targetPeerId} via ${relayPeerId}`)
         const c = await node.dial(multiaddr(circuitAddr))
-        onLog(`[relay-circuit] connected to ${c.remotePeer.toString()} via ${c.remoteAddr.toString()}`)
+        onLog(
+          `[relay-circuit] connected to ${c.remotePeer.toString()} via ${c.remoteAddr.toString()}`,
+        )
         return
       } catch (error) {
         onLog(

@@ -56,37 +56,31 @@
       </div>
 
       <q-list bordered separator dense>
-          <q-item>
-            <q-item-section>
-              <q-item-label>Current Network</q-item-label>
-              <q-item-label caption>{{ activeNetworkName }}</q-item-label>
-            </q-item-section>
-          </q-item>
-          <q-item>
-            <q-item-section>
-              <q-item-label>Discovery Token</q-item-label>
-              <q-item-label caption class="ellipsis">
-                {{ activeDiscoveryToken || 'not derived yet' }}
-              </q-item-label>
-            </q-item-section>
-          </q-item>
-          <q-item>
-            <q-item-section>
-              <q-item-label>Fixture Network</q-item-label>
-              <q-item-label caption>
-                {{ fixtureNetwork.name }}
-              </q-item-label>
-            </q-item-section>
-            <q-item-section side>
-              <q-btn
-                flat
-                dense
-                color="primary"
-                label="Join Test"
-                @click="joinFixtureNetwork"
-              />
-            </q-item-section>
-          </q-item>
+        <q-item>
+          <q-item-section>
+            <q-item-label>Current Network</q-item-label>
+            <q-item-label caption>{{ activeNetworkName }}</q-item-label>
+          </q-item-section>
+        </q-item>
+        <q-item>
+          <q-item-section>
+            <q-item-label>Discovery Token</q-item-label>
+            <q-item-label caption class="ellipsis">
+              {{ activeDiscoveryToken || 'not derived yet' }}
+            </q-item-label>
+          </q-item-section>
+        </q-item>
+        <q-item>
+          <q-item-section>
+            <q-item-label>Fixture Network</q-item-label>
+            <q-item-label caption>
+              {{ fixtureNetwork.name }}
+            </q-item-label>
+          </q-item-section>
+          <q-item-section side>
+            <q-btn flat dense color="primary" label="Join Test" @click="joinFixtureNetwork" />
+          </q-item-section>
+        </q-item>
       </q-list>
     </q-card-section>
 
@@ -118,10 +112,7 @@
 <script setup lang="ts">
 import { matVisibility, matVisibilityOff } from '@quasar/extras/material-icons'
 import { computed, ref } from 'vue'
-import {
-  headlessBrowserDiscoveryTestNetwork,
-  type P2pManagerSnapshot,
-} from '@taskyon/p2p-core'
+import { headlessBrowserDiscoveryTestNetwork, type P2pManagerSnapshot } from '@taskyon/p2p-core'
 
 type NetworkControls = {
   setActiveSubnetwork: (id: string) => void
@@ -155,8 +146,9 @@ const networkOptions = computed(() =>
 
 const activeNetwork = computed(
   () =>
-    snapshot.state.subnetworks.find((network) => network.id === snapshot.state.activeSubnetworkId) ??
-    null,
+    snapshot.state.subnetworks.find(
+      (network) => network.id === snapshot.state.activeSubnetworkId,
+    ) ?? null,
 )
 const activeNetworkName = computed(() => activeNetwork.value?.name ?? '')
 const activeNetworkSecret = computed(() => activeNetwork.value?.secret ?? '')

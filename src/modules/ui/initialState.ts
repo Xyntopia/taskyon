@@ -26,7 +26,8 @@ export const getMappedProfileForSessionId = (sessionId: string): string =>
 export const mapSessionToProfile = (sessionId: string, profileName: string) =>
   LocalStorage.setItem(getSessionProfileStorageKey(sessionId), profileName)
 
-export const getStoredStateString = (name: string) => LocalStorage.getItem(getProfileStorageKey(name)) || ''
+export const getStoredStateString = (name: string) =>
+  LocalStorage.getItem(getProfileStorageKey(name)) || ''
 
 export const getTaskyonUiProfile = (name: string | null) => {
   if (!name) return

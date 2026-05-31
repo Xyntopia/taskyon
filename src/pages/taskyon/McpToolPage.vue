@@ -2,8 +2,8 @@
   <FadeAwayScrollPage padding class="column q-gutter-md">
     <div class="text-h6">Add MCP Tools</div>
     <div class="text-caption">
-      Import MCP `tools/list` payloads from hosted MCP endpoints and save selected tools as
-      Taskyon tool definitions.
+      Import MCP `tools/list` payloads from hosted MCP endpoints and save selected tools as Taskyon
+      tool definitions.
     </div>
 
     <div class="row q-col-gutter-sm">

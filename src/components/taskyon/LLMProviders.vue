@@ -147,9 +147,8 @@ or with an llm proxy such as this one:  https://github.com/BerriAI/liteLLM-proxy
       </div>
       <q-expansion-item label="Retrieve Keys from other AI services">
         <q-item-label header>
-          Manually configure & retrieve API keys (Setup a local, privacy-preserving server, a
-          custom LLM AI server in your company etc...) Everything with an OpenAI compatible API will
-          work:
+          Manually configure & retrieve API keys (Setup a local, privacy-preserving server, a custom
+          LLM AI server in your company etc...) Everything with an OpenAI compatible API will work:
         </q-item-label>
         <div class="row q-gutter-xs">
           <div class="col">

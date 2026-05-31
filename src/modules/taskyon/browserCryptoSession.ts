@@ -117,7 +117,9 @@ type PersistedX25519Jwk = {
   publicJwk: JsonWebKey
 }
 
-async function exportDeviceKeyToJwk(keyPair: CryptoKeyPair): Promise<PersistedX25519Jwk | undefined> {
+async function exportDeviceKeyToJwk(
+  keyPair: CryptoKeyPair,
+): Promise<PersistedX25519Jwk | undefined> {
   if (!keyPair.privateKey.extractable || !keyPair.publicKey.extractable) return undefined
   const privateJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey)
   const publicJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey)
@@ -151,7 +153,9 @@ async function saveDeviceKeyToFallbackStorage(namespace: string, keyPair: Crypto
   LocalStorage.setItem(key, JSON.stringify(exported))
 }
 
-async function getDeviceKeyFromFallbackStorage(namespace: string): Promise<CryptoKeyPair | undefined> {
+async function getDeviceKeyFromFallbackStorage(
+  namespace: string,
+): Promise<CryptoKeyPair | undefined> {
   const key = fallbackDeviceKeyStorageKey(namespace)
   const raw = LocalStorage.getItem(key)
   if (typeof raw !== 'string' || !raw.trim()) return undefined
@@ -166,11 +170,10 @@ async function getDeviceKeyFromFallbackStorage(namespace: string): Promise<Crypt
 }
 
 async function generatePersistableDeviceKeyPair(): Promise<CryptoKeyPair> {
-  const keyPair = (await crypto.subtle.generateKey(
-    { name: 'X25519' },
-    true,
-    ['deriveKey', 'deriveBits'],
-  )) as CryptoKeyPair
+  const keyPair = (await crypto.subtle.generateKey({ name: 'X25519' }, true, [
+    'deriveKey',
+    'deriveBits',
+  ])) as CryptoKeyPair
   return keyPair
 }
 

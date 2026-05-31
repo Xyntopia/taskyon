@@ -261,7 +261,9 @@ const state = useAppStateStore()
 const { task, nextTask, isWorking, short, showMeta } = toRefs(props)
 const showSourceTaskDialog = ref(false)
 const sourceTaskForDialog = ref<TaskNode>()
-const resolvedMessageDebug = computed(() => props.messageDebug ?? !!state.messageDebug[task.value.id])
+const resolvedMessageDebug = computed(
+  () => props.messageDebug ?? !!state.messageDebug[task.value.id],
+)
 const sourceTaskId = computed(() =>
   task.value.content.type === 'error' ? (task.value.parentID ?? task.value.priorID) : undefined,
 )

@@ -252,7 +252,9 @@ const useSessionKey = () => {
         'unknown-none',
       ]
       if (source === 'derived' && explicitSources.includes(bindingKeySource.value)) {
-        console.log('ignore derived bindingKey because an explicit bindingKey source is already active')
+        console.log(
+          'ignore derived bindingKey because an explicit bindingKey source is already active',
+        )
         return
       }
       console.log('set new session bindingKey!', k ? 'add new key...' : 'delete key...')
@@ -404,9 +406,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
   const urlConfig = getUrlConfig()
   const { bindingKey, bindingKeySource, setBindingKey } = useSessionKey()
   const iframeProfileName =
-    urlConfig.isInIframe &&
-    typeof urlConfig.profile === 'string' &&
-    urlConfig.profile.length > 0
+    urlConfig.isInIframe && typeof urlConfig.profile === 'string' && urlConfig.profile.length > 0
       ? urlConfig.profile
       : null
   if (iframeProfileName && !urlConfig.noBindingKeyParam) {
@@ -420,9 +420,12 @@ export const useAppStateStore = defineStore('ui-state', () => {
             profile: iframeProfileName,
           })
         } else {
-          console.log('[IFRAME] skipped profile-derived binding key because host key is already set', {
-            profile: iframeProfileName,
-          })
+          console.log(
+            '[IFRAME] skipped profile-derived binding key because host key is already set',
+            {
+              profile: iframeProfileName,
+            },
+          )
         }
       })
       .catch((error) => {
@@ -437,10 +440,13 @@ export const useAppStateStore = defineStore('ui-state', () => {
     setBindingKey(null, 'host')
     initialState.initWBindingKey = false
   }
-  const hasExplicitUrlProfile = typeof urlConfig.profile === 'string' && urlConfig.profile.length > 0
+  const hasExplicitUrlProfile =
+    typeof urlConfig.profile === 'string' && urlConfig.profile.length > 0
   const profileMode = hasExplicitUrlProfile ? 'explicit' : 'session-driven'
   const activeProfileNameRef = ref<string>(
-    hasExplicitUrlProfile ? (urlConfig.profile as string) : getCurrentActiveProfileName() ?? defaultProfileName,
+    hasExplicitUrlProfile
+      ? (urlConfig.profile as string)
+      : (getCurrentActiveProfileName() ?? defaultProfileName),
   )
   if (!hasExplicitUrlProfile && !getCurrentActiveProfileName()) {
     switchCurrentActiveProfilePointer(activeProfileNameRef.value)
@@ -519,7 +525,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
         ? (urlConfig.profile as string)
         : newId
           ? getMappedProfileForSessionId(newId)
-          : getCurrentActiveProfileName() ?? defaultProfileName
+          : (getCurrentActiveProfileName() ?? defaultProfileName)
     if (profileMode === 'session-driven' && newId) {
       mapSessionToProfile(newId, profileToLoad)
       switchCurrentActiveProfilePointer(profileToLoad)

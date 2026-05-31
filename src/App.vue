@@ -45,30 +45,32 @@ if (process.env.CLIENT) {
       params.get('chii') === '1' || window.localStorage.getItem('taskyon.enableChii') === '1'
 
     if (!enableChii) {
-      console.log('Skipping chii/eruda devtools. Enable with ?chii=1 or localStorage taskyon.enableChii=1')
+      console.log(
+        'Skipping chii/eruda devtools. Enable with ?chii=1 or localStorage taskyon.enableChii=1',
+      )
     } else {
-    const CHII_PORT = 8090 // or 8090, but must match how you run `chii`
+      const CHII_PORT = 8090 // or 8090, but must match how you run `chii`
 
-    console.warn(
-      `Loading chii devtools. Make sure "chii -P ${CHII_PORT}" is running on your dev machine.`,
-    )
+      console.warn(
+        `Loading chii devtools. Make sure "chii -P ${CHII_PORT}" is running on your dev machine.`,
+      )
 
-    const devScript = document.createElement('script')
+      const devScript = document.createElement('script')
 
-    const host = window.location.hostname
-    const protocol = 'https' // "http" or "https", depending on your setup
+      const host = window.location.hostname
+      const protocol = 'https' // "http" or "https", depending on your setup
 
-    // This matches the official snippet from chii:
-    // "<script src="//host-machine-ip:8080/target.js" ...
-    devScript.src = `${protocol}://${host}:${CHII_PORT}/target.js`
-    devScript.async = true
+      // This matches the official snippet from chii:
+      // "<script src="//host-machine-ip:8080/target.js" ...
+      devScript.src = `${protocol}://${host}:${CHII_PORT}/target.js`
+      devScript.async = true
 
-    devScript.onload = () => console.log('Chii devtools script loaded successfully')
-    devScript.onerror = () => console.error('Failed to load chii devtools script')
+      devScript.onload = () => console.log('Chii devtools script loaded successfully')
+      devScript.onerror = () => console.error('Failed to load chii devtools script')
 
       document.head.appendChild(devScript)
 
-    // ---- Eruda dev console (only if NOT on localhost) ----
+      // ---- Eruda dev console (only if NOT on localhost) ----
       const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(host)
 
       if (!isLocalhost) {
@@ -111,11 +113,7 @@ if (process.env.CLIENT) {
       const isTop = window === window.top
       const frameLabel =
         new URLSearchParams(window.location.search).get('taskyonFrameLabel')?.trim() || ''
-      const prefix = isTop
-        ? '[TOP]'
-        : frameLabel
-          ? `[IFRAME ${frameLabel}]`
-          : '[IFRAME]'
+      const prefix = isTop ? '[TOP]' : frameLabel ? `[IFRAME ${frameLabel}]` : '[IFRAME]'
       const style = isTop ? 'color:#2e8b57;font-weight:bold' : 'color:#1e90ff;font-weight:bold'
       const normalizeGroup = (value: string) => value.trim().toLowerCase()
 
@@ -184,7 +182,11 @@ if (process.env.CLIENT) {
         methods.forEach((method) => {
           if (!filteringActive) {
             // Preserve native callsite behavior when no tag filtering is active.
-            console[method] = originals[method].bind(console, `%c${prefix}`, style) as (typeof console)[LogMethod]
+            console[method] = originals[method].bind(
+              console,
+              `%c${prefix}`,
+              style,
+            ) as (typeof console)[LogMethod]
             return
           }
 

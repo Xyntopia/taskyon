@@ -23,9 +23,7 @@ describe('dockview keepAliveViews', () => {
     cy.wait(900)
     cy.dataCy('dock-splitter-toggle-main-0').click()
     cy.dataCy('dock-view-panel-KeepAliveTicker').should('be.visible')
-    cy.dataCy('dock-view-panel-KeepAliveTicker')
-      .invoke('height')
-      .should('be.greaterThan', 80)
+    cy.dataCy('dock-view-panel-KeepAliveTicker').invoke('height').should('be.greaterThan', 80)
 
     // Double-click splitter should also toggle collapse/restore
     cy.dataCy('dock-splitter-toggle-main-0').parent().dblclick()

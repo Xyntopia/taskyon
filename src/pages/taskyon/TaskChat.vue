@@ -148,9 +148,10 @@ import { useRoute } from 'vue-router'
 // we are re-creating the following meta tag dynamically here just for the chat page!
 // <!-- Viewport Meta in order to make window size shrink on mobile when keyboard pops up! -->
 // <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-const viewportContent = process.env.CLIENT && isTauri()
-  ? 'width=device-width, initial-scale=1.0'
-  : 'width=device-width, initial-scale=1.0, interactive-widget=resizes-content'
+const viewportContent =
+  process.env.CLIENT && isTauri()
+    ? 'width=device-width, initial-scale=1.0'
+    : 'width=device-width, initial-scale=1.0, interactive-widget=resizes-content'
 
 useMeta(() => ({
   // set the viewport meta dynamically

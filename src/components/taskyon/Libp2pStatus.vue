@@ -20,12 +20,7 @@
     <q-separator />
 
     <q-list separator dense>
-      <q-item
-        v-for="item in summaryItems"
-        :key="item.id"
-        clickable
-        @click="openDetail(item.id)"
-      >
+      <q-item v-for="item in summaryItems" :key="item.id" clickable @click="openDetail(item.id)">
         <q-item-section avatar>
           <q-icon :name="item.icon" color="primary" />
         </q-item-section>
@@ -50,7 +45,7 @@
               {{ activeDetail?.caption ?? 'No detail selected.' }}
             </div>
           </div>
-        <div class="col-auto">
+          <div class="col-auto">
             <q-btn v-close-popup flat round :icon="matClose" />
           </div>
         </q-card-section>
@@ -200,7 +195,9 @@ const summaryItems = computed(() => [
 ])
 
 const activeDetail = computed(() =>
-  activeDetailId.value ? detailSections.value[activeDetailId.value as keyof typeof detailSections.value] : null,
+  activeDetailId.value
+    ? detailSections.value[activeDetailId.value as keyof typeof detailSections.value]
+    : null,
 )
 
 function openDetail(id: string) {

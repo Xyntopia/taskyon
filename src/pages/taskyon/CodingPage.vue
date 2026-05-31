@@ -794,7 +794,8 @@ const configuration = computed<partialTyConfiguration | null>(() => {
       expertMode: true,
       showLogo: false,
       chatSuggestions: [],
-      welcomeMsg: 'I can help edit files in this coding workspace. Upload or create files here to get started.',
+      welcomeMsg:
+        'I can help edit files in this coding workspace. Upload or create files here to get started.',
     },
     signatureOrKey: taskyonKey,
   }

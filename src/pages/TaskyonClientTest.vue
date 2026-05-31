@@ -2,13 +2,7 @@
   <div class="column">
     <div class="col-6">
       <!--We load the iframe here with the iframe=true parameter to make test in cypress work!-->
-      <iframe
-        id="taskyon"
-        frameborder="0"
-        :src="iframeSrc"
-        width="100%"
-        height="500px"
-      ></iframe>
+      <iframe id="taskyon" frameborder="0" :src="iframeSrc" width="100%" height="500px"></iframe>
     </div>
     <div class="row">
       <div class="col-6">

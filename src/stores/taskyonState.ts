@@ -39,7 +39,10 @@ import type { AuthenticationOptions } from '@taskyon/taskyon/browser'
 import { usePersistentOauth, type TokenGetter } from '@taskyon/taskyon/browser'
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
 import type { chunkStreamType } from '@taskyon/taskyon/tools/chatCompletionTool'
-import { createStandardEntryNodeTool, EntryNodeSettingsSchema } from '@taskyon/taskyon/tools/entryNode'
+import {
+  createStandardEntryNodeTool,
+  EntryNodeSettingsSchema,
+} from '@taskyon/taskyon/tools/entryNode'
 import { until } from '@vueuse/core'
 import { default as Ajv } from 'ajv'
 import type { JSONSchema7 } from 'json-schema'
@@ -1385,9 +1388,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   dynamicQuasarTheming(stateRefs)
 
-  const entryNode = computed(
-    () => stateRefs.llmSettings.entryNode,
-  )
+  const entryNode = computed(() => stateRefs.llmSettings.entryNode)
 
   const tyready = ref(false)
   void taskyon.then(() => {
