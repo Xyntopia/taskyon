@@ -79,6 +79,7 @@ We expose common workflows as npm scripts. Below is each command with its purpos
 - **`build:desktop`**: Builds the Tauri desktop binary inside Docker; output lands in `./dist-desktop`.
 - **`dev`**: Launches Quasar’s hot-reload dev server.
 - **`format`**: Auto-formats all supported files via Prettier.
+- **`format:file`**: Formats only the specific files you pass, using the same repository Prettier configuration.
 - **`lint`**: Runs TypeScript type checks (no emit) and ESLint against your code.
 
 > _Pro tip:_ Run `yarn lint:fix` to auto-fix ESLint errors (if enabled in your editor).
@@ -214,6 +215,7 @@ bash ./packages/shared/modelica/scripts/generate-omc-traces-via-podman.sh
 ```
 
 Notes:
+
 - Requires `podman`, `cargo`, and `curl`.
 - Uses `OMC_PODMAN_IMAGE` (default `openmodelica/openmodelica:v1.26.1-gui`).
 - Output traces are written to `packages/rumoca/target/msl/results/sim_traces/omc`.
@@ -377,11 +379,11 @@ Consistency is enforced through:
 **Commands**:
 
 ```bash
-yarn format   # auto-formats code
-yarn lint     # type-checks & lints
+yarn format:file src/example.ts src/example.vue   # format only changed files
+yarn lint                                      # type-checks & lints
 ```
 
-Format and lint before committing to keep PR diffs clean.
+Format only the files you changed, and lint before committing to keep diffs clean.
 
 Make sure your code is correctly formatted and linted before committing. The configuration for ESLint is integrated into the project, and Visual Studio Code will help ensure that your contributions align with the coding standards (e.g. you can press
 ctrl-shift-p then search for "format" and it will give formatting options).

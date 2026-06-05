@@ -22,7 +22,7 @@ import { appDevTools } from '../tools/webAppDev'
 import { createTaskyonMcpBridge } from '../mcp/taskyonBridge'
 import { TaskyonMessage } from '../types/apiTypes'
 import type { llmSettings } from '../types/profiles'
-import { toolCall, type InternalTool } from '../types/toolApi'
+import type { InternalTool } from '../types/toolApi'
 import { FunctionArguments as FunctionArgumentsSchema } from '../types/tools'
 import type { FunctionArguments } from '../types/tools'
 import { ToolBase } from '../types/tools'
@@ -274,6 +274,7 @@ const dynamicContext =
     const { port: workerport } = createTypeFilteredPort(insidePort, ['functionResponse'])
     const { executor, stop } = functionExecutorCreator(
       taskManagerInstance.getToolDefinition,
+      taskManagerInstance.getTask,
       secretStore,
       workerport,
       toolchainConfig,

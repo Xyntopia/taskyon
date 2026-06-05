@@ -14,10 +14,6 @@
   },
   "toolchainConfig": {
     "chatCompletion": {
-      "reasoning_effort": "low",
-      "max_results": 5,
-      "use_multimodal": true,
-      "llmTools": true,
       "timeouts": {
         "totalMs": 600000,
         "stepMs": 600000
@@ -25,6 +21,7 @@
     },
     "entryNode": {
       "use_baseprompt": true,
+      "use_tool_chooser": true,
       "llmTools": true,
       "use_multimodal": true,
       "reasoning_effort": "low",
@@ -101,7 +98,6 @@
     "siteUrl": "https://taskyon.space",
     "summaryModel": "Xenova/distilbart-cnn-6-6",
     "vectorizationModel": "xyntopia/all-MiniLM-L6-v2",
-    "maxAutonomousTasks": 5,
-    "enableToolChooser": true
+    "maxAutonomousTasks": 5
   }
 }

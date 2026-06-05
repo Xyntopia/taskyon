@@ -473,8 +473,12 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
 const configuration: partialTyConfiguration = {
   llmSettings: {
     //selectedApi: 'taskyon',
-    enableToolChooser: true,
     entryNode: toolCall({ name: 'setSqlQuery', arguments: {} }),
+  },
+  toolchainConfig: {
+    entryNode: {
+      use_tool_chooser: true,
+    },
   },
   appConfiguration: {
     guiMode: 'minChat',

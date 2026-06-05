@@ -1300,7 +1300,6 @@ export const testChatCompletion = async () => {
   const { tool: chatCompletion } = await ty.getToolDefinition('chatCompletion')
   let structuredResponse
   if (chatCompletion && 'function' in chatCompletion && chatCompletion.function !== undefined) {
-    const prompt_templates = state.toolchainConfig.chatCompletion?.prompt_templates
     structuredResponse = await chatCompletion.function(
       {
         model: 'google/gemini-2.5-flash-lite',
@@ -1308,7 +1307,6 @@ export const testChatCompletion = async () => {
           `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
         ],
         llmTools: true,
-        prompt_templates,
         schema: {
           type: 'object',
           properties: {
@@ -2105,8 +2103,8 @@ export async function getTestMetaData() {
           // we are not testing files right now...
           () => Promise.resolve(null),
           () => Promise.resolve(undefined),
-          !!state.toolchainConfig.chatCompletion?.use_multimodal,
-          !!state.toolchainConfig.chatCompletion?.llmTools,
+          !!state.toolchainConfig.entryNode?.use_multimodal,
+          !!state.toolchainConfig.entryNode?.llmTools,
           toolDefs,
         )
         tyChat.thread = res

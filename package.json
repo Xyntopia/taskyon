@@ -22,6 +22,7 @@
     "dev": "yarn run ensure:msl && yarn run quasar dev",
     "dev:http": "yarn run ensure:msl && TASKYON_HTTP=1 yarn run quasar dev",
     "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .prettierignore",
+    "format:file": "prettier --write --ignore-path .prettierignore",
     "lint:fix": "eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}' --fix",
     "lint": "vue-tsc --noEmit && eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}'",
     "relay": "yarn workspace @taskyon/relay start",

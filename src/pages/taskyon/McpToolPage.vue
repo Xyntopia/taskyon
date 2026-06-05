@@ -96,8 +96,7 @@ import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-
-type UnknownRecord = Record<string, unknown>
+import z from 'zod'
 
 type McpInputTool = {
   name: string
@@ -228,33 +227,37 @@ const toolDraft = ref<ToolBase>({
   parameters: fallbackSchema,
 })
 
-function isRecord(value: unknown): value is UnknownRecord {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
+const JsonObjectSchema = z.record(z.string(), z.unknown())
+const McpInputToolSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  inputSchema: z.unknown().optional(),
+})
+const McpToolsPayloadSchema = z.union([
+  z.array(McpInputToolSchema),
+  z.object({ tools: z.array(McpInputToolSchema) }),
+  z.object({
+    result: z.object({
+      tools: z.array(McpInputToolSchema),
+    }),
+  }),
+])
 
 function normalizeToolName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
 
 function toJsonSchema(value: unknown): Readonly<JSONSchema7> {
-  return isRecord(value) ? (value as JSONSchema7) : fallbackSchema
+  const parsed = JsonObjectSchema.safeParse(value)
+  return parsed.success ? (parsed.data as JSONSchema7) : fallbackSchema
 }
 
 function parseToolsFromPayload(payload: unknown): McpInputTool[] {
-  if (Array.isArray(payload)) {
-    return payload.filter(
-      (item): item is McpInputTool => isRecord(item) && typeof item.name === 'string',
-    )
-  }
-  if (!isRecord(payload)) return []
-  const maybeToolsArray = payload.tools
-  if (Array.isArray(maybeToolsArray)) return parseToolsFromPayload(maybeToolsArray)
-
-  const maybeResult = payload.result
-  if (isRecord(maybeResult) && Array.isArray(maybeResult.tools)) {
-    return parseToolsFromPayload(maybeResult.tools)
-  }
-  return []
+  const parsed = McpToolsPayloadSchema.safeParse(payload)
+  if (!parsed.success) return []
+  if (Array.isArray(parsed.data)) return parsed.data
+  if ('tools' in parsed.data) return parsed.data.tools
+  return parsed.data.result.tools
 }
 
 function toTaskyonTool(input: McpInputTool, sourceName?: string): ToolBase {

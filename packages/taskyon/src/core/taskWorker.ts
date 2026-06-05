@@ -43,6 +43,7 @@ export const functionExecutorCreator = (
   getToolDefinition: (
     name: string,
   ) => Promise<{ def?: TaskNodeType<'tooldefinition'> | undefined; tool?: InternalTool }>,
+  getTask: (taskId: string) => Promise<TaskNode | null>,
   secretStore: SecretStore,
   duplexPort: RemoteFunctionPort,
   toolchainConfig: Thunk<Record<string, FunctionArguments>>,
@@ -103,6 +104,7 @@ export const functionExecutorCreator = (
             tool,
             abctl.signal,
             context,
+            getTask,
             duplexPort,
           )
 

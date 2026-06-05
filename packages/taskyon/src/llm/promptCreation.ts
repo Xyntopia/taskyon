@@ -13,11 +13,9 @@ type yesno = z.infer<typeof yesno>
 //       out the goals dynamically trough the parameters we provide and the messages coming before it...
 //       in fact in the future we would like to get rid of this part and provide all of this
 //       functionality with different tools while utilizing a very "slim" chatCompletion
-export type Goals =
-  | 'SimpleCompletion'
-  | 'ChooseTool'
-  | 'AnalyzeToolResult'
-  | 'WebSearch'
+export type Goals = 'SimpleCompletion' | 'ChooseTool' | 'AnalyzeToolResult' | 'WebSearch'
+
+export type PromptInjection = string
 
 // this one here is important. It should be as simple as possible
 // this type is used to parse & describe tool commands
@@ -163,6 +161,7 @@ export function addPrompts(
   },
   chatCompletionMessages: ModelMessage[],
   prompts: string[],
+  promptInjections: PromptInjection[] = [],
   allowedTools: string[],
   lastMessage: unknown,
   goal?: Goals,
@@ -189,6 +188,7 @@ export function addPrompts(
   const prependMessagesList: string[] = []
   const appendMessagesList: string[] = []
   const appendSystemMessage: string[] = []
+  const prependPromptTexts = promptInjections
 
   // we always prepend our "fancy" prompt, if we use "native" tools...
   if ((goal === 'SimpleCompletion' && useBasePrompt) || useNativeTools || goal === 'WebSearch') {
@@ -207,6 +207,7 @@ export function addPrompts(
       }
     }
   }
+  prependMessagesList.push(...prependPromptTexts)
   if (goal && goal !== 'SimpleCompletion' && goal !== 'WebSearch') {
     // only add tools, if we don#t use the native API already
     if (!useNativeTools) {
@@ -234,7 +235,6 @@ export function addPrompts(
       appendSystemMessage.push(taskChatTemplates.schemaReminder)
     }
   }
-
   const converter = string2OpenAiMessage(variables)
 
   const prependMessages = converter('system')(prependMessagesList)

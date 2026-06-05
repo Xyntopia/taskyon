@@ -45,7 +45,7 @@
           />
         </q-tab-panel>
         <q-tab-panel name="agent config" :class="tabPanelClass">
-          <div>AI/LLM chat completion configurations</div>
+          <div>AI/LLM toolchain configurations</div>
           <template v-for="[key, val] in Object.entries(state.toolchainConfig)" :key="key">
             {{ key }}
             <ObjectView
@@ -56,7 +56,7 @@
               copy-object-btn
               show-missing-mode-select
               :show-header-row="state.appConfiguration.expertMode"
-              :icons="iconRegistry.chatCompletion as iconMap"
+              :icons="(iconRegistry[key] as iconMap) ?? {}"
               missing-mode="hide"
               copy-btn
               @update:model-value="(nextVal) => applyToolchainUpdate(key, nextVal)"

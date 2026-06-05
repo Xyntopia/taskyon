@@ -75,7 +75,7 @@
     <div class="text-bold">arguments (yaml):</div>
     <div caption>
       <div class="scroll-area">
-        {{ dump(task.content.data.arguments) }}
+        {{ dump(resolvedFunctionArguments) }}
       </div>
     </div>
   </TaskField>
@@ -140,14 +140,14 @@
       <tyMarkdown
         v-if="state.taskWidgetState[task.id]?.markdownEnabled != false"
         no-line-numbers
-        :src="task.content.data"
+        :src="resolvedMessageContent"
         :use-iframe="true"
         @iframe-ready="(el: HTMLIFrameElement) => onIframeMessage(el, task.id)"
         @if-longpress="showTaskMenu(true)"
         @if-click="showTaskMenu(false)"
       />
       <div v-else class="raw-markdown q-mb-md">
-        {{ task.content.data }}
+        {{ resolvedMessageContent }}
       </div>
       <SourcesList :sources="task.content.ann ?? []" />
     </template>
@@ -234,7 +234,14 @@ import {
   mdiTools,
 } from '@quasar/extras/mdi-v6'
 import tyMarkdown from '@taskyon/shared/components/tyMarkdown.vue'
-import { humanizeError, safeYamlDump, type FileMapping, type TaskNode } from '@taskyon/taskyon'
+import { serializeObject } from '@taskyon/shared/modules/serializeObject'
+import {
+  humanizeError,
+  materializeTaskyonFunctionArguments,
+  safeYamlDump,
+  type FileMapping,
+  type TaskNode,
+} from '@taskyon/taskyon'
 import { dump } from 'js-yaml'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
@@ -266,6 +273,12 @@ const resolvedMessageDebug = computed(
 )
 const sourceTaskId = computed(() =>
   task.value.content.type === 'error' ? (task.value.parentID ?? task.value.priorID) : undefined,
+)
+const resolvedMessageContent = ref(
+  task.value.content.type === 'message' ? task.value.content.data : '',
+)
+const resolvedFunctionArguments = ref(
+  task.value.content.type === 'functioncall' ? task.value.content.data.arguments : {},
 )
 const onUpdateMessageDebug = (value: boolean) => {
   if (props.messageDebug !== undefined) {
@@ -299,6 +312,39 @@ async function getFile(id: string) {
 const onIframeMessage = (el: HTMLIFrameElement, id: string) => {
   void tystate.connectMessageIframe(id, el)
 }
+
+const stringifyTaskVariableValue = (value: unknown) =>
+  serializeObject(value, { maxDepth: 2, maxArrayLength: 20, maxStringLength: 1200 })
+
+const toUiString = (value: unknown) =>
+  typeof value === 'string' ? value : stringifyTaskVariableValue(value)
+
+const resolveTaskWidgetVariables = async () => {
+  const ty = await tystate.taskyon
+  if (task.value.content.type === 'message') {
+    resolvedMessageContent.value = await materializeTaskyonFunctionArguments(
+      { text: task.value.content.data },
+      {
+        surface: 'ui',
+        getTaskById: ty.getTask,
+        stringifyValue: stringifyTaskVariableValue,
+      },
+    ).then((result) => toUiString(result.text ?? ''))
+  }
+
+  if (task.value.content.type === 'functioncall') {
+    resolvedFunctionArguments.value = await materializeTaskyonFunctionArguments(
+      task.value.content.data.arguments,
+      {
+        surface: 'ui',
+        getTaskById: ty.getTask,
+        stringifyValue: stringifyTaskVariableValue,
+      },
+    )
+  }
+}
+
+void resolveTaskWidgetVariables()
 
 if (task.value.content.type === 'files') {
   console.log('get uploaded files')

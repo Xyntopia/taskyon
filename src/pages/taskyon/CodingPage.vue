@@ -786,8 +786,12 @@ const configuration = computed<partialTyConfiguration | null>(() => {
   if (taskyonKey == null) return null
   return {
     llmSettings: {
-      enableToolChooser: true,
       entryNode: toolCall({ name: 'documentAssistant', arguments: {} }),
+    },
+    toolchainConfig: {
+      entryNode: {
+        use_tool_chooser: true,
+      },
     },
     appConfiguration: {
       guiMode: 'minChat',

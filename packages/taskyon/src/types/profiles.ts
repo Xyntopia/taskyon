@@ -47,11 +47,6 @@ export const llmSettings = z.object({
 When a user starts a conversation, this is always the first task that is called.
 `,
   }),
-  enableToolChooser: z.boolean().default(true).meta({
-    description:
-      'Enable the standard tool chooser. This function enables taskyon to decide if and then which tool it should use for the task.',
-    title: 'Use Tools',
-  }),
 })
 export type llmSettings = z.infer<typeof llmSettings>
 

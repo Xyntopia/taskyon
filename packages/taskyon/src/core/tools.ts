@@ -5,15 +5,17 @@ import {
   RemoteFunctionCall,
   RemoteFunctionResponse,
 } from '../types/messages'
+import type { TaskNode } from '../types/taskNode'
 import type { InternalTool, toolContext } from '../types/toolApi'
-import type { FunctionArguments, FunctionCall, ParamType } from '../types/tools'
-import { ToolBase } from '../types/tools'
+import type { FunctionCall, ParamType } from '../types/tools'
+import { FunctionArguments, ToolBase } from '../types/tools'
 import type { Port } from '@taskyon/shared/modules/frpBus'
 import { executeCodeInIframe } from '../utils/iframeWorker'
 import { bigIntToString } from '../utils/objHelpers'
 import { convertZodToJsonSchemaCached } from '../utils/schema'
 import { jsonSchemaToYamlString } from '../utils/yamlUtils'
 import type { ReadonlyDeep } from 'type-fest'
+import { materializeTaskyonFunctionArguments } from './taskVariables'
 
 export type RemoteFunctionPort = Port<RemoteFunctionCall, RemoteFunctionResponse>
 
@@ -162,21 +164,31 @@ export async function handleFunctionExecution(
   tool: InternalTool,
   stopSignal: AbortSignal, // add this to our duplexPort!!
   context: toolContext,
+  getTaskById: (taskId: string) => Promise<TaskNode | null>,
   // TODO: use the duplexPort for remote functions also for our "local" iframeworker execution?....
   duplexPort: RemoteFunctionPort,
 ): Promise<unknown> {
-  // TODO: test here, if tool parameters are correct according to json schema
-  //       if not, throw an error message...
   let funcR: unknown
   const toolDefaultParams = createWithDefaults(tool.parameters)
+  const materializedArguments = await materializeTaskyonFunctionArguments(
+    FunctionArguments.parse(func.arguments),
+    {
+      surface: 'execution',
+      getTaskById,
+    },
+  )
   // mix in with explicit parameters
   const execFunc: ReadonlyDeep<FunctionCall> = {
     ...func,
     arguments: {
       ...(toolDefaultParams as Record<string, ParamType>),
-      ...func.arguments,
+      ...materializedArguments,
     },
   }
+  // We intentionally do not reject tool invocations here based on schema validation.
+  // Taskyon should be tolerant at execution time and let the concrete tool implementation
+  // decide whether partially-valid or loosely-shaped arguments are still usable.
+  // This gives LLM-produced calls more room to succeed with small deviations.
 
   console.log(toolDefaultParams)
   if (tool.function) {

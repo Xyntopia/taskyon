@@ -422,8 +422,9 @@ function defineTyGuiTools(
           )
         }
       },
-      description: 'Modify the prompt templates for the chatCompletion.',
-      longDescription: 'This tool allows you to modify the prompts used for chatCompletion.',
+      description: 'Modify the prompt templates used by the entry node.',
+      longDescription:
+        'This tool allows you to modify the prompt templates owned by the entry node.',
       name: 'modifyPrompts',
       parameters: {
         type: 'object',
@@ -970,6 +971,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // pre-initialize our python webworker, because its very slow to startup :)
   void usePyodideWebworker().preInit()
   const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
     toolChooser: { enabled: true, useTools: true },
     defaultAllowedTools: [],
   })

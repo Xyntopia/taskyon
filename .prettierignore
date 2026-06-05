@@ -1,0 +1,5 @@
+dist/
+.quasar/
+packages/rumoca
+packages/yatra
+src-tauri/

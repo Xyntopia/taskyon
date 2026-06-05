@@ -5,8 +5,8 @@
       <div class="col fit">
         <q-toggle v-model="edit" label="Manually edit prompts" />
         <ObjectView
-          v-if="edit && state.toolchainConfig.chatCompletion?.prompt_templates"
-          v-model="state.toolchainConfig.chatCompletion.prompt_templates as Record<string, unknown>"
+          v-if="edit && state.toolchainConfig.entryNode?.prompt_templates"
+          v-model="state.toolchainConfig.entryNode.prompt_templates as Record<string, unknown>"
         />
         <q-card v-else flat>
           <q-card-section>
@@ -102,7 +102,7 @@ name: current taskyon prompts
 label: ["discard", "hide"]
 -->
 
-${dump(state.toolchainConfig.chatCompletion?.prompt_templates, { forceQuotes: true })}
+${dump(state.toolchainConfig.entryNode?.prompt_templates, { forceQuotes: true })}
 
 ---
 
@@ -119,7 +119,7 @@ is added which explains the required return format.
 
 Available prompts are:
 
-${Object.keys(state.toolchainConfig.chatCompletion?.prompt_templates ?? {})
+${Object.keys(state.toolchainConfig.entryNode?.prompt_templates ?? {})
   .map((x) => '- ' + x)
   .join('\n')}
 
@@ -144,10 +144,10 @@ const structuredResponsePrompt = computed(() => {
     if (Object.keys(tystate.allTools).length !== 0) {
       const rp = addPrompts(
         tystate.allTools,
-        !!state.toolchainConfig.chatCompletion?.llmTools,
-        !!state.toolchainConfig.chatCompletion?.llmTools,
-        !!state.toolchainConfig.chatCompletion?.use_baseprompt,
-        (state.toolchainConfig.chatCompletion?.prompt_templates ?? {}) as {
+        !!state.toolchainConfig.entryNode?.llmTools,
+        !!state.toolchainConfig.entryNode?.llmTools,
+        !!state.toolchainConfig.entryNode?.use_baseprompt,
+        (state.toolchainConfig.entryNode?.prompt_templates ?? {}) as {
           basePrompt: string
           evaluate: string
           instruction: string
@@ -156,6 +156,7 @@ const structuredResponsePrompt = computed(() => {
           schemaReminder: string
           toolResult: string
         },
+        [],
         [],
         [],
         [],

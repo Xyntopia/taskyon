@@ -23,15 +23,23 @@ export const iconRegistry: iconMap = {
     reasoning_effort: mdiHeadSnowflake,
     max_results: mdiFormatListNumbered,
     llmTools: mdiFunctionVariant,
-    use_baseprompt: mdiAutoFix,
     use_multimodal: matVisibility,
+  },
+  entryNode: {
+    use_baseprompt: mdiAutoFix,
+    use_tool_chooser: mdiTools,
+    reasoning_effort: mdiHeadSnowflake,
+    llmTools: mdiFunctionVariant,
+    use_multimodal: matVisibility,
+    websearch: {
+      enabled: mdiSearchWeb,
+      max_results: mdiFormatListNumbered,
+    },
   },
 }
 
 export const settingsIcons: iconMap = {
-  llmSettings: {
-    enableToolChooser: mdiTools,
-  },
+  llmSettings: {},
   appConfiguration: {
     webSearchButton: mdiSearchWeb,
     expertMode: mdiProfessionalHexagon,

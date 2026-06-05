@@ -1,161 +1,167 @@
 <!-- ObjectView.vue -->
 <template>
-  <div v-if="modelValue">
-    <div v-if="showHeaderRow" class="row items-center">
-      <SearchInput
-        v-if="enableExpertMode"
-        :search-string="searchText"
-        class="col fit"
-        outlined
-        dense
-        hide-number-of-search-results
-        :show-filter-button="false"
-        color="secondary"
-        @search="(q, k) => (searchText = q)"
-      />
-
-      <q-btn
-        v-if="copyObjectBtn"
-        class="col-auto"
-        flat
-        stretch
-        :icon="matContentCopy"
-        @click="copyWholeObject"
-      >
-        <q-tooltip>Copy entire object as JSON</q-tooltip>
-      </q-btn>
-
-      <q-btn
-        v-if="enableExpertMode"
-        class="col-auto"
-        flat
-        stretch
-        :label="viewMode.toUpperCase()"
-        @click="cycleViewMode"
-      >
-        <q-tooltip>tree → flat → json → yaml</q-tooltip>
-      </q-btn>
-
-      <q-select
-        v-if="showMissingModeSelect && enableExpertMode"
-        v-model="missingMode"
-        :options="['all', 'hide', 'placeholders']"
-        dense
-        outlined
-        class="col-auto"
-      />
+  <div v-if="modelValue !== undefined">
+    <div v-if="isScalarRoot" class="object-view-scalar row inline items-center q-gutter-xs">
+      <span>{{ scalarDisplayValue }}</span>
+      <slot name="scalar-extra" />
     </div>
-
-    <TreeVariablesView
-      v-if="viewMode === 'tree'"
-      :nodes="filteredTreeNodes"
-      :load-children="buildChildrenForPath"
-      :read-only="readOnly"
-      :separate-labels="separateLabels"
-      :debounce="debounce"
-      :copy-btn="copyBtn"
-      :input-field-behavior="inputFieldBehavior"
-      :list-summary="listSummary"
-      :chart-paths="chartPaths"
-      :full-view-paths="fullViewPaths"
-      :renderers="renderers"
-      :show-missing-indicator="showMissingIndicator"
-      v-bind="$attrs"
-      @update="({ path, value }) => updateByPath(path, value)"
-      @reset="(node) => resetNode(node)"
-      @copy="(path) => copyNodeValue(path)"
-      @toggle-chart="(id) => toggleChartPath(id)"
-      @toggle-full-view="({ id, value }) => toggleFullView(id, value)"
-    >
-      <template #header-extra="slotProps">
-        <q-btn
-          v-if="shouldShowAddKey(slotProps.node)"
-          flat
+    <template v-else>
+      <div v-if="showHeaderRow" class="row items-center">
+        <SearchInput
+          v-if="enableExpertMode"
+          :search-string="searchText"
+          class="col fit"
+          outlined
           dense
-          size="sm"
-          :icon="matAdd"
-          @click.stop="addObjectKeyAtNode(slotProps.node)"
-        >
-          <q-tooltip>Add key</q-tooltip>
-        </q-btn>
-        <q-btn
-          v-if="shouldShowDeleteKey(slotProps.node)"
-          flat
-          dense
-          size="sm"
-          :icon="matDelete"
-          color="negative"
-          @click.stop="deleteNodeAtPath(slotProps.node)"
-        >
-          <q-tooltip>Delete key</q-tooltip>
-        </q-btn>
-        <slot name="header-extra" v-bind="slotProps" />
-      </template>
-      <template #custom="slotProps">
-        <slot name="custom" v-bind="slotProps" />
-      </template>
-    </TreeVariablesView>
+          hide-number-of-search-results
+          :show-filter-button="false"
+          color="secondary"
+          @search="(q, k) => (searchText = q)"
+        />
 
-    <FlatVariablesView
-      v-else-if="viewMode === 'flat'"
-      :nodes="filteredFlatNodes"
-      :read-only="readOnly"
-      :separate-labels="separateLabels"
-      :debounce="debounce"
-      :copy-btn="copyBtn"
-      :input-field-behavior="inputFieldBehavior"
-      :list-summary="listSummary"
-      :chart-paths="chartPaths"
-      :full-view-paths="fullViewPaths"
-      :renderers="renderers"
-      :show-missing-indicator="showMissingIndicator"
-      v-bind="$attrs"
-      @update="({ path, value }) => updateByPath(path, value)"
-      @reset="(node) => resetNode(node)"
-      @copy="(path) => copyNodeValue(path)"
-      @toggle-chart="(id) => toggleChartPath(id)"
-      @toggle-full-view="({ id, value }) => toggleFullView(id, value)"
-    >
-      <template #header-extra="slotProps">
         <q-btn
-          v-if="shouldShowAddKey(slotProps.node)"
+          v-if="copyObjectBtn"
+          class="col-auto"
           flat
-          dense
-          size="sm"
-          :icon="matAdd"
-          @click.stop="addObjectKeyAtNode(slotProps.node)"
+          stretch
+          :icon="matContentCopy"
+          @click="copyWholeObject"
         >
-          <q-tooltip>Add key</q-tooltip>
+          <q-tooltip>Copy entire object as JSON</q-tooltip>
         </q-btn>
+
         <q-btn
-          v-if="shouldShowDeleteKey(slotProps.node)"
+          v-if="enableExpertMode"
+          class="col-auto"
           flat
-          dense
-          size="sm"
-          :icon="matDelete"
-          color="negative"
-          @click.stop="deleteNodeAtPath(slotProps.node)"
+          stretch
+          :label="viewMode.toUpperCase()"
+          @click="cycleViewMode"
         >
-          <q-tooltip>Delete key</q-tooltip>
+          <q-tooltip>tree → flat → json → yaml</q-tooltip>
         </q-btn>
-        <slot name="header-extra" v-bind="slotProps" />
-      </template>
-      <template #custom="slotProps">
-        <slot name="custom" v-bind="slotProps" />
-      </template>
-    </FlatVariablesView>
 
-    <q-card v-else-if="viewMode === 'json'" flat bordered>
-      <q-card-section class="q-pa-sm">
-        <pre class="raw-view">{{ jsonDump }}</pre>
-      </q-card-section>
-    </q-card>
+        <q-select
+          v-if="showMissingModeSelect && enableExpertMode"
+          v-model="missingMode"
+          :options="['all', 'hide', 'placeholders']"
+          dense
+          outlined
+          class="col-auto"
+        />
+      </div>
 
-    <q-card v-else-if="viewMode === 'yaml'" flat bordered>
-      <q-card-section class="q-pa-sm">
-        <pre class="raw-view">{{ yamlDump }}</pre>
-      </q-card-section>
-    </q-card>
+      <TreeVariablesView
+        v-if="viewMode === 'tree'"
+        :nodes="filteredTreeNodes"
+        :load-children="buildChildrenForPath"
+        :read-only="readOnly"
+        :separate-labels="separateLabels"
+        :debounce="debounce"
+        :copy-btn="copyBtn"
+        :input-field-behavior="inputFieldBehavior"
+        :list-summary="listSummary"
+        :chart-paths="chartPaths"
+        :full-view-paths="fullViewPaths"
+        :renderers="renderers"
+        :show-missing-indicator="showMissingIndicator"
+        v-bind="$attrs"
+        @update="({ path, value }) => updateByPath(path, value)"
+        @reset="(node) => resetNode(node)"
+        @copy="(path) => copyNodeValue(path)"
+        @toggle-chart="(id) => toggleChartPath(id)"
+        @toggle-full-view="({ id, value }) => toggleFullView(id, value)"
+      >
+        <template #header-extra="slotProps">
+          <q-btn
+            v-if="shouldShowAddKey(slotProps.node)"
+            flat
+            dense
+            size="sm"
+            :icon="matAdd"
+            @click.stop="addObjectKeyAtNode(slotProps.node)"
+          >
+            <q-tooltip>Add key</q-tooltip>
+          </q-btn>
+          <q-btn
+            v-if="shouldShowDeleteKey(slotProps.node)"
+            flat
+            dense
+            size="sm"
+            :icon="matDelete"
+            color="negative"
+            @click.stop="deleteNodeAtPath(slotProps.node)"
+          >
+            <q-tooltip>Delete key</q-tooltip>
+          </q-btn>
+          <slot name="header-extra" v-bind="slotProps" />
+        </template>
+        <template #custom="slotProps">
+          <slot name="custom" v-bind="slotProps" />
+        </template>
+      </TreeVariablesView>
+
+      <FlatVariablesView
+        v-else-if="viewMode === 'flat'"
+        :nodes="filteredFlatNodes"
+        :read-only="readOnly"
+        :separate-labels="separateLabels"
+        :debounce="debounce"
+        :copy-btn="copyBtn"
+        :input-field-behavior="inputFieldBehavior"
+        :list-summary="listSummary"
+        :chart-paths="chartPaths"
+        :full-view-paths="fullViewPaths"
+        :renderers="renderers"
+        :show-missing-indicator="showMissingIndicator"
+        v-bind="$attrs"
+        @update="({ path, value }) => updateByPath(path, value)"
+        @reset="(node) => resetNode(node)"
+        @copy="(path) => copyNodeValue(path)"
+        @toggle-chart="(id) => toggleChartPath(id)"
+        @toggle-full-view="({ id, value }) => toggleFullView(id, value)"
+      >
+        <template #header-extra="slotProps">
+          <q-btn
+            v-if="shouldShowAddKey(slotProps.node)"
+            flat
+            dense
+            size="sm"
+            :icon="matAdd"
+            @click.stop="addObjectKeyAtNode(slotProps.node)"
+          >
+            <q-tooltip>Add key</q-tooltip>
+          </q-btn>
+          <q-btn
+            v-if="shouldShowDeleteKey(slotProps.node)"
+            flat
+            dense
+            size="sm"
+            :icon="matDelete"
+            color="negative"
+            @click.stop="deleteNodeAtPath(slotProps.node)"
+          >
+            <q-tooltip>Delete key</q-tooltip>
+          </q-btn>
+          <slot name="header-extra" v-bind="slotProps" />
+        </template>
+        <template #custom="slotProps">
+          <slot name="custom" v-bind="slotProps" />
+        </template>
+      </FlatVariablesView>
+
+      <q-card v-else-if="viewMode === 'json'" flat bordered>
+        <q-card-section class="q-pa-sm">
+          <pre class="raw-view">{{ jsonDump }}</pre>
+        </q-card-section>
+      </q-card>
+
+      <q-card v-else-if="viewMode === 'yaml'" flat bordered>
+        <q-card-section class="q-pa-sm">
+          <pre class="raw-view">{{ yamlDump }}</pre>
+        </q-card-section>
+      </q-card>
+    </template>
   </div>
 
   <div v-else>no input data!</div>
@@ -249,7 +255,27 @@ const {
   allowObjectStructureEditing?: boolean
 }>()
 
-const modelValue = defineModel<Record<string, unknown> | undefined>({ required: true })
+const modelValue = defineModel<unknown>({ required: true })
+
+const isStructuredRoot = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const isScalarRoot = computed(
+  () =>
+    modelValue.value === null ||
+    typeof modelValue.value === 'string' ||
+    typeof modelValue.value === 'number' ||
+    typeof modelValue.value === 'boolean',
+)
+
+const scalarDisplayValue = computed(() => {
+  if (modelValue.value === null || modelValue.value === undefined) return ''
+  if (typeof modelValue.value === 'string') return modelValue.value
+  if (typeof modelValue.value === 'number' || typeof modelValue.value === 'boolean') {
+    return String(modelValue.value)
+  }
+  return ''
+})
 
 const cycleViewMode = () => {
   const order: (typeof viewMode.value)[] = ['tree', 'flat', 'json', 'yaml']
@@ -257,15 +283,22 @@ const cycleViewMode = () => {
   viewMode.value = order[(i + 1) % order.length] ?? 'tree'
 }
 
-const jsonDump = computed(() => (modelValue.value ? JSON.stringify(modelValue.value, null, 2) : ''))
+const jsonDump = computed(() =>
+  modelValue.value !== undefined ? JSON.stringify(modelValue.value, null, 2) : '',
+)
 
-const yamlDump = computed(() => (modelValue.value ? safeYamlDump(modelValue.value) : ''))
+const yamlDump = computed(() =>
+  modelValue.value !== undefined ? safeYamlDump(modelValue.value) : '',
+)
 
 const chartPaths = defineModel<string[]>('chartPaths', {
   default: () => [],
 })
 
 const schemaRef = toRef(() => schema)
+const structuredModelValue = computed<Record<string, unknown> | undefined>(() =>
+  isStructuredRoot(modelValue.value) ? modelValue.value : undefined,
+)
 
 const searchText = ref(search ?? '')
 const effectiveLazy = computed(() => lazyRender && searchText.value.length === 0)
@@ -280,7 +313,7 @@ const optionsRef = computed(() => ({
 }))
 
 const { rootNodes, buildChildrenForPath, getValueByPath } = useVariableGraph(
-  modelValue,
+  structuredModelValue,
   schemaRef,
   optionsRef,
 )
@@ -302,7 +335,7 @@ const logObjectEdit = (action: string, payload: Record<string, unknown>) => {
 }
 
 const copyWholeObject = () => {
-  if (!modelValue.value) return
+  if (modelValue.value === undefined) return
 
   const leaves = countLeaves(modelValue.value)
   if (leaves > copyObjectWarnLeavesLimit) {
@@ -316,7 +349,7 @@ const copyWholeObject = () => {
 }
 
 function cloneModelRoot(): Record<string, unknown> | undefined {
-  if (!modelValue.value) return undefined
+  if (!isStructuredRoot(modelValue.value)) return undefined
   try {
     // `modelValue` can be a Vue reactive proxy, which may throw DataCloneError with structuredClone.
     // JSON clone is sufficient for our schema-edited library metadata objects.

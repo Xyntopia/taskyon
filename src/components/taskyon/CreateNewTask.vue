@@ -220,7 +220,12 @@ import FileDropzone from '@taskyon/shared/components/FileDropzone.vue'
 import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
 import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
-import { deepCopy, generateTaskKeyWords, partialTaskDraft } from '@taskyon/taskyon'
+import {
+  deepCopy,
+  generateTaskKeyWords,
+  normalizeEntryNodeSettings,
+  partialTaskDraft,
+} from '@taskyon/taskyon'
 import { watchThrottled } from '@vueuse/core'
 import { QSelect, useQuasar } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
@@ -405,6 +410,18 @@ async function createFileTask(files: File[]) {
 
 const $q = useQuasar()
 
+const resolveEntryNodeArguments = (webSearch: boolean | undefined) => {
+  const entrySettings = normalizeEntryNodeSettings(state.toolchainConfig.entryNode)
+
+  return {
+    ...deepCopy(entrySettings),
+    websearch: {
+      enabled: webSearch ?? entrySettings.websearch.enabled,
+      max_results: entrySettings.websearch.max_results,
+    },
+  }
+}
+
 // TODO: move this "up", it would be better to have the task creation be purely
 //       event based and more configurable...
 async function addNewTask(p2pTopic?: string, webSearch?: boolean) {
@@ -435,12 +452,9 @@ async function addNewTask(p2pTopic?: string, webSearch?: boolean) {
     if (entryNode) {
       const chooseTask = deepCopy(entryNode) as WritableDeep<partialTaskDraft>
       if (chooseTask.content.type === 'functioncall') {
-        // TODO: in the future, we should make this "dynamic" and automatically add the relevant buttons
-        // from our entry node to the task creation area!
-        //  also move this into the toolChooser settings!
         chooseTask.content.data.arguments = {
-          ...(webSearch ? { webSearch: true } : {}),
-          ...(state.llmSettings.enableToolChooser ? { useTools: true } : {}),
+          ...deepCopy(chooseTask.content.data.arguments ?? {}),
+          ...resolveEntryNodeArguments(webSearch),
         }
       }
       newTaskChain.push(chooseTask)
