@@ -15,7 +15,16 @@ export default defineConfigWithVueTs(
      *
      * ESLint requires "ignores" key to be the only one in this object
      */
-    ignores: ['src-tauri', 'public/docs/*', 'packages/rumoca*'],
+    ignores: [
+      'src-tauri',
+      'public/docs/*',
+      'packages/rumoca*',
+      'packages/yatra',
+      'packages/**/dist/**',
+      'packages/**/pkg/**',
+      'packages/taskyon-vscode/media/webview.bundle.js',
+      'packages/tycli/bin/*.cjs',
+    ],
   },
 
   pluginQuasar.configs.recommended(),
