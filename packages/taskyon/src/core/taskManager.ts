@@ -145,31 +145,11 @@ async function useFileManager(db: TyPGDB) {
   }
 }
 
-// TODO: replace this with pglite vector search :)
 async function useTaskVectors(
   db: TyPGDB,
   getAllTaskIds: () => Promise<(string | number)[]>,
   getTask: (taskId: string) => Promise<TaskNode | null>,
-  vectorizerModel?: string,
 ) {
-  if (!vectorizerModel) {
-    return {
-      filterSearch: async (_k = 10, _taskTemplate?: PartialDeep<TaskNode>) => [],
-      syncVectorIndexWithTasks: async (progressCallback: (done: number, total: number) => void) =>
-        progressCallback(0, 0),
-      deleteTaskFromVectorStore: async (_id: string) => {},
-      addtoVectorDB: async (_task: TaskNode) => {},
-      filteredVectorSearch: async (
-        _searchTerm: string,
-        _k = 10,
-        _taskTemplate?: PartialDeep<TaskNode>,
-      ) => [],
-      resetTaskVectors: async () => {},
-      count: async () => 0,
-      searchSimilarTasks: async (_task: Partial<TaskNode>, _k = 10) => [],
-    }
-  }
-
   const vecDb = await createVectorStore<TaskNode>(db, 'tyTaskVectors')
 
   async function syncVectorIndexWithTasks(progressCallback: (done: number, total: number) => void) {
@@ -207,7 +187,7 @@ async function useTaskVectors(
       (task.content.type === 'return' && task.content.data === 'assistant answered')
     ) {
       console.log('skip indexing of task', task.id)
-    } else if (vectorizerModel) {
+    } else {
       console.log('create vector...', task.id)
       const txt = task2Str(task)
       // Save the task to the vector DB, but exclude content.data to save space...
@@ -259,7 +239,7 @@ async function useTaskVectors(
     addtoVectorDB,
     filteredVectorSearch,
     resetTaskVectors: vecDb.clear,
-    count: vecDb.count,
+    countVecs: vecDb.count,
     searchSimilarTasks,
   }
 }
@@ -441,16 +421,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
   const getAllTaskIds = tyCrud.listIds
 
   // TODO: unify our tyCrudVec and useTaskVectors in one db...
-  const {
-    syncVectorIndexWithTasks,
-    deleteTaskFromVectorStore,
-    addtoVectorDB,
-    filteredVectorSearch,
-    resetTaskVectors,
-    searchSimilarTasks,
-    count: countVecs,
-    filterSearch,
-  } = await useTaskVectors(taskyonDb, getAllTaskIds, tyCrud.get, vectorizerModel)
+  const taskVectors = await useTaskVectors(taskyonDb, getAllTaskIds, tyCrud.get)
 
   // TODO: updateToolIndex should work through streams!
   const { toolIndex, defaultToolMap, addDefaultTools, getToolDefinition, updateToolIndex } =
@@ -481,7 +452,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
       console.log('create new Task:', completeTask)
       await execWLock(async () => {
         await tyCrud.add(completeTask)
-        if (options.vectors) void addtoVectorDB(completeTask)
+        if (options.vectors) void taskVectors.addtoVectorDB(completeTask)
         // Update parent-child cache
         updateChildAndSiblingMap(completeTask)
         // update our toolIndex with the new toolname :)
@@ -495,7 +466,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
         const task = await tyCrud.get(id)
         if (task) void deleteFromChildAndSiblings(task)
         void tyCrud.delete(id)
-        void deleteTaskFromVectorStore(id.toString())
+        void taskVectors.deleteTaskFromVectorStore(id.toString())
         if (task?.content.type === 'tooldefinition') toolIndex.delete(task.content.data.name)
       }, id),
     clear: async () => {
@@ -753,7 +724,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
   async function deleteAllTasks() {
     // TODO: also delete vectordb! (will be done automatically, once we transition to pglite)
     // TODO: manually re-initialized taskyondb after remove...
-    await resetTaskVectors()
+    await taskVectors.resetTaskVectors()
     await taskDb.clear()
     await metaDb.clear()
     // we are doing the sleep here because some parts
@@ -971,16 +942,10 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
     deleteAllTasks,
     deleteTaskThread,
     countTasks,
-    syncVectorIndexWithTasks,
-    resetTaskVectors,
-    countVecs,
-    filteredVectorSearch,
     findSiblingLeafTasks,
     searchNextSibling,
     searchAllDirectChildren,
     searchAllChildren,
-    searchSimilarTasks,
-    filterSearch,
     loadYamlConversation,
   }
 
@@ -1022,6 +987,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: stri
 
   return {
     ...defaultMode,
+    ...(taskVectors ?? {}),
     ...fm,
     getTaskIdChain,
     getTaskChain,
