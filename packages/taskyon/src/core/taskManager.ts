@@ -347,7 +347,7 @@ const withLock =
   to the UI. We could have used the function of RxDB for this. But this approach would have been
   less flexible...
 */
-export async function useTyTaskManager(taskyonDb: TyPGDB, vectorizerModel?: string) {
+export async function useTyTaskManager(taskyonDb: TyPGDB) {
   console.log('Initialize task manager with db:', taskyonDb.name)
 
   // because our tasks only have parent IDs defined, we keep a cache of

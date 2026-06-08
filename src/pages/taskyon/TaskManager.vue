@@ -40,7 +40,7 @@
           :is-searching="isSearching"
           :show-filter-button="false"
           color="secondary"
-          @search="(q, k) => onSearchChange({ q, k }, 'query')"
+          @search="(q: string, k: string) => onSearchChange({ q, k }, 'query')"
         />
         <div class="text-caption">
           # of indexed tasks: {{ indexCount }}

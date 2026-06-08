@@ -55,8 +55,6 @@
       }
     },
     "siteUrl": "https://taskyon.space",
-    "summaryModel": "Xenova/distilbart-cnn-6-6",
-    "vectorizationModel": "xyntopia/all-MiniLM-L6-v2",
     "maxAutonomousTasks": 5,
     "useBasePrompt": true,
     "tryUsingVisionModels": true,

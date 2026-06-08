@@ -1,21 +1,19 @@
+import type { Port } from '@taskyon/shared/modules/frpBus'
 import Ajv from 'ajv'
 import type { JSONSchema7, JSONSchema7Object, JSONSchema7Type } from 'json-schema'
+import type { ReadonlyDeep } from 'type-fest'
 import {
   REMOTE_FUNCTION_TIMEOUT_MS,
   RemoteFunctionCall,
   RemoteFunctionResponse,
 } from '../types/messages'
-import type { TaskNode } from '../types/taskNode'
 import type { InternalTool, toolContext } from '../types/toolApi'
-import type { FunctionCall, ParamType } from '../types/tools'
-import { FunctionArguments, ToolBase } from '../types/tools'
-import type { Port } from '@taskyon/shared/modules/frpBus'
+import type { FunctionArguments, FunctionCall, ParamType } from '../types/tools'
+import { ToolBase } from '../types/tools'
 import { executeCodeInIframe } from '../utils/iframeWorker'
 import { bigIntToString } from '../utils/objHelpers'
 import { convertZodToJsonSchemaCached } from '../utils/schema'
 import { jsonSchemaToYamlString } from '../utils/yamlUtils'
-import type { ReadonlyDeep } from 'type-fest'
-import { materializeTaskyonFunctionArguments } from './taskVariables'
 
 export type RemoteFunctionPort = Port<RemoteFunctionCall, RemoteFunctionResponse>
 
@@ -164,58 +162,42 @@ export async function handleFunctionExecution(
   tool: InternalTool,
   stopSignal: AbortSignal, // add this to our duplexPort!!
   context: toolContext,
-  getTaskById: (taskId: string) => Promise<TaskNode | null>,
   // TODO: use the duplexPort for remote functions also for our "local" iframeworker execution?....
   duplexPort: RemoteFunctionPort,
 ): Promise<unknown> {
+  // TODO: test here, if tool parameters are correct according to json schema
+  //       if not, throw an error message...
   let funcR: unknown
-  const toolDefaultParams = createWithDefaults(tool.parameters)
-  const materializedArguments = await materializeTaskyonFunctionArguments(
-    FunctionArguments.parse(func.arguments),
-    {
-      surface: 'execution',
-      getTaskById,
-    },
-  )
-  // mix in with explicit parameters
-  const execFunc: ReadonlyDeep<FunctionCall> = {
-    ...func,
-    arguments: {
-      ...(toolDefaultParams as Record<string, ParamType>),
-      ...materializedArguments,
-    },
-  }
   // We intentionally do not reject tool invocations here based on schema validation.
   // Taskyon should be tolerant at execution time and let the concrete tool implementation
   // decide whether partially-valid or loosely-shaped arguments are still usable.
   // This gives LLM-produced calls more room to succeed with small deviations.
 
-  console.log(toolDefaultParams)
   if (tool.function) {
-    console.log('using tool!', tool)
+    console.log('using tool!', tool.name)
     // TODO: try long-term, to get rid of "internal" functions.. not yet sure how to do this..
     //       maybe have tools with privileged access?
-    funcR = await tool.function(execFunc.arguments, context)
+    funcR = await tool.function(func.arguments, context)
   } else if (tool.code) {
-    console.log('compile & execute function code in iframe', tool)
+    console.log('compile & execute function code in iframe', tool.name)
     try {
       //const { messagePort, ...modContext } = context
       //console.log('messagePort', messagePort)
       funcR = await executeCodeInIframe(
         tool.code,
-        { params: execFunc.arguments, context: context },
-        execFunc.name + '.js',
+        { params: func.arguments, context: context },
+        func.name + '.js',
         stopSignal,
       )
     } catch (error) {
-      throw new Error(`Error executing iframe code for tool: ${execFunc.name}`, { cause: error })
+      throw new Error(`Error executing iframe code for tool: ${func.name}`, { cause: error })
     }
   } else {
     // we do the zod object parsing/validation here, because we might have a proxy object from upstream
     // and want to make sure its serializable for a postMessage function.
     // TODO: use our "onInterrupt" here somehow ;)
     // TODO: pass tool context here as well :)
-    funcR = await handleRemoteFunction(execFunc.name, execFunc.arguments, duplexPort)
+    funcR = await handleRemoteFunction(func.name, func.arguments, duplexPort)
   }
   funcR = bigIntToString(funcR) // Optionally convert bigInt
 

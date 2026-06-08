@@ -13,7 +13,8 @@ import { serializeForJson } from '../utils/objHelpers'
 import type { Thunk } from '../utils/tsHelpers'
 import { type TyTaskManager } from './taskManager'
 import type { RemoteFunctionPort } from './tools'
-import { handleFunctionExecution } from './tools'
+import { createWithDefaults, handleFunctionExecution } from './tools'
+import { materializeTaskyonFunctionArguments } from './taskVariables'
 
 export interface TyTaskStreamData {
   info?: string
@@ -90,21 +91,29 @@ export const functionExecutorCreator = (
 
           // mix in toolchain config into function arguments
           const funcSettings = toolchainConfig()[func.name]
-          if (!funcSettings)
-            console.debug(`No tool settings found for tool ${func.name} in toolchainConfig`)
+          // resolve task variable arguments
+          const materializedArguments = await materializeTaskyonFunctionArguments(func.arguments, {
+            surface: 'execution',
+            getTaskById: getTask,
+          })
+          // also make sure we use the default parameters form json schema...
+          const toolDefaultParams = createWithDefaults(tool.parameters)
+          const preparedFunc = {
+            name: func.name,
+            arguments: {
+              ...toolDefaultParams,
+              ...(funcSettings || {}),
+              ...func.arguments,
+              ...materializedArguments,
+            },
+          }
+          console.log('execute function with context', { preparedFunc })
 
           const funcR = await handleFunctionExecution(
-            {
-              ...func,
-              arguments: {
-                ...(funcSettings || {}),
-                ...func.arguments,
-              },
-            },
+            preparedFunc,
             tool,
             abctl.signal,
             context,
-            getTask,
             duplexPort,
           )
 

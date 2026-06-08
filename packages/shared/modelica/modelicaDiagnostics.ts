@@ -467,7 +467,7 @@ end TestPreparedMeta;
     throw new Error('compile_to_json should not expose dae_prepared_diagnostics in native-only API')
   }
 
-  const build = (dae as Record<string, unknown>).__rumoca_build
+  const build = (dae).__rumoca_build
   if (!build || typeof build !== 'object' || Array.isArray(build)) {
     throw new Error('Native DAE is missing __rumoca_build metadata')
   }

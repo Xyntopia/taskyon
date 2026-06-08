@@ -1,5 +1,5 @@
 {
-  "version": 24,
+  "version": 25,
   "appConfiguration": {
     "darkTheme": "auto",
     "appConfigurationUrl": "/taskyon_settings.json",
@@ -19,7 +19,7 @@
         "stepMs": 600000
       }
     },
-    "entryNode": {
+    "taskyonFlow": {
       "use_baseprompt": true,
       "use_tool_chooser": true,
       "llmTools": true,
@@ -40,6 +40,7 @@
     }
   },
   "llmSettings": {
+    "entryFunction": "taskyonFlow",
     "llmApis": {
       "taskyon": {
         "name": "taskyon",
@@ -96,8 +97,6 @@
       }
     },
     "siteUrl": "https://taskyon.space",
-    "summaryModel": "Xenova/distilbart-cnn-6-6",
-    "vectorizationModel": "xyntopia/all-MiniLM-L6-v2",
     "maxAutonomousTasks": 5
   }
 }

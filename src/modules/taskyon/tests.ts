@@ -1883,20 +1883,11 @@ export async function testTransformersPipeline() {
   }
 }
 
-export async function testVectorizerInitialization() {
-  const nlpWorker = useNlpWorker()
-  const modelName = state.llmSettings.vectorizationModel // Mock model name
-  await nlpWorker.loadVecModel(modelName)
-  await nlpWorker.loadVecTokenizer(modelName)
-  return 'success'
-}
-
 export async function testVectorizeText() {
   try {
     const nlpWorker = useNlpWorker()
     const testText = 'Sample text for vectorization'
-    const modelName = state.llmSettings.vectorizationModel // Mock model name
-    const vector = await nlpWorker.vectorizeText(testText, modelName)
+    const vector = await nlpWorker.vectorizeText(testText, 'xyntopia/all-MiniLM-L6-v2')
     const testSum = vector?.reduce((p, c) => p + c, 0)
     console.log('Vectorize Text Result Test Sum:', testSum)
     return testSum

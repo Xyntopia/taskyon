@@ -4,6 +4,7 @@ import type {
   InternalTool,
   KeyString,
   ModelCard,
+  partialTaskDraft,
   Port,
   TaskNodeMeta,
   Taskyon,
@@ -971,7 +972,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // pre-initialize our python webworker, because its very slow to startup :)
   void usePyodideWebworker().preInit()
   const entryNodeTool = createStandardEntryNodeTool({
-    name: 'entryNode',
+    name: 'taskyonFlow',
     renderOptions: { hideChat: true, hideLlm: true },
     toolChooser: { enabled: true, useTools: true },
     defaultAllowedTools: [],
@@ -997,12 +998,23 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       return initCs
     }
   })().then(async (cs) => {
+    const entryNode = () =>
+      ({
+        role: 'system',
+        content: {
+          type: 'functioncall',
+          data: {
+            name: stateRefs.llmSettings.entryFunction,
+            arguments: {},
+          },
+        },
+      }) as partialTaskDraft
     return await tyCore(
       () => ({
         ...stateRefs.llmSettings,
-        entryNode: stateRefs.llmSettings.entryNode,
+        entryNode: entryNode(),
       }),
-      () => stateRefs.llmSettings.entryNode,
+      entryNode,
       () => stateRefs.toolchainConfig,
       [entryNodeTool],
       cs,
@@ -1391,7 +1403,16 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   dynamicQuasarTheming(stateRefs)
 
-  const entryNode = computed(() => stateRefs.llmSettings.entryNode)
+  const entryNode = computed<partialTaskDraft>(() => ({
+    role: 'system',
+    content: {
+      type: 'functioncall',
+      data: {
+        name: stateRefs.llmSettings.entryFunction,
+        arguments: {},
+      },
+    },
+  }))
 
   const tyready = ref(false)
   void taskyon.then(() => {

@@ -69,10 +69,10 @@
         label="Copy"
       >
         <q-list dense>
-          <q-item clickable v-close-popup @click="copyChartAs('png')">
+          <q-item v-close-popup clickable @click="copyChartAs('png')">
             <q-item-section>PNG</q-item-section>
           </q-item>
-          <q-item clickable v-close-popup @click="copyChartAs('svg')">
+          <q-item v-close-popup clickable @click="copyChartAs('svg')">
             <q-item-section>SVG</q-item-section>
           </q-item>
         </q-list>

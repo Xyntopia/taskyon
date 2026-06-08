@@ -1191,7 +1191,7 @@ async function main() {
   }
   const taskyon = await tyCore(
     () => llmState,
-    () => llmState.entryNode!,
+    () => llmState.entryNode,
     () => ({
       entryNode: {
         llmTools: true,

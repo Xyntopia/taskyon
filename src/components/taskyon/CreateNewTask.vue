@@ -220,12 +220,7 @@ import FileDropzone from '@taskyon/shared/components/FileDropzone.vue'
 import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
 import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
-import {
-  deepCopy,
-  generateTaskKeyWords,
-  normalizeEntryNodeSettings,
-  partialTaskDraft,
-} from '@taskyon/taskyon'
+import { deepCopy, generateTaskKeyWords, partialTaskDraft } from '@taskyon/taskyon'
 import { watchThrottled } from '@vueuse/core'
 import { QSelect, useQuasar } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
@@ -410,21 +405,9 @@ async function createFileTask(files: File[]) {
 
 const $q = useQuasar()
 
-const resolveEntryNodeArguments = (webSearch: boolean | undefined) => {
-  const entrySettings = normalizeEntryNodeSettings(state.toolchainConfig.entryNode)
-
-  return {
-    ...deepCopy(entrySettings),
-    websearch: {
-      enabled: webSearch ?? entrySettings.websearch.enabled,
-      max_results: entrySettings.websearch.max_results,
-    },
-  }
-}
-
 // TODO: move this "up", it would be better to have the task creation be purely
 //       event based and more configurable...
-async function addNewTask(p2pTopic?: string, webSearch?: boolean) {
+async function addNewTask(p2pTopic?: string) {
   console.log('pubishing on topic:', p2pTopic)
   const kwdsPromise = getCurrentKeywordsWithTimeout(300)
   const ty = await tystate.taskyon
@@ -449,20 +432,13 @@ async function addNewTask(p2pTopic?: string, webSearch?: boolean) {
   newTaskChain.push({ ...currentnewTask.value })
 
   if (currentnewTask.value.content.type === 'message') {
-    if (entryNode) {
-      const chooseTask = deepCopy(entryNode) as WritableDeep<partialTaskDraft>
-      if (chooseTask.content.type === 'functioncall') {
-        chooseTask.content.data.arguments = {
-          ...deepCopy(chooseTask.content.data.arguments ?? {}),
-          ...resolveEntryNodeArguments(webSearch),
-        }
+    const chooseTask = deepCopy(entryNode) as WritableDeep<partialTaskDraft>
+    if (chooseTask.content.type === 'functioncall') {
+      chooseTask.content.data.arguments = {
+        ...deepCopy(chooseTask.content.data.arguments ?? {}),
       }
-      newTaskChain.push(chooseTask)
-    } else {
-      $q.notify(
-        "We can can not complete the Chat because we don't have a correct model or provider selected",
-      )
     }
+    newTaskChain.push(chooseTask)
   }
 
   // if we are attaching our task to an existing parent, we want to make sure that

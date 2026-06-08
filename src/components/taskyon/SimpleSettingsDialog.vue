@@ -11,15 +11,17 @@
     <template #btnContent><q-tooltip> More AI Settings</q-tooltip></template>
     <div class="q-pa-sm" @click.stop>
       <ObjectView
+        v-if="entryNode"
         v-model="slimViewModel"
+        view-mode="flat"
         :schema="slimView.jsonSchema as JSONSchema7"
         dense
         :icons="{
-          ...(settingsIcons.llmSettings as iconMap),
           ...(settingsIcons.appConfiguration as iconMap),
-          ...(iconRegistry.chatCompletion as iconMap),
+          ...(iconRegistry.entryNode as iconMap),
         }"
       />
+      <div v-else class="text-negative">Error: No entry node found in toolchain config</div>
     </div>
     <q-card-actions class="float-right">
       <q-btn v-if="em" flat to="/settings/agent%20config" label="Full list of settings" />
@@ -32,35 +34,30 @@
 import { matMoreHoriz } from '@quasar/extras/material-icons'
 import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
-import { chatCompletionToolParameters, llmSettings } from '@taskyon/taskyon'
+import { EntryNodeSettingsSchema } from '@taskyon/taskyon'
 import type { JSONSchema7 } from 'json-schema'
 import type { iconMap } from 'src/modules/icons'
 import { iconRegistry, settingsIcons } from 'src/modules/icons'
 import { appConfiguration } from 'src/modules/taskyon/types'
 import { buildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
-import { computed, reactive } from 'vue'
+import { computed } from 'vue'
 import z from 'zod'
 
 const state = useAppStateStore()
 
 const em = computed(() => state.appConfiguration.expertMode)
-const llmPickKeys = ['enableToolChooser'] as const
-const chatCompletionPickKeys = [
+const entryNodePickKeys = [
   'use_baseprompt',
+  'use_tool_chooser',
   'use_multimodal',
   'reasoning_effort',
-  'max_results',
   'llmTools',
+  'websearch',
 ] as const
-const slimChatKeys = computed(() => (em.value ? chatCompletionPickKeys : ['reasoning_effort']))
+const slimChatKeys = computed(() => (em.value ? entryNodePickKeys : ['reasoning_effort']))
 
-const writableLlmSettings = reactive({
-  enableToolChooser: computed({
-    get: () => state.llmSettings.enableToolChooser,
-    set: (value) => state.setLLMSettings('enableToolChooser', value),
-  }),
-})
+const entryNode = computed(() => state.toolchainConfig[state.llmSettings.entryFunction]!)
 
 const slimView = computed(() =>
   buildSlimView(
@@ -70,13 +67,8 @@ const slimView = computed(() =>
       pickKeys: ['expertMode'],
     },
     {
-      obj: writableLlmSettings,
-      schema: z.toJSONSchema(llmSettings, { unrepresentable: 'any' }),
-      pickKeys: [...llmPickKeys],
-    },
-    {
-      obj: state.toolchainConfig.chatCompletion!,
-      schema: chatCompletionToolParameters,
+      obj: entryNode.value,
+      schema: EntryNodeSettingsSchema,
       pickKeys: [...slimChatKeys.value],
     },
     {

@@ -231,7 +231,7 @@ const dynamicContext =
     const sessionKeyId = await cs.getSessionId()
     const db = await getDatabase(sessionKeyId)
     console.log('tycore starting new session with id:', sessionKeyId)
-    const taskManagerInstance = await useTyTaskManager(db, llmSettings().vectorizationModel)
+    const taskManagerInstance = await useTyTaskManager(db)
     console.log('tycore finished taskManager initialization')
     const secretStore = withSecretStore(
       createCombinedCrudWrapper([

@@ -46,11 +46,11 @@
         </q-tab-panel>
         <q-tab-panel name="agent config" :class="tabPanelClass">
           <div>AI/LLM toolchain configurations</div>
-          <template v-for="[key, val] in Object.entries(state.toolchainConfig)" :key="key">
+          <template v-for="{ key, value } in toolchainEntries" :key="key">
             {{ key }}
             <ObjectView
               :enable-expert-mode="state.appConfiguration.expertMode"
-              :model-value="val as Record<string, unknown>"
+              :model-value="value"
               :schema="tystate.allTools[key]?.parameters"
               class="fit"
               copy-object-btn
@@ -95,7 +95,10 @@
 <script setup lang="ts">
 import FadeAwayScrollPage from '@taskyon/shared/components/FadeAwayScrollPage.vue'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
-import { convertZodToJsonSchemaCached } from '@taskyon/taskyon'
+import {
+  convertZodToJsonSchemaCached,
+  FunctionArguments as FunctionArgumentsSchema,
+} from '@taskyon/taskyon'
 import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
 import LLMProviders from 'components/taskyon/LLMProviders.vue'
 import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'
@@ -114,11 +117,19 @@ const tystate = useTaskyonStore()
 
 const tabPanelClass = 'column items-center'
 
-const applyToolchainUpdate = (key: string, nextValue: Record<string, unknown> | undefined) => {
-  if (!nextValue) return
+const toolchainEntries = computed(() =>
+  Object.keys(state.toolchainConfig).map((key) => ({
+    key,
+    value: state.toolchainConfig[key]!,
+  })),
+)
+
+const applyToolchainUpdate = (key: string, nextValue: unknown) => {
+  const parsed = FunctionArgumentsSchema.safeParse(nextValue)
+  if (!parsed.success) return
   const target = state.toolchainConfig[key]
   if (!target) return
-  Object.assign(target, nextValue)
+  Object.assign(target, parsed.data)
 }
 
 const llmSettingsModel = computed({

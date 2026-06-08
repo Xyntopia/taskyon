@@ -1,6 +1,5 @@
 import z from 'zod'
 import { apiConfig } from './chatCompletion'
-import { partialTaskDraft } from './taskNode'
 import { FunctionArguments } from './tools'
 
 // TODO: rename llmSettings to "tyOptions"
@@ -32,19 +31,13 @@ export const llmSettings = z.object({
     description:
       'wha is the URL of this page?. This helps identifying Backends, where the request is coming from.',
   }),
-  summaryModel: z.string().default('Xenova/distilbart-cnn-6-6').meta({
-    description: 'Which model are we using for local summary?',
-  }),
-  vectorizationModel: z.string().default('Xenova/all-MiniLM-L6-v2').meta({
-    description: 'Which model should be used for vectorization?',
-  }),
   maxAutonomousTasks: z.number().default(3).meta({
     description:
       'Maximum number of tasks which are allowed to be performed autonomously before stopping.',
   }),
-  entryNode: partialTaskDraft.meta({
-    description: `A task template which is used as an entry node for taskyon.
-When a user starts a conversation, this is always the first task that is called.
+  entryFunction: z.string().meta({
+    description: `The function which is used as an entry point for taskyon.
+When a user starts a conversation, this is always the first function that is called.
 `,
   }),
 })

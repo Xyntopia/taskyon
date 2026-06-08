@@ -1,4 +1,9 @@
-import { TOKEN_SERVICE_BASE_URL, isTaskyonKey, type apiConfig, type llmSettings } from '@taskyon/taskyon'
+import {
+  TOKEN_SERVICE_BASE_URL,
+  isTaskyonKey,
+  type apiConfig,
+  type llmSettings,
+} from '@taskyon/taskyon'
 import { toolCall } from '@taskyon/taskyon/api'
 import type { CliApiConfig, LlmModel } from './types'
 
@@ -76,10 +81,7 @@ export function createCliLlmSettings(config: CliApiConfig): llmSettings {
       },
     },
     siteUrl: 'https://tycli.local',
-    summaryModel: 'Xenova/distilbart-cnn-6-6',
-    vectorizationModel: '',
     maxAutonomousTasks: 5,
-    enableToolChooser: true,
     entryNode: toolCall({
       name: 'entryNode',
       arguments: {},
