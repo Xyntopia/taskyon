@@ -27,14 +27,16 @@
                   @mouseenter="state.preview.focusedModuleId = module.id"
                   @mouseleave="state.preview.focusedModuleId = ''"
                 >
+                  <!-- eslint-disable vue/no-v-html -->
                   <span class="spaceship-lab__module-mini-list">
                     <span
                       v-for="variant in moduleMiniIconSvgs(module)"
                       :key="`${module.id}-${variant.name}-icon`"
                       class="spaceship-lab__module-mini-icon"
-                      v-html="variant.svg"
+                      v-html="variant.sanitizedSvg"
                     />
                   </span>
+                  <!-- eslint-enable vue/no-v-html -->
                   <q-tooltip>{{ module.id || `module-${index + 1}` }}</q-tooltip>
                 </q-btn>
               </div>
@@ -319,7 +321,8 @@
                     class="spaceship-lab__module-svg-preview q-mt-xs"
                     @mousedown="beginModuleSvgDrag"
                   >
-                    <div v-html="moduleSvgPreview" />
+                    <!-- eslint-disable-next-line vue/no-v-html -->
+                    <div v-html="sanitizedModuleSvgPreview" />
                   </div>
                 </div>
               </template>
@@ -350,14 +353,16 @@
                       />
                     </div>
                   </div>
+                  <!-- eslint-disable vue/no-v-html -->
                   <div class="spaceship-lab__overview-svg-list">
                     <div
                       v-for="variant in moduleOverviewSvgs(module)"
                       :key="`${module.id}-${variant.name}-overview`"
                       class="spaceship-lab__overview-svg"
-                      v-html="variant.svg"
+                      v-html="variant.sanitizedSvg"
                     />
                   </div>
+                  <!-- eslint-enable vue/no-v-html -->
                 </button>
               </div>
             </div>
@@ -634,6 +639,7 @@ import {
   resizePattern,
   sanitizeModuleSvgMarkup,
 } from './proceduralSpaceship'
+import { sanitizeSvgMarkup } from './sanitizeSvgMarkup'
 import {
   IDENTICON_SIZE_MAX,
   IDENTICON_SIZE_MIN,
@@ -1189,6 +1195,7 @@ const moduleSvgPreview = computed(() =>
     ? modulePreviewSvg(selectedModuleForSvgEditor.value, state.svgEditor.rotation, true, true)
     : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x="50" y="50" text-anchor="middle" fill="#999">no svg</text></svg>',
 )
+const sanitizedModuleSvgPreview = computed(() => sanitizeSvgMarkup(moduleSvgPreview.value))
 const PREVIEW_CELL_SIZE = 18
 const dragState = {
   dragging: false,
@@ -1656,14 +1663,18 @@ function moduleSvgVariants(module: SpaceshipModuleDefinition) {
 function moduleMiniIconSvgs(module: SpaceshipModuleDefinition) {
   return moduleSvgVariants(module).map((variant) => ({
     name: variant.name,
-    svg: buildModulePreviewSvg(module, 0, true, false, false, variant.name),
+    sanitizedSvg: sanitizeSvgMarkup(
+      buildModulePreviewSvg(module, 0, true, false, false, variant.name),
+    ),
   }))
 }
 
 function moduleOverviewSvgs(module: SpaceshipModuleDefinition) {
   return moduleSvgVariants(module).map((variant) => ({
     name: variant.name,
-    svg: buildModulePreviewSvg(module, state.svgEditor.rotation, true, true, true, variant.name),
+    sanitizedSvg: sanitizeSvgMarkup(
+      buildModulePreviewSvg(module, state.svgEditor.rotation, true, true, true, variant.name),
+    ),
   }))
 }
 

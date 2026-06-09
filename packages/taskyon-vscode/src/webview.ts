@@ -27,11 +27,6 @@ type SearchResultSummary = {
   hitCap: boolean
   error?: string
 }
-type ReadResultSummary = {
-  loaded: string[]
-  failed: string[]
-  error?: string
-}
 type UpdateResultSummary = {
   editedFiles: string[]
   changesLog: string[]
