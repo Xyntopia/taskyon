@@ -26,18 +26,19 @@ import { cryptoKeyToBase64 } from '../modules/crypto'
 
 const props = withDefaults(
   defineProps<{
-  tools?: ClientTool[]
-  configuration?: partialTyConfiguration | null
-  persist?: boolean
-  name: string
-  profileName?: string
-  bindingKey?: CryptoKey | string | null
-  missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
+    tools?: ClientTool[]
+    configuration?: partialTyConfiguration | null
+    persist?: boolean
+    name: string
+    profileName?: string | undefined
+    bindingKey?: CryptoKey | string | null
+    missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
   }>(),
   {
     tools: () => [],
     configuration: () => ({}),
     persist: false,
+    profileName: undefined,
     bindingKey: null,
     missingBindingKeyPolicy: 'deriveFromProfile',
   },
