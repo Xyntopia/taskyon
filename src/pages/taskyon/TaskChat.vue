@@ -143,7 +143,6 @@ import { createScrollManager } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
-import { useRoute } from 'vue-router'
 
 // we are re-creating the following meta tag dynamically here just for the chat page!
 // <!-- Viewport Meta in order to make window size shrink on mobile when keyboard pops up! -->
@@ -167,6 +166,9 @@ const props = defineProps<{
   detailed?: boolean
   treeBrowser?: boolean
   rootTaskId?: string
+  taskId?: string
+  gdriveFileId?: string
+  importUrl?: string
   folder?: string
   filePath?: string
 }>()
@@ -197,7 +199,6 @@ const ResetButton = process.env.DEV
   : undefined
 
 const $q = useQuasar()
-const route = useRoute()
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 const taskThreadContainer = ref<HTMLElement | undefined>()
@@ -229,10 +230,11 @@ const openPopupMessage = (message: string) => {
 async function updateChatThread() {
   console.log('update chat thread')
   const ty = await tystate.taskyon
-  if (typeof route.query.gd === 'string') {
+  if (props.taskId) {
+    state.setSelectedTask(props.taskId)
+  } else if (props.gdriveFileId) {
     state.lockBottomScroll = false
-    const gdFileId = route.query.gd
-    const markdownUrl = `https://share.taskyon.space/proxy/gdrive/${gdFileId}`
+    const markdownUrl = `https://share.taskyon.space/proxy/gdrive/${props.gdriveFileId}`
     loadingFromGdrive.value = true
     invitedChat.value = true
     try {
@@ -249,8 +251,8 @@ async function updateChatThread() {
       loadingFromGdrive.value = false
       dismissloading?.()
     }
-  } else if (typeof route.query.url === 'string') {
-    const markdownUrl = route.query.url ? new URL(route.query.url) : undefined
+  } else if (props.importUrl) {
+    const markdownUrl = new URL(props.importUrl)
     if (markdownUrl) {
       state.lockBottomScroll = false
       const markdownContent = await getTextFile(markdownUrl)
@@ -311,10 +313,7 @@ Please check the path and try again.
         })
       ).id
     }
-
     state.setSelectedTask(newTaskId)
-  } else if (typeof route.query.t === 'string') {
-    state.setSelectedTask(route.query.t)
   }
 }
 
@@ -332,7 +331,7 @@ watch(
   () => state.llmSettings.selectedTaskId,
   (newTaskId) => {
     console.log('set new task', newTaskId)
-    if (!props.filePath && !route.query.gd) {
+    if (!props.filePath && !props.gdriveFileId) {
       // we are using window.history here and NOT vue router
       // itself, because we dn't want to trigger any updates!
       if (newTaskId) {
@@ -350,10 +349,10 @@ watch(
 )
 
 watch(
-  () => [route.query, props.folder, props.filePath] as const,
+  () => [props.taskId, props.gdriveFileId, props.importUrl, props.folder, props.filePath] as const,
   async () => {
     // don't update chat if the task is the same as we ahve alread selected...
-    if (route.query.t && route.query.t === state.llmSettings.selectedTaskId) return
+    if (props.taskId && props.taskId === state.llmSettings.selectedTaskId) return
     loadingChat.value = true
     await updateChatThread()
     if (tystate.currentTask) loadingChat.value = false

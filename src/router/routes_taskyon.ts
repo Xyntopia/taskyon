@@ -2,8 +2,11 @@ import { type RouteRecordRaw } from 'vue-router'
 import { mdRoutes } from './routes_default'
 import { defineAsyncComponent } from 'vue'
 import LoadCircle from '@taskyon/shared/components/LoadingCircle.vue'
+import type { RouteLocationNormalizedLoaded } from 'vue-router'
 
 const chatMarkdownRoots = ['docs', 'tyClientExamples'] as const
+
+const getSingleQueryParam = (value: unknown) => (typeof value === 'string' ? value : undefined)
 
 const resolveChatMarkdownProps = (filePathParam: string | string[] | undefined) => {
   const pathSegments = Array.isArray(filePathParam)
@@ -25,6 +28,16 @@ const resolveChatMarkdownProps = (filePathParam: string | string[] | undefined) 
     filePath: `${pathSegments.join('/')}.md`,
   }
 }
+
+const resolveTaskChatProps = (
+  route: RouteLocationNormalizedLoaded,
+  extra: Record<string, unknown> = {},
+) => ({
+  taskId: getSingleQueryParam(route.query.t),
+  gdriveFileId: getSingleQueryParam(route.query.gd),
+  importUrl: getSingleQueryParam(route.query.url),
+  ...extra,
+})
 
 export const universalTyRoutes: RouteRecordRaw[] = [
   {
@@ -48,6 +61,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           delay: 200,
         }),
         meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
+        props: (route) => resolveTaskChatProps(route),
       },
       {
         path: 'chat',
@@ -57,6 +71,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           delay: 200,
         }),
         meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
+        props: (route) => resolveTaskChatProps(route),
       },
       {
         path: 'detailed',
@@ -66,7 +81,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           delay: 200,
         }),
         meta: { title: 'Detailed Chat', description: 'Detailed Chat' },
-        props: { detailed: true },
+        props: (route) => resolveTaskChatProps(route, { detailed: true }),
       },
       {
         path: 'browser/:id',
@@ -87,7 +102,11 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           delay: 200,
         }),
         meta: { title: 'Chat', description: 'Taskyon AI Chat Companion' },
-        props: (route) => resolveChatMarkdownProps(route.params.filePath as string | string[]),
+        props: (route) =>
+          resolveTaskChatProps(
+            route,
+            resolveChatMarkdownProps(route.params.filePath as string | string[]),
+          ),
       },
       {
         // TODO: rename this and all references to search?
