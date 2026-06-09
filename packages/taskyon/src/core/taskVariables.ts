@@ -250,6 +250,26 @@ export const compileTaskyonFunctionArguments = (
   return compiled
 }
 
+export const compileTaskyonMessageString = (
+  input: string,
+  variableService: TaskVariablePresentationService,
+): string =>
+  input.replace(PLACEHOLDER_REGEX, (match, rawName: string) => {
+    const trimmedName = rawName.trim()
+    if (!trimmedName) return match
+
+    if (isTaskVariableRef(trimmedName)) {
+      return `{{${trimmedName}}}`
+    }
+
+    const taskId = variableService.resolveVariableName(trimmedName)
+    if (!taskId) {
+      throw new Error(`Unknown Taskyon variable placeholder: ${trimmedName}`)
+    }
+
+    return `{{${toTaskRef(taskId)}}}`
+  })
+
 export const materializeTaskyonFunctionArguments = async (
   args: ReadonlyDeep<FunctionArguments>,
   options: MaterializeOptions,

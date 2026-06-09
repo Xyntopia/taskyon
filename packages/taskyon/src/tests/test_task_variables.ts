@@ -2,6 +2,7 @@ import { convertTaskNodesToOpenAIChat } from '../tools/chatCompletionTool'
 import { addPrompts } from '../llm/promptCreation'
 import {
   compileTaskyonFunctionArguments,
+  compileTaskyonMessageString,
   createTaskVariablePresentationService,
   materializeTaskyonFunctionArguments,
   materializeTaskyonMessageString,
@@ -185,6 +186,26 @@ export const testTaskVariableRenderingInMessageStrings = async () => {
   return { success: true }
 }
 
+export const testTaskVariableCompilationInMessageStrings = () => {
+  const sourceTask = createTask({
+    id: 'task-source',
+    role: 'assistant',
+    content: { type: 'message', data: 'Rendered value' },
+  })
+  const tasksById = new Map([[sourceTask.id, sourceTask]])
+  const variableService = createTaskVariablePresentationService()
+  variableService.getOrAssignVariableName(sourceTask, tasksById)
+
+  const compiled = compileTaskyonMessageString('Value: {{message1}}', variableService)
+
+  assert(
+    compiled === 'Value: {{_t:task-source}}',
+    `Expected LLM-facing message variable to compile to internal task ref, got ${toDebugString(compiled)}`,
+  )
+
+  return { success: true }
+}
+
 export const testPromptInjectionPlacement = () => {
   const promptResult = addPrompts(
     {},
@@ -230,5 +251,7 @@ testTaskVariableRenderingInOpenAiChat.description =
   'Renders session-scoped Taskyon variables for the LLM and injects off-chain references on demand.'
 testTaskVariableRenderingInMessageStrings.description =
   'Renders task-id placeholders only in human-visible message strings, not function arguments.'
+testTaskVariableCompilationInMessageStrings.description =
+  'Compiles LLM-facing message template variables back to internal task-id placeholders.'
 testPromptInjectionPlacement.description =
   'Places transient prompt injections before the rendered chat and prompts after it.'

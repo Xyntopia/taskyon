@@ -24,6 +24,7 @@ import type OpenAI from 'openai'
 import type { TyTaskManager } from '../core/taskManager'
 import {
   compileTaskyonFunctionArguments,
+  compileTaskyonMessageString,
   createTaskVariablePresentationService,
   extractTaskRefsFromValue,
   materializeTaskyonFunctionArguments,
@@ -836,6 +837,10 @@ function generateFollowUpTasksFromResult(
           txtContent = cont.text
         }
         if (txtContent) {
+          const compiledTextContent = variableService
+            ? compileTaskyonMessageString(txtContent, variableService)
+            : txtContent
+
           if (goal === 'SimpleCompletion' || goal === 'WebSearch' || llmTools) {
             // if we don't need to call a tool, we simply generate a normal message...
             // the same is true, if we have enabled native llmTools. In this case
@@ -845,7 +850,7 @@ function generateFollowUpTasksFromResult(
               role: 'assistant',
               content: {
                 type: 'message',
-                data: txtContent,
+                data: compiledTextContent,
                 ...(sources.length > 0 && !srcsAdded ? { ann: sources } : {}),
               },
             } as partialTaskDraft
@@ -857,7 +862,7 @@ function generateFollowUpTasksFromResult(
             })
             console.log('No more follow up tasks!')
           } else if (goal === 'AnalyzeToolResult' || goal === 'ChooseTool') {
-            const commands = getCommandFromStructuredResponse(txtContent, variableService)
+            const commands = getCommandFromStructuredResponse(compiledTextContent, variableService)
             if (commands.length > 0) {
               const command = commands[0]!
               if (!allowedTools?.includes(command.name)) {
@@ -868,7 +873,7 @@ function generateFollowUpTasksFromResult(
             }
             newTasks.push({
               role: 'assistant',
-              content: { type: 'structured', data: txtContent },
+              content: { type: 'structured', data: compiledTextContent },
             })
             if (commands.length > 0) {
               console.log('Define tool call')

@@ -1,5 +1,5 @@
 import { createChatCompletionTask } from '../api'
-import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
+import { createTool, makeTaskResult } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
 import type { JSONSchema7 } from '../utils/jsonSchema'
 import { safeYamlDump } from '../utils/yamlUtils'
@@ -325,25 +325,15 @@ export const createEntryNodeToolFactory = (config: EntryNodeConfig) =>
       )
       const normalizedSettings = normalizeEntryNodeSettings(settings)
       const useToolChooser = normalizedSettings.use_tool_chooser
-      if (
-        useToolChooser &&
-        config.toolChooser?.enabled &&
-        shouldUseToolChooser(mode, config.toolChooser)
-      ) {
-        return makeTaskResult([
-          toolCall({
-            name: 'chooseTool',
-            arguments: {
-              useTools: config.toolChooser.useTools ?? true,
-              ...(config.toolChooser.webSearch ? { webSearch: true } : {}),
-            },
-          }),
-        ])
-      }
-
-      const llmTools = normalizedSettings.nativeToolCalling
       const webSearchEnabled = normalizedSettings.websearch.enabled
-      const nextGoal = webSearchEnabled ? 'WebSearch' : 'AnalyzeToolResult'
+      const nextGoal = webSearchEnabled
+        ? 'WebSearch'
+        : useToolChooser &&
+            config.toolChooser?.enabled &&
+            shouldUseToolChooser(mode, config.toolChooser)
+          ? 'ChooseTool'
+          : 'AnalyzeToolResult'
+      const llmTools = nextGoal === 'ChooseTool' ? false : normalizedSettings.nativeToolCalling
       const promptAugmentations = buildEntryNodePromptAugmentations({
         mode,
         prompt,
