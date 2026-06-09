@@ -163,7 +163,13 @@ useMeta(() => ({
   },
 }))
 
-const props = defineProps<{ detailed?: boolean; treeBrowser?: boolean; rootTaskId?: string }>()
+const props = defineProps<{
+  detailed?: boolean
+  treeBrowser?: boolean
+  rootTaskId?: string
+  folder?: string
+  filePath?: string
+}>()
 const showAllTasks = ref<boolean>(props.detailed)
 const showHierarchy = ref(false)
 const loadingChat = ref(false)
@@ -195,7 +201,6 @@ const route = useRoute()
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 const taskThreadContainer = ref<HTMLElement | undefined>()
-const folder = ''
 const fileAttachments = ref<File[]>([]) // holds all attached files as a "tasklist"
 const loadingFromGdrive = ref(false)
 const invitedChat = ref(false)
@@ -252,22 +257,21 @@ async function updateChatThread() {
       const newTaskId = await ty.addMdTaskChain(markdownContent)
       state.setSelectedTask(newTaskId)
     }
-  } else if (route.params.filePath) {
+  } else if (props.filePath) {
     state.lockBottomScroll = false
-    const urlPath = (route.params.filePath as string[]).join('/')
-    const filePath = urlPath.endsWith('.md') ? urlPath : `${urlPath}.md`
     let newTaskId: string | undefined
     try {
-      const markdownContent = filePath ? await fetchMarkdown(folder || '', filePath) : undefined
+      const markdownContent = await fetchMarkdown(props.folder || '', props.filePath)
       newTaskId = await ty.addMdTaskChain(markdownContent)
-    } catch {
+    } catch (error) {
+      console.error(error)
       newTaskId = (
         await ty.addPartialTask2Tree({
           content: {
             type: 'error',
-            data: `# 404 - Markdown Not Found
+            data: `${error instanceof Error ? error.message : String(error)}
 
-The markdown file \`${filePath}\` does not exist.
+The markdown file \`${props.filePath}\` does not exist.
 
 ## What might have happened?
 
@@ -303,7 +307,7 @@ watch(
   () => state.llmSettings.selectedTaskId,
   (newTaskId) => {
     console.log('set new task', newTaskId)
-    if (!route.params.filePath && !route.query.gd) {
+    if (!props.filePath && !route.query.gd) {
       // we are using window.history here and NOT vue router
       // itself, because we dn't want to trigger any updates!
       if (newTaskId) {
@@ -321,7 +325,7 @@ watch(
 )
 
 watch(
-  () => route.query,
+  () => [route.query, props.folder, props.filePath] as const,
   async () => {
     // don't update chat if the task is the same as we ahve alread selected...
     if (route.query.t && route.query.t === state.llmSettings.selectedTaskId) return

@@ -3,6 +3,29 @@ import { mdRoutes } from './routes_default'
 import { defineAsyncComponent } from 'vue'
 import LoadCircle from '@taskyon/shared/components/LoadingCircle.vue'
 
+const chatMarkdownRoots = ['docs', 'tyClientExamples'] as const
+
+const resolveChatMarkdownProps = (filePathParam: string | string[] | undefined) => {
+  const pathSegments = Array.isArray(filePathParam)
+    ? filePathParam
+    : filePathParam
+      ? [filePathParam]
+      : []
+
+  const [root, ...rest] = pathSegments
+  if (root && chatMarkdownRoots.includes(root as (typeof chatMarkdownRoots)[number])) {
+    return {
+      folder: root,
+      filePath: `${rest.join('/')}.md`,
+    }
+  }
+
+  return {
+    folder: '',
+    filePath: `${pathSegments.join('/')}.md`,
+  }
+}
+
 export const universalTyRoutes: RouteRecordRaw[] = [
   {
     path: 'settings/:tab?',
@@ -64,6 +87,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           delay: 200,
         }),
         meta: { title: 'Chat', description: 'Taskyon AI Chat Companion' },
+        props: (route) => resolveChatMarkdownProps(route.params.filePath as string | string[]),
       },
       {
         // TODO: rename this and all references to search?
