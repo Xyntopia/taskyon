@@ -31,11 +31,6 @@ const toMarkdownTaskRef = (alias: string): MarkdownImportTaskRef =>
 
 const toTaskRef = (taskId: string) => `${TASK_REF_PREFIX}${taskId}`
 
-const cloneValue = <T>(value: T): T => {
-  if (typeof structuredClone === 'function') return structuredClone(value)
-  return JSON.parse(JSON.stringify(value)) as T
-}
-
 const sanitizeTaskRef = (value: string) => {
   const normalized = value
     .trim()
@@ -203,10 +198,7 @@ const renderTaskAsMarkdown = (
   taskIdToAlias: Map<string, string>,
   fullMeta: boolean,
 ) => {
-  const rewrittenTask = rewriteTaskRefsForMarkdownExport(
-    cloneValue(task),
-    taskIdToAlias,
-  ) as TaskNode
+  const rewrittenTask = rewriteTaskRefsForMarkdownExport(task, taskIdToAlias) as TaskNode
   const message =
     rewrittenTask.content.type === 'message'
       ? '\n\n' + String(rewriteTaskRefsForMarkdownExport(rewrittenTask.content.data, taskIdToAlias))
@@ -266,7 +258,7 @@ export const addMarkdownTaskChain = async (
       seenAliases.add(taskDraft.taskRef)
     }
 
-    const rewrittenDraft = rewriteMarkdownTaskRefs(cloneValue(taskDraft), aliasToTaskId)
+    const rewrittenDraft = rewriteMarkdownTaskRefs(taskDraft, aliasToTaskId)
     const addedTask = await addTask(
       stripMarkdownTaskDraft(MarkdownTaskDraftSchema.parse(rewrittenDraft)),
     )
