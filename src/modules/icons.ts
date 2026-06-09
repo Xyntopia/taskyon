@@ -31,6 +31,7 @@ export const iconRegistry: iconMap = {
     reasoning_effort: mdiHeadSnowflake,
     llmTools: mdiFunctionVariant,
     use_multimodal: matVisibility,
+    max_results: mdiFormatListNumbered,
     websearch: {
       enabled: mdiSearchWeb,
       max_results: mdiFormatListNumbered,

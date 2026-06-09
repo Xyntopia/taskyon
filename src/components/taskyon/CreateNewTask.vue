@@ -29,8 +29,8 @@
         :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
         :show-web-search="state.appConfiguration.webSearchButton"
-        @execute-task="addNewTask(p2pTopic)"
-        @execute-web-search="addNewTask(p2pTopic)"
+        @execute-task="addNewTask('message', p2pTopic)"
+        @execute-web-search="addNewTask('websearch', p2pTopic)"
       >
         <template #left="{ btnSize }">
           <div v-if="minMode">
@@ -198,7 +198,7 @@
         class="col-auto q-px-md row no-wrap items-center"
         @click.stop
       >
-        <q-btn flat :icon-right="matSend" @click="addNewTask(p2pTopic)">
+        <q-btn flat :icon-right="matSend" @click="addNewTask('message', p2pTopic)">
           <q-tooltip>Execute Task</q-tooltip>
         </q-btn>
       </div>
@@ -407,7 +407,37 @@ const $q = useQuasar()
 
 // TODO: move this "up", it would be better to have the task creation be purely
 //       event based and more configurable...
-async function addNewTask(p2pTopic?: string) {
+type MessageExecutionMode = 'message' | 'websearch'
+
+const applyWebSearchIntent = (
+  task: WritableDeep<partialTaskDraft>,
+  mode: MessageExecutionMode,
+): WritableDeep<partialTaskDraft> => {
+  if (task.content.type !== 'functioncall') return task
+
+  const previousArguments =
+    task.content.data.arguments && typeof task.content.data.arguments === 'object'
+      ? task.content.data.arguments
+      : {}
+  const previousWebSearch =
+    'websearch' in previousArguments &&
+    previousArguments.websearch &&
+    typeof previousArguments.websearch === 'object'
+      ? previousArguments.websearch
+      : {}
+
+  task.content.data.arguments = {
+    ...previousArguments,
+    websearch: {
+      ...previousWebSearch,
+      enabled: mode === 'websearch',
+    },
+  }
+
+  return task
+}
+
+async function addNewTask(mode: MessageExecutionMode, p2pTopic?: string) {
   console.log('pubishing on topic:', p2pTopic)
   const kwdsPromise = getCurrentKeywordsWithTimeout(300)
   const ty = await tystate.taskyon
@@ -432,12 +462,10 @@ async function addNewTask(p2pTopic?: string) {
   newTaskChain.push({ ...currentnewTask.value })
 
   if (currentnewTask.value.content.type === 'message') {
-    const chooseTask = deepCopy(entryNode) as WritableDeep<partialTaskDraft>
-    if (chooseTask.content.type === 'functioncall') {
-      chooseTask.content.data.arguments = {
-        ...deepCopy(chooseTask.content.data.arguments ?? {}),
-      }
-    }
+    const chooseTask = applyWebSearchIntent(
+      deepCopy(entryNode) as WritableDeep<partialTaskDraft>,
+      mode,
+    )
     newTaskChain.push(chooseTask)
   }
 

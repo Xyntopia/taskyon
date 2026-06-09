@@ -42,12 +42,14 @@ export const EntryNodeSettingsSchema = {
     use_baseprompt: {
       type: 'boolean',
       default: true,
+      title: 'Base Prompt',
       description:
         'Enable base system prompting for assistant style and formatting when calling chatCompletion.',
     },
     llmTools: {
       type: 'boolean',
       default: true,
+      title: 'Native Tool Calling',
       description:
         'Enable native LLM tool calling during chatCompletion. Disable to prefer Taskyon DIY function-calling.',
     },
@@ -59,24 +61,39 @@ export const EntryNodeSettingsSchema = {
     use_tool_chooser: {
       type: 'boolean',
       default: true,
+      title: 'Tool Chooser',
       description:
         'Enable the chooseTool stage for this specific entry-node run. This is captured on the entry node for replayability.',
     },
     reasoning_effort: {
       enum: ['low', 'medium', 'high', 'none'],
+      title: 'Reasoning Effort',
       description: 'Reasoning effort forwarded to chatCompletion.',
     },
     use_multimodal: {
       type: 'boolean',
+      title: 'Multimodal Input',
       description: 'Allow multimodal model input handling.',
       default: true,
     },
     websearch: {
       type: 'object',
+      title: 'Web Search',
+      description: 'Configure how many results Taskyon includes when a message is sent via search.',
       additionalProperties: false,
       properties: {
-        enabled: { type: 'boolean', default: false },
-        max_results: { type: 'integer', default: 5 },
+        enabled: {
+          type: 'boolean',
+          default: false,
+          title: 'Enabled',
+          description: 'Internal per-message flag set by the send button that was used.',
+        },
+        max_results: {
+          type: 'integer',
+          default: 5,
+          title: 'Search Max Results',
+          description: 'Maximum number of web results to include when web search is requested.',
+        },
       },
     },
     prompt_templates: {

@@ -41,7 +41,7 @@ import { iconRegistry, settingsIcons } from 'src/modules/icons'
 import { appConfiguration } from 'src/modules/taskyon/types'
 import { buildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
-import { computed } from 'vue'
+import { computed, reactive } from 'vue'
 import z from 'zod'
 
 const state = useAppStateStore()
@@ -53,11 +53,41 @@ const entryNodePickKeys = [
   'use_multimodal',
   'reasoning_effort',
   'llmTools',
-  'websearch',
 ] as const
 const slimChatKeys = computed(() => (em.value ? entryNodePickKeys : ['reasoning_effort']))
 
 const entryNode = computed(() => state.toolchainConfig[state.llmSettings.entryFunction]!)
+type EntryNodeWebSearchSettings = {
+  enabled?: boolean
+  max_results?: number
+}
+
+const getEntryNodeWebSearch = (): EntryNodeWebSearchSettings => {
+  const webSearch = entryNode.value.websearch
+  if (!webSearch || typeof webSearch !== 'object' || Array.isArray(webSearch)) {
+    return {}
+  }
+
+  return {
+    ...(typeof webSearch.enabled === 'boolean' ? { enabled: webSearch.enabled } : {}),
+    ...(typeof webSearch.max_results === 'number'
+      ? { max_results: webSearch.max_results }
+      : {}),
+  }
+}
+
+const entryNodeWebSearch = reactive({
+  get max_results() {
+    return getEntryNodeWebSearch().max_results ?? 5
+  },
+  set max_results(value: number) {
+    const currentWebSearch = getEntryNodeWebSearch()
+    entryNode.value.websearch = {
+      ...currentWebSearch,
+      max_results: value,
+    }
+  },
+})
 
 const slimView = computed(() =>
   buildSlimView(
@@ -71,6 +101,20 @@ const slimView = computed(() =>
       schema: EntryNodeSettingsSchema,
       pickKeys: [...slimChatKeys.value],
     },
+    ...(em.value
+      ? [
+          {
+            obj: entryNodeWebSearch,
+            schema:
+              EntryNodeSettingsSchema.properties.websearch &&
+              typeof EntryNodeSettingsSchema.properties.websearch === 'object' &&
+              !Array.isArray(EntryNodeSettingsSchema.properties.websearch)
+                ? EntryNodeSettingsSchema.properties.websearch
+                : { type: 'object', properties: {} },
+            pickKeys: ['max_results'],
+          },
+        ]
+      : []),
     {
       obj: state.appConfiguration,
       schema: z.toJSONSchema(appConfiguration, { unrepresentable: 'any' }),

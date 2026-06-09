@@ -56,7 +56,7 @@
               copy-object-btn
               show-missing-mode-select
               :show-header-row="state.appConfiguration.expertMode"
-              :icons="(iconRegistry[key] as iconMap) ?? {}"
+              :icons="getToolchainIcons(key)"
               missing-mode="hide"
               copy-btn
               @update:model-value="(nextVal) => applyToolchainUpdate(key, nextVal)"
@@ -95,10 +95,7 @@
 <script setup lang="ts">
 import FadeAwayScrollPage from '@taskyon/shared/components/FadeAwayScrollPage.vue'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
-import {
-  convertZodToJsonSchemaCached,
-  FunctionArguments as FunctionArgumentsSchema,
-} from '@taskyon/taskyon'
+import { convertZodToJsonSchemaCached, FunctionArguments as FunctionArgumentsSchema } from '@taskyon/taskyon'
 import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
 import LLMProviders from 'components/taskyon/LLMProviders.vue'
 import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'
@@ -123,6 +120,19 @@ const toolchainEntries = computed(() =>
     value: state.toolchainConfig[key]!,
   })),
 )
+
+const getToolchainIcons = (key: string): iconMap => {
+  const directIcons = iconRegistry[key]
+  if (directIcons && typeof directIcons === 'object') {
+    return directIcons
+  }
+
+  if (key === state.llmSettings.entryFunction) {
+    return (iconRegistry.entryNode as iconMap) ?? {}
+  }
+
+  return {}
+}
 
 const applyToolchainUpdate = (key: string, nextValue: unknown) => {
   const parsed = FunctionArgumentsSchema.safeParse(nextValue)
