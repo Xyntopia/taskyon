@@ -8,6 +8,7 @@
       icon-color="info"
       :show-meta="showMeta"
       :message-debug="resolvedMessageDebug"
+      :raw-conversation-text="rawConversationText"
       @update:message-debug="onUpdateMessageDebug"
     >
       <div class="row items-center">
@@ -37,6 +38,7 @@
       icon-color="info"
       :show-meta="showMeta"
       :message-debug="resolvedMessageDebug"
+      :raw-conversation-text="rawConversationText"
       @update:message-debug="onUpdateMessageDebug"
     >
       {{ task.content.data }}
@@ -46,6 +48,7 @@
       :task="task"
       :show-meta="showMeta"
       :message-debug="resolvedMessageDebug"
+      :raw-conversation-text="rawConversationText"
       short
       @update:message-debug="onUpdateMessageDebug"
     >
@@ -91,6 +94,7 @@
       :task="task"
       :show-meta="showMeta"
       :message-debug="resolvedMessageDebug"
+      :raw-conversation-text="rawConversationText"
       short
       @update:message-debug="onUpdateMessageDebug"
     >
@@ -110,6 +114,7 @@
       :show-meta="showMeta"
       :icon="mdiHeadCog"
       :message-debug="resolvedMessageDebug"
+      :raw-conversation-text="rawConversationText"
       short
       @update:message-debug="onUpdateMessageDebug"
     >
@@ -124,6 +129,7 @@
       :icon="mdiTools"
       :show-meta="showMeta"
       :message-debug="resolvedMessageDebug"
+      :raw-conversation-text="rawConversationText"
       short
       @update:message-debug="onUpdateMessageDebug"
     >
@@ -139,6 +145,7 @@
       icon-color="info"
       :show-meta="showMeta"
       :message-debug="resolvedMessageDebug"
+      :raw-conversation-text="rawConversationText"
       :short="short"
       @update:message-debug="onUpdateMessageDebug"
     >
@@ -168,6 +175,7 @@
       icon-color="negative"
       :show-meta="showMeta"
       :message-debug="resolvedMessageDebug"
+      :raw-conversation-text="rawConversationText"
       short
       @update:message-debug="onUpdateMessageDebug"
     >
@@ -260,6 +268,11 @@ import { computed, ref, toRefs } from 'vue'
 import FileBrowser from './FileBrowser.vue'
 import SourcesList from './SourcesList.vue'
 import TaskField from './TaskField.vue'
+import {
+  formatRawConversationDebug,
+  getRawConversationDebug,
+  hasRawConversationDebug,
+} from './taskDebugConversation'
 import TaskVariableHint from './TaskVariableHint.vue'
 import VariableInspectorDialog from './VariableInspectorDialog.vue'
 
@@ -290,6 +303,7 @@ const sourceTaskId = computed(() =>
 )
 const loadTaskById = async (taskId: string) =>
   (await (await tystate.taskyon).getTask(taskId)) ?? undefined
+const taskMeta = tystate.getTaskMetaRef(task.value.id)
 const resolvedMessageContent = ref(
   task.value.content.type === 'message' ? task.value.content.data : '',
 )
@@ -322,6 +336,10 @@ const functionArgumentSegments = computed(() => {
   }
 
   return segments
+})
+const rawConversationText = computed(() => {
+  const debug = getRawConversationDebug(taskMeta.value)
+  return hasRawConversationDebug(debug) ? formatRawConversationDebug(debug) : undefined
 })
 const onUpdateMessageDebug = (value: boolean) => {
   emit('update:messageDebug', value)

@@ -1,3 +1,4 @@
+import { createStream } from '@taskyon/shared/modules/frpBus'
 import type {
   AssistantModelMessage,
   FilePart,
@@ -20,12 +21,17 @@ import { load } from 'js-yaml'
 import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
 import type OpenAI from 'openai'
-import type { ReadonlyDeep } from 'type-fest'
 import type { TyTaskManager } from '../core/taskManager'
+import {
+  compileTaskyonFunctionArguments,
+  createTaskVariablePresentationService,
+  extractTaskRefsFromValue,
+  materializeTaskyonFunctionArguments,
+  renderTaskyonVariableBlock,
+} from '../core/taskVariables'
 import { mapFunctionNames } from '../core/tools'
 import { isTaskyonKey } from '../core/tyCrypto'
-import type { Goals } from '../llm/promptCreation'
-import { addPrompts } from '../llm/promptCreation'
+import type { Goals, PromptInjection } from '../llm/promptCreation'
 import {
   getTaskyonCosts,
   getTyJwtPublicKey,
@@ -35,15 +41,19 @@ import {
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
 import type { apiConfig, TaskNodeMeta } from '../types/chatCompletion'
 import { getCurrentModel } from '../types/chatCompletion'
-import type { Annotation, FileMapping, partialTaskDraft, TaskNode } from '../types/taskNode'
-import type { llmSettings } from '../types/profiles'
+import type {
+  Annotation,
+  FileMapping,
+  partialTaskDraft,
+  TaskGetter,
+  TaskNode,
+} from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import type { ToolBase } from '../types/tools'
 import { FunctionArguments, FunctionCall } from '../types/tools'
 import { charHash } from '../utils/crypto'
 import { humanizeError, serializeError } from '../utils/error'
-import { createStream } from '@taskyon/shared/modules/frpBus'
 import { convertFileToText } from '../utils/loadFiles'
 import {
   createDeepTransformer,
@@ -60,24 +70,48 @@ type WebSearchOptions = {
   searchContextSize: 'low' | 'high' | 'medium'
 }
 
+type TaskVariablePresentationService = ReturnType<typeof createTaskVariablePresentationService>
+
+const augmentToolSchemaForTaskyonVariables = (schema: JSONSchema7): JSONSchema7 => {
+  if (schema.type !== 'object') return schema
+
+  return {
+    ...schema,
+    properties: {
+      ...(schema.properties ?? {}),
+      $use: {
+        type: 'object',
+        description:
+          'Taskyon extension. Map argument paths to visible task variables when a whole argument should come from a previous task result.',
+        additionalProperties: {
+          type: 'string',
+        },
+        examples: [{ document: 'python1' }],
+      },
+    },
+  }
+}
+
 const convertToChatCompletionTool = (t: ToolBase): Tool => {
   return tool({
     title: t.name,
-    description: t.description,
-    inputSchema: jsonSchema(t.parameters),
+    description: `${t.description}\n\nTaskyon note: whole arguments may use the reserved $use mapping to reference previous task results.`,
+    inputSchema: jsonSchema(augmentToolSchemaForTaskyonVariables(t.parameters)),
   })
 }
 
-const DEFAULT_PROMPT_TEMPLATES = {
-  basePrompt: 'You are a helpful assistant called Taskyon. Return concise and correct Markdown answers.',
-  instruction:
-    'Complete the task accurately. If structured output is requested, follow the required format exactly.',
-  toolResult: 'Evaluate the following tool result and respond in {format}:\n\n{message}',
-  task: 'Complete this task:\n\n{message}',
-  evaluate: 'Evaluate this message and respond in {format}:\n\n{message}',
-  schemaReminder:
-    'Output must strictly match {format} and this schema:\n\n{schema}\n\nDo not add extra text.',
-  tools: 'Available tools:\n\n${tools}',
+const systemMessage = (content: string): SystemModelMessage => ({ role: 'system', content })
+
+const toPromptMessages = (
+  prompts: string[],
+  promptInjections: PromptInjection[],
+): {
+  prependMessages: SystemModelMessage[]
+  appendMessages: SystemModelMessage[]
+} => {
+  const prependMessages = promptInjections.map(systemMessage)
+  const appendMessages = prompts.map(systemMessage)
+  return { prependMessages, appendMessages }
 }
 
 function generateToolDeclarations(
@@ -102,21 +136,20 @@ export async function processChatTask(
   llmTools: boolean,
   llmSettings: {
     tryUsingVisionModels: boolean
-    useBasePrompt: boolean
-    taskChatTemplates: Parameters<typeof addPrompts>[4]
   },
   // can we get rid of taskManager here in order to make our task more functional :)?
   taskManager: TyTaskManager,
   lastTaskBeforeChatCompletion: TaskNode | undefined,
   prompts: string[],
-  goal?: Goals,
-  schema?: Record<string, unknown>,
+  promptInjections: PromptInjection[],
+  variableService?: TaskVariablePresentationService,
 ) {
   //TODO: we can create more things here like giving it context form other tasks, lookup
   //      main objective, previous tasks etc....
   //      actualy: this would be great for a new tool ;)
   // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
   let chatCompletionMessages: ModelMessage[]
+  let originalThread: ModelMessage[] = []
   if (lastTaskBeforeChatCompletion) {
     const taskChain = await taskManager.getTaskChain(lastTaskBeforeChatCompletion.id)
     chatCompletionMessages = await convertTaskNodesToOpenAIChat(
@@ -126,29 +159,24 @@ export async function processChatTask(
       llmSettings.tryUsingVisionModels,
       llmTools,
       toolDefs,
+      variableService
+        ? {
+            getTaskById: taskManager.getTask,
+            variableService,
+          }
+        : {
+            getTaskById: taskManager.getTask,
+          },
     )
+    originalThread = [...chatCompletionMessages]
   } else {
     chatCompletionMessages = []
   }
-
-  const msgs = addPrompts(
-    toolDefs,
-    llmTools,
-    llmTools, // we turn on/off native structured & tools ith the same setting here!
-    llmSettings.useBasePrompt,
-    llmSettings.taskChatTemplates,
-    chatCompletionMessages,
-    prompts,
-    allowedTools,
-    lastTaskBeforeChatCompletion?.content.data,
-    goal,
-    schema,
-  )
-
+  const promptMessages = toPromptMessages(prompts, promptInjections)
   chatCompletionMessages = [
-    ...msgs.prependMessages,
-    ...msgs.modifiedOpenAIConversationThread,
-    ...msgs.appendMessages,
+    ...promptMessages.prependMessages,
+    ...chatCompletionMessages,
+    ...promptMessages.appendMessages,
   ]
 
   if (chatCompletionMessages.length <= 0) {
@@ -160,7 +188,15 @@ export async function processChatTask(
     tools = generateToolDeclarations(allowedTools || [], toolDefs)
   }
 
-  return { chatCompletionMessageThread: chatCompletionMessages, tools, msgs: msgs ?? {} }
+  return {
+    chatCompletionMessageThread: chatCompletionMessages,
+    tools,
+    msgs: {
+      prependMessages: promptMessages.prependMessages,
+      modifiedOpenAIConversationThread: originalThread,
+      appendMessages: promptMessages.appendMessages,
+    },
+  }
 }
 
 type streamOptsType = Parameters<typeof streamText>[0]
@@ -191,6 +227,9 @@ const cleanupRawStreamOutput = (rawOutput: string): string => {
     .trim()
   return cleaned
 }
+
+const normalizePromptInjections = (value: unknown): PromptInjection[] =>
+  Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
 
 const classifyStreamingFailure = (
   err: unknown,
@@ -448,29 +487,86 @@ export async function convertTaskNodesToOpenAIChat(
   tryUsingVisionModels: boolean,
   useNativeTools: boolean,
   toolDefs: Record<string, ToolBase>,
+  options?: {
+    getTaskById?: TaskGetter
+    variableService?: TaskVariablePresentationService
+  },
 ) {
   const tasksById = new Map<string, TaskNode>(taskChain.map((t) => [t.id, t]))
+  const variableService = options?.variableService ?? createTaskVariablePresentationService()
+  const getTaskById: TaskGetter =
+    options?.getTaskById ?? ((taskId: string) => Promise.resolve(tasksById.get(taskId) ?? null))
+  const renderedTaskIds = new Set<string>()
+  const injectedTaskIds = new Set<string>()
+  const messages: ModelMessage[] = []
 
-  const messages = (
-    await Promise.all(
-      taskChain.map((task) =>
-        convertTaskNodeToOpenAIMessage(
-          task,
-          tasksById,
-          tryUsingVisionModels,
-          getFileMapping,
-          getUploadedFile,
-          useNativeTools,
-          toolDefs,
-        ),
-      ),
+  for (const task of taskChain) {
+    const referencedTasks = await renderReferencedTasksForLlm(
+      task,
+      tasksById,
+      renderedTaskIds,
+      injectedTaskIds,
+      variableService,
+      getTaskById,
     )
-  )
-    .flat()
-    .filter<ModelMessage>((message) => message != undefined)
+    messages.push(...referencedTasks)
+
+    const renderedMessages = await convertTaskNodeToOpenAIMessage(
+      task,
+      tasksById,
+      tryUsingVisionModels,
+      getFileMapping,
+      getUploadedFile,
+      useNativeTools,
+      toolDefs,
+      variableService,
+      getTaskById,
+    )
+    if (renderedMessages?.length) messages.push(...renderedMessages)
+    renderedTaskIds.add(task.id)
+  }
 
   // Inject any missing tool response messages (this happens, if our tools create a recursive task chain)
   return ensureToolResponses(messages)
+}
+
+const renderTaskContentForLlm = (
+  task: TaskNode,
+  tasksById: Map<string, TaskNode>,
+  variableService: TaskVariablePresentationService,
+) => {
+  const variableName = variableService.getOrAssignVariableName(task, tasksById)
+  const content =
+    task.content.type === 'message' ? String(task.content.data) : safeYamlDump(task.content.data)
+  return renderTaskyonVariableBlock(variableName, content)
+}
+
+const renderReferencedTasksForLlm = async (
+  task: TaskNode,
+  tasksById: Map<string, TaskNode>,
+  renderedTaskIds: Set<string>,
+  injectedTaskIds: Set<string>,
+  variableService: TaskVariablePresentationService,
+  getTaskById: TaskGetter,
+) => {
+  const refs = extractTaskRefsFromValue(task.content.data)
+  const injectedMessages: SystemModelMessage[] = []
+
+  for (const taskId of refs) {
+    if (renderedTaskIds.has(taskId) || injectedTaskIds.has(taskId)) continue
+    const referencedTask = tasksById.get(taskId) ?? (await getTaskById(taskId))
+    if (!referencedTask) {
+      throw new Error(`Taskyon variable reference points to missing task ${taskId}`)
+    }
+    tasksById.set(taskId, referencedTask)
+    injectedTaskIds.add(taskId)
+    injectedMessages.push({
+      role: 'system',
+      content: renderTaskContentForLlm(referencedTask, tasksById, variableService),
+    })
+  }
+
+  return injectedMessages
 }
 
 function parseYamlResponse2Record(message: string): Record<string, unknown> {
@@ -568,9 +664,7 @@ const normalizeAssistantMessageForToolCall = (
 
   // If the provider already returned native tool calls, keep them as-is.
   if (
-    message.content.some(
-      (part): boolean => typeof part !== 'string' && part.type === 'tool-call',
-    )
+    message.content.some((part): boolean => typeof part !== 'string' && part.type === 'tool-call')
   )
     return message
 
@@ -607,7 +701,10 @@ const robustKeys = createDeepTransformer({
 // we use this to decide whether we should call a function or to continue
 // this is usually not needed if we use llmTools (like built-in tools from openai API)
 // TODO: ability to parse multiple commands/tasks...
-function getCommandFromStructuredResponse(message: string): FunctionCall[] {
+function getCommandFromStructuredResponse(
+  message: string,
+  variableService?: TaskVariablePresentationService,
+): FunctionCall[] {
   // all of the following is done in order to make this as robust as possible
   // thats also why we don't just simply use zod validation on this.
   const structResponse = parseYamlResponse2Record(message || '')
@@ -640,7 +737,12 @@ function getCommandFromStructuredResponse(message: string): FunctionCall[] {
     (dwht && useTool)
   ) {
     if (parsed.success) {
-      const command = parsed.data
+      const command = variableService
+        ? {
+            ...parsed.data,
+            arguments: compileTaskyonFunctionArguments(parsed.data.arguments, variableService),
+          }
+        : parsed.data
       return [command]
     }
     throw new Error(`The response (${JSON.stringify(pickProperties(structResponse, ['use tool', 'try again']))})
@@ -687,6 +789,8 @@ function generateFollowUpTasksFromResult(
   llmTools: boolean,
   allTools: Record<string, ToolBase>,
   prompts: string[] | undefined,
+  promptInjections: PromptInjection[] | undefined,
+  variableService?: TaskVariablePresentationService,
 ): partialTaskDraft[] {
   console.log('generate follow up task')
 
@@ -714,7 +818,7 @@ function generateFollowUpTasksFromResult(
         {
           // check if we have any function calls from the llm inference
           // in that case we shoud handle that first :)
-          const functionCall = convertFunctionCall(cont, allTools)
+          const functionCall = convertFunctionCall(cont, allTools, variableService)
           if (functionCall) {
             newTasks.push({
               role: 'function',
@@ -752,11 +856,8 @@ function generateFollowUpTasksFromResult(
               content: { type: 'return', data: 'assistant answered' },
             })
             console.log('No more follow up tasks!')
-          } else if (
-            goal === 'AnalyzeToolResult' ||
-            goal === 'ChooseTool'
-          ) {
-            const commands = getCommandFromStructuredResponse(txtContent)
+          } else if (goal === 'AnalyzeToolResult' || goal === 'ChooseTool') {
+            const commands = getCommandFromStructuredResponse(txtContent, variableService)
             if (commands.length > 0) {
               const command = commands[0]!
               if (!allowedTools?.includes(command.name)) {
@@ -782,6 +883,7 @@ function generateFollowUpTasksFromResult(
                   name: 'chatCompletion',
                   arguments: {
                     prompts: prompts || [],
+                    prompt_injections: promptInjections || [],
                     model: chatModel,
                     goal: 'SimpleCompletion',
                   },
@@ -799,7 +901,11 @@ function generateFollowUpTasksFromResult(
   return newTasks
 }
 
-export function convertFunctionCall(content: ToolCallPart, tools: Record<string, ToolBase>) {
+export function convertFunctionCall(
+  content: ToolCallPart,
+  tools: Record<string, ToolBase>,
+  variableService?: TaskVariablePresentationService,
+) {
   // if our response contained a call to a function...
   // TODO: update this to the new tools API from Openai
   console.log('A function call was returned...')
@@ -824,7 +930,7 @@ ${toolCall.function.arguments}`,
   }
   const functionCallObj: FunctionCall = {
     name: toolName,
-    arguments: fargs,
+    arguments: variableService ? compileTaskyonFunctionArguments(fargs, variableService) : fargs,
   }
   if (tools[functionCallObj.name]) return functionCallObj
 }
@@ -839,6 +945,8 @@ async function convertTaskNodeToOpenAIMessage(
   getUploadedFile: (uuid: string) => Promise<File | undefined>,
   useNativeTools: boolean,
   toolCollection: Record<string, ToolBase>,
+  variableService: TaskVariablePresentationService,
+  getTaskById: TaskGetter,
   maxToolIdLength = 9, // the max length here is influenced by the Mistral model, which can only use 9 characters for tool ids
 ): Promise<ModelMessage[] | undefined> {
   if (task.content.type === 'functioncall') {
@@ -846,6 +954,12 @@ async function convertTaskNodeToOpenAIMessage(
     if (toolCollection[functionCallName]?.renderOptions?.hideLlm) {
       return
     }
+    const llmArguments = await materializeTaskyonFunctionArguments(task.content.data.arguments, {
+      surface: 'llm',
+      getTaskById,
+      variableService,
+      tasksById,
+    })
     if (useNativeTools) {
       const functionMessage: AssistantModelMessage = {
         role: 'assistant',
@@ -854,7 +968,7 @@ async function convertTaskNodeToOpenAIMessage(
             type: 'tool-call',
             toolCallId: await charHash(task.id, maxToolIdLength),
             toolName: task.content.data.name,
-            input: task.content.data.arguments,
+            input: llmArguments,
           },
         ],
       }
@@ -868,13 +982,15 @@ async function convertTaskNodeToOpenAIMessage(
           // and the result of the function
           content:
             `The following tool was used: ${functionCallName}.` +
-            (!isEmpty(task.content.data.arguments)
-              ? ` The function arguments were: ${JSON.stringify(task.content.data.arguments)}`
+            (!isEmpty(llmArguments)
+              ? ` The function arguments were: ${JSON.stringify(llmArguments)}`
               : ''),
         },
       ]
     }
   } else if (task.content.type === 'toolresult') {
+    const variableName = variableService.getOrAssignVariableName(task, tasksById)
+    const renderedBlock = renderTaskyonVariableBlock(variableName, safeYamlDump(task.content.data))
     if (task.parentID && useNativeTools) {
       // the parent task should be the tool call task...
       const toolCallTask = tasksById.get(task.parentID)
@@ -882,9 +998,7 @@ async function convertTaskNodeToOpenAIMessage(
         toolCallTask?.content.type === 'functioncall' ? toolCallTask.content.data.name : 'unknown'
       const output: ToolResultPart['output'] = {
         type: 'text',
-        // TODO: not sure, if it makes senese to use type 'json' here at some point in the future?
-        //       its not very generic...
-        value: safeYamlDump(task.content.data),
+        value: renderedBlock,
       }
       const message: ToolModelMessage = {
         role: 'tool',
@@ -902,21 +1016,39 @@ async function convertTaskNodeToOpenAIMessage(
       return [
         {
           role: 'system',
-          content: safeYamlDump({
-            'The tool that you called returned the following result:': task.content.data,
-          }),
+          content: renderedBlock,
         },
       ]
   } else if (task.content.type === 'message' && task.role != 'function') {
     const message: ModelMessage = {
       role: task.role,
-      content: task.content.data,
+      content: renderTaskyonVariableBlock(
+        variableService.getOrAssignVariableName(task, tasksById),
+        task.content.data,
+      ),
     }
     return [message]
   } else if (task.content.type === 'error') {
     const message: SystemModelMessage = {
       role: 'system',
-      content: humanizeError(task.content.data),
+      content: renderTaskyonVariableBlock(
+        variableService.getOrAssignVariableName(task, tasksById),
+        humanizeError(task.content.data),
+      ),
+    }
+    return [message]
+  } else if (task.content.type === 'structured') {
+    const message: AssistantModelMessage = {
+      role: 'assistant',
+      content: [
+        {
+          type: 'text',
+          text: renderTaskyonVariableBlock(
+            variableService.getOrAssignVariableName(task, tasksById),
+            safeYamlDump(task.content.data),
+          ),
+        },
+      ],
     }
     return [message]
   } else if (task.content.type === 'files') {
@@ -1074,7 +1206,15 @@ export const chatCompletionToolParameters = {
     prompts: {
       type: 'array',
       description:
-        "Optional Parameter. We can add a custom prompt to the chatCompletion which doesn't get recorded as a task and therefore disappears during message thread conversion.",
+        'Optional Parameter. Append transient system prompts after the rendered task chat. These prompts augment the chatCompletion input only and are not stored as tasks.',
+      items: {
+        type: 'string',
+      },
+    },
+    prompt_injections: {
+      type: 'array',
+      description:
+        'Optional Parameter. Prepend transient system prompts before the rendered task chat. These prompts augment the chatCompletion input only and are not stored as tasks.',
       items: {
         type: 'string',
       },
@@ -1103,12 +1243,6 @@ export const chatCompletionToolParameters = {
       description:
         'Allow models to use their vision/audio & document undestanding capabilities if their are any files in the prompt.',
     },
-    use_baseprompt: {
-      type: 'boolean',
-      title: 'Fancy Output',
-      description:
-        'Enable or disable the base prompt chat completion which makes output more fancy or enables customized behaviour.',
-    },
     context_size: {
       type: 'integer',
       description:
@@ -1129,47 +1263,6 @@ export const chatCompletionToolParameters = {
           type: 'boolean',
           description: 'Optional. If true, smooths output chunks for UI readability.',
           default: true,
-        },
-      },
-    },
-    prompt_templates: {
-      required: [
-        'basePrompt',
-        'instruction',
-        'toolResult',
-        'task',
-        'schemaReminder',
-        'tools',
-      ],
-      type: 'object',
-      description:
-        'These are the definitions of the prompts which are used in chats for different purposes.',
-      properties: {
-        basePrompt: {
-          type: 'string',
-          description:
-            'The base prompt. This should be used e.g. to set the behaviour of the AI. used as a "system" prompt.',
-        },
-        instruction: {
-          type: 'string',
-          description: 'This prompt is used to make the AI follow instructions',
-        },
-        toolResult: {
-          type: 'string',
-          description:
-            'This prompt is used to make the AI display tool results in a certain structured way.',
-        },
-        task: {
-          type: 'string',
-          description: 'This prompt is used to explain to the AI what to do with a specific task.',
-        },
-        schemaReminder: {
-          type: 'string',
-          description: 'This prompt is used to enforce a specific schema as a response...',
-        },
-        tools: {
-          type: 'string',
-          description: 'This prompt is used to give the AI a list of tools.',
         },
       },
     },
@@ -1194,16 +1287,22 @@ export const chatCompletionToolParameters = {
 } as const satisfies JSONSchema7
 
 export function createChatCompletionTool(
-  llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
+  // TODO: move these apiSettings here right into the 'normal' chatCompletion parameters!
+  apiSettings: Thunk<{
+    selectedApi: string
+    llmApis: Record<string, apiConfig>
+    siteUrl: string
+  }>,
   taskManager: TyTaskManager,
 ) {
   // TODO: detect whether selected API supports function calls natively... if not,
   //       fall back to taskyon function calling...
   //const { default: Ajv } = await import('ajv')
   const ajv = new Ajv()
+  const variableService = createTaskVariablePresentationService()
 
   const chatCompletionStream = createStream<chunkStreamType>()
-
+  const { selectedApi, llmApis, siteUrl } = apiSettings()
   const chatCompletion = createTool({
     description: 'Generates a chat-based response using the OpenAI API for the previous message.',
     longDescription: `This tool interfaces with an OpenAI-compatible API to generate completions for
@@ -1215,23 +1314,22 @@ export function createChatCompletionTool(
     parameters: chatCompletionToolParameters,
     function: async (opts, context: toolContext) => {
       //////////   INITIALIZATION
-      const { selectedApi, llmApis, siteUrl } = llmSettings()
       const {
         model,
         goal,
         llmTools = false,
         allowedTools,
         prompts,
+        prompt_injections,
         schema,
-        use_baseprompt = true,
         reasoning_effort: reasoningEffort,
         options,
         // if we don't set it, choose the default setting...
         use_multimodal = true,
-        prompt_templates,
         timeouts,
       } = opts
       const { verbosity, artificial_streaming } = options || {}
+      const promptInjections = normalizePromptInjections(prompt_injections)
 
       const timeout = {
         totalMs: timeouts?.totalMs ?? 10 * 60 * 1000,
@@ -1240,10 +1338,6 @@ export function createChatCompletionTool(
       }
       const useArtificialStreaming = artificial_streaming ?? true
       const tools = allowedTools ?? []
-      const resolvedPromptTemplates = {
-        ...DEFAULT_PROMPT_TEMPLATES,
-        ...(prompt_templates ?? {}),
-      }
 
       if (!selectedApi) {
         throw new Error('No API selected!')
@@ -1295,15 +1389,13 @@ export function createChatCompletionTool(
         toolDefs,
         llmTools,
         {
-          taskChatTemplates: resolvedPromptTemplates,
           tryUsingVisionModels: use_multimodal,
-          useBasePrompt: use_baseprompt,
         },
         taskManager,
         lastTaskBeforeChatCompletion,
         prompts ?? [],
-        goal,
-        schema,
+        promptInjections,
+        variableService,
       )
 
       let rawOutput = ''
@@ -1534,6 +1626,8 @@ export function createChatCompletionTool(
         llmTools,
         toolDefs,
         prompts,
+        promptInjections,
+        variableService,
       )
 
       return makeTaskResult([newTaskChain])

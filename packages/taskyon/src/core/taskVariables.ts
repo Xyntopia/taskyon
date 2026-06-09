@@ -338,4 +338,4 @@ export const materializeTaskyonMessageString = async (
 ): Promise<string> => replaceTemplateRefs(input, options)
 
 export const renderTaskyonVariableBlock = (variableName: string, content: string) =>
-  `<!-- taskyon variable ${variableName} content start -->\n${content}\n<!-- taskyon variable ${variableName} content end -->`
+  `<!-- taskyon variable ${variableName} content start -->\n${content}`

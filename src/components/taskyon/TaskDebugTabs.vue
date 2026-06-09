@@ -32,8 +32,9 @@
       <q-tab-panel v-if="hasConversationDebug" name="TASKPROMPT" class="q-gutter-md">
         <div v-if="conversationMessages.length" class="debug-section">
           <div class="debug-section-title">Conversation</div>
-          <div class="q-gutter-sm">
+          <div>
             <div v-for="(message, index) in conversationMessages" :key="`${message.role}-${index}`">
+              <q-separator v-if="index > 0" class="debug-message-separator" />
               <div class="debug-role-label">{{ message.role }}</div>
               <div class="debug-message-card">
                 <pre class="debug-message-text">{{ message.text }}</pre>
@@ -66,21 +67,14 @@
 </template>
 
 <script setup lang="ts">
-import { serializeObject } from '@taskyon/shared/modules/serializeObject'
 import type { TaskNode } from '@taskyon/taskyon'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, ref, watchEffect } from 'vue'
-
-type ConversationEntry = {
-  role: string
-  text: string
-}
-
-type RawOutputChoice = {
-  messageContent: unknown
-  reasoning?: string
-}
+import {
+  getRawConversationDebug,
+  hasRawConversationDebug as hasRawConversationDebugData,
+} from './taskDebugConversation'
 
 const props = defineProps<{
   task: TaskNode
@@ -99,67 +93,11 @@ const toObject = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : { value }
 
-const stringifyDebugValue = (value: unknown) =>
-  serializeObject(value, {
-    maxDepth: 3,
-    maxArrayLength: 12,
-    maxObjectKeys: 20,
-    maxStringLength: 1200,
-    format: 'yaml',
-  })
-
-const renderMessageContent = (content: unknown): string => {
-  if (typeof content === 'string') return content
-  if (content == null) return ''
-  if (Array.isArray(content)) {
-    return content.map(renderMessageContent).filter(Boolean).join('\n\n')
-  }
-  if (typeof content === 'object') {
-    const maybeText = 'text' in content ? content.text : undefined
-    if (typeof maybeText === 'string') return maybeText
-  }
-  return stringifyDebugValue(content)
-}
-
-const parseConversationMessages = (value: unknown): ConversationEntry[] => {
-  if (!Array.isArray(value)) return []
-  return value.flatMap((entry) => {
-    if (!entry || typeof entry !== 'object' || !('role' in entry)) return []
-    const role = typeof entry.role === 'string' ? entry.role : 'unknown'
-    const text = renderMessageContent('content' in entry ? entry.content : undefined).trim()
-    return [{ role, text: text || '<empty message>' }]
-  })
-}
-
-const parseRawOutputChoice = (value: unknown): RawOutputChoice | undefined => {
-  if (!value || typeof value !== 'object' || !('choice' in value)) return undefined
-  const choice = value.choice
-  if (!choice || typeof choice !== 'object' || !('message' in choice)) return undefined
-  const message = choice.message
-  if (!message || typeof message !== 'object' || !('content' in message)) return undefined
-  const reasoning =
-    'reasoning' in choice && typeof choice.reasoning === 'string' ? choice.reasoning : undefined
-  return {
-    messageContent: message.content,
-    reasoning,
-  }
-}
-
-const conversationMessages = computed(() => parseConversationMessages(taskMeta.value?.taskPrompt))
-const rawOutputChoice = computed(() => parseRawOutputChoice(taskMeta.value?.rawOutput))
-const reasoningText = computed(
-  () => rawOutputChoice.value?.reasoning?.trim() || taskMeta.value?.reasoning?.trim() || '',
-)
-const completionText = computed(() => {
-  const rendered = renderMessageContent(rawOutputChoice.value?.messageContent).trim()
-  return rendered || ''
-})
-const hasConversationDebug = computed(
-  () =>
-    conversationMessages.value.length > 0 ||
-    reasoningText.value.length > 0 ||
-    completionText.value.length > 0,
-)
+const rawConversationDebug = computed(() => getRawConversationDebug(taskMeta.value))
+const conversationMessages = computed(() => rawConversationDebug.value.conversationMessages)
+const reasoningText = computed(() => rawConversationDebug.value.reasoningText)
+const completionText = computed(() => rawConversationDebug.value.completionText)
+const hasConversationDebug = computed(() => hasRawConversationDebugData(rawConversationDebug.value))
 
 watchEffect(() => {
   const available = new Set<string>(['TASKNODE', 'DEBUGGING'])
@@ -192,6 +130,10 @@ watchEffect(() => {
   border-radius: 10px
   padding: .75rem .875rem
   background: rgba(255, 255, 255, .03)
+
+.debug-message-separator
+  margin: .75rem 0
+  opacity: .45
 
 .debug-message-card--reasoning
   background: rgba(255, 255, 255, .02)

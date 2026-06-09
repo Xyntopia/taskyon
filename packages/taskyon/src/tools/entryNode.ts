@@ -25,19 +25,6 @@ type EntryNodeConfig = {
   }) => string
 }
 
-export const EntryNodePromptTemplates = {
-  basePrompt:
-    'You are a helpful assistant called Taskyon. Return concise and correct Markdown answers. Previous task contents may appear inside Taskyon variable comment blocks.',
-  instruction:
-    'Complete the task accurately. If structured output is requested, follow the required format exactly.',
-  toolResult: 'Evaluate the following tool result and respond in {format}:\n\n{message}',
-  task: 'Complete this task:\n\n{message}',
-  evaluate: 'Evaluate this message and respond in {format}:\n\n{message}',
-  schemaReminder:
-    'Output must strictly match {format} and this schema:\n\n{schema}\n\nDo not add extra text.',
-  tools: 'Available tools:\n\n${tools}',
-} as const
-
 export type EntryNodePromptTemplates = {
   basePrompt: string
   instruction: string
@@ -169,7 +156,13 @@ const interpolatePromptTemplate = (template: string, variables: Record<string, s
 const resolvePromptTemplates = (
   overrides: EntryNodeArgs['prompt_templates'],
 ): EntryNodePromptTemplates => ({
-  ...EntryNodePromptTemplates,
+  basePrompt: '',
+  instruction: '',
+  toolResult: '',
+  task: '',
+  evaluate: '',
+  schemaReminder: '',
+  tools: '',
   ...(overrides ?? {}),
 })
 

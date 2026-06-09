@@ -48,6 +48,18 @@
           </div>
         </q-btn>
         <q-btn
+          v-if="props.rawConversationText && !expandMessageContent"
+          class="task-menu-btn"
+          flat
+          color="secondary"
+          size="sm"
+          dense
+          :icon="matContentCopy"
+          @click.stop="copyRawConversation"
+        >
+          <q-tooltip>Copy raw conversation</q-tooltip>
+        </q-btn>
+        <q-btn
           v-if="!expandMessageContent"
           class="task-menu-btn"
           flat
@@ -74,6 +86,18 @@
 
       <!--Context Menu Button-->
       <div v-if="!short || expandMessageContent" class="task-menu-anchor">
+        <q-btn
+          v-if="props.rawConversationText"
+          class="task-menu-btn"
+          flat
+          color="secondary"
+          size="sm"
+          dense
+          :icon="matContentCopy"
+          @click.stop="copyRawConversation"
+        >
+          <q-tooltip>Copy raw conversation</q-tooltip>
+        </q-btn>
         <q-btn
           v-if="!$q.platform.is.mobile"
           class="task-menu-btn"
@@ -192,12 +216,14 @@ import {
   matArrowDropDown,
   matArrowDropUp,
   matClose,
+  matContentCopy,
   matMonetizationOn,
   matMoreHoriz,
   matShield,
 } from '@quasar/extras/material-icons'
 import ResponsiveMenuDialog from '@taskyon/shared/components/ResponsiveMenuDialog.vue'
 import type { TaskNode } from '@taskyon/taskyon'
+import { copyToClipboard } from '@taskyon/shared/modules/utils'
 import { useTextSelection } from '@vueuse/core'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
 import { type QMenu } from 'quasar'
@@ -216,6 +242,7 @@ const props = defineProps<{
   short?: boolean | undefined
   showMeta: boolean | undefined
   messageDebug: boolean
+  rawConversationText?: string | undefined
 }>()
 const emit = defineEmits<{
   (e: 'update:messageDebug', value: boolean): void
@@ -311,6 +338,10 @@ function toggleMarkdown(id: string) {
 
 function onDebugPanelResize(size: { height: number }) {
   showBottomDebugClose.value = size.height >= 520
+}
+
+function copyRawConversation() {
+  void copyToClipboard(props.rawConversationText)
 }
 </script>
 
