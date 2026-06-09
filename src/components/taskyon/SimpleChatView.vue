@@ -9,7 +9,6 @@
       :class="[task.role, task.content.type]"
       :task="task"
       :message-debug="!!state.messageDebug[task.id]"
-      :previous-task="selectedThread[idx - 1]"
       :next-task="selectedThread[idx + 1]"
       :is-working="isProcessing(task.id)"
       :show-meta="!!showIds"

@@ -137,3 +137,90 @@ print(f"Sequence: {numbers}")
 ```
 
 These are just a few examples of what I can do with MathJax and charts. Let me know if you have any specific questions or if you'd like to see more examples!
+
+---
+
+<!--taskyon
+name: Showcase Taskyon's variables
+role: "user"
+label: ["discard", "docs"]
+
+-->
+
+Can you also show me how Taskyon variables work?
+
+---
+
+<!--taskyon
+role: assistant
+label: ["discard", "docs"]
+name: Variable source text
+taskRef: demoVariableText
+
+-->
+
+This sentence came from a previous task and is reused later as a Taskyon variable.
+
+---
+
+<!--taskyon
+role: assistant
+label: ["discard", "docs"]
+name: Variable source object
+taskRef: demoVariableData
+content:
+  type: structured
+  data:
+    site: alpha
+    status: operational
+    capacity_kw: 420
+    tags:
+      - solar
+      - storage
+    metrics:
+      availability: 0.983
+      last_update: "2026-06-05"
+
+-->
+
+---
+
+<!--taskyon
+role: function
+label: ["discard", "docs"]
+name: Variable tool call
+content:
+  type: functioncall
+  data:
+    name: summarizeDocument
+    arguments:
+      $use:
+        document: "_tref:demoVariableText"
+      question: Summarize this in one short sentence.
+
+-->
+
+---
+
+<!--taskyon
+role: assistant
+label: ["discard", "docs"]
+name: Showcase Taskyon's variables
+
+-->
+
+Taskyon variables let later tasks reuse earlier task content without copying the full payload everywhere.
+
+In tool calls, the value stays as a task reference through `$use`, so the argument payload stays small.
+
+In message content, variables can be embedded directly:
+
+- String variable:
+
+  {{_tref:demoVariableText}}
+
+- Structured variable:
+
+  {{_tref:demoVariableData}}
+
+The string is inserted inline with a subtle marker. Structured data renders as a compact preview, and the inline actions let you open either the source task or the full data view.

@@ -1,5 +1,5 @@
 <template>
-  <div class="task-container">
+  <div>
     <!--task meta data-->
     <div v-if="showMeta" class="text-overline text-right" style="font-size: 75%; line-height: 1.5">
       {{ task.id.slice(0, 5) }}
@@ -148,8 +148,36 @@
 
     <!--task debugging-->
     <q-slide-transition class="debug-container">
-      <div v-show="messageDebug">
+      <div v-show="messageDebug" class="task-debug-panel">
+        <q-resize-observer @resize="onDebugPanelResize" />
+        <div class="row justify-end q-px-sm q-pt-sm">
+          <q-btn
+            flat
+            dense
+            size="sm"
+            color="secondary"
+            :icon="matClose"
+            @click="toggleMessageDebug(task.id)"
+          >
+            <q-tooltip>Close debug view</q-tooltip>
+          </q-btn>
+        </div>
         <TaskDebugTabs :task="task" />
+        <div
+          v-if="showBottomDebugClose"
+          class="row justify-end q-px-sm q-pb-sm task-debug-bottom-close"
+        >
+          <q-btn
+            flat
+            dense
+            size="sm"
+            color="secondary"
+            :icon="matClose"
+            @click="toggleMessageDebug(task.id)"
+          >
+            <q-tooltip>Close debug view</q-tooltip>
+          </q-btn>
+        </div>
       </div>
     </q-slide-transition>
     <template v-if="task.id">
@@ -163,6 +191,7 @@
 import {
   matArrowDropDown,
   matArrowDropUp,
+  matClose,
   matMonetizationOn,
   matMoreHoriz,
   matShield,
@@ -218,6 +247,7 @@ const router = useRouter()
 const showTaskMenu = ref(false)
 const showShareDlg = ref(false)
 const showDownloadDlg = ref(false)
+const showBottomDebugClose = ref(false)
 
 const taskMeta = tystate.getTaskMetaRef(task.id)
 const taskMetaNext = tystate.getTaskMetaRef(task.id)
@@ -278,6 +308,10 @@ function toggleMarkdown(id: string) {
   state.taskWidgetState[id].markdownEnabled = !state.taskWidgetState[id].markdownEnabled
   console.log(`markdown for ${id}`, state.taskWidgetState[id].markdownEnabled)
 }
+
+function onDebugPanelResize(size: { height: number }) {
+  showBottomDebugClose.value = size.height >= 520
+}
 </script>
 
 <style lang="sass">
@@ -290,6 +324,12 @@ function toggleMarkdown(id: string) {
     display: flex
     flex-flow: row nowrap
     align-items: flex-start
+
+.task-debug-bottom-close
+  position: sticky
+  bottom: 0
+  background: linear-gradient(to top, rgba(0, 0, 0, .24), rgba(0, 0, 0, 0))
+  z-index: 1
 
 .task-display
   position: relative

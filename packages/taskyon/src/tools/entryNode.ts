@@ -2,6 +2,7 @@ import { createChatCompletionTask } from '../api'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
 import type { JSONSchema7 } from '../utils/jsonSchema'
+import { safeYamlDump } from '../utils/yamlUtils'
 
 type EntryNodeMode = 'message' | 'toolresult' | 'error' | 'fallback'
 
@@ -26,7 +27,7 @@ type EntryNodeConfig = {
 
 export const EntryNodePromptTemplates = {
   basePrompt:
-    'You are a helpful assistant called Taskyon. Return concise and correct Markdown answers.',
+    'You are a helpful assistant called Taskyon. Return concise and correct Markdown answers. Previous task contents may appear inside Taskyon variable comment blocks.',
   instruction:
     'Complete the task accurately. If structured output is requested, follow the required format exactly.',
   toolResult: 'Evaluate the following tool result and respond in {format}:\n\n{message}',
@@ -36,6 +37,16 @@ export const EntryNodePromptTemplates = {
     'Output must strictly match {format} and this schema:\n\n{schema}\n\nDo not add extra text.',
   tools: 'Available tools:\n\n${tools}',
 } as const
+
+export type EntryNodePromptTemplates = {
+  basePrompt: string
+  instruction: string
+  toolResult: string
+  task: string
+  evaluate: string
+  schemaReminder: string
+  tools: string
+}
 
 export const EntryNodeSettingsSchema = {
   type: 'object',
@@ -57,6 +68,12 @@ export const EntryNodeSettingsSchema = {
       type: 'boolean',
       default: true,
       description: 'Alias for llmTools. If set, this value takes precedence over llmTools.',
+    },
+    use_tool_chooser: {
+      type: 'boolean',
+      default: true,
+      description:
+        'Enable the chooseTool stage for this specific entry-node run. This is captured on the entry node for replayability.',
     },
     reasoning_effort: {
       enum: ['low', 'medium', 'high', 'none'],
@@ -91,11 +108,12 @@ export const EntryNodeSettingsSchema = {
   },
 } as const satisfies JSONSchema7
 
-type EntryNodeArgs = {
+export type EntryNodeArgs = {
   toolResultSection?: string
   use_baseprompt?: boolean
   llmTools?: boolean
   nativeToolCalling?: boolean
+  use_tool_chooser?: boolean
   reasoning_effort?: 'low' | 'medium' | 'high' | 'none'
   use_multimodal?: boolean
   websearch?: {
@@ -113,6 +131,20 @@ type EntryNodeArgs = {
   }
 }
 
+export type ResolvedEntryNodeSettings = {
+  use_baseprompt: boolean
+  llmTools: boolean
+  nativeToolCalling: boolean
+  use_tool_chooser: boolean
+  reasoning_effort?: 'low' | 'medium' | 'high' | 'none'
+  use_multimodal: boolean
+  websearch: {
+    enabled: boolean
+    max_results: number
+  }
+  prompt_templates: EntryNodePromptTemplates
+}
+
 const EntryNodeParameters = {
   type: 'object',
   additionalProperties: false,
@@ -124,6 +156,74 @@ const EntryNodeParameters = {
     ...EntryNodeSettingsSchema.properties,
   },
 } as const satisfies JSONSchema7
+
+const stringifyPromptValue = (value: unknown) =>
+  typeof value === 'string' ? value : safeYamlDump(value)
+
+const interpolatePromptTemplate = (template: string, variables: Record<string, string>) =>
+  Object.entries(variables).reduce(
+    (acc, [key, value]) => acc.replace(new RegExp(`\\$?\\{${key}\\}`, 'g'), value),
+    template,
+  )
+
+const resolvePromptTemplates = (
+  overrides: EntryNodeArgs['prompt_templates'],
+): EntryNodePromptTemplates => ({
+  ...EntryNodePromptTemplates,
+  ...(overrides ?? {}),
+})
+
+export const normalizeEntryNodeSettings = (
+  input: Partial<EntryNodeArgs> | undefined,
+): ResolvedEntryNodeSettings => ({
+  use_baseprompt: input?.use_baseprompt ?? true,
+  llmTools: input?.llmTools ?? true,
+  nativeToolCalling: input?.nativeToolCalling ?? true,
+  use_tool_chooser: input?.use_tool_chooser ?? true,
+  ...(input?.reasoning_effort ? { reasoning_effort: input.reasoning_effort } : {}),
+  use_multimodal: input?.use_multimodal ?? true,
+  websearch: {
+    enabled: input?.websearch?.enabled ?? false,
+    max_results: input?.websearch?.max_results ?? 5,
+  },
+  prompt_templates: resolvePromptTemplates(input?.prompt_templates),
+})
+
+const buildEntryNodePromptAugmentations = (args: {
+  mode: EntryNodeMode
+  prompt: string
+  previousTask: TaskNode | undefined
+  templates: EntryNodePromptTemplates
+  useBasePrompt: boolean
+  llmTools: boolean
+  allowedTools: string[]
+}) => {
+  const { mode, prompt, previousTask, templates, useBasePrompt, llmTools, allowedTools } = args
+  const promptInjections = useBasePrompt ? [templates.basePrompt] : []
+  const templateVariables = {
+    format: 'markdown',
+    message: stringifyPromptValue(previousTask?.content.data ?? ''),
+    schema: '<No schema specified>',
+    tools: allowedTools.join(', '),
+  }
+  const modePrompt =
+    mode === 'toolresult'
+      ? interpolatePromptTemplate(templates.toolResult, templateVariables)
+      : mode === 'error'
+        ? interpolatePromptTemplate(templates.evaluate, templateVariables)
+        : mode === 'message'
+          ? interpolatePromptTemplate(templates.task, templateVariables)
+          : prompt
+  const prompts = [
+    ...(!llmTools ? [templates.instruction] : []),
+    ...(allowedTools.length > 0 && !llmTools
+      ? [interpolatePromptTemplate(templates.tools, templateVariables)]
+      : []),
+    modePrompt,
+    ...(modePrompt === prompt ? [] : [prompt]),
+  ]
+  return { prompts, promptInjections }
+}
 
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === 'string')
@@ -230,7 +330,13 @@ export const createEntryNodeToolFactory = (config: EntryNodeConfig) =>
         previousTask,
         config.defaultAllowedTools ?? [],
       )
-      if (config.toolChooser?.enabled && shouldUseToolChooser(mode, config.toolChooser)) {
+      const normalizedSettings = normalizeEntryNodeSettings(settings)
+      const useToolChooser = normalizedSettings.use_tool_chooser
+      if (
+        useToolChooser &&
+        config.toolChooser?.enabled &&
+        shouldUseToolChooser(mode, config.toolChooser)
+      ) {
         return makeTaskResult([
           toolCall({
             name: 'chooseTool',
@@ -242,32 +348,34 @@ export const createEntryNodeToolFactory = (config: EntryNodeConfig) =>
         ])
       }
 
-      const promptTemplates = {
-        ...EntryNodePromptTemplates,
-        ...(settings.prompt_templates ?? {}),
-      }
-      const llmTools = settings.nativeToolCalling ?? settings.llmTools ?? true
-      const webSearchEnabled = settings.websearch?.enabled ?? false
+      const llmTools = normalizedSettings.nativeToolCalling
+      const webSearchEnabled = normalizedSettings.websearch.enabled
       const nextGoal = webSearchEnabled ? 'WebSearch' : 'AnalyzeToolResult'
+      const promptAugmentations = buildEntryNodePromptAugmentations({
+        mode,
+        prompt,
+        previousTask,
+        templates: normalizedSettings.prompt_templates,
+        useBasePrompt: normalizedSettings.use_baseprompt,
+        llmTools,
+        allowedTools,
+      })
       return makeTaskResult([
         createChatCompletionTask({
           goal: nextGoal,
           allowedTools,
-          prompts: [prompt],
+          prompts: promptAugmentations.prompts,
+          prompt_injections: promptAugmentations.promptInjections,
           llmTools,
-          ...(settings.reasoning_effort ? { reasoning_effort: settings.reasoning_effort } : {}),
-          ...(settings.use_multimodal !== undefined
-            ? { use_multimodal: settings.use_multimodal }
+          ...(normalizedSettings.reasoning_effort
+            ? { reasoning_effort: normalizedSettings.reasoning_effort }
             : {}),
-          ...(settings.use_baseprompt !== undefined
-            ? { use_baseprompt: settings.use_baseprompt }
-            : {}),
+          use_multimodal: normalizedSettings.use_multimodal,
           ...(webSearchEnabled
             ? {
-                max_results: settings.websearch?.max_results ?? 5,
+                max_results: normalizedSettings.websearch.max_results,
               }
             : {}),
-          prompt_templates: promptTemplates,
         }),
       ])
     },

@@ -20,7 +20,7 @@ import { sha256UrlSafeHashFromFile } from '../utils/encoding'
 import { openUserUploadedFile, saveUserUploadedFileToOpfs } from '../utils/OPFS'
 import type { TyPGDB } from '../utils/pglite.api'
 import { createTaskNode } from './createTasks'
-import { processMarkdown } from './taskUtils'
+import { addMarkdownTaskChain } from './markdownTaskIO'
 
 /**
  *
@@ -922,8 +922,12 @@ export async function useTyTaskManager(taskyonDb: TyPGDB) {
   async function addMdTaskChain(markdown?: string) {
     console.log('adding new Markdown tasks!!')
     if (markdown) {
-      const taskList = processMarkdown(markdown)
-      const newTaskList = await addTaskChain(taskList)
+      let lastTaskId: string | undefined
+      const newTaskList = await addMarkdownTaskChain(markdown, async (task) => {
+        const addedTask = await addPartialTask2Tree({ ...task, priorID: lastTaskId })
+        lastTaskId = addedTask.id
+        return addedTask
+      })
       return newTaskList.at(-1)?.id
     }
     return undefined

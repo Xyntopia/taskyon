@@ -262,14 +262,39 @@ async function updateChatThread() {
     let newTaskId: string | undefined
     try {
       const markdownContent = await fetchMarkdown(props.folder || '', props.filePath)
-      newTaskId = await ty.addMdTaskChain(markdownContent)
+      try {
+        newTaskId = await ty.addMdTaskChain(markdownContent)
+      } catch (error) {
+        console.error(error)
+        const message = error instanceof Error ? error.message : String(error)
+        newTaskId = (
+          await ty.addPartialTask2Tree({
+            content: {
+              type: 'error',
+              data: `# Markdown Import Failed
+
+Taskyon loaded the markdown file \`${props.filePath}\`, but it could not import the task chain.
+
+## Import error
+
+\`\`\`
+${message}
+\`\`\`
+`,
+            },
+            role: 'system',
+          })
+        ).id
+      }
     } catch (error) {
       console.error(error)
       newTaskId = (
         await ty.addPartialTask2Tree({
           content: {
             type: 'error',
-            data: `${error instanceof Error ? error.message : String(error)}
+            data: `# 404 - Markdown Not Found
+
+${error instanceof Error ? error.message : String(error)}
 
 The markdown file \`${props.filePath}\` does not exist.
 
