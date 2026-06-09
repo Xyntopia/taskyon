@@ -1284,10 +1284,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return instance['taskManagerInstance']
   })*/
 
-  async function addToProcessQueue(taskId: string) {
-    ;(await taskyon).queueTask(taskId)
-  }
-
   const { taskWorkerWaiting, lastActiveTaskId, lastTaskState, workerStreamLogs, activeTaskIds } =
     connectWorkerStream(taskyon)
 
@@ -1444,7 +1440,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     lastTaskState,
     workerStreamLogs,
     activeTaskIds,
-    addToProcessQueue,
     chatCompletionStream,
     connectMessageIframe,
     entryNode,

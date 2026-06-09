@@ -398,7 +398,6 @@ export async function tyCore(
     workerStream: workerStream.stream,
     taskStream: taskStream.stream,
     workerStop: (message: string) => ctx.stopAllTasks(message),
-    queueTask: (id: string) => ctx.queueTask(id),
     // updating and getting ApiKeys for chat completion has a special
     // treatment here, because we need it very often in our UI
     updateChatCompletionApiKey: async (key: string, value?: string) => {

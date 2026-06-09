@@ -220,12 +220,21 @@ import FileDropzone from '@taskyon/shared/components/FileDropzone.vue'
 import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
 import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
-import { deepCopy, generateTaskKeyWords, partialTaskDraft } from '@taskyon/taskyon'
+import {
+  createTaskNode,
+  generateTaskKeyWords,
+  partialTaskDraft,
+  type TaskNode,
+} from '@taskyon/taskyon'
 import { watchThrottled } from '@vueuse/core'
 import { QSelect, useQuasar } from 'quasar'
+import {
+  buildCreateNewTaskChain,
+  type MessageExecutionMode,
+} from 'src/modules/taskyon/createNewTaskChain'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
-import type { ReadonlyDeep, WritableDeep } from 'type-fest'
+import type { ReadonlyDeep } from 'type-fest'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import chatMessageEdit from './chatMessageEdit.vue'
 import ChooseModelDialog from './ChooseModelDialog.vue'
@@ -383,117 +392,60 @@ watchThrottled(
   { immediate: true, throttle: 2000 },
 )
 
-// all our files are added to a "file task"
-async function createFileTask(files: File[]) {
-  const ty = await tystate.taskyon
-
-  // first add files to our DB & save them, then get uuids for each file.
-  const fileUuids = await ty.addFiles(files, 'opfs')
-
-  if (fileUuids.length) {
-    const task: partialTaskDraft = {
-      role: 'system',
-      content: {
-        type: 'files',
-        data: fileUuids,
-      },
-    }
-    return task
-  }
-  return undefined
-}
-
 const $q = useQuasar()
 
-// TODO: move this "up", it would be better to have the task creation be purely
-//       event based and more configurable...
-type MessageExecutionMode = 'message' | 'websearch'
+async function createTaskChainWithIds(taskChain: partialTaskDraft[], priorTaskId?: string) {
+  const createdTasks: TaskNode[] = []
+  let lastTaskId = priorTaskId
 
-const applyWebSearchIntent = (
-  task: WritableDeep<partialTaskDraft>,
-  mode: MessageExecutionMode,
-): WritableDeep<partialTaskDraft> => {
-  if (task.content.type !== 'functioncall') return task
-
-  const previousArguments =
-    task.content.data.arguments && typeof task.content.data.arguments === 'object'
-      ? task.content.data.arguments
-      : {}
-  const previousWebSearch =
-    'websearch' in previousArguments &&
-    previousArguments.websearch &&
-    typeof previousArguments.websearch === 'object'
-      ? previousArguments.websearch
-      : {}
-
-  task.content.data.arguments = {
-    ...previousArguments,
-    websearch: {
-      ...previousWebSearch,
-      enabled: mode === 'websearch',
-    },
+  for (const task of taskChain) {
+    const nextTask = await createTaskNode(
+      { ...task, priorID: lastTaskId },
+      { createMeta: 'missing' },
+    )
+    createdTasks.push(nextTask)
+    lastTaskId = nextTask.id
   }
 
-  return task
+  return createdTasks
 }
 
 async function addNewTask(mode: MessageExecutionMode, p2pTopic?: string) {
   console.log('pubishing on topic:', p2pTopic)
   const kwdsPromise = getCurrentKeywordsWithTimeout(300)
-  const ty = await tystate.taskyon
-
-  const fileTaskObj = await createFileTask(fileAttachments.value)
-
-  // we are creating new taskchain according to what the user wants ;)
-  // sometimes its several tasks in one go...
-  const newTaskChain: partialTaskDraft[] = []
-
-  if (fileTaskObj) {
-    console.log('add files to chat:', fileTaskObj)
-    newTaskChain.push(fileTaskObj)
-  }
 
   // execute: if true, we immediately queue the task for execution in the taskManager
   //          otherwise, it won't get executed but simply saved into the tree
   console.log('adding new task...')
   if (!currentnewTask.value) throw new Error('No task to add!')
-
-  // we are doing the ... to make sure we don't change the original, reactive object
-  newTaskChain.push({ ...currentnewTask.value })
-
-  if (currentnewTask.value.content.type === 'message') {
-    const chooseTask = applyWebSearchIntent(
-      deepCopy(entryNode) as WritableDeep<partialTaskDraft>,
-      mode,
-    )
-    newTaskChain.push(chooseTask)
-  }
-
-  // if we are attaching our task to an existing parent, we want to make sure that
-  // the task doesn't wait for a previous task to be finished (e.g. if there was an error
-  // or the task was cancelled by the user). So we are adding a return task which makes sure
-  // taskyon knows that.
-  if (tystate.currentTask.value && tystate.currentTask.value.content.type !== 'return') {
-    // Add a return type task as the first task in the chain
-    newTaskChain.unshift({
-      role: 'system',
-      content: {
-        type: 'return',
-        data: 'Function was cancelled for unknown reasons.',
-      },
-    })
-  }
-
+  const ty = await tystate.taskyon
+  const fileIds = await ty.addFiles(fileAttachments.value, 'opfs')
   const kwds = (await kwdsPromise) ?? currentKeywords.value
-  if (kwds) newTaskChain.forEach((t) => (t.name = kwds))
+  const newTaskChain = buildCreateNewTaskChain({
+    currentTask: tystate.currentTask.value,
+    draftTask: currentnewTask.value,
+    entryNode: entryNode ? partialTaskDraft.parse(structuredClone(entryNode)) : undefined,
+    fileIds,
+    keyword: kwds,
+    mode,
+  })
 
   // only add to taskyon, if
   if (addToTaskyon) {
-    const newTaskId = (await ty.addTaskChain(newTaskChain, state.llmSettings.selectedTaskId)).at(-1)
+    const createdTasks = await createTaskChainWithIds(
+      newTaskChain,
+      state.llmSettings.selectedTaskId,
+    )
+    const newTaskId = createdTasks.at(-1)
 
-    // push the last task to execution queue right away...
     if (newTaskId) {
-      void tystate.addToProcessQueue(newTaskId.id)
+      tystate.api.send({
+        type: 'tasks',
+        tasks: createdTasks,
+        execute: true,
+        show: true,
+        origin: window.location.origin,
+      })
     }
 
     state.setSelectedTask(newTaskId?.id)
