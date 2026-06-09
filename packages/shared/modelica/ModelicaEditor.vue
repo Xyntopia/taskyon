@@ -602,7 +602,6 @@ import {
   matShowChart,
 } from '@quasar/extras/material-icons'
 import { mdiFileTreeOutline, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
-import { toolCall } from '@taskyon/tyclient'
 import { watchDebounced } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { Dialog, Notify } from 'quasar'
@@ -1206,8 +1205,12 @@ const configuration = computed<partialTyConfiguration | null>(() => {
   const customAppConfiguration = props.taskyonConfiguration?.appConfiguration ?? {}
   return {
     llmSettings: {
-      enableToolChooser: true,
-      entryNode: toolCall({ name: 'modelicaDocumentAssistant', arguments: {} }),
+      entryFunction: 'modelicaDocumentAssistant',
+    },
+    toolchainConfig: {
+      modelicaDocumentAssistant: {
+        useTools: true,
+      },
     },
     appConfiguration: {
       guiMode: 'minChat',

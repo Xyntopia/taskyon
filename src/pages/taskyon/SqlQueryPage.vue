@@ -89,7 +89,7 @@
 
 <script setup lang="ts">
 import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
-import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/client'
+import { createChatCompletionTask, createTool, makeTaskResult } from '@taskyon/client'
 import SplitTaskyonView from '@taskyon/shared/components/SplitTaskyonView.vue'
 import { copyToClipboard } from '@taskyon/shared/modules/utils'
 import type { TyPGDB } from '@taskyon/taskyon/db'
@@ -473,12 +473,7 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
 const configuration: partialTyConfiguration = {
   llmSettings: {
     //selectedApi: 'taskyon',
-    entryNode: toolCall({ name: 'setSqlQuery', arguments: {} }),
-  },
-  toolchainConfig: {
-    entryNode: {
-      use_tool_chooser: true,
-    },
+    entryFunction: 'setSqlQuery',
   },
   appConfiguration: {
     guiMode: 'minChat',
@@ -486,7 +481,7 @@ const configuration: partialTyConfiguration = {
     chatSuggestions: [gettingStarted],
     welcomeMsg: 'Ask taskyon for help on querying your database!',
   },
-  signatureOrKey: tystate.getTaskyonKeyString() ?? undefined,
+  ...(tystate.getTaskyonKeyString() ? { signatureOrKey: tystate.getTaskyonKeyString() } : {}),
 }
 
 // Formatted JSON result for JSON view

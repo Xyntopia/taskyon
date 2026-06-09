@@ -1,4 +1,4 @@
-import type { ReadonlyDeep } from 'type-fest'
+import type { ReadonlyDeep, WritableDeep } from 'type-fest'
 import type { TaskNode, TaskGetter } from '../types/taskNode'
 import type { FunctionArguments } from '../types/tools'
 import { safeYamlDump } from '../utils/yamlUtils'
@@ -124,11 +124,11 @@ export const createTaskVariablePresentationService = () => {
   }
 }
 
-const cloneValue = <T>(value: T): T => {
+const cloneValue = <T>(value: T): WritableDeep<T> => {
   if (typeof structuredClone === 'function') {
-    return structuredClone(value)
+    return structuredClone(value) as WritableDeep<T>
   }
-  return JSON.parse(JSON.stringify(value)) as T
+  return JSON.parse(JSON.stringify(value)) as WritableDeep<T>
 }
 
 const hasOwnPath = (value: Record<string, unknown>, path: string) => {

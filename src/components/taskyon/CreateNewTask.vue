@@ -30,7 +30,7 @@
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
         :show-web-search="state.appConfiguration.webSearchButton"
         @execute-task="addNewTask(p2pTopic)"
-        @execute-web-search="addNewTask(p2pTopic, true)"
+        @execute-web-search="addNewTask(p2pTopic)"
       >
         <template #left="{ btnSize }">
           <div v-if="minMode">

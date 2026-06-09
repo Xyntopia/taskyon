@@ -58,6 +58,12 @@ type Summary = {
   }>
 }
 
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  return Object.prototype.toString.call(error)
+}
+
 function parseArgs(args: string[]): CliOptions {
   const opts: CliOptions = {
     listOnly: false,
@@ -134,7 +140,7 @@ async function loadTestModules() {
 
         const mod = Object.fromEntries(
           fallback.tests.map(({ exportName, experimental }) => {
-            const fn: TaskyonTestFn = async () => ({
+            const fn: TaskyonTestFn = () => ({
               skipped: true,
               reason: fallback.reason,
               testId: exportName,
@@ -259,12 +265,16 @@ function formatResultLine(result: DiagnosticsRunResult): string {
   const error = result.error
   const errorText =
     typeof error === 'object' && error && 'message' in error
-      ? String((error as { message?: unknown }).message ?? error)
-      : String(error)
+      ? toErrorMessage(error.message)
+      : toErrorMessage(error)
   return `[FAIL] ${result.name} - ${errorText}`
 }
 
-function buildSummary(results: DiagnosticsRunResult[], opts: CliOptions, durationMs: number): Summary {
+function buildSummary(
+  results: DiagnosticsRunResult[],
+  opts: CliOptions,
+  durationMs: number,
+): Summary {
   const skipped = results.filter(isSkippedResult).length
   const failed = results.filter((result) => !result.ok).length
   const passed = results.filter((result) => result.ok && !isSkippedResult(result)).length
@@ -345,7 +355,9 @@ async function main() {
     `[taskyon-headless] completed in ${durationMs}ms: ${summary.passed} passed, ${summary.failed} failed, ${summary.skipped} skipped`,
   )
   console.log('TASKYON_HEADLESS_SUMMARY_START')
-  console.log(JSON.stringify(opts.details || opts.json ? summary : { ...summary, results: [] }, null, 2))
+  console.log(
+    JSON.stringify(opts.details || opts.json ? summary : { ...summary, results: [] }, null, 2),
+  )
   console.log('TASKYON_HEADLESS_SUMMARY_END')
 
   if (!summary.ok) runtimeEnv.exit(1)

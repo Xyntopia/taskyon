@@ -252,10 +252,14 @@ const dynamicContext =
     // TODO: we should get rid of this and supply an instanc eof the taskManager insider the tool
     // function itself if it is a "normal" function...
     // TODO: get rid of llmSettings completly!
-    const { chatCompletion, stream: chatCompletionStream } = createChatCompletionTool(
-      llmSettings,
-      taskManagerInstance,
-    )
+    const { chatCompletion, stream: chatCompletionStream } = createChatCompletionTool(() => {
+      const settings = llmSettings()
+      return {
+        selectedApi: settings.selectedApi ?? 'taskyon',
+        llmApis: settings.llmApis,
+        siteUrl: settings.siteUrl,
+      }
+    }, taskManagerInstance)
 
     ToolList.push(
       localVectorStore(db),

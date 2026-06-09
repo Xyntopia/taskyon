@@ -7,7 +7,6 @@ import { enable } from '@libp2p/logger'
 import { ping } from '@libp2p/ping'
 import { tcp } from '@libp2p/tcp'
 import { webSockets } from '@libp2p/websockets'
-import type { PeerId } from '@libp2p/interface'
 import { createLibp2p, type Libp2p } from 'libp2p'
 import { PUBSUB_PEER_DISCOVERY, TOPIC_ROUTER_PROTOCOL } from './constants'
 import { topicRouter, type TopicRouterService } from './topic-router'
@@ -139,10 +138,12 @@ function logRelayStartup(log: ReturnType<typeof createStdoutLogger>) {
 function logRelayReady(log: ReturnType<typeof createStdoutLogger>, libp2p: Libp2p) {
   log.info('=== RELAY SERVER READY ===')
   log.info(`PeerID: ${libp2p.peerId.toString()}`)
-  log.info(`Multiaddrs:\n${libp2p
-    .getMultiaddrs()
-    .map((addr) => `  ${addr.toString()}`)
-    .join('\n')}`)
+  log.info(
+    `Multiaddrs:\n${libp2p
+      .getMultiaddrs()
+      .map((addr) => `  ${addr.toString()}`)
+      .join('\n')}`,
+  )
   log.info('Relay server listening and ready for connections')
   log.info('==============================')
 }
@@ -165,9 +166,13 @@ function registerRelayLifecycleLogging(
   })
   libp2p.addEventListener(
     'self:peer:update',
-    (evt: { detail?: { peer?: { addresses?: Array<{ multiaddr?: { toString?: () => string } }> } } }) => {
+    (evt: {
+      detail?: { peer?: { addresses?: Array<{ multiaddr?: { toString?: () => string } }> } }
+    }) => {
       const addrs =
-        evt.detail?.peer?.addresses?.map((entry) => entry.multiaddr?.toString?.()).filter(Boolean) ?? []
+        evt.detail?.peer?.addresses
+          ?.map((entry) => entry.multiaddr?.toString?.())
+          .filter(Boolean) ?? []
       log.info(`Self peer update: advertised multiaddrs=${addrs.join(', ')}`)
     },
   )
@@ -218,7 +223,7 @@ export async function startRelayLibp2p(opts: RelayStartOptions = {}): Promise<Li
   const bannedPeers = new Set<string>()
   logRelayStartup(log)
 
-  const libp2p = (await createLibp2p(({
+  const libp2p = (await createLibp2p({
     addresses: {
       listen: listenAddrs,
     },
@@ -264,7 +269,7 @@ export async function startRelayLibp2p(opts: RelayStartOptions = {}): Promise<Li
       maxIncomingPendingConnections,
       inboundConnectionTimeout: inboundConnectionTimeoutMs,
     },
-  }) as unknown as Parameters<typeof createLibp2p>[0])) as RelayLibp2pNode
+  } as unknown as Parameters<typeof createLibp2p>[0])) as RelayLibp2pNode
 
   registerRelayLifecycleLogging(libp2p, log)
 

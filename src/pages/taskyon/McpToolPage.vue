@@ -104,6 +104,12 @@ type McpInputTool = {
   inputSchema?: unknown
 }
 
+type RawMcpInputTool = {
+  name: string
+  description?: string | undefined
+  inputSchema?: unknown
+}
+
 type McpExample = {
   id: string
   label: string
@@ -252,12 +258,23 @@ function toJsonSchema(value: unknown): Readonly<JSONSchema7> {
   return parsed.success ? (parsed.data as JSONSchema7) : fallbackSchema
 }
 
+function normalizeMcpInputTool(input: RawMcpInputTool): McpInputTool {
+  return {
+    name: input.name,
+    ...(input.description === undefined ? {} : { description: input.description }),
+    ...(input.inputSchema === undefined ? {} : { inputSchema: input.inputSchema }),
+  }
+}
+
 function parseToolsFromPayload(payload: unknown): McpInputTool[] {
   const parsed = McpToolsPayloadSchema.safeParse(payload)
   if (!parsed.success) return []
-  if (Array.isArray(parsed.data)) return parsed.data
-  if ('tools' in parsed.data) return parsed.data.tools
-  return parsed.data.result.tools
+  const rawTools = Array.isArray(parsed.data)
+    ? parsed.data
+    : 'tools' in parsed.data
+      ? parsed.data.tools
+      : parsed.data.result.tools
+  return rawTools.map(normalizeMcpInputTool)
 }
 
 function toTaskyonTool(input: McpInputTool, sourceName?: string): ToolBase {

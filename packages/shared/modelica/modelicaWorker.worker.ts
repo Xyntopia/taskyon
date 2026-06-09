@@ -89,47 +89,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
-function countVarMapEntries(daeObj: Record<string, unknown> | null, key: string): number {
-  if (!daeObj) return 0
-  const map = daeObj[key]
-  if (!map || typeof map !== 'object' || Array.isArray(map)) return 0
-  return Object.keys(map as Record<string, unknown>).length
-}
-
-function countWhenClauses(daeObj: Record<string, unknown> | null): number {
-  if (!daeObj) return 0
-  const clauses = daeObj.when_clauses
-  return Array.isArray(clauses) ? clauses.length : 0
-}
-
-function countEquations(daeObj: Record<string, unknown> | null): number {
-  if (!daeObj) return 0
-  const fx = daeObj.f_x ?? daeObj.fx
-  return Array.isArray(fx) ? fx.length : 0
-}
-
-function countConditions(daeObj: Record<string, unknown> | null): number {
-  if (!daeObj) return 0
-  const countKey = (key: string): number => {
-    const value = daeObj[key]
-    return Array.isArray(value) ? value.length : 0
-  }
-  return (
-    countKey('f_c') +
-    countKey('fc') +
-    countKey('cond') +
-    countKey('relation') +
-    countKey('synthetic_root_conditions')
-  )
-}
-
-function countResetEquations(daeObj: Record<string, unknown> | null): number {
-  if (!daeObj) return 0
-  const fZ = daeObj.f_z
-  const fM = daeObj.f_m
-  return (Array.isArray(fZ) ? fZ.length : 0) + (Array.isArray(fM) ? fM.length : 0)
-}
-
 function selectDaeForTemplate(
   compiled: Record<string, unknown>,
   usePreparedDae: boolean,

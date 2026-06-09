@@ -59,7 +59,7 @@ const parseRawOutputChoice = (value: unknown): RawOutputChoice | undefined => {
     'reasoning' in choice && typeof choice.reasoning === 'string' ? choice.reasoning : undefined
   return {
     messageContent: message.content,
-    reasoning,
+    ...(reasoning ? { reasoning } : {}),
   }
 }
 

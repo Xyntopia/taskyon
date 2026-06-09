@@ -193,7 +193,10 @@ function summarizeDiagram(diagram: ModelicaDiagramDto) {
     (sum, component) => sum + (component.icon?.graphics?.length ?? 0),
     0,
   )
-  const portCount = diagram.components.reduce((sum, component) => sum + (component.ports?.length ?? 0), 0)
+  const portCount = diagram.components.reduce(
+    (sum, component) => sum + (component.ports?.length ?? 0),
+    0,
+  )
   return {
     className: diagram.className,
     components: diagram.components.length,
@@ -233,7 +236,9 @@ async function runTemplateCoverage(source: string, modelName: string) {
   const preparedStatus = getPreparedDaeStatus(dae)
   const preparedDiagnostics = getPreparedDaeDiagnostics(dae)
   const preparedPayload =
-    parsed.dae_prepared && typeof parsed.dae_prepared === 'object' && !Array.isArray(parsed.dae_prepared)
+    parsed.dae_prepared &&
+    typeof parsed.dae_prepared === 'object' &&
+    !Array.isArray(parsed.dae_prepared)
   if (preparedPayload && !preparedStatus) {
     throw new Error('Selected DAE is missing __rumoca_prepared_status metadata')
   }
@@ -348,9 +353,9 @@ export async function testModelicaDiagramSvgRenderSmoke() {
   }
   const worker = new ModelicaWorkerClient()
   let host: HTMLDivElement | null = null
-  let controller:
-    | ReturnType<typeof createGraphController<DiagramNodeData, DiagramEdgeData>>
-    | null = null
+  let controller: ReturnType<
+    typeof createGraphController<DiagramNodeData, DiagramEdgeData>
+  > | null = null
 
   try {
     debug.phase = 'worker-init'
@@ -467,7 +472,7 @@ end TestPreparedMeta;
     throw new Error('compile_to_json should not expose dae_prepared_diagnostics in native-only API')
   }
 
-  const build = (dae).__rumoca_build
+  const build = dae.__rumoca_build
   if (!build || typeof build !== 'object' || Array.isArray(build)) {
     throw new Error('Native DAE is missing __rumoca_build metadata')
   }
@@ -526,7 +531,10 @@ export async function testModelicaBooleanNetworkShimRuntime() {
     throw new Error('Rumoca wasm export missing: render_template')
   }
 
-  const compiled = wasm.compile_to_json(MODELICA_BOOLEAN_NETWORK_SHIM_SOURCE, 'BooleanNetworkShimSmoke')
+  const compiled = wasm.compile_to_json(
+    MODELICA_BOOLEAN_NETWORK_SHIM_SOURCE,
+    'BooleanNetworkShimSmoke',
+  )
   const parsed = JSON.parse(compiled) as {
     dae?: unknown
     dae_native?: unknown
@@ -613,7 +621,10 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
     throw new Error('Rumoca wasm export missing: render_template')
   }
 
-  const compiled = wasm.compile_to_json(MODELICA_BOOLEAN_SIGNAL_GENERATOR_SOURCE, 'BooleanSignalGenerator')
+  const compiled = wasm.compile_to_json(
+    MODELICA_BOOLEAN_SIGNAL_GENERATOR_SOURCE,
+    'BooleanSignalGenerator',
+  )
   const parsed = JSON.parse(compiled) as {
     dae?: unknown
     dae_native?: unknown
@@ -673,10 +684,14 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
     const pulse = result?.data?.y?.['booleanPulse.y']
     const real = result?.data?.y?.['booleanToReal.y']
     if (!Array.isArray(pulse) || !Array.isArray(real)) {
-      throw new Error('Expected y["booleanPulse.y"] and y["booleanToReal.y"] arrays in simulation output')
+      throw new Error(
+        'Expected y["booleanPulse.y"] and y["booleanToReal.y"] arrays in simulation output',
+      )
     }
     if (pulse.length !== real.length || pulse.length < 200) {
-      throw new Error(`Unexpected waveform sample lengths: pulse=${pulse.length}, real=${real.length}`)
+      throw new Error(
+        `Unexpected waveform sample lengths: pulse=${pulse.length}, real=${real.length}`,
+      )
     }
 
     const toBit = (v: unknown): 0 | 1 | null => {
@@ -701,10 +716,14 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
     const realZeros = realBits.filter((v) => v === 0).length
 
     if (pulseOnes < 100 || pulseZeros < 100) {
-      throw new Error(`booleanPulse.y does not toggle as expected (ones=${pulseOnes}, zeros=${pulseZeros})`)
+      throw new Error(
+        `booleanPulse.y does not toggle as expected (ones=${pulseOnes}, zeros=${pulseZeros})`,
+      )
     }
     if (realOnes < 100 || realZeros < 100) {
-      throw new Error(`booleanToReal.y does not toggle as expected (ones=${realOnes}, zeros=${realZeros})`)
+      throw new Error(
+        `booleanToReal.y does not toggle as expected (ones=${realOnes}, zeros=${realZeros})`,
+      )
     }
 
     const transitions = pulseBits.reduce<number>(
@@ -743,7 +762,9 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
     typeof wasm.compile_with_source_roots !== 'function' &&
     typeof wasm.compile_with_libraries !== 'function'
   ) {
-    throw new Error('Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries')
+    throw new Error(
+      'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
+    )
   }
   if (typeof wasm.render_template !== 'function') {
     throw new Error('Rumoca wasm export missing: render_template')
@@ -792,7 +813,7 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
         },
         (error) => {
           clearTimeout(timer)
-          reject(error)
+          reject(error instanceof Error ? error : new Error(String(error)))
         },
       )
     })
@@ -855,7 +876,12 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
     const yChannels: Record<string, unknown> =
       result?.data?.y && typeof result.data.y === 'object' ? result.data.y : {}
     const channelKeys = Object.keys(yChannels)
-    const requiredChannels = ['booleanPulse1.y', 'booleanPulse2.y', 'booleanStep.y', 'triggeredAdd.y']
+    const requiredChannels = [
+      'booleanPulse1.y',
+      'booleanPulse2.y',
+      'booleanStep.y',
+      'triggeredAdd.y',
+    ]
     for (const key of requiredChannels) {
       if (!channelKeys.includes(key)) {
         throw new Error(`BooleanNetwork1 output missing required channel: ${key}`)
@@ -887,7 +913,10 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
       throw new Error(`booleanStep.y does not step (ones=${stepOnes}, zeros=${stepZeros})`)
     }
     const solverStats = result?.meta?.solverStats ?? {}
-    if (Number(solverStats.initAttempts ?? 0) !== 0 || Number(solverStats.flowStepCalls ?? 0) !== 0) {
+    if (
+      Number(solverStats.initAttempts ?? 0) !== 0 ||
+      Number(solverStats.flowStepCalls ?? 0) !== 0
+    ) {
       throw new Error(
         `BooleanNetwork1 should not use init/flow solves in algebraic_discrete mode (initAttempts=${String(solverStats.initAttempts)}, flowStepCalls=${String(solverStats.flowStepCalls)})`,
       )
@@ -976,7 +1005,9 @@ function Model() {
       throw new Error(`Static model stopped unexpectedly: ${stopReason}`)
     }
     if (result?.meta?.executionMode !== 'static_model') {
-      throw new Error(`Expected static_model execution mode, got ${String(result?.meta?.executionMode)}`)
+      throw new Error(
+        `Expected static_model execution mode, got ${String(result?.meta?.executionMode)}`,
+      )
     }
     const times = Array.isArray(result?.data?.t) ? result.data.t : []
     const p = result?.data?.p?.p
@@ -3180,7 +3211,8 @@ end MslResistorExample;
     debug.runSignalStats = { xAmp, yAmp, xTemporal, yTemporal, xActive, yActive }
 
     if (stateCount === 0) {
-      const algebraicDynamicsDetected = yLen > 1 && yActive > 0 && Math.max(yAmp, yTemporal) > 1.0e-6
+      const algebraicDynamicsDetected =
+        yLen > 1 && yActive > 0 && Math.max(yAmp, yTemporal) > 1.0e-6
       if (!algebraicDynamicsDetected) {
         throw new Error(
           [
@@ -4325,7 +4357,11 @@ export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
     const resolvedSourceFile = sourceFile.trim() || fallbackSourceFile
     const sourceModelicaFileName = `${sineVoltageQualified.replaceAll('.', '/')}.mo`
 
-    const sourceModelicaParse = parseSourceRootAstOrError(wasm, sourceModelica, sourceModelicaFileName)
+    const sourceModelicaParse = parseSourceRootAstOrError(
+      wasm,
+      sourceModelica,
+      sourceModelicaFileName,
+    )
     const mslFiles = await loadMslSourcesFromZip()
     const sourceFileEntry = readMslSourceFromZipByPath(mslFiles, resolvedSourceFile)
     if (!sourceFileEntry) {
@@ -4365,10 +4401,9 @@ export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
       classInfoParseError: sourceModelicaParse.ok ? null : sourceModelicaParse.error,
       iconHintInClassInfoSource,
       iconHintInSourceFile,
-      note:
-        sourceModelicaParse.ok
-          ? 'class_info source is round-trippable'
-          : 'class_info source parse failed; source-root fallback remains valid',
+      note: sourceModelicaParse.ok
+        ? 'class_info source is round-trippable'
+        : 'class_info source parse failed; source-root fallback remains valid',
     }
   } catch (err) {
     const baseMessage = err instanceof Error ? err.message : String(err)
@@ -4451,7 +4486,9 @@ end MslResistorStrictIconProbe;
 
     const iconHintInClassInfoSource = /annotation\s*\(\s*Icon\b|Icon\s*\(/.test(sourceModelica)
     if (!iconHintInClassInfoSource) {
-      throw new Error(`Class info source_modelica has no Icon annotation hint for ${sineVoltageQualified}`)
+      throw new Error(
+        `Class info source_modelica has no Icon annotation hint for ${sineVoltageQualified}`,
+      )
     }
 
     return {

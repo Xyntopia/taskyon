@@ -118,7 +118,8 @@ const rewriteMarkdownTaskRefs = (value: unknown, aliasToTaskId: Map<string, stri
 }
 
 const stripMarkdownTaskDraft = (task: MarkdownTaskDraft): partialTaskDraft => {
-  const { taskRef: _taskRef, ...rest } = task
+  const { taskRef, ...rest } = task
+  void taskRef
   return partialTaskDraft.parse(rest)
 }
 

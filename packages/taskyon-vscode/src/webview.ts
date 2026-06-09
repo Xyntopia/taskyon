@@ -54,8 +54,11 @@ type PastedFilePayload = {
   type: string
   data: string
 }
+type RequestPayload<TData extends object = object> = VscodeResponseMessage['payload'] & {
+  data?: TData
+}
 type PendingRequest = {
-  resolve: (value: any) => void
+  resolve: (value: RequestPayload) => void
   reject: (reason?: unknown) => void
   timeout: ReturnType<typeof setTimeout>
 }
@@ -128,7 +131,6 @@ let activeFile: {
 const pendingRequests = new Map<string, PendingRequest>()
 let requestCounter = 0
 let lastSearchResult: SearchResultSummary | null = null
-let lastReadResult: ReadResultSummary | null = null
 let lastUpdateResult: UpdateResultSummary | null = null
 let entryPassCount = 0
 let taskyonClient: TyClient | null = null
@@ -141,7 +143,7 @@ const VSCODE_REQUEST_TIMEOUT_MS = REMOTE_FUNCTION_TIMEOUT_MS
 const sendRequest = <TData extends object = object>(
   type: string,
   payload: Record<string, unknown> = {},
-): Promise<VscodeResponseMessage['payload'] & { data?: TData }> =>
+): Promise<RequestPayload<TData>> =>
   new Promise((resolve, reject) => {
     const requestId = `${Date.now()}-${requestCounter++}`
     const timeout = setTimeout(() => {
@@ -241,7 +243,6 @@ const renderContextInfo = () => {
 const clearToolContext = () => {
   Object.keys(loadedFiles).forEach((filePath) => delete loadedFiles[filePath])
   lastSearchResult = null
-  lastReadResult = null
   lastUpdateResult = null
   entryPassCount = 0
   renderContextInfo()
@@ -266,22 +267,6 @@ const formatSearchSummary = (result: SearchResultSummary | null) => {
     summary.push(
       '\nNo path matches. Try a filename/path regex with variants for the full path, basename, extension, and separator styles before switching to contentRegex.',
     )
-  }
-  return summary.filter(Boolean).join('\n')
-}
-
-const formatReadSummary = (result: ReadResultSummary | null) => {
-  if (!result) return '(none)'
-  const summary = [
-    `Loaded: ${result.loaded?.length || 0}`,
-    formatListForPrompt(result.loaded || [], HARD_RESULT_CAP),
-  ]
-  if (result.failed?.length) {
-    summary.push(`\nFailed: ${result.failed.length}`)
-    summary.push(formatListForPrompt(result.failed, HARD_RESULT_CAP))
-  }
-  if (result.error) {
-    summary.push(`\nError: ${result.error}`)
   }
   return summary.filter(Boolean).join('\n')
 }
@@ -388,7 +373,11 @@ const buildAssistantContext = ({
 const formatToolResultSection = (title: string, lines: string[]) =>
   [title, ...lines].filter(Boolean).join('\n')
 
-const toErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))
+const toErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  return Object.prototype.toString.call(error)
+}
 
 const throwToolError = (toolName: string, details: string[]) => {
   throw new Error(formatToolResultSection(`### ${toolName}`, details))
@@ -635,7 +624,6 @@ const createTools = () => {
               failed.push(file.path)
             }
           }
-          lastReadResult = { loaded, failed }
           renderContextInfo()
           return continueViaEntryNode(
             formatToolResultSection('### readWorkspaceFiles', [
@@ -648,11 +636,6 @@ const createTools = () => {
           )
         } catch (error) {
           const message = toErrorMessage(error)
-          lastReadResult = {
-            loaded: [],
-            failed: paths || [],
-            error: message,
-          }
           renderContextInfo()
           throwToolError('readWorkspaceFiles', [
             `Requested: ${paths?.length || 0}`,

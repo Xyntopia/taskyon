@@ -4,7 +4,6 @@ import {
   type apiConfig,
   type llmSettings,
 } from '@taskyon/taskyon'
-import { toolCall } from '@taskyon/taskyon/api'
 import type { CliApiConfig, LlmModel } from './types'
 
 export const DEFAULT_PROMPT_TEMPLATES = {
@@ -82,10 +81,7 @@ export function createCliLlmSettings(config: CliApiConfig): llmSettings {
     },
     siteUrl: 'https://tycli.local',
     maxAutonomousTasks: 5,
-    entryNode: toolCall({
-      name: 'entryNode',
-      arguments: {},
-    }),
+    entryFunction: 'entryNode',
   }
 }
 

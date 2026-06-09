@@ -1,6 +1,10 @@
 <template>
   <div class="row no-wrap">
-    <q-scroll-area ref="scrollRef" :style="{ height: scrollHeight }" class="col rounded-borders log-surface">
+    <q-scroll-area
+      ref="scrollRef"
+      :style="{ height: scrollHeight }"
+      class="col rounded-borders log-surface"
+    >
       <q-list dense separator>
         <q-item v-for="entry in logs" :key="entry.id">
           <q-item-section>
@@ -50,6 +54,12 @@ const scrollHeight = computed(() => '220px')
 const formatTimestamp = (atMs: number): string =>
   new Date(atMs).toISOString().replace('T', ' ').slice(0, 19)
 
+const toErrorMessage = (value: unknown): string => {
+  if (value instanceof Error) return value.message
+  if (typeof value === 'string') return value
+  return Object.prototype.toString.call(value)
+}
+
 const formatData = (value: unknown): string => {
   if (value == null) return ''
   if (typeof value === 'string') return value
@@ -79,12 +89,12 @@ const copyText = computed(() =>
 
 const copyAllLogs = () => {
   try {
-    copyToClipboard(copyText.value)
+    void copyToClipboard(copyText.value)
     $q.notify({ type: 'positive', message: 'Logs copied to clipboard.' })
   } catch (error: unknown) {
     $q.notify({
       type: 'negative',
-      message: `Could not copy logs: ${Object.prototype.toString.call(error)}`,
+      message: `Could not copy logs: ${toErrorMessage(error)}`,
     })
   }
 }
@@ -114,4 +124,3 @@ watch(
   border: 1px solid var(--q-info);
 }
 </style>
-

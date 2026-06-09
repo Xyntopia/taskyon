@@ -294,7 +294,7 @@ import {
   matVisibility,
 } from '@quasar/extras/material-icons'
 import { mdiNewBox, mdiRenameBox, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
-import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/client'
+import { createChatCompletionTask, createTool, makeTaskResult } from '@taskyon/client'
 import { watchThrottled } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'
@@ -786,11 +786,11 @@ const configuration = computed<partialTyConfiguration | null>(() => {
   if (taskyonKey == null) return null
   return {
     llmSettings: {
-      entryNode: toolCall({ name: 'documentAssistant', arguments: {} }),
+      entryFunction: 'documentAssistant',
     },
     toolchainConfig: {
-      entryNode: {
-        use_tool_chooser: true,
+      documentAssistant: {
+        showAllFiles: false,
       },
     },
     appConfiguration: {

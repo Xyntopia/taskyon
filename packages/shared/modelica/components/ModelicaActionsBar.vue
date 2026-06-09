@@ -319,13 +319,42 @@ const solverDisplayLabel = computed(() => {
   return integrator ? `${integrator} (${prefix}:${solverId})` : `${prefix}:${solverId}`
 })
 
+type RuntimeMenuOptions = {
+  rumocaWasmVersion?: string | undefined
+  rumocaWasmGitCommit?: string | undefined
+  rumocaWasmBuildTimeLocal?: string | undefined
+  rumocaWasmRustBuildTimeLocal?: string | undefined
+  rumocaWasmPackageBuiltTimeLocal?: string | undefined
+}
+
+const normalizeRuntimeMenuOptions = (
+  value: Record<string, unknown> | null | undefined,
+): RuntimeMenuOptions => ({
+  rumocaWasmVersion:
+    typeof value?.rumocaWasmVersion === 'string' ? value.rumocaWasmVersion : undefined,
+  rumocaWasmGitCommit:
+    typeof value?.rumocaWasmGitCommit === 'string' ? value.rumocaWasmGitCommit : undefined,
+  rumocaWasmBuildTimeLocal:
+    typeof value?.rumocaWasmBuildTimeLocal === 'string'
+      ? value.rumocaWasmBuildTimeLocal
+      : undefined,
+  rumocaWasmRustBuildTimeLocal:
+    typeof value?.rumocaWasmRustBuildTimeLocal === 'string'
+      ? value.rumocaWasmRustBuildTimeLocal
+      : undefined,
+  rumocaWasmPackageBuiltTimeLocal:
+    typeof value?.rumocaWasmPackageBuiltTimeLocal === 'string'
+      ? value.rumocaWasmPackageBuiltTimeLocal
+      : undefined,
+})
+
 const runtimeInfo = computed(() => {
-  const opts = props.runtimeMenuOptions ?? {}
-  const version = String(opts.rumocaWasmVersion ?? 'unknown')
-  const commit = String(opts.rumocaWasmGitCommit ?? 'unknown')
-  const buildTime = String(opts.rumocaWasmBuildTimeLocal ?? 'unknown')
-  const rustBuildTime = String(opts.rumocaWasmRustBuildTimeLocal ?? buildTime)
-  const packageBuiltTime = String(opts.rumocaWasmPackageBuiltTimeLocal ?? 'unknown')
+  const opts = normalizeRuntimeMenuOptions(props.runtimeMenuOptions)
+  const version = opts.rumocaWasmVersion ?? 'unknown'
+  const commit = opts.rumocaWasmGitCommit ?? 'unknown'
+  const buildTime = opts.rumocaWasmBuildTimeLocal ?? 'unknown'
+  const rustBuildTime = opts.rumocaWasmRustBuildTimeLocal ?? buildTime
+  const packageBuiltTime = opts.rumocaWasmPackageBuiltTimeLocal ?? 'unknown'
   const mslStatus = props.mslLoaded
     ? `${props.mslArchiveName || 'MSL loaded'} (${props.mslFileCount} files)`
     : 'MSL not loaded'

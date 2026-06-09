@@ -489,7 +489,8 @@ async function selectFromList(
     renderedLines = 0
   }
 
-  const indexedOptions = (query: string) => optionsFor(query).map((label, index) => ({ label, index }))
+  const indexedOptions = (query: string) =>
+    optionsFor(query).map((label, index) => ({ label, index }))
   const filteredOptions = () => {
     const indexed = indexedOptions(query)
     if (!filterable) return indexed
@@ -1012,14 +1013,13 @@ async function handleProviderCommand(
   writeLine(`Selected provider: ${nextApi}`)
 }
 
-async function handleToolsCommand(
-  ty: Taskyon,
-  target?: Record<string, { hideChat?: boolean }>,
-) {
+async function handleToolsCommand(ty: Taskyon, target?: Record<string, { hideChat?: boolean }>) {
   const all = await ty.updateToolDefinitions(true)
   if (target) {
     for (const key of Object.keys(target)) delete target[key]
-    for (const [name, def] of Object.entries(all as Record<string, { renderOptions?: { hideChat?: boolean } }>)) {
+    for (const [name, def] of Object.entries(
+      all as Record<string, { renderOptions?: { hideChat?: boolean } }>,
+    )) {
       target[name] = { hideChat: Boolean(def.renderOptions?.hideChat) }
     }
   }
@@ -1041,7 +1041,9 @@ async function refreshToolRenderOptions(
 ) {
   const all = await ty.updateToolDefinitions(true)
   for (const key of Object.keys(target)) delete target[key]
-  for (const [name, def] of Object.entries(all as Record<string, { renderOptions?: { hideChat?: boolean } }>)) {
+  for (const [name, def] of Object.entries(
+    all as Record<string, { renderOptions?: { hideChat?: boolean } }>,
+  )) {
     target[name] = { hideChat: Boolean(def.renderOptions?.hideChat) }
   }
 }
@@ -1161,7 +1163,8 @@ async function main() {
     ...(providerKey ? { key: providerKey } : {}),
   } as CliApiConfig
   const explorationContextFiles: Record<string, string> = {}
-  const { formatExplorationContext, createExplorationTool } = await import('./tools/explorationTool')
+  const { formatExplorationContext, createExplorationTool } =
+    await import('./tools/explorationTool')
   const { updateFilesTool } = await import('./tools/patchTool')
   const explorationTool = createExplorationTool(explorationContextFiles)
 
@@ -1182,16 +1185,17 @@ async function main() {
         formatExplorationContext(explorationContextFiles),
       ),
   })
+  const cliEntryTask = toolCall({
+    name: ENTRY_NODE_TOOL_NAME,
+    arguments: {},
+  })
   llmState = {
     ...llmState,
-    entryNode: toolCall({
-      name: ENTRY_NODE_TOOL_NAME,
-      arguments: {},
-    }),
+    entryFunction: ENTRY_NODE_TOOL_NAME,
   }
   const taskyon = await tyCore(
     () => llmState,
-    () => llmState.entryNode,
+    () => cliEntryTask,
     () => ({
       entryNode: {
         llmTools: true,
@@ -1488,17 +1492,21 @@ async function main() {
         }
         continue
       }
-      const inputRaw = await promptForMainInput(rl, async () => {
-        inMenuInteraction = true
-        const selected = await selectSlashCommand(rl, '')
-        inMenuInteraction = false
-        return selected
-      }, async () => {
-        inMenuInteraction = true
-        const selected = await selectFileReference(rl, '')
-        inMenuInteraction = false
-        return selected ? `@${selected}` : null
-      })
+      const inputRaw = await promptForMainInput(
+        rl,
+        async () => {
+          inMenuInteraction = true
+          const selected = await selectSlashCommand(rl, '')
+          inMenuInteraction = false
+          return selected
+        },
+        async () => {
+          inMenuInteraction = true
+          const selected = await selectFileReference(rl, '')
+          inMenuInteraction = false
+          return selected ? `@${selected}` : null
+        },
+      )
       if (inputRaw === null) {
         if (isReadlineClosed(rl)) {
           requestImmediateShutdown('EOF/Readline closed', 0)

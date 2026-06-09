@@ -1,6 +1,6 @@
 import { addMarkdownTaskChain, chat2Md } from '../core/markdownTaskIO'
 import { createTaskNode } from '../core/createTasks'
-import type { TaskNode, partialTaskDraft } from '../types/taskNode'
+import type { partialTaskDraft } from '../types/taskNode'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
