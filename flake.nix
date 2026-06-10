@@ -4,12 +4,19 @@
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
     nixpkgs_unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
   };
 
-  outputs = { self, nixpkgs, nixpkgs_unstable, flake-utils }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      nixpkgs_unstable,
+      flake-utils,
+    }:
 
-    flake-utils.lib.eachDefaultSystem (system:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         # https://nixos.wiki/wiki/Rust
         # https://nixos.org/manual/nixpkgs/stable/#rust
@@ -17,7 +24,7 @@
         # rust-overlay.url = "github:oxalica/rust-overlay";
         pkgs = import nixpkgs { inherit system; };
         pkgs_unstable = import nixpkgs_unstable { inherit system; };
-        python = pkgs.python310;
+        python = pkgs.python311;
         tycliDevBin = pkgs.writeShellScriptBin "tycli" ''
           set -euo pipefail
           repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -60,7 +67,7 @@
           #libsoup
 
           # this is needed for appimage by build_appimage.sh ...
-          #libgpg-error 
+          #libgpg-error
           #xorg.libX11
           #xorg.libSM
           #xorg.libICE
@@ -152,19 +159,20 @@
 
           python # this is needed for newer quasar versions apparently...
           # not sure..  but if I use our git-filter repo form main nix store, it doesn't work.. maybe becuase of cinflicting python versions?
-          # git-filter-repo 
+          # git-filter-repo
           kdiff3
 
           # we use this to search for missing libraries with the same version as this
           # project here.
-          # run: 
+          # run:
           # > nix-index
           # > nix-locate libgbm.so.1
           nix-index
           tycliDevBin
           tycDevBin
         ];
-      in {
+      in
+      {
         devShells.default = pkgs.mkShell rec {
           # pure  = true;                   # ← turn on “pure” mode
           name = "xyntopia_gui";
@@ -183,9 +191,7 @@
 
             # Environment variables
             # fixes libstdc++ issues, libz.so.1 issues
-            export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib/:${
-              pkgs.lib.makeLibraryPath buildInputs
-            }";
+            export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib/:${pkgs.lib.makeLibraryPath buildInputs}";
 
             export NODE_OPTIONS="--max-old-space-size=8192"
             echo "increasing node memory allocation to $NODE_OPTIONS"
@@ -200,9 +206,7 @@
 
             export PATH="$(pwd)/node_modules/.bin:$PATH:$HOME/.cargo/bin"
 
-            export LD_LIBRARY_PATH=${
-              pkgs.lib.makeLibraryPath libraries
-            }:$LD_LIBRARY_PATH
+            export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath libraries}:$LD_LIBRARY_PATH
             export XDG_DATA_DIRS=${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}:$XDG_DATA_DIRS
 
             # Ensure WebKitGTK/libsoup can load the TLS backend on NixOS.
@@ -269,5 +273,6 @@
           # fixes libstdc++ issues and libgl.so issues
           #LD_LIBRARY_PATH=${stdenv.cc.cc.lib}/lib/:/run/opengl-driver/lib/
         };
-      });
+      }
+    );
 }
