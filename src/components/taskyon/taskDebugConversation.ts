@@ -80,13 +80,11 @@ export const hasRawConversationDebug = (debug: RawConversationDebug) =>
   debug.completionText.length > 0
 
 export const formatRawConversationDebug = (debug: RawConversationDebug) => {
-  const sections = [
-    ...debug.conversationMessages.map(
-      (message) => `${message.role}\n${'-'.repeat(32)}\n${message.text}`,
-    ),
-    debug.reasoningText ? `assistant reasoning\n${'-'.repeat(32)}\n${debug.reasoningText}` : '',
-    debug.completionText ? `assistant completion\n${'-'.repeat(32)}\n${debug.completionText}` : '',
-  ].filter(Boolean)
-
-  return sections.join('\n\n' + '='.repeat(48) + '\n\n')
+  return serializeObject(debug, {
+    maxDepth: 4,
+    maxArrayLength: 50,
+    maxObjectKeys: 50,
+    maxStringLength: 20_000,
+    format: 'yaml',
+  })
 }
