@@ -149,8 +149,20 @@ async function useTaskVectors(
   db: TyPGDB,
   getAllTaskIds: () => Promise<(string | number)[]>,
   getTask: (taskId: string) => Promise<TaskNode | null>,
+  getToolDefinition: (name: string) => Promise<{ tool?: InternalTool }>,
 ) {
   const vecDb = await createVectorStore<TaskNode>(db, 'tyTaskVectors')
+
+  async function shouldSkipVectorIndex(task: TaskNode) {
+    if (task.content.type === 'return') {
+      return task.content.data === 'assistant answered'
+    }
+
+    if (task.content.type !== 'functioncall') return false
+
+    const { tool } = await getToolDefinition(task.content.data.name)
+    return tool?.renderOptions?.hideVector === true
+  }
 
   async function syncVectorIndexWithTasks(progressCallback: (done: number, total: number) => void) {
     let counter = 0
@@ -180,12 +192,7 @@ async function useTaskVectors(
     const existingVector = await vecDb.get(task.id)
     if (existingVector) {
       console.log('vector already exists!', task.id)
-    } else if (
-      // TODO:  make this explicit in each task!
-      (task.content.type === 'functioncall' &&
-        ['chatCompletion', 'chooseTool', 'entryNode'].includes(task.content.data.name)) ||
-      (task.content.type === 'return' && task.content.data === 'assistant answered')
-    ) {
+    } else if (await shouldSkipVectorIndex(task)) {
       console.log('skip indexing of task', task.id)
     } else {
       console.log('create vector...', task.id)
@@ -420,12 +427,12 @@ export async function useTyTaskManager(taskyonDb: TyPGDB) {
 
   const getAllTaskIds = tyCrud.listIds
 
-  // TODO: unify our tyCrudVec and useTaskVectors in one db...
-  const taskVectors = await useTaskVectors(taskyonDb, getAllTaskIds, tyCrud.get)
-
   // TODO: updateToolIndex should work through streams!
   const { toolIndex, defaultToolMap, addDefaultTools, getToolDefinition, updateToolIndex } =
     createToolIndex(tyCrud.get)
+
+  // TODO: unify our tyCrudVec and useTaskVectors in one db...
+  const taskVectors = await useTaskVectors(taskyonDb, getAllTaskIds, tyCrud.get, getToolDefinition)
 
   // taskLocks
   const { lockItem, clearLocks } = lockMap('TaskLocks')

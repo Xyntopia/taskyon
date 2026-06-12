@@ -1,15 +1,17 @@
 import { createChatCompletionTask } from '../api'
-import { createTool, makeTaskResult } from '../types/toolApi'
+import { match, P } from 'ts-pattern'
+import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
 import type { JSONSchema7 } from '../utils/jsonSchema'
 import { safeYamlDump } from '../utils/yamlUtils'
 
-type EntryNodeMode = 'message' | 'toolresult' | 'error' | 'fallback'
+type EntryNodeMode = 'message' | 'toolresult' | 'error' | 'structured' | 'fallback'
 
 type EntryNodeConfig = {
   name?: string
-  renderOptions?: { hideChat?: boolean; hideLlm?: boolean }
+  renderOptions?: { hideChat?: boolean; hideLlm?: boolean; hideVector?: boolean }
   defaultAllowedTools?: string[]
+  getToolCatalog?: () => Promise<Array<{ name: string; description: string }>>
   toolChooser?:
     | {
         enabled: true
@@ -63,7 +65,7 @@ export const EntryNodeSettingsSchema = {
       default: true,
       title: 'Tool Chooser',
       description:
-        'Enable the chooseTool stage for this specific entry-node run. This is captured on the entry node for replayability.',
+        'Enable the tool-shortlist stage for this specific entry-node run. This is captured on the entry node for replayability.',
     },
     reasoning_effort: {
       enum: ['low', 'medium', 'high', 'none'],
@@ -149,6 +151,24 @@ export type ResolvedEntryNodeSettings = {
   prompt_templates: EntryNodePromptTemplates
 }
 
+const toEntryNodeArguments = (
+  settings: ResolvedEntryNodeSettings,
+  toolResultSection?: string,
+): EntryNodeArgs => ({
+  use_baseprompt: settings.use_baseprompt,
+  llmTools: settings.llmTools,
+  nativeToolCalling: settings.nativeToolCalling,
+  use_tool_chooser: settings.use_tool_chooser,
+  ...(settings.reasoning_effort ? { reasoning_effort: settings.reasoning_effort } : {}),
+  use_multimodal: settings.use_multimodal,
+  websearch: {
+    enabled: settings.websearch.enabled,
+    max_results: settings.websearch.max_results,
+  },
+  prompt_templates: { ...settings.prompt_templates },
+  ...(toolResultSection !== undefined ? { toolResultSection } : {}),
+})
+
 const EntryNodeParameters = {
   type: 'object',
   additionalProperties: false,
@@ -231,8 +251,11 @@ const buildEntryNodePromptAugmentations = (args: {
       : []),
     modePrompt,
     ...(modePrompt === prompt ? [] : [prompt]),
-  ]
-  return { prompts, promptInjections }
+  ].filter((value) => value.trim().length > 0)
+  return {
+    prompts,
+    promptInjections: promptInjections.filter((value) => value.trim().length > 0),
+  }
 }
 
 const isStringArray = (value: unknown): value is string[] =>
@@ -257,14 +280,87 @@ const resolveMode = (previousTask: TaskNode | undefined): EntryNodeMode => {
   if (!previousTask) return 'fallback'
   if (previousTask.content.type === 'error') return 'error'
   if (previousTask.content.type === 'toolresult') return 'toolresult'
+  if (previousTask.content.type === 'structured') return 'structured'
   if (previousTask.content.type === 'message' && previousTask.role === 'user') return 'message'
   return 'fallback'
 }
+
+type ToolShortlistResult = { type: 'none' } | { type: 'tools'; tools: string[] }
+
+const toolShortlistSchema = {
+  type: 'object',
+  properties: {
+    reasoning_steps: {
+      type: 'array',
+      items: {
+        type: 'string',
+      },
+      description: 'The reasoning steps leading to the final conclusion.',
+    },
+    choice: {
+      anyOf: [
+        {
+          enum: ['no'],
+          description:
+            'If you are sure no tools are required for an answer, choose "no" as an answer instead of a list!',
+        },
+        {
+          type: 'array',
+          description: 'List of tool names you think might be relevant',
+          items: {
+            type: 'string',
+          },
+        },
+      ],
+    },
+  },
+  additionalProperties: false,
+  required: ['reasoning_steps', 'choice'],
+} as const satisfies JSONSchema7
+
+const resolveToolShortlistResult = (
+  task: TaskNode | undefined,
+): ToolShortlistResult | undefined => {
+  if (task?.content.type !== 'structured') return undefined
+  const data = task.content.data
+  if (!data || typeof data !== 'object' || !('choice' in data)) return undefined
+  const choice = data.choice
+  if (choice === 'no') return { type: 'none' }
+  if (Array.isArray(choice) && choice.every((item) => typeof item === 'string')) {
+    const filteredTools = choice.filter((tool) => tool !== 'no')
+    return filteredTools.length > 0 ? { type: 'tools', tools: filteredTools } : { type: 'none' }
+  }
+  return undefined
+}
+
+const buildToolShortlistPrompt = (
+  toolCatalog: ReadonlyArray<{ name: string; description: string }>,
+  toolNum = 3,
+) => {
+  return `Here is list of all the tools which are available to you:
+
+${safeYamlDump(toolCatalog)}
+
+Can you please choose ${toolNum} of these which you think might be relevant for this
+task. Only choose one if you think it would help you to solve the task.
+
+Examples are:
+- something that you can't answer with pure text
+- a math problem
+- something that requires an API call
+- ... and more! make sure to think about it!
+
+If you are sure that none of the tools are relevant, your choice should be simple string "no".`
+}
+
+const createFallbackToolCatalog = (toolNames: readonly string[]) =>
+  toolNames.map((name) => ({ name, description: name }))
 
 type StandardEntryNodeOptions = {
   name: string
   renderOptions: { hideChat?: boolean; hideLlm?: boolean }
   defaultAllowedTools: string[]
+  getToolCatalog?: () => Promise<Array<{ name: string; description: string }>>
   toolChooser:
     | {
         enabled: true
@@ -310,23 +406,16 @@ const buildStandardPrompt = (args: {
   return [...prefix, 'Continue the conversation. Use a tool only when needed.'].join('\n')
 }
 
-const shouldUseToolChooser = (
-  mode: EntryNodeMode,
-  toolChooser: EntryNodeConfig['toolChooser'],
-): boolean => {
-  if (!toolChooser?.enabled) return false
-  return mode !== 'error'
-}
-
 export const createEntryNodeToolFactory = (config: EntryNodeConfig) =>
   createTool({
     name: config.name ?? 'entryNode',
     description: 'Task entry router that decides how to continue based on the previous task.',
     parameters: EntryNodeParameters,
-    renderOptions: config.renderOptions ?? { hideChat: true, hideLlm: true },
+    renderOptions: { hideChat: true, hideLlm: true, hideVector: true, ...config.renderOptions },
     function: ({ toolResultSection, ...settings }: EntryNodeArgs = {}, context) => {
       const previousTask = context.taskChain.at(-2)
       const mode = resolveMode(previousTask)
+      const shortlistResult = resolveToolShortlistResult(previousTask)
       const promptArgsBase = {
         mode,
         taskChain: context.taskChain,
@@ -343,47 +432,197 @@ export const createEntryNodeToolFactory = (config: EntryNodeConfig) =>
       const normalizedSettings = normalizeEntryNodeSettings(settings)
       const useToolChooser = normalizedSettings.use_tool_chooser
       const webSearchEnabled = normalizedSettings.websearch.enabled
-      const nextGoal = webSearchEnabled
-        ? 'WebSearch'
-        : useToolChooser &&
-            config.toolChooser?.enabled &&
-            shouldUseToolChooser(mode, config.toolChooser)
-          ? 'ChooseTool'
-          : 'AnalyzeToolResult'
-      const llmTools = nextGoal === 'ChooseTool' ? false : normalizedSettings.nativeToolCalling
+      const chooserConfig = config.toolChooser?.enabled ? config.toolChooser : undefined
+      const routingContext = {
+        mode,
+        webSearchEnabled,
+        useToolChooser,
+        chooserEnabled: !!chooserConfig,
+        chooserUsesTools: chooserConfig?.useTools ?? false,
+        chooserWebSearch: chooserConfig?.webSearch,
+        shortlistResult,
+      }
+
+      const buildChatCompletionResult = (
+        goal: 'SimpleCompletion' | 'AnalyzeToolResult' | 'WebSearch',
+        args?: {
+          allowedTools?: string[]
+          llmTools?: boolean
+          prompts?: string[]
+          prompt_injections?: string[]
+          max_results?: number
+          schema?: Record<string, unknown>
+          reasoning_effort?: 'low' | 'medium' | 'high' | 'none'
+        },
+      ) => {
+        // TODO:  I am not sur,e why we are doing this here..  if an arg isn#t given, we can siply leae it out...
+        const chatCompletionArgs = {
+          goal,
+          llmTools: args?.llmTools ?? normalizedSettings.nativeToolCalling,
+          use_multimodal: normalizedSettings.use_multimodal,
+          ...(args?.allowedTools ? { allowedTools: args.allowedTools } : {}),
+          ...(args?.prompts ? { prompts: args.prompts } : {}),
+          ...(args?.prompt_injections ? { prompt_injections: args.prompt_injections } : {}),
+          ...(args?.schema ? { schema: args.schema } : {}),
+          ...(args?.reasoning_effort ? { reasoning_effort: args.reasoning_effort } : {}),
+          ...(args?.max_results !== undefined ? { max_results: args.max_results } : {}),
+        }
+        return makeTaskResult([createChatCompletionTask(chatCompletionArgs)])
+      }
+
       const promptAugmentations = buildEntryNodePromptAugmentations({
         mode,
         prompt,
         previousTask,
         templates: normalizedSettings.prompt_templates,
         useBasePrompt: normalizedSettings.use_baseprompt,
-        llmTools,
+        llmTools: normalizedSettings.nativeToolCalling,
         allowedTools,
       })
-      return makeTaskResult([
-        createChatCompletionTask({
-          goal: nextGoal,
-          allowedTools,
-          prompts: promptAugmentations.prompts,
-          prompt_injections: promptAugmentations.promptInjections,
-          llmTools,
-          ...(normalizedSettings.reasoning_effort
-            ? { reasoning_effort: normalizedSettings.reasoning_effort }
-            : {}),
-          use_multimodal: normalizedSettings.use_multimodal,
-          ...(webSearchEnabled
-            ? {
-                max_results: normalizedSettings.websearch.max_results,
-              }
-            : {}),
-        }),
-      ])
+
+      return match(routingContext)
+        .with({ webSearchEnabled: true }, () =>
+          buildChatCompletionResult('WebSearch', {
+            allowedTools,
+            llmTools: normalizedSettings.nativeToolCalling,
+            prompts: promptAugmentations.prompts,
+            prompt_injections: promptAugmentations.promptInjections,
+            max_results: normalizedSettings.websearch.max_results,
+            ...(normalizedSettings.reasoning_effort
+              ? { reasoning_effort: normalizedSettings.reasoning_effort }
+              : {}),
+          }),
+        )
+        .with(
+          {
+            mode: 'message',
+            chooserEnabled: true,
+            useToolChooser: true,
+            chooserUsesTools: true,
+          },
+          async () => {
+            const toolCatalog =
+              (await config.getToolCatalog?.()) ??
+              createFallbackToolCatalog(
+                allowedTools.length > 0 ? allowedTools : (config.defaultAllowedTools ?? []),
+              )
+
+            if (toolCatalog.length === 0) {
+              return buildChatCompletionResult('SimpleCompletion', {
+                allowedTools,
+                llmTools: normalizedSettings.nativeToolCalling,
+                prompts: promptAugmentations.prompts,
+                prompt_injections: promptAugmentations.promptInjections,
+                ...(normalizedSettings.reasoning_effort
+                  ? { reasoning_effort: normalizedSettings.reasoning_effort }
+                  : {}),
+              })
+            }
+
+            return makeTaskResult([
+              createChatCompletionTask({
+                goal: 'AnalyzeToolResult',
+                prompts: [buildToolShortlistPrompt(toolCatalog)],
+                llmTools: true,
+                schema: toolShortlistSchema,
+                ...(normalizedSettings.reasoning_effort
+                  ? { reasoning_effort: normalizedSettings.reasoning_effort }
+                  : {}),
+                use_multimodal: normalizedSettings.use_multimodal,
+              }),
+              // Re-enter after the shortlist completion.
+              // The next entryNode run will see the structured shortlist as previousTask.
+              toolCall({
+                name: config.name ?? 'entryNode',
+                arguments: toEntryNodeArguments(normalizedSettings, toolResultSection),
+              }),
+            ])
+          },
+        )
+        .with({ mode: 'structured', shortlistResult: { type: 'none' } }, () =>
+          buildChatCompletionResult('SimpleCompletion', {
+            allowedTools,
+            llmTools: normalizedSettings.nativeToolCalling,
+            prompts: promptAugmentations.prompts,
+            prompt_injections: promptAugmentations.promptInjections,
+            ...(normalizedSettings.reasoning_effort
+              ? { reasoning_effort: normalizedSettings.reasoning_effort }
+              : {}),
+          }),
+        )
+        .with(
+          { mode: 'structured', shortlistResult: { type: 'tools', tools: P.select() } },
+          (tools) => {
+            const narrowedPromptAugmentations = buildEntryNodePromptAugmentations({
+              mode: 'message',
+              prompt:
+                'Use exactly one of the allowed tools when needed to answer the previous user request. Emit the tool call instead of answering from memory.',
+              previousTask,
+              templates: normalizedSettings.prompt_templates,
+              useBasePrompt: normalizedSettings.use_baseprompt,
+              llmTools: normalizedSettings.nativeToolCalling,
+              allowedTools: tools,
+            })
+
+            return makeTaskResult([
+              createChatCompletionTask({
+                goal: 'ChooseTool',
+                prompts: narrowedPromptAugmentations.prompts,
+                prompt_injections: narrowedPromptAugmentations.promptInjections,
+                allowedTools: tools,
+                llmTools: normalizedSettings.nativeToolCalling,
+                ...(normalizedSettings.reasoning_effort
+                  ? { reasoning_effort: normalizedSettings.reasoning_effort }
+                  : {}),
+                use_multimodal: normalizedSettings.use_multimodal,
+              }),
+            ])
+          },
+        )
+        .with({ mode: 'message' }, () =>
+          buildChatCompletionResult('SimpleCompletion', {
+            allowedTools,
+            llmTools: normalizedSettings.nativeToolCalling,
+            prompts: promptAugmentations.prompts,
+            prompt_injections: promptAugmentations.promptInjections,
+            ...(normalizedSettings.reasoning_effort
+              ? { reasoning_effort: normalizedSettings.reasoning_effort }
+              : {}),
+          }),
+        )
+        .with({ mode: P.union('toolresult', 'error', 'fallback', 'structured') }, () =>
+          buildChatCompletionResult('AnalyzeToolResult', {
+            allowedTools,
+            llmTools: normalizedSettings.nativeToolCalling,
+            prompts: promptAugmentations.prompts,
+            prompt_injections: promptAugmentations.promptInjections,
+            ...(normalizedSettings.reasoning_effort
+              ? { reasoning_effort: normalizedSettings.reasoning_effort }
+              : {}),
+          }),
+        )
+        .otherwise(() => {
+          return makeTaskResult([
+            createChatCompletionTask({
+              goal: 'AnalyzeToolResult',
+              allowedTools,
+              prompts: promptAugmentations.prompts,
+              prompt_injections: promptAugmentations.promptInjections,
+              llmTools: normalizedSettings.nativeToolCalling,
+              ...(normalizedSettings.reasoning_effort
+                ? { reasoning_effort: normalizedSettings.reasoning_effort }
+                : {}),
+              use_multimodal: normalizedSettings.use_multimodal,
+            }),
+          ])
+        })
     },
   })
 
 export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =>
   createEntryNodeToolFactory({
     ...options,
+    ...(options.getToolCatalog ? { getToolCatalog: options.getToolCatalog } : {}),
     ...(options.toolChooser ? { toolChooser: options.toolChooser } : {}),
     buildPrompt: ({ mode, previousTask, taskChain, toolResultSection }) => {
       const extraContextArgsBase = { mode, previousTask, taskChain }

@@ -52,9 +52,16 @@ export const ToolBase = z.object({
         .describe(
           "hide the tool in the UI chat. Useful if the function is used very often and we don't want it to clutter the chatWindow",
         ),
-      hideLlm: z.boolean(
-        'HideLlm will hide the  tool from an LLM inside chatCompletion. This is mainly useful for tools like "chatCompletion" which the llm doesn\'t need to see in the chatCompletion.',
-      ),
+      hideLlm: z
+        .boolean()
+        .describe(
+          'HideLlm will hide the  tool from an LLM inside chatCompletion. This is mainly useful for tools like "chatCompletion" which the llm doesn\'t need to see in the chatCompletion.',
+        ),
+      hideVector: z
+        .boolean()
+        .describe(
+          'Whether the tool should be embedded and searchable by vector search. Only relevant if you are using vector search in your task chains.',
+        ),
     })
     .partial()
     .optional(),

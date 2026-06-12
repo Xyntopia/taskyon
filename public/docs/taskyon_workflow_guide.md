@@ -110,7 +110,7 @@ The **entry node** is the first `functioncall` after the user’s message.
 
 ### 3.1 When to Use Custom Entry Nodes
 
-Use a **custom entry node** instead of the default `chooseTool` when:
+Use a **custom entry node** instead of the default `taskyonFlow` when:
 
 - You need to inject **rich, domain-specific context**  
   (e.g. current code with line numbers, DB schema, previous results).
@@ -121,10 +121,11 @@ Use a **custom entry node** instead of the default `chooseTool` when:
 If you don’t specify one, Taskyon uses:
 
 ```ts
-entryNode = toolCall({ name: 'chooseTool', arguments: {} })
+entryNode = toolCall({ name: 'taskyonFlow', arguments: {} })
 ```
 
-`chooseTool` is a **reference implementation**, not a requirement.
+`taskyonFlow` is the default orchestration entry node. It may run a shortlist phase before
+issuing a narrowed `chatCompletion(goal=ChooseTool, allowedTools=[...])` step.
 
 ### 3.2 What an Entry Node May Do
 
@@ -166,9 +167,10 @@ else:
   → message + return
 ```
 
-**Pattern C – Fallback chooser** (default `chooseTool`)
+**Pattern C – Fallback orchestrator** (default `taskyonFlow`)
 
-- Use when you want a generic “tool router” and are okay with LLM-driven tool choice.
+- Use when you want a generic router that can stay in plain chat mode or narrow the tool set
+  before tool choice.
 
 ---
 

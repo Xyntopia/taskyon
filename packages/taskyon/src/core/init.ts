@@ -10,12 +10,7 @@ import { localVectorStore } from '../tools/localVectorStore'
 import { proceduralTools } from '../tools/proceduralGraphics'
 import { taskOrganizationTools, taskSearcher } from '../tools/TaskPlannerTool'
 import { testingTools } from '../tools/testTools'
-import {
-  createAddNewToolTool,
-  createChooseTool,
-  createToolSearcher,
-  toolCreationWizard,
-} from '../tools/toolTools'
+import { createAddNewToolTool, createToolSearcher, toolCreationWizard } from '../tools/toolTools'
 import { useFullSmallTools } from '../tools/usefulSmallTools'
 import { wfcGenerator } from '../tools/wavefunctioncollapse'
 import { appDevTools } from '../tools/webAppDev'
@@ -265,7 +260,6 @@ const dynamicContext =
       localVectorStore(db),
       chatCompletion,
       createToolSearcher(taskManagerInstance),
-      createChooseTool(taskManagerInstance),
       taskSearcher(taskManagerInstance),
     )
     taskManagerInstance.addDefaultTools(ToolList)

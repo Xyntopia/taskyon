@@ -971,13 +971,15 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // pre-initialize our python webworker, because its very slow to startup :)
   void usePyodideWebworker().preInit()
-  const entryNodeTool = createStandardEntryNodeTool({
-    name: 'taskyonFlow',
-    renderOptions: { hideChat: true, hideLlm: true },
-    toolChooser: { enabled: true, useTools: true },
-    defaultAllowedTools: [],
-  })
 
+  const getEntryNodeToolName = (entryNodeDraft: partialTaskDraft): string => {
+    if (entryNodeDraft.content.type !== 'functioncall') return 'entryNode'
+    const data = entryNodeDraft.content.data
+    if (!data || typeof data !== 'object' || !('name' in data) || typeof data.name !== 'string') {
+      return 'entryNode'
+    }
+    return data.name
+  }
   // this means previously, we have loaded a session with a binding key.
   // so we would like to wait a little bit, if we will get that same binding key...
   const taskyon = (async () => {
@@ -1009,6 +1011,22 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           },
         },
       }) as partialTaskDraft
+    const entryNodeTool = createStandardEntryNodeTool({
+      name: getEntryNodeToolName(entryNode()),
+      renderOptions: { hideChat: true, hideLlm: true },
+      toolChooser: { enabled: true, useTools: true },
+      defaultAllowedTools: [],
+      getToolCatalog: async () => {
+        const ty = await taskyon
+        const allTools = await ty.updateToolDefinitions(true)
+        return Object.values(allTools)
+          .filter((tool) => !['chatCompletion', 'entryNode', 'taskyonFlow'].includes(tool.name))
+          .map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+          }))
+      },
+    })
     return await tyCore(
       () => ({
         ...stateRefs.llmSettings,

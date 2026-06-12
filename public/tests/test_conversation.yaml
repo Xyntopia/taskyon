@@ -5,11 +5,11 @@
     data: test
   created_at: 1752878693862
 - role: function
-  name: chooseTool
+  name: taskyonFlow
   content:
     type: functioncall
     data:
-      name: chooseTool
+      name: taskyonFlow
       arguments:
         llmTools: false
   created_at: 1752878693900
@@ -102,8 +102,8 @@
 
                 - Get the definition of a single tool including source code, if available.
                 (not case sensitive)
-            - name: chooseTool
-              description: Chooses and parameterizes a tool for execution based on provided context.
+            - name: taskyonFlow
+              description: Routes the conversation through plain chat, web search, or a narrowed tool-choice phase.
             - name: taskSearcher
               description: Search through available tasks using a search string
             - name: addNewTool
@@ -175,11 +175,11 @@
         - animatedClock
   created_at: 1752878699308
 - role: function
-  name: chooseTool
+  name: taskyonFlow
   content:
     type: functioncall
     data:
-      name: chooseTool
+      name: taskyonFlow
       arguments:
         llmTools: false
   created_at: 1752878694309

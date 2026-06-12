@@ -151,6 +151,7 @@ import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
 import * as ModelicaDiagnostics from '@taskyon/shared/modelica/modelicaDiagnostics'
 import { runMarkdownDetectionTests } from 'src/modules/taskyon/runMarkdownDetectionTests'
 import * as TaskyonTests from 'src/modules/taskyon/tests'
+import * as TaskyonUiInteractionTests from 'src/modules/taskyon/taskyonUiInteractionTests'
 import { testBuildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
@@ -196,6 +197,10 @@ onMounted(async () => {
 
 const modules = Object.entries(testModules).map(([sourcePath, mod]) => ({ sourcePath, mod }))
 modules.push({ sourcePath: 'src/modules/taskyon/tests.ts', mod: TaskyonTests })
+modules.push({
+  sourcePath: 'src/modules/taskyon/taskyonUiInteractionTests.ts',
+  mod: TaskyonUiInteractionTests,
+})
 modules.push({
   sourcePath: 'src/modules/modelica/modelicaDiagnostics.ts',
   mod: ModelicaDiagnostics,

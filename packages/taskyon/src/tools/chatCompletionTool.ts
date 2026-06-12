@@ -702,13 +702,16 @@ const robustKeys = createDeepTransformer({
 // we use this to decide whether we should call a function or to continue
 // this is usually not needed if we use llmTools (like built-in tools from openai API)
 // TODO: ability to parse multiple commands/tasks...
-function getCommandFromStructuredResponse(
+export function getCommandFromStructuredResponse(
   message: string,
   variableService?: TaskVariablePresentationService,
 ): FunctionCall[] {
   // all of the following is done in order to make this as robust as possible
   // thats also why we don't just simply use zod validation on this.
   const structResponse = parseYamlResponse2Record(message || '')
+  if (!structResponse || typeof structResponse !== 'object' || Array.isArray(structResponse)) {
+    return []
+  }
   const structResponseN = normalizeFalsyValues()(structResponse)
   const lowerStruct = robustKeys(structResponseN) as Record<string, string | boolean>
 
@@ -1315,7 +1318,7 @@ export function createChatCompletionTool(
   It will convert the chain pointed to by the previous Task (priorID) into openAI compatible message
   list and generate a response`,
     name: chatCompletionToolName,
-    renderOptions: { hideChat: true, hideLlm: true },
+    renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
     parameters: chatCompletionToolParameters,
     function: async (opts, context: toolContext) => {
       //////////   INITIALIZATION
@@ -1411,8 +1414,8 @@ export function createChatCompletionTool(
         selectedModel,
         requestApi,
         requestApiKey,
-        // only add a schema if we want ot use native tools!
-        llmTools ? schema : undefined,
+        // Structured output is independent from whether native tool calling is enabled.
+        schema,
         siteUrl,
         goal === 'WebSearch'
           ? {

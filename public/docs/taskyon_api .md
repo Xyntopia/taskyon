@@ -157,7 +157,8 @@ Task processing has two parts:
 - **Execution Engine** --- ensures correct order, parallelism, and task chain continuation
 
 **Default UI flow:** when a user sends a message, Taskyon appends an **entry node** (usually
-`chooseTool`) which decides whether to run a plain chat completion or route into tool calls.
+`taskyonFlow`) which decides whether to run a plain chat completion, a web search, or an
+internal tool-shortlist phase before routing into tool calls.
 
 ### 4.2 processTasks API
 
