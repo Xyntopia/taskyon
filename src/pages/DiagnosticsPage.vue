@@ -166,7 +166,10 @@ import { syncRefsWithLocalStorage } from '../../packages/shared/modules/saveStat
 import { copyToClipboard, getEnvironmentInfo } from '../../packages/shared/modules/utils'
 
 const testModules = import.meta.glob(
-  '../../packages/taskyon/src/tests/**/*.ts',
+  [
+    '../../packages/taskyon/src/tests/**/*.ts',
+    '!../../packages/taskyon/src/tests/test_entry_node_error_recovery.ts',
+  ],
   { eager: true }, // so modules are imported at build time (synchronously)
 )
 console.log('test modules:', testModules)

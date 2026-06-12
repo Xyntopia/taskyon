@@ -1,7 +1,13 @@
 // types exports
 export { BaseMessage, TaskyonMessage, TyP2P } from './types/apiTypes'
 export { llmSettings, TyToolchainConfig } from './types/profiles'
-export { sendTasks } from './api/index'
+export {
+  observeSubTaskStream,
+  observeSubTaskStreamDetailed,
+  processTasks,
+  processTasksDetailed,
+  sendTasks,
+} from './api/index'
 export { createTaskNode, ensureValidTaskId, forgeTaskChain } from './core/createTasks'
 export * from './core/createNewTaskChain'
 export { tyCore } from './core/init'

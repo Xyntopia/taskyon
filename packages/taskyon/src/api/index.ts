@@ -6,8 +6,7 @@ import type { TaskyonMessage } from '../types/apiTypes'
 import type { TaskContentType, TaskNode } from '../types/taskNode'
 import { partialTaskDraft } from '../types/taskNode'
 import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
-import { type Port } from '@taskyon/shared/modules/frpBus'
-import type { ByType } from '../utils/tsHelpers'
+import { createStream, type Port } from '@taskyon/shared/modules/frpBus'
 
 export { BaseMessage, TaskyonMessage, TyP2P } from '../types/apiTypes'
 export { REMOTE_FUNCTION_TIMEOUT_MS } from '../types/messages'
@@ -32,6 +31,90 @@ export type processTasksOpts = {
   throwOnError?: boolean
 }
 
+export type ObserveSubTaskStreamDetailedResult =
+  | {
+      status: 'matched'
+      result: TaskNode
+      observedTasks: TaskNode[]
+      stopTask: TaskNode
+    }
+  | {
+      status: 'timeout'
+      result: undefined
+      observedTasks: TaskNode[]
+      timeoutMs?: number
+    }
+  | {
+      status: 'aborted'
+      result: undefined
+      observedTasks: TaskNode[]
+    }
+  | {
+      status: 'error'
+      result: undefined
+      observedTasks: TaskNode[]
+      error: Error
+      errorTask: TaskNode
+    }
+
+export type ProcessTasksDetailedResult = ObserveSubTaskStreamDetailedResult & {
+  initialIds: string[]
+}
+
+type TaskSubStream = (cb: (task: TaskNode) => void) => () => void
+type TaskNodeWithParent = TaskNode & { parentID: string }
+
+const isTaskCreatedMessage = (
+  message: { type: string } | TaskyonMessage,
+): message is Extract<TaskyonMessage, { type: 'taskCreated' }> & { task: TaskNodeWithParent } => {
+  return (
+    message.type === 'taskCreated' &&
+    'task' in message &&
+    !!message.task &&
+    typeof message.task === 'object' &&
+    typeof message.task.id === 'string' &&
+    typeof message.task.parentID === 'string'
+  )
+}
+
+const appendPendingTask = (
+  pendingByParentId: Map<string, TaskNodeWithParent[]>,
+  task: TaskNodeWithParent,
+) => {
+  const pendingTasks = pendingByParentId.get(task.parentID) ?? []
+  pendingTasks.push(task)
+  pendingByParentId.set(task.parentID, pendingTasks)
+}
+
+const createSubTaskStream = <T extends { type: string }>(
+  receive: Port<T | TaskyonMessage>['receive'],
+  initialIds: string[],
+): TaskSubStream => {
+  const trackedIds = new Set(initialIds)
+  const pendingByParentId = new Map<string, TaskNodeWithParent[]>()
+  const subTaskBus = createStream<TaskNode>()
+
+  const emitTaskAndFlush = (task: TaskNodeWithParent) => {
+    if (trackedIds.has(task.id)) return
+    trackedIds.add(task.id)
+    subTaskBus.emit(task)
+    const pendingChildren = pendingByParentId.get(task.id) ?? []
+    pendingByParentId.delete(task.id)
+    pendingChildren.forEach(emitTaskAndFlush)
+  }
+
+  receive((message) => {
+    if (!isTaskCreatedMessage(message)) return
+    if (trackedIds.has(message.task.parentID)) {
+      emitTaskAndFlush(message.task)
+      return
+    }
+    appendPendingTask(pendingByParentId, message.task)
+  })
+
+  return subTaskBus.stream
+}
+
 export const createChatCompletionTask = (args: chatCompletionParams) =>
   toolCall<chatCompletionParams>({ name: 'chatCompletion', arguments: args })
 
@@ -49,102 +132,190 @@ export const sendTasks =
     })
 
     const initialIds = tasks.map((t) => t.id)
-    const subTasks = new Set<string>(initialIds)
-
-    // filter for all subtasks
-    const subTaskStream = tyPort.receive
-      .narrow((m): m is ByType<'taskCreated', TaskyonMessage> & { task: { id: string } } => {
-        if (
-          m.type === 'taskCreated' &&
-          'task' in m &&
-          !!m.task?.id &&
-          !!m.task?.parentID &&
-          subTasks.has(m.task.parentID)
-        ) {
-          subTasks.add(m.task.id)
-          return true
-        }
-        return false
-      })
-      .map((msg) => msg.task)
+    const subTaskStream = createSubTaskStream(tyPort.receive, initialIds)
 
     return { initialIds, subTaskStream }
   }
 
+export const observeSubTaskStreamDetailed = async (
+  subTaskStream: TaskSubStream,
+  quitCondition: ((t: TaskNode) => boolean) | TaskContentType | TaskContentType[],
+  opts: processTasksOpts,
+): Promise<ObserveSubTaskStreamDetailedResult> => {
+  const expectsError =
+    quitCondition === 'error' || (Array.isArray(quitCondition) && quitCondition.includes('error'))
+  const throwOnError = opts.throwOnError !== false && !expectsError
+  const matchesQuitCondition =
+    typeof quitCondition === 'string'
+      ? (task: TaskNode) => task.content.type === quitCondition
+      : typeof quitCondition === 'object' && Array.isArray(quitCondition)
+        ? (task: TaskNode) => quitCondition.includes(task.content.type)
+        : quitCondition
+
+  const observedTasks: TaskNode[] = []
+  const withObservedTasks = (error: Error) => {
+    return new Error(error.message, {
+      cause: {
+        originalCause: error.cause,
+        observedTasks,
+      },
+    })
+  }
+
+  return await new Promise<ObserveSubTaskStreamDetailedResult>((resolve) => {
+    if (opts.signal?.aborted) {
+      resolve({
+        status: 'aborted',
+        result: undefined,
+        observedTasks,
+      })
+      return
+    }
+
+    let settled = false
+    let timeout: ReturnType<typeof setTimeout> | undefined
+
+    const cleanup = (unsub: () => void, onAbort: () => void) => {
+      unsub()
+      clearTimeout(timeout)
+      opts.signal?.removeEventListener('abort', onAbort)
+    }
+
+    const onAbort = () => {
+      if (settled) return
+      settled = true
+      cleanup(unsub, onAbort)
+      resolve({
+        status: 'aborted',
+        result: undefined,
+        observedTasks,
+      })
+    }
+
+    const unsub = subTaskStream((task) => {
+      if (settled) return
+      observedTasks.push(task)
+
+      if (throwOnError && task.content.type === 'error') {
+        settled = true
+        cleanup(unsub, onAbort)
+        resolve({
+          status: 'error',
+          result: undefined,
+          observedTasks,
+          error: withObservedTasks(
+            new Error(`Task processing failed on task ${task.id}`, { cause: task.content.data }),
+          ),
+          errorTask: task,
+        })
+        return
+      }
+
+      if (matchesQuitCondition(task)) {
+        settled = true
+        cleanup(unsub, onAbort)
+        resolve({
+          status: 'matched',
+          result: task,
+          observedTasks,
+          stopTask: task,
+        })
+      }
+    })
+
+    if (opts.timeoutMs) {
+      timeout = setTimeout(() => {
+        if (settled) return
+        settled = true
+        cleanup(unsub, onAbort)
+        resolve(
+          opts.timeoutMs === undefined
+            ? {
+                status: 'timeout',
+                result: undefined,
+                observedTasks,
+              }
+            : {
+                status: 'timeout',
+                result: undefined,
+                observedTasks,
+                timeoutMs: opts.timeoutMs,
+              },
+        )
+      }, opts.timeoutMs)
+    }
+
+    opts.signal?.addEventListener('abort', onAbort)
+  })
+}
+
+export const observeSubTaskStream = async (
+  subTaskStream: TaskSubStream,
+  quitCondition: ((t: TaskNode) => boolean) | TaskContentType | TaskContentType[],
+  opts: processTasksOpts,
+) => {
+  const result = await observeSubTaskStreamDetailed(subTaskStream, quitCondition, opts)
+  if (result.status === 'matched') {
+    return { result: result.result, observedTasks: result.observedTasks }
+  }
+
+  if (result.status === 'error') {
+    throw result.error
+  }
+
+  const error =
+    result.status === 'aborted'
+      ? new Error('Aborted')
+      : new Error(`Timeout after ${result.timeoutMs ?? 0}ms`)
+
+  if (result.status === 'aborted') {
+    error.name = 'AbortError'
+  }
+
+  throw new Error(error.message, {
+    cause: {
+      status: result.status,
+      observedTasks: result.observedTasks,
+    },
+  })
+}
+
 // we make the opts mandatory on purpose so that people think about
 // some sort of quit condition.
-export const processTasks = <T extends { type: string }>(tyPort: Port<T | TaskyonMessage>) => {
+export const processTasksDetailed = <T extends { type: string }>(
+  tyPort: Port<T | TaskyonMessage>,
+) => {
   const send = sendTasks<T>(tyPort)
   return async (
     taskList: partialTaskDraft[][],
     quitCondition: ((t: TaskNode) => boolean) | TaskContentType | TaskContentType[],
     opts: processTasksOpts,
   ) => {
-    const { subTaskStream } = await send(taskList, opts)
-    const expectsError =
-      quitCondition === 'error' ||
-      (Array.isArray(quitCondition) && quitCondition.includes('error'))
-    const throwOnError = opts.throwOnError !== false && !expectsError
-    const matchesQuitCondition =
-      typeof quitCondition === 'string'
-        ? (task: TaskNode) => task.content.type === quitCondition
-        : typeof quitCondition === 'object' && Array.isArray(quitCondition)
-          ? (task: TaskNode) => quitCondition.includes(task.content.type)
-          : quitCondition
+    const { subTaskStream, initialIds } = await send(taskList, opts)
+    const result = await observeSubTaskStreamDetailed(subTaskStream, quitCondition, opts)
+    return { ...result, initialIds }
+  }
+}
 
-    return await new Promise<TaskNode>((resolve, reject) => {
-      if (opts.signal?.aborted) {
-        const err = new Error('Aborted')
-        err.name = 'AbortError'
-        reject(err)
-        return
-      }
-
-      let settled = false
-      let timeout: ReturnType<typeof setTimeout> | undefined
-
-      const cleanup = (unsub: () => void, onAbort: () => void) => {
-        unsub()
-        clearTimeout(timeout)
-        opts.signal?.removeEventListener('abort', onAbort)
-      }
-
-      const onAbort = () => {
-        if (settled) return
-        settled = true
-        cleanup(unsub, onAbort)
-        const err = new Error('Aborted')
-        err.name = 'AbortError'
-        reject(err)
-      }
-
-      const unsub = subTaskStream((task) => {
-        if (settled) return
-
-        if (throwOnError && task.content.type === 'error') {
-          settled = true
-          cleanup(unsub, onAbort)
-          reject(new Error(`Task processing failed on task ${task.id}`, { cause: task.content.data }))
-          return
-        }
-
-        if (matchesQuitCondition(task)) {
-          settled = true
-          cleanup(unsub, onAbort)
-          resolve(task)
-        }
-      })
-
-      if (opts.timeoutMs) {
-        timeout = setTimeout(() => {
-          if (settled) return
-          settled = true
-          cleanup(unsub, onAbort)
-          reject(new Error(`Timeout after ${opts.timeoutMs}ms`))
-        }, opts.timeoutMs)
-      }
-
-      opts.signal?.addEventListener('abort', onAbort)
-    })
+export const processTasks = <T extends { type: string }>(tyPort: Port<T | TaskyonMessage>) => {
+  const processDetailed = processTasksDetailed(tyPort)
+  return async (
+    taskList: partialTaskDraft[][],
+    quitCondition: ((t: TaskNode) => boolean) | TaskContentType | TaskContentType[],
+    opts: processTasksOpts,
+  ) => {
+    const result = await processDetailed(taskList, quitCondition, opts)
+    if (result.status === 'matched') {
+      return result.result
+    }
+    if (result.status === 'error') {
+      throw result.error
+    }
+    if (result.status === 'aborted') {
+      const error = new Error('Aborted')
+      error.name = 'AbortError'
+      throw error
+    }
+    throw new Error(`Timeout after ${result.timeoutMs ?? 0}ms`)
   }
 }

@@ -799,6 +799,9 @@ function generateFollowUpTasksFromResult(
   console.log('generate follow up task')
 
   const newTasks: partialTaskDraft[] = []
+  const hasNativeToolCalls =
+    Array.isArray(message.content) &&
+    message.content.some((content) => typeof content !== 'string' && content.type === 'tool-call')
 
   /*if(Array.isArray(message.content)){
     const sources = message.content.filter((m) => m.type === 'source')
@@ -843,6 +846,13 @@ function generateFollowUpTasksFromResult(
           const compiledTextContent = variableService
             ? compileTaskyonMessageString(txtContent, variableService)
             : txtContent
+
+          if (llmTools && hasNativeToolCalls) {
+            // Some providers return a text fragment alongside a native tool call.
+            // In that case the tool call is the real continuation signal, so we
+            // must not emit an assistant message plus `return` prematurely.
+            continue
+          }
 
           if (goal === 'SimpleCompletion' || goal === 'WebSearch' || llmTools) {
             // if we don't need to call a tool, we simply generate a normal message...

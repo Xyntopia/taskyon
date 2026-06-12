@@ -1,16 +1,13 @@
 // we can compile this file to js to js using "yarn build:lib"
 
 import type { FunctionCall, Port } from '@taskyon/taskyon/api'
-import { REMOTE_FUNCTION_TIMEOUT_MS, sendTasks } from '@taskyon/taskyon/api'
+import { REMOTE_FUNCTION_TIMEOUT_MS, processTasks, sendTasks } from '@taskyon/taskyon/api'
 import {
   // from frp bux with only very few dependencies
   createDuplexChannel, // utis/frpbus
   MessageChannelBridge, // utils/frpbus
   type ClientTool,
-  type TaskyonMessage,
 } from '@taskyon/taskyon/api'
-import type { partialTaskDraft } from '@taskyon/taskyon/api'
-import type { TaskContentType, TaskNode } from '../../taskyon/src/types/taskNode'
 import type { ByType } from '../../taskyon/src/utils/tsHelpers'
 // TODO: move this into some other part as well..  maybe into "GUI" types or somthing like that?
 import type {
@@ -22,117 +19,16 @@ export {
   createChatCompletionTask,
   createTool, // toolApi
   makeTaskResult, // toolApi
+  observeSubTaskStream,
+  processTasks,
+  processTasksDetailed,
+  sendTasks,
   toolCall, // toolApi
   type partialTaskDraft,
 } from '@taskyon/taskyon/api'
-export type { ClientTool, partialTyConfiguration, TaskyonGuiMessage, TaskyonMessage }
+export type { ClientTool, TaskyonMessage } from '@taskyon/taskyon/api'
+export type { partialTyConfiguration, TaskyonGuiMessage }
 export { REMOTE_FUNCTION_TIMEOUT_MS }
-
-export type processTasksOpts = {
-  timeoutMs?: number
-  signal?: AbortSignal
-  show?: boolean
-  throwOnError?: boolean
-}
-
-// we make the opts mandatory on purpose so that people think about
-// some sort of quit condition.
-export const processTasks = <T extends { type: string }>(tyPort: Port<T | TaskyonMessage>) => {
-  const send = sendTasks<T>(tyPort)
-  return async (
-    taskList: partialTaskDraft[][],
-    quitCondition: ((t: TaskNode) => boolean) | TaskContentType | TaskContentType[],
-    opts: processTasksOpts,
-  ) => {
-    const { initialIds } = await send(taskList, opts)
-    const subTasks = new Set<string>(initialIds)
-    const subTaskStream = tyPort.receive
-      .narrow(
-        (
-          m: T | TaskyonMessage,
-        ): m is ByType<'taskCreated', TaskyonMessage> & { task: { id: string } } => {
-          if (
-            m.type === 'taskCreated' &&
-            'task' in m &&
-            !!m.task?.id &&
-            !!m.task?.parentID &&
-            subTasks.has(m.task.parentID)
-          ) {
-            subTasks.add(m.task.id)
-            return true
-          }
-          return false
-        },
-      )
-      .map((msg: ByType<'taskCreated', TaskyonMessage> & { task: { id: string } }) => msg.task)
-    const expectsError =
-      quitCondition === 'error' || (Array.isArray(quitCondition) && quitCondition.includes('error'))
-    const throwOnError = opts.throwOnError !== false && !expectsError
-    const matchesQuitCondition =
-      typeof quitCondition === 'string'
-        ? (task: TaskNode) => task.content.type === quitCondition
-        : typeof quitCondition === 'object' && Array.isArray(quitCondition)
-          ? (task: TaskNode) => quitCondition.includes(task.content.type)
-          : quitCondition
-
-    return await new Promise<TaskNode>((resolve, reject) => {
-      if (opts.signal?.aborted) {
-        const err = new Error('Aborted')
-        err.name = 'AbortError'
-        reject(err)
-        return
-      }
-
-      let settled = false
-      let timeout: ReturnType<typeof setTimeout> | undefined
-
-      const cleanup = (unsub: () => void, onAbort: () => void) => {
-        unsub()
-        clearTimeout(timeout)
-        opts.signal?.removeEventListener('abort', onAbort)
-      }
-
-      const onAbort = () => {
-        if (settled) return
-        settled = true
-        cleanup(unsub, onAbort)
-        const err = new Error('Aborted')
-        err.name = 'AbortError'
-        reject(err)
-      }
-
-      const unsub = subTaskStream((task: TaskNode) => {
-        if (settled) return
-
-        if (throwOnError && task.content.type === 'error') {
-          settled = true
-          cleanup(unsub, onAbort)
-          reject(
-            new Error(`Task processing failed on task ${task.id}`, { cause: task.content.data }),
-          )
-          return
-        }
-
-        if (matchesQuitCondition(task)) {
-          settled = true
-          cleanup(unsub, onAbort)
-          resolve(task)
-        }
-      })
-
-      if (opts.timeoutMs) {
-        timeout = setTimeout(() => {
-          if (settled) return
-          settled = true
-          cleanup(unsub, onAbort)
-          reject(new Error(`Timeout after ${opts.timeoutMs}ms`))
-        }, opts.timeoutMs)
-      }
-
-      opts.signal?.addEventListener('abort', onAbort)
-    })
-  }
-}
 
 function safeClone<T>(data: T): T {
   try {

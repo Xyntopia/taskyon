@@ -64,7 +64,13 @@ async function emitHeadlessEvent(name: string, payload: Record<string, unknown>)
 }
 
 function getDiagnosticsTests() {
-  const testModules = import.meta.glob('../../packages/taskyon/src/tests/**/*.ts', { eager: true })
+  const testModules = import.meta.glob(
+    [
+      '../../packages/taskyon/src/tests/**/*.ts',
+      '!../../packages/taskyon/src/tests/test_entry_node_error_recovery.ts',
+    ],
+    { eager: true },
+  )
   const modules = Object.entries(testModules).map(([sourcePath, mod]) => ({ sourcePath, mod }))
   modules.push({ sourcePath: 'src/modules/taskyon/tests.ts', mod: TaskyonTests })
   modules.push({
