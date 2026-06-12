@@ -1,4 +1,5 @@
-import type { partialTaskDraft, TaskNode } from '@taskyon/taskyon'
+import { forgeTaskChain } from './createTasks'
+import type { partialTaskDraft, TaskNode } from '../types/taskNode'
 
 export type MessageExecutionMode = 'message' | 'websearch'
 
@@ -11,9 +12,12 @@ type BuildCreateNewTaskChainArgs = {
   mode: MessageExecutionMode
 }
 
-const cloneTaskDraft = (task: partialTaskDraft): partialTaskDraft => {
-  return structuredClone(task)
+type CreatedTaskChain = {
+  taskChain: partialTaskDraft[]
+  createdTasks: TaskNode[]
 }
+
+const cloneTaskDraft = (task: partialTaskDraft): partialTaskDraft => structuredClone(task)
 
 const withKeyword = (
   task: partialTaskDraft,
@@ -108,4 +112,15 @@ export const buildCreateNewTaskChain = ({
   }
 
   return newTaskChain
+}
+
+export const createNewTaskChain = async ({
+  priorTaskId,
+  ...args
+}: BuildCreateNewTaskChainArgs & {
+  priorTaskId?: string | undefined
+}): Promise<CreatedTaskChain> => {
+  const taskChain = buildCreateNewTaskChain(args)
+  const createdTasks = await forgeTaskChain([taskChain], [priorTaskId])
+  return { taskChain, createdTasks }
 }

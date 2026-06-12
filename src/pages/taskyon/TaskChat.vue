@@ -53,7 +53,6 @@
           class="q-pa-md col-auto self-stretch"
           :min-mode="state.minimalGui === 'iframe'"
           :expert-mode="state.appConfiguration.expertMode"
-          add-to-taskyon
         />
       </div>
       <component :is="ResetButton" v-if="ResetButton" color="secondary" flat mode="all" />
@@ -80,7 +79,6 @@
         :min-mode="state.minimalGui === 'iframe'"
         :expert-mode="state.appConfiguration.expertMode"
         style="max-width: 48rem"
-        add-to-taskyon
       />
     </div>
     <!--STICK ELEMENTS AREA...-->

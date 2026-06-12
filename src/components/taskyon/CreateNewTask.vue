@@ -221,17 +221,13 @@ import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
 import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
 import {
-  createTaskNode,
+  createNewTaskChain,
   generateTaskKeyWords,
   partialTaskDraft,
-  type TaskNode,
+  type MessageExecutionMode,
 } from '@taskyon/taskyon'
 import { watchThrottled } from '@vueuse/core'
 import { QSelect, useQuasar } from 'quasar'
-import {
-  buildCreateNewTaskChain,
-  type MessageExecutionMode,
-} from 'src/modules/taskyon/createNewTaskChain'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import type { ReadonlyDeep } from 'type-fest'
@@ -247,17 +243,11 @@ const {
   expertMode = false,
   entryNode = undefined,
   p2pTopic = undefined,
-  addToTaskyon,
 } = defineProps<{
   entryNode?: ReadonlyDeep<partialTaskDraft> | undefined
   minMode?: boolean
   expertMode?: boolean
   p2pTopic?: string // the p2p network that we want to send the task to
-  addToTaskyon?: boolean
-}>()
-
-const emit = defineEmits<{
-  (e: 'addTasks', t: partialTaskDraft[]): void
 }>()
 
 const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
@@ -394,22 +384,6 @@ watchThrottled(
 
 const $q = useQuasar()
 
-async function createTaskChainWithIds(taskChain: partialTaskDraft[], priorTaskId?: string) {
-  const createdTasks: TaskNode[] = []
-  let lastTaskId = priorTaskId
-
-  for (const task of taskChain) {
-    const nextTask = await createTaskNode(
-      { ...task, priorID: lastTaskId },
-      { createMeta: 'missing' },
-    )
-    createdTasks.push(nextTask)
-    lastTaskId = nextTask.id
-  }
-
-  return createdTasks
-}
-
 async function addNewTask(mode: MessageExecutionMode, p2pTopic?: string) {
   console.log('pubishing on topic:', p2pTopic)
   const kwdsPromise = getCurrentKeywordsWithTimeout(300)
@@ -421,43 +395,37 @@ async function addNewTask(mode: MessageExecutionMode, p2pTopic?: string) {
   const ty = await tystate.taskyon
   const fileIds = await ty.addFiles(fileAttachments.value, 'opfs')
   const kwds = (await kwdsPromise) ?? currentKeywords.value
-  const newTaskChain = buildCreateNewTaskChain({
+  const createTaskChainArgs = {
     currentTask: tystate.currentTask.value,
     draftTask: currentnewTask.value,
     entryNode: entryNode ? partialTaskDraft.parse(structuredClone(entryNode)) : undefined,
     fileIds,
     keyword: kwds,
     mode,
-  })
-
-  // only add to taskyon, if
-  if (addToTaskyon) {
-    const createdTasks = await createTaskChainWithIds(
-      newTaskChain,
-      state.llmSettings.selectedTaskId,
-    )
-    const newTaskId = createdTasks.at(-1)
-
-    if (newTaskId) {
-      tystate.api.send({
-        type: 'tasks',
-        tasks: createdTasks,
-        execute: true,
-        show: true,
-        origin: window.location.origin,
-      })
-    }
-
-    state.setSelectedTask(newTaskId?.id)
   }
+  const { createdTasks } = await createNewTaskChain({
+    ...createTaskChainArgs,
+    priorTaskId: state.llmSettings.selectedTaskId,
+  })
+  const newTaskId = createdTasks.at(-1)
+
+  if (newTaskId) {
+    tystate.api.send({
+      type: 'tasks',
+      tasks: createdTasks,
+      execute: true,
+      show: true,
+      origin: window.location.origin,
+    })
+  }
+
+  state.setSelectedTask(newTaskId?.id)
 
   // and empty out the contents for the next chat message :)
   if (currentnewTask.value.role === 'user') {
     tystate.setNewContentDraft({ type: 'message', data: '' })
     fileAttachments.value = []
   }
-
-  emit('addTasks', newTaskChain)
 }
 
 function attachFileToDraft(newFiles: File[]) {

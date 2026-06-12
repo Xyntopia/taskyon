@@ -13,6 +13,6 @@
 - Validate and narrow dynamic values once at the boundary, convert them to strongly typed objects there, and pass typed values downstream instead of repeating ad-hoc `isRecord` checks.
 - Always fix the root cause, not the symptom. Do not soften types, widen contracts, or add downstream guards just to silence errors; make the value strongly typed at the source and validate it there.
 - Do not return fake no-op implementations just to preserve an API shape. If a capability is unavailable in a runtime, model it explicitly as optional and branch at the caller or during registration.
-- Always run automatic lint error correction first (`yarn lint:fix` or package-local `lint:fix`) before final linting.
+- Always run automatic lint error correction first, but only for the files you changed or created (`yarn lint:fix -- <path ...>` or the package-local equivalent), before final linting.
 - Run formatting only on the specific files you edited, using the repository formatter configuration (for example `yarn format:file <path ...>`), not the whole repository.
 - Always run `yarn lint` at the end and fix all reported errors.

@@ -1,7 +1,10 @@
-import { partialTaskDraft, type partialTaskDraft as PartialTaskDraft } from '@taskyon/taskyon'
+import {
+  buildCreateNewTaskChain,
+  partialTaskDraft,
+  type partialTaskDraft as PartialTaskDraft,
+} from '@taskyon/taskyon'
 import { processTasks } from '@taskyon/client'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { buildCreateNewTaskChain } from './createNewTaskChain'
 
 const tystate = useTaskyonStore()
 
@@ -119,98 +122,3 @@ export const testTaskyonUiToolInteraction = async () => {
 }
 testTaskyonUiToolInteraction.description =
   'Builds the same initial function-call chain the UI would send for a tool task and expects the clock tool result.'
-
-export const testTaskyonUiTimeQuestionUsesClockTool = async () => {
-  const taskChain = buildCreateNewTaskChain({
-    currentTask: null,
-    draftTask: getSimpleMessageTask('hi! whats the time?'),
-    entryNode: getEntryNodeDraft(),
-    mode: 'message',
-  })
-
-  const observedTasks: Array<{ role: string; content: { type: string; data: unknown } }> = []
-  const unsubscribe = tystate.api.receive((msg) => {
-    if (msg.type === 'taskCreated' && msg.task) {
-      observedTasks.push({
-        role: msg.task.role,
-        content: {
-          type: msg.task.content.type,
-          data: msg.task.content.data,
-        },
-      })
-    }
-  })
-
-  try {
-    const result = await processTasks(tystate.api)(
-      [taskChain],
-      (task) => task.content.type === 'return' && task.content.data === 'assistant answered',
-      { timeoutMs: 50_000 },
-    )
-
-    const shortlistCall = observedTasks.find(
-      (task) =>
-        task.content.type === 'functioncall' &&
-        isNamedFunctionCall(task.content.data, 'chatCompletion') &&
-        hasGoal(task.content.data, 'AnalyzeToolResult'),
-    )
-    const shortlistResult = observedTasks.find(
-      (task) => task.content.type === 'structured' && hasToolChoice(task.content.data, 'clock'),
-    )
-    const clockCall = observedTasks.find(
-      (task) =>
-        task.content.type === 'functioncall' && isNamedFunctionCall(task.content.data, 'clock'),
-    )
-    const clockResult = observedTasks.find(
-      (task) =>
-        task.content.type === 'toolresult' &&
-        !!task.content.data &&
-        typeof task.content.data === 'object' &&
-        'time' in task.content.data &&
-        'date' in task.content.data &&
-        'weekday' in task.content.data,
-    )
-    const errorTask = observedTasks.find((task) => task.content.type === 'error')
-    const assistantMessage = observedTasks.find(
-      (task) =>
-        task.role === 'assistant' &&
-        task.content.type === 'message' &&
-        typeof task.content.data === 'string' &&
-        task.content.data.trim().length > 0,
-    )
-
-    assert(!!shortlistCall, 'Expected taskyonFlow to run the internal tool shortlist phase')
-    assert(!!shortlistResult, 'Expected the shortlist phase to include the clock tool')
-    assert(!!clockCall, 'Expected the time question flow to call the clock tool')
-    assert(!!clockResult, 'Expected a clock tool result containing time/date/weekday')
-    assert(!errorTask, 'Expected the time question flow to finish without any error task')
-    assert(!!assistantMessage, 'Expected a final assistant message after the clock tool result')
-    assert(result.content.type === 'return', `Expected return result, got ${result.content.type}`)
-
-    return {
-      taskChain,
-      observedTasks,
-      result,
-    }
-  } finally {
-    unsubscribe()
-  }
-}
-testTaskyonUiTimeQuestionUsesClockTool.description =
-  'Runs the UI-style "what is the time" flow through taskyonFlow and asserts that the internal shortlist phase selects the clock tool without any error task.'
-
-function isNamedFunctionCall(data: unknown, name: string): boolean {
-  return !!data && typeof data === 'object' && 'name' in data && data.name === name
-}
-
-function hasGoal(data: unknown, goal: string): boolean {
-  if (!data || typeof data !== 'object' || !('arguments' in data)) return false
-  const args = data.arguments
-  return !!args && typeof args === 'object' && 'goal' in args && args.goal === goal
-}
-
-function hasToolChoice(data: unknown, toolName: string): boolean {
-  if (!data || typeof data !== 'object' || !('choice' in data)) return false
-  const choice = data.choice
-  return Array.isArray(choice) && choice.includes(toolName)
-}

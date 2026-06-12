@@ -53,10 +53,13 @@ export async function ensureValidTaskId(task: partialTaskDraft): Promise<TaskNod
 
 // the following function can be used to calculate Ids for an entire
 // chain.
-export const forgeTaskChain = async (tasks: partialTaskDraft[][]) => {
+export const forgeTaskChain = async (
+  tasks: partialTaskDraft[][],
+  priorTaskIds: Array<string | undefined> = [],
+) => {
   const flattened: TaskNode[] = []
-  for (const tl of tasks) {
-    let lastTaskId: string | undefined = undefined
+  for (const [index, tl] of tasks.entries()) {
+    let lastTaskId = priorTaskIds[index]
     for (const t of tl) {
       const task = await createTaskNode({ ...t, priorID: lastTaskId }, { createMeta: 'missing' })
       lastTaskId = task.id
