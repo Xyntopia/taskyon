@@ -7,6 +7,7 @@ import {
 import { DEFAULT_POLITE_HTTP_MIN_DELAY_MS } from '../utils/politeHttp'
 import { processTasksDetailed } from '../api'
 import { tyCore } from '../core/init'
+import { createDefaultTaskyonToolSetup } from '../tools'
 import { opfsStorageTool } from '../tools/fileTools'
 import {
   buildBrowserMcpImportChain,
@@ -443,6 +444,8 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
         arguments: {},
       }),
     () => ({}),
+    undefined,
+    { toolSetup: createDefaultTaskyonToolSetup() },
   )
   const toolRpcExecutor = await registerToolRpcTools({
     port: ty.port,

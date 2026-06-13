@@ -5,6 +5,7 @@ import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnostics
 import { createTaskyonClient, processTasksDetailed } from '../api'
 import { tyCore } from '../core/init'
 import { createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
+import { createDefaultTaskyonToolSetup } from '../tools'
 import { createStandardEntryNodeTool } from '../tools/entryNode'
 import { createNodeTaskyonDocumentationProviderTool } from '../tools/nodeTaskyonDocumentationProvider'
 import { llmSettings } from '../types/profiles'
@@ -109,6 +110,7 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
     }),
     undefined,
     {
+      toolSetup: createDefaultTaskyonToolSetup(),
       indexTaskVectors: false,
       nodePgLiteDataDir: dataDir,
     },

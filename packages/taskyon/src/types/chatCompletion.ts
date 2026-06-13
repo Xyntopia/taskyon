@@ -1,5 +1,13 @@
 import z from 'zod'
+import type { streamText } from 'ai'
 import { Annotation } from './taskNode'
+
+type StreamOptions = Parameters<typeof streamText>[0]
+export type ChatCompletionStreamChunk = Parameters<Required<StreamOptions>['onChunk']>[0]['chunk']
+export type ChatCompletionStreamEvent = {
+  taskId: string
+  chunk: ChatCompletionStreamChunk
+}
 
 export const OpenAIMessage = z.object({
   content: z.string().nullish(),

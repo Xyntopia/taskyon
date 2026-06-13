@@ -1,33 +1,6 @@
 import { dump } from 'js-yaml'
 import z from 'zod'
-import {
-  chatCompletionToolName,
-  createChatCompletionTool,
-  type chunkStreamType,
-} from '../tools/chatCompletionTool'
-import { devTools } from '../tools/devTools'
-import {
-  createDocumentationIndexTool,
-  createTaskyonDocumentationTool,
-} from '../tools/documentationTool'
-import { executeJavaScript } from '../tools/executeJavaScript'
-import { executePythonScript } from '../tools/executePython'
-import { fileTools } from '../tools/fileTools'
-import { smallHelperTools } from '../tools/helperCollection'
-import { localVectorStore } from '../tools/localVectorStore'
-import { proceduralTools } from '../tools/proceduralGraphics'
-import { taskOrganizationTools, taskSearcher } from '../tools/TaskPlannerTool'
-import { testingTools } from '../tools/testTools'
-import {
-  addNewTool,
-  createMcpToolImporter,
-  createToolSearcher,
-  toolCreationWizard,
-} from '../tools/toolTools'
-import { useFullSmallTools } from '../tools/usefulSmallTools'
-import { webResearchTools } from '../tools/webResearchTool'
-import { wfcGenerator } from '../tools/wavefunctioncollapse'
-import { appDevTools } from '../tools/webAppDev'
+import type { ChatCompletionStreamEvent } from '../types/chatCompletion'
 import type { llmSettings } from '../types/profiles'
 import { createSubtasksResult, type InternalTool } from '../types/toolApi'
 import type { FunctionArguments } from '../types/tools'
@@ -44,7 +17,12 @@ import type { CryptoSession } from '../utils/cryptoSession'
 import { createCryptoSession } from '../utils/cryptoSession'
 import type { EncryptedDataRow } from '../utils/encrypt'
 import { encryptCompressObject } from '../utils/fileUtils'
-import type { IframeMultiPlexer, Port, ProtocolMessage } from '@taskyon/common/modules/frpBus'
+import type {
+  IframeMultiPlexer,
+  Port,
+  ProtocolMessage,
+  Stream,
+} from '@taskyon/common/modules/frpBus'
 import {
   createIframeMux,
   createMessagePortAdapter,
@@ -57,6 +35,7 @@ import {
 } from '@taskyon/common/modules/frpBus'
 import { createProxyApi, createProxyFunction } from '../utils/objHelpers'
 import { configureNodePgLiteDataDir, getDatabase } from '../utils/pglite.api'
+import type { TyPGDB } from '../utils/pglite.api'
 import type { Thunk } from '../utils/tsHelpers'
 import { MAX_REMOTE_FUNCTION_TIMEOUT_MS, taskyonProtocol } from '../api/taskyonProtocol'
 import type { TaskManagerStorage, TyTaskManager } from './taskManager'
@@ -82,7 +61,7 @@ type TaskStreamEvent = Parameters<TyTaskManager['taskStream']>[0] extends (
 
 type SessionStreamObservers = {
   worker: (event: TyTaskStreamData) => void
-  chatCompletion: (event: chunkStreamType) => void
+  chatCompletion: (event: ChatCompletionStreamEvent) => void
   task: Parameters<TyTaskManager['taskStream']>[0]
 }
 
@@ -90,6 +69,19 @@ type TaskManagerStorageFactory = (args: {
   sessionId: string
   db: Awaited<ReturnType<typeof getDatabase>>
 }) => Promise<TaskManagerStorage> | TaskManagerStorage
+
+export type TyCoreToolSetup = {
+  baseTools: InternalTool[]
+  chatCompletionToolName: string
+  createSessionTools: (deps: {
+    db: TyPGDB
+    llmSettings: Thunk<ReadonlyDeep<llmSettings>>
+    taskManager: TyTaskManager
+  }) => {
+    tools: InternalTool[]
+    chatCompletionStream?: Stream<ChatCompletionStreamEvent>
+  }
+}
 
 function createApi(
   insidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
@@ -184,27 +176,6 @@ const createRuntimeIframeMux = (): IframeMultiPlexer => {
 }
 
 const staticContext = (createIframeMultiPlexer: CreateIframeMultiPlexer) => {
-  const ToolList: InternalTool[] = [
-    ...smallHelperTools,
-    ...appDevTools,
-    ...useFullSmallTools,
-    ...devTools,
-    ...testingTools,
-    ...fileTools,
-    ...taskOrganizationTools,
-    ...webResearchTools,
-    ...proceduralTools,
-    addNewTool,
-    wfcGenerator,
-    executePythonScript,
-    executeJavaScript,
-    toolCreationWizard,
-    arcgisMapTool,
-    overpassMapTool,
-    //ragSearchTool,
-    // TODO: finish the ragAddTool
-    //ragAddTool,
-  ]
   // we use this as a global bus which make message iframes "postMessage" available
   // to taskyon & tools
   const iframeMultiPlexer = createIframeMultiPlexer()
@@ -229,7 +200,6 @@ const staticContext = (createIframeMultiPlexer: CreateIframeMultiPlexer) => {
     outsidePort,
     insidePort,
     iframeMultiPlexer,
-    ToolList,
   }
 }
 
@@ -237,7 +207,7 @@ const dynamicContext =
   (
     llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
     entryNode: Thunk<ReadonlyDeep<partialTaskDraft>>,
-    baseToolList: InternalTool[],
+    toolSetup: TyCoreToolSetup,
     outsidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
     insidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
     iframeMultiPlexer: IframeMultiPlexer,
@@ -280,30 +250,12 @@ const dynamicContext =
         },
       )
 
-    // add tools which have access to the taskManagerInstance itself and need to be
-    // regenerated for each session
-    // TODO: we should get rid of this and supply an instanc eof the taskManager insider the tool
-    // function itself if it is a "normal" function...
-    // TODO: get rid of llmSettings completly!
-    const { chatCompletion, stream: chatCompletionStream } = createChatCompletionTool(() => {
-      const settings = llmSettings()
-      return {
-        selectedApi: settings.selectedApi ?? 'taskyon',
-        llmApis: settings.llmApis,
-        siteUrl: settings.siteUrl,
-      }
-    }, taskManagerInstance)
-
-    const sessionToolList = [
-      ...baseToolList,
-      localVectorStore(db),
-      createDocumentationIndexTool(db),
-      createTaskyonDocumentationTool(db),
-      chatCompletion,
-      createToolSearcher(taskManagerInstance),
-      createMcpToolImporter(taskManagerInstance),
-      taskSearcher(taskManagerInstance),
-    ]
+    const sessionTools = toolSetup.createSessionTools({
+      db,
+      llmSettings,
+      taskManager: taskManagerInstance,
+    })
+    const sessionToolList = [...toolSetup.baseTools, ...sessionTools.tools]
     taskManagerInstance.addDefaultTools(sessionToolList)
     await taskManagerInstance.updateToolDefinitions()
     //const { port: taskPort } = createZodPort(inPort, TaskWorkerMessage)
@@ -444,7 +396,7 @@ const dynamicContext =
     )
     const unsubscribeSessionStreams = [
       workerStream(options.streamObservers.worker),
-      chatCompletionStream(options.streamObservers.chatCompletion),
+      sessionTools.chatCompletionStream?.(options.streamObservers.chatCompletion) ?? (() => {}),
       taskManagerInstance.taskStream(options.streamObservers.task),
     ]
     //##################### END INIT CTX #################
@@ -485,6 +437,7 @@ export async function tyCore(
   toolchainConfig: Thunk<Record<string, FunctionArguments>>,
   initialCryptoSession?: CryptoSession,
   options?: {
+    toolSetup?: TyCoreToolSetup
     createIframeMultiPlexer?: CreateIframeMultiPlexer
     indexTaskVectors?: boolean
     nodePgLiteDataDir?: string
@@ -492,18 +445,21 @@ export async function tyCore(
     taskManagerStorageFactory?: TaskManagerStorageFactory
   },
 ) {
-  // TODO: make webpack automatically add all tool files from /tools/*
-
   configureNodePgLiteDataDir(
     options?.nodePgLiteDataDir ? (name) => `${options.nodePgLiteDataDir}/${name}` : undefined,
   )
 
-  const { outsidePort, insidePort, iframeMultiPlexer, ToolList } = staticContext(
+  const { outsidePort, insidePort, iframeMultiPlexer } = staticContext(
     options?.createIframeMultiPlexer ?? createRuntimeIframeMux,
   )
   const workerStream = createStream<TyTaskStreamData>()
-  const chatCompletionStream = createStream<chunkStreamType>()
+  const chatCompletionStream = createStream<ChatCompletionStreamEvent>()
   const taskStream = createStream<TaskStreamEvent>()
+  const toolSetup = options?.toolSetup ?? {
+    baseTools: [],
+    chatCompletionToolName: 'chatCompletion',
+    createSessionTools: () => ({ tools: [] }),
+  }
 
   // TODO: encapsulate this into a "createCtx" function
   //       which also handles the initilaization of ctx..
@@ -515,7 +471,7 @@ export async function tyCore(
   const ctxCreator = dynamicContext(
     llmSettings,
     entryNode,
-    [...ToolList],
+    toolSetup,
     outsidePort,
     insidePort,
     iframeMultiPlexer,
@@ -565,7 +521,9 @@ export async function tyCore(
     // updating and getting ApiKeys for chat completion has a special
     // treatment here, because we need it very often in our UI
     updateChatCompletionApiKey: async (key: string, value?: string) => {
-      const { tool, def } = await ctx.taskManagerInstance.getToolDefinition(chatCompletionToolName)
+      const { tool, def } = await ctx.taskManagerInstance.getToolDefinition(
+        toolSetup.chatCompletionToolName,
+      )
       if (tool) {
         const toolId = await generateSecretId(def?.id, tool)
         if (!value) await ctx.secretStore.deleteSecret(toolId, key)

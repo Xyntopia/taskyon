@@ -1,5 +1,10 @@
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import type { TaskNode } from '@taskyon/taskyon'
+import { createHash } from 'node:crypto'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { pathToFileURL } from 'node:url'
 
 export type WorkerEvent = {
   stage?: string
@@ -34,6 +39,7 @@ const toYaml = (value: unknown) =>
 
 const MAX_RESULT_LINES = 3
 const CONTENT_INDENT = '  '
+const HTML_TAG_PATTERN = /<\/?[a-z][\s\S]*>/i
 
 const truncateToLines = (text: string, maxLines: number) => {
   const lines = text.split('\n')
@@ -49,6 +55,47 @@ const indentMultiline = (text: string, indent: string = CONTENT_INDENT) =>
     .split('\n')
     .map((line) => `${indent}${line}`)
     .join('\n')
+
+const hasHtmlMarkup = (text: string) => HTML_TAG_PATTERN.test(text)
+
+const buildHtmlPreviewDocument = (html: string) => `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Taskyon HTML Preview</title>
+  </head>
+  <body>
+${html}
+  </body>
+</html>
+`
+
+export const writeHtmlPreview = (task: Pick<TaskNode, 'id'>, html: string): string | null => {
+  if (!hasHtmlMarkup(html)) return null
+
+  const previewDir = join(tmpdir(), 'taskyon-tycli-html-previews')
+  const hash = createHash('sha256')
+    .update(task.id)
+    .update('\0')
+    .update(html)
+    .digest('hex')
+    .slice(0, 16)
+  const previewPath = join(previewDir, `${hash}.html`)
+  try {
+    mkdirSync(previewDir, { recursive: true })
+    writeFileSync(previewPath, buildHtmlPreviewDocument(html), 'utf8')
+    return pathToFileURL(previewPath).toString()
+  } catch {
+    return null
+  }
+}
+
+export const renderHtmlPreviewText = (task: Pick<TaskNode, 'id' | 'role'>, text: string) => {
+  if (task.role !== 'assistant') return text
+  const previewUrl = writeHtmlPreview(task, text)
+  return previewUrl ? `HTML preview: ${previewUrl}` : text
+}
 
 const color = (text: string, code: string) =>
   process.stdout.isTTY ? `\x1b[${code}m${text}\x1b[0m` : text
@@ -104,8 +151,8 @@ const renderTaskSummary = (task: TaskNode, showRoleTag: boolean): string => {
   if (task.content.type === 'message')
     return color(
       showRoleTag
-        ? `[${role}|message]\n${indentMultiline(String(task.content.data))}`
-        : String(task.content.data),
+        ? `[${role}|message]\n${indentMultiline(renderHtmlPreviewText(task, String(task.content.data)))}`
+        : renderHtmlPreviewText(task, String(task.content.data)),
       roleColorCode(role),
     )
   if (task.content.type === 'functioncall')

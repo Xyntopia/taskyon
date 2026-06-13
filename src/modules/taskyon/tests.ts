@@ -39,7 +39,9 @@ import {
 } from '@taskyon/taskyon/api'
 import { authenticateWithPopup } from '@taskyon/taskyon/browser'
 import { getDatabase } from '@taskyon/taskyon/db'
+import { buildPmtilesUrlCandidates } from '@taskyon/common/modules/pmtilesUtils'
 import { reconcileWithDefaults } from '@taskyon/common/modules/utils'
+import { parseTaskyonMapWidgetState } from '@taskyon/ui/gis/taskyonMapWidget'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import {
@@ -79,6 +81,51 @@ const getCurrentProfileSettingsForDiagnostics = (): TaskyonProfileSettings => {
     llmSettings: snapshot.llmSettings,
     toolchainConfig: snapshot.toolchainConfig,
   }
+}
+
+export function testPmtilesUrlCandidateHelpers() {
+  const directCandidates = buildPmtilesUrlCandidates('https://example.test/world.pmtiles')
+  assert(
+    JSON.stringify(directCandidates) === JSON.stringify(['https://example.test/world.pmtiles']),
+    'Expected exact PMTiles URL to stay unchanged',
+  )
+
+  const directoryCandidates = buildPmtilesUrlCandidates('https://example.test/maps/', {
+    suffixes: ['world.pmtiles', '/basemap.pmtiles', ''],
+  })
+  assert(
+    JSON.stringify(directoryCandidates) ===
+      JSON.stringify([
+        'https://example.test/maps',
+        'https://example.test/maps.pmtiles',
+        'https://example.test/maps/world.pmtiles',
+        'https://example.test/maps/basemap.pmtiles',
+      ]),
+    'Expected directory PMTiles URL candidates',
+  )
+}
+
+export function testTaskyonMapWidgetStateParser() {
+  const parsed = parseTaskyonMapWidgetState({
+    mode: 'geojson',
+    query: 'cafes in Paris',
+    locations: [{ name: 'Cafe', lat: 48.8566, lng: 2.3522 }],
+    featureCollection: {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [2.3522, 48.8566] },
+          properties: { name: 'Cafe' },
+        },
+      ],
+    },
+  })
+
+  assert(parsed !== null, 'Expected valid map widget state')
+  assert(parsed.mode === 'geojson', 'Expected geojson widget mode')
+  assert(parsed.featureCollection?.features.length === 1, 'Expected one parsed feature')
+  assert(parseTaskyonMapWidgetState({ mode: 'locations', query: 'empty', locations: [] }) === null)
 }
 
 export function testTaskyonProfileSettingsHelpers() {

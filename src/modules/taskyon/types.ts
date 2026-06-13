@@ -108,6 +108,10 @@ export const appConfiguration = z.object({
     description: 'Enable web search button in message editor.',
     title: 'Web Search Button',
   }),
+  pmtilesCacheMaxSizeMb: z.number().int().min(64).max(10240).default(1024).meta({
+    title: 'PMTiles Cache Size',
+    description: 'Max OPFS cache size per PMTiles archive in megabytes.',
+  }),
   guiMode: z.enum(['auto', 'iframe', 'default', 'minChat']).default('auto').meta({
     description: 'Sets whether we want to have a minimalist chat or the full app',
   }),
@@ -126,7 +130,7 @@ export const appConfiguration = z.object({
 export type appConfiguration = z.infer<typeof appConfiguration>
 
 export const TyProfile = z.object({
-  version: z.literal(27).meta({
+  version: z.literal(28).meta({
     description:
       'whenever the schema of the settings change, this number will get changed as well...',
   }),

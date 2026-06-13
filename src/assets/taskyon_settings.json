@@ -1,5 +1,5 @@
 {
-  "version": 27,
+  "version": 28,
   "appConfiguration": {
     "darkTheme": "auto",
     "appConfigurationUrl": "/taskyon_settings.json",
@@ -8,6 +8,7 @@
     "showCosts": false,
     "gdriveDir": "taskyon",
     "useEnterToSend": "auto",
+    "pmtilesCacheMaxSizeMb": 1024,
     "guiMode": "auto",
     "primaryColor": "#2A3548",
     "secondaryColor": "#F78F3B"

@@ -88,6 +88,20 @@
             :icons="settingsIcons.appConfiguration as iconMap"
             class="fit"
           />
+          <q-separator size="xl" spaced class="self-stretch" />
+          <div class="row items-center justify-between fit" style="max-width: 900px">
+            <div>
+              <div class="text-subtitle2">PMTiles OPFS Cache Info</div>
+              <div class="text-caption">Single-file cache diagnostics and current limits.</div>
+            </div>
+            <q-btn flat dense label="Refresh" @click="refreshPmtilesCacheInfo" />
+          </div>
+          <ObjectView
+            v-model="pmtilesCacheInfoModel"
+            :read-only="true"
+            :copy-object-btn="true"
+            class="fit"
+          />
         </q-tab-panel>
       </q-tab-panels>
     </q-card>
@@ -97,6 +111,7 @@
 <script setup lang="ts">
 import FadeAwayScrollPage from '@taskyon/ui/components/FadeAwayScrollPage.vue'
 import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
+import { getPmtilesOpfsCacheDebugSnapshot } from '@taskyon/common/modules/pmtilesOpfsCache'
 import {
   convertZodToJsonSchemaCached,
   FunctionArguments as FunctionArgumentsSchema,
@@ -110,7 +125,7 @@ import { iconRegistry, settingsIcons } from 'src/modules/icons'
 import { TyProfile } from 'src/modules/taskyon/types'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -152,6 +167,28 @@ const llmSettingsModel = computed({
   set: (nextValue) => {
     state.patchLLMSettings(nextValue)
   },
+})
+
+const pmtilesCacheInfoModel = ref<Record<string, unknown>>({
+  loading: true,
+})
+
+const refreshPmtilesCacheInfo = async () => {
+  pmtilesCacheInfoModel.value = {
+    loading: true,
+  }
+  try {
+    pmtilesCacheInfoModel.value = await getPmtilesOpfsCacheDebugSnapshot()
+  } catch (error) {
+    pmtilesCacheInfoModel.value = {
+      loading: false,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
+onMounted(() => {
+  void refreshPmtilesCacheInfo()
 })
 
 const selectedTab = computed(() => {

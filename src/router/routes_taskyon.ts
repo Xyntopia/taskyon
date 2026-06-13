@@ -2,6 +2,7 @@ import { type RouteRecordRaw } from 'vue-router'
 import { mdRoutes } from './routes_default'
 import { defineAsyncComponent } from 'vue'
 import LoadCircle from '@taskyon/ui/components/LoadingCircle.vue'
+import { taskyonMapWidgetRoutePath } from '@taskyon/ui/gis/taskyonMapWidget'
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import { loadTaskChatPage } from './taskChatLoader'
 
@@ -266,6 +267,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     path: '/',
     component: () => import('layouts/EmptyLayout2.vue'),
     children: [
+      {
+        path: taskyonMapWidgetRoutePath,
+        component: () => import('pages/taskyon/MapWidgetPage.vue'),
+        meta: {
+          title: 'Map widget',
+          description: 'Embedded task message map widget',
+        },
+      },
       {
         path: '/dockview',
         component: () => import('pages/DockViewTest.vue'),

@@ -3,6 +3,7 @@ import './node-shims'
 import { createInterface } from 'node:readline/promises'
 import { emitKeypressEvents } from 'node:readline'
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import process from 'node:process'
@@ -46,8 +47,11 @@ import {
   taskyonProtocol,
   taskyonStorageProtocol,
 } from '@taskyon/taskyon/api'
+import { createDefaultTaskyonToolSetup } from '@taskyon/taskyon/tools'
 import { setChatCompletionTraceWriter } from '@taskyon/taskyon/tools/chatCompletionTrace'
 import { createNodeTaskyonDocumentationProviderTool } from '@taskyon/taskyon/tools/nodeTaskyonDocumentationProvider'
+import { mapSearchTool } from '@taskyon/ui/gis/mapSearchTool'
+import { overpassMapTool } from '@taskyon/ui/gis/overpassMapTool'
 import { InternalTool as InternalToolSchema } from '../../taskyon/src/types/toolApi'
 import {
   initPersistentCryptoSession,
@@ -77,6 +81,7 @@ import {
 import { hasInterruptibleWorkerActivity } from './cli/interruptState'
 import { syncProviderRuntimeConfig } from './cli/runtime'
 import {
+  renderHtmlPreviewText,
   renderTaskProgress,
   renderWorkerProgress,
   resolveWorkerStatusText,
@@ -816,7 +821,27 @@ function formatJsonResult(value: unknown): string {
   return JSON.stringify(value, null, 2)
 }
 
+function formatClientCommandResult(value: unknown): string {
+  if (typeof value !== 'string') return formatJsonResult(value)
+
+  return renderHtmlPreviewText(
+    {
+      id: `client-command-result:${createHash('sha256').update(value).digest('hex').slice(0, 16)}`,
+      role: 'assistant',
+    },
+    value,
+  )
+}
+
 const taskCreatedAt = (task: TaskNode) => task.created_at ?? 0
+
+const isMapToolName = (toolName: string) =>
+  toolName === mapSearchTool.name || toolName === overpassMapTool.name
+
+const isHtmlMessageTask = (task: TaskNode) =>
+  task.content.type === 'message' &&
+  typeof task.content.data === 'string' &&
+  task.content.data.includes('<')
 
 type CompactTaskTreeNode = {
   id: string
@@ -958,13 +983,19 @@ async function invokeTaskyonToolTask(
   await runtime.client.task.createChain({
     tasks: taskChain,
     execute: true,
-    show: false,
+    show: true,
   })
   const result = await waitForTaskResult(
     runtime.taskPort,
     taskChain.map((task) => task.id),
-    ['toolresult', 'return', 'error'],
+    ['message', 'return', 'error'],
     10 * 60 * 1000,
+    undefined,
+    undefined,
+    undefined,
+    isMapToolName(invocation.toolName)
+      ? (task) => task.content.type !== 'message' || isHtmlMessageTask(task)
+      : undefined,
   )
   if (result.content.type === 'error') {
     throw new Error(`Tool '${invocation.toolName}' failed.`, { cause: result.content.data })
@@ -1309,6 +1340,7 @@ async function waitForTaskResult(
   signal?: AbortSignal,
   fallbackCondition?: (task: TaskNode) => boolean,
   isFallbackReady?: () => boolean,
+  acceptTask?: (task: TaskNode) => boolean,
 ) {
   const subTasks = new Set<string>(initialIds)
   const quitTypes = Array.isArray(quitCondition) ? quitCondition : [quitCondition]
@@ -1348,6 +1380,7 @@ async function waitForTaskResult(
       if (!msg.task.parentID || !subTasks.has(msg.task.parentID)) return
       subTasks.add(msg.task.id)
       if (!quitTypes.includes(msg.task.content.type)) return
+      if (acceptTask && !acceptTask(msg.task)) return
       if (fallbackCondition?.(msg.task)) {
         fallbackTask = msg.task
         if (isFallbackReady?.()) {
@@ -2247,7 +2280,7 @@ async function handleSettingsCommand(
 
 async function handleClientCommand(runtime: TaskyonClientCommandRuntime, parsedArgs: string) {
   const result = await invokeTaskyonClient(runtime, parsedArgs)
-  writeLine(formatJsonResult(result))
+  writeLine(formatClientCommandResult(result))
 }
 
 async function handleTreeCommand(args: {
@@ -2560,6 +2593,7 @@ async function main() {
     }),
     cryptoSession,
     {
+      toolSetup: createDefaultTaskyonToolSetup(),
       createIframeMultiPlexer: () =>
         createUnavailableIframeMux('Iframe message bridging is not available in tycli.'),
       indexTaskVectors: false,
@@ -2626,6 +2660,8 @@ async function main() {
     explorationTool,
     updateFilesTool,
     downloadFileTool,
+    mapSearchTool,
+    overpassMapTool,
     cliBashTool,
     createNodeTaskyonDocumentationProviderTool(),
   ].map((tool) => InternalToolSchema.parse(tool))

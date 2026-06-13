@@ -570,6 +570,7 @@ export const generateIframeSrc = (
   primaryColorHex: string,
   secondaryColorHex: string,
   mdContentClass: string,
+  theme: 'light' | 'dark' = 'light',
 ) => {
   const primary = hexToRgb(primaryColorHex)
   const secondary = hexToRgb(secondaryColorHex)
@@ -614,7 +615,7 @@ export const generateIframeSrc = (
         }
       </style>
     </head>
-    <body>
+    <body class="body--${theme}" data-taskyon-theme="${theme}">
       <div class="content ${mdContentClass} in-iframe">
         ${renderedHtml}
       </div>

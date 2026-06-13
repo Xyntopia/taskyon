@@ -215,7 +215,7 @@ export const taskSearcher = (taskManager: TyTaskManager) =>
         },
         taskType: {
           type: 'string',
-          enum: taskTypeOptions,
+          enum: taskTypeOptions.filter(option => typeof option !== 'bigint'),
           default: undefined,
           description: `Filter tasks by type. If not provided, all types are included.`,
         },

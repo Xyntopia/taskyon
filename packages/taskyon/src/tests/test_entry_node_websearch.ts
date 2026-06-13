@@ -5,6 +5,7 @@ import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnostics
 import { tyCore } from '../core/init'
 import { createTaskyonClient } from '../api'
 import { createStandardEntryNodeTool } from '../tools/entryNode'
+import { createDefaultTaskyonToolSetup } from '../tools'
 import { buildLinkedTaskChain } from '../testSupport/onlineProviderSupport'
 import { registerToolRpcTools } from '../core/toolRpc'
 import { toolCall } from '../types/toolApi'
@@ -73,7 +74,7 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
       },
     }),
     undefined,
-    { nodePgLiteDataDir: dataDir },
+    { toolSetup: createDefaultTaskyonToolSetup(), nodePgLiteDataDir: dataDir },
   )
   const toolRpcExecutor = await registerToolRpcTools({ port: ty.port, tools: [entryNodeTool] })
 

@@ -4,6 +4,7 @@ import { buildCreateNewTaskChain } from '../../core/createNewTaskChain'
 import { forgeTaskChain } from '../../core/createTasks'
 import { tyCore, type Taskyon } from '../../core/init'
 import { registerToolRpcTools } from '../../core/toolRpc'
+import { createDefaultTaskyonToolSetup } from '../../tools'
 import { createStandardEntryNodeTool } from '../../tools/entryNode'
 import { llmSettings } from '../../types/profiles'
 import { partialTaskDraft, type TaskNode } from '../../types/taskNode'
@@ -107,6 +108,8 @@ const createConversationHarness = async (
     () => runtimeLlmSettings,
     () => getEntryNodeDraft(),
     () => taskyonFlowToolchainConfig,
+    undefined,
+    { toolSetup: createDefaultTaskyonToolSetup() },
   )
   const ty = await tyPromise
   const toolRpcExecutor = await registerToolRpcTools({ port: ty.port, tools: [entryNodeTool] })

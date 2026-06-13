@@ -71,6 +71,8 @@ const hasBrowserOpfs = (): boolean =>
   typeof navigator.storage?.getDirectory === 'function' &&
   typeof navigator.locks?.request === 'function'
 
+export const isPmtilesOpfsCacheAvailable = (): boolean => hasBrowserOpfs()
+
 const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
   if (bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength) {
     return bytes.buffer as ArrayBuffer
@@ -333,7 +335,10 @@ const writeFooter = async (
   })
 }
 
-const enforceMaxBytes = (segments: CachedSegment[], maxBytesPerArchive: number): CachedSegment[] => {
+const enforceMaxBytes = (
+  segments: CachedSegment[],
+  maxBytesPerArchive: number,
+): CachedSegment[] => {
   if (!Number.isFinite(maxBytesPerArchive) || maxBytesPerArchive <= 0) return []
 
   const kept = [...segments]
@@ -474,7 +479,14 @@ class PmtilesOpfsSource implements Source {
       return cached
     }
 
-    const fetched = await fetchRange(this.sourceKey, offset, length, signal, etag, this.customHeaders)
+    const fetched = await fetchRange(
+      this.sourceKey,
+      offset,
+      length,
+      signal,
+      etag,
+      this.customHeaders,
+    )
 
     return navigator.locks.request(this.lockName, async () => {
       const state = await this.reloadState()

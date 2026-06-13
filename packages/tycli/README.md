@@ -2,9 +2,12 @@
 
 Node-first Taskyon CLI for interactive chat and Node diagnostics.
 
-It currently exposes one tool to the model:
+It exposes CLI-safe tools to the model, including:
 
 - `bash`: run a command on the host via `bash -lc`
+- `updateFiles`: create or update local text files
+- `downloadFile`: save validated downloads to the local workspace
+- `mapSearchTool` / `overpassMapTool`: build OpenStreetMap/Overpass map results
 
 The CLI supports slash commands:
 
@@ -87,6 +90,16 @@ tycli-dev
 ```
 
 Type `exit` or `quit` to leave the chat.
+
+## HTML previews
+
+Browser Taskyon can render assistant HTML messages inline in sandboxed message iframes. `tycli`
+cannot embed an iframe in the terminal, so when an assistant message contains HTML, it writes the
+HTML to a temporary preview file and prints a clickable `file://` URL next to the message.
+
+This is generic behavior for HTML assistant messages, not specific to one tool. For example, map
+tools can return an interactive MapLibre/PMTiles HTML view; in `tycli` the transcript includes a
+local preview link that can be opened from terminals that support clickable links.
 
 ## Security
 

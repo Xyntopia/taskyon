@@ -5,6 +5,7 @@ import { tyCore } from '../../../taskyon/src/core/init'
 import type { Taskyon } from '../../../taskyon/src/core/init'
 import { connectTaskManagerStorageFromProtocol } from '../../../taskyon/src/core/taskManager'
 import { taskyonStorageProtocol } from '../../../taskyon/src/api/storageProtocol'
+import { createDefaultTaskyonToolSetup } from '../../../taskyon/src/tools'
 import type { llmSettings } from '../../../taskyon/src/types/profiles'
 import { toolCall } from '../../../taskyon/src/types/toolApi'
 import {
@@ -125,6 +126,7 @@ export async function bootstrapCliTaskyon(args?: {
     () => ({}),
     cryptoSession,
     {
+      toolSetup: createDefaultTaskyonToolSetup(),
       createIframeMultiPlexer: () =>
         createUnavailableIframeMux('Iframe message bridging is not available in tycli.'),
       nodePgLiteDataDir: pgliteNodeDir,

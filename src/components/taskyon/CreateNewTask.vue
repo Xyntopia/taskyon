@@ -174,6 +174,21 @@
                 </q-item-section>
               </q-item>
               <q-item
+                v-for="toolName in filteredToolCollection.length
+                  ? filteredToolCollection
+                  : toolNames"
+                :key="toolName"
+                clickable
+                @click="
+                  () => {
+                    tystate.switchTaskType(toolName)
+                    close()
+                  }
+                "
+              >
+                <q-item-section>{{ toolName }}</q-item-section>
+              </q-item>
+              <q-item
                 v-if="selectedTaskType"
                 class="q-mt-md"
                 clickable

@@ -11,15 +11,6 @@ const onlineEnvKeys = ['openai_api_key', 'openrouter_api_key'] as const
 
 type OnlineEnv = Record<(typeof onlineEnvKeys)[number], KeyString>
 
-declare global {
-  interface Window {
-    __taskyonE2E?: {
-      setProviderApiKey: (name: string, value: KeyString | undefined) => Promise<void>
-      availableProviders: () => string[]
-    }
-  }
-}
-
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0
 
@@ -140,33 +131,27 @@ export const startNewChat = async (page: Page) => {
 }
 
 export const addAiServices = async (page: Page, env: OnlineEnv) => {
-  await page.goto('/')
-  await page.waitForFunction(() => !!window.__taskyonE2E?.setProviderApiKey)
-
   const providerKeys = {
     openai: env.openai_api_key,
     'openrouter.ai': env.openrouter_api_key,
   }
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await page.evaluate(async (keys) => {
-      const hooks = window.__taskyonE2E
-      if (!hooks) throw new Error('Taskyon E2E hooks are unavailable.')
-      for (const [provider, key] of Object.entries(keys)) {
-        await hooks.setProviderApiKey(provider, key)
-      }
-    }, providerKeys)
+  await page.goto('/settings/aiserviceprovider')
+  const providerPanel = page.locator('.llm-providers')
+  await expect(providerPanel).toBeVisible()
+  const keyExpansion = providerPanel.getByText('Add API keys for AI services below:')
+  await keyExpansion.click()
 
-    const providers = await page.evaluate(() => window.__taskyonE2E?.availableProviders() ?? [])
-    if (providers.includes('openai') && providers.includes('openrouter.ai')) return
-    await page.waitForTimeout(500)
+  for (const [provider, key] of Object.entries(providerKeys)) {
+    await providerPanel.getByRole('button', { name: provider, exact: true }).click()
+    const input = dataCy(page, `add-${provider}`).locator('input')
+    await expect(input).toBeVisible()
+    await input.fill(key)
+    await page.getByRole('button', { name: 'OK', exact: true }).last().click()
+    await page.keyboard.press('Escape')
   }
 
-  await expect
-    .poll(() => page.evaluate(() => window.__taskyonE2E?.availableProviders() ?? []), {
-      message: 'configured AI providers',
-    })
-    .toEqual(expect.arrayContaining(['openai', 'openrouter.ai']))
+  await expect(dataCy(page, 'provider-select')).toContainText(/openai|openrouter\.ai/i)
 }
 
 export const expectTaskResultMessage = async (text: string, expectedText?: string) => {

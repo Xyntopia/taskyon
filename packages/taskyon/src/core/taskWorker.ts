@@ -54,8 +54,6 @@ async function safeExecuteTask(
   if (task.content.type === 'functioncall') {
     // calculate function result
     const func = task.content.data
-    console.log(`Calling function ${func.name}`)
-
     return await toolExecutionClient.callTool(func.name, func.arguments, {
       taskId: task.id,
       signal: stopSignal,
@@ -71,7 +69,6 @@ async function safeExecuteTask(
 
 function parseResultForTaskChains(funcR: unknown) {
   if (taskResult.safeParse(funcR).success) {
-    console.log('new tasks were created:', funcR)
     // we have to do this funny workaround with typescript because
     // for some reason zod will delete the task content onwards
     // of the second task in a taskchain... after parsing. so we're
@@ -293,7 +290,6 @@ function createHandleError(
   currentTaskCtrl: AbortController,
   queueTask: (id: string) => void,
 ) {
-  console.log('create error handler function...')
   const autonomousErrorAttemptsBySignature = new Map<string, number>()
 
   return async (error: unknown, task: TaskNode, errorhandlerTask: partialTaskDraft) => {
@@ -510,7 +506,6 @@ const setupRun = (
   rpcPort: FunctionRpcWorkerPort,
   maxConcurrency: number,
 ) => {
-  console.log('setting up task worker run...')
   const currentTaskCtrl: AbortController = new AbortController()
   const toolExecutionClient = createToolExecutionClient(rpcPort)
 
@@ -651,7 +646,6 @@ const setupRun = (
   }
 
   const run = async (defaultTask: partialTaskDraft, errorTask: partialTaskDraft) => {
-    console.log('starting task worker run...')
     const reconciliationInterval = setInterval(() => {
       if (getTasksInProgress() <= 0 && readyQueue.count() === 0 && pendingByPrior.size > 0) {
         streamEmit({ stage: 'waiting' })
@@ -709,8 +703,6 @@ export function runTaskWorker(
   errorTask: partialTaskDraft,
   maxConcurrency = 4,
 ) {
-  console.log('starting task worker listener...')
-
   // create all variables that we want to access from outside
   const taskProcessingStream = createStream<TyTaskStreamData>()
   const { x: workerRpcPort, y: toolRpcPort } = createDuplexChannel<
@@ -721,7 +713,6 @@ export function runTaskWorker(
   let queueTask: ((id: string) => void) | undefined = undefined
 
   const workerStop = (message: string) => {
-    console.log('→ taskworker stop requested', message)
     currentTaskCtrl?.abort(message)
     // in case of any errors, especially if its an interrupt event we simply want to cancel everything :P
     // empty our task queue :)
@@ -742,7 +733,6 @@ export function runTaskWorker(
       } = setupRun(taskProcessingStream.emit, taskManager, workerRpcPort, maxConcurrency)
       currentTaskCtrl = newTaskCtrl
       queueTask = newQueueTask
-      console.log('restarting task worker run...')
 
       void run(defaultTask, errorTask)
     }

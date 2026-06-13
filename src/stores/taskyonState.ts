@@ -43,14 +43,15 @@ import {
   tyCore,
   taskyonStorageProtocol,
 } from '@taskyon/taskyon'
+import type { ChatCompletionStreamEvent } from '@taskyon/taskyon'
 import {
   createPersistentOauthTokenGetter,
   OAUTH_CREDENTIALS_SECRET_PREFIX,
 } from '@taskyon/taskyon/browser'
 import type { AuthenticationOptions, TokenGetter } from '@taskyon/taskyon/browser'
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
+import { createDefaultTaskyonToolSetup } from '@taskyon/taskyon/tools'
 import { createTaskyonDocumentationProviderTool } from '@taskyon/taskyon/tools/documentationProviderTool'
-import type { chunkStreamType } from '@taskyon/taskyon/tools/chatCompletionTool'
 import { createTaskyonClient, taskyonGuiProtocol, taskyonProtocol } from '@taskyon/tyclient'
 import type { TaskyonGuiMessage } from '@taskyon/tyclient'
 import { createStandardEntryNodeTool } from '@taskyon/taskyon/tools/entryNode'
@@ -702,20 +703,6 @@ const useApiManagement = (
     availableKeys.value = { ...availableKeys.value, [name]: value }
   })
 
-  if (process.env.DEV && typeof window !== 'undefined') {
-    const target = window as Window & {
-      __taskyonE2E?: {
-        setProviderApiKey: (name: string, value: KeyString | undefined) => Promise<void>
-        availableProviders: () => string[]
-      }
-    }
-    target.__taskyonE2E = {
-      ...target.__taskyonE2E,
-      setProviderApiKey,
-      availableProviders: () => availableProviders.value,
-    }
-  }
-
   ///////////   computed properties
   const providerDefs = computed(() => Object.keys(stateRefs.llmSettings.llmApis))
   const availableProviders = computed(() => {
@@ -1232,6 +1219,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       () => stateRefs.toolchainConfig,
       cs,
       {
+        toolSetup: createDefaultTaskyonToolSetup(),
         taskManagerStorageFactory: ({ sessionId }) =>
           connectTaskManagerStorageFromProtocol(taskStorageClientPort, sessionId),
       },
@@ -1560,7 +1548,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   }
 
   const { stream: chatCompletionStream, emit: chatCompletionConnector } =
-    createStream<chunkStreamType>()
+    createStream<ChatCompletionStreamEvent>()
   // connect taskyon to this stream as soon as it is initialized...
   void taskyon.then((ty) => ty.chatCompletionStream(chatCompletionConnector))
 

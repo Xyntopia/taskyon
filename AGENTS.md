@@ -3,6 +3,7 @@
 ## Required reading before code changes
 
 - `development_instructions.md` — typing, lint, and root-cause rules (mandatory).
+- `test_instructions.md` — before adding or changing tests.
 - `packages/modelica/README.md` — before any Modelica compiler, template, runtime, or simulation change.
 - `packages/rumoca/AGENTS.md` — before any rumoca change (separate submodule with own spec system).
 

@@ -30,7 +30,12 @@
 <script setup lang="ts">
 import { getCssVar, useQuasar } from 'quasar'
 import { containsHtmlTags, hasMarkdownElements } from '@taskyon/common/modules/markdownDetection'
-import { generateIframeSrc, initPrismTheme, md2Html, tyMdCssUrls } from '@taskyon/common/modules/markdownUtils '
+import {
+  generateIframeSrc,
+  initPrismTheme,
+  md2Html,
+  tyMdCssUrls,
+} from '@taskyon/common/modules/markdownUtils '
 import { asyncComputed } from '@taskyon/common/modules/vueUtils'
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -155,6 +160,7 @@ const buildIframeHtml = (renderedHtmlString: string) => {
     getCssVar('primary') ?? '#000000',
     getCssVar('secondary') ?? '#00ffff',
     'ty-markdown',
+    $q.dark.isActive ? 'dark' : 'light',
   )
 }
 

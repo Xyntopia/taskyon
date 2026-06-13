@@ -8,6 +8,7 @@ import { createTaskyonClient } from '../api'
 import { createSubtasksResult, toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
 import { createStandardEntryNodeTool } from '../tools/entryNode'
+import { createDefaultTaskyonToolSetup } from '../tools'
 import { CLARIFICATION_TOOL_NAME } from '../tools/clarificationTool'
 import { buildLinkedTaskChain } from '../testSupport/onlineProviderSupport'
 import { llmSettings } from '../types/profiles'
@@ -164,7 +165,7 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
       },
     }),
     undefined,
-    { nodePgLiteDataDir: dataDir },
+    { toolSetup: createDefaultTaskyonToolSetup(), nodePgLiteDataDir: dataDir },
   )
   const toolRpcExecutor = await registerToolRpcTools({ port: ty.port, tools: [entryNodeTool] })
 

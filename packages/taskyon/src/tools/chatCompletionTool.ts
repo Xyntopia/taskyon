@@ -45,7 +45,11 @@ import {
 } from '../taskyon.space/taskyon.space_api'
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
 import type { apiConfig, TaskNodeMeta } from '../types/chatCompletion'
-import { getCurrentModel } from '../types/chatCompletion'
+import {
+  getCurrentModel,
+  type ChatCompletionStreamChunk,
+  type ChatCompletionStreamEvent,
+} from '../types/chatCompletion'
 import type {
   Annotation,
   FileMapping,
@@ -221,14 +225,13 @@ export async function processChatTask(
 }
 
 type streamOptsType = Parameters<typeof streamText>[0]
-type streamChunk = Parameters<Required<streamOptsType>['onChunk']>[0]['chunk']
 
 const normalizeChunkText = (value: unknown): string => {
   if (typeof value === 'string') return value
   return ''
 }
 
-const extractTextFromChunk = (chunk: streamChunk): string => {
+const extractTextFromChunk = (chunk: ChatCompletionStreamChunk): string => {
   const c = chunk as unknown as Record<string, unknown>
   if (c['type'] === 'text-delta') return normalizeChunkText(c['textDelta'])
   if (c['type'] === 'text') return normalizeChunkText(c['text'])
@@ -1339,11 +1342,6 @@ async function makeFilesAiReadable(
 
 export const chatCompletionToolName = 'chatCompletion'
 
-export type chunkStreamType = {
-  taskId: string
-  chunk: streamChunk
-}
-
 export function createChatCompletionTool(
   // TODO: move these apiSettings here right into the 'normal' chatCompletion parameters!
   apiSettings: Thunk<{
@@ -1359,7 +1357,7 @@ export function createChatCompletionTool(
   const ajv = new Ajv()
   const variableService = createTaskVariablePresentationService()
 
-  const chatCompletionStream = createStream<chunkStreamType>()
+  const chatCompletionStream = createStream<ChatCompletionStreamEvent>()
   const chatCompletion = createTool({
     description: 'Generates a chat-based response using the OpenAI API for the previous message.',
     longDescription: `This tool interfaces with an OpenAI-compatible API to generate completions for

@@ -1,10 +1,12 @@
 import { spawn } from 'node:child_process'
+import { createServer } from 'node:http'
 import { access, readFile } from 'node:fs/promises'
 import process from 'node:process'
 import { constants as fsConstants } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { TaskNode } from '../../../taskyon/src/types/taskNode'
+import type { AddressInfo } from 'node:net'
 import {
   renderTaskProgress,
   renderWorkerProgress,
@@ -139,6 +141,7 @@ export async function runTycSession(args: {
   homeKey?: string
   timeoutMs?: number
   env?: Record<string, string>
+  cliArgs?: string[]
   runner?: 'pty' | 'pipe'
   isolateHome?: boolean
 }): Promise<SessionResult> {
@@ -149,6 +152,7 @@ export async function runTycSession(args: {
     homeKey,
     timeoutMs = 20_000,
     env,
+    cliArgs = [],
     runner = 'pty',
     isolateHome = true,
   } = args
@@ -161,14 +165,20 @@ export async function runTycSession(args: {
             {
               label: `direct script (${scriptPath})`,
               command: scriptPath,
-              args: ['-qfec', TYCLI_RUN_COMMAND, '/dev/null'],
+              args: [
+                '-qfec',
+                [TYCLI_RUN_COMMAND, ...cliArgs.map((arg) => JSON.stringify(arg))].join(' '),
+                '/dev/null',
+              ],
             },
             {
               label: `shell script fallback (${shellPath})`,
               command: shellPath,
               args: [
                 '-lc',
-                `exec "${scriptPath}" -qfec ${JSON.stringify(TYCLI_RUN_COMMAND)} /dev/null`,
+                `exec "${scriptPath}" -qfec ${JSON.stringify(
+                  [TYCLI_RUN_COMMAND, ...cliArgs.map((arg) => JSON.stringify(arg))].join(' '),
+                )} /dev/null`,
               ],
             },
           ]
@@ -177,7 +187,13 @@ export async function runTycSession(args: {
           {
             label: 'direct node',
             command: (await findExecutableInPath('node')) || 'node',
-            args: ['--import', './src/register.ts', '--experimental-strip-types', './src/cli.ts'],
+            args: [
+              '--import',
+              './src/register.ts',
+              '--experimental-strip-types',
+              './src/cli.ts',
+              ...cliArgs,
+            ],
             cwd: TYCLI_PACKAGE_CWD,
           },
         ]
@@ -207,6 +223,46 @@ export async function runTycSession(args: {
 }
 
 runTycSession.helper = true
+
+async function withMockOverpassServer<T>(run: (url: string) => Promise<T>): Promise<T> {
+  const server = createServer((req, res) => {
+    if (req.method !== 'POST') {
+      res.writeHead(405).end()
+      return
+    }
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(
+      JSON.stringify({
+        elements: [
+          {
+            type: 'node',
+            id: 1,
+            lat: 52.521,
+            lon: 13.4094,
+            tags: { name: 'Cafe Alexanderplatz', amenity: 'cafe' },
+          },
+          {
+            type: 'node',
+            id: 2,
+            lat: 52.5263,
+            lon: 13.4112,
+            tags: { name: 'Cafe Rosa Luxemburg', amenity: 'cafe' },
+          },
+        ],
+      }),
+    )
+  })
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address() as AddressInfo
+  try {
+    return await run(`http://127.0.0.1:${address.port}/api/interpreter`)
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    )
+  }
+}
 
 async function runSpawnedSession(args: {
   attempt: { label: string; command: string; args: string[]; cwd?: string }
@@ -437,6 +493,85 @@ export function testTaskRendererDoesNotEchoUserPromptInput() {
   const output = lines.join('\n')
   assertNotContains(output, 'already echoed by readline')
   assertContains(output, 'assistant response')
+}
+
+export async function testTaskRendererWritesHtmlPreviewForAssistantHtml() {
+  const lines: string[] = []
+  const assistantTask: TaskNode = {
+    id: 'assistant-html-task',
+    role: 'assistant',
+    content: {
+      type: 'message',
+      data: '<div><strong>Map widget</strong><iframe src="https://example.test/map"></iframe></div>',
+    },
+  }
+  const state = {
+    debugEnabled: () => false,
+    showRoleTag: () => true,
+    showFullFunctionResults: () => false,
+    isFunctionHiddenInChat: () => false,
+    clearThinkingPanel: () => {},
+    renderThinkingPanel: () => {},
+    writeLine: (text: string) => {
+      lines.push(text)
+    },
+  }
+
+  renderTaskProgress(state, assistantTask, false)
+
+  const output = lines.join('\n')
+  assertContains(output, 'HTML preview: file://')
+  assertNotContains(output, '<iframe src="https://example.test/map"></iframe>')
+  const previewUrl = /HTML preview: (file:\/\/\S+)/.exec(output)?.[1]
+  if (!previewUrl) throw new Error(`Expected HTML preview URL in output:\n${output}`)
+
+  const previewHtml = await readFile(fileURLToPath(previewUrl), 'utf8')
+  assertContains(previewHtml, '<!doctype html>')
+  assertContains(previewHtml, '<strong>Map widget</strong>')
+  assertContains(previewHtml, '<iframe src="https://example.test/map"></iframe>')
+}
+
+export async function testCliOverpassMapToolPrintsHtmlPreviewLink() {
+  await withMockOverpassServer(async (overpassUrl) => {
+    const result = await runTycSession({
+      testName: 'testCliOverpassMapToolPrintsHtmlPreviewLink',
+      cliArgs: [
+        'client',
+        'callTool',
+        'overpassMapTool',
+        JSON.stringify({
+          overpassQuery:
+            '[out:json][timeout:25];node["amenity"="cafe"](around:300,52.5208,13.4095);out tags center geom;',
+        }),
+      ],
+      steps: [
+        {
+          waitFor: 'HTML preview: file://',
+          failOn: ['Fatal error', '[system|error]', "Tool 'overpassMapTool' failed"],
+          input: '',
+        },
+      ],
+      env: {
+        TASKYON_OVERPASS_INTERPRETER_URL: overpassUrl,
+        TYCLI_HOTKEY_MENUS: '0',
+      },
+      runner: 'pipe',
+      timeoutMs: 90_000,
+    })
+
+    if (result.code !== 0) {
+      throw new Error(`Expected tycli exit code 0, got ${String(result.code)}.\n${result.output}`)
+    }
+    assertContains(result.output, 'HTML preview: file://')
+    assertNotContains(result.output, 'taskyon-world-pmtiles')
+
+    const previewUrl = /HTML preview: (file:\/\/\S+)/.exec(result.output)?.[1]
+    if (!previewUrl) throw new Error(`Could not find preview URL.\n${result.output}`)
+    const previewHtml = await readFile(fileURLToPath(previewUrl), 'utf8')
+    assertContains(previewHtml, 'taskyon-world-pmtiles')
+    assertContains(previewHtml, 'Cafe Alexanderplatz')
+    assertContains(previewHtml, 'Cafe Rosa Luxemburg')
+  })
 }
 
 export function testTaskRendererDoesNotPrintTransientWorkerProgress() {

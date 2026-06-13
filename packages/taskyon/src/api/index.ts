@@ -6,7 +6,13 @@ import { createToolExecutionClient, type ToolRpcCallerPort } from '../core/toolR
 import type { chatCompletionParams } from '../tools/chatCompletionTool'
 import type { TaskContentType, TaskNode } from '../types/taskNode'
 import { partialTaskDraft } from '../types/taskNode'
-import { createClientTool, createSubtasksResult, createTool, toolCall } from '../types/toolApi'
+import {
+  createClientTool,
+  createSubtasksResult,
+  createTool,
+  taskResult,
+  toolCall,
+} from '../types/toolApi'
 import { sha256UrlSafeHashFromFile } from '../utils/encoding'
 import { createPortClient, createStream, type Port } from '@taskyon/common/modules/frpBus'
 import { createLruCache } from '@taskyon/common/modules/lruCache'
@@ -46,7 +52,14 @@ export type {
   ProtocolMessage,
 } from '@taskyon/common/modules/frpBus'
 
-export { createClientTool, createSubtasksResult, createTool, partialTaskDraft, toolCall }
+export {
+  createClientTool,
+  createSubtasksResult,
+  createTool,
+  partialTaskDraft,
+  taskResult,
+  toolCall,
+}
 export type { Port }
 export { taskyonProtocol }
 export {

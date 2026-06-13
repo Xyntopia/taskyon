@@ -6,6 +6,8 @@ import {
   testCliConcurrentSessionsStartWithSharedHome as runCliConcurrentSessionsStartWithSharedHome,
   testPromptHistoryCyclesPreviousInputWithArrowKeys as runPromptHistoryCyclesPreviousInputWithArrowKeys,
   testQuitPromptCtrlCCancelsAndCtrlDExits as runQuitPromptCtrlCCancelsAndCtrlDExits,
+  testCliOverpassMapToolPrintsHtmlPreviewLink as runCliOverpassMapToolPrintsHtmlPreviewLink,
+  testTaskRendererWritesHtmlPreviewForAssistantHtml as runTaskRendererWritesHtmlPreviewForAssistantHtml,
 } from '../../tests/cliE2eDiagnostics'
 
 const assert = (condition: unknown, message: string) => {
@@ -165,6 +167,19 @@ export const testCliTaskRendererDoesNotPrintTransientWorkerProgress = () =>
 
 testCliTaskRendererDoesNotPrintTransientWorkerProgress.description =
   'Verifies tycli does not print transient worker progress as repeated transcript lines.'
+
+export const testCliTaskRendererWritesHtmlPreviewForAssistantHtml = async () =>
+  await runTaskRendererWritesHtmlPreviewForAssistantHtml()
+
+testCliTaskRendererWritesHtmlPreviewForAssistantHtml.description =
+  'Verifies tycli writes assistant HTML messages to a temporary preview file and prints a file URL.'
+
+export const testCliOverpassMapToolPrintsHtmlPreviewLink = async () =>
+  await runCliOverpassMapToolPrintsHtmlPreviewLink()
+
+testCliOverpassMapToolPrintsHtmlPreviewLink.description =
+  'Runs overpassMapTool through tycli client mode with a local Overpass mock and verifies the CLI prints an HTML preview file URL.'
+testCliOverpassMapToolPrintsHtmlPreviewLink.timeoutMs = 100_000
 
 export const testCliTaskRendererHidesHiddenWorkerProgress = () =>
   runTaskRendererHidesHiddenWorkerProgress()

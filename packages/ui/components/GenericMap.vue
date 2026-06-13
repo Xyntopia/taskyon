@@ -29,146 +29,18 @@
 import type { StyleSpecification } from 'maplibre-gl'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import mapLibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-csp-worker.js?url'
-import { PMTiles, Protocol } from 'pmtiles'
-import { createPmtilesOpfsSource } from '@taskyon/common/modules/pmtilesOpfsCache'
+import {
+  addPmtilesVectorLayer,
+  addRasterFallbackBaseLayer,
+  defaultWorldPmtilesUrl,
+  setupTaskyonMapLibreWorker,
+  setupTaskyonPmtilesProtocol,
+  type TaskyonPmtilesVectorLayerSpec,
+} from '../gis/maplibrePmtiles'
 import { onBeforeUnmount, onMounted, ref, useSlots } from 'vue'
 
-const WORLD_PM_URL =
-  'https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:protomaps/world.pmtiles'
 const PARCELS_PM_URL =
   'https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:parcels-temp/parcels.pmtiles'
-
-const protocol = new Protocol()
-let protocolRegistered = false
-let workerRegistered = false
-
-const setupPmtilesProtocol = () => {
-  if (protocolRegistered) return
-  maplibregl.addProtocol('pmtiles', protocol.tile)
-  protocolRegistered = true
-}
-
-const setupMapLibreWorker = () => {
-  if (workerRegistered) return
-  maplibregl.setWorkerUrl(mapLibreWorkerUrl)
-  workerRegistered = true
-}
-
-const getPmtilesUrlCandidates = (url: string, sourceId: string): string[] => {
-  const trimmed = url.trim().replace(/\/+$/, '')
-  const candidates = new Set<string>([trimmed])
-
-  if (!trimmed.endsWith('.pmtiles')) {
-    candidates.add(`${trimmed}.pmtiles`)
-    if (sourceId === WORLD_SOURCE_ID) {
-      candidates.add(`${trimmed}/world.pmtiles`)
-      candidates.add(`${trimmed}/basemap.pmtiles`)
-      candidates.add(`${trimmed}/protomaps.pmtiles`)
-    } else if (sourceId === PARCELS_SOURCE_ID) {
-      candidates.add(`${trimmed}/parcels.pmtiles`)
-      candidates.add(`${trimmed}/parcels-temp.pmtiles`)
-      candidates.add(`${trimmed}/us-parcels.pmtiles`)
-    }
-  }
-
-  return [...candidates]
-}
-
-const ensureRasterFallbackBaseLayer = () => {
-  const m = getMapInstance()
-  if (!m) return
-
-  const sourceId = 'fallback_osm_raster'
-  const layerId = 'fallback_osm_raster_layer'
-
-  if (!m.getSource(sourceId)) {
-    m.addSource(sourceId, {
-      type: 'raster',
-      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-      tileSize: 256,
-      attribution: '© OpenStreetMap contributors',
-    })
-  }
-
-  if (!m.getLayer(layerId)) {
-    m.addLayer({
-      id: layerId,
-      type: 'raster',
-      source: sourceId,
-      paint: {
-        'raster-opacity': 0.85,
-      },
-    })
-  }
-}
-
-const parseVectorLayerNames = (metadata: unknown): string[] => {
-  if (!metadata || typeof metadata !== 'object') return []
-
-  const metaObj = metadata as Record<string, unknown>
-  const vectorLayersRaw = metaObj.vector_layers
-
-  const decode = (val: unknown): unknown => {
-    if (Array.isArray(val)) return val
-    if (typeof val === 'string') {
-      try {
-        return JSON.parse(val)
-      } catch {
-        return null
-      }
-    }
-    return null
-  }
-
-  const decoded = decode(vectorLayersRaw)
-  if (!Array.isArray(decoded)) return []
-
-  return decoded
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') return null
-      const id = (entry as Record<string, unknown>).id
-      return typeof id === 'string' ? id : null
-    })
-    .filter((id): id is string => !!id)
-}
-
-const parseBoundsFromMetadata = (metadata: unknown): [number, number, number, number] | null => {
-  if (!metadata || typeof metadata !== 'object') return null
-
-  const rawBounds = (metadata as Record<string, unknown>).bounds
-
-  const toTuple = (arr: unknown[]): [number, number, number, number] | null => {
-    if (arr.length < 4) return null
-    const values = arr.slice(0, 4).map((v) => Number(v))
-    if (values.some((v) => !Number.isFinite(v))) return null
-    return [values[0]!, values[1]!, values[2]!, values[3]!]
-  }
-
-  if (Array.isArray(rawBounds)) return toTuple(rawBounds)
-
-  if (typeof rawBounds === 'string') {
-    const csv = rawBounds.split(',').map((v) => v.trim())
-    return toTuple(csv)
-  }
-
-  return null
-}
-
-const parseBoundsFromHeader = (header: unknown): [number, number, number, number] | null => {
-  if (!header || typeof header !== 'object') return null
-  const h = header as Record<string, unknown>
-
-  const minLon = Number(h.minLon)
-  const minLat = Number(h.minLat)
-  const maxLon = Number(h.maxLon)
-  const maxLat = Number(h.maxLat)
-
-  if (![minLon, minLat, maxLon, maxLat].every((v) => Number.isFinite(v))) return null
-  if (minLon >= maxLon || minLat >= maxLat) return null
-
-  return [minLon, minLat, maxLon, maxLat]
-}
 
 let resizeObserver: ResizeObserver | null = null
 
@@ -184,6 +56,7 @@ interface GenericMapProps {
   parcelsPmtilesUrl?: string
   showParcelsLayer?: boolean
   autoFitParcelsBounds?: boolean
+  pmtilesVectorLayers?: TaskyonPmtilesVectorLayerSpec[]
   showNavigationControls?: boolean
 }
 
@@ -195,10 +68,11 @@ const props = withDefaults(defineProps<GenericMapProps>(), {
   tileLayerUrl: undefined,
   tileLayerOptions: undefined,
   placeName: undefined,
-  worldPmtilesUrl: WORLD_PM_URL,
+  worldPmtilesUrl: defaultWorldPmtilesUrl,
   parcelsPmtilesUrl: PARCELS_PM_URL,
-  showParcelsLayer: true,
+  showParcelsLayer: false,
   autoFitParcelsBounds: false,
+  pmtilesVectorLayers: () => [],
   showNavigationControls: true,
 })
 
@@ -307,189 +181,48 @@ const makeMinimalStyle = (): StyleSpecification => ({
   ],
 })
 
-const addPmtilesVectorSourceWithAutoLayers = async (
-  sourceId: string,
-  url: string,
-  options: {
-    baseOpacity?: number
-    lineColor?: string
-    lineWidth?: number
-    pointColor?: string
-    beforeLayerId?: string
-    addStreetLabels?: boolean
-  } = {},
-) => {
-  const m = getMapInstance()
-  if (!m || m.getSource(sourceId)) return
+const getDefaultPmtilesLayers = (): TaskyonPmtilesVectorLayerSpec[] => {
+  const layers: TaskyonPmtilesVectorLayerSpec[] = []
 
-  let metadata: unknown = null
-  let header: unknown = null
-  let resolvedUrl = url
-  let lastError: unknown = null
-
-  const candidates = getPmtilesUrlCandidates(url, sourceId)
-  for (const candidate of candidates) {
-    try {
-      const pmtiles = new PMTiles(createPmtilesOpfsSource(candidate))
-      protocol.add(pmtiles)
-      header = await pmtiles.getHeader()
-      metadata = await pmtiles.getMetadata()
-      resolvedUrl = candidate
-      break
-    } catch (error) {
-      lastError = error
-      console.warn(`${logPrefix} PMTiles candidate failed`, { sourceId, candidate, error })
-    }
-  }
-
-  if (!metadata) {
-    if (lastError instanceof Error) {
-      throw lastError
-    }
-    throw new Error(`Failed to load PMTiles metadata for ${sourceId}`)
-  }
-
-  const sourceLayers = parseVectorLayerNames(metadata)
-  const boundsFromMetadata = parseBoundsFromMetadata(metadata)
-  const boundsFromHeader = parseBoundsFromHeader(header)
-  const bounds = boundsFromMetadata ?? boundsFromHeader
-
-  m.addSource(sourceId, {
-    type: 'vector',
-    url: `pmtiles://${resolvedUrl}`,
-  })
-
-  const insertBefore = options.beforeLayerId
-
-  sourceLayers.forEach((sourceLayer, idx) => {
-    const fillId = `${sourceId}_${sourceLayer}_fill`
-    const lineId = `${sourceId}_${sourceLayer}_line`
-    const pointId = `${sourceId}_${sourceLayer}_point`
-    const layerColor =
-      sourceId === WORLD_SOURCE_ID
-        ? (['#3f4953', '#495662', '#55616c', '#606b75', '#6a7580', '#737f89'][idx % 6] ?? '#55616c')
-        : (['#4cc9f0', '#f72585', '#90be6d', '#f9c74f', '#43aa8b', '#f9844a'][idx % 6] ?? '#4cc9f0')
-
-    m.addLayer(
-      {
-        id: fillId,
-        type: 'fill',
-        source: sourceId,
-        'source-layer': sourceLayer,
-        filter: ['==', ['geometry-type'], 'Polygon'],
-        paint: {
-          'fill-color': layerColor,
-          'fill-opacity': options.baseOpacity ?? (sourceId === WORLD_SOURCE_ID ? 0.04 : 0.08),
-        },
-      },
-      insertBefore,
-    )
-
-    m.addLayer(
-      {
-        id: lineId,
-        type: 'line',
-        source: sourceId,
-        'source-layer': sourceLayer,
-        paint: {
-          'line-color': options.lineColor ?? '#93a1af',
-          'line-width': options.lineWidth ?? 0.8,
-          'line-opacity': sourceId === WORLD_SOURCE_ID ? 0.45 : 0.8,
-        },
-      },
-      insertBefore,
-    )
-
-    m.addLayer(
-      {
-        id: pointId,
-        type: 'circle',
-        source: sourceId,
-        'source-layer': sourceLayer,
-        filter: ['==', ['geometry-type'], 'Point'],
-        paint: {
-          'circle-color': options.pointColor ?? '#e5e7eb',
-          'circle-radius': 2,
-          'circle-opacity': sourceId === WORLD_SOURCE_ID ? 0.35 : 0.8,
-        },
-      },
-      insertBefore,
-    )
-
-    if (sourceId === PARCELS_SOURCE_ID) {
-      ;[fillId, lineId, pointId].forEach((layerId) => {
-        m.on('click', layerId, (e) => {
-          const clicked = e.features?.[0]
-          emit('parcels-feature-click', {
-            layerId,
-            sourceLayer,
-            id: clicked?.id ?? null,
-            properties: clicked?.properties ?? {},
-            geometry: clicked?.geometry ?? null,
-            lngLat: { lng: e.lngLat.lng, lat: e.lngLat.lat },
-          })
-        })
-      })
-    }
-  })
-
-  if (sourceId === WORLD_SOURCE_ID && options.addStreetLabels) {
-    const roadLikeSourceLayers = sourceLayers.filter((layerName) =>
-      /(road|street|transport|highway)/i.test(layerName),
-    )
-
-    roadLikeSourceLayers.forEach((sourceLayer) => {
-      const layerId = `${sourceId}_${sourceLayer}_street_name`
-      if (m.getLayer(layerId)) return
-
-      m.addLayer(
-        {
-          id: layerId,
-          type: 'symbol',
-          source: sourceId,
-          'source-layer': sourceLayer,
-          filter: ['all', ['==', ['geometry-type'], 'LineString'], ['has', 'name']],
-          layout: {
-            'symbol-placement': 'line',
-            'text-field': ['coalesce', ['get', 'name:latin'], ['get', 'name_en'], ['get', 'name']],
-            'text-size': ['interpolate', ['linear'], ['zoom'], 11, 10, 14, 12],
-            'text-font': ['Noto Sans Regular'],
-            'text-max-angle': 30,
-            'text-padding': 2,
-          },
-          paint: {
-            'text-color': '#d1d5db',
-            'text-halo-color': '#0b0f14',
-            'text-halo-width': 1.2,
-          },
-          minzoom: 11,
-        },
-        insertBefore,
-      )
+  if (shouldAutoAddWorldBasemap()) {
+    layers.push({
+      id: WORLD_SOURCE_ID,
+      url: props.worldPmtilesUrl,
+      suffixes: ['world.pmtiles', 'basemap.pmtiles', 'protomaps.pmtiles'],
+      baseOpacity: 0.035,
+      lineColor: '#5f6973',
+      lineWidth: 0.65,
+      pointColor: '#7c8792',
+      addStreetLabels: true,
     })
   }
 
-  console.log(`${logPrefix} added PMTiles source`, {
-    sourceId,
-    url: resolvedUrl,
-    sourceLayerCount: sourceLayers.length,
-    boundsFromMetadata,
-    boundsFromHeader,
-    bounds,
-  })
+  if (props.showParcelsLayer) {
+    layers.push({
+      id: PARCELS_SOURCE_ID,
+      url: props.parcelsPmtilesUrl,
+      suffixes: ['parcels.pmtiles', 'parcels-temp.pmtiles', 'us-parcels.pmtiles'],
+      baseOpacity: 0.14,
+      lineColor: '#f97316',
+      lineWidth: 1.3,
+      lineOpacity: 0.8,
+      pointColor: '#f97316',
+      pointOpacity: 0.8,
+      autoFitBounds: props.autoFitParcelsBounds,
+      colorPalette: ['#4cc9f0', '#f72585', '#90be6d', '#f9c74f', '#43aa8b', '#f9844a'],
+      onFeatureClick: (payload) => emit('parcels-feature-click', payload),
+    })
+  }
 
-  if (sourceId === PARCELS_SOURCE_ID && props.autoFitParcelsBounds && bounds) {
-    m.fitBounds(
-      [
-        [bounds[0], bounds[1]],
-        [bounds[2], bounds[3]],
-      ],
-      {
-        padding: 24,
-        duration: 0,
-        maxZoom: 11,
-      },
-    )
+  return layers
+}
+
+const addConfiguredPmtilesLayers = async () => {
+  const m = getMapInstance()
+  if (!m) return
+  const layers = [...getDefaultPmtilesLayers(), ...props.pmtilesVectorLayers]
+  for (const layer of layers) {
+    await addPmtilesVectorLayer(m, layer)
   }
 }
 
@@ -519,8 +252,8 @@ const createMap = () => {
     return
   }
 
-  setupMapLibreWorker()
-  setupPmtilesProtocol()
+  setupTaskyonMapLibreWorker()
+  setupTaskyonPmtilesProtocol()
 
   try {
     map.value = new maplibregl.Map({
@@ -547,32 +280,17 @@ const createMap = () => {
 
   m.on('load', () => {
     void (async () => {
-      try {
-        if (shouldAutoAddWorldBasemap()) {
-          await addPmtilesVectorSourceWithAutoLayers(WORLD_SOURCE_ID, props.worldPmtilesUrl, {
-            baseOpacity: 0.035,
-            lineColor: '#5f6973',
-            lineWidth: 0.65,
-            pointColor: '#7c8792',
-            addStreetLabels: true,
-          })
-        }
+      const current = getMapInstance()
+      if (!current) return
 
-        if (props.showParcelsLayer) {
-          await addPmtilesVectorSourceWithAutoLayers(PARCELS_SOURCE_ID, props.parcelsPmtilesUrl, {
-            baseOpacity: 0.14,
-            lineColor: '#f97316',
-            lineWidth: 1.3,
-            pointColor: '#f97316',
-          })
-        }
+      try {
+        await addConfiguredPmtilesLayers()
       } catch (error) {
         console.error(`${logPrefix} PMTiles load error`, error)
-        ensureRasterFallbackBaseLayer()
+        addRasterFallbackBaseLayer(current)
       }
 
-      const current = getMapInstance()
-      if (current) emit('ready', current)
+      emit('ready', current)
 
       runResizeBurst()
     })()
