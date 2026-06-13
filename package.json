@@ -26,6 +26,7 @@
     "build:tyclient": "echo 'build client library' && yarn workspace @taskyon/tyclient run build",
     "ensure:msl": "node ./scripts/ensure-msl.mjs",
     "modelica:cli": "node ./packages/shared/modelica/modelica_cli.mjs",
+    "diagnostics:modelica:node": "yarn workspace @taskyon/taskyon-headless run diagnostics:modelica",
     "modelica:compare": "MSL_TARGET_DIR=packages/rumoca/target/msl yarn run ensure:msl && node ./packages/shared/modelica/modelica_compare_cli.mjs run --compile-workers 4",
     "modelica:trace-compare": "MSL_TARGET_DIR=packages/rumoca/target/msl yarn run ensure:msl && node ./packages/shared/modelica/modelica_compare_cli.mjs run",
     "modelica:trace-compare:random20": "MSL_TARGET_DIR=packages/rumoca/target/msl yarn run ensure:msl && node ./packages/shared/modelica/modelica_compare_cli.mjs run --max-models 20 --mode random-stop",

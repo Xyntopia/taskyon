@@ -1,13 +1,31 @@
 import * as ModelicaDiagnostics from '../../shared/modelica/modelicaDiagnostics'
 import { runDiagnosticsTests, type TestRecord } from '../../shared/modules/diagnosticsRunner'
 import { createRequire } from 'node:module'
-import { readFile } from 'node:fs/promises'
-import { pathToFileURL } from 'node:url'
+import { access, readFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const require = createRequire(import.meta.url)
 const rumocaWasmPath = require.resolve('rumoca/rumoca_bind_wasm_bg.wasm')
 const rumocaWasmUrl = pathToFileURL(rumocaWasmPath).href
-const defaultMslZipPath = '/workspace/public/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip'
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
+const mslZipCandidates = [
+  process.env.MODELICA_DIAG_MSL_ZIP_PATH?.trim() || '',
+  resolve(repoRoot, 'public/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip'),
+  resolve(repoRoot, 'packages/rumoca/target/msl/ModelicaStandardLibrary-4.1.0.zip'),
+].filter(Boolean)
+
+const findExistingFile = async (paths: string[]): Promise<string | null> => {
+  for (const path of paths) {
+    try {
+      await access(path)
+      return path
+    } catch {
+      continue
+    }
+  }
+  return null
+}
 
 const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
   const copy = new Uint8Array(bytes.byteLength)
@@ -15,9 +33,10 @@ const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
   return copy.buffer
 }
 
-const installNodeFetchWasmFallback = () => {
+const installNodeFetchWasmFallback = async () => {
   const nativeFetch = globalThis.fetch?.bind(globalThis)
   if (!nativeFetch) return
+  const resolvedMslZipPath = await findExistingFile(mslZipCandidates)
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     if (typeof url === 'string' && (url.endsWith('/rumoca_bind_wasm_bg.wasm') || url === rumocaWasmUrl)) {
@@ -32,7 +51,12 @@ const installNodeFetchWasmFallback = () => {
       (url === '/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip' ||
         url === '/public/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip')
     ) {
-      const bytes = await readFile(defaultMslZipPath)
+      if (!resolvedMslZipPath) {
+        throw new Error(
+          `Could not locate ModelicaStandardLibrary-4.1.0.zip. Checked: ${mslZipCandidates.join(', ')}`,
+        )
+      }
+      const bytes = await readFile(resolvedMslZipPath)
       return new Response(toArrayBuffer(bytes), {
         status: 200,
         headers: { 'content-type': 'application/zip' },
@@ -89,7 +113,7 @@ const filterTests = (tests: TestRecord, filter: string): TestRecord => {
 }
 
 const main = async (): Promise<void> => {
-  installNodeFetchWasmFallback()
+  await installNodeFetchWasmFallback()
   if (!process.env.MODELICA_DIAG_RUNTIME_TIMEOUT_MS) {
     process.env.MODELICA_DIAG_RUNTIME_TIMEOUT_MS = '60000'
   }

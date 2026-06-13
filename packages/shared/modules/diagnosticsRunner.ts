@@ -1,5 +1,6 @@
 export interface TaskyonTestFn {
   (opts?: { tyauth?: string; isCypress?: boolean }): unknown
+  setup?: (opts?: { tyauth?: string; isCypress?: boolean }) => unknown
   description?: string
   gui?: boolean
   experimental?: boolean
@@ -158,6 +159,9 @@ export async function runDiagnosticsTests(
         testOpts = {}
         if (opts?.tyauth !== undefined) testOpts.tyauth = opts.tyauth
         if (opts?.isCypress !== undefined) testOpts.isCypress = opts.isCypress
+      }
+      if (typeof testFn.setup === 'function') {
+        await Promise.resolve(testFn.setup(testOpts))
       }
       const requestedTimeoutMs = testFn.timeoutMs ?? defaultTimeoutMs
       const timeoutMs = Math.min(requestedTimeoutMs, MAX_DIAGNOSTICS_TEST_TIMEOUT_MS)

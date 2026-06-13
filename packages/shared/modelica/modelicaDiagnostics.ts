@@ -829,13 +829,12 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
     model: 'Modelica.Blocks.Examples.BooleanNetwork1',
   }
   await ensureDiagnosticsMslLoaded(wasm, debug)
-  const target = await getMslClassSourceForCompile(wasm, 'Modelica.Blocks.Examples.BooleanNetwork1')
+  const target = await getMslClassCompileTarget(wasm, 'Modelica.Blocks.Examples.BooleanNetwork1')
   debug.phase = 'source-loaded'
   debug.sourcePath = target.sourcePath
-  debug.sourceLength = target.source.length
   const sourcePath = target.sourcePath
 
-  const compiled = compileWithDiagnosticsMsl(wasm, target.source, target.className)
+  const compiled = compileWithDiagnosticsMsl(wasm, '', target.modelName)
   const parsed = JSON.parse(compiled) as {
     dae?: unknown
     dae_native?: unknown
@@ -1002,6 +1001,11 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
   } finally {
     abort.abort()
   }
+}
+testModelicaBooleanNetwork1RuntimeRegression.setup = async () => {
+  const wasm = await getDiagnosticsWasm()
+  const debug: Record<string, unknown> = {}
+  await ensureDiagnosticsMslLoaded(wasm, debug)
 }
 
 export async function testModelicaStaticModelExecutionModeRegression() {
@@ -2116,58 +2120,20 @@ function asStringOrEmpty(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
-function withLibraryContext(qualifiedName: string, sourceModelica: string): string {
-  const source = String(sourceModelica || '')
-  if (!source.trim()) return source
-  if (/^\s*within\s+[A-Za-z0-9_.]+\s*;/m.test(source)) return source
-  const parts = String(qualifiedName || '')
-    .split('.')
-    .filter(Boolean)
-  if (parts.length < 2) return source
-  return `within ${parts.slice(0, -1).join('.')};\n\n${source}`
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function extractClassSourceFromFile(fileSource: string, className: string): string {
-  const escapedClassName = escapeRegExp(className)
-  const startRegex = new RegExp(
-    `(?:^|\\n)\\s*(?:model|block|record|type|package|connector|function)\\s+${escapedClassName}\\b`,
-    'm',
-  )
-  const startMatch = startRegex.exec(fileSource)
-  if (!startMatch || startMatch.index < 0) {
-    throw new Error(`Could not locate class declaration for ${className} in source file`)
-  }
-  const startIndex = startMatch.index + (startMatch[0].startsWith('\n') ? 1 : 0)
-  const endRegex = new RegExp(`(?:^|\\n)\\s*end\\s+${escapedClassName}\\s*;`, 'm')
-  const endMatch = endRegex.exec(fileSource.slice(startIndex))
-  if (!endMatch || endMatch.index < 0) {
-    throw new Error(`Could not locate class end for ${className} in source file`)
-  }
-  const endIndex = startIndex + endMatch.index + endMatch[0].length
-  return fileSource.slice(startIndex, endIndex).trim()
-}
-
-async function getMslClassSourceForCompile(
+async function getMslClassCompileTarget(
   wasm: DiagnosticsMslApi,
   qualifiedName: string,
-): Promise<{ source: string; sourcePath: string; className: string }> {
+): Promise<{ sourcePath: string; modelName: string }> {
   if (typeof wasm.get_class_info !== 'function') {
     throw new Error('Rumoca wasm export missing: get_class_info')
   }
   const info = JSON.parse(String(wasm.get_class_info(qualifiedName))) as Record<string, unknown>
-  const className = qualifiedName.split('.').filter(Boolean).at(-1) || 'Model'
-  const sourceModelica = asStringOrEmpty(info.source_modelica)
   const sourceFile = asStringOrEmpty(info.source_file).trim()
 
-  if (sourceModelica.trim()) {
+  if (sourceFile) {
     return {
-      source: withLibraryContext(qualifiedName, sourceModelica),
-      sourcePath: sourceFile || `${qualifiedName.replaceAll('.', '/')}.mo`,
-      className,
+      sourcePath: sourceFile,
+      modelName: qualifiedName,
     }
   }
 
@@ -2177,11 +2143,9 @@ async function getMslClassSourceForCompile(
   if (!sourceFileEntry) {
     throw new Error(`Could not locate source file in MSL zip for ${qualifiedName}`)
   }
-  const extractedClassSource = extractClassSourceFromFile(sourceFileEntry.source, className)
   return {
-    source: withLibraryContext(qualifiedName, extractedClassSource),
     sourcePath: sourceFileEntry.path,
-    className,
+    modelName: qualifiedName,
   }
 }
 

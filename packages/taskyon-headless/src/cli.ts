@@ -216,6 +216,7 @@ function wrapTests(tests: TestRecord, opts: CliOptions): TestRecord {
         return await Promise.resolve(fn(ctx))
       }
       if (fn.description !== undefined) wrapped.description = fn.description
+      if (fn.setup !== undefined) wrapped.setup = fn.setup
       if (fn.timeoutMs !== undefined) wrapped.timeoutMs = fn.timeoutMs
       return [name, wrapped]
     }),
