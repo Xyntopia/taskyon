@@ -125,7 +125,9 @@ entryNode = toolCall({ name: 'taskyonFlow', arguments: {} })
 ```
 
 `taskyonFlow` is the default orchestration entry node. It may run a shortlist phase before
-issuing a narrowed `chatCompletion(goal=ChooseTool, allowedTools=[...])` step.
+issuing a narrowed `chatCompletion(goal=ChooseTool, allowedTools=[...])` step, but only when
+tool chooser is enabled and the available tool count is above the configured
+`tool_chooser_min_tools` threshold.
 
 ### 3.2 What an Entry Node May Do
 

@@ -67,6 +67,14 @@ export const EntryNodeSettingsSchema = {
       description:
         'Enable the tool-shortlist stage for this specific entry-node run. This is captured on the entry node for replayability.',
     },
+    tool_chooser_min_tools: {
+      type: 'integer',
+      default: 5,
+      minimum: 0,
+      title: 'Tool Chooser Min Tools',
+      description:
+        'Only run the tool-shortlist stage when more than this many tools are available. Smaller tool sets are passed directly to chatCompletion.',
+    },
     tool_shortlist_reasoning: {
       type: 'boolean',
       default: false,
@@ -127,6 +135,7 @@ export type EntryNodeArgs = {
   llmTools?: boolean
   nativeToolCalling?: boolean
   use_tool_chooser?: boolean
+  tool_chooser_min_tools?: number
   tool_shortlist_reasoning?: boolean
   reasoning_effort?: 'low' | 'medium' | 'high' | 'none'
   use_multimodal?: boolean
@@ -150,6 +159,7 @@ export type ResolvedEntryNodeSettings = {
   llmTools: boolean
   nativeToolCalling: boolean
   use_tool_chooser: boolean
+  tool_chooser_min_tools: number
   tool_shortlist_reasoning: boolean
   reasoning_effort?: 'low' | 'medium' | 'high' | 'none'
   use_multimodal: boolean
@@ -168,6 +178,7 @@ const toEntryNodeArguments = (
   llmTools: settings.llmTools,
   nativeToolCalling: settings.nativeToolCalling,
   use_tool_chooser: settings.use_tool_chooser,
+  tool_chooser_min_tools: settings.tool_chooser_min_tools,
   tool_shortlist_reasoning: settings.tool_shortlist_reasoning,
   ...(settings.reasoning_effort ? { reasoning_effort: settings.reasoning_effort } : {}),
   use_multimodal: settings.use_multimodal,
@@ -220,6 +231,7 @@ export const normalizeEntryNodeSettings = (
   llmTools: input?.llmTools ?? true,
   nativeToolCalling: input?.nativeToolCalling ?? true,
   use_tool_chooser: input?.use_tool_chooser ?? true,
+  tool_chooser_min_tools: input?.tool_chooser_min_tools ?? 5,
   tool_shortlist_reasoning: input?.tool_shortlist_reasoning ?? false,
   ...(input?.reasoning_effort ? { reasoning_effort: input.reasoning_effort } : {}),
   use_multimodal: input?.use_multimodal ?? true,
@@ -374,6 +386,16 @@ Return only the structured shortlist result. Do not answer the user yet.`
 const createFallbackToolCatalog = (toolNames: readonly string[]) =>
   toolNames.map((name) => ({ name, description: name }))
 
+const resolveToolNames = (
+  toolCatalog: ReadonlyArray<{ name: string; description: string }>,
+  fallbackToolNames: readonly string[],
+) => {
+  const catalogToolNames = toolCatalog.map((tool) => tool.name)
+  return catalogToolNames.length > 0 ? catalogToolNames : [...fallbackToolNames]
+}
+
+const shouldRunToolChooser = (toolCount: number, minTools: number) => toolCount > minTools
+
 type StandardEntryNodeOptions = {
   name: string
   renderOptions: { hideChat?: boolean; hideLlm?: boolean }
@@ -524,10 +546,31 @@ export const createEntryNodeToolFactory = (config: EntryNodeConfig) =>
               createFallbackToolCatalog(
                 allowedTools.length > 0 ? allowedTools : (config.defaultAllowedTools ?? []),
               )
+            const availableTools = resolveToolNames(
+              toolCatalog,
+              allowedTools.length > 0 ? allowedTools : (config.defaultAllowedTools ?? []),
+            )
 
-            if (toolCatalog.length === 0) {
+            if (availableTools.length === 0) {
               return buildChatCompletionResult('SimpleCompletion', {
-                allowedTools,
+                allowedTools: availableTools,
+                llmTools: normalizedSettings.nativeToolCalling,
+                prompts: promptAugmentations.prompts,
+                prompt_injections: promptAugmentations.promptInjections,
+                ...(normalizedSettings.reasoning_effort
+                  ? { reasoning_effort: normalizedSettings.reasoning_effort }
+                  : {}),
+              })
+            }
+
+            if (
+              !shouldRunToolChooser(
+                availableTools.length,
+                normalizedSettings.tool_chooser_min_tools,
+              )
+            ) {
+              return buildChatCompletionResult('SimpleCompletion', {
+                allowedTools: availableTools,
                 llmTools: normalizedSettings.nativeToolCalling,
                 prompts: promptAugmentations.prompts,
                 prompt_injections: promptAugmentations.promptInjections,

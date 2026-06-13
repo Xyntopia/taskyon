@@ -50,6 +50,7 @@ const em = computed(() => state.appConfiguration.expertMode)
 const entryNodePickKeys = [
   'use_baseprompt',
   'use_tool_chooser',
+  'tool_chooser_min_tools',
   'use_multimodal',
   'reasoning_effort',
   'llmTools',
@@ -70,9 +71,7 @@ const getEntryNodeWebSearch = (): EntryNodeWebSearchSettings => {
 
   return {
     ...(typeof webSearch.enabled === 'boolean' ? { enabled: webSearch.enabled } : {}),
-    ...(typeof webSearch.max_results === 'number'
-      ? { max_results: webSearch.max_results }
-      : {}),
+    ...(typeof webSearch.max_results === 'number' ? { max_results: webSearch.max_results } : {}),
   }
 }
 

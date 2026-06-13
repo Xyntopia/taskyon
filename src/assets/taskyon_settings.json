@@ -22,6 +22,7 @@
     "taskyonFlow": {
       "use_baseprompt": true,
       "use_tool_chooser": true,
+      "tool_chooser_min_tools": 5,
       "llmTools": true,
       "use_multimodal": true,
       "reasoning_effort": "low",

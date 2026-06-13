@@ -27,6 +27,8 @@ Taskyon now treats `toolchainConfig.entryNode` as the primary orchestration conf
 
 - Prompt templates (`prompt_templates`) live under `entryNode` settings.
 - Tool-calling behavior (`llmTools` / native tool-calling preference) is configured at `entryNode`.
+- Tool-shortlist behavior is configured at `entryNode` through `use_tool_chooser` and
+  `tool_chooser_min_tools`.
 - Optional web search execution flags are configured at `entryNode.websearch`.
 
 `chatCompletion` remains the execution gateway, while entry-node controls workflow/prompt orchestration.

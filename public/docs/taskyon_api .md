@@ -158,7 +158,9 @@ Task processing has two parts:
 
 **Default UI flow:** when a user sends a message, Taskyon appends an **entry node** (usually
 `taskyonFlow`) which decides whether to run a plain chat completion, a web search, or an
-internal tool-shortlist phase before routing into tool calls.
+internal tool-shortlist phase before routing into tool calls. The shortlist phase is only used
+when tool chooser is enabled and the available tool count exceeds
+`tool_chooser_min_tools`.
 
 ### 4.2 processTasks API
 
