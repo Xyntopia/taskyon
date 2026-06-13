@@ -67,6 +67,13 @@ export const EntryNodeSettingsSchema = {
       description:
         'Enable the tool-shortlist stage for this specific entry-node run. This is captured on the entry node for replayability.',
     },
+    tool_shortlist_reasoning: {
+      type: 'boolean',
+      default: false,
+      title: 'Tool Shortlist Reasoning',
+      description:
+        'Include explicit reasoning text in shortlist results. Usually unnecessary with modern reasoning-capable models.',
+    },
     reasoning_effort: {
       enum: ['low', 'medium', 'high', 'none'],
       title: 'Reasoning Effort',
@@ -120,6 +127,7 @@ export type EntryNodeArgs = {
   llmTools?: boolean
   nativeToolCalling?: boolean
   use_tool_chooser?: boolean
+  tool_shortlist_reasoning?: boolean
   reasoning_effort?: 'low' | 'medium' | 'high' | 'none'
   use_multimodal?: boolean
   websearch?: {
@@ -142,6 +150,7 @@ export type ResolvedEntryNodeSettings = {
   llmTools: boolean
   nativeToolCalling: boolean
   use_tool_chooser: boolean
+  tool_shortlist_reasoning: boolean
   reasoning_effort?: 'low' | 'medium' | 'high' | 'none'
   use_multimodal: boolean
   websearch: {
@@ -159,6 +168,7 @@ const toEntryNodeArguments = (
   llmTools: settings.llmTools,
   nativeToolCalling: settings.nativeToolCalling,
   use_tool_chooser: settings.use_tool_chooser,
+  tool_shortlist_reasoning: settings.tool_shortlist_reasoning,
   ...(settings.reasoning_effort ? { reasoning_effort: settings.reasoning_effort } : {}),
   use_multimodal: settings.use_multimodal,
   websearch: {
@@ -210,6 +220,7 @@ export const normalizeEntryNodeSettings = (
   llmTools: input?.llmTools ?? true,
   nativeToolCalling: input?.nativeToolCalling ?? true,
   use_tool_chooser: input?.use_tool_chooser ?? true,
+  tool_shortlist_reasoning: input?.tool_shortlist_reasoning ?? false,
   ...(input?.reasoning_effort ? { reasoning_effort: input.reasoning_effort } : {}),
   use_multimodal: input?.use_multimodal ?? true,
   websearch: {
@@ -238,11 +249,11 @@ const buildEntryNodePromptAugmentations = (args: {
   }
   const modePrompt =
     mode === 'toolresult'
-      ? interpolatePromptTemplate(templates.toolResult, templateVariables)
+      ? prompt
       : mode === 'error'
-        ? interpolatePromptTemplate(templates.evaluate, templateVariables)
+        ? prompt
         : mode === 'message'
-          ? interpolatePromptTemplate(templates.task, templateVariables)
+          ? prompt
           : prompt
   const prompts = [
     ...(!llmTools ? [templates.instruction] : []),
@@ -250,7 +261,6 @@ const buildEntryNodePromptAugmentations = (args: {
       ? [interpolatePromptTemplate(templates.tools, templateVariables)]
       : []),
     modePrompt,
-    ...(modePrompt === prompt ? [] : [prompt]),
   ].filter((value) => value.trim().length > 0)
   return {
     prompts,
@@ -287,26 +297,32 @@ const resolveMode = (previousTask: TaskNode | undefined): EntryNodeMode => {
 
 type ToolShortlistResult = { type: 'none' } | { type: 'tools'; tools: string[] }
 
-const toolShortlistSchema = {
+const buildToolShortlistSchema = (
+  includeReasoning: boolean,
+): JSONSchema7 & Record<string, unknown> => ({
   type: 'object',
   properties: {
-    reasoning_steps: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
-      description: 'The reasoning steps leading to the final conclusion.',
-    },
+    ...(includeReasoning
+      ? {
+          reasoning_steps: {
+            type: 'array',
+            items: {
+              type: 'string',
+            },
+            description: 'Short reasoning notes for why these tools were chosen.',
+          },
+        }
+      : {}),
     choice: {
       anyOf: [
         {
           enum: ['no'],
           description:
-            'If you are sure no tools are required for an answer, choose "no" as an answer instead of a list!',
+            'If you are sure no tools are required for an answer, choose "no" as an answer instead of a list.',
         },
         {
           type: 'array',
-          description: 'List of tool names you think might be relevant',
+          description: 'List of tool names you think might be relevant.',
           items: {
             type: 'string',
           },
@@ -315,8 +331,8 @@ const toolShortlistSchema = {
     },
   },
   additionalProperties: false,
-  required: ['reasoning_steps', 'choice'],
-} as const satisfies JSONSchema7
+  required: includeReasoning ? ['reasoning_steps', 'choice'] : ['choice'],
+})
 
 const resolveToolShortlistResult = (
   task: TaskNode | undefined,
@@ -350,7 +366,9 @@ Examples are:
 - something that requires an API call
 - ... and more! make sure to think about it!
 
-If you are sure that none of the tools are relevant, your choice should be simple string "no".`
+If you are sure that none of the tools are relevant, your choice should be simple string "no".
+
+Return only the structured shortlist result. Do not answer the user yet.`
 }
 
 const createFallbackToolCatalog = (toolNames: readonly string[]) =>
@@ -520,14 +538,14 @@ export const createEntryNodeToolFactory = (config: EntryNodeConfig) =>
             }
 
             return makeTaskResult([
+              // TODO: replace this static shortlist prompt with a dedicated tool-search tool once
+              // Taskyon has enough tools that shortlist prompting becomes too expensive or tool limits matter.
               createChatCompletionTask({
                 goal: 'AnalyzeToolResult',
                 prompts: [buildToolShortlistPrompt(toolCatalog)],
                 llmTools: true,
-                schema: toolShortlistSchema,
-                ...(normalizedSettings.reasoning_effort
-                  ? { reasoning_effort: normalizedSettings.reasoning_effort }
-                  : {}),
+                schema: buildToolShortlistSchema(normalizedSettings.tool_shortlist_reasoning),
+                reasoning_effort: 'low',
                 use_multimodal: normalizedSettings.use_multimodal,
               }),
               // Re-enter after the shortlist completion.

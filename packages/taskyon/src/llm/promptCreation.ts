@@ -212,18 +212,6 @@ export function addPrompts(
     // only add tools, if we don#t use the native API already
     if (!useNativeTools) {
       appendMessagesList.push(taskChatTemplates.instruction, taskChatTemplates.tools)
-      // send instructions only if there aren't any custom prompts...
-      if (prompts.length === 0) {
-        // Remove the last message from openAIConversationThread
-        // because it will be replaced by our task/evaluate/toolResult messages
-        // where we have wrapped the original message...
-        modifiedOpenAIConversationThread.pop()
-        if (goal === 'ChooseTool') {
-          appendMessagesList.push(taskChatTemplates.task)
-        } else if (goal === 'AnalyzeToolResult') {
-          appendMessagesList.push(taskChatTemplates.toolResult)
-        }
-      }
     }
     // put custom prompts between general instruction, tool lists and
     // the schema enforcer
