@@ -253,6 +253,9 @@ export const compileTaskyonFunctionArguments = (
 export const compileTaskyonMessageString = (
   input: string,
   variableService: TaskVariablePresentationService,
+  options?: {
+    preserveUnknownPlaceholders?: boolean
+  },
 ): string =>
   input.replace(PLACEHOLDER_REGEX, (match, rawName: string) => {
     const trimmedName = rawName.trim()
@@ -264,6 +267,7 @@ export const compileTaskyonMessageString = (
 
     const taskId = variableService.resolveVariableName(trimmedName)
     if (!taskId) {
+      if (options?.preserveUnknownPlaceholders) return match
       throw new Error(`Unknown Taskyon variable placeholder: ${trimmedName}`)
     }
 

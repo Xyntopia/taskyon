@@ -229,6 +229,12 @@ const cleanupRawStreamOutput = (rawOutput: string): string => {
   return cleaned
 }
 
+const serializeRawChunkValue = (value: unknown): string => {
+  if (typeof value === 'string') return value
+  if (value === undefined) return ''
+  return safeYamlDump(value)
+}
+
 const normalizePromptInjections = (value: unknown): PromptInjection[] =>
   Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
 
@@ -844,7 +850,9 @@ function generateFollowUpTasksFromResult(
         }
         if (txtContent) {
           const compiledTextContent = variableService
-            ? compileTaskyonMessageString(txtContent, variableService)
+            ? compileTaskyonMessageString(txtContent, variableService, {
+                preserveUnknownPlaceholders: true,
+              })
             : txtContent
 
           if (llmTools && hasNativeToolCalls) {
@@ -1444,7 +1452,7 @@ export function createChatCompletionTool(
         includeRawChunks: true,
         onChunk({ chunk }) {
           chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
-          if (chunk.type === 'raw') rawOutput += chunk.rawValue as string
+          if (chunk.type === 'raw') rawOutput += serializeRawChunkValue(chunk.rawValue)
           partialTextOutput += extractTextFromChunk(chunk)
         },
         onError(err) {

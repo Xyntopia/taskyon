@@ -396,6 +396,11 @@ const resolveToolNames = (
 
 const shouldRunToolChooser = (toolCount: number, minTools: number) => toolCount > minTools
 
+const resolveFallbackToolNames = (
+  allowedTools: readonly string[],
+  defaultAllowedTools: readonly string[],
+) => (allowedTools.length > 0 ? [...allowedTools] : [...defaultAllowedTools])
+
 type StandardEntryNodeOptions = {
   name: string
   renderOptions: { hideChat?: boolean; hideLlm?: boolean }
@@ -510,6 +515,19 @@ export const createEntryNodeToolFactory = (config: EntryNodeConfig) =>
         return makeTaskResult([createChatCompletionTask(chatCompletionArgs)])
       }
 
+      const resolveAvailableToolsForMessage = async () => {
+        const fallbackToolNames = resolveFallbackToolNames(
+          allowedTools,
+          config.defaultAllowedTools ?? [],
+        )
+        const toolCatalog =
+          (await config.getToolCatalog?.()) ?? createFallbackToolCatalog(fallbackToolNames)
+        return {
+          toolCatalog,
+          availableTools: resolveToolNames(toolCatalog, fallbackToolNames),
+        }
+      }
+
       const promptAugmentations = buildEntryNodePromptAugmentations({
         mode,
         prompt,
@@ -541,22 +559,23 @@ export const createEntryNodeToolFactory = (config: EntryNodeConfig) =>
             chooserUsesTools: true,
           },
           async () => {
-            const toolCatalog =
-              (await config.getToolCatalog?.()) ??
-              createFallbackToolCatalog(
-                allowedTools.length > 0 ? allowedTools : (config.defaultAllowedTools ?? []),
-              )
-            const availableTools = resolveToolNames(
-              toolCatalog,
-              allowedTools.length > 0 ? allowedTools : (config.defaultAllowedTools ?? []),
-            )
+            const { toolCatalog, availableTools } = await resolveAvailableToolsForMessage()
+            const messagePromptAugmentations = buildEntryNodePromptAugmentations({
+              mode,
+              prompt,
+              previousTask,
+              templates: normalizedSettings.prompt_templates,
+              useBasePrompt: normalizedSettings.use_baseprompt,
+              llmTools: normalizedSettings.nativeToolCalling,
+              allowedTools: availableTools,
+            })
 
             if (availableTools.length === 0) {
               return buildChatCompletionResult('SimpleCompletion', {
                 allowedTools: availableTools,
                 llmTools: normalizedSettings.nativeToolCalling,
-                prompts: promptAugmentations.prompts,
-                prompt_injections: promptAugmentations.promptInjections,
+                prompts: messagePromptAugmentations.prompts,
+                prompt_injections: messagePromptAugmentations.promptInjections,
                 ...(normalizedSettings.reasoning_effort
                   ? { reasoning_effort: normalizedSettings.reasoning_effort }
                   : {}),
@@ -572,8 +591,8 @@ export const createEntryNodeToolFactory = (config: EntryNodeConfig) =>
               return buildChatCompletionResult('SimpleCompletion', {
                 allowedTools: availableTools,
                 llmTools: normalizedSettings.nativeToolCalling,
-                prompts: promptAugmentations.prompts,
-                prompt_injections: promptAugmentations.promptInjections,
+                prompts: messagePromptAugmentations.prompts,
+                prompt_injections: messagePromptAugmentations.promptInjections,
                 ...(normalizedSettings.reasoning_effort
                   ? { reasoning_effort: normalizedSettings.reasoning_effort }
                   : {}),
@@ -640,17 +659,27 @@ export const createEntryNodeToolFactory = (config: EntryNodeConfig) =>
             ])
           },
         )
-        .with({ mode: 'message' }, () =>
-          buildChatCompletionResult('SimpleCompletion', {
-            allowedTools,
+        .with({ mode: 'message' }, async () => {
+          const { availableTools } = await resolveAvailableToolsForMessage()
+          const messagePromptAugmentations = buildEntryNodePromptAugmentations({
+            mode,
+            prompt,
+            previousTask,
+            templates: normalizedSettings.prompt_templates,
+            useBasePrompt: normalizedSettings.use_baseprompt,
             llmTools: normalizedSettings.nativeToolCalling,
-            prompts: promptAugmentations.prompts,
-            prompt_injections: promptAugmentations.promptInjections,
+            allowedTools: availableTools,
+          })
+          return buildChatCompletionResult('SimpleCompletion', {
+            allowedTools: availableTools,
+            llmTools: normalizedSettings.nativeToolCalling,
+            prompts: messagePromptAugmentations.prompts,
+            prompt_injections: messagePromptAugmentations.promptInjections,
             ...(normalizedSettings.reasoning_effort
               ? { reasoning_effort: normalizedSettings.reasoning_effort }
               : {}),
-          }),
-        )
+          })
+        })
         .with({ mode: P.union('toolresult', 'error', 'fallback', 'structured') }, () =>
           buildChatCompletionResult('AnalyzeToolResult', {
             allowedTools,

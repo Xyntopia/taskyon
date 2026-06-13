@@ -1017,9 +1017,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       toolChooser: { enabled: true, useTools: true },
       defaultAllowedTools: [],
       getToolCatalog: async () => {
-        const ty = await taskyon
-        const allTools = await ty.updateToolDefinitions(true)
-        return Object.values(allTools)
+        const cachedTools =
+          Object.keys(allTools.value).length > 0
+            ? allTools.value
+            : await (await taskyon).updateToolDefinitions(true)
+        return Object.values(cachedTools)
           .filter((tool) => !['chatCompletion', 'entryNode', 'taskyonFlow'].includes(tool.name))
           .map((tool) => ({
             name: tool.name,

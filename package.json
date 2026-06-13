@@ -6,7 +6,16 @@
   "author": "thomas meschede / yeus <thomas.meschede@web.de>",
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/https_tunnel_wasm",
+    "packages/p2p-core",
+    "packages/relay",
+    "packages/secure-tunnel",
+    "packages/shared",
+    "packages/taskyon",
+    "packages/taskyon-headless",
+    "packages/taskyon-vscode",
+    "packages/tycli",
+    "packages/tyclient"
   ],
   "scripts": {
     "build": "yarn run ensure:msl && yarn pack:tyclient && yarn build:app",

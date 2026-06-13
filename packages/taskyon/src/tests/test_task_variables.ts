@@ -206,6 +206,30 @@ export const testTaskVariableCompilationInMessageStrings = () => {
   return { success: true }
 }
 
+export const testTaskVariableCompilationPreservesUnknownAssistantPlaceholders = () => {
+  const sourceTask = createTask({
+    id: 'task-source',
+    role: 'assistant',
+    content: { type: 'message', data: 'Rendered value' },
+  })
+  const tasksById = new Map([[sourceTask.id, sourceTask]])
+  const variableService = createTaskVariablePresentationService()
+  variableService.getOrAssignVariableName(sourceTask, tasksById)
+
+  const compiled = compileTaskyonMessageString(
+    'Value: {{message1}} {{#tool get_current_time}}',
+    variableService,
+    { preserveUnknownPlaceholders: true },
+  )
+
+  assert(
+    compiled === 'Value: {{_t:task-source}} {{#tool get_current_time}}',
+    `Expected unknown placeholder to stay literal while known variable compiles, got ${toDebugString(compiled)}`,
+  )
+
+  return { success: true }
+}
+
 export const testPromptInjectionPlacement = () => {
   const promptResult = addPrompts(
     {},
