@@ -186,7 +186,7 @@ const processConversationUntilReturn = (taskChain: ReturnType<typeof buildCreate
 export const testTimeQuestionConversationUsesClockTool = async () => {
   const taskChain = buildCreateNewTaskChain({
     currentTask: null,
-    draftTask: getSimpleMessageTask('hi! what is the time?'),
+    draftTask: getSimpleMessageTask('hi! what is the time? use the tool please!'),
     entryNode: getEntryNodeDraft(),
     mode: 'message',
   })
