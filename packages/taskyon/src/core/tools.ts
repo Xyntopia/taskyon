@@ -10,7 +10,7 @@ import {
 import type { InternalTool, toolContext } from '../types/toolApi'
 import type { FunctionArguments, FunctionCall, ParamType } from '../types/tools'
 import { ToolBase } from '../types/tools'
-import { executeCodeInIframe } from '../utils/iframeWorker'
+import { executeToolInWorkerSandbox } from '../utils/executeToolInWorkerSandbox'
 import { bigIntToString } from '../utils/objHelpers'
 import { convertZodToJsonSchemaCached } from '../utils/schema'
 import { jsonSchemaToYamlString } from '../utils/yamlUtils'
@@ -183,14 +183,16 @@ export async function handleFunctionExecution(
     try {
       //const { messagePort, ...modContext } = context
       //console.log('messagePort', messagePort)
-      funcR = await executeCodeInIframe(
+      funcR = await executeToolInWorkerSandbox(
         tool.code,
         { params: func.arguments, context: context },
         func.name + '.js',
         stopSignal,
       )
     } catch (error) {
-      throw new Error(`Error executing iframe code for tool: ${func.name}`, { cause: error })
+      throw new Error(`Error executing worker sandbox code for tool: ${func.name}`, {
+        cause: error,
+      })
     }
   } else {
     // we do the zod object parsing/validation here, because we might have a proxy object from upstream

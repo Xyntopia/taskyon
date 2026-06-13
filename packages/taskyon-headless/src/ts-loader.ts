@@ -22,10 +22,7 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
-async function tryResolveRelative(
-  specifier: string,
-  parentURL?: string,
-): Promise<string | null> {
+async function tryResolveRelative(specifier: string, parentURL?: string): Promise<string | null> {
   if (!parentURL?.startsWith('file:')) return null
   const parentPath = dirname(fileURLToPath(parentURL))
   const basePath = resolvePath(parentPath, specifier)
@@ -63,11 +60,7 @@ type LoadResult = {
   shortCircuit?: boolean
 }
 
-type DefaultLoad = (
-  url: string,
-  context: LoadContext,
-  nextLoad: DefaultLoad,
-) => Promise<LoadResult>
+type DefaultLoad = (url: string, context: LoadContext, nextLoad: DefaultLoad) => Promise<LoadResult>
 
 type DefaultResolve = (
   specifier: string,
@@ -111,20 +104,7 @@ export async function resolve(
     }
   }
 
-  if (
-    specifier === '../modules/sandbox/iframeWorker' ||
-    specifier.endsWith('/modules/sandbox/iframeWorker')
-  ) {
-    return {
-      shortCircuit: true,
-      url: new URL('./shims/iframeWorker.ts', import.meta.url).href,
-    }
-  }
-
-  if (
-    specifier === './modelicaLibraryCatalog' ||
-    specifier.endsWith('/modelicaLibraryCatalog')
-  ) {
+  if (specifier === './modelicaLibraryCatalog' || specifier.endsWith('/modelicaLibraryCatalog')) {
     return {
       shortCircuit: true,
       url: new URL('./shims/modelicaLibraryCatalog.ts', import.meta.url).href,

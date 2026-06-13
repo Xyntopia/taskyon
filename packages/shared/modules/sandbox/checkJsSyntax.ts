@@ -1,3 +1,10 @@
+import {
+  assertBrowserSandboxDom,
+  createBrowserSandboxFrame,
+  findBrowserSandboxFrame,
+  writeBrowserSandboxDocument,
+} from './browserSandboxDomHost'
+
 export interface JsValidationResult {
   valid: boolean
   phase: 'syntax' | 'runtime' | null
@@ -9,12 +16,10 @@ export interface JsValidationResult {
   rawError?: string | undefined
 }
 
-const IFRAME_ID = '__taskyonJsCheckerIframe'
+const BROWSER_SANDBOX_FRAME_ID = '__taskyonJsCheckerIframe'
 
 function assertIsBrowser(): void {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    throw new Error('validateJavaScriptInSandbox can only be used in a browser environment.')
-  }
+  assertBrowserSandboxDom()
 }
 
 function isBrowserEnv(): boolean {
@@ -24,27 +29,16 @@ function isBrowserEnv(): boolean {
 function getOrCreateJsCheckerIframe(): HTMLIFrameElement {
   assertIsBrowser()
 
-  const existing = document.getElementById(IFRAME_ID)
-  if (existing instanceof HTMLIFrameElement) {
+  const existing = findBrowserSandboxFrame(BROWSER_SANDBOX_FRAME_ID)
+  if (existing) {
     return existing
   }
 
-  const iframe = document.createElement('iframe')
-  iframe.id = IFRAME_ID
-  iframe.style.display = 'none'
-  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin')
-
-  document.body.appendChild(iframe)
-
-  const doc = iframe.contentDocument
-  if (!doc) {
-    throw new Error('Failed to access iframe document.')
-  }
-
-  doc.open()
-  doc.write('<!doctype html><html><head></head><body></body></html>')
-  doc.close()
-
+  const iframe = createBrowserSandboxFrame({
+    id: BROWSER_SANDBOX_FRAME_ID,
+    sandboxTokens: ['allow-scripts', 'allow-same-origin'],
+  })
+  writeBrowserSandboxDocument(iframe, '<!doctype html><html><head></head><body></body></html>')
   return iframe
 }
 
@@ -53,15 +47,10 @@ function resetIframeDocument(iframe: HTMLIFrameElement): { win: Window; doc: Doc
   if (!win) {
     throw new Error('Failed to access iframe contentWindow.')
   }
-
-  const doc = iframe.contentDocument
-  if (!doc) {
-    throw new Error('Failed to access iframe contentDocument.')
-  }
-
-  doc.open()
-  doc.write('<!doctype html><html><head></head><body></body></html>')
-  doc.close()
+  const doc = writeBrowserSandboxDocument(
+    iframe,
+    '<!doctype html><html><head></head><body></body></html>',
+  )
 
   return { win, doc }
 }

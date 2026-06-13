@@ -1,6 +1,6 @@
 import {
-  buildIframeCode,
-  buildModelAbiValidationIframeCode,
+  buildModelAbiValidationSandboxCode,
+  buildWorkerSandboxCode,
   getPreparedDaeDiagnostics,
   getPreparedDaeStatus,
   loadWasm,
@@ -10,7 +10,7 @@ import {
 } from './modelica'
 import { hasRumocaTemplateRenderer, renderRumocaTemplate } from './rumocaTemplateRender'
 import { strFromU8, unzipSync } from 'fflate'
-import { executeCodeInIframeSimple } from '../modules/sandbox/iframeWorker'
+import { executeInWorkerSandbox } from '../modules/sandbox/workerSandbox'
 import { validateJavaScriptInSandbox } from '../modules/sandbox/checkJsSyntax'
 import { serializeObject } from '../modules/serializeObject'
 import { createGraphController } from '../modules/graph'
@@ -298,11 +298,11 @@ async function runTemplateCoverage(source: string, modelName: string) {
     let jsExecutable = false
     let abiOk: boolean | undefined
     if (check.executableAsJs) {
-      const code = buildModelAbiValidationIframeCode(out)
+      const code = buildModelAbiValidationSandboxCode(out)
       const id = `modelica-template-abi-check-${check.name.replaceAll(/[^a-zA-Z0-9_-]/g, '_')}`
       const abort = new AbortController()
       try {
-        const rawAbiResult = await executeCodeInIframeSimple(
+        const rawAbiResult = await executeInWorkerSandbox(
           {
             id,
             code,
@@ -510,7 +510,7 @@ end TestPreparedMeta;
     throw new Error('compile_to_json should not expose dae_prepared_diagnostics in native-only API')
   }
 
-  const build = (dae).__rumoca_build
+  const build = dae.__rumoca_build
   if (!build || typeof build !== 'object' || Array.isArray(build)) {
     throw new Error('Native DAE is missing __rumoca_build metadata')
   }
@@ -601,8 +601,8 @@ export async function testModelicaBooleanNetworkShimRuntime() {
   const runId = 'modelica-boolean-network-shim-runtime'
   const abort = new AbortController()
   try {
-    const runCode = await buildIframeCodeChecked(rendered, runId)
-    const result = await executeCodeInIframeSimple<{
+    const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
+    const result = await executeInWorkerSandbox<{
       meta?: { stopReason?: unknown; stopError?: unknown }
       data?: { t?: unknown[] }
     }>(
@@ -693,8 +693,8 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
   const runId = 'modelica-boolean-signal-generator-waveform-regression'
   const abort = new AbortController()
   try {
-    const runCode = await buildIframeCodeChecked(rendered, runId)
-    const result = await executeCodeInIframeSimple<{
+    const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
+    const result = await executeInWorkerSandbox<{
       meta?: { stopReason?: unknown; stopError?: unknown }
       data?: { t?: unknown[]; y?: Record<string, unknown> }
     }>(
@@ -860,6 +860,15 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
   const runId = 'modelica-boolean-network1-runtime-regression'
   const abort = new AbortController()
   const timeoutMs = 10_000
+  type BooleanNetworkRunResult = {
+    meta?: {
+      stopReason?: unknown
+      stopError?: unknown
+      executionMode?: unknown
+      solverStats?: Record<string, unknown>
+    }
+    data?: { t?: unknown[]; y?: Record<string, unknown> }
+  }
   const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> =>
     await new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -878,17 +887,9 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
       )
     })
   try {
-    const runCode = await buildIframeCodeChecked(rendered, runId)
-    const result = await withTimeout(
-      executeCodeInIframeSimple<{
-        meta?: {
-          stopReason?: unknown
-          stopError?: unknown
-          executionMode?: unknown
-          solverStats?: Record<string, unknown>
-        }
-        data?: { t?: unknown[]; y?: Record<string, unknown> }
-      }>(
+    const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
+    const result: BooleanNetworkRunResult = await withTimeout(
+      executeInWorkerSandbox<BooleanNetworkRunResult>(
         {
           id: runId,
           code: runCode,
@@ -1028,7 +1029,7 @@ function Model() {
   const runId = 'modelica-static-model-execution-mode-regression'
   const abort = new AbortController()
   try {
-    const result = await executeCodeInIframeSimple<{
+    const result = await executeInWorkerSandbox<{
       meta?: {
         executionMode?: unknown
         warnings?: unknown
@@ -1038,7 +1039,7 @@ function Model() {
     }>(
       {
         id: runId,
-        code: buildIframeCode(source),
+        code: buildWorkerSandboxCode(source),
         sourceURL: `${runId}.js`,
         stopSignal: abort.signal,
       },
@@ -1220,7 +1221,7 @@ model BouncingBall             "The bouncing ball model"
   }
 
   const runId = 'modelica-bouncing-ball-event-localization'
-  const runCode = await buildIframeCodeChecked(rendered, runId)
+  const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
   const runAbort = new AbortController()
 
   type SimResult = {
@@ -1246,7 +1247,7 @@ model BouncingBall             "The bouncing ball model"
   }
   let runResult: SimResult | null = null
   try {
-    runResult = await executeCodeInIframeSimple(
+    runResult = await executeInWorkerSandbox(
       {
         id: runId,
         code: runCode,
@@ -1509,7 +1510,7 @@ model BouncingBall             "The bouncing ball model"
   }
 
   const runId = 'modelica-bouncing-ball-standard-settings'
-  const runCode = await buildIframeCodeChecked(rendered, runId)
+  const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
   const runAbort = new AbortController()
   type SimResult = {
     meta?: {
@@ -1528,7 +1529,7 @@ model BouncingBall             "The bouncing ball model"
   }
   let runResult: SimResult | null = null
   try {
-    runResult = await executeCodeInIframeSimple(
+    runResult = await executeInWorkerSandbox(
       {
         id: runId,
         code: runCode,
@@ -1752,12 +1753,12 @@ end Test;
     let abiValidationOk: boolean | undefined
     let abiSandboxExecuted = false
     if (decision.shouldValidate) {
-      const code = buildModelAbiValidationIframeCode(rendered)
+      const code = buildModelAbiValidationSandboxCode(rendered)
       const id = `modelica-abi-routing-${c.name.replaceAll(/[^a-zA-Z0-9_-]/g, '_')}`
       const abort = new AbortController()
       abiSandboxExecuted = true
       try {
-        const rawAbiResult = await executeCodeInIframeSimple(
+        const rawAbiResult = await executeInWorkerSandbox(
           {
             id,
             code,
@@ -1870,13 +1871,13 @@ async function assertGeneratedJsSyntaxOrThrow(rendered: string, context: string)
   throw new Error(details)
 }
 
-async function buildIframeCodeChecked(
+async function buildWorkerSandboxCodeChecked(
   rendered: string,
   context: string,
   solverSource?: string,
 ): Promise<string> {
   await assertGeneratedJsSyntaxOrThrow(rendered, context)
-  return buildIframeCode(rendered, solverSource)
+  return buildWorkerSandboxCode(rendered, solverSource)
 }
 
 async function getDiagnosticsWasm(): Promise<DiagnosticsWasm> {
@@ -1920,7 +1921,7 @@ async function ensureDiagnosticsMslLoaded(
   }
 }
 
-function buildModelConstructionProbeIframeCode(compiledJs: string): string {
+function buildModelConstructionProbeSandboxCode(compiledJs: string): string {
   return `
 (params, context) => {
   try {
@@ -2455,12 +2456,12 @@ end MslConstRamp;
     }
     debug.abiDecision = abiDecision
 
-    const modelProbeCode = buildModelConstructionProbeIframeCode(rendered)
+    const modelProbeCode = buildModelConstructionProbeSandboxCode(rendered)
     const modelProbeRunId = 'modelica-msl-smoke-model-probe'
     const modelProbeAbort = new AbortController()
     let modelProbeResult: unknown
     try {
-      modelProbeResult = await executeCodeInIframeSimple(
+      modelProbeResult = await executeInWorkerSandbox(
         {
           id: modelProbeRunId,
           code: modelProbeCode,
@@ -2485,11 +2486,11 @@ end MslConstRamp;
       throw new Error('Model construction probe failed')
     }
 
-    const abiCode = buildModelAbiValidationIframeCode(rendered)
+    const abiCode = buildModelAbiValidationSandboxCode(rendered)
     const abiRunId = 'modelica-msl-smoke-abi'
     const abiAbort = new AbortController()
     try {
-      const rawAbiResult = await executeCodeInIframeSimple(
+      const rawAbiResult = await executeInWorkerSandbox(
         {
           id: abiRunId,
           code: abiCode,
@@ -2518,7 +2519,7 @@ end MslConstRamp;
     }
 
     const runId = 'modelica-msl-smoke-run'
-    const runCode = await buildIframeCodeChecked(rendered, runId)
+    const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
     const runAbort = new AbortController()
     const getSeriesSampleLength = (seriesData: unknown): number => {
       if (Array.isArray(seriesData)) return seriesData.length
@@ -2535,7 +2536,7 @@ end MslConstRamp;
     let runResult: SimResult
     let serializedRunResult = ''
     try {
-      runResult = await executeCodeInIframeSimple(
+      runResult = await executeInWorkerSandbox(
         {
           id: runId,
           code: runCode,
@@ -2989,9 +2990,9 @@ end MslResistorExample;
       },
     }
 
-    debug.phase = 'build-iframe-code'
+    debug.phase = 'build-worker-sandbox-code'
     const runId = 'modelica-msl-resistor-example-run'
-    const runCode = await buildIframeCodeChecked(rendered, runId)
+    const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
     const runAbort = new AbortController()
     type SimResult = {
       meta?: {
@@ -3196,7 +3197,7 @@ end MslResistorExample;
     let serializedRunResult = ''
     try {
       debug.phase = 'execute-generated-js'
-      runResult = await executeCodeInIframeSimple(
+      runResult = await executeInWorkerSandbox(
         {
           id: runId,
           code: runCode,
@@ -3718,7 +3719,10 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
   }
   const generatedCodeDebug = summarizeGeneratedCodeForDebug(rendered)
 
-  const runCode = await buildIframeCodeChecked(rendered, 'modelica-satellite-orbit-2d-runtime')
+  const runCode = await buildWorkerSandboxCodeChecked(
+    rendered,
+    'modelica-satellite-orbit-2d-runtime',
+  )
   const mu = 398600.4418
   const r0 = 7000
   const v0 = Math.sqrt(mu / r0)
@@ -3771,7 +3775,7 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
   ): Promise<OrbitSolverRun> => {
     const abort = new AbortController()
     try {
-      return await executeCodeInIframeSimple(
+      return await executeInWorkerSandbox(
         {
           id: runId,
           code: runCode,

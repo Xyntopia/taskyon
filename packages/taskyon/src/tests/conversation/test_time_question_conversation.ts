@@ -14,7 +14,29 @@ function assert(condition: boolean, msg?: string): asserts condition {
   }
 }
 
-const getEntryNodeDraft = () => partialTaskDraft.parse(structuredClone(tystate.entryNode))
+const getEntryNodeDraft = (entryNodeArgs?: Record<string, unknown>) => {
+  const baseEntryNode = partialTaskDraft.parse(structuredClone(tystate.entryNode))
+  if (baseEntryNode.content.type !== 'functioncall') return baseEntryNode
+
+  const currentArguments =
+    baseEntryNode.content.data.arguments && typeof baseEntryNode.content.data.arguments === 'object'
+      ? baseEntryNode.content.data.arguments
+      : {}
+
+  return partialTaskDraft.parse({
+    ...baseEntryNode,
+    content: {
+      ...baseEntryNode.content,
+      data: {
+        ...baseEntryNode.content.data,
+        arguments: {
+          ...currentArguments,
+          ...(entryNodeArgs ?? {}),
+        },
+      },
+    },
+  })
+}
 
 const getSimpleMessageTask = (text: string) => ({
   role: 'user' as const,
@@ -187,7 +209,10 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
   const taskChain = buildCreateNewTaskChain({
     currentTask: null,
     draftTask: getSimpleMessageTask('hi! what is the time? use the tool please!'),
-    entryNode: getEntryNodeDraft(),
+    entryNode: getEntryNodeDraft({
+      use_tool_chooser: true,
+      tool_chooser_min_tools: 0,
+    }),
     mode: 'message',
   })
 
@@ -204,20 +229,35 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
     const observedTasks = processingResult.observedTasks
     const stopSummary = summarizeProcessingResult(processingResult)
 
-    const shortlistCall = conversationTasks.find(
+    const shortlistCallIndex = conversationTasks.findIndex(
       (task: TaskNode) =>
         task.content.type === 'functioncall' &&
         isNamedFunctionCall(task.content.data, 'chatCompletion') &&
         hasGoal(task.content.data, 'AnalyzeToolResult'),
     )
+    const shortlistCall = shortlistCallIndex >= 0 ? conversationTasks[shortlistCallIndex] : undefined
     const shortlistResult = conversationTasks.find(
       (task: TaskNode) =>
         task.content.type === 'structured' && hasToolChoice(task.content.data, 'clock'),
     )
-    const clockCall = conversationTasks.find(
+    const chooseToolCall = conversationTasks.find(
+      (task: TaskNode) =>
+        task.content.type === 'functioncall' &&
+        isNamedFunctionCall(task.content.data, 'chatCompletion') &&
+        hasGoal(task.content.data, 'ChooseTool'),
+    )
+    const clockCallIndex = conversationTasks.findIndex(
       (task: TaskNode) =>
         task.content.type === 'functioncall' && isNamedFunctionCall(task.content.data, 'clock'),
     )
+    const tasksAfterClock = clockCallIndex >= 0 ? conversationTasks.slice(clockCallIndex + 1) : []
+    const analyzeToolResultCall = tasksAfterClock.find(
+      (task: TaskNode) =>
+        task.content.type === 'functioncall' &&
+        isNamedFunctionCall(task.content.data, 'chatCompletion') &&
+        hasGoal(task.content.data, 'AnalyzeToolResult'),
+    )
+    const clockCall = clockCallIndex >= 0 ? conversationTasks[clockCallIndex] : undefined
     const clockResult = conversationTasks.find(isClockToolResult)
     const errorTask = conversationTasks.find((task: TaskNode) => task.content.type === 'error')
     const returnTasks = conversationTasks.filter((task: TaskNode) => task.content.type === 'return')
@@ -249,6 +289,22 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
     await assertWithDiagnostics(
       !!shortlistResult,
       'Expected the shortlist phase to include the clock tool',
+      taskChain,
+      observedTasks,
+      conversationTasks,
+      stopSummary,
+    )
+    await assertWithDiagnostics(
+      !!chooseToolCall,
+      'Expected a ChooseTool phase after the shortlist result',
+      taskChain,
+      observedTasks,
+      conversationTasks,
+      stopSummary,
+    )
+    await assertWithDiagnostics(
+      !!analyzeToolResultCall,
+      'Expected an AnalyzeToolResult phase after the clock tool returned',
       taskChain,
       observedTasks,
       conversationTasks,
@@ -312,4 +368,4 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
   }
 }
 testTimeQuestionConversationUsesClockTool.description =
-  'Runs the exact UI-style initial Taskyon chain for a time question, waits for the terminal return, then inspects the resulting conversation thread to ensure the clock tool was selected and executed without intermediate error returns.'
+  'Runs the exact UI-style initial Taskyon chain for a time question with the entry-node tool chooser forced on, then verifies shortlist, ChooseTool, clock execution, and final assistant response without intermediate error returns.'

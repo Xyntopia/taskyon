@@ -35,6 +35,8 @@ export type DiagnosticsRunResult = {
   error?: unknown
 }
 
+const MAX_DIAGNOSTICS_TEST_TIMEOUT_MS = 20_000
+
 function camelToNormal(input: string): string {
   if (!input) return ''
   const withSpaces = input
@@ -124,7 +126,8 @@ export async function runDiagnosticsTests(
   },
 ): Promise<DiagnosticsRunResult[]> {
   const details = opts?.details ?? false
-  const defaultTimeoutMs = opts?.timeoutMs ?? 60_000
+  const requestedDefaultTimeoutMs = opts?.timeoutMs ?? MAX_DIAGNOSTICS_TEST_TIMEOUT_MS
+  const defaultTimeoutMs = Math.min(requestedDefaultTimeoutMs, MAX_DIAGNOSTICS_TEST_TIMEOUT_MS)
   const out: DiagnosticsRunResult[] = []
 
   const withTimeout = async (name: string, timeoutMs: number, fn: () => Promise<unknown>) => {
@@ -156,7 +159,8 @@ export async function runDiagnosticsTests(
         if (opts?.tyauth !== undefined) testOpts.tyauth = opts.tyauth
         if (opts?.isCypress !== undefined) testOpts.isCypress = opts.isCypress
       }
-      const timeoutMs = testFn.timeoutMs ?? defaultTimeoutMs
+      const requestedTimeoutMs = testFn.timeoutMs ?? defaultTimeoutMs
+      const timeoutMs = Math.min(requestedTimeoutMs, MAX_DIAGNOSTICS_TEST_TIMEOUT_MS)
       const run = () => Promise.resolve(testFn(testOpts))
       const result = timeoutMs !== undefined ? await withTimeout(name, timeoutMs, run) : await run()
       out.push({

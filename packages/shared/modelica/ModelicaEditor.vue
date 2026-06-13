@@ -719,10 +719,7 @@ import { useProjectFileStore } from './useProjectFileStore'
 import { useModelicaLibraries } from './useModelicaLibraries'
 import { useSolverRegistry } from './useSolverRegistry'
 import { createModelicaLspCompletionExtension } from './modelicaLspCompletion'
-import {
-  ModelicaWorkerClient,
-  type ModelicaWorkerActivityEvent,
-} from './modelicaWorkerClient'
+import { ModelicaWorkerClient, type ModelicaWorkerActivityEvent } from './modelicaWorkerClient'
 import {
   DEFAULT_MODELICA_LIBRARY_ID,
   detectedModelicaLibraryPresets,
@@ -841,7 +838,9 @@ const countNodeClasses = (node: ModelicaLibraryTreeNode): number =>
 
 const countNodeClassType = (node: ModelicaLibraryTreeNode, type: string): number => {
   const own = String(node.classType || '').toLowerCase() === type.toLowerCase() ? 1 : 0
-  return own + (node.children ?? []).reduce((sum, child) => sum + countNodeClassType(child, type), 0)
+  return (
+    own + (node.children ?? []).reduce((sum, child) => sum + countNodeClassType(child, type), 0)
+  )
 }
 
 const astCandidateFromCompiled = (compiled: unknown): unknown => {
@@ -925,12 +924,14 @@ const libraryBusyLabel = computed(() => {
 })
 
 const globalProcessBusy = computed(() => workerBusy.value || Boolean(libraryBusyLabel.value))
-const globalProcessLabel = computed(() =>
-  libraryBusyLabel.value || workerBusyLabel.value || 'Processing',
+const globalProcessLabel = computed(
+  () => libraryBusyLabel.value || workerBusyLabel.value || 'Processing',
 )
 
 const fileNameFromPath = (path: string): string => {
-  const normalized = String(path || '').trim().replaceAll('\\', '/')
+  const normalized = String(path || '')
+    .trim()
+    .replaceAll('\\', '/')
   if (!normalized) return ''
   const parts = normalized.split('/').filter(Boolean)
   return parts[parts.length - 1] || normalized
@@ -1152,9 +1153,7 @@ const daeAnalysis = computed<ModelicaDaeAnalysis>(() => {
       ? (modelShape.constraintBalance as Record<string, unknown>)
       : null
   const solverNy = yCount + wCount
-  const unknownCountDynamic = Number(
-    constraintBalanceMeta?.unknownCountDynamic ?? nx + solverNy,
-  )
+  const unknownCountDynamic = Number(constraintBalanceMeta?.unknownCountDynamic ?? nx + solverNy)
   const equationCountDynamicRaw = constraintBalanceMeta?.equationCountDynamic
   const equationCountDynamic =
     typeof equationCountDynamicRaw === 'number' && Number.isFinite(equationCountDynamicRaw)
@@ -1511,7 +1510,9 @@ function onWorkerActivity(event: ModelicaWorkerActivityEvent) {
   }
 
   workerActivityById.value.delete(event.requestId)
-  workerLiveEntries.value = workerLiveEntries.value.filter((entry) => entry.requestId !== event.requestId)
+  workerLiveEntries.value = workerLiveEntries.value.filter(
+    (entry) => entry.requestId !== event.requestId,
+  )
 }
 
 onMounted(() => {
@@ -2411,9 +2412,7 @@ const runCompilation = async (): Promise<{ ok: boolean; message?: string }> => {
     }
 
     const shouldAutoLoadStandardMsl =
-      /\bModelica\./.test(sourceText) &&
-      Boolean(modelicaWorker.value) &&
-      !standardMslLoaded.value
+      /\bModelica\./.test(sourceText) && Boolean(modelicaWorker.value) && !standardMslLoaded.value
     if (shouldAutoLoadStandardMsl) {
       useModelicaStandardLibrary.value = true
       await loadStandardMslZipFromOpfs('auto-detect: source references Modelica.*')
@@ -2893,7 +2892,7 @@ function openGeneratedHtmlPopup() {
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
-// ---------- Run in sandboxed iframe ----------
+// ---------- Run in worker sandbox ----------
 function handleRunInSandbox() {
   if (!canRunModel.value) {
     Notify.create({
@@ -3048,8 +3047,8 @@ onMounted(async () => {
   // Initial project discovery
   await refreshAvailableProjects()
   // Keep projectFile updated when the editor changes (OPFS will persist it)
-watchDebounced(
-  [
+  watchDebounced(
+    [
       modelicaSource,
       uiTemplates,
       selectedUiTemplateKey,
@@ -3061,12 +3060,12 @@ watchDebounced(
       solverOptionsByKey,
       requiredLibraries,
       plotCharts,
-    plotViewOptions,
-    executionResult,
-    libraryTreeShowRootMetadata,
-    documentVersions,
-    currentVersionIndex,
-  ],
+      plotViewOptions,
+      executionResult,
+      libraryTreeShowRootMetadata,
+      documentVersions,
+      currentVersionIndex,
+    ],
     () => {
       try {
         projectFile.value = packProjectFile()
@@ -3128,7 +3127,10 @@ watchDebounced(
           .map((entry) => entry.slice('opfs:'.length)),
       )
       if (requiredOpfsPaths.length > 0) {
-        await loadLibraryArchivesFromOpfs(requiredOpfsPaths, 'project settings: persisted OPFS archives')
+        await loadLibraryArchivesFromOpfs(
+          requiredOpfsPaths,
+          'project settings: persisted OPFS archives',
+        )
         await refreshLibraryTree()
       } else if (String(mslCachedZipPath.value || '').trim()) {
         await loadCachedMslZipFromOpfs('project settings: useMSL with cached zip path')

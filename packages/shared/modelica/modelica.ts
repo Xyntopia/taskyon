@@ -3,7 +3,7 @@ import type * as WasmTypes from 'rumoca'
 import { z } from 'zod'
 import { ref } from 'vue'
 import { Notify } from 'quasar'
-import { executeCodeInIframeSimple } from '../modules/sandbox/iframeWorker'
+import { executeInWorkerSandbox } from '../modules/sandbox/workerSandbox'
 import { validateJavaScriptInSandbox } from '../modules/sandbox/checkJsSyntax'
 import { serializeObject } from '../modules/serializeObject'
 import { DEFAULT_MODELICA_LIBRARY_URL } from './modelicaLibraryCatalog'
@@ -264,11 +264,11 @@ export type TySimulationServiceV1 = z.infer<typeof TySimulationServiceV1>
 // -------------------------------------------------------------------------------------------------
 // Sandbox ABI validation (compile-time)
 //
-// We validate the generated JS by running it inside the sandboxed iframe,
+// We validate the generated JS by running it inside the browser sandbox,
 // constructing the model via Model(), and checking the minimal ABI contract.
 //
-// Important: we cannot return functions from the iframe, so validation must
-// happen inside the iframe and return plain JSON.
+// Important: we cannot return functions from the browser sandbox, so validation must
+// happen inside the sandbox and return plain JSON.
 // -------------------------------------------------------------------------------------------------
 
 export const TySandboxLogEntryV1 = z.object({
@@ -327,7 +327,7 @@ export function shouldValidateModelAbiForRenderedOutput(
 }
 
 /**
- * Builds iframe-executed code that validates the generated model JS ABI.
+ * Builds worker-sandbox code that validates the generated model JS ABI.
  *
  * Enforcement rules inside the sandbox:
  * - If context.enforceModelAbi is true: ABI must exist and must validate.
@@ -335,7 +335,7 @@ export function shouldValidateModelAbiForRenderedOutput(
  * - Else if model.abi exists: validate it.
  * - Otherwise: skip.
  */
-export function buildModelAbiValidationIframeCode(compiledJs: string): string {
+export function buildModelAbiValidationSandboxCode(compiledJs: string): string {
   // NOTE: We must avoid closing </script> when embedded into HTML; caller already escapes.
   return `
 (params, context) => {
@@ -482,8 +482,8 @@ export const loadWasm = async () => {
   return wasmModule as RumocaModule
 }
 
-// ---------- Build iframe function code ----------
-export const buildIframeCode = (compiledJs: string, solverSource?: string): string => `
+// ---------- Build worker sandbox function code ----------
+export const buildWorkerSandboxCode = (compiledJs: string, solverSource?: string): string => `
 (params, context)=>{
   const runId = (context && (context.__rumocaRunId || context.runId)) || 'unknown'
 
@@ -1023,7 +1023,7 @@ export async function discoverSolverMetadata(solverJs: string): Promise<{
   return { schema, simDefaults }
 }
 `
-  const rawUnknown = await executeCodeInIframeSimple(
+  const rawUnknown = await executeInWorkerSandbox(
     {
       id,
       code,
@@ -1280,7 +1280,7 @@ export function selectDaeForTemplate(
   return dae
 }
 
-export function buildModelConstructionProbeIframeCode(compiledJs: string): string {
+export function buildModelConstructionProbeSandboxCode(compiledJs: string): string {
   return `
 (params, context) => {
   try {
@@ -1404,7 +1404,9 @@ export async function compileModelicaToJs(params: {
     const m = params.wasm
     if (!m) throw new Error('WASM module not loaded')
     if (typeof m.compile_to_json !== 'function' || !hasRumocaTemplateRenderer(m)) {
-      throw new Error('WASM module is missing compile_to_json / render_template / render_target exports')
+      throw new Error(
+        'WASM module is missing compile_to_json / render_template / render_target exports',
+      )
     }
 
     const match = params.modelicaSource.match(/(?:model|class|block|connector|record)\s+(\w+)/)
@@ -1516,8 +1518,8 @@ export async function compileModelicaToJs(params: {
       const modelProbeAbort = new AbortController()
       params.activeSandboxRunIds.add(modelProbeRunId)
       try {
-        const modelProbeCode = buildModelConstructionProbeIframeCode(rendered)
-        const modelProbeResult = await executeCodeInIframeSimple(
+        const modelProbeCode = buildModelConstructionProbeSandboxCode(rendered)
+        const modelProbeResult = await executeInWorkerSandbox(
           {
             id: modelProbeRunId,
             code: modelProbeCode,
@@ -1546,11 +1548,11 @@ export async function compileModelicaToJs(params: {
           throw new Error('Model() construction probe failed')
         }
 
-        const code = buildModelAbiValidationIframeCode(rendered)
+        const code = buildModelAbiValidationSandboxCode(rendered)
         const id = 'rumoca-model-abi-check'
         const abort = new AbortController()
         params.activeSandboxRunIds.add(id)
-        const rawAbiResult = await executeCodeInIframeSimple(
+        const rawAbiResult = await executeInWorkerSandbox(
           {
             id,
             code,
@@ -1670,11 +1672,11 @@ export async function runModelicaSandbox(params: {
     return { ok: false, message: String(msg.message || 'Syntax validation failed') }
   }
 
-  const code = buildIframeCode(params.jsSource, params.solverSource)
+  const code = buildWorkerSandboxCode(params.jsSource, params.solverSource)
   const id = `rumoca-model-worker`
   try {
     params.activeSandboxRunIds.add(id)
-    const result = await executeCodeInIframeSimple(
+    const result = await executeInWorkerSandbox(
       {
         id,
         code,
@@ -1717,7 +1719,7 @@ export async function runModelicaSandbox(params: {
     appendModelicaLog({
       level: 'warning',
       phase: 'run',
-      message: `Iframe execution error: ${(error as Error).message}`,
+      message: `Worker sandbox execution error: ${(error as Error).message}`,
       details: {
         name: (error as Error).name,
         message: (error as Error).message,
