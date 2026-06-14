@@ -2,7 +2,7 @@
 # Manual changes might be lost - proceed with caution!
 
 __metadata:
-  version: 8
+  version: 10
   cacheKey: 10c0
 
 "@ai-sdk/gateway@npm:3.0.17":
@@ -5441,7 +5441,7 @@ __metadata:
     pmtiles: "npm:^4.4.1"
     prismjs: "npm:^1.30.0"
     qrcode: "npm:^1.5.4"
-    rumoca: "npm:^0.9.1"
+    rumoca-full-web: "npm:^0.9.1"
     vue-codemirror: "npm:^6.1.1"
   languageName: unknown
   linkType: soft
@@ -19453,10 +19453,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rumoca@npm:^0.9.1":
+"rumoca-full-web@npm:^0.9.1":
   version: 0.9.1
-  resolution: "rumoca@npm:0.9.1"
-  checksum: 10c0/a01a63b5a80a6a8b9f74e450a705467ff35e5247e4cee526391637702458296a1588bfb062ea4169bddb0ece204cafa5e8da52dc41041e0a5aa3edcbd30e8acc
+  resolution: "rumoca-full-web@npm:0.9.1"
+  checksum: 10c0/cfc6cda094606f301198f4c6257a8d2355d20f26dbd258c9bfd99c0af43243842c94f6534f991f668389d538775d672f7196a21b990e7fb05849791f315ccb9a
   languageName: node
   linkType: hard
 
