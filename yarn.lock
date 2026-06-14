@@ -5457,6 +5457,7 @@ __metadata:
   resolution: "@taskyon/taskyon@workspace:packages/taskyon"
   dependencies:
     "@taskyon/p2p-core": "workspace:*"
+    ts-pattern: "npm:^5.6.2"
   languageName: unknown
   linkType: soft
 
@@ -19452,13 +19453,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rumoca@npm:^0.8.13":
-  version: 0.8.13
-  resolution: "rumoca@npm:0.8.13"
-  checksum: 10c0/3eb46d002aa23fbaf718375e21b52e506310c7b267ad8a125a1e9e892cdc1310db9e5672ce0370ebd21edb3f58946174fdffcdea3bde8fd21846c87638c01b98
-  languageName: node
-  linkType: hard
-
 "rumoca@npm:^0.9.1":
   version: 0.9.1
   resolution: "rumoca@npm:0.9.1"
@@ -21209,10 +21203,8 @@ __metadata:
     prettier: "npm:^3.3.3"
     pyodide: "npm:^0.29.3"
     quasar: "npm:^2.17.0"
-    rumoca: "npm:^0.8.13"
     sort-package-json: "npm:^3.0.0"
     stopword: "npm:^2.0.8"
-    ts-pattern: "npm:^5.6.2"
     type-fest: "npm:^4.30.1"
     typescript: "npm:^5.9.2"
     uuid: "npm:^11.1.0"

@@ -28,6 +28,7 @@
     "relay": "node ./src/p2p/relay.js"
   },
   "dependencies": {
-    "@taskyon/p2p-core": "workspace:*"
+    "@taskyon/p2p-core": "workspace:*",
+    "ts-pattern": "^5.6.2"
   }
 }

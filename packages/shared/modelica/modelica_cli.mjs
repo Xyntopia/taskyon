@@ -1,13 +1,20 @@
 #!/usr/bin/env node
 
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import initRumoca from 'rumoca'
 import * as rumoca from 'rumoca'
 import { strFromU8, unzipSync } from 'fflate'
 
-const COMMANDS = new Set(['init', 'load-msl', 'list-classes', 'get-class-info', 'compile-model'])
+const COMMANDS = new Set([
+  'init',
+  'load-msl',
+  'list-classes',
+  'get-class-info',
+  'compile-model',
+  'render-model-js',
+])
 const require = createRequire(import.meta.url)
 
 function usage() {
@@ -33,11 +40,16 @@ Commands:
   compile-model --model <Qualified.Name> [--source-file <path>] [--use-source-roots]
       Compile one model. If --source-file is omitted, source_modelica is fetched via get_class_info.
 
+  render-model-js --model <Qualified.Name> --template-file <path> [--output-file <path>] [--source-file <path>] [--use-source-roots]
+      Compile one model, select the template DAE, and render generated JS from the provided template.
+
 Options:
   --threads <n>           wasm_init threads (default: 0)
   --msl-zip <path>        path to MSL zip (can be combined with other commands)
   --model <name>          qualified class/model name
   --source-file <path>    Modelica source file for compile-model
+  --template-file <path>  template file used by render-model-js
+  --output-file <path>    output file written by render-model-js
   --prefix <text>         prefix filter for list-classes
   --use-source-roots      use compile_with_source_roots if available
   --json                  print machine-readable JSON output
@@ -51,6 +63,8 @@ function parseArgs(argv) {
     mslZip: '',
     model: '',
     sourceFile: '',
+    templateFile: '',
+    outputFile: '',
     prefix: '',
     useSourceRoots: false,
     json: false,
@@ -102,6 +116,14 @@ function parseArgs(argv) {
       options.prefix = value
       continue
     }
+    if (key === 'template-file') {
+      options.templateFile = value
+      continue
+    }
+    if (key === 'output-file') {
+      options.outputFile = value
+      continue
+    }
     throw new Error(`Unknown option: --${key}`)
   }
 
@@ -146,6 +168,16 @@ function resolveModelName(qualifiedName) {
     .split('.')
     .filter(Boolean)
   return parts[parts.length - 1] ?? 'Model'
+}
+
+function selectDaeForTemplate(compiled, usePreparedDae = true) {
+  if (usePreparedDae) {
+    const prepared = asObject(compiled?.dae_prepared)
+    if (prepared) return prepared
+  }
+  const dae = asObject(compiled?.dae)
+  if (dae) return dae
+  return null
 }
 
 function parseJson(raw) {
@@ -228,17 +260,85 @@ async function readModelSource(model, sourceFile) {
   return { source, sourcePath: '' }
 }
 
-async function compileModel({ model, sourceFile, useSourceRoots }) {
+function renderWithRumoca({ dae, templateSource, modelName, templatePath, outputPath }) {
+  const daeJson = JSON.stringify(dae)
+  if (typeof rumoca.render_template === 'function') {
+    return String(rumoca.render_template(daeJson, templateSource) || '')
+  }
+  if (typeof rumoca.render_target === 'function') {
+    const manifestSource = [
+      'version = 1',
+      'ir = "dae"',
+      'name = "javascript"',
+      '',
+      '[[files]]',
+      `path = "${String(outputPath || 'model.js').replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`,
+      `template = "${String(templatePath || 'javascript.jinja').replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`,
+      '',
+    ].join('\n')
+    const templatesJson = JSON.stringify({
+      [templatePath || 'javascript.jinja']: templateSource,
+    })
+    const rendered = rumoca.render_target(
+      daeJson,
+      modelName,
+      'javascript',
+      manifestSource,
+      templatesJson,
+    )
+    const renderedObj = asObject(rendered)
+    const files = Array.isArray(renderedObj?.files) ? renderedObj.files : []
+    const firstFile = files[0]
+    const firstContent = asObject(firstFile)?.content
+    if (typeof firstContent === 'string') return firstContent
+    if (typeof rendered === 'string') return rendered
+    throw new Error(`render_target returned unexpected payload: ${JSON.stringify(rendered).slice(0, 500)}`)
+  }
+  throw new Error('WASM module is missing render_template / render_target exports')
+}
+
+async function compileModelToDae({ model, sourceFile, useSourceRoots }) {
+  if (!model) throw new Error('Missing --model')
+  if (useSourceRoots && typeof rumoca.compile_with_source_roots === 'function') {
+    if (sourceFile) {
+      const { source, sourcePath } = await readModelSource(model, sourceFile)
+      const normalized = withLibraryContext(model, source)
+      const shortName = resolveModelName(model)
+      const compiled = parseJson(rumoca.compile_with_source_roots(normalized, shortName, '{}'))
+      return { compiled, sourcePath, usedSourceRoots: true }
+    }
+    const compiled = parseJson(rumoca.compile_with_source_roots('', model, '{}'))
+    return { compiled, sourcePath: '', usedSourceRoots: true }
+  }
+  if (useSourceRoots && typeof rumoca.compile_with_libraries === 'function') {
+    if (sourceFile) {
+      const { source, sourcePath } = await readModelSource(model, sourceFile)
+      const normalized = withLibraryContext(model, source)
+      const shortName = resolveModelName(model)
+      const compiled = parseJson(rumoca.compile_with_libraries(normalized, shortName, '{}'))
+      return { compiled, sourcePath, usedSourceRoots: true }
+    }
+    const compiled = parseJson(rumoca.compile_with_libraries('', model, '{}'))
+    return { compiled, sourcePath: '', usedSourceRoots: true }
+  }
+
   if (!model) throw new Error('Missing --model')
   const { source, sourcePath } = await readModelSource(model, sourceFile)
   const normalized = withLibraryContext(model, source)
   const shortName = resolveModelName(model)
+  if (typeof rumoca.compile_to_json !== 'function') {
+    throw new Error('WASM module is missing compile_to_json')
+  }
+  const compiled = parseJson(rumoca.compile_to_json(normalized, shortName))
+  return { compiled, sourcePath, usedSourceRoots: false }
+}
 
-  const compileRaw =
-    useSourceRoots && typeof rumoca.compile_with_source_roots === 'function'
-      ? rumoca.compile_with_source_roots(normalized, shortName, '{}')
-      : rumoca.compile_to_json(normalized, shortName)
-  const compiled = parseJson(compileRaw)
+async function compileModel({ model, sourceFile, useSourceRoots }) {
+  const { compiled, sourcePath } = await compileModelToDae({
+    model,
+    sourceFile,
+    useSourceRoots,
+  })
   const dae = asObject(compiled?.dae_prepared)
   return {
     model,
@@ -254,6 +354,39 @@ async function compileModel({ model, sourceFile, useSourceRoots }) {
           p: Object.keys(asObject(dae.p) ?? {}).length,
         }
       : { x: 0, y: 0, u: 0, p: 0 },
+  }
+}
+
+async function renderModelJs({ model, sourceFile, templateFile, outputFile, useSourceRoots }) {
+  if (!templateFile) throw new Error('Missing --template-file')
+  const { compiled, sourcePath, usedSourceRoots } = await compileModelToDae({
+    model,
+    sourceFile,
+    useSourceRoots,
+  })
+  const dae = selectDaeForTemplate(compiled, true)
+  if (!dae) throw new Error('Rumoca compile result did not contain dae_prepared / dae')
+  const templateAbsolute = resolve(templateFile)
+  const templateSource = String(await readFile(templateAbsolute))
+  const outputPath = outputFile ? resolve(outputFile) : ''
+  const rendered = renderWithRumoca({
+    dae,
+    templateSource,
+    modelName: resolveModelName(model),
+    templatePath: templateAbsolute,
+    outputPath: outputPath || 'model.js',
+  })
+  if (outputPath) {
+    await writeFile(outputPath, rendered, 'utf8')
+  }
+  return {
+    model,
+    sourcePath,
+    usedSourceRoots,
+    templatePath: templateAbsolute,
+    outputPath,
+    bytes: Buffer.byteLength(rendered, 'utf8'),
+    rendered,
   }
 }
 
@@ -309,6 +442,30 @@ async function main() {
       useSourceRoots: options.useSourceRoots,
     })
     printOutput(options, output)
+    return
+  }
+  if (command === 'render-model-js') {
+    output.render = await renderModelJs({
+      model: options.model,
+      sourceFile: options.sourceFile,
+      templateFile: options.templateFile,
+      outputFile: options.outputFile,
+      useSourceRoots: options.useSourceRoots,
+    })
+    printOutput(
+      options,
+      options.json
+        ? output
+        : options.outputFile
+          ? {
+              ...output,
+              render: {
+                ...output.render,
+                rendered: `[written to ${output.render.outputPath || options.outputFile}]`,
+              },
+            }
+          : output.render.rendered,
+    )
     return
   }
 

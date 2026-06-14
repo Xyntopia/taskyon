@@ -5,8 +5,8 @@ import { access, readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const require = createRequire(import.meta.url)
-const rumocaWasmPath = require.resolve('rumoca/rumoca_bind_wasm_bg.wasm')
+const sharedRequire = createRequire(new URL('../../shared/package.json', import.meta.url))
+const rumocaWasmPath = sharedRequire.resolve('rumoca/rumoca_bind_wasm_bg.wasm')
 const rumocaWasmUrl = pathToFileURL(rumocaWasmPath).href
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const mslZipCandidates = [

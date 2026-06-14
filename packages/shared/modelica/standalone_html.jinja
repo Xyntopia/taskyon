@@ -308,6 +308,22 @@ return [];</textarea
 {%- endif -%}
 {%- endmacro -%}
 
+{%- macro render_symbol_name(value) -%}
+{%- if value is string -%}
+{{ value }}
+{%- elif value is mapping and value.name is defined and value.name is string -%}
+{{ value.name }}
+{%- elif value is mapping and value.component_ref is defined -%}
+{{ render_cref(value.component_ref) }}
+{%- elif value is mapping and value.ComponentReference is defined -%}
+{{ render_cref(value.ComponentReference) }}
+{%- elif value is mapping and value.VarRef is defined and value.VarRef is string -%}
+{{ value.VarRef }}
+{%- else -%}
+{{ value|string }}
+{%- endif -%}
+{%- endmacro -%}
+
 {%- macro js_ident(name) -%}
 {{- ('v_' ~ (name|string)
   |replace('.', '__')
@@ -1023,10 +1039,11 @@ function Model() {
     if (firedAny) {
     {%- for eq in reset_eqs %}
       {%- if eq.lhs is defined %}
-      if (stateIndex["{{ eq.lhs }}"] !== undefined) {
-        xNew[stateIndex["{{ eq.lhs }}"]] = {{ render_expr(eq.rhs) }};
-      } else if (algebraicIndex["{{ eq.lhs }}"] !== undefined) {
-        yNew[algebraicIndex["{{ eq.lhs }}"]] = {{ render_expr(eq.rhs) }};
+      {%- set lhs_name = render_symbol_name(eq.lhs)|trim %}
+      if (stateIndex["{{ lhs_name }}"] !== undefined) {
+        xNew[stateIndex["{{ lhs_name }}"]] = {{ render_expr(eq.rhs) }};
+      } else if (algebraicIndex["{{ lhs_name }}"] !== undefined) {
+        yNew[algebraicIndex["{{ lhs_name }}"]] = {{ render_expr(eq.rhs) }};
       }
       {%- endif %}
     {%- endfor %}

@@ -27,6 +27,17 @@ function serializeError(error: unknown): { message: string; name?: string; stack
   }
 }
 
+function hydrateError(error: {
+  message: string | undefined
+  name?: string | undefined
+  stack?: string | undefined
+}): Error {
+  const hydrated = new Error(error.message || 'Worker sandbox failed')
+  if (typeof error.name === 'string' && error.name) hydrated.name = error.name
+  if (typeof error.stack === 'string' && error.stack) hydrated.stack = error.stack
+  return hydrated
+}
+
 function killChildProcess(child: ChildProcess): void {
   if (child.killed) return
   try {
@@ -97,7 +108,7 @@ export class NodeWorkerSandboxRuntime implements WorkerSandboxRuntime {
         }
         if (message.kind === 'error') {
           killChildProcess(child)
-          settle(() => reject(new Error(message.error.message || 'Worker sandbox failed')))
+          settle(() => reject(hydrateError(message.error)))
           return
         }
         if (message.kind !== 'rpc-request') return

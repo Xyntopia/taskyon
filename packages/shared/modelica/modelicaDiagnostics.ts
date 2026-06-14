@@ -2120,6 +2120,72 @@ function asStringOrEmpty(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function extractClassSourceFromFile(fileSource: string, className: string): string {
+  const escapedClassName = escapeRegExp(className)
+  const startRegex = new RegExp(
+    `(?:^|\\n)\\s*(?:model|block|record|type|package|connector|function)\\s+${escapedClassName}\\b`,
+    'm',
+  )
+  const startMatch = startRegex.exec(fileSource)
+  if (!startMatch || startMatch.index < 0) {
+    throw new Error(`Could not locate class declaration for ${className} in source file`)
+  }
+  const startIndex = startMatch.index + (startMatch[0].startsWith('\n') ? 1 : 0)
+  const endRegex = new RegExp(`(?:^|\\n)\\s*end\\s+${escapedClassName}\\s*;`, 'm')
+  const endMatch = endRegex.exec(fileSource.slice(startIndex))
+  if (!endMatch || endMatch.index < 0) {
+    throw new Error(`Could not locate class end for ${className} in source file`)
+  }
+  const endIndex = startIndex + endMatch.index + endMatch[0].length
+  return fileSource.slice(startIndex, endIndex).trim()
+}
+
+function hasClassDeclarationInFile(fileSource: string, className: string): boolean {
+  try {
+    extractClassSourceFromFile(fileSource, className)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function findMslSourceContainerPath(
+  archiveEntries: Record<string, string>,
+  qualifiedName: string,
+): string | null {
+  const parts = qualifiedName.split('.').filter(Boolean)
+  const className = parts.at(-1) || ''
+  if (!className) return null
+
+  const packageCandidates = parts
+    .slice(0, -1)
+    .map(
+      (_, index, allParts) => `${allParts.slice(0, allParts.length - index).join('/')}/package.mo`,
+    )
+
+  for (const candidate of packageCandidates) {
+    const normalizedCandidate = normalizeLibraryEntryPath(candidate)
+    const fileSource = archiveEntries[normalizedCandidate]
+    if (typeof fileSource !== 'string') continue
+    if (hasClassDeclarationInFile(fileSource, className)) {
+      return normalizedCandidate
+    }
+  }
+
+  for (const [path, fileSource] of Object.entries(archiveEntries)) {
+    if (!path.endsWith('/package.mo')) continue
+    if (hasClassDeclarationInFile(fileSource, className)) {
+      return path
+    }
+  }
+
+  return null
+}
+
 async function getMslClassCompileTarget(
   wasm: DiagnosticsMslApi,
   qualifiedName: string,
@@ -2138,8 +2204,12 @@ async function getMslClassCompileTarget(
   }
 
   const mslFiles = await loadMslSourcesFromZip()
+  const resolvedSourcePath = findMslSourceContainerPath(mslFiles, qualifiedName)
   const fallbackPath = `${qualifiedName.replaceAll('.', '/')}.mo`
-  const sourceFileEntry = readMslSourceFromZipByPath(mslFiles, sourceFile || fallbackPath)
+  const sourceFileEntry = readMslSourceFromZipByPath(
+    mslFiles,
+    resolvedSourcePath || sourceFile || fallbackPath,
+  )
   if (!sourceFileEntry) {
     throw new Error(`Could not locate source file in MSL zip for ${qualifiedName}`)
   }

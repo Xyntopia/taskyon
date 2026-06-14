@@ -18,10 +18,32 @@ This package contains the JS Modelica CLI and helper scripts to generate OMC ref
 When a model compiles but runtime/solver behavior is wrong, **you must start with a generated pure JS model first**.
 Do not jump directly to solver/template/compiler edits until this loop has been attempted and documented.
 
+This is not optional and not just a suggestion for the first attempt.
+For every runtime-debug iteration:
+
+1. Regenerate the JS model if needed.
+2. Debug and test the generated JS file directly.
+3. Make candidate fixes in the generated JS first.
+4. Verify the generated JS behavior there.
+5. Only then backport the proven minimal fix to `javascript.jinja` or lower layers.
+
 1. Compile/render one model to JS (`javascript.jinja`).
 2. Run only generated JS + `simulateModel.js`.
 3. Modify generated JS until behavior is understood/fixed.
 4. Backport only minimal/generalizable fixes to templates/compiler.
+
+Use the existing CLI for step 1:
+
+```bash
+node packages/shared/modelica/modelica_cli.mjs render-model-js \
+  --msl-zip public/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip \
+  --model Modelica.Blocks.Examples.BooleanNetwork1 \
+  --use-source-roots \
+  --template-file packages/shared/modelica/javascript.jinja \
+  --output-file /workspace/.tmp/boolean-network1.generated.js
+```
+
+This is the preferred way to generate a JS model from a Modelica class + template during debugging.
 
 Required workflow gate before broader fixes:
 
@@ -310,6 +332,17 @@ Use this workflow when a model compiles but fails in solver/runtime and you need
 2. Run the generated JS + `packages/shared/modelica/simulateModel.js` in Node.
 3. Iterate on the generated JS until the model runs.
 4. Backport minimal/general fixes to `packages/shared/modelica/javascript.jinja`.
+
+Recommended render command:
+
+```bash
+node packages/shared/modelica/modelica_cli.mjs render-model-js \
+  --msl-zip public/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip \
+  --model Modelica.Blocks.Examples.BooleanNetwork1 \
+  --use-source-roots \
+  --template-file packages/shared/modelica/javascript.jinja \
+  --output-file /workspace/.tmp/boolean-network1.generated.js
+```
 
 Example debugger entrypoint:
 

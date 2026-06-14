@@ -44,6 +44,41 @@
 {%- endif -%}
 {%- endmacro -%}
 
+{%- macro render_symbol_name(value) -%}
+{%- if value is string -%}
+{{ value }}
+{%- elif value is mapping and value.name is defined and value.name is string -%}
+{{ value.name }}
+{%- elif value is mapping and value.component_ref is defined -%}
+{{ render_cref(value.component_ref) }}
+{%- elif value is mapping and value.ComponentReference is defined -%}
+{{ render_cref(value.ComponentReference) }}
+{%- elif value is mapping and value.VarRef is defined and value.VarRef is string -%}
+{{ value.VarRef }}
+{%- else -%}
+{{ value|string }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro render_varref_name(varref) -%}
+{%- if varref is mapping and varref.name is defined -%}
+{{ render_symbol_name(varref.name) }}
+{%- else -%}
+{{ render_symbol_name(varref) }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro render_varref_first_subscript_index0(varref, mode="safe", symbol_mode="indexed") -%}
+{%- set subs = varref.subscripts if varref is mapping and varref.subscripts is defined else [] -%}
+{%- if subs|length == 0 -%}0
+{%- elif subs[0].Index is defined and subs[0].Index.value is defined -%}
+{{ (subs[0].Index.value|int) - 1 }}
+{%- elif subs[0].Expr is defined and subs[0].Expr.expr is defined -%}
+(({{ render_expr(subs[0].Expr.expr, mode, symbol_mode) }}) - 1)
+{%- else -%}0
+{%- endif -%}
+{%- endmacro -%}
+
 {%- macro js_ident(name) -%}
 {{- ('v_' ~ (name|string)
   |replace('.', '__')
@@ -77,9 +112,10 @@
 {%- elif e is boolean -%}
 {{ "true" if e else "false" }}
 {%- elif e is mapping and e.Literal is defined -%}
-  {%- if e.Literal.Integer is defined -%}{{ e.Literal.Integer }}
-  {%- elif e.Literal.Real is defined -%}{{ e.Literal.Real }}
-  {%- elif e.Literal.Bool is defined -%}{{ "true" if e.Literal.Bool else "false" }}
+  {%- set literal = e.Literal.value if e.Literal.value is defined else e.Literal -%}
+  {%- if literal.Integer is defined -%}{{ literal.Integer }}
+  {%- elif literal.Real is defined -%}{{ literal.Real }}
+  {%- elif literal.Bool is defined or literal.Boolean is defined -%}{{ "true" if (literal.Bool if literal.Bool is defined else literal.Boolean) else "false" }}
   {%- else -%}0
   {%- endif -%}
 {%- else -%}
@@ -167,7 +203,7 @@ Number.NaN
 {%- endmacro -%}
 
 {%- macro render_js_function_name(fname) -%}
-{%- set f = (fname|string)|trim -%}
+{%- set f = render_symbol_name(fname)|trim -%}
 {%- set f_norm = f|replace('::', '.') -%}
 {%- set f_leaf = f_norm
   |replace('Modelica.Math.', '')
@@ -324,32 +360,51 @@ __rumocaResolveSymbol("{{ name|string|replace('\\', '\\\\')|replace('"', '\\"') 
 {%- elif e is boolean -%}
   {{- "true" if e else "false" -}}
 {%- elif e is mapping and e.Literal is defined -%}
-  {%- if e.Literal.Integer is defined -%}{{ e.Literal.Integer }}
-  {%- elif e.Literal.Real is defined -%}{{ e.Literal.Real }}
-  {%- elif e.Literal.Bool is defined -%}{{ "true" if e.Literal.Bool else "false" }}
-  {%- elif e.Literal.String is defined -%}"{{ e.Literal.String }}"
+  {%- set literal = e.Literal.value if e.Literal.value is defined else e.Literal -%}
+  {%- if literal.Integer is defined -%}{{ literal.Integer }}
+  {%- elif literal.Real is defined -%}{{ literal.Real }}
+  {%- elif literal.Bool is defined or literal.Boolean is defined -%}{{ "true" if (literal.Bool if literal.Bool is defined else literal.Boolean) else "false" }}
+  {%- elif literal.String is defined -%}"{{ literal.String }}"
   {%- else -%}0{%- endif -%}
-{%- elif e is mapping and e.VarRef is defined and e.VarRef.name == "time" -%}
+{%- elif e is mapping and e.VarRef is defined and render_varref_name(e.VarRef)|trim == "time" -%}
   t
-{%- elif e is mapping and e.VarRef is defined and e.VarRef.name == "Modelica.Constants.pi" -%}
+{%- elif e is mapping and e.VarRef is defined and render_varref_name(e.VarRef)|trim == "Modelica.Constants.pi" -%}
   Math.PI
-{%- elif e is mapping and e.VarRef is defined and e.VarRef.name == "Modelica.Constants.e" -%}
+{%- elif e is mapping and e.VarRef is defined and render_varref_name(e.VarRef)|trim == "Modelica.Constants.e" -%}
   Math.E
-{%- elif e is mapping and e.VarRef is defined -%}
+{%- elif e is mapping and e.VarRef is defined and render_varref_name(e.VarRef)|trim in ["c", "__pre__.c"] and e.VarRef.subscripts is defined and e.VarRef.subscripts|length > 0 -%}
+  {%- set varref_name = render_varref_name(e.VarRef)|trim -%}
+  {%- set slot_index = render_varref_first_subscript_index0(e.VarRef, mode, symbol_mode)|trim -%}
   {%- if symbol_mode == "named" -%}
-    {{ e.VarRef.name }}
-  {%- elif mode == "runtime" -%}
-    {{- safe_symbol_ref_runtime(e.VarRef.name) -}}
+    {{ varref_name }}[{{ slot_index }}]
+  {%- elif varref_name == "__pre__.c" -%}
+    (Array.isArray(cPrev) ? Boolean(cPrev[{{ slot_index }}]) : false)
   {%- else -%}
-    {{- safe_symbol_ref_safe(e.VarRef.name) -}}
+    (Array.isArray(cCurr) ? Boolean(cCurr[{{ slot_index }}]) : false)
+  {%- endif -%}
+{%- elif e is mapping and e.VarRef is defined -%}
+  {%- set varref_name = render_varref_name(e.VarRef)|trim -%}
+  {%- if symbol_mode == "named" -%}
+    {{ varref_name }}
+  {%- elif varref_name[:8] == "__pre__." -%}
+    {%- set current_name = varref_name[8:] -%}
+    {%- if mode == "runtime" -%}
+      __rumocaPre("{{ current_name }}", {{ safe_symbol_ref_runtime(current_name) }})
+    {%- else -%}
+      __rumocaPre("{{ current_name }}", {{ safe_symbol_ref_safe(current_name) }})
+    {%- endif -%}
+  {%- elif mode == "runtime" -%}
+    {{- safe_symbol_ref_runtime(varref_name) -}}
+  {%- else -%}
+    {{- safe_symbol_ref_safe(varref_name) -}}
   {%- endif -%}
 {%- elif e is mapping and e.BuiltinCall is defined -%}
   {%- set bc = e.BuiltinCall -%}
   {%- if bc.function|lower == "der" and bc.args|length == 1 -%}
     {%- if symbol_mode == "named" -%}
     der({{ render_expr(bc.args[0], mode, "named") }})
-    {%- elif bc.args[0] is mapping and bc.args[0].VarRef is defined and bc.args[0].VarRef.name in x_map -%}
-    XDot[{%- for (n, _comp) in x_map|items -%}{%- if n == bc.args[0].VarRef.name -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
+    {%- elif bc.args[0] is mapping and bc.args[0].VarRef is defined and render_varref_name(bc.args[0].VarRef)|trim in x_map -%}
+    XDot[{%- for (n, _comp) in x_map|items -%}{%- if n == render_varref_name(bc.args[0].VarRef)|trim -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
     {%- elif bc.args[0] is mapping and bc.args[0].ComponentReference is defined and render_cref(bc.args[0].ComponentReference) in x_map -%}
     XDot[{%- for (n, _comp) in x_map|items -%}{%- if n == render_cref(bc.args[0].ComponentReference) -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
     {%- else -%}
@@ -357,7 +412,7 @@ __rumocaResolveSymbol("{{ name|string|replace('\\', '\\\\')|replace('"', '\\"') 
     {%- endif -%}
   {%- elif bc.function|lower == "pre" and bc.args|length == 1 -%}
     {%- if bc.args[0] is mapping and bc.args[0].VarRef is defined -%}
-    __rumocaPre("{{ bc.args[0].VarRef.name }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
+    __rumocaPre("{{ render_varref_name(bc.args[0].VarRef)|trim }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
     {%- elif bc.args[0] is mapping and bc.args[0].ComponentReference is defined -%}
     __rumocaPre("{{ render_cref(bc.args[0].ComponentReference) }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
     {%- else -%}
@@ -365,7 +420,7 @@ __rumocaResolveSymbol("{{ name|string|replace('\\', '\\\\')|replace('"', '\\"') 
     {%- endif -%}
   {%- elif bc.function|lower == "edge" and bc.args|length == 1 -%}
     {%- if bc.args[0] is mapping and bc.args[0].VarRef is defined -%}
-    __rumocaEdge("{{ bc.args[0].VarRef.name }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
+    __rumocaEdge("{{ render_varref_name(bc.args[0].VarRef)|trim }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
     {%- elif bc.args[0] is mapping and bc.args[0].ComponentReference is defined -%}
     __rumocaEdge("{{ render_cref(bc.args[0].ComponentReference) }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
     {%- else -%}
@@ -373,7 +428,7 @@ __rumocaResolveSymbol("{{ name|string|replace('\\', '\\\\')|replace('"', '\\"') 
     {%- endif -%}
   {%- elif bc.function|lower == "change" and bc.args|length == 1 -%}
     {%- if bc.args[0] is mapping and bc.args[0].VarRef is defined -%}
-    __rumocaChange("{{ bc.args[0].VarRef.name }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
+    __rumocaChange("{{ render_varref_name(bc.args[0].VarRef)|trim }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
     {%- elif bc.args[0] is mapping and bc.args[0].ComponentReference is defined -%}
     __rumocaChange("{{ render_cref(bc.args[0].ComponentReference) }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
     {%- else -%}
@@ -403,40 +458,50 @@ __rumocaResolveSymbol("{{ name|string|replace('\\', '\\\\')|replace('"', '\\"') 
 {%- elif e is mapping and e.ComponentReference is defined and render_cref(e.ComponentReference) == "Modelica.Constants.e" -%}
   Math.E
 {%- elif e is mapping and e.ComponentReference is defined -%}
+  {%- set cref_name = render_cref(e.ComponentReference) -%}
   {%- if symbol_mode == "named" -%}
-    {{ render_cref(e.ComponentReference) }}
+    {{ cref_name }}
+  {%- elif cref_name[:8] == "__pre__." -%}
+    {%- set current_name = cref_name[8:] -%}
+    {%- if mode == "runtime" -%}
+      __rumocaPre("{{ current_name }}", {{ safe_symbol_ref_runtime(current_name) }})
+    {%- else -%}
+      __rumocaPre("{{ current_name }}", {{ safe_symbol_ref_safe(current_name) }})
+    {%- endif -%}
   {%- elif mode == "runtime" -%}
-    {{- safe_symbol_ref_runtime(render_cref(e.ComponentReference)) -}}
+    {{- safe_symbol_ref_runtime(cref_name) -}}
   {%- else -%}
-    {{- safe_symbol_ref_safe(render_cref(e.ComponentReference)) -}}
+    {{- safe_symbol_ref_safe(cref_name) -}}
   {%- endif -%}
 {%- elif e is mapping and e.Parenthesized is defined -%}
   ({{ render_expr(e.Parenthesized.inner, mode, symbol_mode) }})
 {%- elif e is mapping and e.Unary is defined -%}
   {%- set u = e.Unary -%}
-  {%- if u.op.Minus is defined -%}
+  {%- set op_name = u.op if u.op is string else "" -%}
+  {%- if u.op.Minus is defined or op_name == "Minus" -%}
     {%- if is_guaranteed_zero(u.rhs)|trim == "true" -%}0{%- else -%}-({{ render_expr(u.rhs, mode, symbol_mode) }}){%- endif -%}
-  {%- elif u.op.Not is defined -%}
+  {%- elif u.op.Not is defined or op_name == "Not" -%}
     !({{ render_expr(u.rhs, mode, symbol_mode) }})
   {%- else -%}
     {{ render_expr(u.rhs, mode, symbol_mode) }}
   {%- endif -%}
 {%- elif e is mapping and e.Binary is defined -%}
   {%- set b = e.Binary -%}
+  {%- set op_name = b.op if b.op is string else "" -%}
   {%- set op -%}
-    {%- if b.op.Add is defined -%}+{% elif b.op.Sub is defined -%}-{% elif b.op.Mul is defined -%}*{% elif b.op.Div is defined -%}/{% elif b.op.Pow is defined or b.op.Power is defined or b.op.Caret is defined or b.op.Exp is defined or b.op.Circumflex is defined -%}**
+    {%- if b.op.Add is defined or op_name == "Add" -%}+{% elif b.op.Sub is defined or op_name == "Sub" -%}-{% elif b.op.Mul is defined or op_name == "Mul" -%}*{% elif b.op.Div is defined or op_name == "Div" -%}/{% elif b.op.Pow is defined or b.op.Power is defined or b.op.Caret is defined or b.op.Exp is defined or b.op.Circumflex is defined or op_name == "Pow" or op_name == "Power" or op_name == "Caret" or op_name == "Exp" or op_name == "Circumflex" -%}**
     {%- elif b.op is string and (b.op == "^" or b.op == "**" or b.op|lower == "pow" or b.op|lower == "power" or b.op|lower == "caret" or b.op|lower == "exp" or b.op|lower == "circumflex") -%}**
     {%- elif b.op.token is defined and b.op.token.text is defined and (b.op.token.text == "^" or b.op.token.text == "**") -%}**
-    {%- elif b.op.Le is defined or b.op.LessEq is defined -%}<={% elif b.op.Lt is defined or b.op.Less is defined -%}<{% elif b.op.Ge is defined or b.op.GreaterEq is defined -%}>={% elif b.op.Gt is defined or b.op.Greater is defined -%}>{% elif b.op.Eq is defined or b.op.Equals is defined -%}==={% elif b.op.Ne is defined or b.op.NotEquals is defined -%}!==
-    {%- elif b.op.And is defined -%}&&{% elif b.op.Or is defined -%}||{% else -%}+{% endif -%}
+    {%- elif b.op.Le is defined or b.op.LessEq is defined or op_name == "Le" or op_name == "LessEq" -%}<={% elif b.op.Lt is defined or b.op.Less is defined or op_name == "Lt" or op_name == "Less" -%}<{% elif b.op.Ge is defined or b.op.GreaterEq is defined or op_name == "Ge" or op_name == "GreaterEq" -%}>={% elif b.op.Gt is defined or b.op.Greater is defined or op_name == "Gt" or op_name == "Greater" -%}>{% elif b.op.Eq is defined or b.op.Equals is defined or op_name == "Eq" or op_name == "Equals" -%}==={% elif b.op.Ne is defined or b.op.NotEquals is defined or op_name == "Ne" or op_name == "NotEquals" -%}!==
+    {%- elif b.op.And is defined or op_name == "And" -%}&&{% elif b.op.Or is defined or op_name == "Or" -%}||{% else -%}+{% endif -%}
   {%- endset -%}
-  {%- if b.op.Add is defined and is_guaranteed_zero(b.lhs)|trim == "true" -%}
+  {%- if (b.op.Add is defined or op_name == "Add") and is_guaranteed_zero(b.lhs)|trim == "true" -%}
     {{ render_expr(b.rhs, mode, symbol_mode) }}
-  {%- elif b.op.Add is defined and is_guaranteed_zero(b.rhs)|trim == "true" -%}
+  {%- elif (b.op.Add is defined or op_name == "Add") and is_guaranteed_zero(b.rhs)|trim == "true" -%}
     {{ render_expr(b.lhs, mode, symbol_mode) }}
-  {%- elif b.op.Sub is defined and is_guaranteed_zero(b.rhs)|trim == "true" -%}
+  {%- elif (b.op.Sub is defined or op_name == "Sub") and is_guaranteed_zero(b.rhs)|trim == "true" -%}
     {{ render_expr(b.lhs, mode, symbol_mode) }}
-  {%- elif b.op.Sub is defined and is_guaranteed_zero(b.lhs)|trim == "true" -%}
+  {%- elif (b.op.Sub is defined or op_name == "Sub") and is_guaranteed_zero(b.lhs)|trim == "true" -%}
     -({{ render_expr(b.rhs, mode, symbol_mode) }})
   {%- else -%}
     ({{ render_expr(b.lhs, mode, symbol_mode) }} {{ op }} {{ render_expr(b.rhs, mode, symbol_mode) }})
@@ -448,11 +513,13 @@ __rumocaResolveSymbol("{{ name|string|replace('\\', '\\\\')|replace('"', '\\"') 
     {%- if f.comp is defined and f.comp.parts is defined -%}
       {%- for part in f.comp.parts -%}{{ part.ident.text }}{{ "." if not loop.last }}{%- endfor -%}
     {%- elif f.function is defined -%}
-      {{- f.function -}}
+      {{- render_symbol_name(f.function) -}}
     {%- elif f.name is defined -%}
-      {{- f.name -}}
+      {{- render_symbol_name(f.name) -}}
     {%- elif f.comp is defined and f.comp.ident is defined and f.comp.ident.text is defined -%}
       {{- f.comp.ident.text -}}
+    {%- elif f.comp is defined -%}
+      {{- render_symbol_name(f.comp) -}}
     {%- else -%}
       function_call
     {%- endif -%}
@@ -460,8 +527,8 @@ __rumocaResolveSymbol("{{ name|string|replace('\\', '\\\\')|replace('"', '\\"') 
   {%- if fname|lower == "der" and args|length == 1 -%}
     {%- if symbol_mode == "named" -%}
     der({{ render_expr(args[0], mode, "named") }})
-    {%- elif args[0] is mapping and args[0].VarRef is defined and args[0].VarRef.name in x_map -%}
-    XDot[{%- for (n, _comp) in x_map|items -%}{%- if n == args[0].VarRef.name -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
+    {%- elif args[0] is mapping and args[0].VarRef is defined and render_varref_name(args[0].VarRef)|trim in x_map -%}
+    XDot[{%- for (n, _comp) in x_map|items -%}{%- if n == render_varref_name(args[0].VarRef)|trim -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
     {%- elif args[0] is mapping and args[0].ComponentReference is defined and render_cref(args[0].ComponentReference) in x_map -%}
     XDot[{%- for (n, _comp) in x_map|items -%}{%- if n == render_cref(args[0].ComponentReference) -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
     {%- else -%}
@@ -469,7 +536,7 @@ __rumocaResolveSymbol("{{ name|string|replace('\\', '\\\\')|replace('"', '\\"') 
     {%- endif -%}
   {%- elif fname|lower == "pre" and args|length == 1 -%}
     {%- if args[0] is mapping and args[0].VarRef is defined -%}
-    __rumocaPre("{{ args[0].VarRef.name }}", {{ render_expr(args[0], mode, symbol_mode) }})
+    __rumocaPre("{{ render_varref_name(args[0].VarRef)|trim }}", {{ render_expr(args[0], mode, symbol_mode) }})
     {%- elif args[0] is mapping and args[0].ComponentReference is defined -%}
     __rumocaPre("{{ render_cref(args[0].ComponentReference) }}", {{ render_expr(args[0], mode, symbol_mode) }})
     {%- else -%}
@@ -477,7 +544,7 @@ __rumocaResolveSymbol("{{ name|string|replace('\\', '\\\\')|replace('"', '\\"') 
     {%- endif -%}
   {%- elif fname|lower == "edge" and args|length == 1 -%}
     {%- if args[0] is mapping and args[0].VarRef is defined -%}
-    __rumocaEdge("{{ args[0].VarRef.name }}", {{ render_expr(args[0], mode, symbol_mode) }})
+    __rumocaEdge("{{ render_varref_name(args[0].VarRef)|trim }}", {{ render_expr(args[0], mode, symbol_mode) }})
     {%- elif args[0] is mapping and args[0].ComponentReference is defined -%}
     __rumocaEdge("{{ render_cref(args[0].ComponentReference) }}", {{ render_expr(args[0], mode, symbol_mode) }})
     {%- else -%}
@@ -485,7 +552,7 @@ __rumocaResolveSymbol("{{ name|string|replace('\\', '\\\\')|replace('"', '\\"') 
     {%- endif -%}
   {%- elif fname|lower == "change" and args|length == 1 -%}
     {%- if args[0] is mapping and args[0].VarRef is defined -%}
-    __rumocaChange("{{ args[0].VarRef.name }}", {{ render_expr(args[0], mode, symbol_mode) }})
+    __rumocaChange("{{ render_varref_name(args[0].VarRef)|trim }}", {{ render_expr(args[0], mode, symbol_mode) }})
     {%- elif args[0] is mapping and args[0].ComponentReference is defined -%}
     __rumocaChange("{{ render_cref(args[0].ComponentReference) }}", {{ render_expr(args[0], mode, symbol_mode) }})
     {%- else -%}
@@ -607,11 +674,11 @@ false
 true
 {%- elif expr is mapping and expr.Parenthesized is defined -%}
 {{ is_guaranteed_zero(expr.Parenthesized.inner) }}
-{%- elif expr is mapping and expr.Unary is defined and expr.Unary.op.Minus is defined -%}
+{%- elif expr is mapping and expr.Unary is defined and (expr.Unary.op.Minus is defined or expr.Unary.op == "Minus") -%}
 {{ is_guaranteed_zero(expr.Unary.rhs) }}
-{%- elif expr is mapping and expr.Binary is defined and expr.Binary.op.Add is defined -%}
+{%- elif expr is mapping and expr.Binary is defined and (expr.Binary.op.Add is defined or expr.Binary.op == "Add") -%}
 {%- if is_guaranteed_zero(expr.Binary.lhs)|trim == "true" and is_guaranteed_zero(expr.Binary.rhs)|trim == "true" -%}true{%- else -%}false{%- endif -%}
-{%- elif expr is mapping and expr.Binary is defined and expr.Binary.op.Sub is defined -%}
+{%- elif expr is mapping and expr.Binary is defined and (expr.Binary.op.Sub is defined or expr.Binary.op == "Sub") -%}
 {%- if is_guaranteed_zero(expr.Binary.lhs)|trim == "true" and is_guaranteed_zero(expr.Binary.rhs)|trim == "true" -%}true{%- else -%}false{%- endif -%}
 {%- elif expr is string -%}
   {%- set s = compact_expr_text(expr) -%}
@@ -902,6 +969,7 @@ function Model() {
     const tk = s + k * p;
     return Math.abs(t - tk) <= Math.max(__rumocaTimeTol, Math.abs(p) * 1e-12);
   };
+  const __rumoca_sample = Sample;
 
   function __rumocaMissingRef(name) {
     const key = String(name || '');
@@ -1279,7 +1347,7 @@ function Model() {
     ];
   }
 
-  function evalConditions(t, X, Y, U, PIn) {
+  function evalConditions(t, X, Y, U, PIn, cPrev = [], cCurr = []) {
     __rumocaCurrentTime = t;
     {%- if p_map|length > 0 -%}
     const P = Array.isArray(PIn) ? PIn : (PIn && Array.isArray(PIn.P) ? PIn.P : P_DEFAULT);
@@ -1293,7 +1361,7 @@ function Model() {
     ];
   }
 
-  function evalEventIndicators(t, X, Y, U, PIn) {
+  function evalEventIndicators(t, X, Y, U, PIn, cPrev = [], cCurr = []) {
     __rumocaCurrentTime = t;
     {%- if p_map|length > 0 -%}
     const P = Array.isArray(PIn) ? PIn : (PIn && Array.isArray(PIn.P) ? PIn.P : P_DEFAULT);
@@ -1396,14 +1464,15 @@ function Model() {
       if (fired) {
         {%- for eq in wc.equations %}
         {%- if eq.lhs is defined %}
+        {%- set lhs_name = render_symbol_name(eq.lhs)|trim %}
         {
           const __rumocaAssigned = {{ render_expr(eq.rhs) }};
-          if (stateIndex["{{ eq.lhs }}"] !== undefined) {
-            xNew[stateIndex["{{ eq.lhs }}"]] = __rumocaAssigned;
-          } else if (algebraicIndex["{{ eq.lhs }}"] !== undefined) {
-            yNew[algebraicIndex["{{ eq.lhs }}"]] = __rumocaAssigned;
+          if (stateIndex["{{ lhs_name }}"] !== undefined) {
+            xNew[stateIndex["{{ lhs_name }}"]] = __rumocaAssigned;
+          } else if (algebraicIndex["{{ lhs_name }}"] !== undefined) {
+            yNew[algebraicIndex["{{ lhs_name }}"]] = __rumocaAssigned;
           }
-          __rumocaAssignSymbol("{{ eq.lhs }}", __rumocaAssigned);
+          __rumocaAssignSymbol("{{ lhs_name }}", __rumocaAssigned);
         }
         
         {%- endif %}
@@ -1420,17 +1489,18 @@ function Model() {
     {# Pass 1: propagate direct wiring first (lhs = rhs VarRef/ComponentReference). #}
     {%- for eq in reset_eqs %}
       {%- if eq.lhs is defined and eq.rhs is defined and (eq.rhs.VarRef is defined or eq.rhs.ComponentReference is defined) %}
+      {%- set lhs_name = render_symbol_name(eq.lhs)|trim %}
       {
-        const __rumocaIsStateTarget = stateIndex["{{ eq.lhs }}"] !== undefined;
+        const __rumocaIsStateTarget = stateIndex["{{ lhs_name }}"] !== undefined;
         const __rumocaApplyResetEq = __rumocaIsStateTarget ? __rumocaFallbackWhenFired : true;
         if (__rumocaApplyResetEq) {
         const __rumocaAssigned = {{ render_expr(eq.rhs) }};
-        if (stateIndex["{{ eq.lhs }}"] !== undefined) {
-          xNew[stateIndex["{{ eq.lhs }}"]] = __rumocaAssigned;
-        } else if (algebraicIndex["{{ eq.lhs }}"] !== undefined) {
-          yNew[algebraicIndex["{{ eq.lhs }}"]] = __rumocaAssigned;
+        if (stateIndex["{{ lhs_name }}"] !== undefined) {
+          xNew[stateIndex["{{ lhs_name }}"]] = __rumocaAssigned;
+        } else if (algebraicIndex["{{ lhs_name }}"] !== undefined) {
+          yNew[algebraicIndex["{{ lhs_name }}"]] = __rumocaAssigned;
         }
-        __rumocaAssignSymbol("{{ eq.lhs }}", __rumocaAssigned);
+        __rumocaAssignSymbol("{{ lhs_name }}", __rumocaAssigned);
         }
       }
       {%- endif %}
@@ -1438,17 +1508,18 @@ function Model() {
     {# Pass 2: evaluate remaining reset/discrete expressions. #}
     {%- for eq in reset_eqs %}
       {%- if eq.lhs is defined and not (eq.rhs is defined and (eq.rhs.VarRef is defined or eq.rhs.ComponentReference is defined)) %}
+      {%- set lhs_name = render_symbol_name(eq.lhs)|trim %}
       {
-        const __rumocaIsStateTarget = stateIndex["{{ eq.lhs }}"] !== undefined;
+        const __rumocaIsStateTarget = stateIndex["{{ lhs_name }}"] !== undefined;
         const __rumocaApplyResetEq = __rumocaIsStateTarget ? __rumocaFallbackWhenFired : true;
         if (__rumocaApplyResetEq) {
         const __rumocaAssigned = {{ render_expr(eq.rhs) }};
-        if (stateIndex["{{ eq.lhs }}"] !== undefined) {
-          xNew[stateIndex["{{ eq.lhs }}"]] = __rumocaAssigned;
-        } else if (algebraicIndex["{{ eq.lhs }}"] !== undefined) {
-          yNew[algebraicIndex["{{ eq.lhs }}"]] = __rumocaAssigned;
+        if (stateIndex["{{ lhs_name }}"] !== undefined) {
+          xNew[stateIndex["{{ lhs_name }}"]] = __rumocaAssigned;
+        } else if (algebraicIndex["{{ lhs_name }}"] !== undefined) {
+          yNew[algebraicIndex["{{ lhs_name }}"]] = __rumocaAssigned;
         }
-        __rumocaAssignSymbol("{{ eq.lhs }}", __rumocaAssigned);
+        __rumocaAssignSymbol("{{ lhs_name }}", __rumocaAssigned);
         }
       }
       {%- endif %}
