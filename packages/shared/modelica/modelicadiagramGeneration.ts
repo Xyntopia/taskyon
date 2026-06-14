@@ -46,6 +46,12 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
+const isUnaryMinusOp = (value: unknown): boolean => {
+  if (value === 'Minus') return true
+  const record = asRecord(value)
+  return record?.Minus != null
+}
+
 type DiagramPlacement = {
   origin?: [number, number]
   extent?: [[number, number], [number, number]]
@@ -173,8 +179,7 @@ const asNumber = (value: unknown): number | null => {
   if (unary) {
     const rhs = asNumber(unary.rhs)
     if (rhs == null) return null
-    const op = asRecord(unary.op)
-    return op?.Minus ? -rhs : rhs
+    return isUnaryMinusOp(unary.op) ? -rhs : rhs
   }
   return null
 }
@@ -247,10 +252,9 @@ const expressionToDisplayText = (value: unknown): string => {
   if (terminalText) return terminalText
   const unary = asRecord(asRecord(value)?.Unary)
   if (unary) {
-    const op = asRecord(unary.op)
     const rhs = expressionToDisplayText(unary.rhs)
     if (rhs.length === 0) return ''
-    return op?.Minus ? `-${rhs}` : rhs
+    return isUnaryMinusOp(unary.op) ? `-${rhs}` : rhs
   }
   const functionCall = asRecord(asRecord(value)?.FunctionCall)
   if (functionCall) {
