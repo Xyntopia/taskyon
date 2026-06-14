@@ -27,10 +27,10 @@ For every runtime-debug iteration:
 4. Verify the generated JS behavior there.
 5. Only then backport the proven minimal fix to `javascript.jinja` or lower layers.
 
-1. Compile/render one model to JS (`javascript.jinja`).
-2. Run only generated JS + `simulateModel.js`.
-3. Modify generated JS until behavior is understood/fixed.
-4. Backport only minimal/generalizable fixes to templates/compiler.
+6. Compile/render one model to JS (`javascript.jinja`).
+7. Run only generated JS + `simulateModel.js`.
+8. Modify generated JS until behavior is understood/fixed.
+9. Backport only minimal/generalizable fixes to templates/compiler.
 
 Use the existing CLI for step 1:
 
@@ -41,6 +41,19 @@ node packages/shared/modelica/modelica_cli.mjs render-model-js \
   --use-source-roots \
   --template-file packages/shared/modelica/javascript.jinja \
   --output-file /workspace/.tmp/boolean-network1.generated.js
+```
+
+The same CLI now also exposes Rumoca's direct simulation surface for focused smoke checks:
+
+```bash
+node packages/shared/modelica/modelica_cli.mjs simulate-model \
+  --msl-zip public/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip \
+  --model Modelica.Blocks.Examples.FirstOrder \
+  --use-source-roots \
+  --t-end 1 \
+  --dt 0.02 \
+  --solver auto \
+  --json
 ```
 
 This is the preferred way to generate a JS model from a Modelica class + template during debugging.

@@ -45,6 +45,8 @@
         :sim-t0="simT0"
         :sim-tf="simTf"
         :sim-dt="simDt"
+        :selected-simulation-backend="selectedSimulationBackend"
+        :selected-rumoca-solver="selectedRumocaSolver"
         :selected-solver-key="selectedSolverKey"
         :predicted-steps="predictedStepCount"
         :actual-steps="actualStepCount"
@@ -77,6 +79,8 @@
         @update:sim-t0="simT0 = Number($event)"
         @update:sim-tf="simTf = Number($event)"
         @update:sim-dt="simDt = Number($event)"
+        @update:simulation-backend="onSimulationBackendUpdate"
+        @update:rumoca-solver="onRumocaSolverUpdate"
         @update:solver-options="solverOptions = $event"
         @reset-sim-from-model="resetSimulationSettingsFromModelAnnotations"
         @update:project-menu-options="onProjectMenuOptionsUpdate"
@@ -736,6 +740,7 @@ type PlotChartSelection = {
   title?: string | undefined
 }
 type PlotViewOptions = ObjectPathChartsViewOptions
+type SimulationBackend = 'js' | 'rumoca'
 
 const props = withDefaults(
   defineProps<{
@@ -805,6 +810,8 @@ const rumocaWasmGitCommit = ref('unknown')
 const rumocaWasmBuildTimeUtc = ref('unknown')
 const rumocaWasmRustBuildTimeUtc = ref('unknown')
 const rumocaWasmPackageBuiltTimeUtc = ref('unknown')
+const rumocaSimulationAvailable = ref(false)
+const rumocaSimulationModelDiscoveryAvailable = ref(false)
 const formatLocalBuildTime = (buildTimeUtc: string): string => {
   if (!buildTimeUtc || buildTimeUtc === 'unknown') return 'unknown'
   const date = new Date(buildTimeUtc)
@@ -888,6 +895,8 @@ function configureModelicaLspExtensions(worker: ModelicaWorkerClient | null) {
 const simT0 = ref(0)
 const simTf = ref(5)
 const simDt = ref(0.01)
+const selectedSimulationBackend = ref<SimulationBackend>('js')
+const selectedRumocaSolver = ref('auto')
 const allowApplySolverSimDefaults = ref(true)
 
 const {
@@ -989,6 +998,7 @@ const hasHydratedSimulationSettings = ref(false)
 const applyingSimHints = ref(false)
 const running = ref(false)
 const abortController = ref<AbortController | null>(null)
+const simulationRunToken = ref(0)
 
 const hasSimulationResult = computed(
   () => !!executionResult.value && Object.keys(executionResult.value).length > 0,
@@ -1275,6 +1285,8 @@ function hasExplicitSimulationSettings(sim: {
   t0?: number
   tf?: number
   dt?: number
+  simulationBackend?: SimulationBackend
+  rumocaSolver?: string
   solverKey?: string
   solverOptions?: Record<string, unknown>
   solverOptionsByKey?: Record<string, Record<string, unknown>>
@@ -1285,6 +1297,8 @@ function hasExplicitSimulationSettings(sim: {
     't0' in sim ||
     'tf' in sim ||
     'dt' in sim ||
+    'simulationBackend' in sim ||
+    'rumocaSolver' in sim ||
     'solverKey' in sim ||
     'solverOptions' in sim ||
     'solverOptionsByKey' in sim
@@ -1358,6 +1372,116 @@ function resetSimulationSettingsFromModelAnnotations() {
       type: 'warning',
       message: 'No annotation(experiment(...)) defaults found in current Modelica model.',
     })
+  }
+}
+
+function normalizeSimulationBackend(value: unknown): SimulationBackend {
+  return value === 'rumoca' ? 'rumoca' : 'js'
+}
+
+function normalizeRumocaSolver(value: unknown): string {
+  const solver =
+    typeof value === 'string'
+      ? value.trim().toLowerCase()
+      : typeof value === 'number' || typeof value === 'boolean'
+        ? String(value).trim().toLowerCase()
+        : ''
+  return solver || 'auto'
+}
+
+function onSimulationBackendUpdate(value: unknown) {
+  selectedSimulationBackend.value = normalizeSimulationBackend(value)
+}
+
+function onRumocaSolverUpdate(value: unknown) {
+  selectedRumocaSolver.value = normalizeRumocaSolver(value)
+}
+
+function resolveActiveSimulationTarget(): { source: string; modelName: string } {
+  const localModelName =
+    modelicaSource.value.match(/(?:model|class|block|connector|record)\s+(\w+)/)?.[1] ?? 'Model'
+  const qualifiedFromSource = inferQualifiedModelNameFromSource(modelicaSource.value)
+  const useSourceRoots = useModelicaStandardLibrary.value && mslLoaded.value
+  const unchangedLibraryClass =
+    openedLibraryClassContext.value != null &&
+    openedLibraryClassContext.value.sourceSnapshot === modelicaSource.value
+  const isModelicaStdlibClass =
+    typeof qualifiedFromSource === 'string' && qualifiedFromSource.startsWith('Modelica.')
+  const useSourceRootsOnly = useSourceRoots && (unchangedLibraryClass || isModelicaStdlibClass)
+
+  return {
+    source: useSourceRootsOnly ? '' : modelicaSource.value,
+    modelName:
+      (useSourceRootsOnly
+        ? openedLibraryClassContext.value?.qualifiedName || qualifiedFromSource || localModelName
+        : qualifiedFromSource || localModelName) || 'Model',
+  }
+}
+
+function normalizeRumocaSimulationResult(raw: Record<string, unknown>): Record<string, unknown> {
+  const payloadSource =
+    raw.payload && typeof raw.payload === 'object' ? (raw.payload as Record<string, unknown>) : raw
+  const names = Array.isArray(payloadSource.names)
+    ? payloadSource.names.filter((entry): entry is string => typeof entry === 'string')
+    : []
+  const allData = Array.isArray(payloadSource.allData)
+    ? payloadSource.allData.map((column) =>
+        Array.isArray(column)
+          ? column.map((value) =>
+              typeof value === 'number' && Number.isFinite(value) ? value : Number.NaN,
+            )
+          : [],
+      )
+    : []
+  if (names.length === 0 || allData.length === 0) {
+    throw new Error('Rumoca simulation returned no time-series payload')
+  }
+
+  const nStatesRaw = Number(payloadSource.nStates)
+  const nStates = Number.isFinite(nStatesRaw) ? Math.max(0, Math.min(names.length, nStatesRaw)) : 0
+  const times = allData[0] ?? []
+  const stateNames = names.slice(0, nStates)
+  const algebraicNames = names.slice(nStates)
+  const stateSeries = stateNames.reduce<Record<string, number[]>>((acc, name, index) => {
+    acc[name] = allData[index + 1] ?? []
+    return acc
+  }, {})
+  const algebraicSeries = algebraicNames.reduce<Record<string, number[]>>((acc, name, index) => {
+    acc[name] = allData[nStates + index + 1] ?? []
+    return acc
+  }, {})
+
+  return {
+    meta: {
+      nSteps: times.length,
+      executionMode: nStates > 0 ? 'dynamic_dae' : 'algebraic_discrete',
+      model: {
+        modelName:
+          typeof raw.model === 'string'
+            ? raw.model
+            : typeof raw.modelName === 'string'
+              ? raw.modelName
+              : 'Model',
+        stateNames,
+        algebraicNames,
+        inputNames: [],
+        conditionNames: [],
+        stateVariables: stateNames.map((name) => ({ name })),
+        algebraicVariables: algebraicNames.map((name) => ({ name })),
+        inputVariables: [],
+        conditionVariables: [],
+      },
+      rumoca: raw,
+      requestedSolver: normalizeRumocaSolver(raw.solver),
+    },
+    data: {
+      t: times,
+      x: stateSeries,
+      y: algebraicSeries,
+      u: {},
+      z: {},
+      c: {},
+    },
   }
 }
 
@@ -2005,6 +2129,8 @@ function packProjectFile(): TyModelicaProjectFileV1 {
       t0: simT0.value,
       tf: simTf.value,
       dt: simDt.value,
+      simulationBackend: selectedSimulationBackend.value,
+      rumocaSolver: selectedRumocaSolver.value,
       solverKey: selectedSolverKey.value,
       solverOptions: solverOptions.value,
       solverOptionsByKey: solverOptionsByKey.value,
@@ -2057,6 +2183,8 @@ function applyProjectFile(pf: TyModelicaProjectFileV1) {
   if (typeof state.sim.t0 === 'number') simT0.value = state.sim.t0
   if (typeof state.sim.tf === 'number') simTf.value = state.sim.tf
   if (typeof state.sim.dt === 'number') simDt.value = state.sim.dt
+  selectedSimulationBackend.value = normalizeSimulationBackend(state.sim.simulationBackend)
+  selectedRumocaSolver.value = normalizeRumocaSolver(state.sim.rumocaSolver)
   if (typeof state.sim.solverKey === 'string') selectedSolverKey.value = state.sim.solverKey
   if (state.sim.solverOptionsByKey) solverOptionsByKey.value = state.sim.solverOptionsByKey
   if (state.sim.solverOptions) solverOptions.value = state.sim.solverOptions
@@ -2130,9 +2258,17 @@ const isHtmlOutput = computed(() => {
   const s = (jsSource.value ?? '').trimStart()
   return /^<!doctype\s+html/i.test(s) || /^<html\b/i.test(s)
 })
-const canRunModel = computed(
-  () => statusType.value === 'success' && Boolean(jsSource.value) && !isHtmlOutput.value,
-)
+const canRunModel = computed(() => {
+  if (selectedSimulationBackend.value === 'rumoca') {
+    return (
+      statusType.value === 'success' &&
+      wasmLoaded.value &&
+      rumocaSimulationAvailable.value &&
+      modelicaSource.value.trim().length > 0
+    )
+  }
+  return statusType.value === 'success' && Boolean(jsSource.value) && !isHtmlOutput.value
+})
 
 const hasUiTemplate = computed(() => {
   const src = activeUiTemplateSource.value
@@ -2161,6 +2297,10 @@ const runtimeMenuOptions = ref<Record<string, unknown>>({
   t0: simT0.value,
   tf: simTf.value,
   dt: simDt.value,
+  simulationBackend: selectedSimulationBackend.value,
+  rumocaSolver: selectedRumocaSolver.value,
+  rumocaSimulationAvailable: rumocaSimulationAvailable.value,
+  rumocaSimulationModelDiscoveryAvailable: rumocaSimulationModelDiscoveryAvailable.value,
   rumocaWasmVersion: rumocaWasmVersion.value,
   rumocaWasmGitCommit: rumocaWasmGitCommit.value,
   rumocaWasmBuildTimeLocal: rumocaWasmBuildTimeLocal.value,
@@ -2199,6 +2339,25 @@ const runtimeMenuSchema: JSONSchema7 = {
     t0: { type: 'number', title: 'Simulation t0' },
     tf: { type: 'number', title: 'Simulation tf' },
     dt: { type: 'number', title: 'Simulation dt (must be > 0)' },
+    simulationBackend: {
+      type: 'string',
+      title: 'Simulation runtime',
+      oneOf: [
+        { const: 'js', title: 'JS template runtime' },
+        { const: 'rumoca', title: 'Rumoca runtime' },
+      ],
+    },
+    rumocaSolver: { type: 'string', title: 'Rumoca solver' },
+    rumocaSimulationAvailable: {
+      type: 'boolean',
+      title: 'Rumoca simulation export available',
+      readOnly: true,
+    },
+    rumocaSimulationModelDiscoveryAvailable: {
+      type: 'boolean',
+      title: 'Rumoca simulation model discovery available',
+      readOnly: true,
+    },
     rumocaWasmVersion: { type: 'string', title: 'Rumoca WASM version', readOnly: true },
     rumocaWasmGitCommit: { type: 'string', title: 'Rumoca WASM git commit', readOnly: true },
     rumocaWasmBuildTimeLocal: {
@@ -2352,6 +2511,10 @@ watch(
     simT0,
     simTf,
     simDt,
+    selectedSimulationBackend,
+    selectedRumocaSolver,
+    rumocaSimulationAvailable,
+    rumocaSimulationModelDiscoveryAvailable,
     rumocaWasmVersion,
     rumocaWasmGitCommit,
     rumocaWasmBuildTimeLocal,
@@ -2363,6 +2526,10 @@ watch(
       t0: Number(simT0.value),
       tf: Number(simTf.value),
       dt: Number(simDt.value),
+      simulationBackend: selectedSimulationBackend.value,
+      rumocaSolver: selectedRumocaSolver.value,
+      rumocaSimulationAvailable: rumocaSimulationAvailable.value,
+      rumocaSimulationModelDiscoveryAvailable: rumocaSimulationModelDiscoveryAvailable.value,
       rumocaWasmVersion: rumocaWasmVersion.value,
       rumocaWasmGitCommit: rumocaWasmGitCommit.value,
       rumocaWasmBuildTimeLocal: rumocaWasmBuildTimeLocal.value,
@@ -2382,6 +2549,8 @@ watch(
     if (Number.isFinite(maybeT0)) simT0.value = maybeT0
     if (Number.isFinite(maybeTf)) simTf.value = maybeTf
     if (Number.isFinite(maybeDt) && maybeDt > 0) simDt.value = maybeDt
+    selectedSimulationBackend.value = normalizeSimulationBackend(v.simulationBackend)
+    selectedRumocaSolver.value = normalizeRumocaSolver(v.rumocaSolver)
   },
   { deep: true },
 )
@@ -2901,11 +3070,74 @@ function handleRunInSandbox() {
     })
     return
   }
+  if (selectedSimulationBackend.value === 'rumoca') {
+    void runWithRumoca()
+    return
+  }
   void runInSandbox(jsSource.value)
+}
+
+const runWithRumoca = async () => {
+  executionResult.value = {}
+  const runToken = ++simulationRunToken.value
+  running.value = true
+
+  try {
+    const worker = modelicaWorker.value
+    if (!worker) throw new Error('Modelica worker not loaded')
+    if (!rumocaSimulationAvailable.value) {
+      throw new Error('Installed Rumoca WASM package does not export simulate_model')
+    }
+    const target = resolveActiveSimulationTarget()
+    const selectedModel = rumocaSimulationModelDiscoveryAvailable.value
+      ? (
+          await worker.getSimulationModels({
+            source: target.source,
+            defaultModel: target.modelName,
+          })
+        ).selectedModel || target.modelName
+      : target.modelName
+    const raw = await worker.startSimulation({
+      source: target.source,
+      modelName: String(selectedModel).trim() || target.modelName,
+      tEnd: simTf.value,
+      dt: simDt.value,
+      solver: selectedRumocaSolver.value,
+    })
+    if (runToken !== simulationRunToken.value) return
+    executionResult.value = normalizeRumocaSimulationResult({
+      ...raw,
+      modelName: selectedModel,
+      solver: selectedRumocaSolver.value,
+    })
+    appendModelicaLog({
+      level: 'success',
+      phase: 'run',
+      message: `Rumoca simulation finished (${selectedModel}, solver=${selectedRumocaSolver.value}).`,
+    })
+  } catch (error) {
+    if (runToken !== simulationRunToken.value) return
+    const message = error instanceof Error ? error.message : String(error)
+    appendModelicaLog({
+      level: 'error',
+      phase: 'run',
+      message: `Rumoca simulation failed: ${message}`,
+    })
+    Notify.create({
+      type: 'negative',
+      message,
+      timeout: 7000,
+    })
+  } finally {
+    if (runToken === simulationRunToken.value) {
+      running.value = false
+    }
+  }
 }
 
 const runInSandbox = async (jsSource: string | undefined) => {
   executionResult.value = {}
+  const runToken = ++simulationRunToken.value
   abortController.value = new AbortController()
   running.value = true
 
@@ -2922,6 +3154,7 @@ const runInSandbox = async (jsSource: string | undefined) => {
       activeSandboxRunIds: activeSandboxRunIds.value,
       abortSignal: abortController.value.signal,
     })
+    if (runToken !== simulationRunToken.value) return
     if (result.ok) {
       executionResult.value = normalizeSimulationResultForDisplay(result.result)
       const meta =
@@ -2954,11 +3187,14 @@ const runInSandbox = async (jsSource: string | undefined) => {
   } catch (error) {
     console.error('Sandbox execution failed:', error)
   } finally {
-    running.value = false
+    if (runToken === simulationRunToken.value) {
+      running.value = false
+    }
   }
 }
 
 const stopExecution = () => {
+  simulationRunToken.value += 1
   abortController.value?.abort()
   running.value = false
 }
@@ -3012,6 +3248,8 @@ onMounted(async () => {
       requiredLibraries.value = []
       uiTemplates.value = {}
       selectedUiTemplateKey.value = makeSourceKey('builtin', 'default')
+      selectedSimulationBackend.value = 'js'
+      selectedRumocaSolver.value = 'auto'
       modelicaSource.value = ''
       plotCharts.value = []
       executionResult.value = {}
@@ -3031,6 +3269,8 @@ onMounted(async () => {
     requiredLibraries.value = []
     uiTemplates.value = {}
     selectedUiTemplateKey.value = makeSourceKey('builtin', 'default')
+    selectedSimulationBackend.value = 'js'
+    selectedRumocaSolver.value = 'auto'
     modelicaSource.value = ''
     plotCharts.value = []
     executionResult.value = {}
@@ -3056,6 +3296,8 @@ onMounted(async () => {
       simT0,
       simTf,
       simDt,
+      selectedSimulationBackend,
+      selectedRumocaSolver,
       selectedSolverKey,
       solverOptionsByKey,
       requiredLibraries,
@@ -3102,6 +3344,10 @@ onMounted(async () => {
     if (initInfo.packageBuiltTimeUtc) {
       rumocaWasmPackageBuiltTimeUtc.value = initInfo.packageBuiltTimeUtc
     }
+    rumocaSimulationAvailable.value = Boolean(initInfo.simulationAvailable)
+    rumocaSimulationModelDiscoveryAvailable.value = Boolean(
+      initInfo.simulationModelDiscoveryAvailable,
+    )
     return worker
   }
 

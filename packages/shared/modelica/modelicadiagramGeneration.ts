@@ -1,4 +1,4 @@
-import { get_class_info, parse_source_root_file } from 'rumoca'
+import { get_class_info, parse_source_root_file } from 'rumoca-full-web'
 import type { Thunk } from '../modules/tsHelpers'
 
 const ENABLE_DIAGRAM_ICON_DIAGNOSTICS = true
@@ -758,7 +758,9 @@ const parseSourceRootAst = (source: string, fileName: string): Record<string, un
     removeTopLevelImportsForDiagramParse(source),
     normalizeLegacyDeclarationModifiersForDiagramParse(source),
     stripEquationSectionsForDiagramParse(source),
-    stripEquationSectionsForDiagramParse(normalizeLegacyDeclarationModifiersForDiagramParse(source)),
+    stripEquationSectionsForDiagramParse(
+      normalizeLegacyDeclarationModifiersForDiagramParse(source),
+    ),
   ]
   try {
     return parseJson(source)
@@ -984,7 +986,9 @@ const buildTypeLookupCandidates = (
 
 const extractExtendsBaseNamesFromSource = (sourceModelica: string): string[] => {
   const matches = sourceModelica.matchAll(/^\s*extends\s+([A-Za-z_][A-Za-z0-9_.]*)\s*(?:\(|;)/gm)
-  return Array.from(new Set(Array.from(matches, (match) => String(match[1] || '').trim()).filter(Boolean)))
+  return Array.from(
+    new Set(Array.from(matches, (match) => String(match[1] || '').trim()).filter(Boolean)),
+  )
 }
 
 const extractExtendsBaseNames = (classDef: Record<string, unknown>): string[] => {
@@ -1081,7 +1085,8 @@ const resolveTypeIcon = (
       let inheritedIcon: DiagramIconSpec | undefined
       if (iconClass) {
         const basesFromAst = extractExtendsBaseNames(iconClass)
-        const bases = basesFromAst.length > 0 ? basesFromAst : extractExtendsBaseNamesFromSource(sourceModelica)
+        const bases =
+          basesFromAst.length > 0 ? basesFromAst : extractExtendsBaseNamesFromSource(sourceModelica)
         const parentIcons = bases
           .map((baseName) =>
             resolveTypeIcon(

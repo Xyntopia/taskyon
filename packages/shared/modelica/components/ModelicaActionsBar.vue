@@ -112,6 +112,10 @@
         <div class="text-body2 q-mb-sm">{{ runtimeInfo.mslStatus }}</div>
         <div class="text-caption text-grey-7">Rumoca Version</div>
         <div class="text-body2 q-mb-sm">{{ runtimeInfo.rumocaVersion }}</div>
+        <div class="text-caption text-grey-7">Rumoca Simulation Export</div>
+        <div class="text-body2 q-mb-sm">{{ runtimeInfo.rumocaSimulationAvailable }}</div>
+        <div class="text-caption text-grey-7">Rumoca Model Discovery Export</div>
+        <div class="text-body2 q-mb-sm">{{ runtimeInfo.rumocaSimulationModelDiscoveryAvailable }}</div>
         <div class="text-caption text-grey-7">Rumoca Commit</div>
         <div class="text-body2 q-mb-sm">{{ runtimeInfo.rumocaCommit }}</div>
         <div class="text-caption text-grey-7">Rumoca Build Time (legacy)</div>
@@ -156,15 +160,51 @@
       :has-result="hasResult"
       :running="running"
       :can-run="canRunModel"
-      :show-popup-button="true"
-      :can-open-popup="canRunModel"
+      :show-popup-button="selectedSimulationBackend === 'js'"
+      :can-open-popup="selectedSimulationBackend === 'js' && canRunModel"
       @run="emit('run-sandbox')"
       @open-popup="emit('open-popup')"
       @stop="emit('stop-execution')"
       @reset-from-model="emit('reset-sim-from-model')"
     >
+      <template #runtime-settings>
+        <div class="row q-col-gutter-sm">
+          <div class="col-12 col-sm-6">
+            <q-select
+              :model-value="selectedSimulationBackend"
+              :options="simulationBackendOptions"
+              dense
+              outlined
+              emit-value
+              map-options
+              label="Simulation runtime"
+              @update:model-value="emit('update:simulation-backend', String($event || 'js'))"
+            />
+          </div>
+          <div v-if="selectedSimulationBackend === 'rumoca'" class="col-12 col-sm-6">
+            <q-select
+              :model-value="selectedRumocaSolver"
+              :options="rumocaSolverOptions"
+              dense
+              outlined
+              emit-value
+              map-options
+              label="Rumoca solver"
+              @update:model-value="emit('update:rumoca-solver', String($event || 'auto'))"
+            />
+          </div>
+        </div>
+        <div v-if="selectedSimulationBackend === 'rumoca'" class="text-caption text-grey-7">
+          Popup HTML export stays on the JS runtime. Rumoca runs only inside the editor.
+        </div>
+      </template>
       <template #solver-options>
+        <div v-if="selectedSimulationBackend === 'rumoca'" class="text-caption text-grey-7">
+          Rumoca runtime uses its own solver backend selection here. JS solver options still apply
+          to popup HTML export and JS sandbox runs.
+        </div>
         <ObjectView
+          v-else
           v-model="solverOptionsModel"
           missing-mode="placeholders"
           copy-btn
@@ -221,6 +261,8 @@ const props = defineProps<{
   simT0: number
   simTf: number
   simDt: number
+  selectedSimulationBackend: 'js' | 'rumoca'
+  selectedRumocaSolver: string
   selectedSolverKey: string
   predictedSteps: number
   actualSteps?: number | null
@@ -257,6 +299,8 @@ const emit = defineEmits<{
   (e: 'update:sim-t0', value: number): void
   (e: 'update:sim-tf', value: number): void
   (e: 'update:sim-dt', value: number): void
+  (e: 'update:simulation-backend', value: string): void
+  (e: 'update:rumoca-solver', value: string): void
   (e: 'update:solver-options', value: Record<string, unknown>): void
   (e: 'update:project-menu-options', value: Record<string, unknown>): void
   (e: 'update:runtime-menu-options', value: Record<string, unknown>): void
@@ -295,6 +339,9 @@ const solverOptionsModel = computed({
 })
 
 const solverDisplayLabel = computed(() => {
+  if (props.selectedSimulationBackend === 'rumoca') {
+    return `rumoca:${String(props.selectedRumocaSolver || 'auto')}`
+  }
   const key = String(props.selectedSolverKey || '')
   const solverId = solverIdFromKey(key) || key || '-'
   const options =
@@ -310,7 +357,22 @@ const solverDisplayLabel = computed(() => {
   return integrator ? `${integrator} (${prefix}:${solverId})` : `${prefix}:${solverId}`
 })
 
+const simulationBackendOptions = [
+  { label: 'JS template runtime', value: 'js' },
+  { label: 'Rumoca runtime', value: 'rumoca' },
+]
+
+const rumocaSolverOptions = [
+  { label: 'auto', value: 'auto' },
+  { label: 'bdf', value: 'bdf' },
+  { label: 'esdirk34', value: 'esdirk34' },
+  { label: 'trbdf2', value: 'trbdf2' },
+  { label: 'rk-like', value: 'rk-like' },
+]
+
 type RuntimeMenuOptions = {
+  rumocaSimulationAvailable?: boolean | undefined
+  rumocaSimulationModelDiscoveryAvailable?: boolean | undefined
   rumocaWasmVersion?: string | undefined
   rumocaWasmGitCommit?: string | undefined
   rumocaWasmBuildTimeLocal?: string | undefined
@@ -321,6 +383,14 @@ type RuntimeMenuOptions = {
 const normalizeRuntimeMenuOptions = (
   value: Record<string, unknown> | null | undefined,
 ): RuntimeMenuOptions => ({
+  rumocaSimulationAvailable:
+    typeof value?.rumocaSimulationAvailable === 'boolean'
+      ? value.rumocaSimulationAvailable
+      : undefined,
+  rumocaSimulationModelDiscoveryAvailable:
+    typeof value?.rumocaSimulationModelDiscoveryAvailable === 'boolean'
+      ? value.rumocaSimulationModelDiscoveryAvailable
+      : undefined,
   rumocaWasmVersion:
     typeof value?.rumocaWasmVersion === 'string' ? value.rumocaWasmVersion : undefined,
   rumocaWasmGitCommit:
@@ -346,6 +416,9 @@ const runtimeInfo = computed(() => {
   const buildTime = String(opts.rumocaWasmBuildTimeLocal ?? 'unknown')
   const rustBuildTime = String(opts.rumocaWasmRustBuildTimeLocal ?? buildTime)
   const packageBuiltTime = String(opts.rumocaWasmPackageBuiltTimeLocal ?? 'unknown')
+  const simulationAvailable = opts.rumocaSimulationAvailable === true ? 'yes' : 'no'
+  const simulationModelDiscoveryAvailable =
+    opts.rumocaSimulationModelDiscoveryAvailable === true ? 'yes' : 'no'
   const mslStatus = props.mslLoaded
     ? `${props.mslArchiveName || 'MSL loaded'} (${props.mslFileCount} files)`
     : 'MSL not loaded'
@@ -353,6 +426,8 @@ const runtimeInfo = computed(() => {
     modelicaVersion: version,
     mslStatus,
     rumocaVersion: version,
+    rumocaSimulationAvailable: simulationAvailable,
+    rumocaSimulationModelDiscoveryAvailable: simulationModelDiscoveryAvailable,
     rumocaCommit: commit,
     rumocaBuildTime: buildTime,
     rumocaRustBuildTime: rustBuildTime,

@@ -1,5 +1,6 @@
 import defaultSolverSource from './simulateModel?raw'
-import type * as WasmTypes from 'rumoca'
+import type * as WasmTypes from 'rumoca-full-web'
+import rumocaWasmUrl from 'rumoca-full-web/rumoca_bind_wasm_bg.wasm?url'
 import { z } from 'zod'
 import { ref } from 'vue'
 import { Notify } from 'quasar'
@@ -455,10 +456,10 @@ export function buildModelAbiValidationSandboxCode(compiledJs: string): string {
 
 // ---------- WASM loading ----------
 export const loadWasm = async () => {
-  const wasmModule = await import('rumoca')
+  const wasmModule = await import('rumoca-full-web')
 
   if (typeof wasmModule.default === 'function') {
-    await wasmModule.default()
+    await wasmModule.default({ module_or_path: rumocaWasmUrl })
   }
 
   if ('wasm_init' in wasmModule && typeof wasmModule.wasm_init === 'function') {
@@ -565,6 +566,8 @@ export const TyModelicaProjectFileV1 = z.object({
       t0: z.number().optional(),
       tf: z.number().optional(),
       dt: z.number().optional(),
+      simulationBackend: z.enum(['js', 'rumoca']).optional(),
+      rumocaSolver: z.string().optional(),
 
       // Which solver is selected.
       // Prefer solverKey (supports builtin: and project: prefixes). Keep solverId for backwards compat.
@@ -1058,6 +1061,8 @@ export function packProjectFile(input: {
     t0: number
     tf: number
     dt: number
+    simulationBackend?: 'js' | 'rumoca'
+    rumocaSolver?: string
     solverKey: string
     solverOptions: Record<string, unknown>
     solverOptionsByKey?: Record<string, Record<string, unknown>>
@@ -1094,6 +1099,8 @@ export function packProjectFile(input: {
       t0: input.sim.t0,
       tf: input.sim.tf,
       dt: input.sim.dt,
+      simulationBackend: input.sim.simulationBackend,
+      rumocaSolver: input.sim.rumocaSolver,
       solverKey: input.sim.solverKey,
       solverId: solverIdFromKey(input.sim.solverKey),
       solverOptions: input.sim.solverOptions,
@@ -1123,6 +1130,8 @@ export function unpackProjectFile(
     t0?: number
     tf?: number
     dt?: number
+    simulationBackend?: 'js' | 'rumoca'
+    rumocaSolver?: string
     solverKey?: string
     solverOptions?: Record<string, unknown>
     solverOptionsByKey?: Record<string, Record<string, unknown>>
@@ -1179,6 +1188,12 @@ export function unpackProjectFile(
     if (typeof pf.sim.t0 === 'number') out.sim.t0 = pf.sim.t0
     if (typeof pf.sim.tf === 'number') out.sim.tf = pf.sim.tf
     if (typeof pf.sim.dt === 'number') out.sim.dt = pf.sim.dt
+    if (pf.sim.simulationBackend === 'js' || pf.sim.simulationBackend === 'rumoca') {
+      out.sim.simulationBackend = pf.sim.simulationBackend
+    }
+    if (typeof pf.sim.rumocaSolver === 'string') {
+      out.sim.rumocaSolver = pf.sim.rumocaSolver
+    }
 
     const solverKey = typeof pf.sim.solverKey === 'string' ? pf.sim.solverKey : ''
     const solverId = typeof pf.sim.solverId === 'string' ? pf.sim.solverId : ''

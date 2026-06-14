@@ -31,6 +31,16 @@ type WorkerRequest =
       type: 'lsp_completion_with_timing'
       payload: { source: string; line: number; character: number }
     }
+  | {
+      id: number
+      type: 'get_simulation_models'
+      payload: { source: string; defaultModel?: string }
+    }
+  | {
+      id: number
+      type: 'start_simulation'
+      payload: { source: string; modelName: string; tEnd: number; dt: number; solver: string }
+    }
   | { id: number; type: 'get_source_root_document_count' }
 
 type WorkerRequestNoId =
@@ -62,9 +72,19 @@ type WorkerRequestNoId =
       type: 'lsp_completion_with_timing'
       payload: { source: string; line: number; character: number }
     }
+  | {
+      type: 'get_simulation_models'
+      payload: { source: string; defaultModel?: string }
+    }
+  | {
+      type: 'start_simulation'
+      payload: { source: string; modelName: string; tEnd: number; dt: number; solver: string }
+    }
   | { type: 'get_source_root_document_count' }
 
-type WorkerResponse = { id: number; ok: true; result: unknown } | { id: number; ok: false; error: string }
+type WorkerResponse =
+  | { id: number; ok: true; result: unknown }
+  | { id: number; ok: false; error: string }
 
 type Pending = {
   resolve: (value: unknown) => void
@@ -87,6 +107,8 @@ export type ModelicaWorkerInitInfo = {
   rustBuildTimeUtc?: string
   packageBuiltTimeUtc?: string
   rayonEnabled: boolean
+  simulationAvailable?: boolean
+  simulationModelDiscoveryAvailable?: boolean
 }
 
 export class ModelicaWorkerClient {
@@ -174,6 +196,10 @@ export class ModelicaWorkerClient {
         return 'Inspecting source roots'
       case 'lsp_completion_with_timing':
         return 'Computing completion'
+      case 'get_simulation_models':
+        return 'Listing simulation models'
+      case 'start_simulation':
+        return 'Running Rumoca simulation'
       default:
         return 'Running worker task'
     }
@@ -218,11 +244,27 @@ export class ModelicaWorkerClient {
     return this.request({ type: 'compile_render', payload })
   }
 
-  loadMslZip(fileName: string, bytes: ArrayBuffer): Promise<{ fileCount: number; parsedCount: number; archiveName: string; documentCount: number }> {
+  loadMslZip(
+    fileName: string,
+    bytes: ArrayBuffer,
+  ): Promise<{
+    fileCount: number
+    parsedCount: number
+    archiveName: string
+    documentCount: number
+  }> {
     return this.request({ type: 'load_msl_zip', payload: { fileName, bytes } }, [bytes])
   }
 
-  mergeMslZip(fileName: string, bytes: ArrayBuffer): Promise<{ fileCount: number; parsedCount: number; archiveName: string; documentCount: number }> {
+  mergeMslZip(
+    fileName: string,
+    bytes: ArrayBuffer,
+  ): Promise<{
+    fileCount: number
+    parsedCount: number
+    archiveName: string
+    documentCount: number
+  }> {
     return this.request({ type: 'merge_msl_zip', payload: { fileName, bytes } }, [bytes])
   }
 
@@ -246,18 +288,38 @@ export class ModelicaWorkerClient {
     return this.request({ type: 'extract_diagram', payload })
   }
 
-  parseSourceAst(payload: {
-    source: string
-    fileName?: string
-  }): Promise<Record<string, unknown>> {
+  parseSourceAst(payload: { source: string; fileName?: string }): Promise<Record<string, unknown>> {
     return this.request({ type: 'parse_source_ast', payload })
   }
 
-  lspCompletionWithTiming(source: string, line: number, character: number): Promise<Record<string, unknown>> {
+  lspCompletionWithTiming(
+    source: string,
+    line: number,
+    character: number,
+  ): Promise<Record<string, unknown>> {
     return this.request({
       type: 'lsp_completion_with_timing',
       payload: { source, line, character },
     })
+  }
+
+  getSimulationModels(payload: { source: string; defaultModel?: string }): Promise<{
+    ok?: boolean
+    models?: string[]
+    selectedModel?: string | null
+    error?: string | null
+  }> {
+    return this.request({ type: 'get_simulation_models', payload })
+  }
+
+  startSimulation(payload: {
+    source: string
+    modelName: string
+    tEnd: number
+    dt: number
+    solver: string
+  }): Promise<Record<string, unknown>> {
+    return this.request({ type: 'start_simulation', payload })
   }
 
   getSourceRootDocumentCount(): Promise<number> {

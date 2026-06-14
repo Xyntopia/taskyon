@@ -1,5 +1,6 @@
-import initRumoca from 'rumoca'
-import * as rumoca from 'rumoca'
+import initRumoca from 'rumoca-full-web'
+import * as rumoca from 'rumoca-full-web'
+import rumocaWasmUrl from 'rumoca-full-web/rumoca_bind_wasm_bg.wasm?url'
 import { strFromU8, unzipSync } from 'fflate'
 import { handleExtractDiagram } from './modelicadiagramGeneration'
 import { renderRumocaTemplate } from './rumocaTemplateRender'
@@ -39,6 +40,16 @@ type WorkerRequest =
       type: 'lsp_completion_with_timing'
       payload: { source: string; line: number; character: number }
     }
+  | {
+      id: number
+      type: 'get_simulation_models'
+      payload: { source: string; defaultModel?: string }
+    }
+  | {
+      id: number
+      type: 'start_simulation'
+      payload: { source: string; modelName: string; tEnd: number; dt: number; solver: string }
+    }
   | { id: number; type: 'get_source_root_document_count' }
 
 type CompileRenderPayload = {
@@ -63,7 +74,7 @@ function asString(value: unknown): string {
 
 async function readRumocaPackageBuiltTimeUtc(): Promise<string> {
   try {
-    const module = await import('rumoca/rumoca_package_meta.json')
+    const module = await import('rumoca-full-web/rumoca_package_meta.json')
     const meta = (module as { default?: Record<string, unknown> }).default ?? {}
     const raw = meta.packageBuiltTimeUtc
     return typeof raw === 'string' && raw.trim() ? raw : 'unknown'
@@ -102,7 +113,7 @@ function selectDaeForTemplate(
 }
 
 async function handleInit(payload: { threads?: number } | undefined): Promise<unknown> {
-  await initRumoca()
+  await initRumoca({ module_or_path: rumocaWasmUrl })
   const threads = Math.max(0, Math.floor(Number(payload?.threads ?? 0)))
   let rayonEnabled = false
   if (typeof rumoca.wasm_init === 'function') {
@@ -120,7 +131,18 @@ async function handleInit(payload: { threads?: number } | undefined): Promise<un
     typeof rumoca.get_build_time_utc === 'function' ? asString(rumoca.get_build_time_utc()) : ''
   const rustBuildTimeUtc = buildTimeUtc
   const packageBuiltTimeUtc = await readRumocaPackageBuiltTimeUtc()
-  return { version, gitCommit, buildTimeUtc, rustBuildTimeUtc, packageBuiltTimeUtc, rayonEnabled }
+  const simulationAvailable = typeof rumoca.simulate_model === 'function'
+  const simulationModelDiscoveryAvailable = typeof rumoca.get_simulation_models === 'function'
+  return {
+    version,
+    gitCommit,
+    buildTimeUtc,
+    rustBuildTimeUtc,
+    packageBuiltTimeUtc,
+    rayonEnabled,
+    simulationAvailable,
+    simulationModelDiscoveryAvailable,
+  }
 }
 
 function handleCompileRender(payload: CompileRenderPayload): unknown {
@@ -294,7 +316,9 @@ const parseSourceRootAst = (source: string, fileName: string): Record<string, un
     removeTopLevelImportsForDiagramParse(source),
     normalizeLegacyDeclarationModifiersForDiagramParse(source),
     stripEquationSectionsForDiagramParse(source),
-    stripEquationSectionsForDiagramParse(normalizeLegacyDeclarationModifiersForDiagramParse(source)),
+    stripEquationSectionsForDiagramParse(
+      normalizeLegacyDeclarationModifiersForDiagramParse(source),
+    ),
   ]
   try {
     return parseJson(source)
@@ -340,6 +364,37 @@ function handleLspCompletionWithTiming(payload: {
   return JSON.parse(String(rumoca.lsp_completion(payload.source, payload.line, payload.character)))
 }
 
+function handleGetSimulationModels(payload: { source: string; defaultModel?: string }): unknown {
+  if (typeof rumoca.get_simulation_models !== 'function') {
+    throw new Error('Rumoca wasm export missing: get_simulation_models')
+  }
+  return JSON.parse(
+    String(rumoca.get_simulation_models(payload.source, asString(payload.defaultModel))),
+  ) as Record<string, unknown>
+}
+
+function handleStartSimulation(payload: {
+  source: string
+  modelName: string
+  tEnd: number
+  dt: number
+  solver: string
+}): Record<string, unknown> {
+  if (typeof rumoca.simulate_model !== 'function') {
+    throw new Error('Simulation not available in this WASM build. Rebuild with rumoca-sim enabled.')
+  }
+  const raw = String(
+    rumoca.simulate_model(
+      payload.source,
+      payload.modelName,
+      Number(payload.tEnd) || 0,
+      Number(payload.dt) || 0,
+      asString(payload.solver) || 'auto',
+    ),
+  )
+  return JSON.parse(raw) as Record<string, unknown>
+}
+
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const msg = event.data
   try {
@@ -376,6 +431,12 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break
       case 'lsp_completion_with_timing':
         result = handleLspCompletionWithTiming(msg.payload)
+        break
+      case 'get_simulation_models':
+        result = handleGetSimulationModels(msg.payload)
+        break
+      case 'start_simulation':
+        result = handleStartSimulation(msg.payload)
         break
       case 'get_source_root_document_count':
         result =

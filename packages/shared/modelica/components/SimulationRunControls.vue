@@ -58,7 +58,7 @@
     />
 
     <q-btn
-      v-if="canRun"
+      v-if="canRun && showPopupButton"
       dense
       flat
       :icon="matOpenInNew"
@@ -98,6 +98,8 @@
               <q-input v-model.number="dtModel" dense outlined type="number" label="dt" />
             </div>
           </div>
+
+          <slot name="runtime-settings" />
 
           <div class="text-caption text-grey-7">
             {{ `N~${formatMaybe(predictedStepsEffective)} | S=${solverLabel || '-'}` }}

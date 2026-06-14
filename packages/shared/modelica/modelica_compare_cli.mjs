@@ -1,16 +1,14 @@
 #!/usr/bin/env node
 
-import { createRequire } from 'node:module'
 import { readFile, writeFile, mkdir, access, readdir, stat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
 import readline from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
-import initRumoca from 'rumoca'
-import * as rumoca from 'rumoca'
+import initRumoca from 'rumoca-full-web'
+import * as rumoca from 'rumoca-full-web'
 import { strFromU8, unzipSync } from 'fflate'
 
-const require = createRequire(import.meta.url)
 const SCRIPT_PATH = new URL(import.meta.url).pathname
 const SCRIPT_DIR = dirname(SCRIPT_PATH)
 const PROJECT_ROOT = resolve(SCRIPT_DIR, '../../..')
@@ -162,8 +160,7 @@ function parseArgs(argv) {
         .filter(Boolean)
         .map((x) => resolve(x))
       options.libraryZips.push(...entries)
-    }
-    else if (key === 'model') options.modelName = value
+    } else if (key === 'model') options.modelName = value
     else if (key === 'baseline-file') options.baselineFile = resolve(value)
     else if (key === 'candidate-file') options.candidateFile = resolve(value)
     else if (key === 'diff-file') options.diffFile = resolve(value)
@@ -174,7 +171,10 @@ function parseArgs(argv) {
     else if (key === 'max-models') options.maxModels = Math.max(0, Number.parseInt(value, 10) || 0)
     else if (key === 'mode') options.mode = value
     else if (key === 'compile-timeout-ms')
-      options.compileTimeoutMs = Math.max(1, Number.parseInt(value, 10) || DEFAULT_COMPILE_TIMEOUT_MS)
+      options.compileTimeoutMs = Math.max(
+        1,
+        Number.parseInt(value, 10) || DEFAULT_COMPILE_TIMEOUT_MS,
+      )
     else if (key === 'solver-timeout-ms')
       options.solverTimeoutMs = Math.max(1, Number.parseInt(value, 10) || DEFAULT_SOLVER_TIMEOUT_MS)
     else if (key === 'compile-workers')
@@ -234,14 +234,22 @@ function renderWithRumoca({ dae, templateSource, modelName }) {
       '',
     ].join('\n')
     const templatesJson = JSON.stringify({ 'javascript.jinja': templateSource })
-    const rendered = rumoca.render_target(daeJson, modelName, 'javascript', manifestSource, templatesJson)
+    const rendered = rumoca.render_target(
+      daeJson,
+      modelName,
+      'javascript',
+      manifestSource,
+      templatesJson,
+    )
     const renderedObj = asObj(rendered)
     const files = Array.isArray(renderedObj?.files) ? renderedObj.files : []
     const firstFile = files[0]
     const firstContent = firstFile && typeof firstFile === 'object' ? firstFile.content : null
     if (typeof firstContent === 'string') return firstContent
     if (typeof rendered === 'string') return rendered
-    throw new Error(`render_target returned unexpected payload: ${JSON.stringify(rendered).slice(0, 500)}`)
+    throw new Error(
+      `render_target returned unexpected payload: ${JSON.stringify(rendered).slice(0, 500)}`,
+    )
   }
   throw new Error('WASM module is missing render_template / render_target exports')
 }
@@ -250,7 +258,8 @@ function sanitizeLibraryPath(path) {
   const parts = String(path || '')
     .split('/')
     .filter(Boolean)
-  if (parts.length > 1 && /(?:Standard)?Library|^MSL/i.test(parts[0] ?? '')) return parts.slice(1).join('/')
+  if (parts.length > 1 && /(?:Standard)?Library|^MSL/i.test(parts[0] ?? ''))
+    return parts.slice(1).join('/')
   if (parts.length > 0) parts[0] = parts[0].replace(/[\s-][\d.]+$/, '')
   return parts.join('/')
 }
@@ -281,14 +290,17 @@ async function fileExists(path) {
 }
 
 async function initRumocaEngine() {
-  const wasmPath = require.resolve('rumoca/rumoca_bind_wasm_bg.wasm')
-  const wasmBytes = await readFile(wasmPath)
+  const wasmBytes = await readFile(
+    new URL('rumoca-full-web/rumoca_bind_wasm_bg.wasm', import.meta.url),
+  )
   await initRumoca({ module_or_path: wasmBytes })
-  const rayonEnabled = typeof rumoca.wasm_init === 'function' ? Boolean(await rumoca.wasm_init(0)) : false
+  const rayonEnabled =
+    typeof rumoca.wasm_init === 'function' ? Boolean(await rumoca.wasm_init(0)) : false
   return {
     version: typeof rumoca.get_version === 'function' ? asString(rumoca.get_version()) : '',
     gitCommit: typeof rumoca.get_git_commit === 'function' ? asString(rumoca.get_git_commit()) : '',
-    buildTimeUtc: typeof rumoca.get_build_time_utc === 'function' ? asString(rumoca.get_build_time_utc()) : '',
+    buildTimeUtc:
+      typeof rumoca.get_build_time_utc === 'function' ? asString(rumoca.get_build_time_utc()) : '',
     rayonEnabled,
   }
 }
@@ -465,10 +477,14 @@ function isStandaloneExampleForRoot(modelName, rootName) {
 async function loadTargetModels({ modelName, libraryRoots, knownClassNames }) {
   if (String(modelName || '').trim()) return [String(modelName).trim()]
 
-  const roots = Array.isArray(libraryRoots) ? libraryRoots.filter((x) => typeof x === 'string' && x.trim()) : []
+  const roots = Array.isArray(libraryRoots)
+    ? libraryRoots.filter((x) => typeof x === 'string' && x.trim())
+    : []
   const classes = [...knownClassNames]
   if (roots.length > 0) {
-    const byRoot = classes.filter((name) => roots.some((root) => isStandaloneExampleForRoot(name, root)))
+    const byRoot = classes.filter((name) =>
+      roots.some((root) => isStandaloneExampleForRoot(name, root)),
+    )
     if (byRoot.length > 0) return byRoot
   }
   if (await fileExists(DEFAULT_TARGETS_FILE)) {
@@ -621,7 +637,9 @@ function validateTraceShape(trace, { modelName, t0, tf, dt, sourcePath }) {
   const series = asObj(trace?.series) ?? {}
   const channels = Object.keys(series)
   if (times.length < 2) {
-    throw new Error(`OMC trace invalid for ${modelName}: expected >=2 time samples from ${sourcePath}`)
+    throw new Error(
+      `OMC trace invalid for ${modelName}: expected >=2 time samples from ${sourcePath}`,
+    )
   }
   if (channels.length === 0) {
     throw new Error(`OMC trace invalid for ${modelName}: no channels found in ${sourcePath}`)
@@ -640,7 +658,9 @@ function validateTraceShape(trace, { modelName, t0, tf, dt, sourcePath }) {
   for (const name of channels) {
     const values = Array.isArray(series[name]) ? series[name] : []
     if (values.length === 0) {
-      throw new Error(`OMC trace invalid for ${modelName}: channel ${name} is empty in ${sourcePath}`)
+      throw new Error(
+        `OMC trace invalid for ${modelName}: channel ${name} is empty in ${sourcePath}`,
+      )
     }
   }
 }
@@ -654,7 +674,9 @@ function normalizeSolverTrace(runResult) {
     const series = {}
     for (const [name, raw] of Object.entries(seriesObj)) {
       if (!Array.isArray(raw)) continue
-      series[name] = raw.slice(0, n).map((v) => (Number.isFinite(Number(v)) ? Number(v) : Number.NaN))
+      series[name] = raw
+        .slice(0, n)
+        .map((v) => (Number.isFinite(Number(v)) ? Number(v) : Number.NaN))
     }
     return { times, series }
   }
@@ -668,7 +690,9 @@ function normalizeSolverTrace(runResult) {
     if (!obj) return
     for (const [name, raw] of Object.entries(obj)) {
       if (!Array.isArray(raw)) continue
-      series[`${prefix}.${name}`] = raw.slice(0, n).map((v) => (Number.isFinite(Number(v)) ? Number(v) : Number.NaN))
+      series[`${prefix}.${name}`] = raw
+        .slice(0, n)
+        .map((v) => (Number.isFinite(Number(v)) ? Number(v) : Number.NaN))
     }
   }
   pushRecord('x', data.x)
@@ -925,8 +949,16 @@ async function loadOrCreateOmcTrace({ modelName, sim, omcWrapper, omcMslDir }) {
     const raw = parseJson(await readFile(cachePath, 'utf8'))
     const trace = normalizeOmcTrace(raw)
     try {
-      validateTraceShape(trace, { modelName, t0: sim.t0, tf: sim.tf, dt: sim.dt, sourcePath: cachePath })
-      logInfo(`[${modelName}] OMC cache hit: valid cached reference found, skipping OMC recomputation`)
+      validateTraceShape(trace, {
+        modelName,
+        t0: sim.t0,
+        tf: sim.tf,
+        dt: sim.dt,
+        sourcePath: cachePath,
+      })
+      logInfo(
+        `[${modelName}] OMC cache hit: valid cached reference found, skipping OMC recomputation`,
+      )
       return { trace, cachePath, fromCache: true }
     } catch {
       // stale or malformed cache entry; regenerate
@@ -983,7 +1015,14 @@ async function readDirSafe(path) {
   }
 }
 
-async function runSolverForModel({ modelName, sourceModelica, templateSource, solverSource, sim, debug }) {
+async function runSolverForModel({
+  modelName,
+  sourceModelica,
+  templateSource,
+  solverSource,
+  sim,
+  debug,
+}) {
   const compileStartedAt = Date.now()
   const { compiled, dae } = compileModelForTemplate({ modelName, sourceModelica })
   const compileElapsedMs = Date.now() - compileStartedAt
@@ -992,7 +1031,9 @@ async function runSolverForModel({ modelName, sourceModelica, templateSource, so
     const preparedStatus = asString(compiled?.dae_prepared_status)
     const preparedError = asString(compiled?.dae_prepared_error)
     const diagnostics = asObj(compiled?.dae_prepared_diagnostics) ?? {}
-    const planErrors = Array.isArray(compiled?.__compile_plan_errors) ? compiled.__compile_plan_errors : []
+    const planErrors = Array.isArray(compiled?.__compile_plan_errors)
+      ? compiled.__compile_plan_errors
+      : []
     throw new Error(
       `compile returned no usable DAE for ${modelName}: dae_prepared_status=${preparedStatus || 'n/a'}, dae_prepared_error=${preparedError || 'n/a'}, diagnostics=${JSON.stringify(diagnostics).slice(0, 500)}${planErrors.length ? `, plan_errors=${planErrors.join(' || ')}` : ''}`,
     )
@@ -1367,12 +1408,15 @@ async function runSolverProbeInSubprocess({
     let stdout = ''
     let stderr = ''
     let settled = false
-    const timer = setTimeout(() => {
-      if (settled) return
-      settled = true
-      child.kill('SIGKILL')
-      rejectProbe(new Error(`solver timeout after ${solverTimeoutMs}ms for ${modelName}`))
-    }, Math.max(1, Number(solverTimeoutMs) || DEFAULT_SOLVER_TIMEOUT_MS))
+    const timer = setTimeout(
+      () => {
+        if (settled) return
+        settled = true
+        child.kill('SIGKILL')
+        rejectProbe(new Error(`solver timeout after ${solverTimeoutMs}ms for ${modelName}`))
+      },
+      Math.max(1, Number(solverTimeoutMs) || DEFAULT_SOLVER_TIMEOUT_MS),
+    )
     child.stdout.on('data', (buf) => {
       stdout += String(buf)
     })
@@ -1456,7 +1500,12 @@ function compileCurrentModelInLoadedSession(modelName, options = {}) {
       const compileOptionsJson = asString(options.compileOptionsJson || '{}')
       const compiledRaw =
         typeof rumoca.compile_check_with_source_roots_with_options === 'function'
-          ? rumoca.compile_check_with_source_roots_with_options('', modelName, '{}', compileOptionsJson)
+          ? rumoca.compile_check_with_source_roots_with_options(
+              '',
+              modelName,
+              '{}',
+              compileOptionsJson,
+            )
           : rumoca.compile_check_with_source_roots('', modelName, '{}')
       const compiled = parseJson(compiledRaw)
       return {
@@ -1536,7 +1585,11 @@ async function runCompileWorkerDaemon(options) {
       const elapsedMs = Date.now() - startedAt
       const result =
         probe.status === 'compiled' && elapsedMs > timeoutMs
-          ? { status: 'compile_fail', modelName, error: `compile timeout after ${timeoutMs}ms for ${modelName}` }
+          ? {
+              status: 'compile_fail',
+              modelName,
+              error: `compile timeout after ${timeoutMs}ms for ${modelName}`,
+            }
           : probe
       if (typeof process.send === 'function') {
         process.send({ type: 'result', requestId, modelName, elapsedMs, result })
@@ -1617,7 +1670,11 @@ async function runCompileOnWorker({ child, modelName, compileTimeoutMs }) {
       resolveResult({
         modelName,
         elapsedMs: Number(msg.elapsedMs) || 0,
-        result: asObj(msg.result) ?? { status: 'compile_fail', modelName, error: 'invalid worker response' },
+        result: asObj(msg.result) ?? {
+          status: 'compile_fail',
+          modelName,
+          error: 'invalid worker response',
+        },
       })
     }
     child.on('message', onMessage)
@@ -1631,15 +1688,31 @@ async function writeDebugBundle(payload) {
   await writeFile(join(dir, 'summary.json'), JSON.stringify(payload.summary, null, 2), 'utf8')
   await writeFile(join(dir, 'modelica.mo'), payload.sourceModelica || '', 'utf8')
   await writeFile(join(dir, 'generated_model.js'), payload.renderedJs || '', 'utf8')
-  await writeFile(join(dir, 'dae_prepared.json'), JSON.stringify(payload.daePrepared ?? null, null, 2), 'utf8')
+  await writeFile(
+    join(dir, 'dae_prepared.json'),
+    JSON.stringify(payload.daePrepared ?? null, null, 2),
+    'utf8',
+  )
   await writeFile(join(dir, 'solver.js'), payload.solverSource || '', 'utf8')
-  await writeFile(join(dir, 'solver_trace.json'), JSON.stringify(payload.solverTrace, null, 2), 'utf8')
+  await writeFile(
+    join(dir, 'solver_trace.json'),
+    JSON.stringify(payload.solverTrace, null, 2),
+    'utf8',
+  )
   await writeFile(join(dir, 'omc_trace.json'), JSON.stringify(payload.omcTrace, null, 2), 'utf8')
   if (Array.isArray(payload.solverEventLog)) {
-    await writeFile(join(dir, 'solver_event_log.json'), JSON.stringify(payload.solverEventLog, null, 2), 'utf8')
+    await writeFile(
+      join(dir, 'solver_event_log.json'),
+      JSON.stringify(payload.solverEventLog, null, 2),
+      'utf8',
+    )
   }
   if (payload.comparison) {
-    await writeFile(join(dir, 'comparison.json'), JSON.stringify(payload.comparison, null, 2), 'utf8')
+    await writeFile(
+      join(dir, 'comparison.json'),
+      JSON.stringify(payload.comparison, null, 2),
+      'utf8',
+    )
     const mismatches = Array.isArray(payload.comparison.mismatchedChannels)
       ? payload.comparison.mismatchedChannels
       : []
@@ -1686,13 +1759,27 @@ function recordSummary(records) {
   const compileFailed = records.filter((r) => r.status === 'compile_fail').length
   const runtimeFailed = records.filter((r) => r.status === 'run_fail').length
   const missingChannels = records.filter((r) => r.status === 'missing_channels').length
-  const maxDeviationPercent = records.reduce((acc, r) => Math.max(acc, Number(r.maxDeviationPercent) || 0), 0)
-  return { total, compiled, compared, compileFailed, runtimeFailed, missingChannels, maxDeviationPercent }
+  const maxDeviationPercent = records.reduce(
+    (acc, r) => Math.max(acc, Number(r.maxDeviationPercent) || 0),
+    0,
+  )
+  return {
+    total,
+    compiled,
+    compared,
+    compileFailed,
+    runtimeFailed,
+    missingChannels,
+    maxDeviationPercent,
+  }
 }
 
 function percentile(sortedValues, p) {
   if (!sortedValues.length) return 0
-  const idx = Math.min(sortedValues.length - 1, Math.max(0, Math.floor((p / 100) * sortedValues.length)))
+  const idx = Math.min(
+    sortedValues.length - 1,
+    Math.max(0, Math.floor((p / 100) * sortedValues.length)),
+  )
   return Number(sortedValues[idx]) || 0
 }
 
@@ -1711,7 +1798,9 @@ function formatCompareReport(summary) {
   const avgDeviation = deviations.length
     ? deviations.reduce((acc, value) => acc + value, 0) / deviations.length
     : 0
-  const avgElapsedMs = elapsed.length ? elapsed.reduce((acc, value) => acc + value, 0) / elapsed.length : 0
+  const avgElapsedMs = elapsed.length
+    ? elapsed.reduce((acc, value) => acc + value, 0) / elapsed.length
+    : 0
   const topOutliers = compared
     .slice()
     .sort((a, b) => (Number(b.maxDeviationPercent) || 0) - (Number(a.maxDeviationPercent) || 0))
@@ -1720,7 +1809,11 @@ function formatCompareReport(summary) {
   const formatFailureLine = (r, idx) => {
     const modelName = String(r.modelName)
     const errorText = String(r.error || 'unknown error')
-    const stackFirstLine = String(r.stack || '').split('\n').map((x) => x.trim()).find(Boolean) || ''
+    const stackFirstLine =
+      String(r.stack || '')
+        .split('\n')
+        .map((x) => x.trim())
+        .find(Boolean) || ''
     const debugPath = String(r.debugPath || '')
     const details = [
       `${idx + 1}. ${modelName} | ${errorText}`,
@@ -1759,23 +1852,23 @@ function formatCompareReport(summary) {
       : ['(none)']),
     '',
     'Runtime Failures',
-    ...(runFails.length
-      ? runFails.map((r, idx) => formatFailureLine(r, idx))
-      : ['(none)']),
+    ...(runFails.length ? runFails.map((r, idx) => formatFailureLine(r, idx)) : ['(none)']),
     '',
     'Compile Failures',
-    ...(compileFails.length
-      ? compileFails.map((r, idx) => formatFailureLine(r, idx))
-      : ['(none)']),
+    ...(compileFails.length ? compileFails.map((r, idx) => formatFailureLine(r, idx)) : ['(none)']),
     '',
     'Missing Channels',
-    ...(missingChannels.length ? missingChannels.map((r, idx) => `${idx + 1}. ${String(r.modelName)}`) : ['(none)']),
+    ...(missingChannels.length
+      ? missingChannels.map((r, idx) => `${idx + 1}. ${String(r.modelName)}`)
+      : ['(none)']),
     '',
     `Progress JSON: ${String(summary.progressPath || '')}`,
     `OMC Cache Dir: ${String(summary.omcCacheDir || '')}`,
     '',
     'CLI Log Transcript',
-    ...(Array.isArray(summary.cliLogs) && summary.cliLogs.length > 0 ? summary.cliLogs : ['(none)']),
+    ...(Array.isArray(summary.cliLogs) && summary.cliLogs.length > 0
+      ? summary.cliLogs
+      : ['(none)']),
     '',
     'Run JSON',
     '```json',
@@ -2010,7 +2103,8 @@ function diffModelRecords(baseRecord, candidateRecord) {
       asNumber(candidateRecord?.meanDeviationPercent) - asNumber(baseRecord?.meanDeviationPercent),
     deltaElapsedMs: asNumber(candidateRecord?.elapsedMs) - asNumber(baseRecord?.elapsedMs),
     deltaBadChannels: asNumber(candidateRecord?.badChannels) - asNumber(baseRecord?.badChannels),
-    deltaSevereChannels: asNumber(candidateRecord?.severeChannels) - asNumber(baseRecord?.severeChannels),
+    deltaSevereChannels:
+      asNumber(candidateRecord?.severeChannels) - asNumber(baseRecord?.severeChannels),
     deltaComparedChannels:
       asNumber(candidateRecord?.comparedChannels) - asNumber(baseRecord?.comparedChannels),
   }
@@ -2033,7 +2127,9 @@ function compareBaseline({ baseline, candidate }) {
   const baselineCompile = byModelName(baseline?.compile?.records)
   const candidateCompile = byModelName(candidate?.compile?.records)
   const allNames = [...new Set([...baselineCompile.keys(), ...candidateCompile.keys()])].sort()
-  const transitions = allNames.map((name) => diffModelRecords(baselineCompile.get(name), candidateCompile.get(name)))
+  const transitions = allNames.map((name) =>
+    diffModelRecords(baselineCompile.get(name), candidateCompile.get(name)),
+  )
   const addedModels = allNames.filter((name) => !baselineCompile.has(name))
   const removedModels = allNames.filter((name) => !candidateCompile.has(name))
   const statusRegressions = transitions.filter(
@@ -2047,7 +2143,9 @@ function compareBaseline({ baseline, candidate }) {
 
   const baselineRuntime = byModelName(baseline?.runtime?.records)
   const candidateRuntime = byModelName(candidate?.runtime?.records)
-  const allRuntimeNames = [...new Set([...baselineRuntime.keys(), ...candidateRuntime.keys()])].sort()
+  const allRuntimeNames = [
+    ...new Set([...baselineRuntime.keys(), ...candidateRuntime.keys()]),
+  ].sort()
   const runtimeTransitions = allRuntimeNames.map((name) =>
     diffModelRecords(baselineRuntime.get(name), candidateRuntime.get(name)),
   )
@@ -2081,19 +2179,33 @@ function buildDiffAnalysis(
   const compileTransitions = Array.isArray(diff?.transitions) ? diff.transitions : []
   const runtimeTransitions = Array.isArray(diff?.runtimeTransitions) ? diff.runtimeTransitions : []
   const allTransitions = [...compileTransitions, ...runtimeTransitions]
-  const allModelNames = [...new Set(allTransitions.map((t) => asString(t?.modelName)).filter(Boolean))].sort()
+  const allModelNames = [
+    ...new Set(allTransitions.map((t) => asString(t?.modelName)).filter(Boolean)),
+  ].sort()
 
-  const runtimeDeltaMax = runtimeTransitions.map((t) => asNumber(t.deltaMaxDeviationPercent)).sort((a, b) => a - b)
-  const runtimeDeltaElapsed = runtimeTransitions.map((t) => asNumber(t.deltaElapsedMs)).sort((a, b) => a - b)
-  const worsenedRuntime = runtimeTransitions.filter((t) => asNumber(t.deltaMaxDeviationPercent) > 0).length
-  const improvedRuntime = runtimeTransitions.filter((t) => asNumber(t.deltaMaxDeviationPercent) < 0).length
+  const runtimeDeltaMax = runtimeTransitions
+    .map((t) => asNumber(t.deltaMaxDeviationPercent))
+    .sort((a, b) => a - b)
+  const runtimeDeltaElapsed = runtimeTransitions
+    .map((t) => asNumber(t.deltaElapsedMs))
+    .sort((a, b) => a - b)
+  const worsenedRuntime = runtimeTransitions.filter(
+    (t) => asNumber(t.deltaMaxDeviationPercent) > 0,
+  ).length
+  const improvedRuntime = runtimeTransitions.filter(
+    (t) => asNumber(t.deltaMaxDeviationPercent) < 0,
+  ).length
   const compileSuccessRegressedModels = compileTransitions
-    .filter((t) => asString(t.statusBefore) === 'compiled' && asString(t.statusAfter) === 'compile_fail')
+    .filter(
+      (t) => asString(t.statusBefore) === 'compiled' && asString(t.statusAfter) === 'compile_fail',
+    )
     .map((t) => asString(t.modelName))
     .filter(Boolean)
     .sort()
   const compileSuccessImprovedModels = compileTransitions
-    .filter((t) => asString(t.statusBefore) === 'compile_fail' && asString(t.statusAfter) === 'compiled')
+    .filter(
+      (t) => asString(t.statusBefore) === 'compile_fail' && asString(t.statusAfter) === 'compiled',
+    )
     .map((t) => asString(t.modelName))
     .filter(Boolean)
     .sort()
@@ -2119,7 +2231,9 @@ function buildDiffAnalysis(
       deltaElapsedMs: asNumber(t.deltaElapsedMs),
     }))
     .sort((a, b) => b.deltaElapsedMs - a.deltaElapsedMs)
-  const compileTimeDeltaElapsed = compileTimeTransitions.map((t) => asNumber(t.deltaElapsedMs)).sort((a, b) => a - b)
+  const compileTimeDeltaElapsed = compileTimeTransitions
+    .map((t) => asNumber(t.deltaElapsedMs))
+    .sort((a, b) => a - b)
   const modelCount = allModelNames.length
   const compileCompared = asNumber(diff?.totals?.modelsCompared)
   const runtimeCompared = asNumber(diff?.runtimeTotals?.modelsCompared)
@@ -2157,11 +2271,15 @@ function buildDiffAnalysis(
         deltaElapsedMs: {
           mean:
             compileTimeDeltaElapsed.length > 0
-              ? compileTimeDeltaElapsed.reduce((acc, x) => acc + x, 0) / compileTimeDeltaElapsed.length
+              ? compileTimeDeltaElapsed.reduce((acc, x) => acc + x, 0) /
+                compileTimeDeltaElapsed.length
               : 0,
           median: percentile(compileTimeDeltaElapsed, 50),
           p95: percentile(compileTimeDeltaElapsed, 95),
-          max: compileTimeDeltaElapsed.length > 0 ? compileTimeDeltaElapsed[compileTimeDeltaElapsed.length - 1] : 0,
+          max:
+            compileTimeDeltaElapsed.length > 0
+              ? compileTimeDeltaElapsed[compileTimeDeltaElapsed.length - 1]
+              : 0,
           min: compileTimeDeltaElapsed.length > 0 ? compileTimeDeltaElapsed[0] : 0,
         },
       },
@@ -2186,7 +2304,8 @@ function buildDiffAnalysis(
             : 0,
         median: percentile(runtimeDeltaElapsed, 50),
         p95: percentile(runtimeDeltaElapsed, 95),
-        max: runtimeDeltaElapsed.length > 0 ? runtimeDeltaElapsed[runtimeDeltaElapsed.length - 1] : 0,
+        max:
+          runtimeDeltaElapsed.length > 0 ? runtimeDeltaElapsed[runtimeDeltaElapsed.length - 1] : 0,
         min: runtimeDeltaElapsed.length > 0 ? runtimeDeltaElapsed[0] : 0,
       },
       candidatePerformance: computeRunPerformanceMetrics(candidateRun?.records),
@@ -2213,7 +2332,10 @@ function buildDiffAnalysis(
 }
 
 function statsFrom(values) {
-  const xs = values.map((v) => asNumber(v)).filter((v) => Number.isFinite(v) && v >= 0).sort((a, b) => a - b)
+  const xs = values
+    .map((v) => asNumber(v))
+    .filter((v) => Number.isFinite(v) && v >= 0)
+    .sort((a, b) => a - b)
   if (xs.length === 0) return { count: 0, total: 0, mean: 0, median: 0, p95: 0, min: 0, max: 0 }
   const total = xs.reduce((acc, x) => acc + x, 0)
   return {
@@ -2288,8 +2410,12 @@ function buildCategoryBreakdown({ baseline, candidate }) {
   const candidateCompile = byModelName(candidate?.compile?.records)
   const baselineRuntime = byModelName(baseline?.runtime?.records)
   const candidateRuntime = byModelName(candidate?.runtime?.records)
-  const allCompileNames = [...new Set([...baselineCompile.keys(), ...candidateCompile.keys()])].sort()
-  const allRuntimeNames = [...new Set([...baselineRuntime.keys(), ...candidateRuntime.keys()])].sort()
+  const allCompileNames = [
+    ...new Set([...baselineCompile.keys(), ...candidateCompile.keys()]),
+  ].sort()
+  const allRuntimeNames = [
+    ...new Set([...baselineRuntime.keys(), ...candidateRuntime.keys()]),
+  ].sort()
   const categories = new Map()
   const getCategoryRow = (modelName) => {
     const category = categoryFromModelName(modelName)
@@ -2356,8 +2482,12 @@ function buildCategoryBreakdown({ baseline, candidate }) {
     const after = candidateRuntime.get(modelName)
     const beforeStatus = asString(before?.status)
     const afterStatus = asString(after?.status)
-    const beforeAttempted = beforeStatus === 'compared' || beforeStatus === 'missing_channels' || beforeStatus === 'run_fail'
-    const afterAttempted = afterStatus === 'compared' || afterStatus === 'missing_channels' || afterStatus === 'run_fail'
+    const beforeAttempted =
+      beforeStatus === 'compared' ||
+      beforeStatus === 'missing_channels' ||
+      beforeStatus === 'run_fail'
+    const afterAttempted =
+      afterStatus === 'compared' || afterStatus === 'missing_channels' || afterStatus === 'run_fail'
     const beforeSolved = beforeStatus === 'compared'
     const afterSolved = afterStatus === 'compared'
     row.runtime.modelsCompared += 1
@@ -2370,18 +2500,39 @@ function buildCategoryBreakdown({ baseline, candidate }) {
   const pct = (num, den) => (den > 0 ? (num / den) * 100 : 0)
   const rows = [...categories.values()]
   for (const row of rows) {
-    row.compile.baselineCompileRatePercent = pct(row.compile.baselineCompiled, row.compile.modelsCompared)
-    row.compile.candidateCompileRatePercent = pct(row.compile.candidateCompiled, row.compile.modelsCompared)
+    row.compile.baselineCompileRatePercent = pct(
+      row.compile.baselineCompiled,
+      row.compile.modelsCompared,
+    )
+    row.compile.candidateCompileRatePercent = pct(
+      row.compile.candidateCompiled,
+      row.compile.modelsCompared,
+    )
     row.compile.deltaCompiledCount = row.compile.candidateCompiled - row.compile.baselineCompiled
-    row.compile.deltaCompileRatePercent = row.compile.candidateCompileRatePercent - row.compile.baselineCompileRatePercent
-    row.runtime.baselineSolveRatePercent = pct(row.runtime.baselineSolved, row.runtime.baselineRuntimeAttempted)
-    row.runtime.candidateSolveRatePercent = pct(row.runtime.candidateSolved, row.runtime.candidateRuntimeAttempted)
+    row.compile.deltaCompileRatePercent =
+      row.compile.candidateCompileRatePercent - row.compile.baselineCompileRatePercent
+    row.runtime.baselineSolveRatePercent = pct(
+      row.runtime.baselineSolved,
+      row.runtime.baselineRuntimeAttempted,
+    )
+    row.runtime.candidateSolveRatePercent = pct(
+      row.runtime.candidateSolved,
+      row.runtime.candidateRuntimeAttempted,
+    )
     row.runtime.deltaSolvedCount = row.runtime.candidateSolved - row.runtime.baselineSolved
-    row.runtime.deltaSolveRatePercent = row.runtime.candidateSolveRatePercent - row.runtime.baselineSolveRatePercent
-    row.examples.baselineCompileRatePercent = pct(row.examples.baselineCompiled, row.examples.modelsCompared)
-    row.examples.candidateCompileRatePercent = pct(row.examples.candidateCompiled, row.examples.modelsCompared)
+    row.runtime.deltaSolveRatePercent =
+      row.runtime.candidateSolveRatePercent - row.runtime.baselineSolveRatePercent
+    row.examples.baselineCompileRatePercent = pct(
+      row.examples.baselineCompiled,
+      row.examples.modelsCompared,
+    )
+    row.examples.candidateCompileRatePercent = pct(
+      row.examples.candidateCompiled,
+      row.examples.modelsCompared,
+    )
     row.examples.deltaCompiledCount = row.examples.candidateCompiled - row.examples.baselineCompiled
-    row.examples.deltaCompileRatePercent = row.examples.candidateCompileRatePercent - row.examples.baselineCompileRatePercent
+    row.examples.deltaCompileRatePercent =
+      row.examples.candidateCompileRatePercent - row.examples.baselineCompileRatePercent
   }
   rows.sort((a, b) => {
     const byCount = b.compile.modelsCompared - a.compile.modelsCompared
@@ -2391,7 +2542,14 @@ function buildCategoryBreakdown({ baseline, candidate }) {
   return rows
 }
 
-function buildPublicDiffPayload({ diff, analysis, baselineFile, candidateFile, diffFile, diffCsvFile }) {
+function buildPublicDiffPayload({
+  diff,
+  analysis,
+  baselineFile,
+  candidateFile,
+  diffFile,
+  diffCsvFile,
+}) {
   return {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
@@ -2426,12 +2584,14 @@ async function runBaselineDiff(options) {
   }
   const candidateRaw = await readJsonFile(candidateFileInput)
   const fileTag = inferLibraryTagFromCompareFilePath(candidateFileInput)
-  const libraryTag = fileTag || asString(candidateRaw?.libraryTag) || deriveLibraryTagFromRun(candidateRaw)
+  const libraryTag =
+    fileTag || asString(candidateRaw?.libraryTag) || deriveLibraryTagFromRun(candidateRaw)
   const defaults = defaultPathsForLibraryTag(libraryTag)
   const baselineFile = options.baselineFile || defaults.baselineFile
   const diffFile = options.diffFile || defaults.diffFile
   const diffCsvFile = options.diffCsvFile || defaults.diffCsvFile
-  const publicDiffFile = options.publicDiffFile || defaults.publicDiffFile || DEFAULT_PUBLIC_DIFF_FILE
+  const publicDiffFile =
+    options.publicDiffFile || defaults.publicDiffFile || DEFAULT_PUBLIC_DIFF_FILE
   const baselineRaw = (await fileExists(baselineFile)) ? await readJsonFile(baselineFile) : {}
   const baseline = ensureBaselineEnvelope(baselineRaw, libraryTag)
   const candidate = {
@@ -2524,7 +2684,13 @@ async function listLibraryTagsForDiff() {
 }
 
 function shouldRunBaselineDiffAll(options) {
-  return !options.baselineFile && !options.candidateFile && !options.diffFile && !options.diffCsvFile && !options.publicDiffFile
+  return (
+    !options.baselineFile &&
+    !options.candidateFile &&
+    !options.diffFile &&
+    !options.diffCsvFile &&
+    !options.publicDiffFile
+  )
 }
 
 async function runBaselineDiffAll(options) {
@@ -2665,21 +2831,22 @@ async function runComparison(options) {
       throw new Error(`Requested --model not found in loaded classes: ${options.modelName}`)
     }
   }
-  const shouldDiscoverFromPrefixes = targetPrefixes.length > 0 && !String(options.modelName || '').trim()
+  const shouldDiscoverFromPrefixes =
+    targetPrefixes.length > 0 && !String(options.modelName || '').trim()
   let allTargets = shouldDiscoverFromPrefixes
     ? [...knownClassNames]
     : rawTargets.filter((name) => knownClassNames.has(name))
   if (targetPrefixes.length > 0 && !String(options.modelName || '').trim()) {
-    allTargets = allTargets.filter((name) => targetPrefixes.some((prefix) => name.startsWith(prefix)))
+    allTargets = allTargets.filter((name) =>
+      targetPrefixes.some((prefix) => name.startsWith(prefix)),
+    )
   }
   const targetClassTypes = String(options.targetClassTypesCsv || '')
     .split(',')
     .map((x) => x.trim().toLowerCase())
     .filter(Boolean)
   const defaultCompileOnlyClassTypes =
-    options.compileOnly &&
-    targetClassTypes.length === 0 &&
-    !String(options.modelName || '').trim()
+    options.compileOnly && targetClassTypes.length === 0 && !String(options.modelName || '').trim()
       ? ['model', 'block']
       : []
   const effectiveTargetClassTypes =
@@ -2699,7 +2866,10 @@ async function runComparison(options) {
   }
   const targets =
     options.mode === 'random-stop'
-      ? shuffled(allTargets, options.seed).slice(0, options.maxModels > 0 ? options.maxModels : allTargets.length)
+      ? shuffled(allTargets, options.seed).slice(
+          0,
+          options.maxModels > 0 ? options.maxModels : allTargets.length,
+        )
       : options.maxModels > 0
         ? allTargets.slice(0, options.maxModels)
         : allTargets
@@ -2754,7 +2924,8 @@ async function runComparison(options) {
         const finished = await Promise.race(active.values())
         active.delete(finished.child)
         if (!finished.ok) {
-          const message = finished.error instanceof Error ? finished.error.message : String(finished.error)
+          const message =
+            finished.error instanceof Error ? finished.error.message : String(finished.error)
           logInfo(`[${finished.modelName}] Failure captured: ${message}`)
           records.push({
             modelName: finished.modelName,
@@ -2887,7 +3058,8 @@ async function runComparison(options) {
     const datedRunFile = datedRunFileForLibraryTag(libraryTag, new Date().toISOString())
     await writeJsonFile(candidateFile, summary)
     await writeJsonFile(datedRunFile, summary)
-    if (resolve(candidateFile) !== resolve(DEFAULT_RUN_JSON_FILE)) await writeJsonFile(DEFAULT_RUN_JSON_FILE, summary)
+    if (resolve(candidateFile) !== resolve(DEFAULT_RUN_JSON_FILE))
+      await writeJsonFile(DEFAULT_RUN_JSON_FILE, summary)
     summary.candidateFile = candidateFile
     summary.datedRunFile = datedRunFile
     return summary
@@ -2896,10 +3068,10 @@ async function runComparison(options) {
     const modelName = targets[i]
     const startedAt = Date.now()
     let sourceModelica = ''
-      let renderedJs = ''
-      let solverTraceSnapshot = null
-      let solverEventLogSnapshot = null
-      let omcTraceSnapshot = null
+    let renderedJs = ''
+    let solverTraceSnapshot = null
+    let solverEventLogSnapshot = null
+    let omcTraceSnapshot = null
     process.stdout.write(`[${i + 1}/${targets.length}] ${modelName}\n`)
     try {
       if (options.compileOnly) {
@@ -2922,7 +3094,9 @@ async function runComparison(options) {
                 const ms = Number(p?.[k]?.total_ms || 0)
                 return `${k}=${ms.toFixed(1)}ms(calls=${calls})`
               }
-              logInfo(`${base}; phases ${fmt('instantiate')} ${fmt('typecheck')} ${fmt('flatten')} ${fmt('todae')}`)
+              logInfo(
+                `${base}; phases ${fmt('instantiate')} ${fmt('typecheck')} ${fmt('flatten')} ${fmt('todae')}`,
+              )
               if (stat.compileCheckTiming) {
                 const t = stat.compileCheckTiming
                 logInfo(
@@ -2943,7 +3117,9 @@ async function runComparison(options) {
         if (probe.status !== 'compiled') {
           throw new Error(probe.error || `compile probe failed for ${modelName}`)
         }
-        const measuredCompileMs = Number(probe?.planStats?.[0]?.elapsedMs || Date.now() - compileStartedAt)
+        const measuredCompileMs = Number(
+          probe?.planStats?.[0]?.elapsedMs || Date.now() - compileStartedAt,
+        )
         if (measuredCompileMs > Number(options.compileTimeoutMs)) {
           throw new Error(`compile timeout after ${options.compileTimeoutMs}ms for ${modelName}`)
         }
@@ -3000,7 +3176,8 @@ async function runComparison(options) {
           solverOptionsJson: options.solverOptionsJson,
         })
       } catch (subprocessError) {
-        const msg = subprocessError instanceof Error ? subprocessError.message : String(subprocessError)
+        const msg =
+          subprocessError instanceof Error ? subprocessError.message : String(subprocessError)
         logInfo(`[${modelName}] Solver subprocess failed (${msg}); retrying in-process`)
         solverRun = await runSolverProbeInProcess({
           modelName,
@@ -3098,7 +3275,9 @@ async function runComparison(options) {
         Number(record.maxDeviationPercent) >= Number(options.stopThresholdPercent)
       if (options.mode === 'random-stop' && isBad) {
         if (alwaysContinue) {
-          logInfo(`[${modelName}] random-stop guard triggered but continuing due to --always-continue`)
+          logInfo(
+            `[${modelName}] random-stop guard triggered but continuing due to --always-continue`,
+          )
         } else {
           const choice = await promptChoice(modelName, Number(record.maxDeviationPercent) || 0)
           if (choice === 'continue') {
@@ -3106,7 +3285,9 @@ async function runComparison(options) {
           } else if (choice === 'always_continue') {
             alwaysContinue = true
             options.alwaysContinue = true
-            logInfo(`[${modelName}] Interactive mode switched to always-continue for remaining models`)
+            logInfo(
+              `[${modelName}] Interactive mode switched to always-continue for remaining models`,
+            )
           } else if (choice === 'debug') {
             debugPath = await writeDebugBundle({
               modelName,
@@ -3157,7 +3338,9 @@ async function runComparison(options) {
         modelName,
         status,
         elapsedMs: Date.now() - startedAt,
-        ...(options.compileOnly ? {} : { compileElapsedMs: 0, omcElapsedMs: 0, solverElapsedMs: 0, compareElapsedMs: 0 }),
+        ...(options.compileOnly
+          ? {}
+          : { compileElapsedMs: 0, omcElapsedMs: 0, solverElapsedMs: 0, compareElapsedMs: 0 }),
         error: message,
         ...(stack ? { stack } : {}),
         ...(failureDebugPath ? { debugPath: failureDebugPath } : {}),
@@ -3205,7 +3388,8 @@ async function runComparison(options) {
   const datedRunFile = datedRunFileForLibraryTag(libraryTag, new Date().toISOString())
   await writeJsonFile(candidateFile, summary)
   await writeJsonFile(datedRunFile, summary)
-  if (resolve(candidateFile) !== resolve(DEFAULT_RUN_JSON_FILE)) await writeJsonFile(DEFAULT_RUN_JSON_FILE, summary)
+  if (resolve(candidateFile) !== resolve(DEFAULT_RUN_JSON_FILE))
+    await writeJsonFile(DEFAULT_RUN_JSON_FILE, summary)
   summary.candidateFile = candidateFile
   summary.datedRunFile = datedRunFile
   return summary
@@ -3259,10 +3443,20 @@ async function main() {
       const results = await runBaselineDiffAll(options)
       console.log(`Computed baseline diffs: ${results.length}`)
       for (const entry of results) {
-        const { diff, analysis, baselineFile, candidateFile, diffFile, diffCsvFile, publicDiffFile, candidateMeta } =
-          entry
+        const {
+          diff,
+          analysis,
+          baselineFile,
+          candidateFile,
+          diffFile,
+          diffCsvFile,
+          publicDiffFile,
+          candidateMeta,
+        } = entry
         console.log('')
-        console.log(`Library: ${asString(diff?.libraryTag) || asString(candidateMeta?.libraryTag) || 'unknown'}`)
+        console.log(
+          `Library: ${asString(diff?.libraryTag) || asString(candidateMeta?.libraryTag) || 'unknown'}`,
+        )
         console.log(`Baseline file: ${baselineFile}`)
         console.log(`Candidate file: ${candidateFile}`)
         console.log(
@@ -3277,8 +3471,16 @@ async function main() {
       }
       return
     }
-    const { diff, analysis, baselineFile, candidateFile, diffFile, diffCsvFile, publicDiffFile, candidateMeta } =
-      await runBaselineDiff(options)
+    const {
+      diff,
+      analysis,
+      baselineFile,
+      candidateFile,
+      diffFile,
+      diffCsvFile,
+      publicDiffFile,
+      candidateMeta,
+    } = await runBaselineDiff(options)
     console.log(`Baseline file: ${baselineFile}`)
     console.log(`Candidate file: ${candidateFile}`)
     console.log(
