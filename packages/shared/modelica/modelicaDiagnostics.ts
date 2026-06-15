@@ -16,7 +16,6 @@ import { serializeObject } from '../modules/serializeObject'
 import { createGraphController } from '../modules/graph'
 import baseDaeTemplate from './base_dae.jinja?raw'
 import javascriptTemplate from './javascript.jinja?raw'
-import standaloneHtmlTemplate from './standalone_html.jinja?raw'
 import {
   mapDiagramToGraph,
   type DiagramEdgeData,
@@ -31,12 +30,6 @@ const templateChecks = [
     source: javascriptTemplate,
     requiredSnippets: ['function Model()', 'const meta = {'],
     executableAsJs: true,
-  },
-  {
-    name: 'standalone_html.jinja',
-    source: standaloneHtmlTemplate,
-    requiredSnippets: ['<html lang="en">', 'function Model()'],
-    executableAsJs: false,
   },
   {
     name: 'base_dae.jinja',
@@ -1696,11 +1689,6 @@ end Test;
       name: 'javascript.jinja',
       template: javascriptTemplate,
       shouldValidate: true,
-    },
-    {
-      name: 'standalone_html.jinja',
-      template: standaloneHtmlTemplate,
-      shouldValidate: false,
     },
     {
       name: 'base_dae.jinja',
