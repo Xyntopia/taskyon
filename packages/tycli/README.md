@@ -25,4 +25,22 @@ From the repository root:
 yarn tycli
 ```
 
+From the Nix dev shell:
+
+```bash
+tycli
+```
+
+This runs the built bundle from `packages/tycli/bin/tycli.cjs`, so it keeps working even if the current TypeScript sources are temporarily broken. Build it first with:
+
+```bash
+yarn tycli:build
+```
+
+For direct source-level testing without building:
+
+```bash
+tycli-dev
+```
+
 Type `exit` or `quit` to leave the chat.

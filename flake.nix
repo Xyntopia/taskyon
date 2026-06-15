@@ -25,16 +25,32 @@
         pkgs = import nixpkgs { inherit system; };
         pkgs_unstable = import nixpkgs_unstable { inherit system; };
         python = pkgs.python311;
-        tycliDevBin = pkgs.writeShellScriptBin "tycli" ''
-          set -euo pipefail
-          repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-          exec yarn --cwd "$repo_root" node --import "$repo_root/packages/tycli/src/register.ts" --experimental-strip-types "$repo_root/packages/tycli/src/cli.ts" "$@"
-        '';
-        tycDevBin = pkgs.writeShellScriptBin "tyc" ''
-          set -euo pipefail
-          repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-          exec yarn --cwd "$repo_root" node --import "$repo_root/packages/tycli/src/register.ts" --experimental-strip-types "$repo_root/packages/tycli/src/cli.ts" "$@"
-        '';
+        mkTycliBin =
+          commandName:
+          pkgs.writeShellScriptBin commandName ''
+            set -euo pipefail
+            repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+            cli_bin="$repo_root/packages/tycli/bin/tycli.cjs"
+
+            if [ ! -f "$cli_bin" ]; then
+              echo "$commandName: missing built tycli bundle at $cli_bin" >&2
+              echo "$commandName: run yarn tycli:build first" >&2
+              exit 1
+            fi
+
+            exec node "$cli_bin" "$@"
+          '';
+        mkTycliDevBin =
+          commandName:
+          pkgs.writeShellScriptBin commandName ''
+            set -euo pipefail
+            repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+            exec yarn --cwd "$repo_root" node --import "$repo_root/packages/tycli/src/register.ts" --experimental-strip-types "$repo_root/packages/tycli/src/cli.ts" "$@"
+          '';
+        tycliBin = mkTycliBin "tycli";
+        tycBin = mkTycliBin "tyc";
+        tycliDevBin = mkTycliDevBin "tycli-dev";
+        tycDevBin = mkTycliDevBin "tyc-dev";
         prepareRustBin = pkgs.writeShellScriptBin "prepare_rust" ''
           set -euo pipefail
 
@@ -226,6 +242,8 @@ PY
           # > nix-index
           # > nix-locate libgbm.so.1
           nix-index
+          tycliBin
+          tycBin
           tycliDevBin
           tycDevBin
           prepareRustBin

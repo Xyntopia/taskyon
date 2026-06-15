@@ -1,1 +1,1 @@
-- As an AI agent, you can try out what you implemented using the `tyc` command.
+- As an AI agent, you can try out the built CLI using `tyc`, or the live TypeScript entrypoint using `tyc-dev`.
