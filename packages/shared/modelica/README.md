@@ -15,11 +15,17 @@ This package contains the JS Modelica CLI and helper scripts to generate OMC ref
 
 ## Primary Runtime-Debug Tactic (Mandatory First Step)
 
-When a model compiles but runtime/solver behavior is wrong, **you must start with a generated pure JS model first**.
-Do not jump directly to solver/template/compiler edits until this loop has been attempted and documented.
+When a model compiles but runtime or solver behavior is wrong, AI agents **must start with a generated pure JS model first**.
+Do not jump directly to solver, template, compiler, or repo-source edits until this loop has been attempted and documented on the generated JS artifact itself.
 
-This is not optional and not just a suggestion for the first attempt.
-For every runtime-debug iteration:
+This is a hard requirement.
+It is not optional.
+It is not "preferred".
+It is not "good enough" to only inspect diagnostics output and then edit `javascript.jinja` or `simulateModel.js`.
+AI agents must treat this as a blocking gate.
+Until the generated-JS repro and generated-JS fix steps are done, repo source edits are out of bounds for runtime-debug work.
+
+For every runtime-debug iteration, AI agents must:
 
 1. Regenerate the JS model if needed.
 2. Debug and test the generated JS file directly.
@@ -64,6 +70,32 @@ Required workflow gate before broader fixes:
 - Validate a candidate fix in generated JS first.
 - Compare against cached OMC trace (from `.tmp/modelica-omc-cache` when available).
 - Only then backport the minimal fix into template/solver/compiler layers.
+
+If an AI agent edits repo sources before proving the behavior in generated JS first, that work does not follow this runbook and should be treated as incorrect process.
+
+Accepted generated-JS debugging methods include:
+
+- direct instrumentation with temporary logging/assertions in the generated file
+- running the generated file directly with `simulateModel.js`
+- using the Node debugger or browser debugger on the generated file
+- temporary local patches to the generated file to prove the fix before backporting
+
+Forbidden during the initial runtime-debug phase:
+
+- editing `packages/shared/modelica/javascript.jinja` first
+- editing `packages/shared/modelica/simulateModel.js` first
+- editing Rumoca compiler crates first
+- proposing a root-cause fix without showing generated-JS evidence first
+- treating diagnostics output alone as sufficient proof for a template or compiler change
+
+Required agent checklist before backporting any runtime fix:
+
+- [ ] I rendered the failing model to a generated JS file.
+- [ ] I reproduced the bug in that generated JS file directly.
+- [ ] I instrumented or debugged the generated JS file directly.
+- [ ] I proved a candidate fix in the generated JS file first.
+- [ ] I only backported the smallest change needed after the generated JS fix worked.
+- [ ] I documented the generated-JS proof in my notes, PR, or handoff.
 
 Why this is primary:
 
