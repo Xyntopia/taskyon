@@ -10,11 +10,21 @@ export function findBrowserSandboxFrame(id: string): HTMLIFrameElement | null {
   return existing instanceof HTMLIFrameElement ? existing : null
 }
 
+function hasUnsafeSandboxCombination(tokens: string[]): boolean {
+  const values = new Set(tokens)
+  return values.has('allow-scripts') && values.has('allow-same-origin')
+}
+
 export function createBrowserSandboxFrame(args: {
   id: string
   sandboxTokens: string[]
 }): HTMLIFrameElement {
   assertBrowserSandboxDom()
+  if (hasUnsafeSandboxCombination(args.sandboxTokens)) {
+    throw new Error(
+      'Unsafe iframe sandbox configuration: do not combine allow-scripts with allow-same-origin.',
+    )
+  }
   const iframe = document.createElement('iframe')
   iframe.id = args.id
   iframe.style.display = 'none'
@@ -23,15 +33,4 @@ export function createBrowserSandboxFrame(args: {
   }
   document.body.appendChild(iframe)
   return iframe
-}
-
-export function writeBrowserSandboxDocument(iframe: HTMLIFrameElement, html: string): Document {
-  const doc = iframe.contentDocument
-  if (!doc) {
-    throw new Error('Failed to access iframe document.')
-  }
-  doc.open()
-  doc.write(html)
-  doc.close()
-  return doc
 }

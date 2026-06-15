@@ -1,9 +1,4 @@
-import {
-  assertBrowserSandboxDom,
-  createBrowserSandboxFrame,
-  findBrowserSandboxFrame,
-  writeBrowserSandboxDocument,
-} from './browserSandboxDomHost'
+import { executeInWorkerSandbox } from './workerSandbox'
 
 export interface JsValidationResult {
   valid: boolean
@@ -16,44 +11,7 @@ export interface JsValidationResult {
   rawError?: string | undefined
 }
 
-const BROWSER_SANDBOX_FRAME_ID = '__taskyonJsCheckerIframe'
-
-function assertIsBrowser(): void {
-  assertBrowserSandboxDom()
-}
-
-function isBrowserEnv(): boolean {
-  return typeof window !== 'undefined' && typeof document !== 'undefined'
-}
-
-function getOrCreateJsCheckerIframe(): HTMLIFrameElement {
-  assertIsBrowser()
-
-  const existing = findBrowserSandboxFrame(BROWSER_SANDBOX_FRAME_ID)
-  if (existing) {
-    return existing
-  }
-
-  const iframe = createBrowserSandboxFrame({
-    id: BROWSER_SANDBOX_FRAME_ID,
-    sandboxTokens: ['allow-scripts', 'allow-same-origin'],
-  })
-  writeBrowserSandboxDocument(iframe, '<!doctype html><html><head></head><body></body></html>')
-  return iframe
-}
-
-function resetIframeDocument(iframe: HTMLIFrameElement): { win: Window; doc: Document } {
-  const win = iframe.contentWindow
-  if (!win) {
-    throw new Error('Failed to access iframe contentWindow.')
-  }
-  const doc = writeBrowserSandboxDocument(
-    iframe,
-    '<!doctype html><html><head></head><body></body></html>',
-  )
-
-  return { win, doc }
-}
+let jsValidationRunCounter = 0
 
 function makeCodeSnippet(
   code: string,
@@ -84,138 +42,107 @@ function makeCodeSnippet(
   return result.join('\n')
 }
 
-export function validateJavaScriptInSandbox(code: string): Promise<JsValidationResult> {
-  if (!isBrowserEnv()) {
-    return import('node:vm')
-      .then(({ Script }) => {
-        // Parse/compile only in Node-like environments.
-        new Script(`${code}\n//# sourceURL=userCode.js`, { filename: 'userCode.js' })
+function buildSandboxValidationCode(): string {
+  return `
+(code) => {
+  const extractLineColumn = (rawError) => {
+    const text = typeof rawError === 'string' ? rawError : '';
+    const matchers = [
+      /userCode\\.js:(\\d+):(\\d+)/,
+      /<anonymous>:(\\d+):(\\d+)/,
+    ];
+    for (const matcher of matchers) {
+      const match = text.match(matcher);
+      if (match) {
         return {
-          valid: true,
-          phase: null,
-        } satisfies JsValidationResult
-      })
-      .catch((error: unknown) => {
-        const err = error instanceof Error ? error : new Error(String(error))
-        const stack = typeof err.stack === 'string' ? err.stack : ''
-        const match = stack.match(/userCode\.js:(\d+):(\d+)/)
-        const line = match ? Number(match[1]) : undefined
-        const column = match ? Number(match[2]) : undefined
-        const snippet =
-          line !== undefined && column !== undefined
-            ? makeCodeSnippet(code, line, column, 10)
-            : undefined
-        return {
-          valid: false,
-          phase: 'syntax',
-          errorName: err.name || 'SyntaxError',
-          message: err.message || 'Unknown syntax error',
-          line,
-          column,
-          snippet,
-          rawError: stack || err.message,
-        } satisfies JsValidationResult
-      })
+          line: Number(match[1]),
+          column: Number(match[2]),
+        };
+      }
+    }
+    return {};
+  };
+
+  try {
+    const fn = new Function(String(code || '') + '\\n//# sourceURL=userCode.js');
+    fn();
+    return {
+      valid: true,
+      phase: null,
+    };
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    const rawError = typeof err.stack === 'string' && err.stack ? err.stack : err.message;
+    const position = extractLineColumn(rawError);
+    return {
+      valid: false,
+      phase: err.name === 'SyntaxError' ? 'syntax' : 'runtime',
+      errorName: err.name || 'Error',
+      message: err.message || 'Unknown error',
+      line: Number.isFinite(position.line) ? position.line : undefined,
+      column: Number.isFinite(position.column) ? position.column : undefined,
+      rawError,
+    };
+  }
+}
+`.trim()
+}
+
+function normalizeValidationResult(code: string, raw: unknown): JsValidationResult {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {
+      valid: false,
+      phase: 'runtime',
+      errorName: 'ValidationError',
+      message: 'Sandbox validation returned an invalid payload.',
+    }
   }
 
-  return new Promise<JsValidationResult>((resolve) => {
-    const iframe = getOrCreateJsCheckerIframe()
-    const { win, doc } = resetIframeDocument(iframe)
+  const result = raw as Record<string, unknown>
+  const line = typeof result.line === 'number' && result.line > 0 ? result.line : undefined
+  const column = typeof result.column === 'number' && result.column > 0 ? result.column : undefined
 
-    const blob = new Blob([`${code}\n//# sourceURL=userCode.js`], { type: 'text/javascript' })
-    const url = URL.createObjectURL(blob)
+  return {
+    valid: result.valid === true,
+    phase: result.phase === 'syntax' || result.phase === 'runtime' ? result.phase : null,
+    errorName: typeof result.errorName === 'string' ? result.errorName : undefined,
+    message: typeof result.message === 'string' ? result.message : undefined,
+    line,
+    column,
+    snippet:
+      line !== undefined && column !== undefined
+        ? makeCodeSnippet(code, line, column, 10)
+        : undefined,
+    rawError: typeof result.rawError === 'string' ? result.rawError : undefined,
+  }
+}
 
-    let resolved = false
+export async function validateJavaScriptInSandbox(code: string): Promise<JsValidationResult> {
+  const abort = new AbortController()
+  const runId = `js-sandbox-validate-${Date.now()}-${jsValidationRunCounter}`
+  jsValidationRunCounter += 1
 
-    const cleanup = (): void => {
-      URL.revokeObjectURL(url)
-      win.onerror = null
+  try {
+    const raw = await executeInWorkerSandbox(
+      {
+        id: runId,
+        code: buildSandboxValidationCode(),
+        sourceURL: `${runId}.js`,
+        stopSignal: abort.signal,
+      },
+      code,
+    )
+    return normalizeValidationResult(code, raw)
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    return {
+      valid: false,
+      phase: 'runtime',
+      errorName: err.name || 'Error',
+      message: err.message || 'Sandbox validation failed.',
+      rawError: typeof err.stack === 'string' ? err.stack : err.message,
     }
-
-    const errorHandler: OnErrorEventHandlerNonNull = (
-      message,
-      source,
-      lineno,
-      colno,
-      error,
-    ): boolean => {
-      if (typeof source === 'string' && source !== url) {
-        return false
-      }
-
-      if (resolved) {
-        return false
-      }
-      resolved = true
-      cleanup()
-
-      const errorObject = error instanceof Error ? error : undefined
-      const messageText =
-        typeof message === 'string' ? message : (errorObject?.message ?? 'Unknown error')
-
-      const errorName =
-        errorObject?.name ?? (typeof message === 'string' ? message.split(':')[0] : 'Error')
-
-      const phase: 'syntax' | 'runtime' = errorName === 'SyntaxError' ? 'syntax' : 'runtime'
-
-      const line = typeof lineno === 'number' && lineno > 0 ? lineno : undefined
-      const column = typeof colno === 'number' && colno > 0 ? colno : undefined
-
-      const snippet =
-        line !== undefined && column !== undefined
-          ? makeCodeSnippet(code, line, column, 10)
-          : undefined
-
-      const rawError = errorObject?.stack ?? messageText
-
-      resolve({
-        valid: false,
-        phase,
-        errorName,
-        message: messageText,
-        line,
-        column,
-        snippet,
-        rawError,
-      })
-
-      return true
-    }
-
-    win.onerror = errorHandler
-
-    const script = doc.createElement('script')
-    script.src = url
-
-    script.onload = () => {
-      if (resolved) {
-        return
-      }
-      resolved = true
-      cleanup()
-
-      resolve({
-        valid: true,
-        phase: null,
-      })
-    }
-
-    script.onerror = (event: string | Event) => {
-      if (resolved) {
-        return
-      }
-      resolved = true
-      cleanup()
-
-      resolve({
-        valid: false,
-        phase: 'syntax',
-        errorName: 'ScriptLoadError',
-        message: 'Failed to load script for syntax check.',
-        rawError: typeof event === 'string' ? event : JSON.stringify(event),
-      })
-    }
-
-    doc.body.appendChild(script)
-  })
+  } finally {
+    abort.abort()
+  }
 }
