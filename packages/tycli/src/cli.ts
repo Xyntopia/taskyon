@@ -3,7 +3,7 @@ import './node-shims'
 import { createInterface } from 'node:readline/promises'
 import { emitKeypressEvents } from 'node:readline'
 import { spawn } from 'node:child_process'
-import { mkdir, readdir, readFile, stat } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { createDuplexChannel } from '@taskyon/shared/modules/frpBus'
@@ -69,6 +69,7 @@ const FILE_PICKER_EXCLUDED_DIRS = new Set([
   'target',
 ])
 const fileIndexCache = new Map<string, string[]>()
+let fatalErrorHandled = false
 
 function writeLine(text: string) {
   process.stdout.write(`${text}\n`)
@@ -76,6 +77,57 @@ function writeLine(text: string) {
 
 function writeError(text: string) {
   process.stderr.write(`${text}\n`)
+}
+
+const errorTimestamp = () => {
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return [
+    now.getUTCFullYear(),
+    pad(now.getUTCMonth() + 1),
+    pad(now.getUTCDate()),
+    '-',
+    pad(now.getUTCHours()),
+    pad(now.getUTCMinutes()),
+    pad(now.getUTCSeconds()),
+  ].join('')
+}
+
+async function writeFatalErrorLog(error: unknown) {
+  const configDir = await resolveConfigDirectoryPath().catch(() => '/tmp/tycli')
+  const errorDir = join(configDir, 'errors')
+  await mkdir(errorDir, { recursive: true })
+  const filePath = join(errorDir, `error_${errorTimestamp()}_${process.pid}.log`)
+  const body = [
+    `timestamp=${new Date().toISOString()}`,
+    `cwd=${process.cwd()}`,
+    `pid=${process.pid}`,
+    '',
+    error instanceof Error ? error.stack ?? error.message : String(error),
+    '',
+  ].join('\n')
+  await writeFile(filePath, body, 'utf8')
+  return filePath
+}
+
+async function reportFatalError(error: unknown) {
+  if (fatalErrorHandled) return
+  fatalErrorHandled = true
+  try {
+    const filePath = await writeFatalErrorLog(error)
+    writeError(`Fatal error. Details written to ${filePath}`)
+  } catch (logError) {
+    const fallback = logError instanceof Error ? logError.message : String(logError)
+    writeError(`Fatal error. Failed to write error log: ${fallback}`)
+    writeError(error instanceof Error ? (error.stack ?? error.message) : String(error))
+  }
+}
+
+function exitAfterFatalError(code = 1) {
+  process.exitCode = code
+  setImmediate(() => {
+    process.exit(code)
+  })
 }
 
 function writeDebug(text: string) {
@@ -1211,6 +1263,7 @@ async function main() {
     cryptoSession,
     {
       nodePgLiteDataDir: pgliteNodeDir,
+      enableVectorIndexing: false,
     },
   )
   const conversationPersistence = await createConversationPersistence({
@@ -1651,7 +1704,20 @@ async function main() {
   }
 }
 
+process.on('uncaughtException', (error) => {
+  void reportFatalError(error).finally(() => {
+    exitAfterFatalError(1)
+  })
+})
+
+process.on('unhandledRejection', (reason) => {
+  void reportFatalError(reason).finally(() => {
+    exitAfterFatalError(1)
+  })
+})
+
 void main().catch((error) => {
-  writeError(error instanceof Error ? (error.stack ?? error.message) : String(error))
-  process.exitCode = 1
+  void reportFatalError(error).finally(() => {
+    process.exitCode = 1
+  })
 })

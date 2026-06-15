@@ -3,6 +3,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { PGliteWorker } from '@electric-sql/pglite/worker'
 import type { LiveNamespace } from '@electric-sql/pglite/live'
 import { live } from '@electric-sql/pglite/live'
+import { vector } from '@electric-sql/pglite/vector'
 
 export type TyPGDB =
   | (PGliteWorker & { live: LiveNamespace } & { name?: string })
@@ -12,7 +13,8 @@ const pgInstances = new Map<string, TyPGDB>()
 let nodeDataDirResolver: ((name: string) => string) | null = null
 
 const useNodePgLite = () => typeof indexedDB === 'undefined'
-const getNodeDataDir = (name: string) => (nodeDataDirResolver ? nodeDataDirResolver(name) : 'memory://')
+const getNodeDataDir = (name: string) =>
+  nodeDataDirResolver ? nodeDataDirResolver(name) : 'memory://'
 
 export function configureNodePgLiteDataDir(resolver?: (name: string) => string) {
   nodeDataDirResolver = resolver ?? null
@@ -28,6 +30,9 @@ export const getDatabase: (name: string) => Promise<TyPGDB> = async (name) => {
   const newInstance: TyPGDB = useNodePgLite()
     ? ((await PGlite.create({
         dataDir: getNodeDataDir(name),
+        extensions: {
+          vector,
+        },
       })) as TyPGDB)
     : ((await PGliteWorker.create(
         new Worker(new URL('./pglite.worker.ts', import.meta.url), {

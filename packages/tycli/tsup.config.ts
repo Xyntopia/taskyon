@@ -3,6 +3,8 @@ import { defineConfig } from 'tsup'
 export default defineConfig({
   entry: {
     cli: 'src/cli.ts',
+    'nlp.worker': '../taskyon/src/utils/nlp.worker.ts',
+    'pyodide.worker': '../taskyon/src/utils/pyodide.worker.ts',
   },
   format: ['cjs'],
   platform: 'node',
@@ -13,5 +15,11 @@ export default defineConfig({
   splitting: false,
   bundle: true,
   treeshake: true,
-  external: ['@electric-sql/pglite', '@electric-sql/pglite/*'],
+  external: [
+    '@electric-sql/pglite',
+    '@electric-sql/pglite/*',
+    '@huggingface/transformers',
+    'onnxruntime-node',
+    'onnxruntime-common',
+  ],
 })

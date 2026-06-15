@@ -52,7 +52,11 @@ async function tryResolveRelative(specifier: string, parentURL?: string): Promis
 
 async function tryResolveWorkspaceAlias(specifier: string): Promise<string | null> {
   if (specifier === '@taskyon/taskyon') {
-    return pathToFileURL(resolvePath(repoRoot, 'packages/taskyon/src/index.ts')).href
+    return pathToFileURL(resolvePath(repoRoot, 'packages/taskyon/src/tycli.ts')).href
+  }
+
+  if (specifier === '@taskyon/p2p-core') {
+    return pathToFileURL(resolvePath(repoRoot, 'packages/p2p-core/src/index.ts')).href
   }
 
   if (specifier === '@taskyon/taskyon/api') {
@@ -67,6 +71,11 @@ async function tryResolveWorkspaceAlias(specifier: string): Promise<string | nul
   if (specifier.startsWith('@taskyon/shared/')) {
     const rest = specifier.slice('@taskyon/shared/'.length)
     return tryResolveFile(resolvePath(repoRoot, 'packages/shared', rest))
+  }
+
+  if (specifier.startsWith('@taskyon/p2p-core/')) {
+    const rest = specifier.slice('@taskyon/p2p-core/'.length)
+    return tryResolveFile(resolvePath(repoRoot, 'packages/p2p-core/src', rest))
   }
 
   return null

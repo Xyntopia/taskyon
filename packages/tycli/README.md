@@ -44,3 +44,7 @@ tycli-dev
 ```
 
 Type `exit` or `quit` to leave the chat.
+
+## Security
+
+Because the `bash` tool gives the model full shell access to the host, you should **run the coding agent in a sandboxed environment** (e.g., a container, VM, or Nix sandbox) whenever possible. Running it directly on your host machine carries the risk of unintended filesystem changes, dependency conflicts, or other side effects from model-generated commands.

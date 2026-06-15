@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 import { createCryptoSession, type Taskyon } from '@taskyon/taskyon'
@@ -8,16 +9,21 @@ const PREFERRED_CONFIG_DIR = join(homedir(), '.config', 'tycli')
 const FALLBACK_CONFIG_DIR = join('/tmp', 'tycli')
 let cachedConfigFile: string | null = null
 
+async function useFallbackConfigFile() {
+  await mkdir(FALLBACK_CONFIG_DIR, { recursive: true })
+  cachedConfigFile = join(FALLBACK_CONFIG_DIR, 'config.json')
+  return cachedConfigFile
+}
+
 export async function resolveConfigFilePath() {
   if (cachedConfigFile) return cachedConfigFile
   try {
     await mkdir(PREFERRED_CONFIG_DIR, { recursive: true })
+    await access(PREFERRED_CONFIG_DIR, constants.W_OK)
     cachedConfigFile = join(PREFERRED_CONFIG_DIR, 'config.json')
     return cachedConfigFile
   } catch {
-    await mkdir(FALLBACK_CONFIG_DIR, { recursive: true })
-    cachedConfigFile = join(FALLBACK_CONFIG_DIR, 'config.json')
-    return cachedConfigFile
+    return await useFallbackConfigFile()
   }
 }
 
@@ -39,8 +45,15 @@ export async function loadStoredConfig(): Promise<StoredConfig> {
 
 async function saveStoredConfig(next: StoredConfig) {
   const configFile = await resolveConfigFilePath()
-  await mkdir(dirname(configFile), { recursive: true })
-  await writeFile(configFile, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+  const body = `${JSON.stringify(next, null, 2)}\n`
+  try {
+    await mkdir(dirname(configFile), { recursive: true })
+    await writeFile(configFile, body, 'utf8')
+  } catch (error) {
+    if (configFile.includes(FALLBACK_CONFIG_DIR)) throw error
+    const fallbackFile = await useFallbackConfigFile()
+    await writeFile(fallbackFile, body, 'utf8')
+  }
 }
 
 export async function persistConfigPatch(patch: Partial<StoredConfig>) {
@@ -145,6 +158,8 @@ export function resolveKeyForProvider(provider: string): string | undefined {
 
 export async function setSelectedApi(ty: Taskyon, nextApi: string) {
   await persistConfigPatch({ selectedApi: nextApi })
-  const key = (await ty.getSecret(API_KEY_STORE_NAME, nextApi, false, false)) ?? resolveKeyForProvider(nextApi)
+  const key =
+    (await ty.getSecret(API_KEY_STORE_NAME, nextApi, false, false)) ??
+    resolveKeyForProvider(nextApi)
   await ty.updateChatCompletionApiKey(nextApi, key ?? undefined)
 }
