@@ -1,6 +1,5 @@
 import initRumoca from 'rumoca-full-web'
 import * as rumoca from 'rumoca-full-web'
-import rumocaWasmUrl from 'rumoca-full-web/rumoca_bind_wasm_bg.wasm?url'
 import { strFromU8, unzipSync } from 'fflate'
 import { handleExtractDiagram } from './modelicadiagramGeneration'
 import { renderRumocaTemplate } from './rumocaTemplateRender'
@@ -72,17 +71,6 @@ function asString(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
-async function readRumocaPackageBuiltTimeUtc(): Promise<string> {
-  try {
-    const module = await import('rumoca-full-web/rumoca_package_meta.json')
-    const meta = (module as { default?: Record<string, unknown> }).default ?? {}
-    const raw = meta.packageBuiltTimeUtc
-    return typeof raw === 'string' && raw.trim() ? raw : 'unknown'
-  } catch {
-    return 'unknown'
-  }
-}
-
 function sanitizeLibraryPath(path: string): string {
   const parts = String(path || '')
     .split('/')
@@ -113,7 +101,7 @@ function selectDaeForTemplate(
 }
 
 async function handleInit(payload: { threads?: number } | undefined): Promise<unknown> {
-  await initRumoca({ module_or_path: rumocaWasmUrl })
+  await initRumoca()
   const threads = Math.max(0, Math.floor(Number(payload?.threads ?? 0)))
   let rayonEnabled = false
   if (typeof rumoca.wasm_init === 'function') {
@@ -130,7 +118,7 @@ async function handleInit(payload: { threads?: number } | undefined): Promise<un
   const buildTimeUtc =
     typeof rumoca.get_build_time_utc === 'function' ? asString(rumoca.get_build_time_utc()) : ''
   const rustBuildTimeUtc = buildTimeUtc
-  const packageBuiltTimeUtc = await readRumocaPackageBuiltTimeUtc()
+  const packageBuiltTimeUtc = buildTimeUtc
   const simulationAvailable = typeof rumoca.simulate_model === 'function'
   const simulationModelDiscoveryAvailable = typeof rumoca.get_simulation_models === 'function'
   return {

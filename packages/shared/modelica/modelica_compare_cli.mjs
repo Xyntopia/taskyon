@@ -290,10 +290,7 @@ async function fileExists(path) {
 }
 
 async function initRumocaEngine() {
-  const wasmBytes = await readFile(
-    new URL('rumoca-full-web/rumoca_bind_wasm_bg.wasm', import.meta.url),
-  )
-  await initRumoca({ module_or_path: wasmBytes })
+  await initRumoca()
   const rayonEnabled =
     typeof rumoca.wasm_init === 'function' ? Boolean(await rumoca.wasm_init(0)) : false
   return {

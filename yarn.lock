@@ -5441,7 +5441,7 @@ __metadata:
     pmtiles: "npm:^4.4.1"
     prismjs: "npm:^1.30.0"
     qrcode: "npm:^1.5.4"
-    rumoca-full-web: "npm:^0.9.1"
+    rumoca-full-web: "npm:@cognipilot/rumoca@^0.9.4"
     vue-codemirror: "npm:^6.1.1"
   languageName: unknown
   linkType: soft
@@ -19453,10 +19453,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rumoca-full-web@npm:^0.9.1":
-  version: 0.9.1
-  resolution: "rumoca-full-web@npm:0.9.1"
-  checksum: 10c0/cfc6cda094606f301198f4c6257a8d2355d20f26dbd258c9bfd99c0af43243842c94f6534f991f668389d538775d672f7196a21b990e7fb05849791f315ccb9a
+"rumoca-full-web@npm:@cognipilot/rumoca@^0.9.4":
+  version: 0.9.4
+  resolution: "@cognipilot/rumoca@npm:0.9.4"
+  checksum: 10c0/507ee5980b4c8f32cf8a15ed5fd63df22974e087ccea0d290d5e16deb31bc027be074305a0f6c6a20236f454b35b2edeabc4e5005d83c3e8d0cc6d92f254ff20
   languageName: node
   linkType: hard
 

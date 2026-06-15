@@ -264,6 +264,8 @@ export default defineConfig((ctx) => {
             '@electric-sql/pglite',
             'pyodide',
             'rumoca',
+            'rumoca-full-web',
+            '@cognipilot/rumoca',
           ],
         }
         viteConf.resolve = viteConf.resolve || {}

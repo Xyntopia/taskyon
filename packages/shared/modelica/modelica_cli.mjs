@@ -204,10 +204,7 @@ function parseJson(raw) {
 }
 
 async function initEngine(threads) {
-  const wasmBytes = await readFile(
-    new URL('rumoca-full-web/rumoca_bind_wasm_bg.wasm', import.meta.url),
-  )
-  await initRumoca({ module_or_path: wasmBytes })
+  await initRumoca()
   const safeThreads = Number.isFinite(threads) ? Math.max(0, Math.floor(threads)) : 0
   const rayonEnabled =
     typeof rumoca.wasm_init === 'function' ? Boolean(await rumoca.wasm_init(safeThreads)) : false

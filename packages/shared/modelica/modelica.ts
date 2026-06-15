@@ -1,6 +1,5 @@
 import defaultSolverSource from './simulateModel?raw'
 import type * as WasmTypes from 'rumoca-full-web'
-import rumocaWasmUrl from 'rumoca-full-web/rumoca_bind_wasm_bg.wasm?url'
 import { z } from 'zod'
 import { ref } from 'vue'
 import { Notify } from 'quasar'
@@ -459,7 +458,7 @@ export const loadWasm = async () => {
   const wasmModule = await import('rumoca-full-web')
 
   if (typeof wasmModule.default === 'function') {
-    await wasmModule.default({ module_or_path: rumocaWasmUrl })
+    await wasmModule.default()
   }
 
   if ('wasm_init' in wasmModule && typeof wasmModule.wasm_init === 'function') {
