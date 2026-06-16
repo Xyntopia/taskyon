@@ -6,7 +6,8 @@ import {
 import { accessSync, constants as fsConstants } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const verbose = process.env.TASKYON_CLI_VERBOSE === '1' || process.env.TASKYON_CLI_VERBOSE === 'true'
+const verbose =
+  process.env.TASKYON_CLI_VERBOSE === '1' || process.env.TASKYON_CLI_VERBOSE === 'true'
 
 if (!verbose) {
   console.log = () => {}
@@ -81,7 +82,7 @@ class BrowserCompatibleWorker {
     this.worker = new NodeWorker(createWorkerBootstrap(workerUrl), {
       eval: true,
       name: options?.name,
-      type: options?.type === 'classic' ? 'commonjs' : 'module',
+      ...(options?.type === 'classic' ? {} : { type: 'module' }),
     })
 
     this.worker.on('message', (data) => {
@@ -115,15 +116,15 @@ class BrowserCompatibleWorker {
 }
 
 if (typeof globalThis.MessageChannel === 'undefined') {
-  globalThis.MessageChannel = NodeMessageChannel as typeof MessageChannel
+  globalThis.MessageChannel = NodeMessageChannel as unknown as typeof MessageChannel
 }
 
 if (typeof globalThis.MessagePort === 'undefined') {
-  globalThis.MessagePort = NodeMessagePort as typeof MessagePort
+  globalThis.MessagePort = NodeMessagePort as unknown as typeof MessagePort
 }
 
 if (typeof globalThis.Worker === 'undefined') {
-  globalThis.Worker = BrowserCompatibleWorker as typeof Worker
+  globalThis.Worker = BrowserCompatibleWorker as unknown as typeof Worker
 }
 
 export {}
