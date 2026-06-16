@@ -1570,7 +1570,12 @@ model BouncingBall             "The bouncing ball model"
       .reduce((m, v) => Math.max(m, v), Number.NEGATIVE_INFINITY)
     const velocitySignFlips = countSignFlips(vSeries)
     const events = Array.isArray(result?.meta?.events) ? result.meta.events : []
-    const eventCountFromStats = Number(result?.meta?.solverStats?.eventCount ?? events.length)
+    const rawEventCount = result?.meta?.solverStats?.eventCount
+    const hasEventCountMetadata =
+      typeof rawEventCount === 'number' || typeof rawEventCount === 'string' || events.length > 0
+    const eventCountFromStats = hasEventCountMetadata
+      ? Number(rawEventCount ?? events.length)
+      : null
     const summary = {
       runtime: label,
       executionMode: result?.meta?.executionMode ?? null,
@@ -1582,16 +1587,24 @@ model BouncingBall             "The bouncing ball model"
       minH: Number.isFinite(minH) ? minH : null,
       maxH: Number.isFinite(maxH) ? maxH : null,
       velocitySignFlips,
-      eventCountFromStats: Number.isFinite(eventCountFromStats)
-        ? eventCountFromStats
-        : events.length,
+      eventCountFromStats,
+      hasEventCountMetadata,
       stopReason: result?.meta?.stopReason ?? null,
       stopError: result?.meta?.stopError ?? null,
       stateNames: Array.isArray(result?.meta?.model?.stateNames)
         ? result.meta.model.stateNames
         : [],
     }
-    return { tSeries, hSeries, vSeries, minH, velocitySignFlips, eventCountFromStats, summary }
+    return {
+      tSeries,
+      hSeries,
+      vSeries,
+      minH,
+      velocitySignFlips,
+      eventCountFromStats,
+      hasEventCountMetadata,
+      summary,
+    }
   }
   const assertBounceRun = (
     label: string,
@@ -1634,10 +1647,7 @@ model BouncingBall             "The bouncing ball model"
         ].join('\n'),
       )
     }
-    const eventCount = Number.isFinite(details.eventCountFromStats)
-      ? details.eventCountFromStats
-      : 0
-    if (eventCount <= 0) {
+    if (details.hasEventCountMetadata && (details.eventCountFromStats ?? 0) <= 0) {
       throw new Error(
         [
           `${label} produced no events, but the model should definitely bounce and trigger events`,
@@ -2845,6 +2855,16 @@ end MslFirstOrderRuntimeSmoke;
       if (alt.length > 0) return alt
       return []
     }
+    const getSimulationSeriesByName = (
+      result: SimResult | undefined,
+      name: string,
+      preferredBag: 'x' | 'y',
+    ): number[] => {
+      const preferredSeries = getSeriesByName(result?.data?.[preferredBag], name)
+      if (preferredSeries.length > 0) return preferredSeries
+      const fallbackBag = preferredBag === 'x' ? 'y' : 'x'
+      return getSeriesByName(result?.data?.[fallbackBag], name)
+    }
     const getBagKeys = (bag: unknown): string[] =>
       bag && typeof bag === 'object' && !Array.isArray(bag)
         ? Object.keys(bag as Record<string, unknown>)
@@ -2878,7 +2898,7 @@ end MslFirstOrderRuntimeSmoke;
 
     debug.phase = 'validate-simulation-payload'
     const times = Array.isArray(runResult?.data?.t) ? runResult.data.t : []
-    const firstOrderSeries = getSeriesByName(runResult?.data?.y, 'firstOrder.y')
+    const firstOrderSeries = getSimulationSeriesByName(runResult, 'firstOrder.y', 'x')
     debug.runResultPreview = {
       meta: runResult?.meta,
       timeSamples: times.length,

@@ -246,9 +246,9 @@ export const testPromptInjectionPlacement = () => {
       toolResult: 'toolResult {message}',
     },
     [],
-    [],
     ['append me'],
     ['prepend me'],
+    [],
     'hello',
     'SimpleCompletion',
   )

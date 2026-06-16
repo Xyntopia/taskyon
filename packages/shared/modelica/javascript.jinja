@@ -1339,7 +1339,7 @@ function Model() {
   {%- endfor %}
   };
 
-  function residual(t, X, XDot, Y, U, PIn) {
+  function residual(t, X, XDot, Y, U, PIn, cPrev = [], cCurr = []) {
     // For large algebraic-only systems, avoid expensive residual projection loops.
     if (
       (!Array.isArray(X) || X.length === 0) &&
@@ -1389,7 +1389,7 @@ function Model() {
     ];
   }
 
-  function evalAlgebraics(t, X, Y, U, PIn) {
+  function evalAlgebraics(t, X, Y, U, PIn, cPrev = [], cCurr = []) {
     __rumocaCurrentTime = t;
     const P = Array.isArray(PIn) ? PIn : (PIn && Array.isArray(PIn.P) ? PIn.P : P_DEFAULT);
 
