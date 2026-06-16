@@ -163,10 +163,9 @@ export async function runDiagnosticsTests(
       if (typeof testFn.setup === 'function') {
         await Promise.resolve(testFn.setup(testOpts))
       }
-      const requestedTimeoutMs = testFn.timeoutMs ?? defaultTimeoutMs
-      const timeoutMs = Math.min(requestedTimeoutMs, MAX_DIAGNOSTICS_TEST_TIMEOUT_MS)
+      const timeoutMs = testFn.timeoutMs ?? defaultTimeoutMs
       const run = () => Promise.resolve(testFn(testOpts))
-      const result = timeoutMs !== undefined ? await withTimeout(name, timeoutMs, run) : await run()
+      const result = await withTimeout(name, timeoutMs, run)
       out.push({
         name,
         ok: true,

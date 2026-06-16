@@ -39,7 +39,10 @@ const installNodeFetchWasmFallback = async () => {
   const resolvedMslZipPath = await findExistingFile(mslZipCandidates)
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-    if (typeof url === 'string' && (url.endsWith('/rumoca_bind_wasm_bg.wasm') || url === rumocaWasmUrl)) {
+    if (
+      typeof url === 'string' &&
+      (url.endsWith('/rumoca_bind_wasm_bg.wasm') || url === rumocaWasmUrl)
+    ) {
       const bytes = await readFile(rumocaWasmPath)
       return new Response(toArrayBuffer(bytes), {
         status: 200,
@@ -122,7 +125,9 @@ const main = async (): Promise<void> => {
   const selected = filterTests(all, opts.filter)
   const names = Object.keys(selected)
   console.log(`[modelica-node] discovered ${Object.keys(all).length} tests`)
-  console.log(`[modelica-node] selected ${names.length} tests${opts.filter ? ` (filter="${opts.filter}")` : ''}`)
+  console.log(
+    `[modelica-node] selected ${names.length} tests${opts.filter ? ` (filter="${opts.filter}")` : ''}`,
+  )
   if (names.length === 0) {
     console.error('[modelica-node] no tests selected')
     process.exit(1)
@@ -131,7 +136,6 @@ const main = async (): Promise<void> => {
   const startedAt = Date.now()
   const results = await runDiagnosticsTests(selected, {
     details: opts.details,
-    timeoutMs: 300_000,
     onProgress: ({ phase, test, ok }) => {
       if (phase === 'start') console.log(`[RUN ] ${test}`)
       else console.log(`[${ok ? 'PASS' : 'FAIL'}] ${test}`)

@@ -4874,12 +4874,12 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
 export async function testModelicaOrbitInvariantsCompareSolvers() {
   return runModelicaOrbitInvariantTest('compare')
 }
-testModelicaOrbitInvariantsCompareSolvers.timeoutMs = 180_000
+testModelicaOrbitInvariantsCompareSolvers.timeoutMs = 40_000
 
 export async function testModelicaOrbitInvariantsSdirkOnly() {
   return runModelicaOrbitInvariantTest('sdirk-only')
 }
-testModelicaOrbitInvariantsSdirkOnly.timeoutMs = 180_000
+testModelicaOrbitInvariantsSdirkOnly.timeoutMs = 40_000
 
 export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
   const debug: Record<string, unknown> = {
