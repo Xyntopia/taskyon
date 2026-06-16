@@ -111,6 +111,28 @@ export async function resolve(
     }
   }
 
+  // Resolve extensionless `@taskyon/shared/*` imports under Node ESM
+  // (which does not auto-resolve `.ts`). Try `<subpath>.ts` first,
+  // then `<subpath>/index.ts` for directory imports. This is a
+  // harness-only shim; the Quasar / tsup / Vite builds use their own
+  // resolvers.
+  //
+  // `import.meta.url` is the URL of THIS file
+  // (`packages/taskyon-headless/src/ts-loader.ts`). The relative
+  // path from it to the shared package is `../../shared/...`
+  // (src/ → taskyon-headless/ → packages/ → shared/).
+  if (specifier.startsWith('@taskyon/shared/')) {
+    const subpath = specifier.slice('@taskyon/shared/'.length)
+    const directTs = new URL(`../../shared/${subpath}.ts`, import.meta.url)
+    if (await fileExists(fileURLToPath(directTs))) {
+      return { shortCircuit: true, url: directTs.href }
+    }
+    const indexTs = new URL(`../../shared/${subpath}/index.ts`, import.meta.url)
+    if (await fileExists(fileURLToPath(indexTs))) {
+      return { shortCircuit: true, url: indexTs.href }
+    }
+  }
+
   if (specifier.startsWith('./') || specifier.startsWith('../')) {
     const resolved = await tryResolveRelative(specifier, context.parentURL)
     if (resolved) {

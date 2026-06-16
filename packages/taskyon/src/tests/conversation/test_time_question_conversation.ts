@@ -235,7 +235,8 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
         isNamedFunctionCall(task.content.data, 'chatCompletion') &&
         hasGoal(task.content.data, 'AnalyzeToolResult'),
     )
-    const shortlistCall = shortlistCallIndex >= 0 ? conversationTasks[shortlistCallIndex] : undefined
+    const shortlistCall =
+      shortlistCallIndex >= 0 ? conversationTasks[shortlistCallIndex] : undefined
     const shortlistResult = conversationTasks.find(
       (task: TaskNode) =>
         task.content.type === 'structured' && hasToolChoice(task.content.data, 'clock'),
@@ -369,3 +370,4 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
 }
 testTimeQuestionConversationUsesClockTool.description =
   'Runs the exact UI-style initial Taskyon chain for a time question with the entry-node tool chooser forced on, then verifies shortlist, ChooseTool, clock execution, and final assistant response without intermediate error returns.'
+testTimeQuestionConversationUsesClockTool.timeoutMs = 30_000

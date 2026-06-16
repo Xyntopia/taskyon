@@ -109,6 +109,10 @@ async function loadTestModules() {
       dirUrl: new URL('./tests/', import.meta.url),
       sourcePrefix: 'frontend/packages/taskyon-headless/src/tests/',
     },
+    {
+      dirUrl: new URL('../../shared/surrogate/', import.meta.url),
+      sourcePrefix: 'frontend/packages/shared/surrogate/',
+    },
   ]
 
   const modules = []
