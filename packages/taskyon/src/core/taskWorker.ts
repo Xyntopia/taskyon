@@ -316,27 +316,13 @@ function workerLoggingHelper(streamEmit: (value: TyTaskStreamData) => void) {
 }
 
 function createHandleError(
-  stopAllTasks: (message: string) => void,
   taskManager: TyTaskManager,
   currentTaskCtrl: AbortController,
   queueTask: (id: string) => void,
 ) {
   console.log('create error handler function...')
-  let errorCount = 0
 
-  return async (
-    error: unknown,
-    task: TaskNode,
-    maxAutonomousTasks: number,
-    errorhandlerTask: partialTaskDraft,
-  ) => {
-    errorCount += 1
-    if (errorCount >= maxAutonomousTasks) {
-      // TODO: somehow put this into an error tasknode...
-      // TODO: also add any taskWorkerController interrupt in an error tasknode..
-      stopAllTasks(`Too many errors occurred, interrupting execution after ${errorCount} errors!`)
-    }
-
+  return async (error: unknown, task: TaskNode, errorhandlerTask: partialTaskDraft) => {
     const debugInfo = createDebugInfoFromError(error)
     void taskManager.metaUpsert(task.id, debugInfo, 'shallow_merge')
 
@@ -384,17 +370,15 @@ const createTaskProcessor = (
   currentTaskCtrl: AbortController,
   taskisInLoop: (taskId: string) => void,
   taskOutOfLoop: (taskId: string, toolName?: string) => void,
-  stopAllTasks: (message: string) => void,
   taskMessageStream: TaskMessageStream,
   executor: FunctionExecutor,
 ) => {
   // this is uses to track how long a list of tasks has been processing
-  const handleError = createHandleError(stopAllTasks, taskManager, currentTaskCtrl, queueTask)
+  const handleError = createHandleError(taskManager, currentTaskCtrl, queueTask)
   const { isTaskFinished, setTaskFinished } = createTaskTracker(taskManager)
 
   return async (
     taskId: string,
-    maxAutonomousTasks: number,
     defaultTask: partialTaskDraft,
     errorHandlerTask: partialTaskDraft,
   ) => {
@@ -527,7 +511,7 @@ const createTaskProcessor = (
       } catch (error) {
         streamEmit({ stage: 'error', taskId: task.id, info: humanizeError(error) })
         console.error('Error processing task:', error, task)
-        await handleError(error, task, maxAutonomousTasks, errorHandlerTask)
+        await handleError(error, task, errorHandlerTask)
         // TODO: run this taskWorker in a separate worker js/browser thread!
       }
       taskOutOfLoop(task.id, task.content.data.name)
@@ -574,16 +558,11 @@ const setupRun = (
     currentTaskCtrl,
     taskisInLoop,
     taskOutOfLoop,
-    stopAllTasks,
     taskMessageStream,
     executor,
   )
 
-  const run = async (
-    maxAutonomousTasks: number,
-    defaultTask: partialTaskDraft,
-    errorTask: partialTaskDraft,
-  ) => {
+  const run = async (defaultTask: partialTaskDraft, errorTask: partialTaskDraft) => {
     console.log('starting task worker run...')
     while (!currentTaskCtrl.signal.aborted) {
       if (getTasksInProgress() <= 0) {
@@ -596,7 +575,7 @@ const setupRun = (
         streamEmit({ stage: 'aborted' })
         break
       }
-      void asyncProcessTask(taskId, maxAutonomousTasks, defaultTask, errorTask)
+      void asyncProcessTask(taskId, defaultTask, errorTask)
     }
     processTasksQueue.clear()
     allTasksFinished()
@@ -632,10 +611,7 @@ function createDebugInfoFromError(error: unknown) {
 
 export function runTaskWorker(
   taskManager: TyTaskManager,
-  // task message stream is used in order to give message tasks the ability to communicate to
-  // tool call tasks (e.g. a button click)
   taskMessageStream: TaskMessageStream,
-  maxAutonomousTasks: number,
   defaultTask: partialTaskDraft,
   errorTask: partialTaskDraft,
   executor: FunctionExecutor,
@@ -677,7 +653,7 @@ export function runTaskWorker(
       queueTask = newQueueTask
       console.log('restarting task worker run...')
 
-      void run(maxAutonomousTasks, defaultTask, errorTask)
+      void run(defaultTask, errorTask)
     }
     queueTask(id)
   }

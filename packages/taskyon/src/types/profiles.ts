@@ -31,10 +31,6 @@ export const llmSettings = z.object({
     description:
       'wha is the URL of this page?. This helps identifying Backends, where the request is coming from.',
   }),
-  maxAutonomousTasks: z.number().default(3).meta({
-    description:
-      'Maximum number of tasks which are allowed to be performed autonomously before stopping.',
-  }),
   entryFunction: z.string().meta({
     description: `The function which is used as an entry point for taskyon.
 When a user starts a conversation, this is always the first function that is called.

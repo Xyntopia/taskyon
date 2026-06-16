@@ -29,6 +29,7 @@ export const iconRegistry: iconMap = {
     use_baseprompt: mdiAutoFix,
     use_tool_chooser: mdiTools,
     tool_chooser_min_tools: mdiFormatListNumbered,
+    max_error_retries: mdiFormatListNumbered,
     reasoning_effort: mdiHeadSnowflake,
     llmTools: mdiFunctionVariant,
     use_multimodal: matVisibility,

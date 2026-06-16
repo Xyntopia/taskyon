@@ -80,7 +80,6 @@ export function createCliLlmSettings(config: CliApiConfig): llmSettings {
       },
     },
     siteUrl: 'https://tycli.local',
-    maxAutonomousTasks: 5,
     entryFunction: 'entryNode',
   }
 }

@@ -77,7 +77,6 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async () => {
     () => ({
       selectedApi: apiConfig.selectedApi,
       llmApis: apiConfig.llmApis,
-      maxAutonomousTasks: 12,
       siteUrl: 'https://taskyon.space',
       entryFunction: 'entryNode',
     }),

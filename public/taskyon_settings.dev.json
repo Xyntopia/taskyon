@@ -55,7 +55,6 @@
       }
     },
     "siteUrl": "https://taskyon.space",
-    "maxAutonomousTasks": 5,
     "useBasePrompt": true,
     "tryUsingVisionModels": true,
     "taskChatTemplates": {

@@ -23,6 +23,7 @@
       "use_baseprompt": true,
       "use_tool_chooser": true,
       "tool_chooser_min_tools": 5,
+      "max_error_retries": 3,
       "llmTools": true,
       "use_multimodal": true,
       "reasoning_effort": "low",
@@ -96,7 +97,6 @@
         }
       }
     },
-    "siteUrl": "https://taskyon.space",
-    "maxAutonomousTasks": 5
+    "siteUrl": "https://taskyon.space"
   }
 }

@@ -54,6 +54,7 @@ const entryNodePickKeys = [
   'use_multimodal',
   'reasoning_effort',
   'llmTools',
+  'max_error_retries',
 ] as const
 const slimChatKeys = computed(() => (em.value ? entryNodePickKeys : ['reasoning_effort']))
 

@@ -281,7 +281,6 @@ const dynamicContext =
     const { workerStream, stopAllTasks, queueTask } = runTaskWorker(
       taskManagerInstance,
       iframeMultiPlexer.all$,
-      llmSettings().maxAutonomousTasks,
       continuationTask,
       continuationTask,
       executor,

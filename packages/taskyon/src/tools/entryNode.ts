@@ -82,6 +82,14 @@ export const EntryNodeSettingsSchema = {
       description:
         'Include explicit reasoning text in shortlist results. Usually unnecessary with modern reasoning-capable models.',
     },
+    max_error_retries: {
+      type: 'integer',
+      default: 3,
+      minimum: 0,
+      title: 'Max Error Retries',
+      description:
+        'Maximum number of error-recovery attempts for the same failed tool call before giving up and explaining the situation.',
+    },
     reasoning_effort: {
       enum: ['low', 'medium', 'high', 'none'],
       title: 'Reasoning Effort',
@@ -138,6 +146,7 @@ export type EntryNodeArgs = {
   tool_chooser_min_tools?: number
   tool_shortlist_reasoning?: boolean
   reasoning_effort?: 'low' | 'medium' | 'high' | 'none'
+  max_error_retries?: number
   use_multimodal?: boolean
   websearch?: {
     enabled?: boolean
@@ -161,6 +170,7 @@ export type ResolvedEntryNodeSettings = {
   use_tool_chooser: boolean
   tool_chooser_min_tools: number
   tool_shortlist_reasoning: boolean
+  max_error_retries: number
   reasoning_effort?: 'low' | 'medium' | 'high' | 'none'
   use_multimodal: boolean
   websearch: {
@@ -233,6 +243,7 @@ export const normalizeEntryNodeSettings = (
   use_tool_chooser: input?.use_tool_chooser ?? true,
   tool_chooser_min_tools: input?.tool_chooser_min_tools ?? 5,
   tool_shortlist_reasoning: input?.tool_shortlist_reasoning ?? false,
+  max_error_retries: input?.max_error_retries ?? 3,
   ...(input?.reasoning_effort ? { reasoning_effort: input.reasoning_effort } : {}),
   use_multimodal: input?.use_multimodal ?? true,
   websearch: {
@@ -537,6 +548,37 @@ export const createEntryNodeToolFactory = (config: EntryNodeConfig) =>
         llmTools: normalizedSettings.nativeToolCalling,
         allowedTools,
       })
+
+      if (mode === 'error' && previousTask?.parentID) {
+        const errorRetries = context.taskChain.filter(
+          (t) => t.content.type === 'error' && t.parentID === previousTask.parentID,
+        ).length
+        if (errorRetries > normalizedSettings.max_error_retries) {
+          const giveUpPromptAugmentations = buildEntryNodePromptAugmentations({
+            mode: 'error',
+            prompt: [
+              'The same tool call has failed',
+              String(errorRetries - 1),
+              'times.',
+              'Do not retry. Explain concisely what went wrong and what the user can do.',
+            ].join(' '),
+            previousTask,
+            templates: normalizedSettings.prompt_templates,
+            useBasePrompt: normalizedSettings.use_baseprompt,
+            llmTools: normalizedSettings.nativeToolCalling,
+            allowedTools: [],
+          })
+          return buildChatCompletionResult('AnalyzeToolResult', {
+            allowedTools: [],
+            llmTools: normalizedSettings.nativeToolCalling,
+            prompts: giveUpPromptAugmentations.prompts,
+            prompt_injections: giveUpPromptAugmentations.promptInjections,
+            ...(normalizedSettings.reasoning_effort
+              ? { reasoning_effort: normalizedSettings.reasoning_effort }
+              : {}),
+          })
+        }
+      }
 
       return match(routingContext)
         .with({ webSearchEnabled: true }, () =>
