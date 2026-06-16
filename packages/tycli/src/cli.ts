@@ -103,7 +103,7 @@ async function writeFatalErrorLog(error: unknown) {
     `cwd=${process.cwd()}`,
     `pid=${process.pid}`,
     '',
-    error instanceof Error ? error.stack ?? error.message : String(error),
+    error instanceof Error ? (error.stack ?? error.message) : String(error),
     '',
   ].join('\n')
   await writeFile(filePath, body, 'utf8')
@@ -1193,6 +1193,29 @@ async function handleSlashCommand(
   return true
 }
 
+async function loadProjectInstructions(cwd: string): Promise<string> {
+  const parts: string[] = []
+  let current = resolve(cwd)
+  for (;;) {
+    for (const name of ['AGENTS.md', 'CLAUDE.md']) {
+      const filePath = join(current, name)
+      try {
+        const content = await readFile(filePath, 'utf8')
+        if (content.trim()) {
+          parts.push(`# ${relative(cwd, filePath) || name}\n\n${content.trim()}`)
+        }
+      } catch {
+        // File doesn't exist or is unreadable — skip.
+      }
+    }
+    const parentDir = resolve(current, '..')
+    if (parentDir === current) break
+    current = parentDir
+  }
+  if (parts.length <= 0) return ''
+  return `## Project Instructions\n\nThe following project instructions were loaded from files found in the workspace:\n\n${parts.reverse().join('\n\n')}`
+}
+
 async function main() {
   const startupMeta = await loadStartupMeta()
   const { cryptoSession, stored } = await initPersistentCryptoSession()
@@ -1226,16 +1249,37 @@ async function main() {
     showFullFunctionResults: false,
   }
   const toolRenderOptions: Record<string, { hideChat?: boolean }> = {}
+  const projectInstructions = await loadProjectInstructions(process.cwd())
+  const taskyonRef: { current?: Taskyon } = {}
   const cliEntryNodeTool = createStandardEntryNodeTool({
     name: ENTRY_NODE_TOOL_NAME,
     renderOptions: { hideLlm: true, hideChat: true },
     defaultAllowedTools: [...ACTIVE_LLM_TOOLS],
     toolChooser: { enabled: true, useTools: true },
+    getToolCatalog: async () => {
+      const ty = taskyonRef.current
+      if (!ty) return []
+      const allTools = await ty.updateToolDefinitions(true)
+      return Object.values(allTools)
+        .filter(
+          (tool: { name: string; description: string }) =>
+            !['chatCompletion', 'entryNode', 'taskyonFlow'].includes(tool.name),
+        )
+        .map((tool: { name: string; description: string }) => ({
+          name: tool.name,
+          description: tool.description,
+        }))
+    },
     extraContext: ({ toolResultSection }: { toolResultSection?: string }) =>
-      buildCliEnvironmentContext(
-        toolResultSection || '(none)',
-        formatExplorationContext(explorationContextFiles),
-      ),
+      [
+        projectInstructions,
+        buildCliEnvironmentContext(
+          toolResultSection || '(none)',
+          formatExplorationContext(explorationContextFiles),
+        ),
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
   })
   const cliEntryTask = toolCall({
     name: ENTRY_NODE_TOOL_NAME,
@@ -1253,6 +1297,7 @@ async function main() {
         llmTools: true,
         use_baseprompt: true,
         use_multimodal: true,
+        max_error_retries: 3,
         prompt_templates: DEFAULT_PROMPT_TEMPLATES,
       },
       chatCompletion: {
@@ -1263,9 +1308,9 @@ async function main() {
     cryptoSession,
     {
       nodePgLiteDataDir: pgliteNodeDir,
-      enableVectorIndexing: false,
     },
   )
+  taskyonRef.current = taskyon
   const conversationPersistence = await createConversationPersistence({
     taskyon,
     configDir,
