@@ -1509,22 +1509,7 @@ model BouncingBall             "The bouncing ball model"
   const runId = 'modelica-bouncing-ball-standard-settings'
   const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
   const runAbort = new AbortController()
-  type SimResult = {
-    meta?: {
-      events?: unknown[]
-      solverStats?: Record<string, unknown>
-      stopReason?: string
-      stopError?: string
-      model?: {
-        stateNames?: string[]
-      }
-    }
-    data?: {
-      t?: unknown[]
-      x?: Record<string, unknown>
-    }
-  }
-  let runResult: SimResult | null = null
+  let runResult: DiagnosticsSimulationResult | null = null
   try {
     runResult = await executeInWorkerSandbox(
       {
@@ -1573,90 +1558,127 @@ model BouncingBall             "The bouncing ball model"
     }
     return flips
   }
-
-  const tSeries = asFiniteSeries(runResult?.data?.t)
-  const hSeries = getSeriesByName(runResult?.data?.x, 'h')
-  const vSeries = getSeriesByName(runResult?.data?.x, 'v')
-  const minH = hSeries
-    .filter(Number.isFinite)
-    .reduce((m, v) => Math.min(m, v), Number.POSITIVE_INFINITY)
-  const maxH = hSeries
-    .filter(Number.isFinite)
-    .reduce((m, v) => Math.max(m, v), Number.NEGATIVE_INFINITY)
-  const vSignFlips = countSignFlips(vSeries)
-  const events = Array.isArray(runResult?.meta?.events) ? runResult?.meta?.events : []
-  const eventCountFromStats = Number(runResult?.meta?.solverStats?.eventCount ?? events.length)
-
-  const summary = {
-    nSamples: tSeries.length,
-    expectedGridSamples: Math.floor((2 - 0) / 0.1) + 1,
-    tStart: tSeries.length > 0 ? tSeries[0] : null,
-    tEnd: tSeries.length > 0 ? tSeries[tSeries.length - 1] : null,
-    minH: Number.isFinite(minH) ? minH : null,
-    maxH: Number.isFinite(maxH) ? maxH : null,
-    velocitySignFlips: vSignFlips,
-    eventCountFromStats: Number.isFinite(eventCountFromStats) ? eventCountFromStats : events.length,
-    stopReason: runResult?.meta?.stopReason ?? null,
-    stopError: runResult?.meta?.stopError ?? null,
-    stateNames: Array.isArray(runResult?.meta?.model?.stateNames)
-      ? runResult.meta.model.stateNames
-      : [],
+  const summarizeBounceRun = (label: string, result: DiagnosticsSimulationResult) => {
+    const tSeries = asFiniteSeries(result?.data?.t)
+    const hSeries = getSeriesByName(result?.data?.x, 'h')
+    const vSeries = getSeriesByName(result?.data?.x, 'v')
+    const minH = hSeries
+      .filter(Number.isFinite)
+      .reduce((m, v) => Math.min(m, v), Number.POSITIVE_INFINITY)
+    const maxH = hSeries
+      .filter(Number.isFinite)
+      .reduce((m, v) => Math.max(m, v), Number.NEGATIVE_INFINITY)
+    const velocitySignFlips = countSignFlips(vSeries)
+    const events = Array.isArray(result?.meta?.events) ? result.meta.events : []
+    const eventCountFromStats = Number(result?.meta?.solverStats?.eventCount ?? events.length)
+    const summary = {
+      runtime: label,
+      executionMode: result?.meta?.executionMode ?? null,
+      requestedSolver: result?.meta?.requestedSolver ?? null,
+      nSamples: tSeries.length,
+      expectedGridSamples: Math.floor((2 - 0) / 0.1) + 1,
+      tStart: tSeries.length > 0 ? tSeries[0] : null,
+      tEnd: tSeries.length > 0 ? tSeries[tSeries.length - 1] : null,
+      minH: Number.isFinite(minH) ? minH : null,
+      maxH: Number.isFinite(maxH) ? maxH : null,
+      velocitySignFlips,
+      eventCountFromStats: Number.isFinite(eventCountFromStats)
+        ? eventCountFromStats
+        : events.length,
+      stopReason: result?.meta?.stopReason ?? null,
+      stopError: result?.meta?.stopError ?? null,
+      stateNames: Array.isArray(result?.meta?.model?.stateNames)
+        ? result.meta.model.stateNames
+        : [],
+    }
+    return { tSeries, hSeries, vSeries, minH, velocitySignFlips, eventCountFromStats, summary }
+  }
+  const assertBounceRun = (
+    label: string,
+    result: DiagnosticsSimulationResult,
+    details: ReturnType<typeof summarizeBounceRun>,
+  ) => {
+    if (result?.meta?.stopReason) {
+      throw new Error(
+        [
+          `${label} stopped early: ${result.meta.stopReason}`,
+          `stopError=${String(result.meta.stopError ?? '')}`,
+          `summary=${serializeObject(details.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
+        ].join('\n'),
+      )
+    }
+    if (details.tSeries.length < 20 || details.tSeries.length > 25) {
+      throw new Error(
+        [
+          `${label} returned unexpected sample count for dt=0.1, tf=2 (expected about 21, got ${details.tSeries.length})`,
+          `summary=${serializeObject(details.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
+        ].join('\n'),
+      )
+    }
+    if (
+      details.hSeries.length !== details.tSeries.length ||
+      details.vSeries.length !== details.tSeries.length
+    ) {
+      throw new Error(
+        [
+          `${label} state series length mismatch: t=${details.tSeries.length}, h=${details.hSeries.length}, v=${details.vSeries.length}`,
+          `summary=${serializeObject(details.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
+        ].join('\n'),
+      )
+    }
+    if (!Number.isFinite(details.minH) || details.minH > 0.11) {
+      throw new Error(
+        [
+          `${label} did not reach ground contact (min h=${String(details.minH)})`,
+          `summary=${serializeObject(details.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
+        ].join('\n'),
+      )
+    }
+    const eventCount = Number.isFinite(details.eventCountFromStats)
+      ? details.eventCountFromStats
+      : 0
+    if (eventCount <= 0) {
+      throw new Error(
+        [
+          `${label} produced no events, but the model should definitely bounce and trigger events`,
+          `summary=${serializeObject(details.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
+        ].join('\n'),
+      )
+    }
+    if (details.velocitySignFlips <= 0) {
+      throw new Error(
+        [
+          `${label} produced events but no velocity sign flip was observed`,
+          `summary=${serializeObject(details.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
+        ].join('\n'),
+      )
+    }
   }
 
-  if (runResult?.meta?.stopReason) {
-    throw new Error(
-      [
-        `BouncingBall standard-settings run stopped early: ${runResult.meta.stopReason}`,
-        `stopError=${String(runResult.meta.stopError ?? '')}`,
-        `summary=${serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-      ].join('\n'),
-    )
+  const jsSummary = summarizeBounceRun('generated-js sandbox run', runResult ?? {})
+  assertBounceRun('BouncingBall generated-js sandbox run', runResult ?? {}, jsSummary)
+
+  if (typeof wasm.simulate_model !== 'function') {
+    throw new Error('Rumoca wasm export missing: simulate_model')
   }
-  if (tSeries.length < 20 || tSeries.length > 25) {
-    throw new Error(
-      [
-        `Unexpected sample count for dt=0.1, tf=2 (expected about 21, got ${tSeries.length})`,
-        `summary=${serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-      ].join('\n'),
-    )
-  }
-  if (hSeries.length !== tSeries.length || vSeries.length !== tSeries.length) {
-    throw new Error(
-      [
-        `State series length mismatch: t=${tSeries.length}, h=${hSeries.length}, v=${vSeries.length}`,
-        `summary=${serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-      ].join('\n'),
-    )
-  }
-  if (!Number.isFinite(minH) || minH > 0.11) {
-    throw new Error(
-      [
-        `BouncingBall did not reach ground contact (min h=${String(minH)})`,
-        `summary=${serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-      ].join('\n'),
-    )
-  }
-  const eventCount = Number.isFinite(eventCountFromStats) ? eventCountFromStats : events.length
-  if (eventCount <= 0) {
-    throw new Error(
-      [
-        'BouncingBall produced no events, but the model should definitely bounce and trigger events',
-        `summary=${serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-      ].join('\n'),
-    )
-  }
-  if (vSignFlips <= 0) {
-    throw new Error(
-      [
-        'BouncingBall produced events but no velocity sign flip was observed',
-        `summary=${serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-      ].join('\n'),
-    )
-  }
+  const nativeRaw = JSON.parse(
+    String(wasm.simulate_model(source, 'BouncingBall', 2, 0.1, 'auto')),
+  ) as Record<string, unknown>
+  const nativeRunResult = normalizeRumocaNativeSimulationResult({
+    ...nativeRaw,
+    modelName: 'BouncingBall',
+    solver: 'auto',
+  })
+  const nativeSummary = summarizeBounceRun('rumoca native run', nativeRunResult)
+  assertBounceRun('BouncingBall rumoca native run', nativeRunResult, nativeSummary)
 
   return {
     ok: true,
-    summarySerialized: serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
+    summarySerialized: serializeObject(jsSummary.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
+    rumocaNativeSummarySerialized: serializeObject(
+      nativeSummary.summary,
+      MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+    ),
     generatedCodePreview: rendered.slice(0, 500),
   }
 }
@@ -1815,6 +1837,33 @@ export async function testModelicaForcedAbiValidationFailureModes() {
 const MSL_LOCAL_ZIP_PATH = '/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip'
 
 type DiagnosticsWasm = Awaited<ReturnType<typeof loadWasm>>
+type DiagnosticsSimulationResult = {
+  meta?: {
+    nSteps?: number
+    events?: unknown[]
+    solverStats?: Record<string, unknown>
+    stopReason?: string
+    stopError?: string
+    model?: {
+      modelName?: string
+      stateNames?: string[]
+      algebraicNames?: string[]
+      inputNames?: string[]
+      conditionNames?: string[]
+    }
+    requestedSolver?: string
+    executionMode?: string
+    rumoca?: unknown
+  }
+  data?: {
+    t?: unknown[]
+    x?: Record<string, unknown>
+    y?: Record<string, unknown>
+    u?: Record<string, unknown>
+    z?: Record<string, unknown>
+    c?: Record<string, unknown>
+  }
+}
 type MslLoadParsed = {
   parsed_count?: number
   skipped_files?: string[]
@@ -1848,6 +1897,71 @@ type DiagnosticsMslApi = {
   wasm_init?: (numThreads: number) => unknown
   lsp_diagnostics?: (source: string) => string
   lsp_completion_with_timing?: (source: string, line: number, character: number) => string
+}
+
+function normalizeRumocaNativeSimulationResult(
+  raw: Record<string, unknown>,
+): DiagnosticsSimulationResult {
+  const payloadSource =
+    raw.payload && typeof raw.payload === 'object' ? (raw.payload as Record<string, unknown>) : raw
+  const names = Array.isArray(payloadSource.names)
+    ? payloadSource.names.filter((entry): entry is string => typeof entry === 'string')
+    : []
+  const allData = Array.isArray(payloadSource.allData)
+    ? payloadSource.allData.map((column) =>
+        Array.isArray(column)
+          ? column.map((value) =>
+              typeof value === 'number' && Number.isFinite(value) ? value : Number.NaN,
+            )
+          : [],
+      )
+    : []
+  if (names.length === 0 || allData.length === 0) {
+    throw new Error('Rumoca simulation returned no time-series payload')
+  }
+
+  const nStatesRaw = Number(payloadSource.nStates)
+  const nStates = Number.isFinite(nStatesRaw) ? Math.max(0, Math.min(names.length, nStatesRaw)) : 0
+  const times = allData[0] ?? []
+  const stateNames = names.slice(0, nStates)
+  const algebraicNames = names.slice(nStates)
+  const stateSeries = stateNames.reduce<Record<string, number[]>>((acc, name, index) => {
+    acc[name] = allData[index + 1] ?? []
+    return acc
+  }, {})
+  const algebraicSeries = algebraicNames.reduce<Record<string, number[]>>((acc, name, index) => {
+    acc[name] = allData[nStates + index + 1] ?? []
+    return acc
+  }, {})
+
+  return {
+    meta: {
+      nSteps: times.length,
+      executionMode: nStates > 0 ? 'dynamic_dae' : 'algebraic_discrete',
+      model: {
+        modelName:
+          typeof raw.model === 'string'
+            ? raw.model
+            : typeof raw.modelName === 'string'
+              ? raw.modelName
+              : 'Model',
+        stateNames,
+        algebraicNames,
+        inputNames: [],
+        conditionNames: [],
+      },
+      requestedSolver: typeof raw.solver === 'string' ? raw.solver : 'auto',
+      rumoca: raw,
+    },
+    data: {
+      t: times,
+      x: stateSeries,
+      y: algebraicSeries,
+      u: {},
+      z: {},
+      c: {},
+    },
+  }
 }
 
 let sharedDiagnosticsWasmPromise: Promise<DiagnosticsWasm> | null = null
@@ -2636,12 +2750,208 @@ end MslConstRamp;
   }
 }
 
-export async function testModelicaCliMslFirstOrderRumocaSimulation() {
+async function runModelicaMslFirstOrderRumocaSimulationInBrowser() {
+  const debug: Record<string, unknown> = {
+    phase: 'init',
+    mslZipPath: MSL_LOCAL_ZIP_PATH,
+    runtime: 'browser-sandbox',
+  }
+  let fullGeneratedCode = ''
+
+  try {
+    const wasm = await getDiagnosticsWasm()
+    debug.phase = 'wasm-loaded'
+
+    if (
+      typeof wasm.compile_with_source_roots !== 'function' &&
+      typeof wasm.compile_with_libraries !== 'function'
+    ) {
+      throw new Error(
+        'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
+      )
+    }
+    assertTemplateRendererAvailable(wasm)
+
+    const { libraryFileCount, loadParsed } = await ensureDiagnosticsMslLoaded(wasm, debug)
+    debug.mslLibraryFiles = libraryFileCount
+    debug.mslParsedCount = Number(loadParsed.parsed_count ?? 0)
+
+    const source = `
+model MslFirstOrderRuntimeSmoke
+  Modelica.Blocks.Sources.Step step(height = 1, startTime = 0.1);
+  Modelica.Blocks.Continuous.FirstOrder firstOrder(T = 0.5, k = 1);
+equation
+  connect(step.y, firstOrder.u);
+end MslFirstOrderRuntimeSmoke;
+`.trim()
+
+    debug.phase = 'compile-with-libraries'
+    const compiledRaw = compileWithDiagnosticsMsl(wasm, source, 'MslFirstOrderRuntimeSmoke')
+    debug.phase = 'compiled'
+    const compiled = JSON.parse(String(compiledRaw)) as {
+      dae?: unknown
+      dae_native?: unknown
+      dae_prepared?: unknown
+      pretty?: string
+    }
+    const dae = selectDaeForTemplate(compiled, { usePreparedDae: true })
+    if (!dae) {
+      throw new Error('compile_to_json returned no DAE payload for MSL first-order runtime smoke')
+    }
+
+    debug.phase = 'render-javascript-template'
+    const rendered = renderDiagnosticsTemplate(
+      wasm,
+      dae,
+      javascriptTemplate,
+      'javascript.jinja',
+      'model.js',
+    )
+    fullGeneratedCode = rendered
+    debug.renderedPreview = rendered.slice(0, 220)
+    debug.generatedCodeLength = rendered.length
+
+    debug.phase = 'build-worker-sandbox-code'
+    const runId = 'modelica-msl-first-order-runtime-smoke'
+    const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
+    const runAbort = new AbortController()
+    type SimResult = {
+      meta?: {
+        nSteps?: number
+        stopReason?: string
+        stopError?: string
+        model?: {
+          stateNames?: string[]
+          algebraicNames?: string[]
+          inputNames?: string[]
+        }
+      }
+      data?: {
+        t?: unknown[]
+        x?: unknown[] | Record<string, unknown>
+        y?: unknown[] | Record<string, unknown>
+      }
+    }
+    const asFiniteSeries = (value: unknown): number[] =>
+      Array.isArray(value)
+        ? value.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
+        : []
+    const getSeriesByName = (bag: unknown, name: string): number[] => {
+      if (!bag || typeof bag !== 'object' || Array.isArray(bag)) return []
+      const record = bag as Record<string, unknown>
+      const direct = asFiniteSeries(record[name])
+      if (direct.length > 0) return direct
+      const alt = asFiniteSeries(record[name.replaceAll('.', '__')])
+      if (alt.length > 0) return alt
+      return []
+    }
+    const getBagKeys = (bag: unknown): string[] =>
+      bag && typeof bag === 'object' && !Array.isArray(bag)
+        ? Object.keys(bag as Record<string, unknown>)
+        : []
+
+    let runResult: SimResult
+    try {
+      debug.phase = 'execute-generated-js'
+      runResult = await executeInWorkerSandbox(
+        {
+          id: runId,
+          code: runCode,
+          sourceURL: `${runId}.js`,
+          stopSignal: runAbort.signal,
+        },
+        {
+          sim: {
+            t0: 0,
+            tf: 1,
+            dt: 0.02,
+          },
+        },
+        {
+          source: 'ModelicaDiagnostics',
+          __rumocaRunId: runId,
+        },
+      )
+    } finally {
+      runAbort.abort()
+    }
+
+    debug.phase = 'validate-simulation-payload'
+    const times = Array.isArray(runResult?.data?.t) ? runResult.data.t : []
+    const firstOrderSeries = getSeriesByName(runResult?.data?.y, 'firstOrder.y')
+    debug.runResultPreview = {
+      meta: runResult?.meta,
+      timeSamples: times.length,
+      yKeys: getBagKeys(runResult?.data?.y).slice(0, 20),
+      xKeys: getBagKeys(runResult?.data?.x).slice(0, 20),
+      firstOrderSamples: firstOrderSeries.slice(0, 8),
+    }
+
+    if (runResult?.meta?.stopReason) {
+      throw new Error(
+        `MSL first-order runtime smoke stopped early: ${runResult.meta.stopReason} (${runResult.meta.stopError ?? 'n/a'})`,
+      )
+    }
+    if (times.length < 10) {
+      throw new Error(
+        `MSL first-order runtime smoke returned too few time samples: ${times.length}`,
+      )
+    }
+    if (firstOrderSeries.length !== times.length) {
+      throw new Error(
+        `MSL first-order runtime smoke missing or mismatched firstOrder.y series: series=${firstOrderSeries.length}, times=${times.length}`,
+      )
+    }
+    if (firstOrderSeries.some((value) => !Number.isFinite(value))) {
+      throw new Error('MSL first-order runtime smoke produced non-finite firstOrder.y values')
+    }
+
+    const start = firstOrderSeries[0] ?? Number.NaN
+    const finish = firstOrderSeries[firstOrderSeries.length - 1] ?? Number.NaN
+    if (!(finish > start + 0.2)) {
+      throw new Error(
+        `MSL first-order runtime smoke did not respond to the step input as expected (start=${start}, end=${finish})`,
+      )
+    }
+
+    return {
+      ok: true,
+      runtime: 'browser-sandbox',
+      model: 'MslFirstOrderRuntimeSmoke',
+      timeSamples: times.length,
+      firstOrderStart: start,
+      firstOrderEnd: finish,
+      mslLibraryFiles: libraryFileCount,
+      parsedCount: Number(loadParsed.parsed_count ?? 0),
+      skippedCount: Array.isArray(loadParsed.skipped_files) ? loadParsed.skipped_files.length : 0,
+      conflictCount: Array.isArray(loadParsed.conflicts) ? loadParsed.conflicts.length : 0,
+    }
+  } catch (err) {
+    const baseMessage = err instanceof Error ? err.message : String(err)
+    const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
+    throw new Error(
+      [baseMessage, `MSL first-order runtime smoke debug:\n${debugDump}`].join('\n'),
+      {
+        cause: {
+          generatedCodeSerialized: serializeObject(
+            fullGeneratedCode || '[generated code unavailable]',
+            MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+          ),
+        },
+      },
+    )
+  }
+}
+
+export async function testModelicaMslFirstOrderRumocaSimulation() {
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    return runModelicaMslFirstOrderRumocaSimulationInBrowser()
+  }
   const { runModelicaCliMslFirstOrderRumocaSimulation } =
     await import('./modelicaDiagnosticsCliNode')
   return runModelicaCliMslFirstOrderRumocaSimulation()
 }
-testModelicaCliMslFirstOrderRumocaSimulation.timeoutMs = 120_000
+testModelicaMslFirstOrderRumocaSimulation.timeoutMs = 120_000
 
 export async function testModelicaMslResistorManualFlattenAndBaseDae() {
   const debug: Record<string, unknown> = {

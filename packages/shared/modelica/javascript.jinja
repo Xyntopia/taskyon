@@ -17,6 +17,9 @@
 {%- set w_map = dae.w if dae.w is defined else {} -%}
 {%- set z_map = dae.z if dae.z is defined else {} -%}
 {%- set m_map = dae.m if dae.m is defined else {} -%}
+{%- set hidden_condition_m_name = "__rumoca_c" -%}
+{%- set hidden_condition_m_count = 1 if hidden_condition_m_name in m_map else 0 -%}
+{%- set visible_m_count = m_map|length - hidden_condition_m_count -%}
 {%- set x_dot_alias_map = dae.x_dot_alias if dae.x_dot_alias is defined else {} -%}
 {%- set emit_generated_expr_comments = dae.__rumoca_emit_expr_comments if dae.__rumoca_emit_expr_comments is defined else false -%}
 {%- set eqs = dae.f_x if dae.f_x is defined else (dae.fx if dae.fx is defined else []) -%}
@@ -1199,14 +1202,19 @@ function Model() {
   {%- for (name, comp) in m_map|items %}
   {
     const __rumocaY0 = {{ comp_expr_or_nan(comp) }};
+    {%- if name == hidden_condition_m_name %}
     __rumocaFallbackSymbols["{{ name }}"] = __rumocaSignalOr(__rumocaY0, Number.NaN);
+    {%- else %}
+    y0.push(__rumocaSignalOr(__rumocaY0, Number.NaN));
+    __rumocaFallbackSymbols["{{ name }}"] = y0[{{ y_map|length + z_map|length }} + {{ loop.index0 - hidden_condition_m_count if name != hidden_condition_m_name else 0 }}];
+    {%- endif %}
   }
   {%- endfor %}
   {%- for (name, comp) in w_map|items %}
   {
     const __rumocaY0 = {{ comp_expr_or_nan(comp) }};
     y0.push(__rumocaSignalOr(__rumocaY0, Number.NaN));
-    __rumocaFallbackSymbols["{{ name }}"] = y0[{{ y_map|length + z_map|length + m_map|length + loop.index0 }}];
+    __rumocaFallbackSymbols["{{ name }}"] = y0[{{ y_map|length + z_map|length + visible_m_count + loop.index0 }}];
   }
   {%- endfor %}
   {%- for (name, comp) in x_dot_alias_map|items %}
@@ -1251,13 +1259,18 @@ function Model() {
 
     algebraics: [
     {%- for (name, comp) in y_map|items %}
-      { name: "{{ name }}", start: y0[{{ loop.index0 }}]{{ comp_unit_prop(comp) }} }{% if not loop.last or z_map|length > 0 or w_map|length > 0 or obs_list|length > 0 %},{% endif %}
+      { name: "{{ name }}", start: y0[{{ loop.index0 }}]{{ comp_unit_prop(comp) }} }{% if not loop.last or z_map|length > 0 or visible_m_count > 0 or w_map|length > 0 or obs_list|length > 0 %},{% endif %}
     {%- endfor %}
     {%- for (name, comp) in z_map|items %}
-      { name: "{{ name }}", start: y0[{{ y_map|length + loop.index0 }}]{{ comp_unit_prop(comp) }} }{% if not loop.last or w_map|length > 0 or obs_list|length > 0 %},{% endif %}
+      { name: "{{ name }}", start: y0[{{ y_map|length + loop.index0 }}]{{ comp_unit_prop(comp) }} }{% if not loop.last or visible_m_count > 0 or w_map|length > 0 or obs_list|length > 0 %},{% endif %}
+    {%- endfor %}
+    {%- for (name, comp) in m_map|items %}
+    {%- if name != hidden_condition_m_name %}
+      { name: "{{ name }}", start: y0[{{ y_map|length + z_map|length }} + {{ loop.index0 - hidden_condition_m_count }}]{{ comp_unit_prop(comp) }} }{% if (loop.index0 - hidden_condition_m_count) < (visible_m_count - 1) or w_map|length > 0 or obs_list|length > 0 %},{% endif %}
+    {%- endif %}
     {%- endfor %}
     {%- for (name, comp) in w_map|items %}
-      { name: "{{ name }}", start: y0[{{ y_map|length + z_map|length + loop.index0 }}]{{ comp_unit_prop(comp) }} }{% if not loop.last or obs_list|length > 0 %},{% endif %}
+      { name: "{{ name }}", start: y0[{{ y_map|length + z_map|length + visible_m_count + loop.index0 }}]{{ comp_unit_prop(comp) }} }{% if not loop.last or obs_list|length > 0 %},{% endif %}
     {%- endfor %}
     {%- for obs in obs_list %}
       { name: "{{ obs.name }}", start: {% if obs.start is defined %}__rumocaSignalOr({{ render_expr(obs.start) }}, 0){% else %}0{% endif %}{% if obs.unit is defined and obs.unit is not none and (obs.unit|string)|trim != '' and (obs.unit|string)|trim|lower != 'none' and (obs.unit|string)|trim|lower != 'null' %}, unit: "{{ (obs.unit|string)|trim|replace('\\', '\\\\')|replace('"', '\\"') }}"{% else %}{% set __u = inferred_unit_from_name(obs.name)|trim %}{% if __u != '' %}, unit: "{{ __u|replace('\\', '\\\\')|replace('"', '\\"') }}"{% endif %}{% endif %} }{% if not loop.last %},{% endif %}
@@ -1266,10 +1279,15 @@ function Model() {
 
     solverAlgebraics: [
     {%- for (name, comp) in y_map|items %}
-      "{{ name }}"{% if not loop.last or z_map|length > 0 or w_map|length > 0 %},{% endif %}
+      "{{ name }}"{% if not loop.last or z_map|length > 0 or visible_m_count > 0 or w_map|length > 0 %},{% endif %}
     {%- endfor %}
     {%- for (name, comp) in z_map|items %}
-      "{{ name }}"{% if not loop.last or w_map|length > 0 %},{% endif %}
+      "{{ name }}"{% if not loop.last or visible_m_count > 0 or w_map|length > 0 %},{% endif %}
+    {%- endfor %}
+    {%- for (name, comp) in m_map|items %}
+    {%- if name != hidden_condition_m_name %}
+      "{{ name }}"{% if (loop.index0 - hidden_condition_m_count) < (visible_m_count - 1) or w_map|length > 0 %},{% endif %}
+    {%- endif %}
     {%- endfor %}
     {%- for (name, comp) in w_map|items %}
       "{{ name }}"{% if not loop.last %},{% endif %}
@@ -1292,7 +1310,7 @@ function Model() {
 
     summary: {
       nx: {{ x_map|length }},
-      ny: {{ y_map|length + z_map|length + w_map|length }},
+      ny: {{ y_map|length + z_map|length + visible_m_count + w_map|length }},
       nc: {{ cond_eqs|length }},
       neqs: {{ eqs|length }}
     }
@@ -1306,13 +1324,18 @@ function Model() {
 
   const algebraicIndex = {
   {%- for (name, comp) in y_map|items %}
-    "{{ name }}": {{ loop.index0 }}{% if not loop.last or z_map|length > 0 or w_map|length > 0 %},{% endif %}
+    "{{ name }}": {{ loop.index0 }}{% if not loop.last or z_map|length > 0 or visible_m_count > 0 or w_map|length > 0 %},{% endif %}
   {%- endfor %}
   {%- for (name, comp) in z_map|items %}
-    "{{ name }}": {{ y_map|length + loop.index0 }}{% if not loop.last or w_map|length > 0 %},{% endif %}
+    "{{ name }}": {{ y_map|length + loop.index0 }}{% if not loop.last or visible_m_count > 0 or w_map|length > 0 %},{% endif %}
+  {%- endfor %}
+  {%- for (name, comp) in m_map|items %}
+  {%- if name != hidden_condition_m_name %}
+    "{{ name }}": {{ y_map|length + z_map|length }} + {{ loop.index0 - hidden_condition_m_count }}{% if (loop.index0 - hidden_condition_m_count) < (visible_m_count - 1) or w_map|length > 0 %},{% endif %}
+  {%- endif %}
   {%- endfor %}
   {%- for (name, comp) in w_map|items %}
-    "{{ name }}": {{ y_map|length + z_map|length + loop.index0 }}{% if not loop.last %},{% endif %}
+    "{{ name }}": {{ y_map|length + z_map|length + visible_m_count + loop.index0 }}{% if not loop.last %},{% endif %}
   {%- endfor %}
   };
 
@@ -1381,8 +1404,13 @@ function Model() {
   {%- for (name, comp) in z_map|items %}
     out[{{ y_map|length + loop.index0 }}] = __rumocaSignalOr(Y[{{ y_map|length + loop.index0 }}], 0);
   {%- endfor %}
+  {%- for (name, comp) in m_map|items %}
+  {%- if name != hidden_condition_m_name %}
+    out[{{ y_map|length + z_map|length }} + {{ loop.index0 - hidden_condition_m_count }}] = __rumocaSignalOr(Y[{{ y_map|length + z_map|length }} + {{ loop.index0 - hidden_condition_m_count }}], 0);
+  {%- endif %}
+  {%- endfor %}
   {%- for (name, comp) in w_map|items %}
-    out[{{ y_map|length + z_map|length + loop.index0 }}] = __rumocaSignalOr(Y[{{ y_map|length + z_map|length + loop.index0 }}], 0);
+    out[{{ y_map|length + z_map|length + visible_m_count + loop.index0 }}] = __rumocaSignalOr(Y[{{ y_map|length + z_map|length + visible_m_count + loop.index0 }}], 0);
   {%- endfor %}
   {%- for obs in obs_list %}
     var {{ js_ident(obs.name) }} = __rumocaSignalOr(__rumocaResolveSymbol("{{ obs.name|string|replace('\\', '\\\\')|replace('"', '\\"') }}"), 0);
@@ -1396,7 +1424,7 @@ function Model() {
     }
   {%- endif %}
   {%- for obs in obs_list %}
-    out[{{ y_map|length + z_map|length + m_map|length + w_map|length + loop.index0 }}] = {{ js_ident(obs.name) }};
+    out[{{ y_map|length + z_map|length + visible_m_count + w_map|length + loop.index0 }}] = {{ js_ident(obs.name) }};
   {%- endfor %}
     return out;
   }
