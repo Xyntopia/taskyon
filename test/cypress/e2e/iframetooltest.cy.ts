@@ -88,7 +88,7 @@ the clientTest function? make sure, you display the exact string how it is displ
     getIframeBody().dataCy('chat-input').type(msg)
     getIframeBody().dataCy('chat-input').type('{enter}')*/
 
-    getIframeBody().contains('Welcome!', { timeout: 10000 })
+    getIframeBody().contains('Start with a guided design question', { timeout: 10000 })
     getIframeBody().click()
 
     cy.wait(2000) // wait another two seconds for taskyon to settle...

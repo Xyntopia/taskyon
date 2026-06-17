@@ -27,7 +27,7 @@ describe('taskyon API', () => {
     });*/
   })
   it('should be able to interact with taskyon API', () => {
-    cy.contains('Welcome!', { timeout: 10000 })
+    cy.contains('Start with a guided design question', { timeout: 10000 })
     //cy.contains('Ai Service Provide')
     cy.wait(3000) // we are waiting, so that our passwords are able to load in the background
     // enable task cost display & expert mode...

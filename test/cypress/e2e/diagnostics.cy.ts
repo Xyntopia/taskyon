@@ -26,7 +26,7 @@ describe('run diagnostics', () => {
     });*/
   })
   it('fast testing of a few taskyon operations', () => {
-    cy.contains('Welcome!', { timeout: 10000 })
+    cy.contains('Start with a guided design question', { timeout: 10000 })
     //cy.contains('Ai Service Provide')
     cy.wait(3000) // we are waiting, so that our passwords are able to load in the background
 
