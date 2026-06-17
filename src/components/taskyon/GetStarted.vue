@@ -133,7 +133,13 @@
 
 <script setup lang="ts">
 import { isTauri } from '@tauri-apps/api/core'
-import { matBatteryChargingFull, matComputer, matRocketLaunch } from '@quasar/extras/material-icons'
+import {
+  matBatteryChargingFull,
+  matComputer,
+  matRocketLaunch,
+  matSatelliteAlt,
+  matSmartToy,
+} from '@quasar/extras/material-icons'
 import { useAppStateStore } from 'src/stores/appState'
 import logoSvg from 'src/assets/taskyon_logo_complex_animated.svg?raw'
 import logoSvgStatic from 'src/assets/taskyon_logo_complex_static.svg?raw'
@@ -184,6 +190,18 @@ const examples = [
     icon: matBatteryChargingFull,
     prompt:
       'I want to plan a home battery or small energy system. Please start by asking me about my electricity usage, tariffs, solar, EV charging, backup needs, budget, and optimization goals.',
+  },
+  {
+    label: 'Satellite',
+    icon: matSatelliteAlt,
+    prompt:
+      'I want to design a satellite. Please start by asking me about the mission objective, target orbit, payload, mass and power budget, communications link, lifetime, launch vehicle constraints, and overall budget before proposing any subsystems.',
+  },
+  {
+    label: 'Autonomous Mars rover',
+    icon: matSmartToy,
+    prompt:
+      'I want to design an autonomous Mars rover. Please start by asking me about the science goals, landing site and terrain, mission duration, mobility and autonomy requirements, instruments, power source, thermal and dust constraints, communications, and mass and budget limits before proposing any subsystems.',
   },
 ] as const
 
