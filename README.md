@@ -1,131 +1,155 @@
 # Taskyon
 
-<img align="left" src="/taskyon_fancy_logo.png" onerror="this.onerror=null; this.src='/taskyon_fancy_logo.png';" alt="Taskyon Fancy Logo" width="100" style="padding-right: 30px;width: 175px;padding-left: 20px;height: 125px;">
+<p align="center">
+  <img src="/taskyon_fancy_logo.png" alt="Taskyon logo" width="140">
+</p>
 
-- 🌳✅ Task Trees
-- 🌐🔗 Seamless Web Integration
-- 👥🛠️ Hyper-Individualized Workflows
-- 🏡🌟 Local First
-- 🔧🛡️📈 Tool: Safe & Infinite Scalability
-- 🤖 Personalized AI Assistant
+<h3 align="center">Research. Design. Reproduce.</h3>
 
-A Chat & Agent Interface for Users, Experts & Developers based on Tasks! 🚀
+Taskyon is an open-source, local-first design automation system for turning AI-assisted research
+into replayable, inspectable design workflows.
 
-> Tasks are the most fundamental units of problem solving. Taskyon supercharges them.
+The near-term goal is simple:
 
-You can
+> Solve a design problem once through chat and tools, then make the successful process easier
+> to inspect, replay, adapt, and eventually fork.
 
-- use Taskyon here: [https://taskyon.space](https://taskyon.space)
-- or try out our newest version here: [https://dev.taskyon.space](https://dev.taskyon.space)
-- Or deploy it yourself!
-- Compare Taskyon to other AI agents: [taskyon_features.md](/docs/taskyon_features)
+Taskyon is not trying to be another generic chat app. The core artifact is a task tree: a
+structured record of questions, evidence, decisions, tools, parameters, and outputs that can grow
+from an exploratory conversation into a reproducible design automation workflow.
 
----
+## Why Taskyon
 
-## Overview
+Technical work rarely happens in a single tool. A real design process often mixes chat, web
+research, documentation, spreadsheets, scripts, APIs, simulations, and human judgment. The result
+may be useful once, but difficult to repeat.
 
-> _Divide each difficulty into as many parts as is feasible and necessary to resolve it._ – René Descartes
+Taskyon is built around the idea that successful work should become reusable:
 
-Taskyon takes a step beyond conventional, conversational AI by structuring interactions into a dynamic, evolving tree of tasks rather than a flat chat log. This architecture enables parallel and sequential processing, efficient context management, and powerful function chaining. By breaking down complex requests into dedicated tasks, Taskyon not only simplifies problem solving but also unlocks the ability to scale tool usage by letting the Agent write its own tools.
+- inspect the task tree instead of losing structure in a flat chat log;
+- keep sources, assumptions, prompts, artifacts, and outputs close to the work;
+- identify parameters that should change between runs;
+- separate AI interpretation from deterministic tools and human decisions;
+- replay only the steps that need to change;
+- compare variants;
+- share and fork design workflows over time.
 
-While apps serve well for uniform experiences, most processes demand hyper-individualization. Taskyon empowers users by focusing on tasks instead of monolithic applications:
+## Product Direction
 
-- **User-Knowledge First:** True domain experts—your users—define, tailor, and optimize workflows, not developers’ one-size-fits-all defaults.
-- **Flexible Task Trees:** Branch, reorder, or extend tasks on the fly to craft bespoke workflows that reflect each user’s unique needs.
-- **Continuous Evolution & Hyper-Individualization:** As tasks execute and tools integrate, Taskyon learns, automates, and refines new steps—ensuring workflows become ever more personalized over time.
+Taskyon's design-automation path is intentionally incremental:
 
-Built on the principles of [_local-first_](https://dl.acm.org/doi/10.1145/3359591.3359737) 🏠, Taskyon ensures that most data processing happens on the user's local device, prioritizing data security and user autonomy. Whether used for personalized AI interactions, robust task management, or seamless webpage integration, Taskyon offers flexibility and control while maintaining a familiar chat interface.
+```text
+research through chat
+→ one viable design
+→ parameterized task tree
+→ replayable workflow
+→ variants and comparison
+→ deterministic execution dependencies
+→ formal DAG
+→ optimization and simulation
+```
 
-Explore Taskyon's documentation for more information: [https://taskyon.space/docs/index](https://taskyon.space/docs/index)
+The first practical wedge is reproducible replay, not full autonomous engineering optimization.
+Taskyon should help a person solve one concrete case, understand how it was solved, and reuse the
+process with different inputs.
 
-You can find an alternative documentation here: [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Xyntopia/taskyon)
+## Example Workflows
 
-## Philosophy: Hyper Individualization & Local First
+Early public examples are meant to be guided design investigations rather than magic one-click
+solutions:
 
-🤖 **Individualized AI Bots:** Every user deserves a personal AI that learns from direct, human-centric interaction and evolves to become an expert assistant for their specific context.
+- **Local AI workstation**: budget, model requirements, VRAM, GPUs, power, cooling, noise, and
+  local-versus-cloud break-even.
+- **Mission drone**: payload, endurance, motors, propellers, ESC, battery, frame, cost, and safety
+  margins.
+- **Home battery system**: utility data, tariffs, solar, EV charging, battery sizing, scheduling,
+  and investment tradeoffs.
 
-👥🛠️ **User-Driven Evolution:** Users often have more task-specific insights and drive the AI's development through feedback and real-world expertise. This democratization of capability ensures tools and workflows mirror actual needs, not developer assumptions.
+These examples are stepping stones toward a future library of forkable design workflows.
 
-🚫📱 **Apps Aren't Needed Anymore:** By viewing tasks —not apps— as the core unit:
+## What Exists Today
 
-1. We acknowledge users know best how to organize their workflows.
-2. We replace rigid apps with flexible, automated task trees and a UI that adapt over time.
-3. We prioritize continuous, user-guided improvement and automation.
+Taskyon already provides the foundations for this direction:
 
-**Local First & Infinite Tool Scalability:**
+- **Task-based conversations**: each message can become a task node in a navigable tree.
+- **Local-first storage**: user data and task state stay local unless explicitly shared.
+- **Tool execution**: tasks can call tools, functions, and model providers.
+- **Sandboxed code execution**: run JavaScript/Python-style workflows in controlled environments.
+- **File and context attachment**: attach artifacts and data to the working context.
+- **Markdown and visual output**: render MathJax, Mermaid, SVG, HTML widgets, and rich technical
+  documents.
+- **LLM provider flexibility**: use OpenAI-compatible, hosted, or self-hosted model endpoints.
+- **Web embedding**: integrate Taskyon into other pages or workflows.
 
-- 🔐 _Enhanced Safety:_ All data and computation remain local unless explicitly shared, minimizing breach surface.
-- 👑 _Data Sovereignty:_ Users retain full ownership of their information and workflows and knowhow.
-- 💰 _Cost Efficiency:_ Local execution cuts cloud bills; only external calls happen when needed.
-- 🚀 _Scalable Tools Ecosystem:_ Add unlimited tools —from LLM providers to custom Python/JavaScript functions— as branches in your task tree, enabling infinite hyper-individualization.
-- 🔌 _MCP-Friendly Tooling:_ Import and adapt MCP-style tools while keeping Taskyon's native local tool flow.
+## What We Are Building Toward
 
-## Features
+The medium-term focus is turning useful conversations into reproducible design assets:
 
-- **Local First Architecture:** User autonomy, security, and offline capability.
-- **Seamless Web Integration:** Enhance your app or webpage with Taskyons agent capabilities with a single snippet — no backend needed.
-- **Infinite Tool Scalability:** Create and integrate unlimited tools and services into your workflows, powering hyper-individualized experiences.
-- **MCP Tool Support:** Import MCP tool definitions and use them through Taskyon's tool system.
-- **Service & LLM Integration:** Interface with multiple LLM endpoints, including OpenAI-compatible and self-hosted models.
-- **Task-Based Conversations:** Each message is a task node, forming a navigable tree.
-- **Function Tasks:** Define, parameterize, and execute tasks as function calls within the interface.
-- **Sandboxed Code Execution:** Securely run Python/JavaScript in-browser, with access to vector stores and dynamic tool generation.
-- **Local Tool Runtime:** Many tools can run directly in the browser without hosting a separate server, while still allowing server-backed tools when needed.
-- **Contextual Task Management:** Attach files, data sources, and task contexts for rich execution environments.
-- **Format Translation:** Export task trees to formats compatible with external services and APIs.
-- **Dedicated Task Interfaces:** Fine-tune parameters and manage execution state per task.
-- **Enhanced Markdown & Visuals:** Render Mermaid diagrams, SVGs, embedded HTML widgets, and MathJax seamlessly and secure in a sandboxed environment.
-- **Vision Models Support:** Integrate and invoke vision-based tasks alongside text workflows.
+- parameter extraction and editing;
+- task classification as deterministic, external-data, AI, or human steps;
+- recorded replay and deterministic tool replay;
+- source freshness policies;
+- token/cost reporting;
+- baseline verification;
+- run diffs and variant comparison;
+- template export/import;
+- public design pages;
+- sharing, forking, and eventually evaluator DAGs.
 
-## Installation
+The long-term vision is a community of executable, forkable designs: workflows that can be studied,
+challenged, improved, and reused with new parameters.
 
-Taskyon can be accessed directly at [https://taskyon.space](https://taskyon.space). For a local setup:
+## Local First
 
-1. Clone the repository. 📥
-2. Run `yarn install` to install dependencies. 🧶
-3. Use `quasar build` for a production build or `quasar dev` for a development server. 🏗️
+Taskyon follows local-first principles wherever possible:
 
-Alternatively, deploy via Docker or await our upcoming desktop app.
+- **Data ownership**: workflows, drafts, and artifacts remain under user control.
+- **Lower exposure**: data is not sent to external services unless a task or model call requires it.
+- **Cost control**: deterministic replay should reduce repeated AI calls over time.
+- **User autonomy**: workflows should remain useful outside a single hosted service.
 
-## Usage
+## Use Taskyon
 
-Interact through the chat interface where each interaction spawns tasks. Use the built-in sandbox to execute code, call tools, and chain functions. All data and configurations are stored locally for persistent, secure sessions. 💬🖥️
+- Stable app: [https://taskyon.space](https://taskyon.space)
+- Development app: [https://dev.taskyon.space](https://dev.taskyon.space)
+- Documentation: [https://taskyon.space/docs/index](https://taskyon.space/docs/index)
+- Broader chat and agent features: [docs/taskyon_chat_and_agent_features.md](/docs/taskyon_chat_and_agent_features)
+- Feature comparison: [docs/taskyon_features.md](/docs/taskyon_features)
+- DeepWiki notes: [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Xyntopia/taskyon)
 
-## Cost and Usage Management
+## Development
 
-Taskyon minimizes cloud reliance through Local First computing:
+Taskyon is a Yarn 4 monorepo using Quasar, Vue 3, Pinia, Tauri, and shared Taskyon packages.
 
-- _Local Data Storage:_ Lowers cloud storage and transfer costs.
-- _Local Inference & Execution:_ Leverages user hardware for cost-effective computation.
-- _Efficient Resource Use:_ Dynamically balance local vs. external processing for optimal performance.
+```bash
+yarn install
+yarn dev
+```
 
-Real-time monitoring of token usage and service costs provides transparency and control. 📊
+Common commands:
 
-## Security
+- `yarn dev` starts the development app.
+- `yarn build` creates a production build.
+- `yarn lint` runs typechecking and ESLint.
+- `yarn format:file <path...>` formats specific files.
 
-Local processing inherently reduces exposure:
-
-- _Sandboxed Environments:_ Isolate each task's code execution in a secure, isolated environment.
-- _Optional Containerization:_ Run Taskyon in a secure local container for added protection.
-- _No Unnecessary Data Exfiltration:_ User data remains within the browser unless explicitly shared.
-
-## Support
-
-- Join our Taskyon channel: [Matrix Channel](https://matrix.to/#/!UNCbKcBpdEjFduzzMv:matrix.org?via=matrix.org)
-- [Documentation](https://taskyon.space/docs/index)
-
-## Roadmap
-
-- _P2P Task Synchronization:_ Collaborate peer-to-peer on shared task trees.
-- _Desktop App:_ Nearly ready for cross-platform installation.
-- _Taskyon Server:_ Run tasks completely autonomous in the background.
+See `AGENTS.md` and `development_instructions.md` before making code changes.
 
 ## Contributing
 
-📬 Contributions welcome! Please follow our code of conduct and submit pull requests.
+Useful contribution areas include:
 
-For development guidelines, see [DEVELOPMENT](https://taskyon.space/docs/DEVELOPMENT).
+- design workflow templates;
+- deterministic evaluators;
+- data connectors;
+- component catalogs;
+- replay and comparison tools;
+- visualizations;
+- optimization and simulation integrations;
+- verification datasets.
+
+Join the Matrix channel: [Taskyon Matrix](https://matrix.to/#/!UNCbKcBpdEjFduzzMv:matrix.org?via=matrix.org)
 
 ## License
 
-📃 MIT License. See LICENSE.md for details.
+MIT. See `LICENSE.md` for details.
