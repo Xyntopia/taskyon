@@ -41,19 +41,22 @@
       <!-- Welcome Message -->
       <div
         v-else
-        class="full-height column justify-center items-center q-pa-sm welcome no-wrap"
-        style="max-width: 600px; max-height: 90%"
+        class="full-height column justify-center items-center q-pa-sm welcome frontpage-welcome no-wrap"
       >
         <div class="welcome-message column col-auto items-center scroll overflow-auto no-wrap">
-          <GetStarted />
+          <GetStarted>
+            <template #hero-input>
+              <CreateNewTask
+                v-model:file-attachments="fileAttachments"
+                :entry-node="tystate.entryNode"
+                class="frontpage-create-task"
+                :min-mode="state.minimalGui === 'iframe'"
+                :expert-mode="state.appConfiguration.expertMode"
+                hero-mode
+              />
+            </template>
+          </GetStarted>
         </div>
-        <CreateNewTask
-          v-model:file-attachments="fileAttachments"
-          :entry-node="tystate.entryNode"
-          class="q-pa-md col-auto self-stretch"
-          :min-mode="state.minimalGui === 'iframe'"
-          :expert-mode="state.appConfiguration.expertMode"
-        />
       </div>
       <component :is="ResetButton" v-if="ResetButton" color="secondary" flat mode="all" />
     </div>
@@ -456,6 +459,24 @@ watchEffect(() => {
   display: flex
   flex-direction: column
   align-items: center
+
+  .frontpage-welcome
+    position: relative
+    width: 100%
+    max-width: 100%
+    min-width: 0
+    max-height: 100%
+    overflow: hidden
+
+    .welcome-message
+      width: 100%
+      min-width: 0
+      max-height: none
+      overflow: visible !important
+
+    .frontpage-create-task
+      width: 100%
+      min-width: 0
 
   .tasks-container
     width: min(100%, 800px)

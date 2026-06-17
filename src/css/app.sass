@@ -13,6 +13,32 @@ body.body--light
   --button-color: rgb(#{$primary})
   --button-color-rgb: var(--q-primary-rgb)
   --background-color: white
+  --frontpage-ink: var(--q-primary)
+  --frontpage-muted: color-mix(in oklch, var(--q-primary) 72%, white)
+  --frontpage-line: color-mix(in oklch, var(--q-primary) 24%, transparent)
+  --frontpage-tree-line: color-mix(in oklch, var(--q-primary) 32%, transparent)
+  --frontpage-tree-node: color-mix(in oklch, var(--q-secondary) 72%, white)
+  --frontpage-tree-opacity: 0.34
+  --frontpage-border: color-mix(in oklch, var(--q-primary) 24%, transparent)
+  --frontpage-hairline: color-mix(in oklch, var(--q-primary) 14%, transparent)
+  --frontpage-card-bg: rgba(255, 255, 255, 0.94)
+  --frontpage-input-bg: rgba(255, 255, 255, 0.97)
+  --frontpage-inner-input-bg: color-mix(in oklch, white 88%, var(--q-primary) 3%)
+  --frontpage-icon-bg: color-mix(in oklch, var(--q-secondary) 9%, white)
+  --frontpage-card-shadow: 0 14px 34px color-mix(in oklch, var(--q-primary) 8%, transparent), -14px 20px 34px color-mix(in oklch, #4d8eff 9%, transparent), 18px 8px 32px color-mix(in oklch, var(--q-secondary) 10%, transparent)
+  --frontpage-input-shadow: -20px 22px 54px color-mix(in oklch, #4d8eff 16%, transparent), 24px 12px 54px color-mix(in oklch, var(--q-secondary) 20%, transparent), 0 18px 46px color-mix(in oklch, var(--q-primary) 9%, transparent)
+  --frontpage-primary-glow: color-mix(in oklch, #4d8eff 36%, transparent)
+  --frontpage-secondary-glow: color-mix(in oklch, var(--q-secondary) 42%, transparent)
+  --frontpage-secondary-soft: color-mix(in oklch, var(--q-secondary) 32%, transparent)
+  --frontpage-specular-input: linear-gradient(125deg, color-mix(in oklch, #4d8eff 62%, transparent) 0%, color-mix(in oklch, var(--q-primary) 22%, transparent) 24%, color-mix(in oklch, white 86%, transparent) 47%, color-mix(in oklch, var(--q-secondary) 78%, transparent) 92%)
+  --frontpage-specular-card: linear-gradient(132deg, color-mix(in oklch, #4d8eff 34%, transparent) 0%, color-mix(in oklch, var(--q-primary) 16%, transparent) 36%, color-mix(in oklch, white 70%, transparent) 54%, color-mix(in oklch, var(--q-secondary) 46%, transparent) 94%)
+  --frontpage-bg: radial-gradient(circle at 16% 28%, color-mix(in oklch, var(--q-secondary) 9%, transparent) 0 0, transparent 22rem), radial-gradient(circle at 24% 83%, color-mix(in oklch, #4d8eff 10%, transparent) 0 0, transparent 24rem), linear-gradient(180deg, white 0%, white 76%, color-mix(in oklch, #4d8eff 3%, white) 100%)
+  --chat-message-bg: rgba(255, 255, 255, 0.95)
+  --chat-user-bg: rgba(255, 255, 255, 0.98)
+  --chat-message-border: color-mix(in oklch, var(--q-primary) 13%, transparent)
+  --chat-message-shadow: 0 8px 28px color-mix(in oklch, var(--q-primary) 7%, transparent), 12px 8px 28px color-mix(in oklch, var(--q-secondary) 8%, transparent)
+  --chat-user-indicator: linear-gradient(180deg, color-mix(in oklch, white 70%, transparent), var(--q-primary) 18%, var(--q-secondary) 70%, color-mix(in oklch, white 75%, transparent))
+  --chat-user-indicator-glow: 0 0 8px color-mix(in oklch, var(--q-secondary) 60%, transparent), 0 0 18px color-mix(in oklch, #4d8eff 30%, transparent)
   --control-button-border: var(--q-primary)
   --control-button-color: var(--q-primary)
   --control-button-bg: color-mix(in oklch, var(--q-primary) 6%, transparent)
@@ -22,10 +48,36 @@ body.body--dark
   --button-color: rgb(#{$secondary})
   --button-color-rgb: var(--q-secondary-rgb)
   --background-color: #{$dark}
+  --frontpage-ink: white
+  --frontpage-muted: color-mix(in oklch, white 68%, var(--q-primary))
+  --frontpage-line: color-mix(in oklch, var(--q-secondary) 48%, transparent)
+  --frontpage-tree-line: color-mix(in oklch, var(--q-secondary) 35%, var(--q-primary))
+  --frontpage-tree-node: var(--q-secondary)
+  --frontpage-tree-opacity: 0.34
+  --frontpage-border: color-mix(in oklch, var(--q-secondary) 36%, transparent)
+  --frontpage-hairline: color-mix(in oklch, white 16%, transparent)
+  --frontpage-card-bg: color-mix(in oklch, var(--q-primary) 35%, transparent)
+  --frontpage-input-bg: color-mix(in oklch, var(--q-primary) 42%, transparent)
+  --frontpage-inner-input-bg: color-mix(in oklch, var(--q-primary) 32%, black)
+  --frontpage-icon-bg: color-mix(in oklch, var(--q-secondary) 14%, transparent)
+  --frontpage-card-shadow: 0 18px 60px color-mix(in oklch, black 45%, transparent), -18px 20px 44px color-mix(in oklch, #2c70d8 18%, transparent), 22px 10px 46px color-mix(in oklch, var(--q-secondary) 24%, transparent)
+  --frontpage-input-shadow: 0 20px 70px color-mix(in oklch, black 50%, transparent), -24px 20px 48px color-mix(in oklch, #2c70d8 24%, transparent), 28px 12px 52px color-mix(in oklch, var(--q-secondary) 32%, transparent)
+  --frontpage-primary-glow: color-mix(in oklch, var(--q-primary) 75%, transparent)
+  --frontpage-secondary-glow: color-mix(in oklch, var(--q-secondary) 58%, transparent)
+  --frontpage-secondary-soft: color-mix(in oklch, var(--q-secondary) 42%, transparent)
+  --frontpage-specular-input: linear-gradient(125deg, color-mix(in oklch, #2c70d8 62%, transparent) 0%, color-mix(in oklch, white 18%, transparent) 42%, color-mix(in oklch, var(--q-secondary) 78%, transparent) 94%)
+  --frontpage-specular-card: linear-gradient(132deg, color-mix(in oklch, #2c70d8 34%, transparent) 0%, color-mix(in oklch, white 16%, transparent) 42%, color-mix(in oklch, var(--q-secondary) 58%, transparent) 94%)
+  --frontpage-bg: radial-gradient(circle at 70% 30%, color-mix(in oklch, var(--q-secondary) 18%, transparent) 0 0, transparent 25rem), radial-gradient(circle at 24% 82%, color-mix(in oklch, #2c70d8 20%, transparent) 0 0, transparent 24rem), linear-gradient(180deg, color-mix(in oklch, var(--q-primary) 55%, black) 0%, #080d14 100%)
   --control-button-border: var(--q-secondary)
   --control-button-color: white
-  --control-button-bg: color-mix(in oklch, var(--q-primary) 10%, transparent)
+  --control-button-bg: color-mix(in oklch, var(--q-primary) 72%, black)
   --control-button-pattern-color: color-mix(in oklch, var(--q-secondary) 75%, transparent)
+  --chat-message-bg: color-mix(in oklch, var(--q-primary) 34%, black)
+  --chat-user-bg: color-mix(in oklch, var(--q-primary) 42%, black)
+  --chat-message-border: color-mix(in oklch, white 13%, transparent)
+  --chat-message-shadow: 0 18px 42px color-mix(in oklch, black 34%, transparent), 14px 8px 34px color-mix(in oklch, var(--q-secondary) 14%, transparent)
+  --chat-user-indicator: linear-gradient(180deg, color-mix(in oklch, white 50%, transparent), #2c70d8 16%, var(--q-secondary) 70%, color-mix(in oklch, white 48%, transparent))
+  --chat-user-indicator-glow: 0 0 8px color-mix(in oklch, var(--q-secondary) 78%, transparent), 0 0 18px color-mix(in oklch, #2c70d8 55%, transparent)
 
 body
   --control-button-pattern-scale: 0.5
@@ -78,11 +130,33 @@ html.no-ptr
     border: transparent
 
   .task-container
-    background-color: var(--background-color)
+    position: relative
+    border: 1px solid var(--chat-message-border)
+    background: var(--chat-message-bg)
+    box-shadow: var(--chat-message-shadow)
+    backdrop-filter: blur(14px)
+
+    &::after
+      content: ''
+      position: absolute
+      inset: 0
+      border-radius: inherit
+      pointer-events: none
+      background: linear-gradient(130deg, color-mix(in oklch, white 46%, transparent), transparent 18%, transparent 76%, var(--frontpage-secondary-soft))
+      opacity: 0.18
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+      -webkit-mask-composite: xor
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+      mask-composite: exclude
+      padding: 1px
 
     &.user
+      background: var(--chat-user-bg)
+
       &::before
-        background: var(--button-color)
+        background: var(--chat-user-indicator)
+        box-shadow: var(--chat-user-indicator-glow)
+        filter: saturate(1.25)
 
     .task-safety-icon
       color: var(--button-color)
@@ -95,12 +169,12 @@ html.no-ptr
     .task-container
       &.user
         &::before
-          background: rgb($secondary)
+          background: var(--chat-user-indicator)
 
   .task-display
     .task-buttons
-      border: 1px solid var(--button-color)
-      background: var(--background-color)
+      border: 1px solid transparent
+      background: linear-gradient(var(--frontpage-card-bg), var(--frontpage-card-bg)) padding-box, var(--frontpage-specular-card) border-box
       color: var(--button-color)
       border-radius: 5px
 
@@ -119,29 +193,47 @@ html.no-ptr
     padding-top: 5px
 
   .create-new-task
-    border-top-left-radius: 5px
-    border-top-right-radius: 5px
-    box-shadow: 0 0 2px 1px rgba($primary,0.1) // Adds an outer border with the primary color
-    //backdrop-filter: blur(40px) brightness(1.0)
-    background-color: rgba(white, 0.2) // Adjust transparency as needed
-    border: 0.5px solid rgba(white, 0.5)
-    // background-color: rgba($primary, 0.3) // Adjust transparency as needed
+    position: relative
+    border-top-left-radius: 1rem
+    border-top-right-radius: 1rem
+    border: 1px solid transparent
     border-bottom: none
+    background: linear-gradient(var(--frontpage-input-bg), var(--frontpage-input-bg)) padding-box, var(--frontpage-specular-input) border-box
+    box-shadow: var(--frontpage-input-shadow)
+    backdrop-filter: blur(18px)
+
+    &::before
+      content: ''
+      position: absolute
+      inset: 1px 1px 0
+      border-radius: calc(1rem - 1px) calc(1rem - 1px) 0 0
+      pointer-events: none
+      background: linear-gradient(112deg, var(--frontpage-primary-glow), transparent 19%, transparent 74%, var(--frontpage-secondary-glow))
+      opacity: 0.24
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+      -webkit-mask-composite: xor
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+      mask-composite: exclude
+      padding: 1px
 
     .ty-msg-edit
       box-shadow: none !important
-      background-color: var(--background-color)
+      background: var(--frontpage-inner-input-bg)
 
   .ty-msg-edit
-    border-radius: 5px
-    box-shadow: inset 0 0 10px white
+    border: 1px solid var(--chat-message-border)
+    border-radius: 0.85rem
+    background: var(--frontpage-inner-input-bg)
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, white 28%, transparent)
+
     &.q-field--float
-      background-color: var(--background-color)
+      background: var(--frontpage-inner-input-bg)
       box-shadow: none
 
   .body--dark
     .ty-msg-edit
-      box-shadow: inset 0 0 10px rgb($secondary)
+      box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--q-secondary) 18%, transparent)
+
       &.q-field--float
         box-shadow: none
 
@@ -155,12 +247,12 @@ html.no-ptr
   .taskyon-control-button
     position: relative
     margin-right: 20px
-    background-color: var(--control-button-bg)
+    background: linear-gradient(var(--control-button-bg), var(--control-button-bg)) padding-box, var(--frontpage-specular-card) border-box
     color: var(--control-button-color)
-    border: 1px solid color-mix(in oklch, var(--control-button-border) 75%, transparent)
+    border: 1px solid transparent
     border-radius: 50%
     overflow: visible
-    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--control-button-border) 75%, transparent), inset 0 0 8px color-mix(in oklch, var(--control-button-border) 30%, transparent), 0 0 3px color-mix(in oklch, var(--control-button-border) 45%, transparent), 0 0 8px color-mix(in oklch, var(--control-button-border) 18%, transparent)
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, white 16%, transparent), 6px 4px 12px color-mix(in oklch, var(--q-secondary) 18%, transparent), -6px 6px 12px color-mix(in oklch, #2c70d8 12%, transparent)
 
     &::before
       content: ''
@@ -178,6 +270,174 @@ html.no-ptr
       -webkit-mask-composite: xor
       mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
       mask-composite: exclude
+
+    &::after
+      content: ''
+      position: absolute
+      inset: -3px
+      border-radius: inherit
+      pointer-events: none
+      background: linear-gradient(135deg, var(--frontpage-primary-glow), transparent 35%, transparent 68%, var(--frontpage-secondary-glow))
+      opacity: 0.42
+      filter: blur(3px)
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+      -webkit-mask-composite: xor
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+      mask-composite: exclude
+      padding: 2px
+
+  .frontpage-welcome
+    color: var(--frontpage-ink)
+
+    &::before
+      content: ''
+      position: absolute
+      inset: 0
+      pointer-events: none
+      background: radial-gradient(circle at 22% 20%, var(--frontpage-secondary-glow), transparent 18rem), radial-gradient(circle at 68% 78%, var(--frontpage-primary-glow), transparent 17rem)
+      opacity: 0.24
+
+  .frontpage-logo
+    filter: drop-shadow(0 0 12px var(--frontpage-secondary-glow))
+
+  .frontpage-motto
+    color: var(--frontpage-muted)
+
+    span
+      color: var(--q-secondary)
+
+  .frontpage-stages::before
+    content: ''
+    position: absolute
+    top: 50%
+    left: 14%
+    right: 14%
+    height: 1px
+    background: linear-gradient(90deg, transparent, var(--frontpage-line), transparent)
+    z-index: -1
+
+  .frontpage-stage-card
+    position: relative
+    border: 1px solid transparent
+    background: linear-gradient(var(--frontpage-card-bg), var(--frontpage-card-bg)) padding-box, var(--frontpage-specular-card) border-box
+    box-shadow: var(--frontpage-card-shadow)
+    backdrop-filter: blur(18px)
+
+    &::before
+      content: ''
+      position: absolute
+      inset: 0
+      border-radius: inherit
+      pointer-events: none
+      background: linear-gradient(132deg, var(--frontpage-primary-glow), transparent 20%, transparent 75%, var(--frontpage-secondary-glow))
+      opacity: 0.2
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+      -webkit-mask-composite: xor
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+      mask-composite: exclude
+      padding: 1px
+
+  .frontpage-stage-card--active
+    border-color: color-mix(in oklch, var(--q-secondary) 75%, var(--frontpage-border))
+    box-shadow: var(--frontpage-card-shadow), 0 0 0 1px var(--frontpage-secondary-soft)
+
+  .frontpage-stage-button
+    color: inherit
+
+  .frontpage-stage-kicker
+    background: var(--frontpage-icon-bg)
+    color: var(--q-secondary)
+
+  .frontpage-stage-title
+    color: var(--frontpage-ink)
+
+  .frontpage-stage-summary,
+  .frontpage-stage-detail,
+  .frontpage-example-separator
+    color: var(--frontpage-muted)
+
+  .frontpage-stage-detail
+    border-top: 1px solid var(--frontpage-hairline)
+
+  .frontpage-example-separator span
+    background: linear-gradient(90deg, transparent, var(--q-secondary), transparent)
+
+  .frontpage-example-button
+    position: relative
+    border: 1px solid transparent
+    background: linear-gradient(var(--frontpage-card-bg), var(--frontpage-card-bg)) padding-box, var(--frontpage-specular-card) border-box
+    color: var(--frontpage-ink)
+    box-shadow: var(--frontpage-card-shadow)
+
+    &::before
+      content: ''
+      position: absolute
+      inset: 0
+      border-radius: inherit
+      pointer-events: none
+      background: linear-gradient(132deg, var(--frontpage-primary-glow), transparent 24%, transparent 74%, var(--frontpage-secondary-glow))
+      opacity: 0.18
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+      -webkit-mask-composite: xor
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+      mask-composite: exclude
+      padding: 1px
+
+    .q-icon
+      color: var(--q-secondary)
+
+  .frontpage-create-task
+    .create-tasks
+      position: relative
+      border: 1px solid transparent
+      border-radius: 1.15rem
+      background: linear-gradient(var(--frontpage-input-bg), var(--frontpage-input-bg)) padding-box, var(--frontpage-specular-input) border-box
+      box-shadow: var(--frontpage-input-shadow)
+      backdrop-filter: blur(20px)
+
+      &::before
+        content: ''
+        position: absolute
+        inset: 1px
+        border-radius: calc(1.15rem - 1px)
+        pointer-events: none
+        background: linear-gradient(110deg, var(--frontpage-primary-glow), transparent 16%, transparent 70%, var(--frontpage-secondary-glow))
+        opacity: 0.38
+        filter: saturate(1.2)
+        -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+        -webkit-mask-composite: xor
+        mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+        mask-composite: exclude
+        padding: 1px
+
+    .ty-msg-edit
+      border: 1px solid color-mix(in oklch, var(--q-primary) 16%, transparent)
+      border-radius: 0.85rem
+      background: var(--frontpage-inner-input-bg)
+      box-shadow: inset 0 0 0 1px color-mix(in oklch, white 42%, transparent)
+
+    .q-field__control
+      color: var(--frontpage-ink)
+
+    .q-field__native::placeholder
+      color: color-mix(in oklch, var(--frontpage-muted) 78%, transparent)
+
+  .frontpage-tree--left
+    opacity: var(--frontpage-tree-opacity)
+
+  .frontpage-tree--right
+    opacity: calc(var(--frontpage-tree-opacity) * 0.55)
+
+  .tree-lines--primary path
+    fill: none
+    stroke: var(--frontpage-tree-line)
+    stroke-width: 1.35
+    stroke-linecap: round
+    stroke-linejoin: round
+
+  .tree-lines--secondary circle
+    fill: var(--frontpage-tree-node)
+    filter: drop-shadow(0 0 5px var(--frontpage-secondary-glow))
 
   .button-group
     border: 1px solid rgb($primary)
@@ -212,12 +472,13 @@ html.no-ptr
 
   body.body--light::before
     //background-color: white
-    background: $app-bg-light
-    //color: black
+    //background: $app-bg-light  // old washed-out gradient (kept for reference)
+    background: var(--frontpage-bg)
 
   body.body--dark::before
     background-color: black !important
-    background: $app-bg-dark
+    //background: $app-bg-dark  // old washed-out gradient (kept for reference)
+    background: var(--frontpage-bg)
 
   body.taskyon-control-pattern-debug:not(.within-iframe)::after
     content: ''

@@ -1,6 +1,6 @@
 <template>
   <!--Create new task area-->
-  <div class="create-tasks">
+  <div :class="['create-tasks', { 'create-tasks--hero': heroMode }]">
     <!--Function Control-->
     <div v-if="selectedTaskType" class="text-caption text-center">
       <InfoDialog
@@ -29,6 +29,7 @@
         :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="state.appConfiguration.useEnterToSend"
         :show-web-search="state.appConfiguration.webSearchButton"
+        :placeholder="heroMode ? 'Describe what you want to build' : 'Type your message...'"
         @execute-task="addNewTask('message', p2pTopic)"
         @execute-web-search="addNewTask('websearch', p2pTopic)"
       >
@@ -243,11 +244,13 @@ const {
   expertMode = false,
   entryNode = undefined,
   p2pTopic = undefined,
+  heroMode = false,
 } = defineProps<{
   entryNode?: ReadonlyDeep<partialTaskDraft> | undefined
   minMode?: boolean
   expertMode?: boolean
   p2pTopic?: string // the p2p network that we want to send the task to
+  heroMode?: boolean
 }>()
 
 const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
@@ -442,6 +445,40 @@ const removeFileFromDraft = (file: File) => {
 </script>
 
 <style>
+.create-tasks--hero {
+  width: 100%;
+}
+
+.create-tasks--hero .ty-msg-edit {
+  min-height: 4.5rem;
+}
+
+.create-tasks--hero .ty-msg-edit .q-field__control {
+  min-height: 4.5rem;
+}
+
+.create-tasks--hero .ty-msg-edit textarea {
+  font-size: 1.06rem;
+  line-height: 1.5;
+  padding-top: 1rem;
+}
+
+@media (max-width: 560px) {
+  .create-tasks--hero .ty-msg-edit {
+    min-height: 3.6rem;
+  }
+
+  .create-tasks--hero .ty-msg-edit .q-field__control {
+    min-height: 3.6rem;
+  }
+
+  .create-tasks--hero .ty-msg-edit textarea {
+    font-size: 1rem;
+    line-height: 1.45;
+    padding-top: 0.85rem;
+  }
+}
+
 .model-history .ellipsis {
   overflow: hidden;
   text-overflow: ellipsis;

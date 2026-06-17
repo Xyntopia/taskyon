@@ -9,7 +9,7 @@
         autogrow
         type="textarea"
         borderless
-        placeholder="Type your message..."
+        :placeholder="placeholder"
         :input-style="{ maxHeight: '300px' }"
         :class="['q-px-sm', content?.length ? 'q-pt-sm' : '']"
         v-bind="$attrs"
@@ -92,7 +92,10 @@ const content = defineModel<string | null | undefined>({
 const props = defineProps<{
   useEnterToSend: appConfiguration['useEnterToSend']
   showWebSearch?: boolean
+  placeholder?: string
 }>()
+
+const placeholder = computed(() => props.placeholder ?? 'Type your message...')
 
 const emit = defineEmits<{
   (e: 'execute-task'): void
