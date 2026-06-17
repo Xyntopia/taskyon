@@ -11,7 +11,7 @@
 - Fix root causes: keep values strongly typed at their source. No `as any`, `as unknown as`, JSON round-trip hacks, or widening types to silence errors.
 - No generic `isRecord`-style guards. Narrow at the domain boundary, then pass typed values downstream.
 - No fake no-op implementations. Model unavailable capabilities as optional.
-- Do not auto-run `lint:fix` or repo-wide lint. Use targeted checks on changed files only. Remind the user to run full lint before committing if you didn't.
+- Do not auto-run `yarn lint` or `yarn lint:fix` (neither repo-wide nor targeted) unless the user explicitly asks. Instead, remind the user to run `yarn lint` themselves before committing. Targeted `yarn eslint <path>` is fine only when needed to verify a specific change.
 - Format only files you edited: `yarn format:file <path...>`
 
 ## Commands
