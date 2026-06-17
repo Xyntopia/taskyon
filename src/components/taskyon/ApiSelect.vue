@@ -3,6 +3,8 @@
     <!--Show only Providers for which we have an actual key!-->
     <q-select
       v-model="model"
+      data-cy="provider-select"
+      popup-content-class="provider-select-popup"
       emit-value
       borderless
       color="secondary"
@@ -10,6 +12,11 @@
       label="Provider"
       :options="tystate.availableProviders"
     >
+      <template #option="{ itemProps, opt }">
+        <q-item v-bind="itemProps" data-cy="provider-option" :data-provider="opt">
+          <q-item-section>{{ opt }}</q-item-section>
+        </q-item>
+      </template>
     </q-select>
     <q-btn
       v-if="moreSettings"

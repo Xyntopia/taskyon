@@ -8,6 +8,8 @@
         dense
         color="secondary"
         options-dense
+        data-cy="model-select"
+        popup-content-class="model-select-popup"
         label="Select LLM Model for answering/solving the task."
         :options="filteredOptions"
         emit-value
@@ -26,6 +28,11 @@
         @filter-abort="abortFilterFn"
         @keydown.enter="selectFirstOption"
       >
+        <template #option="{ itemProps, opt }">
+          <q-item v-bind="itemProps" data-cy="model-option" :data-model-id="opt.value">
+            <q-item-section>{{ opt.label }}</q-item-section>
+          </q-item>
+        </template>
         <template #prepend>
           <q-icon v-if="selectedApi === 'taskyon' && usedKey" :name="mdiKeyLink">
             <q-tooltip>Only models allowed from key: {{ usedKey.name }}</q-tooltip>

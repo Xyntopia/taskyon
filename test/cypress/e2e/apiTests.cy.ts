@@ -45,6 +45,12 @@ describe('taskyon API', () => {
     // as of 20241007 this is the cheapest model which works with vision...
     const visionModelID = 'google/gemini-2.5-flash-lite'
 
+    // one-time settle: let the app's background work (pyodide pre-init, pglite
+    // wasm load, model-list fetch) finish before driving the model-selection
+    // menu, otherwise the nested q-select popup gets dismissed by stray focus
+    // events. This is only needed on the cold first interaction.
+    cy.wait(5000)
+
     selectllmmodel('openai')
     selectllmmodel('openrouter.ai', visionModelID)
 

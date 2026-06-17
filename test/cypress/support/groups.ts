@@ -2,25 +2,43 @@
 
 export const testModelId = 'google/gemini-2.5-flash-lite'
 
-export function selectllmmodel(provider: string | undefined, modelId: string = '') {
+export function selectllmmodel(provider?: string, modelId = '') {
   cy.dataCy('model-id').click() // open the menu
-  if (provider) {
-    cy.dataCy('model-selection').contains('Provider').click()
-    cy.dataCy('model-selection').get('.q-menu').contains(provider).click()
-  }
-  if (modelId) {
-    cy.wait(100)
-      .contains('Select LLM Model for answering/solving the task.')
-      .click()
-      .type(modelId)
-      .wait(200)
-    cy.get('.q-menu').contains(modelId).click()
-  }
-  // close the menu
-  cy.dataCy('model-selection').type('{esc}')
 
-  //.type('{enter}{esc}');
-  //cy.get('.q-menu').contains(modelId).click();
+  cy.dataCy('model-selection').should('be.visible')
+
+  if (provider) {
+    cy.dataCy('model-selection').contains('.q-field', 'Provider').click()
+
+    cy.get('.q-menu:visible')
+      .last()
+      .find('[data-cy="provider-option"]')
+      .filter((_, el) => el.getAttribute('data-provider') === provider)
+      .first()
+      .click()
+
+    cy.dataCy('provider-select').should('contain.text', provider)
+  }
+
+  if (modelId) {
+    cy.dataCy('model-selection')
+      .contains('.q-field', 'Select LLM Model for answering/solving the task.')
+      .find('input')
+      .click()
+      .clear()
+      .type(modelId)
+
+    cy.get('.q-menu:visible')
+      .last()
+      .find('[data-cy="model-option"]')
+      .filter((_, el) => el.getAttribute('data-model-id') === modelId)
+      .first()
+      .click()
+
+    cy.dataCy('model-select').should('have.value', modelId)
+  }
+
+  cy.dataCy('model-selection').type('{esc}')
 }
 
 export function getLastAssistantMessage(

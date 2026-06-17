@@ -1,7 +1,7 @@
 <template>
   <FadeAwayScrollPage>
     <q-toolbar class="q-pt-md">
-      <q-tabs v-model="selectedTab" class="col-auto" dense no-caps>
+      <q-tabs :model-value="selectedTab" class="col-auto" dense no-caps>
         <q-route-tab
           to="/settings/aiserviceprovider"
           label="AI Service Provider"
@@ -95,7 +95,10 @@
 <script setup lang="ts">
 import FadeAwayScrollPage from '@taskyon/shared/components/FadeAwayScrollPage.vue'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
-import { convertZodToJsonSchemaCached, FunctionArguments as FunctionArgumentsSchema } from '@taskyon/taskyon'
+import {
+  convertZodToJsonSchemaCached,
+  FunctionArguments as FunctionArgumentsSchema,
+} from '@taskyon/taskyon'
 import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
 import LLMProviders from 'components/taskyon/LLMProviders.vue'
 import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'
