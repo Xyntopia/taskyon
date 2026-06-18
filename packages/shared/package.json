@@ -42,7 +42,7 @@
     "pmtiles": "^4.4.1",
     "prismjs": "^1.30.0",
     "qrcode": "^1.5.4",
-    "rumoca-full-web": "npm:@cognipilot/rumoca@^0.9.4",
+    "rumoca-full-web": "file:../rumoca/pkg/release-full-web",
     "vue-codemirror": "^6.1.1"
   }
 }

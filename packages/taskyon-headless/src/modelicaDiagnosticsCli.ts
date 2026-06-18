@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 
 const sharedRequire = createRequire(new URL('../../shared/package.json', import.meta.url))
-const rumocaWasmPath = sharedRequire.resolve('rumoca/rumoca_bind_wasm_bg.wasm')
+const rumocaWasmPath = sharedRequire.resolve('rumoca-full-web/rumoca_bind_wasm_bg.wasm')
 const rumocaWasmUrl = pathToFileURL(rumocaWasmPath).href
 const mslReleaseZipUrl =
   'https://github.com/modelica/ModelicaStandardLibrary/archive/refs/tags/v4.1.0.zip'

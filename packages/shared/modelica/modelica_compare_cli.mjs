@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-import { readFile, writeFile, mkdir, access, readdir, stat } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, access, readdir, stat, unlink, rm } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import readline from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import initRumoca from 'rumoca-full-web'
@@ -21,13 +22,15 @@ const DEFAULT_TARGETS_FILE = join(
 )
 const DEFAULT_RANDOM_SEED = 20260507
 const DEFAULT_COMPILE_TIMEOUT_MS = 10_000
+const DEFAULT_OMC_TIMEOUT_MS = 30_000
 const DEFAULT_SOLVER_TIMEOUT_MS = 20_000
+const DEFAULT_OMC_MAX_CSV_BYTES = 256 * 1024 * 1024
 const COMPARE_ARTIFACT_DIR = join(PROJECT_ROOT, 'packages/shared/modelica/compare')
 const PUBLIC_COMPARE_DIR = join(PROJECT_ROOT, 'public/modelica-compare')
 const DEFAULT_BASELINE_FILE = join(COMPARE_ARTIFACT_DIR, 'baseline_default.json')
 const DEFAULT_RUN_JSON_FILE = join(COMPARE_ARTIFACT_DIR, 'run_latest_default.json')
 const DEFAULT_PUBLIC_DIFF_FILE = join(PUBLIC_COMPARE_DIR, 'diff_latest.json')
-const BASELINE_SCHEMA_VERSION = 1
+const BASELINE_SCHEMA_VERSION = 2
 
 function usage() {
   return `
@@ -46,6 +49,7 @@ Options:
   --library-zip <path|csv>             Additional library zip(s) to load (repeatable or comma-separated)
   --model <qualified.name>             Single model (overrides auto-discovered targets)
   --baseline-file <path>               Baseline JSON path (default: library-specific baseline file)
+  --baseline-profile <key>             Override runtime baseline profile for diff/update (e.g. native.auto)
   --candidate-file <path>              Candidate run JSON path (default: library-specific latest run file)
   --diff-file <path>                   Diff JSON output path (default: library-specific diff file)
   --diff-csv-file <path>               Diff CSV output path (default: library-specific diff CSV)
@@ -59,6 +63,8 @@ Options:
   --always-continue                    Never stop for prompts/failures in random-stop mode
   --compile-only                       Only validate Rumoca compilation (skip OMC/solver/compare)
   --compile-timeout-ms <n>             Per-model compile timeout in milliseconds (default: 10000)
+  --omc-timeout-ms <n>                 Per-model OMC reference timeout in milliseconds (default: 30000)
+  --omc-max-csv-bytes <n>              Fail OMC reference traces above this size before parsing (default: 268435456)
   --solver-timeout-ms <n>              Per-model solver timeout in milliseconds (default: 20000)
   --compile-workers <n>                Compile-only: worker process count (default: 1)
   --compile-debug                      Compile-only: include per-plan compile timing/details in logs
@@ -68,6 +74,7 @@ Options:
   --tf <n>                             Solver tf (default: 5)
   --dt <n>                             Solver dt (default: 0.01)
   --solver-options-json <json>         Solver options JSON (e.g. '{"timeIntegrator":"irk4"}')
+  --rumoca-runtime <template|native>   Rumoca simulation backend (default: template)
   --solver-file <path>                 JS solver file (default: packages/shared/modelica/simulateModel.js)
   --template-file <path>               Jinja template file (default: packages/shared/modelica/javascript.jinja)
   --omc-wrapper <path>                 OMC podman wrapper (default: packages/shared/modelica/scripts/omc-via-podman.sh)
@@ -86,6 +93,7 @@ function parseArgs(argv) {
     libraryZips: [],
     modelName: '',
     baselineFile: '',
+    baselineProfile: '',
     candidateFile: '',
     diffFile: '',
     diffCsvFile: '',
@@ -99,6 +107,8 @@ function parseArgs(argv) {
     alwaysContinue: false,
     compileOnly: false,
     compileTimeoutMs: DEFAULT_COMPILE_TIMEOUT_MS,
+    omcTimeoutMs: DEFAULT_OMC_TIMEOUT_MS,
+    omcMaxCsvBytes: DEFAULT_OMC_MAX_CSV_BYTES,
     solverTimeoutMs: DEFAULT_SOLVER_TIMEOUT_MS,
     compileWorkers: 1,
     compileDebug: false,
@@ -108,6 +118,8 @@ function parseArgs(argv) {
     tf: 5,
     dt: 0.01,
     solverOptionsJson: '',
+    rumocaRuntime: 'template',
+    probeOutputFile: '',
     solverFile: join(PROJECT_ROOT, 'packages/shared/modelica/simulateModel.js'),
     templateFile: join(PROJECT_ROOT, 'packages/shared/modelica/javascript.jinja'),
     omcWrapper: join(PROJECT_ROOT, 'packages/shared/modelica/scripts/omc-via-podman.sh'),
@@ -120,6 +132,7 @@ function parseArgs(argv) {
   const positional = []
   for (let i = 0; i < argv.length; i += 1) {
     const token = String(argv[i] ?? '')
+    if (token === '--') continue
     if (!token.startsWith('--')) {
       positional.push(token)
       continue
@@ -162,6 +175,7 @@ function parseArgs(argv) {
       options.libraryZips.push(...entries)
     } else if (key === 'model') options.modelName = value
     else if (key === 'baseline-file') options.baselineFile = resolve(value)
+    else if (key === 'baseline-profile') options.baselineProfile = sanitizeTag(value)
     else if (key === 'candidate-file') options.candidateFile = resolve(value)
     else if (key === 'diff-file') options.diffFile = resolve(value)
     else if (key === 'diff-csv-file') options.diffCsvFile = resolve(value)
@@ -175,6 +189,10 @@ function parseArgs(argv) {
         1,
         Number.parseInt(value, 10) || DEFAULT_COMPILE_TIMEOUT_MS,
       )
+    else if (key === 'omc-timeout-ms')
+      options.omcTimeoutMs = Math.max(1, Number.parseInt(value, 10) || DEFAULT_OMC_TIMEOUT_MS)
+    else if (key === 'omc-max-csv-bytes')
+      options.omcMaxCsvBytes = Math.max(1, Number.parseInt(value, 10) || DEFAULT_OMC_MAX_CSV_BYTES)
     else if (key === 'solver-timeout-ms')
       options.solverTimeoutMs = Math.max(1, Number.parseInt(value, 10) || DEFAULT_SOLVER_TIMEOUT_MS)
     else if (key === 'compile-workers')
@@ -187,6 +205,8 @@ function parseArgs(argv) {
     else if (key === 'tf') options.tf = Number.parseFloat(value)
     else if (key === 'dt') options.dt = Number.parseFloat(value)
     else if (key === 'solver-options-json') options.solverOptionsJson = value
+    else if (key === 'rumoca-runtime') options.rumocaRuntime = value
+    else if (key === 'probe-output-file') options.probeOutputFile = resolve(value)
     else if (key === 'solver-file') options.solverFile = resolve(value)
     else if (key === 'template-file') options.templateFile = resolve(value)
     else if (key === 'omc-wrapper') options.omcWrapper = resolve(value)
@@ -215,6 +235,15 @@ function selectDaeForTemplate(compiled, usePreparedDae = true) {
 
 function asString(v) {
   return typeof v === 'string' ? v : ''
+}
+
+function normalizeRumocaRuntime(value) {
+  const runtime = String(value || 'template')
+    .trim()
+    .toLowerCase()
+  if (runtime === 'template' || runtime === 'js' || runtime === 'js-template') return 'template'
+  if (runtime === 'native' || runtime === 'rumoca-native') return 'native'
+  throw new Error(`Unsupported --rumoca-runtime ${value}`)
 }
 
 function renderWithRumoca({ dae, templateSource, modelName }) {
@@ -268,6 +297,14 @@ function parseJson(raw) {
   return JSON.parse(String(raw))
 }
 
+function tryParseJsonObject(raw) {
+  try {
+    return asObj(parseJson(raw)) ?? {}
+  } catch {
+    return {}
+  }
+}
+
 function baseName(path) {
   const parts = String(path || '')
     .replaceAll('\\', '/')
@@ -280,6 +317,14 @@ async function ensureDir(path) {
   await mkdir(path, { recursive: true })
 }
 
+async function removeDirIfExists(path) {
+  try {
+    await rm(path, { recursive: true, force: true })
+  } catch {
+    // best-effort cleanup for generated temp artifacts
+  }
+}
+
 async function fileExists(path) {
   try {
     await access(path)
@@ -290,7 +335,7 @@ async function fileExists(path) {
 }
 
 async function initRumocaEngine() {
-  await initRumoca()
+  await initRumoca({ module_or_path: await loadRumocaWasmBytes() })
   const rayonEnabled =
     typeof rumoca.wasm_init === 'function' ? Boolean(await rumoca.wasm_init(0)) : false
   return {
@@ -300,6 +345,11 @@ async function initRumocaEngine() {
       typeof rumoca.get_build_time_utc === 'function' ? asString(rumoca.get_build_time_utc()) : '',
     rayonEnabled,
   }
+}
+
+async function loadRumocaWasmBytes() {
+  const packageDir = dirname(fileURLToPath(import.meta.resolve('rumoca-full-web')))
+  return await readFile(join(packageDir, 'rumoca_bind_wasm_bg.wasm'))
 }
 
 async function readLibraryZip(mslZipPath) {
@@ -677,6 +727,26 @@ function normalizeSolverTrace(runResult) {
     }
     return { times, series }
   }
+  const payload = asObj(direct?.payload) ?? direct
+  if (payload && Array.isArray(payload.names) && Array.isArray(payload.allData)) {
+    const names = payload.names
+    const allData = payload.allData
+    const times = Array.isArray(allData[0])
+      ? allData[0].map((v) => Number(v)).filter((v) => Number.isFinite(v))
+      : []
+    const n = times.length
+    const series = {}
+    const cols = Math.min(names.length, allData.length - 1)
+    for (let i = 0; i < cols; i += 1) {
+      const name = typeof names[i] === 'string' ? names[i] : ''
+      const column = Array.isArray(allData[i + 1]) ? allData[i + 1] : []
+      if (!name || column.length === 0) continue
+      series[name] = column
+        .slice(0, n)
+        .map((v) => (Number.isFinite(Number(v)) ? Number(v) : Number.NaN))
+    }
+    return { times, series }
+  }
   const data = asObj(runResult?.data) ?? {}
   const timesRaw = Array.isArray(data.t) ? data.t : []
   const times = timesRaw.map((v) => Number(v)).filter((v) => Number.isFinite(v))
@@ -871,7 +941,7 @@ function traceDiagnosticHint(omcTrace, solverTrace, comparison) {
   return ''
 }
 
-async function runOmcScript(omcWrapper, mosPath, cwd) {
+async function runOmcScript({ omcWrapper, mosPath, cwd, timeoutMs, modelName }) {
   return await new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(omcWrapper, [mosPath], {
       cwd,
@@ -885,6 +955,20 @@ async function runOmcScript(omcWrapper, mosPath, cwd) {
     })
     let stdout = ''
     let stderr = ''
+    let settled = false
+    const timer = setTimeout(
+      () => {
+        if (settled) return
+        settled = true
+        try {
+          child.kill('SIGKILL')
+        } catch {
+          // ignore kill races on already-exited children
+        }
+        rejectPromise(new Error(`OMC timeout after ${timeoutMs}ms for ${modelName}`))
+      },
+      Math.max(1, Number(timeoutMs) || DEFAULT_OMC_TIMEOUT_MS),
+    )
     child.stdout.on('data', (chunk) => {
       stdout += String(chunk)
     })
@@ -893,6 +977,9 @@ async function runOmcScript(omcWrapper, mosPath, cwd) {
     })
     child.on('error', rejectPromise)
     child.on('close', (code) => {
+      clearTimeout(timer)
+      if (settled) return
+      settled = true
       if (code === 0) resolvePromise({ stdout, stderr })
       else rejectPromise(new Error(`OMC wrapper failed with code ${code}: ${stderr || stdout}`))
     })
@@ -938,7 +1025,14 @@ function mslLoadLines(mslDir) {
   ].map((p) => `loadFile("${p.replaceAll('\\', '/')}");`)
 }
 
-async function loadOrCreateOmcTrace({ modelName, sim, omcWrapper, omcMslDir }) {
+async function loadOrCreateOmcTrace({
+  modelName,
+  sim,
+  omcWrapper,
+  omcMslDir,
+  omcTimeoutMs,
+  omcMaxCsvBytes,
+}) {
   await ensureDir(OMC_CACHE_DIR)
   const key = `${safeName(modelName)}__t0_${sim.t0}__tf_${sim.tf}__dt_${sim.dt}.json`
   const cachePath = join(OMC_CACHE_DIR, key)
@@ -963,6 +1057,7 @@ async function loadOrCreateOmcTrace({ modelName, sim, omcWrapper, omcMslDir }) {
     }
   }
   const runDir = join(OMC_CACHE_DIR, `${safeName(modelName)}__run`)
+  await removeDirIfExists(runDir)
   await ensureDir(runDir)
   const fileNamePrefix = safeName(modelName)
   const csvName = `${fileNamePrefix}_res.csv`
@@ -980,28 +1075,50 @@ async function loadOrCreateOmcTrace({ modelName, sim, omcWrapper, omcMslDir }) {
     `simulate(${modelName}, startTime=${sim.t0}, stopTime=${sim.tf}, outputFormat="csv", fileNamePrefix="${fileNamePrefix}");`,
     'getErrorString();',
   ].join('\n')
-  await writeFile(mosPath, script, 'utf8')
-  const omcRun = await runOmcScript(omcWrapper, mosPath, runDir)
-  const csvPath = join(runDir, csvName)
-  if (!(await fileExists(csvPath))) {
-    const runDirEntries = await readDirSafe(runDir)
-    throw new Error(
-      [
-        `OMC did not produce expected CSV: ${csvPath}`,
-        `model=${modelName}`,
-        `mos=${mosPath}`,
-        `run_dir=${runDir}`,
-        `run_dir_entries=${runDirEntries.join(', ') || '(empty)'}`,
-        `omc_stdout=${(omcRun.stdout || '').trim() || '(empty)'}`,
-        `omc_stderr=${(omcRun.stderr || '').trim() || '(empty)'}`,
-      ].join('\n'),
-    )
+  try {
+    await writeFile(mosPath, script, 'utf8')
+    const omcRun = await runOmcScript({
+      omcWrapper,
+      mosPath,
+      cwd: runDir,
+      timeoutMs: omcTimeoutMs,
+      modelName,
+    })
+    const csvPath = join(runDir, csvName)
+    if (!(await fileExists(csvPath))) {
+      const runDirEntries = await readDirSafe(runDir)
+      throw new Error(
+        [
+          `OMC did not produce expected CSV: ${csvPath}`,
+          `model=${modelName}`,
+          `mos=${mosPath}`,
+          `run_dir=${runDir}`,
+          `run_dir_entries=${runDirEntries.join(', ') || '(empty)'}`,
+          `omc_stdout=${(omcRun.stdout || '').trim() || '(empty)'}`,
+          `omc_stderr=${(omcRun.stderr || '').trim() || '(empty)'}`,
+        ].join('\n'),
+      )
+    }
+    const csvStats = await stat(csvPath)
+    if (Number(csvStats.size) > Number(omcMaxCsvBytes)) {
+      throw new Error(
+        `OMC CSV exceeds limit for ${modelName}: ${csvStats.size} bytes > ${omcMaxCsvBytes} bytes (${csvPath})`,
+      )
+    }
+    const csvContent = await readFile(csvPath, 'utf8')
+    const trace = normalizeOmcTrace(parseOmcCsv(csvContent))
+    validateTraceShape(trace, {
+      modelName,
+      t0: sim.t0,
+      tf: sim.tf,
+      dt: sim.dt,
+      sourcePath: csvPath,
+    })
+    await writeFile(cachePath, JSON.stringify(trace), 'utf8')
+    return { trace, cachePath, fromCache: false }
+  } finally {
+    await removeDirIfExists(runDir)
   }
-  const csvContent = await readFile(csvPath, 'utf8')
-  const trace = normalizeOmcTrace(parseOmcCsv(csvContent))
-  validateTraceShape(trace, { modelName, t0: sim.t0, tf: sim.tf, dt: sim.dt, sourcePath: csvPath })
-  await writeFile(cachePath, JSON.stringify(trace), 'utf8')
-  return { trace, cachePath, fromCache: false }
 }
 
 async function readDirSafe(path) {
@@ -1309,17 +1426,9 @@ async function runSingleModelSolveProbe(options) {
   if (!String(options.modelName || '').trim()) {
     throw new Error('probe-solve requires --model <qualified.name>')
   }
+  options.rumocaRuntime = normalizeRumocaRuntime(options.rumocaRuntime)
   await initRumocaEngine()
   await loadLibrariesFromZips([options.mslZip, ...options.libraryZips])
-  const classInfo = parseJson(rumoca.get_class_info(options.modelName))
-  const sourceModelica = asString(classInfo?.source_modelica)
-  if (!sourceModelica.trim()) {
-    return {
-      status: 'run_fail',
-      modelName: options.modelName,
-      error: 'missing source_modelica',
-    }
-  }
   let solverOptions = {}
   if (String(options.solverOptionsJson || '').trim()) {
     try {
@@ -1331,6 +1440,40 @@ async function runSingleModelSolveProbe(options) {
         modelName: options.modelName,
         error: `invalid solver options json: ${error instanceof Error ? error.message : String(error)}`,
       }
+    }
+  }
+  if (options.rumocaRuntime === 'native') {
+    try {
+      const solverRun = runNativeRumocaSimulation({
+        modelName: options.modelName,
+        t0: options.t0,
+        tf: options.tf,
+        dt: options.dt,
+        solverOptions,
+      })
+      return {
+        status: 'ok',
+        modelName: options.modelName,
+        compileElapsedMs: 0,
+        nativeElapsedMs: Number(solverRun.elapsedMs) || 0,
+        solverTrace: normalizeSolverTrace(solverRun.result),
+      }
+    } catch (error) {
+      return {
+        status: 'run_fail',
+        modelName: options.modelName,
+        error: error instanceof Error ? error.message : String(error),
+        compileElapsedMs: 0,
+      }
+    }
+  }
+  const classInfo = parseJson(rumoca.get_class_info(options.modelName))
+  const sourceModelica = asString(classInfo?.source_modelica)
+  if (!sourceModelica.trim()) {
+    return {
+      status: 'run_fail',
+      modelName: options.modelName,
+      error: 'missing source_modelica',
     }
   }
   const templateSource = await readFile(resolve(options.templateFile), 'utf8')
@@ -1366,6 +1509,37 @@ async function runSingleModelSolveProbe(options) {
   }
 }
 
+function nativeSolverName(solverOptions) {
+  const solver = asString(solverOptions?.solver || solverOptions?.solverName).trim()
+  return solver || 'auto'
+}
+
+function isSolverTimeoutError(error) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /solver timeout after \d+ms/i.test(message)
+}
+
+function runNativeRumocaSimulation({ modelName, t0, tf, dt, solverOptions }) {
+  if (typeof rumoca.simulate_model !== 'function') {
+    throw new Error('WASM module is missing simulate_model')
+  }
+  if (Math.abs(Number(t0) || 0) > 1e-12) {
+    throw new Error('native Rumoca wasm simulation currently supports only t0=0')
+  }
+  const startedAt = Date.now()
+  const raw = rumoca.simulate_model(
+    '',
+    modelName,
+    Number.isFinite(tf) ? tf : 5,
+    Number.isFinite(dt) ? dt : 0.01,
+    nativeSolverName(solverOptions),
+  )
+  return {
+    elapsedMs: Date.now() - startedAt,
+    result: parseJson(raw),
+  }
+}
+
 async function runSolverProbeInSubprocess({
   modelName,
   mslZip,
@@ -1377,7 +1551,13 @@ async function runSolverProbeInSubprocess({
   tf,
   dt,
   solverOptionsJson,
+  rumocaRuntime,
 }) {
+  await mkdir(RUN_CACHE_DIR, { recursive: true })
+  const probeOutputFile = join(
+    RUN_CACHE_DIR,
+    `solve_probe_${safeName(modelName)}_${process.pid}_${Date.now()}.json`,
+  )
   const args = [
     SCRIPT_PATH,
     'probe-solve',
@@ -1395,10 +1575,15 @@ async function runSolverProbeInSubprocess({
     String(tf),
     '--dt',
     String(dt),
+    '--probe-output-file',
+    probeOutputFile,
   ]
   for (const zipPath of libraryZips) args.push('--library-zip', resolve(zipPath))
   if (String(solverOptionsJson || '').trim()) {
     args.push('--solver-options-json', String(solverOptionsJson))
+  }
+  if (String(rumocaRuntime || '').trim()) {
+    args.push('--rumoca-runtime', String(rumocaRuntime))
   }
   return await new Promise((resolveProbe, rejectProbe) => {
     const child = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
@@ -1410,6 +1595,7 @@ async function runSolverProbeInSubprocess({
         if (settled) return
         settled = true
         child.kill('SIGKILL')
+        void unlink(probeOutputFile).catch(() => {})
         rejectProbe(new Error(`solver timeout after ${solverTimeoutMs}ms for ${modelName}`))
       },
       Math.max(1, Number(solverTimeoutMs) || DEFAULT_SOLVER_TIMEOUT_MS),
@@ -1424,13 +1610,15 @@ async function runSolverProbeInSubprocess({
       if (settled) return
       settled = true
       clearTimeout(timer)
+      void unlink(probeOutputFile).catch(() => {})
       rejectProbe(error)
     })
-    child.on('close', (code) => {
+    child.on('close', async (code) => {
       if (settled) return
       settled = true
       clearTimeout(timer)
       if (code !== 0) {
+        void unlink(probeOutputFile).catch(() => {})
         rejectProbe(
           new Error(
             `solver probe process failed for ${modelName}: exit=${code}, stderr=${stderr.trim() || '(empty)'}, stdout=${stdout.trim() || '(empty)'}`,
@@ -1439,25 +1627,14 @@ async function runSolverProbeInSubprocess({
         return
       }
       try {
-        const stdoutLines = String(stdout || '')
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean)
-        const stderrLines = String(stderr || '')
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean)
-        const jsonLine =
-          stdoutLines.length > 0
-            ? stdoutLines[stdoutLines.length - 1]
-            : stderrLines.length > 0
-              ? stderrLines[stderrLines.length - 1]
-              : ''
-        resolveProbe(parseJson(jsonLine))
-      } catch {
+        const probe = await readJsonFile(probeOutputFile)
+        void unlink(probeOutputFile).catch(() => {})
+        resolveProbe(probe)
+      } catch (error) {
+        void unlink(probeOutputFile).catch(() => {})
         rejectProbe(
           new Error(
-            `solver probe returned non-JSON output for ${modelName}: stdout=${(stdout || '').trim().slice(0, 500) || '(empty)'} stderr=${(stderr || '').trim().slice(0, 500) || '(empty)'}`,
+            `solver probe returned no JSON output file for ${modelName}: ${(error instanceof Error ? error.message : String(error)) || 'unknown error'}; stdout=${(stdout || '').trim().slice(0, 500) || '(empty)'} stderr=${(stderr || '').trim().slice(0, 500) || '(empty)'}`,
           ),
         )
       }
@@ -1475,6 +1652,7 @@ async function runSolverProbeInProcess({
   tf,
   dt,
   solverOptionsJson,
+  rumocaRuntime,
 }) {
   return await runSingleModelSolveProbe({
     command: 'probe-solve',
@@ -1487,6 +1665,7 @@ async function runSolverProbeInProcess({
     tf,
     dt,
     solverOptionsJson: String(solverOptionsJson || ''),
+    rumocaRuntime: normalizeRumocaRuntime(rumocaRuntime),
   })
 }
 
@@ -1825,6 +2004,7 @@ function formatCompareReport(summary) {
     'NOTE: AI/debug agents should follow the testing strategy in packages/shared/modelica/README.md',
     `Generated: ${new Date().toISOString()}`,
     `Mode: ${String(summary.mode || '')}`,
+    `Rumoca runtime: ${String(summary.rumocaRuntime || 'template')}`,
     `Seed: ${String(summary.seed ?? '')}`,
     '',
     'Summary',
@@ -1968,7 +2148,51 @@ function deriveLibraryTagFromLibraries(libraries) {
 }
 
 function deriveLibraryTagFromRun(run) {
-  return deriveLibraryTagFromLibraries(run?.libraries)
+  return sanitizeTag(asString(run?.libraryTag) || deriveLibraryTagFromLibraries(run?.libraries))
+}
+
+function solverOptionsFromRun(run) {
+  return tryParseJsonObject(run?.options?.solverOptionsJson)
+}
+
+function runtimeFamilyFromValue(value) {
+  return normalizeRumocaRuntime(value) === 'native' ? 'native' : 'js'
+}
+
+function runtimeVariantForFamily(runtimeFamily, solverOptions) {
+  if (runtimeFamily === 'native') {
+    return sanitizeTag(
+      asString(solverOptions?.solver || solverOptions?.solverName).trim() || 'auto',
+    )
+  }
+  return sanitizeTag(
+    asString(
+      solverOptions?.timeIntegrator || solverOptions?.solver || solverOptions?.solverName,
+    ).trim() || 'default',
+  )
+}
+
+function runtimeProfileKeyForRun(run, overrideProfile = '') {
+  const explicit = sanitizeTag(overrideProfile)
+  if (explicit) return explicit
+  const runtimeFamily = runtimeFamilyFromValue(run?.rumocaRuntime || run?.options?.rumocaRuntime)
+  const solverOptions = solverOptionsFromRun(run)
+  const variant = runtimeVariantForFamily(runtimeFamily, solverOptions)
+  return `${runtimeFamily}.${variant}`
+}
+
+function profileFileTag(profileKey) {
+  return sanitizeTag(profileKey).replaceAll('.', '_')
+}
+
+function defaultDiffPathsForLibraryAndProfile(libraryTag, profileKey) {
+  const tag = sanitizeTag(libraryTag || 'default')
+  const profileTag = profileFileTag(profileKey || 'unknown')
+  return {
+    diffFile: join(COMPARE_ARTIFACT_DIR, `diff_${tag}__${profileTag}.json`),
+    diffCsvFile: join(COMPARE_ARTIFACT_DIR, `diff_${tag}__${profileTag}.csv`),
+    publicDiffFile: join(PUBLIC_COMPARE_DIR, `diff_${tag}__${profileTag}.json`),
+  }
 }
 
 function compileBehaviorOptionsForLibraryTag(libraryTag) {
@@ -1997,6 +2221,11 @@ function defaultPathsForLibraryTag(libraryTag) {
     diffCsvFile: join(COMPARE_ARTIFACT_DIR, `diff_${tag}.csv`),
     publicDiffFile: join(PUBLIC_COMPARE_DIR, `diff_${tag}.json`),
   }
+}
+
+function artifactTagForRumocaRuntime(libraryTag, runtime) {
+  const tag = sanitizeTag(libraryTag || 'default')
+  return normalizeRumocaRuntime(runtime) === 'native' ? `${tag}_native` : tag
 }
 
 function inferLibraryTagFromCompareFilePath(path) {
@@ -2062,28 +2291,167 @@ function buildSection(records, projector) {
   }
 }
 
+function asNumber(v) {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+function hydrateSection(raw) {
+  const obj = asObj(raw) ?? {}
+  const records = Array.isArray(obj.records)
+    ? obj.records.filter((x) => asString(x?.modelName))
+    : []
+  return {
+    updatedAt: asString(obj.updatedAt) || new Date().toISOString(),
+    records,
+    recordsByModel: Object.fromEntries(records.map((x) => [x.modelName, x])),
+  }
+}
+
+function persistableSection(raw) {
+  const section = hydrateSection(raw)
+  return {
+    updatedAt: section.updatedAt,
+    records: section.records,
+  }
+}
+
+function stripModelName(record) {
+  const obj = asObj(record) ?? {}
+  const { modelName, ...rest } = obj
+  void modelName
+  return rest
+}
+
+function normalizeRuntimeModelRecord(raw) {
+  const obj = asObj(raw) ?? {}
+  const modelName = asString(obj.modelName)
+  if (!modelName) return null
+  const rawProfiles = asObj(obj.profiles) ?? asObj(obj.baselines) ?? {}
+  const profiles = {}
+  for (const [profileKey, value] of Object.entries(rawProfiles)) {
+    const normalizedKey = sanitizeTag(profileKey)
+    const profileRecord = asObj(value)
+    if (!normalizedKey || !profileRecord) continue
+    profiles[normalizedKey] = stripModelName(profileRecord)
+  }
+  return { modelName, profiles }
+}
+
+function runtimeProfileSectionFromEnvelope(envelope, profileKey) {
+  const normalizedKey = sanitizeTag(profileKey)
+  const records = []
+  for (const entry of Array.isArray(envelope?.runtimeRecords) ? envelope.runtimeRecords : []) {
+    const modelEntry = normalizeRuntimeModelRecord(entry)
+    if (!modelEntry) continue
+    const profileRecord = asObj(modelEntry.profiles?.[normalizedKey])
+    if (!profileRecord) continue
+    records.push({
+      modelName: modelEntry.modelName,
+      ...profileRecord,
+    })
+  }
+  const section = hydrateSection({
+    updatedAt: envelope?.runtimeProfiles?.[normalizedKey]?.updatedAt,
+    records,
+  })
+  return {
+    ...section,
+    profileMeta: asObj(envelope?.runtimeProfiles?.[normalizedKey]) ?? null,
+  }
+}
+
+function mergeRuntimeProfileRecords(existingRuntimeRecords, profileKey, profileRecords) {
+  const normalizedKey = sanitizeTag(profileKey)
+  const map = new Map()
+  for (const rawEntry of Array.isArray(existingRuntimeRecords) ? existingRuntimeRecords : []) {
+    const entry = normalizeRuntimeModelRecord(rawEntry)
+    if (!entry) continue
+    map.set(entry.modelName, entry)
+  }
+  for (const rawRecord of Array.isArray(profileRecords) ? profileRecords : []) {
+    const record = asObj(rawRecord) ?? {}
+    const modelName = asString(record.modelName)
+    if (!modelName) continue
+    const current = map.get(modelName) ?? { modelName, profiles: {} }
+    current.profiles = {
+      ...current.profiles,
+      [normalizedKey]: stripModelName(record),
+    }
+    map.set(modelName, current)
+  }
+  return [...map.values()].sort((a, b) => a.modelName.localeCompare(b.modelName))
+}
+
+function buildRuntimeProfileMeta({ profileKey, run }) {
+  const solverOptions = solverOptionsFromRun(run)
+  const runtime = run?.rumocaRuntime || run?.options?.rumocaRuntime || 'template'
+  return {
+    profileKey,
+    updatedAt: new Date().toISOString(),
+    rumocaRuntime: normalizeRumocaRuntime(runtime),
+    solverKey: runtimeVariantForFamily(runtimeFamilyFromValue(runtime), solverOptions),
+    solverOptions,
+    artifactTag: asString(run?.artifactTag),
+    generatedAt: asString(run?.generatedAt || run?.updatedAt),
+  }
+}
+
+function legacyBaselineEnvelope(raw, libraryTag) {
+  const obj = asObj(raw) ?? {}
+  const legacyCompileRecords = Array.isArray(obj.records)
+    ? obj.records
+    : Array.isArray(obj?.compile?.records)
+      ? obj.compile.records
+      : []
+  const legacyRuntimeRecords = Array.isArray(obj.records)
+    ? obj.records
+    : Array.isArray(obj?.runtime?.records)
+      ? obj.runtime.records
+      : []
+  const compile = buildSection(legacyCompileRecords, deriveCompileRecord)
+  const runtimeSection = buildSection(legacyRuntimeRecords, deriveRuntimeRecord)
+  const profileKey = 'js.default'
+  return {
+    schemaVersion: BASELINE_SCHEMA_VERSION,
+    libraryTag,
+    compile,
+    runtimeProfiles:
+      runtimeSection.records.length > 0
+        ? {
+            [profileKey]: {
+              profileKey,
+              updatedAt: runtimeSection.updatedAt,
+              rumocaRuntime: 'template',
+              solverKey: 'default',
+              solverOptions: {},
+              artifactTag: sanitizeTag(libraryTag),
+              generatedAt: runtimeSection.updatedAt,
+            },
+          }
+        : {},
+    runtimeRecords: mergeRuntimeProfileRecords([], profileKey, runtimeSection.records),
+  }
+}
+
 function ensureBaselineEnvelope(raw, libraryTag) {
   const obj = asObj(raw) ?? {}
-  const legacyRecords = Array.isArray(obj.records) ? obj.records : null
-  if (legacyRecords) {
-    return {
-      schemaVersion: BASELINE_SCHEMA_VERSION,
-      libraryTag,
-      compile: buildSection(legacyRecords, deriveCompileRecord),
-      runtime: buildSection(legacyRecords, deriveRuntimeRecord),
-    }
+  if (
+    Array.isArray(obj.records) ||
+    Array.isArray(obj?.runtime?.records) ||
+    (asObj(obj.runtime) && !Array.isArray(obj.runtimeRecords))
+  ) {
+    return legacyBaselineEnvelope(raw, libraryTag)
   }
   return {
     schemaVersion: BASELINE_SCHEMA_VERSION,
     libraryTag,
-    compile: asObj(obj.compile) ?? null,
-    runtime: asObj(obj.runtime) ?? null,
+    compile: obj.compile ? hydrateSection(obj.compile) : null,
+    runtimeProfiles: asObj(obj.runtimeProfiles) ?? {},
+    runtimeRecords: Array.isArray(obj.runtimeRecords)
+      ? obj.runtimeRecords.map((x) => normalizeRuntimeModelRecord(x)).filter(Boolean)
+      : [],
   }
-}
-
-function asNumber(v) {
-  const n = Number(v)
-  return Number.isFinite(n) ? n : 0
 }
 
 function diffModelRecords(baseRecord, candidateRecord) {
@@ -2107,6 +2475,55 @@ function diffModelRecords(baseRecord, candidateRecord) {
   }
 }
 
+function compareBaseline({ baseline, candidate, compareCompile = true, runtimeProfileKey = '' }) {
+  const baselineCompile = compareCompile ? byModelName(baseline?.compile?.records) : new Map()
+  const candidateCompile = compareCompile ? byModelName(candidate?.compile?.records) : new Map()
+  const allCompileNames = [
+    ...new Set([...baselineCompile.keys(), ...candidateCompile.keys()]),
+  ].sort()
+  const compileTransitions = allCompileNames.map((name) =>
+    diffModelRecords(baselineCompile.get(name), candidateCompile.get(name)),
+  )
+  const runtimeProfile = sanitizeTag(runtimeProfileKey)
+  const baselineRuntime = byModelName(
+    candidate?.baselineRuntimeRecords || baseline?.runtime?.records,
+  )
+  const candidateRuntime = byModelName(candidate?.runtime?.records)
+  const allRuntimeNames = [
+    ...new Set([...baselineRuntime.keys(), ...candidateRuntime.keys()]),
+  ].sort()
+  const runtimeTransitions = allRuntimeNames.map((name) =>
+    diffModelRecords(baselineRuntime.get(name), candidateRuntime.get(name)),
+  )
+  return {
+    generatedAt: new Date().toISOString(),
+    libraryTag: asString(candidate?.libraryTag || baseline?.libraryTag),
+    runtimeProfileKey: runtimeProfile,
+    totals: {
+      modelsCompared: allCompileNames.length,
+      addedModels: allCompileNames.filter((name) => !baselineCompile.has(name)).length,
+      removedModels: allCompileNames.filter((name) => !candidateCompile.has(name)).length,
+    },
+    transitions: compileTransitions,
+    runtimeTotals: {
+      modelsCompared: allRuntimeNames.length,
+      addedModels: allRuntimeNames.filter((name) => !baselineRuntime.has(name)).length,
+      removedModels: allRuntimeNames.filter((name) => !candidateRuntime.has(name)).length,
+      statusRegressions: runtimeTransitions.filter(
+        (x) => x.statusBefore === 'compared' && x.statusAfter !== 'compared',
+      ).length,
+      statusImprovements: runtimeTransitions.filter(
+        (x) => x.statusBefore !== 'compared' && x.statusAfter === 'compared',
+      ).length,
+      qualityRegressions: runtimeTransitions.filter((x) => x.deltaMaxDeviationPercent > 0).length,
+      qualityImprovements: runtimeTransitions.filter((x) => x.deltaMaxDeviationPercent < 0).length,
+    },
+    runtimeTransitions,
+    baselineProfileMeta: baseline?.runtimeProfileMeta ?? null,
+    candidateProfileMeta: candidate?.runtimeProfileMeta ?? null,
+  }
+}
+
 function toCsvCell(v) {
   const s = String(v ?? '')
   return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s
@@ -2120,58 +2537,17 @@ function toCsv(rows, header) {
   return `${lines.join('\n')}\n`
 }
 
-function compareBaseline({ baseline, candidate }) {
-  const baselineCompile = byModelName(baseline?.compile?.records)
-  const candidateCompile = byModelName(candidate?.compile?.records)
-  const allNames = [...new Set([...baselineCompile.keys(), ...candidateCompile.keys()])].sort()
-  const transitions = allNames.map((name) =>
-    diffModelRecords(baselineCompile.get(name), candidateCompile.get(name)),
-  )
-  const addedModels = allNames.filter((name) => !baselineCompile.has(name))
-  const removedModels = allNames.filter((name) => !candidateCompile.has(name))
-  const statusRegressions = transitions.filter(
-    (x) => x.statusBefore === 'compared' && x.statusAfter !== 'compared',
-  ).length
-  const statusImprovements = transitions.filter(
-    (x) => x.statusBefore !== 'compared' && x.statusAfter === 'compared',
-  ).length
-  const qualityRegressions = transitions.filter((x) => x.deltaMaxDeviationPercent > 0).length
-  const qualityImprovements = transitions.filter((x) => x.deltaMaxDeviationPercent < 0).length
-
-  const baselineRuntime = byModelName(baseline?.runtime?.records)
-  const candidateRuntime = byModelName(candidate?.runtime?.records)
-  const allRuntimeNames = [
-    ...new Set([...baselineRuntime.keys(), ...candidateRuntime.keys()]),
-  ].sort()
-  const runtimeTransitions = allRuntimeNames.map((name) =>
-    diffModelRecords(baselineRuntime.get(name), candidateRuntime.get(name)),
-  )
-
-  return {
-    generatedAt: new Date().toISOString(),
-    libraryTag: asString(candidate?.libraryTag || baseline?.libraryTag),
-    totals: {
-      modelsCompared: allNames.length,
-      addedModels: addedModels.length,
-      removedModels: removedModels.length,
-      statusRegressions,
-      statusImprovements,
-      qualityRegressions,
-      qualityImprovements,
-    },
-    addedModels,
-    removedModels,
-    transitions,
-    runtimeTotals: {
-      modelsCompared: allRuntimeNames.length,
-    },
-    runtimeTransitions,
-  }
-}
-
 function buildDiffAnalysis(
   diff,
-  { candidateRun, baselineRun, baselineCompileRecords, baselineEnvelope, candidateEnvelope } = {},
+  {
+    candidateRun,
+    baselineRun,
+    baselineCompileRecords,
+    baselineRuntimeRecords,
+    baselineEnvelope,
+    candidateEnvelope,
+    compareCompile = true,
+  } = {},
 ) {
   const compileTransitions = Array.isArray(diff?.transitions) ? diff.transitions : []
   const runtimeTransitions = Array.isArray(diff?.runtimeTransitions) ? diff.runtimeTransitions : []
@@ -2232,27 +2608,44 @@ function buildDiffAnalysis(
     .map((t) => asNumber(t.deltaElapsedMs))
     .sort((a, b) => a - b)
   const modelCount = allModelNames.length
-  const compileCompared = asNumber(diff?.totals?.modelsCompared)
+  const compileCompared = compareCompile ? asNumber(diff?.totals?.modelsCompared) : 0
   const runtimeCompared = asNumber(diff?.runtimeTotals?.modelsCompared)
   const pct = (num, den) => (den > 0 ? (num / den) * 100 : 0)
+  const baselinePerformanceRecords = buildBaselinePerformanceRecords({
+    compileRecords: baselineCompileRecords,
+    runtimeRecords: baselineRuntimeRecords,
+  })
 
   return {
     summary: {
       generatedAt: new Date().toISOString(),
       libraryTag: asString(diff?.libraryTag),
+      runtimeProfileKey: asString(diff?.runtimeProfileKey),
       modelCount,
       compileModelsCompared: compileCompared,
       runtimeModelsCompared: runtimeCompared,
       compileCoveragePercent: pct(compileCompared, modelCount),
       runtimeCoveragePercent: pct(runtimeCompared, modelCount),
-      statusRegressions: asNumber(diff?.totals?.statusRegressions),
-      statusImprovements: asNumber(diff?.totals?.statusImprovements),
-      qualityRegressions: asNumber(diff?.totals?.qualityRegressions),
-      qualityImprovements: asNumber(diff?.totals?.qualityImprovements),
-      statusRegressionPercent: pct(asNumber(diff?.totals?.statusRegressions), compileCompared),
-      statusImprovementPercent: pct(asNumber(diff?.totals?.statusImprovements), compileCompared),
-      qualityRegressionPercent: pct(asNumber(diff?.totals?.qualityRegressions), compileCompared),
-      qualityImprovementPercent: pct(asNumber(diff?.totals?.qualityImprovements), compileCompared),
+      statusRegressions: asNumber(diff?.runtimeTotals?.statusRegressions),
+      statusImprovements: asNumber(diff?.runtimeTotals?.statusImprovements),
+      qualityRegressions: asNumber(diff?.runtimeTotals?.qualityRegressions),
+      qualityImprovements: asNumber(diff?.runtimeTotals?.qualityImprovements),
+      statusRegressionPercent: pct(
+        asNumber(diff?.runtimeTotals?.statusRegressions),
+        runtimeCompared,
+      ),
+      statusImprovementPercent: pct(
+        asNumber(diff?.runtimeTotals?.statusImprovements),
+        runtimeCompared,
+      ),
+      qualityRegressionPercent: pct(
+        asNumber(diff?.runtimeTotals?.qualityRegressions),
+        runtimeCompared,
+      ),
+      qualityImprovementPercent: pct(
+        asNumber(diff?.runtimeTotals?.qualityImprovements),
+        runtimeCompared,
+      ),
       compileSuccessTransitions: {
         regressedCount: compileSuccessRegressedModels.length,
         improvedCount: compileSuccessImprovedModels.length,
@@ -2307,11 +2700,19 @@ function buildDiffAnalysis(
       },
       candidatePerformance: computeRunPerformanceMetrics(candidateRun?.records),
       baselinePerformance: computeRunPerformanceMetrics(
-        Array.isArray(baselineCompileRecords) ? baselineCompileRecords : baselineRun?.records,
+        baselinePerformanceRecords.length > 0
+          ? baselinePerformanceRecords
+          : Array.isArray(baselineCompileRecords)
+            ? baselineCompileRecords
+            : baselineRun?.records,
       ),
+      baselineProfileMeta: asObj(diff?.baselineProfileMeta) ?? null,
+      candidateProfileMeta: asObj(diff?.candidateProfileMeta) ?? null,
       categoryBreakdown: buildCategoryBreakdown({
         baseline: baselineEnvelope,
         candidate: candidateEnvelope,
+        runtimeProfileKey: asString(diff?.runtimeProfileKey),
+        compareCompile,
       }),
     },
     detailed: {
@@ -2320,8 +2721,8 @@ function buildDiffAnalysis(
       compileTimeRegressedModels,
       compileTimeImprovedModels,
       compileTimeRegressedDetails,
-      addedModels: Array.isArray(diff?.addedModels) ? diff.addedModels : [],
-      removedModels: Array.isArray(diff?.removedModels) ? diff.removedModels : [],
+      addedModels: Array.isArray(diff?.runtimeAddedModels) ? diff.runtimeAddedModels : [],
+      removedModels: Array.isArray(diff?.runtimeRemovedModels) ? diff.runtimeRemovedModels : [],
       compileTransitionCount: compileTransitions.length,
       runtimeTransitionCount: runtimeTransitions.length,
     },
@@ -2402,10 +2803,40 @@ function isExampleModelName(modelName) {
   return asString(modelName).includes('.Examples.')
 }
 
-function buildCategoryBreakdown({ baseline, candidate }) {
-  const baselineCompile = byModelName(baseline?.compile?.records)
-  const candidateCompile = byModelName(candidate?.compile?.records)
-  const baselineRuntime = byModelName(baseline?.runtime?.records)
+function buildBaselinePerformanceRecords({ compileRecords, runtimeRecords }) {
+  const map = new Map()
+  for (const raw of Array.isArray(compileRecords) ? compileRecords : []) {
+    const record = asObj(raw) ?? {}
+    const modelName = asString(record.modelName)
+    if (!modelName) continue
+    map.set(modelName, { ...record })
+  }
+  for (const raw of Array.isArray(runtimeRecords) ? runtimeRecords : []) {
+    const record = asObj(raw) ?? {}
+    const modelName = asString(record.modelName)
+    if (!modelName) continue
+    map.set(modelName, {
+      ...(map.get(modelName) ?? { modelName, status: 'compiled' }),
+      ...record,
+      modelName,
+    })
+  }
+  return [...map.values()]
+}
+
+function buildCategoryBreakdown({
+  baseline,
+  candidate,
+  runtimeProfileKey = '',
+  compareCompile = true,
+}) {
+  const baselineCompile = compareCompile ? byModelName(baseline?.compile?.records) : new Map()
+  const candidateCompile = compareCompile ? byModelName(candidate?.compile?.records) : new Map()
+  const baselineRuntime = byModelName(
+    Array.isArray(candidate?.baselineRuntimeRecords)
+      ? candidate.baselineRuntimeRecords
+      : runtimeProfileSectionFromEnvelope(baseline, runtimeProfileKey).records,
+  )
   const candidateRuntime = byModelName(candidate?.runtime?.records)
   const allCompileNames = [
     ...new Set([...baselineCompile.keys(), ...candidateCompile.keys()]),
@@ -2551,15 +2982,40 @@ function buildPublicDiffPayload({
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     libraryTag: asString(diff?.libraryTag),
+    runtimeProfileKey: asString(diff?.runtimeProfileKey),
     references: {
       baselineFile,
       candidateFile,
       diffFile,
       diffCsvFile,
     },
+    baselineProfileMeta: asObj(diff?.baselineProfileMeta) ?? null,
+    candidateProfileMeta: asObj(diff?.candidateProfileMeta) ?? null,
     summary: analysis.summary,
     detailed: analysis.detailed,
   }
+}
+
+function buildCandidateEnvelope({ candidateRun, libraryTag, runtimeProfileKey, includeCompile }) {
+  return {
+    libraryTag,
+    compile: includeCompile ? buildSection(candidateRun?.records, deriveCompileRecord) : null,
+    runtime: buildSection(candidateRun?.records, deriveRuntimeRecord),
+    runtimeProfileMeta: buildRuntimeProfileMeta({
+      profileKey: runtimeProfileKey,
+      run: candidateRun,
+    }),
+  }
+}
+
+async function listLatestRunFilesForDiff() {
+  await ensureDir(COMPARE_ARTIFACT_DIR)
+  const entries = await readdir(COMPARE_ARTIFACT_DIR, { withFileTypes: true })
+  return entries
+    .filter((entry) => entry.isFile() && /^run_latest_.*\.json$/i.test(entry.name))
+    .map((entry) => join(COMPARE_ARTIFACT_DIR, entry.name))
+    .filter((file) => baseName(file) !== baseName(DEFAULT_RUN_JSON_FILE))
+    .sort()
 }
 
 async function runBaselineDiff(options) {
@@ -2580,32 +3036,49 @@ async function runBaselineDiff(options) {
     }
   }
   const candidateRaw = await readJsonFile(candidateFileInput)
-  const fileTag = inferLibraryTagFromCompareFilePath(candidateFileInput)
   const libraryTag =
-    fileTag || asString(candidateRaw?.libraryTag) || deriveLibraryTagFromRun(candidateRaw)
+    deriveLibraryTagFromRun(candidateRaw) || inferLibraryTagFromCompareFilePath(candidateFileInput)
+  const runtimeProfileKey = runtimeProfileKeyForRun(candidateRaw, options.baselineProfile)
+  const compareCompile = runtimeProfileKey.startsWith('js.')
   const defaults = defaultPathsForLibraryTag(libraryTag)
+  const diffDefaults = defaultDiffPathsForLibraryAndProfile(libraryTag, runtimeProfileKey)
   const baselineFile = options.baselineFile || defaults.baselineFile
-  const diffFile = options.diffFile || defaults.diffFile
-  const diffCsvFile = options.diffCsvFile || defaults.diffCsvFile
+  const diffFile = options.diffFile || diffDefaults.diffFile
+  const diffCsvFile = options.diffCsvFile || diffDefaults.diffCsvFile
   const publicDiffFile =
-    options.publicDiffFile || defaults.publicDiffFile || DEFAULT_PUBLIC_DIFF_FILE
+    options.publicDiffFile || diffDefaults.publicDiffFile || DEFAULT_PUBLIC_DIFF_FILE
   const baselineRaw = (await fileExists(baselineFile)) ? await readJsonFile(baselineFile) : {}
   const baseline = ensureBaselineEnvelope(baselineRaw, libraryTag)
-  const candidate = {
+  const baselineRuntimeSection = runtimeProfileSectionFromEnvelope(baseline, runtimeProfileKey)
+  const candidate = buildCandidateEnvelope({
+    candidateRun: candidateRaw,
     libraryTag,
-    compile: buildSection(candidateRaw.records, deriveCompileRecord),
-    runtime: buildSection(candidateRaw.records, deriveRuntimeRecord),
-  }
-  const diff = compareBaseline({ baseline, candidate })
+    runtimeProfileKey,
+    includeCompile: compareCompile,
+  })
+  candidate.baselineRuntimeRecords = baselineRuntimeSection.records
+  const diff = compareBaseline({
+    baseline: {
+      ...baseline,
+      runtime: baselineRuntimeSection,
+      runtimeProfileMeta: baselineRuntimeSection.profileMeta,
+    },
+    candidate,
+    compareCompile,
+    runtimeProfileKey,
+  })
   const analysis = buildDiffAnalysis(diff, {
     candidateRun: candidateRaw,
     baselineRun: baselineRaw,
     baselineCompileRecords: baseline?.compile?.records,
+    baselineRuntimeRecords: baselineRuntimeSection.records,
     baselineEnvelope: baseline,
     candidateEnvelope: candidate,
+    compareCompile,
   })
   await writeJsonFile(diffFile, diff)
-  const csvRows = diff.transitions.map((x) => ({
+  const csvSource = diff.runtimeTransitions.length > 0 ? diff.runtimeTransitions : diff.transitions
+  const csvRows = csvSource.map((x) => ({
     model_name: x.modelName,
     status_before: x.statusBefore,
     status_after: x.statusAfter,
@@ -2654,35 +3127,17 @@ async function runBaselineDiff(options) {
     candidateMeta: {
       generatedAt: asString(candidateRaw?.generatedAt || candidateRaw?.updatedAt),
       libraryTag,
+      runtimeProfileKey,
       totalModels: asNumber(candidateRaw?.summary?.total),
     },
+    baselineProfileMeta: baselineRuntimeSection.profileMeta,
   }
-}
-
-async function listLibraryTagsForDiff() {
-  await ensureDir(COMPARE_ARTIFACT_DIR)
-  const names = await readdir(COMPARE_ARTIFACT_DIR)
-  const baselineTags = names
-    .map((name) => {
-      const m = /^baseline_(.+)\.json$/i.exec(name)
-      return m ? sanitizeTag(m[1]) : ''
-    })
-    .filter(Boolean)
-  const latestTags = names
-    .map((name) => {
-      const m = /^run_latest_(.+)\.json$/i.exec(name)
-      if (!m) return ''
-      const tag = sanitizeTag(m[1])
-      if (tag === 'default') return ''
-      return tag
-    })
-    .filter(Boolean)
-  return [...new Set([...baselineTags, ...latestTags])].sort()
 }
 
 function shouldRunBaselineDiffAll(options) {
   return (
     !options.baselineFile &&
+    !options.baselineProfile &&
     !options.candidateFile &&
     !options.diffFile &&
     !options.diffCsvFile &&
@@ -2691,26 +3146,17 @@ function shouldRunBaselineDiffAll(options) {
 }
 
 async function runBaselineDiffAll(options) {
-  const tags = await listLibraryTagsForDiff()
-  if (tags.length === 0) throw new Error('No library tags found in compare artifacts directory')
+  const candidateFiles = await listLatestRunFilesForDiff()
+  if (candidateFiles.length === 0) {
+    throw new Error('No latest run files found in compare artifacts directory')
+  }
   const results = []
-  for (const tag of tags) {
-    const defaults = defaultPathsForLibraryTag(tag)
-    const candidateExists = await fileExists(defaults.candidateFile)
-    const baselineExists = await fileExists(defaults.baselineFile)
-    if (!candidateExists && !baselineExists) continue
+  for (const candidateFile of candidateFiles) {
     const result = await runBaselineDiff({
       ...options,
-      baselineFile: defaults.baselineFile,
-      candidateFile: candidateExists ? defaults.candidateFile : defaults.baselineFile,
-      diffFile: defaults.diffFile,
-      diffCsvFile: defaults.diffCsvFile,
-      publicDiffFile: defaults.publicDiffFile,
+      candidateFile,
     })
     results.push(result)
-  }
-  if (results.length === 0) {
-    throw new Error('No diffable library runs found (missing both baseline and candidate files)')
   }
   return results
 }
@@ -2718,27 +3164,52 @@ async function runBaselineDiffAll(options) {
 async function runBaselineUpdate(options) {
   const candidateFileInput = options.candidateFile || DEFAULT_RUN_JSON_FILE
   const candidate = await readJsonFile(candidateFileInput)
-  const libraryTag = deriveLibraryTagFromRun(candidate)
+  const libraryTag =
+    deriveLibraryTagFromRun(candidate) || inferLibraryTagFromCompareFilePath(candidateFileInput)
+  const runtimeProfileKey = runtimeProfileKeyForRun(candidate, options.baselineProfile)
   const defaults = defaultPathsForLibraryTag(libraryTag)
   const baselineFile = options.baselineFile || defaults.baselineFile
   const baselineRaw = (await fileExists(baselineFile)) ? await readJsonFile(baselineFile) : {}
   const existing = ensureBaselineEnvelope(baselineRaw, libraryTag)
+  const isJsRuntime = runtimeProfileKey.startsWith('js.')
   const merged = {
     schemaVersion: BASELINE_SCHEMA_VERSION,
     libraryTag,
-    compile: buildSection(candidate.records, deriveCompileRecord),
-    runtime: existing.runtime,
+    compile: existing.compile ? persistableSection(existing.compile) : null,
+    runtimeProfiles: {
+      ...(asObj(existing.runtimeProfiles) ?? {}),
+    },
+    runtimeRecords: existing.runtimeRecords,
   }
   const isCompileOnly = Boolean(candidate?.options?.compileOnly)
+  if (isJsRuntime) {
+    merged.compile = persistableSection(buildSection(candidate.records, deriveCompileRecord))
+  }
   if (!isCompileOnly) {
-    merged.runtime = buildSection(candidate.records, deriveRuntimeRecord)
+    const runtimeSection = buildSection(candidate.records, deriveRuntimeRecord)
+    merged.runtimeProfiles[runtimeProfileKey] = buildRuntimeProfileMeta({
+      profileKey: runtimeProfileKey,
+      run: candidate,
+    })
+    merged.runtimeRecords = mergeRuntimeProfileRecords(
+      existing.runtimeRecords,
+      runtimeProfileKey,
+      runtimeSection.records,
+    )
   }
   await writeJsonFile(baselineFile, merged)
   return {
     baselineFile,
     candidateFile: candidateFileInput,
+    runtimeProfileKey,
     models: Array.isArray(candidate?.records) ? candidate.records.length : 0,
-    updatedSections: isCompileOnly ? ['compile'] : ['compile', 'runtime'],
+    updatedSections: isCompileOnly
+      ? isJsRuntime
+        ? ['compile']
+        : []
+      : isJsRuntime
+        ? ['compile', 'runtime']
+        : ['runtime'],
     updatedAt: new Date().toISOString(),
   }
 }
@@ -2775,18 +3246,24 @@ async function promptBaselineFileSelection() {
 }
 
 async function runComparison(options) {
+  options.rumocaRuntime = normalizeRumocaRuntime(options.rumocaRuntime)
   if (options.mode !== 'full' && options.mode !== 'random-stop') {
     throw new Error(`Unsupported --mode ${options.mode}`)
   }
   const runId = `run_${Date.now()}_${options.seed}`
   logInfo(`Starting compare run id=${runId}`)
   logInfo(
-    `Config mode=${options.mode} seed=${options.seed} maxModels=${options.maxModels || 0} stopThreshold=${options.stopThresholdPercent}% alwaysContinue=${options.alwaysContinue ? 'yes' : 'no'} compileOnly=${options.compileOnly ? 'yes' : 'no'}`,
+    `Config mode=${options.mode} seed=${options.seed} maxModels=${options.maxModels || 0} stopThreshold=${options.stopThresholdPercent}% alwaysContinue=${options.alwaysContinue ? 'yes' : 'no'} compileOnly=${options.compileOnly ? 'yes' : 'no'} rumocaRuntime=${options.rumocaRuntime}`,
   )
-  logInfo(`Config sim t0=${options.t0} tf=${options.tf} dt=${options.dt}`)
+  logInfo(
+    `Config sim t0=${options.t0} tf=${options.tf} dt=${options.dt} omcTimeoutMs=${options.omcTimeoutMs} solverTimeoutMs=${options.solverTimeoutMs} omcMaxCsvBytes=${options.omcMaxCsvBytes}`,
+  )
   logInfo(`Path mslZip=${resolve(options.mslZip)}`)
   logInfo(`Path libraryZips=${options.libraryZips.map((x) => resolve(x)).join(', ') || '(none)'}`)
   logInfo(`Path omcWrapper=${resolve(options.omcWrapper)}`)
+  if (options.rumocaRuntime === 'native' && Math.abs(Number(options.t0) || 0) > 1e-12) {
+    throw new Error('native Rumoca wasm comparison currently supports only --t0 0')
+  }
 
   const init = await initRumocaEngine()
   const libraries = await loadLibrariesFromZips([options.mslZip, ...options.libraryZips])
@@ -2801,7 +3278,8 @@ async function runComparison(options) {
   logInfo(
     `Compile behavior options for '${libraryTag}': ${options.compileOptionsJson} (${compileBehaviorOptions.reason})`,
   )
-  const defaultPaths = defaultPathsForLibraryTag(libraryTag)
+  const artifactTag = artifactTagForRumocaRuntime(libraryTag, options.rumocaRuntime)
+  const defaultPaths = defaultPathsForLibraryTag(artifactTag)
   const candidateFile = options.candidateFile || defaultPaths.candidateFile
   const mslZipResolved = resolve(options.mslZip)
   const additionalZipRoots = options.libraryZips
@@ -2842,12 +3320,23 @@ async function runComparison(options) {
     .split(',')
     .map((x) => x.trim().toLowerCase())
     .filter(Boolean)
+  const defaultCompareClassTypes =
+    !options.compileOnly &&
+    targetClassTypes.length === 0 &&
+    !String(options.modelName || '').trim() &&
+    targetPrefixes.length === 0
+      ? ['model', 'block', 'class']
+      : []
   const defaultCompileOnlyClassTypes =
     options.compileOnly && targetClassTypes.length === 0 && !String(options.modelName || '').trim()
       ? ['model', 'block']
       : []
   const effectiveTargetClassTypes =
-    targetClassTypes.length > 0 ? targetClassTypes : defaultCompileOnlyClassTypes
+    targetClassTypes.length > 0
+      ? targetClassTypes
+      : defaultCompareClassTypes.length > 0
+        ? defaultCompareClassTypes
+        : defaultCompileOnlyClassTypes
   if (effectiveTargetClassTypes.length > 0) {
     allTargets = allTargets.filter((name) => {
       const info = knownClassInfoByName.get(name)
@@ -3050,12 +3539,17 @@ async function runComparison(options) {
       omcCacheDir: OMC_CACHE_DIR,
       cliLogs: RUN_LOG_BUFFER.slice(),
       libraryTag,
+      artifactTag,
+      rumocaRuntime: options.rumocaRuntime,
     }
     await saveProgress(progressPath, summary)
-    const datedRunFile = datedRunFileForLibraryTag(libraryTag, new Date().toISOString())
+    const datedRunFile = datedRunFileForLibraryTag(artifactTag, new Date().toISOString())
     await writeJsonFile(candidateFile, summary)
     await writeJsonFile(datedRunFile, summary)
-    if (resolve(candidateFile) !== resolve(DEFAULT_RUN_JSON_FILE))
+    if (
+      options.rumocaRuntime !== 'native' &&
+      resolve(candidateFile) !== resolve(DEFAULT_RUN_JSON_FILE)
+    )
       await writeJsonFile(DEFAULT_RUN_JSON_FILE, summary)
     summary.candidateFile = candidateFile
     summary.datedRunFile = datedRunFile
@@ -3146,6 +3640,8 @@ async function runComparison(options) {
           sim: { t0: options.t0, tf: options.tf, dt: options.dt },
           omcWrapper: resolve(options.omcWrapper),
           omcMslDir: resolve(options.omcMslDir),
+          omcTimeoutMs: Number(options.omcTimeoutMs),
+          omcMaxCsvBytes: Number(options.omcMaxCsvBytes),
         })
         logInfo(
           `[${modelName}] OMC done in ${Date.now() - omcStart}ms (cache=${omcRun.fromCache ? 'hit' : 'miss'}) -> ${omcRun.cachePath}`,
@@ -3157,7 +3653,9 @@ async function runComparison(options) {
       const omcElapsedMs = Date.now() - omcStart
 
       const solverStart = Date.now()
-      logInfo(`[${modelName}] Step 2/4 running Rumoca template-based simulation`)
+      logInfo(
+        `[${modelName}] Step 2/4 running Rumoca ${options.rumocaRuntime === 'native' ? 'native wasm' : 'template-based'} simulation`,
+      )
       let solverRun = null
       try {
         solverRun = await runSolverProbeInSubprocess({
@@ -3171,10 +3669,14 @@ async function runComparison(options) {
           tf: options.tf,
           dt: options.dt,
           solverOptionsJson: options.solverOptionsJson,
+          rumocaRuntime: options.rumocaRuntime,
         })
       } catch (subprocessError) {
         const msg =
           subprocessError instanceof Error ? subprocessError.message : String(subprocessError)
+        if (isSolverTimeoutError(subprocessError)) {
+          throw subprocessError
+        }
         logInfo(`[${modelName}] Solver subprocess failed (${msg}); retrying in-process`)
         solverRun = await runSolverProbeInProcess({
           modelName,
@@ -3186,6 +3688,7 @@ async function runComparison(options) {
           tf: options.tf,
           dt: options.dt,
           solverOptionsJson: options.solverOptionsJson,
+          rumocaRuntime: options.rumocaRuntime,
         })
       }
       if (asString(solverRun?.status) !== 'ok') {
@@ -3205,6 +3708,7 @@ async function runComparison(options) {
         records.push({
           modelName,
           status: 'run_fail',
+          rumocaRuntime: options.rumocaRuntime,
           elapsedMs: Date.now() - startedAt,
           compileElapsedMs: Number(solverRun.compileElapsedMs) || 0,
           omcElapsedMs,
@@ -3225,6 +3729,7 @@ async function runComparison(options) {
         records.push({
           modelName,
           status: 'missing_channels',
+          rumocaRuntime: options.rumocaRuntime,
           elapsedMs: Date.now() - startedAt,
           compileElapsedMs: Number(solverRun.compileElapsedMs) || 0,
           omcElapsedMs,
@@ -3259,6 +3764,7 @@ async function runComparison(options) {
           compareElapsedMs,
           omcCachePath: omcRun.cachePath,
           omcFromCache: omcRun.fromCache,
+          rumocaRuntime: options.rumocaRuntime,
           ...comparison,
           ...(hint ? { diagnosticHint: hint } : {}),
           ...(comparedDebugPath ? { debugPath: comparedDebugPath } : {}),
@@ -3334,6 +3840,7 @@ async function runComparison(options) {
       records.push({
         modelName,
         status,
+        rumocaRuntime: options.rumocaRuntime,
         elapsedMs: Date.now() - startedAt,
         ...(options.compileOnly
           ? {}
@@ -3380,12 +3887,17 @@ async function runComparison(options) {
     omcCacheDir: OMC_CACHE_DIR,
     cliLogs: RUN_LOG_BUFFER.slice(),
     libraryTag,
+    artifactTag,
+    rumocaRuntime: options.rumocaRuntime,
   }
   await saveProgress(progressPath, summary)
-  const datedRunFile = datedRunFileForLibraryTag(libraryTag, new Date().toISOString())
+  const datedRunFile = datedRunFileForLibraryTag(artifactTag, new Date().toISOString())
   await writeJsonFile(candidateFile, summary)
   await writeJsonFile(datedRunFile, summary)
-  if (resolve(candidateFile) !== resolve(DEFAULT_RUN_JSON_FILE))
+  if (
+    options.rumocaRuntime !== 'native' &&
+    resolve(candidateFile) !== resolve(DEFAULT_RUN_JSON_FILE)
+  )
     await writeJsonFile(DEFAULT_RUN_JSON_FILE, summary)
   summary.candidateFile = candidateFile
   summary.datedRunFile = datedRunFile
@@ -3427,6 +3939,10 @@ async function main() {
   if (options.command === 'probe-solve') {
     process.title = `modelica-compare:probe-solve:${safeName(options.modelName || 'unknown')}`
     const probe = await runSingleModelSolveProbe(options)
+    if (options.probeOutputFile) {
+      await writeJsonFile(options.probeOutputFile, probe)
+      return
+    }
     console.log(JSON.stringify(probe))
     return
   }
@@ -3454,16 +3970,17 @@ async function main() {
         console.log(
           `Library: ${asString(diff?.libraryTag) || asString(candidateMeta?.libraryTag) || 'unknown'}`,
         )
+        console.log(`Runtime profile: ${candidateMeta.runtimeProfileKey || 'n/a'}`)
         console.log(`Baseline file: ${baselineFile}`)
         console.log(`Candidate file: ${candidateFile}`)
         console.log(
-          `Candidate meta: library=${candidateMeta.libraryTag || 'n/a'}, generatedAt=${candidateMeta.generatedAt || 'n/a'}, totalModels=${candidateMeta.totalModels}`,
+          `Candidate meta: library=${candidateMeta.libraryTag || 'n/a'}, profile=${candidateMeta.runtimeProfileKey || 'n/a'}, generatedAt=${candidateMeta.generatedAt || 'n/a'}, totalModels=${candidateMeta.totalModels}`,
         )
         console.log(`Diff JSON: ${diffFile}`)
         console.log(`Diff CSV: ${diffCsvFile}`)
         console.log(`Public analysis JSON: ${publicDiffFile}`)
         console.log(
-          `Compile success improved=${analysis.summary.compileSuccessTransitions.improvedCount}, regressed=${analysis.summary.compileSuccessTransitions.regressedCount}; compile-time compared=${analysis.summary.compileTimeTransitions.comparedCompiledToCompiledCount}, slower=${analysis.summary.compileTimeTransitions.regressedCount}, faster=${analysis.summary.compileTimeTransitions.improvedCount}; Status regressions=${diff.totals.statusRegressions}`,
+          `Compile success improved=${analysis.summary.compileSuccessTransitions.improvedCount}, regressed=${analysis.summary.compileSuccessTransitions.regressedCount}; compile-time compared=${analysis.summary.compileTimeTransitions.comparedCompiledToCompiledCount}, slower=${analysis.summary.compileTimeTransitions.regressedCount}, faster=${analysis.summary.compileTimeTransitions.improvedCount}; Runtime status regressions=${diff.runtimeTotals.statusRegressions}`,
         )
       }
       return
@@ -3481,13 +3998,13 @@ async function main() {
     console.log(`Baseline file: ${baselineFile}`)
     console.log(`Candidate file: ${candidateFile}`)
     console.log(
-      `Candidate meta: library=${candidateMeta.libraryTag || 'n/a'}, generatedAt=${candidateMeta.generatedAt || 'n/a'}, totalModels=${candidateMeta.totalModels}`,
+      `Candidate meta: library=${candidateMeta.libraryTag || 'n/a'}, profile=${candidateMeta.runtimeProfileKey || 'n/a'}, generatedAt=${candidateMeta.generatedAt || 'n/a'}, totalModels=${candidateMeta.totalModels}`,
     )
     console.log(`Diff JSON: ${diffFile}`)
     console.log(`Diff CSV: ${diffCsvFile}`)
     console.log(`Public analysis JSON: ${publicDiffFile}`)
     console.log(
-      `Compile success improved=${analysis.summary.compileSuccessTransitions.improvedCount}, regressed=${analysis.summary.compileSuccessTransitions.regressedCount}; compile-time compared=${analysis.summary.compileTimeTransitions.comparedCompiledToCompiledCount}, slower=${analysis.summary.compileTimeTransitions.regressedCount}, faster=${analysis.summary.compileTimeTransitions.improvedCount}; Status regressions=${diff.totals.statusRegressions}`,
+      `Compile success improved=${analysis.summary.compileSuccessTransitions.improvedCount}, regressed=${analysis.summary.compileSuccessTransitions.regressedCount}; compile-time compared=${analysis.summary.compileTimeTransitions.comparedCompiledToCompiledCount}, slower=${analysis.summary.compileTimeTransitions.regressedCount}, faster=${analysis.summary.compileTimeTransitions.improvedCount}; Runtime status regressions=${diff.runtimeTotals.statusRegressions}`,
     )
     return
   }
@@ -3499,6 +4016,7 @@ async function main() {
     const updated = await runBaselineUpdate(options)
     console.log(`Updated baseline: ${updated.baselineFile}`)
     console.log(`From candidate: ${updated.candidateFile}`)
+    console.log(`Runtime profile: ${updated.runtimeProfileKey}`)
     console.log(`Models: ${updated.models}`)
     console.log(`Updated at: ${updated.updatedAt}`)
     return

@@ -28,7 +28,13 @@ type RumocaLegacyLibraryApi = {
 
 type RumocaSourceRootApi = {
   compile_with_source_roots: (source: string, modelName: string, sourceRootsJson: string) => string
+  export_parsed_source_roots_binary: (urisJson: string) => Uint8Array
+  get_bundled_source_root_manifest: () => string
+  load_source_root_index: (sourceRootsJson: string) => string
+  load_bundled_source_root_cache: (archiveId: string) => number
   load_source_roots: (sourceRootsJson: string) => string
+  merge_parsed_source_roots_binary: (bytes: Uint8Array) => number
+  render_modelica_view: (source: string, modelName: string, view: string) => string
   clear_source_root_cache: () => void
   get_source_root_document_count: () => number
 }
@@ -665,6 +671,16 @@ const resolveModelicaLogCallSite = (stack: string | undefined): string | undefin
  */
 export const modelicaLog = ref<ModelicaLogEntry[]>([])
 
+const consoleMethodForModelicaLogLevel: Record<
+  ModelicaLogLevel,
+  'info' | 'warn' | 'error' | 'log'
+> = {
+  info: 'info',
+  success: 'info',
+  warning: 'warn',
+  error: 'error',
+}
+
 export function appendModelicaLog(
   entry: Omit<ModelicaLogEntry, 'timestamp'> & { timestamp?: string },
 ) {
@@ -678,8 +694,9 @@ export function appendModelicaLog(
     ...(callSite ? { callSite } : {}),
   }
 
-  console.log('[ModelicaLog]', nextEntry, callSite ? `caller: ${callSite}` : '')
   modelicaLog.value.push(nextEntry)
+  const consoleMethod = consoleMethodForModelicaLogLevel[nextEntry.level]
+  globalThis.console?.[consoleMethod]?.('[ModelicaLog]', nextEntry)
 }
 
 export function renderUiHtml({

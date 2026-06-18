@@ -3,6 +3,7 @@ import * as rumoca from 'rumoca-full-web'
 import { strFromU8, unzipSync } from 'fflate'
 import { handleExtractDiagram } from './modelicadiagramGeneration'
 import { renderRumocaTemplate } from './rumocaTemplateRender'
+import baseDaeTemplate from './base_dae.jinja?raw'
 
 let loadedSourceRootFiles: Record<string, string> = {}
 
@@ -17,6 +18,16 @@ type WorkerRequest =
         modelName: string
         usePreparedDae: boolean
         useSourceRoots: boolean
+      }
+    }
+  | {
+      id: number
+      type: 'render_modelica_view'
+      payload: {
+        modelicaSource: string
+        modelName: string
+        useSourceRoots: boolean
+        view: 'base-modelica' | 'flat-modelica' | 'dae-modelica'
       }
     }
   | { id: number; type: 'load_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
@@ -49,6 +60,10 @@ type WorkerRequest =
       type: 'start_simulation'
       payload: { source: string; modelName: string; tEnd: number; dt: number; solver: string }
     }
+  | { id: number; type: 'get_bundled_source_root_manifest' }
+  | { id: number; type: 'load_bundled_source_root_cache'; payload: { archiveId: string } }
+  | { id: number; type: 'export_source_root_binary_cache'; payload: { uris: string[] } }
+  | { id: number; type: 'restore_source_root_binary_cache'; payload: { bytes: ArrayBuffer } }
   | { id: number; type: 'get_source_root_document_count' }
 
 type CompileRenderPayload = {
@@ -57,6 +72,13 @@ type CompileRenderPayload = {
   modelName: string
   usePreparedDae: boolean
   useSourceRoots: boolean
+}
+
+type RenderModelicaViewPayload = {
+  modelicaSource: string
+  modelName: string
+  useSourceRoots: boolean
+  view: 'base-modelica' | 'flat-modelica' | 'dae-modelica'
 }
 
 type WorkerResponse =
@@ -100,6 +122,19 @@ function selectDaeForTemplate(
   return dae
 }
 
+function getSourceRootDocumentCount(): number {
+  return typeof rumoca.get_source_root_document_count === 'function'
+    ? Number(rumoca.get_source_root_document_count()) || 0
+    : 0
+}
+
+function materializeLoadedSourceRootsIfNeeded(): void {
+  if (getSourceRootDocumentCount() > 0) return
+  if (Object.keys(loadedSourceRootFiles).length === 0) return
+  if (typeof rumoca.load_source_roots !== 'function') return
+  rumoca.load_source_roots(JSON.stringify(loadedSourceRootFiles))
+}
+
 async function handleInit(payload: { threads?: number } | undefined): Promise<unknown> {
   await initRumoca()
   const threads = Math.max(0, Math.floor(Number(payload?.threads ?? 0)))
@@ -136,6 +171,9 @@ async function handleInit(payload: { threads?: number } | undefined): Promise<un
 function handleCompileRender(payload: CompileRenderPayload): unknown {
   const source = payload.modelicaSource
   const modelName = payload.modelName || 'Model'
+  if (payload.useSourceRoots) {
+    materializeLoadedSourceRootsIfNeeded()
+  }
   const compileRaw =
     payload.useSourceRoots && typeof rumoca.compile_with_source_roots === 'function'
       ? rumoca.compile_with_source_roots(source, modelName, '{}')
@@ -155,12 +193,38 @@ function handleCompileRender(payload: CompileRenderPayload): unknown {
     outputPath: `${modelName}.txt`,
     targetName: 'template',
   })
+  const daePretty = renderRumocaTemplate({
+    wasm: rumoca,
+    daeJson: JSON.stringify(daeForTemplate),
+    templateSource: baseDaeTemplate,
+    modelName,
+    templatePath: 'base_dae.jinja',
+    outputPath: `${modelName}.dae.txt`,
+    targetName: 'template',
+  })
   return {
     compiled,
     daeForTemplate,
+    daePretty,
     rendered,
     modelName,
     usedLibraries: payload.useSourceRoots,
+  }
+}
+
+function handleRenderModelicaView(payload: RenderModelicaViewPayload): unknown {
+  if (payload.useSourceRoots) {
+    materializeLoadedSourceRootsIfNeeded()
+  }
+
+  const renderModelicaView = Reflect.get(rumoca, 'render_modelica_view')
+  if (typeof renderModelicaView !== 'function') {
+    throw new Error('Installed Rumoca WASM package does not export render_modelica_view')
+  }
+
+  return {
+    view: payload.view,
+    rendered: String(renderModelicaView(payload.modelicaSource, payload.modelName, payload.view)),
   }
 }
 
@@ -179,7 +243,29 @@ function handleLoadMslZip(payload: { fileName: string; bytes: ArrayBuffer }): un
   if (fileCount === 0) {
     throw new Error('No usable .mo files found in archive')
   }
+  const sourceRootUris = Object.keys(libraries).sort((lhs, rhs) => lhs.localeCompare(rhs))
   loadedSourceRootFiles = libraries
+  if (typeof rumoca.load_source_root_index === 'function') {
+    const resultRaw = rumoca.load_source_root_index(JSON.stringify(libraries))
+    let classCount = 0
+    try {
+      const parsed = JSON.parse(String(resultRaw)) as { class_count?: unknown }
+      const maybeCount = Number(parsed.class_count)
+      if (Number.isFinite(maybeCount)) classCount = maybeCount
+    } catch {
+      classCount = 0
+    }
+    return {
+      fileCount,
+      parsedCount: fileCount,
+      archiveName: payload.fileName,
+      documentCount: getSourceRootDocumentCount(),
+      loadMode: 'index',
+      classCount,
+      sourceRootUris,
+    }
+  }
+
   const resultRaw = rumoca.load_source_roots(JSON.stringify(libraries))
   let parsedCount = fileCount
   try {
@@ -193,10 +279,9 @@ function handleLoadMslZip(payload: { fileName: string; bytes: ArrayBuffer }): un
     fileCount,
     parsedCount,
     archiveName: payload.fileName,
-    documentCount:
-      typeof rumoca.get_source_root_document_count === 'function'
-        ? Number(rumoca.get_source_root_document_count()) || 0
-        : 0,
+    documentCount: getSourceRootDocumentCount(),
+    loadMode: 'parsed',
+    sourceRootUris,
   }
 }
 
@@ -214,6 +299,7 @@ function handleMergeMslZip(payload: { fileName: string; bytes: ArrayBuffer }): u
   if (fileCount === 0) {
     throw new Error('No usable .mo files found in archive')
   }
+  const sourceRootUris = Object.keys(libraries).sort((lhs, rhs) => lhs.localeCompare(rhs))
 
   // Incremental add: parse each file and merge parsed definitions into the existing session.
   const defs: Array<[string, string]> = []
@@ -238,10 +324,9 @@ function handleMergeMslZip(payload: { fileName: string; bytes: ArrayBuffer }): u
     fileCount,
     parsedCount: mergedCount,
     archiveName: payload.fileName,
-    documentCount:
-      typeof rumoca.get_source_root_document_count === 'function'
-        ? Number(rumoca.get_source_root_document_count()) || 0
-        : 0,
+    documentCount: getSourceRootDocumentCount(),
+    loadMode: 'merge',
+    sourceRootUris,
   }
 }
 
@@ -251,6 +336,7 @@ function handleListClasses(): unknown {
 }
 
 function handleGetClassInfo(payload: { qualifiedName: string }): unknown {
+  materializeLoadedSourceRootsIfNeeded()
   const raw = rumoca.get_class_info(payload.qualifiedName)
   return JSON.parse(String(raw))
 }
@@ -356,6 +442,7 @@ function handleGetSimulationModels(payload: { source: string; defaultModel?: str
   if (typeof rumoca.get_simulation_models !== 'function') {
     throw new Error('Rumoca wasm export missing: get_simulation_models')
   }
+  materializeLoadedSourceRootsIfNeeded()
   return JSON.parse(
     String(rumoca.get_simulation_models(payload.source, asString(payload.defaultModel))),
   ) as Record<string, unknown>
@@ -371,6 +458,7 @@ function handleStartSimulation(payload: {
   if (typeof rumoca.simulate_model !== 'function') {
     throw new Error('Simulation not available in this WASM build. Rebuild with rumoca-sim enabled.')
   }
+  materializeLoadedSourceRootsIfNeeded()
   const raw = String(
     rumoca.simulate_model(
       payload.source,
@@ -383,6 +471,47 @@ function handleStartSimulation(payload: {
   return JSON.parse(raw) as Record<string, unknown>
 }
 
+function handleGetBundledSourceRootManifest(): unknown {
+  if (typeof rumoca.get_bundled_source_root_manifest !== 'function') {
+    return { archives: [] }
+  }
+  return JSON.parse(String(rumoca.get_bundled_source_root_manifest()))
+}
+
+function handleLoadBundledSourceRootCache(payload: { archiveId: string }): unknown {
+  if (typeof rumoca.load_bundled_source_root_cache !== 'function') {
+    throw new Error('Rumoca wasm export missing: load_bundled_source_root_cache')
+  }
+  const archiveId = asString(payload.archiveId).trim()
+  if (!archiveId) throw new Error('Missing bundled archive id')
+  rumoca.load_bundled_source_root_cache(archiveId)
+  loadedSourceRootFiles = {}
+  return {
+    archiveId,
+    documentCount: getSourceRootDocumentCount(),
+  }
+}
+
+function handleExportSourceRootBinaryCache(payload: { uris: string[] }): Uint8Array {
+  materializeLoadedSourceRootsIfNeeded()
+  if (typeof rumoca.export_parsed_source_roots_binary !== 'function') {
+    throw new Error('Rumoca wasm export missing: export_parsed_source_roots_binary')
+  }
+  const raw: unknown = rumoca.export_parsed_source_roots_binary(JSON.stringify(payload.uris))
+  if (raw instanceof Uint8Array) return raw
+  if (raw instanceof ArrayBuffer) return new Uint8Array(raw)
+  if (ArrayBuffer.isView(raw)) return new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)
+  throw new Error('Rumoca export_parsed_source_roots_binary returned an unsupported payload')
+}
+
+function handleRestoreSourceRootBinaryCache(payload: { bytes: ArrayBuffer }): number {
+  if (typeof rumoca.merge_parsed_source_roots_binary !== 'function') {
+    throw new Error('Rumoca wasm export missing: merge_parsed_source_roots_binary')
+  }
+  loadedSourceRootFiles = {}
+  return Number(rumoca.merge_parsed_source_roots_binary(new Uint8Array(payload.bytes))) || 0
+}
+
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const msg = event.data
   try {
@@ -393,6 +522,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break
       case 'compile_render':
         result = handleCompileRender(msg.payload)
+        break
+      case 'render_modelica_view':
+        result = handleRenderModelicaView(msg.payload)
         break
       case 'load_msl_zip':
         result = handleLoadMslZip(msg.payload)
@@ -412,6 +544,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         result = handleGetClassInfo(msg.payload)
         break
       case 'extract_diagram':
+        materializeLoadedSourceRootsIfNeeded()
         result = handleExtractDiagram(msg.payload, () => loadedSourceRootFiles)
         break
       case 'parse_source_ast':
@@ -426,11 +559,20 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       case 'start_simulation':
         result = handleStartSimulation(msg.payload)
         break
+      case 'get_bundled_source_root_manifest':
+        result = handleGetBundledSourceRootManifest()
+        break
+      case 'load_bundled_source_root_cache':
+        result = handleLoadBundledSourceRootCache(msg.payload)
+        break
+      case 'export_source_root_binary_cache':
+        result = handleExportSourceRootBinaryCache(msg.payload)
+        break
+      case 'restore_source_root_binary_cache':
+        result = handleRestoreSourceRootBinaryCache(msg.payload)
+        break
       case 'get_source_root_document_count':
-        result =
-          typeof rumoca.get_source_root_document_count === 'function'
-            ? Number(rumoca.get_source_root_document_count()) || 0
-            : 0
+        result = getSourceRootDocumentCount()
         break
       default: {
         const exhaustive: never = msg

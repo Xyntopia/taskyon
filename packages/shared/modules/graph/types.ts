@@ -130,6 +130,7 @@ export type InteractionOptions<N = unknown, E = unknown> = {
   maxZoom?: number
   zoomStep?: number
   onNodeClick?: (node: LayoutNode<N>) => void
+  onNodeDoubleClick?: (node: LayoutNode<N>) => void
   edgeTooltipHtml?: (edge: LayoutEdge<E>) => string | null | undefined
   nodeTooltipHtml?: (node: LayoutNode<N>) => string | null | undefined
 }

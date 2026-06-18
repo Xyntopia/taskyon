@@ -202,29 +202,56 @@ set -euo pipefail
 # Run compare (auto-target discovery, always writes JSON + text reports)
 yarn modelica:compare
 
+# Run the same compare with Rumoca's native WASM simulation surface
+yarn modelica:compare:native
+
 # Optional: run against an extra library zip (for example PowerSystems)
 node packages/shared/modelica/modelica_compare_cli.mjs run --library-zip /abs/path/PowerSystems.zip
+
+# Optional: select the Rumoca runtime explicitly
+node packages/shared/modelica/modelica_compare_cli.mjs run --rumoca-runtime native
+
+# Optional: harden the OMC reference stage for long or huge traces
+node packages/shared/modelica/modelica_compare_cli.mjs run \
+  --omc-timeout-ms 30000 \
+  --omc-max-csv-bytes 268435456
 
 # Diff current run against baseline
 yarn modelica:baseline:diff
 
+# Diff current native WASM run against the shared library baseline
+yarn modelica:baseline:diff:native
+
 # Accept current run as new baseline
 yarn modelica:baseline:update
+
+# Accept current native WASM run into the shared library baseline
+yarn modelica:baseline:update:native
 ```
 
 Notes:
 
 - Source of truth files:
   - Latest run JSON: `packages/shared/modelica/compare/run_latest_<library>.json` (plus global pointer `run_latest_default.json`)
+  - Native WASM latest run JSON: `packages/shared/modelica/compare/run_latest_<library>_native.json`
   - Dated run JSON: `packages/shared/modelica/compare/run_<library>_<timestamp>.json`
   - Baseline JSON: `packages/shared/modelica/compare/baseline_<library>.json`
-  - Diff JSON: `packages/shared/modelica/compare/diff_<library>.json`
-  - Diff CSV: `packages/shared/modelica/compare/diff_<library>.csv`
+  - Shared runtime profiles inside the baseline use keys such as `js.default`, `native.auto`, `native.rk4`
+  - Diff JSON: `packages/shared/modelica/compare/diff_<library>__<profile>.json`
+  - Diff CSV: `packages/shared/modelica/compare/diff_<library>__<profile>.csv`
 - `run` now auto-discovers targets from loaded library roots (no `--targets-file` required in normal usage).
 - JSON run artifact is always written; explicit `--json` flag is no longer required.
+- Compare runs enforce independent timeouts for compile, OMC reference generation, and Rumoca
+  solver execution. Current defaults are `10000ms`, `30000ms`, and `20000ms`.
+- OMC reference CSVs are rejected before parsing when they exceed the configured size cap
+  (`--omc-max-csv-bytes`, default `268435456`).
+- OMC run directories under `.tmp/modelica-omc-cache/*__run` are now treated as ephemeral.
+  After a reference trace is normalized, the harness keeps only the compact per-model JSON cache
+  and deletes the raw OMC build / CSV outputs automatically.
 - `baseline-update` merges into the library-specific baseline:
-  - compile info is always refreshed from the candidate run.
-  - runtime/solver info is only refreshed when the candidate run includes runtime execution (non-`--compile-only` runs).
+  - compile info is shared once per library and refreshed only from `js.*` candidate runs.
+  - runtime/solver info is stored per model under the selected runtime profile key.
+- `baseline-diff` auto-selects the runtime profile from the candidate run by default and can be overridden with `--baseline-profile <key>`.
 
 ## Testing Strategy
 

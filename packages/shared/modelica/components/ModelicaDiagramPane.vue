@@ -115,6 +115,10 @@ const props = defineProps<{
   viewMode?: 'diagram' | 'icon'
 }>()
 
+const emit = defineEmits<{
+  openModel: [qualifiedName: string]
+}>()
+
 const emptyGraph: GraphData<DiagramNodeData, DiagramEdgeData> = { nodes: [], edges: [] }
 const emptyOptions: RenderOptions<DiagramNodeData, DiagramEdgeData> = {}
 
@@ -211,6 +215,12 @@ const runtimeOptions = computed<RenderOptions<DiagramNodeData, DiagramEdgeData>>
       edge.data?.color
         ? { stroke: colorToCss(edge.data.color, 'rgba(55, 65, 81, 0.95)') }
         : undefined,
+    onNodeDoubleClick: (node: LayoutNode<DiagramNodeData>) => {
+      if (viewMode.value !== 'diagram') return
+      const qualifiedName = String(node.data?.typeName || '').trim()
+      if (!qualifiedName) return
+      emit('openModel', qualifiedName)
+    },
     nodeSvg: (node: LayoutNode<DiagramNodeData>) =>
       renderNodeSvg(node, labelsEnabled, nativeLabelsEnabled, libraryPathsEnabled),
   }
@@ -657,17 +667,14 @@ watchDebounced(
   { debounce: 350, maxWait: 900, immediate: true },
 )
 
-watch(
-  [diagramIrHash, runtimeOptions],
-  () => {
-    if (!controller) return
-    if (diagramIrHash.value !== lastAppliedGraphHash) {
-      controller.setGraph(mapped.value.graph)
-      lastAppliedGraphHash = diagramIrHash.value
-    }
-    controller.setOptions(runtimeOptions.value)
-  },
-)
+watch([diagramIrHash, runtimeOptions], () => {
+  if (!controller) return
+  if (diagramIrHash.value !== lastAppliedGraphHash) {
+    controller.setGraph(mapped.value.graph)
+    lastAppliedGraphHash = diagramIrHash.value
+  }
+  controller.setOptions(runtimeOptions.value)
+})
 
 const onCopyPng = async () => {
   if (!controller || exportingPng.value || !hasGraph.value) return

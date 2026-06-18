@@ -20,9 +20,8 @@ import type {
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
-const createSvgEl = <K extends keyof SVGElementTagNameMap>(
-  tag: K,
-): SVGElementTagNameMap[K] => document.createElementNS(SVG_NS, tag)
+const createSvgEl = <K extends keyof SVGElementTagNameMap>(tag: K): SVGElementTagNameMap[K] =>
+  document.createElementNS(SVG_NS, tag)
 
 const mergeNodeStyle = (theme: GraphTheme | undefined, node: LayoutNode): Required<NodeStyle> => {
   const base = theme?.defaultNodeStyle ?? {}
@@ -390,6 +389,12 @@ export const createGraphController = <N = unknown, E = unknown>(
           options.onNodeClick?.(node)
         })
       }
+      if (options.onNodeDoubleClick) {
+        group.addEventListener('dblclick', () => {
+          suppressClickForNodeId = node.id
+          options.onNodeDoubleClick?.(node)
+        })
+      }
       const tip = options.nodeTooltipHtml?.(node)
       if (tip) {
         group.addEventListener('mousemove', (evt) => showTooltip(tip, evt.clientX, evt.clientY))
@@ -575,7 +580,10 @@ export const createGraphController = <N = unknown, E = unknown>(
     if (draggedNodeId) {
       const node = layout.nodes.find((n) => n.id === draggedNodeId)
       if (!node) return
-      if (!draggedNodeMoved && (Math.abs(evt.clientX - nodeDragStart.x) > 3 || Math.abs(evt.clientY - nodeDragStart.y) > 3)) {
+      if (
+        !draggedNodeMoved &&
+        (Math.abs(evt.clientX - nodeDragStart.x) > 3 || Math.abs(evt.clientY - nodeDragStart.y) > 3)
+      ) {
         draggedNodeMoved = true
       }
       const dx = (evt.clientX - nodeDragStart.x) / viewport.scale

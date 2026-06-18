@@ -40,6 +40,22 @@ const execFileAsync = (file: string, args: string[]): Promise<{ stdout: string; 
     )
   })
 
+function extractTrailingJsonObject(stdout: string): string {
+  const text = String(stdout || '').trim()
+  if (!text) {
+    throw new Error('CLI returned empty stdout')
+  }
+  const lastObjectStart = text.lastIndexOf('\n{')
+  if (lastObjectStart >= 0) {
+    return text.slice(lastObjectStart + 1)
+  }
+  const firstChar = text[0]
+  if (firstChar === '{' || firstChar === '[') {
+    return text
+  }
+  throw new Error(`CLI stdout did not contain a trailing JSON payload:\n${text.slice(-800)}`)
+}
+
 export async function runModelicaCliMslFirstOrderRumocaSimulation() {
   const resolvedMslZipPath = await resolveCachedModelicaLibraryZipPath()
   const debug: Record<string, unknown> = {
@@ -83,7 +99,7 @@ end MslFirstOrderCliSmoke;
     ])
     debug.stderr = stderr
 
-    const parsed = JSON.parse(stdout) as {
+    const parsed = JSON.parse(extractTrailingJsonObject(stdout)) as {
       simulation?: {
         simulation?: {
           payload?: {

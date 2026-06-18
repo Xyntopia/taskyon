@@ -194,7 +194,7 @@ ${sourcesSection}
 ## Generated JavaScript
 \`\`\`\n${jsSource.value}\n\`\`\`
 
-## Pretty DAE
+## Base DAE
 \`\`\`\n${daePrettyOutput.value}\n\`\`\`
 
 ## Recent logs

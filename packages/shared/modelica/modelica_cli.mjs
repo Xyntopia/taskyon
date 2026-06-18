@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 
+import { writeFileSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import initRumoca from 'rumoca-full-web'
 import * as rumoca from 'rumoca-full-web'
 import { strFromU8, unzipSync } from 'fflate'
+
+let loadedSourceRootFiles = {}
 
 const COMMANDS = new Set([
   'init',
@@ -204,7 +208,7 @@ function parseJson(raw) {
 }
 
 async function initEngine(threads) {
-  await initRumoca()
+  await initRumoca({ module_or_path: await loadRumocaWasmBytes() })
   const safeThreads = Number.isFinite(threads) ? Math.max(0, Math.floor(threads)) : 0
   const rayonEnabled =
     typeof rumoca.wasm_init === 'function' ? Boolean(await rumoca.wasm_init(safeThreads)) : false
@@ -217,6 +221,11 @@ async function initEngine(threads) {
     simulationAvailable: typeof rumoca.simulate_model === 'function',
     simulationModelDiscoveryAvailable: typeof rumoca.get_simulation_models === 'function',
   }
+}
+
+async function loadRumocaWasmBytes() {
+  const packageDir = dirname(fileURLToPath(import.meta.resolve('rumoca-full-web')))
+  return await readFile(join(packageDir, 'rumoca_bind_wasm_bg.wasm'))
 }
 
 async function loadMslZip(mslZipPath) {
@@ -235,16 +244,42 @@ async function loadMslZip(mslZipPath) {
 
   const fileCount = Object.keys(libraries).length
   if (fileCount === 0) throw new Error(`No usable .mo files found in zip: ${absolute}`)
-  const resultRaw = rumoca.load_source_roots(JSON.stringify(libraries))
+  loadedSourceRootFiles = libraries
+  const useIndexLoad = typeof rumoca.load_source_root_index === 'function'
+  const resultRaw = useIndexLoad
+    ? rumoca.load_source_root_index(JSON.stringify(libraries))
+    : rumoca.load_source_roots(JSON.stringify(libraries))
   const loaded = parseJson(resultRaw)
-  const parsedCount = Number.isFinite(Number(loaded?.parsed_count))
-    ? Number(loaded.parsed_count)
-    : fileCount
+  const parsedCount = useIndexLoad
+    ? fileCount
+    : Number.isFinite(Number(loaded?.parsed_count))
+      ? Number(loaded.parsed_count)
+      : fileCount
   const documentCount =
     typeof rumoca.get_source_root_document_count === 'function'
       ? Number(rumoca.get_source_root_document_count()) || 0
       : 0
-  return { absolute, fileCount, parsedCount, documentCount }
+  return {
+    absolute,
+    fileCount,
+    parsedCount,
+    documentCount,
+    loadMode: useIndexLoad ? 'index' : 'parsed',
+    classCount: Number(loaded?.class_count) || 0,
+  }
+}
+
+function getSourceRootDocumentCount() {
+  return typeof rumoca.get_source_root_document_count === 'function'
+    ? Number(rumoca.get_source_root_document_count()) || 0
+    : 0
+}
+
+function materializeLoadedSourceRootsIfNeeded() {
+  if (getSourceRootDocumentCount() > 0) return
+  if (Object.keys(loadedSourceRootFiles).length === 0) return
+  if (typeof rumoca.load_source_roots !== 'function') return
+  rumoca.load_source_roots(JSON.stringify(loadedSourceRootFiles))
 }
 
 function listClasses(prefix) {
@@ -327,6 +362,7 @@ function renderWithRumoca({ dae, templateSource, modelName, templatePath, output
 async function compileModelToDae({ model, sourceFile, useSourceRoots }) {
   if (!model) throw new Error('Missing --model')
   if (useSourceRoots && typeof rumoca.compile_with_source_roots === 'function') {
+    materializeLoadedSourceRootsIfNeeded()
     if (sourceFile) {
       const { source, sourcePath } = await readModelSource(model, sourceFile)
       const normalized = withLibraryContext(model, source)
@@ -338,6 +374,7 @@ async function compileModelToDae({ model, sourceFile, useSourceRoots }) {
     return { compiled, sourcePath: '', usedSourceRoots: true }
   }
   if (useSourceRoots && typeof rumoca.compile_with_libraries === 'function') {
+    materializeLoadedSourceRootsIfNeeded()
     if (sourceFile) {
       const { source, sourcePath } = await readModelSource(model, sourceFile)
       const normalized = withLibraryContext(model, source)
@@ -429,6 +466,7 @@ async function simulateModel({ model, sourceFile, useSourceRoots, tEnd, dt, solv
   let usedSourceRoots = false
 
   if (useSourceRoots) {
+    materializeLoadedSourceRootsIfNeeded()
     usedSourceRoots = true
     if (sourceFile) {
       const loaded = await readModelSource(model, sourceFile)
@@ -466,15 +504,18 @@ async function simulateModel({ model, sourceFile, useSourceRoots, tEnd, dt, solv
 }
 
 function printOutput(options, payload) {
+  const writeOutput = (text) => {
+    writeFileSync(1, `${String(text)}\n`, 'utf8')
+  }
   if (options.json) {
-    console.log(JSON.stringify(payload, null, 2))
+    writeOutput(JSON.stringify(payload, null, 2))
     return
   }
   if (typeof payload === 'string') {
-    console.log(payload)
+    writeOutput(payload)
     return
   }
-  console.log(JSON.stringify(payload, null, 2))
+  writeOutput(JSON.stringify(payload, null, 2))
 }
 
 async function main() {

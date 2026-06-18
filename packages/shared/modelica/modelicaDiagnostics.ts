@@ -1877,6 +1877,9 @@ type DiagnosticsSimulationResult = {
 }
 type MslLoadParsed = {
   parsed_count?: number
+  file_count?: number
+  class_count?: number
+  load_mode?: 'index' | 'parsed'
   skipped_files?: string[]
   conflicts?: string[]
   error_count?: number
@@ -1900,8 +1903,10 @@ type DiagnosticsMslApi = {
     dt: number,
     solver: string,
   ) => string
+  load_source_root_index?: (sourceRootsJson: string) => string
   load_source_roots?: (sourceRootsJson: string) => string
   load_libraries?: (librariesJson: string) => string
+  clear_source_root_cache?: () => void
   list_classes?: () => string
   get_class_info?: (qualifiedName: string) => string
   parse_source_root_file?: (source: string, filename: string) => string
@@ -2015,13 +2020,24 @@ async function getDiagnosticsWasm(): Promise<DiagnosticsWasm> {
   return sharedDiagnosticsWasmPromise
 }
 
+function resetDiagnosticsMslLoadCache(): void {
+  sharedDiagnosticsMslLoadPromise = null
+}
+
+function clearDiagnosticsMslSession(wasm: DiagnosticsMslApi): void {
+  if (typeof wasm.clear_source_root_cache === 'function') {
+    wasm.clear_source_root_cache()
+  }
+  resetDiagnosticsMslLoadCache()
+}
+
 async function ensureDiagnosticsMslLoaded(
   wasm: DiagnosticsMslApi,
   debug: Record<string, unknown>,
 ): Promise<MslLoadResult> {
   if (!sharedDiagnosticsMslLoadPromise) {
     const loadDebug: Record<string, unknown> = {}
-    sharedDiagnosticsMslLoadPromise = loadLocalMslLibraries(wasm, loadDebug)
+    sharedDiagnosticsMslLoadPromise = loadLocalMslLibraries(wasm, loadDebug, 'parsed')
       .then(({ libraryFileCount, loadParsed }) => ({
         libraryFileCount,
         loadParsed,
@@ -2126,11 +2142,15 @@ function normalizeLibraryEntryPath(path: string): string {
 async function loadLocalMslLibraries(
   wasm: DiagnosticsMslApi,
   debug: Record<string, unknown>,
+  preferredMode: 'auto' | 'index' | 'parsed' = 'auto',
 ): Promise<MslLoadResult> {
+  const canLoadSourceRootIndex = typeof wasm.load_source_root_index === 'function'
   const canLoadSourceRoots = typeof wasm.load_source_roots === 'function'
   const canLoadLibraries = typeof wasm.load_libraries === 'function'
-  if (!canLoadSourceRoots && !canLoadLibraries) {
-    throw new Error('Rumoca wasm export missing: load_source_roots / load_libraries')
+  if (!canLoadSourceRootIndex && !canLoadSourceRoots && !canLoadLibraries) {
+    throw new Error(
+      'Rumoca wasm export missing: load_source_root_index / load_source_roots / load_libraries',
+    )
   }
 
   const zipResponse = await fetch(MSL_DIAGNOSTICS_ZIP_URL)
@@ -2162,12 +2182,20 @@ async function loadLocalMslLibraries(
   }
   debug.libraryFileCount = libraryFileCount
 
-  const loadFn = canLoadSourceRoots ? wasm.load_source_roots : wasm.load_libraries
+  const useIndexLoad = preferredMode !== 'parsed' && canLoadSourceRootIndex
+  const loadFn = useIndexLoad
+    ? wasm.load_source_root_index
+    : canLoadSourceRoots
+      ? wasm.load_source_roots
+      : wasm.load_libraries
   if (typeof loadFn !== 'function') {
-    throw new Error('Rumoca wasm export missing: load_source_roots / load_libraries')
+    throw new Error(
+      'Rumoca wasm export missing: load_source_root_index / load_source_roots / load_libraries',
+    )
   }
   const loadRaw = loadFn(JSON.stringify(libraries))
   const loadParsed = JSON.parse(String(loadRaw)) as MslLoadParsed
+  loadParsed.load_mode = useIndexLoad ? 'index' : 'parsed'
   debug.loadParsed = loadParsed
 
   return {
@@ -2175,6 +2203,68 @@ async function loadLocalMslLibraries(
     loadParsed,
   }
 }
+
+export async function testModelicaMslLoadBenchmark() {
+  const debug: Record<string, unknown> = {
+    phase: 'init',
+    mslZipPath: MSL_LOCAL_ZIP_PATH,
+  }
+
+  try {
+    const wasm = await getDiagnosticsWasm()
+    debug.phase = 'wasm-loaded'
+
+    const canIndex = typeof wasm.load_source_root_index === 'function'
+    const canParse = typeof wasm.load_source_roots === 'function'
+    if (!canIndex && !canParse) {
+      throw new Error('Rumoca wasm export missing: load_source_root_index / load_source_roots')
+    }
+
+    const runLoad = async (mode: 'index' | 'parsed') => {
+      clearDiagnosticsMslSession(wasm)
+      const started = performance.now()
+      const { libraryFileCount, loadParsed } = await loadLocalMslLibraries(wasm, debug, mode)
+      const loadMs = Math.round((performance.now() - started) * 10) / 10
+      const classTree =
+        typeof wasm.list_classes === 'function'
+          ? (JSON.parse(String(wasm.list_classes())) as {
+              total_classes?: unknown
+            })
+          : null
+      return {
+        mode,
+        libraryFileCount,
+        loadMs,
+        parsedCount: Number(loadParsed.parsed_count ?? 0),
+        classCount: Number(loadParsed.class_count ?? 0),
+        listedClassCount: Number(classTree?.total_classes ?? 0),
+        documentCount:
+          typeof wasm.get_source_root_document_count === 'function'
+            ? Number(wasm.get_source_root_document_count()) || 0
+            : 0,
+      }
+    }
+
+    const indexed = canIndex ? await runLoad('index') : null
+    const parsed = canParse ? await runLoad('parsed') : null
+    clearDiagnosticsMslSession(wasm)
+
+    return {
+      ok: true,
+      indexed,
+      parsed,
+      speedupVsParsed:
+        indexed && parsed && indexed.loadMs > 0
+          ? Math.round((parsed.loadMs / indexed.loadMs) * 100) / 100
+          : null,
+    }
+  } catch (err) {
+    const baseMessage = err instanceof Error ? err.message : String(err)
+    const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
+    throw new Error([baseMessage, `MSL load benchmark debug:\n${debugDump}`].join('\n'))
+  }
+}
+testModelicaMslLoadBenchmark.timeoutMs = 120_000
 
 function compileWithDiagnosticsMsl(
   wasm: DiagnosticsMslApi,
@@ -2414,6 +2504,41 @@ function collectQualifiedClassNames(
   }
 }
 
+type DiagnosticsClassTreeNode = {
+  name?: unknown
+  qualified_name?: unknown
+  children?: unknown
+}
+
+function findQualifiedClassNode(
+  nodes: DiagnosticsClassTreeNode[],
+  qualifiedName: string,
+): DiagnosticsClassTreeNode | null {
+  for (const node of nodes) {
+    if (node.qualified_name === qualifiedName) {
+      return node
+    }
+    if (!Array.isArray(node.children)) continue
+    const nested = findQualifiedClassNode(
+      node.children as DiagnosticsClassTreeNode[],
+      qualifiedName,
+    )
+    if (nested) return nested
+  }
+  return null
+}
+
+function directQualifiedChildNames(node: DiagnosticsClassTreeNode | null): string[] {
+  if (!node || !Array.isArray(node.children)) return []
+  return node.children
+    .map((child) =>
+      typeof (child as DiagnosticsClassTreeNode).qualified_name === 'string'
+        ? ((child as DiagnosticsClassTreeNode).qualified_name as string)
+        : '',
+    )
+    .filter((name) => name.length > 0)
+}
+
 export async function testModelicaOptionalRayonInitialization() {
   const wasm = await getDiagnosticsWasm()
   const hasInit = typeof wasm.wasm_init === 'function'
@@ -2513,13 +2638,13 @@ export async function testModelicaMslTreeViewData() {
     throw new Error('Rumoca wasm export missing: list_classes')
   }
 
-  const { libraryFileCount } = await ensureDiagnosticsMslLoaded(wasm, debug)
+  const { libraryFileCount, loadParsed } = await ensureDiagnosticsMslLoaded(wasm, debug)
   debug.phase = 'msl-loaded'
 
   const rawTree = wasm.list_classes()
   const tree = JSON.parse(String(rawTree)) as {
     total_classes?: unknown
-    classes?: Array<{ name?: unknown; qualified_name?: unknown; children?: unknown }>
+    classes?: DiagnosticsClassTreeNode[]
   }
   const classNodes = Array.isArray(tree.classes) ? tree.classes : []
   const allQualifiedNames: string[] = []
@@ -2536,12 +2661,77 @@ export async function testModelicaMslTreeViewData() {
     )
   }
 
+  const complexNode = findQualifiedClassNode(classNodes, 'Complex')
+  const complexChildNames = directQualifiedChildNames(complexNode)
+  const expectedComplexMembers =
+    loadParsed.load_mode === 'parsed'
+      ? [
+          "Complex.'constructor'",
+          "Complex.'constructor'.fromReal",
+          "Complex.'0'",
+          "Complex.'-'.negate",
+          "Complex.'-'.subtract",
+          "Complex.'*'.multiply",
+          "Complex.'*'.scalarProduct",
+          "Complex.'+'",
+          "Complex.'String'",
+        ]
+      : [
+          'Complex.constructor',
+          'Complex.constructor.fromReal',
+          'Complex.0',
+          'Complex.-.negate',
+          'Complex.-.subtract',
+          'Complex.*.multiply',
+          'Complex.*.scalarProduct',
+          'Complex.+',
+          'Complex.String',
+        ]
+  const missingExpectedComplexMembers = expectedComplexMembers.filter(
+    (qualifiedName) => !allQualifiedNames.includes(qualifiedName),
+  )
+  const leakedComplexMembers = [
+    'Complex.fromReal',
+    'Complex.negate',
+    'Complex.subtract',
+    'Complex.multiply',
+    'Complex.scalarProduct',
+    'Complex.function',
+    'Complex.constructor.s',
+    'Complex.constructor.fromReal.returns',
+    'Complex.*.scalarProduct.returns',
+    'Complex.*.s',
+    'Complex.containing',
+    'Complex.tests',
+  ].filter((qualifiedName) => allQualifiedNames.includes(qualifiedName))
+
+  debug.loadMode = loadParsed.load_mode
+  debug.complexChildNames = complexChildNames
+  debug.leakedComplexMembers = leakedComplexMembers
+  debug.missingExpectedComplexMembers = missingExpectedComplexMembers
+
+  if (!complexNode) {
+    throw new Error('Expected Complex root node in MSL class tree')
+  }
+  if (leakedComplexMembers.length > 0 || missingExpectedComplexMembers.length > 0) {
+    throw new Error(
+      [
+        'MSL class tree shape regression around Complex operator record.',
+        `leaked=${leakedComplexMembers.join(',') || 'none'}`,
+        `missing=${missingExpectedComplexMembers.join(',') || 'none'}`,
+        `complex_children=${complexChildNames.join(',') || 'none'}`,
+      ].join(' '),
+    )
+  }
+
   return {
     ok: true,
     libraryFileCount,
     totalClasses,
     hasModelicaRoot,
     hasKnownPackage,
+    loadMode: loadParsed.load_mode,
+    complexChildNames,
     classPreview: allQualifiedNames.slice(0, 20),
   }
 }

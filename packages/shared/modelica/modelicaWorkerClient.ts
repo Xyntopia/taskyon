@@ -11,6 +11,16 @@ type WorkerRequest =
         useSourceRoots: boolean
       }
     }
+  | {
+      id: number
+      type: 'render_modelica_view'
+      payload: {
+        modelicaSource: string
+        modelName: string
+        useSourceRoots: boolean
+        view: 'base-modelica' | 'flat-modelica' | 'dae-modelica'
+      }
+    }
   | { id: number; type: 'load_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
   | { id: number; type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
   | { id: number; type: 'clear_libraries' }
@@ -41,6 +51,10 @@ type WorkerRequest =
       type: 'start_simulation'
       payload: { source: string; modelName: string; tEnd: number; dt: number; solver: string }
     }
+  | { id: number; type: 'get_bundled_source_root_manifest' }
+  | { id: number; type: 'load_bundled_source_root_cache'; payload: { archiveId: string } }
+  | { id: number; type: 'export_source_root_binary_cache'; payload: { uris: string[] } }
+  | { id: number; type: 'restore_source_root_binary_cache'; payload: { bytes: ArrayBuffer } }
   | { id: number; type: 'get_source_root_document_count' }
 
 type WorkerRequestNoId =
@@ -53,6 +67,15 @@ type WorkerRequestNoId =
         modelName: string
         usePreparedDae: boolean
         useSourceRoots: boolean
+      }
+    }
+  | {
+      type: 'render_modelica_view'
+      payload: {
+        modelicaSource: string
+        modelName: string
+        useSourceRoots: boolean
+        view: 'base-modelica' | 'flat-modelica' | 'dae-modelica'
       }
     }
   | { type: 'load_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
@@ -80,6 +103,10 @@ type WorkerRequestNoId =
       type: 'start_simulation'
       payload: { source: string; modelName: string; tEnd: number; dt: number; solver: string }
     }
+  | { type: 'get_bundled_source_root_manifest' }
+  | { type: 'load_bundled_source_root_cache'; payload: { archiveId: string } }
+  | { type: 'export_source_root_binary_cache'; payload: { uris: string[] } }
+  | { type: 'restore_source_root_binary_cache'; payload: { bytes: ArrayBuffer } }
   | { type: 'get_source_root_document_count' }
 
 type WorkerResponse =
@@ -109,6 +136,17 @@ export type ModelicaWorkerInitInfo = {
   rayonEnabled: boolean
   simulationAvailable?: boolean
   simulationModelDiscoveryAvailable?: boolean
+}
+
+export type BundledSourceRootArchive = {
+  archiveId: string
+  fileName: string
+  fileCount: number
+  source?: string
+}
+
+export type BundledSourceRootManifest = {
+  archives: BundledSourceRootArchive[]
 }
 
 export class ModelicaWorkerClient {
@@ -179,6 +217,8 @@ export class ModelicaWorkerClient {
         return 'Compiling Modelica'
       case 'extract_diagram':
         return 'Building diagram'
+      case 'render_modelica_view':
+        return 'Loading analysis view'
       case 'get_class_info':
         return 'Loading class info'
       case 'load_msl_zip':
@@ -194,6 +234,14 @@ export class ModelicaWorkerClient {
         return 'Initializing worker'
       case 'get_source_root_document_count':
         return 'Inspecting source roots'
+      case 'get_bundled_source_root_manifest':
+        return 'Inspecting bundled libraries'
+      case 'load_bundled_source_root_cache':
+        return 'Loading bundled libraries'
+      case 'export_source_root_binary_cache':
+        return 'Creating library cache'
+      case 'restore_source_root_binary_cache':
+        return 'Restoring library cache'
       case 'lsp_completion_with_timing':
         return 'Computing completion'
       case 'get_simulation_models':
@@ -237,11 +285,21 @@ export class ModelicaWorkerClient {
   }): Promise<{
     compiled: Record<string, unknown>
     daeForTemplate: Record<string, unknown>
+    daePretty: string
     rendered: string
     modelName: string
     usedLibraries: boolean
   }> {
     return this.request({ type: 'compile_render', payload })
+  }
+
+  renderModelicaView(payload: {
+    modelicaSource: string
+    modelName: string
+    useSourceRoots: boolean
+    view: 'base-modelica' | 'flat-modelica' | 'dae-modelica'
+  }): Promise<{ view: 'base-modelica' | 'flat-modelica' | 'dae-modelica'; rendered: string }> {
+    return this.request({ type: 'render_modelica_view', payload })
   }
 
   loadMslZip(
@@ -252,6 +310,9 @@ export class ModelicaWorkerClient {
     parsedCount: number
     archiveName: string
     documentCount: number
+    loadMode?: 'index' | 'parsed'
+    classCount?: number
+    sourceRootUris: string[]
   }> {
     return this.request({ type: 'load_msl_zip', payload: { fileName, bytes } }, [bytes])
   }
@@ -264,6 +325,8 @@ export class ModelicaWorkerClient {
     parsedCount: number
     archiveName: string
     documentCount: number
+    loadMode?: 'merge'
+    sourceRootUris: string[]
   }> {
     return this.request({ type: 'merge_msl_zip', payload: { fileName, bytes } }, [bytes])
   }
@@ -320,6 +383,36 @@ export class ModelicaWorkerClient {
     solver: string
   }): Promise<Record<string, unknown>> {
     return this.request({ type: 'start_simulation', payload })
+  }
+
+  getBundledSourceRootManifest(): Promise<BundledSourceRootManifest> {
+    return this.request<BundledSourceRootManifest>({ type: 'get_bundled_source_root_manifest' })
+  }
+
+  loadBundledSourceRootCache(
+    archiveId: string,
+  ): Promise<{ archiveId: string; documentCount: number }> {
+    return this.request({
+      type: 'load_bundled_source_root_cache',
+      payload: { archiveId },
+    })
+  }
+
+  exportSourceRootBinaryCache(uris: string[]): Promise<Uint8Array> {
+    return this.request<Uint8Array>({
+      type: 'export_source_root_binary_cache',
+      payload: { uris },
+    })
+  }
+
+  restoreSourceRootBinaryCache(bytes: ArrayBuffer): Promise<number> {
+    return this.request<number>(
+      {
+        type: 'restore_source_root_binary_cache',
+        payload: { bytes },
+      },
+      [bytes],
+    )
   }
 
   getSourceRootDocumentCount(): Promise<number> {

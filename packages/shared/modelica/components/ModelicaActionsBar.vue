@@ -50,7 +50,7 @@
             <q-item-section>Export Generated JS</q-item-section>
           </q-item>
           <q-item v-close-popup clickable @click="emit('export-target', 'daePretty')">
-            <q-item-section>Export Pretty DAE</q-item-section>
+            <q-item-section>Export Base DAE</q-item-section>
           </q-item>
           <q-item v-close-popup clickable @click="emit('export-target', 'daeJson')">
             <q-item-section>Export DAE JSON</q-item-section>
@@ -115,7 +115,9 @@
         <div class="text-caption text-grey-7">Rumoca Simulation Export</div>
         <div class="text-body2 q-mb-sm">{{ runtimeInfo.rumocaSimulationAvailable }}</div>
         <div class="text-caption text-grey-7">Rumoca Model Discovery Export</div>
-        <div class="text-body2 q-mb-sm">{{ runtimeInfo.rumocaSimulationModelDiscoveryAvailable }}</div>
+        <div class="text-body2 q-mb-sm">
+          {{ runtimeInfo.rumocaSimulationModelDiscoveryAvailable }}
+        </div>
         <div class="text-caption text-grey-7">Rumoca Commit</div>
         <div class="text-body2 q-mb-sm">{{ runtimeInfo.rumocaCommit }}</div>
         <div class="text-caption text-grey-7">Rumoca Build Time (legacy)</div>
