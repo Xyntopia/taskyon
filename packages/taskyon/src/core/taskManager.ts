@@ -459,7 +459,14 @@ export async function useTyTaskManager(taskyonDb: TyPGDB) {
       console.log('create new Task:', completeTask)
       await execWLock(async () => {
         await tyCrud.add(completeTask)
-        if (options.vectors) void taskVectors.addtoVectorDB(completeTask)
+        if (options.vectors) {
+          void taskVectors.addtoVectorDB(completeTask).catch((error: unknown) => {
+            console.warn('vector indexing failed', {
+              taskId: completeTask.id,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          })
+        }
         // Update parent-child cache
         updateChildAndSiblingMap(completeTask)
         // update our toolIndex with the new toolname :)

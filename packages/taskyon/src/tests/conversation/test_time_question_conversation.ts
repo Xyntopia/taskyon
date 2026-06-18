@@ -1,12 +1,36 @@
 import {
   buildCreateNewTaskChain,
+  forgeTaskChain,
   partialTaskDraft,
-  processTasksDetailed,
+  tyCore,
   type TaskNode,
+  type Taskyon,
 } from '../..'
-import { useTaskyonStore } from 'src/stores/taskyonState'
+import { createStandardEntryNodeTool } from '../../tools/entryNode'
 
-const tystate = useTaskyonStore()
+type TaskNodeWithParent = TaskNode & { parentID: string }
+
+type ConversationRunResult =
+  | {
+      status: 'matched'
+      result: TaskNode
+      stopTask: TaskNode
+      observedTasks: TaskNode[]
+      initialIds: string[]
+    }
+  | {
+      status: 'timeout'
+      observedTasks: TaskNode[]
+      initialIds: string[]
+      timeoutMs: number
+    }
+  | {
+      status: 'error'
+      observedTasks: TaskNode[]
+      initialIds: string[]
+      error: Error
+      errorTask: TaskNode
+    }
 
 function assert(condition: boolean, msg?: string): asserts condition {
   if (!condition) {
@@ -14,28 +38,87 @@ function assert(condition: boolean, msg?: string): asserts condition {
   }
 }
 
-const getEntryNodeDraft = (entryNodeArgs?: Record<string, unknown>) => {
-  const baseEntryNode = partialTaskDraft.parse(structuredClone(tystate.entryNode))
-  if (baseEntryNode.content.type !== 'functioncall') return baseEntryNode
+const taskyonFlowToolchainConfig = {
+  taskyonFlow: {
+    use_baseprompt: true,
+    use_tool_chooser: true,
+    tool_chooser_min_tools: 5,
+    max_error_retries: 3,
+    providerToolCalling: true,
+    use_multimodal: true,
+    reasoning_effort: 'low',
+    websearch: {
+      max_results: 5,
+    },
+    prompt_templates: {
+      basePrompt:
+        'You are a helpful assistant called **Taskyon**.\nReturn answers in **Markdown**.',
+      instruction: 'You are a helpful assistant tasked with accurately completing the given task.',
+      toolResult:
+        '**Instruction:**\n\nPlease evaluate the tool/function result.\n\n```\n{message}\n```',
+      task: 'COMPLETE THE FOLLOWING TASK:\n\n```\n{message}\n```',
+      schemaReminder:
+        'Your output must strictly follow these rules and match the requested {format} schema.\n\nSchema:\n\n{schema}',
+      tools: 'Choose one of the following tools if it helps you to complete the task:\n\n${tools}',
+    },
+  },
+} as const
 
-  const currentArguments =
-    baseEntryNode.content.data.arguments && typeof baseEntryNode.content.data.arguments === 'object'
-      ? baseEntryNode.content.data.arguments
-      : {}
+const taskyonFlowLlmSettings = {
+  selectedApi: 'taskyon',
+  llmApis: {
+    taskyon: {
+      name: 'taskyon',
+      baseURL: 'https://share.taskyon.space',
+      defaultModel: 'google/gemini-2.5-flash-lite',
+      selectedModel: 'google/gemini-2.5-flash-lite',
+      streamSupport: true,
+      defaultHeaders: {
+        apiKey: 'sb_publishable_WrQ1aIRvl9BrMtpMQ9TocQ_JN7I9kJm',
+      },
+      routes: {
+        chatCompletion: '/chatCompletion/api/v1/',
+        models: '/chatCompletion/api/v1/models',
+      },
+    },
+  },
+  siteUrl: 'https://taskyon.space',
+  entryFunction: 'taskyonFlow',
+} as const
 
-  return partialTaskDraft.parse({
-    ...baseEntryNode,
+const resolveStandaloneTaskyonApiKey = (tyauth?: string) =>
+  tyauth?.trim() || process.env.TASKYON_API_KEY?.trim() || ''
+
+const getEntryNodeDraft = (entryNodeArgs?: Record<string, unknown>) =>
+  partialTaskDraft.parse({
+    role: 'system',
     content: {
-      ...baseEntryNode.content,
+      type: 'functioncall',
       data: {
-        ...baseEntryNode.content.data,
+        name: 'taskyonFlow',
         arguments: {
-          ...currentArguments,
           ...(entryNodeArgs ?? {}),
         },
       },
     },
   })
+
+const createConversationHarness = async (): Promise<{ ty: Taskyon }> => {
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'taskyonFlow',
+    renderOptions: { hideChat: true, hideLlm: true },
+    toolChooser: { enabled: true, useTools: true },
+    defaultAllowedTools: [],
+  })
+
+  const ty = await tyCore(
+    () => taskyonFlowLlmSettings,
+    () => getEntryNodeDraft(),
+    () => taskyonFlowToolchainConfig,
+    [entryNodeTool],
+  )
+
+  return { ty }
 }
 
 const getSimpleMessageTask = (text: string) => ({
@@ -94,6 +177,7 @@ const summarizeTask = (task: TaskNode) => ({
 })
 
 const collectTaskDiagnostics = async (
+  ty: Taskyon,
   taskChain: ReturnType<typeof buildCreateNewTaskChain>,
   observedTasks: TaskNode[],
   conversationTasks: TaskNode[],
@@ -102,7 +186,7 @@ const collectTaskDiagnostics = async (
   const metaEntries = await Promise.all(
     conversationTasks.map(async (task) => ({
       taskId: task.id,
-      meta: (await tystate.getMeta(task.id)) ?? null,
+      meta: (await ty.getMeta(task.id)) ?? null,
     })),
   )
 
@@ -118,6 +202,7 @@ const collectTaskDiagnostics = async (
 const assertWithDiagnostics = async (
   condition: boolean,
   message: string,
+  ty: Taskyon,
   taskChain: ReturnType<typeof buildCreateNewTaskChain>,
   observedTasks: TaskNode[],
   conversationTasks: TaskNode[],
@@ -126,6 +211,7 @@ const assertWithDiagnostics = async (
   if (condition) return
   throw new Error(message, {
     cause: await collectTaskDiagnostics(
+      ty,
       taskChain,
       observedTasks,
       conversationTasks,
@@ -134,9 +220,7 @@ const assertWithDiagnostics = async (
   })
 }
 
-const summarizeProcessingResult = (
-  result: Awaited<ReturnType<ReturnType<typeof processTasksDetailed>>>,
-) => {
+const summarizeProcessingResult = (result: ConversationRunResult) => {
   if (result.status === 'matched') {
     return {
       status: result.status,
@@ -162,23 +246,19 @@ const summarizeProcessingResult = (
   return {
     status: result.status,
     initialIds: result.initialIds,
-    ...(result.status === 'timeout' ? { timeoutMs: result.timeoutMs } : {}),
+    timeoutMs: result.timeoutMs,
     observedTaskIds: result.observedTasks.map((task) => task.id),
   }
 }
 
-const getLatestLeafId = async (rootTaskId: string) => {
-  const ty = await tystate.taskyon
+const getLatestLeafId = async (ty: Taskyon, rootTaskId: string) => {
   const leafIds = await ty.findSiblingLeafTasks(rootTaskId)
   const leafTasks = await ty.convertTaskIDs(leafIds)
   const latestLeaf = leafTasks.sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0))[0]
   return latestLeaf?.id
 }
 
-const getConversationTasks = async (
-  processingResult: Awaited<ReturnType<ReturnType<typeof processTasksDetailed>>>,
-) => {
-  const ty = await tystate.taskyon
+const getConversationTasks = async (ty: Taskyon, processingResult: ConversationRunResult) => {
   const rootTaskId = processingResult.initialIds.at(-1)
   if (!rootTaskId) {
     throw new Error('Expected an initial root task id for the created conversation')
@@ -189,7 +269,7 @@ const getConversationTasks = async (
       ? processingResult.result.id
       : processingResult.status === 'error'
         ? processingResult.errorTask.id
-        : await getLatestLeafId(rootTaskId)
+        : await getLatestLeafId(ty, rootTaskId)
 
   if (!terminalTaskId) {
     throw new Error('Expected a terminal task id for the created conversation')
@@ -197,15 +277,95 @@ const getConversationTasks = async (
   return await ty.convertTaskIDs(await ty.getTaskIdChain(terminalTaskId))
 }
 
-const processConversationUntilReturn = (taskChain: ReturnType<typeof buildCreateNewTaskChain>) => {
-  return processTasksDetailed(tystate.api)([taskChain], 'return', {
-    timeoutMs: 120_000,
-    show: true,
-    throwOnError: true,
-  })
-}
+const processConversationUntilReturn =
+  (ty: Taskyon) => async (taskChain: ReturnType<typeof buildCreateNewTaskChain>) => {
+    const tasks = await forgeTaskChain([taskChain])
+    const initialIds = tasks.map((task) => task.id)
+    const trackedIds = new Set(initialIds)
+    const pendingByParentId = new Map<string, TaskNodeWithParent[]>()
+    const observedTasks: TaskNode[] = []
 
-export const testTimeQuestionConversationUsesClockTool = async () => {
+    const appendPendingTask = (task: TaskNodeWithParent) => {
+      const pending = pendingByParentId.get(task.parentID) ?? []
+      pending.push(task)
+      pendingByParentId.set(task.parentID, pending)
+    }
+
+    return await new Promise<ConversationRunResult>((resolve) => {
+      const finish = (result: ConversationRunResult) => {
+        clearTimeout(timeout)
+        unsubscribe()
+        resolve(result)
+      }
+
+      const emitTaskAndFlush = (task: TaskNodeWithParent) => {
+        if (trackedIds.has(task.id)) return
+        trackedIds.add(task.id)
+        observedTasks.push(task)
+
+        if (task.content.type === 'error') {
+          finish({
+            status: 'error',
+            observedTasks,
+            initialIds,
+            error: new Error(`Task processing failed on task ${task.id}`, {
+              cause: task.content.data,
+            }),
+            errorTask: task,
+          })
+          return
+        }
+
+        if (task.content.type === 'return') {
+          finish({
+            status: 'matched',
+            result: task,
+            stopTask: task,
+            observedTasks,
+            initialIds,
+          })
+          return
+        }
+
+        const pendingChildren = pendingByParentId.get(task.id) ?? []
+        pendingByParentId.delete(task.id)
+        pendingChildren.forEach(emitTaskAndFlush)
+      }
+
+      const unsubscribe = ty.port.receive((msg) => {
+        if (msg.type !== 'taskCreated' || !msg.task || typeof msg.task.parentID !== 'string') return
+        const task = msg.task as TaskNodeWithParent
+        if (trackedIds.has(task.parentID)) {
+          emitTaskAndFlush(task)
+          return
+        }
+        appendPendingTask(task)
+      })
+
+      const timeoutMs = 120_000
+      const timeout = setTimeout(() => {
+        finish({
+          status: 'timeout',
+          observedTasks,
+          initialIds,
+          timeoutMs,
+        })
+      }, timeoutMs)
+
+      ty.port.send({
+        type: 'tasks',
+        tasks,
+        execute: true,
+        show: true,
+        origin:
+          typeof globalThis.location?.origin === 'string'
+            ? globalThis.location.origin
+            : 'taskyon-test',
+      })
+    })
+  }
+
+export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Taskyon) => {
   const taskChain = buildCreateNewTaskChain({
     currentTask: null,
     draftTask: getSimpleMessageTask('hi! what is the time? use the tool please!'),
@@ -224,8 +384,8 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
   )
 
   try {
-    const processingResult = await processConversationUntilReturn(taskChain)
-    const conversationTasks = await getConversationTasks(processingResult)
+    const processingResult = await processConversationUntilReturn(ty)(taskChain)
+    const conversationTasks = await getConversationTasks(ty, processingResult)
     const observedTasks = processingResult.observedTasks
     const stopSummary = summarizeProcessingResult(processingResult)
 
@@ -263,9 +423,11 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
     const errorTask = conversationTasks.find((task: TaskNode) => task.content.type === 'error')
     const returnTasks = conversationTasks.filter((task: TaskNode) => task.content.type === 'return')
     const finalAssistantMessage = [...conversationTasks].reverse().find(isAssistantMessage)
+
     await assertWithDiagnostics(
       processingResult.status === 'matched',
       `Expected processing to stop on a return task, got ${processingResult.status}`,
+      ty,
       taskChain,
       observedTasks,
       conversationTasks,
@@ -274,6 +436,7 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
     await assertWithDiagnostics(
       processingResult.status !== 'matched' || processingResult.result.content.type === 'return',
       'Expected the stop task to be a return task',
+      ty,
       taskChain,
       observedTasks,
       conversationTasks,
@@ -282,6 +445,7 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
     await assertWithDiagnostics(
       !!shortlistCall,
       'Expected a shortlist/decision phase before tool execution',
+      ty,
       taskChain,
       observedTasks,
       conversationTasks,
@@ -290,6 +454,7 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
     await assertWithDiagnostics(
       !!shortlistResult,
       'Expected the shortlist phase to include the clock tool',
+      ty,
       taskChain,
       observedTasks,
       conversationTasks,
@@ -298,6 +463,7 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
     await assertWithDiagnostics(
       !!chooseToolCall,
       'Expected a ChooseTool phase after the shortlist result',
+      ty,
       taskChain,
       observedTasks,
       conversationTasks,
@@ -306,6 +472,7 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
     await assertWithDiagnostics(
       !!analyzeToolResultCall,
       'Expected an AnalyzeToolResult phase after the clock tool returned',
+      ty,
       taskChain,
       observedTasks,
       conversationTasks,
@@ -314,6 +481,7 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
     await assertWithDiagnostics(
       !!clockCall,
       'Expected the time conversation to call the clock tool',
+      ty,
       taskChain,
       observedTasks,
       conversationTasks,
@@ -322,6 +490,7 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
     await assertWithDiagnostics(
       !!clockResult,
       'Expected the clock tool result to contain time/date/weekday',
+      ty,
       taskChain,
       observedTasks,
       conversationTasks,
@@ -330,6 +499,7 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
     await assertWithDiagnostics(
       !errorTask,
       'Expected the time conversation to finish without any error task',
+      ty,
       taskChain,
       observedTasks,
       conversationTasks,
@@ -338,6 +508,7 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
     await assertWithDiagnostics(
       returnTasks.length === 1,
       `Expected exactly one return task for the time conversation, got ${returnTasks.length}`,
+      ty,
       taskChain,
       observedTasks,
       conversationTasks,
@@ -346,6 +517,7 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
     await assertWithDiagnostics(
       !!finalAssistantMessage,
       'Expected a final assistant message after the tool result',
+      ty,
       taskChain,
       observedTasks,
       conversationTasks,
@@ -364,9 +536,20 @@ export const testTimeQuestionConversationUsesClockTool = async () => {
       throw error
     }
     throw new Error('Time question conversation test failed', {
-      cause: await collectTaskDiagnostics(taskChain, [], [], error),
+      cause: await collectTaskDiagnostics(ty, taskChain, [], [], error),
     })
   }
+}
+runTimeQuestionConversationUsesClockToolScenario.helper = true
+
+export const testTimeQuestionConversationUsesClockTool = async (opts?: { tyauth?: string }) => {
+  const { ty } = await createConversationHarness()
+  const taskyonApiKey = resolveStandaloneTaskyonApiKey(opts?.tyauth)
+  if (taskyonApiKey) {
+    await ty.setSecret('chatCompletionApiKeys', taskyonFlowLlmSettings.selectedApi, taskyonApiKey)
+    await ty.updateChatCompletionApiKey(taskyonFlowLlmSettings.selectedApi, taskyonApiKey)
+  }
+  return await runTimeQuestionConversationUsesClockToolScenario(ty)
 }
 testTimeQuestionConversationUsesClockTool.description =
   'Runs the exact UI-style initial Taskyon chain for a time question with the entry-node tool chooser forced on, then verifies shortlist, ChooseTool, clock execution, and final assistant response without intermediate error returns.'

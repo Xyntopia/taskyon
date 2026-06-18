@@ -57,49 +57,53 @@ export async function countToolTokens(functionList: ToolBase[]) {
   return totalTokens
 }
 
-const nlpWorker = {
-  // TODO: make sure, we don't reload models & tokenizers all the time!!
-  vectorizeText: async (text: string, modelName: string) => {
-    return await getVector(text, modelName)
-  },
+export function createNlpWorkerApi() {
+  return {
+    // TODO: make sure, we don't reload models & tokenizers all the time!!
+    vectorizeText: async (text: string, modelName: string) => {
+      return await getVector(text, modelName)
+    },
 
-  loadVecTokenizer: async (modelName: string) => {
-    await loadTokenizer(modelName)
-    console.log('tokenizer loaded:', modelName)
-  },
+    loadVecTokenizer: async (modelName: string) => {
+      await loadTokenizer(modelName)
+      console.log('tokenizer loaded:', modelName)
+    },
 
-  loadVecModel: async (modelName: string) => {
-    await loadModel(modelName)
-    console.log('model loaded:', modelName)
-  },
+    loadVecModel: async (modelName: string) => {
+      await loadModel(modelName)
+      console.log('model loaded:', modelName)
+    },
 
-  estimateChatTokens: async (
-    content: TaskNode['content'],
-    chat: CountableMessage[],
-    tools: Record<string, ToolBase>,
-    allowedTools?: string[],
-    chatResult?: string,
-  ): Promise<TaskNodeMeta['estimatedTokens']> => {
-    //console.log('estimate chat tokens...')
-    const functions: ToolBase[] = mapFunctionNames(allowedTools || [], tools)
-    // TODO: convert task.content into a legitimate string first, using the
-    //       "original" functions toshow what actually gets sent to the LLM!
-    const contentStr = JSON.stringify(content.data)
-    const singlePromptTokens = await countStringTokens(contentStr)
-    const promptTokens = await countChatTokens(chat)
-    const functionTokens = Math.floor((await countToolTokens(functions)) * 0.7)
-    const resultTokens = chatResult ? await countStringTokens(chatResult) : 0
-    return {
-      singlePromptTokens,
-      promptTokens,
-      functionTokens,
-      resultTokens,
-    }
-  },
+    estimateChatTokens: async (
+      content: TaskNode['content'],
+      chat: CountableMessage[],
+      tools: Record<string, ToolBase>,
+      allowedTools?: string[],
+      chatResult?: string,
+    ): Promise<TaskNodeMeta['estimatedTokens']> => {
+      const functions: ToolBase[] = mapFunctionNames(allowedTools || [], tools)
+      const contentStr = JSON.stringify(content.data)
+      const singlePromptTokens = await countStringTokens(contentStr)
+      const promptTokens = await countChatTokens(chat)
+      const functionTokens = Math.floor((await countToolTokens(functions)) * 0.7)
+      const resultTokens = chatResult ? await countStringTokens(chatResult) : 0
+      return {
+        singlePromptTokens,
+        promptTokens,
+        functionTokens,
+        resultTokens,
+      }
+    },
+  }
 }
+
+const nlpWorker = createNlpWorkerApi()
 
 export type NlpWorkerInterface = typeof nlpWorker
 
-if (typeof self !== 'undefined' && typeof (self as { addEventListener?: unknown }).addEventListener === 'function') {
+if (
+  typeof self !== 'undefined' &&
+  typeof (self as { addEventListener?: unknown }).addEventListener === 'function'
+) {
   expose(nlpWorker)
 }

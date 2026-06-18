@@ -315,6 +315,98 @@ function workerLoggingHelper(streamEmit: (value: TyTaskStreamData) => void) {
   }
 }
 
+const MAX_EQUIVALENT_AUTONOMOUS_ERRORS = 3
+
+const toAutonomousErrorText = (value: unknown): string => {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return `${value}`
+  }
+  if (value instanceof Error) return value.message
+  return ''
+}
+
+const normalizeAutonomousErrorText = (value: unknown) =>
+  toAutonomousErrorText(value)
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+
+const extractAutonomousErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  if (error && typeof error === 'object' && 'message' in error) {
+    return toAutonomousErrorText((error as { message?: unknown }).message)
+  }
+  return ''
+}
+
+const createAutonomousErrorSignature = (error: unknown) =>
+  normalizeAutonomousErrorText(extractAutonomousErrorMessage(error))
+
+const isUnrecoverableAutonomousError = (error: unknown) => {
+  const signature = createAutonomousErrorSignature(error)
+  if (signature.length === 0) return false
+
+  return [
+    'define an api key',
+    'missing api key',
+    'no api key',
+    'api key is required',
+    'unauthorized',
+    'forbidden',
+    'authentication failed',
+    'invalid api key',
+  ].some((pattern) => signature.includes(pattern))
+}
+
+const countEquivalentAutonomousErrors = (taskChain: TaskNode[], signature: string) => {
+  if (signature.length === 0) return 0
+  return taskChain.filter((task) => {
+    if (task.content.type !== 'error') return false
+    return createAutonomousErrorSignature(task.content.data) === signature
+  }).length
+}
+
+type AutonomousErrorHandlingDecision =
+  | {
+      mode: 'stop'
+      reason: string
+      summary: string
+    }
+  | {
+      mode: 'retry'
+    }
+
+const resolveAutonomousErrorHandlingDecision = (
+  task: TaskNode,
+  taskChain: TaskNode[],
+  error: unknown,
+): AutonomousErrorHandlingDecision => {
+  const signature = createAutonomousErrorSignature(error)
+  const equivalentErrors = countEquivalentAutonomousErrors(taskChain, signature)
+  const toolName =
+    task.content.type === 'functioncall' ? task.content.data.name : `t/${task.content.type}`
+
+  if (isUnrecoverableAutonomousError(error)) {
+    return {
+      mode: 'stop',
+      reason: `Stopping autonomous recovery after unrecoverable ${toolName} error`,
+      summary: `Unrecoverable ${toolName} error prevented autonomous retry`,
+    }
+  }
+
+  if (equivalentErrors + 1 >= MAX_EQUIVALENT_AUTONOMOUS_ERRORS) {
+    return {
+      mode: 'stop',
+      reason: `Stopping autonomous recovery after ${MAX_EQUIVALENT_AUTONOMOUS_ERRORS} equivalent ${toolName} errors`,
+      summary: `Repeated equivalent ${toolName} errors tripped the autonomous circuit breaker`,
+    }
+  }
+
+  return { mode: 'retry' }
+}
+
 function createHandleError(
   taskManager: TyTaskManager,
   currentTaskCtrl: AbortController,
@@ -325,21 +417,33 @@ function createHandleError(
   return async (error: unknown, task: TaskNode, errorhandlerTask: partialTaskDraft) => {
     const debugInfo = createDebugInfoFromError(error)
     void taskManager.metaUpsert(task.id, debugInfo, 'shallow_merge')
+    const taskChain = await taskManager.getTaskChain(task.id)
+    const errorHandlingDecision = resolveAutonomousErrorHandlingDecision(task, taskChain, error)
 
     // we are adding the error task chain as a subtaskchain with the parentID of this
     // particular task.
     const errorTaskId = (
       await taskManager.addTaskChain(
-        [
-          {
-            role: 'system',
-            content: {
-              type: 'error',
-              data: serializeForJson(error),
-            },
-          },
-          errorhandlerTask,
-        ],
+        errorHandlingDecision.mode === 'retry'
+          ? [
+              {
+                role: 'system',
+                content: {
+                  type: 'error',
+                  data: serializeForJson(error),
+                },
+              },
+              errorhandlerTask,
+            ]
+          : [
+              {
+                role: 'system',
+                content: {
+                  type: 'error',
+                  data: serializeForJson(error),
+                },
+              },
+            ],
         undefined,
         task.id,
       )
@@ -353,12 +457,22 @@ function createHandleError(
         errorTaskId,
         {
           error: debugInfo.error,
-          summary: `Error originated in task ${task.id}`,
+          summary:
+            errorHandlingDecision.mode === 'retry'
+              ? `Error originated in task ${task.id}`
+              : errorHandlingDecision.summary,
         },
         'shallow_merge',
       )
-      // we need processTasksQueue as an argument here!!!
-      queueTask(errorTaskId)
+      if (errorHandlingDecision.mode === 'retry') {
+        // we need processTasksQueue as an argument here!!!
+        queueTask(errorTaskId)
+      } else {
+        console.warn(errorHandlingDecision.reason, {
+          taskId: task.id,
+          errorTaskId,
+        })
+      }
     }
   }
 }

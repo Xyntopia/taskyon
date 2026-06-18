@@ -157,6 +157,10 @@ import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, onMounted, ref } from 'vue'
 import {
+  runTimeQuestionConversationUsesClockToolScenario,
+  testTimeQuestionConversationUsesClockTool as packageTimeQuestionConversationTest,
+} from '../../packages/taskyon/src/tests/conversation/test_time_question_conversation'
+import {
   buildDiagnosticsRegistry,
   runDiagnosticsTests,
   type TaskyonTestFn,
@@ -208,6 +212,21 @@ modules.push({
 modules.push({
   sourcePath: 'src/modules/modelica/modelicaDiagnostics.ts',
   mod: ModelicaDiagnostics,
+})
+modules.push({
+  sourcePath: 'src/pages/DiagnosticsPage.vue',
+  mod: {
+    testTimeQuestionConversationUsesClockTool: Object.assign(
+      async () => {
+        const ty = await tystate.taskyon
+        return await runTimeQuestionConversationUsesClockToolScenario(ty)
+      },
+      {
+        description: packageTimeQuestionConversationTest.description,
+        timeoutMs: packageTimeQuestionConversationTest.timeoutMs,
+      },
+    ),
+  },
 })
 
 const registry = buildDiagnosticsRegistry({

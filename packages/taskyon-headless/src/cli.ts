@@ -6,6 +6,7 @@ import {
   type TestRecord,
 } from '../../shared/modules/diagnosticsRunner'
 import { readdir } from 'node:fs/promises'
+import { basename } from 'node:path'
 import { headlessTestMetadata, unsupportedModuleFallbacks } from './testMetadata'
 
 type CliOptions = {
@@ -99,6 +100,24 @@ function filePathFromUrl(url: URL): string {
   return decodeURIComponent(url.pathname)
 }
 
+async function listTestFiles(dirUrl: URL, relativeDir = ''): Promise<string[]> {
+  const dirPath = filePathFromUrl(new URL(relativeDir, dirUrl))
+  const entries = await readdir(dirPath, { withFileTypes: true })
+  const files: string[] = []
+
+  for (const entry of entries) {
+    const relativePath = relativeDir ? `${relativeDir}${entry.name}` : entry.name
+    if (entry.isDirectory()) {
+      files.push(...(await listTestFiles(dirUrl, `${relativePath}/`)))
+      continue
+    }
+    if (!entry.isFile() || !entry.name.endsWith('.ts') || !entry.name.startsWith('test')) continue
+    files.push(relativePath)
+  }
+
+  return files.sort((a, b) => a.localeCompare(b))
+}
+
 async function loadTestModules() {
   const testDirs = [
     {
@@ -119,15 +138,7 @@ async function loadTestModules() {
   const discoveredFiles: string[] = []
 
   for (const { dirUrl, sourcePrefix } of testDirs) {
-    const testsDirPath = filePathFromUrl(dirUrl)
-    const entries: string[] = []
-
-    for (const entry of await readdir(testsDirPath, { withFileTypes: true })) {
-      if (!entry.isFile() || !entry.name.endsWith('.ts')) continue
-      entries.push(entry.name)
-    }
-
-    entries.sort((a, b) => a.localeCompare(b))
+    const entries = await listTestFiles(dirUrl)
 
     for (const entry of entries) {
       const moduleUrl = new URL(entry, dirUrl)
@@ -139,7 +150,7 @@ async function loadTestModules() {
           mod,
         })
       } catch (error) {
-        const fallback = unsupportedModuleFallbacks[entry]
+        const fallback = unsupportedModuleFallbacks[basename(entry)]
         if (!fallback) throw error
 
         const mod = Object.fromEntries(
@@ -174,12 +185,13 @@ function filterTests(tests: TestRecord, filter: string): TestRecord {
 }
 
 function testIdentifier(name: string): string {
-  return name
+  const camelName = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
     .replace(/ +([a-z0-9])/g, (_, chr: string) => chr.toUpperCase())
-    .replace(/^([a-z])/, (_, chr: string) => `test${chr.toUpperCase()}`)
+  if (camelName.startsWith('test') && camelName.length > 4) return camelName
+  return camelName.replace(/^([a-z])/, (_, chr: string) => `test${chr.toUpperCase()}`)
 }
 
 function shouldSkipTest(name: string, opts: CliOptions): WrappedSkippedResult | null {

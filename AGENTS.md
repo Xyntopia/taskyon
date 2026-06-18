@@ -65,4 +65,5 @@
 - Headless packages use `--experimental-strip-types` instead of a compile step. Don't add a build step to them.
 - `COREPACK_HOME` must be outside the repo (ESM/CJS conflict). The Nix shell handles this; if bypassing Nix, set `COREPACK_HOME` to a path outside any `type: "module"` package boundary.
 - The `packages/taskyon` package exports TS source files directly. Import it via the `exports` map paths, not by relative file paths.
+- Keep browser UI mode and Node headless mode aligned. Changes in shared runtime paths must work in both environments; do not fix headless by introducing a Node-only shortcut into code that is also used by the browser UI.
 - When working on Modelica runtime bugs: debug generated JS first, then backport fixes to templates. See `packages/shared/modelica/README.md` for the mandatory debug loop.

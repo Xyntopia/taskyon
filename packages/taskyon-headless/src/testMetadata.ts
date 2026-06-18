@@ -46,6 +46,9 @@ export const headlessTestMetadata: Record<string, HeadlessTestMetadata> = {
   testSharedHeadlessBrowserDiscoveryFixture: {
     requiresNetwork: true,
   },
+  testNodeDiscoveryThroughLocalRelay: {
+    requiresNetwork: true,
+  },
   testEntryNodeRecoversFromMalformedPythonToolCall: {
     requiresNetwork: true,
   },

@@ -24,12 +24,6 @@ export type { Port }
 export * from '../mcp/bridge'
 export * from '../mcp/taskyonBridge'
 export * from '../mcp/types'
-export type processTasksOpts = {
-  timeoutMs?: number
-  signal?: AbortSignal
-  show?: boolean
-  throwOnError?: boolean
-}
 
 export type ObserveSubTaskStreamDetailedResult =
   | {
@@ -59,6 +53,19 @@ export type ObserveSubTaskStreamDetailedResult =
 
 export type ProcessTasksDetailedResult = ObserveSubTaskStreamDetailedResult & {
   initialIds: string[]
+}
+
+export type ProcessTasksInterruptHook = (
+  reason: string,
+  result: ObserveSubTaskStreamDetailedResult,
+) => void | Promise<void>
+
+export type processTasksOpts = {
+  timeoutMs?: number
+  signal?: AbortSignal
+  show?: boolean
+  throwOnError?: boolean
+  interruptOnSettle?: ProcessTasksInterruptHook
 }
 
 type TaskSubStream = (cb: (task: TaskNode) => void) => () => void
@@ -249,6 +256,19 @@ export const observeSubTaskStreamDetailed = async (
   })
 }
 
+const createInterruptReason = (result: ObserveSubTaskStreamDetailedResult) => {
+  if (result.status === 'matched') {
+    return `processTasks settled after matching ${result.result.content.type} task ${result.result.id}`
+  }
+  if (result.status === 'error') {
+    return `processTasks settled after error task ${result.errorTask.id}`
+  }
+  if (result.status === 'timeout') {
+    return `processTasks timed out after ${result.timeoutMs ?? 0}ms`
+  }
+  return 'processTasks aborted'
+}
+
 export const observeSubTaskStream = async (
   subTaskStream: TaskSubStream,
   quitCondition: ((t: TaskNode) => boolean) | TaskContentType | TaskContentType[],
@@ -293,6 +313,9 @@ export const processTasksDetailed = <T extends { type: string }>(
   ) => {
     const { subTaskStream, initialIds } = await send(taskList, opts)
     const result = await observeSubTaskStreamDetailed(subTaskStream, quitCondition, opts)
+    if (opts.interruptOnSettle) {
+      await opts.interruptOnSettle(createInterruptReason(result), result)
+    }
     return { ...result, initialIds }
   }
 }

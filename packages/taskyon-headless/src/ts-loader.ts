@@ -41,6 +41,49 @@ async function tryResolveRelative(specifier: string, parentURL?: string): Promis
   return null
 }
 
+async function tryResolveWorkspacePackageSource(
+  specifier: string,
+  packageName: string,
+  packageRootRelativeToLoader: string,
+  sourceRoot = '',
+): Promise<string | null> {
+  const specifierPath = specifier.startsWith('file:') ? fileURLToPath(specifier) : specifier
+  const normalizedSpecifier =
+    specifier === packageName || specifier.startsWith(`${packageName}/`)
+      ? specifier
+      : specifierPath.includes(`/node_modules/${packageName}/`)
+        ? specifierPath.slice(specifierPath.indexOf(packageName))
+        : specifierPath.endsWith(`/node_modules/${packageName}`)
+          ? packageName
+          : null
+
+  if (normalizedSpecifier === packageName) {
+    const indexTs = new URL(
+      `${packageRootRelativeToLoader}${sourceRoot}/index.ts`,
+      import.meta.url,
+    )
+    if (await fileExists(fileURLToPath(indexTs))) return indexTs.href
+    return null
+  }
+
+  if (!normalizedSpecifier?.startsWith(`${packageName}/`)) return null
+
+  const subpath = normalizedSpecifier.slice(`${packageName}/`.length)
+  const directTs = new URL(
+    `${packageRootRelativeToLoader}${sourceRoot}/${subpath}.ts`,
+    import.meta.url,
+  )
+  if (await fileExists(fileURLToPath(directTs))) return directTs.href
+
+  const indexTs = new URL(
+    `${packageRootRelativeToLoader}${sourceRoot}/${subpath}/index.ts`,
+    import.meta.url,
+  )
+  if (await fileExists(fileURLToPath(indexTs))) return indexTs.href
+
+  return null
+}
+
 type ResolveContext = {
   parentURL?: string
 }
@@ -67,6 +110,33 @@ type DefaultResolve = (
   context: ResolveContext,
   nextResolve: DefaultResolve,
 ) => Promise<ResolveResult>
+
+async function transpileTypeScriptModule(url: string): Promise<LoadResult> {
+  const [{ default: ts }, source] = await Promise.all([
+    import('typescript'),
+    readFile(fileURLToPath(url), 'utf8'),
+  ])
+
+  const transpiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+      sourceMap: false,
+      inlineSourceMap: false,
+      inlineSources: false,
+      verbatimModuleSyntax: true,
+      importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+    },
+    fileName: fileURLToPath(url),
+    reportDiagnostics: false,
+  })
+
+  return {
+    format: 'module',
+    shortCircuit: true,
+    source: transpiled.outputText,
+  }
+}
 
 export async function resolve(
   specifier: string,
@@ -111,25 +181,21 @@ export async function resolve(
     }
   }
 
-  // Resolve extensionless `@taskyon/shared/*` imports under Node ESM
-  // (which does not auto-resolve `.ts`). Try `<subpath>.ts` first,
-  // then `<subpath>/index.ts` for directory imports. This is a
-  // harness-only shim; the Quasar / tsup / Vite builds use their own
-  // resolvers.
-  //
-  // `import.meta.url` is the URL of THIS file
-  // (`packages/taskyon-headless/src/ts-loader.ts`). The relative
-  // path from it to the shared package is `../../shared/...`
-  // (src/ → taskyon-headless/ → packages/ → shared/).
-  if (specifier.startsWith('@taskyon/shared/')) {
-    const subpath = specifier.slice('@taskyon/shared/'.length)
-    const directTs = new URL(`../../shared/${subpath}.ts`, import.meta.url)
-    if (await fileExists(fileURLToPath(directTs))) {
-      return { shortCircuit: true, url: directTs.href }
-    }
-    const indexTs = new URL(`../../shared/${subpath}/index.ts`, import.meta.url)
-    if (await fileExists(fileURLToPath(indexTs))) {
-      return { shortCircuit: true, url: indexTs.href }
+  // Resolve source-package imports for workspace packages that export built
+  // `dist/*` files in normal app usage, but run directly from TypeScript source
+  // in the headless strip-types harness.
+  const workspaceSourceUrl =
+    (await tryResolveWorkspacePackageSource(specifier, '@taskyon/shared', '../../shared')) ??
+    (await tryResolveWorkspacePackageSource(
+      specifier,
+      '@taskyon/p2p-core',
+      '../../p2p-core',
+      '/src',
+    ))
+  if (workspaceSourceUrl) {
+    return {
+      shortCircuit: true,
+      url: workspaceSourceUrl,
     }
   }
 
@@ -151,6 +217,15 @@ export async function load(
   context: LoadContext,
   defaultLoad: DefaultLoad,
 ): Promise<LoadResult> {
+  const shouldTranspileWithTypeScript =
+    url.startsWith('file:') &&
+    url.endsWith('.ts') &&
+    url.includes('/packages/taskyon/src/p2p/protobuf/')
+
+  if (shouldTranspileWithTypeScript) {
+    return await transpileTypeScriptModule(url)
+  }
+
   if (url.endsWith('?raw')) {
     const fileUrl = url.slice(0, -'?raw'.length)
     const filePath = fileURLToPath(fileUrl)
@@ -165,6 +240,17 @@ export async function load(
     return await defaultLoad(url, context, defaultLoad)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    const isUnsupportedTypeScriptSyntax =
+      error instanceof Error &&
+      'code' in error &&
+      error.code === 'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX' &&
+      url.startsWith('file:') &&
+      url.endsWith('.ts')
+
+    if (isUnsupportedTypeScriptSyntax) {
+      return await transpileTypeScriptModule(url)
+    }
+
     if (message.includes('EISDIR')) {
       console.error('[ts-loader] EISDIR while loading url:', url)
     }

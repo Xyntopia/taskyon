@@ -26,6 +26,10 @@ import {
   type TaskyonTestFn,
   type TestRecord,
 } from '../../../packages/shared/modules/diagnosticsRunner'
+import {
+  runTimeQuestionConversationUsesClockToolScenario,
+  testTimeQuestionConversationUsesClockTool as packageTimeQuestionConversationTest,
+} from '../../../packages/taskyon/src/tests/conversation/test_time_question_conversation'
 import { getEnvironmentInfo } from '../../../packages/shared/modules/utils'
 
 const route = useRoute()
@@ -77,6 +81,21 @@ function getDiagnosticsTests() {
   modules.push({
     sourcePath: 'src/modules/modelica/modelicaDiagnostics.ts',
     mod: ModelicaDiagnostics,
+  })
+  modules.push({
+    sourcePath: 'src/pages/taskyon/HeadlessPage.vue',
+    mod: {
+      testTimeQuestionConversationUsesClockTool: Object.assign(
+        async () => {
+          const ty = await state.taskyon
+          return await runTimeQuestionConversationUsesClockToolScenario(ty)
+        },
+        {
+          description: packageTimeQuestionConversationTest.description,
+          timeoutMs: packageTimeQuestionConversationTest.timeoutMs,
+        },
+      ),
+    },
   })
 
   const builtins: Array<{ testName: string; func: TaskyonTestFn; sourcePath: string }> = [
