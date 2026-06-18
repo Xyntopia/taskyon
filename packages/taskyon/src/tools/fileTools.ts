@@ -212,7 +212,7 @@ between browser sessions but are private to this application.`,
           role: 'system',
           content: { type: 'toolresult', data: result },
         },
-        createChatCompletionTask({ goal: 'SimpleCompletion' }),
+        createChatCompletionTask({}),
       ],
     ])
   },

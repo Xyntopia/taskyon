@@ -11,7 +11,7 @@
     data:
       name: taskyonFlow
       arguments:
-        llmTools: false
+        providerToolCalling: false
   created_at: 1752878693900
 - role: function
   name: test
@@ -132,7 +132,6 @@
 
             If you are sure that none of the tools are relevant, your choice
             should be simple string "no".
-        llmTools: false
         schema:
           type: object
           properties:
@@ -181,7 +180,7 @@
     data:
       name: taskyonFlow
       arguments:
-        llmTools: false
+        providerToolCalling: false
   created_at: 1752878694309
 - role: function
   name: test
@@ -195,7 +194,6 @@
           - Please use one of the tools you chose earlier
         allowedTools:
           - animatedClock
-        llmTools: false
   created_at: 1752878699605
 - role: assistant
   name: test

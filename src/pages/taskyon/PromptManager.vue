@@ -67,7 +67,7 @@ import { mdiMagicStaff } from '@quasar/extras/mdi-v6'
 import CreateTaskButton from 'components/taskyon/CreateTaskButton.vue'
 import { dump } from 'js-yaml'
 import { useAppStateStore } from 'src/stores/appState'
-import { addPrompts } from '@taskyon/taskyon'
+import { buildEntryNodePromptPreviewMessages, normalizeEntryNodeSettings } from '@taskyon/taskyon'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
 
 const tystate = useTaskyonStore()
@@ -140,31 +140,22 @@ How would you like to change the prompt?
 
 const structuredResponsePrompt = computed(() => {
   if (tystate.taskContentDraft) {
-    console.log('create structured example', tystate.allTools)
-    if (Object.keys(tystate.allTools).length !== 0) {
-      const rp = addPrompts(
-        tystate.allTools,
-        !!state.toolchainConfig.entryNode?.llmTools,
-        !!state.toolchainConfig.entryNode?.llmTools,
-        !!state.toolchainConfig.entryNode?.use_baseprompt,
-        (state.toolchainConfig.entryNode?.prompt_templates ?? {}) as {
-          basePrompt: string
-          evaluate: string
-          instruction: string
-          tools: string
-          task: string
-          schemaReminder: string
-          toolResult: string
-        },
-        [],
-        [],
-        [],
-        [],
-        tystate.taskContentDraft,
-        'SimpleCompletion',
-      )
-      return [...rp.prependMessages, ...rp.modifiedOpenAIConversationThread, ...rp.appendMessages]
-    }
+    const settings = normalizeEntryNodeSettings(state.toolchainConfig.entryNode)
+    const allowedTools = Object.keys(tystate.allTools)
+    return buildEntryNodePromptPreviewMessages({
+      prompt:
+        typeof tystate.taskContentDraft === 'string'
+          ? tystate.taskContentDraft
+          : dump(tystate.taskContentDraft),
+      templates: settings.prompt_templates,
+      useBasePrompt: settings.use_baseprompt,
+      providerToolCalling: settings.providerToolCalling,
+      allowedTools,
+    }).map((message) => ({
+      role: message.role,
+      content:
+        typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+    }))
   }
   return []
 })

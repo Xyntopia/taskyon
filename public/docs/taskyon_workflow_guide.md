@@ -86,7 +86,7 @@ This makes completion unambiguous.
 
 - Returning **plain values** from tools when you _didn’t intend_ to involve the LLM:
   - Tool result is auto-wrapped as  
-    `toolresult → chatCompletion(goal=AnalyzeToolResult)`.
+    `toolresult → entryNode`.
 - Not using `allowedTools`:
   - LLM may “escalate” into tools you never intended.
 - Ending chains without `return`:
@@ -125,7 +125,7 @@ entryNode = toolCall({ name: 'taskyonFlow', arguments: {} })
 ```
 
 `taskyonFlow` is the default orchestration entry node. It may run a shortlist phase before
-issuing a narrowed `chatCompletion(goal=ChooseTool, allowedTools=[...])` step, but only when
+issuing a narrowed `chatCompletion(allowedTools=[...])` step, but only when
 tool chooser is enabled and the available tool count is above the configured
 `tool_chooser_min_tools` threshold.
 
@@ -143,7 +143,7 @@ Entry node **contract**:
 - It **must** return tasks (`makeTaskResult` or plain value → auto-wrapped).
 - It **should**:
   - end sub-workflows with `return`,
-  - use `chatCompletion(goal=ChooseTool, allowedTools=[...])` only when LLM is expected to choose tools.
+  - use `chatCompletion(allowedTools=[...])` only when the provider should be allowed to emit native tool calls.
 
 ### 3.3 Entry Node Patterns
 
@@ -152,7 +152,7 @@ Entry node **contract**:
 ```text
 entryNode: documentAssistant
   → build context prompt (document state, rules)
-  → chatCompletion(goal=ChooseTool, allowedTools=[updateDocument])
+  → chatCompletion(allowedTools=[updateDocument])
   → updateDocument tool applies concrete edits
 ```
 
@@ -163,7 +163,7 @@ entryNode/tool: setSqlQuery
 
 if no sql:
   → build SQL + schema prompt
-  → chatCompletion(goal=ChooseTool, allowedTools=[setSqlQuery])
+  → chatCompletion(allowedTools=[setSqlQuery])
 else:
   → set SQL in UI
   → message + return
@@ -267,7 +267,7 @@ return { foo: 123 }
 
 ```text
 toolresult({foo:123})
-→ chatCompletion(goal=AnalyzeToolResult)
+→ entryNode
 ```
 
 Use when:
@@ -314,7 +314,7 @@ Tools **can** intentionally leave chains without a `return`, but:
 - Plans within _allowed tools_:
   - can choose tools (typically via entry-node-driven routing),
   - parameterizes tool calls,
-  - interprets tool results (`AnalyzeToolResult`),
+  - returns structured data or native tool calls,
   - handles recovery prompts provided by the entry node.
 
 **Task worker / tools**
@@ -493,7 +493,7 @@ toolCall({ name: 'echo', arguments: { msg: 'Hello' } })
 ```text
 entryNode: documentAssistant
   → build context (versions, line numbers, rules)
-  → chatCompletion(goal=ChooseTool, allowedTools=['updateDocument'])
+  → chatCompletion(allowedTools=['updateDocument'])
   → updateDocument applies patches or replaces content
   → (optionally) message + return
 ```
@@ -505,7 +505,7 @@ entryNode/tool: setSqlQuery
 
 If no sql:
   → build context (schema, last query, last results)
-  → chatCompletion(goal=ChooseTool, allowedTools=['setSqlQuery'])
+  → chatCompletion(allowedTools=['setSqlQuery'])
 
 If sql:
   → assign sql to editor state

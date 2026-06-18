@@ -22,7 +22,6 @@ export const iconRegistry: iconMap = {
   chatCompletion: {
     reasoning_effort: mdiHeadSnowflake,
     max_results: mdiFormatListNumbered,
-    llmTools: mdiFunctionVariant,
     use_multimodal: matVisibility,
   },
   entryNode: {
@@ -31,7 +30,7 @@ export const iconRegistry: iconMap = {
     tool_chooser_min_tools: mdiFormatListNumbered,
     max_error_retries: mdiFormatListNumbered,
     reasoning_effort: mdiHeadSnowflake,
-    llmTools: mdiFunctionVariant,
+    providerToolCalling: mdiFunctionVariant,
     use_multimodal: matVisibility,
     max_results: mdiFormatListNumbered,
     websearch: {

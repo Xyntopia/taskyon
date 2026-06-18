@@ -21,7 +21,7 @@ The Task Transitions Map illustrates the flow and transitions of various content
 
 We expect all function calls to do one of the following:
 
-- **Return a plain value** -> Taskyon auto-wraps it as `toolresult` and appends `chatCompletion(goal=AnalyzeToolResult)`.
+- **Return a plain value** -> Taskyon auto-wraps it as `toolresult` and appends `entryNode`.
 - **Return a task chain** via `makeTaskResult(...)` (sequential or parallel).
 - **Return a task chain that ends with `return`** to explicitly signal completion to the parent task.
 
@@ -76,7 +76,7 @@ or complex tasks then trying to solve a problem
 with the generic tools available.
 In the UI, user messages are typically followed by an **entry node** (a tool call). The entry
 node is now the primary workflow router: it decides the next action and forwards orchestration
-settings (prompts, native tool-calling, web search options, reasoning) to `chatCompletion`.
+settings (prompts, provider tool-calling, web search options, reasoning) to `chatCompletion`.
 The graph below shows this default workflow.
 
 ```mermaid
@@ -89,7 +89,7 @@ flowchart TD
   Files --> U[User message]
   U --> Entry{{entryNode}}
 
-  Entry --> CT{{chatCompletion<br/>goal=AnalyzeToolResult or WebSearch}}
+  Entry --> CT{{chatCompletion}}
   CT --> ToolCall{{Tool call}}
   ToolCall --> ToolResult[toolresult]
   ToolResult --> Entry

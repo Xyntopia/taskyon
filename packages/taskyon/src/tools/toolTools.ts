@@ -149,7 +149,6 @@ From the list of tools you just extracted with the toolSearcher, you have to cho
 Explain in one sentence, why you are choosing this tool.
 `,
           ],
-          goal: 'SimpleCompletion',
         }),
         createChatCompletionTask({
           prompts: [
@@ -157,7 +156,6 @@ Explain in one sentence, why you are choosing this tool.
 - Use the name you selected for the "toolName" argument in the "toolSearcher" tool`,
           ],
           allowedTools: ['toolSearcher'],
-          goal: 'ChooseTool',
         }),
         createChatCompletionTask({
           prompts: [
@@ -195,7 +193,6 @@ Just pure {format} which we can parse. make sure that you follow the schema you
 were given for this.`,
           ],
           allowedTools: ['addNewTool'],
-          goal: 'ChooseTool',
         }),
         {
           role: 'assistant',

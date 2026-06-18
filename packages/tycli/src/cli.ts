@@ -1294,14 +1294,11 @@ async function main() {
     () => cliEntryTask,
     () => ({
       entryNode: {
-        llmTools: true,
+        providerToolCalling: true,
         use_baseprompt: true,
         use_multimodal: true,
         max_error_retries: 3,
         prompt_templates: DEFAULT_PROMPT_TEMPLATES,
-      },
-      chatCompletion: {
-        llmTools: true,
       },
     }),
     [cliEntryNodeTool, explorationTool, updateFilesTool] as unknown as [],

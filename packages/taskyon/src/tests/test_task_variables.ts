@@ -1,5 +1,5 @@
 import { convertTaskNodesToOpenAIChat } from '../tools/chatCompletionTool'
-import { addPrompts } from '../llm/promptCreation'
+import { toPromptMessages } from '../llm/promptMessages'
 import {
   compileTaskyonFunctionArguments,
   compileTaskyonMessageString,
@@ -231,30 +231,7 @@ export const testTaskVariableCompilationPreservesUnknownAssistantPlaceholders = 
 }
 
 export const testPromptInjectionPlacement = () => {
-  const promptResult = addPrompts(
-    {},
-    false,
-    false,
-    true,
-    {
-      basePrompt: 'base prompt',
-      evaluate: 'evaluate {message}',
-      instruction: 'instruction',
-      tools: 'tools {tools}',
-      task: 'task {message}',
-      schemaReminder: 'schema {schema}',
-      toolResult: 'toolResult {message}',
-    },
-    [],
-    ['append me'],
-    ['prepend me'],
-    [],
-    'hello',
-    'SimpleCompletion',
-  )
-
-  const prependMessages = promptResult.prependMessages
-  const appendMessages = promptResult.appendMessages
+  const { prependMessages, appendMessages } = toPromptMessages(['append me'], ['prepend me'])
   assert(
     prependMessages.some(
       (message) => message.role === 'system' && message.content === 'prepend me',

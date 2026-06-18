@@ -87,7 +87,7 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async () => {
       }),
     () => ({
       entryNode: {
-        llmTools: true,
+        providerToolCalling: true,
       },
     }),
     [entryNodeTool],

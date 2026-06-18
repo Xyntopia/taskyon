@@ -1271,10 +1271,8 @@ export const testChatCompletionWebSearch = async () => {
         content: { type: 'message', data: 'hi!..   can you please search for what "taskyon" is?' },
       },
       createChatCompletionTask({
-        goal: 'WebSearch',
         model: 'google/gemini-2.5-flash-lite',
-        llmTools: true,
-        max_results: 2,
+        websearch: { enabled: true, max_results: 2 },
       }),
     ],
   ]
@@ -1306,7 +1304,6 @@ export const testChatCompletion = async () => {
         prompts: [
           `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
         ],
-        llmTools: true,
         schema: {
           type: 'object',
           properties: {
@@ -1410,9 +1407,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
           },
         },
         createChatCompletionTask({
-          goal: 'SimpleCompletion',
           model: 'google/gemini-2.5-flash-lite',
-          llmTools: false,
         }),
       ],
     ]
@@ -1530,9 +1525,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
           },
         },
         createChatCompletionTask({
-          goal: 'SimpleCompletion',
           model: 'google/gemini-2.5-flash-lite',
-          llmTools: false,
         }),
       ],
     ]
@@ -1632,9 +1625,7 @@ export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: st
           },
         },
         createChatCompletionTask({
-          goal: 'SimpleCompletion',
           model: 'google/gemini-2.5-flash-lite',
-          llmTools: false,
         }),
       ],
     ]
@@ -1706,7 +1697,6 @@ export const testFileUpload = async () => {
       prompts: ['The user just uploaded a file, can you extract the data below?'],
       options: { verbosity: 'high' },
       reasoning_effort: 'low',
-      llmTools: false,
       //reasoning_effort: undefined,
       model: 'google/gemini-2.5-flash-lite',
       schema: {
@@ -2095,7 +2085,7 @@ export async function getTestMetaData() {
           () => Promise.resolve(null),
           () => Promise.resolve(undefined),
           !!state.toolchainConfig.entryNode?.use_multimodal,
-          !!state.toolchainConfig.entryNode?.llmTools,
+          !!state.toolchainConfig.entryNode?.providerToolCalling,
           toolDefs,
         )
         tyChat.thread = res

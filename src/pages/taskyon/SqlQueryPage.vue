@@ -443,7 +443,6 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
         return makeTaskResult([
           createChatCompletionTask({
             prompts: [toolPrompt],
-            goal: 'ChooseTool',
             allowedTools: ['setSqlQuery'],
           }),
         ])

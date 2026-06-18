@@ -574,13 +574,14 @@ You have access to the \`updateDocument\` tool which can:
      - Answer normally **without** calling \`updateDocument\`.
 
 Your goal is to **keep the document in sync with the user's intent**. When in doubt, prefer **actually editing the document** via \`updateDocument\` instead of just suggesting changes.
-If you do not want to make any changes to the document, don't call \`updateDocument\` at all.
+      If you do not want to make any changes to the document, don't call \`updateDocument\` at all.
 `
       return makeTaskResult([
-        ...(opts.webSearch ? [createChatCompletionTask({ goal: 'WebSearch' })] : []),
+        ...(opts.webSearch
+          ? [createChatCompletionTask({ websearch: { enabled: true, max_results: 5 } })]
+          : []),
         createChatCompletionTask({
           prompts: [contextPrompt],
-          goal: 'ChooseTool',
           allowedTools: ['updateDocument'],
         }),
       ])
@@ -654,7 +655,6 @@ If you do not want to make any changes to the document, don't call \`updateDocum
             prompts: [
               "It seems you called updateDocument but did not provide any edits or new content. Please make sure to include the changes you want to apply. Or don't call it at all",
             ],
-            goal: 'ChooseTool',
             allowedTools: ['updateDocument'],
           }),
         ])
@@ -744,7 +744,6 @@ If you do not want to make any changes to the document, don't call \`updateDocum
             prompts: [
               `updateDocument failed while applying patches: ${msg}\nPlease resend the updateDocument call with corrected, non-overlapping, in-range patches.`,
             ],
-            goal: 'ChooseTool',
             allowedTools: ['updateDocument'],
           }),
         ])

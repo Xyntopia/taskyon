@@ -32,7 +32,8 @@ import {
 } from '../core/taskVariables'
 import { mapFunctionNames } from '../core/tools'
 import { isTaskyonKey } from '../core/tyCrypto'
-import type { Goals, PromptInjection } from '../llm/promptCreation'
+import { toPromptMessages } from '../llm/promptMessages'
+import type { PromptInjection } from '../llm/promptMessages'
 import {
   getTaskyonCosts,
   getTyJwtPublicKey,
@@ -50,7 +51,7 @@ import type {
   TaskNode,
 } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
-import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
+import { createTool, makeTaskResult } from '../types/toolApi'
 import type { ToolBase } from '../types/tools'
 import { FunctionArguments, FunctionCall } from '../types/tools'
 import { charHash } from '../utils/crypto'
@@ -101,20 +102,6 @@ const convertToChatCompletionTool = (t: ToolBase): Tool => {
   })
 }
 
-const systemMessage = (content: string): SystemModelMessage => ({ role: 'system', content })
-
-const toPromptMessages = (
-  prompts: string[],
-  promptInjections: PromptInjection[],
-): {
-  prependMessages: SystemModelMessage[]
-  appendMessages: SystemModelMessage[]
-} => {
-  const prependMessages = promptInjections.map(systemMessage)
-  const appendMessages = prompts.map(systemMessage)
-  return { prependMessages, appendMessages }
-}
-
 function generateToolDeclarations(
   allowedTools: string[],
   toolCollection: Record<string, ToolBase>,
@@ -134,7 +121,6 @@ function generateToolDeclarations(
 export async function processChatTask(
   allowedTools: string[],
   toolDefs: Record<string, ToolBase>,
-  llmTools: boolean,
   llmSettings: {
     tryUsingVisionModels: boolean
   },
@@ -149,6 +135,7 @@ export async function processChatTask(
   //      main objective, previous tasks etc....
   //      actualy: this would be great for a new tool ;)
   // TODO: accept a thread from outside this tool... and only convert it into an openai compatible format
+  const useProviderToolCalling = allowedTools.length > 0
   let chatCompletionMessages: ModelMessage[]
   let originalThread: ModelMessage[] = []
   if (lastTaskBeforeChatCompletion) {
@@ -158,7 +145,7 @@ export async function processChatTask(
       taskManager.getFileMappingByUuid,
       taskManager.getUploadedFile,
       llmSettings.tryUsingVisionModels,
-      llmTools,
+      useProviderToolCalling,
       toolDefs,
       variableService
         ? {
@@ -185,7 +172,7 @@ export async function processChatTask(
   }
 
   let tools: ToolSet = {}
-  if (llmTools) {
+  if (useProviderToolCalling) {
     tools = generateToolDeclarations(allowedTools || [], toolDefs)
   }
 
@@ -706,7 +693,7 @@ const robustKeys = createDeepTransformer({
 })
 
 // we use this to decide whether we should call a function or to continue
-// this is usually not needed if we use llmTools (like built-in tools from openai API)
+// this is usually not needed when provider-native tool calling is enabled
 // TODO: ability to parse multiple commands/tasks...
 export function getCommandFromStructuredResponse(
   message: string,
@@ -792,14 +779,9 @@ property correctly.`)
 //        this tool would analyze the results of the previous function and create new tasks!
 function generateFollowUpTasksFromResult(
   sources: Annotation[],
-  goal: Goals,
   message: ModelMessage,
-  allowedTools: string[] | undefined,
-  chatModel: string,
-  llmTools: boolean,
+  useProviderToolCalling: boolean,
   allTools: Record<string, ToolBase>,
-  prompts: string[] | undefined,
-  promptInjections: PromptInjection[] | undefined,
   variableService?: TaskVariablePresentationService,
 ): partialTaskDraft[] {
   console.log('generate follow up task')
@@ -855,71 +837,28 @@ function generateFollowUpTasksFromResult(
               })
             : txtContent
 
-          if (llmTools && hasNativeToolCalls) {
+          if (useProviderToolCalling && hasNativeToolCalls) {
             // Some providers return a text fragment alongside a native tool call.
             // In that case the tool call is the real continuation signal, so we
             // must not emit an assistant message plus `return` prematurely.
             continue
           }
 
-          if (goal === 'SimpleCompletion' || goal === 'WebSearch' || llmTools) {
-            // if we don't need to call a tool, we simply generate a normal message...
-            // the same is true, if we have enabled native llmTools. In this case
-            // we either got a function back already (functionCall[0]) or we
-            // got a message back :)
-            const newMsg = {
-              role: 'assistant',
-              content: {
-                type: 'message',
-                data: compiledTextContent,
-                ...(sources.length > 0 && !srcsAdded ? { ann: sources } : {}),
-              },
-            } as partialTaskDraft
-            if (sources.length) srcsAdded = true
+          const newMsg = {
+            role: 'assistant',
+            content: {
+              type: 'message',
+              data: compiledTextContent,
+              ...(sources.length > 0 && !srcsAdded ? { ann: sources } : {}),
+            },
+          } as partialTaskDraft
+          if (sources.length) srcsAdded = true
 
-            newTasks.push(newMsg, {
-              role: 'system',
-              content: { type: 'return', data: 'assistant answered' },
-            })
-            console.log('No more follow up tasks!')
-          } else if (goal === 'AnalyzeToolResult' || goal === 'ChooseTool') {
-            const commands = getCommandFromStructuredResponse(compiledTextContent, variableService)
-            if (commands.length > 0) {
-              const command = commands[0]!
-              if (!allowedTools?.includes(command.name)) {
-                throw new Error(`Tool '${command.name}' is not in the list of allowed tools`, {
-                  cause: { allowedTools, requestedTool: command.name },
-                })
-              }
-            }
-            newTasks.push({
-              role: 'assistant',
-              content: { type: 'structured', data: compiledTextContent },
-            })
-            if (commands.length > 0) {
-              console.log('Define tool call')
-              newTasks.push({
-                role: 'function',
-                content: { type: 'functioncall', data: commands[0]! },
-              })
-            } else {
-              console.log('no more tools to call, finalize the result :)')
-              newTasks.push(
-                toolCall<chatCompletionParams>({
-                  name: 'chatCompletion',
-                  arguments: {
-                    prompts: prompts || [],
-                    prompt_injections: promptInjections || [],
-                    model: chatModel,
-                    goal: 'SimpleCompletion',
-                  },
-                }),
-              )
-            }
-          } else {
-            // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-            throw new Error(`chatCompletion goal unknown: ${goal}`)
-          }
+          newTasks.push(newMsg, {
+            role: 'system',
+            content: { type: 'return', data: 'assistant answered' },
+          })
+          console.log('No more follow up tasks!')
         }
       }
     }
@@ -1210,21 +1149,10 @@ export const chatCompletionToolParameters = {
       description:
         'The name of the model to use for the completion. Optional, will choose default model if not provided',
     },
-    goal: {
-      enum: ['SimpleCompletion', 'ChooseTool', 'AnalyzeToolResult', 'WebSearch'],
-      description:
-        'Optional Parameter to define the goal of the chat completion. If not set, the goal is dynamically inferred from the input.',
-    },
-    llmTools: {
-      type: 'boolean',
-      title: 'Use LLM Native Tools',
-      description: `Optional Parameter. If set to true, we will use native tool apis offered by llm providers to generate tool calls in json format. If undefined, it will be treated as false.`,
-      default: false,
-    },
     allowedTools: {
       type: 'array',
       description:
-        'Optional Parameter. We can specify which tools are allowed to be called by the LLM',
+        'Optional Parameter. If provided, chatCompletion enables provider-native tool calling and limits calls to this tool set.',
       items: {
         type: 'string',
       },
@@ -1256,12 +1184,24 @@ export const chatCompletionToolParameters = {
       description: 'How many reasoning tokens should models with reasoning capability use?',
       title: 'Reasoning Effort',
     },
-    max_results: {
-      type: 'integer',
-      description:
-        '[Optional] In case of a WebSearch, how many results should be retrieved at max?',
-      title: 'Max Results',
-      default: 5,
+    websearch: {
+      type: 'object',
+      description: 'Optional websearch configuration. Websearch runs only when enabled is true.',
+      additionalProperties: false,
+      properties: {
+        enabled: {
+          type: 'boolean',
+          title: 'Enabled',
+          default: false,
+          description: 'Explicitly enable websearch for this request.',
+        },
+        max_results: {
+          type: 'integer',
+          description: 'How many web results should be retrieved at max when websearch is enabled.',
+          title: 'Max Results',
+          default: 5,
+        },
+      },
     },
     use_multimodal: {
       type: 'boolean',
@@ -1342,12 +1282,11 @@ export function createChatCompletionTool(
       //////////   INITIALIZATION
       const {
         model,
-        goal,
-        llmTools = false,
         allowedTools,
         prompts,
         prompt_injections,
         schema,
+        websearch,
         reasoning_effort: reasoningEffort,
         options,
         // if we don't set it, choose the default setting...
@@ -1364,6 +1303,7 @@ export function createChatCompletionTool(
       }
       const useArtificialStreaming = artificial_streaming ?? true
       const tools = allowedTools ?? []
+      const useProviderToolCalling = tools.length > 0
 
       if (!selectedApi) {
         throw new Error('No API selected!')
@@ -1398,7 +1338,7 @@ export function createChatCompletionTool(
       }
 
       const selectedModel = model ?? getCurrentModel(requestApi)
-      console.log('calling chat completion tool...', selectedModel, goal, llmTools)
+      console.log('calling chat completion tool...', selectedModel, useProviderToolCalling)
       // the current task doesn't *have* to exist. We can also works solely with prompts...
       const currentTask = context.taskChain.at(-1)
 
@@ -1407,13 +1347,11 @@ export function createChatCompletionTool(
       //////////// END INITIALIZATION
 
       // refactor this below and make it all explicit, without passing llmSettings...
-      // now add goal-specific prompts...
       const lastTaskBeforeChatCompletion = context.taskChain.at(-2)
       // TODO: can we get rid of taskManager here in order to make our task more functional :)?
       const chatInfo = await processChatTask(
         tools,
         toolDefs,
-        llmTools,
         {
           tryUsingVisionModels: use_multimodal,
         },
@@ -1435,9 +1373,9 @@ export function createChatCompletionTool(
         // Structured output is independent from whether native tool calling is enabled.
         schema,
         siteUrl,
-        goal === 'WebSearch'
+        websearch?.enabled === true
           ? {
-              maxResults: opts.max_results ?? 5,
+              maxResults: websearch.max_results ?? 5,
               searchContextSize: 'medium',
             }
           : undefined,
@@ -1487,7 +1425,7 @@ export function createChatCompletionTool(
         const failureDetails = lower.includes('no endpoints found that support tool use')
           ? [
               'Provider routing failed: no endpoint supports tool use for this request.',
-              `Request context: api=${selectedApi}, model=${selectedModel}, llmTools=${llmTools}, declaredTools=${Object.keys(chatInfo.tools).length}.`,
+              `Request context: api=${selectedApi}, model=${selectedModel}, providerToolCalling=${useProviderToolCalling}, declaredTools=${Object.keys(chatInfo.tools).length}.`,
               'Suggested fix: use a model/provider route with tool-call support, relax provider filters, or disable tool use for this run.',
               'Reference: https://openrouter.ai/docs/guides/routing/provider-selection',
             ].join('\n')
@@ -1513,7 +1451,7 @@ export function createChatCompletionTool(
                   shortReason: failure.shortReason,
                   selectedApi,
                   selectedModel,
-                  llmTools,
+                  providerToolCalling: useProviderToolCalling,
                   declaredToolCount: Object.keys(chatInfo.tools).length,
                   failureDetails,
                   rawOutput,
@@ -1645,14 +1583,9 @@ export function createChatCompletionTool(
       const normalizedFirstMessage = normalizeAssistantMessageForToolCall(res.messages[0], toolDefs)
       const newTaskChain = generateFollowUpTasksFromResult(
         sources,
-        goal || 'SimpleCompletion',
         normalizedFirstMessage,
-        allowedTools,
-        selectedModel,
-        llmTools,
+        useProviderToolCalling,
         toolDefs,
-        prompts,
-        promptInjections,
         variableService,
       )
 

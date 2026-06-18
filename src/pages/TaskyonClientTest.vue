@@ -151,7 +151,7 @@ async function startClientTest() {
           data: 'Awesome! now can you add these two strings for me:  “cypress” and “test function”? PLease use the clientTest tool!',
         },
       },
-      createChatCompletionTask({ goal: 'ChooseTool', allowedTools: ['clientTest'] }),
+      createChatCompletionTask({ allowedTools: ['clientTest'] }),
     ],
   ]
   /*const unsub = tyclient.value?.port.receive((msg) => {
@@ -200,7 +200,7 @@ async function startFileUpload() {
             data: 'The user uploaded a pdf file, can you show me whats in it?',
           },
         },
-        createChatCompletionTask({ goal: 'SimpleCompletion' }),
+        createChatCompletionTask({}),
       ],
     ],
     'message',

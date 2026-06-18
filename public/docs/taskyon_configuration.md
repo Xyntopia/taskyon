@@ -26,10 +26,10 @@ CHeck out this link for taskyons default configuration on this server: [/taskyon
 Taskyon now treats `toolchainConfig.entryNode` as the primary orchestration config surface.
 
 - Prompt templates (`prompt_templates`) live under `entryNode` settings.
-- Tool-calling behavior (`llmTools` / native tool-calling preference) is configured at `entryNode`.
+- Tool-calling behavior (`providerToolCalling`) is configured at `entryNode`.
 - Tool-shortlist behavior is configured at `entryNode` through `use_tool_chooser` and
   `tool_chooser_min_tools`.
-- Optional web search execution flags are configured at `entryNode.websearch`.
+- Optional web search execution flags are configured at `entryNode.websearch`, and search only runs when `websearch.enabled` is explicitly set to `true`.
 
 `chatCompletion` remains the execution gateway, while entry-node controls workflow/prompt orchestration.
 

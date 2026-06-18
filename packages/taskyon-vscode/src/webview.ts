@@ -436,7 +436,6 @@ const createTools = () => {
             toolResultSection,
           ].join('\n'),
         ],
-        goal: 'SimpleCompletion',
       }),
     ])
 
@@ -467,7 +466,6 @@ const createTools = () => {
         return makeTaskResult([
           createChatCompletionTask({
             prompts: [buildAssistantContext({ toolResultSection: toolResultSection || '(none)' })],
-            goal: 'ChooseTool',
             allowedTools: ['searchWorkspaceFiles', 'readWorkspaceFiles', 'updateFiles'],
           }),
         ])

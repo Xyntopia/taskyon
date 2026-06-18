@@ -90,7 +90,6 @@ Note: This tool only supports one level of grouping. For further breakdown, use 
             prompts: [
               \`Review the following task breakdown:\\n\${groupsFormatted}\\nExplain why it is necessary to break this task into multiple subtasks. Confirm if the plan works or suggest improvements.\`,
             ],
-            goal: 'PlanTasks',
           }),
         ],
       ]);
