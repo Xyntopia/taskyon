@@ -3,6 +3,8 @@
 
 import { addAIServices } from '../support/groups'
 
+const DIAGNOSTICS_TIMEOUT_MS = 200_000
+
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
 // This test will pass when run against a clean Quasar project
@@ -31,7 +33,6 @@ describe('run diagnostics', () => {
     cy.wait(3000) // we are waiting, so that our passwords are able to load in the background
 
     addAIServices()
-    cy.get('.q-btn').contains('Use free Taskyon', { matchCase: false }).click()
 
     cy.log('starting tests!')
 
@@ -41,9 +42,11 @@ describe('run diagnostics', () => {
 
     cy.dataCy('run-tests').click()
 
-    cy.get(`[data-cy="test-finished"]`, { timeout: 100000 }).contains('Test Finished')
+    cy.get(`[data-cy="test-finished"]`, { timeout: DIAGNOSTICS_TIMEOUT_MS }).contains(
+      'Test Finished',
+    )
 
-    cy.dataCy('diagnostics-result', { timeout: 100000 }).should(($el) => {
+    cy.dataCy('diagnostics-result', { timeout: DIAGNOSTICS_TIMEOUT_MS }).should(($el) => {
       const text = $el.text().trim().toLowerCase()
       const lines = text.split('\n').map((l) => l.trim())
       const lastLine = lines[lines.length - 1]

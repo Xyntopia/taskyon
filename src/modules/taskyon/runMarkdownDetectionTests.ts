@@ -1,5 +1,5 @@
 //runMarkdownDetectionTests.ts
-import { hasMarkdownElements, containsHtmlTags } from '../markdownDetection'
+import { hasMarkdownElements, containsHtmlTags } from '@taskyon/shared/modules/markdownDetection'
 
 // Assuming hasMarkdownElements and containsHtmlTags are in scope
 // import { hasMarkdownElements, containsHtmlTags } from './your-module'
@@ -288,6 +288,18 @@ export function runMarkdownDetectionTests() {
       input: '<!-- <span>hidden</span> --> Visible <span>shown</span>',
       expectMarkdown: false,
       expectHtml: true, // pure comment ignored, real span counts
+    },
+    {
+      name: 'taskyon style html comment prefixed to plain text',
+      input: '<!-- taskyon variable result1 content end -->The image displays the Taskyon logo.',
+      expectMarkdown: false,
+      expectHtml: false,
+    },
+    {
+      name: 'taskyon style html comment before markdown content',
+      input: '<!-- taskyon variable result1 content end -->\n\nThe image displays **Taskyon**.',
+      expectMarkdown: true,
+      expectHtml: false,
     },
     {
       name: 'script block html',

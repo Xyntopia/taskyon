@@ -52,7 +52,7 @@ import { useQuasar } from 'quasar' // load dynamically! :)
 import { freeKey } from 'src/assets/taskyon_free_key'
 import { setColors } from 'src/boot/brand-colors'
 import { useGdrive } from 'src/modules/gdrive'
-import { setPrismTheme } from 'src/modules/markdownUtils '
+import { setPrismTheme } from '@taskyon/shared/modules/markdownUtils '
 import { TaskyonGuiMessage } from 'src/modules/taskyon/apiTypes'
 import {
   initCryptoSessionFromBrowser,
