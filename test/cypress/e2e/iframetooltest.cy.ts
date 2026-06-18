@@ -52,12 +52,6 @@ describe('iframe integration', () => {
     cy.visit('/clienttest')
     clearIframeStorage()
 
-    // choose free model in iframe
-    getIframeBody().find('.q-btn').contains('AI service provider se', { matchCase: false }).click()
-    getIframeBody().find('.q-btn').contains('Use free Taskyon', { matchCase: false }).click()
-
-    cy.reload()
-
     getIframeBody().should('exist')
     cy.dataCy('client-ready', { timeout: 30000 }).contains('client ready')
     //getIframeBody().find('#q-app').should('exist');

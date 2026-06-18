@@ -19,16 +19,16 @@ describe('dockview keepAliveViews', () => {
       })
 
     // Collapse/restore through the splitter handle (new UX path)
-    cy.dataCy('dock-splitter-toggle-main-0').click()
+    cy.dataCy('dock-splitter-toggle-left-main-0').click()
     cy.wait(900)
-    cy.dataCy('dock-splitter-toggle-main-0').click()
+    cy.dataCy('dock-splitter-toggle-left-main-0').click()
     cy.dataCy('dock-view-panel-KeepAliveTicker').should('be.visible')
     cy.dataCy('dock-view-panel-KeepAliveTicker').invoke('height').should('be.greaterThan', 80)
 
     // Double-click splitter should also toggle collapse/restore
-    cy.dataCy('dock-splitter-toggle-main-0').parent().dblclick()
+    cy.dataCy('dock-splitter-toggle-left-main-0').parent().dblclick()
     cy.wait(700)
-    cy.dataCy('dock-splitter-toggle-main-0').parent().dblclick()
+    cy.dataCy('dock-splitter-toggle-left-main-0').parent().dblclick()
 
     // Existing tab-minimize path still works
     cy.dataCy('dock-minimize-panel').click()

@@ -83,8 +83,3 @@ export function addAIServices() {
   cy.contains('openrouter.ai').click()
   cy.dataCy('add-openrouter.ai').type(Cypress.env().openrouter_api_key + '{enter}')
 }
-
-export function useFreeTaskyon() {
-  cy.get('.q-btn').contains('AI service provider se', { matchCase: false }).click()
-  cy.get('.q-btn').contains('Use free Taskyon', { matchCase: false }).click()
-}

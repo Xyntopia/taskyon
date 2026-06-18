@@ -1,7 +1,7 @@
 // Use `cy.dataCy` custom command for more robust tests
 // See https://docs.cypress.io/guides/references/best-practices.html#Selecting-Elements
 
-import { getLastAssistantMessage, useFreeTaskyon, writeMessage } from '../support/groups'
+import { getLastAssistantMessage, writeMessage } from '../support/groups'
 
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
@@ -12,8 +12,6 @@ describe('Sharing functionality', () => {
   })
   it('should be able to share a message and open it afterwards', () => {
     cy.log('starting tests!')
-
-    useFreeTaskyon()
 
     cy.wait(1000)
     writeMessage('Hello world! how are you?')

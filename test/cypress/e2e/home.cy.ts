@@ -5,7 +5,6 @@ import {
   getLastAssistantMessage,
   selectllmmodel,
   testModelId,
-  useFreeTaskyon,
   writeMessage,
 } from '../support/groups'
 
@@ -36,15 +35,14 @@ describe('test taskyon startpage', () => {
 
     cy.log('starting tests!')
 
-    useFreeTaskyon()
     //cy.wait('[aria-label="quick ai settings"]')
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
 
     // enable task cost display & expert mode...
     cy.dataCy('Expert Mode').find('.q-toggle').click()
-    cy.dataCy('Use Tools').find('.q-toggle').click()
-    cy.dataCy('Use Tools').find('.obj-info').click()
-    cy.contains('Enable the standard tool chooser.').type('{esc}')
+    cy.dataCy('Tool Chooser').find('.q-toggle').click()
+    cy.dataCy('Tool Chooser').find('.obj-info').click()
+    cy.contains('Enable the tool-shortlist stage for this specific entry-node run.').type('{esc}')
     cy.get('.q-btn').contains('Ok').click()
 
     selectllmmodel(undefined, testModelId)
@@ -54,8 +52,8 @@ describe('test taskyon startpage', () => {
 
     // check if more fancy options ae present  now...
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
-    cy.contains('Vision')
-    cy.contains('Fancy Output').type('{esc}')
+    cy.contains('Multimodal Input')
+    cy.contains('Base Prompt').type('{esc}')
 
     //cy.dataCy('chat-input').focus().type('{enter}')
     //cy.get('li').first().click();
