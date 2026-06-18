@@ -5,6 +5,7 @@ import {
   type TaskyonTestFn,
   type TestRecord,
 } from '../../shared/modules/diagnosticsRunner'
+import { freeKey as taskyonDevFreeKey } from '../../../src/assets/taskyon_free_key'
 import { readdir } from 'node:fs/promises'
 import { basename } from 'node:path'
 import { headlessTestMetadata, unsupportedModuleFallbacks } from './testMetadata'
@@ -74,7 +75,7 @@ function parseArgs(args: string[]): CliOptions {
     json: false,
     allowLongRun: false,
     filter: '',
-    tyauth: runtimeEnv.getEnv('TYAUTH') ?? runtimeEnv.getEnv('TASKYON_TYAUTH') ?? undefined,
+    tyauth: runtimeEnv.getEnv('TYAUTH') ?? runtimeEnv.getEnv('TASKYON_TYAUTH') ?? taskyonDevFreeKey,
   }
 
   for (let i = 0; i < args.length; i++) {

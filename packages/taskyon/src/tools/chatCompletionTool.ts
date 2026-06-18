@@ -10,6 +10,7 @@ import type {
   SystemModelMessage,
   Tool,
   ToolCallPart,
+  ToolChoice,
   ToolModelMessage,
   ToolResultPart,
   ToolSet,
@@ -271,6 +272,7 @@ async function llmRequest(
   webSearch?: WebSearchOptions,
   reasoningEffort?: 'low' | 'high' | 'medium' | 'none',
   verbosity?: OpenAI.ChatCompletionCreateParams['verbosity'],
+  toolChoice?: ToolChoice<ToolSet>,
 ) {
   // TODO:
   //     stream_options: { include_usage: true },
@@ -417,6 +419,7 @@ async function llmRequest(
     model,
     messages: openAIConversationThread,
     tools,
+    ...(toolChoice ? { toolChoice } : {}),
     ...overrideOpts,
     /*onFinish({ text, finishReason, usage, response, steps, totalUsage, content }) {
         // your own logic, e.g. for saving the chat history or recording usage
@@ -1157,6 +1160,23 @@ export const chatCompletionToolParameters = {
         type: 'string',
       },
     },
+    toolChoice: {
+      type: 'object',
+      description:
+        'Optional Parameter. Use to explicitly control provider-native tool choice when allowedTools are provided.',
+      additionalProperties: false,
+      properties: {
+        type: {
+          type: 'string',
+          enum: ['auto', 'required', 'tool'],
+        },
+        toolName: {
+          type: 'string',
+          description: 'Required when type is "tool". Names one allowed tool to call.',
+        },
+      },
+      required: ['type'],
+    },
     prompts: {
       type: 'array',
       description:
@@ -1283,6 +1303,7 @@ export function createChatCompletionTool(
       const {
         model,
         allowedTools,
+        toolChoice,
         prompts,
         prompt_injections,
         schema,
@@ -1304,6 +1325,14 @@ export function createChatCompletionTool(
       const useArtificialStreaming = artificial_streaming ?? true
       const tools = allowedTools ?? []
       const useProviderToolCalling = tools.length > 0
+      const normalizedToolChoice =
+        toolChoice?.type === 'tool' && typeof toolChoice.toolName === 'string'
+          ? { type: 'tool' as const, toolName: toolChoice.toolName }
+          : toolChoice?.type === 'required'
+            ? ('required' as const)
+            : toolChoice?.type === 'auto'
+              ? ('auto' as const)
+              : undefined
 
       if (!selectedApi) {
         throw new Error('No API selected!')
@@ -1381,6 +1410,7 @@ export function createChatCompletionTool(
           : undefined,
         reasoningEffort,
         verbosity,
+        normalizedToolChoice,
       )
 
       let errorCapture: unknown

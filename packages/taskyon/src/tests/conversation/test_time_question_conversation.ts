@@ -6,6 +6,7 @@ import {
   type TaskNode,
   type Taskyon,
 } from '../..'
+import { freeKey as taskyonDevFreeKey } from '../../../../../src/assets/taskyon_free_key'
 import { createStandardEntryNodeTool } from '../../tools/entryNode'
 
 type TaskNodeWithParent = TaskNode & { parentID: string }
@@ -87,7 +88,12 @@ const taskyonFlowLlmSettings = {
 } as const
 
 const resolveStandaloneTaskyonApiKey = (tyauth?: string) =>
-  tyauth?.trim() || process.env.TASKYON_API_KEY?.trim() || ''
+  tyauth?.trim() || process.env.TASKYON_API_KEY?.trim() || taskyonDevFreeKey
+
+const initializeStandaloneTaskyonProviderKey = async (ty: Taskyon, key: string) => {
+  await ty.setSecret('AiProviderKey', taskyonFlowLlmSettings.selectedApi, key)
+  await ty.updateChatCompletionApiKey(taskyonFlowLlmSettings.selectedApi, key)
+}
 
 const getEntryNodeDraft = (entryNodeArgs?: Record<string, unknown>) =>
   partialTaskDraft.parse({
@@ -109,14 +115,25 @@ const createConversationHarness = async (): Promise<{ ty: Taskyon }> => {
     renderOptions: { hideChat: true, hideLlm: true },
     toolChooser: { enabled: true, useTools: true },
     defaultAllowedTools: [],
+    getToolCatalog: async () => {
+      const ty = await tyPromise
+      const cachedTools = await ty.updateToolDefinitions(true)
+      return Object.values(cachedTools)
+        .filter((tool) => !['chatCompletion', 'entryNode', 'taskyonFlow'].includes(tool.name))
+        .map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+        }))
+    },
   })
 
-  const ty = await tyCore(
+  const tyPromise: Promise<Taskyon> = tyCore(
     () => taskyonFlowLlmSettings,
     () => getEntryNodeDraft(),
     () => taskyonFlowToolchainConfig,
     [entryNodeTool],
   )
+  const ty = await tyPromise
 
   return { ty }
 }
@@ -133,10 +150,30 @@ const isNamedFunctionCall = (data: unknown, name: string): boolean => {
   return !!data && typeof data === 'object' && 'name' in data && data.name === name
 }
 
-const hasGoal = (data: unknown, goal: string): boolean => {
-  if (!data || typeof data !== 'object' || !('arguments' in data)) return false
+const getFunctionArgs = (data: unknown): Record<string, unknown> | undefined => {
+  if (!data || typeof data !== 'object' || !('arguments' in data)) return undefined
   const args = data.arguments
-  return !!args && typeof args === 'object' && 'goal' in args && args.goal === goal
+  return args && typeof args === 'object' && !Array.isArray(args)
+    ? (args as Record<string, unknown>)
+    : undefined
+}
+
+const hasPromptSnippet = (data: unknown, snippet: string): boolean => {
+  const args = getFunctionArgs(data)
+  const prompts = args?.prompts
+  return (
+    Array.isArray(prompts) &&
+    prompts.some((prompt) => typeof prompt === 'string' && prompt.includes(snippet))
+  )
+}
+
+const hasToolChoiceSchema = (data: unknown): boolean => {
+  const args = getFunctionArgs(data)
+  const schema = args?.schema
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return false
+  const properties = (schema as Record<string, unknown>).properties
+  if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return false
+  return 'choice' in (properties as Record<string, unknown>)
 }
 
 const hasToolChoice = (data: unknown, toolName: string): boolean => {
@@ -393,7 +430,8 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
       (task: TaskNode) =>
         task.content.type === 'functioncall' &&
         isNamedFunctionCall(task.content.data, 'chatCompletion') &&
-        hasGoal(task.content.data, 'AnalyzeToolResult'),
+        hasToolChoiceSchema(task.content.data) &&
+        hasPromptSnippet(task.content.data, 'Return only the structured shortlist result.'),
     )
     const shortlistCall =
       shortlistCallIndex >= 0 ? conversationTasks[shortlistCallIndex] : undefined
@@ -405,7 +443,10 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
       (task: TaskNode) =>
         task.content.type === 'functioncall' &&
         isNamedFunctionCall(task.content.data, 'chatCompletion') &&
-        hasGoal(task.content.data, 'ChooseTool'),
+        hasPromptSnippet(
+          task.content.data,
+          'Use exactly one of the allowed tools when needed to answer the previous user request.',
+        ),
     )
     const clockCallIndex = conversationTasks.findIndex(
       (task: TaskNode) =>
@@ -416,7 +457,10 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
       (task: TaskNode) =>
         task.content.type === 'functioncall' &&
         isNamedFunctionCall(task.content.data, 'chatCompletion') &&
-        hasGoal(task.content.data, 'AnalyzeToolResult'),
+        hasPromptSnippet(
+          task.content.data,
+          'Analyze the previous tool result and continue the task.',
+        ),
     )
     const clockCall = clockCallIndex >= 0 ? conversationTasks[clockCallIndex] : undefined
     const clockResult = conversationTasks.find(isClockToolResult)
@@ -545,10 +589,7 @@ runTimeQuestionConversationUsesClockToolScenario.helper = true
 export const testTimeQuestionConversationUsesClockTool = async (opts?: { tyauth?: string }) => {
   const { ty } = await createConversationHarness()
   const taskyonApiKey = resolveStandaloneTaskyonApiKey(opts?.tyauth)
-  if (taskyonApiKey) {
-    await ty.setSecret('chatCompletionApiKeys', taskyonFlowLlmSettings.selectedApi, taskyonApiKey)
-    await ty.updateChatCompletionApiKey(taskyonFlowLlmSettings.selectedApi, taskyonApiKey)
-  }
+  await initializeStandaloneTaskyonProviderKey(ty, taskyonApiKey)
   return await runTimeQuestionConversationUsesClockToolScenario(ty)
 }
 testTimeQuestionConversationUsesClockTool.description =

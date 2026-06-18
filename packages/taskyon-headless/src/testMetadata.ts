@@ -12,6 +12,9 @@ export type UnsupportedModuleFallback = {
 }
 
 export const headlessTestMetadata: Record<string, HeadlessTestMetadata> = {
+  testTimeQuestionConversationUsesClockTool: {
+    requiresNetwork: true,
+  },
   testTokenMinting: {
     requiresAuth: true,
     requiresNetwork: true,

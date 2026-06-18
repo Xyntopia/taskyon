@@ -600,6 +600,13 @@ const buildEntryNodeChatCompletionResult = (
   executionConfig: EntryNodeExecutionConfig,
   args?: {
     allowedTools?: string[]
+    toolChoice?:
+      | { type: 'auto' }
+      | { type: 'required' }
+      | {
+          type: 'tool'
+          toolName: string
+        }
     prompts?: string[]
     prompt_injections?: string[]
     websearch?: { enabled: boolean; max_results: number }
@@ -612,6 +619,7 @@ const buildEntryNodeChatCompletionResult = (
     ...(args?.allowedTools && args.allowedTools.length > 0
       ? { allowedTools: args.allowedTools }
       : {}),
+    ...(args?.toolChoice ? { toolChoice: args.toolChoice } : {}),
     ...(args?.prompts ? { prompts: args.prompts } : {}),
     ...(args?.prompt_injections ? { prompt_injections: args.prompt_injections } : {}),
     ...(args?.schema ? { schema: args.schema } : {}),
@@ -661,6 +669,14 @@ const buildEntryNodeToolCallingResult = (
   if (executionConfig.normalizedSettings.providerToolCalling || args.allowedTools.length === 0) {
     return buildEntryNodeChatCompletionResult(executionConfig, {
       allowedTools: args.allowedTools,
+      ...(args.allowedTools.length === 1
+        ? {
+            toolChoice: {
+              type: 'tool' as const,
+              toolName: args.allowedTools[0] as string,
+            },
+          }
+        : {}),
       prompts: args.prompts,
       prompt_injections: args.prompt_injections,
       ...withReasoningEffort(args.reasoning_effort),
