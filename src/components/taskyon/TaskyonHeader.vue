@@ -44,11 +44,10 @@
           dense
           :icon="mdiForumPlus"
           :size="btnSize"
-          to="/"
           aria-label="start new chat"
           @click="
             () => {
-              state.setLLMSettings('selectedTaskId', undefined)
+              state.navigateToTask(undefined, { path: '/' })
               state.createTaskType.type = 'message'
             }
           "

@@ -77,7 +77,12 @@
               </q-tooltip>
             </q-btn>
           </FileDropzone>
-          <q-btn dense flat to="/" :icon="mdiForumPlus" @click="state.setSelectedTask(null)">
+          <q-btn
+            dense
+            flat
+            :icon="mdiForumPlus"
+            @click="state.navigateToTask(undefined, { path: '/' })"
+          >
             <q-tooltip> Create a new conversation </q-tooltip>
           </q-btn>
           <q-btn dense flat :icon="matSearch" to="/TaskManager"
@@ -218,7 +223,7 @@ async function loadConversations(files: File[]) {
       })
     }
   }
-  state.setSelectedTask(last_loaded_id || null)
+  state.navigateToTask(last_loaded_id)
 }
 
 // const TableOfChatContent = defineAsyncComponent(

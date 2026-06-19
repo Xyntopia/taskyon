@@ -54,7 +54,7 @@
         class="col"
         flat
         :icon="matAltRoute"
-        @click="state.setSelectedTask(task.id)"
+        @click="state.navigateToTask(task.id)"
       >
         <q-tooltip :delay="0"
           >Start alternative chat from here, keeping all previous messages up to this

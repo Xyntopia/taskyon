@@ -298,7 +298,7 @@ async function editTask(taskId: string) {
     void router.push(`/tool/${task.id}`)
   } else {
     tystate.setContentDraftFromTask(task)
-    state.setSelectedTask(task?.priorID || task?.parentID)
+    state.navigateToTask(task?.priorID || task?.parentID)
   }
 }
 
@@ -306,7 +306,7 @@ async function deleteTask(taskId: string) {
   const ty = await tystate.taskyon
   const task = await ty.getTask(taskId)
   if (task) void ty.deleteTask(task.id)
-  state.setSelectedTask(task?.priorID || task?.parentID)
+  state.navigateToTask(task?.priorID || task?.parentID)
 }
 
 async function createNewConversation(taskId: string) {
@@ -316,7 +316,7 @@ async function createNewConversation(taskId: string) {
 
   // we simply need to tell our task manager that we don't have any task selected
   // the next message which will be send, will be an orphan in this case.
-  state.setSelectedTask(undefined)
+  state.navigateToTask(undefined, { path: '/' })
 }
 
 function toggleMessageDebug(id: string) {

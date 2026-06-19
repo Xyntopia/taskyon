@@ -232,7 +232,7 @@ async function updateChatThread() {
   console.log('update chat thread')
   const ty = await tystate.taskyon
   if (props.taskId) {
-    state.setSelectedTask(props.taskId)
+    return
   } else if (props.gdriveFileId) {
     state.lockBottomScroll = false
     const markdownUrl = `https://share.taskyon.space/proxy/gdrive/${props.gdriveFileId}`
@@ -241,7 +241,7 @@ async function updateChatThread() {
     try {
       const markdownContent = await getTextFile(markdownUrl)
       const newTaskId = await ty.addMdTaskChain(markdownContent)
-      state.setSelectedTask(newTaskId)
+      state.navigateToTask(newTaskId, { replace: true })
     } catch (error) {
       console.error('Error loading from Google Drive:', error)
       openPopupMessage(
@@ -258,7 +258,7 @@ async function updateChatThread() {
       state.lockBottomScroll = false
       const markdownContent = await getTextFile(markdownUrl)
       const newTaskId = await ty.addMdTaskChain(markdownContent)
-      state.setSelectedTask(newTaskId)
+      state.navigateToTask(newTaskId, { replace: true })
     }
   } else if (props.filePath) {
     state.lockBottomScroll = false
@@ -314,7 +314,7 @@ Please check the path and try again.
         })
       ).id
     }
-    state.setSelectedTask(newTaskId)
+    state.navigateToTask(newTaskId, { replace: true })
   }
 }
 
@@ -328,27 +328,6 @@ watch(tystate.currentTask, () => {
 })
 
 // Watch selectedTaskId and update URL query parameter
-watch(
-  () => state.llmSettings.selectedTaskId,
-  (newTaskId) => {
-    console.log('set new task', newTaskId)
-    if (!props.filePath && !props.gdriveFileId) {
-      // we are using window.history here and NOT vue router
-      // itself, because we dn't want to trigger any updates!
-      if (newTaskId) {
-        const url = new URL(window.location.href)
-        url.searchParams.set('t', newTaskId)
-        window.history.replaceState({}, '', url.toString())
-      } else {
-        const url = new URL(window.location.href)
-        url.searchParams.delete('t')
-        window.history.replaceState({}, '', url.toString())
-      }
-    }
-  },
-  { immediate: true },
-)
-
 watch(
   () => [props.taskId, props.gdriveFileId, props.importUrl, props.folder, props.filePath] as const,
   async () => {

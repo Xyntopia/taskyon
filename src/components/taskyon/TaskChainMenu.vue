@@ -38,7 +38,7 @@ defineProps<{
 async function onDeleteThread(conversationId: string) {
   console.log('deleting thread!!', conversationId)
   const ty = await tystate.taskyon
-  state.setSelectedTask(undefined)
+  state.navigateToTask(undefined, { path: '/' })
   await ty.deleteTaskThread(conversationId)
   state.chatHistory = state.chatHistory.filter((id) => id != conversationId)
 }

@@ -18,7 +18,7 @@ const onAddTasks = async () => {
   const ty = await tystate.taskyon
   try {
     const newTaskId = await ty.addMdTaskChain(props.markdown)
-    state.setSelectedTask(newTaskId)
+    state.navigateToTask(newTaskId)
   } catch (error) {
     console.log('could not create taskchain from markdown!', error)
     tystate.api.send({

@@ -1191,7 +1191,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           // push the last task to execution queue right away...
           const tn = await ensureValidTaskId(msg.task)
           if (msg.show) {
-            stateRefs.setSelectedTask(tn.id)
+            stateRefs.navigateToTask(tn.id)
           }
           ty.port.send(msg)
           // we don't forward this message to outPort, because we 've already processed everything relevant here..
@@ -1309,7 +1309,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   watch(lastActiveTaskId, (newTaskId) => {
     if (newTaskId) {
-      stateRefs.setSelectedTask(newTaskId)
+      stateRefs.navigateToTask(newTaskId)
     }
   })
 

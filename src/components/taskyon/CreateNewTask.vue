@@ -422,7 +422,7 @@ async function addNewTask(mode: MessageExecutionMode, p2pTopic?: string) {
     })
   }
 
-  state.setSelectedTask(newTaskId?.id)
+  state.navigateToTask(newTaskId?.id)
 
   // and empty out the contents for the next chat message :)
   if (currentnewTask.value.role === 'user') {
