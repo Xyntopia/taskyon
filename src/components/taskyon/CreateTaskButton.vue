@@ -4,10 +4,12 @@
 
 <script setup lang="ts">
 import { useAppStateStore } from 'src/stores/appState'
+import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
+const { navigateToTask } = useTaskNavigation()
 
 const props = defineProps<{
   markdown?: string
@@ -18,7 +20,7 @@ const onAddTasks = async () => {
   const ty = await tystate.taskyon
   try {
     const newTaskId = await ty.addMdTaskChain(props.markdown)
-    state.navigateToTask(newTaskId)
+    navigateToTask(newTaskId)
   } catch (error) {
     console.log('could not create taskchain from markdown!', error)
     tystate.api.send({

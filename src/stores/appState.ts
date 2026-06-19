@@ -34,26 +34,12 @@ import {
   setTaskyonUiProfile,
   switchCurrentActiveProfilePointer,
 } from 'src/modules/ui/initialState'
-import {
-  buildHrefWithSelectedTask,
-  installTaskyonUrlChangeEvents,
-  readSelectedTaskIdFromHref,
-  TASKYON_URL_CHANGE_EVENT,
-} from 'src/modules/taskSelectionUrl'
+import { buildTaskSelectionRoute } from 'src/modules/taskSelectionUrl'
 import type { PartialDeep } from 'type-fest'
+import { useRoute, useRouter } from 'vue-router'
 
 interface TaskWidgetStateType {
   markdownEnabled: boolean
-}
-
-const withoutSelectedTaskId = <T extends { selectedTaskId?: string | undefined } | undefined>(
-  settings: T,
-) => {
-  if (!settings) return settings
-  return {
-    ...settings,
-    selectedTaskId: undefined,
-  } as T
 }
 
 const VSCODE_MESSAGE_SOURCE = 'taskyon-vscode'
@@ -236,11 +222,7 @@ function loadConfigurationFile(initialState: initialState, stateRefs: Reactive<i
               }
             : { arrays: 'concat', objects: 'merge', typeMismatch: 'target', primitives: 'preserve' }
           deepMergeReactive(stateRefs.appConfiguration, config.appConfiguration, mergeStrategy)
-          deepMergeReactive(
-            stateRefs.llmSettings,
-            withoutSelectedTaskId(config.llmSettings),
-            mergeStrategy,
-          )
+          deepMergeReactive(stateRefs.llmSettings, config.llmSettings, mergeStrategy)
           deepMergeReactive(stateRefs.toolchainConfig, config.toolchainConfig, mergeStrategy)
         } else {
           console.warn(
@@ -327,7 +309,6 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
   ) {
     console.log(`[PERSIST] load saved ui state from profile "${initialProfileName}"`)
     const storedInitialState = deepMerge(initialState, initialStoredStateObjTyped, 'overwrite')
-    storedInitialState.llmSettings.selectedTaskId = undefined
     stateRefs = reactive(storedInitialState)
   } else {
     // TODO: pop up a dialog or a separate migration page where we
@@ -351,12 +332,10 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
     if (saveToLocalStorage && pn) {
       setTaskyonUiProfile(pn, {
         ...newState,
-        llmSettings: withoutSelectedTaskId(newState.llmSettings),
       })
       console.log('[PERSIST] saved ui profile', {
         profile: pn,
         selectedApi: newState.llmSettings.selectedApi,
-        selectedTaskId: newState.llmSettings.selectedTaskId,
         selectedModel:
           newState.llmSettings.selectedApi &&
           newState.llmSettings.llmApis[newState.llmSettings.selectedApi]?.selectedModel,
@@ -393,7 +372,7 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
     }
     if (newConfig.llmSettings) {
       // TODO: make sure, this function is only temporary and doesn't overwrite our actual llmSettings...
-      deepMergeReactive(stateRefs.llmSettings, withoutSelectedTaskId(newConfig.llmSettings))
+      deepMergeReactive(stateRefs.llmSettings, newConfig.llmSettings)
     }
     if (newConfig.appConfiguration) {
       deepMergeReactive(stateRefs.appConfiguration, newConfig.appConfiguration)
@@ -479,15 +458,11 @@ export const useAppStateStore = defineStore('ui-state', () => {
     initialState,
     () => activeProfileNameRef.value,
   )
-  const syncSelectedTaskIdFromUrl = () => {
-    if (!process.env.CLIENT) return
-    stateRefs.llmSettings.selectedTaskId = readSelectedTaskIdFromHref(window.location.href)
-  }
-  if (process.env.CLIENT) {
-    installTaskyonUrlChangeEvents()
-    syncSelectedTaskIdFromUrl()
-    window.addEventListener(TASKYON_URL_CHANGE_EVENT, syncSelectedTaskIdFromUrl)
-  }
+  const route = useRoute()
+  const router = useRouter()
+  const selectedTaskId = computed(() =>
+    typeof route.query.t === 'string' && route.query.t.trim() ? route.query.t.trim() : undefined,
+  )
   if (iframeProfileName && !urlConfig.noBindingKeyParam) {
     // Keep waiting behavior stable even if persisted state had `initWBindingKey: false`.
     stateRefs.initWBindingKey = true
@@ -548,12 +523,8 @@ export const useAppStateStore = defineStore('ui-state', () => {
     }
     const storedProfile = getTaskyonUiProfile(profileName)
     if (storedProfile) {
-      Object.assign(stateRefs, {
-        ...storedProfile,
-        llmSettings: withoutSelectedTaskId(storedProfile.llmSettings),
-      })
+      Object.assign(stateRefs, storedProfile)
     }
-    syncSelectedTaskIdFromUrl()
   }
 
   // our sessions only get saved once we have a legitimate session key!
@@ -586,7 +557,10 @@ export const useAppStateStore = defineStore('ui-state', () => {
       urlProfile: urlConfig.profile,
     })
     // re-load state with new profile!
-    Object.assign(stateRefs, getTaskyonUiProfile(profileToLoad) ?? {})
+    const storedProfile = getTaskyonUiProfile(profileToLoad)
+    if (storedProfile) {
+      Object.assign(stateRefs, storedProfile)
+    }
   }
 
   // we do this funny next line, because our store is currently "reactive" which means
@@ -605,7 +579,24 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // explicitly!
 
   const patchLLMSettings = (newSettings: PartialDeep<typeof stateRefs.llmSettings>) => {
-    deepMergeReactive(stateRefs.llmSettings, withoutSelectedTaskId(newSettings))
+    deepMergeReactive(stateRefs.llmSettings, newSettings)
+  }
+
+  const navigateToTask = (
+    taskId: string | null | undefined,
+    options: {
+      path?: string
+      replace?: boolean
+    } = {},
+  ) => {
+    if (!process.env.CLIENT) return
+    const routeTarget = buildTaskSelectionRoute(window.location.href, taskId, options.path)
+    if (routeTarget === route.fullPath) return
+    if (options.replace) {
+      void router.replace(routeTarget)
+      return
+    }
+    void router.push(routeTarget)
   }
 
   const setReadOnlySettings =
@@ -661,23 +652,9 @@ export const useAppStateStore = defineStore('ui-state', () => {
     },
     isInIframe: urlConfig.isInIframe,
     isInVscode: urlConfig.isInVscode,
-    navigateToTask: (
-      taskId: string | null | undefined,
-      options: {
-        path?: string
-        replace?: boolean
-      } = {},
-    ) => {
-      console.log('navigate to task:', taskId, options)
-      if (!process.env.CLIENT) {
-        stateRefs.llmSettings.selectedTaskId = taskId || undefined
-        return
-      }
-      const nextHref = buildHrefWithSelectedTask(window.location.href, taskId, options.path)
-      const updateHistory = options.replace ? window.history.replaceState : window.history.pushState
-      updateHistory.call(window.history, {}, '', nextHref)
-    },
     ...allRefs,
+    selectedTaskId,
+    navigateToTask,
     llmSettings: computed(
       () => stateRefs.llmSettings as DeepReadonly<typeof stateRefs.llmSettings>,
     ), // make sure to write protect llmSettings in order to make changes explicit!

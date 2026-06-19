@@ -2071,11 +2071,11 @@ export async function getTestMetaData() {
   async function completionMessage() {
     const ty = await tystate.taskyon
     const tyChat: Record<string, unknown> = {
-      chatID: state.llmSettings.selectedTaskId,
+      chatID: state.selectedTaskId,
     }
-    if (state.llmSettings.selectedTaskId) {
-      tyChat.taskIdChain = await ty.getTaskIdChain(state.llmSettings.selectedTaskId)
-      const task = await ty.getTask(state.llmSettings.selectedTaskId)
+    if (state.selectedTaskId) {
+      tyChat.taskIdChain = await ty.getTaskIdChain(state.selectedTaskId)
+      const task = await ty.getTask(state.selectedTaskId)
       if (task) {
         const taskChain = await ty.getTaskChain(task.id)
         const toolDefs = await ty.updateToolDefinitions(false)

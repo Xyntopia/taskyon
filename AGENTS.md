@@ -9,10 +9,12 @@
 ## Key rules
 
 - Fix root causes: keep values strongly typed at their source. No `as any`, `as unknown as`, JSON round-trip hacks, or widening types to silence errors.
+- If a fix starts cascading into broad type churn, readonly workarounds, or many unrelated file edits, stop and step back. Revert the speculative path and choose the smallest boundary fix instead of spreading the workaround through the codebase.
 - No generic `isRecord`-style guards. Narrow at the domain boundary, then pass typed values downstream.
 - No fake no-op implementations. Model unavailable capabilities as optional.
 - Do not auto-run `yarn lint` or `yarn lint:fix` (neither repo-wide nor targeted) unless the user explicitly asks. Linting is intentionally not default because it is comparatively expensive. Instead, remind the user to run `yarn lint` themselves before committing, or ask whether they want you to run it when wrapping up. Targeted `yarn eslint <path>` is fine only when needed to verify a specific change and only when explicitly requested.
 - Always run the formatter on every file you edited yourself, without waiting for the user to ask. Format only the edited files: `yarn format:file <path...>`
+- Prefer explicit event/function flow over Vue watchers. Watchers are hard to trace and should be used only when reacting to external reactive state is genuinely the simplest boundary; do not use a watcher to bounce one source of truth into another.
 
 ## Commands
 
@@ -67,3 +69,4 @@
 - The `packages/taskyon` package exports TS source files directly. Import it via the `exports` map paths, not by relative file paths.
 - Keep browser UI mode and Node headless mode aligned. Changes in shared runtime paths must work in both environments; do not fix headless by introducing a Node-only shortcut into code that is also used by the browser UI.
 - When working on Modelica runtime bugs: debug generated JS first, then backport fixes to templates. See `packages/shared/modelica/README.md` for the mandatory debug loop.
+- When the persisted Taskyon profile schema changes, bump the profile version in both `src/modules/taskyon/types.ts` and `src/assets/taskyon_settings.json`. Prefer invalidating old persisted profiles through the version number instead of adding one-off cleanup code for removed fields.

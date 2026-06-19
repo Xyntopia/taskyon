@@ -23,7 +23,7 @@
     <TaskyonHeader v-else v-model:drawer-open="drawerOpen" new-chat back-to-chat />
 
     <q-drawer
-      v-if="state"
+      v-if="shouldMountSidebar"
       v-model="drawerOpen"
       :show-if-above="guiM !== 'iframe'"
       persistent
@@ -58,12 +58,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { defineAsyncComponent } from 'vue'
 import TaskyonHeader from '../components/taskyon/TaskyonHeader.vue'
 import { useAppStateStore } from 'src/stores/appState'
+import { useRoute } from 'vue-router'
 
 const drawerOpen = ref(false)
+const hasOpenedSidebar = ref(false)
 
 const ChatSidebar = defineAsyncComponent(
   () =>
@@ -76,6 +78,15 @@ const ChatSidebar = defineAsyncComponent(
 )
 
 const state = useAppStateStore()
+const route = useRoute()
 
 const guiM = computed(() => state.minimalGui)
+const showSidebar = computed(() => route.meta.showSidebar !== false)
+const shouldMountSidebar = computed(
+  () => state && (showSidebar.value || drawerOpen.value || hasOpenedSidebar.value),
+)
+
+watch(drawerOpen, (isOpen) => {
+  if (isOpen) hasOpenedSidebar.value = true
+})
 </script>

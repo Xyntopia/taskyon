@@ -2,7 +2,6 @@
   <!--Task Page-->
   <FadeAwayScrollPage class="column chat-page" :style-fn="myPageStyle">
     <!--Chat Area-->
-    <div v-if="state.taskyonRunmode === 'waiting for connection'">Connecting....</div>
     <div id="chat-area" ref="taskThreadContainer">
       <!--<q-resize-observer :debounce="500" @resize="onResize" />-->
       <q-scroll-observer
@@ -21,9 +20,9 @@
       -->
       <!-- "Task" Display (.tasks-container & .task-container) -->
       <TaskChainViewer
-        v-if="tystate.selectedThread.length > 0 && tystate.currentTask.value"
+        v-if="currentTaskForView && tystate.selectedThread.length > 0"
         :selected-thread="tystate.selectedThread"
-        :current-task="tystate.currentTask.value"
+        :current-task="currentTaskForView"
         :show-all-tasks="showAllTasks"
         :show-hierarchy="showHierarchy"
         :task-tree-root="rootTaskId"
@@ -31,13 +30,7 @@
         :expert-mode="state.appConfiguration.expertMode"
         @on-size-change="scm.autoScroll"
       />
-      <div
-        v-else-if="loadingChat"
-        class="text-primary loadingChat text-h6 q-pa-xl column items-center"
-      >
-        loading chat
-        <q-spinner-comment size="2em" />
-      </div>
+      <LoadingCircle v-else-if="showLoadingState" :label="loadingStateLabel" />
       <!-- Welcome Message -->
       <div
         v-else
@@ -75,7 +68,7 @@
     <!--Create new task area-->
     <div class="col-auto row justify-center create-new-task-container self-stretch">
       <CreateNewTask
-        v-if="tystate.selectedThread.length > 0 && tystate.currentTask.value"
+        v-if="currentTaskForView && tystate.selectedThread.length > 0"
         v-model:file-attachments="fileAttachments"
         :entry-node="tystate.entryNode"
         class="col q-pa-xs create-new-task"
@@ -138,12 +131,22 @@ import { storeToRefs } from 'pinia'
 import { QSpinnerBox, useMeta, useQuasar } from 'quasar'
 import FadeAwayScrollPage from '@taskyon/shared/components/FadeAwayScrollPage.vue'
 import FileDropzone from '@taskyon/shared/components/FileDropzone.vue'
+import LoadingCircle from '@taskyon/shared/components/LoadingCircle.vue'
 import PasswordRequestDialog from '@taskyon/shared/components/PasswordRequestDialog.vue'
 import ToggleButton from '@taskyon/shared/components/ToggleButton.vue'
 import { createScrollManager } from 'src/modules/vueUtils'
+import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
-import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
+import {
+  computed,
+  defineAsyncComponent,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+  watchEffect,
+} from 'vue'
 
 // we are re-creating the following meta tag dynamically here just for the chat page!
 // <!-- Viewport Meta in order to make window size shrink on mobile when keyboard pops up! -->
@@ -173,9 +176,25 @@ const props = defineProps<{
   folder?: string
   filePath?: string
 }>()
+const hasChatTarget = computed(() =>
+  Boolean(props.taskId || props.gdriveFileId || props.importUrl || props.filePath),
+)
+const hasVisibleChat = computed(
+  () => tystate.selectedThread.length > 0 && Boolean(tystate.currentTask.value),
+)
+const currentTaskForView = computed(() =>
+  hasVisibleChat.value && tystate.currentTask.value ? tystate.currentTask.value : undefined,
+)
+const isInitializingTaskyon = computed(() => state.taskyonRunmode === 'waiting for connection')
+const showLoadingState = computed(
+  () => isInitializingTaskyon.value || (hasChatTarget.value && !hasVisibleChat.value),
+)
+const loadingStateLabel = computed(() =>
+  isInitializingTaskyon.value ? 'Initializing Taskyon...' : 'Loading chat...',
+)
+
 const showAllTasks = ref<boolean>(props.detailed)
 const showHierarchy = ref(false)
-const loadingChat = ref(false)
 const delayedTrue = ref(false)
 let dismissloading: ReturnType<typeof $q.notify> | undefined = undefined
 
@@ -202,6 +221,7 @@ const ResetButton = process.env.DEV
 const $q = useQuasar()
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
+const { navigateToTask } = useTaskNavigation()
 const taskThreadContainer = ref<HTMLElement | undefined>()
 const fileAttachments = ref<File[]>([]) // holds all attached files as a "tasklist"
 const loadingFromGdrive = ref(false)
@@ -241,7 +261,7 @@ async function updateChatThread() {
     try {
       const markdownContent = await getTextFile(markdownUrl)
       const newTaskId = await ty.addMdTaskChain(markdownContent)
-      state.navigateToTask(newTaskId, { replace: true })
+      navigateToTask(newTaskId, { replace: true })
     } catch (error) {
       console.error('Error loading from Google Drive:', error)
       openPopupMessage(
@@ -258,7 +278,7 @@ async function updateChatThread() {
       state.lockBottomScroll = false
       const markdownContent = await getTextFile(markdownUrl)
       const newTaskId = await ty.addMdTaskChain(markdownContent)
-      state.navigateToTask(newTaskId, { replace: true })
+      navigateToTask(newTaskId, { replace: true })
     }
   } else if (props.filePath) {
     state.lockBottomScroll = false
@@ -314,7 +334,7 @@ Please check the path and try again.
         })
       ).id
     }
-    state.navigateToTask(newTaskId, { replace: true })
+    navigateToTask(newTaskId, { replace: true })
   }
 }
 
@@ -323,19 +343,14 @@ const scm = createScrollManager(taskThreadContainer, lockBottomScroll, '.task-co
 
 watch(tystate.currentTask, () => {
   scm.autoScroll()
-  loadingChat.value = false
   activateAfter(1000)
 })
 
-// Watch selectedTaskId and update URL query parameter
 watch(
   () => [props.taskId, props.gdriveFileId, props.importUrl, props.folder, props.filePath] as const,
   async () => {
-    // don't update chat if the task is the same as we ahve alread selected...
-    if (props.taskId && props.taskId === state.llmSettings.selectedTaskId) return
-    loadingChat.value = true
+    if (!hasChatTarget.value) return
     await updateChatThread()
-    if (tystate.currentTask) loadingChat.value = false
   },
   { immediate: true },
 )

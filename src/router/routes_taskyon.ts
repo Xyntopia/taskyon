@@ -15,6 +15,8 @@ const resolveChatMarkdownProps = (filePathParam: string | string[] | undefined) 
       ? [filePathParam]
       : []
 
+  if (pathSegments.length === 0) return {}
+
   const [root, ...rest] = pathSegments
   if (root && chatMarkdownRoots.includes(root as (typeof chatMarkdownRoots)[number])) {
     return {
@@ -39,6 +41,11 @@ const resolveTaskChatProps = (
   ...extra,
 })
 
+const shouldOpenChatRoute = (route: RouteLocationNormalizedLoaded) =>
+  typeof route.query.t === 'string' ||
+  typeof route.query.gd === 'string' ||
+  typeof route.query.url === 'string'
+
 export const universalTyRoutes: RouteRecordRaw[] = [
   {
     path: 'settings/:tab?',
@@ -54,14 +61,21 @@ export const taskyonRoutes: RouteRecordRaw[] = [
     children: [
       {
         path: '',
-        //component: defineAsyncComponent(() => import('pages/TaskChat.vue')),
-        component: defineAsyncComponent({
-          loader: () => import('pages/taskyon/TaskChat.vue'),
-          loadingComponent: LoadCircle,
-          delay: 200,
-        }),
-        meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
-        props: (route) => resolveTaskChatProps(route),
+        beforeEnter: (to) => {
+          if (shouldOpenChatRoute(to)) {
+            return {
+              path: '/chat',
+              query: to.query,
+            }
+          }
+          return true
+        },
+        component: () => import('pages/taskyon/TaskyonHome.vue'),
+        meta: {
+          title: 'Main',
+          description: 'Taskyon AI Chat Companion',
+          showSidebar: false,
+        },
       },
       {
         path: 'chat',
@@ -95,7 +109,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       },
       {
         // TODO:  change this, so that we can use "arbitrary" files for this!!!
-        path: '/chat/:filePath([^.]*)*',
+        path: '/chat/:filePath([^.]*)+',
         component: defineAsyncComponent({
           loader: () => import('pages/taskyon/TaskChat.vue'),
           loadingComponent: LoadCircle,

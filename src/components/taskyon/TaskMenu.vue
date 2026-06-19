@@ -54,7 +54,7 @@
         class="col"
         flat
         :icon="matAltRoute"
-        @click="state.navigateToTask(task.id)"
+        @click="navigateToTask(task.id)"
       >
         <q-tooltip :delay="0"
           >Start alternative chat from here, keeping all previous messages up to this
@@ -132,9 +132,11 @@ import {
 import { mdiFileTree, mdiForumPlus, mdiLanguageMarkdown } from '@quasar/extras/mdi-v6'
 import type { TaskNode } from '@taskyon/taskyon'
 import { copyToClipboard } from '../../../packages/shared/modules/utils'
+import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useAppStateStore } from 'src/stores/appState'
 
 const state = useAppStateStore()
+const { navigateToTask } = useTaskNavigation()
 
 defineProps<{
   task: TaskNode

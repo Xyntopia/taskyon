@@ -228,6 +228,7 @@ import { useTextSelection } from '@vueuse/core'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
 import { type QMenu } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
+import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, defineAsyncComponent, ref, useTemplateRef } from 'vue'
 import { useRouter } from 'vue-router'
@@ -283,6 +284,7 @@ const taskCostMeta = computed(() =>
 )
 
 const state = useAppStateStore()
+const { navigateToTask } = useTaskNavigation()
 
 const humanReadableTaskCosts = computed(() => {
   if (taskCostMeta.value?.taskCosts) {
@@ -298,7 +300,7 @@ async function editTask(taskId: string) {
     void router.push(`/tool/${task.id}`)
   } else {
     tystate.setContentDraftFromTask(task)
-    state.navigateToTask(task?.priorID || task?.parentID)
+    navigateToTask(task?.priorID || task?.parentID)
   }
 }
 
@@ -306,7 +308,7 @@ async function deleteTask(taskId: string) {
   const ty = await tystate.taskyon
   const task = await ty.getTask(taskId)
   if (task) void ty.deleteTask(task.id)
-  state.navigateToTask(task?.priorID || task?.parentID)
+  navigateToTask(task?.priorID || task?.parentID)
 }
 
 async function createNewConversation(taskId: string) {
@@ -316,7 +318,7 @@ async function createNewConversation(taskId: string) {
 
   // we simply need to tell our task manager that we don't have any task selected
   // the next message which will be send, will be an orphan in this case.
-  state.navigateToTask(undefined, { path: '/' })
+  navigateToTask(undefined, { path: '/' })
 }
 
 function toggleMessageDebug(id: string) {

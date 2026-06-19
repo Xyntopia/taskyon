@@ -230,6 +230,7 @@ import {
 import { watchThrottled } from '@vueuse/core'
 import { QSelect, useQuasar } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
+import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useTaskyonStore } from 'stores/taskyonState'
 import type { ReadonlyDeep } from 'type-fest'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -257,6 +258,7 @@ const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
+const { navigateToTask } = useTaskNavigation()
 
 const keywordExtractorReady = ref(false)
 
@@ -398,6 +400,7 @@ async function addNewTask(mode: MessageExecutionMode, p2pTopic?: string) {
   const ty = await tystate.taskyon
   const fileIds = await ty.addFiles(fileAttachments.value, 'opfs')
   const kwds = (await kwdsPromise) ?? currentKeywords.value
+  const previousTaskId = state.selectedTaskId
   const createTaskChainArgs = {
     currentTask: tystate.currentTask.value,
     draftTask: currentnewTask.value,
@@ -408,7 +411,7 @@ async function addNewTask(mode: MessageExecutionMode, p2pTopic?: string) {
   }
   const { createdTasks } = await createNewTaskChain({
     ...createTaskChainArgs,
-    priorTaskId: state.llmSettings.selectedTaskId,
+    priorTaskId: previousTaskId,
   })
   const newTaskId = createdTasks.at(-1)
 
@@ -422,7 +425,7 @@ async function addNewTask(mode: MessageExecutionMode, p2pTopic?: string) {
     })
   }
 
-  state.navigateToTask(newTaskId?.id)
+  if (!previousTaskId) navigateToTask(newTaskId?.id)
 
   // and empty out the contents for the next chat message :)
   if (currentnewTask.value.role === 'user') {

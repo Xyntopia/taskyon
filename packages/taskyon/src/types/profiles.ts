@@ -11,11 +11,6 @@ export const llmSettings = z.object({
   secretPublicKey: z.string().nullish().optional().meta({
     description: 'A (public) cryptographic key which is used to encrypt secrets',
   }),
-  // TODO: this needs to go into appSettings!
-  selectedTaskId: z.string().optional().meta({
-    description:
-      'The currently selected conversation defined by the ID of its last node. The task chain is defined through each tasknodes parent IDs',
-  }),
   // TODO:  simply add apiconfig here..  if we want a different one, we would
   // simply load an entirely different settings profile
   // TODO: also:  move this to chatCompletion..  we are using chatCompletion for this after all!

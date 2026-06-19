@@ -52,12 +52,12 @@ async function updateToc(newTaskId: string) {
   conversationThread.value = toc
 }
 
-if (state.llmSettings.selectedTaskId) {
-  void updateToc(state.llmSettings.selectedTaskId)
+if (state.selectedTaskId) {
+  void updateToc(state.selectedTaskId)
 }
 
 watch(
-  () => state.llmSettings.selectedTaskId,
+  () => state.selectedTaskId,
   (newTaskId) => {
     if (newTaskId) {
       void updateToc(newTaskId)

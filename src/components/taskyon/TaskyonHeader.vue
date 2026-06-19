@@ -47,7 +47,7 @@
           aria-label="start new chat"
           @click="
             () => {
-              state.navigateToTask(undefined, { path: '/' })
+              navigateToTask(undefined, { path: '/' })
               state.createTaskType.type = 'message'
             }
           "
@@ -55,7 +55,7 @@
         </q-btn>
       </div>
       <q-space class="col" />
-      <div v-if="!minMode && state.llmSettings.selectedTaskId">
+      <div v-if="!minMode && state.selectedTaskId">
         <share-dialog-btn
           flat
           round
@@ -64,7 +64,7 @@
           download
           share
           :size="btnSize"
-          :task-or-id="state.llmSettings.selectedTaskId"
+          :task-or-id="state.selectedTaskId"
         />
       </div>
       <!--
@@ -174,11 +174,13 @@ import {
 import { mdiForum, mdiForumPlus } from '@quasar/extras/mdi-v6'
 import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
 import { QToolbar } from 'quasar'
+import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useAppStateStore } from 'src/stores/appState'
 import { defineAsyncComponent } from 'vue'
 import TaskyonMenu from './TaskyonMenu.vue'
 
 const state = useAppStateStore()
+const { navigateToTask } = useTaskNavigation()
 
 const { btnSize = 'md' } = defineProps<{
   minMode?: boolean

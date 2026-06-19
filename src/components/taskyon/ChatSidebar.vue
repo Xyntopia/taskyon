@@ -38,15 +38,12 @@
             <q-item-section
               lines
               :class="
-                state.llmSettings.selectedTaskId == conversationId
+                state.selectedTaskId == conversationId
                   ? ['text-weight-bolder', $q.dark.isActive ? 'text-secondary' : 'text-primary']
                   : [$q.dark.isActive ? 'text-white' : 'text-primary']
               "
               ><template v-if="nameMap[conversationId]">
-                {{
-                  (state.llmSettings.selectedTaskId == conversationId ? '> ' : '') +
-                  nameMap[conversationId]
-                }}
+                {{ (state.selectedTaskId == conversationId ? '> ' : '') + nameMap[conversationId] }}
               </template>
               <div v-else class="row no-wrap items-center">
                 <q-icon :name="matAutorenew" class="q-mr-sm" />
@@ -77,12 +74,7 @@
               </q-tooltip>
             </q-btn>
           </FileDropzone>
-          <q-btn
-            dense
-            flat
-            :icon="mdiForumPlus"
-            @click="state.navigateToTask(undefined, { path: '/' })"
-          >
+          <q-btn dense flat :icon="mdiForumPlus" @click="navigateToTask(undefined, { path: '/' })">
             <q-tooltip> Create a new conversation </q-tooltip>
           </q-btn>
           <q-btn dense flat :icon="matSearch" to="/TaskManager"
@@ -116,6 +108,7 @@ import FileDropzone from '@taskyon/shared/components/FileDropzone.vue'
 import { generateTaskKeyWords, sleep } from '@taskyon/taskyon'
 import { watchThrottled } from '@vueuse/core'
 import { useQuasar } from 'quasar'
+import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { ref } from 'vue'
@@ -127,6 +120,7 @@ const $route = useRoute()
 const $q = useQuasar()
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
+const { navigateToTask } = useTaskNavigation()
 
 const conversationIDs = ref<string[]>([])
 const nameMap = ref<Record<string, string>>({})
@@ -181,7 +175,7 @@ async function updateName(id: string) {
 }
 
 watchThrottled(
-  [() => state.llmSettings.selectedTaskId, () => state.chatHistory],
+  [() => state.selectedTaskId, () => state.chatHistory],
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   ([_, newChatHistory]) => {
     console.log('updating sidebar chat list')
@@ -223,7 +217,7 @@ async function loadConversations(files: File[]) {
       })
     }
   }
-  state.navigateToTask(last_loaded_id)
+  navigateToTask(last_loaded_id)
 }
 
 // const TableOfChatContent = defineAsyncComponent(

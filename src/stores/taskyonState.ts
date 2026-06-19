@@ -786,6 +786,15 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
     ty.taskStream(({ id, data: task }) => {
       if (!task) {
         void add2ChatHistory(task, id.toString(), 'delete')
+        return
+      }
+      const selectedTaskId = stateRefs.selectedTaskId
+      if (
+        selectedTaskId &&
+        selectedTaskId !== id &&
+        (task.parentID === selectedTaskId || task.priorID === selectedTaskId)
+      ) {
+        stateRefs.navigateToTask(id.toString(), { replace: true })
       }
       if (currentTask.value?.id === id) {
         // console.log('update current task...', task)
@@ -796,7 +805,7 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
     // this needs to be a watch, because we're updating this variable from other sources as well...
     // TODO: make this a readonly property...
     watch(
-      () => stateRefs.llmSettings.selectedTaskId,
+      () => stateRefs.selectedTaskId,
       async (newSelectedTask) => {
         // TODO: I don't remember why we need this delay here....
         if (newSelectedTask) {
@@ -822,7 +831,7 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
 
     // also update chat history if we switch between tasks...
     watch(
-      () => stateRefs.llmSettings.selectedTaskId,
+      () => stateRefs.selectedTaskId,
       async (selectedTask) => {
         if (selectedTask) {
           const taskNode = await ty.getTask(selectedTask)
@@ -834,7 +843,7 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
   })
 
   const selectedThread = asyncComputed<TaskNode[]>(async () => {
-    const newSelectedTask = stateRefs.llmSettings.selectedTaskId
+    const newSelectedTask = stateRefs.selectedTaskId
     if (newSelectedTask) {
       const ty = await taskyon
       const selectedThreadIDs = await ty.getTaskIdChain(newSelectedTask)
@@ -1144,7 +1153,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
             hasAppConfiguration: !!newConfig.appConfiguration,
             hasToolchainConfig: !!newConfig.toolchainConfig,
             hasSignatureOrKey: !!newConfig.signatureOrKey,
-            selectedTaskId: llmCfg?.selectedTaskId,
             selectedApi: llmCfg?.selectedApi,
             incomingPrimaryColor: appCfg?.primaryColor,
             incomingSecondaryColor: appCfg?.secondaryColor,
@@ -1189,10 +1197,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         },
         task: async (msg) => {
           // push the last task to execution queue right away...
-          const tn = await ensureValidTaskId(msg.task)
-          if (msg.show) {
-            stateRefs.navigateToTask(tn.id)
-          }
+          await ensureValidTaskId(msg.task)
           ty.port.send(msg)
           // we don't forward this message to outPort, because we 've already processed everything relevant here..
         },
@@ -1306,12 +1311,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   const { taskWorkerWaiting, lastActiveTaskId, lastTaskState, workerStreamLogs, activeTaskIds } =
     connectWorkerStream(taskyon)
-
-  watch(lastActiveTaskId, (newTaskId) => {
-    if (newTaskId) {
-      stateRefs.navigateToTask(newTaskId)
-    }
-  })
 
   const stopWorker = async (reason: string) => {
     console.log('stopping worker with reason:', reason)
