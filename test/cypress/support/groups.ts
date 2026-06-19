@@ -2,6 +2,68 @@
 
 export const testModelId = 'google/gemini-2.5-flash-lite'
 
+const modelSelectLabel = 'Select LLM Model for answering/solving the task.'
+const modelPopupSelector = '.model-select-popup:visible'
+
+function isQuasarToggleOn($toggle: JQuery<HTMLElement>) {
+  return $toggle.hasClass('q-toggle--truthy') || $toggle.attr('aria-checked') === 'true'
+}
+
+function getSettingsToggle(label: string) {
+  return cy
+    .get('[data-cy="ai-settings"]:visible')
+    .find(`[data-cy="${label}"]:visible .q-toggle:visible`)
+    .first()
+}
+
+export function setSettingsToggle(label: string, enabled: boolean) {
+  getSettingsToggle(label)
+    .should('exist')
+    .then(($toggle) => {
+      if (isQuasarToggleOn($toggle) !== enabled) {
+        cy.wrap($toggle).click()
+      }
+    })
+
+  getSettingsToggle(label).should(($toggle) => {
+    expect(isQuasarToggleOn($toggle)).to.equal(enabled)
+  })
+}
+
+export function closeAiSettings() {
+  cy.get('[data-cy="ai-settings"]:visible').should('exist')
+  cy.get('body').type('{esc}')
+  cy.get('[data-cy="ai-settings"]:visible').should('not.exist')
+}
+
+function getModelField() {
+  return cy.dataCy('model-selection').contains('.q-field', modelSelectLabel)
+}
+
+function clickModelField() {
+  getModelField().scrollIntoView().should('be.visible').click('center')
+}
+
+function pressModelFieldOpenKey() {
+  getModelField().find('input').focus().type('{downArrow}', { force: true })
+}
+
+function openModelPopup(attempt = 0): Cypress.Chainable<JQuery<HTMLElement>> {
+  clickModelField()
+  pressModelFieldOpenKey()
+
+  return cy.get('body').then(($body) => {
+    if ($body.find(modelPopupSelector).length > 0) {
+      return cy.get(modelPopupSelector)
+    }
+    if (attempt >= 8) {
+      return cy.get(modelPopupSelector, { timeout: 10000 })
+    }
+    cy.wait(250)
+    return openModelPopup(attempt + 1)
+  })
+}
+
 export function selectllmmodel(provider?: string, modelId = '') {
   cy.dataCy('model-id').click() // open the menu
 
@@ -21,15 +83,10 @@ export function selectllmmodel(provider?: string, modelId = '') {
   }
 
   if (modelId) {
-    cy.dataCy('model-selection')
-      .contains('.q-field', 'Select LLM Model for answering/solving the task.')
-      .find('input')
-      .click()
-      .clear()
-      .type(modelId)
+    clickModelField()
+    getModelField().find('input').should('be.visible').clear().type(modelId)
 
-    cy.get('.q-menu:visible')
-      .last()
+    openModelPopup()
       .find('[data-cy="model-option"]')
       .filter((_, el) => el.getAttribute('data-model-id') === modelId)
       .first()

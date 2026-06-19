@@ -1,7 +1,13 @@
 // Use `cy.dataCy` custom command for more robust tests
 // See https://docs.cypress.io/guides/references/best-practices.html#Selecting-Elements
 
-import { selectllmmodel, startNewChat, writeMessage } from '../support/groups'
+import {
+  closeAiSettings,
+  selectllmmodel,
+  setSettingsToggle,
+  startNewChat,
+  writeMessage,
+} from '../support/groups'
 
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
@@ -19,8 +25,8 @@ describe('Tool Tests', () => {
 
     //cy.get('[aria-label="Open Sidebar"]').click();
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
-    cy.dataCy('Expert Mode').find('.q-toggle').click()
-    cy.get('.q-btn').contains('Ok').click()
+    setSettingsToggle('Expert Mode', true)
+    closeAiSettings()
 
     cy.dataCy('tool-btn').click()
     cy.get('.q-menu').contains('Manager').click()

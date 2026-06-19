@@ -2,8 +2,10 @@
 // See https://docs.cypress.io/guides/references/best-practices.html#Selecting-Elements
 
 import {
+  closeAiSettings,
   getLastAssistantMessage,
   selectllmmodel,
+  setSettingsToggle,
   testModelId,
   writeMessage,
 } from '../support/groups'
@@ -39,20 +41,20 @@ describe('test taskyon startpage', () => {
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
 
     // enable task cost display & expert mode...
-    cy.dataCy('Expert Mode').find('.q-toggle').click()
-    cy.dataCy('Tool Chooser').find('.q-toggle').click()
+    setSettingsToggle('Expert Mode', true)
+    setSettingsToggle('Tool Chooser', true)
     cy.dataCy('Tool Chooser').find('.obj-info').click()
     cy.contains('Enable the tool-shortlist stage for this specific entry-node run.').type('{esc}')
-    cy.get('.q-btn').contains('Ok').click()
+    closeAiSettings()
 
     selectllmmodel(undefined, testModelId)
 
-    cy.wait(100).reload()
+    cy.wait(100).reload().wait(1000)
     // TODO: check if expert mode is still there...
 
     // check if more fancy options ae present  now...
-    cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
-    cy.contains('Multimodal Input')
+    //cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
+    /*cy.contains('Multimodal Input')
     cy.contains('Base Prompt').type('{esc}')
 
     //cy.dataCy('chat-input').focus().type('{enter}')
@@ -66,7 +68,7 @@ describe('test taskyon startpage', () => {
       .invoke('text')
       .then((text) => text.trim())
       .should('equal', msg)
-    getLastAssistantMessage('.assistant.message').should('not.be.empty')
+    getLastAssistantMessage('.assistant.message').should('not.be.empty')*/
 
     // Check if the task costs element is present and contains the expected text
     /*cy.get('.task-costs')

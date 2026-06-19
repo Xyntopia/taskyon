@@ -1,7 +1,13 @@
 // Use `cy.dataCy` custom command for more robust tests
 // See https://docs.cypress.io/guides/references/best-practices.html#Selecting-Elements
 
-import { addAIServices, checkLastMessage, selectllmmodel, writeMessage } from '../support/groups'
+import {
+  addAIServices,
+  checkLastMessage,
+  selectllmmodel,
+  setSettingsToggle,
+  writeMessage,
+} from '../support/groups'
 
 // ** This file is an example of how to write Cypress tests, you can safely delete it **
 
@@ -39,7 +45,7 @@ describe('taskyon API', () => {
 
     cy.get('[aria-label="quick ai settings"]', { timeout: 60000 }).click()
     //cy.dataCy('ai-settings').scrollTo('bottom').type('{esc}')
-    cy.dataCy('Expert Mode').find('.q-toggle').click()
+    setSettingsToggle('Expert Mode', true)
     cy.dataCy('ai-settings').type('{esc}')
 
     // as of 20241007 this is the cheapest model which works with vision...
