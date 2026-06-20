@@ -19,7 +19,10 @@ async function loadWorkerSandboxRuntime(): Promise<WorkerSandboxRuntime> {
     const { BrowserWorkerSandboxRuntime } = await import('./browserWorkerSandboxRuntime')
     return new BrowserWorkerSandboxRuntime()
   }
-  const { NodeWorkerSandboxRuntime } = await import('./nodeWorkerSandboxRuntime')
+  const nodeRuntimeModule = './nodeWorkerSandboxRuntime.ts'
+  const { NodeWorkerSandboxRuntime } = (await import(/* @vite-ignore */ nodeRuntimeModule)) as {
+    NodeWorkerSandboxRuntime: new () => WorkerSandboxRuntime
+  }
   return new NodeWorkerSandboxRuntime()
 }
 

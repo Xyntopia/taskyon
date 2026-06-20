@@ -2967,8 +2967,14 @@ export async function testModelicaMslFirstOrderRumocaSimulation() {
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     return runModelicaMslFirstOrderRumocaSimulationInBrowser()
   }
-  const { runModelicaCliMslFirstOrderRumocaSimulation } =
-    await import('./modelicaDiagnosticsCliNode')
+  const nodeDiagnosticsModule = './modelicaDiagnosticsCliNode.ts'
+  const { runModelicaCliMslFirstOrderRumocaSimulation } = (await import(
+    /* @vite-ignore */ nodeDiagnosticsModule
+  )) as {
+    runModelicaCliMslFirstOrderRumocaSimulation: () => ReturnType<
+      typeof runModelicaMslFirstOrderRumocaSimulationInBrowser
+    >
+  }
   return runModelicaCliMslFirstOrderRumocaSimulation()
 }
 testModelicaMslFirstOrderRumocaSimulation.timeoutMs = 120_000

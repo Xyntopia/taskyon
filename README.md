@@ -1,30 +1,30 @@
 # Taskyon
 
 <p align="center">
-  <img src="/taskyon_fancy_logo.png" alt="Taskyon logo" width="140">
+  <img src="/taskyon_fancy_logo.png" onerror="this.onerror=null; this.src='/taskyon_fancy_logo.png';" alt="Taskyon Fancy Logo" width="100" style="padding-right: 30px;width: 175px;padding-left: 20px;height: 125px;">
 </p>
 
 <h3 align="center">Research. Design. Reproduce.</h3>
 
-Taskyon is an open-source, local-first design automation system for turning AI-assisted research
-into replayable, inspectable design workflows.
+Taskyon is an open-source, local-first design automation system for AI-assisted research, tool use,
+and replayable engineering workflows.
 
 The near-term goal is simple:
 
 > Solve a design problem once through chat and tools, then make the successful process easier
 > to inspect, replay, adapt, and eventually fork.
 
-Taskyon is not trying to be another generic chat app. The core artifact is a task tree: a
-structured record of questions, evidence, decisions, tools, parameters, and outputs that can grow
-from an exploratory conversation into a reproducible design automation workflow.
+Taskyon is not trying to be another generic chat app. It is design automation software built around
+a task tree: a structured record of questions, evidence, decisions, tools, parameters, and outputs
+that can be inspected and reused.
 
 ## Why Taskyon
 
-Technical work rarely happens in a single tool. A real design process often mixes chat, web
-research, documentation, spreadsheets, scripts, APIs, simulations, and human judgment. The result
-may be useful once, but difficult to repeat.
+Technical design work rarely happens in a single tool. A real design automation process often mixes
+chat, web research, documentation, spreadsheets, scripts, APIs, simulations, and human judgment. The
+result may be useful once, but difficult to repeat.
 
-Taskyon is built around the idea that successful work should become reusable:
+Taskyon is built around the idea that successful design work should become reusable:
 
 - inspect the task tree instead of losing structure in a flat chat log;
 - keep sources, assumptions, prompts, artifacts, and outputs close to the work;
@@ -34,7 +34,7 @@ Taskyon is built around the idea that successful work should become reusable:
 - compare variants;
 - share and fork design workflows over time.
 
-## Product Direction
+## Project Direction
 
 Taskyon's design-automation path is intentionally incremental:
 
@@ -49,14 +49,13 @@ research through chat
 → optimization and simulation
 ```
 
-The first practical wedge is reproducible replay, not full autonomous engineering optimization.
-Taskyon should help a person solve one concrete case, understand how it was solved, and reuse the
-process with different inputs.
+The first practical goal is reproducible design replay, not full autonomous engineering
+optimization. Taskyon should help a person solve one concrete case, understand how it was solved,
+and reuse parts of the process with different inputs.
 
 ## Example Workflows
 
-Early public examples are meant to be guided design investigations rather than magic one-click
-solutions:
+Examples are meant to be guided design investigations rather than magic one-click solutions:
 
 - **Local AI workstation**: budget, model requirements, VRAM, GPUs, power, cooling, noise, and
   local-versus-cloud break-even.
@@ -65,11 +64,11 @@ solutions:
 - **Home battery system**: utility data, tariffs, solar, EV charging, battery sizing, scheduling,
   and investment tradeoffs.
 
-These examples are stepping stones toward a future library of forkable design workflows.
+These examples are starting points for forkable, inspectable workflows.
 
 ## What Exists Today
 
-Taskyon already provides the foundations for this direction:
+Taskyon already provides the foundations for open-source design automation:
 
 - **Task-based conversations**: each message can become a task node in a navigable tree.
 - **Local-first storage**: user data and task state stay local unless explicitly shared.
@@ -79,11 +78,11 @@ Taskyon already provides the foundations for this direction:
 - **Markdown and visual output**: render MathJax, Mermaid, SVG, HTML widgets, and rich technical
   documents.
 - **LLM provider flexibility**: use OpenAI-compatible, hosted, or self-hosted model endpoints.
-- **Web embedding**: integrate Taskyon into other pages or workflows.
+- **Web embedding**: integrate Taskyon into other pages or local workflows.
 
 ## What We Are Building Toward
 
-The medium-term focus is turning useful conversations into reproducible design assets:
+The medium-term focus is turning useful conversations into reproducible design automation assets:
 
 - parameter extraction and editing;
 - task classification as deterministic, external-data, AI, or human steps;
@@ -96,8 +95,8 @@ The medium-term focus is turning useful conversations into reproducible design a
 - public design pages;
 - sharing, forking, and eventually evaluator DAGs.
 
-The long-term vision is a community of executable, forkable designs: workflows that can be studied,
-challenged, improved, and reused with new parameters.
+The long-term vision is a library of executable, forkable design automation workflows that can be
+studied, challenged, improved, and reused with new parameters.
 
 ## Local First
 
@@ -108,18 +107,18 @@ Taskyon follows local-first principles wherever possible:
 - **Cost control**: deterministic replay should reduce repeated AI calls over time.
 - **User autonomy**: workflows should remain useful outside a single hosted service.
 
-## Use Taskyon
+## Try Taskyon
 
-- Stable app: [https://taskyon.space](https://taskyon.space)
-- Development app: [https://dev.taskyon.space](https://dev.taskyon.space)
-- Documentation: [https://taskyon.space/docs/index](https://taskyon.space/docs/index)
+- Run locally with the development commands below.
+- Documentation: [public/docs/index.md](public/docs/index.md)
 - Broader chat and agent features: [docs/taskyon_chat_and_agent_features.md](/docs/taskyon_chat_and_agent_features)
 - Feature comparison: [docs/taskyon_features.md](/docs/taskyon_features)
 - DeepWiki notes: [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Xyntopia/taskyon)
 
 ## Development
 
-Taskyon is a Yarn 4 monorepo using Quasar, Vue 3, Pinia, Tauri, and shared Taskyon packages.
+Taskyon is a Yarn 4 monorepo for open-source design automation software using Quasar, Vue 3, Pinia,
+Tauri, and shared Taskyon packages.
 
 ```bash
 yarn install
