@@ -93,7 +93,8 @@
             flat
             :icon="mdiSubdirectoryArrowRight"
             label="Detailed Task View"
-            to="/detailed"
+            :disable="!state.selectedTaskId"
+            @click="openDetailedTaskView"
           ></q-btn>
         </div>
       </div>
@@ -124,6 +125,10 @@ const { navigateToTask } = useTaskNavigation()
 
 const conversationIDs = ref<string[]>([])
 const nameMap = ref<Record<string, string>>({})
+
+const openDetailedTaskView = () => {
+  navigateToTask(state.selectedTaskId, { path: '/detailed' })
+}
 
 void tystate.taskyon.then((ty) =>
   ty.taskStream((data) => {
