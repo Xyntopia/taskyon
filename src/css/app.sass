@@ -50,6 +50,15 @@ body.body--light
   --chat-tool-specular: color-mix(in oklch, var(--q-accent) 46%, transparent)
   --chat-tool-specular-hot: color-mix(in oklch, var(--q-accent) 64%, transparent)
   --chat-tool-rim-glow: color-mix(in oklch, var(--q-accent) 20%, transparent)
+  --chat-sidebar-ink: var(--frontpage-ink)
+  --chat-sidebar-muted: color-mix(in oklch, var(--frontpage-muted) 76%, transparent)
+  --chat-sidebar-row-bg: color-mix(in oklch, white 88%, var(--chat-primary-vibrant) 3%)
+  --chat-sidebar-active-bg: color-mix(in oklch, white 94%, var(--chat-primary-vibrant) 4%)
+  --chat-sidebar-active-shadow: 0 0 24px color-mix(in oklch, #74a8ff 13%, transparent), 0 8px 24px color-mix(in oklch, var(--q-primary) 6%, transparent)
+  --chat-sidebar-action-bg: color-mix(in oklch, white 84%, var(--chat-primary-vibrant) 4%)
+  --chat-sidebar-action-shadow: 0 0 14px color-mix(in oklch, #74a8ff 10%, transparent)
+  --chat-sidebar-specular: color-mix(in oklch, var(--chat-primary-vibrant) 56%, transparent)
+  --chat-sidebar-specular-hot: color-mix(in oklch, #74a8ff 70%, transparent)
   --chat-user-indicator: linear-gradient(180deg, color-mix(in oklch, white 70%, transparent), color-mix(in oklch, var(--q-secondary) 46%, transparent) 18%, var(--q-secondary) 70%, color-mix(in oklch, white 75%, transparent))
   --chat-user-indicator-glow: 0 0 8px color-mix(in oklch, var(--q-secondary) 52%, transparent), 0 0 18px color-mix(in oklch, var(--q-secondary) 24%, transparent)
   --control-button-border: var(--q-primary)
@@ -102,6 +111,15 @@ body.body--dark
   --chat-tool-specular: color-mix(in oklch, var(--q-accent) 52%, transparent)
   --chat-tool-specular-hot: color-mix(in oklch, var(--q-accent) 70%, transparent)
   --chat-tool-rim-glow: color-mix(in oklch, var(--q-accent) 24%, transparent)
+  --chat-sidebar-ink: white
+  --chat-sidebar-muted: color-mix(in oklch, white 62%, transparent)
+  --chat-sidebar-row-bg: color-mix(in oklch, var(--q-primary) 22%, transparent)
+  --chat-sidebar-active-bg: color-mix(in oklch, var(--q-primary) 35%, transparent)
+  --chat-sidebar-active-shadow: 0 0 26px color-mix(in oklch, var(--chat-primary-vibrant) 24%, transparent), 0 14px 34px color-mix(in oklch, black 34%, transparent)
+  --chat-sidebar-action-bg: color-mix(in oklch, var(--q-primary) 30%, transparent)
+  --chat-sidebar-action-shadow: 0 0 16px color-mix(in oklch, var(--chat-primary-vibrant) 18%, transparent)
+  --chat-sidebar-specular: color-mix(in oklch, var(--chat-primary-vibrant) 64%, transparent)
+  --chat-sidebar-specular-hot: color-mix(in oklch, white 32%, var(--chat-primary-vibrant))
   --chat-user-indicator: linear-gradient(180deg, color-mix(in oklch, white 50%, transparent), color-mix(in oklch, var(--q-secondary) 54%, transparent) 16%, var(--q-secondary) 70%, color-mix(in oklch, white 48%, transparent))
   --chat-user-indicator-glow: 0 0 8px color-mix(in oklch, var(--q-secondary) 72%, transparent), 0 0 18px color-mix(in oklch, var(--q-secondary) 38%, transparent)
 
@@ -233,6 +251,139 @@ html.no-ptr
       background: var(--frontpage-card-bg)
       color: var(--button-color)
       border-radius: 5px
+
+  .chat-sidebar
+    color: var(--chat-sidebar-ink)
+
+    .q-focus-helper
+      display: none
+
+  .chat-sidebar__dev,
+  .chat-sidebar__header,
+  .chat-sidebar__pending-name,
+  .chat-sidebar__conversation-menu
+    color: var(--chat-sidebar-muted)
+
+  .chat-sidebar__header
+    gap: 0.45rem
+    letter-spacing: 0.04em
+
+    .q-icon
+      color: var(--chat-sidebar-specular)
+      filter: drop-shadow(0 0 7px var(--chat-sidebar-specular))
+
+  .chat-sidebar__separator
+    opacity: 0.55
+
+  .chat-sidebar__conversation-list
+    display: grid
+    gap: 0.18rem
+
+  .chat-sidebar__conversation
+    position: relative
+    isolation: isolate
+    overflow: visible
+    min-height: 2.25rem
+    margin: 0 0.1rem
+    padding: 0.28rem 0.38rem 0.28rem 0.56rem
+    border: 1px solid transparent
+    border-radius: 0.55rem
+    background: transparent
+    color: var(--chat-sidebar-ink)
+    transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease
+
+    &::before,
+    &::after
+      content: ''
+      position: absolute
+      pointer-events: none
+      opacity: 0
+      transition: opacity 0.18s ease
+
+    &::before
+      inset: 0.42rem auto 0.42rem 0.22rem
+      width: 2px
+      border-radius: 2px
+      background: linear-gradient(180deg, transparent, var(--chat-sidebar-specular-hot), color-mix(in oklch, var(--q-secondary) 66%, transparent), transparent)
+      filter: drop-shadow(0 0 7px var(--chat-sidebar-specular))
+
+    &::after
+      inset: 0
+      z-index: 0
+      border-radius: inherit
+      padding: 1px
+      background: radial-gradient(3.1rem 1.4rem at 3% 0%, var(--chat-sidebar-specular-hot), transparent 64%), radial-gradient(3.2rem 1.35rem at 98% 100%, color-mix(in oklch, var(--q-secondary) 52%, transparent), transparent 66%), linear-gradient(130deg, var(--chat-sidebar-specular), transparent 24%, transparent 78%, color-mix(in oklch, var(--q-secondary) 40%, transparent))
+      filter: drop-shadow(0 0 9px color-mix(in oklch, var(--chat-sidebar-specular) 72%, transparent))
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+      -webkit-mask-composite: xor
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)
+      mask-composite: exclude
+
+    > .q-item__section
+      position: relative
+      z-index: 1
+
+    &:hover
+      background: var(--chat-sidebar-row-bg)
+      border-color: color-mix(in oklch, var(--chat-sidebar-specular) 22%, transparent)
+
+    &:focus-visible
+      outline: 2px solid color-mix(in oklch, var(--chat-sidebar-specular-hot) 54%, transparent)
+      outline-offset: 2px
+
+    &.chat-sidebar__conversation--active
+      background: var(--chat-sidebar-active-bg)
+      border-color: color-mix(in oklch, var(--chat-sidebar-specular) 34%, transparent)
+      box-shadow: var(--chat-sidebar-active-shadow)
+
+      &::before
+        opacity: 0.88
+
+      &::after
+        opacity: 0.72
+
+  .chat-sidebar__conversation-title
+    min-width: 0
+    color: var(--chat-sidebar-ink)
+    font-size: 0.82rem
+    line-height: 1.18
+
+  .chat-sidebar__conversation-title--active
+    font-weight: 650
+
+  .chat-sidebar__conversation-menu
+    opacity: 0.56
+    transition: opacity 0.18s ease
+
+  .chat-sidebar__conversation:hover,
+  .chat-sidebar__conversation--active
+    .chat-sidebar__conversation-menu
+      opacity: 1
+
+  .chat-sidebar__actions
+    gap: 0.25rem
+    margin: 0.42rem 0.1rem 0
+    padding: 0.42rem 0.1rem 0.1rem
+    border-top: 1px solid color-mix(in oklch, var(--chat-sidebar-specular) 16%, transparent)
+
+  .chat-sidebar__action-button,
+  .chat-sidebar__detail-button
+    border: 1px solid color-mix(in oklch, var(--chat-sidebar-specular) 22%, transparent)
+    border-radius: 0.5rem
+    background: var(--chat-sidebar-action-bg)
+    color: var(--chat-sidebar-ink)
+    box-shadow: var(--chat-sidebar-action-shadow)
+
+  .chat-sidebar__action-button
+    min-width: 2rem
+    min-height: 2rem
+
+  .chat-sidebar__detail-button
+    min-height: 2rem
+    padding: 0 0.5rem
+
+  .chat-sidebar__expert
+    padding: 0.1rem
 
   // TODO: move this into component..
   .scroll-area
@@ -613,16 +764,24 @@ html.no-ptr
       padding: 0.4rem
 
       .create-tasks__controls
-        flex-wrap: wrap
+        flex-wrap: nowrap
         gap: 0.35rem
+        overflow-x: auto
+        overflow-y: hidden
+        scrollbar-width: none
+
+        &::-webkit-scrollbar
+          display: none
 
       .create-tasks__control-group
-        flex: 1 1 100%
+        flex: 0 0 auto
+        overflow: visible
 
       .create-tasks__model-slot
-        flex: 1 1 100%
-        max-width: 100%
-        margin-left: 0
+        flex: 1 1 7.5rem
+        min-width: 5.8rem
+        max-width: none
+        margin-left: auto
 
   .frontpage-tree--left
     opacity: var(--frontpage-tree-opacity)
