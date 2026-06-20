@@ -6,36 +6,69 @@
         <path d="M106 472 48 414" />
         <path d="M106 448 190 364" />
         <path d="M106 390 62 346" />
+        <path d="M62 346 28 346" />
+        <path d="M62 346 62 300" />
         <path d="M106 386 106 262" />
+        <path d="M106 284 72 250" />
+        <path d="M72 250 34 250" />
         <path d="M106 324 168 262" />
+        <path d="M132 298 188 298" />
+        <path d="M188 298 218 268" />
         <path d="M168 262V166" />
         <path d="M168 218 240 146" />
+        <path d="M202 184 262 184" />
+        <path d="M262 184 292 154" />
         <path d="M168 198 120 150" />
+        <path d="M144 174 102 174" />
+        <path d="M102 174 72 144" />
         <path d="M168 166 168 92" />
         <path d="M168 132 214 86" />
         <path d="M168 126 134 92" />
+        <path d="M168 108 196 108" />
+        <path d="M196 108 232 72" />
         <path d="M214 86 268 86" />
+        <path d="M268 86 306 48" />
+        <path d="M268 86 316 118" />
         <path d="M120 150 86 116" />
+        <path d="M86 116 42 116" />
         <path d="M190 364 288 364" />
         <path d="M190 364 238 316" />
         <path d="M238 316 312 316" />
         <path d="M288 364 326 326" />
+        <path d="M288 364 326 398" />
+        <path d="M238 316 260 286" />
+        <path d="M260 286 332 286" />
         <path d="M48 414 48 340" />
         <path d="M48 340 18 310" />
         <path d="M106 518 158 570" />
         <path d="M158 570 222 570" />
+        <path d="M158 570 124 604" />
+        <path d="M222 570 258 606" />
       </g>
       <g class="tree-lines tree-lines--secondary">
         <circle cx="106" cy="386" r="3" />
+        <circle cx="62" cy="346" r="2.5" />
+        <circle cx="28" cy="346" r="2" />
+        <circle cx="34" cy="250" r="2" />
         <circle cx="190" cy="364" r="3" />
+        <circle cx="218" cy="268" r="2.4" />
         <circle cx="240" cy="146" r="3" />
+        <circle cx="292" cy="154" r="2.2" />
         <circle cx="168" cy="92" r="2.5" />
         <circle cx="214" cy="86" r="2.5" />
+        <circle cx="232" cy="72" r="2" />
         <circle cx="268" cy="86" r="2.5" />
+        <circle cx="306" cy="48" r="2" />
+        <circle cx="316" cy="118" r="2" />
+        <circle cx="42" cy="116" r="2" />
         <circle cx="48" cy="414" r="3" />
         <circle cx="238" cy="316" r="3" />
+        <circle cx="332" cy="286" r="2" />
         <circle cx="312" cy="316" r="2.5" />
+        <circle cx="326" cy="398" r="2" />
         <circle cx="222" cy="570" r="2.5" />
+        <circle cx="124" cy="604" r="2" />
+        <circle cx="258" cy="606" r="2" />
       </g>
     </svg>
     <svg class="frontpage-tree frontpage-tree--right" viewBox="0 0 420 360" aria-hidden="true">
@@ -45,12 +78,23 @@
         <path d="M260 216 310 166" />
         <path d="M260 216 220 176" />
         <path d="M310 166V112" />
+        <path d="M310 138 346 102" />
+        <path d="M346 102 382 102" />
         <path d="M220 176V128" />
+        <path d="M220 148 184 112" />
+        <path d="M184 112 140 112" />
+        <path d="M260 260 306 306" />
+        <path d="M306 306 358 306" />
       </g>
       <g class="tree-lines tree-lines--secondary">
         <circle cx="260" cy="216" r="3" />
         <circle cx="310" cy="166" r="3" />
+        <circle cx="346" cy="102" r="2.4" />
+        <circle cx="382" cy="102" r="2" />
         <circle cx="220" cy="176" r="3" />
+        <circle cx="140" cy="112" r="2" />
+        <circle cx="306" cy="306" r="2.4" />
+        <circle cx="358" cy="306" r="2" />
       </g>
     </svg>
     <div class="frontpage-brand column items-center">
@@ -101,8 +145,10 @@
           class="frontpage-stage-button column items-start"
           @click="toggleStage(stage.title)"
         >
-          <span class="frontpage-stage-kicker">{{ stage.number }}</span>
-          <span class="frontpage-stage-title">{{ stage.title }}</span>
+          <span class="frontpage-stage-heading row items-center no-wrap">
+            <span class="frontpage-stage-kicker">{{ stage.number }}</span>
+            <span class="frontpage-stage-title">{{ stage.title }}</span>
+          </span>
           <span class="frontpage-stage-summary">{{ stage.summary }}</span>
         </button>
         <p v-if="activeStage === stage.title" class="frontpage-stage-detail">{{ stage.detail }}</p>
@@ -255,66 +301,75 @@ function startExample(prompt: string) {
   width: 100%;
   min-width: 0;
   flex-wrap: wrap;
-  gap: clamp(0.6rem, 1.8vw, 1.5rem);
-  margin-top: clamp(1rem, 2.6vh, 1.7rem);
+  gap: clamp(0.45rem, 1.2vw, 0.9rem);
+  margin-top: clamp(0.75rem, 1.8vh, 1.15rem);
 }
 
 .frontpage-stage-card {
-  flex: 1 1 13rem;
+  flex: 1 1 10.5rem;
   min-width: 0;
-  max-width: 16.5rem;
-  min-height: 6.6rem;
-  border-radius: 1rem;
-  overflow: hidden;
+  max-width: 13.5rem;
+  min-height: 4.05rem;
+  border-radius: 0.75rem;
+  overflow: visible;
 }
 
 .frontpage-stage-button {
   width: 100%;
-  min-height: 6.6rem;
-  padding: 0.85rem 1.05rem;
+  min-height: 4.05rem;
+  padding: 0.55rem 0.68rem;
   border: 0;
   background: transparent;
   text-align: left;
   cursor: pointer;
 }
 
+.frontpage-stage-heading {
+  gap: 0.38rem;
+  min-width: 0;
+  margin-bottom: 0.2rem;
+}
+
 .frontpage-stage-kicker {
   display: grid;
-  width: 2rem;
-  height: 2rem;
-  margin-bottom: 0.5rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 1.25rem;
   place-items: center;
   border-radius: 50%;
+  font-size: 0.68rem;
   font-weight: 700;
 }
 
 .frontpage-stage-title {
+  min-width: 0;
+  font-size: 0.9rem;
   font-weight: 700;
 }
 
 .frontpage-stage-summary,
 .frontpage-stage-detail {
-  font-size: 0.88rem;
-  line-height: 1.4;
+  font-size: 0.78rem;
+  line-height: 1.32;
 }
 
 .frontpage-stage-detail {
-  margin: -0.2rem 1.05rem 1rem;
-  padding-top: 0.75rem;
+  margin: -0.2rem 0.72rem 0.7rem;
+  padding-top: 0.52rem;
 }
 
 .frontpage-examples {
   width: 100%;
   min-width: 0;
-  margin-top: clamp(1rem, 2.6vh, 1.7rem);
-  gap: 0.65rem;
+  margin-top: clamp(0.75rem, 1.8vh, 1.15rem);
+  gap: 0.45rem;
 }
 
 .frontpage-example-separator {
-  width: min(100%, 28rem);
+  width: min(100%, 22rem);
   min-width: 0;
-  gap: 0.85rem;
-  font-size: 0.88rem;
+  gap: 0.65rem;
+  font-size: 0.78rem;
 }
 
 .frontpage-example-separator p {
@@ -332,15 +387,16 @@ function startExample(prompt: string) {
   width: 100%;
   min-width: 0;
   flex-wrap: wrap;
-  gap: 0.75rem 1rem;
+  gap: 0.45rem 0.65rem;
 }
 
 .frontpage-example-button {
-  flex: 1 1 11rem;
+  flex: 1 1 9.5rem;
   min-width: 0;
-  max-width: 15.5rem;
-  min-height: 2.6rem;
-  border-radius: 0.85rem;
+  max-width: 12.5rem;
+  min-height: 2.15rem;
+  border-radius: 0.65rem;
+  font-size: 0.78rem;
 }
 
 .frontpage-tree {

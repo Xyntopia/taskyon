@@ -2,7 +2,7 @@
   <!--Create new task area-->
   <div :class="['create-tasks', { 'create-tasks--hero': heroMode }]">
     <!--Function Control-->
-    <div v-if="selectedTaskType" class="text-caption text-center">
+    <div v-if="selectedTaskType" class="create-tasks__mode text-caption text-center">
       <InfoDialog
         size="sm"
         flat
@@ -20,7 +20,7 @@
       </InfoDialog>
     </div>
     <!--Task Creation-->
-    <div>
+    <div class="create-tasks__input">
       <!-- in case we simply want to send simple messages :)-->
       <chatMessageEdit
         v-if="!selectedTaskType"
@@ -83,7 +83,7 @@
       </div>
     </div>
     <!--show attached files-->
-    <div v-if="fileAttachments.length">
+    <div v-if="fileAttachments.length" class="create-tasks__attachments row items-center">
       <q-chip
         v-for="file in fileAttachments"
         :key="file.name"
@@ -101,11 +101,11 @@
       </q-chip>
     </div>
     <!--Task Creation State-->
-    <div v-if="!minMode" class="q-px-sm q-pt-xs row justify-between items-center">
-      <div class="col-auto row">
+    <div v-if="!minMode" class="create-tasks__controls row items-center no-wrap">
+      <div class="create-tasks__control-group row items-center no-wrap">
         <!--attach files...-->
         <FileDropzone
-          class="col-auto"
+          class="create-tasks__dropzone"
           accept="*"
           enable-paste
           enable-menu
@@ -192,14 +192,21 @@
         </ResponsiveMenuDialogBtn>
       </div>
       <!--Choose Model-->
-      <ChooseModelDialog />
+      <div class="create-tasks__model-slot">
+        <ChooseModelDialog class="create-tasks__model-control" />
+      </div>
       <!--Tool task execution-->
       <div
         v-if="expertMode && selectedTaskType"
-        class="col-auto q-px-md row no-wrap items-center"
+        class="create-tasks__execute row no-wrap items-center"
         @click.stop
       >
-        <q-btn flat :icon-right="matSend" @click="addNewTask('message', p2pTopic)">
+        <q-btn
+          class="create-tasks__execute-button"
+          flat
+          :icon-right="matSend"
+          @click="addNewTask('message', p2pTopic)"
+        >
           <q-tooltip>Execute Task</q-tooltip>
         </q-btn>
       </div>

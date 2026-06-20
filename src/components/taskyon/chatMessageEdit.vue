@@ -23,11 +23,17 @@
         </template>
         <template v-if="smallMode" #after>
           <div v-show="smallMode">
-            <q-btn flat :icon="matSend" @click="$emit('execute-task')">
+            <q-btn
+              class="msg-edit__send-button"
+              flat
+              :icon="matSend"
+              @click="$emit('execute-task')"
+            >
               <q-tooltip>{{ sendToolTip }}</q-tooltip>
             </q-btn>
             <q-btn
               v-if="showWebSearch"
+              class="msg-edit__secondary-button"
               flat
               :icon="mdiSearchWeb"
               @click="$emit('execute-web-search')"
@@ -47,11 +53,18 @@
       <slot name="top" btn-size="sm" />
     </div>
     <div v-if="!smallMode" class="bar bottom border-radius-inherit">
-      <q-btn flat size="sm" :icon="matSend" @click="$emit('execute-task')">
+      <q-btn
+        class="msg-edit__send-button"
+        flat
+        size="sm"
+        :icon="matSend"
+        @click="$emit('execute-task')"
+      >
         <q-tooltip>{{ sendToolTip }}</q-tooltip>
       </q-btn>
       <q-btn
         v-if="showWebSearch"
+        class="msg-edit__secondary-button"
         flat
         size="sm"
         :icon="mdiSearchWeb"
