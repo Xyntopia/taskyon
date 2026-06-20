@@ -51,6 +51,7 @@ import tyMarkdownCss from 'src/css/markdown.sass?inline'
 
 import { uid } from 'quasar'
 import { generateKaTeXIframeCss } from './katexFonts'
+import { stripHtmlCommentsOutsideMarkdownCode } from './markdownText'
 import { svgStringToPngUint8 } from './svgUtils'
 import { copyPngToClipboard, copyToClipboard, hexToRgb } from './utils'
 
@@ -457,6 +458,7 @@ export const md2Html = async (
   allowHtml = false,
   extensions: MarkdownExtension[] = [],
 ) => {
+  const renderSource = allowHtml ? src : stripHtmlCommentsOutsideMarkdownCode(src)
   // 0) make a one-off random marker for this invocation
   const rand = Math.random().toString(36).slice(2, 20) // e.g. "x9fj3k2a"
   const wrap = `${rand}` // e.g. "HTMLBLOCK_x9fj3k2a..."
@@ -534,7 +536,7 @@ export const md2Html = async (
 
   // 2) Parse tokens and replace html_block tokens with placeholders
   const env = {}
-  const tokens = md.parse(src, env)
+  const tokens = md.parse(renderSource, env)
   const htmlBlocks: string[] = []
 
   if (allowHtml) {

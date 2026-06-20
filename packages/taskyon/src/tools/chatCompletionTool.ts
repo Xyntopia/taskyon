@@ -30,6 +30,7 @@ import {
   extractTaskRefsFromValue,
   materializeTaskyonFunctionArguments,
   renderTaskyonVariableBlock,
+  sanitizeTaskyonVariableCommentsOutsideCode,
 } from '../core/taskVariables'
 import { mapFunctionNames } from '../core/tools'
 import { isTaskyonKey } from '../core/tyCrypto'
@@ -74,6 +75,11 @@ type WebSearchOptions = {
 }
 
 type TaskVariablePresentationService = ReturnType<typeof createTaskVariablePresentationService>
+type AssistantOutputSanitation = NonNullable<TaskNodeMeta['assistantOutputSanitation']>
+type GeneratedFollowUpTasks = {
+  tasks: partialTaskDraft[]
+  sanitation: AssistantOutputSanitation[]
+}
 
 const augmentToolSchemaForTaskyonVariables = (schema: JSONSchema7): JSONSchema7 => {
   if (schema.type !== 'object') return schema
@@ -786,10 +792,11 @@ function generateFollowUpTasksFromResult(
   useProviderToolCalling: boolean,
   allTools: Record<string, ToolBase>,
   variableService?: TaskVariablePresentationService,
-): partialTaskDraft[] {
+): GeneratedFollowUpTasks {
   console.log('generate follow up task')
 
   const newTasks: partialTaskDraft[] = []
+  const sanitation: AssistantOutputSanitation[] = []
   const hasNativeToolCalls =
     Array.isArray(message.content) &&
     message.content.some((content) => typeof content !== 'string' && content.type === 'tool-call')
@@ -834,18 +841,26 @@ function generateFollowUpTasksFromResult(
           txtContent = cont.text
         }
         if (txtContent) {
-          const compiledTextContent = variableService
-            ? compileTaskyonMessageString(txtContent, variableService, {
-                preserveUnknownPlaceholders: true,
-              })
-            : txtContent
-
           if (useProviderToolCalling && hasNativeToolCalls) {
             // Some providers return a text fragment alongside a native tool call.
             // In that case the tool call is the real continuation signal, so we
             // must not emit an assistant message plus `return` prematurely.
             continue
           }
+
+          const sanitizedText = sanitizeTaskyonVariableCommentsOutsideCode(txtContent)
+          if (sanitizedText.removedComments.length > 0) {
+            console.warn('Removed Taskyon variable comments from assistant output.', {
+              original: txtContent,
+              sanitized: sanitizedText.sanitized,
+              removedComments: sanitizedText.removedComments,
+            })
+          }
+          const compiledTextContent = variableService
+            ? compileTaskyonMessageString(sanitizedText.sanitized, variableService, {
+                preserveUnknownPlaceholders: true,
+              })
+            : sanitizedText.sanitized
 
           const newMsg = {
             role: 'assistant',
@@ -855,6 +870,13 @@ function generateFollowUpTasksFromResult(
               ...(sources.length > 0 && !srcsAdded ? { ann: sources } : {}),
             },
           } as partialTaskDraft
+          if (sanitizedText.removedComments.length > 0) {
+            sanitation.push({
+              rawIncomingMessage: txtContent,
+              sanitizedMessage: sanitizedText.sanitized,
+              removedComments: sanitizedText.removedComments,
+            })
+          }
           if (sources.length) srcsAdded = true
 
           newTasks.push(newMsg, {
@@ -866,7 +888,7 @@ function generateFollowUpTasksFromResult(
       }
     }
   }
-  return newTasks
+  return { tasks: newTasks, sanitation }
 }
 
 export function convertFunctionCall(
@@ -1461,6 +1483,25 @@ export function createChatCompletionTool(
             ].join('\n')
           : humanized
         const partialContent = partialTextOutput.trim() || cleanupRawStreamOutput(rawOutput)
+        const sanitizedPartialContent =
+          partialContent.length > 0
+            ? sanitizeTaskyonVariableCommentsOutsideCode(partialContent)
+            : undefined
+        if (sanitizedPartialContent && sanitizedPartialContent.removedComments.length > 0) {
+          console.warn('Removed Taskyon variable comments from assistant output.', {
+            original: partialContent,
+            sanitized: sanitizedPartialContent.sanitized,
+            removedComments: sanitizedPartialContent.removedComments,
+          })
+        }
+        const partialAssistantSanitation: AssistantOutputSanitation | undefined =
+          sanitizedPartialContent && sanitizedPartialContent.removedComments.length > 0
+            ? {
+                rawIncomingMessage: partialContent,
+                sanitizedMessage: sanitizedPartialContent.sanitized,
+                removedComments: sanitizedPartialContent.removedComments,
+              }
+            : undefined
         if (currentTask) {
           void taskManager.metaUpsert(
             currentTask.id,
@@ -1488,6 +1529,9 @@ export function createChatCompletionTool(
                   partialTextOutput,
                 },
               },
+              ...(partialAssistantSanitation
+                ? { assistantOutputSanitation: partialAssistantSanitation }
+                : {}),
             },
             'shallow_merge',
           )
@@ -1499,13 +1543,13 @@ export function createChatCompletionTool(
           failure,
         })
         return makeTaskResult([
-          ...(partialContent
+          ...(sanitizedPartialContent
             ? [
                 {
                   role: 'assistant',
                   content: {
                     type: 'message',
-                    data: `${failure.assistantPrefix}\n\n${partialContent}`,
+                    data: `${failure.assistantPrefix}\n\n${sanitizedPartialContent.sanitized}`,
                   },
                 } as partialTaskDraft,
               ]
@@ -1611,15 +1655,25 @@ export function createChatCompletionTool(
         })
 
       const normalizedFirstMessage = normalizeAssistantMessageForToolCall(res.messages[0], toolDefs)
-      const newTaskChain = generateFollowUpTasksFromResult(
+      const generatedFollowUpTasks = generateFollowUpTasksFromResult(
         sources,
         normalizedFirstMessage,
         useProviderToolCalling,
         toolDefs,
         variableService,
       )
+      const assistantOutputSanitation = generatedFollowUpTasks.sanitation.at(-1)
+      if (currentTask && assistantOutputSanitation) {
+        void taskManager.metaUpsert(
+          currentTask.id,
+          {
+            assistantOutputSanitation,
+          },
+          'shallow_merge',
+        )
+      }
 
-      return makeTaskResult([newTaskChain])
+      return makeTaskResult([generatedFollowUpTasks.tasks])
     },
   })
 

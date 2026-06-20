@@ -6,6 +6,7 @@ import {
   createTaskVariablePresentationService,
   materializeTaskyonFunctionArguments,
   materializeTaskyonMessageString,
+  sanitizeTaskyonVariableCommentsOutsideCode,
 } from '../core/taskVariables'
 import type { TaskNode } from '../types/taskNode'
 import type { ToolBase } from '../types/tools'
@@ -230,6 +231,57 @@ export const testTaskVariableCompilationPreservesUnknownAssistantPlaceholders = 
   return { success: true }
 }
 
+export const testTaskyonVariableCommentSanitization = () => {
+  const input =
+    '<!-- taskyon variable message1 content start -->\nHello\n<!-- taskyon variable result2 content end -->'
+  const result = sanitizeTaskyonVariableCommentsOutsideCode(input)
+
+  assert(
+    result.sanitized === '\nHello\n',
+    `Expected Taskyon variable comments to be removed, got ${toDebugString(result.sanitized)}`,
+  )
+  assert(
+    result.removedComments.length === 2,
+    `Expected two removed comments, got ${result.removedComments.length}`,
+  )
+
+  return { success: true }
+}
+
+export const testTaskyonVariableCommentSanitizationPreservesCode = () => {
+  const fenced = [
+    '```html',
+    '<!-- taskyon variable message1 content start -->',
+    '```',
+    'Use `<!-- taskyon variable result1 content end -->` literally.',
+  ].join('\n')
+  const result = sanitizeTaskyonVariableCommentsOutsideCode(fenced)
+
+  assert(result.sanitized === fenced, 'Expected Taskyon comments in code contexts to stay literal')
+  assert(
+    result.removedComments.length === 0,
+    `Expected no removed comments in code contexts, got ${result.removedComments.length}`,
+  )
+
+  return { success: true }
+}
+
+export const testTaskyonVariableCommentSanitizationIgnoresNormalComments = () => {
+  const input = '<!-- normal comment -->\n<!-- taskyon something else -->\nHello'
+  const result = sanitizeTaskyonVariableCommentsOutsideCode(input)
+
+  assert(
+    result.sanitized === input,
+    `Expected normal comments to remain unchanged, got ${toDebugString(result.sanitized)}`,
+  )
+  assert(
+    result.removedComments.length === 0,
+    `Expected no removed comments, got ${result.removedComments.length}`,
+  )
+
+  return { success: true }
+}
+
 export const testPromptInjectionPlacement = () => {
   const { prependMessages, appendMessages } = toPromptMessages(['append me'], ['prepend me'])
   assert(
@@ -254,5 +306,11 @@ testTaskVariableRenderingInMessageStrings.description =
   'Renders task-id placeholders only in human-visible message strings, not function arguments.'
 testTaskVariableCompilationInMessageStrings.description =
   'Compiles LLM-facing message template variables back to internal task-id placeholders.'
+testTaskyonVariableCommentSanitization.description =
+  'Removes exact Taskyon variable HTML comments from assistant text before persistence.'
+testTaskyonVariableCommentSanitizationPreservesCode.description =
+  'Preserves exact Taskyon variable HTML comments inside fenced and inline code.'
+testTaskyonVariableCommentSanitizationIgnoresNormalComments.description =
+  'Leaves non-Taskyon HTML comments untouched during persistence sanitization.'
 testPromptInjectionPlacement.description =
   'Places transient prompt injections before the rendered chat and prompts after it.'

@@ -1,13 +1,21 @@
 import type { ReadonlyDeep, WritableDeep } from 'type-fest'
+import { transformMarkdownTextOutsideCode } from '@taskyon/shared/modules/markdownText'
 import type { TaskNode, TaskGetter } from '../types/taskNode'
 import type { FunctionArguments } from '../types/tools'
 import { safeYamlDump } from '../utils/yamlUtils'
 
 export const TASK_REF_PREFIX = '_t:'
 const PLACEHOLDER_REGEX = /{{\s*([^{}]+?)\s*}}/g
+const TASKYON_VARIABLE_COMMENT_REGEX =
+  /<!-- taskyon variable [A-Za-z][A-Za-z0-9]*[0-9] content (?:start|end) -->/g
 
 export type TaskVariableRef = `${typeof TASK_REF_PREFIX}${string}`
 export type TaskVariableSurface = 'llm' | 'ui' | 'cli' | 'execution'
+
+export type TaskyonVariableCommentSanitization = {
+  sanitized: string
+  removedComments: string[]
+}
 
 type TaskVariablePresentationService = ReturnType<typeof createTaskVariablePresentationService>
 
@@ -273,6 +281,20 @@ export const compileTaskyonMessageString = (
 
     return `{{${toTaskRef(taskId)}}}`
   })
+
+export const sanitizeTaskyonVariableCommentsOutsideCode = (
+  input: string,
+): TaskyonVariableCommentSanitization => {
+  const removedComments: string[] = []
+  const sanitized = transformMarkdownTextOutsideCode(input, (text) =>
+    text.replace(TASKYON_VARIABLE_COMMENT_REGEX, (match) => {
+      removedComments.push(match)
+      return ''
+    }),
+  )
+
+  return { sanitized, removedComments }
+}
 
 export const materializeTaskyonFunctionArguments = async (
   args: ReadonlyDeep<FunctionArguments>,

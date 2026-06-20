@@ -125,6 +125,17 @@ export const TaskNodeMeta = z
       description:
         'We can optionally add some raw result data for debugging purposes, e.g. chatcompletion ...',
     }), // Replace with the correct Zod schema if available
+    assistantOutputSanitation: z
+      .object({
+        rawIncomingMessage: z.string(),
+        sanitizedMessage: z.string(),
+        removedComments: z.string().array(),
+      })
+      .optional()
+      .meta({
+        description:
+          'Debug data captured when Taskyon removed reserved variable comments from an assistant answer before saving it.',
+      }),
     error: z.union([TaskDebugError, z.unknown()]).optional(),
     taskPrompt: z.record(z.string(), z.unknown()).array().optional().meta({
       description: 'add any prompts that were used for a task...',

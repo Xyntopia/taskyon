@@ -1,5 +1,6 @@
 //runMarkdownDetectionTests.ts
 import { hasMarkdownElements, containsHtmlTags } from '@taskyon/shared/modules/markdownDetection'
+import { stripHtmlCommentsOutsideMarkdownCode } from '@taskyon/shared/modules/markdownText'
 
 // Assuming hasMarkdownElements and containsHtmlTags are in scope
 // import { hasMarkdownElements, containsHtmlTags } from './your-module'
@@ -362,12 +363,44 @@ export function runMarkdownDetectionTests() {
     }
   })
 
+  const commentCases = [
+    {
+      name: 'plain html comment is hidden',
+      input: '<!-- hidden -->Visible text',
+      expected: 'Visible text',
+    },
+    {
+      name: 'html comment before markdown is hidden',
+      input: '<!-- hidden -->\n\n**Visible**',
+      expected: '\n\n**Visible**',
+    },
+    {
+      name: 'html comment in fenced code stays visible',
+      input: '```html\n<!-- visible -->\n```',
+      expected: '```html\n<!-- visible -->\n```',
+    },
+    {
+      name: 'html comment in inline code stays visible',
+      input: 'Use `<!-- visible -->` literally.',
+      expected: 'Use `<!-- visible -->` literally.',
+    },
+  ]
+  const commentResults = commentCases.map((tc) => {
+    const actual = stripHtmlCommentsOutsideMarkdownCode(tc.input)
+    return {
+      ...tc,
+      actual,
+      ok: actual === tc.expected,
+    }
+  })
+
   const markdownFailed = results.filter((r) => !r.markdownOk)
   const htmlFailed = results.filter((r) => !r.htmlOk)
+  const commentFailed = commentResults.filter((r) => !r.ok)
 
   const res = {
-    total: cases.length,
-    success: markdownFailed.length + htmlFailed.length === 0,
+    total: cases.length + commentCases.length,
+    success: markdownFailed.length + htmlFailed.length + commentFailed.length === 0,
     markdown: {
       passed: cases.length - markdownFailed.length,
       failed: markdownFailed.length,
@@ -377,6 +410,11 @@ export function runMarkdownDetectionTests() {
       passed: cases.length - htmlFailed.length,
       failed: htmlFailed.length,
       failedCases: htmlFailed,
+    },
+    comments: {
+      passed: commentCases.length - commentFailed.length,
+      failed: commentFailed.length,
+      failedCases: commentFailed,
     },
   }
 
