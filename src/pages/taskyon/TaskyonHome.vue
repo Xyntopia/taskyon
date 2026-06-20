@@ -21,13 +21,19 @@
 import FadeAwayScrollPage from '@taskyon/shared/components/FadeAwayScrollPage.vue'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
 import GetStarted from 'components/taskyon/GetStarted.vue'
+import { warmupTaskChatPage } from 'src/router/taskChatLoader'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const fileAttachments = ref<File[]>([])
+
+onMounted(() => {
+  void tystate.taskyon
+  warmupTaskChatPage()
+})
 </script>
 
 <style scoped lang="sass">

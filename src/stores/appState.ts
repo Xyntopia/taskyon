@@ -42,6 +42,8 @@ interface TaskWidgetStateType {
   markdownEnabled: boolean
 }
 
+export type TaskyonSessionStatus = 'checking-auth' | 'switching-session' | 'ready'
+
 const VSCODE_MESSAGE_SOURCE = 'taskyon-vscode'
 const installVscodeConsoleBridge = (() => {
   let installed = false
@@ -505,6 +507,13 @@ export const useAppStateStore = defineStore('ui-state', () => {
 
   // these are refs that we don't save:
   const sessionId = ref<string | null>(null)
+  const taskyonAuthLoading = ref(false)
+  const taskyonSessionSwitching = ref(false)
+  const taskyonSessionStatus = computed<TaskyonSessionStatus>(() => {
+    if (taskyonAuthLoading.value) return 'checking-auth'
+    if (taskyonSessionSwitching.value) return 'switching-session'
+    return 'ready'
+  })
   const draftPasteFiles = ref<File[]>([])
   let draftPasteHandler: ((files: File[]) => void) | null = null
   watch(
@@ -561,6 +570,14 @@ export const useAppStateStore = defineStore('ui-state', () => {
     if (storedProfile) {
       Object.assign(stateRefs, storedProfile)
     }
+  }
+
+  const setTaskyonAuthLoading = (loading: boolean) => {
+    taskyonAuthLoading.value = loading
+  }
+
+  const setTaskyonSessionSwitching = (switching: boolean) => {
+    taskyonSessionSwitching.value = switching
   }
 
   // we do this funny next line, because our store is currently "reactive" which means
@@ -622,6 +639,9 @@ export const useAppStateStore = defineStore('ui-state', () => {
     authToken,
     iframeApiKey,
     sessionId: computed(() => sessionId.value),
+    taskyonSessionStatus,
+    setTaskyonAuthLoading,
+    setTaskyonSessionSwitching,
     activeProfileName: computed(() => activeProfileNameRef.value),
     profileMode: computed(() => profileMode),
     setActiveProfile,

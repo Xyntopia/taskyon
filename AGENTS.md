@@ -16,6 +16,11 @@
 - Always run the formatter on every file you edited yourself, without waiting for the user to ask. Format only the edited files: `yarn format:file <path...>`
 - Prefer explicit event/function flow over Vue watchers. Watchers are hard to trace and should be used only when reacting to external reactive state is genuinely the simplest boundary; do not use a watcher to bounce one source of truth into another.
 
+## Branches
+
+- `dev` is the open-source integration branch. Backport general Taskyon fixes here only when they do not depend on commercial services or taskyon.space-specific files.
+- `taskyon` is also open source and tracks the public Taskyon app line.
+
 ## Commands
 
 | Task                      | Command                                                          |

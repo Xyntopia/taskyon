@@ -721,6 +721,18 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
   // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
   // we want to oad them gradually into our UI
   const currentTask = ref<TaskNode | null>(null)
+  const pendingCreatedTaskIds = ref(new Set<string>())
+  const taskSelectionRevision = ref(0)
+  const currentTaskResolutionStatus = ref<'idle' | 'loading' | 'resolved' | 'missing'>('idle')
+
+  function markTasksPendingCreation(taskIds: readonly string[]) {
+    const nextPending = new Set(pendingCreatedTaskIds.value)
+    for (const taskId of taskIds) {
+      nextPending.add(taskId)
+    }
+    pendingCreatedTaskIds.value = nextPending
+    taskSelectionRevision.value += 1
+  }
 
   void taskyon.then((ty) => {
     const add2ChatHistory = async (
@@ -788,6 +800,12 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
         void add2ChatHistory(task, id.toString(), 'delete')
         return
       }
+      if (pendingCreatedTaskIds.value.has(id.toString())) {
+        const nextPending = new Set(pendingCreatedTaskIds.value)
+        nextPending.delete(id.toString())
+        pendingCreatedTaskIds.value = nextPending
+        taskSelectionRevision.value += 1
+      }
       const selectedTaskId = stateRefs.selectedTaskId
       if (
         selectedTaskId &&
@@ -800,18 +818,45 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
         // console.log('update current task...', task)
         currentTask.value = task
       }
+      if (selectedTaskId === id) {
+        currentTask.value = task
+        currentTaskResolutionStatus.value = 'resolved'
+        taskSelectionRevision.value += 1
+      }
     })
 
     // this needs to be a watch, because we're updating this variable from other sources as well...
     // TODO: make this a readonly property...
     watch(
-      () => stateRefs.selectedTaskId,
-      async (newSelectedTask) => {
+      () =>
+        [
+          stateRefs.selectedTaskId,
+          stateRefs.sessionId,
+          stateRefs.taskyonSessionStatus,
+          taskSelectionRevision.value,
+        ] as const,
+      async ([newSelectedTask, , sessionStatus]) => {
+        let cancelled = false
+        onWatcherCleanup(() => {
+          cancelled = true
+        })
         // TODO: I don't remember why we need this delay here....
-        if (newSelectedTask) {
-          currentTask.value = await ty.getTask(newSelectedTask)
+        if (sessionStatus !== 'ready') {
+          currentTask.value = null
+          currentTaskResolutionStatus.value = newSelectedTask ? 'loading' : 'idle'
+        } else if (newSelectedTask) {
+          currentTaskResolutionStatus.value = 'loading'
+          const task = await ty.getTask(newSelectedTask)
+          if (cancelled) return
+          currentTask.value = task
+          currentTaskResolutionStatus.value = task
+            ? 'resolved'
+            : pendingCreatedTaskIds.value.has(newSelectedTask)
+              ? 'loading'
+              : 'missing'
         } else {
           currentTask.value = null
+          currentTaskResolutionStatus.value = 'idle'
         }
       },
       {
@@ -831,9 +876,9 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
 
     // also update chat history if we switch between tasks...
     watch(
-      () => stateRefs.selectedTaskId,
-      async (selectedTask) => {
-        if (selectedTask) {
+      () => [stateRefs.selectedTaskId, stateRefs.taskyonSessionStatus] as const,
+      async ([selectedTask, sessionStatus]) => {
+        if (selectedTask && sessionStatus === 'ready') {
           const taskNode = await ty.getTask(selectedTask)
           if (taskNode) void add2ChatHistory(taskNode, taskNode.id, 'existing')
         }
@@ -842,20 +887,34 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
     )
   })
 
-  const selectedThread = asyncComputed<TaskNode[]>(async () => {
-    const newSelectedTask = stateRefs.selectedTaskId
-    if (newSelectedTask) {
-      const ty = await taskyon
-      const selectedThreadIDs = await ty.getTaskIdChain(newSelectedTask)
-      return await ty.convertTaskIDs(selectedThreadIDs)
-    } else {
-      return []
-    }
-  }, [])
+  const selectedThread = asyncComputed<TaskNode[]>(
+    async () => {
+      const newSelectedTask = stateRefs.selectedTaskId
+      if (stateRefs.taskyonSessionStatus !== 'ready') {
+        return []
+      } else if (newSelectedTask) {
+        const ty = await taskyon
+        const selectedThreadIDs = await ty.getTaskIdChain(newSelectedTask)
+        return await ty.convertTaskIDs(selectedThreadIDs)
+      } else {
+        return []
+      }
+    },
+    [],
+    () =>
+      [
+        stateRefs.selectedTaskId,
+        stateRefs.sessionId,
+        stateRefs.taskyonSessionStatus,
+        taskSelectionRevision.value,
+      ] as const,
+  )
 
   return {
     selectedThread,
     currentTask: computed(() => currentTask),
+    currentTaskResolutionStatus: computed(() => currentTaskResolutionStatus.value),
+    markTasksPendingCreation,
   }
 }
 
@@ -1063,6 +1122,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     () => stateRefs.bindingKey,
     async (newkey) => {
       console.log('new binding key', newkey)
+      stateRefs.setTaskyonSessionSwitching(true)
 
       let cancelled = false
       onWatcherCleanup(() => {
@@ -1075,22 +1135,29 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         },
         true,
       )
-      if (cancelled) return
-      const ty = await taskyon
-      const newId = await cs.getSessionId()
-      const oldId = await ty.getCryptoSession().getSessionId()
-      if (cancelled || newId === oldId) return
+      try {
+        if (cancelled) return
+        const ty = await taskyon
+        const newId = await cs.getSessionId()
+        const oldId = await ty.getCryptoSession().getSessionId()
+        if (cancelled) return
 
-      console.log(`switch user session because of binding key change! ${oldId}->${newId}`)
-      await ty.setNewSession(cs)
-      // after we are finished switching, we can officially chang ethe session id...
-      stateRefs.setSessionId(newId)
-      // and re-init our api key management with new session...
-      await apiKeyManagement.initModelsAndStoredKeys()
+        if (newId !== oldId) {
+          console.log(`switch user session because of binding key change! ${oldId}->${newId}`)
+          await ty.setNewSession(cs)
+          // after we are finished switching, we can officially chang ethe session id...
+          stateRefs.setSessionId(newId)
+          // and re-init our api key management with new session...
+          await apiKeyManagement.initModelsAndStoredKeys()
+        }
+      } finally {
+        if (!cancelled) stateRefs.setTaskyonSessionSwitching(false)
+      }
     },
   )
 
-  const { currentTask, selectedThread } = taskUiUpdates(taskyon, stateRefs)
+  const { currentTask, currentTaskResolutionStatus, markTasksPendingCreation, selectedThread } =
+    taskUiUpdates(taskyon, stateRefs)
 
   // iApiOutside is the port to the "outside" of taskyon UI. It is the port used to
   // communicate towards the taskyon engine. iApiInside communicates to the outside of taskyon.
@@ -1452,6 +1519,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     taskContentDraft,
     selectedThread,
     currentTask,
+    currentTaskResolutionStatus,
+    markTasksPendingCreation,
     ...apiKeyManagement,
     stopWorker,
     taskWorkerWaiting,

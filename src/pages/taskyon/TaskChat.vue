@@ -31,6 +31,15 @@
         @on-size-change="scm.autoScroll"
       />
       <LoadingCircle v-else-if="showLoadingState" :label="loadingStateLabel" />
+      <div
+        v-else-if="showUnavailableChatTarget"
+        class="full-height column justify-center items-center q-pa-md"
+      >
+        <q-card flat bordered class="q-pa-md text-center">
+          <div class="text-body1">This chat is not available in the current Taskyon session.</div>
+          <q-btn class="q-mt-md" flat color="primary" label="Start a new chat" to="/" />
+        </q-card>
+      </div>
       <!-- Welcome Message -->
       <div
         v-else
@@ -186,11 +195,22 @@ const currentTaskForView = computed(() =>
   hasVisibleChat.value && tystate.currentTask.value ? tystate.currentTask.value : undefined,
 )
 const isInitializingTaskyon = computed(() => state.taskyonRunmode === 'waiting for connection')
+const isSessionReady = computed(() => state.taskyonSessionStatus === 'ready')
+const showUnavailableChatTarget = computed(
+  () =>
+    hasChatTarget.value &&
+    isSessionReady.value &&
+    tystate.currentTaskResolutionStatus === 'missing',
+)
 const showLoadingState = computed(
-  () => isInitializingTaskyon.value || (hasChatTarget.value && !hasVisibleChat.value),
+  () =>
+    hasChatTarget.value &&
+    (isInitializingTaskyon.value ||
+      !isSessionReady.value ||
+      (!hasVisibleChat.value && !showUnavailableChatTarget.value)),
 )
 const loadingStateLabel = computed(() =>
-  isInitializingTaskyon.value ? 'Initializing Taskyon...' : 'Loading chat...',
+  isInitializingTaskyon.value ? 'Initializing Taskyon...' : 'Opening chat...',
 )
 
 const showAllTasks = ref<boolean>(props.detailed)

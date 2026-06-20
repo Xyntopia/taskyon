@@ -416,6 +416,7 @@ async function addNewTask(mode: MessageExecutionMode, p2pTopic?: string) {
   const newTaskId = createdTasks.at(-1)
 
   if (newTaskId) {
+    tystate.markTasksPendingCreation(createdTasks.map((task) => task.id))
     tystate.api.send({
       type: 'tasks',
       tasks: createdTasks,

@@ -3,6 +3,7 @@ import { mdRoutes } from './routes_default'
 import { defineAsyncComponent } from 'vue'
 import LoadCircle from '@taskyon/shared/components/LoadingCircle.vue'
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
+import { loadTaskChatPage } from './taskChatLoader'
 
 const chatMarkdownRoots = ['docs', 'tyClientExamples'] as const
 
@@ -79,42 +80,26 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       },
       {
         path: 'chat',
-        component: defineAsyncComponent({
-          loader: () => import('pages/taskyon/TaskChat.vue'),
-          loadingComponent: LoadCircle,
-          delay: 200,
-        }),
+        component: defineAsyncComponent(loadTaskChatPage),
         meta: { title: 'Main', description: 'Taskyon AI Chat Companion' },
         props: (route) => resolveTaskChatProps(route),
       },
       {
         path: 'detailed',
-        component: defineAsyncComponent({
-          loader: () => import('pages/taskyon/TaskChat.vue'),
-          loadingComponent: LoadCircle,
-          delay: 200,
-        }),
+        component: defineAsyncComponent(loadTaskChatPage),
         meta: { title: 'Detailed Chat', description: 'Detailed Chat' },
         props: (route) => resolveTaskChatProps(route, { detailed: true }),
       },
       {
         path: 'browser/:id',
-        component: defineAsyncComponent({
-          loader: () => import('pages/taskyon/TaskChat.vue'),
-          loadingComponent: LoadCircle,
-          delay: 200,
-        }),
+        component: defineAsyncComponent(loadTaskChatPage),
         meta: { title: 'Task Browser', description: 'Task Browser' },
         props: (route) => ({ treeBrowser: true, rootTaskId: route.params.id }),
       },
       {
         // TODO:  change this, so that we can use "arbitrary" files for this!!!
         path: '/chat/:filePath([^.]*)+',
-        component: defineAsyncComponent({
-          loader: () => import('pages/taskyon/TaskChat.vue'),
-          loadingComponent: LoadCircle,
-          delay: 200,
-        }),
+        component: defineAsyncComponent(loadTaskChatPage),
         meta: { title: 'Chat', description: 'Taskyon AI Chat Companion' },
         props: (route) =>
           resolveTaskChatProps(
