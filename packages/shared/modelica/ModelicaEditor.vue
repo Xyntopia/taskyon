@@ -744,7 +744,6 @@ import { safeYamlDump } from '../modules/yamlUtils'
 import { syncStateWithOPFSFolder } from '../modules/saveState'
 import ModelicaActionsBar from './components/ModelicaActionsBar.vue'
 import ModelicaDaeAnalysisPane, {
-  type ModelicaAnalysisArtifactKey,
   type ModelicaDaeAnalysis,
 } from './components/ModelicaDaeAnalysisPane.vue'
 import ModelicaLibraryTreeView from './components/libraryTree/ModelicaLibraryTreeView.vue'
@@ -752,6 +751,7 @@ import SanitizedMarkup from './components/SanitizedMarkup.vue'
 import ModelicaDiagramPane from './components/ModelicaDiagramPane.vue'
 import { mapRumocaClassTree } from './components/libraryTree/mapRumocaClasses'
 import type { ModelicaLibraryTreeNode } from './components/libraryTree/types'
+import type { ModelicaAnalysisArtifactKey } from './modelicaAnalysisArtifacts'
 import { createModelicatools } from './modelicaTools'
 import { useProjectFileStore } from './useProjectFileStore'
 import { useModelicaLibraries } from './useModelicaLibraries'

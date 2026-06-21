@@ -2207,7 +2207,7 @@ async function loadLocalMslLibraries(
 export async function testModelicaMslLoadBenchmark() {
   const debug: Record<string, unknown> = {
     phase: 'init',
-    mslZipPath: MSL_LOCAL_ZIP_PATH,
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
   }
 
   try {

@@ -66,7 +66,7 @@
 
 ## Gotchas
 
-- Modelica library archives are not bundled by app builds. Use `yarn modelica:libraries:publish` manually to mirror libraries and update `packages/shared/modelica/modelica_libraries.json`.
+- Modelica library archives are not bundled by app builds. Do not put large library files such as the MSL archive in `public/`, GitHub Pages, or other repository-published static assets. Mirror them to external object storage such as S3 instead, and use `yarn modelica:libraries:publish` manually to update `packages/shared/modelica/modelica_libraries.json`.
 - Builds need `--max-old-space-size=8192` (set in Nix shell; set manually if not using Nix: `export NODE_OPTIONS="--max-old-space-size=8192"`).
 - `packages/rumoca` and `packages/yatra` are separate git repos. Changes there should follow their own workflows, not root-level commands.
 - Headless packages use `--experimental-strip-types` instead of a compile step. Don't add a build step to them.

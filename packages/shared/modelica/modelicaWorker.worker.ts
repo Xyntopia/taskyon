@@ -7,6 +7,12 @@ import baseDaeTemplate from './base_dae.jinja?raw'
 
 let loadedSourceRootFiles: Record<string, string> = {}
 
+type RumocaSourceRootIndexApi = typeof rumoca & {
+  load_source_root_index?: (sourceRootsJson: string) => string
+}
+
+const rumocaSourceRootIndexApi = rumoca as RumocaSourceRootIndexApi
+
 type WorkerRequest =
   | { id: number; type: 'init'; payload?: { threads?: number } }
   | {
@@ -245,8 +251,8 @@ function handleLoadMslZip(payload: { fileName: string; bytes: ArrayBuffer }): un
   }
   const sourceRootUris = Object.keys(libraries).sort((lhs, rhs) => lhs.localeCompare(rhs))
   loadedSourceRootFiles = libraries
-  if (typeof rumoca.load_source_root_index === 'function') {
-    const resultRaw = rumoca.load_source_root_index(JSON.stringify(libraries))
+  if (typeof rumocaSourceRootIndexApi.load_source_root_index === 'function') {
+    const resultRaw = rumocaSourceRootIndexApi.load_source_root_index(JSON.stringify(libraries))
     let classCount = 0
     try {
       const parsed = JSON.parse(String(resultRaw)) as { class_count?: unknown }

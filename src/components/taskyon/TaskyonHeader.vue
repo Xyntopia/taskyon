@@ -54,6 +54,15 @@
           ><q-tooltip>Create New Chat</q-tooltip>
         </q-btn>
       </div>
+      <component
+        :is="ResetButton"
+        v-if="showTaskChatResetButton"
+        color="secondary"
+        dense
+        flat
+        mode="all"
+        :size="btnSize"
+      />
       <q-space class="col" />
       <div v-if="!minMode && state.selectedTaskId">
         <share-dialog-btn
@@ -176,11 +185,13 @@ import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDi
 import { QToolbar } from 'quasar'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useAppStateStore } from 'src/stores/appState'
-import { defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
+import { useRoute } from 'vue-router'
 import TaskyonMenu from './TaskyonMenu.vue'
 
 const state = useAppStateStore()
 const { navigateToTask } = useTaskNavigation()
+const route = useRoute()
 
 const { btnSize = 'md' } = defineProps<{
   minMode?: boolean
@@ -200,4 +211,25 @@ const drawerOpen = defineModel<boolean | undefined>('drawerOpen', {
 })
 
 const ShareDialogBtn = defineAsyncComponent(() => import('../taskyon/TaskChainPublishDialog.vue'))
+const ResetButton = process.env.DEV
+  ? defineAsyncComponent(
+      () =>
+        import(
+          /* webpackPrefetch: true */
+          /* webpackChunkName: "codemirror" */
+          /* webpackMode: "lazy" */
+          /* webpackFetchPriority: "low" */
+          './TyResetButton.vue'
+        ),
+    )
+  : undefined
+
+const taskChatPaths = new Set(['/chat', '/detailed'])
+const showTaskChatResetButton = computed(
+  () =>
+    Boolean(ResetButton) &&
+    (taskChatPaths.has(route.path) ||
+      route.path.startsWith('/chat/') ||
+      route.path.startsWith('/browser/')),
+)
 </script>

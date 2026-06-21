@@ -60,7 +60,6 @@
           </GetStarted>
         </div>
       </div>
-      <component :is="ResetButton" v-if="ResetButton" color="secondary" flat mode="all" />
     </div>
     <!--Task Chat Control Buttons-->
     <div style="height: 0px" class="relative-position">
@@ -147,15 +146,7 @@ import { createScrollManager } from 'src/modules/vueUtils'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
-import {
-  computed,
-  defineAsyncComponent,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  watch,
-  watchEffect,
-} from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 
 // we are re-creating the following meta tag dynamically here just for the chat page!
 // <!-- Viewport Meta in order to make window size shrink on mobile when keyboard pops up! -->
@@ -224,19 +215,6 @@ function activateAfter(ms: number) {
     delayedTrue.value = true
   }, ms)
 }
-
-const ResetButton = process.env.DEV
-  ? defineAsyncComponent(
-      () =>
-        import(
-          /* webpackPrefetch: true */
-          /* webpackChunkName: "codemirror" */
-          /* webpackMode: "lazy" */
-          /* webpackFetchPriority: "low" */
-          'src/components/taskyon/TyResetButton.vue'
-        ),
-    )
-  : undefined
 
 const $q = useQuasar()
 const tystate = useTaskyonStore()

@@ -103,6 +103,8 @@
 </template>
 
 <script setup lang="ts">
+import type { ModelicaAnalysisArtifactKey } from '../modelicaAnalysisArtifacts'
+
 export type ModelicaDaeAnalysis = {
   executionMode: string
   strategy: string
@@ -122,14 +124,6 @@ export type ModelicaDaeAnalysis = {
     }
   }
 }
-
-export type ModelicaAnalysisArtifactKey =
-  | 'baseDae'
-  | 'baseModelica'
-  | 'flatModelica'
-  | 'daeModelica'
-  | 'daeJson'
-  | 'ast'
 
 type AnalysisArtifactCard = {
   key: ModelicaAnalysisArtifactKey
