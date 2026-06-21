@@ -2280,12 +2280,11 @@ const projectMenuOptions = ref<Record<string, unknown>>({
   aiSeesAll: true,
   usePreparedDae: true,
 })
-const libraryPresetUrlById = detectedModelicaLibraryPresets.reduce<Record<string, string>>(
-  (acc, preset) => {
+const libraryPresetUrlById = computed(() =>
+  detectedModelicaLibraryPresets.value.reduce<Record<string, string>>((acc, preset) => {
     acc[preset.id] = preset.url
     return acc
-  },
-  {},
+  }, {}),
 )
 const selectedLibraryPreset = ref<string>(DEFAULT_MODELICA_LIBRARY_ID)
 const libraryMenuOptions = ref<Record<string, unknown>>({
@@ -2317,21 +2316,21 @@ const projectMenuSchema: JSONSchema7 = {
   },
 }
 
-const libraryMenuSchema: JSONSchema7 = {
+const libraryMenuSchema = computed<JSONSchema7>(() => ({
   type: 'object',
   properties: {
     useMSL: { type: 'boolean', title: 'Use Modelica Standard Library for compile' },
     mslLibraryPreset: {
       type: 'string',
       title: 'Library preset',
-      oneOf: detectedModelicaLibraryPresets.map((preset) => ({
+      oneOf: detectedModelicaLibraryPresets.value.map((preset) => ({
         const: preset.id,
         title: preset.label,
       })),
     },
     mslZipUrl: { type: 'string', title: 'MSL ZIP URL' },
   },
-}
+}))
 
 const runtimeMenuSchema: JSONSchema7 = {
   type: 'object',
@@ -2470,7 +2469,7 @@ watch(
     if (typeof v.mslLibraryPreset === 'string' && v.mslLibraryPreset.trim()) {
       const preset = v.mslLibraryPreset.trim()
       selectedLibraryPreset.value = preset
-      const presetUrl = libraryPresetUrlById[preset]
+      const presetUrl = libraryPresetUrlById.value[preset]
       if (typeof presetUrl === 'string' && presetUrl.trim()) {
         mslDownloadUrl.value = presetUrl
       }

@@ -26,9 +26,9 @@
 | Task                      | Command                                                          |
 | ------------------------- | ---------------------------------------------------------------- |
 | Install                   | `yarn install` (Yarn 4 via Corepack; `nodeLinker: node-modules`) |
-| Dev server                | `yarn dev` (runs `ensure:msl` first)                             |
+| Dev server                | `yarn dev`                                                       |
 | HTTP dev server           | `yarn dev:http`                                                  |
-| Full build                | `yarn build` (ensure:msl → pack:tyclient → quasar build)         |
+| Full build                | `yarn build` (pack:tyclient → quasar build)                      |
 | Lint (typecheck + eslint) | `yarn lint`                                                      |
 | Lint fix (targeted)       | `yarn lint:fix -- <path...>`                                     |
 | Format file               | `yarn format:file <path...>`                                     |
@@ -66,7 +66,7 @@
 
 ## Gotchas
 
-- `yarn dev` and `yarn build` require `ensure:msl` to download Modelica Standard Library first. This is automatic via the script, but needs network access.
+- Modelica library archives are not bundled by app builds. Use `yarn modelica:libraries:publish` manually to mirror libraries and update `packages/shared/modelica/modelica_libraries.json`.
 - Builds need `--max-old-space-size=8192` (set in Nix shell; set manually if not using Nix: `export NODE_OPTIONS="--max-old-space-size=8192"`).
 - `packages/rumoca` and `packages/yatra` are separate git repos. Changes there should follow their own workflows, not root-level commands.
 - Headless packages use `--experimental-strip-types` instead of a compile step. Don't add a build step to them.

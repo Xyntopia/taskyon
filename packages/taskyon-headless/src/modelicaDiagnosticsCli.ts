@@ -1,31 +1,15 @@
 import * as ModelicaDiagnostics from '../../shared/modelica/modelicaDiagnostics'
 import { runDiagnosticsTests, type TestRecord } from '../../shared/modules/diagnosticsRunner'
+import { resolveCachedModelicaLibraryZipPath } from '../../shared/modelica/modelicaLibraryCacheNode'
 import { createRequire } from 'node:module'
-import { access, readFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { readFile } from 'node:fs/promises'
+import { pathToFileURL } from 'node:url'
 
 const sharedRequire = createRequire(new URL('../../shared/package.json', import.meta.url))
 const rumocaWasmPath = sharedRequire.resolve('rumoca/rumoca_bind_wasm_bg.wasm')
 const rumocaWasmUrl = pathToFileURL(rumocaWasmPath).href
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
-const mslZipCandidates = [
-  process.env.MODELICA_DIAG_MSL_ZIP_PATH?.trim() || '',
-  resolve(repoRoot, 'public/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip'),
-  resolve(repoRoot, 'packages/rumoca/target/msl/ModelicaStandardLibrary-4.1.0.zip'),
-].filter(Boolean)
-
-const findExistingFile = async (paths: string[]): Promise<string | null> => {
-  for (const path of paths) {
-    try {
-      await access(path)
-      return path
-    } catch {
-      continue
-    }
-  }
-  return null
-}
+const mslReleaseZipUrl =
+  'https://github.com/modelica/ModelicaStandardLibrary/archive/refs/tags/v4.1.0.zip'
 
 const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
   const copy = new Uint8Array(bytes.byteLength)
@@ -36,7 +20,7 @@ const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
 const installNodeFetchWasmFallback = async () => {
   const nativeFetch = globalThis.fetch?.bind(globalThis)
   if (!nativeFetch) return
-  const resolvedMslZipPath = await findExistingFile(mslZipCandidates)
+  const resolvedMslZipPath = await resolveCachedModelicaLibraryZipPath()
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     if (
@@ -49,16 +33,7 @@ const installNodeFetchWasmFallback = async () => {
         headers: { 'content-type': 'application/wasm' },
       })
     }
-    if (
-      typeof url === 'string' &&
-      (url === '/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip' ||
-        url === '/public/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip')
-    ) {
-      if (!resolvedMslZipPath) {
-        throw new Error(
-          `Could not locate ModelicaStandardLibrary-4.1.0.zip. Checked: ${mslZipCandidates.join(', ')}`,
-        )
-      }
+    if (typeof url === 'string' && url === mslReleaseZipUrl) {
       const bytes = await readFile(resolvedMslZipPath)
       return new Response(toArrayBuffer(bytes), {
         status: 200,

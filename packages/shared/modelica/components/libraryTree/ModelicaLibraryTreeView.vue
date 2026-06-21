@@ -63,13 +63,7 @@
       </q-btn-dropdown>
       <q-btn flat dense size="sm" :icon="mdiUnfoldMoreHorizontal" @click="expandRootNodes" />
       <q-btn flat dense size="sm" :icon="mdiUnfoldLessHorizontal" @click="collapseAllNodes" />
-      <q-btn
-        flat
-        dense
-        size="sm"
-        :icon="matMyLocation"
-        @click="revealCurrentClassOrPackage"
-      >
+      <q-btn flat dense size="sm" :icon="matMyLocation" @click="revealCurrentClassOrPackage">
         <q-tooltip>Reveal current class/package in tree</q-tooltip>
       </q-btn>
       <q-btn
@@ -151,14 +145,34 @@
           >
             <template #body-cell-action="scope">
               <q-td :props="scope" class="table-cell-wrap">
-                <q-btn
-                  dense
-                  size="sm"
-                  color="primary"
-                  label="Install"
-                  :disable="!scope.row.installUrl"
-                  @click="emit('load-library-preset', scope.row.installUrl)"
-                />
+                <div class="row no-wrap q-gutter-xs">
+                  <q-btn
+                    dense
+                    size="sm"
+                    color="primary"
+                    label="Install"
+                    :disable="!scope.row.installUrl"
+                    @click="emit('load-library-preset', scope.row.installUrl)"
+                  >
+                    <q-tooltip>
+                      {{
+                        scope.row.mirrorUrl
+                          ? 'Install from Taskyon mirror'
+                          : 'Install from upstream'
+                      }}
+                    </q-tooltip>
+                  </q-btn>
+                  <q-btn
+                    dense
+                    size="sm"
+                    flat
+                    label="Original"
+                    :disable="!scope.row.upstreamUrl"
+                    @click="emit('load-library-preset', scope.row.upstreamUrl)"
+                  >
+                    <q-tooltip>Install from original source URL</q-tooltip>
+                  </q-btn>
+                </div>
               </q-td>
             </template>
             <template #body-cell-name="scope">
@@ -171,6 +185,26 @@
               <q-td :props="scope" class="table-cell-wrap">{{ String(scope.value || '') }}</q-td>
             </template>
             <template #body-cell-link="scope">
+              <q-td :props="scope" class="table-cell-wrap">
+                <a :href="String(scope.value || '')" target="_blank" rel="noopener noreferrer">
+                  {{ String(scope.value || '') }}
+                </a>
+              </q-td>
+            </template>
+            <template #body-cell-mirrorUrl="scope">
+              <q-td :props="scope" class="table-cell-wrap">
+                <a
+                  v-if="scope.value"
+                  :href="String(scope.value || '')"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {{ String(scope.value || '') }}
+                </a>
+                <span v-else class="text-grey-6">Not mirrored</span>
+              </q-td>
+            </template>
+            <template #body-cell-upstreamUrl="scope">
               <q-td :props="scope" class="table-cell-wrap">
                 <a :href="String(scope.value || '')" target="_blank" rel="noopener noreferrer">
                   {{ String(scope.value || '') }}
@@ -230,6 +264,7 @@ import ResponsiveMenuDialog from '../../../components/ResponsiveMenuDialog.vue'
 import {
   detectedModelicaLibraryPresets,
   downloadableModelicaLibraries,
+  refreshModelicaLibraryManifestFromMirror,
 } from '../../modelicaLibraryCatalog'
 import type { ModelicaLibraryTreeNode } from './types'
 import {
@@ -288,12 +323,20 @@ const hasFilter = computed(() => filterText.value.trim().length > 0)
 const mslDownloading = computed(() => props.mslDownloading)
 const activeLibraryLoads = computed(() => props.activeLibraryLoads)
 const mslBusy = computed(() => mslDownloading.value || activeLibraryLoads.value.length > 0)
-const detectedLibraryPresets = computed(() => detectedModelicaLibraryPresets)
-const downloadableLibraries = computed(() => downloadableModelicaLibraries)
+const detectedLibraryPresets = computed(() => detectedModelicaLibraryPresets.value)
+const downloadableLibraries = computed(() => downloadableModelicaLibraries.value)
 const downloadableLibraryColumns: QTableColumn[] = [
   { name: 'action', label: '', field: 'action', sortable: false, align: 'left' },
   { name: 'name', label: 'Name', field: 'name', sortable: true, align: 'left' },
   { name: 'license', label: 'License', field: 'license', sortable: true, align: 'left' },
+  { name: 'mirrorUrl', label: 'Mirror', field: 'mirrorUrl', sortable: false, align: 'left' },
+  {
+    name: 'upstreamUrl',
+    label: 'Original',
+    field: 'upstreamUrl',
+    sortable: false,
+    align: 'left',
+  },
   {
     name: 'description',
     label: 'Description',
@@ -396,8 +439,17 @@ function triggerLibraryImport() {
   libraryImportEl.value?.click()
 }
 
-function openLibrariesDialog() {
+async function openLibrariesDialog() {
   showLibrariesDialog.value = true
+  try {
+    await refreshModelicaLibraryManifestFromMirror()
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    Notify.create({
+      type: 'warning',
+      message: `Using bundled Modelica library manifest: ${message}`,
+    })
+  }
 }
 
 function onFilterInput(value: string | number | null) {
@@ -446,7 +498,10 @@ const findClosestVisiblePathTarget = (qualifiedName: string): string | null => {
   const byLower = new Map(ids.map((id) => [id.toLowerCase(), id] as const))
   const exactLower = byLower.get(normalized.toLowerCase())
   if (exactLower) return exactLower
-  const parts = normalized.split('.').map((part) => part.trim()).filter(Boolean)
+  const parts = normalized
+    .split('.')
+    .map((part) => part.trim())
+    .filter(Boolean)
   for (let i = parts.length; i >= 1; i -= 1) {
     const candidate = parts.slice(0, i).join('.')
     if (treeIndex.value.nodeById[candidate]) return candidate

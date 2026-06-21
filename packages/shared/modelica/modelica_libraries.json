@@ -1,5 +1,5 @@
 {
-  "generated_on": "2026-05-06",
+  "generated_on": "2026-06-21T20:49:57.211Z",
   "notes": [
     "Download URLs are direct GitHub ZIP archives where practical.",
     "Some projects are better consumed from tagged releases; others are branch archives because no current release asset was obvious.",
@@ -11,175 +11,376 @@
       "download_url": "https://github.com/modelica/ModelicaStandardLibrary/archive/refs/tags/v4.1.0.zip",
       "source_url": "https://github.com/modelica/ModelicaStandardLibrary",
       "short_description": "Official Modelica Standard Library (MSL) release archive.",
-      "license": "BSD-3-Clause"
+      "license": "BSD-3-Clause",
+      "id": "ModelicaStandardLibrary-4.1.0",
+      "file_name": "ModelicaStandardLibrary-4.1.0.zip",
+      "mirror": true,
+      "mirror_key": "ModelicaStandardLibrary-4.1.0/f7629cb1313c3c644ae8bab904877fce49eab7345d033f45185cd85ae8be8b47.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/ModelicaStandardLibrary-4.1.0/f7629cb1313c3c644ae8bab904877fce49eab7345d033f45185cd85ae8be8b47.zip",
+      "size_bytes": 21730526,
+      "sha256": "f7629cb1313c3c644ae8bab904877fce49eab7345d033f45185cd85ae8be8b47",
+      "mirrored_at": "2026-06-21T20:44:49.650Z"
     },
     {
       "name": "PowerSystems",
       "download_url": "https://github.com/modelica-3rdparty/PowerSystems/archive/refs/tags/v2.0.0.zip",
       "source_url": "https://github.com/modelica-3rdparty/PowerSystems",
       "short_description": "General electrical power-system library for transient and steady-state AC/DC simulations; useful as a broad grid-modelling base.",
-      "license": "Modelica License 2"
+      "license": "Modelica License 2",
+      "id": "PowerSystems",
+      "file_name": "PowerSystems.zip",
+      "mirror": true,
+      "mirror_key": "PowerSystems/95ed7b5bf823f4d97e0128081847b646337b6e2739f0abe11c7691b0652effa6.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/PowerSystems/95ed7b5bf823f4d97e0128081847b646337b6e2739f0abe11c7691b0652effa6.zip",
+      "size_bytes": 1126064,
+      "sha256": "95ed7b5bf823f4d97e0128081847b646337b6e2739f0abe11c7691b0652effa6",
+      "mirrored_at": "2026-06-21T20:44:54.208Z"
     },
     {
       "name": "WindPowerPlants",
       "download_url": "https://github.com/modelica-3rdparty/WindPowerPlants/archive/refs/tags/v2.0.0.zip",
       "source_url": "https://github.com/modelica-3rdparty/WindPowerPlants",
       "short_description": "Focused wind-power-plant library with wind turbines, generators, pitch control, and an electrical interface to connect to grid models.",
-      "license": "BSD-3-Clause"
+      "license": "BSD-3-Clause",
+      "id": "WindPowerPlants",
+      "file_name": "WindPowerPlants.zip",
+      "mirror": true,
+      "mirror_key": "WindPowerPlants/17de497df48a8c1cbdc853bc157980b4ba90c826ddfb5d382643c6aa5aa79bac.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/WindPowerPlants/17de497df48a8c1cbdc853bc157980b4ba90c826ddfb5d382643c6aa5aa79bac.zip",
+      "size_bytes": 1094499,
+      "sha256": "17de497df48a8c1cbdc853bc157980b4ba90c826ddfb5d382643c6aa5aa79bac",
+      "mirrored_at": "2026-06-21T20:44:58.781Z"
     },
     {
       "name": "PhotoVoltaics",
       "download_url": "https://github.com/modelica-3rdparty/PhotoVoltaics/archive/refs/tags/v2.1.0.zip",
       "source_url": "https://github.com/modelica-3rdparty/PhotoVoltaics",
       "short_description": "Photovoltaic cells, modules, plants, irradiance models, converters, MPPT, and simple battery models; probably one of the easiest PV starting points.",
-      "license": "BSD-3-Clause"
+      "license": "BSD-3-Clause",
+      "id": "PhotoVoltaics",
+      "file_name": "PhotoVoltaics.zip",
+      "mirror": true,
+      "mirror_key": "PhotoVoltaics/e10b431a064b73cc249cff1fc4023080fa230f7f9ff67931afdcb7addf32f3c8.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/PhotoVoltaics/e10b431a064b73cc249cff1fc4023080fa230f7f9ff67931afdcb7addf32f3c8.zip",
+      "size_bytes": 947396,
+      "sha256": "e10b431a064b73cc249cff1fc4023080fa230f7f9ff67931afdcb7addf32f3c8",
+      "mirrored_at": "2026-06-21T20:45:03.074Z"
     },
     {
       "name": "PVSystems",
       "download_url": "https://github.com/modelica-3rdparty/PVSystems/archive/refs/tags/v0.6.2.zip",
       "source_url": "https://github.com/modelica-3rdparty/PVSystems",
       "short_description": "PV-system and power-converter design library with PV arrays, storage, converters, transformers, grid elements, and converter-control blocks.",
-      "license": "MIT"
+      "license": "MIT",
+      "id": "PVSystems",
+      "file_name": "PVSystems.zip",
+      "mirror": true,
+      "mirror_key": "PVSystems/80a8dda5654819cbe84bf7f16eb717a619ea4760f096573951bcddaef30c06c7.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/PVSystems/80a8dda5654819cbe84bf7f16eb717a619ea4760f096573951bcddaef30c06c7.zip",
+      "size_bytes": 13733820,
+      "sha256": "80a8dda5654819cbe84bf7f16eb717a619ea4760f096573951bcddaef30c06c7",
+      "mirrored_at": "2026-06-21T20:45:14.670Z"
     },
     {
       "name": "MoSDH",
       "download_url": "https://github.com/modelica-3rdparty/MoSDH/archive/refs/heads/main.zip",
       "source_url": "https://github.com/modelica-3rdparty/MoSDH",
       "short_description": "Solar and geothermal district-heating systems with seasonal storage, including pit, borehole, and tank storage models.",
-      "license": "BSD-3-Clause"
+      "license": "BSD-3-Clause",
+      "id": "MoSDH",
+      "file_name": "MoSDH.zip",
+      "mirror": true,
+      "mirror_key": "MoSDH/bab93844bdda90d9b4d1e2d79202712333df55c032eaa6962fe87f68150b2081.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/MoSDH/bab93844bdda90d9b4d1e2d79202712333df55c032eaa6962fe87f68150b2081.zip",
+      "size_bytes": 5659895,
+      "sha256": "bab93844bdda90d9b4d1e2d79202712333df55c032eaa6962fe87f68150b2081",
+      "mirrored_at": "2026-06-21T20:45:23.988Z"
     },
     {
       "name": "OpenIPSL",
       "download_url": "https://github.com/OpenIPSL/OpenIPSL/archive/refs/tags/v3.1.0.zip",
       "source_url": "https://github.com/OpenIPSL/OpenIPSL",
       "short_description": "Power-system dynamic-analysis library for phasor time-domain simulations; serious grid/stability tool, but not the easiest onboarding target.",
-      "license": "BSD-3-Clause"
+      "license": "BSD-3-Clause",
+      "id": "OpenIPSL",
+      "file_name": "OpenIPSL.zip",
+      "mirror": true,
+      "mirror_key": "OpenIPSL/63a1488cf028d57d6c9c6c97415cf965948f5a85647751a37a60d4d81e74dbf9.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/OpenIPSL/63a1488cf028d57d6c9c6c97415cf965948f5a85647751a37a60d4d81e74dbf9.zip",
+      "size_bytes": 9539376,
+      "sha256": "63a1488cf028d57d6c9c6c97415cf965948f5a85647751a37a60d4d81e74dbf9",
+      "mirrored_at": "2026-06-21T20:45:35.372Z"
     },
     {
       "name": "OpenModelica_Microgrids",
       "download_url": "https://github.com/upb-lea/OpenModelica_Microgrids/archive/refs/heads/master.zip",
       "source_url": "https://github.com/upb-lea/OpenModelica_Microgrids",
       "short_description": "Small OpenModelica-oriented library for three-phase AC microgrids and control-structure experiments.",
-      "license": "Modelica License 2"
+      "license": "Modelica License 2",
+      "id": "OpenModelica_Microgrids",
+      "file_name": "OpenModelica_Microgrids.zip",
+      "mirror": true,
+      "mirror_key": "OpenModelica_Microgrids/c7f3d012a37fa33197c0a587c73c6cfd59db77f8d398454cf807cb8d3faed7d6.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/OpenModelica_Microgrids/c7f3d012a37fa33197c0a587c73c6cfd59db77f8d398454cf807cb8d3faed7d6.zip",
+      "size_bytes": 3063809,
+      "sha256": "c7f3d012a37fa33197c0a587c73c6cfd59db77f8d398454cf807cb8d3faed7d6",
+      "mirrored_at": "2026-06-21T20:45:50.431Z"
     },
     {
       "name": "PowerGrids",
       "download_url": "https://github.com/PowerGrids/PowerGrids/archive/refs/heads/master.zip",
       "source_url": "https://github.com/PowerGrids/PowerGrids",
       "short_description": "Declarative electro-mechanical power-generation and transmission-system library using phasor approximation.",
-      "license": "MPL-2.0"
+      "license": "MPL-2.0",
+      "id": "PowerGrids",
+      "file_name": "PowerGrids.zip",
+      "mirror": true,
+      "mirror_key": "PowerGrids/8751e4c5f37af2a183ae8c3d546c2d9480897f6f7791e2c781ee09f164250334.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/PowerGrids/8751e4c5f37af2a183ae8c3d546c2d9480897f6f7791e2c781ee09f164250334.zip",
+      "size_bytes": 394308,
+      "sha256": "8751e4c5f37af2a183ae8c3d546c2d9480897f6f7791e2c781ee09f164250334",
+      "mirrored_at": "2026-06-21T20:45:53.779Z"
     },
     {
       "name": "ModPowerSystems",
       "download_url": "https://github.com/modelica-3rdparty/ModPowerSystems/archive/refs/heads/master.zip",
       "source_url": "https://github.com/modelica-3rdparty/ModPowerSystems",
       "short_description": "Power-system components across static phasors, dynamic phasors, and electromagnetic-transient modelling.",
-      "license": "Modelica License 2"
+      "license": "Modelica License 2",
+      "id": "ModPowerSystems",
+      "file_name": "ModPowerSystems.zip",
+      "mirror": true,
+      "mirror_key": "ModPowerSystems/9056926502f920d4b59b9ef2ffbf113e5a7beec0710c7e2b9e5475102b6cdd0c.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/ModPowerSystems/9056926502f920d4b59b9ef2ffbf113e5a7beec0710c7e2b9e5475102b6cdd0c.zip",
+      "size_bytes": 383793,
+      "sha256": "9056926502f920d4b59b9ef2ffbf113e5a7beec0710c7e2b9e5475102b6cdd0c",
+      "mirrored_at": "2026-06-21T20:45:55.798Z"
     },
     {
       "name": "ObjectStab",
       "download_url": "https://github.com/modelica-3rdparty/ObjectStab/archive/refs/tags/v2.0.0.zip",
       "source_url": "https://github.com/modelica-3rdparty/ObjectStab",
       "short_description": "Voltage and transient-stability study library with generators, lines, transformers, loads, buses, compensation devices, and faults.",
-      "license": "Unknown"
+      "license": "Unknown",
+      "id": "ObjectStab",
+      "file_name": "ObjectStab.zip",
+      "mirror": true,
+      "mirror_key": "ObjectStab/7b236defc897e48022673a527ed83e0db6a7b47f6803082dded1a9e164125842.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/ObjectStab/7b236defc897e48022673a527ed83e0db6a7b47f6803082dded1a9e164125842.zip",
+      "size_bytes": 3019511,
+      "sha256": "7b236defc897e48022673a527ed83e0db6a7b47f6803082dded1a9e164125842",
+      "mirrored_at": "2026-06-21T20:46:00.684Z"
     },
     {
       "name": "SolarTherm",
       "download_url": "https://github.com/SolarTherm/SolarTherm/archive/refs/heads/master.zip",
       "source_url": "https://github.com/SolarTherm/SolarTherm",
       "short_description": "Concentrating solar-thermal power/fuel station performance simulation and optimization using Modelica plus helper tooling.",
-      "license": "LGPL-3.0"
+      "license": "LGPL-3.0",
+      "id": "SolarTherm",
+      "file_name": "SolarTherm.zip",
+      "mirror": true,
+      "mirror_key": "SolarTherm/1732e3469ade0ef68ff691ac3d4be262cb8c937a20667f7abb23b211a52a0326.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/SolarTherm/1732e3469ade0ef68ff691ac3d4be262cb8c937a20667f7abb23b211a52a0326.zip",
+      "size_bytes": 22087702,
+      "sha256": "1732e3469ade0ef68ff691ac3d4be262cb8c937a20667f7abb23b211a52a0326",
+      "mirrored_at": "2026-06-21T20:46:08.084Z"
     },
     {
       "name": "Soltermica",
       "download_url": "https://github.com/gheralb/Soltermica/archive/refs/heads/master.zip",
       "source_url": "https://github.com/gheralb/Soltermica",
       "short_description": "Low-temperature solar-thermal systems for solar water heating, collectors, tanks, boilers, heat exchangers, and climatic conditions.",
-      "license": "Unknown"
+      "license": "Unknown",
+      "id": "Soltermica",
+      "file_name": "Soltermica.zip",
+      "mirror": true,
+      "mirror_key": "Soltermica/a76bc01b16ddc39a91763a68ea8f96bd438b52b8567fe50479cf56d406cec74e.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/Soltermica/a76bc01b16ddc39a91763a68ea8f96bd438b52b8567fe50479cf56d406cec74e.zip",
+      "size_bytes": 1016879,
+      "sha256": "a76bc01b16ddc39a91763a68ea8f96bd438b52b8567fe50479cf56d406cec74e",
+      "mirrored_at": "2026-06-21T20:46:12.388Z"
     },
     {
       "name": "Spot",
       "download_url": "https://github.com/modelica-3rdparty/Spot/archive/refs/heads/master.zip",
       "source_url": "https://github.com/modelica-3rdparty/Spot",
       "short_description": "Archived predecessor-style power-system library for transient and steady-state modelling; useful historically, but not ideal for new work.",
-      "license": "Unknown"
+      "license": "Unknown",
+      "id": "Spot",
+      "file_name": "Spot.zip",
+      "mirror": true,
+      "mirror_key": "Spot/97e1b145961da7c26d9ff997213c083bb3e41dad74b1038e81a2020c76c18e5d.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/Spot/97e1b145961da7c26d9ff997213c083bb3e41dad74b1038e81a2020c76c18e5d.zip",
+      "size_bytes": 421399,
+      "sha256": "97e1b145961da7c26d9ff997213c083bb3e41dad74b1038e81a2020c76c18e5d",
+      "mirrored_at": "2026-06-21T20:46:15.181Z"
     },
     {
       "name": "Modelica Buildings Library",
       "download_url": "https://github.com/lbl-srg/modelica-buildings/archive/refs/tags/v13.0.0.zip",
       "source_url": "https://github.com/lbl-srg/modelica-buildings",
       "short_description": "Large open-source building energy/control library with HVAC, district energy, storage, controls, heat transfer, airflow, demand response, and AC/DC electrical systems.",
-      "license": "Unknown"
+      "license": "Unknown",
+      "id": "Modelica-Buildings-Library",
+      "file_name": "Modelica-Buildings-Library.zip",
+      "mirror": true,
+      "mirror_key": "Modelica-Buildings-Library/848a0cf54bc8e1d5336d3d7084ca333af318fa86bdc9515097bb68403e19caf4.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/Modelica-Buildings-Library/848a0cf54bc8e1d5336d3d7084ca333af318fa86bdc9515097bb68403e19caf4.zip",
+      "size_bytes": 78795971,
+      "sha256": "848a0cf54bc8e1d5336d3d7084ca333af318fa86bdc9515097bb68403e19caf4",
+      "mirrored_at": "2026-06-21T20:46:54.268Z"
     },
     {
       "name": "AixLib",
       "download_url": "https://github.com/RWTH-EBC/AixLib/archive/refs/heads/main.zip",
       "source_url": "https://github.com/RWTH-EBC/AixLib",
       "short_description": "Building-performance simulation library for HVAC systems and high- and reduced-order building models; part of the IBPSA ecosystem.",
-      "license": "Unknown"
+      "license": "Unknown",
+      "id": "AixLib",
+      "file_name": "AixLib.zip",
+      "mirror": true,
+      "mirror_key": "AixLib/881b7a38ca8b824a8c83802001245d9075b164d65482ddddf9e7c41a9810bc83.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/AixLib/881b7a38ca8b824a8c83802001245d9075b164d65482ddddf9e7c41a9810bc83.zip",
+      "size_bytes": 68676070,
+      "sha256": "881b7a38ca8b824a8c83802001245d9075b164d65482ddddf9e7c41a9810bc83",
+      "mirrored_at": "2026-06-21T20:47:20.483Z"
     },
     {
       "name": "Modelica IBPSA Library",
       "download_url": "https://github.com/ibpsa/modelica-ibpsa/archive/refs/heads/master.zip",
       "source_url": "https://github.com/ibpsa/modelica-ibpsa",
       "short_description": "Core library of best-practice models for building and community energy/control systems; mainly used as a base for Buildings, AixLib, IDEAS, etc.",
-      "license": "Unknown"
+      "license": "Unknown",
+      "id": "Modelica-IBPSA-Library",
+      "file_name": "Modelica-IBPSA-Library.zip",
+      "mirror": true,
+      "mirror_key": "Modelica-IBPSA-Library/90836ca74f6b12f0121df2debb619ca0766e404f52092914e610ac94e1846ec2.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/Modelica-IBPSA-Library/90836ca74f6b12f0121df2debb619ca0766e404f52092914e610ac94e1846ec2.zip",
+      "size_bytes": 32602216,
+      "sha256": "90836ca74f6b12f0121df2debb619ca0766e404f52092914e610ac94e1846ec2",
+      "mirrored_at": "2026-06-21T20:47:36.559Z"
     },
     {
       "name": "IDEAS",
       "download_url": "https://github.com/open-ideas/IDEAS/archive/refs/heads/master.zip",
       "source_url": "https://github.com/open-ideas/IDEAS",
       "short_description": "Integrated District Energy Assessment Simulations library for simultaneous transient simulation of thermal and electrical energy systems at building and district level.",
-      "license": "Unknown"
+      "license": "Unknown",
+      "id": "IDEAS",
+      "file_name": "IDEAS.zip",
+      "mirror": true,
+      "mirror_key": "IDEAS/7e9aa4e9d94483f73e6997eaa8f6f714b38c3e34bcbd87872330d38383bb629b.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/IDEAS/7e9aa4e9d94483f73e6997eaa8f6f714b38c3e34bcbd87872330d38383bb629b.zip",
+      "size_bytes": 124284547,
+      "sha256": "7e9aa4e9d94483f73e6997eaa8f6f714b38c3e34bcbd87872330d38383bb629b",
+      "mirrored_at": "2026-06-21T20:48:16.803Z"
     },
     {
       "name": "BuildSysPro",
       "download_url": "https://github.com/EDF-Lab/BuildSysPro/archive/refs/heads/master.zip",
       "source_url": "https://github.com/EDF-Lab/BuildSysPro",
       "short_description": "EDF open-source Modelica library for buildings, districts, and energy-systems modelling.",
-      "license": "BSD-3-Clause"
+      "license": "BSD-3-Clause",
+      "id": "BuildSysPro",
+      "file_name": "BuildSysPro.zip",
+      "mirror": true,
+      "mirror_key": "BuildSysPro/e6fc94031916e8a2fae468a7dce5a8d600393ada16b1d29c008fd95ca08ab935.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/BuildSysPro/e6fc94031916e8a2fae468a7dce5a8d600393ada16b1d29c008fd95ca08ab935.zip",
+      "size_bytes": 69648293,
+      "sha256": "e6fc94031916e8a2fae468a7dce5a8d600393ada16b1d29c008fd95ca08ab935",
+      "mirrored_at": "2026-06-21T20:48:47.935Z"
     },
     {
       "name": "ClaRa",
       "download_url": "https://github.com/xrg-simulation/ClaRa-official/archive/refs/heads/main.zip",
       "source_url": "https://github.com/xrg-simulation/ClaRa-official",
       "short_description": "Open-source dynamic simulation library for power plants and other energy systems, focused on thermal hydraulics plus instrumentation and control.",
-      "license": "BSD-3-Clause"
+      "license": "BSD-3-Clause",
+      "id": "ClaRa",
+      "file_name": "ClaRa.zip",
+      "mirror": true,
+      "mirror_key": "ClaRa/6aab8e368296769121fea57456f8a30dc766e6946ac6482a4766cbd386782d58.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/ClaRa/6aab8e368296769121fea57456f8a30dc766e6946ac6482a4766cbd386782d58.zip",
+      "size_bytes": 49790267,
+      "sha256": "6aab8e368296769121fea57456f8a30dc766e6946ac6482a4766cbd386782d58",
+      "mirrored_at": "2026-06-21T20:49:01.545Z"
     },
     {
       "name": "ThermoPower",
       "download_url": "https://github.com/casella/ThermoPower/archive/refs/heads/master.zip",
       "source_url": "https://github.com/casella/ThermoPower",
       "short_description": "Open-source library for dynamic modelling of thermal power plants and energy-conversion systems, including solar direct steam and organic Rankine applications.",
-      "license": "Unknown"
+      "license": "Unknown",
+      "id": "ThermoPower",
+      "file_name": "ThermoPower.zip",
+      "mirror": true,
+      "mirror_key": "ThermoPower/c88eb94f49a67f228955086e7168a8264a03bb94e8f2d0e11bf7511deb13a9fa.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/ThermoPower/c88eb94f49a67f228955086e7168a8264a03bb94e8f2d0e11bf7511deb13a9fa.zip",
+      "size_bytes": 333572,
+      "sha256": "c88eb94f49a67f228955086e7168a8264a03bb94e8f2d0e11bf7511deb13a9fa",
+      "mirrored_at": "2026-06-21T20:49:03.965Z"
     },
     {
       "name": "TRANSFORM",
       "download_url": "https://github.com/ORNL-Modelica/TRANSFORM-Library/archive/refs/heads/master.zip",
       "source_url": "https://github.com/ORNL-Modelica/TRANSFORM-Library",
       "short_description": "ORNL Modelica library for transient simulation of reconfigurable thermal-hydraulic energy systems and other multiphysics systems; Dymola-oriented and beta.",
-      "license": "Apache-2.0"
+      "license": "Apache-2.0",
+      "id": "TRANSFORM",
+      "file_name": "TRANSFORM.zip",
+      "mirror": true,
+      "mirror_key": "TRANSFORM/8cd893a2a374112b02c492585aa1ea92ab29f4f8a818a25093b6a75566e55ccd.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/TRANSFORM/8cd893a2a374112b02c492585aa1ea92ab29f4f8a818a25093b6a75566e55ccd.zip",
+      "size_bytes": 26953622,
+      "sha256": "8cd893a2a374112b02c492585aa1ea92ab29f4f8a818a25093b6a75566e55ccd",
+      "mirrored_at": "2026-06-21T20:49:21.010Z"
     },
     {
       "name": "BEEAM",
       "download_url": "https://github.com/NatLabRockies/BEEAM/archive/refs/heads/main.zip",
       "source_url": "https://github.com/NatLabRockies/BEEAM",
       "short_description": "Building Electrical Efficiency Analysis Model for building electrical distribution efficiency using harmonic power flow, including AC, DC, hybrid networks, and converter losses.",
-      "license": "Other"
+      "license": "Other",
+      "id": "BEEAM",
+      "file_name": "BEEAM.zip",
+      "mirror": true,
+      "mirror_key": "BEEAM/de275ab73ae17f4c0a1c50cab72eb5671f1c776d0d34a04896770bdaab4f2e2f.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/BEEAM/de275ab73ae17f4c0a1c50cab72eb5671f1c776d0d34a04896770bdaab4f2e2f.zip",
+      "size_bytes": 25657360,
+      "sha256": "de275ab73ae17f4c0a1c50cab72eb5671f1c776d0d34a04896770bdaab4f2e2f",
+      "mirrored_at": "2026-06-21T20:49:35.548Z"
     },
     {
       "name": "DroneLibrary",
       "download_url": "https://github.com/ALSETLab/Modelica-Drone-3D-FMI/archive/refs/tags/v1.0.0.zip",
       "source_url": "https://github.com/ALSETLab/Modelica-Drone-3D-FMI",
       "short_description": "Multi-domain UAV/drone library with quadcopter dynamics, electrical subsystems, control models, and 3D/FMI workflows.",
-      "license": "BSD-3-Clause"
+      "license": "BSD-3-Clause",
+      "id": "DroneLibrary",
+      "file_name": "DroneLibrary.zip",
+      "mirror": true,
+      "mirror_key": "DroneLibrary/99c08bc35f2cd46c86df84f99c2eb2d5867e21c150f411d38ce04cf7d146ef24.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/DroneLibrary/99c08bc35f2cd46c86df84f99c2eb2d5867e21c150f411d38ce04cf7d146ef24.zip",
+      "size_bytes": 60569300,
+      "sha256": "99c08bc35f2cd46c86df84f99c2eb2d5867e21c150f411d38ce04cf7d146ef24",
+      "mirrored_at": "2026-06-21T20:49:55.573Z"
     },
     {
       "name": "RotorAeroLib",
       "download_url": "https://github.com/ATAEngineering/RotorAeroLib/archive/refs/heads/master.zip",
       "source_url": "https://github.com/ATAEngineering/RotorAeroLib",
       "short_description": "Rotorcraft-focused aerodynamics and stability library with quadcopter example models useful for UAV development.",
-      "license": "BSD-3-Clause"
+      "license": "BSD-3-Clause",
+      "id": "RotorAeroLib",
+      "file_name": "RotorAeroLib.zip",
+      "mirror": true,
+      "mirror_key": "RotorAeroLib/c1d301cc1100ed7a6763c76bc7b872f936f475ca0cc5c5a0cc615611b5fd43f8.zip",
+      "mirror_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/RotorAeroLib/c1d301cc1100ed7a6763c76bc7b872f936f475ca0cc5c5a0cc615611b5fd43f8.zip",
+      "size_bytes": 26501,
+      "sha256": "c1d301cc1100ed7a6763c76bc7b872f936f475ca0cc5c5a0cc615611b5fd43f8",
+      "mirrored_at": "2026-06-21T20:49:57.211Z"
     }
-  ]
+  ],
+  "mirror_manifest_url": "https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:modelica-libraries/modelica_libraries.json"
 }

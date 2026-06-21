@@ -3,6 +3,7 @@ import {
   buildWorkerSandboxCode,
   getPreparedDaeDiagnostics,
   getPreparedDaeStatus,
+  DEFAULT_MSL_ZIP_URL,
   loadWasm,
   selectDaeForTemplate,
   shouldValidateModelAbiForRenderedOutput,
@@ -1844,7 +1845,7 @@ export async function testModelicaForcedAbiValidationFailureModes() {
   return testModelicaAbiValidationRoutingRegression()
 }
 
-const MSL_LOCAL_ZIP_PATH = '/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip'
+const MSL_DIAGNOSTICS_ZIP_URL = DEFAULT_MSL_ZIP_URL
 
 type DiagnosticsWasm = Awaited<ReturnType<typeof loadWasm>>
 type DiagnosticsSimulationResult = {
@@ -2132,10 +2133,10 @@ async function loadLocalMslLibraries(
     throw new Error('Rumoca wasm export missing: load_source_roots / load_libraries')
   }
 
-  const zipResponse = await fetch(MSL_LOCAL_ZIP_PATH)
+  const zipResponse = await fetch(MSL_DIAGNOSTICS_ZIP_URL)
   if (!zipResponse.ok) {
     throw new Error(
-      `Failed to fetch local MSL archive at ${MSL_LOCAL_ZIP_PATH}: HTTP ${zipResponse.status}`,
+      `Failed to fetch MSL archive at ${MSL_DIAGNOSTICS_ZIP_URL}: HTTP ${zipResponse.status}`,
     )
   }
 
@@ -2358,10 +2359,10 @@ function readMslSourceFromZipByPath(
 }
 
 async function loadMslSourcesFromZip(): Promise<Record<string, string>> {
-  const zipResponse = await fetch(MSL_LOCAL_ZIP_PATH)
+  const zipResponse = await fetch(MSL_DIAGNOSTICS_ZIP_URL)
   if (!zipResponse.ok) {
     throw new Error(
-      `Failed to fetch local MSL archive at ${MSL_LOCAL_ZIP_PATH}: HTTP ${zipResponse.status}`,
+      `Failed to fetch MSL archive at ${MSL_DIAGNOSTICS_ZIP_URL}: HTTP ${zipResponse.status}`,
     )
   }
   const zipBytes = new Uint8Array(await zipResponse.arrayBuffer())
@@ -2547,7 +2548,7 @@ export async function testModelicaMslTreeViewData() {
 
 export async function testModelicaMslCompileAndRunSmoke() {
   const debug: Record<string, unknown> = {
-    mslZipPath: MSL_LOCAL_ZIP_PATH,
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
     phase: 'init',
   }
   let fullGeneratedCode = ''
@@ -2731,7 +2732,7 @@ end MslConstRamp;
 
     return {
       ok: true,
-      mslZipPath: MSL_LOCAL_ZIP_PATH,
+      mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
       mslLibraryFiles: libraryFileCount,
       parsedCount: Number(loadParsed.parsed_count ?? 0),
       skippedCount: Array.isArray(loadParsed.skipped_files) ? loadParsed.skipped_files.length : 0,
@@ -2763,7 +2764,7 @@ end MslConstRamp;
 async function runModelicaMslFirstOrderRumocaSimulationInBrowser() {
   const debug: Record<string, unknown> = {
     phase: 'init',
-    mslZipPath: MSL_LOCAL_ZIP_PATH,
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
     runtime: 'browser-sandbox',
   }
   let fullGeneratedCode = ''
@@ -2982,7 +2983,7 @@ testModelicaMslFirstOrderRumocaSimulation.timeoutMs = 120_000
 export async function testModelicaMslResistorManualFlattenAndBaseDae() {
   const debug: Record<string, unknown> = {
     phase: 'init',
-    mslZipPath: MSL_LOCAL_ZIP_PATH,
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
   }
 
   const extendsResistorSource = `
@@ -3235,7 +3236,7 @@ end MslResistorManualFlattened;
 export async function testModelicaMslResistorExampleSimulation() {
   const debug: Record<string, unknown> = {
     phase: 'init',
-    mslZipPath: MSL_LOCAL_ZIP_PATH,
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
   }
   let fullGeneratedCode = ''
 
@@ -4890,7 +4891,7 @@ testModelicaOrbitInvariantsSdirkOnly.timeoutMs = 40_000
 export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
   const debug: Record<string, unknown> = {
     phase: 'init',
-    mslZipPath: MSL_LOCAL_ZIP_PATH,
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
   }
   try {
     const wasm = await getDiagnosticsWasm()
@@ -4981,7 +4982,7 @@ export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
 export async function testModelicaMslResistorSineVoltageClassInfoRoundtripStrict() {
   const debug: Record<string, unknown> = {
     phase: 'init',
-    mslZipPath: MSL_LOCAL_ZIP_PATH,
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
   }
   try {
     const wasm = await getDiagnosticsWasm()

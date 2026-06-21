@@ -1,7 +1,8 @@
 import { nextTick, ref, type Ref } from 'vue'
 import { Notify } from 'quasar'
-import { DEFAULT_MSL_ZIP_URL, appendModelicaLog } from './modelica'
+import { appendModelicaLog } from './modelica'
 import type { ModelicaWorkerClient } from './modelicaWorkerClient'
+import { getDefaultModelicaLibraryUrl } from './modelicaLibraryCatalog'
 
 export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient | null> }) {
   const useModelicaStandardLibrary = ref(false)
@@ -15,7 +16,7 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
   const mslArchiveName = ref('')
   const mslFileCount = ref(0)
   const mslCachedZipPath = ref('')
-  const mslDownloadUrl = ref(DEFAULT_MSL_ZIP_URL)
+  const mslDownloadUrl = ref(getDefaultModelicaLibraryUrl())
   const standardMslCachedZipPath = ref('')
   const standardMslLoaded = ref(false)
   const loadedLibraryCachePaths = ref<string[]>([])
@@ -201,8 +202,12 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
     return `modelicaMslCache/${inferredName}`
   }
 
+  function resolveLibraryDownloadUrl(urlOverride?: string): string {
+    return String(urlOverride || mslDownloadUrl.value || getDefaultModelicaLibraryUrl()).trim()
+  }
+
   async function downloadMslZipToOpfs(urlOverride?: string) {
-    const url = String(urlOverride || mslDownloadUrl.value || DEFAULT_MSL_ZIP_URL).trim()
+    const url = resolveLibraryDownloadUrl(urlOverride)
     if (!url) throw new Error('MSL ZIP URL is empty')
     const existingDownload = inFlightDownloads.get(url)
     if (existingDownload) {
@@ -231,7 +236,7 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
       }
       const path = await writeBlobToOpfsMslCache(blob, fileNameHint)
       mslCachedZipPath.value = path
-      const standardUrl = String(DEFAULT_MSL_ZIP_URL).trim()
+      const standardUrl = getDefaultModelicaLibraryUrl()
       if (url === standardUrl) {
         standardMslCachedZipPath.value = path
       }
@@ -281,7 +286,10 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
         message: `Loading cached MSL ZIP from OPFS${formatLoadReason(reason)}`,
       })
       if (!cachedPath) {
-        const fallbackUrl = String(mslDownloadUrl.value || DEFAULT_MSL_ZIP_URL).trim()
+        const fallbackUrl = resolveLibraryDownloadUrl()
+        if (!fallbackUrl) {
+          throw new Error('No Modelica library download URL configured')
+        }
         appendModelicaLog({
           level: 'warning',
           phase: 'general',
@@ -317,7 +325,10 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
     }
     inFlightStandardMslLoad = (async () => {
       await nextTick()
-      const standardUrl = String(DEFAULT_MSL_ZIP_URL).trim()
+      const standardUrl = getDefaultModelicaLibraryUrl()
+      if (!standardUrl) {
+        throw new Error('No standard Modelica library download URL configured')
+      }
       const knownPath = normalizeCachedZipPath(standardMslCachedZipPath.value)
       const inferredPath = inferCachedZipPathFromUrl(standardUrl)
       const candidatePaths = [knownPath, inferredPath].filter(Boolean)
@@ -337,9 +348,9 @@ export function useModelicaLibraries(params: { worker: Ref<ModelicaWorkerClient 
         appendModelicaLog({
           level: 'info',
           phase: 'general',
-          message: `Standard MSL cache missing; downloading from ${DEFAULT_MSL_ZIP_URL}`,
+          message: `Standard MSL cache missing; downloading from ${standardUrl}`,
         })
-        cachedPath = await downloadMslZipToOpfs(DEFAULT_MSL_ZIP_URL)
+        cachedPath = await downloadMslZipToOpfs(standardUrl)
       } else {
         mslCachedZipPath.value = cachedPath
         standardMslCachedZipPath.value = cachedPath

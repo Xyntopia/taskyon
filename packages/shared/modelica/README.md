@@ -41,8 +41,10 @@ For every runtime-debug iteration, AI agents must:
 Use the existing CLI for step 1:
 
 ```bash
+MODELICA_MSL_ZIP=/path/to/ModelicaStandardLibrary-4.1.0.zip
+
 node packages/shared/modelica/modelica_cli.mjs render-model-js \
-  --msl-zip public/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip \
+  --msl-zip "$MODELICA_MSL_ZIP" \
   --model Modelica.Blocks.Examples.BooleanNetwork1 \
   --use-source-roots \
   --template-file packages/shared/modelica/javascript.jinja \
@@ -52,8 +54,10 @@ node packages/shared/modelica/modelica_cli.mjs render-model-js \
 The same CLI now also exposes Rumoca's direct simulation surface for focused smoke checks:
 
 ```bash
+MODELICA_MSL_ZIP=/path/to/ModelicaStandardLibrary-4.1.0.zip
+
 node packages/shared/modelica/modelica_cli.mjs simulate-model \
-  --msl-zip public/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip \
+  --msl-zip "$MODELICA_MSL_ZIP" \
   --model Modelica.Blocks.Examples.FirstOrder \
   --use-source-roots \
   --t-end 1 \
@@ -63,6 +67,12 @@ node packages/shared/modelica/modelica_cli.mjs simulate-model \
 ```
 
 This is the preferred way to generate a JS model from a Modelica class + template during debugging.
+
+Node diagnostics do not read MSL from `packages/rumoca/target/msl`. They resolve the same
+`modelica_libraries.json` manifest as the browser UI, prefer the configured mirror URL, fall back to
+the original upstream URL, and cache the archive under `XDG_CACHE_HOME/taskyon/modelica-libraries` or
+`~/.cache/taskyon/modelica-libraries`. Set `MODELICA_DIAG_MSL_ZIP_PATH` only when you need to force a
+specific local archive.
 
 Required workflow gate before broader fixes:
 
@@ -381,8 +391,10 @@ Use this workflow when a model compiles but fails in solver/runtime and you need
 Recommended render command:
 
 ```bash
+MODELICA_MSL_ZIP=/path/to/ModelicaStandardLibrary-4.1.0.zip
+
 node packages/shared/modelica/modelica_cli.mjs render-model-js \
-  --msl-zip public/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip \
+  --msl-zip "$MODELICA_MSL_ZIP" \
   --model Modelica.Blocks.Examples.BooleanNetwork1 \
   --use-source-roots \
   --template-file packages/shared/modelica/javascript.jinja \
@@ -400,9 +412,9 @@ node --inspect-brk /workspace/.tmp/run_cp_lambda_debug.mjs
 Suggested `run_cp_lambda_debug.mjs` behavior:
 
 - Load Rumoca wasm.
-- Load source roots from:
-  - `packages/rumoca/target/msl/ModelicaStandardLibrary-4.1.0.zip`
-  - `public/modelica-libraries/WindPowerPlants.zip`
+- Load local debug source roots from:
+  - a cached or explicitly downloaded `ModelicaStandardLibrary-4.1.0.zip`
+  - an unpacked or cached `WindPowerPlants.zip` archive
 - Compile:
   - `WindPowerPlants.Examples.CpLambdaWindTurbine`
 - Render with:

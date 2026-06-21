@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process'
-import { access, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { serializeObject } from '../modules/serializeObject'
+import { resolveCachedModelicaLibraryZipPath } from './modelicaLibraryCacheNode'
 
 const MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS = {
   format: 'json' as const,
@@ -12,11 +13,6 @@ const MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS = {
   maxStringLength: 1200,
   indent: 2,
 }
-
-const MSL_LOCAL_ZIP_FILE_CANDIDATES = [
-  new URL('../../../public/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip', import.meta.url),
-  new URL('../../../packages/rumoca/target/msl/ModelicaStandardLibrary-4.1.0.zip', import.meta.url),
-]
 
 const execFileAsync = (file: string, args: string[]): Promise<{ stdout: string; stderr: string }> =>
   new Promise((resolve, reject) => {
@@ -44,22 +40,8 @@ const execFileAsync = (file: string, args: string[]): Promise<{ stdout: string; 
     )
   })
 
-async function resolveDiagnosticsMslZipFilePath(): Promise<string> {
-  for (const candidate of MSL_LOCAL_ZIP_FILE_CANDIDATES) {
-    try {
-      await access(candidate)
-      return candidate.pathname
-    } catch {
-      continue
-    }
-  }
-  throw new Error(
-    `Could not locate ModelicaStandardLibrary-4.1.0.zip for CLI diagnostics. Checked: ${MSL_LOCAL_ZIP_FILE_CANDIDATES.map((candidate) => candidate.pathname).join(', ')}`,
-  )
-}
-
 export async function runModelicaCliMslFirstOrderRumocaSimulation() {
-  const resolvedMslZipPath = await resolveDiagnosticsMslZipFilePath()
+  const resolvedMslZipPath = await resolveCachedModelicaLibraryZipPath()
   const debug: Record<string, unknown> = {
     phase: 'init',
     mslZipPath: resolvedMslZipPath,
