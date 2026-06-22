@@ -47,6 +47,11 @@ type WorkerRequest =
     }
   | { id: number; type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
   | { id: number; type: 'materialize_library_classes'; payload: { qualifiedNames: string[] } }
+  | {
+      id: number
+      type: 'materialize_diagram_classes'
+      payload: { source: string; qualifiedName?: string; fileName?: string }
+    }
   | { id: number; type: 'materialize_all_libraries' }
   | { id: number; type: 'clear_libraries' }
   | { id: number; type: 'list_classes' }
@@ -226,6 +231,7 @@ function materializeLibraryClasses(qualifiedNames: string[]): {
   materializedFileCount: number
   requestedClassCount: number
 } {
+  const startedAt = performance.now()
   const availableUris = availableSourceRootUris()
   if (availableUris.length === 0) {
     return {
@@ -242,8 +248,23 @@ function materializeLibraryClasses(qualifiedNames: string[]): {
     availableUris,
     materializedSourceRootUris,
   )
+  console.info('[modelica-worker][materialize-library-classes] selected source roots', {
+    requestedClassCount: qualifiedNames.length,
+    availableUriCount: availableUris.length,
+    selectedUriCount: selectedUris.length,
+    materializedBeforeCount: materializedSourceRootUris.size,
+  })
   const subset = decodeSourceRootSubset(selectedUris)
   const loaded = loadSourceRootSubset(subset)
+  console.info('[modelica-worker][materialize-library-classes] finished', {
+    requestedClassCount: qualifiedNames.length,
+    selectedUriCount: selectedUris.length,
+    parsedCount: loaded.parsedCount,
+    insertedCount: loaded.insertedCount,
+    documentCount: loaded.documentCount,
+    materializedFileCount: materializedSourceRootUris.size,
+    elapsedMs: Math.round(performance.now() - startedAt),
+  })
   return {
     ...loaded,
     materializedFileCount: materializedSourceRootUris.size,
@@ -473,14 +494,25 @@ function handleMergeMslZip(payload: { fileName: string; bytes: ArrayBuffer }): u
 }
 
 function handleListClasses(): unknown {
+  const startedAt = performance.now()
   if (lazyLibraryIndex) {
-    return {
+    const result = {
       total_classes: lazyLibraryIndex.totalClasses,
       classes: lazyLibraryIndex.classes,
     }
+    console.info('[modelica-worker][list-classes] returned lazy index tree', {
+      totalClasses: lazyLibraryIndex.totalClasses,
+      rootNodeCount: lazyLibraryIndex.classes.length,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    })
+    return result
   }
   const raw = rumoca.list_classes()
-  return JSON.parse(String(raw))
+  const result = JSON.parse(String(raw))
+  console.info('[modelica-worker][list-classes] returned rumoca class tree', {
+    elapsedMs: Math.round(performance.now() - startedAt),
+  })
+  return result
 }
 
 function handleGetClassInfo(payload: { qualifiedName: string }): unknown {
@@ -509,6 +541,7 @@ function handleExtractDiagramFull(payload: {
   qualifiedName?: string
   fileName?: string
 }): unknown {
+  const startedAt = performance.now()
   materializeLibraryClasses([
     asString(payload.qualifiedName),
     ...referencedModelicaClassNames(payload.source),
@@ -529,10 +562,77 @@ function handleExtractDiagramFull(payload: {
       return !isLibraryClassMaterialized(qualifiedName)
     })
     if (missing.length === 0) return refined
+    console.info('[modelica-worker][extract-diagram] materializing missing classes', {
+      pass,
+      missingCount: missing.length,
+      missing,
+    })
     materializeLibraryClasses(missing)
   }
 
-  return handleExtractDiagram(payload, () => loadedSourceRootFiles, isLibraryClassMaterialized)
+  const result = handleExtractDiagram(
+    payload,
+    () => loadedSourceRootFiles,
+    isLibraryClassMaterialized,
+  )
+  console.info('[modelica-worker][extract-diagram] finished', {
+    qualifiedName: payload.qualifiedName,
+    elapsedMs: Math.round(performance.now() - startedAt),
+    materializedFileCount: materializedSourceRootUris.size,
+  })
+  return result
+}
+
+function handleMaterializeDiagramClasses(payload: {
+  source: string
+  qualifiedName?: string
+  fileName?: string
+}): unknown {
+  const startedAt = performance.now()
+  materializeLibraryClasses([
+    asString(payload.qualifiedName),
+    ...referencedModelicaClassNames(payload.source),
+  ])
+
+  let passCount = 0
+  const requested = new Set<string>()
+  const totalRequested = new Set<string>()
+  for (let pass = 0; pass < 3; pass += 1) {
+    passCount = pass + 1
+    requested.clear()
+    handleExtractDiagram(
+      payload,
+      () => loadedSourceRootFiles,
+      (qualifiedName) => {
+        if (isLibraryClassMaterialized(qualifiedName)) return true
+        requested.add(qualifiedName)
+        totalRequested.add(qualifiedName)
+        return false
+      },
+    )
+    const missing = Array.from(requested).filter((qualifiedName) => {
+      return !isLibraryClassMaterialized(qualifiedName)
+    })
+    if (missing.length === 0) break
+    console.info('[modelica-worker][materialize-diagram-classes] materializing missing classes', {
+      pass,
+      missingCount: missing.length,
+      missing,
+    })
+    materializeLibraryClasses(missing)
+  }
+
+  const result = {
+    materializedFileCount: materializedSourceRootUris.size,
+    requestedClassCount: totalRequested.size,
+    passCount,
+  }
+  console.info('[modelica-worker][materialize-diagram-classes] finished', {
+    ...result,
+    qualifiedName: payload.qualifiedName,
+    elapsedMs: Math.round(performance.now() - startedAt),
+  })
+  return result
 }
 
 const removeTopLevelImportsForDiagramParse = (source: string): string => {
@@ -706,6 +806,7 @@ function handleExportSourceRootBinaryCache(payload: { uris: string[] }): Uint8Ar
 }
 
 function handleRestoreSourceRootBinaryCache(payload: { bytes: ArrayBuffer }): number {
+  const startedAt = performance.now()
   if (typeof rumoca.merge_parsed_source_roots_binary !== 'function') {
     throw new Error('Rumoca wasm export missing: merge_parsed_source_roots_binary')
   }
@@ -713,7 +814,14 @@ function handleRestoreSourceRootBinaryCache(payload: { bytes: ArrayBuffer }): nu
   loadedSourceRootBytes = {}
   lazyLibraryIndex = null
   materializedSourceRootUris = new Set()
-  return Number(rumoca.merge_parsed_source_roots_binary(new Uint8Array(payload.bytes))) || 0
+  const restoredCount =
+    Number(rumoca.merge_parsed_source_roots_binary(new Uint8Array(payload.bytes))) || 0
+  console.info('[modelica-worker][restore-source-root-cache] finished', {
+    restoredCount,
+    byteLength: payload.bytes.byteLength,
+    elapsedMs: Math.round(performance.now() - startedAt),
+  })
+  return restoredCount
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
@@ -738,6 +846,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break
       case 'materialize_library_classes':
         result = materializeLibraryClasses(msg.payload.qualifiedNames)
+        break
+      case 'materialize_diagram_classes':
+        result = handleMaterializeDiagramClasses(msg.payload)
         break
       case 'materialize_all_libraries':
         result = materializeAllLibraries()

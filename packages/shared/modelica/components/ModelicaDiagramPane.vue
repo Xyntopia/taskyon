@@ -713,12 +713,17 @@ const loadDiagram = async () => {
         const preview = await props.extractor.extractPreview(request)
         if (token !== loadToken) return
         diagram.value = preview
+        await nextTick()
       } catch (previewError) {
         console.info('[diagram][pane] preview unavailable', {
           qualifiedName: props.qualifiedName ?? 'unknown',
           error: previewError instanceof Error ? previewError.message : String(previewError),
         })
       }
+    }
+    if (props.extractor.materialize) {
+      await props.extractor.materialize(request)
+      if (token !== loadToken) return
     }
     diagram.value = await props.extractor.extract(request)
     if (token !== loadToken) return

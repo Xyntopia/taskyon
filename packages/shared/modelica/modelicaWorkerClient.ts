@@ -33,6 +33,11 @@ type WorkerRequest =
     }
   | { id: number; type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
   | { id: number; type: 'materialize_library_classes'; payload: { qualifiedNames: string[] } }
+  | {
+      id: number
+      type: 'materialize_diagram_classes'
+      payload: { source: string; qualifiedName?: string; fileName?: string }
+    }
   | { id: number; type: 'materialize_all_libraries' }
   | { id: number; type: 'clear_libraries' }
   | { id: number; type: 'list_classes' }
@@ -100,6 +105,10 @@ type WorkerRequestNoId =
     }
   | { type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
   | { type: 'materialize_library_classes'; payload: { qualifiedNames: string[] } }
+  | {
+      type: 'materialize_diagram_classes'
+      payload: { source: string; qualifiedName?: string; fileName?: string }
+    }
   | { type: 'materialize_all_libraries' }
   | { type: 'clear_libraries' }
   | { type: 'list_classes' }
@@ -142,6 +151,7 @@ type Pending = {
   resolve: (value: unknown) => void
   reject: (reason: Error) => void
   requestType: WorkerRequestNoId['type']
+  startedAt: number
 }
 
 export type ModelicaWorkerActivityEvent = {
@@ -149,6 +159,7 @@ export type ModelicaWorkerActivityEvent = {
   requestType: WorkerRequestNoId['type']
   label: string
   status: 'started' | 'finished' | 'failed'
+  elapsedMs?: number
   error?: string
 }
 
@@ -195,6 +206,7 @@ export class ModelicaWorkerClient {
           requestType: req.requestType,
           label: this.activityLabel(req.requestType),
           status: 'finished',
+          elapsedMs: Math.round(performance.now() - req.startedAt),
         })
         req.resolve(msg.result)
       } else {
@@ -203,6 +215,7 @@ export class ModelicaWorkerClient {
           requestType: req.requestType,
           label: this.activityLabel(req.requestType),
           status: 'failed',
+          elapsedMs: Math.round(performance.now() - req.startedAt),
           error: msg.error,
         })
         req.reject(new Error(msg.error))
@@ -218,6 +231,7 @@ export class ModelicaWorkerClient {
         requestType: req.requestType,
         label: this.activityLabel(req.requestType),
         status: 'failed',
+        elapsedMs: Math.round(performance.now() - req.startedAt),
         error: 'Modelica worker terminated',
       })
       req.reject(new Error('Modelica worker terminated'))
@@ -253,6 +267,8 @@ export class ModelicaWorkerClient {
         return 'Loading libraries'
       case 'materialize_library_classes':
         return 'Loading library classes'
+      case 'materialize_diagram_classes':
+        return 'Loading diagram classes'
       case 'materialize_all_libraries':
         return 'Loading full library'
       case 'list_classes':
@@ -286,6 +302,7 @@ export class ModelicaWorkerClient {
 
   private request<T = unknown>(msg: WorkerRequestNoId, transfer: Transferable[] = []): Promise<T> {
     const id = this.nextId++
+    const startedAt = performance.now()
     this.emitActivity({
       requestId: id,
       requestType: msg.type,
@@ -297,6 +314,7 @@ export class ModelicaWorkerClient {
         resolve: resolve as (value: unknown) => void,
         reject,
         requestType: msg.type,
+        startedAt,
       })
       const withId = { id, ...msg } as WorkerRequest
       this.worker.postMessage(withId, transfer)
@@ -381,6 +399,21 @@ export class ModelicaWorkerClient {
     return this.request({
       type: 'materialize_library_classes',
       payload: { qualifiedNames },
+    })
+  }
+
+  materializeDiagramClasses(payload: {
+    source: string
+    qualifiedName?: string
+    fileName?: string
+  }): Promise<{
+    materializedFileCount: number
+    requestedClassCount: number
+    passCount: number
+  }> {
+    return this.request({
+      type: 'materialize_diagram_classes',
+      payload,
     })
   }
 

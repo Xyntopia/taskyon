@@ -52,4 +52,9 @@ export const createRumocaModelicaDiagramExtractor = (
     const payload = await worker.extractDiagramPreview(toWorkerPayload(request))
     return ensureDiagramShape(payload)
   },
+  materialize: async (request: DiagramExtractRequest): Promise<void> => {
+    const worker = getWorker()
+    if (!worker) throw new Error('Modelica worker not loaded')
+    await worker.materializeDiagramClasses(toWorkerPayload(request))
+  },
 })

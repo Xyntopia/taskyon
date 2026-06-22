@@ -127,4 +127,5 @@ export type DiagramExtractRequest = {
 export interface ModelicaDiagramExtractor {
   extract: (request: DiagramExtractRequest) => Promise<ModelicaDiagramDto>
   extractPreview?: (request: DiagramExtractRequest) => Promise<ModelicaDiagramDto>
+  materialize?: (request: DiagramExtractRequest) => Promise<void>
 }

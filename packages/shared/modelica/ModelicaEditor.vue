@@ -1034,6 +1034,7 @@ const {
   mslDownloadUrl,
   standardMslLoaded,
   loadedLibraryCachePaths,
+  latestLazyLibraryClassTree,
   downloadMslZipToOpfs,
   loadCachedMslZipFromOpfs,
   loadStandardMslZipFromOpfs,
@@ -1060,6 +1061,44 @@ const libraryBusyLabel = computed(() => {
 const globalProcessBusy = computed(() => workerBusy.value || Boolean(libraryBusyLabel.value))
 const globalProcessLabel = computed(
   () => libraryBusyLabel.value || workerBusyLabel.value || 'Processing',
+)
+const lastAppliedLazyLibraryTreeSignature = ref('')
+
+function applyLazyLibraryTreeToEditor(): boolean {
+  if (latestLazyLibraryClassTree.value.length === 0) return false
+  const treeSignature = latestLazyLibraryClassTree.value
+    .map((node) => String(node.qualified_name || node.name || ''))
+    .join('|')
+  if (
+    treeSignature &&
+    treeSignature === lastAppliedLazyLibraryTreeSignature.value &&
+    libraryTreeNodes.value.length > 0
+  ) {
+    return true
+  }
+  const mappedNodes = mapRumocaClassTree(latestLazyLibraryClassTree.value)
+  lastAppliedLazyLibraryTreeSignature.value = treeSignature
+  libraryTreeNodes.value = mappedNodes
+  standardMslLoaded.value = mappedNodes.some((node) => node.qualifiedName === 'Modelica')
+  appendModelicaLog({
+    level: 'success',
+    phase: 'general',
+    message: `Loaded Modelica library tree from lazy index: ${mappedNodes.length} root nodes`,
+    details: {
+      lazyRootNodeCount: latestLazyLibraryClassTree.value.length,
+      rootNodeCount: mappedNodes.length,
+      standardMslLoaded: standardMslLoaded.value,
+    },
+  })
+  return true
+}
+
+watch(
+  latestLazyLibraryClassTree,
+  () => {
+    applyLazyLibraryTreeToEditor()
+  },
+  { flush: 'sync' },
 )
 
 const fileNameFromPath = (path: string): string => {
@@ -1756,6 +1795,19 @@ const phaseForWorkerRequestType = (type: string): WorkerLiveLogEntry['phase'] =>
   return 'general'
 }
 
+const shouldLogWorkerCompletion = (event: ModelicaWorkerActivityEvent): boolean => {
+  if (event.status === 'failed') return true
+  if ((event.elapsedMs ?? 0) >= 1000) return true
+  return [
+    'extract_diagram',
+    'materialize_diagram_classes',
+    'load_msl_zip',
+    'merge_msl_zip',
+    'restore_source_root_binary_cache',
+    'list_classes',
+  ].includes(event.requestType)
+}
+
 function onWorkerActivity(event: ModelicaWorkerActivityEvent) {
   if (event.requestType === 'lsp_completion_with_timing') return
   if (event.status === 'started') {
@@ -1782,6 +1834,21 @@ function onWorkerActivity(event: ModelicaWorkerActivityEvent) {
   workerLiveEntries.value = workerLiveEntries.value.filter(
     (entry) => entry.requestId !== event.requestId,
   )
+  if (shouldLogWorkerCompletion(event)) {
+    appendModelicaLog({
+      level: event.status === 'failed' ? 'error' : 'info',
+      phase: phaseForWorkerRequestType(event.requestType),
+      message:
+        event.status === 'failed'
+          ? `${event.label} failed after ${event.elapsedMs ?? 0} ms: ${event.error ?? 'unknown error'}`
+          : `${event.label} finished in ${event.elapsedMs ?? 0} ms`,
+      details: {
+        requestId: event.requestId,
+        requestType: event.requestType,
+        elapsedMs: event.elapsedMs,
+      },
+    })
+  }
 }
 
 onMounted(() => {
@@ -3077,23 +3144,49 @@ const clearAll = () => {
 }
 
 async function refreshLibraryTree() {
+  if (applyLazyLibraryTreeToEditor()) return
   const worker = modelicaWorker.value
   if (!worker) {
     libraryTreeNodes.value = []
     standardMslLoaded.value = false
     return
   }
+  const startedAt = performance.now()
   try {
+    appendModelicaLog({
+      level: 'info',
+      phase: 'general',
+      message: 'Refreshing Modelica library tree',
+      details: {
+        existingRootNodeCount: libraryTreeNodes.value.length,
+      },
+    })
     const raw = await worker.listClasses()
+    const listClassesMs = Math.round(performance.now() - startedAt)
+    const mapStartedAt = performance.now()
     const mappedNodes = mapRumocaClassTree(raw.classes)
+    const mapTreeMs = Math.round(performance.now() - mapStartedAt)
+    const rawClassCount = Array.isArray(raw.classes) ? raw.classes.length : 0
     libraryTreeNodes.value = mappedNodes
     standardMslLoaded.value = mappedNodes.some((node) => node.qualifiedName === 'Modelica')
+    appendModelicaLog({
+      level: 'success',
+      phase: 'general',
+      message: `Refreshed Modelica library tree in ${Math.round(performance.now() - startedAt)} ms: ${mappedNodes.length} root nodes`,
+      details: {
+        listClassesMs,
+        mapTreeMs,
+        rawClassCount,
+        rootNodeCount: mappedNodes.length,
+        standardMslLoaded: standardMslLoaded.value,
+      },
+    })
   } catch (error) {
     standardMslLoaded.value = false
     appendModelicaLog({
       level: 'warning',
       phase: 'general',
-      message: `Failed to refresh library tree: ${(error as Error).message}`,
+      message: `Failed to refresh library tree after ${Math.round(performance.now() - startedAt)} ms: ${(error as Error).message}`,
     })
   }
 }
@@ -3698,6 +3791,12 @@ const stopExecution = () => {
 }
 
 onMounted(async () => {
+  const mountedStartedAt = performance.now()
+  appendModelicaLog({
+    level: 'info',
+    phase: 'general',
+    message: 'Modelica editor startup: begin state hydration',
+  })
   // 1) Global state (not bound to a specific model)
   //    - layout
   //    - template editor state
@@ -3720,6 +3819,17 @@ onMounted(async () => {
     showAllInPrompt,
     currentProjectId,
   })
+  appendModelicaLog({
+    level: 'info',
+    phase: 'general',
+    message: `Modelica editor startup: global state hydrated in ${Math.round(performance.now() - mountedStartedAt)} ms`,
+    details: {
+      useModelicaStandardLibrary: useModelicaStandardLibrary.value,
+      requiredLibraryCount: requiredLibraries.value.length,
+      mslCachedZipPath: mslCachedZipPath.value,
+      standardMslCachedZipPath: standardMslCachedZipPath.value,
+    },
+  })
   if (layoutContainsLegacyWorkbenchViews(initialLayout.value)) {
     initialLayout.value = createDefaultLayout()
   }
@@ -3730,6 +3840,15 @@ onMounted(async () => {
   //    Folder name depends on the selected project.
   await syncStateWithOPFSFolder(`modelicaProject_${currentProjectId.value}`, {
     projectFile,
+  })
+  appendModelicaLog({
+    level: 'info',
+    phase: 'general',
+    message: `Modelica editor startup: project state hydrated in ${Math.round(performance.now() - mountedStartedAt)} ms`,
+    details: {
+      currentProjectId: currentProjectId.value,
+      hasProjectFile: Boolean(projectFile.value),
+    },
   })
 
   // Hydrate project state into the editor
@@ -3787,6 +3906,17 @@ onMounted(async () => {
 
   // Initial project discovery
   await refreshAvailableProjects()
+  appendModelicaLog({
+    level: 'info',
+    phase: 'general',
+    message: `Modelica editor startup: project discovery finished in ${Math.round(performance.now() - mountedStartedAt)} ms`,
+    details: {
+      availableProjectCount: availableProjectIds.value.length,
+      currentProjectId: currentProjectId.value,
+      useModelicaStandardLibrary: useModelicaStandardLibrary.value,
+      requiredLibraries: requiredLibraries.value,
+    },
+  })
   // Keep projectFile updated when the editor changes (OPFS will persist it)
   watchDebounced(
     [
@@ -3831,11 +3961,23 @@ onMounted(async () => {
   }
 
   const initModelicaWorker = async (): Promise<ModelicaWorkerClient> => {
+    const startedAt = performance.now()
+    const requestedThreads = getRequestedWorkerThreads()
+    appendModelicaLog({
+      level: 'info',
+      phase: 'loadWasm',
+      message: `Initializing Modelica worker (requested threads=${requestedThreads})`,
+      details: {
+        crossOriginIsolated: globalThis.crossOriginIsolated === true,
+        hardwareConcurrency:
+          typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : undefined,
+      },
+    })
     const worker = new ModelicaWorkerClient()
     modelicaWorker.value = worker
     unsubscribeWorkerActivity?.()
     unsubscribeWorkerActivity = worker.onActivity(onWorkerActivity)
-    const initInfo = await worker.init(getRequestedWorkerThreads())
+    const initInfo = await worker.init(requestedThreads)
     configureModelicaLspExtensions(worker)
     wasmLoaded.value = true
     if (initInfo.version) rumocaWasmVersion.value = initInfo.version
@@ -3849,15 +3991,53 @@ onMounted(async () => {
     rumocaSimulationModelDiscoveryAvailable.value = Boolean(
       initInfo.simulationModelDiscoveryAvailable,
     )
+    appendModelicaLog({
+      level: 'success',
+      phase: 'loadWasm',
+      message: `Initialized Modelica worker in ${Math.round(performance.now() - startedAt)} ms`,
+      details: {
+        requestedThreads,
+        rayonEnabled: initInfo.rayonEnabled,
+        version: initInfo.version,
+        gitCommit: initInfo.gitCommit,
+        simulationAvailable: initInfo.simulationAvailable,
+        simulationModelDiscoveryAvailable: initInfo.simulationModelDiscoveryAvailable,
+      },
+    })
     return worker
   }
 
   // 3) Modelica worker
   try {
+    const workerStartupStartedAt = performance.now()
     const worker = await initModelicaWorker()
+    const documentCountStartedAt = performance.now()
     const documentCount = await worker.getSourceRootDocumentCount()
+    appendModelicaLog({
+      level: 'info',
+      phase: 'general',
+      message: `Checked Modelica worker source-root document count in ${Math.round(performance.now() - documentCountStartedAt)} ms: ${documentCount}`,
+      details: {
+        documentCount,
+        useModelicaStandardLibrary: useModelicaStandardLibrary.value,
+        requiredLibraries: requiredLibraries.value,
+      },
+    })
     const persistedLibraryLoadRequested =
       Boolean(useModelicaStandardLibrary.value) || requiredLibraries.value.length > 0
+    appendModelicaLog({
+      level: 'info',
+      phase: 'general',
+      message: persistedLibraryLoadRequested
+        ? 'Modelica editor startup: persisted library load requested'
+        : 'Modelica editor startup: no persisted library load requested',
+      details: {
+        documentCount,
+        useModelicaStandardLibrary: useModelicaStandardLibrary.value,
+        requiredLibraries: requiredLibraries.value,
+        mslCachedZipPath: mslCachedZipPath.value,
+      },
+    })
     if (documentCount > 0 && persistedLibraryLoadRequested) {
       mslLoaded.value = true
       mslFileCount.value = documentCount
@@ -3893,7 +4073,7 @@ onMounted(async () => {
     appendModelicaLog({
       level: 'success',
       phase: 'general',
-      message: 'Modelica worker loaded successfully! Ready to compile.',
+      message: `Modelica worker loaded successfully in ${Math.round(performance.now() - workerStartupStartedAt)} ms! Ready to compile.`,
     })
   } catch (error) {
     appendModelicaLog({
