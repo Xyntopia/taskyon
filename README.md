@@ -1,7 +1,7 @@
 # Taskyon
 
 <p align="center">
-  <img src="/taskyon_fancy_logo.png" onerror="this.onerror=null; this.src='/taskyon_fancy_logo.png';" alt="Taskyon Fancy Logo" width="100" style="padding-right: 30px;width: 175px;padding-left: 20px;height: 125px;">
+  <img src="public/taskyon_fancy_logo.png" alt="Taskyon logo" width="175">
 </p>
 
 <h3 align="center">Research. Design. Reproduce.</h3>

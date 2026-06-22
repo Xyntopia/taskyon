@@ -313,6 +313,10 @@ export default defineConfig((ctx) => {
                 src: 'README.md',
                 dest: 'docs', // Will be placed in 'public/docs'
               },
+              {
+                src: 'public/taskyon_fancy_logo.png',
+                dest: 'docs/public', // Keep README image paths working after README.md is copied to docs
+              },
             ],
           }),
         ]
