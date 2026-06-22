@@ -24,6 +24,10 @@ import {
 } from './diagram/mapDiagramToGraph'
 import type { ModelicaDiagramDto } from './diagram/types'
 import { ModelicaWorkerClient } from './modelicaWorkerClient'
+import {
+  buildLazyModelicaLibraryByteArchive,
+  normalizeModelicaLibraryEntryPath,
+} from './lazyModelicaLibraryIndex'
 
 const templateChecks = [
   {
@@ -1673,7 +1677,7 @@ model BouncingBall             "The bouncing ball model"
     throw new Error('Rumoca wasm export missing: simulate_model')
   }
   const nativeRaw = JSON.parse(
-    String(wasm.simulate_model(source, 'BouncingBall', 2, 0.1, 'auto')),
+    String(wasm.simulate_model(source, 'BouncingBall', 2, 0.1, 'auto', '{}')),
   ) as Record<string, unknown>
   const nativeRunResult = normalizeRumocaNativeSimulationResult({
     ...nativeRaw,
@@ -1902,6 +1906,7 @@ type DiagnosticsMslApi = {
     tEnd: number,
     dt: number,
     solver: string,
+    parameterOverridesJson: string,
   ) => string
   load_source_root_index?: (sourceRootsJson: string) => string
   load_source_roots?: (sourceRootsJson: string) => string
@@ -2127,16 +2132,7 @@ function buildModelConstructionProbeSandboxCode(compiledJs: string): string {
 }
 
 function normalizeLibraryEntryPath(path: string): string {
-  const parts = String(path || '')
-    .split('/')
-    .filter(Boolean)
-  if (parts.length > 1 && /(?:Standard)?Library|^MSL/i.test(parts[0] ?? '')) {
-    return parts.slice(1).join('/')
-  }
-  if (parts.length > 0) {
-    parts[0] = parts[0]!.replace(/[\s-][\d.]+$/, '')
-  }
-  return parts.join('/')
+  return normalizeModelicaLibraryEntryPath(path)
 }
 
 async function loadLocalMslLibraries(
@@ -2265,6 +2261,64 @@ export async function testModelicaMslLoadBenchmark() {
   }
 }
 testModelicaMslLoadBenchmark.timeoutMs = 120_000
+
+export async function testModelicaTaskyonLazyMslIndexLoadsUnderTwoSeconds() {
+  const debug: Record<string, unknown> = {
+    phase: 'fetch',
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
+  }
+
+  try {
+    const zipResponse = await fetch(MSL_DIAGNOSTICS_ZIP_URL)
+    if (!zipResponse.ok) {
+      throw new Error(
+        `Failed to fetch MSL archive at ${MSL_DIAGNOSTICS_ZIP_URL}: HTTP ${zipResponse.status}`,
+      )
+    }
+    const zipBytes = new Uint8Array(await zipResponse.arrayBuffer())
+    if (zipBytes.length <= 1024) {
+      throw new Error('MSL archive appears to be invalid (too small)')
+    }
+    debug.zipBytes = zipBytes.length
+    debug.phase = 'lazy-index'
+
+    const started = performance.now()
+    const archive = unzipSync(zipBytes)
+    const lazyArchive = buildLazyModelicaLibraryByteArchive(archive)
+    const loadMs = Math.round((performance.now() - started) * 10) / 10
+    const modelicaRoot = findQualifiedClassNode(lazyArchive.index.classes, 'Modelica')
+
+    debug.loadMs = loadMs
+    debug.fileCount = lazyArchive.index.fileCount
+    debug.totalClasses = lazyArchive.index.totalClasses
+    debug.sourceRootUriCount = lazyArchive.index.sourceRootUris.length
+    debug.hasModelicaRoot = Boolean(modelicaRoot)
+
+    if (lazyArchive.index.fileCount <= 0 || lazyArchive.index.totalClasses <= 0) {
+      throw new Error('Taskyon lazy MSL index did not discover source files or classes')
+    }
+    if (!modelicaRoot) {
+      throw new Error('Taskyon lazy MSL index did not discover the Modelica root package')
+    }
+    if (loadMs > 2000) {
+      throw new Error(`Taskyon lazy MSL index exceeded 2000ms: ${loadMs}ms`)
+    }
+
+    return {
+      ok: true,
+      loadMs,
+      fileCount: lazyArchive.index.fileCount,
+      totalClasses: lazyArchive.index.totalClasses,
+      sourceRootUriCount: lazyArchive.index.sourceRootUris.length,
+      modelicaChildCount: Array.isArray(modelicaRoot.children) ? modelicaRoot.children.length : 0,
+    }
+  } catch (err) {
+    const baseMessage = err instanceof Error ? err.message : String(err)
+    const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
+    throw new Error([baseMessage, `Taskyon lazy MSL index debug:\n${debugDump}`].join('\n'))
+  }
+}
+testModelicaTaskyonLazyMslIndexLoadsUnderTwoSeconds.timeoutMs = 60_000
 
 function compileWithDiagnosticsMsl(
   wasm: DiagnosticsMslApi,

@@ -1,12 +1,12 @@
 import * as ModelicaDiagnostics from '../../shared/modelica/modelicaDiagnostics'
 import { runDiagnosticsTests, type TestRecord } from '../../shared/modules/diagnosticsRunner'
 import { resolveCachedModelicaLibraryZipPath } from '../../shared/modelica/modelicaLibraryCacheNode'
-import { createRequire } from 'node:module'
 import { readFile } from 'node:fs/promises'
-import { pathToFileURL } from 'node:url'
+import { dirname, join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const sharedRequire = createRequire(new URL('../../shared/package.json', import.meta.url))
-const rumocaWasmPath = sharedRequire.resolve('rumoca-full-web/rumoca_bind_wasm_bg.wasm')
+const rumocaPackageDir = dirname(fileURLToPath(import.meta.resolve('rumoca-full-web')))
+const rumocaWasmPath = join(rumocaPackageDir, 'rumoca_bind_wasm_bg.wasm')
 const rumocaWasmUrl = pathToFileURL(rumocaWasmPath).href
 const mslReleaseZipUrl =
   'https://github.com/modelica/ModelicaStandardLibrary/archive/refs/tags/v4.1.0.zip'

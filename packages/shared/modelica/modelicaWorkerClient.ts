@@ -1,3 +1,5 @@
+import type { LazyModelicaClassTreeNode } from './lazyModelicaLibraryIndex'
+
 type WorkerRequest =
   | { id: number; type: 'init'; payload?: { threads?: number } }
   | {
@@ -23,6 +25,8 @@ type WorkerRequest =
     }
   | { id: number; type: 'load_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
   | { id: number; type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
+  | { id: number; type: 'materialize_library_classes'; payload: { qualifiedNames: string[] } }
+  | { id: number; type: 'materialize_all_libraries' }
   | { id: number; type: 'clear_libraries' }
   | { id: number; type: 'list_classes' }
   | { id: number; type: 'get_class_info'; payload: { qualifiedName: string } }
@@ -80,6 +84,8 @@ type WorkerRequestNoId =
     }
   | { type: 'load_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
   | { type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
+  | { type: 'materialize_library_classes'; payload: { qualifiedNames: string[] } }
+  | { type: 'materialize_all_libraries' }
   | { type: 'clear_libraries' }
   | { type: 'list_classes' }
   | { type: 'get_class_info'; payload: { qualifiedName: string } }
@@ -224,6 +230,10 @@ export class ModelicaWorkerClient {
       case 'load_msl_zip':
       case 'merge_msl_zip':
         return 'Loading libraries'
+      case 'materialize_library_classes':
+        return 'Loading library classes'
+      case 'materialize_all_libraries':
+        return 'Loading full library'
       case 'list_classes':
         return 'Listing classes'
       case 'parse_source_ast':
@@ -310,9 +320,10 @@ export class ModelicaWorkerClient {
     parsedCount: number
     archiveName: string
     documentCount: number
-    loadMode?: 'index' | 'parsed'
+    loadMode?: 'lazy-index' | 'index' | 'parsed'
     classCount?: number
     sourceRootUris: string[]
+    classes?: LazyModelicaClassTreeNode[]
   }> {
     return this.request({ type: 'load_msl_zip', payload: { fileName, bytes } }, [bytes])
   }
@@ -329,6 +340,28 @@ export class ModelicaWorkerClient {
     sourceRootUris: string[]
   }> {
     return this.request({ type: 'merge_msl_zip', payload: { fileName, bytes } }, [bytes])
+  }
+
+  materializeLibraryClasses(qualifiedNames: string[]): Promise<{
+    parsedCount: number
+    insertedCount: number
+    documentCount: number
+    materializedFileCount: number
+    requestedClassCount: number
+  }> {
+    return this.request({
+      type: 'materialize_library_classes',
+      payload: { qualifiedNames },
+    })
+  }
+
+  materializeAllLibraries(): Promise<{
+    parsedCount: number
+    insertedCount: number
+    documentCount: number
+    materializedFileCount: number
+  }> {
+    return this.request({ type: 'materialize_all_libraries' })
   }
 
   clearLibraries(): Promise<{ ok: true }> {

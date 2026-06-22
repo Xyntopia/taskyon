@@ -1,11 +1,7 @@
 import { nextTick, ref, type Ref } from 'vue'
 import { Notify } from 'quasar'
 import { appendModelicaLog } from './modelica'
-import type {
-  BundledSourceRootArchive,
-  BundledSourceRootManifest,
-  ModelicaWorkerClient,
-} from './modelicaWorkerClient'
+import type { ModelicaWorkerClient } from './modelicaWorkerClient'
 import { getDefaultModelicaLibraryUrl } from './modelicaLibraryCatalog'
 
 type LibraryParsedCacheMetadata = {
@@ -45,7 +41,6 @@ export function useModelicaLibraries(params: {
   const inFlightArchiveLoads = new Map<string, Promise<void>>()
   const inFlightDownloads = new Map<string, Promise<string>>()
   let inFlightStandardMslLoad: Promise<void> | null = null
-  let bundledStandardMslArchive: BundledSourceRootArchive | null | undefined
 
   function triggerMslImport() {
     mslImportEl.value?.click()
@@ -127,11 +122,6 @@ export function useModelicaLibraries(params: {
     await writeArrayBufferToOpfs(relativePath, encoder.encode(content).buffer)
   }
 
-  async function readArrayBufferFromOpfs(relativePath: string): Promise<ArrayBuffer> {
-    const file = await readFileFromOpfs(relativePath)
-    return await file.arrayBuffer()
-  }
-
   function arrayBufferFromUint8Array(bytes: Uint8Array): ArrayBuffer {
     if (
       bytes.byteOffset === 0 &&
@@ -141,25 +131,6 @@ export function useModelicaLibraries(params: {
       return bytes.buffer
     }
     return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
-  }
-
-  async function readTextFromOpfs(relativePath: string): Promise<string> {
-    const file = await readFileFromOpfs(relativePath)
-    return await file.text()
-  }
-
-  async function deleteOpfsFile(relativePath: string): Promise<void> {
-    const root = await getOpfsRoot()
-    const parts = String(relativePath || '')
-      .split('/')
-      .filter(Boolean)
-    if (parts.length === 0) throw new Error('Missing OPFS path')
-
-    let dir: FileSystemDirectoryHandle = root
-    for (let i = 0; i < parts.length - 1; i++) {
-      dir = await dir.getDirectoryHandle(parts[i]!)
-    }
-    await dir.removeEntry(parts[parts.length - 1]!)
   }
 
   function normalizeCachedZipPath(raw: unknown): string {
@@ -203,35 +174,6 @@ export function useModelicaLibraries(params: {
     return `${MODELICA_SOURCE_ROOT_CACHE_DIR}/${archiveFingerprint}.json`
   }
 
-  async function readLibraryParsedCacheMetadata(
-    archiveFingerprint: string,
-  ): Promise<LibraryParsedCacheMetadata | null> {
-    try {
-      const raw = await readTextFromOpfs(libraryParsedCacheMetadataPath(archiveFingerprint))
-      const parsed = JSON.parse(raw) as Partial<LibraryParsedCacheMetadata>
-      if (
-        typeof parsed.archivePath !== 'string' ||
-        typeof parsed.cachePath !== 'string' ||
-        typeof parsed.archiveFingerprint !== 'string' ||
-        typeof parsed.archiveName !== 'string'
-      ) {
-        return null
-      }
-      return {
-        archiveName: parsed.archiveName,
-        archivePath: parsed.archivePath,
-        archiveFingerprint: parsed.archiveFingerprint,
-        cachePath: parsed.cachePath,
-        cacheSchemaVersion: Number(parsed.cacheSchemaVersion) || 0,
-        documentCount: Number(parsed.documentCount) || 0,
-        fileCount: Number(parsed.fileCount) || 0,
-        rumocaVersionMarker: String(parsed.rumocaVersionMarker || ''),
-      }
-    } catch {
-      return null
-    }
-  }
-
   async function writeLibraryParsedCacheMetadata(
     metadata: LibraryParsedCacheMetadata,
   ): Promise<void> {
@@ -239,18 +181,6 @@ export function useModelicaLibraries(params: {
       libraryParsedCacheMetadataPath(metadata.archiveFingerprint),
       `${JSON.stringify(metadata, null, 2)}\n`,
     )
-  }
-
-  async function deleteLibraryParsedCache(archiveFingerprint: string): Promise<void> {
-    const deleteIfPresent = async (path: string): Promise<void> => {
-      try {
-        await deleteOpfsFile(path)
-      } catch {
-        // Ignore missing entries while clearing stale cache artifacts.
-      }
-    }
-    await deleteIfPresent(libraryParsedCachePath(archiveFingerprint))
-    await deleteIfPresent(libraryParsedCacheMetadataPath(archiveFingerprint))
   }
 
   function normalizeLibraryCachePaths(paths: string[]): string[] {
@@ -326,43 +256,14 @@ export function useModelicaLibraries(params: {
         message: `Loading Modelica library archive: ${file.name}`,
       })
 
-      if (archivePath) {
-        const cacheMetadata = await readLibraryParsedCacheMetadata(fingerprint)
-        if (cacheMetadata && (await opfsFileExists(cacheMetadata.cachePath))) {
-          try {
-            const cachedBuffer = await readArrayBufferFromOpfs(cacheMetadata.cachePath)
-            const restoredCount = await worker.restoreSourceRootBinaryCache(cachedBuffer)
-            loadedArchiveFingerprints.value.add(fingerprint)
-            mslLoaded.value = true
-            mslArchiveName.value = file.name
-            mslFileCount.value = cacheMetadata.fileCount || restoredCount
-            appendModelicaLog({
-              level: 'success',
-              phase: 'general',
-              message: `Restored cached AST for ${file.name}: ${restoredCount} documents loaded`,
-            })
-            return
-          } catch (error) {
-            await deleteLibraryParsedCache(fingerprint)
-            appendModelicaLog({
-              level: 'warning',
-              phase: 'general',
-              message: `Discarded stale cached AST for ${file.name}: ${(error as Error).message}`,
-            })
-          }
-        }
-      }
-
       appendModelicaLog({
         level: 'info',
         phase: 'general',
-        message:
-          'First load of this library may take a little longer while creating the cached AST for future loads.',
+        message: 'Indexing Modelica library for fast browsing. Source files are parsed on demand.',
       })
       Notify.create({
         type: 'info',
-        message:
-          'First load of this library may take a little longer while creating the cached AST for future loads.',
+        message: 'Indexing Modelica library for fast browsing. Source files are parsed on demand.',
       })
 
       const shouldMerge = mslLoaded.value || loadedArchiveFingerprints.value.size > 0
@@ -376,11 +277,13 @@ export function useModelicaLibraries(params: {
       mslFileCount.value = result.fileCount
 
       const loadMessage =
-        result.loadMode === 'index'
+        result.loadMode === 'lazy-index'
           ? `Modelica libraries indexed: ${result.fileCount} files scanned, ${result.classCount ?? 0} classes discovered`
-          : result.loadMode === 'merge'
-            ? `Modelica libraries merged: ${result.parsedCount} files parsed`
-            : `Modelica libraries loaded: ${result.parsedCount} files parsed`
+          : result.loadMode === 'index'
+            ? `Modelica libraries indexed: ${result.fileCount} files scanned, ${result.classCount ?? 0} classes discovered`
+            : result.loadMode === 'merge'
+              ? `Modelica libraries merged: ${result.parsedCount} files parsed`
+              : `Modelica libraries loaded: ${result.parsedCount} files parsed`
 
       appendModelicaLog({
         level: 'success',
@@ -388,7 +291,12 @@ export function useModelicaLibraries(params: {
         message: loadMessage,
       })
 
-      if (archivePath && Array.isArray(result.sourceRootUris) && result.sourceRootUris.length > 0) {
+      if (
+        archivePath &&
+        result.loadMode !== 'lazy-index' &&
+        Array.isArray(result.sourceRootUris) &&
+        result.sourceRootUris.length > 0
+      ) {
         const cacheBytes = await worker.exportSourceRootBinaryCache(result.sourceRootUris)
         if (cacheBytes.length > 0) {
           const cachePath = libraryParsedCachePath(fingerprint)
@@ -428,62 +336,6 @@ export function useModelicaLibraries(params: {
 
   function resolveLibraryDownloadUrl(urlOverride?: string): string {
     return String(urlOverride || mslDownloadUrl.value || getDefaultModelicaLibraryUrl()).trim()
-  }
-
-  function isStandardMslArchive(entry: BundledSourceRootArchive): boolean {
-    const archiveId = String(entry.archiveId || '').toLowerCase()
-    const fileName = String(entry.fileName || '').toLowerCase()
-    return archiveId.includes('msl') || fileName.includes('modelicastandardlibrary')
-  }
-
-  function findBundledStandardMslArchive(
-    manifest: BundledSourceRootManifest,
-  ): BundledSourceRootArchive | null {
-    const archives = Array.isArray(manifest.archives) ? manifest.archives : []
-    return archives.find(isStandardMslArchive) ?? null
-  }
-
-  async function getBundledStandardMslArchive(): Promise<BundledSourceRootArchive | null> {
-    if (bundledStandardMslArchive !== undefined) return bundledStandardMslArchive
-    const worker = params.worker.value
-    if (!worker) throw new Error('Modelica worker not loaded')
-    const manifest = await worker.getBundledSourceRootManifest()
-    bundledStandardMslArchive = findBundledStandardMslArchive(manifest)
-    return bundledStandardMslArchive
-  }
-
-  async function tryLoadBundledStandardMsl(reason?: string): Promise<boolean> {
-    const worker = params.worker.value
-    if (!worker) throw new Error('Modelica worker not loaded')
-    const archive = await getBundledStandardMslArchive()
-    if (!archive) return false
-
-    startLoading(archive.fileName || archive.archiveId)
-    await nextTick()
-    try {
-      appendModelicaLog({
-        level: 'info',
-        phase: 'general',
-        message: `Loading bundled standard MSL${formatLoadReason(reason)}`,
-      })
-      const result = await worker.loadBundledSourceRootCache(archive.archiveId)
-      mslLoaded.value = true
-      standardMslLoaded.value = true
-      mslArchiveName.value = archive.fileName || archive.archiveId
-      mslFileCount.value = Number(archive.fileCount) || 0
-      appendModelicaLog({
-        level: 'success',
-        phase: 'general',
-        message: `Loaded bundled standard MSL: ${archive.fileName || archive.archiveId} (${result.documentCount} documents ready)`,
-      })
-      Notify.create({
-        type: 'positive',
-        message: `Loaded bundled standard MSL: ${archive.fileName || archive.archiveId}`,
-      })
-      return true
-    } finally {
-      finishLoading(archive.fileName || archive.archiveId)
-    }
   }
 
   async function downloadMslZipToOpfs(urlOverride?: string) {
@@ -604,17 +456,6 @@ export function useModelicaLibraries(params: {
       return
     }
     inFlightStandardMslLoad = (async () => {
-      try {
-        if (await tryLoadBundledStandardMsl(reason)) {
-          return
-        }
-      } catch (err) {
-        appendModelicaLog({
-          level: 'warning',
-          phase: 'general',
-          message: `Bundled standard MSL unavailable, falling back to ZIP load: ${(err as Error).message}`,
-        })
-      }
       await nextTick()
       const standardUrl = getDefaultModelicaLibraryUrl()
       if (!standardUrl) {

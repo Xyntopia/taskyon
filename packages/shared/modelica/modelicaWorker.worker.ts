@@ -4,14 +4,16 @@ import { strFromU8, unzipSync } from 'fflate'
 import { handleExtractDiagram } from './modelicadiagramGeneration'
 import { renderRumocaTemplate } from './rumocaTemplateRender'
 import baseDaeTemplate from './base_dae.jinja?raw'
+import {
+  buildLazyModelicaLibraryByteArchive,
+  selectLazyModelicaSourceUris,
+  type LazyModelicaLibraryIndex,
+} from './lazyModelicaLibraryIndex'
 
 let loadedSourceRootFiles: Record<string, string> = {}
-
-type RumocaSourceRootIndexApi = typeof rumoca & {
-  load_source_root_index?: (sourceRootsJson: string) => string
-}
-
-const rumocaSourceRootIndexApi = rumoca as RumocaSourceRootIndexApi
+let loadedSourceRootBytes: Record<string, Uint8Array> = {}
+let lazyLibraryIndex: LazyModelicaLibraryIndex | null = null
+let materializedSourceRootUris = new Set<string>()
 
 type WorkerRequest =
   | { id: number; type: 'init'; payload?: { threads?: number } }
@@ -38,6 +40,8 @@ type WorkerRequest =
     }
   | { id: number; type: 'load_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
   | { id: number; type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
+  | { id: number; type: 'materialize_library_classes'; payload: { qualifiedNames: string[] } }
+  | { id: number; type: 'materialize_all_libraries' }
   | { id: number; type: 'clear_libraries' }
   | { id: number; type: 'list_classes' }
   | { id: number; type: 'get_class_info'; payload: { qualifiedName: string } }
@@ -134,11 +138,144 @@ function getSourceRootDocumentCount(): number {
     : 0
 }
 
-function materializeLoadedSourceRootsIfNeeded(): void {
-  if (getSourceRootDocumentCount() > 0) return
-  if (Object.keys(loadedSourceRootFiles).length === 0) return
-  if (typeof rumoca.load_source_roots !== 'function') return
-  rumoca.load_source_roots(JSON.stringify(loadedSourceRootFiles))
+function parseSourceRootLoadSummary(raw: unknown): {
+  parsedCount: number
+  insertedCount: number
+  documentCount: number
+} {
+  try {
+    const parsed = JSON.parse(String(raw)) as {
+      parsed_count?: unknown
+      inserted_count?: unknown
+    }
+    return {
+      parsedCount: Number(parsed.parsed_count) || 0,
+      insertedCount: Number(parsed.inserted_count) || 0,
+      documentCount: getSourceRootDocumentCount(),
+    }
+  } catch {
+    return {
+      parsedCount: 0,
+      insertedCount: 0,
+      documentCount: getSourceRootDocumentCount(),
+    }
+  }
+}
+
+function loadSourceRootSubset(subset: Record<string, string>): {
+  parsedCount: number
+  insertedCount: number
+  documentCount: number
+} {
+  const uris = Object.keys(subset)
+  if (uris.length === 0) {
+    return {
+      parsedCount: 0,
+      insertedCount: 0,
+      documentCount: getSourceRootDocumentCount(),
+    }
+  }
+  if (typeof rumoca.load_source_roots !== 'function') {
+    throw new Error('Rumoca wasm export missing: load_source_roots')
+  }
+  const raw = rumoca.load_source_roots(JSON.stringify(subset))
+  materializedSourceRootUris = new Set(uris)
+  return parseSourceRootLoadSummary(raw)
+}
+
+function availableSourceRootUris(): string[] {
+  return Array.from(
+    new Set([...Object.keys(loadedSourceRootFiles), ...Object.keys(loadedSourceRootBytes)]),
+  )
+}
+
+function decodeSourceRootUri(uri: string): string | null {
+  const existing = loadedSourceRootFiles[uri]
+  if (typeof existing === 'string') return existing
+  const bytes = loadedSourceRootBytes[uri]
+  if (!bytes) return null
+  const decoded = strFromU8(bytes)
+  loadedSourceRootFiles[uri] = decoded
+  return decoded
+}
+
+function decodeSourceRootSubset(uris: string[]): Record<string, string> {
+  const subset: Record<string, string> = {}
+  for (const uri of uris) {
+    const source = decodeSourceRootUri(uri)
+    if (source != null) subset[uri] = source
+  }
+  return subset
+}
+
+function materializeLibraryClasses(qualifiedNames: string[]): {
+  parsedCount: number
+  insertedCount: number
+  documentCount: number
+  materializedFileCount: number
+  requestedClassCount: number
+} {
+  const availableUris = availableSourceRootUris()
+  if (availableUris.length === 0) {
+    return {
+      parsedCount: 0,
+      insertedCount: 0,
+      documentCount: getSourceRootDocumentCount(),
+      materializedFileCount: 0,
+      requestedClassCount: qualifiedNames.length,
+    }
+  }
+  const selectedUris = selectLazyModelicaSourceUris(
+    lazyLibraryIndex,
+    qualifiedNames,
+    availableUris,
+    materializedSourceRootUris,
+  )
+  const subset = decodeSourceRootSubset(selectedUris)
+  const loaded = loadSourceRootSubset(subset)
+  return {
+    ...loaded,
+    materializedFileCount: materializedSourceRootUris.size,
+    requestedClassCount: qualifiedNames.length,
+  }
+}
+
+function materializeAllLibraries(): {
+  parsedCount: number
+  insertedCount: number
+  documentCount: number
+  materializedFileCount: number
+} {
+  const subset = decodeSourceRootSubset(availableSourceRootUris())
+  const loaded = loadSourceRootSubset(subset)
+  return {
+    ...loaded,
+    materializedFileCount: materializedSourceRootUris.size,
+  }
+}
+
+function errorSuggestsMissingSourceRoot(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /not found|unknown|missing|unresolved|failed to resolve|cannot resolve/i.test(message)
+}
+
+function referencedModelicaClassNames(source: string): string[] {
+  const matches = source.match(/\bModelica(?:\.[A-Za-z_][A-Za-z0-9_]*)+/g) ?? []
+  return Array.from(new Set(matches))
+}
+
+function compileWithLazySourceRoots(source: string, modelName: string): string {
+  if (typeof rumoca.compile_with_source_roots !== 'function') {
+    return rumoca.compile_to_json(source, modelName)
+  }
+  materializeLibraryClasses([modelName, ...referencedModelicaClassNames(source)])
+  try {
+    return rumoca.compile_with_source_roots(source, modelName, '{}')
+  } catch (error) {
+    if (!errorSuggestsMissingSourceRoot(error)) throw error
+    materializeAllLibraries()
+    return rumoca.compile_with_source_roots(source, modelName, '{}')
+  }
 }
 
 async function handleInit(payload: { threads?: number } | undefined): Promise<unknown> {
@@ -177,12 +314,9 @@ async function handleInit(payload: { threads?: number } | undefined): Promise<un
 function handleCompileRender(payload: CompileRenderPayload): unknown {
   const source = payload.modelicaSource
   const modelName = payload.modelName || 'Model'
-  if (payload.useSourceRoots) {
-    materializeLoadedSourceRootsIfNeeded()
-  }
   const compileRaw =
     payload.useSourceRoots && typeof rumoca.compile_with_source_roots === 'function'
-      ? rumoca.compile_with_source_roots(source, modelName, '{}')
+      ? compileWithLazySourceRoots(source, modelName)
       : rumoca.compile_to_json(source, modelName)
 
   const compiled = JSON.parse(String(compileRaw)) as Record<string, unknown>
@@ -220,7 +354,10 @@ function handleCompileRender(payload: CompileRenderPayload): unknown {
 
 function handleRenderModelicaView(payload: RenderModelicaViewPayload): unknown {
   if (payload.useSourceRoots) {
-    materializeLoadedSourceRootsIfNeeded()
+    materializeLibraryClasses([
+      payload.modelName,
+      ...referencedModelicaClassNames(payload.modelicaSource),
+    ])
   }
 
   const renderModelicaView = Reflect.get(rumoca, 'render_modelica_view')
@@ -236,58 +373,24 @@ function handleRenderModelicaView(payload: RenderModelicaViewPayload): unknown {
 
 function handleLoadMslZip(payload: { fileName: string; bytes: ArrayBuffer }): unknown {
   const archive = unzipSync(new Uint8Array(payload.bytes))
-  const libraries: Record<string, string> = {}
-
-  for (const [rawPath, content] of Object.entries(archive)) {
-    const lowerPath = rawPath.toLowerCase()
-    if (!lowerPath.endsWith('.mo')) continue
-    if (rawPath.includes('Test') || rawPath.includes('Obsolete')) continue
-    libraries[sanitizeLibraryPath(rawPath)] = strFromU8(content)
-  }
-
-  const fileCount = Object.keys(libraries).length
+  const lazyArchive = buildLazyModelicaLibraryByteArchive(archive)
+  const fileCount = Object.keys(lazyArchive.sources).length
   if (fileCount === 0) {
     throw new Error('No usable .mo files found in archive')
   }
-  const sourceRootUris = Object.keys(libraries).sort((lhs, rhs) => lhs.localeCompare(rhs))
-  loadedSourceRootFiles = libraries
-  if (typeof rumocaSourceRootIndexApi.load_source_root_index === 'function') {
-    const resultRaw = rumocaSourceRootIndexApi.load_source_root_index(JSON.stringify(libraries))
-    let classCount = 0
-    try {
-      const parsed = JSON.parse(String(resultRaw)) as { class_count?: unknown }
-      const maybeCount = Number(parsed.class_count)
-      if (Number.isFinite(maybeCount)) classCount = maybeCount
-    } catch {
-      classCount = 0
-    }
-    return {
-      fileCount,
-      parsedCount: fileCount,
-      archiveName: payload.fileName,
-      documentCount: getSourceRootDocumentCount(),
-      loadMode: 'index',
-      classCount,
-      sourceRootUris,
-    }
-  }
-
-  const resultRaw = rumoca.load_source_roots(JSON.stringify(libraries))
-  let parsedCount = fileCount
-  try {
-    const parsed = JSON.parse(String(resultRaw)) as { parsed_count?: unknown }
-    const maybeCount = Number(parsed.parsed_count)
-    if (Number.isFinite(maybeCount)) parsedCount = maybeCount
-  } catch {
-    parsedCount = fileCount
-  }
+  loadedSourceRootFiles = {}
+  loadedSourceRootBytes = lazyArchive.sources
+  lazyLibraryIndex = lazyArchive.index
+  materializedSourceRootUris = new Set()
   return {
     fileCount,
-    parsedCount,
+    parsedCount: 0,
     archiveName: payload.fileName,
     documentCount: getSourceRootDocumentCount(),
-    loadMode: 'parsed',
-    sourceRootUris,
+    loadMode: 'lazy-index',
+    classCount: lazyArchive.index.totalClasses,
+    sourceRootUris: lazyArchive.index.sourceRootUris,
+    classes: lazyArchive.index.classes,
   }
 }
 
@@ -326,6 +429,9 @@ function handleMergeMslZip(payload: { fileName: string; bytes: ArrayBuffer }): u
     ...loadedSourceRootFiles,
     ...libraries,
   }
+  loadedSourceRootBytes = {}
+  lazyLibraryIndex = null
+  materializedSourceRootUris = new Set(Object.keys(loadedSourceRootFiles))
   return {
     fileCount,
     parsedCount: mergedCount,
@@ -337,13 +443,26 @@ function handleMergeMslZip(payload: { fileName: string; bytes: ArrayBuffer }): u
 }
 
 function handleListClasses(): unknown {
+  if (lazyLibraryIndex) {
+    return {
+      total_classes: lazyLibraryIndex.totalClasses,
+      classes: lazyLibraryIndex.classes,
+    }
+  }
   const raw = rumoca.list_classes()
   return JSON.parse(String(raw))
 }
 
 function handleGetClassInfo(payload: { qualifiedName: string }): unknown {
-  materializeLoadedSourceRootsIfNeeded()
-  const raw = rumoca.get_class_info(payload.qualifiedName)
+  materializeLibraryClasses([payload.qualifiedName])
+  let raw: string
+  try {
+    raw = rumoca.get_class_info(payload.qualifiedName)
+  } catch (error) {
+    if (!errorSuggestsMissingSourceRoot(error)) throw error
+    materializeAllLibraries()
+    raw = rumoca.get_class_info(payload.qualifiedName)
+  }
   return JSON.parse(String(raw))
 }
 
@@ -448,7 +567,10 @@ function handleGetSimulationModels(payload: { source: string; defaultModel?: str
   if (typeof rumoca.get_simulation_models !== 'function') {
     throw new Error('Rumoca wasm export missing: get_simulation_models')
   }
-  materializeLoadedSourceRootsIfNeeded()
+  materializeLibraryClasses([
+    asString(payload.defaultModel),
+    ...referencedModelicaClassNames(payload.source),
+  ])
   return JSON.parse(
     String(rumoca.get_simulation_models(payload.source, asString(payload.defaultModel))),
   ) as Record<string, unknown>
@@ -464,7 +586,7 @@ function handleStartSimulation(payload: {
   if (typeof rumoca.simulate_model !== 'function') {
     throw new Error('Simulation not available in this WASM build. Rebuild with rumoca-sim enabled.')
   }
-  materializeLoadedSourceRootsIfNeeded()
+  materializeLibraryClasses([payload.modelName, ...referencedModelicaClassNames(payload.source)])
   const raw = String(
     rumoca.simulate_model(
       payload.source,
@@ -472,6 +594,7 @@ function handleStartSimulation(payload: {
       Number(payload.tEnd) || 0,
       Number(payload.dt) || 0,
       asString(payload.solver) || 'auto',
+      '{}',
     ),
   )
   return JSON.parse(raw) as Record<string, unknown>
@@ -492,6 +615,9 @@ function handleLoadBundledSourceRootCache(payload: { archiveId: string }): unkno
   if (!archiveId) throw new Error('Missing bundled archive id')
   rumoca.load_bundled_source_root_cache(archiveId)
   loadedSourceRootFiles = {}
+  loadedSourceRootBytes = {}
+  lazyLibraryIndex = null
+  materializedSourceRootUris = new Set()
   return {
     archiveId,
     documentCount: getSourceRootDocumentCount(),
@@ -499,7 +625,7 @@ function handleLoadBundledSourceRootCache(payload: { archiveId: string }): unkno
 }
 
 function handleExportSourceRootBinaryCache(payload: { uris: string[] }): Uint8Array {
-  materializeLoadedSourceRootsIfNeeded()
+  materializeAllLibraries()
   if (typeof rumoca.export_parsed_source_roots_binary !== 'function') {
     throw new Error('Rumoca wasm export missing: export_parsed_source_roots_binary')
   }
@@ -515,6 +641,9 @@ function handleRestoreSourceRootBinaryCache(payload: { bytes: ArrayBuffer }): nu
     throw new Error('Rumoca wasm export missing: merge_parsed_source_roots_binary')
   }
   loadedSourceRootFiles = {}
+  loadedSourceRootBytes = {}
+  lazyLibraryIndex = null
+  materializedSourceRootUris = new Set()
   return Number(rumoca.merge_parsed_source_roots_binary(new Uint8Array(payload.bytes))) || 0
 }
 
@@ -538,9 +667,18 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       case 'merge_msl_zip':
         result = handleMergeMslZip(msg.payload)
         break
+      case 'materialize_library_classes':
+        result = materializeLibraryClasses(msg.payload.qualifiedNames)
+        break
+      case 'materialize_all_libraries':
+        result = materializeAllLibraries()
+        break
       case 'clear_libraries':
         rumoca.clear_source_root_cache()
         loadedSourceRootFiles = {}
+        loadedSourceRootBytes = {}
+        lazyLibraryIndex = null
+        materializedSourceRootUris = new Set()
         result = { ok: true }
         break
       case 'list_classes':
@@ -550,7 +688,10 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         result = handleGetClassInfo(msg.payload)
         break
       case 'extract_diagram':
-        materializeLoadedSourceRootsIfNeeded()
+        materializeLibraryClasses([
+          asString(msg.payload.qualifiedName),
+          ...referencedModelicaClassNames(msg.payload.source),
+        ])
         result = handleExtractDiagram(msg.payload, () => loadedSourceRootFiles)
         break
       case 'parse_source_ast':
