@@ -173,18 +173,18 @@ const parseBoundsFromHeader = (header: unknown): [number, number, number, number
 let resizeObserver: ResizeObserver | null = null
 
 interface GenericMapProps {
-  initialCenter?: [number, number]
-  initialZoom?: number
-  useDefaultTileLayer?: boolean
-  mapStyle?: string | StyleSpecification | undefined
-  tileLayerUrl?: string | undefined
-  tileLayerOptions?: Record<string, unknown> | undefined
-  placeName?: string | undefined
-  worldPmtilesUrl?: string | undefined
-  parcelsPmtilesUrl?: string | undefined
-  showParcelsLayer?: boolean | undefined
-  autoFitParcelsBounds?: boolean | undefined
-  showNavigationControls?: boolean | undefined
+  initialCenter: [number, number]
+  initialZoom: number
+  useDefaultTileLayer: boolean
+  mapStyle?: string | StyleSpecification
+  tileLayerUrl?: string
+  tileLayerOptions?: Record<string, unknown>
+  placeName?: string
+  worldPmtilesUrl?: string
+  parcelsPmtilesUrl?: string
+  showParcelsLayer?: boolean
+  autoFitParcelsBounds?: boolean
+  showNavigationControls?: boolean
 }
 
 const props = withDefaults(defineProps<GenericMapProps>(), {
@@ -192,9 +192,6 @@ const props = withDefaults(defineProps<GenericMapProps>(), {
   initialZoom: 10,
   useDefaultTileLayer: true,
   mapStyle: 'minimal',
-  tileLayerUrl: undefined,
-  tileLayerOptions: undefined,
-  placeName: undefined,
   worldPmtilesUrl: WORLD_PM_URL,
   parcelsPmtilesUrl: PARCELS_PM_URL,
   showParcelsLayer: true,

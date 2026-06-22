@@ -421,8 +421,8 @@ const buildVariableNodes = (
       ...(effectiveSubschema ? { schema: effectiveSubschema } : {}),
     }
 
-    const icon = getByPath(newPath)(options.icons)
-    if (typeof icon === 'string') base.icon = icon
+    const icon = getByPath(newPath)(options.icons) as string | undefined
+    if (icon) base.icon = icon
     if (effectiveSubschema?.icon) base.icon = effectiveSubschema.icon
     if (effectiveSubschema?.offIcon) base.offIcon = effectiveSubschema.offIcon
     if (effectiveSubschema?.onIcon) base.onIcon = effectiveSubschema.onIcon

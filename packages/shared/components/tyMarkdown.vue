@@ -30,18 +30,9 @@
 <script setup lang="ts">
 import { getCssVar, useQuasar } from 'quasar'
 import { containsHtmlTags, hasMarkdownElements } from '../modules/markdownDetection'
-import {
-  decodeInlineActionPayload,
-  generateIframeSrc,
-  initPrismTheme,
-  md2Html,
-  preprocessMarkdownSource,
-  resolveMarkdownExtensions,
-  tyMdCssUrls,
-  type MarkdownExtension,
-} from '../modules/markdownUtils '
+import { generateIframeSrc, initPrismTheme, md2Html, tyMdCssUrls } from '../modules/markdownUtils '
 import { asyncComputed } from '../modules/vueUtils'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 // https://mdit-plugins.github.io/mathjax.html#usage
@@ -53,28 +44,10 @@ const emit = defineEmits<{
   (e: 'iframe-ready', el: HTMLIFrameElement): void
   (e: 'ifLongpress', pos: { x: number; y: number }): void
   (e: 'ifClick', pos: { x: number; y: number }): void
-  (e: 'inlineAction', data: { action: string; payload: unknown }): void
 }>()
-
-const dispatchInlineAction = (action: string, payload: unknown) => {
-  const handler = inlineActionHandlers.value[action]
-  if (handler) {
-    void handler(payload)
-    return
-  }
-  emit('inlineAction', { action, payload })
-}
 
 function handleMarkdownClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
-  const inlineAction = target?.closest('[data-inline-action]') as HTMLElement | null
-  if (inlineAction) {
-    event.preventDefault()
-    const action = inlineAction.dataset.inlineAction
-    if (!action) return
-    dispatchInlineAction(action, decodeInlineActionPayload(inlineAction.dataset.inlinePayload))
-    return
-  }
   const link = target?.closest('a[href]') as HTMLAnchorElement | null
   if (!link) return
   const href = link.getAttribute('href') || ''
@@ -131,58 +104,28 @@ initPrismTheme($q.dark.isActive)
 const router = useRouter()
 const route = useRoute()
 
-const {
-  src = undefined,
-  useIframe = false,
-  extensions = [],
-} = defineProps<{
+const { src = undefined, useIframe = false } = defineProps<{
   src?: string
   useIframe?: boolean
-  extensions?: MarkdownExtension[]
 }>()
-
-const resolvedExtensions = computed(() => resolveMarkdownExtensions(extensions))
-const inlineActionHandlers = computed(
-  () =>
-    Object.assign(
-      {},
-      ...resolvedExtensions.value.map((extension) => extension.actionHandlers ?? {}),
-    ) as Record<string, (payload: unknown) => void | Promise<void>>,
-)
 
 const renderedHtml = asyncComputed(
   async () => {
     const raw = src ?? ''
-    const prepared = await preprocessMarkdownSource(raw, extensions)
     if (!useIframe) {
       // No iframe: render as markdown with HTML disabled (extra safety)
-      return {
-        html: await md2Html(
-          prepared.src,
-          $q.dark.isActive,
-          prepared.allowHtml,
-          resolvedExtensions.value,
-        ),
-        iframe: false,
-      }
+      return { html: await md2Html(raw, $q.dark.isActive, false), iframe: false }
     }
-    const hasHtmlTags = prepared.allowHtml || containsHtmlTags(prepared.src)
-    if (!hasHtmlTags)
-      return {
-        html: await md2Html(prepared.src, $q.dark.isActive, false, resolvedExtensions.value),
-        iframe: false,
-      }
-    const hasMdElements = hasMarkdownElements(prepared.src)
+    const hasHtmlTags = containsHtmlTags(raw)
+    if (!hasHtmlTags) return { html: await md2Html(raw, $q.dark.isActive, false), iframe: false }
+    const hasMdElements = hasMarkdownElements(raw)
     const isPureHtml = hasHtmlTags && !hasMdElements // 1) has real HTML (outside code)
     // useIframe = true:
     // pure HTML => don't run through markdown-it, just show raw HTML in iframe
-    if (isPureHtml) return { html: prepared.src, iframe: true }
+    if (isPureHtml) return { html: raw, iframe: true }
 
     // possibly with HTML outside code => markdown-it with html enabled
-    return {
-      html: await md2Html(prepared.src, $q.dark.isActive, true, resolvedExtensions.value),
-      iframe: true,
-    }
+    return { html: await md2Html(raw, $q.dark.isActive, true), iframe: true }
   },
   { html: 'rendering ...', iframe: false },
 )
@@ -304,12 +247,6 @@ function handleMessage(event: MessageEvent) {
   if (event.data?.type === 'linkClick') {
     const href = String(event.data?.href || '')
     if (href) openMarkdownLink(href)
-  }
-
-  if (event.data?.type === 'inlineAction') {
-    const action = String(event.data?.action || '')
-    if (!action) return
-    dispatchInlineAction(action, decodeInlineActionPayload(event.data?.payload))
   }
 }
 

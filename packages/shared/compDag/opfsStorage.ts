@@ -55,3 +55,40 @@ export async function writeFile(path: string, file: File): Promise<void> {
   await writable.write(file)
   await writable.close()
 }
+
+/**
+ * Deletes a file from OPFS if it exists.
+ *
+ * @param path the OPFS path to delete
+ */
+export async function deleteFile(path: string): Promise<void> {
+  const root = await getRoot()
+  const parts = path.split('/').filter((p) => p.length > 0)
+  if (parts.length === 0) return
+  const fileName = parts[parts.length - 1]!
+  let dir = root
+  for (const part of parts.slice(0, -1)) {
+    dir = await dir.getDirectoryHandle(part, { create: false })
+  }
+  await dir.removeEntry(fileName)
+}
+
+/**
+ * Lists file names directly under the given directory path.
+ *
+ * @param dirPath the OPFS directory path
+ * @returns file names in the directory (not recursive)
+ */
+export async function listFiles(dirPath: string): Promise<string[]> {
+  const root = await getRoot()
+  const parts = dirPath.split('/').filter((p) => p.length > 0)
+  let dir = root
+  for (const part of parts) {
+    dir = await dir.getDirectoryHandle(part, { create: false })
+  }
+  const out: string[] = []
+  for await (const [name, handle] of dir.entries()) {
+    if (handle.kind === 'file') out.push(name)
+  }
+  return out
+}

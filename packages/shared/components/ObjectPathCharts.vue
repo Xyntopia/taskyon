@@ -591,17 +591,7 @@ const props = withDefaults(
     lazy?: boolean
   }>(),
   {
-    source: null,
-    mapRows: null,
-    mapRuns: null,
-    pathUnits: null,
-    pathOptions: null,
-    pathKindByPath: null,
-    seriesResolver: null,
-    plotPayloadResolver: null,
-    mapPayloadResolver: null,
     showAddMapButton: true,
-    favoriteKeys: null,
     showControls: true,
     enableDefaultPlotRenderer: true,
     lazy: false,

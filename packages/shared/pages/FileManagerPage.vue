@@ -235,7 +235,7 @@ async function getDirectoryStats(dir: DirHandle, dirPath: string): Promise<Direc
     for await (const [name, handle] of dir.entries()) {
       const fullPath = dirPath ? `${dirPath}/${name}` : name
       if (handle.kind === 'file') {
-        const file = await (handle).getFile()
+        const file = await (handle as FileSystemFileHandle).getFile()
         totalSize += file.size
         fileCount += 1
         if (latestModified == null || file.lastModified > latestModified) {
@@ -290,7 +290,7 @@ async function dirHandleToNodes(dir: DirHandle, parentPath = ''): Promise<TreeNo
     const fullPath = parentPath ? `${parentPath}/${name}` : name
 
     if (handle.kind === 'file') {
-      const fileHandle = handle
+      const fileHandle = handle as FileSystemFileHandle
       const file = await fileHandle.getFile()
       out.push({
         id: fullPath,

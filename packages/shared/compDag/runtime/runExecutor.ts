@@ -35,6 +35,15 @@ const objectiveKeyOf = (objective: Objective): string => {
   return `${objective.target.path}|${op}${index}`
 }
 
+const describeUnknownError = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  try {
+    return typeof error === 'string' ? error : JSON.stringify(error)
+  } catch {
+    return String(error)
+  }
+}
+
 const compareObjectives = (
   a: ObjectiveMap,
   b: ObjectiveMap,
@@ -287,8 +296,10 @@ export const createRunExecutorService = (deps?: { now?: () => number }) => {
       }
       await updateRunProgress(`Running combo ${i + 1} of ${totalCombos}`)
 
-        let comboRowCounter = 0
-        const studyResult = await node.call(validated).study(
+      let comboRowCounter = 0
+      let studyResult: StudyResult<unknown>
+      try {
+        studyResult = await node.call(validated).study(
           {
             ...commonStudyOpts,
             onRow: async (event: StudyRowEvent<unknown>) => {
@@ -427,11 +438,19 @@ export const createRunExecutorService = (deps?: { now?: () => number }) => {
                 }
               }
             }
+            },
           },
-        },
-        input.defaultNodeCtx,
-        input.engineConfig,
-      )
+          input.defaultNodeCtx,
+          input.engineConfig,
+        )
+      } catch (error) {
+        const detail = describeUnknownError(error)
+        const wrapped = new Error(
+          `Run executor failed in node "${node.name}" during combo ${i + 1}/${totalCombos}: ${detail}`,
+        )
+        ;(wrapped as Error & { cause?: unknown }).cause = error
+        throw wrapped
+      }
 
       input.onModelLog('Study result received', {
         comboIndex: i,

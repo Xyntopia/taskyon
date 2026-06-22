@@ -528,8 +528,6 @@ interface Entry {
  */
 export function createIframeMux<I extends string | number | symbol = string>(sweepEvery = 5) {
   const { stream: all$, emit } = createStream<BusMsg<I>>()
-  const messageHost: Pick<EventTarget, 'addEventListener' | 'removeEventListener'> =
-    typeof window !== 'undefined' ? window : new EventTarget()
 
   const winToId = new WeakMap<Window, I>()
   const idToEntry = new Map<I, Entry>()
@@ -540,7 +538,7 @@ export function createIframeMux<I extends string | number | symbol = string>(swe
     if (!id) return
     emit({ id, payload: ev.data })
   }
-  messageHost.addEventListener('message', onMessage as EventListener)
+  window.addEventListener('message', onMessage)
 
   const attachIframe = (id: I, iframe: HTMLIFrameElement, origin?: string) => {
     const win = iframe.contentWindow
@@ -549,9 +547,10 @@ export function createIframeMux<I extends string | number | symbol = string>(swe
     winToId.set(win, id)
 
     // Infer origin unless caller overrides. srcdoc/about:srcdoc => "null"
-    const hrefBase = typeof window !== 'undefined' ? window.location.href : 'http://localhost/'
     const inferred =
-      iframe.src && iframe.src !== 'about:srcdoc' ? new URL(iframe.src, hrefBase).origin : 'null'
+      iframe.src && iframe.src !== 'about:srcdoc'
+        ? new URL(iframe.src, window.location.href).origin
+        : 'null'
 
     const expected = origin ?? inferred
     const postTarget = expected === 'null' ? '*' : expected
@@ -597,7 +596,7 @@ export function createIframeMux<I extends string | number | symbol = string>(swe
   }
 
   const scheduleSweep = () => {
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    if ('requestIdleCallback' in window) {
       window.requestIdleCallback(sweep, { timeout: 200 })
     } else {
       setTimeout(sweep, 0)
@@ -607,7 +606,7 @@ export function createIframeMux<I extends string | number | symbol = string>(swe
   const gc = sweep
 
   const destroy = () => {
-    messageHost.removeEventListener('message', onMessage as EventListener)
+    window.removeEventListener('message', onMessage)
     idToEntry.clear()
     // WeakMaps auto-GC
   }

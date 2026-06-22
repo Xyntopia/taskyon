@@ -1,7 +1,6 @@
 // modelicaTools.ts
 
 import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/tyclient'
-import { applyLinePatches, type LinePatchOperation } from '@taskyon/taskyon/tools/filePatching'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'
 import { serializeObject } from '../modules/serializeObject'
@@ -22,6 +21,13 @@ type ModelicaLogEntry = {
   message: string
   phase?: string
   details?: unknown
+}
+
+type LinePatchOperation = {
+  type: 'replace' | 'insert' | 'delete'
+  lineStart: number
+  lineEnd?: number
+  text?: string
 }
 
 type ModelicaDocumentUpdate = {
@@ -49,6 +55,34 @@ function formatContentWithLineNumbers(content: string): string {
       return `${lineNum}: ${line}`
     })
     .join('\n')
+}
+
+function applyLinePatches(text: string, patches: LinePatchOperation[]): string {
+  const lines = (text ?? '').split('\n')
+  const sortedPatches = [...patches].sort((a, b) => b.lineStart - a.lineStart)
+
+  for (const patch of sortedPatches) {
+    const startIdx = patch.lineStart - 1
+    if (startIdx < 0) continue
+
+    if (patch.type === 'insert') {
+      const newLines = (patch.text || '').split('\n')
+      lines.splice(startIdx, 0, ...newLines)
+      continue
+    }
+
+    const endLine = patch.lineEnd ?? patch.lineStart
+    const deleteCount = endLine - patch.lineStart + 1
+
+    if (patch.type === 'delete') {
+      lines.splice(startIdx, deleteCount)
+    } else if (patch.type === 'replace') {
+      const newLines = (patch.text || '').split('\n')
+      lines.splice(startIdx, deleteCount, ...newLines)
+    }
+  }
+
+  return lines.join('\n')
 }
 
 function extractCompileStatus(logs: ModelicaLogEntry[]) {

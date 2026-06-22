@@ -82,6 +82,18 @@
       @change="onLibraryImportChange"
     />
     <q-separator />
+    <q-banner
+      v-if="mslBusy || activeLibraryLoads.length > 0"
+      dense
+      rounded
+      class="q-ma-sm bg-blue-1 text-blue-10"
+    >
+      <div class="text-weight-medium">Loading libraries...</div>
+      <div v-if="activeLibraryLoads.length > 0" class="text-caption">
+        {{ activeLibraryLoads.join(', ') }}
+      </div>
+      <div v-else class="text-caption">Preparing library import...</div>
+    </q-banner>
     <div class="col" style="overflow: hidden">
       <q-virtual-scroll
         v-if="visibleRows.length > 0"

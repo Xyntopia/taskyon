@@ -620,6 +620,7 @@
                   v-model:options="plotViewOptions"
                   :source="plotSourceData"
                   :path-units="plotPathUnits"
+                  :show-add-map-button="false"
                 />
               </q-card-section>
             </q-card>
@@ -714,6 +715,7 @@ import {
   matShowChart,
 } from '@quasar/extras/material-icons'
 import { mdiFileTreeOutline, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
+import { toolCall } from '@taskyon/tyclient'
 import { watchDebounced } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { Dialog, Notify } from 'quasar'
@@ -742,7 +744,7 @@ import {
   runModelicaSandbox,
 } from './modelica'
 import defaultUiTemplateSource from './ui_template_placeholders.html?raw'
-import type { partialTyConfiguration } from '../../tyclient/src'
+import type { partialTyConfiguration } from '@taskyon/tyclient'
 import { copyToClipboard } from '../modules/utils'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useAttrs, watch } from 'vue'
 import { EditorState, type Extension } from '@codemirror/state'
@@ -1367,8 +1369,8 @@ const daeAnalysis = computed<ModelicaDaeAnalysis>(() => {
           : 'Underdetermined solve slice (likely partitioning issue).'
   const hasDummyState = Boolean(
     modelShape.hasOnlyDummyState ||
-    (nx === 1 &&
-      Object.prototype.hasOwnProperty.call((dae.x ?? {}) as object, '_rumoca_dummy_state')),
+      (nx === 1 &&
+        Object.prototype.hasOwnProperty.call((dae.x ?? {}) as object, '_rumoca_dummy_state')),
   )
   const executionMode =
     typeof resultMeta.executionMode === 'string'
@@ -1869,12 +1871,8 @@ const configuration = computed<partialTyConfiguration | null>(() => {
   const customAppConfiguration = props.taskyonConfiguration?.appConfiguration ?? {}
   return {
     llmSettings: {
-      entryFunction: 'modelicaDocumentAssistant',
-    },
-    toolchainConfig: {
-      modelicaDocumentAssistant: {
-        useTools: true,
-      },
+      enableToolChooser: true,
+      entryNode: toolCall({ name: 'modelicaDocumentAssistant', arguments: {} }),
     },
     appConfiguration: {
       guiMode: 'minChat',

@@ -18,6 +18,25 @@ const modelRunLogs = ref<LogEntry[]>([])
 const unifiedRunLogs = ref<UnifiedLogEntry[]>([])
 let unifiedLogSeq = 0
 
+const emitToBrowserConsole = (
+  source: string,
+  message: string,
+  data: unknown,
+  level: LogLevel,
+): void => {
+  const prefix = '[JOULIOS]'
+  const tag = `[${source}]`
+  if (level === 'error') {
+    console.error(prefix, tag, message, data ?? '')
+    return
+  }
+  if (level === 'warn') {
+    console.warn(prefix, tag, message, data ?? '')
+    return
+  }
+  console.info(prefix, tag, message, data ?? '')
+}
+
 const appendLog = (source: string, message: string, data?: unknown, level: LogLevel = 'info') => {
   unifiedRunLogs.value.push({
     id: (unifiedLogSeq += 1),
@@ -31,6 +50,8 @@ const appendLog = (source: string, message: string, data?: unknown, level: LogLe
   if (unifiedRunLogs.value.length > 1200) {
     unifiedRunLogs.value.splice(0, unifiedRunLogs.value.length - 1200)
   }
+
+  emitToBrowserConsole(source, message, data, level)
 }
 
 const appendModelRunLog = (message: string, data?: unknown, level: LogLevel = 'info') => {
@@ -92,4 +113,3 @@ export const useSharedRunLogs = () => ({
   appendChartsLog,
   clearLogs,
 })
-

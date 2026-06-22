@@ -25,7 +25,7 @@ const props = withDefaults(
     persist?: boolean
     name: string
     url?: string
-    profileName?: string | undefined
+    profileName?: string
     bindingKey?: CryptoKey | string | null
     missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
   }>(),
@@ -34,7 +34,6 @@ const props = withDefaults(
     configuration: () => ({}),
     persist: false,
     url: '',
-    profileName: undefined,
     bindingKey: null,
     missingBindingKeyPolicy: 'deriveFromProfile',
   },

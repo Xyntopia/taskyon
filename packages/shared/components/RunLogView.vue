@@ -54,12 +54,6 @@ const scrollHeight = computed(() => '220px')
 const formatTimestamp = (atMs: number): string =>
   new Date(atMs).toISOString().replace('T', ' ').slice(0, 19)
 
-const toErrorMessage = (value: unknown): string => {
-  if (value instanceof Error) return value.message
-  if (typeof value === 'string') return value
-  return Object.prototype.toString.call(value)
-}
-
 const formatData = (value: unknown): string => {
   if (value == null) return ''
   if (typeof value === 'string') return value
@@ -89,12 +83,12 @@ const copyText = computed(() =>
 
 const copyAllLogs = () => {
   try {
-    void copyToClipboard(copyText.value)
+    copyToClipboard(copyText.value)
     $q.notify({ type: 'positive', message: 'Logs copied to clipboard.' })
   } catch (error: unknown) {
     $q.notify({
       type: 'negative',
-      message: `Could not copy logs: ${toErrorMessage(error)}`,
+      message: `Could not copy logs: ${Object.prototype.toString.call(error)}`,
     })
   }
 }
