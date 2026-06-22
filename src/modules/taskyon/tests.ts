@@ -59,6 +59,13 @@ import { extractBrowserAccessActivity } from './browserAccess'
 import { runLibp2pBrowserMessageExchangeTest } from './libp2pBrowserDiagnostics'
 import { gDriveSyncPort } from './sync'
 import { resolveShownTaskChainResponse, trackShownTaskChainRequest } from './taskChainNavigation'
+import { isBrowserRecordNamespace } from '../taskyonStorageNamespaces'
+import {
+  createInitialState as createInitialRankingState,
+  getRanking,
+  parseRankingState,
+  trainPythonModel,
+} from '../../pages/apps/ranking'
 
 // Assuming hasMarkdownElements and containsHtmlTags are in scope
 // import { hasMarkdownElements, containsHtmlTags } from './your-module'
@@ -177,6 +184,35 @@ export function testTaskExecutionProgressReduction() {
 }
 testTaskExecutionProgressReduction.description =
   'Reduces completion and worker streams into shared transient task execution progress.'
+
+export const testRankingUsesInjectedPythonRunner = async () => {
+  const state = createInitialRankingState({ modelType: 'svm' })
+  state.candidates = {
+    '0': { id: '0', name: 'Alpha', vec: [1, 0] },
+    '1': { id: '1', name: 'Beta', vec: [0, 1] },
+  }
+  state.duels = [{ leftId: '0', rightId: '1', winner: 0 }]
+
+  const trainingScripts: string[] = []
+  const trained = await trainPythonModel(state, (code) => {
+    trainingScripts.push(code)
+    return Promise.resolve({ stdout: '', result: 'serialized-model' })
+  })
+  assert(trained.ok && trained.data === 'serialized-model', 'Expected injected Python training')
+  assert(
+    trainingScripts[0]?.includes('train_svm') === true,
+    'Expected the selected ranking model script',
+  )
+
+  state.model.modelBlob = trained.data
+  const ranked = await getRanking(state, () => Promise.resolve({ stdout: '', result: ['1', '0'] }))
+  assert(ranked.ok && ranked.data.join(',') === '1,0', 'Expected injected Python ranking')
+  assert(parseRankingState(state).model.modelBlob === 'serialized-model')
+  assert(isBrowserRecordNamespace('ranking/state'), 'Expected ranking storage to be routed')
+}
+
+testRankingUsesInjectedPythonRunner.description =
+  'Runs ranking training and inference through an injected Python capability and validates persisted state.'
 
 const getCurrentProfileSettingsForDiagnostics = (): TaskyonProfileSettings => {
   const snapshot = state.getProfileSnapshot().sections

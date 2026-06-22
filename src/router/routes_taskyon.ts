@@ -288,6 +288,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         },
       },
       {
+        path: '/ranking',
+        component: () => import('pages/apps/rankingPage.vue'),
+        meta: {
+          title: 'Ranking Tournament',
+          description: 'Ranking Tournament',
+        },
+      },
+      {
         path: '/p2p',
         component: () => import('pages/taskyon/Libp2pUniversalChat.vue'),
         meta: {

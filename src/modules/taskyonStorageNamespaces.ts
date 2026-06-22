@@ -6,6 +6,7 @@ export const browserRecordNamespacePrefixes = [
   'documentation/',
   'modelica/',
   'pmtiles/',
+  'ranking/',
   'spaceships/',
   'taskyon/local/',
   'taskyon/ui-state/',

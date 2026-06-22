@@ -121,6 +121,7 @@
     "@taskyon/modelica": "workspace:*",
     "@taskyon/p2p-core": "workspace:*",
     "@taskyon/runtime-browser": "workspace:*",
+    "@taskyon/sdk": "workspace:*",
     "@taskyon/secure-tunnel": "workspace:*",
     "@taskyon/spaceships": "workspace:*",
     "@taskyon/surrogate": "workspace:*",

@@ -4702,7 +4702,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@taskyon/sdk@workspace:packages/sdk":
+"@taskyon/sdk@workspace:*, @taskyon/sdk@workspace:packages/sdk":
   version: 0.0.0-use.local
   resolution: "@taskyon/sdk@workspace:packages/sdk"
   dependencies:
@@ -17480,6 +17480,7 @@ __metadata:
     "@taskyon/modelica": "workspace:*"
     "@taskyon/p2p-core": "workspace:*"
     "@taskyon/runtime-browser": "workspace:*"
+    "@taskyon/sdk": "workspace:*"
     "@taskyon/secure-tunnel": "workspace:*"
     "@taskyon/spaceships": "workspace:*"
     "@taskyon/surrogate": "workspace:*"
