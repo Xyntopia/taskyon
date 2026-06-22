@@ -30,6 +30,7 @@ export const browserAccessEnsureDefaults = {
 }
 
 export const browserAccessResearchDefaults = {
+  researchMode: 'websearch-first',
   supportTools: ['proxyWebReader', 'tauriHttpWebReader'],
   maxSourcesPerQuery: 5,
   mustDownload: true,
@@ -91,6 +92,12 @@ export const browserAccessResearchSchema = {
   type: 'object',
   additionalProperties: false,
   properties: {
+    researchMode: {
+      type: 'string',
+      enum: ['websearch-first', 'browser-mcp-first', 'websearch-only'],
+      description:
+        'Research mode. Start with chatCompletion web search, require browser MCP first, or avoid browser MCP entirely.',
+    },
     supportTools: {
       type: 'array',
       items: { type: 'string' },
@@ -217,6 +224,7 @@ const extractActivityFromFunctionCall = (task: TaskNode): BrowserAccessActivity 
   }
 
   if (toolName === 'webResearchPlanner') {
+    const query = readStringList(args.searchQueries)[0]
     return {
       id: task.id,
       taskId: task.id,
@@ -225,7 +233,7 @@ const extractActivityFromFunctionCall = (task: TaskNode): BrowserAccessActivity 
       status: 'running',
       summary: `Research objective: ${readString(args.objective) ?? 'research task'}`,
       timestamp,
-      query: readStringList(args.searchQueries)[0],
+      ...(query ? { query } : {}),
     }
   }
 
@@ -248,15 +256,16 @@ const extractActivityFromFunctionCall = (task: TaskNode): BrowserAccessActivity 
     toolName === 'ensureBrowserMcpTools' ||
     toolName === 'importMcpTools'
   ) {
+    const serverUrl = readString(args.serverUrl)
     return {
       id: task.id,
       taskId: task.id,
       toolName,
       kind: 'mcp',
       status: 'running',
-      summary: `Connecting to browser MCP at ${readString(args.serverUrl) ?? 'configured endpoint'}`,
+      summary: `Connecting to browser MCP at ${serverUrl ?? 'configured endpoint'}`,
       timestamp,
-      url: readString(args.serverUrl),
+      ...(serverUrl ? { url: serverUrl } : {}),
     }
   }
 

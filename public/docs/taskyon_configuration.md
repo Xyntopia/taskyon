@@ -35,6 +35,16 @@ Taskyon now treats `toolchainConfig.entryNode` as the primary orchestration conf
 
 `chatCompletion` remains the execution gateway, while entry-node controls workflow/prompt orchestration.
 
+### Research Access Mode
+
+Structured research defaults live under `toolchainConfig.webResearchPlanner`.
+
+- `researchMode: "websearch-first"` starts with chatCompletion web search and fallback readers.
+- `researchMode: "browser-mcp-first"` checks and imports Browser MCP tools before research branches fan out.
+- `researchMode: "websearch-only"` avoids Browser MCP tools and keeps research on web search plus support tools.
+
+The default profile uses `websearch-first` so browser and CLI research can start without a local Browser MCP sidecar.
+
 ### Conclusion
 
 Taskyon provides a powerful and flexible configuration system that can be used to customize its behavior. By using the GUI, iframe integration, and configuration options, you can tailor Taskyon to meet the needs of your application.

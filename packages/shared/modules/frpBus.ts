@@ -617,3 +617,23 @@ export function createIframeMux<I extends string | number | symbol = string>(swe
 export type IframeMultiPlexer<I extends string | number | symbol = string> = ReturnType<
   typeof createIframeMux<I>
 >
+
+export function createUnavailableIframeMux<I extends string | number | symbol = string>(
+  reason = 'Iframe message bridging is not available in this runtime.',
+): IframeMultiPlexer<I> {
+  const { stream: all$ } = createStream<BusMsg<I>>()
+  const fail = () => {
+    throw new Error(reason)
+  }
+
+  return {
+    all$,
+    send: fail,
+    attachIframe: fail,
+    detachId: () => {},
+    gc: () => {},
+    destroy: () => {
+      all$.unsubscribeAll()
+    },
+  }
+}

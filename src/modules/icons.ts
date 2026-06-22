@@ -11,6 +11,7 @@ import {
   mdiHeadSnowflake,
   mdiProfessionalHexagon,
   mdiSearchWeb,
+  mdiStrategy,
   mdiTools,
 } from '@quasar/extras/mdi-v6'
 
@@ -48,6 +49,7 @@ export const iconRegistry: iconMap = {
     startupInstructions: mdiTools,
   },
   webResearchPlanner: {
+    researchMode: mdiStrategy,
     searchQueries: mdiSearchWeb,
     browserTools: mdiTools,
     supportTools: mdiTools,

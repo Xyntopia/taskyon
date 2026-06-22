@@ -22,6 +22,7 @@ type EnsureBrowserMcpToolsArgs = BrowserMcpImportArgs & {
 type WebResearchPlannerArgs = {
   objective: string
   searchQueries: string[]
+  researchMode?: ResearchMode
   browserTools?: string[]
   supportTools?: string[]
   maxSourcesPerQuery?: number
@@ -33,6 +34,9 @@ type WebResearchPlannerArgs = {
   webSearchMaxResults?: number
   ensureBrowserMcp?: boolean
 }
+
+const researchModes = ['websearch-first', 'browser-mcp-first', 'websearch-only'] as const
+type ResearchMode = (typeof researchModes)[number]
 
 const defaultResearchSupportTools = ['proxyWebReader', 'tauriHttpWebReader']
 const defaultBrowserMcpStartupInstructions = [
@@ -152,19 +156,37 @@ const uniqueStrings = (values: readonly string[]) => Array.from(new Set(values))
 const joinHints = (label: string, hints: readonly string[]) =>
   hints.length > 0 ? `${label}: ${hints.join(', ')}.` : ''
 
+const resolveResearchMode = (mode: ResearchMode | undefined): ResearchMode => {
+  if (mode === 'browser-mcp-first' || mode === 'websearch-only') return mode
+  return 'websearch-first'
+}
+
 const buildResearchTaskToolset = (args: WebResearchPlannerArgs) => {
-  const browserTools = trimNonEmptyStrings(args.browserTools)
+  const researchMode = resolveResearchMode(args.researchMode)
+  const useBrowserTools = researchMode === 'browser-mcp-first' || args.ensureBrowserMcp === true
+  const browserTools =
+    researchMode === 'websearch-only' || !useBrowserTools
+      ? []
+      : trimNonEmptyStrings(args.browserTools)
   const configuredSupportTools = trimNonEmptyStrings(args.supportTools)
   const supportTools = uniqueStrings(
     configuredSupportTools.length > 0 ? configuredSupportTools : defaultResearchSupportTools,
   )
-  const allowedTools = uniqueStrings([...browserTools, ...supportTools])
+  const webSearchTools = args.enableWebSearch === false ? [] : ['chatCompletion']
+  const allowedTools = uniqueStrings([...webSearchTools, ...browserTools, ...supportTools])
   if (allowedTools.length === 0) {
     throw new Error(
       'webResearchPlanner needs at least one browserTools or supportTools entry so delegated subtasks stay explicit.',
     )
   }
   return { browserTools, supportTools, allowedTools }
+}
+
+const shouldEnsureBrowserMcp = (args: WebResearchPlannerArgs) => {
+  const researchMode = resolveResearchMode(args.researchMode)
+  if (researchMode === 'websearch-only') return false
+  if (researchMode === 'browser-mcp-first') return args.ensureBrowserMcp !== false
+  return args.ensureBrowserMcp === true && trimNonEmptyStrings(args.browserTools).length > 0
 }
 
 const buildResearchEntryNodeArguments = (args: WebResearchPlannerArgs) => {
@@ -191,6 +213,8 @@ const buildDiscoveryTask = (
     `Find up to ${maxSourcesPerQuery} strong candidate sources.`,
     'Use chatCompletion web search first for discovery when it is enabled.',
     'Prioritize official manufacturer pages, product pages, and direct specification documents.',
+    'For each candidate, capture manufacturer, product or model name, source page URL, direct document URL when available, and a short evidence note.',
+    'Avoid duplicate products and prefer current official documents over reposted PDFs.',
     joinHints('Preferred file types', fileTypeHints),
     joinHints('Site hints', siteHints),
     deliverable ? `Target output: ${deliverable}.` : '',
@@ -209,6 +233,7 @@ const buildValidationTask = (
     `Validate the best candidates for "${objective}" found via "${query}".`,
     'Open the pages with browser tooling when available, confirm the source is relevant, and extract the strongest direct source URLs.',
     'If direct browsing is blocked, fall back to proxy-backed fetching.',
+    'Deduplicate products before returning results; do not count the same product or document twice.',
     mustDownload
       ? 'If the browser tooling supports downloads, download the spec sheets. Otherwise capture the direct download URLs exactly.'
       : 'Capture the strongest direct source URLs exactly.',
@@ -525,7 +550,7 @@ Each search query becomes its own parallel research branch. Inside each branch, 
 
 This tool is especially useful for tasks like finding manufacturer spec sheets, datasheets, whitepapers, or product PDFs.
 
-Taskyon first uses chatCompletion web search for discovery when enabled. It then uses browser MCP tools for validation, browsing, and downloads, with proxyWebReader and tauriHttpWebReader as fallbacks for blocked pages or direct fetches.`,
+Taskyon first uses chatCompletion web search for discovery when enabled. In browser-mcp-first mode it ensures browser MCP tools before branching; websearch-first can opt into browser MCP by setting ensureBrowserMcp; websearch-only avoids browser MCP entirely. proxyWebReader and tauriHttpWebReader stay available as fallbacks for blocked pages or direct fetches.`,
   parameters: {
     type: 'object',
     additionalProperties: false,
@@ -538,6 +563,13 @@ Taskyon first uses chatCompletion web search for discovery when enabled. It then
         type: 'array',
         items: { type: 'string' },
         description: 'One query per parallel research branch.',
+      },
+      researchMode: {
+        type: 'string',
+        enum: [...researchModes],
+        default: 'websearch-first',
+        description:
+          'Research execution mode. websearch-first starts immediately with chatCompletion web search; browser-mcp-first ensures browser MCP before branching; websearch-only never uses browser MCP tools.',
       },
       browserTools: {
         type: 'array',
@@ -566,9 +598,8 @@ Taskyon first uses chatCompletion web search for discovery when enabled. It then
       },
       ensureBrowserMcp: {
         type: 'boolean',
-        default: true,
         description:
-          'When true, Taskyon first ensures that the configured browser MCP endpoint is reachable and imports the browser tools before research branches fan out.',
+          'Explicitly ensure browser MCP before research. In websearch-first mode this only applies when browserTools are configured.',
       },
       maxSourcesPerQuery: {
         type: 'integer',
@@ -602,7 +633,7 @@ Taskyon first uses chatCompletion web search for discovery when enabled. It then
   } as const satisfies JSONSchema7,
   function: (args, context) => {
     const browserTools = trimNonEmptyStrings(args.browserTools)
-    if (args.ensureBrowserMcp !== false) {
+    if (shouldEnsureBrowserMcp(args)) {
       return makeTaskResult([
         [
           {
@@ -773,8 +804,8 @@ This tool includes a built-in provider catalog with 40 public vendors so a user 
               type: 'message',
               data: createProxyOnboardingButton({
                 providerLabel,
-                pricingUrl: resolvedArgs.pricingUrl,
-                docsUrl,
+                ...(resolvedArgs.pricingUrl ? { pricingUrl: resolvedArgs.pricingUrl } : {}),
+                ...(docsUrl ? { docsUrl } : {}),
                 onboardingToken: nextToken,
               }),
             },

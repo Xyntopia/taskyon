@@ -49,6 +49,7 @@
       "startupInstructions": "Start your browser MCP server manually so it exposes an HTTP MCP endpoint.\nThis can be a local process or a container such as Podman, as long as it binds to the configured MCP URL.\nAfter the endpoint is reachable, click Continue in chat or retry import from the Browser Access page."
     },
     "webResearchPlanner": {
+      "researchMode": "websearch-first",
       "supportTools": ["proxyWebReader", "tauriHttpWebReader"],
       "enableWebSearch": true,
       "webSearchMaxResults": 5,

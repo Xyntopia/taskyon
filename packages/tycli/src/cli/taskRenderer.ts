@@ -122,11 +122,14 @@ const renderTaskSummary = (task: TaskNode, showRoleTag: boolean): string => {
         : String(task.content.data),
       roleColorCode(role),
     )
-  return color(showRoleTag ? `[${role}|${task.content.type}]` : task.content.type, roleColorCode(role))
+  return color(
+    showRoleTag ? `[${role}|${task.content.type}]` : task.content.type,
+    roleColorCode(role),
+  )
 }
 
 const isVisibleMessageRole = (task: TaskNode) =>
-  task.content.type === 'message' && (task.role === 'user' || task.role === 'assistant')
+  task.content.type === 'message' && task.role === 'assistant'
 
 const shouldRenderTask = (task: TaskNode, debugEnabled: boolean) => {
   if (debugEnabled) return true
@@ -149,8 +152,20 @@ export const renderTaskProgress = (
 ): void => {
   const debugEnabled = state.debugEnabled()
   const toolName = extractToolName(task)
-  if (!debugEnabled && task.content.type === 'functioncall' && toolName && state.isFunctionHiddenInChat(toolName)) return
-  if (!debugEnabled && task.content.type === 'toolresult' && toolName && state.isFunctionHiddenInChat(toolName)) return
+  if (
+    !debugEnabled &&
+    task.content.type === 'functioncall' &&
+    toolName &&
+    state.isFunctionHiddenInChat(toolName)
+  )
+    return
+  if (
+    !debugEnabled &&
+    task.content.type === 'toolresult' &&
+    toolName &&
+    state.isFunctionHiddenInChat(toolName)
+  )
+    return
   if (!shouldRenderTask(task, debugEnabled)) return
   state.clearThinkingPanel()
   const prefix = debugEnabled ? (previousSnapshotExists ? '[task updated] ' : '[task] ') : ''

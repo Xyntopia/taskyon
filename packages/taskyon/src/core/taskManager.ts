@@ -355,7 +355,10 @@ const withLock =
   to the UI. We could have used the function of RxDB for this. But this approach would have been
   less flexible...
 */
-export async function useTyTaskManager(taskyonDb: TyPGDB) {
+export async function useTyTaskManager(
+  taskyonDb: TyPGDB,
+  options: { indexTaskVectors: boolean } = { indexTaskVectors: true },
+) {
   console.log('Initialize task manager with db:', taskyonDb.name)
 
   // because our tasks only have parent IDs defined, we keep a cache of
@@ -902,7 +905,7 @@ export async function useTyTaskManager(taskyonDb: TyPGDB) {
   // so when calling the function, we need to pre-select which type of task
   // we want to have.
   const addPartialTask2Tree = (task: partialTaskDraft) =>
-    taskDb.add(task, { createMeta: 'missing', vectors: true })
+    taskDb.add(task, { createMeta: 'missing', vectors: options.indexTaskVectors !== false })
 
   async function addTaskChain(
     taskList: partialTaskDraft[],

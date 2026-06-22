@@ -6,7 +6,7 @@ import {
   type TaskyonTestFn,
   type TestRecord,
 } from '../../../shared/modules/diagnosticsRunner'
-import { readdir } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { basename } from 'node:path'
 import process from 'node:process'
 import { bootstrapCliTaskyon } from '../cli/runtime'
@@ -56,6 +56,12 @@ type Summary = {
     details?: unknown
     error?: unknown
   }>
+}
+
+type TestFileEntry = {
+  entry: string
+  moduleUrl: URL
+  sourcePath: string
 }
 
 function toErrorMessage(error: unknown): string {
@@ -125,7 +131,51 @@ async function listTestFiles(dirUrl: URL, relativeDir = ''): Promise<string[]> {
   return files.sort((a, b) => a.localeCompare(b))
 }
 
-async function loadTestModules() {
+function matchesFilter(value: string, filter: string): boolean {
+  if (!filter.trim()) return true
+  return value.toLowerCase().includes(filter.trim().toLowerCase())
+}
+
+function testIdentifier(name: string): string {
+  const normalizedName = name.replace(/^Test\s+/i, '')
+  const camelName = normalizedName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/ +([a-z0-9])/g, (_, chr: string) => chr.toUpperCase())
+  if (camelName.startsWith('test') && camelName.length > 4) return camelName
+  return camelName.replace(/^([a-z])/, (_, chr: string) => `test${chr.toUpperCase()}`)
+}
+
+function testDisplayName(name: string): string {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+    .replace(/^Test\s+/i, '')
+    .replace(/^([a-z])/, (_, chr: string) => chr.toUpperCase())
+}
+
+function exportedTestNames(source: string): string[] {
+  const matches = source.matchAll(/\bexport\s+const\s+(test[A-Za-z0-9_]+)/g)
+  return Array.from(matches, (match) => match[1]).filter((name): name is string => Boolean(name))
+}
+
+async function testFileMatchesFilter(file: TestFileEntry, filter: string): Promise<boolean> {
+  if (!filter.trim()) return true
+  if (matchesFilter(file.sourcePath, filter) || matchesFilter(basename(file.entry), filter)) {
+    return true
+  }
+
+  const source = await readFile(filePathFromUrl(file.moduleUrl), 'utf8')
+  return exportedTestNames(source).some(
+    (name) =>
+      matchesFilter(name, filter) ||
+      matchesFilter(testDisplayName(name), filter) ||
+      matchesFilter(testIdentifier(name), filter),
+  )
+}
+
+async function listTestFileEntries() {
   const testDirs = [
     {
       dirUrl: new URL('../../../taskyon/src/tests/', import.meta.url),
@@ -141,42 +191,63 @@ async function loadTestModules() {
     },
   ]
 
-  const modules = []
-  const discoveredFiles: string[] = []
+  const files: TestFileEntry[] = []
 
   for (const { dirUrl, sourcePrefix } of testDirs) {
     const entries = await listTestFiles(dirUrl)
 
     for (const entry of entries) {
       const moduleUrl = new URL(entry, dirUrl)
-      discoveredFiles.push(`${sourcePrefix}${entry}`)
-      try {
-        const mod = await import(moduleUrl.href)
-        modules.push({
-          sourcePath: `${sourcePrefix}${entry}`,
-          mod,
-        })
-      } catch (error) {
-        const fallback = unsupportedModuleFallbacks[basename(entry)]
-        if (!fallback) throw error
+      files.push({
+        entry,
+        moduleUrl,
+        sourcePath: `${sourcePrefix}${entry}`,
+      })
+    }
+  }
 
-        const mod = Object.fromEntries(
-          fallback.tests.map(({ exportName, experimental }) => {
-            const fn: TaskyonTestFn = () => ({
-              skipped: true,
-              reason: fallback.reason,
-              testId: exportName,
-            })
-            if (experimental) fn.experimental = true
-            return [exportName, fn]
-          }),
-        )
+  return files
+}
 
-        modules.push({
-          sourcePath: `${sourcePrefix}${entry}`,
-          mod,
-        })
-      }
+async function loadTestModules(filter: string) {
+  const files = await listTestFileEntries()
+  const modules = []
+  const discoveredFiles = files.map((file) => file.sourcePath)
+  const selectedFiles = []
+
+  for (const file of files) {
+    if (await testFileMatchesFilter(file, filter)) {
+      selectedFiles.push(file)
+    }
+  }
+
+  for (const file of selectedFiles) {
+    try {
+      const mod = await import(file.moduleUrl.href)
+      modules.push({
+        sourcePath: file.sourcePath,
+        mod,
+      })
+    } catch (error) {
+      const fallback = unsupportedModuleFallbacks[basename(file.entry)]
+      if (!fallback) throw error
+
+      const mod = Object.fromEntries(
+        fallback.tests.map(({ exportName, experimental }) => {
+          const fn: TaskyonTestFn = () => ({
+            skipped: true,
+            reason: fallback.reason,
+            testId: exportName,
+          })
+          if (experimental) fn.experimental = true
+          return [exportName, fn]
+        }),
+      )
+
+      modules.push({
+        sourcePath: file.sourcePath,
+        mod,
+      })
     }
   }
 
@@ -191,22 +262,11 @@ function filterTests(tests: TestRecord, filter: string): TestRecord {
   )
 }
 
-function testIdentifier(name: string): string {
-  const normalizedName = name.replace(/^Test\s+/i, '')
-  const camelName = normalizedName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .replace(/ +([a-z0-9])/g, (_, chr: string) => chr.toUpperCase())
-  if (camelName.startsWith('test') && camelName.length > 4) return camelName
-  return camelName.replace(/^([a-z])/, (_, chr: string) => `test${chr.toUpperCase()}`)
-}
-
 function filterLargeTokenTests(tests: TestRecord, includeLargeTokens: boolean): TestRecord {
   if (includeLargeTokens) return tests
   return Object.fromEntries(
     Object.entries(tests).filter(([name]) => {
-      const metadata = headlessTestMetadata[testIdentifier(name)]
+      const metadata = diagnosticsTestMetadata[testIdentifier(name)]
       return !metadata?.requiresLargeTokens
     }),
   )
@@ -386,14 +446,19 @@ function applyDiagnosticsEnvironment(context: DiagnosticsTestContext) {
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2))
-  const { modules, discoveredFiles } = await loadTestModules()
+  const { modules, discoveredFiles } = await loadTestModules(opts.filter)
   const registry = buildDiagnosticsRegistry({ modules })
 
   if (opts.listOnly) {
+    const defaultTests = filterTests(
+      filterLargeTokenTests(registry.tests, opts.includeLargeTokens),
+      opts.filter,
+    )
+    const experimentalTests = filterTests(registry.experimentalTests, opts.filter)
     console.log(`Discovered files: ${discoveredFiles.length}`)
     for (const file of discoveredFiles) console.log(`- ${file}`)
     console.log('')
-    listTests(registry.tests, registry.experimentalTests)
+    listTests(defaultTests, experimentalTests)
     return
   }
 

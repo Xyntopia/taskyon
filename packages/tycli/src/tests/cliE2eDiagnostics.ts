@@ -3,6 +3,8 @@ import { access, readFile } from 'node:fs/promises'
 import process from 'node:process'
 import { constants as fsConstants } from 'node:fs'
 import { join } from 'node:path'
+import type { TaskNode } from '../../../taskyon/src/types/taskNode'
+import { renderTaskProgress } from '../cli/taskRenderer'
 
 type SessionStep = {
   delayMs?: number
@@ -130,15 +132,18 @@ async function runTycSession(args: {
             {
               label: `shell script fallback (${shellPath})`,
               command: shellPath,
-              args: ['-lc', `exec "${scriptPath}" -qfec ${JSON.stringify(TYCLI_RUN_COMMAND)} /dev/null`],
+              args: [
+                '-lc',
+                `exec "${scriptPath}" -qfec ${JSON.stringify(TYCLI_RUN_COMMAND)} /dev/null`,
+              ],
             },
           ]
         })()
       : [
           {
-            label: 'direct yarn',
-            command: (await findExecutableInPath('yarn')) || 'yarn',
-            args: ['workspace', '@taskyon/tycli', 'run', 'run'],
+            label: 'direct node',
+            command: (await findExecutableInPath('node')) || 'node',
+            args: ['--import', './src/register.ts', '--experimental-strip-types', './src/cli.ts'],
           },
         ]
 
@@ -179,6 +184,7 @@ async function runSpawnedSession(args: {
         ...process.env,
         HOME: TEST_HOME,
         XDG_CONFIG_HOME: join(TEST_HOME, '.config'),
+        TYCLI_TERMINAL_UI: 'none',
         ...(env ?? {}),
       },
     })
@@ -235,8 +241,18 @@ async function runSpawnedSession(args: {
       }
       reject(error)
     })
+    child.stdin.on('error', (error) => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      recordSession(closedCode)
+      reject(
+        new Error(
+          `Failed to write to CLI stdin: ${error instanceof Error ? error.message : String(error)}.\nOutput:\n${output}`,
+        ),
+      )
+    })
     child.on('close', (code) => finish(code))
-
     ;(async () => {
       for (const step of steps) {
         if (closedCode !== null) {
@@ -288,24 +304,77 @@ function assertNotContains(output: string, pattern: string) {
 export async function testCliStartupShowsVersionCommitAndBuildDate() {
   const result = await runTycSession({
     testName: 'testCliStartupShowsVersionCommitAndBuildDate',
-    steps: [{ waitFor: 'Commands:', input: '/exit\n' }],
+    steps: [{ waitFor: 'Slash commands:', input: '/exit\n' }],
     env: { TYCLI_HOTKEY_MENUS: '0' },
   })
   if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
-  assertContains(result.output, 'tycli version=')
-  assertContains(result.output, 'commit=')
-  assertContains(result.output, 'buildDate=')
+  assertContains(result.output, 'tycli 0.1.0')
+  assertContains(result.output, 'tycli log: /tmp/tycli/tycli_')
+  assertContains(result.output, 'Conversation storage:')
+  assertContains(result.output, 'tycli ready.')
+  assertContains(result.output, '| idle]')
+}
+
+export async function testTerminalKitFooterOptInStartsAndExits() {
+  const result = await runTycSession({
+    testName: 'testTerminalKitFooterOptInStartsAndExits',
+    steps: [{ waitFor: 'Slash commands:', input: '/exit\n' }],
+    env: { TYCLI_HOTKEY_MENUS: '0', TYCLI_TERMINAL_UI: 'terminal-kit' },
+    runner: 'pty',
+  })
+  if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
+  assertContains(result.output, 'tycli ready.')
+  assertContains(result.output, 'Conversation saved:')
+  assertNotContains(result.output, 'Fatal error')
+}
+
+export function testTaskRendererDoesNotEchoUserPromptInput() {
+  const lines: string[] = []
+  const userTask: TaskNode = {
+    id: 'user-task',
+    role: 'user',
+    content: {
+      type: 'message',
+      data: 'already echoed by readline',
+    },
+  }
+  const assistantTask: TaskNode = {
+    id: 'assistant-task',
+    role: 'assistant',
+    content: {
+      type: 'message',
+      data: 'assistant response',
+    },
+  }
+  const state = {
+    debugEnabled: () => false,
+    showRoleTag: () => true,
+    showFullFunctionResults: () => false,
+    isFunctionHiddenInChat: () => false,
+    clearThinkingPanel: () => {},
+    renderThinkingPanel: () => {},
+    writeLine: (text: string) => {
+      lines.push(text)
+    },
+  }
+
+  renderTaskProgress(state, userTask, false)
+  renderTaskProgress(state, assistantTask, false)
+
+  const output = lines.join('\n')
+  assertNotContains(output, 'already echoed by readline')
+  assertContains(output, 'assistant response')
 }
 
 export async function testSlashMenuOpensOnSingleSlash() {
   const result = await runTycSession({
     testName: 'testSlashMenuOpensOnSingleSlash',
     steps: [
-      { waitFor: 'Commands:', input: '/\n' },
+      { waitFor: 'Slash commands:', input: '/' },
       { waitFor: 'Slash commands', input: '' },
       { delayMs: 100, input: 'exit\n' },
     ],
-    env: { TYCLI_HOTKEY_MENUS: '0' },
+    env: { TYCLI_HOTKEY_MENUS: '1' },
   })
   assertContains(result.output, 'Slash commands')
   if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
@@ -315,7 +384,7 @@ export async function testAtFileCommandAddsContextForDirectPath() {
   const result = await runTycSession({
     testName: 'testAtFileCommandAddsContextForDirectPath',
     steps: [
-      { waitFor: 'Commands:', input: '@package.json\n' },
+      { waitFor: 'Slash commands:', input: '@package.json\n' },
       { waitFor: 'Added file context: package.json', input: '/exit\n' },
     ],
     env: { TYCLI_HOTKEY_MENUS: '0' },
@@ -329,7 +398,7 @@ export async function testAtMenuOpensOnSingleAt() {
   const result = await runTycSession({
     testName: 'testAtMenuOpensOnSingleAt',
     steps: [
-      { waitFor: 'Commands:', input: '@\n' },
+      { waitFor: 'Slash commands:', input: '@\n' },
       { waitFor: 'Files (@)', input: '' },
       { delayMs: 100, input: '1\n' },
       { delayMs: 200, input: '/exit\n' },
@@ -340,47 +409,141 @@ export async function testAtMenuOpensOnSingleAt() {
   if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
 }
 
-export async function testDoubleCtrlCForcesExit() {
+export async function testIdleCtrlCShowsQuitPromptAndCanBeCancelled() {
   const result = await runTycSession({
-    testName: 'testDoubleCtrlCForcesExit',
+    testName: 'testIdleCtrlCShowsQuitPromptAndCanBeCancelled',
     steps: [
-      { waitFor: 'Commands:', input: '\u0003' },
-      { delayMs: 120, input: '\u0003' },
+      { waitFor: 'Slash commands:', input: '', signal: 'SIGINT' },
+      { waitFor: 'Quit tycli? (y/N)', input: 'n\n' },
+      { waitFor: 'Conversation storage:', input: '/exit\n' },
     ],
+    env: { TYCLI_HOTKEY_MENUS: '1' },
+    runner: 'pipe',
+  })
+  if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
+  assertContains(result.output, 'Ctrl-C received.')
+  assertContains(result.output, 'Quit tycli? (y/N)')
+  assertContains(result.output, 'Conversation storage:')
+  assertContains(result.output, 'tycli log:')
+}
+
+export async function testIdleCtrlDReportsPathsAndExits() {
+  const result = await runTycSession({
+    testName: 'testIdleCtrlDReportsPathsAndExits',
+    steps: [{ waitFor: 'Slash commands:', input: '\u0004' }],
     env: { TYCLI_HOTKEY_MENUS: '1' },
     runner: 'pty',
   })
-  assertContains(result.output, 'Force exiting...')
+  if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
+  assertContains(result.output, 'Ctrl-D received.')
+  assertContains(result.output, 'Conversation saved:')
+  assertContains(result.output, 'Conversation storage:')
+  assertContains(result.output, 'tycli log:')
 }
 
-export async function testDebugToggleAndConversationPersistence() {
+export async function testCtrlCCancelsModelMenuAndKeepsPromptUsable() {
   const result = await runTycSession({
-    testName: 'testDebugToggleAndConversationPersistence',
+    testName: 'testCtrlCCancelsModelMenuAndKeepsPromptUsable',
     steps: [
-      { waitFor: 'Commands:', input: 'hello\n' },
+      { waitFor: 'Slash commands:', input: '/model\n' },
+      { waitFor: 'Model menu', input: '\u0003' },
+      { delayMs: 200, input: '/exit\n' },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    runner: 'pty',
+  })
+  if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
+  assertContains(result.output, 'Ctrl-C received.')
+  assertContains(result.output, 'Menu cancelled.')
+  assertContains(result.output, 'Conversation saved:')
+  assertNotContains(result.output, 'Fatal error')
+}
+
+export async function testPromptHistoryCyclesPreviousInputWithArrowKeys() {
+  const initialResult = await runTycSession({
+    testName: 'testPromptHistoryCyclesPreviousInputWithArrowKeys',
+    steps: [
+      { waitFor: 'Slash commands:', input: '/tools\n' },
+      { waitFor: 'Active tool definitions:', input: '/exit\n' },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    runner: 'pty',
+  })
+  if (initialResult.code !== 0) {
+    throw new Error(`Expected initial exit code 0, got ${String(initialResult.code)}`)
+  }
+
+  const replayResult = await runTycSession({
+    testName: 'testPromptHistoryCyclesPreviousInputWithArrowKeys',
+    steps: [
+      { waitFor: 'Slash commands:', input: '\x1b[A\n' },
+      { waitFor: 'Active tool definitions:', input: '/exit\n' },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    runner: 'pty',
+  })
+  if (replayResult.code !== 0) {
+    throw new Error(`Expected replay exit code 0, got ${String(replayResult.code)}`)
+  }
+  if (!replayResult.output.includes('Active tool definitions:')) {
+    throw new Error(`Expected Up+Enter to replay persisted /tools.\n${replayResult.output}`)
+  }
+}
+
+export async function testResumeConversationReportsStorageAndLogs() {
+  const initialResult = await runTycSession({
+    testName: 'testResumeConversationReportsStorageAndLogs',
+    steps: [
+      { waitFor: 'Slash commands:', input: '/tools\n' },
+      { waitFor: 'Active tool definitions:', input: '/exit\n' },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    runner: 'pty',
+  })
+  if (initialResult.code !== 0) {
+    throw new Error(`Expected initial exit code 0, got ${String(initialResult.code)}`)
+  }
+  const saveMatch = initialResult.output.match(/Conversation saved: (.+\.md)/)
+  if (!saveMatch?.[1]) {
+    throw new Error(`Could not find conversation save path.\n${initialResult.output}`)
+  }
+
+  const conversationPath = saveMatch[1].trim()
+  const resumeResult = await runTycSession({
+    testName: 'testResumeConversationReportsStorageAndLogs',
+    steps: [
+      { waitFor: 'Slash commands:', input: `/resume ${conversationPath}\n` },
+      { waitFor: 'Current conversation storage:', input: '/exit\n' },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    runner: 'pty',
+  })
+  if (resumeResult.code !== 0) {
+    throw new Error(`Expected resume exit code 0, got ${String(resumeResult.code)}`)
+  }
+  assertContains(resumeResult.output, `Resumed conversation: ${conversationPath}`)
+  assertContains(resumeResult.output, 'Loaded conversation log:')
+  assertContains(resumeResult.output, 'Current tycli log:')
+}
+
+export async function testTaskInterruptReportsStatusAndPersistsConversation() {
+  const result = await runTycSession({
+    testName: 'testTaskInterruptReportsStatusAndPersistsConversation',
+    steps: [
+      { waitFor: 'Slash commands:', input: 'hello\n' },
       { delayMs: 500, input: '\u0003' },
-      { waitFor: 'Task interrupted.', input: '/debug on\n' },
-      { waitFor: 'Debug logs: ON', input: 'hello again\n' },
-      { delayMs: 500, input: '\u0003' },
-      { waitFor: 'Task interrupted.', input: '/debug off\n' },
-      { waitFor: 'Debug logs: OFF', input: '/exit\n' },
+      { waitFor: 'Task interrupted.', input: '/exit\n' },
+      { waitFor: 'Conversation saved:', input: '', signal: 'SIGTERM' },
     ],
     env: { TYCLI_HOTKEY_MENUS: '0' },
     timeoutMs: 45_000,
   })
-  const debugOnPos = result.output.indexOf('Debug logs: ON')
-  const debugOffPos = result.output.indexOf('Debug logs: OFF')
-  if (debugOnPos < 0 || debugOffPos < 0) {
-    throw new Error(`Missing debug toggle markers.\nOutput:\n${result.output.slice(-5000)}`)
-  }
-
-  const beforeDebug = result.output.slice(0, debugOnPos)
-  const duringDebug = result.output.slice(debugOnPos, debugOffPos)
-  const afterDebug = result.output.slice(debugOffPos)
-  assertNotContains(beforeDebug, '[task]')
-  assertNotContains(beforeDebug, '[worker]')
-  assertContains(duringDebug, '[worker]')
-  assertNotContains(afterDebug, '[task]')
+  assertContains(result.output, 'Ctrl-C received.')
+  assertContains(result.output, 'Stopping current worker task...')
+  assertContains(result.output, 'Worker stop requested. Waiting for task cleanup...')
+  assertContains(result.output, 'Task interrupted.')
+  assertContains(result.output, 'Conversation storage:')
+  assertContains(result.output, 'tycli log:')
 
   const saveMatch = result.output.match(/Conversation saved: (.+\.md)/)
   if (!saveMatch?.[1]) throw new Error(`Could not find conversation save path.\n${result.output}`)
@@ -391,13 +554,33 @@ export async function testDebugToggleAndConversationPersistence() {
 
 testCliStartupShowsVersionCommitAndBuildDate.description =
   'CLI startup prints version, commit, and build date'
+testTerminalKitFooterOptInStartsAndExits.description =
+  'Terminal Kit footer backend can be enabled without making tycli depend on it for startup'
+testTaskRendererDoesNotEchoUserPromptInput.description =
+  'Task renderer does not duplicate user prompt input in normal CLI output'
 testSlashMenuOpensOnSingleSlash.description = 'Slash menu opens immediately on "/" keypress'
 testAtFileCommandAddsContextForDirectPath.description =
   '@<path> adds file content to CLI context without opening picker'
 testAtMenuOpensOnSingleAt.description = 'File picker opens immediately on "@" keypress'
-testDoubleCtrlCForcesExit.description = 'Double Ctrl+C forces immediate process exit'
-testDebugToggleAndConversationPersistence.description =
-  'Debug logs are hidden by default, visible when enabled, and conversation is persisted to markdown'
+testIdleCtrlCShowsQuitPromptAndCanBeCancelled.description =
+  'Idle Ctrl+C reports the interrupt, shows paths, and allows cancelling the quit prompt'
+testIdleCtrlDReportsPathsAndExits.description =
+  'Idle Ctrl+D reports EOF, prints session paths, and exits cleanly'
+testCtrlCCancelsModelMenuAndKeepsPromptUsable.description =
+  'Ctrl+C cancels the raw model menu and returns to a usable prompt'
+testPromptHistoryCyclesPreviousInputWithArrowKeys.description =
+  'Up and Down cycle through prior main prompt inputs, including persisted history'
+testResumeConversationReportsStorageAndLogs.description =
+  'Resume loads a saved markdown conversation and reports source/current storage and log paths'
+testTaskInterruptReportsStatusAndPersistsConversation.description =
+  'Ctrl+C during a task reports interrupt phases and persists the interrupted conversation'
+testTaskInterruptReportsStatusAndPersistsConversation.timeoutMs = 45_000
 testAtFileCommandAddsContextForDirectPath.experimental = true
-testDoubleCtrlCForcesExit.experimental = true
-testDebugToggleAndConversationPersistence.experimental = true
+testTerminalKitFooterOptInStartsAndExits.experimental = true
+testIdleCtrlCShowsQuitPromptAndCanBeCancelled.experimental = true
+testIdleCtrlCShowsQuitPromptAndCanBeCancelled.helper = true
+testIdleCtrlDReportsPathsAndExits.experimental = true
+testCtrlCCancelsModelMenuAndKeepsPromptUsable.experimental = true
+testPromptHistoryCyclesPreviousInputWithArrowKeys.experimental = true
+testResumeConversationReportsStorageAndLogs.experimental = true
+testTaskInterruptReportsStatusAndPersistsConversation.experimental = true

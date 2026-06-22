@@ -1,5 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { createUnavailableIframeMux } from '../../../shared/modules/frpBus'
 import { tyCore } from '../../../taskyon/src/core/init'
 import type { Taskyon } from '../../../taskyon/src/core/init'
 import type { llmSettings } from '../../../taskyon/src/types/profiles'
@@ -99,6 +100,8 @@ export async function bootstrapCliTaskyon(args?: {
     environmentTools,
     cryptoSession,
     {
+      createIframeMultiPlexer: () =>
+        createUnavailableIframeMux('Iframe message bridging is not available in tycli.'),
       nodePgLiteDataDir: pgliteNodeDir,
     },
   )

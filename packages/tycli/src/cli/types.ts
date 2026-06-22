@@ -6,10 +6,19 @@ export type StoredConfig = {
   providerModels?: Record<string, string>
   selectedApi?: string
   taskyonModel?: string
+  inputHistory?: string[]
+  sessions?: TycliSessionRecord[]
   wrappedSessionKey?: string
   cliUi?: {
     showRoleTag?: boolean
   }
+}
+
+export type TycliSessionRecord = {
+  conversationPath: string
+  logPath: string
+  startedAt: string
+  endedAt?: string
 }
 
 export type CliApiConfig = {
@@ -57,6 +66,7 @@ export const SLASH_COMMANDS = [
   'tools',
   'debug',
   'settings',
+  'resume',
   'exit',
   'quit',
 ] as const

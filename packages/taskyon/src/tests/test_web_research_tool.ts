@@ -28,6 +28,7 @@ export const testWebResearchBuildsParallelQueryGroups = () => {
   const groups = buildWebResearchTaskGroups({
     objective: 'Collect solar cell spec sheets',
     searchQueries: ['Aiko solar ABC datasheet pdf', 'LONGi Hi-MO X10 datasheet pdf'],
+    researchMode: 'browser-mcp-first',
     browserTools: ['browser_search', 'browser_visit'],
     maxSourcesPerQuery: 4,
     mustDownload: true,
@@ -40,6 +41,10 @@ export const testWebResearchBuildsParallelQueryGroups = () => {
   assert(
     groups[0]?.[0]?.allowedTools?.includes('browser_search'),
     'Expected imported browser tools to be forwarded to delegated subtasks',
+  )
+  assert(
+    groups[0]?.[0]?.allowedTools?.includes('chatCompletion'),
+    'Expected web-search-enabled research branches to allow chatCompletion discovery',
   )
   assert(
     groups[0]?.[0]?.allowedTools?.includes('tauriHttpWebReader'),
@@ -169,7 +174,7 @@ export const testMcpCapableWebProviderCatalog = () => {
   return { success: true }
 }
 
-export const testWebResearchPlannerEnablesBrowserSetupAndWebSearchByDefault = () => {
+export const testWebResearchPlannerUsesWebSearchFirstByDefault = () => {
   const baseContext = {
     taskChain: [],
     getSecret: () => Promise.resolve(null),
@@ -192,41 +197,82 @@ export const testWebResearchPlannerEnablesBrowserSetupAndWebSearchByDefault = ()
     'Expected webResearchPlanner to return a task result',
   )
 
-  const ensureCall = getFunctionCall(initialResult.taskChainList[0]?.[1])
+  const firstCall = getFunctionCall(initialResult.taskChainList[1]?.[3])
+  assert(
+    firstCall &&
+      typeof firstCall === 'object' &&
+      'name' in firstCall &&
+      firstCall.name === 'entryNode',
+    'Expected default research mode to launch delegated research without browser MCP setup',
+  )
+
+  assert(
+    firstCall &&
+      typeof firstCall === 'object' &&
+      'arguments' in firstCall &&
+      firstCall.arguments &&
+      typeof firstCall.arguments === 'object' &&
+      'websearch' in firstCall.arguments &&
+      typeof firstCall.arguments.websearch === 'object' &&
+      firstCall.arguments.websearch !== null &&
+      'enabled' in firstCall.arguments.websearch &&
+      firstCall.arguments.websearch.enabled === true,
+    'Expected default delegated research branches to enable chatCompletion web search',
+  )
+
+  return { success: true }
+}
+
+export const testWebResearchPlannerBrowserMcpFirstEnsuresBrowserSetup = () => {
+  const result = webResearchPlanner.function?.(
+    {
+      objective: 'Collect solar cell spec sheets',
+      searchQueries: ['Aiko solar ABC datasheet pdf'],
+      browserTools: ['browser_search', 'browser_visit'],
+      researchMode: 'browser-mcp-first',
+    },
+    {
+      taskChain: [],
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'test-tool',
+    },
+  )
+
+  assert(
+    result && typeof result === 'object' && 'taskChainList' in result,
+    'Expected browser MCP research mode to return a task result',
+  )
+
+  const ensureCall = getFunctionCall(result.taskChainList[0]?.[1])
   assert(
     ensureCall &&
       typeof ensureCall === 'object' &&
       'name' in ensureCall &&
       ensureCall.name === 'ensureBrowserMcpTools',
-    'Expected research planner to ensure browser MCP access by default',
+    'Expected browser-mcp-first research mode to ensure browser MCP access',
   )
 
-  const delegatedResult = webResearchPlanner.function?.(
-    {
-      objective: 'Collect solar cell spec sheets',
-      searchQueries: ['Aiko solar ABC datasheet pdf'],
-      browserTools: ['browser_search', 'browser_visit'],
-      ensureBrowserMcp: false,
-    },
-    baseContext,
-  )
+  return { success: true }
+}
+
+export const testWebResearchPlannerWebSearchOnlyExcludesBrowserTools = () => {
+  const groups = buildWebResearchTaskGroups({
+    objective: 'Collect solar cell spec sheets',
+    searchQueries: ['Aiko solar ABC datasheet pdf'],
+    researchMode: 'websearch-only',
+    browserTools: ['browser_search', 'browser_visit'],
+    supportTools: ['proxyWebReader'],
+  })
 
   assert(
-    delegatedResult && typeof delegatedResult === 'object' && 'taskChainList' in delegatedResult,
-    'Expected delegated research task result after browser MCP setup',
+    groups[0]?.[0]?.allowedTools?.includes('proxyWebReader'),
+    'Expected websearch-only mode to preserve configured support tools',
   )
-
-  const delegatedEntryNodeCall = getFunctionCall(delegatedResult.taskChainList[1]?.[3])
   assert(
-    delegatedEntryNodeCall &&
-      typeof delegatedEntryNodeCall === 'object' &&
-      'arguments' in delegatedEntryNodeCall &&
-      delegatedEntryNodeCall.arguments &&
-      typeof delegatedEntryNodeCall.arguments === 'object' &&
-      'websearch' in delegatedEntryNodeCall.arguments &&
-      typeof delegatedEntryNodeCall.arguments.websearch === 'object' &&
-      delegatedEntryNodeCall.arguments.websearch?.enabled === true,
-    'Expected delegated research branches to enable chatCompletion web search by default',
+    !groups[0]?.[0]?.allowedTools?.includes('browser_search'),
+    'Expected websearch-only mode to exclude browser MCP tools',
   )
 
   return { success: true }
@@ -242,6 +288,10 @@ testProxyWebReaderProviderCatalogAndPresetResolution.description =
   'Exposes a large proxy provider catalog and resolves proxyWebReader metadata from a selected provider preset.'
 testMcpCapableWebProviderCatalog.description =
   'Saves a dedicated MCP-capable web-provider catalog derived from the shared proxy provider source of truth.'
-testWebResearchPlannerEnablesBrowserSetupAndWebSearchByDefault.description =
-  'Ensures browser MCP setup runs before research by default and delegated research branches enable chatCompletion web search for discovery.'
-testWebResearchPlannerEnablesBrowserSetupAndWebSearchByDefault.requiresLargeTokens = true
+testWebResearchPlannerUsesWebSearchFirstByDefault.description =
+  'Starts research in websearch-first mode by default and enables chatCompletion web search in delegated research branches.'
+testWebResearchPlannerBrowserMcpFirstEnsuresBrowserSetup.description =
+  'Ensures browser MCP setup runs before research when researchMode is browser-mcp-first.'
+testWebResearchPlannerWebSearchOnlyExcludesBrowserTools.description =
+  'Excludes browser MCP tools from delegated branches when researchMode is websearch-only.'
+testWebResearchPlannerUsesWebSearchFirstByDefault.requiresLargeTokens = true

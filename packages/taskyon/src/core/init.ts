@@ -50,6 +50,7 @@ import {
   createPortApi,
   createStream,
   createTypeFilteredPort,
+  createUnavailableIframeMux,
 } from '@taskyon/shared/modules/frpBus'
 import { createProxyApi, createProxyFunction } from '../utils/objHelpers'
 import { configureNodePgLiteDataDir, getDatabase } from '../utils/pglite.api'
@@ -170,7 +171,16 @@ function toFunctionArguments(args: Record<string, unknown>): FunctionArguments {
   return FunctionArgumentsSchema.parse(args)
 }
 
-const staticContext = () => {
+type CreateIframeMultiPlexer = () => IframeMultiPlexer
+
+const createRuntimeIframeMux = (): IframeMultiPlexer => {
+  if (typeof window !== 'undefined') return createIframeMux(5)
+  return createUnavailableIframeMux(
+    'Iframe message bridging is only available in browser runtimes.',
+  )
+}
+
+const staticContext = (createIframeMultiPlexer: CreateIframeMultiPlexer) => {
   const ToolList: InternalTool[] = [
     ...smallHelperTools,
     ...appDevTools,
@@ -192,7 +202,7 @@ const staticContext = () => {
   ]
   // we use this as a global bus which make message iframes "postMessage" available
   // to taskyon & tools
-  const iframeMultiPlexer = createIframeMux(5)
+  const iframeMultiPlexer = createIframeMultiPlexer()
 
   // these stream defines that clients can use to communicate with taskyon
   // (e.g. iframes which are connected to taskyon)
@@ -226,6 +236,7 @@ const dynamicContext =
     insidePort: Port<TaskyonMessage, TaskyonMessage>,
     iframeMultiPlexer: IframeMultiPlexer,
     toolchainConfig: Thunk<Record<string, FunctionArguments>>,
+    options: { indexTaskVectors: boolean },
   ) =>
   async (cs: CryptoSession) => {
     // if our cryptoSession changes, we need to re-calculate everything below!
@@ -233,7 +244,9 @@ const dynamicContext =
     const sessionKeyId = await cs.getSessionId()
     const db = await getDatabase(sessionKeyId)
     console.log('tycore starting new session with id:', sessionKeyId)
-    const taskManagerInstance = await useTyTaskManager(db)
+    const taskManagerInstance = await useTyTaskManager(db, {
+      indexTaskVectors: options.indexTaskVectors,
+    })
     console.log('tycore finished taskManager initialization')
     const secretStore = withSecretStore(
       createCombinedCrudWrapper([
@@ -324,6 +337,8 @@ export async function tyCore(
   EnvironmentTools: InternalTool[],
   initialCryptoSession?: CryptoSession,
   options?: {
+    createIframeMultiPlexer?: CreateIframeMultiPlexer
+    indexTaskVectors?: boolean
     nodePgLiteDataDir?: string
   },
 ) {
@@ -333,7 +348,9 @@ export async function tyCore(
     options?.nodePgLiteDataDir ? (name) => `${options.nodePgLiteDataDir}/${name}` : undefined,
   )
 
-  const { outsidePort, insidePort, iframeMultiPlexer, ToolList } = staticContext()
+  const { outsidePort, insidePort, iframeMultiPlexer, ToolList } = staticContext(
+    options?.createIframeMultiPlexer ?? createRuntimeIframeMux,
+  )
 
   // TODO: encapsulate this into a "createCtx" function
   //       which also handles the initilaization of ctx..
@@ -349,6 +366,7 @@ export async function tyCore(
     insidePort,
     iframeMultiPlexer,
     toolchainConfig,
+    { indexTaskVectors: options?.indexTaskVectors !== false },
   )
 
   // TODO: we need to integrate all of these with our API.
