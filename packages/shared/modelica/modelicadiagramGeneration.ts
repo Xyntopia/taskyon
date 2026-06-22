@@ -6,6 +6,8 @@ import {
   type ImportAliasMap,
 } from './qualifiedNameResolution'
 
+type SourceRootMaterializer = (qualifiedName: string) => boolean
+
 const ENABLE_DIAGRAM_ICON_DIAGNOSTICS = true
 
 function asString(value: unknown): string {
@@ -128,6 +130,7 @@ type DiagramComponent = {
   name: string
   typeName: string
   description?: string
+  qualifiedTypeName?: string
   iconValues?: Record<string, string>
   placement?: DiagramPlacement
   iconRef?: string
@@ -980,6 +983,7 @@ const resolveTypeIcon = (
   classQualifiedName: string | undefined,
   cache: Map<string, DiagramIconSpec | null>,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
+  materializeSourceRoot: SourceRootMaterializer,
   importAliases: ImportAliasMap = {},
   visited: Set<string> = new Set<string>(),
 ): DiagramIconSpec | undefined => {
@@ -1006,6 +1010,7 @@ const resolveTypeIcon = (
     }
     visited.add(candidate)
     try {
+      if (!materializeSourceRoot(candidate)) continue
       const rawInfo = get_class_info(candidate)
       const info = JSON.parse(String(rawInfo)) as Record<string, unknown>
       const sourceModelica = asString(info.source_modelica)
@@ -1052,6 +1057,7 @@ const resolveTypeIcon = (
               qualified,
               cache,
               loadedSourceRootFiles,
+              materializeSourceRoot,
               importAliases,
               visited,
             ),
@@ -1090,10 +1096,41 @@ const resolveTypeIcon = (
   return undefined
 }
 
+const resolveQualifiedTypeName = (
+  typeName: string,
+  classQualifiedName: string | undefined,
+  cache: Map<string, string | null>,
+  materializeSourceRoot: SourceRootMaterializer,
+  importAliases: ImportAliasMap = {},
+): string | undefined => {
+  const normalizedType = typeName.trim()
+  if (!normalizedType) return undefined
+  const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName, importAliases)
+  for (const candidate of candidates) {
+    if (cache.has(candidate)) {
+      const cached = cache.get(candidate)
+      if (cached) return cached
+      continue
+    }
+    try {
+      if (!materializeSourceRoot(candidate)) continue
+      const rawInfo = get_class_info(candidate)
+      const info = JSON.parse(String(rawInfo)) as Record<string, unknown>
+      const qualified = asString(info.qualified_name).trim() || candidate
+      cache.set(candidate, qualified)
+      return qualified
+    } catch {
+      cache.set(candidate, null)
+    }
+  }
+  return undefined
+}
+
 const diagnoseTypeIconResolution = (
   typeName: string,
   classQualifiedName: string | undefined,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
+  materializeSourceRoot: SourceRootMaterializer,
   importAliases: ImportAliasMap = {},
 ): void => {
   const normalizedType = typeName.trim()
@@ -1101,6 +1138,12 @@ const diagnoseTypeIconResolution = (
   const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName, importAliases)
   const diagnostics = candidates.map((candidate) => {
     try {
+      if (!materializeSourceRoot(candidate)) {
+        return {
+          candidate,
+          status: 'not-materialized',
+        }
+      }
       const rawInfo = get_class_info(candidate)
       const info = JSON.parse(String(rawInfo)) as Record<string, unknown>
       const qualified = asString(info.qualified_name) || candidate
@@ -1178,6 +1221,7 @@ const isConnectorType = (
   typeName: string,
   classQualifiedName: string | undefined,
   cache: Map<string, boolean>,
+  materializeSourceRoot: SourceRootMaterializer,
   importAliases: ImportAliasMap = {},
 ): boolean => {
   const normalized = typeName.trim()
@@ -1189,6 +1233,7 @@ const isConnectorType = (
       continue
     }
     try {
+      if (!materializeSourceRoot(candidate)) continue
       const rawInfo = get_class_info(candidate)
       const info = JSON.parse(String(rawInfo)) as Record<string, unknown>
       const restriction = asString(info.restriction).trim().toLowerCase()
@@ -1214,6 +1259,7 @@ const resolveTypePorts = (
   portCache: Map<string, DiagramPort[] | null>,
   connectorTypeCache: Map<string, boolean>,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
+  materializeSourceRoot: SourceRootMaterializer,
   importAliases: ImportAliasMap = {},
   visited: Set<string> = new Set<string>(),
 ): DiagramPort[] => {
@@ -1229,6 +1275,7 @@ const resolveTypePorts = (
     }
     visited.add(candidate)
     try {
+      if (!materializeSourceRoot(candidate)) continue
       const rawInfo = get_class_info(candidate)
       const info = JSON.parse(String(rawInfo)) as Record<string, unknown>
       const sourceModelica = asString(info.source_modelica)
@@ -1261,6 +1308,7 @@ const resolveTypePorts = (
           portCache,
           connectorTypeCache,
           loadedSourceRootFiles,
+          materializeSourceRoot,
           importAliases,
           visited,
         ),
@@ -1273,6 +1321,7 @@ const resolveTypePorts = (
             extractTypeName(component.type_name),
             qualified,
             connectorTypeCache,
+            materializeSourceRoot,
             importAliases,
           ),
         )
@@ -1286,6 +1335,7 @@ const resolveTypePorts = (
             qualified,
             iconCache,
             loadedSourceRootFiles,
+            materializeSourceRoot,
             importAliases,
           )
           const port: DiagramPort = {
@@ -1318,6 +1368,7 @@ export function handleExtractDiagram(
     fileName?: string
   },
   loadedSourceRootFiles: Thunk<Record<string, string>>,
+  materializeSourceRoot: SourceRootMaterializer = () => true,
 ): DiagramDto {
   const source = asString(payload.source)
   if (!source.trim()) throw new Error('Cannot build diagram: source is empty')
@@ -1333,6 +1384,7 @@ export function handleExtractDiagram(
   const iconCache = new Map<string, DiagramIconSpec | null>()
   const portCache = new Map<string, DiagramPort[] | null>()
   const connectorTypeCache = new Map<string, boolean>()
+  const qualifiedTypeCache = new Map<string, string | null>()
   const equations = Array.isArray(classDef.equations) ? classDef.equations : []
   const rawConnections: Array<{
     lhs: string
@@ -1371,11 +1423,19 @@ export function handleExtractDiagram(
       const placement = extractPlacement(component.annotation)
       const typeName = extractTypeName(component.type_name)
       const iconRef = typeName
+      const qualifiedTypeName = resolveQualifiedTypeName(
+        typeName,
+        payload.qualifiedName,
+        qualifiedTypeCache,
+        materializeSourceRoot,
+        importAliases,
+      )
       const icon = resolveTypeIcon(
         iconRef,
         payload.qualifiedName,
         iconCache,
         loadedSourceRootFiles,
+        materializeSourceRoot,
         importAliases,
       )
       const traceComponentIcon =
@@ -1397,6 +1457,7 @@ export function handleExtractDiagram(
             typeName,
             payload.qualifiedName,
             loadedSourceRootFiles,
+            materializeSourceRoot,
             importAliases,
           )
         }
@@ -1408,6 +1469,7 @@ export function handleExtractDiagram(
         portCache,
         connectorTypeCache,
         loadedSourceRootFiles,
+        materializeSourceRoot,
         importAliases,
       )
       const item: DiagramComponent = {
@@ -1418,6 +1480,7 @@ export function handleExtractDiagram(
       const iconValues = extractIconValueMap(component)
       const description = asString(component.description) || asString(component.comment)
       if (description) item.description = description
+      if (qualifiedTypeName) item.qualifiedTypeName = qualifiedTypeName
       if (Object.keys(iconValues).length > 0) item.iconValues = iconValues
       if (placement) item.placement = placement
       if (iconRef) item.iconRef = iconRef

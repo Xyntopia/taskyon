@@ -1,6 +1,7 @@
 <!--ModelicaEditor.vue-->
 <template>
   <DockView
+    v-bind="attrs"
     v-model:node="initialLayout"
     class="col"
     hide-tab-add
@@ -207,12 +208,17 @@
             <q-card flat class="fit">
               <ModelicaDiagramPane
                 :extractor="diagramExtractor"
-                :source="modelicaSource"
-                :qualified-name="diagramTargetQualifiedName"
+                :source="activeDiagramSource"
+                :qualified-name="activeDiagramQualifiedName"
                 :wasm-loaded="wasmLoaded"
                 :refresh-key="diagramRefreshKey"
+                :can-navigate-back="canNavigateDiagramBack"
+                :navigation-depth="diagramNavigationDepth"
+                :can-open-code="diagramNavigationDepth > 0 && Boolean(activeDiagramQualifiedName)"
                 view-mode="diagram"
                 @open-model="openModelFromDiagram"
+                @navigate-back="navigateDiagramBack"
+                @open-code="openActiveDiagramModelInCode"
               />
             </q-card>
           </q-tab-panel>
@@ -221,8 +227,8 @@
             <q-card flat class="fit">
               <ModelicaDiagramPane
                 :extractor="diagramExtractor"
-                :source="modelicaSource"
-                :qualified-name="diagramTargetQualifiedName"
+                :source="activeDiagramSource"
+                :qualified-name="activeDiagramQualifiedName"
                 :wasm-loaded="wasmLoaded"
                 :refresh-key="diagramRefreshKey"
                 view-mode="icon"
@@ -738,7 +744,7 @@ import {
 import defaultUiTemplateSource from './ui_template_placeholders.html?raw'
 import type { partialTyConfiguration } from '../../tyclient/src'
 import { copyToClipboard } from '../modules/utils'
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useAttrs, watch } from 'vue'
 import { EditorState, type Extension } from '@codemirror/state'
 import { safeYamlDump } from '../modules/yamlUtils'
 import { syncStateWithOPFSFolder } from '../modules/saveState'
@@ -777,6 +783,12 @@ type PlotChartSelection = {
 type PlotViewOptions = ObjectPathChartsViewOptions
 type SimulationBackend = 'js' | 'rumoca'
 type RenderModelicaViewId = 'base-modelica' | 'flat-modelica' | 'dae-modelica'
+
+defineOptions({
+  inheritAttrs: false,
+})
+
+const attrs = useAttrs()
 
 const props = withDefaults(
   defineProps<{
@@ -822,6 +834,12 @@ const displayedModelicaLog = computed(() => [
 const openedLibraryClassContext = ref<{ qualifiedName: string; sourceSnapshot: string } | null>(
   null,
 )
+type DiagramNavigationEntry = {
+  qualifiedName: string | null
+  source: string
+}
+const diagramNavigationEntry = ref<DiagramNavigationEntry | null>(null)
+const diagramNavigationStack = ref<DiagramNavigationEntry[]>([])
 const templateSource = ref('')
 const output = ref('') // legacy raw output if needed
 const jsSource = ref('') // generated JS shown + executed
@@ -1116,6 +1134,26 @@ const diagramTargetQualifiedName = computed<string | null>(() => {
   }
   return inferQualifiedModelNameFromSource(modelicaSource.value)
 })
+const activeDiagramQualifiedName = computed<string | null>(
+  () => diagramNavigationEntry.value?.qualifiedName ?? diagramTargetQualifiedName.value,
+)
+const activeDiagramSource = computed(
+  () => diagramNavigationEntry.value?.source ?? modelicaSource.value,
+)
+const diagramNavigationDepth = computed(() => diagramNavigationStack.value.length)
+const canNavigateDiagramBack = computed(() => diagramNavigationStack.value.length > 0)
+
+function currentDiagramNavigationEntry(): DiagramNavigationEntry {
+  return {
+    qualifiedName: activeDiagramQualifiedName.value,
+    source: activeDiagramSource.value,
+  }
+}
+
+function resetDiagramNavigation(): void {
+  diagramNavigationEntry.value = null
+  diagramNavigationStack.value = []
+}
 
 const compactModelTabTitle = (qualifiedName: string | null, maxTailChars = 14): string => {
   const full = String(qualifiedName || '').trim()
@@ -2263,6 +2301,8 @@ function applyProjectFile(pf: TyModelicaProjectFileV1) {
   hasHydratedSimulationSettings.value = hasExplicitSimulationSettings(state.sim)
   allowApplySolverSimDefaults.value = !hasHydratedSimulationSettings.value
   modelicaSource.value = state.modelicaSource
+  openedLibraryClassContext.value = null
+  resetDiagramNavigation()
   requiredLibraries.value = Array.isArray(state.requiredLibraries) ? state.requiredLibraries : []
   const requiredPreset = requiredLibraries.value.find((entry) => entry.startsWith('preset:'))
   const requiredZip = requiredLibraries.value.find((entry) => entry.startsWith('zip:'))
@@ -3014,6 +3054,7 @@ watchDebounced(
 const clearAll = () => {
   modelicaSource.value = ''
   openedLibraryClassContext.value = null
+  resetDiagramNavigation()
   templateSource.value = ''
   output.value = ''
   jsSource.value = ''
@@ -3082,6 +3123,27 @@ async function resolveOpenableQualifiedName(typeName: string): Promise<string> {
   throw lastError ?? new Error(`Unable to resolve ${normalizedTypeName}`)
 }
 
+async function fetchLibraryClassSource(qualifiedName: string): Promise<{
+  qualifiedName: string
+  source: string
+}> {
+  const worker = modelicaWorker.value
+  if (!worker) throw new Error('Modelica worker not loaded')
+  const info = await worker.getClassInfo(qualifiedName)
+  const qualified =
+    typeof info.qualified_name === 'string' && info.qualified_name.trim().length > 0
+      ? info.qualified_name.trim()
+      : qualifiedName
+  const sourceModelica = typeof info.source_modelica === 'string' ? info.source_modelica : ''
+  if (!sourceModelica.trim()) {
+    throw new Error(`No source available for ${qualifiedName}`)
+  }
+  return {
+    qualifiedName: qualified,
+    source: withLibraryContext(qualified, sourceModelica),
+  }
+}
+
 async function openModelFromLibraryTree(
   qualifiedName: string,
   options: { workspaceTab?: 'modelica' | 'diagram' | 'icon' | 'help' } = {},
@@ -3096,25 +3158,15 @@ async function openModelFromLibraryTree(
       })
     }
 
-    const worker = modelicaWorker.value
-    if (!worker) return
-    const info = await worker.getClassInfo(qualifiedName)
-    const qualified =
-      typeof info.qualified_name === 'string' && info.qualified_name.trim().length > 0
-        ? info.qualified_name.trim()
-        : qualifiedName
-    const sourceModelica = typeof info.source_modelica === 'string' ? info.source_modelica : ''
-    if (!sourceModelica.trim()) {
-      throw new Error(`No source available for ${qualifiedName}`)
-    }
-    const normalizedSource = withLibraryContext(qualified, sourceModelica)
-    modelicaSource.value = normalizedSource
+    const loaded = await fetchLibraryClassSource(qualifiedName)
+    modelicaSource.value = loaded.source
     openedLibraryClassContext.value = {
-      qualifiedName: qualified,
-      sourceSnapshot: normalizedSource,
+      qualifiedName: loaded.qualifiedName,
+      sourceSnapshot: loaded.source,
     }
-    await refreshModelHelp(qualified)
-    workspaceTab.value = options.workspaceTab ?? 'modelica'
+    resetDiagramNavigation()
+    await refreshModelHelp(loaded.qualifiedName)
+    workspaceTab.value = options.workspaceTab ?? workspaceTab.value
     statusType.value = ''
     appendModelicaLog({
       level: 'info',
@@ -3139,8 +3191,51 @@ async function openModelFromLibraryTree(
 }
 
 async function openModelFromDiagram(typeName: string) {
-  const qualifiedName = await resolveOpenableQualifiedName(typeName)
-  await openModelFromLibraryTree(qualifiedName, { workspaceTab: 'diagram' })
+  try {
+    console.info('[modelica-diagram][dblclick] editor open request', { typeName })
+    const qualifiedName = await resolveOpenableQualifiedName(typeName)
+    console.info('[modelica-diagram][dblclick] editor resolved model', {
+      typeName,
+      qualifiedName,
+    })
+    const loaded = await fetchLibraryClassSource(qualifiedName)
+    diagramNavigationStack.value = [
+      ...diagramNavigationStack.value,
+      currentDiagramNavigationEntry(),
+    ]
+    diagramNavigationEntry.value = {
+      qualifiedName: loaded.qualifiedName,
+      source: loaded.source,
+    }
+    await refreshModelHelp(loaded.qualifiedName)
+    workspaceTab.value = 'diagram'
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    appendModelicaLog({
+      level: 'error',
+      phase: 'general',
+      message: `Failed to open diagram component ${typeName}: ${message}`,
+    })
+    Notify.create({
+      type: 'negative',
+      message: `Failed to open diagram component ${typeName}: ${message}`,
+    })
+  }
+}
+
+function navigateDiagramBack(): void {
+  const stack = diagramNavigationStack.value
+  const previous = stack[stack.length - 1]
+  if (!previous) return
+  diagramNavigationStack.value = stack.slice(0, -1)
+  diagramNavigationEntry.value = previous.qualifiedName || previous.source.trim() ? previous : null
+  void refreshModelHelp(activeDiagramQualifiedName.value)
+}
+
+async function openActiveDiagramModelInCode(): Promise<void> {
+  const qualifiedName = activeDiagramQualifiedName.value
+  if (!qualifiedName) return
+  await openModelFromLibraryTree(qualifiedName, { workspaceTab: 'modelica' })
 }
 
 watchDebounced(
@@ -3301,6 +3396,8 @@ const exampleCharts: Partial<Record<keyof typeof exampleModels, PlotChartSelecti
 const applyExample = async (choice: unknown) => {
   const key = String(choice) as keyof typeof exampleModels
   modelicaSource.value = exampleModels[key] ?? exampleModels.bouncingBall
+  openedLibraryClassContext.value = null
+  resetDiagramNavigation()
   applySimulationHintsFromModelica(modelicaSource.value)
   const presetCharts = exampleCharts[key]
   plotCharts.value = presetCharts ? [...presetCharts] : []
@@ -3651,6 +3748,8 @@ onMounted(async () => {
       selectedSimulationBackend.value = 'js'
       selectedRumocaSolver.value = 'auto'
       modelicaSource.value = ''
+      openedLibraryClassContext.value = null
+      resetDiagramNavigation()
       plotCharts.value = []
       executionResult.value = {}
       hasHydratedSimulationSettings.value = false
@@ -3672,6 +3771,8 @@ onMounted(async () => {
     selectedSimulationBackend.value = 'js'
     selectedRumocaSolver.value = 'auto'
     modelicaSource.value = ''
+    openedLibraryClassContext.value = null
+    resetDiagramNavigation()
     plotCharts.value = []
     executionResult.value = {}
     hasHydratedSimulationSettings.value = false

@@ -1,4 +1,7 @@
-import type { LazyModelicaClassTreeNode } from './lazyModelicaLibraryIndex'
+import type {
+  LazyModelicaClassTreeNode,
+  LazyModelicaLibraryIndex,
+} from './lazyModelicaLibraryIndex'
 
 type WorkerRequest =
   | { id: number; type: 'init'; payload?: { threads?: number } }
@@ -23,7 +26,11 @@ type WorkerRequest =
         view: 'base-modelica' | 'flat-modelica' | 'dae-modelica'
       }
     }
-  | { id: number; type: 'load_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
+  | {
+      id: number
+      type: 'load_msl_zip'
+      payload: { fileName: string; bytes: ArrayBuffer; lazyIndex?: LazyModelicaLibraryIndex }
+    }
   | { id: number; type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
   | { id: number; type: 'materialize_library_classes'; payload: { qualifiedNames: string[] } }
   | { id: number; type: 'materialize_all_libraries' }
@@ -33,6 +40,11 @@ type WorkerRequest =
   | {
       id: number
       type: 'extract_diagram'
+      payload: { source: string; qualifiedName?: string; fileName?: string }
+    }
+  | {
+      id: number
+      type: 'extract_diagram_preview'
       payload: { source: string; qualifiedName?: string; fileName?: string }
     }
   | {
@@ -82,7 +94,10 @@ type WorkerRequestNoId =
         view: 'base-modelica' | 'flat-modelica' | 'dae-modelica'
       }
     }
-  | { type: 'load_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
+  | {
+      type: 'load_msl_zip'
+      payload: { fileName: string; bytes: ArrayBuffer; lazyIndex?: LazyModelicaLibraryIndex }
+    }
   | { type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
   | { type: 'materialize_library_classes'; payload: { qualifiedNames: string[] } }
   | { type: 'materialize_all_libraries' }
@@ -91,6 +106,10 @@ type WorkerRequestNoId =
   | { type: 'get_class_info'; payload: { qualifiedName: string } }
   | {
       type: 'extract_diagram'
+      payload: { source: string; qualifiedName?: string; fileName?: string }
+    }
+  | {
+      type: 'extract_diagram_preview'
       payload: { source: string; qualifiedName?: string; fileName?: string }
     }
   | {
@@ -223,6 +242,8 @@ export class ModelicaWorkerClient {
         return 'Compiling Modelica'
       case 'extract_diagram':
         return 'Building diagram'
+      case 'extract_diagram_preview':
+        return 'Loading diagram preview'
       case 'render_modelica_view':
         return 'Loading analysis view'
       case 'get_class_info':
@@ -315,6 +336,7 @@ export class ModelicaWorkerClient {
   loadMslZip(
     fileName: string,
     bytes: ArrayBuffer,
+    lazyIndex?: LazyModelicaLibraryIndex,
   ): Promise<{
     fileCount: number
     parsedCount: number
@@ -324,8 +346,15 @@ export class ModelicaWorkerClient {
     classCount?: number
     sourceRootUris: string[]
     classes?: LazyModelicaClassTreeNode[]
+    lazyIndex?: LazyModelicaLibraryIndex
   }> {
-    return this.request({ type: 'load_msl_zip', payload: { fileName, bytes } }, [bytes])
+    const payload: { fileName: string; bytes: ArrayBuffer; lazyIndex?: LazyModelicaLibraryIndex } =
+      {
+        fileName,
+        bytes,
+      }
+    if (lazyIndex) payload.lazyIndex = lazyIndex
+    return this.request({ type: 'load_msl_zip', payload }, [bytes])
   }
 
   mergeMslZip(
@@ -382,6 +411,14 @@ export class ModelicaWorkerClient {
     fileName?: string
   }): Promise<Record<string, unknown>> {
     return this.request({ type: 'extract_diagram', payload })
+  }
+
+  extractDiagramPreview(payload: {
+    source: string
+    qualifiedName?: string
+    fileName?: string
+  }): Promise<Record<string, unknown>> {
+    return this.request({ type: 'extract_diagram_preview', payload })
   }
 
   parseSourceAst(payload: { source: string; fileName?: string }): Promise<Record<string, unknown>> {

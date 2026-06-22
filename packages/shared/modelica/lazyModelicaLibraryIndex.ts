@@ -97,16 +97,23 @@ export function buildLazyModelicaLibraryArchive(
 export function buildLazyModelicaLibraryByteArchive(
   archive: Record<string, Uint8Array>,
 ): LazyModelicaLibraryByteArchive {
+  const sources = buildLazyModelicaLibraryByteSources(archive)
+  return {
+    sources,
+    index: buildLazyModelicaLibraryIndexFromArchiveBytes(sources),
+  }
+}
+
+export function buildLazyModelicaLibraryByteSources(
+  archive: Record<string, Uint8Array>,
+): Record<string, Uint8Array> {
   const sources: Record<string, Uint8Array> = {}
   for (const [rawPath, content] of Object.entries(archive)) {
     const normalizedPath = normalizeArchiveSourcePath(rawPath)
     if (!normalizedPath) continue
     sources[normalizedPath] = content
   }
-  return {
-    sources,
-    index: buildLazyModelicaLibraryIndexFromArchiveBytes(sources),
-  }
+  return sources
 }
 
 export function buildLazyModelicaLibraryIndex(

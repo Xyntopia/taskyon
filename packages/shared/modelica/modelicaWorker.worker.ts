@@ -6,7 +6,9 @@ import { renderRumocaTemplate } from './rumocaTemplateRender'
 import baseDaeTemplate from './base_dae.jinja?raw'
 import {
   buildLazyModelicaLibraryByteArchive,
+  buildLazyModelicaLibraryByteSources,
   selectLazyModelicaSourceUris,
+  sourceUrisForQualifiedName,
   type LazyModelicaLibraryIndex,
 } from './lazyModelicaLibraryIndex'
 
@@ -38,7 +40,11 @@ type WorkerRequest =
         view: 'base-modelica' | 'flat-modelica' | 'dae-modelica'
       }
     }
-  | { id: number; type: 'load_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
+  | {
+      id: number
+      type: 'load_msl_zip'
+      payload: { fileName: string; bytes: ArrayBuffer; lazyIndex?: LazyModelicaLibraryIndex }
+    }
   | { id: number; type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
   | { id: number; type: 'materialize_library_classes'; payload: { qualifiedNames: string[] } }
   | { id: number; type: 'materialize_all_libraries' }
@@ -48,6 +54,11 @@ type WorkerRequest =
   | {
       id: number
       type: 'extract_diagram'
+      payload: { source: string; qualifiedName?: string; fileName?: string }
+    }
+  | {
+      id: number
+      type: 'extract_diagram_preview'
       payload: { source: string; qualifiedName?: string; fileName?: string }
     }
   | {
@@ -240,6 +251,15 @@ function materializeLibraryClasses(qualifiedNames: string[]): {
   }
 }
 
+function isLibraryClassMaterialized(qualifiedName: string): boolean {
+  const normalized = asString(qualifiedName).trim()
+  if (!normalized || !lazyLibraryIndex) return true
+  const uris = sourceUrisForQualifiedName(lazyLibraryIndex, normalized)
+  if (uris.length === 0) return true
+  const requiredUris = selectLazyModelicaSourceUris(lazyLibraryIndex, [normalized], uris, [])
+  return requiredUris.every((uri) => materializedSourceRootUris.has(uri))
+}
+
 function materializeAllLibraries(): {
   parsedCount: number
   insertedCount: number
@@ -371,9 +391,18 @@ function handleRenderModelicaView(payload: RenderModelicaViewPayload): unknown {
   }
 }
 
-function handleLoadMslZip(payload: { fileName: string; bytes: ArrayBuffer }): unknown {
+function handleLoadMslZip(payload: {
+  fileName: string
+  bytes: ArrayBuffer
+  lazyIndex?: LazyModelicaLibraryIndex
+}): unknown {
   const archive = unzipSync(new Uint8Array(payload.bytes))
-  const lazyArchive = buildLazyModelicaLibraryByteArchive(archive)
+  const lazyArchive = payload.lazyIndex
+    ? {
+        sources: buildLazyModelicaLibraryByteSources(archive),
+        index: payload.lazyIndex,
+      }
+    : buildLazyModelicaLibraryByteArchive(archive)
   const fileCount = Object.keys(lazyArchive.sources).length
   if (fileCount === 0) {
     throw new Error('No usable .mo files found in archive')
@@ -391,6 +420,7 @@ function handleLoadMslZip(payload: { fileName: string; bytes: ArrayBuffer }): un
     classCount: lazyArchive.index.totalClasses,
     sourceRootUris: lazyArchive.index.sourceRootUris,
     classes: lazyArchive.index.classes,
+    lazyIndex: lazyArchive.index,
   }
 }
 
@@ -464,6 +494,45 @@ function handleGetClassInfo(payload: { qualifiedName: string }): unknown {
     raw = rumoca.get_class_info(payload.qualifiedName)
   }
   return JSON.parse(String(raw))
+}
+
+function handleExtractDiagramPreview(payload: {
+  source: string
+  qualifiedName?: string
+  fileName?: string
+}): unknown {
+  return handleExtractDiagram(payload, () => loadedSourceRootFiles, isLibraryClassMaterialized)
+}
+
+function handleExtractDiagramFull(payload: {
+  source: string
+  qualifiedName?: string
+  fileName?: string
+}): unknown {
+  materializeLibraryClasses([
+    asString(payload.qualifiedName),
+    ...referencedModelicaClassNames(payload.source),
+  ])
+
+  for (let pass = 0; pass < 3; pass += 1) {
+    const requested = new Set<string>()
+    const refined = handleExtractDiagram(
+      payload,
+      () => loadedSourceRootFiles,
+      (qualifiedName) => {
+        if (isLibraryClassMaterialized(qualifiedName)) return true
+        requested.add(qualifiedName)
+        return false
+      },
+    )
+    const missing = Array.from(requested).filter((qualifiedName) => {
+      return !isLibraryClassMaterialized(qualifiedName)
+    })
+    if (missing.length === 0) return refined
+    materializeLibraryClasses(missing)
+  }
+
+  return handleExtractDiagram(payload, () => loadedSourceRootFiles, isLibraryClassMaterialized)
 }
 
 const removeTopLevelImportsForDiagramParse = (source: string): string => {
@@ -688,11 +757,10 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         result = handleGetClassInfo(msg.payload)
         break
       case 'extract_diagram':
-        materializeLibraryClasses([
-          asString(msg.payload.qualifiedName),
-          ...referencedModelicaClassNames(msg.payload.source),
-        ])
-        result = handleExtractDiagram(msg.payload, () => loadedSourceRootFiles)
+        result = handleExtractDiagramFull(msg.payload)
+        break
+      case 'extract_diagram_preview':
+        result = handleExtractDiagramPreview(msg.payload)
         break
       case 'parse_source_ast':
         result = handleParseSourceAst(msg.payload)

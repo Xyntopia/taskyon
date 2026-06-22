@@ -3,6 +3,7 @@ import { Notify } from 'quasar'
 import { appendModelicaLog } from './modelica'
 import type { ModelicaWorkerClient } from './modelicaWorkerClient'
 import { getDefaultModelicaLibraryUrl } from './modelicaLibraryCatalog'
+import type { LazyModelicaLibraryIndex } from './lazyModelicaLibraryIndex'
 
 type LibraryParsedCacheMetadata = {
   archiveName: string
@@ -15,8 +16,21 @@ type LibraryParsedCacheMetadata = {
   rumocaVersionMarker: string
 }
 
+type LibraryLazyIndexCache = {
+  archiveName: string
+  archivePath: string
+  archiveFingerprint: string
+  cacheSchemaVersion: number
+  fileCount: number
+  totalClasses: number
+  rumocaVersionMarker: string
+  index: LazyModelicaLibraryIndex
+}
+
 const MODELICA_SOURCE_ROOT_CACHE_DIR = 'modelicaSourceRootCache'
 const MODELICA_SOURCE_ROOT_CACHE_SCHEMA_VERSION = 1
+const MODELICA_LAZY_INDEX_CACHE_DIR = 'modelicaLazyIndexCache'
+const MODELICA_LAZY_INDEX_CACHE_SCHEMA_VERSION = 1
 
 export function useModelicaLibraries(params: {
   worker: Ref<ModelicaWorkerClient | null>
@@ -40,6 +54,8 @@ export function useModelicaLibraries(params: {
   const loadedArchiveFingerprints = ref<Set<string>>(new Set())
   const inFlightArchiveLoads = new Map<string, Promise<void>>()
   const inFlightDownloads = new Map<string, Promise<string>>()
+  const inFlightParsedCacheTasks = new Set<string>()
+  const handledParsedCacheFingerprints = new Set<string>()
   let inFlightStandardMslLoad: Promise<void> | null = null
 
   function triggerMslImport() {
@@ -89,6 +105,10 @@ export function useModelicaLibraries(params: {
     }
     const fileHandle = await dir.getFileHandle(parts[parts.length - 1]!)
     return await fileHandle.getFile()
+  }
+
+  async function readTextFromOpfs(relativePath: string): Promise<string> {
+    return await (await readFileFromOpfs(relativePath)).text()
   }
 
   async function opfsFileExists(relativePath: string): Promise<boolean> {
@@ -174,6 +194,10 @@ export function useModelicaLibraries(params: {
     return `${MODELICA_SOURCE_ROOT_CACHE_DIR}/${archiveFingerprint}.json`
   }
 
+  function libraryLazyIndexCachePath(archiveFingerprint: string): string {
+    return `${MODELICA_LAZY_INDEX_CACHE_DIR}/${archiveFingerprint}.json`
+  }
+
   async function writeLibraryParsedCacheMetadata(
     metadata: LibraryParsedCacheMetadata,
   ): Promise<void> {
@@ -181,6 +205,181 @@ export function useModelicaLibraries(params: {
       libraryParsedCacheMetadataPath(metadata.archiveFingerprint),
       `${JSON.stringify(metadata, null, 2)}\n`,
     )
+  }
+
+  async function readLibraryParsedCacheMetadata(
+    archiveFingerprint: string,
+  ): Promise<LibraryParsedCacheMetadata | null> {
+    try {
+      const raw = await readTextFromOpfs(libraryParsedCacheMetadataPath(archiveFingerprint))
+      const parsed = JSON.parse(raw) as Partial<LibraryParsedCacheMetadata>
+      if (parsed.archiveFingerprint !== archiveFingerprint) return null
+      if (parsed.cacheSchemaVersion !== MODELICA_SOURCE_ROOT_CACHE_SCHEMA_VERSION) return null
+      if (parsed.rumocaVersionMarker !== currentRumocaVersionMarker()) return null
+      if (typeof parsed.cachePath !== 'string' || !parsed.cachePath.trim()) return null
+      if (!(await opfsFileExists(parsed.cachePath))) return null
+      return parsed as LibraryParsedCacheMetadata
+    } catch {
+      return null
+    }
+  }
+
+  function parseLazyIndexCache(
+    raw: string,
+    expectedFingerprint: string,
+  ): LibraryLazyIndexCache | null {
+    const parsed = JSON.parse(raw) as Partial<LibraryLazyIndexCache>
+    if (parsed.archiveFingerprint !== expectedFingerprint) return null
+    if (parsed.cacheSchemaVersion !== MODELICA_LAZY_INDEX_CACHE_SCHEMA_VERSION) return null
+    if (parsed.rumocaVersionMarker !== currentRumocaVersionMarker()) return null
+    const index = parsed.index
+    if (!index || typeof index !== 'object') return null
+    if (!Array.isArray(index.classes)) return null
+    if (!Array.isArray(index.sourceRootUris)) return null
+    if (!index.classToUris || typeof index.classToUris !== 'object') return null
+    if (!index.uriToClasses || typeof index.uriToClasses !== 'object') return null
+    if (!Number.isFinite(index.totalClasses) || !Number.isFinite(index.fileCount)) return null
+    return parsed as LibraryLazyIndexCache
+  }
+
+  async function readCachedLazyLibraryIndex(
+    archiveFingerprint: string,
+  ): Promise<LazyModelicaLibraryIndex | null> {
+    const cachePath = libraryLazyIndexCachePath(archiveFingerprint)
+    try {
+      const raw = await readTextFromOpfs(cachePath)
+      const cached = parseLazyIndexCache(raw, archiveFingerprint)
+      if (!cached) {
+        appendModelicaLog({
+          level: 'warning',
+          phase: 'general',
+          message: `Ignoring stale Modelica lazy index cache: ${cachePath}`,
+        })
+        return null
+      }
+      appendModelicaLog({
+        level: 'info',
+        phase: 'general',
+        message: `Modelica lazy index cache hit: ${cached.fileCount} files, ${cached.totalClasses} classes`,
+      })
+      return cached.index
+    } catch {
+      appendModelicaLog({
+        level: 'info',
+        phase: 'general',
+        message: 'Modelica lazy index cache miss; archive will be indexed once',
+      })
+      return null
+    }
+  }
+
+  async function writeLazyLibraryIndexCache(params: {
+    archiveName: string
+    archivePath: string
+    archiveFingerprint: string
+    index: LazyModelicaLibraryIndex
+  }): Promise<void> {
+    const payload: LibraryLazyIndexCache = {
+      archiveName: params.archiveName,
+      archivePath: params.archivePath,
+      archiveFingerprint: params.archiveFingerprint,
+      cacheSchemaVersion: MODELICA_LAZY_INDEX_CACHE_SCHEMA_VERSION,
+      fileCount: params.index.fileCount,
+      totalClasses: params.index.totalClasses,
+      rumocaVersionMarker: currentRumocaVersionMarker(),
+      index: params.index,
+    }
+    await writeTextToOpfs(
+      libraryLazyIndexCachePath(params.archiveFingerprint),
+      `${JSON.stringify(payload)}\n`,
+    )
+    appendModelicaLog({
+      level: 'info',
+      phase: 'general',
+      message: `Cached Modelica lazy index in OPFS: ${payload.fileCount} files, ${payload.totalClasses} classes`,
+    })
+  }
+
+  function runParsedCacheTask(
+    archiveFingerprint: string,
+    delayMs: number,
+    task: () => Promise<void>,
+  ): void {
+    if (
+      inFlightParsedCacheTasks.has(archiveFingerprint) ||
+      handledParsedCacheFingerprints.has(archiveFingerprint)
+    ) {
+      return
+    }
+    inFlightParsedCacheTasks.add(archiveFingerprint)
+    window.setTimeout(() => {
+      void task().finally(() => {
+        inFlightParsedCacheTasks.delete(archiveFingerprint)
+      })
+    }, delayMs)
+  }
+
+  async function restoreOrWarmParsedCacheInBackground(cacheRequest: {
+    archiveName: string
+    archivePath: string
+    archiveFingerprint: string
+    sourceRootUris: string[]
+    fileCount: number
+    documentCount: number
+  }): Promise<void> {
+    if (handledParsedCacheFingerprints.has(cacheRequest.archiveFingerprint)) return
+    const metadata = await readLibraryParsedCacheMetadata(cacheRequest.archiveFingerprint)
+    const delayMs = metadata ? 3000 : 30000
+    runParsedCacheTask(cacheRequest.archiveFingerprint, delayMs, async () => {
+      if (handledParsedCacheFingerprints.has(cacheRequest.archiveFingerprint)) return
+      const worker = params.worker.value
+      if (!worker) return
+      const freshMetadata = await readLibraryParsedCacheMetadata(cacheRequest.archiveFingerprint)
+      if (freshMetadata) {
+        appendModelicaLog({
+          level: 'info',
+          phase: 'general',
+          message: `Restoring full parsed Modelica cache from OPFS in background: ${freshMetadata.archiveName}`,
+        })
+        const cacheFile = await readFileFromOpfs(freshMetadata.cachePath)
+        const restoredCount = await worker.restoreSourceRootBinaryCache(
+          await cacheFile.arrayBuffer(),
+        )
+        handledParsedCacheFingerprints.add(cacheRequest.archiveFingerprint)
+        appendModelicaLog({
+          level: 'success',
+          phase: 'general',
+          message: `Full parsed Modelica cache restored in background: ${restoredCount} source roots`,
+        })
+        return
+      }
+
+      appendModelicaLog({
+        level: 'info',
+        phase: 'general',
+        message: `Building full parsed Modelica cache in background after startup idle delay: ${cacheRequest.archiveName}`,
+      })
+      const cacheBytes = await worker.exportSourceRootBinaryCache(cacheRequest.sourceRootUris)
+      if (cacheBytes.length === 0) return
+      const cachePath = libraryParsedCachePath(cacheRequest.archiveFingerprint)
+      await writeArrayBufferToOpfs(cachePath, arrayBufferFromUint8Array(cacheBytes))
+      await writeLibraryParsedCacheMetadata({
+        archiveName: cacheRequest.archiveName,
+        archivePath: cacheRequest.archivePath,
+        archiveFingerprint: cacheRequest.archiveFingerprint,
+        cachePath,
+        cacheSchemaVersion: MODELICA_SOURCE_ROOT_CACHE_SCHEMA_VERSION,
+        documentCount: cacheRequest.documentCount,
+        fileCount: cacheRequest.fileCount,
+        rumocaVersionMarker: currentRumocaVersionMarker(),
+      })
+      handledParsedCacheFingerprints.add(cacheRequest.archiveFingerprint)
+      appendModelicaLog({
+        level: 'success',
+        phase: 'general',
+        message: `Full parsed Modelica cache stored in OPFS: ${cacheRequest.archiveName}`,
+      })
+    })
   }
 
   function normalizeLibraryCachePaths(paths: string[]): string[] {
@@ -256,20 +455,26 @@ export function useModelicaLibraries(params: {
         message: `Loading Modelica library archive: ${file.name}`,
       })
 
+      const shouldMerge = mslLoaded.value || loadedArchiveFingerprints.value.size > 0
+      const cachedLazyIndex =
+        !shouldMerge && archivePath ? await readCachedLazyLibraryIndex(fingerprint) : null
       appendModelicaLog({
         level: 'info',
         phase: 'general',
-        message: 'Indexing Modelica library for fast browsing. Source files are parsed on demand.',
+        message: cachedLazyIndex
+          ? 'Restoring Modelica lazy index from OPFS. Source files are still parsed on demand.'
+          : 'Indexing Modelica library for fast browsing. Source files are parsed on demand.',
       })
-      Notify.create({
-        type: 'info',
-        message: 'Indexing Modelica library for fast browsing. Source files are parsed on demand.',
-      })
-
-      const shouldMerge = mslLoaded.value || loadedArchiveFingerprints.value.size > 0
+      if (!cachedLazyIndex) {
+        Notify.create({
+          type: 'info',
+          message:
+            'Indexing Modelica library for fast browsing. Source files are parsed on demand.',
+        })
+      }
       const result = shouldMerge
         ? await worker.mergeMslZip(file.name, archiveBuffer)
-        : await worker.loadMslZip(file.name, archiveBuffer)
+        : await worker.loadMslZip(file.name, archiveBuffer, cachedLazyIndex ?? undefined)
       loadedArchiveFingerprints.value.add(fingerprint)
 
       mslLoaded.value = true
@@ -290,6 +495,31 @@ export function useModelicaLibraries(params: {
         phase: 'general',
         message: loadMessage,
       })
+
+      if (archivePath && result.loadMode === 'lazy-index' && result.lazyIndex && !cachedLazyIndex) {
+        await writeLazyLibraryIndexCache({
+          archiveName: file.name,
+          archivePath,
+          archiveFingerprint: fingerprint,
+          index: result.lazyIndex,
+        })
+      }
+
+      if (
+        archivePath &&
+        result.loadMode === 'lazy-index' &&
+        Array.isArray(result.sourceRootUris) &&
+        result.sourceRootUris.length > 0
+      ) {
+        await restoreOrWarmParsedCacheInBackground({
+          archiveName: file.name,
+          archivePath,
+          archiveFingerprint: fingerprint,
+          sourceRootUris: result.sourceRootUris,
+          fileCount: result.fileCount,
+          documentCount: result.documentCount,
+        })
+      }
 
       if (
         archivePath &&

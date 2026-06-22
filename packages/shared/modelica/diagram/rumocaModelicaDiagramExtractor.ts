@@ -22,22 +22,34 @@ const ensureDiagramShape = (value: unknown): ModelicaDiagramDto => {
   }
 }
 
+const toWorkerPayload = (
+  request: DiagramExtractRequest,
+): { source: string; qualifiedName?: string; fileName?: string } => {
+  const payloadRequest: { source: string; qualifiedName?: string; fileName?: string } = {
+    source: request.source,
+  }
+  if (typeof request.qualifiedName === 'string' && request.qualifiedName.trim().length > 0) {
+    payloadRequest.qualifiedName = request.qualifiedName
+  }
+  if (typeof request.fileName === 'string' && request.fileName.trim().length > 0) {
+    payloadRequest.fileName = request.fileName
+  }
+  return payloadRequest
+}
+
 export const createRumocaModelicaDiagramExtractor = (
   getWorker: () => ModelicaWorkerClient | null,
 ): ModelicaDiagramExtractor => ({
   extract: async (request: DiagramExtractRequest): Promise<ModelicaDiagramDto> => {
     const worker = getWorker()
     if (!worker) throw new Error('Modelica worker not loaded')
-    const payloadRequest: { source: string; qualifiedName?: string; fileName?: string } = {
-      source: request.source,
-    }
-    if (typeof request.qualifiedName === 'string' && request.qualifiedName.trim().length > 0) {
-      payloadRequest.qualifiedName = request.qualifiedName
-    }
-    if (typeof request.fileName === 'string' && request.fileName.trim().length > 0) {
-      payloadRequest.fileName = request.fileName
-    }
-    const payload = await worker.extractDiagram(payloadRequest)
+    const payload = await worker.extractDiagram(toWorkerPayload(request))
+    return ensureDiagramShape(payload)
+  },
+  extractPreview: async (request: DiagramExtractRequest): Promise<ModelicaDiagramDto> => {
+    const worker = getWorker()
+    if (!worker) throw new Error('Modelica worker not loaded')
+    const payload = await worker.extractDiagramPreview(toWorkerPayload(request))
     return ensureDiagramShape(payload)
   },
 })
