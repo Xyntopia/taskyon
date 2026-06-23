@@ -228,13 +228,7 @@ import FileDropzone from '@taskyon/shared/components/FileDropzone.vue'
 import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
 import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
-import {
-  createNewTaskChain,
-  generateTaskKeyWords,
-  partialTaskDraft,
-  type MessageExecutionMode,
-} from '@taskyon/taskyon'
-import { watchThrottled } from '@vueuse/core'
+import { createNewTaskChain, partialTaskDraft, type MessageExecutionMode } from '@taskyon/taskyon'
 import { QSelect, useQuasar } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
@@ -244,9 +238,6 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import chatMessageEdit from './chatMessageEdit.vue'
 import ChooseModelDialog from './ChooseModelDialog.vue'
 import SimpleSettingsDialog from './SimpleSettingsDialog.vue'
-// import { watchThrottled } from '@vueuse/core'
-// use idel mechanism to calculate all kinds of stuff here :=)
-//import { useIdle } from '@vueuse/core'
 
 const {
   expertMode = false,
@@ -267,18 +258,7 @@ const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { navigateToTask } = useTaskNavigation()
 
-const keywordExtractorReady = ref(false)
-
 onMounted(() => {
-  // pre-load our python-based keyword function!
-  void generateTaskKeyWords(
-    currentnewTask.value ?? {
-      role: 'system',
-      content: { type: 'message', data: 'test' },
-    },
-    [],
-  ).then(() => (keywordExtractorReady.value = true))
-
   state.setDraftPasteHandler((pastedFiles) => {
     attachFileToDraft(pastedFiles)
   })
@@ -356,49 +336,10 @@ const currentnewTask = computed(() => {
   return partialTaskDraft.parse(task) // we can do this, because we defined the "role"
 })
 
-const getCurrentKeyword = async () => {
-  const startTime = performance.now()
-  const kwd = (await generateTaskKeyWords(currentnewTask.value, tystate.selectedThread))[0]
-  const endTime = performance.now()
-  console.log(`Keyword creation took ${endTime - startTime} ms.`)
-  return kwd
-}
-
-// add taskchain to taskManager
-async function getCurrentKeywordsWithTimeout(timeoutMs = 200): Promise<string | undefined | null> {
-  try {
-    const kwd = await Promise.race([
-      getCurrentKeyword(),
-      new Promise<null>((resolve) =>
-        setTimeout(() => {
-          resolve(null)
-        }, timeoutMs),
-      ),
-    ])
-    return kwd
-  } catch (err) {
-    console.log('Error generating keywords!', err)
-  }
-  //console.log(`Keyword Timeout? ${kwds === null ? true : false}`)
-}
-
-//const { idle, lastActive } = useIdle(2000) // 5 min
-const currentKeywords = ref<string>()
-watchThrottled(
-  tystate.selectedThread,
-  async () => {
-    // calculate keywords here with much biggger timeout!
-    const kwds = await getCurrentKeywordsWithTimeout(2000)
-    if (kwds) currentKeywords.value = kwds
-  },
-  { immediate: true, throttle: 2000 },
-)
-
 const $q = useQuasar()
 
 async function addNewTask(mode: MessageExecutionMode, p2pTopic?: string) {
   console.log('pubishing on topic:', p2pTopic)
-  const kwdsPromise = getCurrentKeywordsWithTimeout(300)
 
   // execute: if true, we immediately queue the task for execution in the taskManager
   //          otherwise, it won't get executed but simply saved into the tree
@@ -406,14 +347,12 @@ async function addNewTask(mode: MessageExecutionMode, p2pTopic?: string) {
   if (!currentnewTask.value) throw new Error('No task to add!')
   const ty = await tystate.taskyon
   const fileIds = await ty.addFiles(fileAttachments.value, 'opfs')
-  const kwds = (await kwdsPromise) ?? currentKeywords.value
   const previousTaskId = state.selectedTaskId
   const createTaskChainArgs = {
     currentTask: tystate.currentTask.value,
     draftTask: currentnewTask.value,
     entryNode: entryNode ? partialTaskDraft.parse(structuredClone(entryNode)) : undefined,
     fileIds,
-    keyword: kwds,
     mode,
   }
   const { createdTasks } = await createNewTaskChain({

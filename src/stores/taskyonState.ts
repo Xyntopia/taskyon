@@ -34,7 +34,6 @@ import {
   TaskyonMessage,
   TOKEN_SERVICE_BASE_URL,
   tyCore,
-  usePyodideWebworker,
 } from '@taskyon/taskyon'
 import type { AuthenticationOptions } from '@taskyon/taskyon/browser'
 import { usePersistentOauth, type TokenGetter } from '@taskyon/taskyon/browser'
@@ -1036,9 +1035,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   // callin ExecutionContext.interrupt();  cancels processing of current task
   console.log('initialize taskyon')
-
-  // pre-initialize our python webworker, because its very slow to startup :)
-  void usePyodideWebworker().preInit()
 
   const getEntryNodeToolName = (entryNodeDraft: partialTaskDraft): string => {
     if (entryNodeDraft.content.type !== 'functioncall') return 'entryNode'

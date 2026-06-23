@@ -1,7 +1,7 @@
-import { usePyodideWebworker } from '../utils/webWorkerApi'
 import { match, P } from 'ts-pattern'
 import type { TaskNode } from '../types/taskNode'
 import type { partialTaskDraft } from '../types/taskNode'
+import { generateTaskName, type TaskNameOptions } from './taskNaming'
 
 export function findAllFilesInTasks(taskList: TaskNode[]): string[] {
   const fileSet = new Set<string>()
@@ -13,14 +13,13 @@ export function findAllFilesInTasks(taskList: TaskNode[]): string[] {
   return Array.from(fileSet)
 }
 
-const { extractKeywords } = usePyodideWebworker()
+export type GenerateTaskKeywordsOptions = Partial<TaskNameOptions>
 
-// TODO: this should be moved into its own "NLP" tool
-export async function generateTaskKeyWords(
+export function taskChainTextForNaming(
   newTask: partialTaskDraft | undefined,
   taskChain: TaskNode[],
-) {
-  const chatString = [...taskChain, newTask].reduce(
+): string {
+  return [...taskChain, newTask].reduce(
     (p, n) =>
       p +
       '\n\n' +
@@ -57,6 +56,21 @@ export async function generateTaskKeyWords(
 
     '',
   )
-  const kws = await extractKeywords(chatString, 5)
-  return kws
+}
+
+// Compatibility wrapper for existing task naming call sites.
+export async function generateTaskKeyWords(
+  newTask: partialTaskDraft | undefined,
+  taskChain: TaskNode[],
+  options: GenerateTaskKeywordsOptions = {},
+) {
+  const name = await generateTaskName({
+    text: taskChainTextForNaming(newTask, taskChain),
+    options: {
+      mode: options.mode ?? 'first-words',
+      maxWords: options.maxWords ?? 4,
+      maxChars: options.maxChars ?? 50,
+    },
+  })
+  return name ? [name] : []
 }

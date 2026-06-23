@@ -41,20 +41,11 @@ export function usePyodideWebworker() {
 
     console.log(`create pyodide webworker`)
 
-    // Create the initialization promise
-    pythonWorkerPromise = (async () => {
-      const worker = wrap<pythonWorker>(
-        new Worker(new URL('./pyodide.worker.ts', import.meta.url), { type: 'module' }),
-      )
-
-      // Wait for the worker to be fully initialized by running a simple script
-      // This ensures Pyodide is loaded before we consider the worker ready
-      await worker.runPythonScript("print('worker ready')")
-
-      pythonWorker = worker
-      pythonWorkerPromise = null // Clear the promise after successful creation
-      return worker
-    })()
+    const worker = wrap<pythonWorker>(
+      new Worker(new URL('./pyodide.worker.ts', import.meta.url), { type: 'module' }),
+    )
+    pythonWorker = worker
+    pythonWorkerPromise = Promise.resolve(worker)
 
     return pythonWorkerPromise
   }
@@ -65,46 +56,7 @@ export function usePyodideWebworker() {
     return await pythonWorker.runPythonScript(script, params)
   }
 
-  // TODO: somehow initialize functions like this on webworker-side
-  //       that way we don't have to re-initialize them all the time...
-  async function extractKeywords(text: string, num: number) {
-    const pythonScript = `
-import micropip
-await micropip.install('yake')
-import yake
-
-def keywordsFunc(text: str):
-  kw_extractor = yake.KeywordExtractor()
-  keywords = kw_extractor.extract_keywords(text)
-  return keywords
-keywordsFunc
-  `
-    const res = await asyncRunPython(pythonScript, [text])
-    if (!res) {
-      console.error('could not execute async python script')
-      throw Error('could not execute async python script')
-    }
-    console.log('keyword Result: ', res)
-    try {
-      const allKws = res.result as [string, number][]
-      const kws = allKws.map((x) => x[0]).slice(0, num)
-      return kws
-    } catch (error) {
-      console.error('no keywords found!', error)
-      return ['no keywords found']
-    }
-  }
-
-  const preInit = async () => {
-    console.log('pre-initialized python web worker')
-    const pythonWorker = await getPythonWorker()
-    await pythonWorker.runPythonScript("print('initializing...')")
-    console.log('python worker is ready...')
-  }
-
   return {
     asyncRunPython,
-    extractKeywords,
-    preInit,
   }
 }

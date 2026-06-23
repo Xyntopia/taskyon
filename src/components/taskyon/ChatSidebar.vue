@@ -119,7 +119,7 @@
 import { matAutorenew, matFileUpload, matSearch } from '@quasar/extras/material-icons'
 import { mdiForumPlus, mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import FileDropzone from '@taskyon/shared/components/FileDropzone.vue'
-import { generateTaskKeyWords, sleep } from '@taskyon/taskyon'
+import { generateTaskKeyWords, type TaskNode } from '@taskyon/taskyon'
 import { watchThrottled } from '@vueuse/core'
 import { useQuasar } from 'quasar'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
@@ -137,6 +137,7 @@ const { navigateToTask } = useTaskNavigation()
 
 const conversationIDs = ref<string[]>([])
 const nameMap = ref<Record<string, string>>({})
+const namingInProgress = new Set<string>()
 
 const openDetailedTaskView = () => {
   navigateToTask(state.selectedTaskId, { path: '/detailed' })
@@ -150,45 +151,74 @@ void tystate.taskyon.then((ty) =>
   }),
 )
 
-let currentlyCalculating = false
+const firstExistingTaskName = (taskChain: { name?: string | undefined }[]) => {
+  for (let i = taskChain.length - 1; i >= 0; i--) {
+    const name = taskChain[i]?.name?.trim()
+    if (name) return name
+  }
+}
+
+const cacheName = async (id: string, name: string) => {
+  const trimmedName = name.trim()
+  if (!trimmedName) return
+
+  nameMap.value[id] = trimmedName
+  const ty = await tystate.taskyon
+  void ty.metaUpsert(id, { name: trimmedName }, 'shallow_merge')
+}
+
+const generateLocalName = async (task: TaskNode, taskChain: TaskNode[]) =>
+  (
+    await generateTaskKeyWords(task, taskChain, {
+      mode: 'first-words',
+      maxWords: 4,
+    })
+  )[0]
+
+const updateNameWithTextRank = async (id: string) => {
+  if (namingInProgress.has(id)) return
+  namingInProgress.add(id)
+
+  try {
+    const ty = await tystate.taskyon
+    const task = await ty.getTask(id)
+    if (!task) return
+
+    const taskChain = await ty.getTaskChain(id)
+    const kws = await generateTaskKeyWords(task, taskChain, {
+      mode: 'textrank',
+      maxWords: 4,
+    })
+    if (kws[0]) await cacheName(id, kws[0])
+  } finally {
+    namingInProgress.delete(id)
+  }
+}
 
 // TODO: this is probably a good idea to move this into "taskyon core"
 async function updateName(id: string) {
   console.log('update name...', id)
-  const displayName = nameMap.value[id]
-  if (displayName) return
   const ty = await tystate.taskyon
   const task = await ty.getTask(id)
   if (!task) return
-  let name = task?.name
-  if (!name?.trim()) {
-    const taskMeta = await ty.getMeta('id')
-    name = taskMeta?.name
-  }
-  if (!name?.trim()) {
-    const taskChain = await ty.getTaskChain(id)
 
-    // search if a previous task already has a name first
-    for (let i = taskChain.length - 1; i >= 0; i--) {
-      if (taskChain[i]!.name?.trim()) {
-        name = taskChain[i]!.name!.trim()
-        break
-      }
-    }
+  const taskMeta = await ty.getMeta(id)
+  const cachedName = taskMeta?.name?.trim()
+  if (cachedName) {
+    nameMap.value[id] = cachedName
+    return
+  }
 
-    if (!name?.trim()) {
-      currentlyCalculating = true
-      await sleep(1000) // we slow this calculation down artificially to not overwhelm CPU
-      const kws = await generateTaskKeyWords(task, taskChain)
-      console.log('calculating new name', kws)
-      if (kws[0]) name = kws[0]
-      currentlyCalculating = false
-    }
+  const taskChain = await ty.getTaskChain(id)
+  const displayName =
+    task.name?.trim() ||
+    firstExistingTaskName(taskChain) ||
+    (await generateLocalName(task, taskChain))
+
+  if (displayName?.trim()) {
+    nameMap.value[id] = displayName.trim()
   }
-  if (name?.trim()) {
-    nameMap.value[id] = name.trim()
-    void ty.metaUpsert(id, { name }, 'shallow_merge')
-  }
+  void updateNameWithTextRank(id)
 }
 
 watchThrottled(
@@ -197,10 +227,8 @@ watchThrottled(
   ([_, newChatHistory]) => {
     console.log('updating sidebar chat list')
     conversationIDs.value = newChatHistory.slice(0, 10)
-    if (!currentlyCalculating) {
-      for (const cid of conversationIDs.value) {
-        void updateName(cid)
-      }
+    for (const cid of conversationIDs.value) {
+      void updateName(cid)
     }
   },
   {

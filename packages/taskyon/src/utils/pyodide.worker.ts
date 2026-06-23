@@ -31,10 +31,6 @@ async function getPyodide() {
   })
 
   console.log(`Pyodide code loaded after ${(performance.now() - startTime).toFixed(2)} ms`)
-  await pyodide.loadPackage(['micropip'])
-  const micropip = pyodide.pyimport('micropip')
-  // TODO: instead of python use a js/wasm keyword extractor
-  await micropip.install('yake==0.6.0')
   pyodideEnv = pyodide
   pyodideInitPromise = null // Clear the promise after successful load
   console.log(`Pyodide initialization took ${(performance.now() - startTime).toFixed(2)} ms`)
@@ -69,6 +65,9 @@ const pythonWorker = {
 
 export type pythonWorker = typeof pythonWorker
 
-if (typeof self !== 'undefined' && typeof (self as { addEventListener?: unknown }).addEventListener === 'function') {
+if (
+  typeof self !== 'undefined' &&
+  typeof (self as { addEventListener?: unknown }).addEventListener === 'function'
+) {
   expose(pythonWorker)
 }

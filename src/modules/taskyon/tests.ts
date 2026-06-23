@@ -949,12 +949,13 @@ testArchiveUploadDownload.gui = true
 export const testPyodide = async () => {
   const python = usePyodideWebworker()
 
-  const sampleText =
-    'Taskyon is an open-source platform for managing tasks, projects, and workflows efficiently.'
-  const kws = await python.extractKeywords(sampleText, 5)
+  const result = await python.asyncRunPython('1 + 1')
+  assert(result !== undefined, 'Expected Python worker to return a result object')
+  assert(result.result === 2, `Expected Python worker to return 2, got ${safeYamlDump(result)}`)
+  assert(typeof result.stdout === 'string', `Expected Python worker stdout to be a string`)
 
   return {
-    kws,
+    result,
   }
 }
 

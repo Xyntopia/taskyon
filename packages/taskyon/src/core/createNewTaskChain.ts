@@ -1,5 +1,6 @@
 import { forgeTaskChain } from './createTasks'
 import type { partialTaskDraft, TaskNode } from '../types/taskNode'
+import { textRankTaskName } from './taskNaming'
 
 export type MessageExecutionMode = 'message' | 'websearch'
 
@@ -18,6 +19,25 @@ type CreatedTaskChain = {
 }
 
 const cloneTaskDraft = (task: partialTaskDraft): partialTaskDraft => structuredClone(task)
+
+const TASK_NAME_INPUT_WORD_LIMIT = 100
+
+const firstWords = (text: string, maxWords: number) => text.trim().split(/\s+/).slice(0, maxWords)
+
+const taskTextForName = (task: partialTaskDraft): string | null => {
+  if (task.content.type === 'message' || task.content.type === 'return') return task.content.data
+  if (task.content.type === 'functioncall') return task.content.data.name
+  return null
+}
+
+const createTaskKeyword = (task: partialTaskDraft): string | null => {
+  const text = taskTextForName(task)
+  if (!text) return null
+  return textRankTaskName(firstWords(text, TASK_NAME_INPUT_WORD_LIMIT).join(' '), {
+    maxWords: 4,
+    maxChars: 50,
+  })
+}
 
 const withKeyword = (
   task: partialTaskDraft,
@@ -85,15 +105,18 @@ export const buildCreateNewTaskChain = ({
 }: BuildCreateNewTaskChainArgs): partialTaskDraft[] => {
   const newTaskChain: partialTaskDraft[] = []
   const fileTask = createFileTaskDraft(fileIds)
+  const generatedKeyword = keyword ?? createTaskKeyword(draftTask)
 
   if (fileTask) {
-    newTaskChain.push(withKeyword(fileTask, keyword))
+    newTaskChain.push(withKeyword(fileTask, generatedKeyword))
   }
 
-  newTaskChain.push(withKeyword(cloneTaskDraft(draftTask), keyword))
+  newTaskChain.push(withKeyword(cloneTaskDraft(draftTask), generatedKeyword))
 
   if (draftTask.content.type === 'message' && entryNode) {
-    newTaskChain.push(withKeyword(applyWebSearchIntent(cloneTaskDraft(entryNode), mode), keyword))
+    newTaskChain.push(
+      withKeyword(applyWebSearchIntent(cloneTaskDraft(entryNode), mode), generatedKeyword),
+    )
   }
 
   if (currentTask && currentTask.content.type !== 'return') {
@@ -106,7 +129,7 @@ export const buildCreateNewTaskChain = ({
             data: 'Function was cancelled for unknown reasons.',
           },
         },
-        keyword,
+        generatedKeyword,
       ),
     )
   }
