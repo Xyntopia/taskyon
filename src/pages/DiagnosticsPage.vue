@@ -21,6 +21,16 @@
             label="Abort tests"
             @click="abortRunningTests"
           />
+          <q-chip
+            dense
+            square
+            :color="isRunning ? 'primary' : 'grey-4'"
+            :text-color="isRunning ? 'white' : 'grey-9'"
+            data-cy="diagnostics-running-state"
+          >
+            <q-spinner v-if="isRunning" class="q-mr-xs" color="white" size="14px" />
+            {{ isRunning ? 'Tests running' : 'Tests idle' }}
+          </q-chip>
           <div>
             <q-toggle v-model="state.noGuiTests" label="no GUI Input"></q-toggle>
             <q-toggle v-model="state.detailedTests" label="detailed"></q-toggle>
@@ -125,7 +135,7 @@
           <q-separator vertical />
           <div v-if="diagnostics" class="col" style="min-width: 300px; min-height: 500px">
             <q-btn flat :icon="matContentCopy" @click="copyToClipboard(diagnostics)"></q-btn>
-            <q-scroll-area class="fit" style="max-height: 90%">
+            <q-scroll-area ref="diagnosticsScrollRef" class="fit" style="max-height: 90%">
               <pre data-cy="diagnostics-result">{{ diagnostics }}</pre>
             </q-scroll-area>
             <div v-if="testFinished" data-cy="test-finished">Test Finished</div>
@@ -155,7 +165,7 @@ import * as TaskyonUiInteractionTests from 'src/modules/taskyon/taskyonUiInterac
 import { testBuildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import {
   runTimeQuestionConversationUsesClockToolScenario,
   testTimeQuestionConversationUsesClockTool as packageTimeQuestionConversationTest,
@@ -187,6 +197,13 @@ const testFinished = ref(false)
 const searchQuery = ref('')
 const isRunning = ref(false)
 const abortRequested = ref(false)
+const diagnosticsScrollRef = ref<{
+  setScrollPercentage: (
+    axis: 'vertical' | 'horizontal',
+    percentage: number,
+    duration?: number,
+  ) => void
+} | null>(null)
 
 const infoText = ref('get password')
 let resolveSecret: (secret: string) => void
@@ -388,6 +405,16 @@ syncRefsWithLocalStorage('taskyon.diagnostics.expansion', {
   searchQuery,
 })
 
+async function scrollDiagnosticsToBottom() {
+  await nextTick()
+  diagnosticsScrollRef.value?.setScrollPercentage('vertical', 1)
+}
+
+function appendDiagnosticsLog(nextText: string) {
+  diagnostics.value += nextText
+  void scrollDiagnosticsToBottom()
+}
+
 async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
   if (isRunning.value) return
   isRunning.value = true
@@ -396,7 +423,7 @@ async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
 
   diagnostics.value = ''
   const startTime = Date.now() // milliseconds since epoch
-  diagnostics.value = `report_date: ${new Date().toISOString()}\n`
+  appendDiagnosticsLog(`report_date: ${new Date().toISOString()}\n`)
   let total = 0
   let failed = 0
   let aborted = false
@@ -409,7 +436,7 @@ async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
     shouldAbort: () => abortRequested.value,
     onAbort: (nextTest) => {
       aborted = true
-      diagnostics.value += `\nabort requested - skipped remaining tests (next: ${nextTest})\n`
+      appendDiagnosticsLog(`\nabort requested - skipped remaining tests (next: ${nextTest})\n`)
     },
     onProgress: ({ phase, test }) => {
       console.log(`diagnostics test ${phase}:`, test)
@@ -418,27 +445,31 @@ async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
       total += 1
       if (!result.ok) failed += 1
       if (result.ok) {
-        diagnostics.value += dump(
-          {
-            [result.name]: details
-              ? {
-                  status: 'OK',
-                  result: result.details,
-                }
-              : 'OK',
-          },
-          { skipInvalid: true, noRefs: true },
+        appendDiagnosticsLog(
+          dump(
+            {
+              [result.name]: details
+                ? {
+                    status: 'OK',
+                    result: result.details,
+                  }
+                : 'OK',
+            },
+            { skipInvalid: true, noRefs: true },
+          ),
         )
       } else {
-        diagnostics.value += dump(
-          {
-            [result.name]: {
-              status: 'ERROR',
-              message: 'an error occured during this test...',
-              error: result.error,
+        appendDiagnosticsLog(
+          dump(
+            {
+              [result.name]: {
+                status: 'ERROR',
+                message: 'an error occured during this test...',
+                error: result.error,
+              },
             },
-          },
-          { skipInvalid: true, noRefs: true },
+            { skipInvalid: true, noRefs: true },
+          ),
         )
       }
     },
@@ -448,11 +479,11 @@ async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
   try {
     await runDiagnosticsTests(tests, runOptions)
 
-    diagnostics.value += `\n\ntime to run tests: ${(Date.now() - startTime) / 1000}s`
-    diagnostics.value += `\nfailed tests: ${failed}/${total}`
-    diagnostics.value += aborted
-      ? '\naborted before all tests were finished'
-      : '\nfinished all tests!'
+    appendDiagnosticsLog(`\n\ntime to run tests: ${(Date.now() - startTime) / 1000}s`)
+    appendDiagnosticsLog(`\nfailed tests: ${failed}/${total}`)
+    appendDiagnosticsLog(
+      aborted ? '\naborted before all tests were finished' : '\nfinished all tests!',
+    )
     console.log('diagnostics:', diagnostics.value)
     testFinished.value = true
   } finally {
