@@ -122,9 +122,9 @@
 <script setup lang="ts">
 import { watchDebounced } from '@vueuse/core'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { sanitizeSvgMarkup } from '../../spaceships/sanitizeSvgMarkup'
+import SanitizedMarkup from '../../components/SanitizedMarkup.vue'
+import { sanitizeSvgMarkup } from '../../modules/sanitizeMarkup'
 import ToggleButton from '../../components/ToggleButton.vue'
-import SanitizedMarkup from './SanitizedMarkup.vue'
 import {
   createGraphController,
   type GraphData,

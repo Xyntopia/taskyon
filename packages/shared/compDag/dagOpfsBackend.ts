@@ -56,7 +56,7 @@ export function createOpfsDagBackend(prefix = 'dag'): DagStorageBackend {
 
     async writeArtifact(value: unknown): Promise<Hash> {
       const json = JSON.stringify(value)
-      const hash = await canonicalHash(json)
+      const hash = canonicalHash(json)
       const file = new File([json], `${hash}.json`, { type: 'application/json' })
       await writeFile(`${artifactsDir}/${hash}.json`, file)
       return hash

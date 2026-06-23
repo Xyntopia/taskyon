@@ -570,27 +570,39 @@ const plotResolutionOptions: Array<{ label: string; value: PlotResolution }> = [
 
 const props = withDefaults(
   defineProps<{
-    source?: Record<string, unknown> | null
-    mapRows?: PlotFlatRow[] | null
-    mapRuns?: unknown[] | null
-    pathUnits?: Record<string, string> | null
-    pathOptions?: Option[] | null
-    pathKindByPath?: Record<string, SchemaPathKind> | null
-    seriesResolver?: ((path: string) => number[] | null) | null
+    source?: Record<string, unknown> | null | undefined
+    mapRows?: PlotFlatRow[] | null | undefined
+    mapRuns?: unknown[] | null | undefined
+    pathUnits?: Record<string, string> | null | undefined
+    pathOptions?: Option[] | null | undefined
+    pathKindByPath?: Record<string, SchemaPathKind> | null | undefined
+    seriesResolver?: ((path: string) => number[] | null) | null | undefined
     plotPayloadResolver?:
       | ((args: ObjectPathChartsPlotResolverArgs) => ChartPayload | Promise<ChartPayload>)
       | null
+      | undefined
     mapPayloadResolver?:
       | ((args: ObjectPathChartsMapResolverArgs) => ChartPayload | Promise<ChartPayload>)
       | null
+      | undefined
     autoContourOnSparseHeatmap?: boolean
-    favoriteKeys?: string[] | null
+    favoriteKeys?: string[] | null | undefined
     showAddMapButton?: boolean
     showControls?: boolean
     enableDefaultPlotRenderer?: boolean
     lazy?: boolean
   }>(),
   {
+    source: undefined,
+    mapRows: undefined,
+    mapRuns: undefined,
+    pathUnits: undefined,
+    pathOptions: undefined,
+    pathKindByPath: undefined,
+    seriesResolver: undefined,
+    plotPayloadResolver: undefined,
+    mapPayloadResolver: undefined,
+    favoriteKeys: undefined,
     showAddMapButton: true,
     showControls: true,
     enableDefaultPlotRenderer: true,

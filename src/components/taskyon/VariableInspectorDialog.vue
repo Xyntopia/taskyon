@@ -18,7 +18,7 @@
       <q-card-section class="scroll" style="max-height: calc(100vh - 72px)">
         <ObjectView
           v-if="viewMode === 'data'"
-          :model-value="task?.content.data"
+          :model-value="taskData"
           read-only
           copy-object-btn
           copy-btn
@@ -43,7 +43,7 @@
 import { matClose } from '@quasar/extras/material-icons'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
 import type { TaskNode } from '@taskyon/taskyon'
-import { defineAsyncComponent, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 
 const AsyncTaskWidget = defineAsyncComponent(() => import('./TaskWidget.vue'))
 
@@ -57,6 +57,12 @@ const emit = defineEmits<{
 }>()
 
 const viewMode = ref<'data' | 'task'>('data')
+const taskData = computed(() => {
+  const data = props.task?.content.data
+  return data && typeof data === 'object' && !Array.isArray(data)
+    ? (data as Record<string, unknown>)
+    : undefined
+})
 
 const toggleViewMode = () => {
   viewMode.value = viewMode.value === 'data' ? 'task' : 'data'

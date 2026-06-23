@@ -83,7 +83,7 @@ const copyText = computed(() =>
 
 const copyAllLogs = () => {
   try {
-    copyToClipboard(copyText.value)
+    void copyToClipboard(copyText.value)
     $q.notify({ type: 'positive', message: 'Logs copied to clipboard.' })
   } catch (error: unknown) {
     $q.notify({

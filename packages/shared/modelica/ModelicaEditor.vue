@@ -704,7 +704,6 @@
 </template>
 
 <script setup lang="ts">
-import DOMPurify from 'dompurify'
 import {
   matCode,
   matContentCopy,
@@ -755,7 +754,8 @@ import ModelicaDaeAnalysisPane, {
   type ModelicaDaeAnalysis,
 } from './components/ModelicaDaeAnalysisPane.vue'
 import ModelicaLibraryTreeView from './components/libraryTree/ModelicaLibraryTreeView.vue'
-import SanitizedMarkup from './components/SanitizedMarkup.vue'
+import SanitizedMarkup from '../components/SanitizedMarkup.vue'
+import { sanitizeHtmlMarkup } from '../modules/sanitizeMarkup'
 import ModelicaDiagramPane from './components/ModelicaDiagramPane.vue'
 import { mapRumocaClassTree } from './components/libraryTree/mapRumocaClasses'
 import type { ModelicaLibraryTreeNode } from './components/libraryTree/types'
@@ -1221,10 +1221,7 @@ const modelHelpError = ref('')
 let modelHelpRequestId = 0
 
 const asDocString = (value: unknown): string => (typeof value === 'string' ? value : '')
-const sanitizeModelHelpHtml = (markup: string): string =>
-  DOMPurify.sanitize(markup, {
-    USE_PROFILES: { html: true },
-  })
+const sanitizeModelHelpHtml = sanitizeHtmlMarkup
 
 const pickFirstNonEmptyDocString = (record: Record<string, unknown>, keys: string[]): string => {
   for (const key of keys) {
@@ -1369,8 +1366,8 @@ const daeAnalysis = computed<ModelicaDaeAnalysis>(() => {
           : 'Underdetermined solve slice (likely partitioning issue).'
   const hasDummyState = Boolean(
     modelShape.hasOnlyDummyState ||
-      (nx === 1 &&
-        Object.prototype.hasOwnProperty.call((dae.x ?? {}) as object, '_rumoca_dummy_state')),
+    (nx === 1 &&
+      Object.prototype.hasOwnProperty.call((dae.x ?? {}) as object, '_rumoca_dummy_state')),
   )
   const executionMode =
     typeof resultMeta.executionMode === 'string'
@@ -1869,10 +1866,15 @@ const configuration = computed<partialTyConfiguration | null>(() => {
   const taskyonKey = props.taskyonSignatureOrKey
   if (taskyonKey == null) return null
   const customAppConfiguration = props.taskyonConfiguration?.appConfiguration ?? {}
+  const customToolchainConfig = props.taskyonConfiguration?.toolchainConfig ?? {}
   return {
-    llmSettings: {
-      enableToolChooser: true,
-      entryNode: toolCall({ name: 'modelicaDocumentAssistant', arguments: {} }),
+    toolchainConfig: {
+      ...customToolchainConfig,
+      taskyonFlow: {
+        ...(customToolchainConfig.taskyonFlow ?? {}),
+        enableToolChooser: true,
+        entryNode: toolCall({ name: 'modelicaDocumentAssistant', arguments: {} }),
+      },
     },
     appConfiguration: {
       guiMode: 'minChat',

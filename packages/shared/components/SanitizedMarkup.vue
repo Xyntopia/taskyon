@@ -4,6 +4,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue'
+import { renderSanitizedMarkup } from '../modules/sanitizeMarkup'
 
 const props = withDefaults(
   defineProps<{
@@ -25,6 +26,6 @@ const sanitizedMarkup = computed(() =>
 
 watchEffect(() => {
   if (!rootEl.value) return
-  rootEl.value.innerHTML = sanitizedMarkup.value
+  renderSanitizedMarkup(rootEl.value, sanitizedMarkup.value)
 })
 </script>

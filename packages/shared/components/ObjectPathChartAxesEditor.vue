@@ -127,10 +127,7 @@
         @filter="handleFilter"
       />
     </div>
-    <div
-      v-if="plotMode === 'heatmap'"
-      class="object-path-charts__col col-12 col-md-2"
-    >
+    <div v-if="plotMode === 'heatmap'" class="object-path-charts__col col-12 col-md-2">
       <q-select
         v-model="zAxisTransformKind"
         :options="axisTransformKindOptions"
@@ -161,14 +158,7 @@
       v-if="plotMode === 'heatmap' && zAxisTransformKind === 'index'"
       class="object-path-charts__col col-12 col-md-2"
     >
-      <q-input
-        v-model.number="zAxisIndex"
-        type="number"
-        min="0"
-        outlined
-        dense
-        label="Z index"
-      />
+      <q-input v-model.number="zAxisIndex" type="number" min="0" outlined dense label="Z index" />
     </div>
     <div class="object-path-charts__col col-12" :class="showRemove ? 'col-md-2' : 'col-md-3'">
       <q-input v-model="chartTitle" outlined dense label="Title (optional)" />
@@ -221,11 +211,13 @@ export type ObjectPathChartDefinition = {
 const props = withDefaults(
   defineProps<{
     pathOptions: Option[]
-    scalarPathOptions?: Option[]
-    arrayPathOptions?: Option[]
+    scalarPathOptions?: Option[] | undefined
+    arrayPathOptions?: Option[] | undefined
     showRemove?: boolean
   }>(),
   {
+    scalarPathOptions: undefined,
+    arrayPathOptions: undefined,
     showRemove: false,
   },
 )
@@ -274,8 +266,7 @@ const plotMode = computed<'2d' | 'heatmap'>({
 })
 
 const withAxisTransform = (axis: 'x' | 'y' | 'z', transform: AxisTransform) => {
-  const key =
-    axis === 'x' ? 'xAxisTransform' : axis === 'y' ? 'yAxisTransform' : 'zAxisTransform'
+  const key = axis === 'x' ? 'xAxisTransform' : axis === 'y' ? 'yAxisTransform' : 'zAxisTransform'
   configModel.value = {
     ...configModel.value,
     [key]: transform,
@@ -304,7 +295,9 @@ const axisTransformOf = (axis: 'x' | 'y' | 'z'): AxisTransform => {
     return {
       kind: 'index',
       index:
-        typeof transform.index === 'number' && Number.isInteger(transform.index) && transform.index >= 0
+        typeof transform.index === 'number' &&
+        Number.isInteger(transform.index) &&
+        transform.index >= 0
           ? transform.index
           : 0,
     }
@@ -369,13 +362,19 @@ const yAxisIndex = axisIndex('y')
 const zAxisIndex = axisIndex('z')
 
 const xPathOptionsResolved = computed(() =>
-  xAxisTransformKind.value === 'scalar' ? scalarPathOptionsResolved.value : arrayPathOptionsResolved.value,
+  xAxisTransformKind.value === 'scalar'
+    ? scalarPathOptionsResolved.value
+    : arrayPathOptionsResolved.value,
 )
 const yPathOptionsResolved = computed(() =>
-  yAxisTransformKind.value === 'scalar' ? scalarPathOptionsResolved.value : arrayPathOptionsResolved.value,
+  yAxisTransformKind.value === 'scalar'
+    ? scalarPathOptionsResolved.value
+    : arrayPathOptionsResolved.value,
 )
 const zPathOptionsResolved = computed(() =>
-  zAxisTransformKind.value === 'scalar' ? scalarPathOptionsResolved.value : arrayPathOptionsResolved.value,
+  zAxisTransformKind.value === 'scalar'
+    ? scalarPathOptionsResolved.value
+    : arrayPathOptionsResolved.value,
 )
 
 const xPath = computed({

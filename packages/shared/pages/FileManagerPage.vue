@@ -96,7 +96,13 @@
 </template>
 
 <script setup lang="ts">
-import { matContentCopy, matDelete, matDownload, matFolder, matInfo } from '@quasar/extras/material-icons'
+import {
+  matContentCopy,
+  matDelete,
+  matDownload,
+  matFolder,
+  matInfo,
+} from '@quasar/extras/material-icons'
 import { mdiFile } from '@quasar/extras/mdi-v6'
 import type { QTreeNode } from 'quasar'
 import FileDropzone from '../components/FileDropzone.vue'
@@ -235,7 +241,7 @@ async function getDirectoryStats(dir: DirHandle, dirPath: string): Promise<Direc
     for await (const [name, handle] of dir.entries()) {
       const fullPath = dirPath ? `${dirPath}/${name}` : name
       if (handle.kind === 'file') {
-        const file = await (handle as FileSystemFileHandle).getFile()
+        const file = await handle.getFile()
         totalSize += file.size
         fileCount += 1
         if (latestModified == null || file.lastModified > latestModified) {
@@ -247,7 +253,10 @@ async function getDirectoryStats(dir: DirHandle, dirPath: string): Promise<Direc
         totalSize += child.totalSize
         fileCount += child.fileCount
         directoryCount += child.directoryCount
-        if (child.latestModified != null && (latestModified == null || child.latestModified > latestModified)) {
+        if (
+          child.latestModified != null &&
+          (latestModified == null || child.latestModified > latestModified)
+        ) {
           latestModified = child.latestModified
         }
       }
@@ -290,7 +299,7 @@ async function dirHandleToNodes(dir: DirHandle, parentPath = ''): Promise<TreeNo
     const fullPath = parentPath ? `${parentPath}/${name}` : name
 
     if (handle.kind === 'file') {
-      const fileHandle = handle as FileSystemFileHandle
+      const fileHandle = handle
       const file = await fileHandle.getFile()
       out.push({
         id: fullPath,
