@@ -42,6 +42,7 @@ import {
   normalizeStoredModelForProvider,
   modelOptionsForProvider,
 } from './cli/models'
+import { hasInterruptibleWorkerActivity } from './cli/interruptState'
 import { syncProviderRuntimeConfig } from './cli/runtime'
 import { renderTaskProgress, renderWorkerProgress, type WorkerEvent } from './cli/taskRenderer'
 import {
@@ -55,6 +56,7 @@ import {
 } from './cli/types'
 import { formatExplorationContext, createExplorationTool } from './tools/explorationTool'
 import { updateFilesTool } from './tools/patchTool'
+import { downloadFileTool } from './tools/downloadFileTool'
 
 type BashToolArgs = {
   command?: string
@@ -83,6 +85,7 @@ const ENTRY_NODE_TOOL_NAME = 'entryNode'
 let debugLogsEnabled = process.env.TYCLI_DEBUG === '1'
 const EXPLORATION_TOOL_NAME = 'exploration'
 const UPDATE_FILES_TOOL_NAME = 'updateFiles'
+const DOWNLOAD_FILE_TOOL_NAME = 'downloadFile'
 const FILE_PICKER_MAX_DEPTH = 3
 const FILE_PICKER_MAX_ENTRIES = 5000
 const FILE_PICKER_MAX_OPTIONS = 30
@@ -105,6 +108,13 @@ const FILE_PICKER_EXCLUDED_DIRS = new Set([
 const fileIndexCache = new Map<string, string[]>()
 let fatalErrorHandled = false
 const RUNTIME_LOG_MAX_BYTES = 100 * 1024 * 1024
+
+function adoptInvocationWorkingDirectory() {
+  const cwd =
+    process.env.TYCLI_CWD?.trim() || process.env.PROJECT_CWD?.trim() || process.env.INIT_CWD?.trim()
+  if (!cwd || cwd === process.cwd()) return
+  process.chdir(cwd)
+}
 
 type RuntimeLog = {
   filePath: string
@@ -457,7 +467,12 @@ const cliBashTool = createTool({
     },
   } as const,
 })
-const ACTIVE_LLM_TOOLS = [cliBashTool.name, EXPLORATION_TOOL_NAME, UPDATE_FILES_TOOL_NAME] as const
+const ACTIVE_LLM_TOOLS = [
+  cliBashTool.name,
+  EXPLORATION_TOOL_NAME,
+  UPDATE_FILES_TOOL_NAME,
+  DOWNLOAD_FILE_TOOL_NAME,
+] as const
 
 function buildCliEnvironmentContext(
   toolResultSection = '(none)',
@@ -1696,6 +1711,8 @@ async function loadProjectInstructions(cwd: string): Promise<string> {
 }
 
 async function main() {
+  adoptInvocationWorkingDirectory()
+
   let restoreConsoleLogging: (() => void) | undefined
   const sessionStartedAt = new Date()
   try {
@@ -1751,7 +1768,7 @@ async function main() {
       return Object.values(allTools)
         .filter(
           (tool: { name: string; description: string }) =>
-            !['chatCompletion', 'entryNode', 'taskyonFlow'].includes(tool.name),
+            !['chatCompletion', 'entryNode', 'opfsStorage', 'taskyonFlow'].includes(tool.name),
         )
         .map((tool: { name: string; description: string }) => ({
           name: tool.name,
@@ -1789,7 +1806,7 @@ async function main() {
         prompt_templates: DEFAULT_PROMPT_TEMPLATES,
       },
     }),
-    [cliEntryNodeTool, explorationTool, updateFilesTool] as unknown as [],
+    [cliEntryNodeTool, explorationTool, updateFilesTool, downloadFileTool] as unknown as [],
     cryptoSession,
     {
       createIframeMultiPlexer: () =>
@@ -1895,6 +1912,7 @@ async function main() {
   let persistQueue = Promise.resolve()
   let waitingForTask = false
   let interruptedCurrentTask = false
+  let interruptNoticePrinted = false
   let requestQuitOnNextPrompt = false
   let eofRequested = false
   let inMenuInteraction = false
@@ -1906,8 +1924,12 @@ async function main() {
   let taskInterruptKeysCleanup: (() => void) | undefined
   let activeTaskWaitController: AbortController | undefined
   let thinkingLines: string[] = []
+  let thinkingText = ''
   let thinkingPanelHeight = 0
+  let thinkingRenderTimer: ReturnType<typeof setTimeout> | null = null
+  let renderedThinkingPanelText = ''
   const activeWorkerTasks = new Set<string>()
+  const suppressedTaskIds = new Set<string>()
   let hasWorkerProcessing = false
   let taskProcessingStatus: 'idle' | 'processing' | 'finished' = 'idle'
   const taskFeed: TaskNode[] = []
@@ -1949,6 +1971,13 @@ async function main() {
   const activeTaskCount = () =>
     activeWorkerTasks.size > 0 ? activeWorkerTasks.size : hasWorkerProcessing ? 1 : 0
 
+  const hasActiveWorkerTask = () =>
+    hasInterruptibleWorkerActivity({
+      waitingForTask,
+      activeWorkerTaskCount: activeWorkerTasks.size,
+      hasWorkerProcessing,
+    })
+
   const updateFooter = () => {
     const providerModel = currentProviderModel()
     footer.setStatus({
@@ -1973,12 +2002,24 @@ async function main() {
     )
   }
 
-  const clearThinkingPanel = () => {
+  const clearThinkingRenderTimer = () => {
+    if (thinkingRenderTimer === null) return
+    clearTimeout(thinkingRenderTimer)
+    thinkingRenderTimer = null
+  }
+
+  const eraseThinkingPanel = () => {
     if (thinkingPanelHeight <= 0) return
     for (let i = 0; i < thinkingPanelHeight; i += 1) {
       process.stdout.write('\x1b[1A\x1b[2K')
     }
     thinkingPanelHeight = 0
+  }
+
+  const clearThinkingPanel = () => {
+    clearThinkingRenderTimer()
+    eraseThinkingPanel()
+    renderedThinkingPanelText = ''
   }
 
   const mainPrompt = () =>
@@ -1998,18 +2039,95 @@ async function main() {
   const resetThinking = () => {
     clearThinkingPanel()
     thinkingLines = []
+    thinkingText = ''
     activeWorkerTasks.clear()
     hasWorkerProcessing = false
+  }
+
+  const suppressInterruptedWorkerTasks = () => {
+    for (const taskId of activeWorkerTasks) {
+      suppressedTaskIds.add(taskId)
+    }
+  }
+
+  const isSuppressedTask = (task: TaskNode) => {
+    if (suppressedTaskIds.has(task.id)) return true
+    if (task.parentID && suppressedTaskIds.has(task.parentID)) {
+      suppressedTaskIds.add(task.id)
+      return true
+    }
+    if (task.priorID && suppressedTaskIds.has(task.priorID)) {
+      suppressedTaskIds.add(task.id)
+      return true
+    }
+    return false
+  }
+
+  const isSuppressedWorkerEvent = (event: WorkerEvent) => {
+    const taskId = event.task?.id ?? event.taskId ?? null
+    if (taskId === null) return false
+    if (suppressedTaskIds.has(taskId)) return true
+    return false
+  }
+
+  const wrapThinkingText = (text: string, maxWidth = 88) => {
+    const paragraphs = text
+      .replace(/\r\n?/g, '\n')
+      .trim()
+      .split('\n')
+      .map((line) => line.replace(/\s+/g, ' ').trim())
+      .filter((line) => line.length > 0)
+    const lines: string[] = []
+
+    for (const paragraph of paragraphs) {
+      let current = ''
+      for (const word of paragraph.split(' ')) {
+        if (!word) continue
+        const next = current ? `${current} ${word}` : word
+        if (next.length <= maxWidth) {
+          current = next
+          continue
+        }
+        if (current) lines.push(current)
+        current = word
+      }
+      if (current) lines.push(current)
+    }
+
+    return lines
   }
 
   const renderThinkingPanel = () => {
     if (!waitingForTask) return
     const recent = thinkingLines.slice(-5)
-    clearThinkingPanel()
-    if (recent.length <= 0) return
     const panel = recent.length > 0 ? ['[thinking]', ...recent.map((line) => `  ${line}`)] : []
+    const panelText = panel.join('\n')
+    if (panelText === renderedThinkingPanelText) return
+
+    clearThinkingRenderTimer()
+    eraseThinkingPanel()
+    if (panel.length <= 0) {
+      renderedThinkingPanelText = ''
+      return
+    }
+
     process.stdout.write(`${panel.join('\n')}\n`)
     thinkingPanelHeight = panel.length
+    renderedThinkingPanelText = panelText
+  }
+
+  const scheduleThinkingRender = () => {
+    if (!waitingForTask) return
+    if (thinkingPanelHeight <= 0 && renderedThinkingPanelText.length === 0) {
+      renderThinkingPanel()
+      return
+    }
+    if (thinkingRenderTimer !== null) return
+    thinkingRenderTimer = setTimeout(() => {
+      thinkingRenderTimer = null
+      renderThinkingPanel()
+    }, 300)
+    thinkingRenderTimer.unref()
   }
 
   const clearWorkerCleanupNoticeTimer = () => {
@@ -2029,6 +2147,13 @@ async function main() {
 
   const noteInterruptPhase = (message: string) => {
     writeLine(message)
+  }
+
+  const writeTaskInterruptedNotice = () => {
+    if (interruptNoticePrinted) return
+    interruptNoticePrinted = true
+    writeLine('Task interrupted.')
+    writeSessionLocations('Session Locations', currentSessionLocations())
   }
 
   const trackWorkerProgress = (event: WorkerEvent) => {
@@ -2059,13 +2184,11 @@ async function main() {
 
   const appendThinkingText = (delta: string) => {
     if (!delta) return
-    const next = delta
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0)
+    thinkingText = `${thinkingText}${delta}`.slice(-2000)
+    const next = wrapThinkingText(thinkingText)
     if (next.length <= 0) return
-    thinkingLines = [...thinkingLines, ...next].slice(-5)
-    renderThinkingPanel()
+    thinkingLines = next.slice(-5)
+    scheduleThinkingRender()
   }
 
   const requestImmediateShutdown = (reason: string, exitCode = 0) => {
@@ -2088,7 +2211,6 @@ async function main() {
       shutdownForceTimer = setTimeout(() => {
         process.exit(exitCode === 0 ? 1 : exitCode)
       }, 2000)
-      shutdownForceTimer.unref()
     }
     if (!isReadlineClosed(rl)) rl.close()
   }
@@ -2097,6 +2219,7 @@ async function main() {
     interruptedCurrentTask = true
     noteInterruptPhase(`${source} received.`)
     noteInterruptPhase('Stopping current worker task...')
+    suppressInterruptedWorkerTasks()
     try {
       taskyon.workerStop(`Interrupted by ${source}`)
       noteInterruptPhase('Worker stop requested. Waiting for task cleanup...')
@@ -2110,6 +2233,7 @@ async function main() {
     scheduleWorkerCleanupNotice()
     resetThinking()
     updateFooter()
+    writeTaskInterruptedNotice()
   }
 
   const onSigint = () => {
@@ -2122,7 +2246,7 @@ async function main() {
       }
       return
     }
-    if (waitingForTask) {
+    if (hasActiveWorkerTask()) {
       interruptCurrentTask('Ctrl-C')
       return
     }
@@ -2148,7 +2272,7 @@ async function main() {
       writeSessionLocations('Session Locations', currentSessionLocations())
       return
     }
-    if (waitingForTask) {
+    if (hasActiveWorkerTask()) {
       interruptCurrentTask('Ctrl-D')
       return
     }
@@ -2205,6 +2329,7 @@ async function main() {
   const unsubscribeTaskProgress = clientPort.receive((msg: TaskyonMessage) => {
     if (!isTaskCreatedMessage(msg)) return
     const task = msg.task
+    const suppressed = isSuppressedTask(task)
     const snapshot = JSON.stringify(task.content)
     const prev = taskSnapshotById.get(task.id)
     if (prev === snapshot) return
@@ -2214,6 +2339,7 @@ async function main() {
     else taskFeed.push(task)
     currentLeafId = task.id
     queueConversationPersist(task.id)
+    if (suppressed) return
     renderTaskProgress(
       {
         debugEnabled: () => debugLogsEnabled,
@@ -2232,11 +2358,13 @@ async function main() {
   const unsubscribeWorkerProgress = taskyon.workerStream((event: unknown) => {
     const workerEvent = event as WorkerEvent
     const taskId = workerEvent.task?.id ?? workerEvent.taskId ?? null
+    const suppressed = isSuppressedWorkerEvent(workerEvent)
     if (taskId) {
       currentLeafId = taskId
       queueConversationPersist(taskId)
     }
     trackWorkerProgress(workerEvent)
+    if (suppressed) return
     renderWorkerProgress(
       {
         debugEnabled: () => debugLogsEnabled,
@@ -2441,6 +2569,7 @@ async function main() {
       try {
         waitingForTask = true
         interruptedCurrentTask = false
+        interruptNoticePrinted = false
         resetThinking()
         taskProcessingStatus = 'processing'
         hasWorkerProcessing = true
@@ -2463,8 +2592,7 @@ async function main() {
         clearThinkingPanel()
         if (interruptedCurrentTask) {
           await flushConversationPersist()
-          writeLine('Task interrupted.')
-          writeSessionLocations('Session Locations', currentSessionLocations())
+          writeTaskInterruptedNotice()
           restorePromptIfIdle()
           continue
         }
@@ -2481,8 +2609,7 @@ async function main() {
         clearThinkingPanel()
         if (interruptedCurrentTask) {
           await flushConversationPersist()
-          writeLine('Task interrupted.')
-          writeSessionLocations('Session Locations', currentSessionLocations())
+          writeTaskInterruptedNotice()
           restorePromptIfIdle()
           continue
         }
@@ -2528,6 +2655,7 @@ async function main() {
       shutdownForceTimer = null
     }
     process.exitCode = requestedExitCode
+    process.exit(requestedExitCode)
   }
 }
 

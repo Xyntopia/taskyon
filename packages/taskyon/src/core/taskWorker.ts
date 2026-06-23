@@ -327,10 +327,7 @@ const toAutonomousErrorText = (value: unknown): string => {
 }
 
 const normalizeAutonomousErrorText = (value: unknown) =>
-  toAutonomousErrorText(value)
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim()
+  toAutonomousErrorText(value).toLowerCase().replace(/\s+/g, ' ').trim()
 
 const extractAutonomousErrorMessage = (error: unknown) => {
   if (error instanceof Error) return error.message
@@ -623,6 +620,16 @@ const createTaskProcessor = (
           setTaskFinished(task.id)
         }
       } catch (error) {
+        if (currentTaskCtrl.signal.aborted) {
+          streamEmit({
+            stage: 'aborted',
+            task,
+            taskId: task.id,
+            info: currentTaskCtrl.signal.reason,
+          })
+          taskOutOfLoop(task.id, task.content.data.name)
+          return task
+        }
         streamEmit({ stage: 'error', taskId: task.id, info: humanizeError(error) })
         console.error('Error processing task:', error, task)
         await handleError(error, task, errorHandlerTask)

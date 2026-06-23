@@ -22,6 +22,19 @@ let remoteFunctionRequestCounter = 0
 const createRemoteFunctionRequestId = (name: string) =>
   `${name}-${Date.now()}-${remoteFunctionRequestCounter++}`
 
+const maxRemoteFunctionTimeoutMs = 10 * 60 * 1000
+
+const resolveRemoteFunctionTimeoutMs = (args: ReadonlyDeep<FunctionArguments>) => {
+  const timeoutMs = args.timeoutMs
+  if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs)) {
+    return REMOTE_FUNCTION_TIMEOUT_MS
+  }
+  return Math.min(
+    Math.max(Math.trunc(timeoutMs), REMOTE_FUNCTION_TIMEOUT_MS),
+    maxRemoteFunctionTimeoutMs,
+  )
+}
+
 // the following doesn't really work ;) thats why we're doing the custom schema above..
 /*const internalToolFunctionSchema = z
   .function()
@@ -49,6 +62,7 @@ async function handleRemoteFunction(
   duplexPort: RemoteFunctionPort,
 ) {
   const requestId = createRemoteFunctionRequestId(name)
+  const timeoutMs = resolveRemoteFunctionTimeoutMs(args)
   const funcRP: Promise<RemoteFunctionResponse> = new Promise((resolve, reject) => {
     let settled = false
     let unsub = () => {}
@@ -64,10 +78,10 @@ async function handleRemoteFunction(
       cleanup()
       reject(
         new Error(
-          `Remote function bridge timed out after ${REMOTE_FUNCTION_TIMEOUT_MS}ms while waiting for ${name} (request ${requestId})`,
+          `Remote function bridge timed out after ${timeoutMs}ms while waiting for ${name} (request ${requestId})`,
         ),
       )
-    }, REMOTE_FUNCTION_TIMEOUT_MS)
+    }, timeoutMs)
 
     const listener = (msg: RemoteFunctionResponse) => {
       const response = RemoteFunctionResponse.safeParse(msg)

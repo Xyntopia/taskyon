@@ -3,6 +3,88 @@ import { convertFileToText } from '../utils/loadFiles'
 import { createTool, makeTaskResult } from '../types/toolApi'
 import { createChatCompletionTask } from '../api'
 
+const looksLikePdfBytes = (bytes: Uint8Array) =>
+  bytes.length >= 5 &&
+  bytes[0] === 0x25 &&
+  bytes[1] === 0x50 &&
+  bytes[2] === 0x44 &&
+  bytes[3] === 0x46 &&
+  bytes[4] === 0x2d
+
+const blobFromBase64 = (content: string, mimeType: string) => {
+  const binaryString = atob(content)
+  const bytes = new Uint8Array(binaryString.length)
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i)
+  }
+  return new Blob([bytes], { type: mimeType })
+}
+
+const sanitizeOpfsFilename = (value: string) => value.replace(/[\\/:]/g, '_').trim()
+
+const normalizeOpfsDirectory = (value: string) => value.replace(/\\/g, '/').replace(/\/+$/, '')
+
+const assertOpfsDirectoryInsideArtifactRoot = (directory: string, artifactRoot?: string) => {
+  const root = artifactRoot?.trim()
+  if (!root) return
+
+  if (root.startsWith('/') || root.includes('..')) {
+    throw new Error('artifactRoot must be a relative OPFS directory.')
+  }
+
+  const normalizedRoot = normalizeOpfsDirectory(root)
+  const normalizedDirectory = normalizeOpfsDirectory(directory).replace(/^\/+/, '')
+  const rootPrefix = `${normalizedRoot}/`
+  if (normalizedDirectory !== normalizedRoot && !normalizedDirectory.startsWith(rootPrefix)) {
+    throw new Error(`OPFS directory must be inside artifactRoot ${rootPrefix}.`)
+  }
+}
+
+const filenameFromUrl = (url: string) => {
+  try {
+    const pathName = new URL(url).pathname
+    const rawFilename = decodeURIComponent(pathName.split('/').filter(Boolean).at(-1) ?? '')
+    return sanitizeOpfsFilename(rawFilename) || 'download'
+  } catch {
+    return 'download'
+  }
+}
+
+const saveBlobToOpfs = async (
+  dirHandle: FileSystemDirectoryHandle,
+  directory: string,
+  filename: string,
+  blob: Blob,
+) => {
+  const fileHandle = await dirHandle.getFileHandle(filename, { create: true })
+  const writable = await fileHandle.createWritable()
+  await writable.write(blob)
+  await writable.close()
+
+  return {
+    success: true,
+    message: `File saved to ${directory}/${filename}`,
+    fileInfo: {
+      name: filename,
+      path: `${directory}/${filename}`,
+      size: blob.size,
+      type: blob.type || 'application/octet-stream',
+    },
+  }
+}
+
+const getOpfsRoot = async () => {
+  if (
+    typeof navigator === 'undefined' ||
+    !navigator.storage ||
+    typeof navigator.storage.getDirectory !== 'function'
+  ) {
+    throw new Error('opfsStorage is only available in browser runtimes with OPFS support.')
+  }
+
+  return await navigator.storage.getDirectory()
+}
+
 /**
  * Tool that provides Origin Private File System (OPFS) integration for local file storage
  * and retrieval within the browser's secure storage.
@@ -12,6 +94,7 @@ export const opfsStorageTool = createTool({
   description: 'Save and load files using local Origin Private File System (OPFS) storage',
   longDescription: `This tool enables secure local file operations using the browser's Origin Private File System (OPFS):
 - Save files to local opfs storage
+- Download accessible URLs directly into OPFS
 - Read files by converting them into txt (including pdf, word and more...).
 - List files in directories
 - Delete files
@@ -25,8 +108,12 @@ between browser sessions but are private to this application.`,
     properties: {
       action: {
         type: 'string',
-        enum: ['save', 'read', 'list', 'delete', 'exists'],
+        enum: ['save', 'download', 'read', 'list', 'delete', 'exists'],
         description: 'The action to perform on local OPFS storage',
+      },
+      url: {
+        type: 'string',
+        description: 'Source URL to fetch and save for the download action',
       },
       directory: {
         type: 'string',
@@ -46,19 +133,34 @@ between browser sessions but are private to this application.`,
         description: 'The MIME type of the file (used for save action)',
         default: 'application/octet-stream',
       },
+      expectedFileType: {
+        type: 'string',
+        enum: ['pdf'],
+        description:
+          'Optional expected file type. When set to pdf, download rejects HTML/error pages and only saves real PDF bytes.',
+      },
+      artifactRoot: {
+        type: 'string',
+        description:
+          'Optional relative OPFS directory that all research artifacts for this request must stay under, for example research/solar-cell-spec-sheets/.',
+      },
     },
     required: ['action'],
   } as const satisfies JSONSchema7,
   function: async ({
     action,
+    url,
     directory = '/',
     filename,
     content,
     mimeType = 'application/octet-stream',
+    expectedFileType,
+    artifactRoot,
   }) => {
     // Get access to the OPFS root
-    const root = await navigator.storage.getDirectory()
+    const root = await getOpfsRoot()
     let dirHandle = root
+    assertOpfsDirectoryInsideArtifactRoot(directory, artifactRoot)
 
     // Create or navigate to directory (handling nested paths)
     if (directory !== '/') {
@@ -79,33 +181,33 @@ between browser sessions but are private to this application.`,
           throw new Error('Content is required for save action')
         }
 
-        // Convert base64 to Blob
-        const binaryString = atob(content)
-        const len = binaryString.length
-        const bytes = new Uint8Array(len)
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i)
+        result = await saveBlobToOpfs(
+          dirHandle,
+          directory,
+          filename,
+          blobFromBase64(content, mimeType),
+        )
+        break
+      }
+
+      case 'download': {
+        if (!url) {
+          throw new Error('Url is required for download action')
         }
-        const blob = new Blob([bytes], { type: mimeType })
 
-        // Create a file in the directory
-        const fileHandle = await dirHandle.getFileHandle(filename, { create: true })
-
-        // Create a writable stream and write the blob
-        const writable = await fileHandle.createWritable()
-        await writable.write(blob)
-        await writable.close()
-
-        result = {
-          success: true,
-          message: `File saved to ${directory}/${filename}`,
-          fileInfo: {
-            name: filename,
-            path: `${directory}/${filename}`,
-            size: blob.size,
-            type: mimeType,
-          },
+        const response = await fetch(url)
+        if (!response.ok) {
+          throw new Error(`Download failed with HTTP ${response.status}: ${response.statusText}`)
         }
+
+        const responseMimeType = response.headers.get('content-type') ?? mimeType
+        const bytes = new Uint8Array(await response.arrayBuffer())
+        if (expectedFileType === 'pdf' && !looksLikePdfBytes(bytes)) {
+          throw new Error(`Download did not return PDF bytes. Content-Type was ${responseMimeType}`)
+        }
+        const blob = new Blob([bytes], { type: responseMimeType })
+        const saveName = sanitizeOpfsFilename(filename ?? '') || filenameFromUrl(url)
+        result = await saveBlobToOpfs(dirHandle, directory, saveName, blob)
         break
       }
 

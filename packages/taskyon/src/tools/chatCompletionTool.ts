@@ -1363,7 +1363,6 @@ export function createChatCompletionTool(
   const variableService = createTaskVariablePresentationService()
 
   const chatCompletionStream = createStream<chunkStreamType>()
-  const { selectedApi, llmApis, siteUrl } = apiSettings()
   const chatCompletion = createTool({
     description: 'Generates a chat-based response using the OpenAI API for the previous message.',
     longDescription: `This tool interfaces with an OpenAI-compatible API to generate completions for
@@ -1409,6 +1408,7 @@ export function createChatCompletionTool(
             : toolChoice?.type === 'auto'
               ? ('auto' as const)
               : undefined
+      const { selectedApi, llmApis, siteUrl } = apiSettings()
 
       if (!selectedApi) {
         throw new Error('No API selected!')
@@ -1442,7 +1442,10 @@ export function createChatCompletionTool(
         requestApiKey = delegationToken
       }
 
-      const selectedModel = model ?? getCurrentModel(requestApi)
+      const selectedModel =
+        selectedApi === 'chatgpt-codex'
+          ? getCurrentModel(requestApi)
+          : (model ?? getCurrentModel(requestApi))
       console.log('calling chat completion tool...', selectedModel, useProviderToolCalling)
       // the current task doesn't *have* to exist. We can also works solely with prompts...
       const currentTask = context.taskChain.at(-1)

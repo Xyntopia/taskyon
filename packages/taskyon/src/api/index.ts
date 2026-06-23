@@ -122,6 +122,9 @@ const createSubTaskStream = <T extends { type: string }>(
   return subTaskBus.stream
 }
 
+const currentOrigin = () =>
+  typeof globalThis.location?.origin === 'string' ? globalThis.location.origin : 'taskyon-node'
+
 export const createChatCompletionTask = (args: chatCompletionParams) =>
   toolCall<chatCompletionParams>({ name: 'chatCompletion', arguments: args })
 
@@ -135,7 +138,7 @@ export const sendTasks =
       tasks: tasks,
       execute: true,
       show: opts.show ?? true, // we want to show this task in our GUI as a succesful test
-      origin: window.origin,
+      origin: currentOrigin(),
     })
 
     const initialIds = tasks.map((t) => t.id)

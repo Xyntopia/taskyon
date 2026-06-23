@@ -4,12 +4,17 @@ import {
   proxyWebReaderProviderIds,
   resolveProxyWebReaderArgs,
 } from '@taskyon/shared/modules/webFetching'
+import { processTasksDetailed } from '../api'
+import { tyCore } from '../core/init'
+import { opfsStorageTool } from '../tools/fileTools'
 import {
   buildBrowserMcpImportChain,
   buildEnsureBrowserMcpImportRetryChain,
   buildWebResearchTaskGroups,
   webResearchPlanner,
 } from '../tools/webResearchTool'
+import type { TaskNode } from '../types/taskNode'
+import { createTool, toolCall } from '../types/toolApi'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -22,6 +27,74 @@ const getFunctionCall = (task: unknown) => {
     return undefined
   }
   return content.type === 'functioncall' ? content.data : undefined
+}
+
+const updateFilesStub = createTool({
+  name: 'updateFiles',
+  description: 'Test stub for file updates.',
+  parameters: {
+    type: 'object',
+    additionalProperties: true,
+    properties: {},
+  },
+  function: () => ({ ok: true }),
+})
+
+const opfsStorageStub = createTool({
+  name: 'opfsStorage',
+  description: 'Test stub for browser OPFS file storage.',
+  parameters: {
+    type: 'object',
+    additionalProperties: true,
+    properties: {},
+  },
+  function: () => ({ ok: true }),
+})
+
+const bashStub = createTool({
+  name: 'bash',
+  description: 'Test stub for command-line downloads.',
+  parameters: {
+    type: 'object',
+    additionalProperties: true,
+    properties: {},
+  },
+  function: () => ({ ok: true }),
+})
+
+const downloadFileStub = createTool({
+  name: 'downloadFile',
+  description: 'Test stub for verified command-line downloads.',
+  parameters: {
+    type: 'object',
+    additionalProperties: true,
+    properties: {},
+  },
+  function: () => ({ ok: true }),
+})
+
+const jinaMarkdownReaderStub = createTool({
+  name: 'jinaMarkdownReader',
+  description: 'Test stub for page validation.',
+  parameters: {
+    type: 'object',
+    additionalProperties: true,
+    properties: {},
+  },
+  function: () => ({ ok: true }),
+})
+
+const isDelegatedResearchEntryNode = (task: TaskNode) => {
+  if (task.content.type !== 'functioncall' || task.content.data.name !== 'entryNode') return false
+  const args = task.content.data.arguments
+  return (
+    !!args &&
+    typeof args === 'object' &&
+    !Array.isArray(args) &&
+    'allowedTools' in args &&
+    Array.isArray(args.allowedTools) &&
+    args.allowedTools[0] === 'updateFiles'
+  )
 }
 
 export const testWebResearchBuildsParallelQueryGroups = () => {
@@ -43,20 +116,113 @@ export const testWebResearchBuildsParallelQueryGroups = () => {
     'Expected imported browser tools to be forwarded to delegated subtasks',
   )
   assert(
-    groups[0]?.[0]?.allowedTools?.includes('chatCompletion'),
-    'Expected web-search-enabled research branches to allow chatCompletion discovery',
+    !groups[0]?.[0]?.allowedTools?.includes('chatCompletion'),
+    'Expected web-search-enabled research branches to avoid recursive chatCompletion tool calls',
   )
   assert(
-    groups[0]?.[0]?.allowedTools?.includes('tauriHttpWebReader'),
-    'Expected support tools to include the built-in direct web reader by default',
+    !groups[0]?.[0]?.allowedTools?.includes('proxyWebReader') &&
+      !groups[0]?.[0]?.allowedTools?.includes('tauriHttpWebReader'),
+    'Expected websearch-first research branches to keep fallback reader tools opt-in',
+  )
+  assert(
+    groups[0]?.[0]?.allowedTools?.includes('updateFiles'),
+    'Expected websearch-first research branches to keep updateFiles available for save requests',
+  )
+  assert(
+    !groups[0]?.[0]?.allowedTools?.includes('opfsStorage'),
+    'Expected generic websearch-first research branches to keep browser-only OPFS storage opt-in',
+  )
+  assert(
+    groups[0]?.[0]?.allowedTools?.includes('downloadFile'),
+    'Expected websearch-first research branches to keep verified local downloads available',
+  )
+  assert(
+    groups[0]?.[0]?.allowedTools?.includes('bash'),
+    'Expected websearch-first research branches to keep bash available as a download fallback',
+  )
+  assert(
+    groups[0]?.[0]?.allowedTools?.includes('jinaMarkdownReader'),
+    'Expected websearch-first research branches to keep a page reader available for validation',
   )
   assert(
     groups[0]?.[0]?.task.includes('Aiko solar ABC datasheet pdf'),
     'Expected the first delegated task to reference the search query',
   )
   assert(
-    groups[0]?.[1]?.task.includes('download the spec sheets'),
-    'Expected the second delegated task to request download or direct asset capture',
+    groups[0]?.[1]?.task.includes('The requested deliverable includes saved research artifacts'),
+    'Expected the second delegated task to require saved research artifacts',
+  )
+  assert(
+    groups[0]?.[1]?.task.includes('updateFiles or opfsStorage'),
+    'Expected validation tasks to save requested deliverables when a file-writing tool is available',
+  )
+  assert(
+    groups[0]?.[1]?.task.includes('local path or OPFS path'),
+    'Expected validation tasks to choose a task-specific directory structure for multi-file saves',
+  )
+  assert(
+    groups[0]?.[1]?.task.includes('Do not create competing branch-specific directories'),
+    'Expected validation tasks to reject competing branch-specific directories',
+  )
+  assert(
+    groups[0]?.[1]?.task.includes('opfsStorage download with expectedFileType set to pdf'),
+    'Expected validation tasks to describe browser OPFS PDF URL validation',
+  )
+  assert(
+    groups[0]?.[1]?.task.includes('For OPFS saves, base64-encode file content'),
+    'Expected validation tasks to describe browser OPFS artifact saves',
+  )
+  assert(
+    groups[0]?.[1]?.task.includes('use it to validate candidate pages'),
+    'Expected validation tasks to prefer page-reader validation before shell-only guesses',
+  )
+  assert(
+    groups[0]?.[1]?.task.includes('do not treat URL-only entries as completed downloads'),
+    'Expected validation tasks to reject URL-only entries when artifact downloads are requested',
+  )
+  assert(
+    groups[0]?.[1]?.task.includes('real PDF content'),
+    'Expected validation tasks to reject HTML/error pages for PDF downloads',
+  )
+  assert(
+    groups[0]?.[1]?.task.includes('starts with the %PDF- magic bytes'),
+    'Expected validation tasks to require shell fallback PDF byte validation',
+  )
+  assert(
+    groups[0]?.[1]?.task.includes('research/collect-solar-cell-spec-sheets/'),
+    'Expected validation tasks to include a single planner-selected artifact root',
+  )
+  assert(
+    groups[0]?.[1]?.task.includes('artifactRoot: research/collect-solar-cell-spec-sheets/'),
+    'Expected delegated tasks to pass the artifact root into artifact-writing tools',
+  )
+  assert(
+    groups[0]?.[1]?.task.includes(
+      'When using opfsStorage, pass artifactRoot: research/collect-solar-cell-spec-sheets/',
+    ),
+    'Expected delegated tasks to pass the artifact root into browser OPFS writes',
+  )
+
+  return { success: true }
+}
+
+export const testWebResearchArtifactRootSlugIsStable = () => {
+  const groups = buildWebResearchTaskGroups({
+    objective: "Find 10 home battery spec sheets that don't require a permit in California!",
+    searchQueries: ['California no permit home battery datasheet pdf'],
+  })
+
+  assert(
+    groups[0]?.[0]?.task.includes(
+      'research/find-10-home-battery-spec-sheets-that-dont-require-a-permit-in-california/',
+    ),
+    `Expected stable research artifact root in discovery task, got ${groups[0]?.[0]?.task ?? '(none)'}`,
+  )
+  assert(
+    groups[0]?.[1]?.task.includes(
+      'research/find-10-home-battery-spec-sheets-that-dont-require-a-permit-in-california/',
+    ),
+    `Expected stable research artifact root in validation task, got ${groups[0]?.[1]?.task ?? '(none)'}`,
   )
 
   return { success: true }
@@ -212,12 +378,117 @@ export const testWebResearchPlannerUsesWebSearchFirstByDefault = () => {
       'arguments' in firstCall &&
       firstCall.arguments &&
       typeof firstCall.arguments === 'object' &&
+      'allowedTools' in firstCall.arguments &&
+      Array.isArray(firstCall.arguments.allowedTools) &&
+      firstCall.arguments.allowedTools.length === 4 &&
+      firstCall.arguments.allowedTools[0] === 'updateFiles' &&
+      firstCall.arguments.allowedTools[1] === 'downloadFile' &&
+      firstCall.arguments.allowedTools[2] === 'bash' &&
+      firstCall.arguments.allowedTools[3] === 'jinaMarkdownReader' &&
       'websearch' in firstCall.arguments &&
       typeof firstCall.arguments.websearch === 'object' &&
       firstCall.arguments.websearch !== null &&
       'enabled' in firstCall.arguments.websearch &&
       firstCall.arguments.websearch.enabled === true,
-    'Expected default delegated research branches to enable chatCompletion web search',
+    'Expected default delegated research branches to enable chatCompletion web search and expose local save, verified download, shell fallback, and page-validation tools only',
+  )
+
+  return { success: true }
+}
+
+export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
+  const ty = await tyCore(
+    () => ({
+      selectedApi: 'test',
+      llmApis: {},
+      siteUrl: 'https://taskyon.space',
+      entryFunction: 'entryNode',
+    }),
+    () =>
+      toolCall({
+        name: 'entryNode',
+        arguments: {},
+      }),
+    () => ({}),
+    [
+      webResearchPlanner,
+      updateFilesStub,
+      opfsStorageStub,
+      downloadFileStub,
+      bashStub,
+      jinaMarkdownReaderStub,
+    ],
+  )
+
+  const result = await processTasksDetailed(ty.port)(
+    [
+      [
+        {
+          role: 'user',
+          content: {
+            type: 'message',
+            data: 'hi! can you search for 5 spec sheets of solar cells for me and save them here?',
+          },
+        },
+        toolCall({
+          name: 'webResearchPlanner',
+          arguments: {
+            objective: 'Find 5 solar cell spec sheets and save them here.',
+            searchQueries: ['solar cell datasheet pdf manufacturer spec sheet'],
+            enableWebSearch: true,
+            deliverable: 'Markdown file with 5 solar cell spec sheets and direct URLs',
+          },
+        }),
+      ],
+    ],
+    isDelegatedResearchEntryNode,
+    {
+      show: false,
+      timeoutMs: 10_000,
+      throwOnError: false,
+      interruptOnSettle: (reason) => {
+        ty.workerStop(reason)
+      },
+    },
+  )
+
+  assert(result.status === 'matched', `Expected delegated entryNode task, got ${result.status}`)
+  const args =
+    result.result.content.type === 'functioncall' ? result.result.content.data.arguments : undefined
+  assert(
+    args &&
+      typeof args === 'object' &&
+      !Array.isArray(args) &&
+      'allowedTools' in args &&
+      Array.isArray(args.allowedTools) &&
+      args.allowedTools.length === 4 &&
+      args.allowedTools[0] === 'updateFiles' &&
+      args.allowedTools[1] === 'downloadFile' &&
+      args.allowedTools[2] === 'bash' &&
+      args.allowedTools[3] === 'jinaMarkdownReader',
+    'Expected processTasks-generated research branch to expose local save, verified download, shell fallback, and page-validation tools only',
+  )
+  assert(
+    args &&
+      typeof args === 'object' &&
+      !Array.isArray(args) &&
+      'websearch' in args &&
+      args.websearch &&
+      typeof args.websearch === 'object' &&
+      !Array.isArray(args.websearch) &&
+      'enabled' in args.websearch &&
+      args.websearch.enabled === true,
+    'Expected processTasks-generated research branch to keep web search enabled',
+  )
+  const delegatedBootstrap =
+    result.observedTasks.find(
+      (task) =>
+        task.content.type === 'message' &&
+        task.content.data.includes('Subtask objective: Research objective:'),
+    )?.content.data ?? ''
+  assert(
+    delegatedBootstrap.includes('research/find-5-solar-cell-spec-sheets-and-save-them-here/'),
+    'Expected processTasks-generated research branch to include one deterministic artifact root',
   )
 
   return { success: true }
@@ -278,8 +549,43 @@ export const testWebResearchPlannerWebSearchOnlyExcludesBrowserTools = () => {
   return { success: true }
 }
 
+export const testOpfsStorageSupportsBrowserDownloads = () => {
+  const parameters = opfsStorageTool.parameters
+  assert(
+    parameters.type === 'object' && parameters.properties,
+    'Expected opfsStorage to expose object parameters',
+  )
+
+  const actionSchema = parameters.properties.action
+  assert(
+    typeof actionSchema === 'object' &&
+      actionSchema !== null &&
+      !Array.isArray(actionSchema) &&
+      'enum' in actionSchema &&
+      Array.isArray(actionSchema.enum) &&
+      actionSchema.enum.includes('download'),
+    'Expected opfsStorage action enum to include download',
+  )
+  assert(
+    'url' in parameters.properties,
+    'Expected opfsStorage download action to expose a url parameter',
+  )
+  assert(
+    'expectedFileType' in parameters.properties,
+    'Expected opfsStorage download action to support expected PDF validation',
+  )
+  assert(
+    'artifactRoot' in parameters.properties,
+    'Expected opfsStorage to expose an artifact root guard for browser research writes',
+  )
+
+  return { success: true }
+}
+
 testWebResearchBuildsParallelQueryGroups.description =
   'Builds parallel web-research branches where each query expands into sequential discovery and validation tasks with explicit browser-capable tool restrictions.'
+testWebResearchArtifactRootSlugIsStable.description =
+  'Chooses one deterministic research artifact root from the objective and forwards it into every delegated branch.'
 testBrowserMcpImportChainBuildsImportCall.description =
   'Builds the browser MCP import bootstrap chain and forwards the selected MCP tool names into importMcpTools.'
 testEnsureBrowserMcpImportRetryChainBuildsImportCall.description =
@@ -290,8 +596,12 @@ testMcpCapableWebProviderCatalog.description =
   'Saves a dedicated MCP-capable web-provider catalog derived from the shared proxy provider source of truth.'
 testWebResearchPlannerUsesWebSearchFirstByDefault.description =
   'Starts research in websearch-first mode by default and enables chatCompletion web search in delegated research branches.'
+testWebResearchPlannerProcessTasksKeepsSaveTool.description =
+  'Exercises webResearchPlanner through processTasks and verifies delegated web-search branches retain local artifact storage and validation tools for save requests.'
 testWebResearchPlannerBrowserMcpFirstEnsuresBrowserSetup.description =
   'Ensures browser MCP setup runs before research when researchMode is browser-mcp-first.'
 testWebResearchPlannerWebSearchOnlyExcludesBrowserTools.description =
   'Excludes browser MCP tools from delegated branches when researchMode is websearch-only.'
+testOpfsStorageSupportsBrowserDownloads.description =
+  'Exposes a browser OPFS download action so research can save accessible URLs without local filesystem access.'
 testWebResearchPlannerUsesWebSearchFirstByDefault.requiresLargeTokens = true

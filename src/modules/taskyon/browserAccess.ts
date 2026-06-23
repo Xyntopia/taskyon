@@ -31,11 +31,12 @@ export const browserAccessEnsureDefaults = {
 
 export const browserAccessResearchDefaults = {
   researchMode: 'websearch-first',
-  supportTools: ['proxyWebReader', 'tauriHttpWebReader'],
+  supportTools: ['opfsStorage', 'jinaMarkdownReader'],
   maxSourcesPerQuery: 5,
   mustDownload: true,
   fileTypeHints: ['pdf'],
-  deliverable: 'manufacturer, product name, source page URL, direct document URL',
+  deliverable:
+    'task-specific saved artifacts with manufacturer, product name, source page URL, direct document URL, and saved OPFS path when available',
   enableWebSearch: true,
   webSearchMaxResults: 5,
 }
@@ -110,7 +111,8 @@ export const browserAccessResearchSchema = {
     },
     mustDownload: {
       type: 'boolean',
-      description: 'Whether validated sources should be downloaded when possible.',
+      description:
+        'Whether validated sources or generated artifacts should be saved when local or OPFS storage is available.',
     },
     fileTypeHints: {
       type: 'array',

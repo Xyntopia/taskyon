@@ -49,9 +49,11 @@ const plannerContinuationPrompt = (allowedTools?: string[]) =>
   [
     'Continue this delegated subtask using the detailed objective above.',
     'Carry out the work autonomously and continue the chain normally.',
-    ...(allowedTools && allowedTools.length > 0
+    ...(allowedTools
       ? [
-          `Important: the available tools for this subtask are intentionally restricted to: ${allowedTools.join(', ')}.`,
+          allowedTools.length > 0
+            ? `Important: the callable helper tools for this subtask are intentionally restricted to: ${allowedTools.join(', ')}. Configured entry-node capabilities such as web search may still be available; use them when the objective asks for discovery.`
+            : 'Important: this subtask should not call tools. Use the configured entry-node capabilities directly.',
         ]
       : []),
   ].join('\n')
@@ -85,7 +87,7 @@ export const normalizePlannedTaskInput = (value: unknown): PlannedTaskConfig => 
 
   return {
     task: rawTask.trim(),
-    ...(rawAllowedTools && rawAllowedTools.length > 0 ? { allowedTools: rawAllowedTools } : {}),
+    ...(rawAllowedTools !== undefined ? { allowedTools: rawAllowedTools } : {}),
   }
 }
 
@@ -137,9 +139,7 @@ const createPlannerTaskChain = (
   toolCall({
     name: 'entryNode',
     arguments: {
-      ...(task.allowedTools && task.allowedTools.length > 0
-        ? { allowedTools: task.allowedTools }
-        : {}),
+      ...(task.allowedTools !== undefined ? { allowedTools: task.allowedTools } : {}),
     },
   }),
 ]

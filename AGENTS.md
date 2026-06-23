@@ -49,6 +49,17 @@
 - Extract helpers when they remove real duplication or clarify a distinct step.
   Do not extract helpers only to make code look abstract.
 
+## `tycli` development workflow
+
+- When implementing or debugging `tycli` behavior, use `tycli` yourself first. Start it with `yarn tycli`, run the real user-facing prompt or command, and let the observed behavior drive the fix.
+- Use the provider and model requested for the workflow. For the current web-research workflow, use the `chatgpt-codex` provider and the requested mini model. If the requested model name does not match an available model id, stop and clarify instead of silently substituting another model.
+- Inspect the generated `tycli` log and saved conversation transcript for every non-trivial `tycli` debugging pass. The transcript often contains worker/tool-call details that are not visible in the terminal UI.
+- Track bugs found while using `tycli`. Fix bugs that block the requested workflow first when they are on the same root-cause path.
+- Treat unrelated discoveries as sidequests. Before starting a sidequest, stop and ask the user whether to handle it now. After resolving a sidequest, stop again and ask whether to continue the main task.
+- If questions or ambiguous choices arise during development, ask the user clearly before proceeding.
+- After the workflow works manually in `tycli`, add a regression diagnostic that exercises the same behavior through `processTask` where possible.
+- Because Taskyon workflows should work in both `tycli` and the browser, ask the user to run the new/changed diagnostic in the browser as part of final verification.
+
 ## Branches
 
 - `dev` is the open-source integration branch. Backport general Taskyon fixes here only when they do not depend on commercial services or taskyon.space-specific files.

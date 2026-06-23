@@ -22,6 +22,7 @@ type EnsureBrowserMcpToolsArgs = BrowserMcpImportArgs & {
 type WebResearchPlannerArgs = {
   objective: string
   searchQueries: string[]
+  artifactRoot?: string
   researchMode?: ResearchMode
   browserTools?: string[]
   supportTools?: string[]
@@ -38,7 +39,7 @@ type WebResearchPlannerArgs = {
 const researchModes = ['websearch-first', 'browser-mcp-first', 'websearch-only'] as const
 type ResearchMode = (typeof researchModes)[number]
 
-const defaultResearchSupportTools = ['proxyWebReader', 'tauriHttpWebReader']
+const defaultResearchSupportTools = ['updateFiles', 'downloadFile', 'bash', 'jinaMarkdownReader']
 const defaultBrowserMcpStartupInstructions = [
   'Start your browser MCP server outside Taskyon so it exposes an HTTP MCP endpoint.',
   'A common pattern is to run a local container or local process that serves MCP on the configured port.',
@@ -156,6 +157,30 @@ const uniqueStrings = (values: readonly string[]) => Array.from(new Set(values))
 const joinHints = (label: string, hints: readonly string[]) =>
   hints.length > 0 ? `${label}: ${hints.join(', ')}.` : ''
 
+const slugifyResearchObjective = (value: string) => {
+  const slug = value
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[''`]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug || 'research-artifacts'
+}
+
+const normalizeArtifactRoot = (value: string) => {
+  const normalized = value
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '')
+  if (normalized.length === 0 || normalized.includes('..')) {
+    throw new Error('webResearchPlanner artifactRoot must be a relative directory path.')
+  }
+  return `${normalized}/`
+}
+
+const resolveResearchArtifactRoot = (args: WebResearchPlannerArgs, objective: string) =>
+  normalizeArtifactRoot(args.artifactRoot ?? `research/${slugifyResearchObjective(objective)}`)
+
 const resolveResearchMode = (mode: ResearchMode | undefined): ResearchMode => {
   if (mode === 'browser-mcp-first' || mode === 'websearch-only') return mode
   return 'websearch-first'
@@ -172,11 +197,10 @@ const buildResearchTaskToolset = (args: WebResearchPlannerArgs) => {
   const supportTools = uniqueStrings(
     configuredSupportTools.length > 0 ? configuredSupportTools : defaultResearchSupportTools,
   )
-  const webSearchTools = args.enableWebSearch === false ? [] : ['chatCompletion']
-  const allowedTools = uniqueStrings([...webSearchTools, ...browserTools, ...supportTools])
-  if (allowedTools.length === 0) {
+  const allowedTools = uniqueStrings([...browserTools, ...supportTools])
+  if (allowedTools.length === 0 && args.enableWebSearch === false) {
     throw new Error(
-      'webResearchPlanner needs at least one browserTools or supportTools entry so delegated subtasks stay explicit.',
+      'webResearchPlanner needs web search enabled or at least one browserTools/supportTools entry so delegated subtasks stay explicit.',
     )
   }
   return { browserTools, supportTools, allowedTools }
@@ -202,6 +226,7 @@ const buildResearchEntryNodeArguments = (args: WebResearchPlannerArgs) => {
 const buildDiscoveryTask = (
   objective: string,
   query: string,
+  artifactRoot: string,
   maxSourcesPerQuery: number,
   fileTypeHints: readonly string[],
   siteHints: readonly string[],
@@ -210,6 +235,7 @@ const buildDiscoveryTask = (
   [
     `Research objective: ${objective}.`,
     `Use this search query: ${query}.`,
+    `Use exactly this artifact root for the whole request: ${artifactRoot}.`,
     `Find up to ${maxSourcesPerQuery} strong candidate sources.`,
     'Use chatCompletion web search first for discovery when it is enabled.',
     'Prioritize official manufacturer pages, product pages, and direct specification documents.',
@@ -225,18 +251,28 @@ const buildDiscoveryTask = (
 const buildValidationTask = (
   objective: string,
   query: string,
+  artifactRoot: string,
   mustDownload: boolean,
   fileTypeHints: readonly string[],
   deliverable?: string,
 ) =>
   [
     `Validate the best candidates for "${objective}" found via "${query}".`,
+    `The only output directory for this research request is ${artifactRoot}. Save every downloaded file, generated text file, manifest, index, and note under this directory. Do not create sibling directories such as task_artifacts, task_battery_specs, taskyon, or alternate spellings of the task name.`,
     'Open the pages with browser tooling when available, confirm the source is relevant, and extract the strongest direct source URLs.',
-    'If direct browsing is blocked, fall back to proxy-backed fetching.',
     'Deduplicate products before returning results; do not count the same product or document twice.',
     mustDownload
-      ? 'If the browser tooling supports downloads, download the spec sheets. Otherwise capture the direct download URLs exactly.'
+      ? 'The requested deliverable includes saved research artifacts, not just links. Use whichever storage or download tool is available in this runtime. In tycli or other local runtimes, prefer downloadFile for accessible URL downloads because it validates file bytes, then use bash only as a fallback when downloadFile is unavailable or clearly unsuitable. If bash is used to download a requested PDF, verify the saved file starts with the %PDF- magic bytes before counting it; delete, rename, or mark any HTML/access-denied/error response as blocked instead of leaving it with a .pdf filename. Use updateFiles for text artifacts such as Markdown, JSON, CSV, or manifests. In browser runtimes, use opfsStorage download with expectedFileType set to pdf for accessible PDF URLs, or opfsStorage save for generated artifacts and file bytes that browser tooling exposes as base64. Verify each saved artifact exists and is non-empty when the tool supports verification. For PDF requests, count a saved artifact only when it is confirmed to be real PDF content, not an HTML error page or URL-only entry. If a requested artifact cannot be saved, record it as a blocked download with the reason; do not treat URL-only entries as completed downloads.'
       : 'Capture the strongest direct source URLs exactly.',
+    [
+      'If the original user asked to save the results, save them without asking for extra confirmation.',
+      mustDownload
+        ? `Use this single shared task-specific layout for the whole user request: files live below ${artifactRoot}; multiple artifacts should include ${artifactRoot}index.md or a manifest with every local path or OPFS path. Do not create competing branch-specific directories.`
+        : `Use this single task-specific layout: files live below ${artifactRoot}. For a small single-file result, save one clear Markdown file under ${artifactRoot}; for multiple files, put the files plus an index.md there.`,
+      `Use stable descriptive filenames under ${artifactRoot} and record each local path or OPFS path next to the source URL. When using updateFiles or downloadFile, pass artifactRoot: ${artifactRoot} and make filePath start with ${artifactRoot}. When using opfsStorage, pass artifactRoot: ${artifactRoot} and make directory start with ${artifactRoot}.`,
+      'For OPFS saves, base64-encode file content, set the best matching MIME type, and keep text formats such as Markdown, JSON, CSV, and HTML readable when loaded back.',
+      'If a page reader such as jinaMarkdownReader is available, use it to validate candidate pages and find direct artifact URLs before falling back to shell-only guesses. If a file-writing tool such as updateFiles or opfsStorage is available, create or update the index or manifest with the validated results and saved artifact paths.',
+    ].join(' '),
     joinHints('Preferred file types', fileTypeHints),
     deliverable ? `Keep the final material aligned with: ${deliverable}.` : '',
   ]
@@ -255,12 +291,14 @@ export const buildWebResearchTaskGroups = (args: WebResearchPlannerArgs) => {
   const fileTypeHints = trimNonEmptyStrings(args.fileTypeHints)
   const siteHints = trimNonEmptyStrings(args.siteHints)
   const mustDownload = args.mustDownload ?? true
+  const artifactRoot = resolveResearchArtifactRoot(args, objective)
 
   return searchQueries.map((query) => [
     {
       task: buildDiscoveryTask(
         objective,
         query,
+        artifactRoot,
         maxSourcesPerQuery,
         fileTypeHints,
         siteHints,
@@ -269,7 +307,14 @@ export const buildWebResearchTaskGroups = (args: WebResearchPlannerArgs) => {
       allowedTools,
     },
     {
-      task: buildValidationTask(objective, query, mustDownload, fileTypeHints, args.deliverable),
+      task: buildValidationTask(
+        objective,
+        query,
+        artifactRoot,
+        mustDownload,
+        fileTypeHints,
+        args.deliverable,
+      ),
       allowedTools,
     },
   ])
@@ -543,14 +588,14 @@ This tool checks whether the configured browser MCP server is reachable. If it i
 export const webResearchPlanner = createTool({
   name: 'webResearchPlanner',
   description:
-    'Launch parallel browser-research branches that search, crawl, validate, and optionally download source material.',
+    'Launch parallel research branches that search, crawl, validate, and save task-specific artifacts.',
   longDescription: `Use this for structured research where the work should branch by query.
 
 Each search query becomes its own parallel research branch. Inside each branch, Taskyon first searches for likely sources and then validates or downloads the strongest candidates.
 
-This tool is especially useful for tasks like finding manufacturer spec sheets, datasheets, whitepapers, or product PDFs.
+This tool is useful for research tasks that need saved outputs such as reports, spec sheets, datasets, images, PDFs, JSON, CSV, Markdown, or other task-specific files.
 
-Taskyon first uses chatCompletion web search for discovery when enabled. In browser-mcp-first mode it ensures browser MCP tools before branching; websearch-first can opt into browser MCP by setting ensureBrowserMcp; websearch-only avoids browser MCP entirely. proxyWebReader and tauriHttpWebReader stay available as fallbacks for blocked pages or direct fetches.`,
+Taskyon first uses chatCompletion web search for discovery when enabled. In browser-mcp-first mode it ensures browser MCP tools before branching; websearch-first can opt into browser MCP by setting ensureBrowserMcp; websearch-only avoids browser MCP entirely. updateFiles supports local text artifacts in tycli, downloadFile supports verified local URL downloads in tycli, bash is a local fallback for unusual downloads, jinaMarkdownReader supports page validation, opfsStorage supports browser OPFS artifacts when explicitly enabled, and proxy/browser readers stay opt-in for blocked pages or direct fetches.`,
   parameters: {
     type: 'object',
     additionalProperties: false,
@@ -563,6 +608,11 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
         type: 'array',
         items: { type: 'string' },
         description: 'One query per parallel research branch.',
+      },
+      artifactRoot: {
+        type: 'string',
+        description:
+          'Optional relative output directory for all research artifacts. Defaults to research/<objective-slug>/. All delegated branches must use the same root.',
       },
       researchMode: {
         type: 'string',
@@ -581,7 +631,7 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
         type: 'array',
         items: { type: 'string' },
         description:
-          'Additional explicit helper tools for each delegated branch. Defaults to proxyWebReader and tauriHttpWebReader.',
+          'Additional explicit helper tools for each delegated branch. Defaults to updateFiles, downloadFile, bash, and jinaMarkdownReader so local save requests, verified local downloads, shell fallback, and page validation work in tycli/local runtimes; browser OPFS and browser/proxy fetchers stay opt-in.',
       },
       enableWebSearch: {
         type: 'boolean',
@@ -611,7 +661,7 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
         type: 'boolean',
         default: true,
         description:
-          'When true, delegated tasks should download files if the browser tooling supports it, otherwise preserve the direct download URLs.',
+          'When true, delegated tasks should save requested source files or artifacts to the local filesystem or browser OPFS when tooling supports it, otherwise record the blocker next to the direct URL.',
       },
       fileTypeHints: {
         type: 'array',
