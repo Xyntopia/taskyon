@@ -21,6 +21,7 @@ import { openUserUploadedFile, saveUserUploadedFileToOpfs } from '../utils/OPFS'
 import type { TyPGDB } from '../utils/pglite.api'
 import { createTaskNode } from './createTasks'
 import { addMarkdownTaskChain } from './markdownTaskIO'
+import { selectTaskChainIds, type TaskChainSelection } from './taskChainSelection'
 
 /**
  *
@@ -597,8 +598,11 @@ export async function useTyTaskManager(taskyonDb: TyPGDB) {
     return taskList
   }
 
-  const getTaskChain = async (taskId: string): Promise<TaskNode[]> =>
-    await convertTaskIDs(await getTaskIdChain(taskId))
+  const getTaskChain = async (
+    taskId: string,
+    maxFollow = 1e9,
+    selection: TaskChainSelection = { method: 'flattened' },
+  ): Promise<TaskNode[]> => await convertTaskIDs(await getTaskIdChain(taskId, maxFollow, selection))
 
   // first, get all immediate children and then, for each of them get all their leaf siblings
   // then from each leaf sibling go backwards through prior & parent IDs to create
@@ -724,16 +728,16 @@ export async function useTyTaskManager(taskyonDb: TyPGDB) {
   const getTaskIdChain = (
     taskId: string,
     maxFollow = 1e9, // by default we can follow 1mio. tasks...
-    untilTaskID: string | undefined = undefined,
-    onlyFirstChild = true,
-  ) =>
-    getFlattenedChain(
-      taskId,
-      maxFollow, // by default we can follow 1mio. tasks...
-      untilTaskID,
-      onlyFirstChild,
-      true,
-    )
+    selection: TaskChainSelection = { method: 'flattened' },
+  ) => {
+    return selectTaskChainIds(taskId, maxFollow, selection, {
+      getTask: taskDb.get,
+      getFlattenedChain: (rootTaskId, limit, stopTaskId, useOnlyFirstChild) =>
+        getFlattenedChain(rootTaskId, limit, stopTaskId, useOnlyFirstChild, true),
+      searchAllDirectChildren,
+      findSiblingLeafTasks,
+    })
+  }
 
   async function deleteAllTasks() {
     // TODO: also delete vectordb! (will be done automatically, once we transition to pglite)

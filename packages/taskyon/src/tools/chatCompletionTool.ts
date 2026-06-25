@@ -80,6 +80,23 @@ type GeneratedFollowUpTasks = {
   tasks: partialTaskDraft[]
   sanitation: AssistantOutputSanitation[]
 }
+type ChatCompletionContextOptions = {
+  includeSubtaskResults?: 'terminal-visible' | 'none'
+  maxFollow?: number
+}
+
+const getChatTaskChainSelection = (
+  contextOptions: ChatCompletionContextOptions | undefined,
+): { method: 'lineage'; includeSubtaskResults?: 'terminal-visible' | 'none' } => ({
+  method: 'lineage',
+  ...(contextOptions?.includeSubtaskResults
+    ? { includeSubtaskResults: contextOptions.includeSubtaskResults }
+    : {}),
+})
+
+const getChatCompletionContextOptions = (
+  maxFollow: number | undefined,
+): ChatCompletionContextOptions | undefined => (maxFollow === undefined ? undefined : { maxFollow })
 
 const augmentToolSchemaForTaskyonVariables = (schema: JSONSchema7): JSONSchema7 => {
   if (schema.type !== 'object') return schema
@@ -137,6 +154,7 @@ export async function processChatTask(
   prompts: string[],
   promptInjections: PromptInjection[],
   variableService?: TaskVariablePresentationService,
+  contextOptions?: ChatCompletionContextOptions,
 ) {
   //TODO: we can create more things here like giving it context form other tasks, lookup
   //      main objective, previous tasks etc....
@@ -146,7 +164,11 @@ export async function processChatTask(
   let chatCompletionMessages: ModelMessage[]
   let originalThread: ModelMessage[] = []
   if (lastTaskBeforeChatCompletion) {
-    const taskChain = await taskManager.getTaskChain(lastTaskBeforeChatCompletion.id)
+    const taskChain = await taskManager.getTaskChain(
+      lastTaskBeforeChatCompletion.id,
+      contextOptions?.maxFollow,
+      getChatTaskChainSelection(contextOptions),
+    )
     chatCompletionMessages = await convertTaskNodesToOpenAIChat(
       taskChain,
       taskManager.getFileMappingByUuid,
@@ -981,11 +1003,10 @@ async function convertTaskNodeToOpenAIMessage(
   } else if (task.content.type === 'toolresult') {
     const variableName = variableService.getOrAssignVariableName(task, tasksById)
     const renderedBlock = renderTaskyonVariableBlock(variableName, safeYamlDump(task.content.data))
-    if (task.parentID && useNativeTools) {
+    const toolCallTask = task.parentID ? tasksById.get(task.parentID) : undefined
+    if (task.parentID && useNativeTools && toolCallTask?.content.type === 'functioncall') {
       // the parent task should be the tool call task...
-      const toolCallTask = tasksById.get(task.parentID)
-      const name =
-        toolCallTask?.content.type === 'functioncall' ? toolCallTask.content.data.name : 'unknown'
+      const name = toolCallTask.content.data.name
       const output: ToolResultPart['output'] = {
         type: 'text',
         value: renderedBlock,
@@ -1334,6 +1355,7 @@ export function createChatCompletionTool(
         options,
         // if we don't set it, choose the default setting...
         use_multimodal = true,
+        context_size,
         timeouts,
       } = opts
       const { verbosity, artificial_streaming } = options || {}
@@ -1411,6 +1433,7 @@ export function createChatCompletionTool(
         prompts ?? [],
         promptInjections,
         variableService,
+        getChatCompletionContextOptions(context_size),
       )
 
       let rawOutput = ''

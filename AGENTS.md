@@ -17,6 +17,36 @@
 - When adding a test, make sure it is part of the diagnostics suite. Prefer locations already discovered by `packages/taskyon-headless` (for example `packages/taskyon/src/tests/test*.ts`) or wire the new test into the appropriate diagnostics runner.
 - Prefer explicit event/function flow over Vue watchers. Watchers are hard to trace and should be used only when reacting to external reactive state is genuinely the simplest boundary; do not use a watcher to bounce one source of truth into another.
 
+## TypeScript readability
+
+- Optimize TypeScript for local readability first, then reuse. Strong types are
+  required, but do not split every tiny local concept into top-level aliases just
+  to make the type graph look tidy.
+- Use separate named types when the name carries domain meaning, the type is
+  reused, it is a public API boundary, or it is complex enough that naming makes
+  the code easier to read.
+- Prefer inline unions or a single nearby options type for small local details.
+  Avoid extra aliases such as one-off mode unions, one-off legacy arg wrappers,
+  or types that merely mirror part of another type without adding meaning.
+- Keep types close to the code that uses them. Do not create a broad shared
+  "normalized type universe" for implementation details.
+- For APIs with multiple strategies, prefer an explicit required `mode` or
+  `method` field when callers must choose behavior, and implement the branch with
+  a simple `switch` statement.
+- Do not merge unrelated controls into one parameter. For example, a traversal
+  limit such as `maxFollow` should stay separate from an options object that
+  selects the traversal strategy.
+
+## Coding principles
+
+- Prefer functional style and composition, but keep the code readable. Avoid
+  unnecessary nesting, clever abstractions, and indirection that makes the
+  control flow harder to follow.
+- Keep functions focused on one purpose. Around 40 lines is a useful guideline:
+  if a function becomes harder to read, split it by responsibility.
+- Extract helpers when they remove real duplication or clarify a distinct step.
+  Do not extract helpers only to make code look abstract.
+
 ## Branches
 
 - `dev` is the open-source integration branch. Backport general Taskyon fixes here only when they do not depend on commercial services or taskyon.space-specific files.
