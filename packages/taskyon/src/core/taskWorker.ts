@@ -1,7 +1,11 @@
 import type { ReadonlyDeep } from 'type-fest'
 import type { TaskNode, TaskNodeType, partialTaskDraft } from '../types/taskNode'
-import type { InternalTool, toolContext } from '../types/toolApi'
-import { taskResult } from '../types/toolApi'
+import {
+  createSubtasksResult,
+  taskResult,
+  type InternalTool,
+  type toolContext,
+} from '../types/toolApi'
 import type { FunctionArguments, FunctionCall } from '../types/tools'
 import { createAsyncQueue, sleep } from '../utils/asyncUtils'
 import type { SecretStore } from '../utils/crudWrapper'
@@ -74,6 +78,7 @@ export const functionExecutorCreator = (
           const msgPortAdapter = createMessagePortAdapter(filteredStream)
           const context: toolContext = {
             taskChain,
+            createSubtasksResult,
             getSecret: async (name, askNew, saveNew = true) => {
               console.log('get secret name', name)
               const secr = await secretStore.getSecret(toolId, name, askNew, saveNew)

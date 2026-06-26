@@ -3,7 +3,6 @@ import {
   createChatCompletionTask,
   createTool,
   initializeTaskyon,
-  makeTaskResult,
   toolCall,
   type TyClient,
 } from '@taskyon/tyclient'
@@ -391,53 +390,50 @@ const encodeFileAsBase64 = async (file: File): Promise<string> => {
 }
 
 const createTools = () => {
-  const continueViaEntryNode = (toolResultSection: string) =>
-    makeTaskResult([
-      {
-        role: 'system',
-        content: {
-          type: 'message',
-          data: toolResultSection,
-        },
+  const buildEntryNodeContinuation = (toolResultSection: string) => [
+    {
+      role: 'system' as const,
+      content: {
+        type: 'message' as const,
+        data: toolResultSection,
       },
-      toolCall({
-        name: 'entryNode',
-        arguments: { toolResultSection },
-      }),
-    ])
+    },
+    toolCall({
+      name: 'entryNode',
+      arguments: { toolResultSection },
+    }),
+  ]
 
-  const stopForUserResult = () =>
-    makeTaskResult([
-      {
-        role: 'assistant',
-        content: {
-          type: 'message',
-          data: `I have already gone through ${ENTRY_PASS_LIMIT} entry-node steps for this message. Please send a new message to continue or narrow the search.`,
-        },
+  const buildStopForUserResult = () => [
+    {
+      role: 'assistant' as const,
+      content: {
+        type: 'message' as const,
+        data: `I have already gone through ${ENTRY_PASS_LIMIT} entry-node steps for this message. Please send a new message to continue or narrow the search.`,
       },
-    ])
+    },
+  ]
 
-  const finalSummaryResult = (toolResultSection: string) =>
-    makeTaskResult([
-      {
-        role: 'system',
-        content: {
-          type: 'message',
-          data: toolResultSection,
-        },
+  const buildFinalSummaryResult = (toolResultSection: string) => [
+    {
+      role: 'system' as const,
+      content: {
+        type: 'message' as const,
+        data: toolResultSection,
       },
-      createChatCompletionTask({
-        prompts: [
-          [
-            'Summarize the updates you just completed for the user.',
-            'Keep the answer short and concrete.',
-            'Mention the edited files and the effect of the changes.',
-            '',
-            toolResultSection,
-          ].join('\n'),
-        ],
-      }),
-    ])
+    },
+    createChatCompletionTask({
+      prompts: [
+        [
+          'Summarize the updates you just completed for the user.',
+          'Keep the answer short and concrete.',
+          'Mention the edited files and the effect of the changes.',
+          '',
+          toolResultSection,
+        ].join('\n'),
+      ],
+    }),
+  ]
 
   const tools = [
     createTool({
@@ -454,16 +450,16 @@ const createTools = () => {
         additionalProperties: false,
       },
       renderOptions: { hideChat: false, hideLlm: true },
-      function: ({ toolResultSection }: { toolResultSection?: string } = {}) => {
+      function: ({ toolResultSection }: { toolResultSection?: string } = {}, ctx) => {
         if (!toolResultSection) {
           entryPassCount = 0
         }
         entryPassCount += 1
         if (entryPassCount > ENTRY_PASS_LIMIT) {
-          return stopForUserResult()
+          return ctx.createSubtasksResult(buildStopForUserResult())
         }
 
-        return makeTaskResult([
+        return ctx.createSubtasksResult([
           createChatCompletionTask({
             prompts: [buildAssistantContext({ toolResultSection: toolResultSection || '(none)' })],
             allowedTools: ['searchWorkspaceFiles', 'readWorkspaceFiles', 'updateFiles'],
@@ -503,17 +499,20 @@ const createTools = () => {
         additionalProperties: false,
       },
       renderOptions: { hideChat: false, hideLlm: true },
-      function: async ({
-        mode,
-        query,
-        exclude,
-        maxResults,
-      }: {
-        mode?: SearchMode
-        query: string
-        exclude?: string
-        maxResults?: number
-      }) => {
+      function: async (
+        {
+          mode,
+          query,
+          exclude,
+          maxResults,
+        }: {
+          mode?: SearchMode
+          query: string
+          exclude?: string
+          maxResults?: number
+        },
+        ctx,
+      ) => {
         const effectiveMode: SearchMode = mode || 'pathRegex'
         const requestedMax = Math.max(
           1,
@@ -549,18 +548,20 @@ const createTools = () => {
             items: matches,
             hitCap,
           }
-          return continueViaEntryNode(
-            formatToolResultSection('### searchWorkspaceFiles', [
-              `Mode: ${responseMode}`,
-              `Regex: ${query || '(none)'}`,
-              `Exclude: ${effectiveExclude || '(none)'}`,
-              `Max Results: ${requestedMax}`,
-              formatListForPrompt(matches, requestedMax),
-              hitCap ? `\nHit cap of ${requestedMax}; refine the regex.` : '',
-              !hitCap && !matches.length && responseMode === 'pathRegex'
-                ? '\nNo path matches. Try filename/path variants before switching to contentRegex.'
-                : '',
-            ]),
+          return ctx.createSubtasksResult(
+            buildEntryNodeContinuation(
+              formatToolResultSection('### searchWorkspaceFiles', [
+                `Mode: ${responseMode}`,
+                `Regex: ${query || '(none)'}`,
+                `Exclude: ${effectiveExclude || '(none)'}`,
+                `Max Results: ${requestedMax}`,
+                formatListForPrompt(matches, requestedMax),
+                hitCap ? `\nHit cap of ${requestedMax}; refine the regex.` : '',
+                !hitCap && !matches.length && responseMode === 'pathRegex'
+                  ? '\nNo path matches. Try filename/path variants before switching to contentRegex.'
+                  : '',
+              ]),
+            ),
           )
         } catch (error) {
           const message = toErrorMessage(error)
@@ -601,7 +602,7 @@ const createTools = () => {
         additionalProperties: false,
       },
       renderOptions: { hideChat: false, hideLlm: true },
-      function: async ({ paths }: { paths: string[] }) => {
+      function: async ({ paths }: { paths: string[] }, ctx) => {
         try {
           const response = await sendRequest<{
             files?: Array<{ path: string; content?: string; languageId?: string; error?: string }>
@@ -618,14 +619,16 @@ const createTools = () => {
             }
           }
           renderContextInfo()
-          return continueViaEntryNode(
-            formatToolResultSection('### readWorkspaceFiles', [
-              `Requested: ${paths?.length || 0}`,
-              `Loaded: ${loaded.length}`,
-              formatListForPrompt(loaded, HARD_RESULT_CAP),
-              failed.length ? `\nFailed: ${failed.length}` : '',
-              failed.length ? formatListForPrompt(failed, HARD_RESULT_CAP) : '',
-            ]),
+          return ctx.createSubtasksResult(
+            buildEntryNodeContinuation(
+              formatToolResultSection('### readWorkspaceFiles', [
+                `Requested: ${paths?.length || 0}`,
+                `Loaded: ${loaded.length}`,
+                formatListForPrompt(loaded, HARD_RESULT_CAP),
+                failed.length ? `\nFailed: ${failed.length}` : '',
+                failed.length ? formatListForPrompt(failed, HARD_RESULT_CAP) : '',
+              ]),
+            ),
           )
         } catch (error) {
           const message = toErrorMessage(error)
@@ -728,13 +731,16 @@ const createTools = () => {
         additionalProperties: false,
       },
       renderOptions: { hideChat: false, hideLlm: true },
-      function: async ({
-        updates,
-        description,
-      }: {
-        updates: FileUpdate[]
-        description?: string
-      }) => {
+      function: async (
+        {
+          updates,
+          description,
+        }: {
+          updates: FileUpdate[]
+          description?: string
+        },
+        ctx,
+      ) => {
         try {
           const normalizedUpdates = (updates || []).map(normalizeFileUpdate)
           const applyResponse = await sendRequest<{
@@ -827,14 +833,16 @@ const createTools = () => {
           lastUpdateResult = { editedFiles, changesLog, description }
           renderContextInfo()
 
-          return finalSummaryResult(
-            formatToolResultSection('### updateFiles', [
-              description ? `Description: ${description}` : '',
-              `Edited: ${editedFiles.length}`,
-              formatListForPrompt(editedFiles, HARD_RESULT_CAP),
-              changesLog.length ? `\nNotes:` : '',
-              changesLog.length ? formatListForPrompt(changesLog, HARD_RESULT_CAP) : '',
-            ]),
+          return ctx.createSubtasksResult(
+            buildFinalSummaryResult(
+              formatToolResultSection('### updateFiles', [
+                description ? `Description: ${description}` : '',
+                `Edited: ${editedFiles.length}`,
+                formatListForPrompt(editedFiles, HARD_RESULT_CAP),
+                changesLog.length ? `\nNotes:` : '',
+                changesLog.length ? formatListForPrompt(changesLog, HARD_RESULT_CAP) : '',
+              ]),
+            ),
           )
         } catch (error) {
           const message = toErrorMessage(error)
@@ -845,15 +853,17 @@ const createTools = () => {
             error: message,
           }
           renderContextInfo()
-          return continueViaEntryNode(
-            formatToolResultSection('### updateFiles', [
-              description ? `Description: ${description}` : '',
-              `Error: ${message}`,
-              'The update did not apply.',
-              'If there were multiple matches for a patch, increase the context and try again.',
-              'For larger replacements, provide at least 3 lines in both `searchStart` and `searchEnd`.',
-              'If a search block was not found, copy it exactly from the latest file contents.',
-            ]),
+          return ctx.createSubtasksResult(
+            buildEntryNodeContinuation(
+              formatToolResultSection('### updateFiles', [
+                description ? `Description: ${description}` : '',
+                `Error: ${message}`,
+                'The update did not apply.',
+                'If there were multiple matches for a patch, increase the context and try again.',
+                'For larger replacements, provide at least 3 lines in both `searchStart` and `searchEnd`.',
+                'If a search block was not found, copy it exactly from the latest file contents.',
+              ]),
+            ),
           )
         }
       },

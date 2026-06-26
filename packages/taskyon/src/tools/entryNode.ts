@@ -1,7 +1,7 @@
 import { createChatCompletionTask } from '../api'
 import { toPromptMessages } from '../llm/promptMessages'
 import { match, P } from 'ts-pattern'
-import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
+import { createTool, toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
 import type { FunctionCall } from '../types/tools'
@@ -627,7 +627,7 @@ const buildEntryNodeChatCompletionResult = (
     ...(args?.websearch ? { websearch: args.websearch } : {}),
   }
 
-  return makeTaskResult([createChatCompletionTask(chatCompletionArgs)])
+  return [createChatCompletionTask(chatCompletionArgs)]
 }
 
 const buildPromptBasedChatCompletionResult = (
@@ -638,24 +638,23 @@ const buildPromptBasedChatCompletionResult = (
     prompt_injections: string[]
     reasoning_effort?: 'low' | 'medium' | 'high' | 'none'
   },
-) =>
-  makeTaskResult([
-    createChatCompletionTask({
-      prompts: args.prompts,
-      prompt_injections: args.prompt_injections,
-      schema: buildPromptBasedToolDecisionSchema(args.allowedTools),
-      ...withReasoningEffort(args.reasoning_effort),
-      use_multimodal: executionConfig.normalizedSettings.use_multimodal,
-    }),
-    toolCall({
-      name: executionConfig.entryNodeName,
-      arguments: toEntryNodeArguments(
-        executionConfig.normalizedSettings,
-        executionConfig.toolResultSection,
-        args.allowedTools,
-      ),
-    }),
-  ])
+) => [
+  createChatCompletionTask({
+    prompts: args.prompts,
+    prompt_injections: args.prompt_injections,
+    schema: buildPromptBasedToolDecisionSchema(args.allowedTools),
+    ...withReasoningEffort(args.reasoning_effort),
+    use_multimodal: executionConfig.normalizedSettings.use_multimodal,
+  }),
+  toolCall({
+    name: executionConfig.entryNodeName,
+    arguments: toEntryNodeArguments(
+      executionConfig.normalizedSettings,
+      executionConfig.toolResultSection,
+      args.allowedTools,
+    ),
+  }),
+]
 
 const buildEntryNodeToolCallingResult = (
   executionConfig: EntryNodeExecutionConfig,
@@ -732,22 +731,21 @@ const resolveAvailableToolsForMessage = async (
 const buildShortlistReentryResult = (
   executionConfig: EntryNodeExecutionConfig,
   toolCatalog: ReadonlyArray<{ name: string; description: string }>,
-) =>
-  makeTaskResult([
-    createChatCompletionTask({
-      prompts: [buildToolShortlistPrompt(toolCatalog)],
-      schema: buildToolShortlistSchema(executionConfig.normalizedSettings.tool_shortlist_reasoning),
-      reasoning_effort: 'low',
-      use_multimodal: executionConfig.normalizedSettings.use_multimodal,
-    }),
-    toolCall({
-      name: executionConfig.entryNodeName,
-      arguments: toEntryNodeArguments(
-        executionConfig.normalizedSettings,
-        executionConfig.toolResultSection,
-      ),
-    }),
-  ])
+) => [
+  createChatCompletionTask({
+    prompts: [buildToolShortlistPrompt(toolCatalog)],
+    schema: buildToolShortlistSchema(executionConfig.normalizedSettings.tool_shortlist_reasoning),
+    reasoning_effort: 'low',
+    use_multimodal: executionConfig.normalizedSettings.use_multimodal,
+  }),
+  toolCall({
+    name: executionConfig.entryNodeName,
+    arguments: toEntryNodeArguments(
+      executionConfig.normalizedSettings,
+      executionConfig.toolResultSection,
+    ),
+  }),
+]
 
 const createEntryNodeRuntimeState = (
   config: EntryNodeConfig,
@@ -856,10 +854,12 @@ const runEntryNode = async (config: EntryNodeConfig, args: EntryNodeArgs, contex
 
   if (runtime.mode === 'structured' && runtime.shortlistResult === undefined) {
     if (runtime.promptBasedToolDecision?.type === 'tool') {
-      return makeTaskResult([toolCall(runtime.promptBasedToolDecision.command)])
+      return context.createSubtasksResult([toolCall(runtime.promptBasedToolDecision.command)])
     }
     if (runtime.promptBasedToolDecision?.type === 'none') {
-      return buildPromptBasedFinalAnswerResult(executionConfig, runtime.promptContext)
+      return context.createSubtasksResult(
+        buildPromptBasedFinalAnswerResult(executionConfig, runtime.promptContext),
+      )
     }
   }
 
@@ -869,10 +869,12 @@ const runEntryNode = async (config: EntryNodeConfig, args: EntryNodeArgs, contex
     runtime.normalizedSettings.max_error_retries,
   )
   if (giveUpAfterError !== undefined) {
-    return buildErrorGiveUpResult(executionConfig, runtime.promptContext, giveUpAfterError)
+    return context.createSubtasksResult(
+      buildErrorGiveUpResult(executionConfig, runtime.promptContext, giveUpAfterError),
+    )
   }
 
-  return match(runtime.routingContext)
+  const subtaskDrafts = await match(runtime.routingContext)
     .with({ webSearchEnabled: true }, () =>
       buildEntryNodeChatCompletionResult(executionConfig, {
         allowedTools: runtime.allowedTools,
@@ -980,6 +982,8 @@ const runEntryNode = async (config: EntryNodeConfig, args: EntryNodeArgs, contex
         promptAugmentations,
       ),
     )
+
+  return context.createSubtasksResult(subtaskDrafts)
 }
 
 type StandardEntryNodeOptions = {

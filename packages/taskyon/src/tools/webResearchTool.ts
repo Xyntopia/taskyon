@@ -5,7 +5,7 @@ import {
   type ResolvedProxyWebReaderArgs,
 } from '@taskyon/shared/modules/webFetching'
 import { buildTaskPlannerTaskChains } from './TaskPlannerTool'
-import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
+import { createTool, toolCall } from '../types/toolApi'
 import { canUseTauriHttpPlugin, tauriHttpRequestText } from '../utils/tauriHttpPlugin'
 
 type BrowserMcpImportArgs = {
@@ -491,7 +491,7 @@ After import, you can delegate browser-based research through webResearchPlanner
     },
     required: [],
   } as const satisfies JSONSchema7,
-  function: (args) => makeTaskResult([[...buildBrowserMcpImportChain(args)]]),
+  function: (args, ctx) => ctx.createSubtasksResult([[...buildBrowserMcpImportChain(args)]]),
 })
 
 export const ensureBrowserMcpTools = createTool({
@@ -548,12 +548,12 @@ This tool checks whether the configured browser MCP server is reachable. If it i
 
     try {
       await checkBrowserMcpEndpoint(serverUrl)
-      return makeTaskResult([[...buildEnsureBrowserMcpImportRetryChain(args)]])
+      return ctx.createSubtasksResult([[...buildEnsureBrowserMcpImportRetryChain(args)]])
     } catch {
       if (isOnboardingReentry) {
         await waitForContinueDecision(ctx.messagePort, 'ensureBrowserMcpTools', onboardingToken)
         await checkBrowserMcpEndpoint(serverUrl)
-        return makeTaskResult([[...buildEnsureBrowserMcpImportRetryChain(args)]])
+        return ctx.createSubtasksResult([[...buildEnsureBrowserMcpImportRetryChain(args)]])
       }
 
       const nextToken = `browser-mcp-onboarding-${Date.now().toString(36)}`
@@ -563,7 +563,7 @@ This tool checks whether the configured browser MCP server is reachable. If it i
         startupInstructions,
         onboardingToken: nextToken,
       })
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [
           {
             role: 'assistant',
@@ -684,7 +684,7 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
   function: (args, context) => {
     const browserTools = trimNonEmptyStrings(args.browserTools)
     if (shouldEnsureBrowserMcp(args)) {
-      return makeTaskResult([
+      return context.createSubtasksResult([
         [
           {
             role: 'assistant',
@@ -729,7 +729,7 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
       },
     )
 
-    return makeTaskResult([
+    return context.createSubtasksResult([
       [
         {
           role: 'assistant',
@@ -846,7 +846,7 @@ This tool includes a built-in provider catalog with 40 public vendors so a user 
     let apiKey = await ctx.getSecret(secretName, false)
     if (!apiKey && !isOnboardingReentry) {
       const nextToken = `proxy-onboarding-${Date.now().toString(36)}`
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [
           {
             role: 'assistant',

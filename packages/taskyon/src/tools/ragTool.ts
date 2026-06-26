@@ -1,7 +1,7 @@
 import type { JSONSchema7 } from 'json-schema'
 // import type { JSONSchema } from 'json-schema-to-ts'
 // import type { ToolBase } from '../taskyon/types'
-import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
+import { createTool, toolCall } from '../types/toolApi'
 import { createVectorStore } from '../utils/crudWrapper'
 import { sha256UrlSafeHash } from '../utils/encoding'
 import type { TyPGDB } from '../utils/pglite.api'
@@ -45,7 +45,7 @@ export const ragSearchTool = createTool({
     },
     required: ['searchText', 'sourceType'],
   } as const satisfies JSONSchema7,
-  function: async ({ searchText, k = 5, sourceType, label }) => {
+  function: async ({ searchText, k = 5, sourceType, label }, ctx) => {
     if (sourceType === 'vectorStore') {
       const { search } = await createVectorStore(await getDatabase('DEMODB'), 'vectorStoreTool')
 
@@ -60,7 +60,7 @@ export const ragSearchTool = createTool({
               }
             : undefined,
         )
-        return makeTaskResult([
+        return ctx.createSubtasksResult([
           [
             {
               role: 'system',
@@ -91,7 +91,7 @@ export const ragSearchTool = createTool({
         },
       })
 
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [
           task,
           toolCall({

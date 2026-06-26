@@ -89,7 +89,7 @@
 
 <script setup lang="ts">
 import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
-import { createChatCompletionTask, createTool, makeTaskResult } from '@taskyon/tyclient'
+import { createChatCompletionTask, createTool } from '@taskyon/tyclient'
 import SplitTaskyonView from '@taskyon/shared/components/SplitTaskyonView.vue'
 import { copyToClipboard } from '@taskyon/shared/modules/utils'
 import type { TyPGDB } from '@taskyon/taskyon/db'
@@ -409,7 +409,7 @@ const tools = [
       required: [],
       additionalProperties: false,
     } as const satisfies JSONSchema7,
-    function: async ({ sql }) => {
+    function: async ({ sql }, ctx) => {
       if (!sql) {
         const schema = await db.value!.query(sqlschemaquery)
         const toolPrompt = `
@@ -440,7 +440,7 @@ ${lastQuery}
 Only use the tool 'setSqlQuery' Tool if you think the user wants to change the SQL query.
 `
 
-        return makeTaskResult([
+        return ctx.createSubtasksResult([
           createChatCompletionTask({
             prompts: [toolPrompt],
             allowedTools: ['setSqlQuery'],
@@ -449,7 +449,7 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
       }
 
       sqlQuery.value = sql
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         {
           role: 'assistant',
           content: {

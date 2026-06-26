@@ -3,7 +3,7 @@ import type { TyTaskManager } from '../core/taskManager'
 import { createChatCompletionTask } from '../api'
 import type { partialTaskDraft, TaskNode } from '../types/taskNode'
 import { taskTypeOptions } from '../types/taskNode'
-import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
+import { createTool, toolCall } from '../types/toolApi'
 import { safeYamlDump } from '../utils/yamlUtils'
 
 type PlannedTaskConfig = {
@@ -250,7 +250,7 @@ For every delegated task, Taskyon first creates a fresh local context, expands t
       })
       .join('\n')
 
-    return makeTaskResult([
+    return context.createSubtasksResult([
       [
         {
           role: 'assistant',

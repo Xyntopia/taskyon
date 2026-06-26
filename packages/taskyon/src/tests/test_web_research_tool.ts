@@ -14,7 +14,7 @@ import {
   webResearchPlanner,
 } from '../tools/webResearchTool'
 import type { TaskNode } from '../types/taskNode'
-import { createTool, toolCall } from '../types/toolApi'
+import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -343,6 +343,7 @@ export const testMcpCapableWebProviderCatalog = () => {
 export const testWebResearchPlannerUsesWebSearchFirstByDefault = () => {
   const baseContext = {
     taskChain: [],
+    createSubtasksResult,
     getSecret: () => Promise.resolve(null),
     setSecret: () => Promise.resolve(),
     stopSignal: new AbortController().signal,
@@ -504,6 +505,7 @@ export const testWebResearchPlannerBrowserMcpFirstEnsuresBrowserSetup = () => {
     },
     {
       taskChain: [],
+      createSubtasksResult,
       getSecret: () => Promise.resolve(null),
       setSecret: () => Promise.resolve(),
       stopSignal: new AbortController().signal,

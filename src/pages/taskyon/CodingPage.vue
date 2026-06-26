@@ -294,7 +294,7 @@ import {
   matVisibility,
 } from '@quasar/extras/material-icons'
 import { mdiNewBox, mdiRenameBox, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
-import { createChatCompletionTask, createTool, makeTaskResult } from '@taskyon/tyclient'
+import { createChatCompletionTask, createTool } from '@taskyon/tyclient'
 import { watchThrottled } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'
@@ -467,7 +467,7 @@ const tools = [
       },
       additionalProperties: false,
     } as const satisfies JSONSchema7,
-    function: (opts) => {
+    function: (opts, ctx) => {
       const showAllFiles = opts.showAllFiles ?? showAllFilesInPrompt.value ?? false
 
       // 1. Context Assembly
@@ -576,7 +576,7 @@ You have access to the \`updateDocument\` tool which can:
 Your goal is to **keep the document in sync with the user's intent**. When in doubt, prefer **actually editing the document** via \`updateDocument\` instead of just suggesting changes.
       If you do not want to make any changes to the document, don't call \`updateDocument\` at all.
 `
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         ...(opts.webSearch
           ? [createChatCompletionTask({ websearch: { enabled: true, max_results: 5 } })]
           : []),
@@ -637,7 +637,7 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
       },
       required: ['updates'],
     } as const satisfies JSONSchema7,
-    function: ({ updates, description }) => {
+    function: ({ updates, description }, ctx) => {
       // count total number of edits, because often the AI still uses this tool, but doesn't apply any
       // edits if it simply wants to respond...
       const totalEdits = updates.reduce((acc, update) => {
@@ -650,7 +650,7 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
           type: 'warning',
           message: 'No edits provided in updateDocument call',
         })
-        return makeTaskResult([
+        return ctx.createSubtasksResult([
           createChatCompletionTask({
             prompts: [
               "It seems you called updateDocument but did not provide any edits or new content. Please make sure to include the changes you want to apply. Or don't call it at all",
@@ -739,7 +739,7 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
           type: 'negative',
           message: `updateDocument failed: ${msg}`,
         })
-        return makeTaskResult([
+        return ctx.createSubtasksResult([
           createChatCompletionTask({
             prompts: [
               `updateDocument failed while applying patches: ${msg}\nPlease resend the updateDocument call with corrected, non-overlapping, in-range patches.`,
@@ -775,7 +775,7 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
         })
       }
 
-      return makeTaskResult(returnMsgs)
+      return ctx.createSubtasksResult(returnMsgs)
     },
   }),
 ]

@@ -1,6 +1,6 @@
 // modelicaTools.ts
 
-import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/tyclient'
+import { createChatCompletionTask, createTool, toolCall } from '@taskyon/tyclient'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'
 import { serializeObject } from '../modules/serializeObject'
@@ -174,14 +174,14 @@ export const createModelicatools = ({
       },
       additionalProperties: false,
     } as const satisfies JSONSchema7,
-    function: (opts) => {
+    function: (opts, ctx) => {
       const useTools = opts.useTools ?? true
       const showAll = opts.showAll ?? showAllInPrompt.value ?? true
       const compileStatus = extractCompileStatus(modelicaLog.value || [])
       const compileLooksBroken = compileStatus.state === 'error'
 
       if (useTools && compileLooksBroken) {
-        return makeTaskResult([
+        return ctx.createSubtasksResult([
           {
             role: 'assistant',
             content: {
@@ -256,7 +256,7 @@ ${sourcesSection}
 5. If compilation is failing, prefer calling autoFixModelicaCompilationCycle.
 `
 
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         createChatCompletionTask({
           prompts: [contextPrompt],
           allowedTools: [
@@ -283,7 +283,7 @@ ${sourcesSection}
       },
       additionalProperties: false,
     } as const satisfies JSONSchema7,
-    function: async ({ includeSources }) => {
+    function: async ({ includeSources }, ctx) => {
       if (compileNow) {
         try {
           await compileNow()
@@ -316,7 +316,7 @@ ${sourcesSection}
         payload.templateSourceWithLines = formatContentWithLineNumbers(templateSource.value || '')
       }
 
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         {
           role: 'system',
           content: {
@@ -350,7 +350,7 @@ ${sourcesSection}
       },
       additionalProperties: false,
     } as const satisfies JSONSchema7,
-    function: async ({ currentRound, maxRounds, showAll }) => {
+    function: async ({ currentRound, maxRounds, showAll }, ctx) => {
       if (compileNow) {
         try {
           await compileNow()
@@ -373,7 +373,7 @@ ${sourcesSection}
               : 'error'
 
       if (compileState === 'success') {
-        return makeTaskResult([
+        return ctx.createSubtasksResult([
           {
             role: 'system',
             content: {
@@ -385,7 +385,7 @@ ${sourcesSection}
       }
 
       if (round > max) {
-        return makeTaskResult([
+        return ctx.createSubtasksResult([
           {
             role: 'system',
             content: {
@@ -438,7 +438,7 @@ Constraints:
 - Prefer fixing template/solver when error is JS/render/runtime.
 `
 
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [
           createChatCompletionTask({
             prompts: [cyclePrompt],
@@ -503,13 +503,16 @@ Constraints:
       required: ['updates'],
       additionalProperties: false,
     } as const satisfies JSONSchema7,
-    function: async ({
-      updates,
-      description,
-    }: {
-      updates: ModelicaDocumentUpdate[]
-      description?: string
-    }) => {
+    function: async (
+      {
+        updates,
+        description,
+      }: {
+        updates: ModelicaDocumentUpdate[]
+        description?: string
+      },
+      ctx,
+    ) => {
       const totalEdits = updates.reduce((acc, update) => {
         const patchCount = Array.isArray(update.patches) ? update.patches.length : 0
         const newContentStr = typeof update.newContent === 'string' ? update.newContent : ''
@@ -522,7 +525,7 @@ Constraints:
           type: 'warning',
           message: 'No edits provided in updateModelicaDocument call',
         })
-        return makeTaskResult([
+        return ctx.createSubtasksResult([
           createChatCompletionTask({
             prompts: [
               'You called updateModelicaDocument but did not provide any patches or newContent. Provide edits or do not call the tool.',
@@ -612,7 +615,7 @@ Constraints:
         }
       }
 
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         {
           role: 'system',
           content: {

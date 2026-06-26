@@ -5,13 +5,13 @@ import type { chatCompletionParams } from '../tools/chatCompletionTool'
 import type { TaskyonMessage } from '../types/apiTypes'
 import type { TaskContentType, TaskNode } from '../types/taskNode'
 import { partialTaskDraft } from '../types/taskNode'
-import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
+import { createTool, toolCall } from '../types/toolApi'
 import { createStream, type Port } from '@taskyon/shared/modules/frpBus'
 
 export { BaseMessage, TaskyonMessage, TyP2P } from '../types/apiTypes'
 export { REMOTE_FUNCTION_TIMEOUT_MS } from '../types/messages'
 export { llmSettings, TyToolchainConfig } from '../types/profiles'
-export type { ClientTool } from '../types/toolApi'
+export type { ClientTool, toolContext } from '../types/toolApi'
 export type { FunctionCall } from '../types/tools'
 export {
   createDuplexChannel, // utils/frpbus
@@ -19,7 +19,7 @@ export {
   MessageChannelBridge,
 } from '@taskyon/shared/modules/frpBus'
 
-export { createTool, makeTaskResult, partialTaskDraft, toolCall }
+export { createTool, partialTaskDraft, toolCall }
 export type { Port }
 export * from '../mcp/mcpProtocolBridge'
 export * from '../mcp/taskyonToMcpBridge'

@@ -1,7 +1,7 @@
 import { createDuplexChannel } from '@taskyon/shared/modules/frpBus'
 import { handleFunctionExecution } from '../core/tools'
 import type { RemoteFunctionCall, RemoteFunctionResponse } from '../types/messages'
-import type { InternalTool, toolContext } from '../types/toolApi'
+import { createSubtasksResult, type InternalTool, type toolContext } from '../types/toolApi'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -43,6 +43,7 @@ export const testRemoteFunctionBridgeHonorsToolTimeoutMs = async () => {
       new AbortController().signal,
       {
         taskChain: [],
+        createSubtasksResult,
         getSecret: () => Promise.resolve(null),
         setSecret: () => Promise.resolve(),
         stopSignal: new AbortController().signal,

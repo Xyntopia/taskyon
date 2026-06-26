@@ -82,7 +82,7 @@ const animatedClockTool = createTool({
     required: [],
     properties: {},
   } as const satisfies JSONSchema7,
-  code: `() => {
+  code: `(_params, ctx) => {
     const html = \`
 <!DOCTYPE html>
 <html lang="en">
@@ -162,7 +162,7 @@ const animatedClockTool = createTool({
 </html>
 \`;
 
-    return makeTaskResult([
+    return ctx.createSubtasksResult([
       [
         {
           role: 'assistant',

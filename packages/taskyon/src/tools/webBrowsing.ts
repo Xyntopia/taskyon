@@ -1,4 +1,4 @@
-import { createTool, makeTaskResult } from '../types/toolApi'
+import { createTool } from '../types/toolApi'
 import { openedWindows } from './webAppDev'
 
 export const openThirdPartyUrlTool = createTool({
@@ -24,7 +24,7 @@ Windows can be given IDs for later reference with the windowManager tool.`,
     },
     required: ['url'],
   } as const,
-  function: ({ url, windowId = '', windowFeatures = '' }) => {
+  function: ({ url, windowId = '', windowFeatures = '' }, ctx) => {
     try {
       console.log(`Opening third-party URL: ${url}`)
 
@@ -88,7 +88,7 @@ Windows can be given IDs for later reference with the windowManager tool.`,
         }
       })
 
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [
           {
             role: 'system',
@@ -101,7 +101,7 @@ Windows can be given IDs for later reference with the windowManager tool.`,
       ])
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [
           {
             role: 'system',

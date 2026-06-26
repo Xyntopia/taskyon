@@ -1,6 +1,6 @@
 import type { JSONSchema7 } from 'json-schema'
 import { convertFileToText } from '../utils/loadFiles'
-import { createTool, makeTaskResult } from '../types/toolApi'
+import { createTool } from '../types/toolApi'
 import { createChatCompletionTask } from '../api'
 
 const looksLikePdfBytes = (bytes: Uint8Array) =>
@@ -147,16 +147,19 @@ between browser sessions but are private to this application.`,
     },
     required: ['action'],
   } as const satisfies JSONSchema7,
-  function: async ({
-    action,
-    url,
-    directory = '/',
-    filename,
-    content,
-    mimeType = 'application/octet-stream',
-    expectedFileType,
-    artifactRoot,
-  }) => {
+  function: async (
+    {
+      action,
+      url,
+      directory = '/',
+      filename,
+      content,
+      mimeType = 'application/octet-stream',
+      expectedFileType,
+      artifactRoot,
+    },
+    ctx,
+  ) => {
     // Get access to the OPFS root
     const root = await getOpfsRoot()
     let dirHandle = root
@@ -308,7 +311,7 @@ between browser sessions but are private to this application.`,
         throw new Error(`Unknown action: ${action}`)
     }
 
-    return makeTaskResult([
+    return ctx.createSubtasksResult([
       [
         {
           role: 'system',

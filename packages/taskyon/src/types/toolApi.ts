@@ -24,6 +24,7 @@ import { ToolBase, taskMarker } from './tools'
  */
 export type toolContext = {
   taskChain: TaskNode[]
+  createSubtasksResult: typeof createSubtasksResult
   getSecret: (name: string, askNew: boolean | string, saveNew?: boolean) => Promise<string | null>
   setSecret: (name: string, value: string) => Promise<void>
   stopSignal: AbortSignal
@@ -88,25 +89,10 @@ export const taskResult = z.object({
 })
 export type taskResult = z.infer<typeof taskResult>
 
-export function makeTaskResult(
+export const createSubtasksResult = (
   tasks: partialTaskDraft | partialTaskDraft[] | partialTaskDraft[][],
-): taskResult {
-  let tasksArray: partialTaskDraft[][]
-  if (Array.isArray(tasks)) {
-    if (Array.isArray(tasks[0])) {
-      // Already a 2D array
-      tasksArray = tasks as partialTaskDraft[][]
-    } else {
-      // 1D array, wrap in another array
-      tasksArray = [tasks as partialTaskDraft[]]
-    }
-  } else {
-    // 0D, wrap in 2D array
-    tasksArray = [[tasks]]
-  }
-  tasks = tasksArray
-  return {
+): taskResult =>
+  taskResult.parse({
     taskResultMarker: taskMarker,
-    taskChainList: tasks,
-  }
-}
+    taskChainList: Array.isArray(tasks) ? (Array.isArray(tasks[0]) ? tasks : [tasks]) : [[tasks]],
+  })

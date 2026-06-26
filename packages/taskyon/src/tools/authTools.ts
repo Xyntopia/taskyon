@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
+import { createTool, toolCall } from '../types/toolApi'
 import { authenticateWithPopup } from '../utils/oauthUi'
 
 declare global {
@@ -102,7 +102,7 @@ not working:
 
     function: async (
       { oauthURL, clientId, scope = '', toolId, tokenUrl },
-      { taskChain, stopSignal },
+      { createSubtasksResult, taskChain, stopSignal },
     ) => {
       // we need the 3rd last task, -1 is the current task and -2 is the button message UI
       const prev = taskChain.at(-3)
@@ -112,7 +112,7 @@ not working:
       if (!isReentry) {
         // FIRST CALL: render login button & requeue self
         const html = createLoginButton({ oauthURL, clientId, scope, toolId })
-        return makeTaskResult([
+        return createSubtasksResult([
           [
             { role: 'assistant', content: { type: 'message', data: html } },
             toolCall({
@@ -144,7 +144,7 @@ not working:
       // store secret and confirm
       await setSecret(toolId, 'oauth-creds', JSON.stringify(creds))
 
-      return makeTaskResult([
+      return createSubtasksResult([
         [{ role: 'assistant', content: { type: 'return', data: '🎉 Logged in successfully.' } }],
       ])
     },

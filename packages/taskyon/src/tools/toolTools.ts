@@ -2,7 +2,7 @@ import type { JSONSchema7 } from 'json-schema'
 import type { JSONSchema } from 'json-schema-to-ts'
 import { type TyTaskManager } from '../core/taskManager'
 import { craeteToolJsonSchema } from '../core/tools'
-import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
+import { createTool, toolCall } from '../types/toolApi'
 import { ToolBase } from '../types/tools'
 import { createChatCompletionTask } from '../api'
 
@@ -41,7 +41,7 @@ is now unreadable.
       },
       required: [],
     } as const satisfies JSONSchema7,
-    function: async ({ toolName, withCode, analyze }) => {
+    function: async ({ toolName, withCode, analyze }, ctx) => {
       const allTools = await taskManager.updateToolDefinitions(true)
       if (withCode) {
         for (const key in allTools) {
@@ -83,7 +83,7 @@ is now unreadable.
       if (analyze) {
         return result
       } else {
-        return makeTaskResult([
+        return ctx.createSubtasksResult([
           [
             {
               role: 'system',
@@ -105,9 +105,9 @@ If you need examples of how to create tools, you can use the toolSearcher to ret
 existing tool definitions, including their source code when available. Additionally, you can use the toolCreationWizard
 to get some more general information how to create tools.`,
     parameters: toolJsonSchema as JSONSchema7 & Record<string, unknown> & Readonly<JSONSchema>,
-    function: (toolDef: unknown) => {
+    function: (toolDef: unknown, ctx) => {
       const toolDefinition = ToolBase.parse(toolDef)
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [
           {
             role: 'assistant',
@@ -124,11 +124,11 @@ export const toolCreationWizard = createTool({
     type: 'object',
     properties: {},
   } as const,
-  function: () => {
+  function: (_args, ctx) => {
     // "undefined" is the first step and how we start :)
     console.log('starting function creation wizard')
 
-    return makeTaskResult([
+    return ctx.createSubtasksResult([
       [
         {
           role: 'assistant',
@@ -160,18 +160,18 @@ Explain in one sentence, why you are choosing this tool.
         createChatCompletionTask({
           prompts: [
             `
-You can return different types of tasks by calling makeTaskResult.
-makeTaskResult accepts a list of task *chains* (an array of arrays of tasks).
+You can return different types of tasks by calling createSubtasksResult.
+createSubtasksResult accepts a list of task *chains* (an array of arrays of tasks).
 • Each individual chain (an inner array) runs its tasks sequentially.
 • Multiple chains run in parallel.
-If you simply return a result without makeTaskResult, Taskyon will analyze it and decide what to do next automatically.
+If you simply return a result without Taskyon will analyze it and decide what to do next automatically.
 
 Here are the task types you can emit:
 - MessageContent, StructuredContent, ToolCallContent, UploadedFilesContent, ToolResultContent, ToolDefinition, ErrorContent, Return
 
 If you want to display the result of a function in a specific way, you can use th following structure:
 
-return makeTaskResult([[
+return ctx.createSubtasksResult([[
   {
     role: 'assistant',
     content: {
@@ -251,7 +251,8 @@ function mapImportedMcpToolToTaskyonTool(input: McpInputTool, sourceName?: strin
   return ToolBase.parse({
     name: normalizeToolName(input.name),
     description:
-      input.description || `Imported MCP tool ${input.name}${sourceName ? ` from ${sourceName}` : ''}`,
+      input.description ||
+      `Imported MCP tool ${input.name}${sourceName ? ` from ${sourceName}` : ''}`,
     longDescription: sourceName
       ? `Imported from MCP server: ${sourceName}. Original tool name: ${input.name}.`
       : `Imported MCP tool. Original tool name: ${input.name}.`,
@@ -309,7 +310,7 @@ to Taskyon tooldefinitions, and stores them in the task tree.`,
       required: ['serverUrl'],
       additionalProperties: false,
     } as const satisfies JSONSchema7,
-    function: async ({ serverUrl, serverName, toolNames }) => {
+    function: async ({ serverUrl, serverName, toolNames }, ctx) => {
       await taskManager.updateToolDefinitions()
       await mcpRpcRequest(serverUrl, 1, 'initialize', {
         protocolVersion: '2024-11-05',
@@ -330,7 +331,7 @@ to Taskyon tooldefinitions, and stores them in the task tree.`,
         mapImportedMcpToolToTaskyonTool(tool, serverName || serverUrl),
       )
 
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [
           ...taskyonTools.map((toolDefinition) => ({
             role: 'assistant' as const,

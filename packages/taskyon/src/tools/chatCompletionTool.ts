@@ -53,7 +53,7 @@ import type {
   TaskNode,
 } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
-import { createTool, makeTaskResult } from '../types/toolApi'
+import { createTool } from '../types/toolApi'
 import type { ToolBase } from '../types/tools'
 import { FunctionArguments, FunctionCall } from '../types/tools'
 import { charHash } from '../utils/crypto'
@@ -1600,7 +1600,7 @@ export function createChatCompletionTool(
           errorCapture,
           failure,
         })
-        return makeTaskResult([
+        return context.createSubtasksResult([
           ...(sanitizedPartialContent
             ? [
                 {
@@ -1687,7 +1687,7 @@ export function createChatCompletionTool(
             throw new Error('Schema needs to be an object!', { cause: schema })
           }
         } else structResponse = output
-        return makeTaskResult([
+        return context.createSubtasksResult([
           ...(sources.length > 0
             ? [
                 {
@@ -1731,7 +1731,7 @@ export function createChatCompletionTool(
         )
       }
 
-      return makeTaskResult([generatedFollowUpTasks.tasks])
+      return context.createSubtasksResult([generatedFollowUpTasks.tasks])
     },
   })
 

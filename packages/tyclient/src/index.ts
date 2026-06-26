@@ -8,6 +8,7 @@ import {
   MessageChannelBridge, // utils/frpbus
   type ClientTool,
 } from '@taskyon/taskyon/api'
+import { createSubtasksResult } from '../../taskyon/src/types/toolApi'
 import type { ByType } from '../../taskyon/src/utils/tsHelpers'
 // TODO: move this into some other part as well..  maybe into "GUI" types or somthing like that?
 import type {
@@ -18,7 +19,6 @@ import { sendFile } from '../../taskyon/src/types/apiTypes'
 export {
   createChatCompletionTask,
   createTool, // toolApi
-  makeTaskResult, // toolApi
   observeSubTaskStream,
   processTasks,
   processTasksDetailed,
@@ -26,7 +26,7 @@ export {
   toolCall, // toolApi
   type partialTaskDraft,
 } from '@taskyon/taskyon/api'
-export type { ClientTool, TaskyonMessage } from '@taskyon/taskyon/api'
+export type { ClientTool, TaskyonMessage, toolContext } from '@taskyon/taskyon/api'
 export type { partialTyConfiguration, TaskyonGuiMessage }
 export { REMOTE_FUNCTION_TIMEOUT_MS }
 
@@ -90,6 +90,7 @@ async function handleFunctionExecution(
   // with this we make sure, that we can also handle async functions :)
   const result = await tool.function(args, {
     taskChain: [],
+    createSubtasksResult,
     getSecret: (name) => {
       console.log('tyclient get secret name', name)
       return Promise.resolve('N/A')

@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, makeTaskResult, toolCall } from '../types/toolApi'
+import { createTool, toolCall } from '../types/toolApi'
 import type { OAuthCredentials } from '../utils/oauth'
 import { OAUTH_PROVIDERS, useRefreshTokenIfExpired } from '../utils/oauth'
 
@@ -57,7 +57,7 @@ const getGitlabInfo = createTool({
     }
 
     if (!TOKEN || forceLogin) {
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [
           toolCall({
             name: 'ensureOauthLogin',
@@ -96,7 +96,7 @@ const getGitlabInfo = createTool({
       data.groups = await res.json()
     }
 
-    return makeTaskResult([
+    return ctx.createSubtasksResult([
       [
         {
           role: 'assistant',
@@ -171,7 +171,7 @@ The tool never stores content server-side; everything runs client-side in the Ta
       PHASE 1 — auth & UI
     ───────────────────────────────────────────────────────────*/
     if (!TOKEN) {
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [
           toolCall({
             name: 'ensureOauthLogin',
@@ -223,7 +223,7 @@ The tool never stores content server-side; everything runs client-side in the Ta
       })
 
       if (res === 'cancelled')
-        return makeTaskResult([
+        return ctx.createSubtasksResult([
           [
             {
               role: 'assistant',
@@ -283,7 +283,9 @@ The tool never stores content server-side; everything runs client-side in the Ta
         `\n\n🔗 All issues: ${allIssuesUrl}` +
         (createdUrls.length ? `\n🔗 Newly created: ${newIssuesLinks}` : '')
 
-      return makeTaskResult([[{ role: 'assistant', content: { type: 'message', data: summary } }]])
+      return ctx.createSubtasksResult([
+        [{ role: 'assistant', content: { type: 'message', data: summary } }],
+      ])
     }
 
     /*───────────────────────────────────────────────────────────
@@ -346,7 +348,7 @@ The tool never stores content server-side; everything runs client-side in the Ta
   });
 </script>`
 
-    return makeTaskResult([
+    return ctx.createSubtasksResult([
       [
         { role: 'assistant', content: { type: 'message', data: uiHtml } },
         toolCall({ name: 'issueListGenerator', arguments: { issuelist, project } }),

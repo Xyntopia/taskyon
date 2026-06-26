@@ -3,8 +3,8 @@ import type {
   WorkerSandboxRpcHandlers,
 } from '@taskyon/shared/modules/sandbox/workerSandbox'
 import { executeInWorkerSandbox } from '@taskyon/shared/modules/sandbox/workerSandbox'
+import { partialTaskDraft } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
-import { taskMarker } from '../types/tools'
 
 function buildToolSandboxCode(userCode: string): string {
   return `
@@ -30,13 +30,6 @@ function buildToolSandboxCode(userCode: string): string {
         };
       }
 
-      function makeTaskResult(tasks) {
-        return {
-          taskResultMarker: "${taskMarker}",
-          taskChainList: tasks,
-        };
-      }
-
       function createChatCompletionTask(args) {
         return {
           role: 'function',
@@ -57,13 +50,25 @@ function buildToolSandboxCode(userCode: string): string {
           setSecret: (...args) => callRpc('setSecret', ...args),
           messagePort: globalThis.__workerSandboxMessagePort ?? null,
           toolCall,
-          makeTaskResult,
+          createSubtasksResult: (tasks) => callRpc('createSubtasksResult', tasks),
           createChatCompletionTask,
         };
         return userFn(params, ctx);
       };
     })()
   `
+}
+
+function parseCreateSubtasksResultInput(
+  value: unknown,
+): Parameters<toolContext['createSubtasksResult']>[0] {
+  const singleTask = partialTaskDraft.safeParse(value)
+  if (singleTask.success) return singleTask.data
+
+  const taskChain = partialTaskDraft.array().safeParse(value)
+  if (taskChain.success) return taskChain.data
+
+  return partialTaskDraft.array().array().parse(value)
 }
 
 function buildRpcHandlers(context: toolContext): WorkerSandboxRpcHandlers {
@@ -75,6 +80,8 @@ function buildRpcHandlers(context: toolContext): WorkerSandboxRpcHandlers {
         typeof saveNew === 'boolean' ? saveNew : undefined,
       ),
     setSecret: (name, value) => context.setSecret(String(name), String(value)),
+    createSubtasksResult: (tasks) =>
+      context.createSubtasksResult(parseCreateSubtasksResultInput(tasks)),
   }
 }
 

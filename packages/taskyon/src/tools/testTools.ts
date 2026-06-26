@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, makeTaskResult } from '../types/toolApi'
+import { createTool } from '../types/toolApi'
 
 const testSecretStore = createTool({
   name: 'testSecretStore',
@@ -38,7 +38,7 @@ const testSecretStore = createTool({
     const retrieved = await ctx.getSecret(key, false)
 
     console.log('retrieved secret', retrieved)
-    return makeTaskResult([
+    return ctx.createSubtasksResult([
       [
         {
           role: 'assistant',
@@ -88,7 +88,7 @@ export const postMessageTester = createTool({
           else console.log('Received message, still waiting for button press...:', ev.data)
         }
       })
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [
           {
             role: 'assistant',
@@ -119,7 +119,7 @@ export const postMessageTester = createTool({
 
     console.log('Rendering UI for postMessageTester...')
     // Return the UI now, and queue up a second call to this same tool.
-    return makeTaskResult([
+    return ctx.createSubtasksResult([
       [
         {
           role: 'assistant',

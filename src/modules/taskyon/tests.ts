@@ -36,6 +36,7 @@ import { getDatabase } from '@taskyon/taskyon/db'
 import { reconcileWithDefaults } from '@taskyon/shared/modules/utils'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
+import { createSubtasksResult } from '../../../packages/taskyon/src/types/toolApi'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
@@ -1493,6 +1494,7 @@ export const testChatCompletion = async () => {
       },
       {
         taskChain: [],
+        createSubtasksResult,
         getSecret: (name) => tystate.getProviderApiKey(name),
         setSecret: () => {
           console.log('set test secret')

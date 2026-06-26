@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, makeTaskResult } from '../types/toolApi'
+import { createTool } from '../types/toolApi'
 
 // Global store for all opened windows
 export const openedWindows = new Map()
@@ -27,7 +27,7 @@ Windows can be given IDs for later reference with the windowManager tool.`,
     },
     required: ['html'],
   } as const satisfies JSONSchema7,
-  function: ({ html, windowId = '', windowFeatures = '' }) => {
+  function: ({ html, windowId = '', windowFeatures = '' }, ctx) => {
     try {
       console.log('Opening new window with HTML content via blob URL.')
       const blob = new Blob([html], { type: 'text/html' })
@@ -71,7 +71,7 @@ Windows can be given IDs for later reference with the windowManager tool.`,
         URL.revokeObjectURL(url)
       })
 
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [
           {
             role: 'system',
@@ -84,7 +84,7 @@ Windows can be given IDs for later reference with the windowManager tool.`,
       ])
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [
           {
             role: 'system',
@@ -116,11 +116,11 @@ export const windowManagerTool = createTool({
     },
     required: ['action'],
   } as const satisfies JSONSchema7,
-  function: ({ action = 'list', windowId }) => {
+  function: ({ action = 'list', windowId }, ctx) => {
     switch (action) {
       case 'list': {
         const windowIds = Array.from(openedWindows.keys())
-        return makeTaskResult([
+        return ctx.createSubtasksResult([
           [
             {
               role: 'system',
@@ -134,7 +134,7 @@ export const windowManagerTool = createTool({
       }
       case 'focus':
         if (!windowId || !openedWindows.has(windowId)) {
-          return makeTaskResult([
+          return ctx.createSubtasksResult([
             [
               {
                 role: 'system',
@@ -146,7 +146,7 @@ export const windowManagerTool = createTool({
 
         try {
           openedWindows.get(windowId).window.focus()
-          return makeTaskResult([
+          return ctx.createSubtasksResult([
             [
               {
                 role: 'system',
@@ -156,7 +156,7 @@ export const windowManagerTool = createTool({
           ])
         } catch {
           openedWindows.delete(windowId)
-          return makeTaskResult([
+          return ctx.createSubtasksResult([
             [
               {
                 role: 'system',
@@ -171,7 +171,7 @@ export const windowManagerTool = createTool({
 
       case 'close':
         if (!windowId || !openedWindows.has(windowId)) {
-          return makeTaskResult([
+          return ctx.createSubtasksResult([
             [
               {
                 role: 'system',
@@ -189,7 +189,7 @@ export const windowManagerTool = createTool({
           windowToClose.window.close()
           openedWindows.delete(windowId)
 
-          return makeTaskResult([
+          return ctx.createSubtasksResult([
             [
               {
                 role: 'system',
@@ -199,7 +199,7 @@ export const windowManagerTool = createTool({
           ])
         } catch {
           openedWindows.delete(windowId)
-          return makeTaskResult([
+          return ctx.createSubtasksResult([
             [
               {
                 role: 'system',
@@ -229,7 +229,7 @@ export const windowManagerTool = createTool({
           }
         }
 
-        return makeTaskResult([
+        return ctx.createSubtasksResult([
           [
             {
               role: 'system',
@@ -239,7 +239,7 @@ export const windowManagerTool = createTool({
         ])
       }
       default:
-        return makeTaskResult([
+        return ctx.createSubtasksResult([
           [
             {
               role: 'system',
@@ -267,7 +267,7 @@ export const createWaitForMessageTool = createTool({
     required: ['messageId'],
     additionalProperties: false,
   } as const satisfies JSONSchema7,
-  async function({ messageId }) {
+  async function({ messageId }, ctx) {
     // pause here until the matching postMessage arrives
     const data = await new Promise((resolve) => {
       const listener = (event: MessageEvent) => {
@@ -280,7 +280,7 @@ export const createWaitForMessageTool = createTool({
     })
 
     // once we have it, return it as a TaskResult
-    return makeTaskResult([
+    return ctx.createSubtasksResult([
       [
         {
           role: 'assistant',

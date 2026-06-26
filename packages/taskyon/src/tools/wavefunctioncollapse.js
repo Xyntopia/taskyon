@@ -1,7 +1,7 @@
 // wafefunctioncollapse doesn't have any typescript types that come with it
 // thats why we are using a pure js function here...
 // import * as wfc from 'wavefunctioncollapse'
-import { createTool, makeTaskResult } from '../types/toolApi'
+import { createTool } from '../types/toolApi'
 
 export const wfcGenerator = createTool({
   name: 'wfcGenerator',
@@ -92,7 +92,7 @@ export const wfcGenerator = createTool({
       },
     },
   },
-  function: ({ patterns, resolution = 4, tileSize = 16, colorMap, output }) => {
+  function: ({ patterns, resolution = 4, tileSize = 16, colorMap, output }, ctx) => {
     // Basic validation (minimal)
     if (!Array.isArray(patterns)) throw new Error('patterns must be an array')
     if (!colorMap || typeof colorMap !== 'object') throw new Error('colorMap required')
@@ -326,7 +326,7 @@ export const wfcGenerator = createTool({
 </script>
 `
 
-    return makeTaskResult([
+    return ctx.createSubtasksResult([
       [
         {
           role: 'assistant',

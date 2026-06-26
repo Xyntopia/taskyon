@@ -2,7 +2,7 @@ import type { JSONSchema7 } from 'json-schema'
 import { useGdrive } from 'src/modules/gdrive' // Import the gdrive module
 import { usePersistentOauth } from '../utils/oauthUi'
 import { OAUTH_PROVIDERS } from '../utils/oauth'
-import { createTool, makeTaskResult } from '../types/toolApi'
+import { createTool } from '../types/toolApi'
 
 /*const googleDriveTool = createTool({
   description: 'A tool that saves/loads files from Google Drive using OAuth2 within the iframe',
@@ -170,7 +170,7 @@ Files can be organized in directories and optionally made public with sharable l
   } as const satisfies JSONSchema7,
   function: async (
     { action, directory, filename, content, mimeType, share },
-    { getSecret, setSecret },
+    { createSubtasksResult, getSecret, setSecret },
   ) => {
     try {
       // TODO: give gdrivetool its own ability to authenticate through oauth.
@@ -278,7 +278,7 @@ Files can be organized in directories and optionally made public with sharable l
           throw new Error(`Unknown action: ${action}`)
       }
 
-      return makeTaskResult([
+      return createSubtasksResult([
         [
           {
             role: 'system',
@@ -287,7 +287,7 @@ Files can be organized in directories and optionally made public with sharable l
         ],
       ])
     } catch (error) {
-      return makeTaskResult([
+      return createSubtasksResult([
         [
           {
             role: 'system',

@@ -1,4 +1,4 @@
-import { createTool, makeTaskResult, toolCall } from '@taskyon/tyclient'
+import { createTool, toolCall } from '@taskyon/tyclient'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import type { JSONSchema7 } from 'json-schema'
 import { serializeObject } from '@taskyon/shared/modules/serializeObject'
@@ -219,7 +219,7 @@ const tauriBashTool = createTool({
 
     if (!isApprovalStep) {
       const nextToken = approvalToken || `tauri-bash-${Date.now().toString(36)}`
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [
           {
             role: 'assistant',
