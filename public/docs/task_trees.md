@@ -26,7 +26,28 @@ The system maintains caches to efficiently traverse these relationships in both 
 
 - **Hierarchical and Sequential Links:** TaskNodes reference their **parentID** (denoting hierarchical relationships) and **priorID** (capturing sequential dependencies). This linkage forms a structured TaskTree where tasks build upon each other.
 - **Subtasks and Results:** New tasks are appended as child TaskNodes, preserving context while keeping each node immutable.
-- **Task Execution and Propagation:** Task results propagate upwards in the tree, similar to function return values in programming. This is done through a tree flattening operation.
+- **Task Execution and Propagation:** Executable tasks consume a selected view of the task tree and append new task nodes as their result. Child workflow results propagate through explicit result, `toolresult`, or `return` nodes rather than by mutating or moving existing nodes.
+
+#### Tasks as Reducers
+
+Every executable Taskyon task can be understood as a reducer over explicit prior state:
+
+```text
+next tasks = reducer(selected task projection, arguments, tools, persisted artifacts)
+```
+
+For example, `chatCompletion` reduces the visible task chain into an assistant response, tool
+call, or follow-up task. A normal tool reduces its function arguments and relevant task context into
+a `toolresult` or child task chains. A workflow controller reduces completed child results into the
+next iteration or a final result.
+
+This reducer model has two important consequences:
+
+- Workflow state should live in the task tree, persisted artifacts, or explicit arguments, not in
+  hidden tool-local runtime state.
+- Context rendering is part of the reducer API. The system should pass a deliberate projection of
+  parents, previous siblings, child results, and summaries instead of blindly flattening every
+  subtask into every downstream LLM/tool call.
 
 #### Task Chain Processing and Parallelization
 
@@ -47,9 +68,11 @@ Taskyon's execution model distinguishes between sequential processing within a s
 
 - **Context Rendering for LLM Inference:**  
   The `chatCompletion` tool converts task chains into an OpenAI-compatible message list. Key points:
-  - Context is built from `priorID`/`parentID` traversal and flattened in a deterministic order.
+  - Context is built from `priorID`/`parentID` traversal and rendered as a task projection.
   - Tasks can opt out of rendering (e.g., via render options like `hideChat` / `hideLlm`).
-  - For simple flows, a single chain is used. For nested subtasks, the tool flattens the tree to preserve the most relevant context.
+  - For simple flows, a single chain is used. For nested subtasks, the projection should prefer
+    lineage, previous siblings, terminal child results, and compact summaries over raw full-tree
+    flattening.
   - `chatCompletion` parameters (like `context_size` and prompt templates) can further control how much history is included.
 
 ## 3. Task Completion Detection

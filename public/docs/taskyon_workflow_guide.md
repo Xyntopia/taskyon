@@ -17,6 +17,17 @@ Think of Taskyon as:
 - a **tool layer** that returns new tasks,
 - and an **LLM gateway** (`chatCompletion`) that plans, explains, or chooses tools.
 
+Another useful framing: executable Taskyon tasks are **reducers**. They consume a selected
+projection of prior tasks, explicit arguments, and persisted artifacts, then produce new task nodes
+or a plain result.
+
+```text
+next tasks = reducer(selected task projection, arguments, artifacts)
+```
+
+This means workflow state should be visible in the task tree or durable artifacts. Avoid hiding loop
+state, intermediate decisions, or progress inside tool-local runtime state.
+
 ### 1.1 Task Basics
 
 Each task node has:
@@ -55,6 +66,8 @@ A task is _finished_ when:
   - `priorID` (linear sequence on one level),
   - `parentID` (subtask chain owned by a `functioncall`).
 - A `functioncall` **must not** rely on synchronous return values; its “output” is the subtask chains it creates.
+- Long-running workflows should be explicit reducer chains, not hidden imperative loops inside one
+  tool. Prefer `batch -> reduce -> continue-or-return` style task chains for iterative work.
 
 ### 2.2 Minimal Valid Workflow
 
@@ -70,7 +83,7 @@ The smallest reasonable workflow:
 **Recommended leaf pattern:**
 
 ```ts
-return makeTaskResult([
+return ctx.createSubtasksResult([
   [
     { role: 'assistant', content: { type: 'message', data: 'Done.' } },
     { role: 'system', content: { type: 'return', data: 'OK' } },
@@ -101,6 +114,12 @@ This makes completion unambiguous.
 
 - Recursive tool → LLM → tool without a base case.
 - Error handlers that keep retrying the same failing tool indefinitely.
+
+**Hidden workflow state**
+
+- Running an internal `while` loop or `processTasks`-style subworkflow inside one tool makes resume,
+  inspection, folding, and workflow extraction harder.
+- Prefer follow-up reducer tasks that inspect completed child outputs and decide whether to continue.
 
 ---
 
@@ -134,13 +153,13 @@ tool chooser is enabled and the available tool count is above the configured
 An entry node **may**:
 
 - call **multiple tools**,
-- spawn **parallel chains** (2D `makeTaskResult`),
+- spawn **parallel chains** (2D `ctx.createSubtasksResult`),
 - **short-circuit** (e.g. compute something and immediately `return`),
 - skip the LLM entirely and just do deterministic work.
 
 Entry node **contract**:
 
-- It **must** return tasks (`makeTaskResult` or plain value → auto-wrapped).
+- It **must** return tasks (`ctx.createSubtasksResult` or plain value → auto-wrapped).
 - It **should**:
   - end sub-workflows with `return`,
   - use `chatCompletion(allowedTools=[...])` only when the provider should be allowed to emit native tool calls.
@@ -183,7 +202,7 @@ else:
 **Sequential within one chain**
 
 ```ts
-return makeTaskResult([
+return ctx.createSubtasksResult([
   [
     taskA, // no priorID (start)
     taskB, // priorID = taskA.id
@@ -195,7 +214,7 @@ return makeTaskResult([
 **Parallel sub-chains**
 
 ```ts
-return makeTaskResult([
+return ctx.createSubtasksResult([
   [chain1_step1, chain1_step2],
   [chain2_step1, chain2_step2],
 ])
@@ -238,7 +257,7 @@ const myTool = createTool({
   } as const,
   async function({ query }, ctx) {
     // do work
-    return makeTaskResult([
+    return ctx.createSubtasksResult([
       [
         { role: 'assistant', content: { type: 'message', data: `Got: ${query}` } },
         { role: 'system', content: { type: 'return', data: 'OK' } },
@@ -255,7 +274,26 @@ Tools receive a `toolContext`:
 - `stopSignal` – for cancellations,
 - `toolId`, `messagePort?` – for identification / duplex communication.
 
-### 5.2 Returning Results
+### 5.2 Stateless Tools and Reducer Workflows
+
+Tools should be stateless wherever possible. A tool may return a plain value, or it may create child
+task chains with `ctx.createSubtasksResult`, but it should not hide long-running workflow progress
+inside local variables.
+
+For iterative workflows, represent each step in the task tree:
+
+```text
+controller tool
+  -> branch batch
+  -> reducer/evaluator
+  -> next controller step or final result
+```
+
+The reducer/evaluator runs after the branch batch is finished, reads the completed child outputs or
+persisted artifacts, and then creates the next task chain or final result. This keeps workflows
+resumable and makes the task tree a useful record of decisions.
+
+### 5.3 Returning Results
 
 **Option 1 – Plain values**
 
@@ -278,7 +316,7 @@ Avoid when:
 
 - you want deterministic follow-up (no extra LLM hop).
 
-**Option 2 – Explicit task chains (`makeTaskResult`)**
+**Option 2 – Explicit task chains (`ctx.createSubtasksResult`)**
 
 Use when:
 
@@ -286,7 +324,7 @@ Use when:
 - you want to call other tools, or end with a specific `message`/`return`.
 
 **Guideline:**  
-For **workflow tools** (orchestration), **always** use `makeTaskResult`.  
+For **workflow tools** (orchestration), **always** use `ctx.createSubtasksResult`.  
 For small helper tools whose result should be “interpreted by the AI”, plain values are acceptable.
 
 ### 5.3 Inspecting Context
@@ -377,7 +415,7 @@ In production workflows, you’re expected to **override** the default error beh
 
 ## 8. Parallelism
 
-- Parallelism appears when a tool returns **multiple chains** (`makeTaskResult` with 2D arrays).
+- Parallelism appears when a tool returns **multiple chains** (`ctx.createSubtasksResult` with 2D arrays).
 - Taskyon guarantees:
   - **sequential** order inside each chain (`priorID`),
   - **independent** execution of sibling chains,
@@ -447,7 +485,7 @@ Pruning/summarization is an **application concern**:
 **Do**
 
 - End important chains with `return`.
-- Use `makeTaskResult` for orchestration tools.
+- Use `ctx.createSubtasksResult` for orchestration tools.
 - Constrain `chatCompletion` with `allowedTools`.
 - Put heavy prompt engineering in **entry nodes** and/or tools, not scattered in the UI.
 - Use entry nodes to inject domain state (documents, schemas, config).
@@ -476,7 +514,7 @@ const echo = createTool({
     required: ['msg'],
   } as const,
   function: async ({ msg }) =>
-    makeTaskResult([
+    ctx.createSubtasksResult([
       [
         { role: 'assistant', content: { type: 'message', data: msg } },
         { role: 'system', content: { type: 'return', data: 'OK' } },

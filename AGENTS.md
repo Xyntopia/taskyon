@@ -12,7 +12,7 @@
 - If a fix starts cascading into broad type churn, readonly workarounds, or many unrelated file edits, stop and step back. Revert the speculative path and choose the smallest boundary fix instead of spreading the workaround through the codebase.
 - No generic `isRecord`-style guards. Narrow at the domain boundary, then pass typed values downstream.
 - No fake no-op implementations. Model unavailable capabilities as optional.
-- Before creating or refactoring a tool, first search for similar tools in `packages/taskyon/src/tools/` and inspect how they are implemented. Reuse local patterns like `makeTaskResult`, `toolCall`, `chatCompletion`, and re-entry chains instead of inventing a new orchestration style.
+- Before creating or refactoring a tool, first search for similar tools in `packages/taskyon/src/tools/` and inspect how they are implemented. Reuse local patterns like `ctx.createSubtasksResult`, `toolCall`, `chatCompletion`, and re-entry chains instead of inventing a new orchestration style.
 - Diagnostics and Taskyon test modules must stay compatible with both browser diagnostics and Node/`tycli` diagnostics. Do not add tests that only work in one runtime unless the unsupported runtime is explicitly modeled and skipped at the diagnostics boundary.
 - Do not auto-run `yarn lint` or `yarn lint:fix` (neither repo-wide nor targeted) unless the user explicitly asks. Linting is intentionally not default because it is comparatively expensive. Instead, remind the user to run `yarn lint` themselves before committing, or ask whether they want you to run it when wrapping up. Targeted `yarn eslint <path>` is fine only when needed to verify a specific change and only when explicitly requested.
 - Always run the formatter on every file you edited yourself, without waiting for the user to ask. Format only the edited files: `yarn format:file <path...>`
@@ -44,6 +44,21 @@
 - Prefer functional style and composition, but keep the code readable. Avoid
   unnecessary nesting, clever abstractions, and indirection that makes the
   control flow harder to follow.
+- Prefer stateless functions wherever possible. Keep workflow state explicit in
+  task data, persisted artifacts, or caller-provided arguments instead of hidden
+  tool-local state, so interrupted Taskyon workflows can be resumed and audited.
+- Taskyon tools should be stateless wherever possible. Do not hide workflow
+  progress, loop state, or intermediate decisions in local runtime state inside
+  a tool.
+- Prefer task-tree orchestration over imperative tool-local orchestration.
+  Long-running workflows should be represented as explicit task chains with
+  reducer or continuation tasks, not as hidden loops or internal `processTasks`
+  calls inside one tool.
+- Treat executable Taskyon tasks as reducers over an explicit task-tree
+  projection. They should consume visible prior tasks, child results, explicit
+  arguments, and persisted artifacts, then produce new task nodes or plain
+  results. Keep reducer inputs and outputs inspectable instead of relying on
+  hidden runtime state.
 - Keep functions focused on one purpose. Around 40 lines is a useful guideline:
   if a function becomes harder to read, split it by responsibility.
 - Extract helpers when they remove real duplication or clarify a distinct step.

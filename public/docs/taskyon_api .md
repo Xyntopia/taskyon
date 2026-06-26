@@ -21,7 +21,7 @@ Taskyon uses a **task chain execution model**:
 Key concepts:
 
 1. **Tools** – callable definitions
-2. **makeTaskResult** – return format for new tasks
+2. **createSubtasksResult** – return format for new tasks
 3. **Task Processing** – high-level API (`processTasks`) that runs and monitors chains
 
 ---
@@ -75,7 +75,7 @@ Every tool receives a `toolContext`:
 
 ---
 
-## 3. makeTaskResult
+## 3. createSubtasksResult
 
 ### 3.1 Purpose
 
@@ -84,7 +84,7 @@ Wraps tasks in a recognized structure so Taskyon continues execution.
 ### 3.2 Signature
 
 ```ts
-makeTaskResult(tasks: partialTaskDraft | partialTaskDraft[] | partialTaskDraft[][])
+ctx.createSubtasksResult(tasks: partialTaskDraft | partialTaskDraft[] | partialTaskDraft[][])
 ```
 
 Input formats:
@@ -98,13 +98,15 @@ Input formats:
 - **Message**
 
 ```ts
-return makeTaskResult([[{ role: 'assistant', content: { type: 'message', data: 'Hello' } }]])
+return ctx.createSubtasksResult([
+  [{ role: 'assistant', content: { type: 'message', data: 'Hello' } }],
+])
 ```
 
 - **Tool result**
 
 ```ts
-return makeTaskResult([
+return ctx.createSubtasksResult([
   [{ role: 'system', content: { type: 'toolresult', data: { result: 'ok' } } }],
 ])
 ```
@@ -112,7 +114,7 @@ return makeTaskResult([
 - **Sequential**
 
 ```ts
-return makeTaskResult([
+return ctx.createSubtasksResult([
   [
     { role: 'assistant', content: { type: 'message', data: 'Step 1' } },
     toolCall({ name: 'nextTool', arguments: {} }),
@@ -124,7 +126,7 @@ return makeTaskResult([
 - **Parallel**
 
 ```ts
-return makeTaskResult([
+return ctx.createSubtasksResult([
   [task1, task2],
   [task3, task4],
 ])
@@ -135,7 +137,7 @@ return makeTaskResult([
 If a tool 'sameTool' wants to call itself recursivly it can do this:
 
 ```ts
-return makeTaskResult([
+return ctx.createSubtasksResult([
   [
     { role: 'assistant', content: { type: 'message', data: html } },
     toolCall({ name: 'sameTool', arguments: params }),
@@ -143,7 +145,7 @@ return makeTaskResult([
 ])
 ```
 
-> If you return a plain value (not wrapped in `makeTaskResult`), Taskyon auto-wraps it in a `toolresult` and adds a `chatCompletion` step.
+> If you return a plain value (not wrapped in `ctx.createSubtasksResult`), Taskyon auto-wraps it in a `toolresult` and adds a `chatCompletion` step.
 
 ---
 
@@ -282,12 +284,12 @@ export const exampleTool = createTool({
     if (context.stopSignal.aborted) throw new Error('Cancelled')
 
     if (parallel) {
-      return makeTaskResult([
+      return ctx.createSubtasksResult([
         [toolCall({ name: 'tool1', arguments: { q: query } })],
         [toolCall({ name: 'tool2', arguments: { q: query } })],
       ])
     }
-    return makeTaskResult([
+    return ctx.createSubtasksResult([
       [
         { role: 'assistant', content: { type: 'message', data: 'Processing...' } },
         toolCall({ name: 'tool1', arguments: { q: query } }),
@@ -311,6 +313,6 @@ export const exampleTool = createTool({
 ## 9. Developer Notes
 
 - Returning plain values triggers auto-analysis via ChatCompletion
-- Use `makeTaskResult` for fine-grained control of flow
+- Use `ctx.createSubtasksResult` for fine-grained control of flow
 - Errors spawn `error` tasks + optional analysis
 - Keep chains concise; execution order guaranteed by `priorID` / `parentID`

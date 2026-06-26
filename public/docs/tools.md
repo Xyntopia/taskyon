@@ -19,7 +19,10 @@ For end-to-end workflow patterns (entry nodes, tool chains, return tasks), see:
 ### Context
 
 All taskyon functions have access to the _tree context_ of the node that is currently processed.
-This means, they will get a list of the preceding chain of tasknodes. Taskyon extracts this chain from the tree by walking through priorIDs/parent IDs upwards. Siblings which are linked through their priorIDs can have their own subchains and we are using a recursive flatmap operation to flatten them in order to create the context for the current taskNode.
+This means they receive a selected projection of the preceding task tree. Taskyon derives this view
+by walking through `priorID` and `parentID` links and by including the task results that matter for
+the current reducer. The projection should expose useful parents, siblings, child results, and
+summaries without blindly flattening every subtask.
 
 ## Tool Categories
 
@@ -42,6 +45,13 @@ Check here for more examples: [Tool Examples](/tool_examples.md)
 
 #### Best Practice
 
+- Treat tools as stateless reducers where possible. A tool should consume explicit arguments, the
+  selected task context, and durable artifacts, then return a plain result or create child task
+  chains. Do not hide workflow progress, loop state, or important decisions in tool-local runtime
+  state.
+- For long-running workflows, use explicit task-tree orchestration: create child chains, then use a
+  later reducer/evaluator task to inspect finished child outputs and decide whether to continue or
+  return a final result. See `/docs/taskyon_workflow_guide` for the full pattern.
 - Tools should try to always return a value. This give taskyon the feedback whether a tool was successful or not.
   for example in the function below instead of simply zooming in to the location, we return a string
   based on the success of the function.

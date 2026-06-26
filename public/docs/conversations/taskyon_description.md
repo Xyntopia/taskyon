@@ -22,7 +22,7 @@ The Task Transitions Map illustrates the flow and transitions of various content
 We expect all function calls to do one of the following:
 
 - **Return a plain value** -> Taskyon auto-wraps it as `toolresult` and appends `entryNode`.
-- **Return a task chain** via `makeTaskResult(...)` (sequential or parallel).
+- **Return a task chain** via `ctx.createSubtasksResult(...)` (sequential or parallel).
 - **Return a task chain that ends with `return`** to explicitly signal completion to the parent task.
 
 #### Workflow Description:
