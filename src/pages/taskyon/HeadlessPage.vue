@@ -73,6 +73,7 @@ function getDiagnosticsTests() {
     [
       '../../packages/taskyon/src/tests/**/*.ts',
       '!../../packages/taskyon/src/tests/test_entry_node_error_recovery.ts',
+      '!../../packages/taskyon/src/tests/test_entry_node_websearch.ts',
       '../../packages/shared/surrogate/test_*.ts',
     ],
     { eager: true },

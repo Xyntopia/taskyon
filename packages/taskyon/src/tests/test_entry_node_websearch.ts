@@ -8,7 +8,7 @@ import {
   resolveApiConfig,
   resolveApiKey,
   resolveOnlineModel,
-} from './onlineProviderSupport'
+} from '../testSupport/onlineProviderSupport'
 import { registerToolRpcTools } from '../core/toolRpc'
 import { toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
@@ -53,7 +53,7 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async () => {
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
     defaultAllowedTools: [],
-    toolChooser: { enabled: true, useTools: true },
+    toolChooser: { enabled: true, useTools: true, webSearch: true },
   })
 
   const ty = await tyCore(

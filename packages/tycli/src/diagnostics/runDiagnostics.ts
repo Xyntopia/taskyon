@@ -81,8 +81,10 @@ function parseArgs(args: string[]): CliOptions {
     allowLongRun: false,
     filter: '',
     tyauth: process.env.TYAUTH ?? process.env.TASKYON_TYAUTH ?? undefined,
-    provider: process.env.TASKYON_SELECTED_API?.trim() || undefined,
-    model: process.env.TASKYON_MODEL?.trim() || undefined,
+    ...(process.env.TASKYON_SELECTED_API?.trim()
+      ? { provider: process.env.TASKYON_SELECTED_API.trim() }
+      : {}),
+    ...(process.env.TASKYON_MODEL?.trim() ? { model: process.env.TASKYON_MODEL.trim() } : {}),
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -100,10 +102,23 @@ function parseArgs(args: string[]): CliOptions {
     else if (arg.startsWith('--filter=')) opts.filter = arg.slice('--filter='.length)
     else if (arg === '--tyauth') opts.tyauth = args[++i] ?? undefined
     else if (arg.startsWith('--tyauth=')) opts.tyauth = arg.slice('--tyauth='.length)
-    else if (arg === '--provider') opts.provider = args[++i]?.trim() || undefined
-    else if (arg.startsWith('--provider=')) opts.provider = arg.slice('--provider='.length).trim()
-    else if (arg === '--model') opts.model = args[++i]?.trim() || undefined
-    else if (arg.startsWith('--model=')) opts.model = arg.slice('--model='.length).trim()
+    else if (arg === '--provider') {
+      const provider = args[++i]?.trim()
+      if (provider) opts.provider = provider
+      else delete opts.provider
+    } else if (arg.startsWith('--provider=')) {
+      const provider = arg.slice('--provider='.length).trim()
+      if (provider) opts.provider = provider
+      else delete opts.provider
+    } else if (arg === '--model') {
+      const model = args[++i]?.trim()
+      if (model) opts.model = model
+      else delete opts.model
+    } else if (arg.startsWith('--model=')) {
+      const model = arg.slice('--model='.length).trim()
+      if (model) opts.model = model
+      else delete opts.model
+    }
   }
 
   return opts
@@ -491,10 +506,12 @@ async function main() {
     ...(opts.tyauth ? { tyauth: opts.tyauth } : {}),
     allowLongRun: opts.allowLongRun,
     selectedApi: runtime.selectedApi,
-    model: runtime.model,
-    providerKey: runtime.providerKey,
-    providerAccessToken: runtime.oauthSession?.accessToken,
-    accountId: runtime.oauthSession?.accountId,
+    ...(runtime.model ? { model: runtime.model } : {}),
+    ...(runtime.providerKey ? { providerKey: runtime.providerKey } : {}),
+    ...(runtime.oauthSession?.accessToken
+      ? { providerAccessToken: runtime.oauthSession.accessToken }
+      : {}),
+    ...(runtime.oauthSession?.accountId ? { accountId: runtime.oauthSession.accountId } : {}),
   }
   applyDiagnosticsEnvironment(context)
 

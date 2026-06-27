@@ -116,12 +116,6 @@ type McpInputTool = {
   inputSchema?: unknown
 }
 
-type RawMcpInputTool = {
-  name: string
-  description?: string | undefined
-  inputSchema?: unknown
-}
-
 type McpExample = {
   id: string
   label: string
@@ -262,6 +256,7 @@ const McpToolsPayloadSchema = z.union([
     }),
   }),
 ])
+type McpToolsPayload = z.infer<typeof McpToolsPayloadSchema>
 
 function normalizeToolName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -272,7 +267,7 @@ function toJsonSchema(value: unknown): Readonly<JSONSchema7> {
   return parsed.success ? (parsed.data as JSONSchema7) : fallbackSchema
 }
 
-function normalizeMcpInputTool(input: RawMcpInputTool): McpInputTool {
+function normalizeMcpInputTool(input: z.infer<typeof McpInputToolSchema>): McpInputTool {
   return {
     name: input.name,
     ...(input.description === undefined ? {} : { description: input.description }),
@@ -280,21 +275,16 @@ function normalizeMcpInputTool(input: RawMcpInputTool): McpInputTool {
   }
 }
 
-function parseMcpToolsFromPayload(payload: unknown): McpInputTool[] {
-  if (Array.isArray(payload)) {
-    return payload.filter(
-      (item): item is McpInputTool => isRecord(item) && typeof item.name === 'string',
-    )
-  }
-  if (!isRecord(payload)) return []
-  const maybeToolsArray = payload.tools
-  if (Array.isArray(maybeToolsArray)) return parseMcpToolsFromPayload(maybeToolsArray)
+function getMcpInputTools(payload: McpToolsPayload) {
+  if (Array.isArray(payload)) return payload
+  if ('tools' in payload) return payload.tools
+  return payload.result.tools
+}
 
-  const maybeResult = payload.result
-  if (isRecord(maybeResult) && Array.isArray(maybeResult.tools)) {
-    return parseMcpToolsFromPayload(maybeResult.tools)
-  }
-  return []
+function parseMcpToolsFromPayload(payload: unknown): McpInputTool[] {
+  const parsed = McpToolsPayloadSchema.safeParse(payload)
+  if (!parsed.success) return []
+  return getMcpInputTools(parsed.data).map(normalizeMcpInputTool)
 }
 
 function mapImportedMcpToolToTaskyonTool(input: McpInputTool, sourceName?: string): ToolBase {

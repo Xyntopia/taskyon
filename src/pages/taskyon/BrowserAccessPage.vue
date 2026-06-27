@@ -20,7 +20,7 @@
           <ObjectView
             v-model="entryNodeWebSearchModel"
             :schema="entryNodeWebSearchSchema"
-            :icons="iconRegistry.entryNode.websearch as iconMap"
+            :icons="entryNodeWebSearchIcons"
             missing-mode="placeholders"
           />
         </section>
@@ -130,7 +130,8 @@
 <script setup lang="ts">
 import FadeAwayScrollPage from '@taskyon/shared/components/FadeAwayScrollPage.vue'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
-import { forgeTaskChain, toolCall, type partialTaskDraft, type TaskNode } from '@taskyon/taskyon'
+import { forgeTaskChain, type FunctionArguments, type TaskNode } from '@taskyon/taskyon'
+import { toolCall, type partialTaskDraft } from '@taskyon/taskyon/api'
 import type { JSONSchema7 } from 'json-schema'
 import type { iconMap } from 'src/modules/icons'
 import { iconRegistry } from 'src/modules/icons'
@@ -155,6 +156,16 @@ const tystate = useTaskyonStore()
 
 const entryToolName = computed(() => state.llmSettings.entryFunction)
 
+const isNestedIconMap = (value: string | iconMap | undefined): value is iconMap =>
+  typeof value === 'object' && value !== null
+
+const entryNodeWebSearchIcons = computed(() => {
+  const entryNodeIcons = iconRegistry.entryNode
+  if (!isNestedIconMap(entryNodeIcons)) return {}
+  const websearchIcons = entryNodeIcons.websearch
+  return isNestedIconMap(websearchIcons) ? websearchIcons : {}
+})
+
 const entryNodeWebSearchSchema = {
   type: 'object',
   additionalProperties: false,
@@ -172,7 +183,7 @@ const entryNodeWebSearchSchema = {
   required: [],
 } as const satisfies JSONSchema7
 
-const ensureToolchainObject = <T extends Record<string, unknown>>(key: string, defaults: T): T => {
+const ensureToolchainObject = <T extends FunctionArguments>(key: string, defaults: T): T => {
   const current = state.toolchainConfig[key]
   if (!current || typeof current !== 'object' || Array.isArray(current)) {
     state.toolchainConfig[key] = structuredClone(defaults)
@@ -285,7 +296,8 @@ const runBrowserMcpImport = async () => {
       ...browserEnsureModel.value,
     },
   }) as partialTaskDraft
-  const tasks = await forgeTaskChain([[toolTask]], [state.llmSettings.selectedTaskId])
+  const parentIds = state.selectedTaskId ? [state.selectedTaskId] : []
+  const tasks = await forgeTaskChain([[toolTask]], parentIds)
   tystate.api.send({
     type: 'tasks',
     tasks,

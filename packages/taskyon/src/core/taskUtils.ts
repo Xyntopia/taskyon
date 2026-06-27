@@ -63,7 +63,7 @@ export async function generateTaskKeyWords(
   newTask: partialTaskDraft | undefined,
   taskChain: TaskNode[],
   options: GenerateTaskKeywordsOptions = {},
-) {
+): Promise<string[]> {
   const name = await generateTaskName({
     text: taskChainTextForNaming(newTask, taskChain),
     options: {

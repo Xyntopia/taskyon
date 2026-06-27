@@ -11,7 +11,7 @@ import {
   resolveApiConfig,
   resolveApiKey,
   resolveOnlineModel,
-} from './onlineProviderSupport'
+} from '../testSupport/onlineProviderSupport'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)

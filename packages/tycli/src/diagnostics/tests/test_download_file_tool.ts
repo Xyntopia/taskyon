@@ -34,7 +34,7 @@ export const testDownloadFileReturnsRecoverableFailureForHttpErrors = async () =
     'tycli-download-file-http-error',
     async () =>
       await withMockFetch(
-        async () => new Response('not found', { status: 404, statusText: 'Not Found' }),
+        () => Promise.resolve(new Response('not found', { status: 404, statusText: 'Not Found' })),
         async () => {
           const result = await downloadFileTool.function?.({
             url: 'https://example.test/missing.pdf',
@@ -63,11 +63,13 @@ export const testDownloadFileReturnsRecoverableFailureForNonPdfBytes = async () 
     'tycli-download-file-html-error',
     async () =>
       await withMockFetch(
-        async () =>
-          new Response('<html>blocked</html>', {
-            status: 200,
-            headers: { 'content-type': 'text/html' },
-          }),
+        () =>
+          Promise.resolve(
+            new Response('<html>blocked</html>', {
+              status: 200,
+              headers: { 'content-type': 'text/html' },
+            }),
+          ),
         async () => {
           const result = await downloadFileTool.function?.({
             url: 'https://example.test/wrapper.pdf',

@@ -386,26 +386,34 @@ export const proxyWebReaderProviders = {
 
 export const proxyWebReaderProviderIds = Object.keys(proxyWebReaderProviders)
 
+const proxyWebReaderProviderMap: Readonly<Record<string, ProxyProviderPreset>> =
+  proxyWebReaderProviders
+
 export const resolveProxyProviderPreset = (providerPreset: string | undefined) => {
   if (!providerPreset) return undefined
-  return proxyWebReaderProviders[providerPreset as keyof typeof proxyWebReaderProviders]
+  return proxyWebReaderProviderMap[providerPreset]
 }
 
 export const resolveProxyWebReaderArgs = (args: ProxyWebReaderArgs): ResolvedProxyWebReaderArgs => {
   const preset = resolveProxyProviderPreset(args.providerPreset)
   const defaultConfig = preset?.defaultConfig ?? {}
+  const providerPreset = args.providerPreset?.trim()
+  const docsUrl = args.docsUrl?.trim() || preset?.docsUrl
+  const apiKeyHeader = args.apiKeyHeader?.trim() || defaultConfig.apiKeyHeader
+  const apiKeyScheme = args.apiKeyScheme?.trim() || defaultConfig.apiKeyScheme
+  const apiKeyQueryParam = args.apiKeyQueryParam?.trim() || defaultConfig.apiKeyQueryParam
   return {
     url: ensureNonEmptyString(args.url, 'url'),
-    providerPreset: args.providerPreset,
     providerLabel: args.providerLabel?.trim() || preset?.label || 'configured proxy service',
     pricingUrl: args.pricingUrl?.trim() || preset?.pricingUrl || '',
-    docsUrl: args.docsUrl?.trim() || preset?.docsUrl,
     serviceUrl: args.serviceUrl?.trim() || defaultConfig.serviceUrl || '',
     apiKeySecretName: args.apiKeySecretName?.trim() || defaultConfig.apiKeySecretName || 'API_KEY',
-    apiKeyHeader: args.apiKeyHeader?.trim() || defaultConfig.apiKeyHeader,
-    apiKeyScheme: args.apiKeyScheme?.trim() || defaultConfig.apiKeyScheme,
     apiKeyLocation: args.apiKeyLocation || defaultConfig.apiKeyLocation || 'header',
-    apiKeyQueryParam: args.apiKeyQueryParam?.trim() || defaultConfig.apiKeyQueryParam,
     targetUrlParam: args.targetUrlParam?.trim() || defaultConfig.targetUrlParam || 'url',
+    ...(providerPreset ? { providerPreset } : {}),
+    ...(docsUrl ? { docsUrl } : {}),
+    ...(apiKeyHeader ? { apiKeyHeader } : {}),
+    ...(apiKeyScheme ? { apiKeyScheme } : {}),
+    ...(apiKeyQueryParam ? { apiKeyQueryParam } : {}),
   }
 }

@@ -126,7 +126,6 @@ const createPlannerTaskChain = (
     },
   },
   createChatCompletionTask({
-    goal: 'SimpleCompletion',
     prompts: [plannerTaskChainPrompt],
   }),
   {

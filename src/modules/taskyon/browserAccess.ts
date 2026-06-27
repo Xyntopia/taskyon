@@ -22,6 +22,9 @@ export const browserAccessMcpDefaults = {
 }
 
 export const browserAccessEnsureDefaults = {
+  serverUrl: browserAccessMcpDefaults.serverUrl,
+  serverName: browserAccessMcpDefaults.serverName,
+  toolNames: [] as string[],
   startupInstructions: [
     'Start your browser MCP server manually so it exposes an HTTP MCP endpoint.',
     'This can be a local process or a container such as Podman, as long as it binds to the configured MCP URL.',
@@ -80,6 +83,19 @@ export const browserAccessEnsureSchema = {
   type: 'object',
   additionalProperties: false,
   properties: {
+    serverUrl: {
+      type: 'string',
+      description: 'HTTP MCP endpoint, for example http://127.0.0.1:8931/mcp.',
+    },
+    serverName: {
+      type: 'string',
+      description: 'Human label used for browser MCP imports.',
+    },
+    toolNames: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Optional subset of browser MCP tools to import. Leave empty to import all.',
+    },
     startupInstructions: {
       type: 'string',
       description:

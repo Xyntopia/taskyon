@@ -1,7 +1,6 @@
 import { basename } from 'node:path'
+import type * as TerminalKitModule from 'terminal-kit'
 import { noopCliFooter, type CliFooter, type CliFooterStatus } from './types'
-
-type TerminalKitModule = typeof import('terminal-kit')
 
 const isSupportedTerminal = () =>
   process.stdin.isTTY &&
@@ -46,7 +45,7 @@ const writeFooterText = (text: string) => {
 export async function createTerminalKitFooter(): Promise<CliFooter> {
   if (!isSupportedTerminal()) return noopCliFooter()
 
-  let terminalKit: TerminalKitModule
+  let terminalKit: typeof TerminalKitModule
   try {
     terminalKit = await import('terminal-kit')
   } catch {
