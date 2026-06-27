@@ -91,7 +91,7 @@
 import { matContentCopy, matDeleteForever, matSave } from '@quasar/extras/material-icons'
 import { mdiTools } from '@quasar/extras/mdi-v6'
 import { Dialog } from 'quasar'
-import { generateSecretId } from '../../../packages/taskyon/src/core/taskWorker'
+import { generateSecretId } from '../../../packages/taskyon/src/core/taskFunctionExecutor'
 import { copyToClipboard } from '@taskyon/shared/modules/utils'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'

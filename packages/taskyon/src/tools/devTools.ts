@@ -191,8 +191,9 @@ The tool never stores content server-side; everything runs client-side in the Ta
     /*───────────────────────────────────────────────────────────
       PHASE 2 — called from the iframe postMessage
     ───────────────────────────────────────────────────────────*/
-    const prev = ctx.taskChain.at(-3)
-    const thisMsg = ctx.taskChain.at(-1)
+    const taskChain = await ctx.getExecutionTaskChain()
+    const prev = taskChain.at(-3)
+    const thisMsg = taskChain.at(-1)
     if (
       prev?.content.type === 'functioncall' &&
       prev.content.data.name === 'issueListGenerator' &&

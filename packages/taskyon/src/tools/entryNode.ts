@@ -747,18 +747,19 @@ const buildShortlistReentryResult = (
   }),
 ]
 
-const createEntryNodeRuntimeState = (
+const createEntryNodeRuntimeState = async (
   config: EntryNodeConfig,
   args: EntryNodeArgs,
   context: toolContext,
-): EntryNodeRuntimeState => {
+): Promise<EntryNodeRuntimeState> => {
   const { toolResultSection, allowedTools: allowedToolsOverride, ...settings } = args
-  const previousTask = context.taskChain.at(-2)
+  const taskChain = await context.getExecutionTaskChain()
+  const previousTask = taskChain.at(-2)
   const mode = resolveMode(previousTask)
   const shortlistResult = resolveToolShortlistResult(previousTask)
   const promptArgsBase = {
     mode,
-    taskChain: context.taskChain,
+    taskChain,
     previousTask,
   }
   const prompt = config.buildPrompt(
@@ -766,11 +767,7 @@ const createEntryNodeRuntimeState = (
   )
   const allowedTools =
     allowedToolsOverride ??
-    resolveAllowedToolsFromFailedTask(
-      context.taskChain,
-      previousTask,
-      config.defaultAllowedTools ?? [],
-    )
+    resolveAllowedToolsFromFailedTask(taskChain, previousTask, config.defaultAllowedTools ?? [])
   const normalizedSettings = normalizeEntryNodeSettings(settings)
   const promptContext = {
     mode,
@@ -842,7 +839,7 @@ const shouldGiveUpAfterError = (
 }
 
 const runEntryNode = async (config: EntryNodeConfig, args: EntryNodeArgs, context: toolContext) => {
-  const runtime = createEntryNodeRuntimeState(config, args, context)
+  const runtime = await createEntryNodeRuntimeState(config, args, context)
   const executionConfig = {
     entryNodeName: runtime.entryNodeName,
     normalizedSettings: runtime.normalizedSettings,
@@ -864,7 +861,7 @@ const runEntryNode = async (config: EntryNodeConfig, args: EntryNodeArgs, contex
   }
 
   const giveUpAfterError = shouldGiveUpAfterError(
-    context.taskChain,
+    await context.getExecutionTaskChain(),
     runtime.previousTask,
     runtime.normalizedSettings.max_error_retries,
   )

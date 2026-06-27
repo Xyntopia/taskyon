@@ -207,8 +207,9 @@ const tauriBashTool = createTool({
   function: async ({ command, approvalToken }, ctx) => {
     ensureTauri()
 
-    const previousCall = ctx.taskChain.at(-3)
-    const thisMessage = ctx.taskChain.at(-1)
+    const taskChain = await ctx.getExecutionTaskChain()
+    const previousCall = taskChain.at(-3)
+    const thisMessage = taskChain.at(-1)
     const hasApprovalToken = typeof approvalToken === 'string' && approvalToken.length > 0
     const isApprovalStep =
       hasApprovalToken &&

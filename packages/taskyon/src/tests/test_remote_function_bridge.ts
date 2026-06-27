@@ -1,7 +1,10 @@
 import { createDuplexChannel } from '@taskyon/shared/modules/frpBus'
-import { handleFunctionExecution } from '../core/tools'
-import type { RemoteFunctionCall, RemoteFunctionResponse } from '../types/messages'
-import { createSubtasksResult, type InternalTool, type toolContext } from '../types/toolApi'
+import { callToolOverRpc } from '../core/toolRpc'
+import type {
+  RemoteFunctionCall,
+  RemoteFunctionCancel,
+  RemoteFunctionResponse,
+} from '../types/messages'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -9,10 +12,11 @@ const assert = (condition: unknown, message: string) => {
 
 export const testRemoteFunctionBridgeHonorsToolTimeoutMs = async () => {
   const { x: workerPort, y: remotePort } = createDuplexChannel<
-    RemoteFunctionCall,
+    RemoteFunctionCall | RemoteFunctionCancel,
     RemoteFunctionResponse
   >()
   const unsubscribe = remotePort.receive((msg) => {
+    if (msg.type !== 'functionCall') return
     setTimeout(() => {
       remotePort.send({
         type: 'functionResponse',
@@ -24,31 +28,11 @@ export const testRemoteFunctionBridgeHonorsToolTimeoutMs = async () => {
   })
 
   try {
-    const result = await handleFunctionExecution(
+    const result = await callToolOverRpc(
       {
         name: 'slowRemote',
         arguments: { timeoutMs: 31_000 },
       },
-      {
-        name: 'slowRemote',
-        description: 'Remote test tool.',
-        parameters: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            timeoutMs: { type: 'integer' },
-          },
-        },
-      } satisfies InternalTool,
-      new AbortController().signal,
-      {
-        taskChain: [],
-        createSubtasksResult,
-        getSecret: () => Promise.resolve(null),
-        setSecret: () => Promise.resolve(),
-        stopSignal: new AbortController().signal,
-        toolId: 'test-remote-timeout',
-      } satisfies toolContext,
       workerPort,
     )
 

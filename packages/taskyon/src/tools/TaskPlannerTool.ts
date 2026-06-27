@@ -233,7 +233,7 @@ For every delegated task, Taskyon first creates a fresh local context, expands t
     },
     required: ['tasks'],
   } as const satisfies JSONSchema7,
-  function: ({ tasks }, context) => {
+  function: async ({ tasks }, context) => {
     const normalizedGroups = tasks.map((group) =>
       group.map((item) => normalizePlannedTaskInput(item)),
     )
@@ -260,7 +260,7 @@ For every delegated task, Taskyon first creates a fresh local context, expands t
           },
         },
       ],
-      ...buildTaskPlannerTaskChains(tasks, context.taskChain),
+      ...buildTaskPlannerTaskChains(tasks, await context.getExecutionTaskChain()),
     ])
   },
 })

@@ -8,7 +8,7 @@ import { ToolBase, taskMarker } from './tools'
 /**
  * Represents the context passed to tools within the Taskyon system.
  *
- * @property taskChain - The sequence of TaskNode objects representing the current chain of tasks.
+ * @property getExecutionTaskChain - Lazily retrieves the current execution task chain.
  * @property getSecret - Retrieves a secret value by name. If `askNew` is `true`, prompts for a new secret if it doesn't exist.
  *   If `askNew` is a string, uses the string as a custom message or hint when prompting for the secret.
  * @param name - The name of the secret to retrieve.
@@ -23,7 +23,7 @@ import { ToolBase, taskMarker } from './tools'
  * @property toolId - The unique identifier for the tool instance.
  */
 export type toolContext = {
-  taskChain: TaskNode[]
+  getExecutionTaskChain: () => Promise<TaskNode[]>
   createSubtasksResult: typeof createSubtasksResult
   getSecret: (name: string, askNew: boolean | string, saveNew?: boolean) => Promise<string | null>
   setSecret: (name: string, value: string) => Promise<void>

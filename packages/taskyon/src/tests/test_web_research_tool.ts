@@ -340,9 +340,9 @@ export const testMcpCapableWebProviderCatalog = () => {
   return { success: true }
 }
 
-export const testWebResearchPlannerUsesWebSearchFirstByDefault = () => {
+export const testWebResearchPlannerUsesWebSearchFirstByDefault = async () => {
   const baseContext = {
-    taskChain: [],
+    getExecutionTaskChain: () => Promise.resolve([]),
     createSubtasksResult,
     getSecret: () => Promise.resolve(null),
     setSecret: () => Promise.resolve(),
@@ -350,7 +350,7 @@ export const testWebResearchPlannerUsesWebSearchFirstByDefault = () => {
     toolId: 'test-tool',
   }
 
-  const initialResult = webResearchPlanner.function?.(
+  const initialResult = await webResearchPlanner.function?.(
     {
       objective: 'Collect solar cell spec sheets',
       searchQueries: ['Aiko solar ABC datasheet pdf'],
@@ -495,8 +495,8 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
   return { success: true }
 }
 
-export const testWebResearchPlannerBrowserMcpFirstEnsuresBrowserSetup = () => {
-  const result = webResearchPlanner.function?.(
+export const testWebResearchPlannerBrowserMcpFirstEnsuresBrowserSetup = async () => {
+  const result = await webResearchPlanner.function?.(
     {
       objective: 'Collect solar cell spec sheets',
       searchQueries: ['Aiko solar ABC datasheet pdf'],
@@ -504,7 +504,7 @@ export const testWebResearchPlannerBrowserMcpFirstEnsuresBrowserSetup = () => {
       researchMode: 'browser-mcp-first',
     },
     {
-      taskChain: [],
+      getExecutionTaskChain: () => Promise.resolve([]),
       createSubtasksResult,
       getSecret: () => Promise.resolve(null),
       setSecret: () => Promise.resolve(),

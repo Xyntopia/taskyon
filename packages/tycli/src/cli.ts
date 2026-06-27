@@ -10,12 +10,13 @@ import { inspect } from 'node:util'
 import { createDuplexChannel, createUnavailableIframeMux } from '../../shared/modules/frpBus'
 import { createTaskNode } from '../../taskyon/src/core/createTasks'
 import { tyCore } from '../../taskyon/src/core/init'
+import { createExternalToolContext, registerToolRpcExecutor } from '../../taskyon/src/core/toolRpc'
 import type { Taskyon } from '../../taskyon/src/core/init'
 import { createStandardEntryNodeTool } from '../../taskyon/src/tools/entryNode'
 import type { TaskyonMessage } from '../../taskyon/src/types/apiTypes'
 import type { llmSettings } from '../../taskyon/src/types/profiles'
 import type { partialTaskDraft, TaskNode } from '../../taskyon/src/types/taskNode'
-import { createTool, toolCall } from '../../taskyon/src/types/toolApi'
+import { createTool, toolCall, type ClientTool } from '../../taskyon/src/types/toolApi'
 import {
   getProviderOauthConfig,
   getProviderOauthCredentialsSecretName,
@@ -443,7 +444,7 @@ function parseSlashName(line: string): SlashParsed | null {
   return { name, args }
 }
 
-const cliBashTool = createTool({
+const cliBashTool: ClientTool = createTool({
   name: 'bash',
   description: 'Run a bash command on the host system and return stdout, stderr, and exit code.',
   parameters: {
@@ -466,6 +467,7 @@ const cliBashTool = createTool({
       },
     },
   } as const,
+  function: (args) => executeBashCommand(args),
 })
 const ACTIVE_LLM_TOOLS = [
   cliBashTool.name,
@@ -558,20 +560,6 @@ function isTaskCreatedMessage(
 ): msg is { type: 'taskCreated'; task: TaskNode; parentID?: string } {
   const candidate = msg as { type?: unknown; task?: unknown }
   return candidate.type === 'taskCreated' && !!candidate.task
-}
-
-function isRemoteFunctionCall(msg: TaskyonMessage): msg is TaskyonMessage & {
-  type: 'functionCall'
-  functionName: string
-  requestId: string
-  arguments?: Record<string, unknown>
-} {
-  const candidate = msg as { type?: unknown; functionName?: unknown; requestId?: unknown }
-  return (
-    candidate.type === 'functionCall' &&
-    typeof candidate.functionName === 'string' &&
-    typeof candidate.requestId === 'string'
-  )
 }
 
 async function createPreparedTaskChain(
@@ -1868,24 +1856,10 @@ async function main() {
   const unsubscribeBridgeToTaskyon = bridgePort.receive((msg) => taskyon.port.send(msg))
   const unsubscribeTaskyonToBridge = taskyon.port.receive((msg) => bridgePort.send(msg))
 
-  const unsubscribeFunctionCalls = clientPort.receive(async (msg: TaskyonMessage) => {
-    if (!isRemoteFunctionCall(msg) || msg.functionName !== cliBashTool.name) return
-    try {
-      const response = await executeBashCommand((msg.arguments ?? {}) as BashToolArgs)
-      clientPort.send({
-        type: 'functionResponse',
-        functionName: msg.functionName,
-        requestId: msg.requestId,
-        response,
-      })
-    } catch (error) {
-      clientPort.send({
-        type: 'functionResponse',
-        functionName: msg.functionName,
-        requestId: msg.requestId,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
+  const cliToolRpcExecutor = registerToolRpcExecutor({
+    port: clientPort,
+    getTool: (name) => (name === cliBashTool.name ? cliBashTool : undefined),
+    createContext: (_call, stopSignal) => createExternalToolContext(stopSignal),
   })
 
   clientPort.send({ type: 'functionDescription', ...cliBashTool } as unknown as TaskyonMessage)
@@ -2629,7 +2603,7 @@ async function main() {
     unsubscribeTaskProgress()
     unsubscribeWorkerProgress()
     if (!isReadlineClosed(rl)) rl.close()
-    unsubscribeFunctionCalls()
+    cliToolRpcExecutor.destroy()
     unsubscribeBridgeToTaskyon()
     unsubscribeTaskyonToBridge()
     activeTaskWaitController = undefined

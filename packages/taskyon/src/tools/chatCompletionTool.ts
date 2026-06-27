@@ -1448,14 +1448,15 @@ export function createChatCompletionTool(
           : (model ?? getCurrentModel(requestApi))
       console.log('calling chat completion tool...', selectedModel, useProviderToolCalling)
       // the current task doesn't *have* to exist. We can also works solely with prompts...
-      const currentTask = context.taskChain.at(-1)
+      const executionTaskChain = await context.getExecutionTaskChain()
+      const currentTask = executionTaskChain.at(-1)
 
       const toolDefs = await taskManager.updateToolDefinitions(true)
 
       //////////// END INITIALIZATION
 
       // refactor this below and make it all explicit, without passing llmSettings...
-      const lastTaskBeforeChatCompletion = context.taskChain.at(-2)
+      const lastTaskBeforeChatCompletion = executionTaskChain.at(-2)
       // TODO: can we get rid of taskManager here in order to make our task more functional :)?
       const chatInfo = await processChatTask(
         tools,

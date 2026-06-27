@@ -48,6 +48,7 @@ function buildToolSandboxCode(userCode: string): string {
           ...(baseContext || {}),
           getSecret: (...args) => callRpc('getSecret', ...args),
           setSecret: (...args) => callRpc('setSecret', ...args),
+          getExecutionTaskChain: () => callRpc('getExecutionTaskChain'),
           messagePort: globalThis.__workerSandboxMessagePort ?? null,
           toolCall,
           createSubtasksResult: (tasks) => callRpc('createSubtasksResult', tasks),
@@ -80,6 +81,7 @@ function buildRpcHandlers(context: toolContext): WorkerSandboxRpcHandlers {
         typeof saveNew === 'boolean' ? saveNew : undefined,
       ),
     setSecret: (name, value) => context.setSecret(String(name), String(value)),
+    getExecutionTaskChain: () => context.getExecutionTaskChain(),
     createSubtasksResult: (tasks) =>
       context.createSubtasksResult(parseCreateSubtasksResultInput(tasks)),
   }
@@ -91,7 +93,7 @@ export function executeToolInWorkerSandbox(
   sourceURL = 'worker-sandbox-tool.js',
   stopSignal: AbortSignal,
 ): Promise<unknown> {
-  const { toolId, taskChain, messagePort } = args.context
+  const { toolId, messagePort } = args.context
   const options: ExecuteInWorkerSandboxOptions = {
     id: toolId,
     code: buildToolSandboxCode(code),
@@ -101,5 +103,5 @@ export function executeToolInWorkerSandbox(
     messagePort,
   }
 
-  return executeInWorkerSandbox(options, args.params, { taskChain, toolId })
+  return executeInWorkerSandbox(options, args.params, { toolId })
 }

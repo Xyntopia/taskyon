@@ -536,8 +536,9 @@ This tool checks whether the configured browser MCP server is reachable. If it i
     const serverName = args.serverName?.trim() || 'local-browser-mcp'
     const startupInstructions =
       args.startupInstructions?.trim() || defaultBrowserMcpStartupInstructions
-    const previousCall = ctx.taskChain.at(-3)
-    const thisMessage = ctx.taskChain.at(-1)
+    const taskChain = await ctx.getExecutionTaskChain()
+    const previousCall = taskChain.at(-3)
+    const thisMessage = taskChain.at(-1)
     const onboardingToken = typeof args.onboardingToken === 'string' ? args.onboardingToken : ''
     const isOnboardingReentry =
       onboardingToken.length > 0 &&
@@ -681,7 +682,7 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
     },
     required: ['objective', 'searchQueries'],
   } as const satisfies JSONSchema7,
-  function: (args, context) => {
+  function: async (args, context) => {
     const browserTools = trimNonEmptyStrings(args.browserTools)
     if (shouldEnsureBrowserMcp(args)) {
       return context.createSubtasksResult([
@@ -710,24 +711,25 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
 
     const taskGroups = buildWebResearchTaskGroups(args)
     const breakdown = formatResearchBreakdown(taskGroups)
-    const delegatedChains = buildTaskPlannerTaskChains(taskGroups, context.taskChain).map(
-      (chain) => {
-        const entryNodeArguments = buildResearchEntryNodeArguments(args)
-        if (!entryNodeArguments) return chain
-        return chain.map((task) => {
-          if (task.content.type !== 'functioncall' || task.content.data.name !== 'entryNode') {
-            return task
-          }
-          return toolCall({
-            name: 'entryNode',
-            arguments: {
-              ...(task.content.data.arguments || {}),
-              ...entryNodeArguments,
-            },
-          })
+    const delegatedChains = buildTaskPlannerTaskChains(
+      taskGroups,
+      await context.getExecutionTaskChain(),
+    ).map((chain) => {
+      const entryNodeArguments = buildResearchEntryNodeArguments(args)
+      if (!entryNodeArguments) return chain
+      return chain.map((task) => {
+        if (task.content.type !== 'functioncall' || task.content.data.name !== 'entryNode') {
+          return task
+        }
+        return toolCall({
+          name: 'entryNode',
+          arguments: {
+            ...(task.content.data.arguments || {}),
+            ...entryNodeArguments,
+          },
         })
-      },
-    )
+      })
+    })
 
     return context.createSubtasksResult([
       [
@@ -833,8 +835,9 @@ This tool includes a built-in provider catalog with 40 public vendors so a user 
     const serviceUrl = ensureNonEmptyString(resolvedArgs.serviceUrl, 'serviceUrl')
     const secretName = resolvedArgs.apiKeySecretName
     const docsUrl = resolvedArgs.docsUrl?.trim()
-    const previousCall = ctx.taskChain.at(-3)
-    const thisMessage = ctx.taskChain.at(-1)
+    const taskChain = await ctx.getExecutionTaskChain()
+    const previousCall = taskChain.at(-3)
+    const thisMessage = taskChain.at(-1)
     const onboardingToken = typeof args.onboardingToken === 'string' ? args.onboardingToken : ''
     const isOnboardingReentry =
       onboardingToken.length > 0 &&

@@ -388,6 +388,108 @@ export function streamProcedureCall<T extends unknown[], R>(timeoutMs?: number) 
   return { emitFunc, stream: requireSubscribers(stream, 1) }
 }
 
+export type RpcMessagePort<TRequest> = {
+  send: (message: TRequest) => void
+  receive: (observer: Observer<unknown>) => Unsubscribe
+}
+
+export type RpcScopeStore<TScope> = {
+  set: (requestId: string, scope: TScope) => void
+  get: (requestId: string) => TScope | undefined
+  delete: (requestId: string) => void
+}
+
+export function createRpcScopeStore<TScope>(): RpcScopeStore<TScope> {
+  const scopes = new Map<string, TScope>()
+  return {
+    set: (requestId, scope) => scopes.set(requestId, scope),
+    get: (requestId) => scopes.get(requestId),
+    delete: (requestId) => {
+      scopes.delete(requestId)
+    },
+  }
+}
+
+export type RpcResponseResult<TResult> =
+  | {
+      ok: true
+      value: TResult
+    }
+  | {
+      ok: false
+      error: Error
+    }
+
+export function createStreamRpcRequest<TRequest, TResponse, TResult, TScope>(options: {
+  port: RpcMessagePort<TRequest>
+  request: TRequest
+  requestId: string
+  timeoutMs: number
+  signal?: AbortSignal | undefined
+  scope?: TScope | undefined
+  scopeStore?: RpcScopeStore<TScope> | undefined
+  createCancelRequest: (reason: string) => TRequest
+  parseResponse: (message: unknown) => TResponse | undefined
+  isResponseForRequest: (response: TResponse, requestId: string) => boolean
+  readResponse: (response: TResponse) => RpcResponseResult<TResult>
+}): Promise<TResult> {
+  if (options.scope !== undefined) options.scopeStore?.set(options.requestId, options.scope)
+
+  const responsePromise = new Promise<TResult>((resolve, reject) => {
+    let settled = false
+    let unsubscribe: Unsubscribe = () => {}
+
+    const cleanup = () => {
+      clearTimeout(timeout)
+      options.signal?.removeEventListener('abort', abort)
+      options.scopeStore?.delete(options.requestId)
+      unsubscribe()
+    }
+
+    const finish = (result: RpcResponseResult<TResult>) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      if (result.ok) resolve(result.value)
+      else reject(result.error)
+    }
+
+    const cancel = (reason: string) => {
+      options.port.send(options.createCancelRequest(reason))
+    }
+
+    const abort = () => {
+      const reason =
+        options.signal?.reason instanceof Error
+          ? options.signal.reason.message
+          : String(options.signal?.reason ?? 'RPC request aborted')
+      cancel(reason)
+      finish({ ok: false, error: new Error(reason) })
+    }
+
+    const timeout = setTimeout(() => {
+      const message = `RPC request ${options.requestId} timed out after ${options.timeoutMs}ms`
+      cancel(message)
+      finish({ ok: false, error: new Error(message) })
+    }, options.timeoutMs)
+
+    if (options.signal?.aborted) {
+      abort()
+      return
+    }
+
+    options.signal?.addEventListener('abort', abort, { once: true })
+    unsubscribe = options.port.receive((message) => {
+      const response = options.parseResponse(message)
+      if (!response || !options.isResponseForRequest(response, options.requestId)) return
+      finish(options.readResponse(response))
+    })
+  })
+
+  options.port.send(options.request)
+  return responsePromise
+}
+
 // ---- MessagePort <-> FRP bridge ------------------------------------------
 
 export interface PortBridge<T> {

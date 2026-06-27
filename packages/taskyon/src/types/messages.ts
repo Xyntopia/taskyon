@@ -11,10 +11,14 @@ const RemoteFunctionBase = z.object({
 })
 
 export const REMOTE_FUNCTION_TIMEOUT_MS = 30_000
+export const MAX_REMOTE_FUNCTION_TIMEOUT_MS = 10 * 60 * 1000
 
 export const RemoteFunctionCall = RemoteFunctionBase.extend({
   type: z.literal('functionCall').meta({
     description: 'Field to indicate what kind of a message we have here.',
+  }),
+  taskId: z.string().optional().meta({
+    description: 'Task id whose function call is being executed, when available.',
   }),
   arguments: FunctionArguments.optional().meta({
     description: 'the arguments for the function as a json object',
@@ -41,3 +45,15 @@ export const RemoteFunctionResponse = RemoteFunctionBase.extend({
     'This type is used for sending messages with the result of a remote function call between windows. E.g. from parent to taskyon iframe',
 })
 export type RemoteFunctionResponse = z.infer<typeof RemoteFunctionResponse>
+
+export const RemoteFunctionCancel = RemoteFunctionBase.extend({
+  type: z.literal('functionCancel').meta({
+    description: 'Field to indicate that an in-flight function call should be cancelled.',
+  }),
+  reason: z.string().optional().meta({
+    description: 'Optional human-readable reason for the cancellation.',
+  }),
+}).meta({
+  description: 'Cancels a pending remote function call identified by requestId.',
+})
+export type RemoteFunctionCancel = z.infer<typeof RemoteFunctionCancel>

@@ -1493,7 +1493,7 @@ export const testChatCompletion = async () => {
         },
       },
       {
-        taskChain: [],
+        getExecutionTaskChain: () => Promise.resolve([]),
         createSubtasksResult,
         getSecret: (name) => tystate.getProviderApiKey(name),
         setSecret: () => {

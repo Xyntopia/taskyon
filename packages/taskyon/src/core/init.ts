@@ -22,8 +22,9 @@ import { wfcGenerator } from '../tools/wavefunctioncollapse'
 import { appDevTools } from '../tools/webAppDev'
 import { createTaskyonToMcpBridge } from '../mcp/taskyonToMcpBridge'
 import { TaskyonMessage } from '../types/apiTypes'
+import type { RemoteFunctionCall } from '../types/messages'
 import type { llmSettings } from '../types/profiles'
-import type { InternalTool } from '../types/toolApi'
+import { createSubtasksResult, type InternalTool } from '../types/toolApi'
 import { FunctionArguments as FunctionArgumentsSchema } from '../types/tools'
 import type { FunctionArguments } from '../types/tools'
 import { ToolBase } from '../types/tools'
@@ -38,15 +39,11 @@ import type { CryptoSession } from '../utils/cryptoSession'
 import { createCryptoSession } from '../utils/cryptoSession'
 import type { EncryptedDataRow } from '../utils/encrypt'
 import { encryptCompressObject } from '../utils/fileUtils'
-import type {
-  extractStreamType,
-  IframeMultiPlexer,
-  Port,
-  TaskMessageStream,
-} from '@taskyon/shared/modules/frpBus'
+import type { extractStreamType, IframeMultiPlexer, Port } from '@taskyon/shared/modules/frpBus'
 import {
   createDuplexChannel,
   createIframeMux,
+  createMessagePortAdapter,
   createPortApi,
   createStream,
   createTypeFilteredPort,
@@ -57,7 +54,11 @@ import { configureNodePgLiteDataDir, getDatabase } from '../utils/pglite.api'
 import type { Thunk } from '../utils/tsHelpers'
 import type { TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
-import { functionExecutorCreator, generateSecretId, runTaskWorker } from './taskWorker'
+import { generateSecretId } from './taskFunctionExecutor'
+import { runTaskWorker } from './taskWorker'
+import { callToolOverRpc, registerToolRpcBroker, registerToolRpcExecutor } from './toolRpc'
+import { materializeTaskyonFunctionArguments } from './taskVariables'
+import { createWithDefaults } from './tools'
 import type { ReadonlyDeep } from 'type-fest'
 
 function createApi(
@@ -163,10 +164,6 @@ function createApi(
   }
 }
 
-function createEmptyTaskMessageStream(): TaskMessageStream {
-  return createStream<{ id: string; payload: unknown }>().stream
-}
-
 function toFunctionArguments(args: Record<string, unknown>): FunctionArguments {
   return FunctionArgumentsSchema.parse(args)
 }
@@ -233,6 +230,7 @@ const dynamicContext =
     llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
     entryNode: Thunk<ReadonlyDeep<partialTaskDraft>>,
     ToolList: InternalTool[],
+    outsidePort: Port<TaskyonMessage, TaskyonMessage>,
     insidePort: Port<TaskyonMessage, TaskyonMessage>,
     iframeMultiPlexer: IframeMultiPlexer,
     toolchainConfig: Thunk<Record<string, FunctionArguments>>,
@@ -291,30 +289,112 @@ const dynamicContext =
     // taskyon should automatically pick up on this...
     console.log('starting taskyon worker')
     const { port: workerport } = createTypeFilteredPort(insidePort, ['functionResponse'])
-    const { executor, stop } = functionExecutorCreator(
-      taskManagerInstance.getToolDefinition,
-      taskManagerInstance.getTask,
-      secretStore,
-      workerport,
-      toolchainConfig,
-    )
+    const { port: coreToolRpcPort } = createTypeFilteredPort(outsidePort, [
+      'functionCall',
+      'functionCancel',
+    ])
+    const coreToolExecutor = registerToolRpcExecutor({
+      port: coreToolRpcPort,
+      getTool: async (name) => {
+        const { tool } = await taskManagerInstance.getToolDefinition(name)
+        if (tool?.function || tool?.code) return tool
+        return undefined
+      },
+      createContext: async (call, stopSignal) => {
+        const { tool, def } = await taskManagerInstance.getToolDefinition(call.functionName)
+        if (!tool) throw new Error(`Tool not found: ${call.functionName}`)
+        const toolId = await generateSecretId(def?.id, tool)
+        const executionTask = call.taskId ? await taskManagerInstance.getTask(call.taskId) : null
+        const messagePortAdapter = executionTask
+          ? createMessagePortAdapter(
+              iframeMultiPlexer.all$.filter((msg) => {
+                return msg.id === executionTask.parentID || msg.id === executionTask.priorID
+              }),
+            )
+          : undefined
+        return {
+          context: {
+            getExecutionTaskChain: () => {
+              if (!call.taskId) {
+                throw new Error(
+                  'getExecutionTaskChain is not available for this tool call because no task id was provided.',
+                )
+              }
+              return taskManagerInstance.getTaskChain(call.taskId)
+            },
+            createSubtasksResult,
+            getSecret: async (name, askNew, saveNew = true) => {
+              console.log('get secret name', name)
+              const secr = await secretStore.getSecret(toolId, name, askNew, saveNew)
+              return secr ?? null
+            },
+            setSecret: async (name, value) => {
+              console.log('set secret name', name)
+              await secretStore.setSecret(toolId, name, value)
+            },
+            stopSignal,
+            toolId,
+            ...(messagePortAdapter
+              ? {
+                  messagePort: messagePortAdapter.port,
+                }
+              : {}),
+          },
+          cleanup: () => messagePortAdapter?.destroy(),
+        }
+      },
+    })
+    const prepareToolCall = async (call: RemoteFunctionCall) => {
+      const { tool } = await taskManagerInstance.getToolDefinition(call.functionName)
+      if (!tool) {
+        throw new Error(
+          `The function '${call.functionName}' is not available in tools. Please select a valid toolname.`,
+        )
+      }
+      const rawArguments = call.arguments ?? {}
+      const funcSettings = toolchainConfig()[call.functionName]
+      const materializedArguments = await materializeTaskyonFunctionArguments(rawArguments, {
+        surface: 'execution',
+        getTaskById: taskManagerInstance.getTask,
+      })
+      return {
+        name: call.functionName,
+        arguments: {
+          ...createWithDefaults(tool.parameters),
+          ...(funcSettings || {}),
+          ...rawArguments,
+          ...materializedArguments,
+        },
+      }
+    }
     const continuationTask = partialTaskDraft.parse(entryNode())
-    const { workerStream, stopAllTasks, queueTask } = runTaskWorker(
+    const { workerStream, toolRpcPort, stopAllTasks, queueTask } = runTaskWorker(
       taskManagerInstance,
-      iframeMultiPlexer.all$,
       continuationTask,
       continuationTask,
-      executor,
     )
+    const workerToolBroker = registerToolRpcBroker({
+      workerPort: toolRpcPort,
+      toolPort: workerport,
+      prepareFunctionCall: prepareToolCall,
+    })
     //##################### END INIT CTX #################
     return {
       chatCompletionStream,
       workerStream,
-      executor,
+      callTool: (name: string, args: FunctionArguments) =>
+        callToolOverRpc(
+          {
+            name,
+            arguments: args,
+          },
+          workerport,
+        ),
       stopAllTasks: (message: string) => {
         console.log('tycore stopping all tasks:', message)
         stopAllTasks(message)
-        stop()
+        workerToolBroker.stop(message)
+        coreToolExecutor.stop(message)
       },
       queueTask,
       taskManagerInstance,
@@ -363,6 +443,7 @@ export async function tyCore(
     llmSettings,
     entryNode,
     [...EnvironmentTools, ...ToolList],
+    outsidePort,
     insidePort,
     iframeMultiPlexer,
     toolchainConfig,
@@ -435,14 +516,7 @@ export async function tyCore(
         },
         listTaskyonTools: async () => await ctx.taskManagerInstance.updateToolDefinitions(true),
         callTaskyonTool: async (name: string, args: Record<string, unknown>) =>
-          await ctx.executor(
-            {
-              name,
-              arguments: toFunctionArguments(args),
-            },
-            [],
-            createEmptyTaskMessageStream(),
-          ),
+          await ctx.callTool(name, toFunctionArguments(args)),
       }
       return createTaskyonToMcpBridge(
         options?.protocolVersion

@@ -70,8 +70,9 @@ export const postMessageTester = createTool({
     additionalProperties: false,
   } as const satisfies JSONSchema7,
   code: `async (_, ctx) => {
-    const previousCall = ctx.taskChain.at(-3)
-    const thisMessage = ctx.taskChain.at(-1)
+    const taskChain = await ctx.getExecutionTaskChain()
+    const previousCall = taskChain.at(-3)
+    const thisMessage = taskChain.at(-1)
     // ────────────────────────────────────────────────────────────────────────────
     // SECOND CALL ─ the MessagePort is available in ctx.port
     // ────────────────────────────────────────────────────────────────────────────

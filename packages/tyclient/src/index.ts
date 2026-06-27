@@ -1,14 +1,15 @@
 // we can compile this file to js to js using "yarn build:lib"
 
-import type { FunctionCall, Port } from '@taskyon/taskyon/api'
+import type { Port } from '@taskyon/taskyon/api'
 import { REMOTE_FUNCTION_TIMEOUT_MS, processTasks, sendTasks } from '@taskyon/taskyon/api'
 import {
   // from frp bux with only very few dependencies
   createDuplexChannel, // utis/frpbus
   MessageChannelBridge, // utils/frpbus
   type ClientTool,
+  createExternalToolContext,
+  registerToolRpcExecutor,
 } from '@taskyon/taskyon/api'
-import { createSubtasksResult } from '../../taskyon/src/types/toolApi'
 import type { ByType } from '../../taskyon/src/utils/tsHelpers'
 // TODO: move this into some other part as well..  maybe into "GUI" types or somthing like that?
 import type {
@@ -82,31 +83,6 @@ const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
   })
 }
 
-async function handleFunctionExecution(
-  args: FunctionCall['arguments'],
-  tool: ClientTool,
-  stopSignal: AbortSignal,
-) {
-  // with this we make sure, that we can also handle async functions :)
-  const result = await tool.function(args, {
-    taskChain: [],
-    createSubtasksResult,
-    getSecret: (name) => {
-      console.log('tyclient get secret name', name)
-      return Promise.resolve('N/A')
-    },
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    setSecret: (name, _value) => {
-      console.log('tyclient set secret name', name)
-      return Promise.resolve()
-    },
-    stopSignal,
-    toolId: 'N/A',
-  })
-
-  return result
-}
-
 export interface TyClient {
   sendTasks: ReturnType<typeof sendTasks>
   waitForTaskResult: ReturnType<typeof processTasks>
@@ -146,7 +122,6 @@ export async function initializeTaskyon(options: {
 
   const taskyon = document.getElementById(options.iframeId ?? 'taskyon') as HTMLIFrameElement
 
-  const controller = new AbortController()
   const { x: clientSidePort, y: towardsIframe } = createDuplexChannel<
     TaskyonGuiMessage,
     TaskyonGuiMessage
@@ -229,46 +204,12 @@ export async function initializeTaskyon(options: {
   console.log('tyclient set up function listener!')
 
   clientSidePort.receive((msg: TaskyonGuiMessage) => console.log('tyclient received message', msg))
-  clientSidePort.receive.narrow(
-    (msg: TaskyonGuiMessage): msg is ByType<'functionCall', TaskyonGuiMessage> =>
-      msg.type === 'functionCall',
-  )(async (msg: ByType<'functionCall', TaskyonGuiMessage>) => {
-    const tool = toolMap[msg.functionName]
-    let tyres: TaskyonGuiMessage
-
-    if (tool) {
-      try {
-        const res = await handleFunctionExecution(msg.arguments ?? {}, tool, controller.signal)
-        tyres = {
-          type: 'functionResponse',
-          functionName: tool.name,
-          requestId: msg.requestId,
-          response: res,
-        }
-        console.log('tyclient tool send functionResponse to iframe', res, tool)
-      } catch (error) {
-        tyres = {
-          type: 'functionResponse',
-          functionName: tool.name,
-          requestId: msg.requestId,
-          error:
-            typeof error === 'object' && error !== null && 'message' in error
-              ? error.message
-              : JSON.stringify(error),
-        }
-        console.error('tyclient tool error occurred', error)
-      }
-    } else {
-      tyres = {
-        type: 'functionResponse',
-        functionName: msg.functionName,
-        requestId: msg.requestId,
-        error: `Tool not found: ${msg.functionName}`,
-      }
-      console.warn('tyclient received function call for unknown tool', msg.functionName)
-    }
-    send(tyres)
+  const toolRpcExecutor = registerToolRpcExecutor({
+    port: clientSidePort,
+    getTool: (name) => toolMap[name],
+    createContext: (_call, stopSignal) => createExternalToolContext(stopSignal),
   })
+  void toolRpcExecutor
 
   return {
     sendTasks: sendTasks(clientSidePort),

@@ -102,9 +102,10 @@ not working:
 
     function: async (
       { oauthURL, clientId, scope = '', toolId, tokenUrl },
-      { createSubtasksResult, taskChain, stopSignal },
+      { createSubtasksResult, getExecutionTaskChain, stopSignal },
     ) => {
       // we need the 3rd last task, -1 is the current task and -2 is the button message UI
+      const taskChain = await getExecutionTaskChain()
       const prev = taskChain.at(-3)
       const isReentry =
         prev?.content.type === 'functioncall' && prev.content.data.name === 'ensureOauthLogin'

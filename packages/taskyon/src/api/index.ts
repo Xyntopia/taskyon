@@ -15,12 +15,20 @@ export type { ClientTool, toolContext } from '../types/toolApi'
 export type { FunctionCall } from '../types/tools'
 export {
   createDuplexChannel, // utils/frpbus
+  createStreamRpcRequest,
   createPortApi, // utis/frpbus
   MessageChannelBridge,
 } from '@taskyon/shared/modules/frpBus'
+export type { RpcMessagePort, RpcResponseResult } from '@taskyon/shared/modules/frpBus'
 
 export { createTool, partialTaskDraft, toolCall }
 export type { Port }
+export {
+  callToolOverRpc,
+  createExternalToolContext,
+  registerToolRpcExecutor,
+} from '../core/toolRpc'
+export type { ToolRpcCallerPort, ToolRpcResponderPort } from '../core/toolRpc'
 export * from '../mcp/mcpProtocolBridge'
 export * from '../mcp/taskyonToMcpBridge'
 export * from '../mcp/types'

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { sha256UrlSafeHashFromFile } from '../utils/encoding'
 import type { ByType } from '../utils/tsHelpers'
-import { RemoteFunctionCall, RemoteFunctionResponse } from './messages'
+import { RemoteFunctionCall, RemoteFunctionCancel, RemoteFunctionResponse } from './messages'
 import { partialTaskDraft, TaskNode } from './taskNode'
 import { ToolBase } from './tools'
 
@@ -91,6 +91,7 @@ const TyStatusMessage = z
 export const TaskWorkerMessage = z.discriminatedUnion('type', [
   z.object({ ...BaseMessage.shape, ...RemoteFunctionCall.shape }),
   z.object({ ...BaseMessage.shape, ...RemoteFunctionResponse.shape }),
+  z.object({ ...BaseMessage.shape, ...RemoteFunctionCancel.shape }),
 ])
 export type TaskWorkerMessage = z.infer<typeof TaskWorkerMessage>
 

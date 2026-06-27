@@ -1,24 +1,23 @@
-import type { ReadonlyDeep } from 'type-fest'
-import type { TaskNode, TaskNodeType, partialTaskDraft } from '../types/taskNode'
-import {
-  createSubtasksResult,
-  taskResult,
-  type InternalTool,
-  type toolContext,
-} from '../types/toolApi'
-import type { FunctionArguments, FunctionCall } from '../types/tools'
+import type { TaskNode, partialTaskDraft } from '../types/taskNode'
+import { taskResult } from '../types/toolApi'
+import type { FunctionCall } from '../types/tools'
 import { createAsyncQueue, sleep } from '../utils/asyncUtils'
-import type { SecretStore } from '../utils/crudWrapper'
-import { sha256UrlSafeHash } from '../utils/encoding'
 import { humanizeError, serializeError } from '../utils/error'
-import type { TaskMessageStream } from '@taskyon/shared/modules/frpBus'
-import { createMessagePortAdapter, createStream } from '@taskyon/shared/modules/frpBus'
+import type { Port, RpcMessagePort } from '@taskyon/shared/modules/frpBus'
+import {
+  createDuplexChannel,
+  createStream,
+  createStreamRpcRequest,
+} from '@taskyon/shared/modules/frpBus'
 import { serializeForJson } from '../utils/objHelpers'
-import type { Thunk } from '../utils/tsHelpers'
 import { type TyTaskManager } from './taskManager'
-import type { RemoteFunctionPort } from './tools'
-import { createWithDefaults, handleFunctionExecution } from './tools'
-import { materializeTaskyonFunctionArguments } from './taskVariables'
+import {
+  MAX_REMOTE_FUNCTION_TIMEOUT_MS,
+  REMOTE_FUNCTION_TIMEOUT_MS,
+  RemoteFunctionCall,
+  RemoteFunctionCancel,
+  RemoteFunctionResponse,
+} from '../types/messages'
 
 export interface TyTaskStreamData {
   info?: string
@@ -37,128 +36,91 @@ export interface TyTaskStreamData {
     | 'queued'
 }
 
-export async function generateSecretId(
-  taskId: string | undefined,
-  tool: { name: string; code?: unknown; function?: unknown },
-) {
-  return tool.name + ':' + (taskId ?? (await sha256UrlSafeHash(tool.code ?? tool.function)))
-}
+type FunctionRpcCallMessage = RemoteFunctionCall | RemoteFunctionCancel
+type FunctionRpcWorkerPort = RpcMessagePort<FunctionRpcCallMessage>
+export type TaskWorkerToolRpcPort = Port<RemoteFunctionResponse, FunctionRpcCallMessage>
 
-export const functionExecutorCreator = (
-  getToolDefinition: (
-    name: string,
-  ) => Promise<{ def?: TaskNodeType<'tooldefinition'> | undefined; tool?: InternalTool }>,
-  getTask: (taskId: string) => Promise<TaskNode | null>,
-  secretStore: SecretStore,
-  duplexPort: RemoteFunctionPort,
-  toolchainConfig: Thunk<Record<string, FunctionArguments>>,
-) => {
-  const availableFunctionAbortControllers = new Set<AbortController>()
+let taskWorkerRpcRequestCounter = 0
 
-  return {
-    stop: () => {
-      console.log('stopping all available function executions...')
-      for (const ctrl of availableFunctionAbortControllers) {
-        ctrl.abort()
-      }
-    },
+const createTaskWorkerRpcRequestId = (task: TaskNode, func: FunctionCall) =>
+  `${func.name}-${task.id}-${Date.now()}-${taskWorkerRpcRequestCounter++}`
 
-    executor: async (
-      func: ReadonlyDeep<FunctionCall>,
-      taskChain: TaskNode[],
-      filteredStream: TaskMessageStream,
-    ) => {
-      const abctl = new AbortController()
-      availableFunctionAbortControllers.add(abctl)
-
-      try {
-        const { tool, def } = await getToolDefinition(func.name)
-        if (tool && !abctl.signal.aborted) {
-          const toolId = await generateSecretId(def?.id, tool)
-          const msgPortAdapter = createMessagePortAdapter(filteredStream)
-          const context: toolContext = {
-            taskChain,
-            createSubtasksResult,
-            getSecret: async (name, askNew, saveNew = true) => {
-              console.log('get secret name', name)
-              const secr = await secretStore.getSecret(toolId, name, askNew, saveNew)
-              return secr ?? null
-            },
-            setSecret: async (name, value) => {
-              console.log('set secret name', name)
-              await secretStore.setSecret(toolId, name, value)
-            },
-            stopSignal: abctl.signal,
-            // if w are dealing with a tool definition use that id. otherwise generate an id on the fly )
-            toolId,
-            messagePort: msgPortAdapter.port,
-          }
-
-          // mix in toolchain config into function arguments
-          const funcSettings = toolchainConfig()[func.name]
-          // resolve task variable arguments
-          const materializedArguments = await materializeTaskyonFunctionArguments(func.arguments, {
-            surface: 'execution',
-            getTaskById: getTask,
-          })
-          // also make sure we use the default parameters form json schema...
-          const toolDefaultParams = createWithDefaults(tool.parameters)
-          const preparedFunc = {
-            name: func.name,
-            arguments: {
-              ...toolDefaultParams,
-              ...(funcSettings || {}),
-              ...func.arguments,
-              ...materializedArguments,
-            },
-          }
-          console.log('execute function with context', { preparedFunc })
-
-          const funcR = await handleFunctionExecution(
-            preparedFunc,
-            tool,
-            abctl.signal,
-            context,
-            duplexPort,
-          )
-
-          return funcR
-        } else {
-          throw new Error(
-            !abctl.signal.aborted
-              ? `The function '${func.name}' is not available in tools. Please select a valid toolname. You can use
-          the toolSearcher to search for valid names.`
-              : `The function execution was cancelled by taskyon ${abctl.signal.reason}`,
-          )
-        }
-      } finally {
-        // O(1), no indexOf / splice
-        availableFunctionAbortControllers.delete(abctl)
-      }
-    },
+const resolveWorkerRpcTimeoutMs = (func: FunctionCall) => {
+  const timeoutMs = func.arguments.timeoutMs
+  if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs)) {
+    return MAX_REMOTE_FUNCTION_TIMEOUT_MS
   }
+  return Math.min(
+    Math.max(Math.trunc(timeoutMs), REMOTE_FUNCTION_TIMEOUT_MS),
+    MAX_REMOTE_FUNCTION_TIMEOUT_MS,
+  )
 }
 
-type FunctionExecutor = ReturnType<typeof functionExecutorCreator>['executor']
+const errorFromRemoteResponse = (name: string, requestId: string, error: unknown) =>
+  new Error(`Remote function ${name} failed for request ${requestId}: ${humanizeError(error)}`)
 
-// TODO: how about we put this here into its own tool as well!
-//       its totally possible now... Would probably make the code cleaner...
+async function requestFunctionTaskExecution(
+  task: TaskNode,
+  func: FunctionCall,
+  rpcPort: FunctionRpcWorkerPort,
+  stopSignal: AbortSignal,
+): Promise<unknown> {
+  const requestId = createTaskWorkerRpcRequestId(task, func)
+  const request = RemoteFunctionCall.parse({
+    type: 'functionCall',
+    functionName: func.name,
+    requestId,
+    taskId: task.id,
+    arguments: func.arguments,
+  })
+
+  return await createStreamRpcRequest<
+    FunctionRpcCallMessage,
+    RemoteFunctionResponse,
+    unknown,
+    never
+  >({
+    port: rpcPort,
+    request,
+    requestId,
+    timeoutMs: resolveWorkerRpcTimeoutMs(func),
+    signal: stopSignal,
+    createCancelRequest: (reason) =>
+      RemoteFunctionCancel.parse({
+        type: 'functionCancel',
+        functionName: func.name,
+        requestId,
+        reason,
+      }),
+    parseResponse: (value) => {
+      const response = RemoteFunctionResponse.safeParse(value)
+      if (response.success) return response.data
+      return undefined
+    },
+    isResponseForRequest: (response) => response.requestId === requestId,
+    readResponse: (response) => {
+      if (response.error !== undefined) {
+        return {
+          ok: false,
+          error: errorFromRemoteResponse(func.name, requestId, response.error),
+        }
+      }
+      return { ok: true, value: response.response }
+    },
+  })
+}
+
 async function safeExecuteTask(
   task: TaskNode,
-  taskMessageStream: TaskMessageStream,
-  taskChain: TaskNode[],
-  executor: FunctionExecutor,
+  rpcPort: FunctionRpcWorkerPort,
+  stopSignal: AbortSignal,
 ): Promise<unknown> {
   if (task.content.type === 'functioncall') {
     // calculate function result
     const func = task.content.data
     console.log(`Calling function ${func.name}`)
-    // only allow immediate prior or parent tasks to send messages for now...
-    const filteredStream = taskMessageStream.filter((msg) => {
-      return msg.id === task.parentID || msg.id === task.priorID
-    })
 
-    return await executor(func, taskChain, filteredStream)
+    return await requestFunctionTaskExecution(task, func, rpcPort, stopSignal)
   } else {
     throw new Error(
       `Task with id ${task.id} is not a functioncall task, but of type ${task.content.type}. This should not happen!`,
@@ -486,8 +448,7 @@ const createTaskProcessor = (
   currentTaskCtrl: AbortController,
   taskisInLoop: (taskId: string) => void,
   taskOutOfLoop: (taskId: string, toolName?: string) => void,
-  taskMessageStream: TaskMessageStream,
-  executor: FunctionExecutor,
+  rpcPort: FunctionRpcWorkerPort,
 ) => {
   // this is uses to track how long a list of tasks has been processing
   const handleError = createHandleError(taskManager, currentTaskCtrl, queueTask)
@@ -534,8 +495,7 @@ const createTaskProcessor = (
       let newTasks: TaskNode[][] = []
       try {
         // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
-        const taskChain = await taskManager.getTaskChain(task.id)
-        const funcR = await safeExecuteTask(task, taskMessageStream, taskChain, executor)
+        const funcR = await safeExecuteTask(task, rpcPort, currentTaskCtrl.signal)
 
         // We check the result of the task here to see whether it contains
         // a lists of tasks. If thats the case we return
@@ -661,8 +621,7 @@ const setupRun = (
   streamEmit: (value: TyTaskStreamData) => void,
   stopAllTasks: (message: string) => void,
   taskManager: TyTaskManager,
-  taskMessageStream: TaskMessageStream,
-  executor: FunctionExecutor,
+  rpcPort: FunctionRpcWorkerPort,
 ) => {
   console.log('setting up task worker run...')
   const currentTaskCtrl: AbortController = new AbortController()
@@ -684,8 +643,7 @@ const setupRun = (
     currentTaskCtrl,
     taskisInLoop,
     taskOutOfLoop,
-    taskMessageStream,
-    executor,
+    rpcPort,
   )
 
   const run = async (defaultTask: partialTaskDraft, errorTask: partialTaskDraft) => {
@@ -737,15 +695,17 @@ function createDebugInfoFromError(error: unknown) {
 
 export function runTaskWorker(
   taskManager: TyTaskManager,
-  taskMessageStream: TaskMessageStream,
   defaultTask: partialTaskDraft,
   errorTask: partialTaskDraft,
-  executor: FunctionExecutor,
 ) {
   console.log('starting task worker listener...')
 
   // create all variables that we want to access from outside
   const taskProcessingStream = createStream<TyTaskStreamData>()
+  const { x: workerRpcPort, y: toolRpcPort } = createDuplexChannel<
+    FunctionRpcCallMessage,
+    RemoteFunctionResponse
+  >()
   let currentTaskCtrl: AbortController | undefined = new AbortController()
   let queueTask: ((id: string) => void) | undefined = undefined
 
@@ -768,13 +728,7 @@ export function runTaskWorker(
         run,
         queueTask: newQueueTask,
         currentTaskCtrl: newTaskCtrl,
-      } = setupRun(
-        taskProcessingStream.emit,
-        stopAllTasks,
-        taskManager,
-        taskMessageStream,
-        executor,
-      )
+      } = setupRun(taskProcessingStream.emit, stopAllTasks, taskManager, workerRpcPort)
       currentTaskCtrl = newTaskCtrl
       queueTask = newQueueTask
       console.log('restarting task worker run...')
@@ -785,6 +739,7 @@ export function runTaskWorker(
   }
   return {
     workerStream: taskProcessingStream.stream,
+    toolRpcPort,
     stopAllTasks,
     queueTask: externalQueueTask,
   }
