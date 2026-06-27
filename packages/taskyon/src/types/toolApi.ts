@@ -41,7 +41,7 @@ const internalToolFunctionSchema = z.custom<
 })
 export type internalToolFunctionSchema = z.infer<typeof internalToolFunctionSchema>
 
-const InternalTool = ToolBase.extend({
+export const InternalTool = ToolBase.extend({
   // TODO: take away he "optional" from this type here...
   function: internalToolFunctionSchema.optional(),
 }).meta({

@@ -7,15 +7,9 @@ import {
   createDuplexChannel, // utis/frpbus
   MessageChannelBridge, // utils/frpbus
   type ClientTool,
-  createExternalToolContext,
-  registerToolRpcExecutor,
+  registerToolRpcTools,
 } from '@taskyon/taskyon/api'
-import type { ByType } from '../../taskyon/src/utils/tsHelpers'
-// TODO: move this into some other part as well..  maybe into "GUI" types or somthing like that?
-import type {
-  partialTyConfiguration,
-  TaskyonGuiMessage,
-} from '../../../src/modules/taskyon/apiTypes'
+import type { partialTyConfiguration, TaskyonGuiMessage } from '@taskyon/taskyon/api'
 import { sendFile } from '../../taskyon/src/types/apiTypes'
 export {
   createChatCompletionTask,
@@ -29,7 +23,7 @@ export {
 } from '@taskyon/taskyon/api'
 export type { ClientTool, TaskyonMessage, toolContext } from '@taskyon/taskyon/api'
 export type { partialTyConfiguration, TaskyonGuiMessage }
-export { REMOTE_FUNCTION_TIMEOUT_MS }
+export { REMOTE_FUNCTION_TIMEOUT_MS } from '@taskyon/taskyon/api'
 
 function safeClone<T>(data: T): T {
   try {
@@ -115,11 +109,6 @@ export async function initializeTaskyon(options: {
   const resolvedPersist = options.persist ?? true
   const resolvedMissingBindingKeyPolicy = options.missingBindingKeyPolicy ?? 'noBindingKey'
 
-  const toolMap = options.tools.reduce<Record<string, ClientTool>>((p, c) => {
-    p[c.name] = c
-    return p
-  }, {})
-
   const taskyon = document.getElementById(options.iframeId ?? 'taskyon') as HTMLIFrameElement
 
   const { x: clientSidePort, y: towardsIframe } = createDuplexChannel<
@@ -151,63 +140,10 @@ export async function initializeTaskyon(options: {
     peerId: resolvedName,
   })
 
-  const pendingToolAcks = new Set(options.tools.map((tool) => tool.name))
-  const toolAckTimeoutMs = 10_000
-  const toolAckPromise =
-    pendingToolAcks.size === 0
-      ? Promise.resolve()
-      : new Promise<void>((resolve, reject) => {
-          const statusStream = clientSidePort.receive.narrow(
-            (
-              msg: TaskyonGuiMessage,
-            ): msg is ByType<'status', TaskyonGuiMessage> & {
-              data: { type: 'newtool'; id: string }
-            } =>
-              msg.type === 'status' &&
-              msg.data.type === 'newtool' &&
-              typeof msg.data.id === 'string',
-          )
-
-          const timeout = setTimeout(() => {
-            unsub()
-            reject(
-              new Error(
-                `Timed out after ${toolAckTimeoutMs}ms waiting for tool registration: ${[
-                  ...pendingToolAcks,
-                ].join(', ')}`,
-              ),
-            )
-          }, toolAckTimeoutMs)
-
-          const unsub = statusStream((msg) => {
-            pendingToolAcks.delete(msg.data.id)
-            if (pendingToolAcks.size === 0) {
-              clearTimeout(timeout)
-              unsub()
-              resolve()
-            }
-          })
-        })
-
-  console.log('tyclient sending our functions!')
-  options.tools.forEach((t) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { function: _toolfunc, ...fdescr } = t
-    send({
-      type: 'functionDescription',
-      ...fdescr,
-    })
-  })
-
-  await toolAckPromise
-
-  console.log('tyclient set up function listener!')
-
   clientSidePort.receive((msg: TaskyonGuiMessage) => console.log('tyclient received message', msg))
-  const toolRpcExecutor = registerToolRpcExecutor({
+  const toolRpcExecutor = await registerToolRpcTools({
     port: clientSidePort,
-    getTool: (name) => toolMap[name],
-    createContext: (_call, stopSignal) => createExternalToolContext(stopSignal),
+    tools: options.tools,
   })
   void toolRpcExecutor
 

@@ -10,13 +10,19 @@ import { inspect } from 'node:util'
 import { createDuplexChannel, createUnavailableIframeMux } from '../../shared/modules/frpBus'
 import { createTaskNode } from '../../taskyon/src/core/createTasks'
 import { tyCore } from '../../taskyon/src/core/init'
-import { createExternalToolContext, registerToolRpcExecutor } from '../../taskyon/src/core/toolRpc'
+import { registerToolRpcTools } from '../../taskyon/src/core/toolRpc'
 import type { Taskyon } from '../../taskyon/src/core/init'
 import { createStandardEntryNodeTool } from '../../taskyon/src/tools/entryNode'
 import type { TaskyonMessage } from '../../taskyon/src/types/apiTypes'
 import type { llmSettings } from '../../taskyon/src/types/profiles'
 import type { partialTaskDraft, TaskNode } from '../../taskyon/src/types/taskNode'
-import { createTool, toolCall, type ClientTool } from '../../taskyon/src/types/toolApi'
+import {
+  createTool,
+  InternalTool as InternalToolSchema,
+  toolCall,
+  type ClientTool,
+  type InternalTool,
+} from '../../taskyon/src/types/toolApi'
 import {
   getProviderOauthConfig,
   getProviderOauthCredentialsSecretName,
@@ -1794,7 +1800,6 @@ async function main() {
         prompt_templates: DEFAULT_PROMPT_TEMPLATES,
       },
     }),
-    [cliEntryNodeTool, explorationTool, updateFilesTool, downloadFileTool] as unknown as [],
     cryptoSession,
     {
       createIframeMultiPlexer: () =>
@@ -1856,13 +1861,17 @@ async function main() {
   const unsubscribeBridgeToTaskyon = bridgePort.receive((msg) => taskyon.port.send(msg))
   const unsubscribeTaskyonToBridge = taskyon.port.receive((msg) => bridgePort.send(msg))
 
-  const cliToolRpcExecutor = registerToolRpcExecutor({
+  const cliTools: InternalTool[] = [
+    cliEntryNodeTool,
+    explorationTool,
+    updateFilesTool,
+    downloadFileTool,
+    cliBashTool,
+  ].map((tool) => InternalToolSchema.parse(tool))
+  const cliToolRpcExecutor = await registerToolRpcTools({
     port: clientPort,
-    getTool: (name) => (name === cliBashTool.name ? cliBashTool : undefined),
-    createContext: (_call, stopSignal) => createExternalToolContext(stopSignal),
+    tools: cliTools,
   })
-
-  clientPort.send({ type: 'functionDescription', ...cliBashTool } as unknown as TaskyonMessage)
 
   const rl = createInterface({
     input: process.stdin,

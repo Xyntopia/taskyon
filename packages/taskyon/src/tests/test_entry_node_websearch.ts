@@ -9,6 +9,7 @@ import {
   resolveApiKey,
   resolveOnlineModel,
 } from './onlineProviderSupport'
+import { registerToolRpcTools } from '../core/toolRpc'
 import { toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
 
@@ -51,6 +52,8 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async () => {
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
+    defaultAllowedTools: [],
+    toolChooser: { enabled: true, useTools: true },
   })
 
   const ty = await tyCore(
@@ -70,10 +73,10 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async () => {
         providerToolCalling: true,
       },
     }),
-    [entryNodeTool],
     undefined,
     { nodePgLiteDataDir: dataDir },
   )
+  const toolRpcExecutor = await registerToolRpcTools({ port: ty.port, tools: [entryNodeTool] })
 
   await ty.setSecret('chatCompletionApiKeys', apiConfig.selectedApi, apiKey)
   await ty.updateChatCompletionApiKey(apiConfig.selectedApi, apiKey)
@@ -131,7 +134,9 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async () => {
   const chatCompletionTask = finish.tasks.find(
     (task) => task.content.type === 'functioncall' && task.content.data.name === 'chatCompletion',
   )
-  assert(chatCompletionTask, 'Expected entryNode to create a chatCompletion task')
+  if (!chatCompletionTask) {
+    throw new Error('Expected entryNode to create a chatCompletion task')
+  }
 
   const meta = await waitForTaskMeta(ty.getMeta, chatCompletionTask.id)
   const streamContent =
@@ -147,6 +152,8 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async () => {
     hasExecutedWebSearch(streamContent),
     'Expected hosted web search usage in the chatCompletion stream metadata',
   )
+
+  toolRpcExecutor.destroy()
 
   return {
     success: true,

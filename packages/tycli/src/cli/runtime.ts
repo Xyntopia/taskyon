@@ -5,7 +5,6 @@ import { tyCore } from '../../../taskyon/src/core/init'
 import type { Taskyon } from '../../../taskyon/src/core/init'
 import type { llmSettings } from '../../../taskyon/src/types/profiles'
 import { toolCall } from '../../../taskyon/src/types/toolApi'
-import type { InternalTool } from '../../../taskyon/src/types/toolApi'
 import {
   API_KEY_STORE_NAME,
   type CliApiConfig,
@@ -88,7 +87,6 @@ export async function bootstrapCliTaskyon(args?: {
   }
 
   const llmState = createCliLlmSettings(config)
-  const environmentTools: InternalTool[] = []
   const taskyon = await tyCore(
     () => llmState,
     () =>
@@ -97,7 +95,6 @@ export async function bootstrapCliTaskyon(args?: {
         arguments: {},
       }),
     () => ({}),
-    environmentTools,
     cryptoSession,
     {
       createIframeMultiPlexer: () =>

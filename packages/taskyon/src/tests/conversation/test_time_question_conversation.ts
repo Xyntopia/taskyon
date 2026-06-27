@@ -7,6 +7,7 @@ import {
   type Taskyon,
 } from '../..'
 import { freeKey as taskyonDevFreeKey } from '../../../../../src/assets/taskyon_free_key'
+import { registerToolRpcTools } from '../../core/toolRpc'
 import { createStandardEntryNodeTool } from '../../tools/entryNode'
 
 type TaskNodeWithParent = TaskNode & { parentID: string }
@@ -109,7 +110,7 @@ const getEntryNodeDraft = (entryNodeArgs?: Record<string, unknown>) =>
     },
   })
 
-const createConversationHarness = async (): Promise<{ ty: Taskyon }> => {
+const createConversationHarness = async (): Promise<{ ty: Taskyon; cleanup: () => void }> => {
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'taskyonFlow',
     renderOptions: { hideChat: true, hideLlm: true },
@@ -131,11 +132,11 @@ const createConversationHarness = async (): Promise<{ ty: Taskyon }> => {
     () => taskyonFlowLlmSettings,
     () => getEntryNodeDraft(),
     () => taskyonFlowToolchainConfig,
-    [entryNodeTool],
   )
   const ty = await tyPromise
+  const toolRpcExecutor = await registerToolRpcTools({ port: ty.port, tools: [entryNodeTool] })
 
-  return { ty }
+  return { ty, cleanup: () => toolRpcExecutor.destroy() }
 }
 
 const getSimpleMessageTask = (text: string) => ({
@@ -587,10 +588,14 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
 runTimeQuestionConversationUsesClockToolScenario.helper = true
 
 export const testTimeQuestionConversationUsesClockTool = async (opts?: { tyauth?: string }) => {
-  const { ty } = await createConversationHarness()
-  const taskyonApiKey = resolveStandaloneTaskyonApiKey(opts?.tyauth)
-  await initializeStandaloneTaskyonProviderKey(ty, taskyonApiKey)
-  return await runTimeQuestionConversationUsesClockToolScenario(ty)
+  const { ty, cleanup } = await createConversationHarness()
+  try {
+    const taskyonApiKey = resolveStandaloneTaskyonApiKey(opts?.tyauth)
+    await initializeStandaloneTaskyonProviderKey(ty, taskyonApiKey)
+    return await runTimeQuestionConversationUsesClockToolScenario(ty)
+  } finally {
+    cleanup()
+  }
 }
 testTimeQuestionConversationUsesClockTool.description =
   'Runs the exact UI-style initial Taskyon chain for a time question with the entry-node tool chooser forced on, then verifies shortlist, ChooseTool, clock execution, and final assistant response without intermediate error returns.'

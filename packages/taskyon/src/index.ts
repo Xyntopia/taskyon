@@ -1,5 +1,10 @@
 // types exports
 export { BaseMessage, TaskyonMessage, TyP2P } from './types/apiTypes'
+export {
+  TaskyonGuiMessage,
+  type guiMessageTypes,
+  type partialTyConfiguration,
+} from './types/guiApiTypes'
 export { llmSettings, TyToolchainConfig } from './types/profiles'
 export {
   observeSubTaskStream,
@@ -43,7 +48,7 @@ export type {
   internalToolFunctionSchema,
   toolContext,
 } from './types/toolApi'
-export { taskResult } from './types/toolApi'
+export { createTool, taskResult, toolCall } from './types/toolApi'
 export * from './types/tools'
 export * from './types/tyKey'
 export * from './utils/asyncUtils'

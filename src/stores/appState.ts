@@ -21,7 +21,6 @@ import type { KeyString, Thunk, tyPublicKeyDraft } from '@taskyon/taskyon'
 import {
   base64ToPublixX25519,
   cryptoKeyToBase64,
-  deepMerge,
   generateAssymetricKeyDeriver,
   sleep,
   type FunctionCall,

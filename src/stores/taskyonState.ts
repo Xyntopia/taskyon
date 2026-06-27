@@ -1,13 +1,14 @@
 import type {
   Asyncify,
+  ClientTool,
   CryptoSession,
-  InternalTool,
   KeyString,
   ModelCard,
   partialTaskDraft,
   Port,
   TaskNodeMeta,
   Taskyon,
+  ToolBase,
   Thunk,
   tyPublicApiKeyObject,
   TyTaskStreamData,
@@ -29,7 +30,9 @@ import {
   fetchModelsForSelectedApi,
   OAUTH_PROVIDERS,
   randomString,
+  registerToolRpcTools,
   TaskNode,
+  TaskyonGuiMessage,
   TaskyonMessage,
   tyCore,
 } from '@taskyon/taskyon'
@@ -53,7 +56,6 @@ import { freeKey } from 'src/assets/taskyon_free_key'
 import { setColors } from 'src/boot/brand-colors'
 import { useGdrive } from 'src/modules/gdrive'
 import { setPrismTheme } from '@taskyon/shared/modules/markdownUtils '
-import { TaskyonGuiMessage } from 'src/modules/taskyon/apiTypes'
 import {
   initCryptoSessionFromBrowser,
   persistSession,
@@ -359,7 +361,7 @@ function connectGdriveSync(
 function defineTyGuiTools(
   stateRefs: ReturnType<typeof useAppStateStore>,
   ty: Taskyon,
-): InternalTool[] {
+): ClientTool[] {
   return [
     ...guiTools,
     createOAuthTool(ty.setSecret),
@@ -890,7 +892,7 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
 }
 
 function reactiveTools(taskyon: Promise<Taskyon>) {
-  const allTools = ref<Record<string, InternalTool>>({})
+  const allTools = ref<Record<string, ToolBase>>({})
 
   void taskyon.then((ty) => {
     const updateTools = async () => {
@@ -1016,6 +1018,35 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     }
     return data.name
   }
+  const buildEntryNodeDraft = () =>
+    ({
+      role: 'system',
+      content: {
+        type: 'functioncall',
+        data: {
+          name: stateRefs.llmSettings.entryFunction,
+          arguments: {},
+        },
+      },
+    }) as partialTaskDraft
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: getEntryNodeToolName(buildEntryNodeDraft()),
+    renderOptions: { hideChat: true, hideLlm: true },
+    toolChooser: { enabled: true, useTools: true },
+    defaultAllowedTools: [],
+    getToolCatalog: async () => {
+      const cachedTools =
+        Object.keys(allTools.value).length > 0
+          ? allTools.value
+          : await (await taskyon).updateToolDefinitions(true)
+      return Object.values(cachedTools)
+        .filter((tool) => !['chatCompletion', 'entryNode', 'taskyonFlow'].includes(tool.name))
+        .map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+        }))
+    },
+  })
   // this means previously, we have loaded a session with a binding key.
   // so we would like to wait a little bit, if we will get that same binding key...
   const taskyon = (async () => {
@@ -1036,49 +1067,23 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       return initCs
     }
   })().then(async (cs) => {
-    const entryNode = () =>
-      ({
-        role: 'system',
-        content: {
-          type: 'functioncall',
-          data: {
-            name: stateRefs.llmSettings.entryFunction,
-            arguments: {},
-          },
-        },
-      }) as partialTaskDraft
-    const entryNodeTool = createStandardEntryNodeTool({
-      name: getEntryNodeToolName(entryNode()),
-      renderOptions: { hideChat: true, hideLlm: true },
-      toolChooser: { enabled: true, useTools: true },
-      defaultAllowedTools: [],
-      getToolCatalog: async () => {
-        const cachedTools =
-          Object.keys(allTools.value).length > 0
-            ? allTools.value
-            : await (await taskyon).updateToolDefinitions(true)
-        return Object.values(cachedTools)
-          .filter((tool) => !['chatCompletion', 'entryNode', 'taskyonFlow'].includes(tool.name))
-          .map((tool) => ({
-            name: tool.name,
-            description: tool.description,
-          }))
-      },
-    })
     return await tyCore(
       () => ({
         ...stateRefs.llmSettings,
-        entryNode: entryNode(),
+        entryNode: buildEntryNodeDraft(),
       }),
-      entryNode,
+      buildEntryNodeDraft,
       () => stateRefs.toolchainConfig,
-      [entryNodeTool],
       cs,
     )
   })
 
   void taskyon.then(async (ty) => {
-    ty.addDefaultTools(defineTyGuiTools(stateRefs, ty))
+    const uiToolRpcExecutor = await registerToolRpcTools({
+      port: ty.port,
+      tools: [entryNodeTool, ...defineTyGuiTools(stateRefs, ty)],
+    })
+    onScopeDispose(() => uiToolRpcExecutor.destroy())
     await ty.updateToolDefinitions(false)
   })
 

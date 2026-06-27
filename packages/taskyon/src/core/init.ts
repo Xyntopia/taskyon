@@ -408,13 +408,6 @@ export async function tyCore(
   llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
   entryNode: Thunk<ReadonlyDeep<partialTaskDraft>>,
   toolchainConfig: Thunk<Record<string, FunctionArguments>>,
-  // with the Environment Tools we can provide a list of tools as closures which have access
-  // to the environment in which taskyon is running (through closure variables
-  // of this environment inside the tool).
-  // E.g. the taskyon GUI and its state.
-  // this way we can give taskyon access and the ability to read & change the environment
-  // it is running in.
-  EnvironmentTools: InternalTool[],
   initialCryptoSession?: CryptoSession,
   options?: {
     createIframeMultiPlexer?: CreateIframeMultiPlexer
@@ -442,7 +435,7 @@ export async function tyCore(
   const ctxCreator = dynamicContext(
     llmSettings,
     entryNode,
-    [...EnvironmentTools, ...ToolList],
+    [...ToolList],
     outsidePort,
     insidePort,
     iframeMultiPlexer,

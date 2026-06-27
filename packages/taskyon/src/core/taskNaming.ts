@@ -74,12 +74,12 @@ export function textRankTaskName(
   return name ?? firstWordsTaskName(cleanedText, { maxWords, maxChars })
 }
 
-export async function generateTaskName(input: {
+export function generateTaskName(input: {
   text: string
   options: TaskNameOptions
 }): Promise<string | null> {
   if (input.options.mode === 'textrank') {
-    return textRankTaskName(input.text, input.options)
+    return Promise.resolve(textRankTaskName(input.text, input.options))
   }
-  return firstWordsTaskName(input.text, input.options)
+  return Promise.resolve(firstWordsTaskName(input.text, input.options))
 }

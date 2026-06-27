@@ -15,6 +15,7 @@ import {
 } from '../tools/webResearchTool'
 import type { TaskNode } from '../types/taskNode'
 import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
+import { registerToolRpcTools } from '../core/toolRpc'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -411,7 +412,10 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
         arguments: {},
       }),
     () => ({}),
-    [
+  )
+  const toolRpcExecutor = await registerToolRpcTools({
+    port: ty.port,
+    tools: [
       webResearchPlanner,
       updateFilesStub,
       opfsStorageStub,
@@ -419,7 +423,7 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
       bashStub,
       jinaMarkdownReaderStub,
     ],
-  )
+  })
 
   const result = await processTasksDetailed(ty.port)(
     [
@@ -453,7 +457,9 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
     },
   )
 
-  assert(result.status === 'matched', `Expected delegated entryNode task, got ${result.status}`)
+  if (result.status !== 'matched') {
+    throw new Error(`Expected delegated entryNode task, got ${result.status}`)
+  }
   const args =
     result.result.content.type === 'functioncall' ? result.result.content.data.arguments : undefined
   assert(
@@ -481,16 +487,23 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
       args.websearch.enabled === true,
     'Expected processTasks-generated research branch to keep web search enabled',
   )
+  const delegatedBootstrapTask = result.observedTasks.find(
+    (task) =>
+      task.content.type === 'message' &&
+      typeof task.content.data === 'string' &&
+      task.content.data.includes('Subtask objective: Research objective:'),
+  )
   const delegatedBootstrap =
-    result.observedTasks.find(
-      (task) =>
-        task.content.type === 'message' &&
-        task.content.data.includes('Subtask objective: Research objective:'),
-    )?.content.data ?? ''
+    delegatedBootstrapTask?.content.type === 'message' &&
+    typeof delegatedBootstrapTask.content.data === 'string'
+      ? delegatedBootstrapTask.content.data
+      : ''
   assert(
     delegatedBootstrap.includes('research/find-5-solar-cell-spec-sheets-and-save-them-here/'),
     'Expected processTasks-generated research branch to include one deterministic artifact root',
   )
+
+  toolRpcExecutor.destroy()
 
   return { success: true }
 }

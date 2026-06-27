@@ -2,6 +2,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { mkdir } from 'node:fs/promises'
 import { tyCore } from '../core/init'
+import { registerToolRpcTools } from '../core/toolRpc'
 import { toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
 import { createStandardEntryNodeTool } from '../tools/entryNode'
@@ -54,10 +55,10 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async () => {
         providerToolCalling: true,
       },
     }),
-    [entryNodeTool],
     undefined,
     { nodePgLiteDataDir: dataDir },
   )
+  const toolRpcExecutor = await registerToolRpcTools({ port: ty.port, tools: [entryNodeTool] })
 
   await ty.setSecret('chatCompletionApiKeys', apiConfig.selectedApi, apiKey)
   await ty.updateChatCompletionApiKey(apiConfig.selectedApi, apiKey)
@@ -160,6 +161,8 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async () => {
     Boolean(successfulPythonResult),
     'Expected successful executePythonScript toolresult with "recovered-ok"',
   )
+
+  toolRpcExecutor.destroy()
 
   return {
     success: true,

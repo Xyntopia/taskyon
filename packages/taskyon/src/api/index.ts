@@ -9,6 +9,11 @@ import { createTool, toolCall } from '../types/toolApi'
 import { createStream, type Port } from '@taskyon/shared/modules/frpBus'
 
 export { BaseMessage, TaskyonMessage, TyP2P } from '../types/apiTypes'
+export {
+  TaskyonGuiMessage,
+  type guiMessageTypes,
+  type partialTyConfiguration,
+} from '../types/guiApiTypes'
 export { REMOTE_FUNCTION_TIMEOUT_MS } from '../types/messages'
 export { llmSettings, TyToolchainConfig } from '../types/profiles'
 export type { ClientTool, toolContext } from '../types/toolApi'
@@ -26,9 +31,15 @@ export type { Port }
 export {
   callToolOverRpc,
   createExternalToolContext,
+  createToolRpcFunctionDescriptionMessage,
   registerToolRpcExecutor,
+  registerToolRpcTools,
 } from '../core/toolRpc'
-export type { ToolRpcCallerPort, ToolRpcResponderPort } from '../core/toolRpc'
+export type {
+  ToolRpcCallerPort,
+  ToolRpcFunctionDescriptionMessage,
+  ToolRpcResponderPort,
+} from '../core/toolRpc'
 export * from '../mcp/mcpProtocolBridge'
 export * from '../mcp/taskyonToMcpBridge'
 export * from '../mcp/types'

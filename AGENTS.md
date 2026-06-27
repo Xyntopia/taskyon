@@ -19,6 +19,13 @@
 - When adding a test, make sure it is part of the diagnostics suite. Prefer locations already discovered by `packages/taskyon-headless` (for example `packages/taskyon/src/tests/test*.ts`) or wire the new test into the appropriate diagnostics runner.
 - Prefer explicit event/function flow over Vue watchers. Watchers are hard to trace and should be used only when reacting to external reactive state is genuinely the simplest boundary; do not use a watcher to bounce one source of truth into another.
 
+## Critical evaluation
+
+- Be more critical of user requests than feels comfortable. Do not treat the requested implementation shape as correct just because the user suggested it.
+- Before adding a helper, abstraction, schema, wrapper, or new file, actively look for the existing upstream boundary that should own the behavior. Prefer extending that boundary over creating a parallel path.
+- If the user suggests something that duplicates existing logic, weakens a source-of-truth boundary, or adds coordination state, push back clearly and propose the smaller/root-cause alternative.
+- Ask whether a change is really needed when the codebase already has an idiomatic mechanism. Agreement is not useful unless the request survives that check.
+
 ## TypeScript readability
 
 - Optimize TypeScript for local readability first, then reuse. Strong types are

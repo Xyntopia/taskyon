@@ -8,7 +8,13 @@ import {
   RemoteFunctionCancel,
   RemoteFunctionResponse,
 } from '../types/messages'
-import { createSubtasksResult, type InternalTool, type toolContext } from '../types/toolApi'
+import { TaskyonMessage, type TaskyonMessage as TaskyonMessageType } from '../types/apiTypes'
+import {
+  createSubtasksResult,
+  InternalTool as InternalToolSchema,
+  type InternalTool,
+  type toolContext,
+} from '../types/toolApi'
 import type { FunctionArguments, FunctionCall } from '../types/tools'
 import { executeToolInWorkerSandbox } from '../utils/executeToolInWorkerSandbox'
 import { humanizeError, serializeError } from '../utils/error'
@@ -17,6 +23,17 @@ import { bigIntToString } from '../utils/objHelpers'
 export type ToolRpcCallMessage = RemoteFunctionCall | RemoteFunctionCancel
 export type ToolRpcCallerPort = RpcMessagePort<ToolRpcCallMessage>
 export type ToolRpcResponderPort = RpcMessagePort<RemoteFunctionResponse>
+export type ToolRpcFunctionDescriptionMessage = Extract<
+  TaskyonMessageType,
+  { type: 'functionDescription' }
+>
+type ToolRpcNewToolStatusMessage = Extract<TaskyonMessageType, { type: 'status' }>
+type ToolRpcRegistrationPort = {
+  send: (message: RemoteFunctionResponse | ToolRpcFunctionDescriptionMessage) => void
+  receive: ToolRpcResponderPort['receive'] & {
+    wait: (opts: { timeoutMs?: number; signal?: AbortSignal }) => Promise<unknown>
+  }
+}
 
 let remoteFunctionRequestCounter = 0
 
@@ -194,6 +211,66 @@ export function createExternalToolContext(stopSignal: AbortSignal): toolContext 
     stopSignal,
     toolId: 'N/A',
   }
+}
+
+export const createToolRpcFunctionDescriptionMessage = (
+  tool: InternalTool,
+): ToolRpcFunctionDescriptionMessage => ({
+  type: 'functionDescription',
+  name: tool.name,
+  description: tool.description,
+  ...(tool.longDescription ? { longDescription: tool.longDescription } : {}),
+  ...(tool.renderOptions ? { renderOptions: tool.renderOptions } : {}),
+  parameters: tool.parameters,
+  ...(tool.code ? { code: tool.code } : {}),
+})
+
+const isNewToolStatusFor = (
+  message: unknown,
+  toolName: string,
+): message is ToolRpcNewToolStatusMessage => {
+  const parsed = TaskyonMessage.safeParse(message)
+  return (
+    parsed.success &&
+    parsed.data.type === 'status' &&
+    parsed.data.data.type === 'newtool' &&
+    parsed.data.data.id === toolName
+  )
+}
+
+const waitForToolRegistration = async (
+  port: ToolRpcRegistrationPort,
+  toolName: string,
+  timeoutMs: number,
+): Promise<ToolRpcNewToolStatusMessage> => {
+  while (true) {
+    const message = await port.receive.wait({ timeoutMs })
+    if (isNewToolStatusFor(message, toolName)) return message
+  }
+}
+
+export async function registerToolRpcTools(options: {
+  port: ToolRpcRegistrationPort
+  tools: unknown[]
+  timeoutMs?: number
+  createContext?: Parameters<typeof registerToolRpcExecutor>[0]['createContext']
+}) {
+  const tools = options.tools.map((tool) => InternalToolSchema.parse(tool))
+  const timeoutMs = options.timeoutMs ?? REMOTE_FUNCTION_TIMEOUT_MS
+  await Promise.all(
+    tools.map(async (tool) => {
+      const registration = waitForToolRegistration(options.port, tool.name, timeoutMs)
+      options.port.send(createToolRpcFunctionDescriptionMessage(tool))
+      await registration
+    }),
+  )
+  const toolMap = new Map(tools.map((tool) => [tool.name, tool]))
+  return registerToolRpcExecutor({
+    port: options.port,
+    getTool: (name) => toolMap.get(name),
+    createContext:
+      options.createContext ?? ((_call, stopSignal) => createExternalToolContext(stopSignal)),
+  })
 }
 
 export function registerToolRpcExecutor(options: {
