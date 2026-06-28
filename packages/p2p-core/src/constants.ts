@@ -3,7 +3,6 @@ export const CHAT_FILE_TOPIC = 'universal-connectivity-file'
 export const PUBSUB_PEER_DISCOVERY = 'universal-connectivity-browser-peer-discovery'
 export const SUBNETWORK_PEER_DISCOVERY_EVENT = 'taskyon:subnetwork-discovery'
 export const FILE_EXCHANGE_PROTOCOL = '/universal-connectivity-file/1'
-export const DIRECT_MESSAGE_PROTOCOL = '/universal-connectivity/dm/1.0.0'
 export const TOPIC_ROUTER_PROTOCOL = '/taskyon/topic-router/1.0.0'
 
 export const CIRCUIT_RELAY_CODE = 290

@@ -1,8 +1,18 @@
-import { multiaddr, streamToDuplex, type BrowserPubsubMessage, type PeerId } from '@taskyon/p2p-core'
+import {
+  multiaddr,
+  streamToDuplex,
+  type BrowserPubsubMessage,
+  type PeerId,
+} from '@taskyon/p2p-core'
 import * as lp from 'it-length-prefixed'
 import map from 'it-map'
 import { pipe } from 'it-pipe'
-import { CHAT_FILE_TOPIC, CHAT_TOPIC, FILE_EXCHANGE_PROTOCOL, PUBSUB_PEER_DISCOVERY } from './constants'
+import {
+  CHAT_FILE_TOPIC,
+  CHAT_TOPIC,
+  FILE_EXCHANGE_PROTOCOL,
+  PUBSUB_PEER_DISCOVERY,
+} from './constants'
 import type { libP2pNode } from './libp2p'
 import { log, startLibp2p } from './libp2p'
 import { getAddresses, getPeerDetails, getPeerTypes } from './p2putils'
@@ -42,10 +52,6 @@ export interface ChatFile {
   id: string
   body: Uint8Array
   sender: string
-}
-
-export interface DirectMessages {
-  [peerId: string]: ChatMessage[]
 }
 
 type p2pOptions = { chatTopic: string }
@@ -96,15 +102,21 @@ export const createNode = () => {
 
     n.addEventListener('connection:open', onConnection)
     n.addEventListener('connection:close', onConnection)
-    n.addEventListener('self:peer:update', ({ detail: { peer } }: { detail: { peer: { id: { toString: () => string } } } }) => {
-      activityStream.emit({ type: 'log', message: `peer updated: ${peer.id.toString()}` })
-      updateInfo({ peerTypes: getPeerTypes(n), nodePeerDetails: getPeerDetails(n) })
-    })
-    n.addEventListener('peer:discovery', (event: { detail: { id: { toString: () => string } } }) => {
-      const peer = event.detail
-      activityStream.emit({ type: 'log', message: `discovered peer: ${peer.id.toString()}` })
-      updateInfo({ peerCount: n.getConnections().length, peerTypes: getPeerTypes(n) })
-    })
+    n.addEventListener(
+      'self:peer:update',
+      ({ detail: { peer } }: { detail: { peer: { id: { toString: () => string } } } }) => {
+        activityStream.emit({ type: 'log', message: `peer updated: ${peer.id.toString()}` })
+        updateInfo({ peerTypes: getPeerTypes(n), nodePeerDetails: getPeerDetails(n) })
+      },
+    )
+    n.addEventListener(
+      'peer:discovery',
+      (event: { detail: { id: { toString: () => string } } }) => {
+        const peer = event.detail
+        activityStream.emit({ type: 'log', message: `discovered peer: ${peer.id.toString()}` })
+        updateInfo({ peerCount: n.getConnections().length, peerTypes: getPeerTypes(n) })
+      },
+    )
     n.services.pubsub.addEventListener('subscription-change', onSubscriptionChange)
 
     /*useEffect(() => {
@@ -184,9 +196,9 @@ export const createNode = () => {
           return
         }
         const normalizedTarget = maddr.toString()
-        const alreadyConnected = p2p.getConnections().some((conn) =>
-          conn.remoteAddr.toString().startsWith(normalizedTarget),
-        )
+        const alreadyConnected = p2p
+          .getConnections()
+          .some((conn) => conn.remoteAddr.toString().startsWith(normalizedTarget))
         if (alreadyConnected) {
           activityStream.emit({
             type: 'log',
@@ -262,7 +274,11 @@ const useUniversalChat = (libp2p: libP2pNode, chatTopic: string) => {
     }
   }
 
-  const chatMessageCB = (evt: CustomEvent<BrowserPubsubMessage>, topic: string, data: Uint8Array) => {
+  const chatMessageCB = (
+    evt: CustomEvent<BrowserPubsubMessage>,
+    topic: string,
+    data: Uint8Array,
+  ) => {
     const msg = new TextDecoder().decode(data)
     log(`chat message received: ${topic}: ${msg}`)
 

@@ -8,7 +8,6 @@ import {
   setBrowserLibp2pLogNamespaces,
   startBrowserLibp2p,
 } from '@taskyon/p2p-core/browser'
-import { directMessage } from './direct-message'
 
 export {
   connectToMultiaddr,
@@ -20,11 +19,7 @@ export {
 }
 
 export async function startLibp2p(): Promise<BrowserLibp2pNode> {
-  return await startBrowserLibp2p({
-    additionalServices: {
-      directMessage: directMessage(),
-    },
-  })
+  return await startBrowserLibp2p()
 }
 
 export type libP2pNode = BrowserLibp2pNode
