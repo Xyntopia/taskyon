@@ -1,7 +1,7 @@
 import type { QDialogInputPrompt, QDialogOptions, QDialogSelectionPrompt } from 'quasar'
 import { Dialog } from 'quasar'
 import type { JSONSchema7 } from 'json-schema'
-import { createTool } from '@taskyon/tyclient'
+import { createClientTool } from '@taskyon/tyclient'
 import { tauriLocalTools } from './TauriLocalTools'
 
 export const simpleDialogSchema = {
@@ -91,7 +91,7 @@ type DialogResult = { action: 'ok'; data: unknown } | { action: 'cancel' } | { a
 /* ------------------------------------------------------------------ *
  * 3.  Taskyon tool wrapper
  * ------------------------------------------------------------------ */
-export const quasarDialogTool = createTool({
+export const quasarDialogTool = createClientTool({
   name: 'userdialog',
   description: 'Display a Dialog to collect user input/confirmation.',
   longDescription: 'Builds alert, confirm, prompt or option dialogs and returns { action, data }.',

@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createTool, toolCall } from '../types/toolApi'
+import { createClientTool, toolCall } from '../types/toolApi'
 import { authenticateWithPopup } from '../utils/oauthUi'
 
 declare global {
@@ -58,7 +58,7 @@ function withAbort<T>(signal: AbortSignal, p: Promise<T>) {
 export const createOAuthTool = (
   setSecret: (id: string | number, secretName: string, secretData: string) => Promise<void>,
 ) => {
-  return createTool({
+  return createClientTool({
     name: 'ensureOauthLogin',
     description: `Ensure, that we have an oauth token for the calling tool.`,
     longDescription: `Checks if we have an OAuth token available for specified service. Otherwise

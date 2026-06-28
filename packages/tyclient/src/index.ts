@@ -6,6 +6,7 @@ import {
   FunctionArguments as FunctionArgumentsSchema,
   callToolOverRpc,
   processTasks,
+  sendFile,
   sendTasks,
 } from '@taskyon/taskyon/api'
 import {
@@ -19,10 +20,11 @@ import type {
   FunctionArguments,
   partialTyConfiguration,
   TaskyonGuiMessage,
+  ToolRpcCreateContext,
 } from '@taskyon/taskyon/api'
-import { sendFile } from '../../taskyon/src/types/apiTypes'
 export {
   createChatCompletionTask,
+  createClientTool,
   createTool, // toolApi
   observeSubTaskStream,
   processTasks,
@@ -31,7 +33,13 @@ export {
   toolCall, // toolApi
   type partialTaskDraft,
 } from '@taskyon/taskyon/api'
-export type { ClientTool, TaskyonMessage, toolContext } from '@taskyon/taskyon/api'
+export type {
+  ClientTool,
+  ClientToolContext,
+  TaskyonMessage,
+  ToolRpcCreateContext,
+  toolContext,
+} from '@taskyon/taskyon/api'
 export type { FunctionArguments, partialTyConfiguration, TaskyonGuiMessage }
 export { REMOTE_FUNCTION_TIMEOUT_MS } from '@taskyon/taskyon/api'
 
@@ -164,6 +172,7 @@ export async function initializeTaskyon(options: {
   profileName?: string
   missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
   iframeId?: string
+  createToolContext?: ToolRpcCreateContext
 }): Promise<TyClient> {
   console.log('initialize taskyon tyclient...')
   const resolvedName = options.name ?? 'taskyon'
@@ -206,6 +215,7 @@ export async function initializeTaskyon(options: {
   const toolRpcExecutor = await registerToolRpcTools({
     port: clientSidePort,
     tools: options.tools,
+    ...(options.createToolContext ? { createContext: options.createToolContext } : {}),
   })
   void toolRpcExecutor
 

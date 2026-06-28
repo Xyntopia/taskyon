@@ -5,10 +5,10 @@ import type { chatCompletionParams } from '../tools/chatCompletionTool'
 import type { TaskyonMessage } from '../types/apiTypes'
 import type { TaskContentType, TaskNode } from '../types/taskNode'
 import { partialTaskDraft } from '../types/taskNode'
-import { createTool, toolCall } from '../types/toolApi'
+import { createClientTool, createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 import { createStream, type Port } from '@taskyon/shared/modules/frpBus'
 
-export { BaseMessage, TaskyonMessage, TyP2P } from '../types/apiTypes'
+export { BaseMessage, sendFile, TaskyonMessage, TyP2P } from '../types/apiTypes'
 export {
   TaskyonGuiMessage,
   type guiMessageTypes,
@@ -16,7 +16,7 @@ export {
 } from '../types/guiApiTypes'
 export { REMOTE_FUNCTION_TIMEOUT_MS } from '../types/messages'
 export { llmSettings, TyToolchainConfig } from '../types/profiles'
-export type { ClientTool, toolContext } from '../types/toolApi'
+export type { ClientTool, ClientToolContext, toolContext } from '../types/toolApi'
 export { FunctionArguments } from '../types/tools'
 export type { FunctionCall } from '../types/tools'
 export {
@@ -27,7 +27,7 @@ export {
 } from '@taskyon/shared/modules/frpBus'
 export type { RpcMessagePort, RpcResponseResult } from '@taskyon/shared/modules/frpBus'
 
-export { createTool, partialTaskDraft, toolCall }
+export { createClientTool, createSubtasksResult, createTool, partialTaskDraft, toolCall }
 export type { Port }
 export {
   callToolOverRpc,
@@ -37,6 +37,7 @@ export {
   registerToolRpcTools,
 } from '../core/toolRpc'
 export type {
+  ToolRpcCreateContext,
   ToolRpcCallerPort,
   ToolRpcFunctionDescriptionMessage,
   ToolRpcResponderPort,

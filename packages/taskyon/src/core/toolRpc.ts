@@ -23,6 +23,7 @@ import { bigIntToString } from '../utils/objHelpers'
 export type ToolRpcCallMessage = RemoteFunctionCall | RemoteFunctionCancel
 export type ToolRpcCallerPort = RpcMessagePort<ToolRpcCallMessage>
 export type ToolRpcResponderPort = RpcMessagePort<RemoteFunctionResponse>
+export type ToolRpcCreateContext = Parameters<typeof registerToolRpcExecutor>[0]['createContext']
 export type ToolRpcFunctionDescriptionMessage = Extract<
   TaskyonMessageType,
   { type: 'functionDescription' }
@@ -195,19 +196,17 @@ async function executeToolDefinition(
 }
 
 export function createExternalToolContext(stopSignal: AbortSignal): toolContext {
+  const unavailableSecretAccess = () => {
+    throw new Error('Secret access is not implemented for external tool clients yet.')
+  }
+
   return {
     getExecutionTaskChain: () => {
       throw new Error('getExecutionTaskChain is not implemented for external tool clients yet.')
     },
     createSubtasksResult,
-    getSecret: (name) => {
-      console.log('external tool get secret name', name)
-      return Promise.resolve('N/A')
-    },
-    setSecret: (name) => {
-      console.log('external tool set secret name', name)
-      return Promise.resolve()
-    },
+    getSecret: unavailableSecretAccess,
+    setSecret: unavailableSecretAccess,
     stopSignal,
     toolId: 'N/A',
   }
@@ -249,13 +248,26 @@ const waitForToolRegistration = async (
   }
 }
 
+const parseExternalRpcTool = (tool: unknown): InternalTool => {
+  const parsed = InternalToolSchema.parse(tool)
+  if (!parsed.function && !parsed.code) {
+    throw new Error(`Remote tool "${parsed.name}" must define either function or code.`)
+  }
+  if (parsed.function && parsed.code) {
+    throw new Error(
+      `Remote tool "${parsed.name}" must not define both function and code. Use code for Taskyon-core sandbox execution or function for client-side execution.`,
+    )
+  }
+  return parsed
+}
+
 export async function registerToolRpcTools(options: {
   port: ToolRpcRegistrationPort
   tools: unknown[]
   timeoutMs?: number
-  createContext?: Parameters<typeof registerToolRpcExecutor>[0]['createContext']
+  createContext?: ToolRpcCreateContext
 }) {
-  const tools = options.tools.map((tool) => InternalToolSchema.parse(tool))
+  const tools = options.tools.map(parseExternalRpcTool)
   const timeoutMs = options.timeoutMs ?? REMOTE_FUNCTION_TIMEOUT_MS
   await Promise.all(
     tools.map(async (tool) => {
@@ -264,7 +276,7 @@ export async function registerToolRpcTools(options: {
       await registration
     }),
   )
-  const toolMap = new Map(tools.map((tool) => [tool.name, tool]))
+  const toolMap = new Map(tools.filter((tool) => tool.function).map((tool) => [tool.name, tool]))
   return registerToolRpcExecutor({
     port: options.port,
     getTool: (name) => toolMap.get(name),

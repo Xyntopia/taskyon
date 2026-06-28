@@ -40,12 +40,19 @@ export type * from './types/taskNode'
 export { partialTaskDraft, TaskContent, TaskNode } from './types/taskNode'
 export * from './utils/oauth'
 export type {
+  ClientToolContext,
   ClientTool,
   InternalTool,
   internalToolFunctionSchema,
   toolContext,
 } from './types/toolApi'
-export { createTool, taskResult, toolCall } from './types/toolApi'
+export {
+  createClientTool,
+  createSubtasksResult,
+  createTool,
+  taskResult,
+  toolCall,
+} from './types/toolApi'
 export * from './types/tools'
 export * from './types/tyKey'
 export * from './utils/asyncUtils'

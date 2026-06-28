@@ -8,6 +8,7 @@ import type {
   Port,
   TaskNodeMeta,
   Taskyon,
+  ToolRpcCreateContext,
   ToolBase,
   Thunk,
   tyPublicApiKeyObject,
@@ -16,6 +17,8 @@ import type {
 import {
   base64ToPublixX25519,
   createDuplexChannel,
+  createClientTool,
+  createSubtasksResult,
   createPortApi,
   createStream,
   createTypeFilteredPort,
@@ -46,6 +49,7 @@ import type { chunkStreamType } from '@taskyon/taskyon/tools/chatCompletionTool'
 import {
   createStandardEntryNodeTool,
   EntryNodeSettingsSchema,
+  type EntryNodeArgs,
 } from '@taskyon/taskyon/tools/entryNode'
 import { until } from '@vueuse/core'
 import { default as Ajv } from 'ajv'
@@ -365,8 +369,12 @@ function defineTyGuiTools(
   return [
     ...guiTools,
     createOAuthTool(ty.setSecret),
-    {
-      function: ({ newPrompts }) => {
+    createClientTool({
+      function: ({
+        newPrompts,
+      }: {
+        newPrompts: NonNullable<EntryNodeArgs['prompt_templates']>
+      }) => {
         console.log('Modifying prompts in llmSettings...')
         const promptTemplates = stateRefs.toolchainConfig.entryNode?.prompt_templates
         if (
@@ -411,8 +419,32 @@ function defineTyGuiTools(
         },
         required: ['newPrompts'],
       } as const satisfies JSONSchema7,
-    },
+    }),
   ]
+}
+
+function createTrustedUiToolContext(ty: Taskyon): ToolRpcCreateContext {
+  return (call, stopSignal) => {
+    const toolSecretId = call.functionName
+    return {
+      getExecutionTaskChain: () => {
+        if (!call.taskId) {
+          throw new Error(
+            'getExecutionTaskChain is not available for this UI tool call because no task id was provided.',
+          )
+        }
+        return ty.getTaskChain(call.taskId)
+      },
+      createSubtasksResult,
+      getSecret: async (name, askNew, saveNew = true) =>
+        (await ty.getSecret(toolSecretId, name, askNew, saveNew)) ?? null,
+      setSecret: async (name, value) => {
+        await ty.setSecret(toolSecretId, name, value)
+      },
+      stopSignal,
+      toolId: toolSecretId,
+    }
+  }
 }
 
 export const AiProvideKeyStoreName = 'AiProviderKey'
@@ -1082,6 +1114,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     const uiToolRpcExecutor = await registerToolRpcTools({
       port: ty.port,
       tools: [entryNodeTool, ...defineTyGuiTools(stateRefs, ty)],
+      createContext: createTrustedUiToolContext(ty),
     })
     onScopeDispose(() => uiToolRpcExecutor.destroy())
     await ty.updateToolDefinitions(false)

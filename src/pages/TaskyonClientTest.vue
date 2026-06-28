@@ -42,7 +42,7 @@ import type {
   TyClient,
   partialTaskDraft,
 } from '@taskyon/tyclient'
-import { initializeTaskyon, createTool, createChatCompletionTask } from '@taskyon/tyclient'
+import { initializeTaskyon, createClientTool, createChatCompletionTask } from '@taskyon/tyclient'
 import { freeKey } from 'src/assets/taskyon_free_key'
 import type { JSONSchema7 } from 'json-schema'
 import { useAppStateStore } from 'src/stores/appState'
@@ -99,7 +99,7 @@ const configuration: partialTyConfiguration = {
 
 // Tool Definitions
 const tools: ClientTool[] = [
-  createTool({
+  createClientTool({
     name: 'clientTest',
     description: 'function which adds two strings on this page and displays them!',
     parameters: {

@@ -1,6 +1,6 @@
 // modelicaTools.ts
 
-import { createChatCompletionTask, createTool, toolCall } from '@taskyon/tyclient'
+import { createChatCompletionTask, createClientTool, toolCall } from '@taskyon/tyclient'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'
 import { serializeObject } from '../modules/serializeObject'
@@ -154,7 +154,7 @@ export const createModelicatools = ({
   createNewVersion: (description?: string) => void
   compileNow?: () => Promise<{ ok: boolean; message?: string }>
 }) => [
-  createTool({
+  createClientTool({
     name: 'modelicaDocumentAssistant',
     description:
       'Main assistant that inspects the current Modelica and template sources and decides on edits.',
@@ -269,7 +269,7 @@ ${sourcesSection}
     },
   }),
 
-  createTool({
+  createClientTool({
     name: 'getModelicaCompilerStatus',
     description:
       'Return the latest compile / ABI status and recent relevant logs so the agent can decide next edits.',
@@ -328,7 +328,7 @@ ${sourcesSection}
     },
   }),
 
-  createTool({
+  createClientTool({
     name: 'autoFixModelicaCompilationCycle',
     description:
       'Autonomous compile-fix loop: inspect latest compile errors, patch documents, and re-check until success.',
@@ -457,7 +457,7 @@ Constraints:
     },
   }),
 
-  createTool({
+  createClientTool({
     name: 'updateModelicaDocument',
     description:
       'Apply line-based updates to Modelica and or template and create a version snapshot.',

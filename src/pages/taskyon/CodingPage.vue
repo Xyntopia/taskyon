@@ -294,7 +294,7 @@ import {
   matVisibility,
 } from '@quasar/extras/material-icons'
 import { mdiNewBox, mdiRenameBox, mdiTextBoxPlus } from '@quasar/extras/mdi-v6'
-import { createChatCompletionTask, createTool } from '@taskyon/tyclient'
+import { createChatCompletionTask, createClientTool } from '@taskyon/tyclient'
 import { watchThrottled } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'
@@ -449,7 +449,7 @@ if (!isInVscode) {
 // --- Tools Configuration ---
 
 const tools = [
-  createTool({
+  createClientTool({
     name: 'documentAssistant',
     description: 'Main assistant that inspects the project files and decides on next actions.',
     parameters: {
@@ -588,7 +588,7 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
     },
   }),
 
-  createTool({
+  createClientTool({
     name: 'updateDocument',
     description: 'Update one or more files in the project.',
     parameters: {

@@ -32,6 +32,8 @@ export type toolContext = {
   messagePort?: MessagePort // optional message port for communication
 }
 
+export type ClientToolContext = Omit<toolContext, 'getSecret' | 'setSecret' | 'toolId'>
+
 // TODO: make all of this generic functions in order to get better typescript checking
 const internalToolFunctionSchema = z.custom<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,7 +51,14 @@ export const InternalTool = ToolBase.extend({
 })
 export type InternalTool = z.infer<typeof InternalTool>
 
-export type ClientTool = WithRequired<InternalTool, 'function'>
+export type ClientFunctionTool = Omit<InternalTool, 'code' | 'function'> & {
+  code?: never
+  function: (params: FunctionCall['arguments'], context: ClientToolContext) => unknown
+}
+export type ClientCodeTool = WithRequired<Omit<InternalTool, 'function'>, 'code'> & {
+  function?: never
+}
+export type ClientTool = ClientFunctionTool | ClientCodeTool
 
 // Create a helper function to preserve schema types
 export function createTool<
@@ -63,6 +72,26 @@ export function createTool<
   } & Omit<InternalTool, 'function' | 'parameters'>,
 ): T {
   console.log('create tool', tool.name)
+  return tool
+}
+
+export function createClientTool<
+  T,
+  SCHEMA extends Readonly<JSONSchema>,
+  PARAMS = FromSchema<SCHEMA, { keepDefaultedPropertiesOptional: true }>,
+>(
+  tool: T & {
+    parameters: SCHEMA
+    function: (params: PARAMS, context: ClientToolContext) => unknown
+  } & Omit<ClientFunctionTool, 'function' | 'parameters'>,
+): T & ClientFunctionTool
+export function createClientTool<T, SCHEMA extends Readonly<JSONSchema>>(
+  tool: T & {
+    parameters: SCHEMA
+  } & Omit<ClientCodeTool, 'parameters'>,
+): T & ClientCodeTool
+export function createClientTool(tool: ClientTool): ClientTool {
+  console.log('create client tool', tool.name)
   return tool
 }
 

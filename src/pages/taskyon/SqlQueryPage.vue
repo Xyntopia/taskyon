@@ -89,7 +89,7 @@
 
 <script setup lang="ts">
 import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
-import { createChatCompletionTask, createTool } from '@taskyon/tyclient'
+import { createChatCompletionTask, createClientTool } from '@taskyon/tyclient'
 import SplitTaskyonView from '@taskyon/shared/components/SplitTaskyonView.vue'
 import { copyToClipboard } from '@taskyon/shared/modules/utils'
 import type { TyPGDB } from '@taskyon/taskyon/db'
@@ -400,7 +400,7 @@ FROM
 
 // Taskyon tools
 const tools = [
-  createTool({
+  createClientTool({
     name: 'setSqlQuery',
     description: 'Replace the current SQL query in the editor with the provided string',
     parameters: {

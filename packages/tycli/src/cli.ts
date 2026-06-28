@@ -18,6 +18,7 @@ import type { llmSettings } from '../../taskyon/src/types/profiles'
 import type { partialTaskDraft, TaskNode } from '../../taskyon/src/types/taskNode'
 import {
   createTool,
+  createClientTool,
   InternalTool as InternalToolSchema,
   toolCall,
   type ClientTool,
@@ -450,7 +451,7 @@ function parseSlashName(line: string): SlashParsed | null {
   return { name, args }
 }
 
-const cliBashTool: ClientTool = createTool({
+const cliBashTool: ClientTool = createClientTool({
   name: 'bash',
   description: 'Run a bash command on the host system and return stdout, stderr, and exit code.',
   parameters: {

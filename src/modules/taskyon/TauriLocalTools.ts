@@ -1,4 +1,4 @@
-import { createTool, toolCall } from '@taskyon/tyclient'
+import { createClientTool, toolCall } from '@taskyon/tyclient'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import type { JSONSchema7 } from 'json-schema'
 import { serializeObject } from '@taskyon/shared/modules/serializeObject'
@@ -100,7 +100,7 @@ const waitForBashDecision = async (
   })
 }
 
-const tauriExplorationTool = createTool({
+const tauriExplorationTool = createClientTool({
   name: 'tauriExploreWorkspace',
   description: 'Explore local workspace files in Tauri mode: list, read, and regex-search.',
   parameters: {
@@ -149,7 +149,7 @@ const tauriExplorationTool = createTool({
   },
 })
 
-const tauriPatchTool = createTool({
+const tauriPatchTool = createClientTool({
   name: 'tauriPatchWorkspace',
   description: 'Apply context/regex/new-content file updates in local Tauri workspace files.',
   parameters: {
@@ -192,7 +192,7 @@ const tauriPatchTool = createTool({
   },
 })
 
-const tauriBashTool = createTool({
+const tauriBashTool = createClientTool({
   name: 'tauriBashTool',
   description: 'Run a local bash command in Tauri mode after explicit yes/no user approval.',
   parameters: {
