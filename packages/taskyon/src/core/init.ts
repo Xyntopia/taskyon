@@ -20,12 +20,10 @@ import { useFullSmallTools } from '../tools/usefulSmallTools'
 import { webResearchTools } from '../tools/webResearchTool'
 import { wfcGenerator } from '../tools/wavefunctioncollapse'
 import { appDevTools } from '../tools/webAppDev'
-import { createTaskyonToMcpBridge } from '../mcp/taskyonToMcpBridge'
 import { TaskyonMessage } from '../types/apiTypes'
 import type { RemoteFunctionCall } from '../types/messages'
 import type { llmSettings } from '../types/profiles'
 import { createSubtasksResult, type InternalTool } from '../types/toolApi'
-import { FunctionArguments as FunctionArgumentsSchema } from '../types/tools'
 import type { FunctionArguments } from '../types/tools'
 import { ToolBase } from '../types/tools'
 import { partialTaskDraft } from '../types/taskNode'
@@ -109,6 +107,13 @@ function createApi(
           },
         })
       },
+      toolDefinitionsRequest: async (msg) => {
+        insidePort.send({
+          type: 'toolDefinitionsResponse',
+          requestId: msg.requestId,
+          tools: await taskManagerInstance().updateToolDefinitions(msg.includeHidden),
+        })
+      },
       file: async (msg) => {
         const id = await taskManagerInstance().addFiles([msg.file], msg.store ?? 'memory')
         console.log('received file...', id, msg)
@@ -162,10 +167,6 @@ function createApi(
   return {
     reconnectTaskStreamBridge,
   }
-}
-
-function toFunctionArguments(args: Record<string, unknown>): FunctionArguments {
-  return FunctionArgumentsSchema.parse(args)
 }
 
 type CreateIframeMultiPlexer = () => IframeMultiPlexer
@@ -500,22 +501,6 @@ export async function tyCore(
         if (!value) await ctx.secretStore.deleteSecret(toolId, key)
         else await ctx.secretStore.setSecret(toolId, key, value)
       }
-    },
-    createMcpBridge: (options?: { name?: string; version?: string; protocolVersion?: string }) => {
-      const baseBridgeOptions = {
-        serverInfo: {
-          name: options?.name ?? 'taskyon',
-          version: options?.version ?? '0.5.1',
-        },
-        listTaskyonTools: async () => await ctx.taskManagerInstance.updateToolDefinitions(true),
-        callTaskyonTool: async (name: string, args: Record<string, unknown>) =>
-          await ctx.callTool(name, toFunctionArguments(args)),
-      }
-      return createTaskyonToMcpBridge(
-        options?.protocolVersion
-          ? { ...baseBridgeOptions, protocolVersion: options.protocolVersion }
-          : baseBridgeOptions,
-      )
     },
     // we are creating the proxyApi here so that from the outside every function always gets proxied
     // to the most up-to-date taskmanager instance... We are also flattening it at the same time!

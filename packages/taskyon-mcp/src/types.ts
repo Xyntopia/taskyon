@@ -62,4 +62,3 @@ export type McpToolsCallResult = {
   structuredContent?: unknown
   isError?: boolean
 }
-

@@ -12,6 +12,7 @@
     "packages/secure-tunnel",
     "packages/shared",
     "packages/taskyon",
+    "packages/taskyon-mcp",
     "packages/taskyon-vscode",
     "packages/tycli",
     "packages/tyclient"

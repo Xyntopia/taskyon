@@ -1,7 +1,13 @@
 // we can compile this file to js to js using "yarn build:lib"
 
 import type { Port } from '@taskyon/taskyon/api'
-import { REMOTE_FUNCTION_TIMEOUT_MS, processTasks, sendTasks } from '@taskyon/taskyon/api'
+import {
+  REMOTE_FUNCTION_TIMEOUT_MS,
+  FunctionArguments as FunctionArgumentsSchema,
+  callToolOverRpc,
+  processTasks,
+  sendTasks,
+} from '@taskyon/taskyon/api'
 import {
   // from frp bux with only very few dependencies
   createDuplexChannel, // utis/frpbus
@@ -9,7 +15,11 @@ import {
   type ClientTool,
   registerToolRpcTools,
 } from '@taskyon/taskyon/api'
-import type { partialTyConfiguration, TaskyonGuiMessage } from '@taskyon/taskyon/api'
+import type {
+  FunctionArguments,
+  partialTyConfiguration,
+  TaskyonGuiMessage,
+} from '@taskyon/taskyon/api'
 import { sendFile } from '../../taskyon/src/types/apiTypes'
 export {
   createChatCompletionTask,
@@ -22,8 +32,60 @@ export {
   type partialTaskDraft,
 } from '@taskyon/taskyon/api'
 export type { ClientTool, TaskyonMessage, toolContext } from '@taskyon/taskyon/api'
-export type { partialTyConfiguration, TaskyonGuiMessage }
+export type { FunctionArguments, partialTyConfiguration, TaskyonGuiMessage }
 export { REMOTE_FUNCTION_TIMEOUT_MS } from '@taskyon/taskyon/api'
+
+export type TaskyonToolDefinition = Extract<
+  TaskyonGuiMessage,
+  { type: 'toolDefinitionsResponse' }
+>['tools'][string]
+
+let toolDefinitionsRequestCounter = 0
+
+const createToolDefinitionsRequestId = () =>
+  `tool-definitions-${Date.now()}-${toolDefinitionsRequestCounter++}`
+
+async function waitForToolDefinitionsResponse(
+  port: Port<TaskyonGuiMessage, TaskyonGuiMessage>,
+  requestId: string,
+  timeoutMs: number,
+): Promise<Record<string, TaskyonToolDefinition>> {
+  while (true) {
+    const message = await port.receive.wait({ timeoutMs })
+    if (message.type === 'toolDefinitionsResponse' && message.requestId === requestId) {
+      return message.tools
+    }
+  }
+}
+
+export async function listTaskyonTools(
+  client: Pick<TyClient, 'port'>,
+  options?: { includeHidden?: boolean; timeoutMs?: number },
+): Promise<Record<string, TaskyonToolDefinition>> {
+  const requestId = createToolDefinitionsRequestId()
+  const response = waitForToolDefinitionsResponse(
+    client.port,
+    requestId,
+    options?.timeoutMs ?? 30_000,
+  )
+  client.port.send({
+    type: 'toolDefinitionsRequest',
+    requestId,
+    includeHidden: options?.includeHidden,
+  })
+  return await response
+}
+
+export async function callTaskyonTool(
+  client: Pick<TyClient, 'port'>,
+  name: string,
+  args: Record<string, unknown>,
+) {
+  return await callToolOverRpc(
+    { name, arguments: FunctionArgumentsSchema.parse(args) },
+    client.port,
+  )
+}
 
 function safeClone<T>(data: T): T {
   try {

@@ -17,7 +17,8 @@ export {
 export { REMOTE_FUNCTION_TIMEOUT_MS } from '../types/messages'
 export { llmSettings, TyToolchainConfig } from '../types/profiles'
 export type { ClientTool, toolContext } from '../types/toolApi'
-export type { FunctionArguments, FunctionCall } from '../types/tools'
+export { FunctionArguments } from '../types/tools'
+export type { FunctionCall } from '../types/tools'
 export {
   createDuplexChannel, // utils/frpbus
   createStreamRpcRequest,
@@ -40,9 +41,6 @@ export type {
   ToolRpcFunctionDescriptionMessage,
   ToolRpcResponderPort,
 } from '../core/toolRpc'
-export * from '../mcp/mcpProtocolBridge'
-export * from '../mcp/taskyonToMcpBridge'
-export * from '../mcp/types'
 
 export type ObserveSubTaskStreamDetailedResult =
   | {

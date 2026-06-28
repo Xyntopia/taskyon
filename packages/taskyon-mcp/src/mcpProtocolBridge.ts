@@ -1,4 +1,3 @@
-import { humanizeError } from '../utils/error'
 import type {
   JsonRpcErrorObject,
   JsonRpcFailure,
@@ -41,6 +40,16 @@ class JsonRpcMethodError extends Error {
     super(rpc.message)
     this.name = 'JsonRpcMethodError'
     this.rpc = rpc
+  }
+}
+
+function humanizeError(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return String(error)
   }
 }
 
@@ -136,7 +145,10 @@ const methodHandlers: Record<string, McpMethodHandler> = {
   },
 }
 
-async function runMethod(req: JsonRpcRequest, deps: McpProtocolBridgeDependencies): Promise<unknown> {
+async function runMethod(
+  req: JsonRpcRequest,
+  deps: McpProtocolBridgeDependencies,
+): Promise<unknown> {
   const handler = methodHandlers[req.method]
   if (!handler) {
     throw new JsonRpcMethodError({

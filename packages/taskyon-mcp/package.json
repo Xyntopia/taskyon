@@ -1,0 +1,15 @@
+{
+  "name": "@taskyon/taskyon-mcp",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "import": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@taskyon/tyclient": "workspace:*"
+  }
+}

@@ -73,6 +73,18 @@ const TyReadyMessage = z.object({ type: z.literal('taskyonReady') }).meta({
   description: 'simple message which signals, that our API is ready!',
 })
 
+const ToolDefinitionsRequestMessage = z.object({
+  type: z.literal('toolDefinitionsRequest'),
+  requestId: z.string(),
+  includeHidden: z.boolean().optional(),
+})
+
+const ToolDefinitionsResponseMessage = z.object({
+  type: z.literal('toolDefinitionsResponse'),
+  requestId: z.string(),
+  tools: z.record(z.string(), ToolBase),
+})
+
 export const BaseMessage = z.object({
   origin: z.string().optional(),
   peerId: z.string().optional(),
@@ -123,6 +135,8 @@ export const TaskyonMessage = z.discriminatedUnion('type', [
   z.object({ ...BaseMessage.shape, ...TaskChainMessage.shape }),
   z.object({ ...BaseMessage.shape, ...FunctionDescriptionMessage.shape }),
   z.object({ ...BaseMessage.shape, ...TyReadyMessage.shape }),
+  z.object({ ...BaseMessage.shape, ...ToolDefinitionsRequestMessage.shape }),
+  z.object({ ...BaseMessage.shape, ...ToolDefinitionsResponseMessage.shape }),
   z.object({ ...BaseMessage.shape, ...FileMessage.shape }),
 ])
 
