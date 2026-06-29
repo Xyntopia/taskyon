@@ -42,7 +42,12 @@ import { reconcileWithDefaults } from '@taskyon/shared/modules/utils'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { createSubtasksResult } from '../../../packages/taskyon/src/types/toolApi'
-import { useAppStateStore } from 'src/stores/appState'
+import {
+  buildTaskyonProfileSectionResetPatch,
+  validateTaskyonProfileSettingsPatch,
+  useAppStateStore,
+  type TaskyonProfileSettings,
+} from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
 import { useGdrive } from '../gdrive'
@@ -63,6 +68,86 @@ function assert(condition: boolean, msg?: string): asserts condition {
     throw new Error(msg ?? 'Assertion failed')
   }
 }
+
+const getCurrentProfileSettingsForDiagnostics = (): TaskyonProfileSettings => {
+  const snapshot = state.getProfileSnapshot().sections
+  assert(snapshot.appConfiguration !== undefined, 'Expected appConfiguration in profile snapshot')
+  assert(snapshot.llmSettings !== undefined, 'Expected llmSettings in profile snapshot')
+  assert(snapshot.toolchainConfig !== undefined, 'Expected toolchainConfig in profile snapshot')
+  return {
+    appConfiguration: snapshot.appConfiguration,
+    llmSettings: snapshot.llmSettings,
+    toolchainConfig: snapshot.toolchainConfig,
+  }
+}
+
+export function testTaskyonProfileSettingsHelpers() {
+  const current = getCurrentProfileSettingsForDiagnostics()
+  const patched = validateTaskyonProfileSettingsPatch(current, {
+    appConfiguration: { primaryColor: '#123456' },
+    llmSettings: { selectedApi: 'taskyon' },
+    toolchainConfig: {
+      entryNode: {
+        prompt_templates: {
+          basePrompt: 'Diagnostic base prompt',
+        },
+      },
+    },
+  })
+
+  assert(
+    patched.appConfiguration?.primaryColor === '#123456',
+    'Expected appConfiguration patch to update primaryColor',
+  )
+  assert(
+    patched.llmSettings?.selectedApi === 'taskyon',
+    'Expected llmSettings patch to update selectedApi',
+  )
+  assert(
+    patched.toolchainConfig?.entryNode?.prompt_templates !== undefined &&
+      patched.toolchainConfig.entryNode.prompt_templates !== null &&
+      typeof patched.toolchainConfig.entryNode.prompt_templates === 'object' &&
+      !Array.isArray(patched.toolchainConfig.entryNode.prompt_templates) &&
+      'basePrompt' in patched.toolchainConfig.entryNode.prompt_templates &&
+      patched.toolchainConfig.entryNode.prompt_templates.basePrompt === 'Diagnostic base prompt',
+    'Expected toolchainConfig patch to update entryNode prompt templates',
+  )
+
+  let rejectedInvalidColor = false
+  try {
+    validateTaskyonProfileSettingsPatch(current, {
+      appConfiguration: { primaryColor: 'blue' },
+    })
+  } catch {
+    rejectedInvalidColor = true
+  }
+  assert(rejectedInvalidColor, 'Expected invalid appConfiguration color patch to be rejected')
+
+  const resetPatch = buildTaskyonProfileSectionResetPatch(current, ['appConfiguration'])
+  assert(
+    !!resetPatch.appConfiguration && !resetPatch.llmSettings && !resetPatch.toolchainConfig,
+    'Expected appConfiguration-only reset patch',
+  )
+
+  const originalAppConfiguration = current.appConfiguration
+  try {
+    Object.assign(state.appConfiguration, { diagnosticExtraKey: 'remove-me' })
+    state.resetProfileSections(['appConfiguration'])
+    assert(
+      !('diagnosticExtraKey' in state.appConfiguration),
+      'Expected resetProfileSections to remove extra appConfiguration keys',
+    )
+  } finally {
+    state.patchProfileSettings({ appConfiguration: originalAppConfiguration })
+  }
+
+  return {
+    patched,
+    resetPatch,
+  }
+}
+testTaskyonProfileSettingsHelpers.description =
+  'Validates Taskyon profile patch/reset helpers for appConfiguration, llmSettings, and toolchainConfig.'
 
 export function testReconcileWithDefaults() {
   const diagnostics: Array<{

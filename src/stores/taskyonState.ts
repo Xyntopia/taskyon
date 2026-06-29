@@ -47,13 +47,8 @@ import type { AuthenticationOptions, TokenGetter } from '@taskyon/taskyon/browse
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
 import type { chunkStreamType } from '@taskyon/taskyon/tools/chatCompletionTool'
 import { createPortRpcClient, taskyonProtocol } from '@taskyon/tyclient'
-import {
-  createStandardEntryNodeTool,
-  EntryNodeSettingsSchema,
-  type EntryNodeArgs,
-} from '@taskyon/taskyon/tools/entryNode'
+import { createStandardEntryNodeTool } from '@taskyon/taskyon/tools/entryNode'
 import { until } from '@vueuse/core'
-import { default as Ajv } from 'ajv'
 import type { JSONSchema7 } from 'json-schema'
 import { defineStore } from 'pinia'
 import { useQuasar } from 'quasar' // load dynamically! :)
@@ -73,8 +68,13 @@ import type { ReadonlyDeep } from 'type-fest'
 import { computed, onScopeDispose, onWatcherCleanup, readonly, ref, watch, watchEffect } from 'vue'
 import { sendFile } from '../../packages/taskyon/src/types/apiTypes'
 import { guiTools } from '../modules/taskyon/GuiTools'
-import { useAppStateStore } from './appState'
+import {
+  taskyonProfileSections,
+  useAppStateStore,
+  type TaskyonProfileSettingsInput,
+} from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
+import z from 'zod'
 
 /**
  * Creates a proxy for an asynchronous object initializer, allowing you to call methods
@@ -367,58 +367,132 @@ function defineTyGuiTools(
   stateRefs: ReturnType<typeof useAppStateStore>,
   ty: Taskyon,
 ): ClientTool[] {
+  const taskyonProfileSectionSchema = z.enum(taskyonProfileSections)
+  const profilePatchSchema = z
+    .object({
+      appConfiguration: z.record(z.string(), z.unknown()).optional(),
+      llmSettings: z.record(z.string(), z.unknown()).optional(),
+      toolchainConfig: z.record(z.string(), z.unknown()).optional(),
+    })
+    .strict()
+    .refine((patch) => Object.keys(patch).length > 0, {
+      message: 'Provide at least one profile section to patch.',
+    })
+  const manageTaskyonProfileArgs = z.discriminatedUnion('action', [
+    z.object({
+      action: z.literal('readProfile'),
+      sections: z.array(taskyonProfileSectionSchema).optional(),
+    }),
+    z.object({
+      action: z.literal('patchProfile'),
+      patch: profilePatchSchema,
+      persist: z.boolean().optional(),
+    }),
+    z.object({
+      action: z.literal('resetSections'),
+      sections: z.array(taskyonProfileSectionSchema).optional(),
+      persist: z.boolean().optional(),
+    }),
+    z.object({
+      action: z.literal('readTaskChain'),
+    }),
+  ])
+  const toProfileSettingsInput = (
+    patch: z.infer<typeof profilePatchSchema>,
+  ): TaskyonProfileSettingsInput => {
+    const next: TaskyonProfileSettingsInput = {}
+    if (patch.appConfiguration !== undefined) next.appConfiguration = patch.appConfiguration
+    if (patch.llmSettings !== undefined) next.llmSettings = patch.llmSettings
+    if (patch.toolchainConfig !== undefined) next.toolchainConfig = patch.toolchainConfig
+    return next
+  }
+
   return [
     ...guiTools,
     createOAuthTool(ty.setSecret),
     createClientTool({
-      function: ({
-        newPrompts,
-      }: {
-        newPrompts: NonNullable<EntryNodeArgs['prompt_templates']>
-      }) => {
-        console.log('Modifying prompts in llmSettings...')
-        const promptTemplates = stateRefs.toolchainConfig.entryNode?.prompt_templates
-        if (
-          !promptTemplates ||
-          typeof promptTemplates !== 'object' ||
-          Array.isArray(promptTemplates) ||
-          !('basePrompt' in promptTemplates) ||
-          !stateRefs.toolchainConfig.entryNode
-        ) {
-          throw new Error('No prompt templates defined in entryNode settings!')
+      function: async (rawArgs, ctx) => {
+        const args = manageTaskyonProfileArgs.parse(rawArgs)
+        if (args.action === 'readProfile') {
+          return stateRefs.getProfileSnapshot(args.sections)
         }
-        const newPromptsMerged = {
-          ...promptTemplates,
-          ...newPrompts,
+        if (args.action === 'patchProfile') {
+          return {
+            ok: true,
+            action: args.action,
+            persist: args.persist ?? false,
+            ...stateRefs.patchProfileSettings(toProfileSettingsInput(args.patch), {
+              persist: args.persist ?? false,
+            }),
+          }
         }
-        const ajv = new Ajv()
-        const validate = ajv.compile(EntryNodeSettingsSchema.properties.prompt_templates)
-        const valid = validate(newPromptsMerged)
-        if (valid) {
-          stateRefs.toolchainConfig.entryNode.prompt_templates = newPromptsMerged
-          console.log('Prompts modified:', stateRefs.toolchainConfig.entryNode?.prompt_templates)
-        } else {
-          throw new Error(
-            `It was not possible to add prompts for ${JSON.stringify(Object.keys(newPrompts))} to
-  ${JSON.stringify(Object.keys(stateRefs.toolchainConfig.entryNode?.prompt_templates ?? {}))}. Did you use the wrong
-  keys and are they all defined as string?`,
-          )
+        if (args.action === 'resetSections') {
+          return {
+            ok: true,
+            action: args.action,
+            persist: args.persist ?? false,
+            ...stateRefs.resetProfileSections(args.sections, { persist: args.persist ?? false }),
+          }
+        }
+        return {
+          action: args.action,
+          taskChain: await ctx.getExecutionTaskChain(),
         }
       },
-      description: 'Modify the prompt templates used by the entry node.',
+      description: 'Read, patch, or reset the active Taskyon profile settings.',
       longDescription:
-        'This tool allows you to modify the prompt templates owned by the entry node.',
-      name: 'modifyPrompts',
+        'This tool can inspect the current Taskyon profile, patch appConfiguration, llmSettings, or toolchainConfig, reset those sections to the bundled defaults, and read the current execution task chain. It never exposes or mutates secrets or signatureOrKey.',
+      name: 'manageTaskyonProfile',
       parameters: {
         type: 'object',
         properties: {
-          newPrompts: {
+          action: {
+            type: 'string',
+            enum: ['readProfile', 'patchProfile', 'resetSections', 'readTaskChain'],
+            description: 'Profile management operation to perform.',
+          },
+          sections: {
+            type: 'array',
+            description:
+              'Profile sections to read or reset. Defaults to all editable profile sections.',
+            items: {
+              type: 'string',
+              enum: [...taskyonProfileSections],
+            },
+          },
+          patch: {
             type: 'object',
-            description: 'An object containing the new prompts.',
-            properties: EntryNodeSettingsSchema.properties.prompt_templates.properties,
+            description:
+              'Section-level patch for appConfiguration, llmSettings, and/or toolchainConfig.',
+            properties: {
+              appConfiguration: {
+                type: 'object',
+                description: 'Partial app configuration patch.',
+                additionalProperties: true,
+              },
+              llmSettings: {
+                type: 'object',
+                description: 'Partial LLM settings patch.',
+                additionalProperties: true,
+              },
+              toolchainConfig: {
+                type: 'object',
+                description:
+                  'Partial toolchain configuration patch. For prompt templates, patch toolchainConfig.entryNode.prompt_templates.',
+                additionalProperties: true,
+              },
+            },
+            additionalProperties: false,
+          },
+          persist: {
+            type: 'boolean',
+            description:
+              'Persist mutation to the active local profile. Defaults to false for transient changes.',
+            default: false,
           },
         },
-        required: ['newPrompts'],
+        required: ['action'],
+        additionalProperties: false,
       } as const satisfies JSONSchema7,
     }),
   ]

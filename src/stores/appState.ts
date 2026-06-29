@@ -11,11 +11,12 @@ import {
   clearBrowserCaches,
   clearCookies,
   clearServiceWorkers,
+  deepMerge,
   deepMergeReactive,
   reconcileWithDefaults,
 } from '../../packages/shared/modules/utils'
 import type { DeepReadonly } from 'vue'
-import { computed, reactive, ref, toRefs, unref, watch, type Reactive } from 'vue'
+import { computed, reactive, ref, toRaw, toRefs, unref, watch, type Reactive } from 'vue'
 // TODO: remove, to make this file here faster...
 import type { KeyString, Thunk, tyPublicKeyDraft } from '@taskyon/taskyon'
 import {
@@ -37,6 +38,7 @@ import {
 import { buildTaskSelectionRoute } from 'src/modules/taskSelectionUrl'
 import type { PartialDeep } from 'type-fest'
 import { useRoute, useRouter } from 'vue-router'
+import type { ZodError } from 'zod'
 
 interface TaskWidgetStateType {
   markdownEnabled: boolean
@@ -192,6 +194,96 @@ function getInitialState() {
 }
 
 type initialState = ReturnType<typeof getInitialState>['initialState']
+
+export const taskyonProfileSections = [
+  'appConfiguration',
+  'llmSettings',
+  'toolchainConfig',
+] as const
+export type TaskyonProfileSection = (typeof taskyonProfileSections)[number]
+export type TaskyonProfileSettings = Pick<TyProfile, TaskyonProfileSection>
+export type TaskyonProfileSettingsInput = Partial<
+  Record<TaskyonProfileSection, Record<string, unknown>>
+>
+export type TaskyonProfileSettingsPatch = Partial<TaskyonProfileSettings>
+
+const cloneProfileValue = <T>(value: T): T => structuredClone(toRaw(value))
+
+export function normalizeTaskyonProfileSections(
+  sections: readonly TaskyonProfileSection[] = taskyonProfileSections,
+): TaskyonProfileSection[] {
+  return taskyonProfileSections.filter((section) => sections.includes(section))
+}
+
+export function createTaskyonProfileSettingsSnapshot(
+  profile: TaskyonProfileSettings,
+  sections: readonly TaskyonProfileSection[] = taskyonProfileSections,
+): TaskyonProfileSettingsPatch {
+  const snapshot: TaskyonProfileSettingsPatch = {}
+  for (const section of normalizeTaskyonProfileSections(sections)) {
+    if (section === 'appConfiguration') {
+      snapshot.appConfiguration = cloneProfileValue(profile.appConfiguration)
+    } else if (section === 'llmSettings') {
+      snapshot.llmSettings = cloneProfileValue(profile.llmSettings)
+    } else {
+      snapshot.toolchainConfig = cloneProfileValue(profile.toolchainConfig)
+    }
+  }
+  return snapshot
+}
+
+const formatProfileValidationError = (section: TaskyonProfileSection, error: ZodError): string => {
+  const details = error.issues
+    .map((issue) => {
+      const path = issue.path.length ? `.${issue.path.join('.')}` : ''
+      return `${section}${path}: ${issue.message}`
+    })
+    .join('; ')
+  return `Invalid ${section} profile settings: ${details}`
+}
+
+export function validateTaskyonProfileSettingsPatch(
+  current: TaskyonProfileSettings,
+  patch: TaskyonProfileSettingsInput,
+): TaskyonProfileSettingsPatch {
+  const next: TaskyonProfileSettingsPatch = {}
+
+  if (patch.appConfiguration) {
+    const merged = deepMerge(cloneProfileValue(current.appConfiguration), patch.appConfiguration)
+    const parsed = TyProfile.shape.appConfiguration.safeParse(merged)
+    if (!parsed.success) {
+      throw new Error(formatProfileValidationError('appConfiguration', parsed.error))
+    }
+    next.appConfiguration = parsed.data
+  }
+
+  if (patch.llmSettings) {
+    const merged = deepMerge(cloneProfileValue(current.llmSettings), patch.llmSettings)
+    const parsed = TyProfile.shape.llmSettings.safeParse(merged)
+    if (!parsed.success) {
+      throw new Error(formatProfileValidationError('llmSettings', parsed.error))
+    }
+    next.llmSettings = parsed.data
+  }
+
+  if (patch.toolchainConfig) {
+    const merged = deepMerge(cloneProfileValue(current.toolchainConfig), patch.toolchainConfig)
+    const parsed = TyProfile.shape.toolchainConfig.safeParse(merged)
+    if (!parsed.success) {
+      throw new Error(formatProfileValidationError('toolchainConfig', parsed.error))
+    }
+    next.toolchainConfig = parsed.data
+  }
+
+  return next
+}
+
+export function buildTaskyonProfileSectionResetPatch(
+  defaults: TaskyonProfileSettings,
+  sections: readonly TaskyonProfileSection[],
+): TaskyonProfileSettingsPatch {
+  return createTaskyonProfileSettingsSnapshot(defaults, sections)
+}
 
 function loadConfigurationFile(initialState: initialState, stateRefs: Reactive<initialState>) {
   void axios
@@ -356,6 +448,19 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
     stateRefs.llmSettings.userId = 'unknown'
   }
 
+  const beginSettingsChange = (persist: boolean) => {
+    saveToLocalStorage = persist
+  }
+
+  const finishSettingsChange = (persist: boolean) => {
+    if (!persist) {
+      queueMicrotask(() => {
+        saveToLocalStorage = true
+        console.log('[PERSIST] re-enabled local persistence after transient override')
+      })
+    }
+  }
+
   function overRideSettings(newConfig: PartialDeep<TyProfile>, persist: boolean = false) {
     // For non-persistent config overrides (common for embedded clients),
     // skip only the immediate merge write, then resume normal persistence.
@@ -367,7 +472,7 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
       incomingPrimaryColor: newConfig.appConfiguration?.primaryColor,
       incomingSecondaryColor: newConfig.appConfiguration?.secondaryColor,
     })
-    saveToLocalStorage = persist
+    beginSettingsChange(persist)
     const previousColors = {
       primaryColor: stateRefs.appConfiguration.primaryColor,
       secondaryColor: stateRefs.appConfiguration.secondaryColor,
@@ -382,12 +487,7 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
     if (newConfig.toolchainConfig) {
       deepMergeReactive(stateRefs.toolchainConfig, newConfig.toolchainConfig)
     }
-    if (!persist) {
-      queueMicrotask(() => {
-        saveToLocalStorage = true
-        console.log('[PERSIST] re-enabled local persistence after transient override')
-      })
-    }
+    finishSettingsChange(persist)
     console.log('[PERSIST] overRideSettings colors merged', {
       before: previousColors,
       after: {
@@ -397,7 +497,24 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
     })
   }
 
-  return { overRideSettings, stateRefs }
+  function replaceProfileSettings(
+    newConfig: TaskyonProfileSettingsPatch,
+    persist: boolean = false,
+  ) {
+    beginSettingsChange(persist)
+    if (newConfig.appConfiguration) {
+      stateRefs.appConfiguration = cloneProfileValue(newConfig.appConfiguration)
+    }
+    if (newConfig.llmSettings) {
+      stateRefs.llmSettings = cloneProfileValue(newConfig.llmSettings)
+    }
+    if (newConfig.toolchainConfig) {
+      stateRefs.toolchainConfig = cloneProfileValue(newConfig.toolchainConfig)
+    }
+    finishSettingsChange(persist)
+  }
+
+  return { overRideSettings, replaceProfileSettings, stateRefs }
 }
 
 // this is where we save all of our app settings.
@@ -456,7 +573,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
   if (!hasExplicitUrlProfile && !getCurrentActiveProfileName()) {
     switchCurrentActiveProfilePointer(activeProfileNameRef.value)
   }
-  const { overRideSettings, stateRefs } = saveAndLoadState(
+  const { overRideSettings, replaceProfileSettings, stateRefs } = saveAndLoadState(
     initialState,
     () => activeProfileNameRef.value,
   )
@@ -599,6 +716,43 @@ export const useAppStateStore = defineStore('ui-state', () => {
     deepMergeReactive(stateRefs.llmSettings, newSettings)
   }
 
+  const getProfileSettings = (): TaskyonProfileSettings => ({
+    appConfiguration: cloneProfileValue(stateRefs.appConfiguration),
+    llmSettings: cloneProfileValue(stateRefs.llmSettings),
+    toolchainConfig: cloneProfileValue(stateRefs.toolchainConfig),
+  })
+
+  const getProfileSnapshot = (
+    sections: readonly TaskyonProfileSection[] = taskyonProfileSections,
+  ) => ({
+    activeProfileName: activeProfileNameRef.value,
+    profileMode,
+    sections: createTaskyonProfileSettingsSnapshot(stateRefs, sections),
+  })
+
+  const patchProfileSettings = (
+    patch: TaskyonProfileSettingsInput,
+    options: { persist?: boolean } = {},
+  ) => {
+    const validatedPatch = validateTaskyonProfileSettingsPatch(getProfileSettings(), patch)
+    const changedSections = taskyonProfileSections.filter((section) => !!validatedPatch[section])
+    replaceProfileSettings(validatedPatch, options.persist ?? false)
+    return getProfileSnapshot(changedSections)
+  }
+
+  const resetProfileSections = (
+    sections: readonly TaskyonProfileSection[] = taskyonProfileSections,
+    options: { persist?: boolean } = {},
+  ) => {
+    const normalizedSections = normalizeTaskyonProfileSections(sections)
+    const resetPatch = buildTaskyonProfileSectionResetPatch(
+      defaultStorableSettings,
+      normalizedSections,
+    )
+    replaceProfileSettings(resetPatch, options.persist ?? false)
+    return getProfileSnapshot(normalizedSections)
+  }
+
   const navigateToTask = (
     taskId: string | null | undefined,
     options: {
@@ -681,6 +835,9 @@ export const useAppStateStore = defineStore('ui-state', () => {
     patchLLMSettings,
     setLLMSettings: setReadOnlySettings(() => stateRefs.llmSettings),
     overRideSettings,
+    getProfileSnapshot,
+    patchProfileSettings,
+    resetProfileSections,
     getStateValues: () => unref(allRefs),
     $reset,
     minimalGui,

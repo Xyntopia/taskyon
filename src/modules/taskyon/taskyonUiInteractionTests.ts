@@ -48,6 +48,16 @@ const hasEnabledWebSearch = (value: unknown): boolean => {
   )
 }
 
+const waitForRegisteredTool = async (toolName: string, timeoutMs = 2_000) => {
+  const started = Date.now()
+  while (Date.now() - started < timeoutMs) {
+    const tool = tystate.allTools[toolName]
+    if (tool) return tool
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  return tystate.allTools[toolName]
+}
+
 export const testTaskyonUiSimpleChatInteraction = async () => {
   const taskChain = buildCreateNewTaskChain({
     currentTask: null,
@@ -122,3 +132,15 @@ export const testTaskyonUiToolInteraction = async () => {
 }
 testTaskyonUiToolInteraction.description =
   'Builds the same initial function-call chain the UI would send for a tool task and expects the clock tool result.'
+
+export const testTaskyonUiProfileManagementToolRegistration = async () => {
+  await tystate.taskyon
+  const tool = await waitForRegisteredTool('manageTaskyonProfile')
+  assert(!!tool, 'Expected manageTaskyonProfile to be registered as a Taskyon UI tool')
+
+  return {
+    toolName: tool.name,
+  }
+}
+testTaskyonUiProfileManagementToolRegistration.description =
+  'Verifies the Taskyon UI registers the profile-management tool.'
