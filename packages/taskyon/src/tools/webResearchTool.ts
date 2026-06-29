@@ -6,6 +6,12 @@ import {
 } from '@taskyon/shared/modules/webFetching'
 import { buildTaskPlannerTaskChains } from './TaskPlannerTool'
 import { createTool, toolCall } from '../types/toolApi'
+import {
+  parsePoliteHttpPolicy,
+  politeFetch,
+  politeHttpPolicySchema,
+  waitForPoliteHttpTurn,
+} from '../utils/politeHttp'
 import { canUseTauriHttpPlugin, tauriHttpRequestText } from '../utils/tauriHttpPlugin'
 
 type BrowserMcpImportArgs = {
@@ -448,12 +454,20 @@ const buildProxyRequestUrlWithAuth = (args: ResolvedProxyWebReaderArgs, apiKey: 
   return requestUrl.toString()
 }
 
-const requestProxyText = async (requestUrl: string, headers: Record<string, string>) => {
+const requestProxyText = async (
+  requestUrl: string,
+  headers: Record<string, string>,
+  httpPolicy: { minDelayMs?: number } | undefined,
+) => {
   if (canUseTauriHttpPlugin()) {
-    return await tauriHttpRequestText(requestUrl, { method: 'GET', headers })
+    return await tauriHttpRequestText(requestUrl, {
+      method: 'GET',
+      headers,
+      ...(httpPolicy ? { httpPolicy } : {}),
+    })
   }
 
-  const response = await fetch(requestUrl, { method: 'GET', headers })
+  const response = await politeFetch(requestUrl, { method: 'GET', headers }, httpPolicy)
   return {
     status: response.status,
     statusText: response.statusText,
@@ -821,6 +835,7 @@ This tool includes a built-in provider catalog with 40 public vendors so a user 
         type: 'string',
         description: 'Query parameter name used by the service for the final target URL.',
       },
+      httpPolicy: politeHttpPolicySchema,
     },
     required: ['url'],
   } as const satisfies JSONSchema7,
@@ -886,11 +901,17 @@ This tool includes a built-in provider catalog with 40 public vendors so a user 
       throw new Error(`No API key was provided for ${providerLabel}.`)
     }
 
+    const httpPolicy = parsePoliteHttpPolicy(args.httpPolicy)
+    await waitForPoliteHttpTurn(targetUrl, httpPolicy)
     const requestUrl = buildProxyRequestUrlWithAuth(
       { ...resolvedArgs, serviceUrl, targetUrlParam: resolvedArgs.targetUrlParam },
       apiKey,
     )
-    const response = await requestProxyText(requestUrl, buildProxyHeaders(resolvedArgs, apiKey))
+    const response = await requestProxyText(
+      requestUrl,
+      buildProxyHeaders(resolvedArgs, apiKey),
+      httpPolicy,
+    )
     if (response.status < 200 || response.status >= 300) {
       throw new Error(
         `Proxy request failed: ${response.status} ${response.statusText} while fetching ${targetUrl}.`,

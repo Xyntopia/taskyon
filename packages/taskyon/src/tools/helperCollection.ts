@@ -1,5 +1,6 @@
 import type { JSONSchema7 } from 'json-schema'
 import { createTool } from '../types/toolApi'
+import { parsePoliteHttpPolicy, politeFetch, politeHttpPolicySchema } from '../utils/politeHttp'
 import { canUseTauriHttpPlugin, tauriHttpGetText } from '../utils/tauriHttpPlugin'
 
 const jinaMarkdownReader = createTool({
@@ -19,13 +20,17 @@ const jinaMarkdownReader = createTool({
         type: 'string',
         description: 'The URL of the website to read as markdown.',
       },
+      httpPolicy: politeHttpPolicySchema,
     },
   },
-  code: `({url}) => {
-    return fetch(\`https://r.jina.ai/\${url}\`)
-      .then(response => response.text())
-      .then(data => data);
-  }`,
+  function: async ({ url, httpPolicy }) => {
+    const response = await politeFetch(
+      `https://r.jina.ai/${url}`,
+      undefined,
+      parsePoliteHttpPolicy(httpPolicy),
+    )
+    return await response.text()
+  },
 })
 
 const tauriHttpWebReader = createTool({
@@ -45,9 +50,10 @@ const tauriHttpWebReader = createTool({
         type: 'string',
         description: 'The absolute URL of the website resource to download.',
       },
+      httpPolicy: politeHttpPolicySchema,
     },
   },
-  function: async ({ url }) => {
+  function: async ({ url, httpPolicy }) => {
     if (!canUseTauriHttpPlugin()) {
       throw new Error('tauriHttpWebReader is only available in Tauri desktop runtime')
     }
@@ -57,7 +63,10 @@ const tauriHttpWebReader = createTool({
       throw new Error(`Invalid URL '${target}'. Please provide an absolute http(s) URL.`)
     }
 
-    const response = await tauriHttpGetText(target)
+    const parsedHttpPolicy = parsePoliteHttpPolicy(httpPolicy)
+    const response = await tauriHttpGetText(target, {
+      ...(parsedHttpPolicy ? { httpPolicy: parsedHttpPolicy } : {}),
+    })
     if (response.status < 200 || response.status >= 300) {
       throw new Error(`Tauri HTTP request failed: ${response.status} ${response.statusText}`)
     }
@@ -84,9 +93,10 @@ export const jinaSearch = createTool({
         type: 'string',
         description: 'The search query to use with the Jina AI search API.',
       },
+      httpPolicy: politeHttpPolicySchema,
     },
   } as const satisfies JSONSchema7,
-  function: async ({ query }, ctx) => {
+  function: async ({ query, httpPolicy }, ctx) => {
     // get key from here:  https://jina.ai/api-dashboard/key-manager
     const apiKey = await ctx.getSecret(
       'Search API key',
@@ -104,15 +114,19 @@ export const jinaSearch = createTool({
       //
       // TODO:   enable searching in only specific sites:
       //         "X-Site: https://jina.ai"
-      const response = await fetch(`https://s.jina.ai/?q=${encodeURIComponent(query)}`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'X-Respond-With': 'no-content',
-          Accept: 'application/json',
-          'X-With-Favicons': 'true',
+      const response = await politeFetch(
+        `https://s.jina.ai/?q=${encodeURIComponent(query)}`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'X-Respond-With': 'no-content',
+            Accept: 'application/json',
+            'X-With-Favicons': 'true',
+          },
         },
-      })
+        parsePoliteHttpPolicy(httpPolicy),
+      )
       const body = await response.json()
       if (response.status === 401)
         throw new Error(

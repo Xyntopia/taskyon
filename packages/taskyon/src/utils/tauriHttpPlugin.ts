@@ -1,5 +1,6 @@
 import { isTauri } from '@tauri-apps/api/core'
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
+import { parseHttpUrl, type PoliteHttpPolicy, waitForPoliteHttpTurn } from './politeHttp'
 
 type TauriHttpHeader = [string, string]
 
@@ -34,6 +35,7 @@ export async function tauriHttpRequestText(
     method?: string
     headers?: Record<string, string>
     insecureTls?: boolean
+    httpPolicy?: PoliteHttpPolicy
   },
 ): Promise<{ status: number; statusText: string; headers: TauriHttpHeader[]; body: string }> {
   if (!canUseTauriHttpPlugin()) {
@@ -42,6 +44,8 @@ export async function tauriHttpRequestText(
 
   let response: Response
   try {
+    const parsedUrl = parseHttpUrl(url)
+    await waitForPoliteHttpTurn(parsedUrl, opts?.httpPolicy)
     response = await tauriFetch(url, {
       method: opts?.method ?? 'GET',
       ...(opts?.headers ? { headers: opts.headers } : {}),
@@ -72,6 +76,7 @@ export async function tauriHttpGetText(
   url: string,
   opts?: {
     insecureTls?: boolean
+    httpPolicy?: PoliteHttpPolicy
   },
 ) {
   return await tauriHttpRequestText(url, opts)

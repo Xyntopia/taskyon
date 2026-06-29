@@ -4,6 +4,7 @@ import {
   proxyWebReaderProviderIds,
   resolveProxyWebReaderArgs,
 } from '@taskyon/shared/modules/webFetching'
+import { DEFAULT_POLITE_HTTP_MIN_DELAY_MS } from '../utils/politeHttp'
 import { processTasksDetailed } from '../api'
 import { tyCore } from '../core/init'
 import { opfsStorageTool } from '../tools/fileTools'
@@ -11,6 +12,7 @@ import {
   buildBrowserMcpImportChain,
   buildEnsureBrowserMcpImportRetryChain,
   buildWebResearchTaskGroups,
+  proxyWebReader,
   webResearchPlanner,
 } from '../tools/webResearchTool'
 import type { TaskNode } from '../types/taskNode'
@@ -597,6 +599,41 @@ export const testOpfsStorageSupportsBrowserDownloads = () => {
   return { success: true }
 }
 
+export const testLocalBrowsingToolsExposePoliteHttpPolicy = () => {
+  const opfsProperties = opfsStorageTool.parameters.properties
+  assert(
+    'httpPolicy' in opfsProperties,
+    'Expected opfsStorage to expose polite HTTP controls for browser downloads',
+  )
+
+  const proxyProperties = proxyWebReader.parameters.properties
+  assert(
+    'httpPolicy' in proxyProperties,
+    'Expected proxyWebReader to expose polite HTTP controls for proxy browsing',
+  )
+
+  const httpPolicy = proxyProperties.httpPolicy
+  assert(
+    typeof httpPolicy === 'object' &&
+      httpPolicy !== null &&
+      'properties' in httpPolicy &&
+      typeof httpPolicy.properties === 'object' &&
+      httpPolicy.properties !== null &&
+      'minDelayMs' in httpPolicy.properties,
+    'Expected proxyWebReader httpPolicy to expose minDelayMs',
+  )
+  const minDelay = httpPolicy.properties.minDelayMs
+  assert(
+    typeof minDelay === 'object' &&
+      minDelay !== null &&
+      'default' in minDelay &&
+      minDelay.default === DEFAULT_POLITE_HTTP_MIN_DELAY_MS,
+    'Expected polite HTTP minDelayMs to default to the shared polite delay',
+  )
+
+  return { success: true }
+}
+
 testWebResearchBuildsParallelQueryGroups.description =
   'Builds parallel web-research branches where each query expands into sequential discovery and validation tasks with explicit browser-capable tool restrictions.'
 testWebResearchArtifactRootSlugIsStable.description =
@@ -619,4 +656,6 @@ testWebResearchPlannerWebSearchOnlyExcludesBrowserTools.description =
   'Excludes browser MCP tools from delegated branches when researchMode is websearch-only.'
 testOpfsStorageSupportsBrowserDownloads.description =
   'Exposes a browser OPFS download action so research can save accessible URLs without local filesystem access.'
+testLocalBrowsingToolsExposePoliteHttpPolicy.description =
+  'Exposes a default polite HTTP policy on low-level local browsing tools.'
 testWebResearchPlannerUsesWebSearchFirstByDefault.requiresLargeTokens = true

@@ -2,6 +2,7 @@ import type { JSONSchema7 } from 'json-schema'
 import { convertFileToText } from '../utils/loadFiles'
 import { createTool } from '../types/toolApi'
 import { createChatCompletionTask } from '../api'
+import { parsePoliteHttpPolicy, politeFetch, politeHttpPolicySchema } from '../utils/politeHttp'
 
 const looksLikePdfBytes = (bytes: Uint8Array) =>
   bytes.length >= 5 &&
@@ -144,6 +145,7 @@ between browser sessions but are private to this application.`,
         description:
           'Optional relative OPFS directory that all research artifacts for this request must stay under, for example research/solar-cell-spec-sheets/.',
       },
+      httpPolicy: politeHttpPolicySchema,
     },
     required: ['action'],
   } as const satisfies JSONSchema7,
@@ -157,6 +159,7 @@ between browser sessions but are private to this application.`,
       mimeType = 'application/octet-stream',
       expectedFileType,
       artifactRoot,
+      httpPolicy,
     },
     ctx,
   ) => {
@@ -198,7 +201,7 @@ between browser sessions but are private to this application.`,
           throw new Error('Url is required for download action')
         }
 
-        const response = await fetch(url)
+        const response = await politeFetch(url, undefined, parsePoliteHttpPolicy(httpPolicy))
         if (!response.ok) {
           throw new Error(`Download failed with HTTP ${response.status}: ${response.statusText}`)
         }
