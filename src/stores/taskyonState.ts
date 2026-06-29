@@ -292,6 +292,44 @@ You can select them in the "Chat Settings" section in the message input window.
   //'How do I integrate Taskyon into my webpage?',
 ]
 
+const taskyonDocumentationUrls = import.meta.glob<string>('../../public/docs/**/*.md', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+})
+
+const taskyonDocumentationPathFromGlob = (path: string) =>
+  path.replace('../../public/docs/', '').replace(/^\//, '')
+
+const taskyonDocumentationTitleFromPath = (path: string) =>
+  path.split('/').pop()?.replace(/\.md$/, '').replace(/[_-]+/g, ' ') || path
+
+async function loadTaskyonDocumentationDocuments() {
+  const entries = Object.entries(taskyonDocumentationUrls).sort(([left], [right]) =>
+    left.localeCompare(right),
+  )
+  const documents = await Promise.all(
+    entries.map(async ([globPath, url]) => {
+      const path = taskyonDocumentationPathFromGlob(globPath)
+      const response = await fetch(url, { cache: 'no-cache' })
+      if (!response.ok) {
+        throw new Error(`Failed to load Taskyon documentation ${path}: ${response.status}`)
+      }
+      return {
+        id: path,
+        path,
+        title: taskyonDocumentationTitleFromPath(path),
+        url,
+        content: await response.text(),
+        metadata: {
+          source: 'taskyon-public-docs',
+        },
+      }
+    }),
+  )
+  return { documents }
+}
+
 function connectGdriveSync(
   directory: string,
   tyPort: Port<TaskyonGuiMessage, TaskyonGuiMessage>,
@@ -410,6 +448,19 @@ function defineTyGuiTools(
   return [
     ...guiTools,
     createOAuthTool(ty.setSecret),
+    createClientTool({
+      function: loadTaskyonDocumentationDocuments,
+      description: 'Load the bundled Taskyon markdown documentation for local indexing.',
+      longDescription:
+        'Browser-side provider for the Taskyon documentation workflow. It discovers app-served public/docs markdown files and returns their current content so core documentation tools can index them locally.',
+      name: 'getTaskyonDocumentationDocuments',
+      renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {},
+      } as const satisfies JSONSchema7,
+    }),
     createClientTool({
       function: async (rawArgs, ctx) => {
         const args = manageTaskyonProfileArgs.parse(rawArgs)

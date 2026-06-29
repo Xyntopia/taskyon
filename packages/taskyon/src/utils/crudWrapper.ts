@@ -426,7 +426,7 @@ export const createVectorStore = async <T>(
     searchText: string,
     k: number,
     allowedIDs?: string[],
-    filters?: PartialDeep<TaskNode>,
+    filters?: PartialDeep<T>,
   ) => {
     const { vectorizeText } = useNlpWorker()
     console.log(`Searching for ${searchText.slice(0, maxStrLength)}`)

@@ -2,6 +2,10 @@ import { dump } from 'js-yaml'
 import z from 'zod'
 import { chatCompletionToolName, createChatCompletionTool } from '../tools/chatCompletionTool'
 import { devTools } from '../tools/devTools'
+import {
+  createDocumentationIndexTool,
+  createTaskyonDocumentationTool,
+} from '../tools/documentationTool'
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { executePythonScript } from '../tools/executePython'
 import { fileTools } from '../tools/fileTools'
@@ -279,6 +283,8 @@ const dynamicContext =
 
     ToolList.push(
       localVectorStore(db),
+      createDocumentationIndexTool(db),
+      createTaskyonDocumentationTool(db),
       chatCompletion,
       createToolSearcher(taskManagerInstance),
       createMcpToolImporter(taskManagerInstance),
