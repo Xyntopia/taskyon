@@ -30,7 +30,12 @@ import {
   usePyodideWebworker,
   zodToYamlString,
 } from '@taskyon/taskyon'
-import { createChatCompletionTask, processTasks } from '@taskyon/tyclient'
+import {
+  createChatCompletionTask,
+  createPortRpcClient,
+  processTasks,
+  taskyonProtocol,
+} from '@taskyon/tyclient'
 import { authenticateWithPopup } from '@taskyon/taskyon/browser'
 import { getDatabase } from '@taskyon/taskyon/db'
 import { reconcileWithDefaults } from '@taskyon/shared/modules/utils'
@@ -1330,7 +1335,7 @@ export async function testToolList() {
 
   const ty = await tystate.taskyon
 
-  const allTools = (await ty.updateToolDefinitions()) ?? []
+  const allTools = await createPortRpcClient(ty.port, taskyonProtocol.rpc.listTools)({})
   return {
     'all tools': summarizeTools(Object.keys(allTools), allTools),
   }
@@ -2241,7 +2246,7 @@ export async function getTestMetaData() {
       const task = await ty.getTask(state.selectedTaskId)
       if (task) {
         const taskChain = await ty.getTaskChain(task.id)
-        const toolDefs = await ty.updateToolDefinitions(false)
+        const toolDefs = await createPortRpcClient(ty.port, taskyonProtocol.rpc.listTools)({})
         const res = await convertTaskNodesToOpenAIChat(
           taskChain,
           // we are not testing files right now...

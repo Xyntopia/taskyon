@@ -14,7 +14,7 @@ import type {
 
 export type McpProtocolBridgeDependencies = {
   serverInfo: McpServerInfo
-  listTools: () => Promise<McpTool[]>
+  getTools: () => Promise<McpTool[]>
   callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>
   protocolVersion?: string
 }
@@ -123,7 +123,7 @@ const methodHandlers: Record<string, McpMethodHandler> = {
   initialize: (_req, deps) => Promise.resolve(initializeResult(deps)),
   'notifications/initialized': () => Promise.resolve(null),
   'tools/list': async (_req, deps): Promise<McpToolsListResult> => {
-    const tools = await deps.listTools()
+    const tools = await deps.getTools()
     return { tools }
   },
   'tools/call': async (req, deps): Promise<McpToolsCallResult> => {

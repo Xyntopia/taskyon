@@ -24,6 +24,8 @@
     "start": "node ./dist/cli.cjs"
   },
   "dependencies": {
-    "terminal-kit": "^3.1.2"
+    "@taskyon/tyclient": "workspace:*",
+    "terminal-kit": "^3.1.2",
+    "zod": "^4.0.0-beta.20250505T195954"
   }
 }

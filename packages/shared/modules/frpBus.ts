@@ -1,5 +1,5 @@
 // frpBus.ts
-import type { z } from 'zod'
+import { z } from 'zod'
 
 /**
  * Functional Reactive Programming (FRP) Bus
@@ -388,9 +388,9 @@ export function streamProcedureCall<T extends unknown[], R>(timeoutMs?: number) 
   return { emitFunc, stream: requireSubscribers(stream, 1) }
 }
 
-export type RpcMessagePort<TRequest> = {
+export type RpcMessagePort<TRequest, TReceive = unknown> = {
   send: (message: TRequest) => void
-  receive: (observer: Observer<unknown>) => Unsubscribe
+  receive: (observer: Observer<TReceive>) => Unsubscribe
 }
 
 export type RpcScopeStore<TScope> = {
@@ -420,16 +420,236 @@ export type RpcResponseResult<TResult> =
       error: Error
     }
 
-export function createStreamRpcRequest<TRequest, TResponse, TResult, TScope>(options: {
-  port: RpcMessagePort<TRequest>
+export type PortRpcClientOptions = {
+  timeoutMs?: number
+  signal?: AbortSignal
+}
+
+export type UnaryPortRpcDefinition<
+  TRequest extends { requestId: string },
+  TResponse extends { requestId: string; result: TResult },
+  TArgs,
+  TResult,
+  TRequestSchema = z.ZodType<TRequest>,
+  TResponseSchema = z.ZodType<TResponse>,
+> = {
+  name: string
+  request: TRequestSchema
+  response: TResponseSchema
+  createRequest: (args: TArgs, requestId: string) => TRequest
+  createResponse: (request: { requestId: string }, result: TResult) => TResponse
+  isResponseForRequest: (response: { requestId: string }, requestId: string) => boolean
+  readResponse: (response: { result: TResult }) => RpcResponseResult<TResult>
+  createCancelRequest?: (request: TRequest, reason: string) => TRequest
+  defaultTimeoutMs?: number | undefined
+}
+
+type FrpRpcConfig<
+  TRequest extends z.ZodObject<z.ZodRawShape> = z.ZodObject<z.ZodRawShape>,
+  TResponse extends z.ZodType = z.ZodType,
+> = {
+  request: TRequest
+  response: TResponse
+  defaultTimeoutMs?: number
+}
+
+let portRpcRequestCounter = 0
+
+const createPortRpcRequestId = (name: string) => `${name}-${Date.now()}-${portRpcRequestCounter++}`
+
+type RpcRequestFromConfig<TName extends string, TConfig extends FrpRpcConfig> = z.output<
+  TConfig['request']
+> & {
+  type: `${TName}Request`
+  requestId: string
+}
+
+type RpcResponseFromConfig<TName extends string, TConfig extends FrpRpcConfig> = {
+  type: `${TName}Response`
+  requestId: string
+  result: z.output<TConfig['response']>
+}
+
+type RpcDefinitionFromConfig<
+  TName extends string,
+  TConfig extends FrpRpcConfig,
+> = UnaryPortRpcDefinition<
+  RpcRequestFromConfig<TName, TConfig>,
+  RpcResponseFromConfig<TName, TConfig>,
+  z.input<TConfig['request']>,
+  z.output<TConfig['response']>,
+  z.ZodObject<
+    Omit<TConfig['request']['shape'], 'type' | 'requestId'> & {
+      type: z.ZodLiteral<`${TName}Request`>
+      requestId: z.ZodString
+    }
+  >,
+  z.ZodObject<{
+    type: z.ZodLiteral<`${TName}Response`>
+    requestId: z.ZodString
+    result: TConfig['response']
+  }>
+>
+
+type FrpRpcDefinitions<TRpc extends Record<string, FrpRpcConfig>> = {
+  [K in keyof TRpc]: K extends string ? RpcDefinitionFromConfig<K, TRpc[K]> : never
+}
+
+const createUnaryRpcDefinition = <const TName extends string, const TConfig extends FrpRpcConfig>(
+  name: TName,
+  config: TConfig,
+): RpcDefinitionFromConfig<TName, TConfig> => {
+  const requestType = `${name}Request` as `${TName}Request`
+  const responseType = `${name}Response` as `${TName}Response`
+  const request = z
+    .object({
+      ...config.request.shape,
+      type: z.literal(requestType),
+      requestId: z.string(),
+    })
+    .describe(config.request.description ?? '') as RpcDefinitionFromConfig<
+    TName,
+    TConfig
+  >['request']
+  const response = z
+    .object({
+      type: z.literal(responseType),
+      requestId: z.string(),
+      result: config.response,
+    })
+    .describe(config.response.description ?? '') as RpcDefinitionFromConfig<
+    TName,
+    TConfig
+  >['response']
+
+  return {
+    name,
+    request,
+    response,
+    defaultTimeoutMs: config.defaultTimeoutMs,
+    createRequest: (args, requestId) =>
+      request.parse({
+        ...args,
+        type: requestType,
+        requestId,
+      }) as RpcRequestFromConfig<TName, TConfig>,
+    createResponse: (receivedRequest, result) =>
+      response.parse({
+        type: responseType,
+        requestId: receivedRequest.requestId,
+        result,
+      }) as RpcResponseFromConfig<TName, TConfig>,
+    isResponseForRequest: (receivedResponse, requestId) => receivedResponse.requestId === requestId,
+    readResponse: (receivedResponse) => ({
+      ok: true,
+      value: receivedResponse.result,
+    }),
+  }
+}
+
+export type FrpProtocolDefinition<TRpc extends Record<string, unknown>> = {
+  id: string
+  version: string
+  rpc: TRpc
+}
+
+export function defineFrpProtocol<const TRpc extends Record<string, FrpRpcConfig>>(
+  definition: FrpProtocolDefinition<TRpc>,
+): FrpProtocolDefinition<FrpRpcDefinitions<TRpc>> {
+  const rpcDefinitions: Partial<FrpRpcDefinitions<TRpc>> = {}
+  const entries = Object.entries(definition.rpc) as Array<
+    [keyof TRpc & string, TRpc[keyof TRpc & string]]
+  >
+  for (const [name, config] of entries) {
+    rpcDefinitions[name] = createUnaryRpcDefinition(
+      name,
+      config,
+    ) as FrpRpcDefinitions<TRpc>[typeof name]
+  }
+  return {
+    ...definition,
+    rpc: rpcDefinitions as FrpRpcDefinitions<TRpc>,
+  }
+}
+
+export function createPortRpcClient<
+  TRequest extends { requestId: string },
+  TResponse extends { requestId: string; result: TResult },
+  TArgs,
+  TResult,
+  TReceive = unknown,
+>(
+  port: RpcMessagePort<TRequest, TReceive>,
+  definition: UnaryPortRpcDefinition<TRequest, TResponse, TArgs, TResult>,
+) {
+  return async (args: TArgs & PortRpcClientOptions): Promise<TResult> => {
+    const requestId = createPortRpcRequestId(definition.name)
+    const request = definition.createRequest(args, requestId)
+    const createCancelRequest = definition.createCancelRequest
+    return await createStreamRpcRequest<TRequest, TResponse, TResult, never, TReceive>({
+      port,
+      request,
+      requestId,
+      timeoutMs: args.timeoutMs ?? definition.defaultTimeoutMs ?? 30_000,
+      signal: args.signal,
+      createCancelRequest: createCancelRequest
+        ? (reason) => createCancelRequest(request, reason)
+        : undefined,
+      parseResponse: (message) => {
+        const parsed = definition.response.safeParse(message)
+        return parsed.success ? (parsed.data as TResponse) : undefined
+      },
+      isResponseForRequest: definition.isResponseForRequest,
+      readResponse: definition.readResponse,
+    })
+  }
+}
+
+export function registerPortRpcHandler<
+  Tx,
+  Rx,
+  TRequest extends { requestId: string },
+  TResponse extends Tx & { requestId: string; result: TResult },
+  TArgs,
+  TResult,
+>(
+  port: Port<Tx, Rx>,
+  definition: UnaryPortRpcDefinition<TRequest, TResponse, TArgs, TResult>,
+  handler: (request: TRequest) => TResult | Promise<TResult>,
+  errorHandler?: (error: unknown) => void,
+): Unsubscribe {
+  return port.receive((raw) => {
+    const parsed = definition.request.safeParse(raw)
+    if (!parsed.success) return
+    const request = parsed.data as TRequest
+
+    void Promise.resolve(handler(request))
+      .then((result) => {
+        port.send(definition.createResponse(request, result))
+      })
+      .catch((error) => {
+        if (errorHandler) errorHandler(error)
+        else console.error('an error occured during handling of the RPC request', error)
+      })
+  })
+}
+
+export function createStreamRpcRequest<
+  TRequest,
+  TResponse,
+  TResult,
+  TScope,
+  TReceive = unknown,
+>(options: {
+  port: RpcMessagePort<TRequest, TReceive>
   request: TRequest
   requestId: string
   timeoutMs: number
   signal?: AbortSignal | undefined
   scope?: TScope | undefined
   scopeStore?: RpcScopeStore<TScope> | undefined
-  createCancelRequest: (reason: string) => TRequest
-  parseResponse: (message: unknown) => TResponse | undefined
+  createCancelRequest?: ((reason: string) => TRequest) | undefined
+  parseResponse: (message: TReceive) => TResponse | undefined
   isResponseForRequest: (response: TResponse, requestId: string) => boolean
   readResponse: (response: TResponse) => RpcResponseResult<TResult>
 }): Promise<TResult> {
@@ -455,7 +675,7 @@ export function createStreamRpcRequest<TRequest, TResponse, TResult, TScope>(opt
     }
 
     const cancel = (reason: string) => {
-      options.port.send(options.createCancelRequest(reason))
+      if (options.createCancelRequest) options.port.send(options.createCancelRequest(reason))
     }
 
     const abort = () => {

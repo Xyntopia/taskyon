@@ -46,6 +46,7 @@ import {
 import type { AuthenticationOptions, TokenGetter } from '@taskyon/taskyon/browser'
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
 import type { chunkStreamType } from '@taskyon/taskyon/tools/chatCompletionTool'
+import { createPortRpcClient, taskyonProtocol } from '@taskyon/tyclient'
 import {
   createStandardEntryNodeTool,
   EntryNodeSettingsSchema,
@@ -923,12 +924,18 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
   }
 }
 
-function reactiveTools(taskyon: Promise<Taskyon>) {
+const createTaskyonApi = (ty: Pick<Taskyon, 'port'>) => ({
+  listTools: createPortRpcClient(ty.port, taskyonProtocol.rpc.listTools),
+})
+
+type TaskyonApi = ReturnType<typeof createTaskyonApi>
+
+function reactiveTools(taskyon: Promise<Taskyon>, taskyonApi: Promise<TaskyonApi>) {
   const allTools = ref<Record<string, ToolBase>>({})
 
-  void taskyon.then((ty) => {
+  void Promise.all([taskyon, taskyonApi]).then(([ty, api]) => {
     const updateTools = async () => {
-      allTools.value = await ty.updateToolDefinitions(true)
+      allTools.value = await api.listTools({ includeHidden: true })
     }
     void updateTools()
 
@@ -1061,24 +1068,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         },
       },
     }) as partialTaskDraft
-  const entryNodeTool = createStandardEntryNodeTool({
-    name: getEntryNodeToolName(buildEntryNodeDraft()),
-    renderOptions: { hideChat: true, hideLlm: true },
-    toolChooser: { enabled: true, useTools: true },
-    defaultAllowedTools: [],
-    getToolCatalog: async () => {
-      const cachedTools =
-        Object.keys(allTools.value).length > 0
-          ? allTools.value
-          : await (await taskyon).updateToolDefinitions(true)
-      return Object.values(cachedTools)
-        .filter((tool) => !['chatCompletion', 'entryNode', 'taskyonFlow'].includes(tool.name))
-        .map((tool) => ({
-          name: tool.name,
-          description: tool.description,
-        }))
-    },
-  })
   // this means previously, we have loaded a session with a binding key.
   // so we would like to wait a little bit, if we will get that same binding key...
   const taskyon = (async () => {
@@ -1109,6 +1098,27 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       cs,
     )
   })
+  const taskyonApi = taskyon.then(createTaskyonApi)
+  const allTools = reactiveTools(taskyon, taskyonApi)
+
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: getEntryNodeToolName(buildEntryNodeDraft()),
+    renderOptions: { hideChat: true, hideLlm: true },
+    toolChooser: { enabled: true, useTools: true },
+    defaultAllowedTools: [],
+    getToolCatalog: async () => {
+      const cachedTools =
+        Object.keys(allTools.value).length > 0
+          ? allTools.value
+          : await (await taskyonApi).listTools({ includeHidden: true })
+      return Object.values(cachedTools)
+        .filter((tool) => !['chatCompletion', 'entryNode', 'taskyonFlow'].includes(tool.name))
+        .map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+        }))
+    },
+  })
 
   void taskyon.then(async (ty) => {
     const uiToolRpcExecutor = await registerToolRpcTools({
@@ -1117,7 +1127,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       createContext: createTrustedUiToolContext(ty),
     })
     onScopeDispose(() => uiToolRpcExecutor.destroy())
-    await ty.updateToolDefinitions(false)
+    await (await taskyonApi).listTools({})
   })
 
   const apiKeyManagement = useApiManagement(stateRefs, () => taskyon)
@@ -1305,9 +1315,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     }
     // ------------end of IFRAME operations-------
   })
-
-  // make sure we always have an up-to-date list of tools
-  const allTools = reactiveTools(taskyon)
 
   // an oauth token getter function which persists secrets in our local secretstore!
   const getToken: TokenGetter = async (...args) => {

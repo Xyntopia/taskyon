@@ -43,6 +43,7 @@ import {
   createIframeMux,
   createMessagePortAdapter,
   createPortApi,
+  registerPortRpcHandler,
   createStream,
   createTypeFilteredPort,
   createUnavailableIframeMux,
@@ -50,6 +51,7 @@ import {
 import { createProxyApi, createProxyFunction } from '../utils/objHelpers'
 import { configureNodePgLiteDataDir, getDatabase } from '../utils/pglite.api'
 import type { Thunk } from '../utils/tsHelpers'
+import { taskyonProtocol } from '../api/taskyonProtocol'
 import type { TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
 import { generateSecretId } from './taskFunctionExecutor'
@@ -107,13 +109,6 @@ function createApi(
           },
         })
       },
-      toolDefinitionsRequest: async (msg) => {
-        insidePort.send({
-          type: 'toolDefinitionsResponse',
-          requestId: msg.requestId,
-          tools: await taskManagerInstance().updateToolDefinitions(msg.includeHidden),
-        })
-      },
       file: async (msg) => {
         const id = await taskManagerInstance().addFiles([msg.file], msg.store ?? 'memory')
         console.log('received file...', id, msg)
@@ -131,6 +126,13 @@ function createApi(
     },
     (msg) => console.warn('taskyon receiving unknown message', msg),
     (msg) => console.error('an error occured during handling of the message', msg),
+  )
+
+  registerPortRpcHandler(
+    insidePort,
+    taskyonProtocol.rpc.listTools,
+    async (request) => await taskManagerInstance().updateToolDefinitions(request.includeHidden),
+    (error) => console.error('an error occured during handling of the RPC request', error),
   )
 
   let unsubscribeTaskStream: (() => void) | null = null
@@ -510,8 +512,6 @@ export async function tyCore(
         'getTask',
         'getTaskIdChain',
         'convertTaskIDs',
-        'updateToolDefinitions',
-        'addDefaultTools',
         'addPartialTask2Tree',
         'getMeta',
         'metaUpsert',
@@ -521,7 +521,6 @@ export async function tyCore(
         //       on taskManagerinstance..
         'addMdTaskChain',
         'loadYamlConversation',
-        'addTaskChain',
         'getToolDefinition',
         'countTasks',
         'countVecs',

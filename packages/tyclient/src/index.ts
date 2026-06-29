@@ -2,7 +2,6 @@
 
 import type { Port } from '@taskyon/taskyon/api'
 import {
-  REMOTE_FUNCTION_TIMEOUT_MS,
   FunctionArguments as FunctionArgumentsSchema,
   callToolOverRpc,
   processTasks,
@@ -42,47 +41,8 @@ export type {
 } from '@taskyon/taskyon/api'
 export type { FunctionArguments, partialTyConfiguration, TaskyonGuiMessage }
 export { REMOTE_FUNCTION_TIMEOUT_MS } from '@taskyon/taskyon/api'
-
-export type TaskyonToolDefinition = Extract<
-  TaskyonGuiMessage,
-  { type: 'toolDefinitionsResponse' }
->['tools'][string]
-
-let toolDefinitionsRequestCounter = 0
-
-const createToolDefinitionsRequestId = () =>
-  `tool-definitions-${Date.now()}-${toolDefinitionsRequestCounter++}`
-
-async function waitForToolDefinitionsResponse(
-  port: Port<TaskyonGuiMessage, TaskyonGuiMessage>,
-  requestId: string,
-  timeoutMs: number,
-): Promise<Record<string, TaskyonToolDefinition>> {
-  while (true) {
-    const message = await port.receive.wait({ timeoutMs })
-    if (message.type === 'toolDefinitionsResponse' && message.requestId === requestId) {
-      return message.tools
-    }
-  }
-}
-
-export async function listTaskyonTools(
-  client: Pick<TyClient, 'port'>,
-  options?: { includeHidden?: boolean; timeoutMs?: number },
-): Promise<Record<string, TaskyonToolDefinition>> {
-  const requestId = createToolDefinitionsRequestId()
-  const response = waitForToolDefinitionsResponse(
-    client.port,
-    requestId,
-    options?.timeoutMs ?? 30_000,
-  )
-  client.port.send({
-    type: 'toolDefinitionsRequest',
-    requestId,
-    includeHidden: options?.includeHidden,
-  })
-  return await response
-}
+export type { ToolBase as TaskyonToolDefinition } from '@taskyon/taskyon/api'
+export { createPortRpcClient, taskyonProtocol } from '@taskyon/taskyon/api'
 
 export async function callTaskyonTool(
   client: Pick<TyClient, 'port'>,

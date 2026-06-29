@@ -12,6 +12,7 @@ export {
   processTasks,
   processTasksDetailed,
   sendTasks,
+  taskyonProtocol,
 } from './api/index'
 export { createTaskNode, ensureValidTaskId, forgeTaskChain } from './core/createTasks'
 export * from './core/createNewTaskChain'

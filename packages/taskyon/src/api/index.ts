@@ -2,11 +2,12 @@
 // TODO: maybe move the "Api" into its own package?
 import { forgeTaskChain } from '../core/createTasks'
 import type { chatCompletionParams } from '../tools/chatCompletionTool'
-import type { TaskyonMessage } from '../types/apiTypes'
+import type { TaskyonMessage as TaskyonMessageType } from '../types/apiTypes'
 import type { TaskContentType, TaskNode } from '../types/taskNode'
 import { partialTaskDraft } from '../types/taskNode'
 import { createClientTool, createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 import { createStream, type Port } from '@taskyon/shared/modules/frpBus'
+import { taskyonProtocol } from './taskyonProtocol'
 
 export { BaseMessage, sendFile, TaskyonMessage, TyP2P } from '../types/apiTypes'
 export {
@@ -18,17 +19,25 @@ export { REMOTE_FUNCTION_TIMEOUT_MS } from '../types/messages'
 export { llmSettings, TyToolchainConfig } from '../types/profiles'
 export type { ClientTool, ClientToolContext, toolContext } from '../types/toolApi'
 export { FunctionArguments } from '../types/tools'
-export type { FunctionCall } from '../types/tools'
+export type { FunctionCall, ToolBase } from '../types/tools'
 export {
   createDuplexChannel, // utils/frpbus
   createStreamRpcRequest,
+  createPortRpcClient,
+  registerPortRpcHandler,
   createPortApi, // utis/frpbus
   MessageChannelBridge,
 } from '@taskyon/shared/modules/frpBus'
-export type { RpcMessagePort, RpcResponseResult } from '@taskyon/shared/modules/frpBus'
+export type {
+  PortRpcClientOptions,
+  RpcMessagePort,
+  RpcResponseResult,
+  UnaryPortRpcDefinition,
+} from '@taskyon/shared/modules/frpBus'
 
 export { createClientTool, createSubtasksResult, createTool, partialTaskDraft, toolCall }
 export type { Port }
+export { taskyonProtocol }
 export {
   callToolOverRpc,
   createExternalToolContext,
@@ -90,13 +99,17 @@ type TaskSubStream = (cb: (task: TaskNode) => void) => () => void
 type TaskNodeWithParent = TaskNode & { parentID: string }
 
 const isTaskCreatedMessage = (
-  message: { type: string } | TaskyonMessage,
-): message is Extract<TaskyonMessage, { type: 'taskCreated' }> & { task: TaskNodeWithParent } => {
+  message: { type: string } | TaskyonMessageType,
+): message is Extract<TaskyonMessageType, { type: 'taskCreated' }> & {
+  task: TaskNodeWithParent
+} => {
   return (
     message.type === 'taskCreated' &&
     'task' in message &&
     !!message.task &&
     typeof message.task === 'object' &&
+    'id' in message.task &&
+    'parentID' in message.task &&
     typeof message.task.id === 'string' &&
     typeof message.task.parentID === 'string'
   )
@@ -112,7 +125,7 @@ const appendPendingTask = (
 }
 
 const createSubTaskStream = <T extends { type: string }>(
-  receive: Port<T | TaskyonMessage>['receive'],
+  receive: Port<T | TaskyonMessageType>['receive'],
   initialIds: string[],
 ): TaskSubStream => {
   const trackedIds = new Set(initialIds)
@@ -147,7 +160,7 @@ export const createChatCompletionTask = (args: chatCompletionParams) =>
   toolCall<chatCompletionParams>({ name: 'chatCompletion', arguments: args })
 
 export const sendTasks =
-  <T extends { type: string }>(tyPort: Port<T | TaskyonMessage>) =>
+  <T extends { type: string }>(tyPort: Port<T | TaskyonMessageType>) =>
   async (taskList: partialTaskDraft[][], opts: processTasksOpts) => {
     const tasks = await forgeTaskChain(taskList)
 
@@ -324,7 +337,7 @@ export const observeSubTaskStream = async (
 // we make the opts mandatory on purpose so that people think about
 // some sort of quit condition.
 export const processTasksDetailed = <T extends { type: string }>(
-  tyPort: Port<T | TaskyonMessage>,
+  tyPort: Port<T | TaskyonMessageType>,
 ) => {
   const send = sendTasks<T>(tyPort)
   return async (
@@ -341,7 +354,7 @@ export const processTasksDetailed = <T extends { type: string }>(
   }
 }
 
-export const processTasks = <T extends { type: string }>(tyPort: Port<T | TaskyonMessage>) => {
+export const processTasks = <T extends { type: string }>(tyPort: Port<T | TaskyonMessageType>) => {
   const processDetailed = processTasksDetailed(tyPort)
   return async (
     taskList: partialTaskDraft[][],

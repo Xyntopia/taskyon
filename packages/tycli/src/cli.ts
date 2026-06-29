@@ -8,26 +8,26 @@ import { join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { inspect } from 'node:util'
 import { createDuplexChannel, createUnavailableIframeMux } from '../../shared/modules/frpBus'
-import { createTaskNode } from '../../taskyon/src/core/createTasks'
-import { tyCore } from '../../taskyon/src/core/init'
-import { registerToolRpcTools } from '../../taskyon/src/core/toolRpc'
-import type { Taskyon } from '../../taskyon/src/core/init'
-import { createStandardEntryNodeTool } from '../../taskyon/src/tools/entryNode'
-import type { TaskyonMessage } from '../../taskyon/src/types/apiTypes'
-import type { llmSettings } from '../../taskyon/src/types/profiles'
-import type { partialTaskDraft, TaskNode } from '../../taskyon/src/types/taskNode'
+import { createPortRpcClient, taskyonProtocol } from '@taskyon/tyclient'
 import {
   createTool,
   createClientTool,
-  InternalTool as InternalToolSchema,
-  toolCall,
-  type ClientTool,
-  type InternalTool,
-} from '../../taskyon/src/types/toolApi'
-import {
+  createTaskNode,
+  createStandardEntryNodeTool,
   getProviderOauthConfig,
   getProviderOauthCredentialsSecretName,
-} from '../../taskyon/src/utils/providerAuth'
+  registerToolRpcTools,
+  toolCall,
+  tyCore,
+  type ClientTool,
+  type InternalTool,
+  type llmSettings,
+  type partialTaskDraft,
+  type TaskNode,
+  type Taskyon,
+  type TaskyonMessage,
+} from '@taskyon/taskyon'
+import { InternalTool as InternalToolSchema } from '../../taskyon/src/types/toolApi'
 import {
   initPersistentCryptoSession,
   loadStoredConfig,
@@ -1505,7 +1505,10 @@ async function handleProviderCommand(
 }
 
 async function handleToolsCommand(ty: Taskyon, target?: Record<string, { hideChat?: boolean }>) {
-  const all = await ty.updateToolDefinitions(true)
+  const all = await createPortRpcClient(
+    ty.port,
+    taskyonProtocol.rpc.listTools,
+  )({ includeHidden: true })
   if (target) {
     for (const key of Object.keys(target)) delete target[key]
     for (const [name, def] of Object.entries(
@@ -1530,7 +1533,10 @@ async function refreshToolRenderOptions(
   ty: Taskyon,
   target: Record<string, { hideChat?: boolean }>,
 ) {
-  const all = await ty.updateToolDefinitions(true)
+  const all = await createPortRpcClient(
+    ty.port,
+    taskyonProtocol.rpc.listTools,
+  )({ includeHidden: true })
   for (const key of Object.keys(target)) delete target[key]
   for (const [name, def] of Object.entries(
     all as Record<string, { renderOptions?: { hideChat?: boolean } }>,
@@ -1759,7 +1765,10 @@ async function main() {
     getToolCatalog: async () => {
       const ty = taskyonRef.current
       if (!ty) return []
-      const allTools = await ty.updateToolDefinitions(true)
+      const allTools = await createPortRpcClient(
+        ty.port,
+        taskyonProtocol.rpc.listTools,
+      )({ includeHidden: true })
       return Object.values(allTools)
         .filter(
           (tool: { name: string; description: string }) =>

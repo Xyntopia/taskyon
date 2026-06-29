@@ -5460,6 +5460,15 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@taskyon/taskyon-mcp@workspace:packages/taskyon-mcp":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/taskyon-mcp@workspace:packages/taskyon-mcp"
+  dependencies:
+    "@taskyon/tyclient": "workspace:*"
+    zod: "npm:^4.0.0-beta.20250505T195954"
+  languageName: unknown
+  linkType: soft
+
 "@taskyon/taskyon@workspace:*, @taskyon/taskyon@workspace:packages/taskyon":
   version: 0.0.0-use.local
   resolution: "@taskyon/taskyon@workspace:packages/taskyon"
@@ -5473,7 +5482,9 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@taskyon/tycli@workspace:packages/tycli"
   dependencies:
+    "@taskyon/tyclient": "workspace:*"
     terminal-kit: "npm:^3.1.2"
+    zod: "npm:^4.0.0-beta.20250505T195954"
   bin:
     tycli: ./bin/tycli.cjs
   languageName: unknown
@@ -21222,6 +21233,7 @@ __metadata:
     "@vscode/vsce": "npm:^2.15.0"
     esbuild: "npm:^0.25.0"
     typescript: "npm:^5.9.2"
+    zod: "npm:^4.0.0-beta.20250505T195954"
   languageName: unknown
   linkType: soft
 

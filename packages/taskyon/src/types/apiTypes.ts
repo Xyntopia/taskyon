@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { taskyonProtocol } from '../api/taskyonProtocol'
 import { sha256UrlSafeHashFromFile } from '../utils/encoding'
 import type { ByType } from '../utils/tsHelpers'
 import { RemoteFunctionCall, RemoteFunctionCancel, RemoteFunctionResponse } from './messages'
@@ -73,17 +74,8 @@ const TyReadyMessage = z.object({ type: z.literal('taskyonReady') }).meta({
   description: 'simple message which signals, that our API is ready!',
 })
 
-const ToolDefinitionsRequestMessage = z.object({
-  type: z.literal('toolDefinitionsRequest'),
-  requestId: z.string(),
-  includeHidden: z.boolean().optional(),
-})
-
-const ToolDefinitionsResponseMessage = z.object({
-  type: z.literal('toolDefinitionsResponse'),
-  requestId: z.string(),
-  tools: z.record(z.string(), ToolBase),
-})
+export const ToolDefinitionsRequestMessage = taskyonProtocol.rpc.listTools.request
+export const ToolDefinitionsResponseMessage = taskyonProtocol.rpc.listTools.response
 
 export const BaseMessage = z.object({
   origin: z.string().optional(),
