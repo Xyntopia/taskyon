@@ -417,95 +417,92 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
   )
   const toolRpcExecutor = await registerToolRpcTools({
     port: ty.port,
-    tools: [
-      webResearchPlanner,
-      updateFilesStub,
-      opfsStorageStub,
-      downloadFileStub,
-      bashStub,
-      jinaMarkdownReaderStub,
-    ],
+    tools: [updateFilesStub, opfsStorageStub, downloadFileStub, bashStub, jinaMarkdownReaderStub],
   })
 
-  const result = await processTasksDetailed(ty.port)(
-    [
+  try {
+    const result = await processTasksDetailed(ty.port)(
       [
-        {
-          role: 'user',
-          content: {
-            type: 'message',
-            data: 'hi! can you search for 5 spec sheets of solar cells for me and save them here?',
+        [
+          {
+            role: 'user',
+            content: {
+              type: 'message',
+              data: 'hi! can you search for 5 spec sheets of solar cells for me and save them here?',
+            },
           },
-        },
-        toolCall({
-          name: 'webResearchPlanner',
-          arguments: {
-            objective: 'Find 5 solar cell spec sheets and save them here.',
-            searchQueries: ['solar cell datasheet pdf manufacturer spec sheet'],
-            enableWebSearch: true,
-            deliverable: 'Markdown file with 5 solar cell spec sheets and direct URLs',
-          },
-        }),
+          toolCall({
+            name: 'webResearchPlanner',
+            arguments: {
+              objective: 'Find 5 solar cell spec sheets and save them here.',
+              searchQueries: ['solar cell datasheet pdf manufacturer spec sheet'],
+              enableWebSearch: true,
+              deliverable: 'Markdown file with 5 solar cell spec sheets and direct URLs',
+            },
+          }),
+        ],
       ],
-    ],
-    isDelegatedResearchEntryNode,
-    {
-      show: false,
-      timeoutMs: 10_000,
-      throwOnError: false,
-      interruptOnSettle: (reason) => {
-        ty.workerStop(reason)
+      isDelegatedResearchEntryNode,
+      {
+        show: false,
+        timeoutMs: 10_000,
+        throwOnError: false,
+        interruptOnSettle: (reason) => {
+          ty.workerStop(reason)
+        },
       },
-    },
-  )
+    )
 
-  if (result.status !== 'matched') {
-    throw new Error(`Expected delegated entryNode task, got ${result.status}`)
+    if (result.status !== 'matched') {
+      throw new Error(`Expected delegated entryNode task, got ${result.status}`)
+    }
+    const args =
+      result.result.content.type === 'functioncall'
+        ? result.result.content.data.arguments
+        : undefined
+    assert(
+      args &&
+        typeof args === 'object' &&
+        !Array.isArray(args) &&
+        'allowedTools' in args &&
+        Array.isArray(args.allowedTools) &&
+        args.allowedTools.length === 4 &&
+        args.allowedTools[0] === 'updateFiles' &&
+        args.allowedTools[1] === 'downloadFile' &&
+        args.allowedTools[2] === 'bash' &&
+        args.allowedTools[3] === 'jinaMarkdownReader',
+      'Expected processTasks-generated research branch to expose local save, verified download, shell fallback, and page-validation tools only',
+    )
+    assert(
+      args &&
+        typeof args === 'object' &&
+        !Array.isArray(args) &&
+        'websearch' in args &&
+        args.websearch &&
+        typeof args.websearch === 'object' &&
+        !Array.isArray(args.websearch) &&
+        'enabled' in args.websearch &&
+        args.websearch.enabled === true,
+      'Expected processTasks-generated research branch to keep web search enabled',
+    )
+    const delegatedBootstrapTask = result.observedTasks.find(
+      (task) =>
+        task.content.type === 'message' &&
+        typeof task.content.data === 'string' &&
+        task.content.data.includes('Subtask objective: Research objective:'),
+    )
+    const delegatedBootstrap =
+      delegatedBootstrapTask?.content.type === 'message' &&
+      typeof delegatedBootstrapTask.content.data === 'string'
+        ? delegatedBootstrapTask.content.data
+        : ''
+    assert(
+      delegatedBootstrap.includes('research/find-5-solar-cell-spec-sheets-and-save-them-here/'),
+      'Expected processTasks-generated research branch to include one deterministic artifact root',
+    )
+  } finally {
+    toolRpcExecutor.destroy()
   }
-  const args =
-    result.result.content.type === 'functioncall' ? result.result.content.data.arguments : undefined
-  assert(
-    args &&
-      typeof args === 'object' &&
-      !Array.isArray(args) &&
-      'allowedTools' in args &&
-      Array.isArray(args.allowedTools) &&
-      args.allowedTools.length === 4 &&
-      args.allowedTools[0] === 'updateFiles' &&
-      args.allowedTools[1] === 'downloadFile' &&
-      args.allowedTools[2] === 'bash' &&
-      args.allowedTools[3] === 'jinaMarkdownReader',
-    'Expected processTasks-generated research branch to expose local save, verified download, shell fallback, and page-validation tools only',
-  )
-  assert(
-    args &&
-      typeof args === 'object' &&
-      !Array.isArray(args) &&
-      'websearch' in args &&
-      args.websearch &&
-      typeof args.websearch === 'object' &&
-      !Array.isArray(args.websearch) &&
-      'enabled' in args.websearch &&
-      args.websearch.enabled === true,
-    'Expected processTasks-generated research branch to keep web search enabled',
-  )
-  const delegatedBootstrapTask = result.observedTasks.find(
-    (task) =>
-      task.content.type === 'message' &&
-      typeof task.content.data === 'string' &&
-      task.content.data.includes('Subtask objective: Research objective:'),
-  )
-  const delegatedBootstrap =
-    delegatedBootstrapTask?.content.type === 'message' &&
-    typeof delegatedBootstrapTask.content.data === 'string'
-      ? delegatedBootstrapTask.content.data
-      : ''
-  assert(
-    delegatedBootstrap.includes('research/find-5-solar-cell-spec-sheets-and-save-them-here/'),
-    'Expected processTasks-generated research branch to include one deterministic artifact root',
-  )
-
-  toolRpcExecutor.destroy()
 
   return { success: true }
 }

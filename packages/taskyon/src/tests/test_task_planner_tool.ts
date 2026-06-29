@@ -80,9 +80,10 @@ export const testTaskPlannerBuildsParallelAndSequentialChains = () => {
       'arguments' in planningCall &&
       planningCall.arguments &&
       typeof planningCall.arguments === 'object' &&
-      'goal' in planningCall.arguments &&
-      planningCall.arguments.goal === 'SimpleCompletion',
-    'Expected planner chatCompletion to use goal SimpleCompletion',
+      !('goal' in planningCall.arguments) &&
+      'prompts' in planningCall.arguments &&
+      Array.isArray(planningCall.arguments.prompts),
+    'Expected planner chatCompletion to use prompts without deprecated goal',
   )
 
   const firstEntryNodeCall = getFunctionCall(chains[0]?.[3])

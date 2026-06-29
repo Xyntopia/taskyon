@@ -369,7 +369,7 @@ const createConsentHtml = (query: string) => `<div style="font-family:sans-serif
   });
 </script>`
 
-const readProviderDocumentsFromTaskChain = async (taskChain: TaskNode[]) => {
+const readProviderDocumentsFromTaskChain = (taskChain: TaskNode[]) => {
   for (let index = taskChain.length - 1; index >= 0; index -= 1) {
     const task = taskChain[index]
     if (task?.content.type !== 'toolresult' || !task.parentID) continue
@@ -477,7 +477,7 @@ export const createTaskyonDocumentationTool = (db: TyPGDB) =>
       const indexedProviderResult = args.phase === 'indexProviderResult'
       if (indexedProviderResult) {
         const taskChain = await ctx.getExecutionTaskChain()
-        const documents = await readProviderDocumentsFromTaskChain(taskChain)
+        const documents = readProviderDocumentsFromTaskChain(taskChain)
         if (!documents) {
           return ctx.createSubtasksResult([
             [

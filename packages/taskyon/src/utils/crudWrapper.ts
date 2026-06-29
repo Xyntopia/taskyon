@@ -1,5 +1,4 @@
 import type { PartialDeep } from 'type-fest'
-import type { TaskNode } from '../types/taskNode'
 import { KeyedMutex } from './asyncUtils'
 import type { AskCryptoKey } from './crypto'
 import type { EncryptedDataRow } from './encrypt'

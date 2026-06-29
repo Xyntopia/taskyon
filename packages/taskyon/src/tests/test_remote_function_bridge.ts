@@ -211,11 +211,12 @@ export const testRemoteFunctionBridgeAllowsExplicitExternalSecretContext = async
     port: clientPort,
     tools: [secretTool],
     createContext: (call, stopSignal) => ({
-      getExecutionTaskChain: async () => [],
+      getExecutionTaskChain: () => Promise.resolve([]),
       createSubtasksResult,
-      getSecret: async (name) => secrets.get(`${call.functionName}:${name}`) ?? null,
-      setSecret: async (name, value) => {
+      getSecret: (name) => Promise.resolve(secrets.get(`${call.functionName}:${name}`) ?? null),
+      setSecret: (name, value) => {
         secrets.set(`${call.functionName}:${name}`, value)
+        return Promise.resolve()
       },
       stopSignal,
       toolId: call.functionName,

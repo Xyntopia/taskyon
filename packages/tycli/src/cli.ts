@@ -10,7 +10,6 @@ import { inspect } from 'node:util'
 import { createDuplexChannel, createUnavailableIframeMux } from '../../shared/modules/frpBus'
 import { createPortRpcClient, taskyonProtocol } from '@taskyon/tyclient'
 import {
-  createTool,
   createClientTool,
   createTaskNode,
   createStandardEntryNodeTool,

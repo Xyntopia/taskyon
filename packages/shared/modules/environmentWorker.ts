@@ -57,7 +57,7 @@ export const createEnvironmentWorker = <Request, Response>(
   const local: EnvironmentWorkerLike<Request, Response> = {
     onmessage: null,
     onerror: null,
-    postMessage(request, _transfer) {
+    postMessage(request) {
       if (terminated) return
       queueMicrotask(() => {
         const controller = new AbortController()

@@ -35,7 +35,7 @@ import {
   createPortRpcClient,
   processTasks,
   taskyonProtocol,
-} from '@taskyon/tyclient'
+} from '@taskyon/taskyon/api'
 import { authenticateWithPopup } from '@taskyon/taskyon/browser'
 import { getDatabase } from '@taskyon/taskyon/db'
 import { reconcileWithDefaults } from '@taskyon/shared/modules/utils'
@@ -149,6 +149,34 @@ export function testTaskyonProfileSettingsHelpers() {
 testTaskyonProfileSettingsHelpers.description =
   'Validates Taskyon profile patch/reset helpers for appConfiguration, llmSettings, and toolchainConfig.'
 
+function structurallyEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false
+    return left.every((value, index) => structurallyEqual(value, right[index]))
+  }
+  if (
+    !left ||
+    !right ||
+    typeof left !== 'object' ||
+    typeof right !== 'object' ||
+    Object.getPrototypeOf(left) !== Object.prototype ||
+    Object.getPrototypeOf(right) !== Object.prototype
+  ) {
+    return false
+  }
+
+  const leftRecord = left as Record<string, unknown>
+  const rightRecord = right as Record<string, unknown>
+  const leftKeys = Object.keys(leftRecord)
+  const rightKeys = Object.keys(rightRecord)
+  if (leftKeys.length !== rightKeys.length) return false
+  return leftKeys.every(
+    (key) =>
+      Object.hasOwn(rightRecord, key) && structurallyEqual(leftRecord[key], rightRecord[key]),
+  )
+}
+
 export function testReconcileWithDefaults() {
   const diagnostics: Array<{
     name: string
@@ -167,7 +195,7 @@ export function testReconcileWithDefaults() {
   ) => {
     summary.total += 1
     const actual = reconcileWithDefaults(stored, defaults, options)
-    const passed = JSON.stringify(actual) === JSON.stringify(expected)
+    const passed = structurallyEqual(actual, expected)
 
     if (passed) {
       summary.passed += 1

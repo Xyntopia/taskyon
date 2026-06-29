@@ -22,7 +22,7 @@ const jinaMarkdownReader = createTool({
       },
       httpPolicy: politeHttpPolicySchema,
     },
-  },
+  } as const satisfies JSONSchema7,
   function: async ({ url, httpPolicy }) => {
     const response = await politeFetch(
       `https://r.jina.ai/${url}`,
@@ -52,7 +52,7 @@ const tauriHttpWebReader = createTool({
       },
       httpPolicy: politeHttpPolicySchema,
     },
-  },
+  } as const satisfies JSONSchema7,
   function: async ({ url, httpPolicy }) => {
     if (!canUseTauriHttpPlugin()) {
       throw new Error('tauriHttpWebReader is only available in Tauri desktop runtime')

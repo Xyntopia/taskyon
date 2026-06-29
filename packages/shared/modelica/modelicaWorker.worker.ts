@@ -763,7 +763,6 @@ function handleStartSimulation(payload: {
       Number(payload.tEnd) || 0,
       Number(payload.dt) || 0,
       asString(payload.solver) || 'auto',
-      '{}',
     ),
   )
   return JSON.parse(raw) as Record<string, unknown>

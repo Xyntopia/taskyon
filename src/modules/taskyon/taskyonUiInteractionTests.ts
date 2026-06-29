@@ -3,7 +3,7 @@ import {
   partialTaskDraft,
   type partialTaskDraft as PartialTaskDraft,
 } from '@taskyon/taskyon'
-import { processTasks } from '@taskyon/tyclient'
+import { processTasks } from '@taskyon/taskyon/api'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 
 const tystate = useTaskyonStore()

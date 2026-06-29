@@ -499,8 +499,8 @@ const createUnaryRpcDefinition = <const TName extends string, const TConfig exte
   name: TName,
   config: TConfig,
 ): RpcDefinitionFromConfig<TName, TConfig> => {
-  const requestType = `${name}Request` as `${TName}Request`
-  const responseType = `${name}Response` as `${TName}Response`
+  const requestType: `${TName}Request` = `${name}Request`
+  const responseType: `${TName}Response` = `${name}Response`
   const request = z
     .object({
       ...config.request.shape,
@@ -597,7 +597,7 @@ export function createPortRpcClient<
         : undefined,
       parseResponse: (message) => {
         const parsed = definition.response.safeParse(message)
-        return parsed.success ? (parsed.data as TResponse) : undefined
+        return parsed.success ? parsed.data : undefined
       },
       isResponseForRequest: definition.isResponseForRequest,
       readResponse: definition.readResponse,
@@ -621,7 +621,7 @@ export function registerPortRpcHandler<
   return port.receive((raw) => {
     const parsed = definition.request.safeParse(raw)
     if (!parsed.success) return
-    const request = parsed.data as TRequest
+    const request = parsed.data
 
     void Promise.resolve(handler(request))
       .then((result) => {

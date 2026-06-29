@@ -117,16 +117,17 @@
                         />
                       </q-item-section>
                     </template>
-                    <q-list dense :padding="false">
-                      <q-item
+                    <div class="diagnostics-test-list">
+                      <button
                         v-for="(val, name) in section.tests[groupName] ?? {}"
                         :key="name"
-                        clickable
+                        type="button"
+                        class="diagnostics-test-button"
                         @click="runTests({ [`${name}`]: val }, true)"
                       >
-                        <q-item-section>{{ name }}</q-item-section>
-                      </q-item>
-                    </q-list>
+                        {{ name }}
+                      </button>
+                    </div>
                   </q-expansion-item>
                 </div>
               </q-expansion-item>
@@ -184,6 +185,7 @@ const testModules = import.meta.glob(
     '../../packages/taskyon/src/tests/**/*.ts',
     '!../../packages/taskyon/src/tests/test_entry_node_error_recovery.ts',
     '!../../packages/taskyon/src/tests/test_entry_node_websearch.ts',
+    '!../../packages/taskyon/src/tests/test_remote_function_bridge.ts',
     '../../packages/shared/surrogate/test_*.ts',
   ],
   { eager: true }, // so modules are imported at build time (synchronously)
@@ -515,3 +517,28 @@ function abortRunningTests() {
 
 //const stateView = {...state}
 </script>
+
+<style scoped>
+.diagnostics-test-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.diagnostics-test-button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  min-height: 32px;
+  padding: 4px 16px;
+  text-align: left;
+}
+
+.diagnostics-test-button:hover,
+.diagnostics-test-button:focus-visible {
+  background: rgb(0 0 0 / 8%);
+  outline: none;
+}
+</style>

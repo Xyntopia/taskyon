@@ -11,10 +11,10 @@ const assert = (condition: unknown, message: string) => {
 }
 
 const createTestContext = (taskChain: TaskNode[] = []) => ({
-  getExecutionTaskChain: async () => taskChain,
+  getExecutionTaskChain: () => Promise.resolve(taskChain),
   createSubtasksResult,
-  getSecret: async () => null,
-  setSecret: async () => undefined,
+  getSecret: () => Promise.resolve(null),
+  setSecret: () => Promise.resolve(),
   stopSignal: new AbortController().signal,
   toolId: 'documentation-test',
 })

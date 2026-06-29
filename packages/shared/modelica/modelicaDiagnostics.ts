@@ -1677,7 +1677,7 @@ model BouncingBall             "The bouncing ball model"
     throw new Error('Rumoca wasm export missing: simulate_model')
   }
   const nativeRaw = JSON.parse(
-    String(wasm.simulate_model(source, 'BouncingBall', 2, 0.1, 'auto', '{}')),
+    String(wasm.simulate_model(source, 'BouncingBall', 2, 0.1, 'auto')),
   ) as Record<string, unknown>
   const nativeRunResult = normalizeRumocaNativeSimulationResult({
     ...nativeRaw,
