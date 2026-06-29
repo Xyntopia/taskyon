@@ -14,8 +14,15 @@ const cloneArgs = <T>(value: T): T =>
     ? structuredClone(value)
     : (JSON.parse(JSON.stringify(value)) as T)
 
-async function loadWorkerSandboxRuntime(): Promise<WorkerSandboxRuntime> {
+async function loadWorkerSandboxRuntime(
+  options: ExecuteInWorkerSandboxOptions,
+): Promise<WorkerSandboxRuntime> {
   if (isBrowserRuntime()) {
+    if (options.browserRuntime === 'worker') {
+      const { BrowserNativeWorkerSandboxRuntime } =
+        await import('./browserNativeWorkerSandboxRuntime')
+      return new BrowserNativeWorkerSandboxRuntime()
+    }
     const { BrowserWorkerSandboxRuntime } = await import('./browserWorkerSandboxRuntime')
     return new BrowserWorkerSandboxRuntime()
   }
@@ -45,6 +52,6 @@ export async function executeInWorkerSandbox<R = unknown>(
   options: ExecuteInWorkerSandboxOptions,
   ...args: unknown[]
 ): Promise<R> {
-  const runtime = await loadWorkerSandboxRuntime()
+  const runtime = await loadWorkerSandboxRuntime(options)
   return await runtime.execute<R>(buildWorkerSandboxRequest(options, args), options)
 }

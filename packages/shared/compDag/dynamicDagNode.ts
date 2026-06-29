@@ -95,10 +95,10 @@ const toObjectZod = (schema: JsonSchema): z.ZodObject<z.ZodRawShape> => {
 
 const createTimeoutSignal = (timeoutMs: number): { signal: AbortSignal; dispose: () => void } => {
   const controller = new AbortController()
-  const timeout = window.setTimeout(() => {
+  const timeout = globalThis.setTimeout(() => {
     controller.abort(`Dynamic node timed out after ${timeoutMs}ms`)
   }, timeoutMs)
-  return { signal: controller.signal, dispose: () => window.clearTimeout(timeout) }
+  return { signal: controller.signal, dispose: () => globalThis.clearTimeout(timeout) }
 }
 
 const normalizeLegacy = (def: DynamicLegacyNodeDefinition): DynamicDagNodeDefinition => {
@@ -183,12 +183,11 @@ export const compileDynamicDagNode = (args: {
     exposedInputs: exposedInputs as never,
     policy: { cache: 'ReadWrite', scope: 'ModelState' },
     run: async (params, use) => {
-      if (typeof document === 'undefined') {
-        throw new Error('Dynamic DAG nodes require browser document for iframe execution.')
-      }
       const resolvedInputs: Record<string, unknown> = {}
-      for (const [alias, runner] of Object.entries(use as Record<string, () => Promise<unknown>>)) {
-        resolvedInputs[alias] = await runner()
+      for (const [alias, runner] of Object.entries(
+        use as Record<string, (params: Record<string, unknown>) => Promise<unknown>>,
+      )) {
+        resolvedInputs[alias] = await runner({})
       }
       const timeoutMs = Math.max(100, Math.min(definition.timeoutMs ?? 5_000, 60_000))
       const timeout = createTimeoutSignal(timeoutMs)

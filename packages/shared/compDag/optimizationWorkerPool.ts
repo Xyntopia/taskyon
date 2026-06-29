@@ -1,3 +1,5 @@
+import type { EnvironmentWorkerLike } from '../modules/environmentWorker'
+
 export type OptimizationWorkerStats = {
   workerCount: number
   busyWorkers: number
@@ -30,20 +32,29 @@ type PendingTask = {
 }
 
 type WorkerSlot = {
-  worker: Worker
+  worker: EnvironmentWorkerLike<EstimateDurationTask, EstimateDurationResult | WorkerErrorResult>
   busy: boolean
   activeTaskId: number | null
 }
 
 export class OptimizationWorkerPool {
-  private readonly createWorker: () => Worker
+  private readonly createWorker: () => EnvironmentWorkerLike<
+    EstimateDurationTask,
+    EstimateDurationResult | WorkerErrorResult
+  >
   private readonly workerDebugLabel: string
   private slots: WorkerSlot[] = []
   private queue: PendingTask[] = []
   private pendingById = new Map<number, PendingTask>()
   private taskId = 0
 
-  constructor(args: { createWorker: () => Worker; workerDebugLabel?: string }) {
+  constructor(args: {
+    createWorker: () => EnvironmentWorkerLike<
+      EstimateDurationTask,
+      EstimateDurationResult | WorkerErrorResult
+    >
+    workerDebugLabel?: string
+  }) {
     this.createWorker = args.createWorker
     this.workerDebugLabel = args.workerDebugLabel ?? '(custom-worker-factory)'
   }

@@ -66,6 +66,11 @@ const globalConfig: PmtilesOpfsCacheGlobalConfig = {
   maxBytesPerArchive: DEFAULT_MAX_BYTES,
 }
 
+const hasBrowserOpfs = (): boolean =>
+  typeof navigator !== 'undefined' &&
+  typeof navigator.storage?.getDirectory === 'function' &&
+  typeof navigator.locks?.request === 'function'
+
 const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
   if (bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength) {
     return bytes.buffer as ArrayBuffer
@@ -82,6 +87,9 @@ const keyHash = (input: string): string => {
 }
 
 const getRootDir = async (): Promise<FileSystemDirectoryHandle> => {
+  if (!hasBrowserOpfs()) {
+    throw new Error('PMTiles OPFS cache requires browser OPFS and Web Locks support.')
+  }
   return navigator.storage.getDirectory()
 }
 
@@ -537,6 +545,28 @@ class PmtilesOpfsSource implements Source {
   }
 }
 
+class DirectPmtilesSource implements Source {
+  constructor(
+    private readonly sourceKey: string,
+    private readonly customHeaders: HeadersInit | undefined,
+  ) {}
+
+  getKey(): string {
+    return this.sourceKey
+  }
+
+  async getBytes(
+    offset: number,
+    length: number,
+    signal?: AbortSignal,
+    etag?: string,
+  ): Promise<RangeResponse> {
+    return fetchRange(this.sourceKey, offset, length, signal, etag, this.customHeaders)
+  }
+
+  async clear(): Promise<void> {}
+}
+
 export function setPmtilesOpfsCacheGlobalConfig(
   partial: Partial<PmtilesOpfsCacheGlobalConfig>,
 ): void {
@@ -562,7 +592,7 @@ export async function getPmtilesOpfsCacheDebugSnapshot(): Promise<PmtilesOpfsCac
     entries: [],
   }
 
-  if (typeof navigator === 'undefined' || !navigator.storage?.getDirectory) return empty
+  if (!hasBrowserOpfs()) return empty
 
   const dir = await getOrCreateCacheDir().catch(() => null)
   if (!dir) return empty
@@ -621,10 +651,14 @@ export function createPmtilesOpfsSource(
   url: string,
   options: PmtilesOpfsSourceOptions = {},
 ): Source & { clear: () => Promise<void> } {
+  if (!hasBrowserOpfs()) {
+    return new DirectPmtilesSource(url, options.customHeaders)
+  }
   return new PmtilesOpfsSource(url, options)
 }
 
 export async function clearPmtilesOpfsCache(url: string): Promise<void> {
+  if (!hasBrowserOpfs()) return
   const source = new PmtilesOpfsSource(url)
   await source.clear()
 }

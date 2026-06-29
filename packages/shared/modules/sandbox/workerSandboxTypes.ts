@@ -9,6 +9,7 @@ export interface ExecuteInWorkerSandboxOptions {
   stopSignal: AbortSignal
   rpcHandlers?: WorkerSandboxRpcHandlers
   messagePort?: MessagePort | undefined
+  browserRuntime?: 'iframe' | 'worker'
 }
 
 export type WorkerSandboxExecuteRequest = {

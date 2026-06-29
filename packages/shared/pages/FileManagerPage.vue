@@ -206,7 +206,7 @@ function formatModified(timestamp?: number) {
 
 /** OPFS directory handle with typed .entries() (just for TS) */
 type DirHandle = FileSystemDirectoryHandle & {
-  entries(): AsyncIterableIterator<[string, FileSystemHandle]>
+  entries(): AsyncIterableIterator<[string, FileSystemFileHandle | FileSystemDirectoryHandle]>
 }
 
 /** Our node extends Quasar’s, keeps TypeScript happy */

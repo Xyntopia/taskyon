@@ -186,9 +186,9 @@ Generated JS should prioritize equation readability and low overhead in the hot 
 
 Identifier notation modes:
 
-- `unicode` (default): index marker `ᵢ`  
+- `unicode` (default): index marker `ᵢ`
   Example: `x[1,2] -> xᵢ1ᵢ2`
-- `ascii`: index marker `ii`  
+- `ascii`: index marker `ii`
   Example: `x[1,2] -> xii1ii2`
 
 Base identifier mapping:
