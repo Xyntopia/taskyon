@@ -20,9 +20,8 @@ import type {
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
-const createSvgEl = <K extends keyof SVGElementTagNameMap>(
-  tag: K,
-): SVGElementTagNameMap[K] => document.createElementNS(SVG_NS, tag)
+const createSvgEl = <K extends keyof SVGElementTagNameMap>(tag: K): SVGElementTagNameMap[K] =>
+  document.createElementNS(SVG_NS, tag)
 
 const mergeNodeStyle = (theme: GraphTheme | undefined, node: LayoutNode): Required<NodeStyle> => {
   const base = theme?.defaultNodeStyle ?? {}
@@ -133,6 +132,9 @@ export const createGraphController = <N = unknown, E = unknown>(
   let suppressClickForNodeId: string | null = null
   let draggedNodeMoved = false
   let nodeDragStart = { x: 0, y: 0, nodeX: 0, nodeY: 0 }
+  let lastClickForDoubleClick: { nodeId: string; time: number } | null = null
+  let lastPointerDownForDoubleClick: { nodeId: string; time: number } | null = null
+  let lastDoubleClickDispatch: { nodeId: string; time: number } | null = null
 
   container.style.position = 'relative'
   container.style.overflow = 'hidden'
@@ -275,6 +277,38 @@ export const createGraphController = <N = unknown, E = unknown>(
     htmlLayer.appendChild(host)
   }
 
+  const describeEventTarget = (
+    target: EventTarget | null,
+  ): { tagName: string; className: string; graphNode: string } | null => {
+    if (!(target instanceof Element)) return null
+    return {
+      tagName: target.tagName,
+      className: target.getAttribute('class') ?? '',
+      graphNode: target.getAttribute('data-graph-node') ?? '',
+    }
+  }
+
+  const dispatchNodeDoubleClick = (
+    node: LayoutNode<N>,
+    source: 'native-dblclick' | 'click-fallback' | 'pointerdown-fallback',
+    evt: MouseEvent,
+  ): void => {
+    const now = performance.now()
+    if (lastDoubleClickDispatch?.nodeId === node.id && now - lastDoubleClickDispatch.time < 300) {
+      return
+    }
+    lastDoubleClickDispatch = { nodeId: node.id, time: now }
+    suppressClickForNodeId = node.id
+    console.info('[modelica-diagram][dblclick] graph renderer dispatch', {
+      source,
+      nodeId: node.id,
+      label: node.label,
+      detail: evt.detail,
+      target: describeEventTarget(evt.target),
+    })
+    options.onNodeDoubleClick?.(node)
+  }
+
   const renderNodes = () => {
     clearChildren(nodeLayer)
     clearChildren(htmlLayer)
@@ -348,6 +382,22 @@ export const createGraphController = <N = unknown, E = unknown>(
       if (options.enableNodeDrag !== false) {
         const startNodeDrag = (evt: PointerEvent) => {
           if (evt.button !== 0) return
+          if (options.onNodeDoubleClick) {
+            const now = performance.now()
+            const isFallbackDoubleClick =
+              lastPointerDownForDoubleClick?.nodeId === node.id &&
+              now - lastPointerDownForDoubleClick.time < 450
+            lastPointerDownForDoubleClick = { nodeId: node.id, time: now }
+            console.info('[modelica-diagram][dblclick] graph renderer pointerdown', {
+              nodeId: node.id,
+              label: node.label,
+              isFallbackDoubleClick,
+              target: describeEventTarget(evt.target),
+            })
+            if (isFallbackDoubleClick) {
+              dispatchNodeDoubleClick(node, 'pointerdown-fallback', evt)
+            }
+          }
           evt.stopPropagation()
           draggedNodeId = node.id
           draggedNodeMoved = false
@@ -381,14 +431,38 @@ export const createGraphController = <N = unknown, E = unknown>(
           if (options.enableNodeDrag !== false) group.style.cursor = 'grab'
         })
       }
-      if (options.onNodeClick) {
-        group.addEventListener('click', () => {
+      if (options.onNodeClick || options.onNodeDoubleClick) {
+        group.addEventListener('click', (evt) => {
+          if (options.onNodeDoubleClick) {
+            console.info('[modelica-diagram][dblclick] graph renderer click', {
+              nodeId: node.id,
+              label: node.label,
+              detail: evt.detail,
+              target: describeEventTarget(evt.target),
+            })
+          }
+          if (options.onNodeDoubleClick) {
+            const now = performance.now()
+            const isFallbackDoubleClick =
+              lastClickForDoubleClick?.nodeId === node.id &&
+              now - lastClickForDoubleClick.time < 450
+            lastClickForDoubleClick = { nodeId: node.id, time: now }
+            if (isFallbackDoubleClick) {
+              dispatchNodeDoubleClick(node, 'click-fallback', evt)
+              return
+            }
+          }
           if (suppressClickForNodeId === node.id) {
             suppressClickForNodeId = null
             return
           }
           options.onNodeClick?.(node)
         })
+      }
+      if (options.onNodeDoubleClick) {
+        group.addEventListener('dblclick', (evt) =>
+          dispatchNodeDoubleClick(node, 'native-dblclick', evt),
+        )
       }
       const tip = options.nodeTooltipHtml?.(node)
       if (tip) {
@@ -575,7 +649,10 @@ export const createGraphController = <N = unknown, E = unknown>(
     if (draggedNodeId) {
       const node = layout.nodes.find((n) => n.id === draggedNodeId)
       if (!node) return
-      if (!draggedNodeMoved && (Math.abs(evt.clientX - nodeDragStart.x) > 3 || Math.abs(evt.clientY - nodeDragStart.y) > 3)) {
+      if (
+        !draggedNodeMoved &&
+        (Math.abs(evt.clientX - nodeDragStart.x) > 3 || Math.abs(evt.clientY - nodeDragStart.y) > 3)
+      ) {
         draggedNodeMoved = true
       }
       const dx = (evt.clientX - nodeDragStart.x) / viewport.scale

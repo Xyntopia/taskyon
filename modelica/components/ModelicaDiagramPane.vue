@@ -1,6 +1,43 @@
 <template>
   <div class="modelica-diagram-pane">
-    <div class="row items-center q-gutter-xs q-pa-xs">
+    <div v-if="viewMode === 'diagram'" class="row items-center q-gutter-xs q-pa-xs">
+      <q-btn
+        v-if="canNavigateBack"
+        dense
+        flat
+        color="grey-7"
+        label="Back"
+        @click="emit('navigateBack')"
+      />
+      <q-chip
+        v-if="qualifiedName"
+        dense
+        square
+        color="grey-3"
+        text-color="grey-8"
+        class="modelica-diagram-active-chip"
+      >
+        {{ qualifiedName }}
+      </q-chip>
+      <q-chip
+        v-if="effectiveNavigationDepth > 0"
+        dense
+        square
+        color="grey-2"
+        text-color="grey-8"
+        class="modelica-diagram-depth-chip"
+      >
+        {{ `Depth ${effectiveNavigationDepth}` }}
+      </q-chip>
+      <q-btn
+        v-if="canOpenCode"
+        dense
+        flat
+        color="primary"
+        label="Open Code"
+        @click="emit('openCode')"
+      />
+      <q-separator v-if="qualifiedName || canNavigateBack || canOpenCode" vertical spaced />
       <q-btn-toggle
         v-model="layoutMode"
         dense
@@ -65,15 +102,28 @@
     </div>
 
     <div v-if="errorText" class="q-px-sm q-pb-xs text-negative text-caption">{{ errorText }}</div>
-    <div v-else-if="loading" class="q-px-sm q-pb-xs text-grey-7 text-caption">Loading diagram…</div>
+    <div v-else-if="loading" class="q-px-sm q-pb-xs text-grey-7 text-caption">
+      {{ diagram ? 'Refining diagram…' : 'Loading diagram…' }}
+    </div>
 
-    <div ref="containerRef" class="diagram-canvas"></div>
+    <div v-if="viewMode === 'diagram'" ref="containerRef" class="diagram-canvas"></div>
+    <div v-else class="q-pa-sm fit">
+      <SanitizedMarkup
+        v-if="classIconMarkup"
+        class="class-icon-view"
+        :markup="classIconMarkup"
+        :sanitize="sanitizeSvgMarkup"
+      />
+      <div v-else class="text-caption text-grey-7">No icon available for this class.</div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { watchDebounced } from '@vueuse/core'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import SanitizedMarkup from '../../components/SanitizedMarkup.vue'
+import { sanitizeSvgMarkup } from '../../modules/sanitizeMarkup'
 import ToggleButton from '../../components/ToggleButton.vue'
 import {
   createGraphController,
@@ -101,6 +151,16 @@ const props = defineProps<{
   qualifiedName?: string | null
   wasmLoaded: boolean
   refreshKey?: string | number | null
+  viewMode?: 'diagram' | 'icon'
+  canNavigateBack?: boolean
+  navigationDepth?: number
+  canOpenCode?: boolean
+}>()
+
+const emit = defineEmits<{
+  openModel: [qualifiedName: string]
+  navigateBack: []
+  openCode: []
 }>()
 
 const emptyGraph: GraphData<DiagramNodeData, DiagramEdgeData> = { nodes: [], edges: [] }
@@ -109,6 +169,8 @@ const emptyOptions: RenderOptions<DiagramNodeData, DiagramEdgeData> = {}
 const containerRef = ref<HTMLElement | null>(null)
 const diagram = ref<ModelicaDiagramDto | null>(null)
 const layoutMode = ref<DiagramLayoutMode>('authored')
+const viewMode = computed<'diagram' | 'icon'>(() => props.viewMode ?? 'diagram')
+const effectiveNavigationDepth = computed(() => props.navigationDepth ?? 0)
 const showLabels = ref(true)
 const showModelicaNativeLabels = ref(true)
 const showLibraryPaths = ref(false)
@@ -198,15 +260,57 @@ const runtimeOptions = computed<RenderOptions<DiagramNodeData, DiagramEdgeData>>
       edge.data?.color
         ? { stroke: colorToCss(edge.data.color, 'rgba(55, 65, 81, 0.95)') }
         : undefined,
+    onNodeDoubleClick: (node: LayoutNode<DiagramNodeData>) => {
+      console.info('[modelica-diagram][dblclick] pane received node dblclick', {
+        viewMode: viewMode.value,
+        nodeId: node.id,
+        label: node.label,
+        typeName: node.data?.typeName ?? '',
+        qualifiedTypeName: node.data?.qualifiedTypeName ?? '',
+        iconRef: node.data?.iconRef ?? '',
+      })
+      if (viewMode.value !== 'diagram') return
+      const qualifiedName = String(
+        node.data?.qualifiedTypeName || node.data?.iconRef || node.data?.typeName || '',
+      ).trim()
+      if (!qualifiedName) {
+        console.warn('[modelica-diagram][dblclick] no openable model name on node', {
+          nodeId: node.id,
+          label: node.label,
+          data: node.data,
+        })
+        return
+      }
+      console.info('[modelica-diagram][dblclick] emitting openModel', {
+        nodeId: node.id,
+        qualifiedName,
+      })
+      emit('openModel', qualifiedName)
+    },
     nodeSvg: (node: LayoutNode<DiagramNodeData>) =>
       renderNodeSvg(node, labelsEnabled, nativeLabelsEnabled, libraryPathsEnabled),
   }
+})
+
+const classIconMarkup = computed(() => {
+  const icon = diagram.value?.classIcon
+  if (!icon || !Array.isArray(icon.graphics) || icon.graphics.length === 0) return ''
+  return renderIconSvg(
+    icon,
+    { x: 0, y: 0, width: 420, height: 420 },
+    props.qualifiedName ?? 'Model',
+    undefined,
+    true,
+    false,
+    false,
+  ).markup
 })
 
 let controller: ReturnType<typeof createGraphController<DiagramNodeData, DiagramEdgeData>> | null =
   null
 let resizeObserver: ResizeObserver | null = null
 let lastAppliedGraphHash = ''
+let loadToken = 0
 
 const derivedFileName = (qualifiedName: string | null | undefined): string => {
   if (!qualifiedName) return 'Model.mo'
@@ -580,7 +684,7 @@ const renderNodeSvg = (
     const labelOut = shouldRenderExternalLabel
       ? `<text x="${centerX}" y="${node.y + node.height + 16}" text-anchor="middle" dominant-baseline="middle" fill="rgb(17 24 39)" font-size="12" font-weight="700">${label}</text>`
       : ''
-    return `<g transform="${transform}">${iconRender.markup}${ports}</g>${labelOut}`
+    return `<g transform="${transform}">${iconRender.markup}</g>${ports}${labelOut}`
   }
   if (!labelsEnabled) return ''
   if (!libraryPathsEnabled) {
@@ -590,6 +694,7 @@ const renderNodeSvg = (
 }
 
 const loadDiagram = async () => {
+  const token = (loadToken += 1)
   if (!props.wasmLoaded || !props.source.trim()) {
     diagram.value = null
     errorText.value = ''
@@ -603,7 +708,25 @@ const loadDiagram = async () => {
       fileName: derivedFileName(props.qualifiedName),
     }
     if (props.qualifiedName != null) request.qualifiedName = props.qualifiedName
+    if (props.extractor.extractPreview) {
+      try {
+        const preview = await props.extractor.extractPreview(request)
+        if (token !== loadToken) return
+        diagram.value = preview
+        await nextTick()
+      } catch (previewError) {
+        console.info('[diagram][pane] preview unavailable', {
+          qualifiedName: props.qualifiedName ?? 'unknown',
+          error: previewError instanceof Error ? previewError.message : String(previewError),
+        })
+      }
+    }
+    if (props.extractor.materialize) {
+      await props.extractor.materialize(request)
+      if (token !== loadToken) return
+    }
     diagram.value = await props.extractor.extract(request)
+    if (token !== loadToken) return
     const components = Array.isArray(diagram.value?.components) ? diagram.value.components : []
     const missingIcons = components
       .filter((component) => !component.icon || !Array.isArray(component.icon.graphics))
@@ -615,10 +738,11 @@ const loadDiagram = async () => {
       missingIcons,
     })
   } catch (error) {
+    if (token !== loadToken) return
     diagram.value = null
     errorText.value = (error as Error).message || 'Failed to build block diagram'
   } finally {
-    loading.value = false
+    if (token === loadToken) loading.value = false
   }
 }
 
@@ -630,17 +754,17 @@ watchDebounced(
   { debounce: 350, maxWait: 900, immediate: true },
 )
 
-watch(
-  [diagramIrHash, runtimeOptions],
-  () => {
-    if (!controller) return
-    if (diagramIrHash.value !== lastAppliedGraphHash) {
-      controller.setGraph(mapped.value.graph)
-      lastAppliedGraphHash = diagramIrHash.value
-    }
-    controller.setOptions(runtimeOptions.value)
-  },
-)
+watch([diagramIrHash, runtimeOptions], () => {
+  if (!controller) return
+  if (diagramIrHash.value !== lastAppliedGraphHash) {
+    controller.setGraph(mapped.value.graph)
+    lastAppliedGraphHash = diagramIrHash.value
+    void nextTick(() => {
+      if (hasGraph.value) controller?.fit()
+    })
+  }
+  controller.setOptions(runtimeOptions.value)
+})
 
 const onCopyPng = async () => {
   if (!controller || exportingPng.value || !hasGraph.value) return
@@ -674,6 +798,9 @@ onMounted(() => {
   if (!container) return
   controller = createGraphController(container, mapped.value.graph, runtimeOptions.value)
   lastAppliedGraphHash = diagramIrHash.value
+  void nextTick(() => {
+    if (hasGraph.value) controller?.fit()
+  })
   resizeObserver = new ResizeObserver(() => controller?.resize())
   resizeObserver.observe(container)
 })
@@ -695,9 +822,28 @@ onBeforeUnmount(() => {
 
 .diagram-canvas {
   width: 100%;
-  height: calc(100% - 44px);
+  height: 100%;
   min-height: 460px;
   background: rgb(229 231 235);
+}
+
+.modelica-diagram-active-chip {
+  max-width: min(42vw, 360px);
+}
+
+.modelica-diagram-active-chip :deep(.q-chip__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelica-diagram-depth-chip {
+  flex: 0 0 auto;
+}
+
+.class-icon-view {
+  width: min(100%, 520px);
+  height: min(100%, 520px);
 }
 
 :deep(.diagram-node-html) {

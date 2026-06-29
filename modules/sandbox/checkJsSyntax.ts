@@ -1,3 +1,5 @@
+import { executeInWorkerSandbox } from './workerSandbox'
+
 export interface JsValidationResult {
   valid: boolean
   phase: 'syntax' | 'runtime' | null
@@ -9,58 +11,7 @@ export interface JsValidationResult {
   rawError?: string | undefined
 }
 
-const IFRAME_ID = '__taskyonJsCheckerIframe'
-
-function assertIsBrowser(): void {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    throw new Error('validateJavaScriptInSandbox can only be used in a browser environment.')
-  }
-}
-
-function getOrCreateJsCheckerIframe(): HTMLIFrameElement {
-  assertIsBrowser()
-
-  const existing = document.getElementById(IFRAME_ID)
-  if (existing instanceof HTMLIFrameElement) {
-    return existing
-  }
-
-  const iframe = document.createElement('iframe')
-  iframe.id = IFRAME_ID
-  iframe.style.display = 'none'
-  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin')
-
-  document.body.appendChild(iframe)
-
-  const doc = iframe.contentDocument
-  if (!doc) {
-    throw new Error('Failed to access iframe document.')
-  }
-
-  doc.open()
-  doc.write('<!doctype html><html><head></head><body></body></html>')
-  doc.close()
-
-  return iframe
-}
-
-function resetIframeDocument(iframe: HTMLIFrameElement): { win: Window; doc: Document } {
-  const win = iframe.contentWindow
-  if (!win) {
-    throw new Error('Failed to access iframe contentWindow.')
-  }
-
-  const doc = iframe.contentDocument
-  if (!doc) {
-    throw new Error('Failed to access iframe contentDocument.')
-  }
-
-  doc.open()
-  doc.write('<!doctype html><html><head></head><body></body></html>')
-  doc.close()
-
-  return { win, doc }
-}
+let jsValidationRunCounter = 0
 
 function makeCodeSnippet(
   code: string,
@@ -91,105 +42,107 @@ function makeCodeSnippet(
   return result.join('\n')
 }
 
-export function validateJavaScriptInSandbox(code: string): Promise<JsValidationResult> {
-  return new Promise<JsValidationResult>((resolve) => {
-    const iframe = getOrCreateJsCheckerIframe()
-    const { win, doc } = resetIframeDocument(iframe)
-
-    const blob = new Blob([`${code}\n//# sourceURL=userCode.js`], { type: 'text/javascript' })
-    const url = URL.createObjectURL(blob)
-
-    let resolved = false
-
-    const cleanup = (): void => {
-      URL.revokeObjectURL(url)
-      win.onerror = null
-    }
-
-    const errorHandler: OnErrorEventHandlerNonNull = (
-      message,
-      source,
-      lineno,
-      colno,
-      error,
-    ): boolean => {
-      if (typeof source === 'string' && source !== url) {
-        return false
+function buildSandboxValidationCode(): string {
+  return `
+(code) => {
+  const extractLineColumn = (rawError) => {
+    const text = typeof rawError === 'string' ? rawError : '';
+    const matchers = [
+      /userCode\\.js:(\\d+):(\\d+)/,
+      /<anonymous>:(\\d+):(\\d+)/,
+    ];
+    for (const matcher of matchers) {
+      const match = text.match(matcher);
+      if (match) {
+        return {
+          line: Number(match[1]),
+          column: Number(match[2]),
+        };
       }
-
-      if (resolved) {
-        return false
-      }
-      resolved = true
-      cleanup()
-
-      const errorObject = error instanceof Error ? error : undefined
-      const messageText =
-        typeof message === 'string' ? message : (errorObject?.message ?? 'Unknown error')
-
-      const errorName =
-        errorObject?.name ?? (typeof message === 'string' ? message.split(':')[0] : 'Error')
-
-      const phase: 'syntax' | 'runtime' = errorName === 'SyntaxError' ? 'syntax' : 'runtime'
-
-      const line = typeof lineno === 'number' && lineno > 0 ? lineno : undefined
-      const column = typeof colno === 'number' && colno > 0 ? colno : undefined
-
-      const snippet =
-        line !== undefined && column !== undefined
-          ? makeCodeSnippet(code, line, column, 2)
-          : undefined
-
-      const rawError = errorObject?.stack ?? messageText
-
-      resolve({
-        valid: false,
-        phase,
-        errorName,
-        message: messageText,
-        line,
-        column,
-        snippet,
-        rawError,
-      })
-
-      return true
     }
+    return {};
+  };
 
-    win.onerror = errorHandler
+  try {
+    const fn = new Function(String(code || '') + '\\n//# sourceURL=userCode.js');
+    fn();
+    return {
+      valid: true,
+      phase: null,
+    };
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    const rawError = typeof err.stack === 'string' && err.stack ? err.stack : err.message;
+    const position = extractLineColumn(rawError);
+    return {
+      valid: false,
+      phase: err.name === 'SyntaxError' ? 'syntax' : 'runtime',
+      errorName: err.name || 'Error',
+      message: err.message || 'Unknown error',
+      line: Number.isFinite(position.line) ? position.line : undefined,
+      column: Number.isFinite(position.column) ? position.column : undefined,
+      rawError,
+    };
+  }
+}
+`.trim()
+}
 
-    const script = doc.createElement('script')
-    script.src = url
-
-    script.onload = () => {
-      if (resolved) {
-        return
-      }
-      resolved = true
-      cleanup()
-
-      resolve({
-        valid: true,
-        phase: null,
-      })
+function normalizeValidationResult(code: string, raw: unknown): JsValidationResult {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {
+      valid: false,
+      phase: 'runtime',
+      errorName: 'ValidationError',
+      message: 'Sandbox validation returned an invalid payload.',
     }
+  }
 
-    script.onerror = (event: string | Event) => {
-      if (resolved) {
-        return
-      }
-      resolved = true
-      cleanup()
+  const result = raw as Record<string, unknown>
+  const line = typeof result.line === 'number' && result.line > 0 ? result.line : undefined
+  const column = typeof result.column === 'number' && result.column > 0 ? result.column : undefined
 
-      resolve({
-        valid: false,
-        phase: 'syntax',
-        errorName: 'ScriptLoadError',
-        message: 'Failed to load script for syntax check.',
-        rawError: typeof event === 'string' ? event : JSON.stringify(event),
-      })
+  return {
+    valid: result.valid === true,
+    phase: result.phase === 'syntax' || result.phase === 'runtime' ? result.phase : null,
+    errorName: typeof result.errorName === 'string' ? result.errorName : undefined,
+    message: typeof result.message === 'string' ? result.message : undefined,
+    line,
+    column,
+    snippet:
+      line !== undefined && column !== undefined
+        ? makeCodeSnippet(code, line, column, 10)
+        : undefined,
+    rawError: typeof result.rawError === 'string' ? result.rawError : undefined,
+  }
+}
+
+export async function validateJavaScriptInSandbox(code: string): Promise<JsValidationResult> {
+  const abort = new AbortController()
+  const runId = `js-sandbox-validate-${Date.now()}-${jsValidationRunCounter}`
+  jsValidationRunCounter += 1
+
+  try {
+    const raw = await executeInWorkerSandbox(
+      {
+        id: runId,
+        code: buildSandboxValidationCode(),
+        sourceURL: `${runId}.js`,
+        stopSignal: abort.signal,
+      },
+      code,
+    )
+    return normalizeValidationResult(code, raw)
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    return {
+      valid: false,
+      phase: 'runtime',
+      errorName: err.name || 'Error',
+      message: err.message || 'Sandbox validation failed.',
+      rawError: typeof err.stack === 'string' ? err.stack : err.message,
     }
-
-    doc.body.appendChild(script)
-  })
+  } finally {
+    abort.abort()
+  }
 }

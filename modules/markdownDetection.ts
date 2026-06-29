@@ -1,4 +1,4 @@
-// src/modules/markdownDetection.ts
+// markdownDetection.ts
 import MarkdownIt from 'markdown-it'
 
 // A lean markdown-it instance only for HTML detection
@@ -148,23 +148,26 @@ export const hasMarkdownElements = (raw: string): boolean => {
 export const containsHtmlTags = (markdown: string) => {
   const tokens = mdHtmlDetector.parse(markdown, {})
 
+  const stripIgnorableHtml = (value: string) =>
+    value
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/(?:<br\s*\/?>(?:\s*)?)+/gi, '')
+      .trim()
+
+  const containsActualTagMarkup = (value: string) =>
+    /<\/?[A-Za-z][A-Za-z0-9-]*\b[^>]*>/i.test(value)
+
   // Recursively search for real HTML tokens (block or inline)
   const hasHtml = (toks: typeof tokens): boolean => {
     for (const t of toks) {
       if (t.type === 'html_block' || t.type === 'html_inline') {
-        const trimmed = t.content.trim()
-        if (!trimmed) continue
+        const stripped = stripIgnorableHtml(t.content)
+        if (!stripped) continue
 
-        // Ignore *pure* HTML comments
-        if (/^<!--[\s\S]*?-->$/.test(trimmed)) continue
+        // If removing comments and harmless line breaks leaves only text,
+        // treat the token as normal markdown/plain text content.
+        if (!containsActualTagMarkup(stripped)) continue
 
-        // Ignore commonly used, safe inline tags that don't allow any content
-        // or attributes, such as one or more <br> tags used for line breaks.
-        // Examples that will be ignored:
-        //   "<br>", "<br/>", "<br />", "<br> <br>" etc.
-        if (/^(?:<br\s*\/?>(?:\s*)?)+$/i.test(trimmed)) continue
-
-        // Anything else counts as real HTML
         return true
       }
 

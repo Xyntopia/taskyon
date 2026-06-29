@@ -89,7 +89,7 @@ const simulateModel = (params, context, model) => {
   let c0 = Array.isArray(model.c0) ? model.c0.slice() : null
   if (!c0 && haveEvents) {
     try {
-      const cProbe = model.evalConditions(0, x0_model, y0_model, new Array(nu).fill(0), null)
+      const cProbe = model.evalConditions(0, x0_model, y0_model, new Array(nu).fill(0), null, [], [])
       if (Array.isArray(cProbe)) c0 = cProbe.slice()
     } catch {
       /* empty */
@@ -1191,6 +1191,43 @@ const simulateModel = (params, context, model) => {
     let c = c0.slice()
     let xDotPrev = new Array(nx).fill(0)
 
+    const collectInvalidVectorEntries = (values, expectedLength) => {
+      if (!Array.isArray(values)) {
+        return { reason: 'non_array', invalid: [{ index: -1, value: values }] }
+      }
+      if (values.length !== expectedLength) {
+        return { reason: 'length_mismatch', invalid: [{ index: -1, value: values.length }] }
+      }
+      const invalid = []
+      for (let i = 0; i < values.length; i++) {
+        const value = values[i]
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          invalid.push({ index: i, value })
+          if (invalid.length >= 12) break
+        }
+      }
+      return { reason: invalid.length > 0 ? 'non_finite' : null, invalid }
+    }
+
+    const assertRuntimeVectors = (phase, tEval, xEval, yEval, uEval) => {
+      const xCheck = collectInvalidVectorEntries(xEval, nx)
+      const yCheck = collectInvalidVectorEntries(yEval, ny)
+      const uCheck = collectInvalidVectorEntries(uEval, nu)
+      const hasError = xCheck.reason || yCheck.reason || uCheck.reason
+      if (!hasError) return
+      const payload = {
+        phase,
+        t: Number(tEval),
+        expected: { nx, ny, nu },
+        issues: {
+          x: xCheck.reason ? { reason: xCheck.reason, invalid: xCheck.invalid } : null,
+          y: yCheck.reason ? { reason: yCheck.reason, invalid: yCheck.invalid } : null,
+          u: uCheck.reason ? { reason: uCheck.reason, invalid: uCheck.invalid } : null,
+        },
+      }
+      throw new Error(`Runtime vector contract failed: ${JSON.stringify(payload)}`)
+    }
+
     if (executionMode === 'static_model') {
       log(
         'Static Modelica model has no dynamic or algebraic equations; emitting constant trajectory',
@@ -1277,15 +1314,17 @@ const simulateModel = (params, context, model) => {
           `Consistent initialization failed (stage=initial_consistent_state, t=${Number(t).toPrecision(8)}): ${tailErrors}`,
         )
       }
+      assertRuntimeVectors('post_initial_consistent_solve', t, x, y, u0)
 
       if (haveEvents) {
         try {
-          const cInit = model.evalConditions(t, x, y, u0, pOverride)
+          const cInit = model.evalConditions(t, x, y, u0, pOverride, c, c)
           if (Array.isArray(cInit)) c = cInit.slice()
         } catch {
           /* empty */
         }
       }
+      assertRuntimeVectors('post_initial_condition_eval', t, x, y, u0)
     }
 
     function conditionsChanged(cPrev, cNext) {
@@ -1299,10 +1338,24 @@ const simulateModel = (params, context, model) => {
       return false
     }
 
-    function evalConditionsSafe(tLocal, xLocal, yLocal, uLocal, fallback) {
+    function evalConditionsSafe(tLocal, xLocal, yLocal, uLocal, fallback, cPrevLocal, cCurrLocal) {
       if (!haveEvents) return Array.isArray(fallback) ? fallback.slice() : []
+      const cPrevSafe = Array.isArray(cPrevLocal) ? cPrevLocal.slice() : []
+      const cCurrSafe = Array.isArray(cCurrLocal)
+        ? cCurrLocal.slice()
+        : Array.isArray(fallback)
+          ? fallback.slice()
+          : cPrevSafe.slice()
       try {
-        const ce = model.evalConditions(tLocal, xLocal, yLocal, uLocal, pOverride)
+        const ce = model.evalConditions(
+          tLocal,
+          xLocal,
+          yLocal,
+          uLocal,
+          pOverride,
+          cPrevSafe,
+          cCurrSafe,
+        )
         if (Array.isArray(ce)) return ce.slice()
       } catch (e) {
         log(`evalConditions threw at t=${tLocal}`, {
@@ -1312,10 +1365,24 @@ const simulateModel = (params, context, model) => {
       }
       return Array.isArray(fallback) ? fallback.slice() : []
     }
-    function evalEventIndicatorsSafe(tLocal, xLocal, yLocal, uLocal, cLocal) {
+    function evalEventIndicatorsSafe(tLocal, xLocal, yLocal, uLocal, cLocal, cPrevLocal, cCurrLocal) {
       if (haveEventIndicators) {
+        const cPrevSafe = Array.isArray(cPrevLocal) ? cPrevLocal.slice() : []
+        const cCurrSafe = Array.isArray(cCurrLocal)
+          ? cCurrLocal.slice()
+          : Array.isArray(cLocal)
+            ? cLocal.slice()
+            : cPrevSafe.slice()
         try {
-          const zi = model.evalEventIndicators(tLocal, xLocal, yLocal, uLocal, pOverride)
+          const zi = model.evalEventIndicators(
+            tLocal,
+            xLocal,
+            yLocal,
+            uLocal,
+            pOverride,
+            cPrevSafe,
+            cCurrSafe,
+          )
           if (Array.isArray(zi)) {
             return zi.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
           }
@@ -1394,6 +1461,7 @@ const simulateModel = (params, context, model) => {
           stack: e && e.stack,
         })
       }
+      assertRuntimeVectors('post_reset_projection', tLocal, xNext, yNext, uLocal)
       return { xNext, yNext, cNext }
     }
 
@@ -1483,6 +1551,7 @@ const simulateModel = (params, context, model) => {
         Array.isArray(step.xDot) && step.xDot.length === nx
           ? step.xDot.slice()
           : step.x.map((xv, i) => (xv - xLocal[i]) / dtLocal)
+      assertRuntimeVectors('post_flow_step', tLocal + dtLocal, step.x, step.y, uLocal)
       return {
         xNext: step.x.slice(),
         yNext: step.y.slice(),
@@ -1657,7 +1726,7 @@ const simulateModel = (params, context, model) => {
         const tm = 0.5 * (tl + tr)
         const mid = advanceFlowInterval(tl, xl, yl, tm - tl, xDotL)
         const uMid = f_u(tm) || new Array(nu).fill(0)
-        const cm = evalConditionsSafe(tm, mid.xNext, mid.yNext, uMid, cl)
+        const cm = evalConditionsSafe(tm, mid.xNext, mid.yNext, uMid, cl, cl, cl)
 
         if (conditionsChanged(cl, cm)) {
           tr = tm
@@ -1693,13 +1762,15 @@ const simulateModel = (params, context, model) => {
       const uEvent = f_u(tEvent) || new Array(nu).fill(0)
 
       for (let iter = 0; iter < eventIterationMaxIter; iter++) {
-        cCurr = evalConditionsSafe(tEvent, xCurr, yCurr, uEvent, cPrev)
+        cCurr = evalConditionsSafe(tEvent, xCurr, yCurr, uEvent, cPrev, cPrev, cPrev)
         const applied = applyResetsSafe(tEvent, xCurr, yCurr, uEvent, cPrev, cCurr)
         const cAfter = evalConditionsSafe(
           tEvent,
           applied.xNext,
           applied.yNext,
           uEvent,
+          applied.cNext,
+          cPrev,
           applied.cNext,
         )
 
@@ -1769,7 +1840,7 @@ const simulateModel = (params, context, model) => {
         const uNext = f_u(tTarget) || new Array(nu).fill(0)
 
         if (haveEvents) {
-          const cEval = evalConditionsSafe(tTarget, xNext, yNext, uNext, cNext)
+          const cEval = evalConditionsSafe(tTarget, xNext, yNext, uNext, cNext, cNext, cNext)
           const settled = settleEventAtTime(tTarget, xNext, yNext, cNext)
           const applied = applyResetsSafe(tTarget, settled.x, settled.y, uNext, cNext, cEval)
           yNext = evaluateAlgebraicState(
@@ -1795,7 +1866,7 @@ const simulateModel = (params, context, model) => {
       if (!haveEvents || !enableEventLocalization) {
         const flow = advanceFlowInterval(tLocal, xLocal, yLocal, dtLocal, xDotSeed)
         const uNext = f_u(tTarget) || new Array(nu).fill(0)
-        const cEval = evalConditionsSafe(tTarget, flow.xNext, flow.yNext, uNext, cLocal)
+        const cEval = evalConditionsSafe(tTarget, flow.xNext, flow.yNext, uNext, cLocal, cLocal, cLocal)
         const applied = applyResetsSafe(tTarget, flow.xNext, flow.yNext, uNext, cLocal, cEval)
         return {
           xNext: applied.xNext,
@@ -1820,7 +1891,7 @@ const simulateModel = (params, context, model) => {
         const remaining = tTarget - tCur
         const flow = advanceFlowInterval(tCur, xCur, yCur, remaining, xDotCur)
         const uEnd = f_u(tTarget) || new Array(nu).fill(0)
-        const cEnd = evalConditionsSafe(tTarget, flow.xNext, flow.yNext, uEnd, cCur)
+        const cEnd = evalConditionsSafe(tTarget, flow.xNext, flow.yNext, uEnd, cCur, cCur, cCur)
         if (!conditionsChanged(cCur, cEnd)) {
           const applied = applyResetsSafe(tTarget, flow.xNext, flow.yNext, uEnd, cCur, cEnd)
           xCur = applied.xNext

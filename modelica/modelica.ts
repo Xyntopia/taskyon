@@ -1,12 +1,17 @@
 import defaultSolverSource from './simulateModel?raw'
-import type * as WasmTypes from 'rumoca'
+import type * as WasmTypes from 'rumoca-full-web'
 import { z } from 'zod'
 import { ref } from 'vue'
 import { Notify } from 'quasar'
-import { executeCodeInIframeSimple } from '../modules/sandbox/iframeWorker'
+import { executeInWorkerSandbox } from '../modules/sandbox/workerSandbox'
 import { validateJavaScriptInSandbox } from '../modules/sandbox/checkJsSyntax'
 import { serializeObject } from '../modules/serializeObject'
 import { DEFAULT_MODELICA_LIBRARY_URL } from './modelicaLibraryCatalog'
+import {
+  hasRumocaTemplateRenderer,
+  renderRumocaTemplate,
+  type RumocaTemplateRenderApi,
+} from './rumocaTemplateRender'
 
 // Zod v3 vs v4 compatibility: some builds do not expose z.function().args().returns().
 // We use z.custom to type-check "is a function" while keeping strong TS inference.
@@ -23,12 +28,20 @@ type RumocaLegacyLibraryApi = {
 
 type RumocaSourceRootApi = {
   compile_with_source_roots: (source: string, modelName: string, sourceRootsJson: string) => string
+  export_parsed_source_roots_binary: (urisJson: string) => Uint8Array
+  get_bundled_source_root_manifest: () => string
+  load_source_root_index: (sourceRootsJson: string) => string
+  load_bundled_source_root_cache: (archiveId: string) => number
   load_source_roots: (sourceRootsJson: string) => string
+  merge_parsed_source_roots_binary: (bytes: Uint8Array) => number
+  render_modelica_view: (source: string, modelName: string, view: string) => string
   clear_source_root_cache: () => void
   get_source_root_document_count: () => number
 }
 
-export type RumocaModule = typeof WasmTypes & Partial<RumocaLegacyLibraryApi & RumocaSourceRootApi>
+export type RumocaModule = typeof WasmTypes &
+  Partial<RumocaLegacyLibraryApi & RumocaSourceRootApi> &
+  RumocaTemplateRenderApi
 export const DEFAULT_MSL_ZIP_URL = DEFAULT_MODELICA_LIBRARY_URL
 export const builtinSolvers: Record<string, string> = {
   default: defaultSolverSource,
@@ -257,11 +270,11 @@ export type TySimulationServiceV1 = z.infer<typeof TySimulationServiceV1>
 // -------------------------------------------------------------------------------------------------
 // Sandbox ABI validation (compile-time)
 //
-// We validate the generated JS by running it inside the sandboxed iframe,
+// We validate the generated JS by running it inside the browser sandbox,
 // constructing the model via Model(), and checking the minimal ABI contract.
 //
-// Important: we cannot return functions from the iframe, so validation must
-// happen inside the iframe and return plain JSON.
+// Important: we cannot return functions from the browser sandbox, so validation must
+// happen inside the sandbox and return plain JSON.
 // -------------------------------------------------------------------------------------------------
 
 export const TySandboxLogEntryV1 = z.object({
@@ -320,7 +333,7 @@ export function shouldValidateModelAbiForRenderedOutput(
 }
 
 /**
- * Builds iframe-executed code that validates the generated model JS ABI.
+ * Builds worker-sandbox code that validates the generated model JS ABI.
  *
  * Enforcement rules inside the sandbox:
  * - If context.enforceModelAbi is true: ABI must exist and must validate.
@@ -328,7 +341,7 @@ export function shouldValidateModelAbiForRenderedOutput(
  * - Else if model.abi exists: validate it.
  * - Otherwise: skip.
  */
-export function buildModelAbiValidationIframeCode(compiledJs: string): string {
+export function buildModelAbiValidationSandboxCode(compiledJs: string): string {
   // NOTE: We must avoid closing </script> when embedded into HTML; caller already escapes.
   return `
 (params, context) => {
@@ -448,7 +461,7 @@ export function buildModelAbiValidationIframeCode(compiledJs: string): string {
 
 // ---------- WASM loading ----------
 export const loadWasm = async () => {
-  const wasmModule = await import('rumoca')
+  const wasmModule = await import('rumoca-full-web')
 
   if (typeof wasmModule.default === 'function') {
     await wasmModule.default()
@@ -475,8 +488,8 @@ export const loadWasm = async () => {
   return wasmModule as RumocaModule
 }
 
-// ---------- Build iframe function code ----------
-export const buildIframeCode = (compiledJs: string, solverSource?: string): string => `
+// ---------- Build worker sandbox function code ----------
+export const buildWorkerSandboxCode = (compiledJs: string, solverSource?: string): string => `
 (params, context)=>{
   const runId = (context && (context.__rumocaRunId || context.runId)) || 'unknown'
 
@@ -558,6 +571,8 @@ export const TyModelicaProjectFileV1 = z.object({
       t0: z.number().optional(),
       tf: z.number().optional(),
       dt: z.number().optional(),
+      simulationBackend: z.enum(['js', 'rumoca']).optional(),
+      rumocaSolver: z.string().optional(),
 
       // Which solver is selected.
       // Prefer solverKey (supports builtin: and project: prefixes). Keep solverId for backwards compat.
@@ -583,6 +598,16 @@ export const TyModelicaProjectFileV1 = z.object({
         })
         .optional(),
       result: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
+
+  ui: z
+    .object({
+      libraryTree: z
+        .object({
+          showRootMetadata: z.boolean().optional(),
+        })
+        .optional(),
     })
     .optional(),
 
@@ -646,6 +671,16 @@ const resolveModelicaLogCallSite = (stack: string | undefined): string | undefin
  */
 export const modelicaLog = ref<ModelicaLogEntry[]>([])
 
+const consoleMethodForModelicaLogLevel: Record<
+  ModelicaLogLevel,
+  'info' | 'warn' | 'error' | 'log'
+> = {
+  info: 'info',
+  success: 'info',
+  warning: 'warn',
+  error: 'error',
+}
+
 export function appendModelicaLog(
   entry: Omit<ModelicaLogEntry, 'timestamp'> & { timestamp?: string },
 ) {
@@ -659,8 +694,9 @@ export function appendModelicaLog(
     ...(callSite ? { callSite } : {}),
   }
 
-  console.log('[ModelicaLog]', nextEntry, callSite ? `caller: ${callSite}` : '')
   modelicaLog.value.push(nextEntry)
+  const consoleMethod = consoleMethodForModelicaLogLevel[nextEntry.level]
+  globalThis.console?.[consoleMethod]?.('[ModelicaLog]', nextEntry)
 }
 
 export function renderUiHtml({
@@ -1006,7 +1042,7 @@ export async function discoverSolverMetadata(solverJs: string): Promise<{
   return { schema, simDefaults }
 }
 `
-  const rawUnknown = await executeCodeInIframeSimple(
+  const rawUnknown = await executeInWorkerSandbox(
     {
       id,
       code,
@@ -1041,6 +1077,8 @@ export function packProjectFile(input: {
     t0: number
     tf: number
     dt: number
+    simulationBackend?: 'js' | 'rumoca'
+    rumocaSolver?: string
     solverKey: string
     solverOptions: Record<string, unknown>
     solverOptionsByKey?: Record<string, Record<string, unknown>>
@@ -1055,6 +1093,11 @@ export function packProjectFile(input: {
       minimalView?: boolean | undefined
     }
     result?: Record<string, unknown>
+  }
+  ui?: {
+    libraryTree?: {
+      showRootMetadata?: boolean
+    }
   }
   documentVersions: ModelicaVersion[]
   currentVersionIndex: number
@@ -1072,6 +1115,8 @@ export function packProjectFile(input: {
       t0: input.sim.t0,
       tf: input.sim.tf,
       dt: input.sim.dt,
+      simulationBackend: input.sim.simulationBackend,
+      rumocaSolver: input.sim.rumocaSolver,
       solverKey: input.sim.solverKey,
       solverId: solverIdFromKey(input.sim.solverKey),
       solverOptions: input.sim.solverOptions,
@@ -1080,6 +1125,7 @@ export function packProjectFile(input: {
       plotViewOptions: input.sim.plotViewOptions,
       result: input.sim.result,
     },
+    ui: input.ui,
     documentVersions:
       input.documentVersions as unknown as TyModelicaProjectFileV1['documentVersions'],
     currentVersionIndex: input.currentVersionIndex,
@@ -1100,6 +1146,8 @@ export function unpackProjectFile(
     t0?: number
     tf?: number
     dt?: number
+    simulationBackend?: 'js' | 'rumoca'
+    rumocaSolver?: string
     solverKey?: string
     solverOptions?: Record<string, unknown>
     solverOptionsByKey?: Record<string, Record<string, unknown>>
@@ -1115,9 +1163,32 @@ export function unpackProjectFile(
     }
     result?: Record<string, unknown>
   }
+  ui?: {
+    libraryTree?: {
+      showRootMetadata?: boolean
+    }
+  }
   documentVersions?: ModelicaVersion[]
   currentVersionIndex?: number
 } {
+  const uiState =
+    pf.ui && typeof pf.ui === 'object'
+      ? ({
+          libraryTree:
+            pf.ui.libraryTree && typeof pf.ui.libraryTree === 'object'
+              ? {
+                  ...(typeof pf.ui.libraryTree.showRootMetadata === 'boolean'
+                    ? { showRootMetadata: pf.ui.libraryTree.showRootMetadata }
+                    : {}),
+                }
+              : undefined,
+        } as {
+          libraryTree?: {
+            showRootMetadata?: boolean
+          }
+        })
+      : null
+
   const out: ReturnType<typeof unpackProjectFile> = {
     modelicaSource: pf.modelicaSource ?? '',
     requiredLibraries: Array.isArray(pf.requiredLibraries) ? pf.requiredLibraries : [],
@@ -1125,6 +1196,7 @@ export function unpackProjectFile(
     selectedUiTemplateId:
       pf.activeUiTemplateId || Object.keys(pf.uiTemplates ?? {})[0] || 'default',
     sim: {},
+    ...(uiState ? { ui: uiState } : {}),
   }
   if (pf.solvers && typeof pf.solvers === 'object') out.projectSolvers = pf.solvers
 
@@ -1132,6 +1204,12 @@ export function unpackProjectFile(
     if (typeof pf.sim.t0 === 'number') out.sim.t0 = pf.sim.t0
     if (typeof pf.sim.tf === 'number') out.sim.tf = pf.sim.tf
     if (typeof pf.sim.dt === 'number') out.sim.dt = pf.sim.dt
+    if (pf.sim.simulationBackend === 'js' || pf.sim.simulationBackend === 'rumoca') {
+      out.sim.simulationBackend = pf.sim.simulationBackend
+    }
+    if (typeof pf.sim.rumocaSolver === 'string') {
+      out.sim.rumocaSolver = pf.sim.rumocaSolver
+    }
 
     const solverKey = typeof pf.sim.solverKey === 'string' ? pf.sim.solverKey : ''
     const solverId = typeof pf.sim.solverId === 'string' ? pf.sim.solverId : ''
@@ -1233,7 +1311,7 @@ export function selectDaeForTemplate(
   return dae
 }
 
-export function buildModelConstructionProbeIframeCode(compiledJs: string): string {
+export function buildModelConstructionProbeSandboxCode(compiledJs: string): string {
   return `
 (params, context) => {
   try {
@@ -1356,8 +1434,10 @@ export async function compileModelicaToJs(params: {
   try {
     const m = params.wasm
     if (!m) throw new Error('WASM module not loaded')
-    if (typeof m.compile_to_json !== 'function' || typeof m.render_template !== 'function') {
-      throw new Error('WASM module is missing compile_to_json / render_template exports')
+    if (typeof m.compile_to_json !== 'function' || !hasRumocaTemplateRenderer(m)) {
+      throw new Error(
+        'WASM module is missing compile_to_json / render_template / render_target exports',
+      )
     }
 
     const match = params.modelicaSource.match(/(?:model|class|block|connector|record)\s+(\w+)/)
@@ -1449,7 +1529,15 @@ export async function compileModelicaToJs(params: {
 
     const daeJson = JSON.stringify(daeForTemplate)
     compileDebug.daeJsonLength = daeJson.length
-    const rendered = m.render_template(daeJson, params.templateSource)
+    const rendered = renderRumocaTemplate({
+      wasm: m,
+      daeJson,
+      templateSource: params.templateSource,
+      modelName,
+      templatePath: 'template.jinja',
+      outputPath: `${modelName}.txt`,
+      targetName: 'template',
+    })
     partialRendered = String(rendered ?? '')
     compileDebug.renderedPreview = String(rendered).slice(0, 220)
 
@@ -1461,8 +1549,8 @@ export async function compileModelicaToJs(params: {
       const modelProbeAbort = new AbortController()
       params.activeSandboxRunIds.add(modelProbeRunId)
       try {
-        const modelProbeCode = buildModelConstructionProbeIframeCode(rendered)
-        const modelProbeResult = await executeCodeInIframeSimple(
+        const modelProbeCode = buildModelConstructionProbeSandboxCode(rendered)
+        const modelProbeResult = await executeInWorkerSandbox(
           {
             id: modelProbeRunId,
             code: modelProbeCode,
@@ -1491,11 +1579,11 @@ export async function compileModelicaToJs(params: {
           throw new Error('Model() construction probe failed')
         }
 
-        const code = buildModelAbiValidationIframeCode(rendered)
+        const code = buildModelAbiValidationSandboxCode(rendered)
         const id = 'rumoca-model-abi-check'
         const abort = new AbortController()
         params.activeSandboxRunIds.add(id)
-        const rawAbiResult = await executeCodeInIframeSimple(
+        const rawAbiResult = await executeInWorkerSandbox(
           {
             id,
             code,
@@ -1615,11 +1703,11 @@ export async function runModelicaSandbox(params: {
     return { ok: false, message: String(msg.message || 'Syntax validation failed') }
   }
 
-  const code = buildIframeCode(params.jsSource, params.solverSource)
+  const code = buildWorkerSandboxCode(params.jsSource, params.solverSource)
   const id = `rumoca-model-worker`
   try {
     params.activeSandboxRunIds.add(id)
-    const result = await executeCodeInIframeSimple(
+    const result = await executeInWorkerSandbox(
       {
         id,
         code,
@@ -1662,7 +1750,7 @@ export async function runModelicaSandbox(params: {
     appendModelicaLog({
       level: 'warning',
       phase: 'run',
-      message: `Iframe execution error: ${(error as Error).message}`,
+      message: `Worker sandbox execution error: ${(error as Error).message}`,
       details: {
         name: (error as Error).name,
         message: (error as Error).message,

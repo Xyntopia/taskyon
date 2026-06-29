@@ -173,13 +173,13 @@ const parseBoundsFromHeader = (header: unknown): [number, number, number, number
 let resizeObserver: ResizeObserver | null = null
 
 interface GenericMapProps {
-  initialCenter: [number, number]
-  initialZoom: number
-  useDefaultTileLayer: boolean
+  initialCenter?: [number, number]
+  initialZoom?: number
+  useDefaultTileLayer?: boolean
   mapStyle?: string | StyleSpecification
-  tileLayerUrl?: string
-  tileLayerOptions?: Record<string, unknown>
-  placeName?: string
+  tileLayerUrl?: string | undefined
+  tileLayerOptions?: Record<string, unknown> | undefined
+  placeName?: string | undefined
   worldPmtilesUrl?: string
   parcelsPmtilesUrl?: string
   showParcelsLayer?: boolean

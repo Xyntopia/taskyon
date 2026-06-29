@@ -1,6 +1,10 @@
 <template>
   <div class="row no-wrap">
-    <q-scroll-area ref="scrollRef" :style="{ height: scrollHeight }" class="col rounded-borders log-surface">
+    <q-scroll-area
+      ref="scrollRef"
+      :style="{ height: scrollHeight }"
+      class="col rounded-borders log-surface"
+    >
       <q-list dense separator>
         <q-item v-for="entry in logs" :key="entry.id">
           <q-item-section>
@@ -79,7 +83,7 @@ const copyText = computed(() =>
 
 const copyAllLogs = () => {
   try {
-    copyToClipboard(copyText.value)
+    void copyToClipboard(copyText.value)
     $q.notify({ type: 'positive', message: 'Logs copied to clipboard.' })
   } catch (error: unknown) {
     $q.notify({
@@ -114,4 +118,3 @@ watch(
   border: 1px solid var(--q-info);
 }
 </style>
-

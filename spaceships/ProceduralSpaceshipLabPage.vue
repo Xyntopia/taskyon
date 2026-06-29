@@ -28,11 +28,13 @@
                   @mouseleave="state.preview.focusedModuleId = ''"
                 >
                   <span class="spaceship-lab__module-mini-list">
-                    <span
+                    <SanitizedMarkup
                       v-for="variant in moduleMiniIconSvgs(module)"
                       :key="`${module.id}-${variant.name}-icon`"
+                      tag="span"
                       class="spaceship-lab__module-mini-icon"
-                      v-html="variant.svg"
+                      :markup="variant.svg"
+                      :sanitize="sanitizeSvgMarkup"
                     />
                   </span>
                   <q-tooltip>{{ module.id || `module-${index + 1}` }}</q-tooltip>
@@ -319,7 +321,7 @@
                     class="spaceship-lab__module-svg-preview q-mt-xs"
                     @mousedown="beginModuleSvgDrag"
                   >
-                    <div v-html="moduleSvgPreview" />
+                    <SanitizedMarkup :markup="moduleSvgPreview" :sanitize="sanitizeSvgMarkup" />
                   </div>
                 </div>
               </template>
@@ -351,11 +353,12 @@
                     </div>
                   </div>
                   <div class="spaceship-lab__overview-svg-list">
-                    <div
+                    <SanitizedMarkup
                       v-for="variant in moduleOverviewSvgs(module)"
                       :key="`${module.id}-${variant.name}-overview`"
                       class="spaceship-lab__overview-svg"
-                      v-html="variant.svg"
+                      :markup="variant.svg"
+                      :sanitize="sanitizeSvgMarkup"
                     />
                   </div>
                 </button>
@@ -653,9 +656,11 @@ import {
 } from './spaceshipSchemas'
 import { clearSpaceshipImageCache, getSpaceshipImage } from './spaceshipIdenticonCache'
 import { syncStateWithOPFSFolder } from '../modules/saveState'
+import SanitizedMarkup from '../components/SanitizedMarkup.vue'
 import ObjectView from '../components/varViews/ObjectView.vue'
 import ToggleButton from '../components/ToggleButton.vue'
 import { matTune } from '@quasar/extras/material-icons'
+import { sanitizeSvgMarkup } from '../modules/sanitizeMarkup'
 
 type GalleryEntry = {
   id: string

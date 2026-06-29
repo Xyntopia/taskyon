@@ -1,15 +1,24 @@
 #!/usr/bin/env node
 
-import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
-import { createRequire } from 'node:module'
-import initRumoca from 'rumoca'
-import * as rumoca from 'rumoca'
+import { writeFileSync } from 'node:fs'
+import { readFile, writeFile } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import initRumoca from 'rumoca-full-web'
+import * as rumoca from 'rumoca-full-web'
 import { strFromU8, unzipSync } from 'fflate'
 
-const COMMANDS = new Set(['init', 'load-msl', 'list-classes', 'get-class-info', 'compile-model'])
-const require = createRequire(import.meta.url)
+let loadedSourceRootFiles = {}
 
+const COMMANDS = new Set([
+  'init',
+  'load-msl',
+  'list-classes',
+  'get-class-info',
+  'compile-model',
+  'render-model-js',
+  'simulate-model',
+])
 function usage() {
   return `
 Modelica CLI (rumoca wasm)
@@ -33,11 +42,22 @@ Commands:
   compile-model --model <Qualified.Name> [--source-file <path>] [--use-source-roots]
       Compile one model. If --source-file is omitted, source_modelica is fetched via get_class_info.
 
+  render-model-js --model <Qualified.Name> --template-file <path> [--output-file <path>] [--source-file <path>] [--use-source-roots]
+      Compile one model, select the template DAE, and render generated JS from the provided template.
+
+  simulate-model --model <Qualified.Name> [--source-file <path>] [--use-source-roots] [--t-end <f64>] [--dt <f64>] [--solver <name>]
+      Simulate one model through Rumoca's WASM simulation surface and print the result payload.
+
 Options:
   --threads <n>           wasm_init threads (default: 0)
   --msl-zip <path>        path to MSL zip (can be combined with other commands)
   --model <name>          qualified class/model name
   --source-file <path>    Modelica source file for compile-model
+  --template-file <path>  template file used by render-model-js
+  --output-file <path>    output file written by render-model-js
+  --solver <name>         simulation solver (for example auto, bdf, esdirk34, trbdf2, rk-like)
+  --t-end <f64>           simulation stop time for simulate-model
+  --dt <f64>              fixed output interval for simulate-model
   --prefix <text>         prefix filter for list-classes
   --use-source-roots      use compile_with_source_roots if available
   --json                  print machine-readable JSON output
@@ -51,7 +71,12 @@ function parseArgs(argv) {
     mslZip: '',
     model: '',
     sourceFile: '',
+    templateFile: '',
+    outputFile: '',
     prefix: '',
+    solver: 'auto',
+    tEnd: 1,
+    dt: 0.01,
     useSourceRoots: false,
     json: false,
     help: false,
@@ -98,8 +123,28 @@ function parseArgs(argv) {
       options.sourceFile = value
       continue
     }
+    if (key === 'solver') {
+      options.solver = value
+      continue
+    }
+    if (key === 't-end') {
+      options.tEnd = Number.parseFloat(value)
+      continue
+    }
+    if (key === 'dt') {
+      options.dt = Number.parseFloat(value)
+      continue
+    }
     if (key === 'prefix') {
       options.prefix = value
+      continue
+    }
+    if (key === 'template-file') {
+      options.templateFile = value
+      continue
+    }
+    if (key === 'output-file') {
+      options.outputFile = value
       continue
     }
     throw new Error(`Unknown option: --${key}`)
@@ -148,22 +193,39 @@ function resolveModelName(qualifiedName) {
   return parts[parts.length - 1] ?? 'Model'
 }
 
+function selectDaeForTemplate(compiled, usePreparedDae = true) {
+  if (usePreparedDae) {
+    const prepared = asObject(compiled?.dae_prepared)
+    if (prepared) return prepared
+  }
+  const dae = asObject(compiled?.dae)
+  if (dae) return dae
+  return null
+}
+
 function parseJson(raw) {
   return JSON.parse(String(raw))
 }
 
 async function initEngine(threads) {
-  const wasmPath = require.resolve('rumoca/rumoca_bind_wasm_bg.wasm')
-  const wasmBytes = await readFile(wasmPath)
-  await initRumoca({ module_or_path: wasmBytes })
+  await initRumoca({ module_or_path: await loadRumocaWasmBytes() })
   const safeThreads = Number.isFinite(threads) ? Math.max(0, Math.floor(threads)) : 0
-  const rayonEnabled = typeof rumoca.wasm_init === 'function' ? Boolean(await rumoca.wasm_init(safeThreads)) : false
+  const rayonEnabled =
+    typeof rumoca.wasm_init === 'function' ? Boolean(await rumoca.wasm_init(safeThreads)) : false
   return {
     version: typeof rumoca.get_version === 'function' ? asString(rumoca.get_version()) : '',
     gitCommit: typeof rumoca.get_git_commit === 'function' ? asString(rumoca.get_git_commit()) : '',
-    buildTimeUtc: typeof rumoca.get_build_time_utc === 'function' ? asString(rumoca.get_build_time_utc()) : '',
+    buildTimeUtc:
+      typeof rumoca.get_build_time_utc === 'function' ? asString(rumoca.get_build_time_utc()) : '',
     rayonEnabled,
+    simulationAvailable: typeof rumoca.simulate_model === 'function',
+    simulationModelDiscoveryAvailable: typeof rumoca.get_simulation_models === 'function',
   }
+}
+
+async function loadRumocaWasmBytes() {
+  const packageDir = dirname(fileURLToPath(import.meta.resolve('rumoca-full-web')))
+  return await readFile(join(packageDir, 'rumoca_bind_wasm_bg.wasm'))
 }
 
 async function loadMslZip(mslZipPath) {
@@ -182,16 +244,42 @@ async function loadMslZip(mslZipPath) {
 
   const fileCount = Object.keys(libraries).length
   if (fileCount === 0) throw new Error(`No usable .mo files found in zip: ${absolute}`)
-  const resultRaw = rumoca.load_source_roots(JSON.stringify(libraries))
+  loadedSourceRootFiles = libraries
+  const useIndexLoad = typeof rumoca.load_source_root_index === 'function'
+  const resultRaw = useIndexLoad
+    ? rumoca.load_source_root_index(JSON.stringify(libraries))
+    : rumoca.load_source_roots(JSON.stringify(libraries))
   const loaded = parseJson(resultRaw)
-  const parsedCount = Number.isFinite(Number(loaded?.parsed_count))
-    ? Number(loaded.parsed_count)
-    : fileCount
+  const parsedCount = useIndexLoad
+    ? fileCount
+    : Number.isFinite(Number(loaded?.parsed_count))
+      ? Number(loaded.parsed_count)
+      : fileCount
   const documentCount =
     typeof rumoca.get_source_root_document_count === 'function'
       ? Number(rumoca.get_source_root_document_count()) || 0
       : 0
-  return { absolute, fileCount, parsedCount, documentCount }
+  return {
+    absolute,
+    fileCount,
+    parsedCount,
+    documentCount,
+    loadMode: useIndexLoad ? 'index' : 'parsed',
+    classCount: Number(loaded?.class_count) || 0,
+  }
+}
+
+function getSourceRootDocumentCount() {
+  return typeof rumoca.get_source_root_document_count === 'function'
+    ? Number(rumoca.get_source_root_document_count()) || 0
+    : 0
+}
+
+function materializeLoadedSourceRootsIfNeeded() {
+  if (getSourceRootDocumentCount() > 0) return
+  if (Object.keys(loadedSourceRootFiles).length === 0) return
+  if (typeof rumoca.load_source_roots !== 'function') return
+  rumoca.load_source_roots(JSON.stringify(loadedSourceRootFiles))
 }
 
 function listClasses(prefix) {
@@ -228,17 +316,93 @@ async function readModelSource(model, sourceFile) {
   return { source, sourcePath: '' }
 }
 
-async function compileModel({ model, sourceFile, useSourceRoots }) {
+function renderWithRumoca({ dae, templateSource, modelName, templatePath, outputPath }) {
+  const daeJson = JSON.stringify(dae)
+  if (typeof rumoca.render_template === 'function') {
+    return String(rumoca.render_template(daeJson, templateSource) || '')
+  }
+  if (typeof rumoca.render_target === 'function') {
+    const manifestSource = [
+      'version = 1',
+      'ir = "dae"',
+      'name = "javascript"',
+      '',
+      '[[files]]',
+      `path = "${String(outputPath || 'model.js')
+        .replaceAll('\\', '\\\\')
+        .replaceAll('"', '\\"')}"`,
+      `template = "${String(templatePath || 'javascript.jinja')
+        .replaceAll('\\', '\\\\')
+        .replaceAll('"', '\\"')}"`,
+      '',
+    ].join('\n')
+    const templatesJson = JSON.stringify({
+      [templatePath || 'javascript.jinja']: templateSource,
+    })
+    const rendered = rumoca.render_target(
+      daeJson,
+      modelName,
+      'javascript',
+      manifestSource,
+      templatesJson,
+    )
+    const renderedObj = asObject(rendered)
+    const files = Array.isArray(renderedObj?.files) ? renderedObj.files : []
+    const firstFile = files[0]
+    const firstContent = asObject(firstFile)?.content
+    if (typeof firstContent === 'string') return firstContent
+    if (typeof rendered === 'string') return rendered
+    throw new Error(
+      `render_target returned unexpected payload: ${JSON.stringify(rendered).slice(0, 500)}`,
+    )
+  }
+  throw new Error('WASM module is missing render_template / render_target exports')
+}
+
+async function compileModelToDae({ model, sourceFile, useSourceRoots }) {
+  if (!model) throw new Error('Missing --model')
+  if (useSourceRoots && typeof rumoca.compile_with_source_roots === 'function') {
+    materializeLoadedSourceRootsIfNeeded()
+    if (sourceFile) {
+      const { source, sourcePath } = await readModelSource(model, sourceFile)
+      const normalized = withLibraryContext(model, source)
+      const shortName = resolveModelName(model)
+      const compiled = parseJson(rumoca.compile_with_source_roots(normalized, shortName, '{}'))
+      return { compiled, sourcePath, usedSourceRoots: true }
+    }
+    const compiled = parseJson(rumoca.compile_with_source_roots('', model, '{}'))
+    return { compiled, sourcePath: '', usedSourceRoots: true }
+  }
+  if (useSourceRoots && typeof rumoca.compile_with_libraries === 'function') {
+    materializeLoadedSourceRootsIfNeeded()
+    if (sourceFile) {
+      const { source, sourcePath } = await readModelSource(model, sourceFile)
+      const normalized = withLibraryContext(model, source)
+      const shortName = resolveModelName(model)
+      const compiled = parseJson(rumoca.compile_with_libraries(normalized, shortName, '{}'))
+      return { compiled, sourcePath, usedSourceRoots: true }
+    }
+    const compiled = parseJson(rumoca.compile_with_libraries('', model, '{}'))
+    return { compiled, sourcePath: '', usedSourceRoots: true }
+  }
+
   if (!model) throw new Error('Missing --model')
   const { source, sourcePath } = await readModelSource(model, sourceFile)
   const normalized = withLibraryContext(model, source)
   const shortName = resolveModelName(model)
+  if (typeof rumoca.compile_to_json !== 'function') {
+    throw new Error('WASM module is missing compile_to_json')
+  }
+  const compiled = parseJson(rumoca.compile_to_json(normalized, shortName))
+  return { compiled, sourcePath, usedSourceRoots: false }
+}
 
-  const compileRaw =
-    useSourceRoots && typeof rumoca.compile_with_source_roots === 'function'
-      ? rumoca.compile_with_source_roots(normalized, shortName, '{}')
-      : rumoca.compile_to_json(normalized, shortName)
-  const compiled = parseJson(compileRaw)
+async function compileModel({ model, sourceFile, useSourceRoots }) {
+  const { compiled, sourcePath } = await compileModelToDae({
+    model,
+    sourceFile,
+    useSourceRoots,
+  })
   const dae = asObject(compiled?.dae_prepared)
   return {
     model,
@@ -257,16 +421,101 @@ async function compileModel({ model, sourceFile, useSourceRoots }) {
   }
 }
 
+async function renderModelJs({ model, sourceFile, templateFile, outputFile, useSourceRoots }) {
+  if (!templateFile) throw new Error('Missing --template-file')
+  const { compiled, sourcePath, usedSourceRoots } = await compileModelToDae({
+    model,
+    sourceFile,
+    useSourceRoots,
+  })
+  const dae = selectDaeForTemplate(compiled, true)
+  if (!dae) throw new Error('Rumoca compile result did not contain dae_prepared / dae')
+  const templateAbsolute = resolve(templateFile)
+  const templateSource = String(await readFile(templateAbsolute))
+  const outputPath = outputFile ? resolve(outputFile) : ''
+  const rendered = renderWithRumoca({
+    dae,
+    templateSource,
+    modelName: resolveModelName(model),
+    templatePath: templateAbsolute,
+    outputPath: outputPath || 'model.js',
+  })
+  if (outputPath) {
+    await writeFile(outputPath, rendered, 'utf8')
+  }
+  return {
+    model,
+    sourcePath,
+    usedSourceRoots,
+    templatePath: templateAbsolute,
+    outputPath,
+    bytes: Buffer.byteLength(rendered, 'utf8'),
+    rendered,
+  }
+}
+
+async function simulateModel({ model, sourceFile, useSourceRoots, tEnd, dt, solver }) {
+  if (!model) throw new Error('Missing --model')
+  if (typeof rumoca.simulate_model !== 'function') {
+    throw new Error('WASM module is missing simulate_model')
+  }
+
+  let source = ''
+  let sourcePath = ''
+  let modelName = model
+  let usedSourceRoots = false
+
+  if (useSourceRoots) {
+    materializeLoadedSourceRootsIfNeeded()
+    usedSourceRoots = true
+    if (sourceFile) {
+      const loaded = await readModelSource(model, sourceFile)
+      source = withLibraryContext(model, loaded.source)
+      sourcePath = loaded.sourcePath
+      modelName = resolveModelName(model)
+    }
+  } else {
+    const loaded = await readModelSource(model, sourceFile)
+    source = withLibraryContext(model, loaded.source)
+    sourcePath = loaded.sourcePath
+    modelName = resolveModelName(model)
+  }
+
+  const simulation = parseJson(
+    rumoca.simulate_model(
+      source,
+      modelName,
+      Number.isFinite(tEnd) ? tEnd : 1,
+      Number.isFinite(dt) ? dt : 0.01,
+      asString(solver) || 'auto',
+    ),
+  )
+
+  return {
+    model,
+    modelName,
+    sourcePath,
+    usedSourceRoots,
+    tEnd: Number.isFinite(tEnd) ? tEnd : 1,
+    dt: Number.isFinite(dt) ? dt : 0.01,
+    solver: asString(solver) || 'auto',
+    simulation,
+  }
+}
+
 function printOutput(options, payload) {
+  const writeOutput = (text) => {
+    writeFileSync(1, `${String(text)}\n`, 'utf8')
+  }
   if (options.json) {
-    console.log(JSON.stringify(payload, null, 2))
+    writeOutput(JSON.stringify(payload, null, 2))
     return
   }
   if (typeof payload === 'string') {
-    console.log(payload)
+    writeOutput(payload)
     return
   }
-  console.log(JSON.stringify(payload, null, 2))
+  writeOutput(JSON.stringify(payload, null, 2))
 }
 
 async function main() {
@@ -307,6 +556,42 @@ async function main() {
       model: options.model,
       sourceFile: options.sourceFile,
       useSourceRoots: options.useSourceRoots,
+    })
+    printOutput(options, output)
+    return
+  }
+  if (command === 'render-model-js') {
+    output.render = await renderModelJs({
+      model: options.model,
+      sourceFile: options.sourceFile,
+      templateFile: options.templateFile,
+      outputFile: options.outputFile,
+      useSourceRoots: options.useSourceRoots,
+    })
+    printOutput(
+      options,
+      options.json
+        ? output
+        : options.outputFile
+          ? {
+              ...output,
+              render: {
+                ...output.render,
+                rendered: `[written to ${output.render.outputPath || options.outputFile}]`,
+              },
+            }
+          : output.render.rendered,
+    )
+    return
+  }
+  if (command === 'simulate-model') {
+    output.simulation = await simulateModel({
+      model: options.model,
+      sourceFile: options.sourceFile,
+      useSourceRoots: options.useSourceRoots,
+      tEnd: options.tEnd,
+      dt: options.dt,
+      solver: options.solver,
     })
     printOutput(options, output)
     return

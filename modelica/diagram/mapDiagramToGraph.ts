@@ -21,6 +21,7 @@ export type DiagramNodePortData = {
 
 export type DiagramNodeData = {
   typeName: string
+  qualifiedTypeName?: string
   description: string
   iconValues: Record<string, string>
   hasIcon: boolean
@@ -53,7 +54,8 @@ type Rect = { x: number; y: number; width: number; height: number }
 type Size = { width: number; height: number }
 const DIAGRAM_SCALE = 3
 
-const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value))
+const clamp = (value: number, min: number, max: number): number =>
+  Math.max(min, Math.min(max, value))
 const shortTypeName = (typeName: string): string => {
   const trimmed = typeName.trim()
   if (!trimmed) return ''
@@ -142,7 +144,12 @@ const iconGeometryOverflowScale = (
     minY = Math.min(minY, extent.minY)
     maxY = Math.max(maxY, extent.maxY)
   })
-  if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+  if (
+    !Number.isFinite(minX) ||
+    !Number.isFinite(maxX) ||
+    !Number.isFinite(minY) ||
+    !Number.isFinite(maxY)
+  ) {
     return null
   }
   const geometryWidth = Math.max(1e-6, maxX - minX)
@@ -153,7 +160,9 @@ const iconGeometryOverflowScale = (
   }
 }
 
-const normalizeExtent = (extent: [[number, number], [number, number]]): [[number, number], [number, number]] => {
+const normalizeExtent = (
+  extent: [[number, number], [number, number]],
+): [[number, number], [number, number]] => {
   const minX = Math.min(extent[0][0], extent[1][0])
   const maxX = Math.max(extent[0][0], extent[1][0])
   const minY = Math.min(extent[0][1], extent[1][1])
@@ -164,7 +173,10 @@ const normalizeExtent = (extent: [[number, number], [number, number]]): [[number
   ]
 }
 
-const rectFromPlacement = (placement: DiagramPlacementTransform | undefined, fallbackSize: Size): Rect | null => {
+const rectFromPlacement = (
+  placement: DiagramPlacementTransform | undefined,
+  fallbackSize: Size,
+): Rect | null => {
   if (!placement) return null
   const rawExtent =
     placement.extent ??
@@ -220,10 +232,10 @@ const rectFromPlacement = (placement: DiagramPlacementTransform | undefined, fal
 }
 
 const averagePoint = (points: Array<{ x: number; y: number }>): { x: number; y: number } => {
-  const sum = points.reduce(
-    (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
-    { x: 0, y: 0 },
-  )
+  const sum = points.reduce((acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }), {
+    x: 0,
+    y: 0,
+  })
   return { x: sum.x / points.length, y: sum.y / points.length }
 }
 
@@ -248,7 +260,10 @@ const buildNodeSizes = (diagram: ModelicaDiagramDto): Map<string, Size> => {
     const hasIcon = Boolean(component.icon && component.icon.graphics.length > 0)
     const placementSize = sizeFromPlacementExtent(component.placement?.extent)
     const geometryScale = iconGeometryOverflowScale(component.icon)
-    const fallbackText = fallbackTextSize(component.name, component.description || component.typeName)
+    const fallbackText = fallbackTextSize(
+      component.name,
+      component.description || component.typeName,
+    )
     const fallback = hasIcon
       ? {
           width: Math.max(
@@ -274,7 +289,10 @@ const buildNodeSizes = (diagram: ModelicaDiagramDto): Map<string, Size> => {
 const iconCoordinateExtent = (
   icon: DiagramIconSpec | undefined,
 ): { minX: number; maxX: number; minY: number; maxY: number } => {
-  const e = icon?.coordinateExtent ?? [[-100, -100], [100, 100]]
+  const e = icon?.coordinateExtent ?? [
+    [-100, -100],
+    [100, 100],
+  ]
   return {
     minX: Math.min(e[0][0], e[1][0]),
     maxX: Math.max(e[0][0], e[1][0]),
@@ -294,7 +312,8 @@ const nodePortsFromComponent = (component: {
   const extentHeight = Math.max(1e-6, extent.maxY - extent.minY)
   return ports.map((port) => {
     const placement = port.placement
-    const center = placement?.origin ??
+    const center =
+      placement?.origin ??
       (placement?.extent
         ? [
             (placement.extent[0][0] + placement.extent[1][0]) / 2,
@@ -328,7 +347,9 @@ const lookupPortAnchor = (
   const rect = rects.get(componentId)
   if (!node || !rect) return null
   const ports = node.data?.ports ?? []
-  const match = ports.find((port) => port.name === portName) ?? ports.find((port) => portName.startsWith(`${port.name}.`))
+  const match =
+    ports.find((port) => port.name === portName) ??
+    ports.find((port) => portName.startsWith(`${port.name}.`))
   if (!match) return null
   const center = centerOfRect(rect)
   const rawXRatio = node.data?.flipX ? 1 - match.xRatio : match.xRatio
@@ -337,7 +358,7 @@ const lookupPortAnchor = (
     x: rect.x + rect.width * rawXRatio,
     y: rect.y + rect.height * rawYRatio,
   }
-  const angle = ((-(node.data?.instanceRotation ?? 0)) * Math.PI) / 180
+  const angle = (-(node.data?.instanceRotation ?? 0) * Math.PI) / 180
   const cos = Math.cos(angle)
   const sin = Math.sin(angle)
   const dx = unrotated.x - center.x
@@ -348,7 +369,10 @@ const lookupPortAnchor = (
   }
 }
 
-const deriveFixedRects = (diagram: ModelicaDiagramDto, nodeSizes: Map<string, Size>): Map<string, Rect> => {
+const deriveFixedRects = (
+  diagram: ModelicaDiagramDto,
+  nodeSizes: Map<string, Size>,
+): Map<string, Rect> => {
   const fixedRects = new Map<string, Rect>()
   diagram.components.forEach((component) => {
     const fallbackSize = nodeSizes.get(component.id) ?? { width: 120, height: 70 }
@@ -422,10 +446,15 @@ export const mapDiagramToGraph = (
       preferredWidth: preferredSize.width,
       preferredHeight: preferredSize.height,
       instanceRotation: component.placement?.rotation ?? 0,
-      flipX: (component.placement?.extent?.[1][0] ?? 1) - (component.placement?.extent?.[0][0] ?? -1) < 0,
-      flipY: (component.placement?.extent?.[1][1] ?? 1) - (component.placement?.extent?.[0][1] ?? -1) < 0,
+      flipX:
+        (component.placement?.extent?.[1][0] ?? 1) - (component.placement?.extent?.[0][0] ?? -1) <
+        0,
+      flipY:
+        (component.placement?.extent?.[1][1] ?? 1) - (component.placement?.extent?.[0][1] ?? -1) <
+        0,
       ports: nodePortsFromComponent(component),
     }
+    if (component.qualifiedTypeName) data.qualifiedTypeName = component.qualifiedTypeName
     if (component.iconRef) data.iconRef = component.iconRef
     if (component.icon) data.icon = component.icon
     return {
@@ -437,40 +466,48 @@ export const mapDiagramToGraph = (
   })
   const nodesById = new Map(nodes.map((node) => [node.id, node] as const))
 
-  const edges: GraphData<DiagramNodeData, DiagramEdgeData>['edges'] = diagram.connections.map((connection) => {
-    const explicitPoints = connection.linePoints?.map((point) => toGraphPoint(point))
-    const fromRect = fixedRects.get(connection.from)
-    const toRect = fixedRects.get(connection.to)
-    const fromPortAnchor = lookupPortAnchor(connection.from, connection.fromPort, nodesById, fixedRects)
-    const toPortAnchor = lookupPortAnchor(connection.to, connection.toPort, nodesById, fixedRects)
-    const generatedPoints =
-      !explicitPoints && fromRect && toRect
-        ? [fromPortAnchor ?? centerOfRect(fromRect), toPortAnchor ?? centerOfRect(toRect)]
-        : undefined
-    const data: DiagramEdgeData = {}
-    if (explicitPoints) {
-      const anchoredPoints = [...explicitPoints]
-      if (fromPortAnchor && anchoredPoints.length > 0) anchoredPoints[0] = fromPortAnchor
-      if (toPortAnchor && anchoredPoints.length > 0) anchoredPoints[anchoredPoints.length - 1] = toPortAnchor
-      data.linePoints = anchoredPoints
-      data.preferredPoints = anchoredPoints
-      if (mode === 'authored') {
-        data.lockPreferredPath = true
-        data.preservePreferredEndpoints = false
+  const edges: GraphData<DiagramNodeData, DiagramEdgeData>['edges'] = diagram.connections.map(
+    (connection) => {
+      const explicitPoints = connection.linePoints?.map((point) => toGraphPoint(point))
+      const fromRect = fixedRects.get(connection.from)
+      const toRect = fixedRects.get(connection.to)
+      const fromPortAnchor = lookupPortAnchor(
+        connection.from,
+        connection.fromPort,
+        nodesById,
+        fixedRects,
+      )
+      const toPortAnchor = lookupPortAnchor(connection.to, connection.toPort, nodesById, fixedRects)
+      const generatedPoints =
+        !explicitPoints && fromRect && toRect
+          ? [fromPortAnchor ?? centerOfRect(fromRect), toPortAnchor ?? centerOfRect(toRect)]
+          : undefined
+      const data: DiagramEdgeData = {}
+      if (explicitPoints) {
+        const anchoredPoints = [...explicitPoints]
+        if (fromPortAnchor && anchoredPoints.length > 0) anchoredPoints[0] = fromPortAnchor
+        if (toPortAnchor && anchoredPoints.length > 0)
+          anchoredPoints[anchoredPoints.length - 1] = toPortAnchor
+        data.linePoints = anchoredPoints
+        data.preferredPoints = anchoredPoints
+        if (mode === 'authored') {
+          data.lockPreferredPath = true
+          data.preservePreferredEndpoints = false
+        }
       }
-    }
-    if (!explicitPoints && generatedPoints) data.preferredPoints = generatedPoints
-    if (connection.lineColor) data.color = connection.lineColor
-    if (connection.fromPort) data.fromPort = connection.fromPort
-    if (connection.toPort) data.toPort = connection.toPort
-    return {
-      id: connection.id,
-      source: connection.from,
-      target: connection.to,
-      type: 'modelica-connect',
-      data,
-    }
-  })
+      if (!explicitPoints && generatedPoints) data.preferredPoints = generatedPoints
+      if (connection.lineColor) data.color = connection.lineColor
+      if (connection.fromPort) data.fromPort = connection.fromPort
+      if (connection.toPort) data.toPort = connection.toPort
+      return {
+        id: connection.id,
+        source: connection.from,
+        target: connection.to,
+        type: 'modelica-connect',
+        data,
+      }
+    },
+  )
 
   const optionsBase: RenderOptions<DiagramNodeData, DiagramEdgeData> = {
     direction: 'TB',

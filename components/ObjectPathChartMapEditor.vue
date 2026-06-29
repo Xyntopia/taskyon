@@ -146,8 +146,8 @@ const props = withDefaults(
     arrayNumericColumnOptions: Option[]
     featurePathOptions: Option[]
     objectFeaturePathOptions: Option[]
-    detectedLatPath?: string | null
-    detectedLonPath?: string | null
+    detectedLatPath?: string | null | undefined
+    detectedLonPath?: string | null | undefined
     showRemove?: boolean
     plotResolutionOptions: Array<{ label: string; value: PlotResolution }>
   }>(),

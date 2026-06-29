@@ -1,5 +1,5 @@
 import z from 'zod'
-import { executeCodeInIframeSimple } from '../modules/sandbox/iframeWorker'
+import { executeInWorkerSandbox } from '../modules/sandbox/workerSandbox'
 import { createNode } from './dagCore'
 
 export type DynamicJsNodeDefinition = {
@@ -53,7 +53,7 @@ export const createDynamicJsNode = (definition: DynamicJsNodeDefinition) =>
       const timeoutMs = Math.max(100, Math.min(definition.timeoutMs, 60_000))
       const timeout = createTimeoutSignal(timeoutMs)
       try {
-        const value = await executeCodeInIframeSimple(
+        const value = await executeInWorkerSandbox(
           {
             id: `dynamic-node-${definition.id}`,
             code: definition.code,

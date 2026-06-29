@@ -19,7 +19,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { deepMerge } from '../modules/objHelpers'
-import type { ClientTool, partialTyConfiguration, TyClient } from '@taskyon/tyclient'
+import type { ClientTool, partialTyConfiguration } from '@taskyon/tyclient'
 import { initializeTaskyon } from '@taskyon/tyclient'
 import { cryptoKeyToBase64 } from '../modules/crypto'
 
@@ -30,7 +30,7 @@ const props = withDefaults(
     persist?: boolean
     name: string
     url?: string
-    profileName?: string
+    profileName?: string | undefined
     bindingKey?: CryptoKey | string | null
     missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
   }>(),
@@ -89,7 +89,6 @@ const iframeSrc = computed(() => {
   }
   return `${taskyonBaseUrl.value}?${params.toString()}`
 })
-let tyAgent: TyClient | undefined = undefined
 
 const toTransportBindingKey = async (
   key: CryptoKey | string | null,
@@ -118,7 +117,6 @@ watch([resolvedProfileName, effectiveBindingKey], ([nextProfile, nextBinding], o
   const [oldProfile, oldBinding] = oldValues ?? [undefined, undefined]
   if (oldProfile === undefined && oldBinding === undefined) return
   if (nextProfile === oldProfile && nextBinding === oldBinding) return
-  tyAgent = undefined
   iframeReloadSeed.value += 1
 })
 
@@ -127,7 +125,6 @@ watch(
   (nextConfig, prevConfig) => {
     if (prevConfig === undefined) return
     if (nextConfig === prevConfig) return
-    tyAgent = undefined
     iframeReloadSeed.value += 1
   },
   { deep: true },
@@ -138,7 +135,6 @@ watch(
   (nextTools, prevTools) => {
     if (prevTools === undefined) return
     if (nextTools === prevTools) return
-    tyAgent = undefined
     iframeReloadSeed.value += 1
   },
   { deep: true },
@@ -149,7 +145,6 @@ watch(
   (nextPersist, prevPersist) => {
     if (prevPersist === undefined) return
     if (nextPersist === prevPersist) return
-    tyAgent = undefined
     iframeReloadSeed.value += 1
   },
 )
@@ -180,6 +175,6 @@ const onIframeLoaded = async () => {
   if (effectiveBindingKey.value) {
     initOptions.bindingKey = effectiveBindingKey.value
   }
-  tyAgent = await initializeTaskyon(initOptions)
+  await initializeTaskyon(initOptions)
 }
 </script>

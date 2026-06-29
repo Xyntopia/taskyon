@@ -51,15 +51,104 @@ import tyMarkdownCss from 'src/css/markdown.sass?inline'
 
 import { uid } from 'quasar'
 import { generateKaTeXIframeCss } from './katexFonts'
+import { stripHtmlCommentsOutsideMarkdownCode } from './markdownText'
 import { svgStringToPngUint8 } from './svgUtils'
 import { copyPngToClipboard, copyToClipboard, hexToRgb } from './utils'
 
 type MditToken = ReturnType<InstanceType<typeof MarkdownIt>['parse']>[number]
+type MarkdownPlugin = (md: MarkdownIt) => void
+type MaybePromise<T> = T | Promise<T>
+
+export type MarkdownPreprocessResult =
+  | string
+  | {
+      src: string
+      allowHtml?: boolean
+    }
+
+export type MarkdownActionHandler = (payload: unknown) => void | Promise<void>
+
+export type MarkdownExtension = {
+  name?: string
+  preprocess?: (src: string) => MaybePromise<MarkdownPreprocessResult>
+  plugins?: MarkdownPlugin[]
+  actionHandlers?: Record<string, MarkdownActionHandler>
+}
+
+export type MarkdownInlineAction = {
+  action: string
+  payload?: unknown
+}
 
 export const tyMdCssUrls = {
   dark: [darkHref],
   light: [lightHref],
 } as const
+
+export const escapeHtml = (value: string) =>
+  value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+
+export const encodeInlineActionPayload = (payload: unknown) =>
+  encodeURIComponent(JSON.stringify(payload))
+
+export const decodeInlineActionPayload = (payload: string | undefined): unknown => {
+  if (!payload) return undefined
+  try {
+    return JSON.parse(decodeURIComponent(payload))
+  } catch {
+    return undefined
+  }
+}
+
+export const renderInlineActionButton = (args: {
+  label: string
+  action: string
+  payload?: unknown
+  className?: string
+  title?: string
+}) => {
+  const payloadAttr =
+    args.payload === undefined
+      ? ''
+      : ` data-inline-payload="${escapeHtml(encodeInlineActionPayload(args.payload))}"`
+  const titleAttr = args.title ? ` title="${escapeHtml(args.title)}"` : ''
+  const classAttr = args.className ? ` ${args.className}` : ''
+  return `<button type="button" class="inline-action-button${classAttr}" data-inline-action="${escapeHtml(args.action)}"${payloadAttr}${titleAttr}>${escapeHtml(args.label)}</button>`
+}
+
+const resolveExtensionPlugins = (extensions: MarkdownExtension[]) =>
+  extensions.flatMap((extension) => extension.plugins ?? [])
+
+export const resolveMarkdownExtensions = (extensions: MarkdownExtension[] = []) => [
+  ...defaultMarkdownExtensions,
+  ...extensions,
+]
+
+export const preprocessMarkdownSource = async (
+  src: string,
+  extensions: MarkdownExtension[] = [],
+): Promise<{ src: string; allowHtml: boolean }> => {
+  let current = src
+  let allowHtml = false
+
+  for (const extension of resolveMarkdownExtensions(extensions)) {
+    if (!extension.preprocess) continue
+    const result = await extension.preprocess(current)
+    if (typeof result === 'string') {
+      current = result
+      continue
+    }
+    current = result.src
+    allowHtml ||= result.allowHtml ?? false
+  }
+
+  return { src: current, allowHtml }
+}
 
 export const highlighter = (code: string, lang: string) => {
   // non-null assertion or coalesce to JS grammar
@@ -126,32 +215,17 @@ export function createMultiButtonPlugin(
   langMatcher: RegExp,
   buttons: {
     label: string
+    action: string
     languages: RegExp
-    callback: (html: string, lang: string, containerId: string) => void | Promise<void>
+    payload: (args: { lang: string; code: string; containerId: string }) => unknown
+    callback: (payload: unknown) => void | Promise<void>
     feedback?: {
       successLabel: string
       durationMs: number
       failureLabel?: string
     }
   }[],
-) {
-  // 1) Setup a single message listener
-  let listener: ((event: MessageEvent) => void) | null = null
-
-  function setupListener() {
-    if (listener) return // Only once
-    listener = (event: MessageEvent) => {
-      const { type, html, lang, containerId } = event.data || {}
-      if (!type) return
-      const btn = buttons.find((b) => b.label === type && b.languages.test(lang))
-      if (btn) {
-        void btn.callback(html, lang, containerId)
-      }
-    }
-    window.addEventListener('message', listener)
-  }
-
-  // 2) Return a plugin that injects buttons using postMessage
+): MarkdownExtension {
   const plugin = createFenceTransformPlugin(langMatcher, (_token: MditToken, lang, content) => {
     const uid = `code-${Math.random().toString(36).slice(2)}`
     const blockId = `block-${Math.random().toString(36).slice(2)}`
@@ -163,27 +237,20 @@ export function createMultiButtonPlugin(
         // pull feedback values or defaults
         const success = b.feedback?.successLabel ?? '✓'
         const dur = b.feedback?.durationMs ?? 2000
-        return `
-          <button
-            id="btn-${uid}-${b.label.replace(/\s+/g, '-')}"
-            class="btn-${b.label.replace(/\s+/g, '-').toLowerCase()}"
-            onclick="
-              // 1) immediate feedback
+        return renderInlineActionButton({
+          label: b.label,
+          action: b.action,
+          payload: b.payload({ lang, code: _token.content, containerId: blockId }),
+          className: `btn-${b.label.replace(/\s+/g, '-').toLowerCase()}`,
+          title: `${b.label} ${lang}`.trim(),
+        }).replace(
+          '>',
+          ` onclick="
               const orig = this.textContent;
               this.textContent = orig+' ${success}';
               setTimeout(() => { this.textContent = orig }, ${dur});
-              // 2) notify parent for the real work
-              const msg = {
-                type: '${b.label}',
-                html: document.getElementById('${blockId}').innerHTML,
-                lang: '${lang}',
-                containerId: '${blockId}'
-              };
-              if(window.parent !== window) window.parent.postMessage(msg, '*');
-              window.postMessage(msg, '*'); // also post to self for local handling
-            "
-          >${b.label}</button>
-        `
+            ">`,
+        )
       })
       .join('')
 
@@ -198,42 +265,35 @@ export function createMultiButtonPlugin(
     `
   })
 
-  return {
-    plugin,
-    setupListener,
-    cleanup: () => {
-      if (listener) window.removeEventListener('message', listener)
-      listener = null
-    },
-  }
+  const actionHandlers = Object.fromEntries(
+    buttons.map((button) => [button.action, button.callback] as const),
+  )
+
+  return { plugins: [plugin], actionHandlers }
 }
 
-const { plugin: codeButtons, setupListener } = createMultiButtonPlugin(/.*/, [
+const codeButtonsExtension = createMultiButtonPlugin(/.*/, [
   {
     label: 'Copy',
+    action: 'copy-code',
     languages: /^(?!mermaid$).*/, // Exclude mermaid
-    callback: (html, lang) => {
-      // parse the HTML
-      const doc = new DOMParser().parseFromString(html, 'text/html')
-      // find the first <code>…</code>
-      const codeEl = doc.querySelector('pre code')
-      const code = codeEl?.textContent ?? ''
-      console.log(`copy ${lang}:`, code)
-      void copyToClipboard(code)
+    payload: ({ code, lang }) => ({ code, lang }),
+    callback: (payload) => {
+      const input = payload as { code?: string; lang?: string }
+      console.log(`copy ${input.lang ?? ''}:`, input.code ?? '')
+      void copyToClipboard(input.code ?? '')
     },
   },
   // Mermaid: Copy Source
   {
     label: 'Copy Source',
+    action: 'copy-mermaid-source',
     languages: /^mermaid$/,
-    callback: (html, lang) => {
-      // parse the HTML
-      const doc = new DOMParser().parseFromString(html, 'text/html')
-      // find the first <code>…</code>
-      const codeEl = doc.querySelector('pre code')
-      const code = codeEl?.textContent ?? ''
-      console.log(`copy ${lang}:`, code)
-      void copyToClipboard(code)
+    payload: ({ code, lang }) => ({ code, lang }),
+    callback: (payload) => {
+      const input = payload as { code?: string; lang?: string }
+      console.log(`copy ${input.lang ?? ''}:`, input.code ?? '')
+      void copyToClipboard(input.code ?? '')
     },
   },
   // TODO: Run code for js/python
@@ -267,52 +327,28 @@ const { plugin: codeButtons, setupListener } = createMultiButtonPlugin(/.*/, [
   // Copy as PNG
   {
     label: 'Copy as PNG',
+    action: 'copy-mermaid-png',
     languages: /^mermaid$/,
-    callback: async (html, lang, blockId) => {
-      const doc = new DOMParser().parseFromString(html, 'text/html')
-      // look for inline <svg> or <img src="blob:…">
-
-      // Try to find an <img> (blob) or <svg> (inline)
-      let svgString = ''
-      const img = doc.querySelector('img')
-      const svg = doc.querySelector('svg')
-
-      if (img && img.src.startsWith('blob:')) {
-        try {
-          const response = await fetch(img.src)
-          svgString = await response.text()
-        } catch (err) {
-          console.error('Failed to fetch SVG from blob:', err)
+    payload: ({ code }) => ({ code }),
+    callback: async (payload) => {
+      const input = payload as { code?: string }
+      const source = input.code ?? ''
+      if (!source) return
+      try {
+        mermaid.initialize(createMermaidSettings(document.body.classList.contains('body--dark')))
+        const svgString = await drawDiagram(mermaid)(source, uid())
+        if (!svgString.startsWith('<svg')) {
+          console.error('SVG string is invalid:', svgString.slice(0, 100))
           return
         }
-      } else if (svg) {
-        svgString = svg.outerHTML
-      } else {
-        console.error('No <img> or <svg> found in block:', blockId, doc.documentElement.innerHTML)
-        return
-      }
-
-      if (!svgString.startsWith('<svg')) {
-        console.error('SVG string is invalid:', svgString.slice(0, 100))
-        return
-      }
-
-      try {
         const res = await svgStringToPngUint8(svgString, 1024)
-        if (res) {
-          await copyPngToClipboard(res)
-          console.log('Copied PNG to clipboard')
-        } else {
-          console.error('SVG to PNG conversion failed')
-        }
+        if (res) await copyPngToClipboard(res)
       } catch (err) {
         console.error('Error converting/copying PNG:', err)
       }
     },
   },
 ])
-
-setupListener()
 
 // Example of using the render function
 export const drawDiagram =
@@ -405,7 +441,24 @@ const createMermaidSettings = (darkMode: boolean): MermaidConfig => ({
   suppressErrorRendering: true,
 })
 
-export const md2Html = async (src: string, darkMode = false, allowHtml = false) => {
+const defaultMarkdownExtensions: MarkdownExtension[] = [
+  {
+    name: 'shared-default-markdown-plugins',
+    plugins: [emoji, sub, sup, ins, mark, footnote, deflist, createMermaidPlaceholders],
+  },
+  {
+    name: 'shared-code-buttons',
+    ...codeButtonsExtension,
+  },
+]
+
+export const md2Html = async (
+  src: string,
+  darkMode = false,
+  allowHtml = false,
+  extensions: MarkdownExtension[] = [],
+) => {
+  const renderSource = allowHtml ? src : stripHtmlCommentsOutsideMarkdownCode(src)
   // 0) make a one-off random marker for this invocation
   const rand = Math.random().toString(36).slice(2, 20) // e.g. "x9fj3k2a"
   const wrap = `${rand}` // e.g. "HTMLBLOCK_x9fj3k2a..."
@@ -437,18 +490,7 @@ export const md2Html = async (src: string, darkMode = false, allowHtml = false) 
     highlight: highlighter,
   })
 
-  const plugins = [
-    emoji,
-    sub,
-    sup,
-    ins,
-    mark,
-    footnote,
-    deflist,
-    createMermaidPlaceholders,
-    codeButtons,
-  ]
-  plugins.forEach((plugin) => {
+  resolveExtensionPlugins(extensions).forEach((plugin) => {
     md.use(plugin)
   })
   md.use(katex, {
@@ -494,7 +536,7 @@ export const md2Html = async (src: string, darkMode = false, allowHtml = false) 
 
   // 2) Parse tokens and replace html_block tokens with placeholders
   const env = {}
-  const tokens = md.parse(src, env)
+  const tokens = md.parse(renderSource, env)
   const htmlBlocks: string[] = []
 
   if (allowHtml) {
@@ -556,6 +598,16 @@ export const generateIframeSrc = (
           width: 100%;
           box-sizing: border-box;
         }
+        .inline-action-button {
+          border: 1px solid rgba(var(--q-secondary-rgb), 0.35);
+          background: rgba(var(--q-secondary-rgb), 0.08);
+          color: inherit;
+          border-radius: 999px;
+          font-size: 0.75rem;
+          line-height: 1.1;
+          padding: 0.1rem 0.45rem;
+          cursor: pointer;
+        }
         img, svg {
           max-width: 100%;
           height: auto;
@@ -606,6 +658,19 @@ export const generateIframeSrc = (
 
         document.addEventListener('click', function(event) {
           const target = event.target;
+          const inlineAction = target && target.closest ? target.closest('[data-inline-action]') : null;
+          if (inlineAction) {
+            event.preventDefault();
+            window.parent.postMessage(
+              {
+                type: 'inlineAction',
+                action: inlineAction.getAttribute('data-inline-action') || '',
+                payload: inlineAction.getAttribute('data-inline-payload') || ''
+              },
+              '*'
+            );
+            return;
+          }
           const link = target && target.closest ? target.closest('a[href]') : null;
           if (link) {
             event.preventDefault();

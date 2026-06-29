@@ -45,7 +45,7 @@ const languageKey = ref('')
 // ---------------------------
 // 1️⃣ Scan all legacy modes at build time
 // ---------------------------
-const legacyModesMap = import.meta.glob(
+const legacyJsModesMap = import.meta.glob(
   '/node_modules/@codemirror/legacy-modes/mode/*.js',
 ) as Record<
   string,
@@ -53,9 +53,22 @@ const legacyModesMap = import.meta.glob(
   () => Promise<any>
 >
 
+const legacyCjsModesMap = import.meta.glob(
+  '/node_modules/@codemirror/legacy-modes/mode/*.cjs',
+) as Record<
+  string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  () => Promise<any>
+>
+
+const legacyModesMap = {
+  ...legacyJsModesMap,
+  ...legacyCjsModesMap,
+}
+
 async function loadLegacyMode(lang: string) {
   const entry = Object.entries(legacyModesMap).find(
-    ([path]) => path.endsWith(`/${lang}.js`), // note the slash for safety
+    ([path]) => path.endsWith(`/${lang}.js`) || path.endsWith(`/${lang}.cjs`),
   )
   if (!entry) return null
 

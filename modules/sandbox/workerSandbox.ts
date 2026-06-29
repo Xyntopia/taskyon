@@ -1,0 +1,56 @@
+import type {
+  ExecuteInWorkerSandboxOptions,
+  WorkerSandboxExecuteRequestEnvelope,
+  WorkerSandboxRuntime,
+} from './workerSandboxTypes'
+
+export type { ExecuteInWorkerSandboxOptions, WorkerSandboxRpcHandlers } from './workerSandboxTypes'
+
+const isBrowserRuntime = (): boolean =>
+  typeof window !== 'undefined' && typeof document !== 'undefined'
+
+const cloneArgs = <T>(value: T): T =>
+  typeof structuredClone === 'function'
+    ? structuredClone(value)
+    : (JSON.parse(JSON.stringify(value)) as T)
+
+async function loadWorkerSandboxRuntime(
+  options: ExecuteInWorkerSandboxOptions,
+): Promise<WorkerSandboxRuntime> {
+  if (isBrowserRuntime()) {
+    if (options.browserRuntime === 'worker') {
+      const { BrowserNativeWorkerSandboxRuntime } = await import('./browserNativeWorkerSandboxRuntime')
+      return new BrowserNativeWorkerSandboxRuntime()
+    }
+    const { BrowserWorkerSandboxRuntime } = await import('./browserWorkerSandboxRuntime')
+    return new BrowserWorkerSandboxRuntime()
+  }
+  const nodeRuntimeModule = './nodeWorkerSandboxRuntime.ts'
+  const { NodeWorkerSandboxRuntime } = (await import(/* @vite-ignore */ nodeRuntimeModule)) as {
+    NodeWorkerSandboxRuntime: new () => WorkerSandboxRuntime
+  }
+  return new NodeWorkerSandboxRuntime()
+}
+
+function buildWorkerSandboxRequest(
+  options: ExecuteInWorkerSandboxOptions,
+  args: unknown[],
+): WorkerSandboxExecuteRequestEnvelope {
+  return {
+    request: {
+      kind: 'execute',
+      code: options.code,
+      args: cloneArgs(args),
+      sourceURL: options.sourceURL ?? 'worker-sandbox.js',
+    },
+    messagePort: options.messagePort,
+  }
+}
+
+export async function executeInWorkerSandbox<R = unknown>(
+  options: ExecuteInWorkerSandboxOptions,
+  ...args: unknown[]
+): Promise<R> {
+  const runtime = await loadWorkerSandboxRuntime(options)
+  return await runtime.execute<R>(buildWorkerSandboxRequest(options, args), options)
+}

@@ -1,20 +1,22 @@
 import {
-  buildIframeCode,
-  buildModelAbiValidationIframeCode,
+  buildModelAbiValidationSandboxCode,
+  buildWorkerSandboxCode,
   getPreparedDaeDiagnostics,
   getPreparedDaeStatus,
+  DEFAULT_MSL_ZIP_URL,
   loadWasm,
   selectDaeForTemplate,
   shouldValidateModelAbiForRenderedOutput,
   validateModelAbiValidationResultV1,
 } from './modelica'
+import { hasRumocaTemplateRenderer, renderRumocaTemplate } from './rumocaTemplateRender'
 import { strFromU8, unzipSync } from 'fflate'
-import { executeCodeInIframeSimple } from '../modules/sandbox/iframeWorker'
+import { executeInWorkerSandbox } from '../modules/sandbox/workerSandbox'
+import { validateJavaScriptInSandbox } from '../modules/sandbox/checkJsSyntax'
 import { serializeObject } from '../modules/serializeObject'
 import { createGraphController } from '../modules/graph'
 import baseDaeTemplate from './base_dae.jinja?raw'
 import javascriptTemplate from './javascript.jinja?raw'
-import standaloneHtmlTemplate from './standalone_html.jinja?raw'
 import {
   mapDiagramToGraph,
   type DiagramEdgeData,
@@ -22,6 +24,10 @@ import {
 } from './diagram/mapDiagramToGraph'
 import type { ModelicaDiagramDto } from './diagram/types'
 import { ModelicaWorkerClient } from './modelicaWorkerClient'
+import {
+  buildLazyModelicaLibraryByteArchive,
+  normalizeModelicaLibraryEntryPath,
+} from './lazyModelicaLibraryIndex'
 
 const templateChecks = [
   {
@@ -29,12 +35,6 @@ const templateChecks = [
     source: javascriptTemplate,
     requiredSnippets: ['function Model()', 'const meta = {'],
     executableAsJs: true,
-  },
-  {
-    name: 'standalone_html.jinja',
-    source: standaloneHtmlTemplate,
-    requiredSnippets: ['<html lang="en">', 'function Model()'],
-    executableAsJs: false,
   },
   {
     name: 'base_dae.jinja',
@@ -143,6 +143,39 @@ equation
 end BooleanNetworkShimSmoke;
 `.trim()
 
+function getTemplateModelName(dae: Record<string, unknown>, fallback = 'Model'): string {
+  const raw = dae.model_name
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw : fallback
+}
+
+function assertTemplateRendererAvailable(wasm: DiagnosticsWasm): void {
+  if (!hasRumocaTemplateRenderer(wasm)) {
+    throw new Error('Rumoca wasm export missing: render_template / render_target')
+  }
+}
+
+function renderDiagnosticsTemplate(
+  wasm: DiagnosticsWasm,
+  dae: Record<string, unknown>,
+  templateSource: string,
+  templatePath: string,
+  outputPath: string,
+): string {
+  const rendered = renderRumocaTemplate({
+    wasm,
+    daeJson: JSON.stringify(dae),
+    templateSource,
+    modelName: getTemplateModelName(dae),
+    templatePath,
+    outputPath,
+    targetName: 'template',
+  })
+  if (!rendered.length) {
+    throw new Error(`Rumoca template render returned empty output for ${templatePath}`)
+  }
+  return rendered
+}
+
 const MODELICA_BOOLEAN_SIGNAL_GENERATOR_SOURCE = `
 model BooleanSignalGenerator
   Modelica.Blocks.Sources.BooleanPulse booleanPulse(period = 0.2, width = 50);
@@ -193,7 +226,10 @@ function summarizeDiagram(diagram: ModelicaDiagramDto) {
     (sum, component) => sum + (component.icon?.graphics?.length ?? 0),
     0,
   )
-  const portCount = diagram.components.reduce((sum, component) => sum + (component.ports?.length ?? 0), 0)
+  const portCount = diagram.components.reduce(
+    (sum, component) => sum + (component.ports?.length ?? 0),
+    0,
+  )
   return {
     className: diagram.className,
     components: diagram.components.length,
@@ -214,9 +250,7 @@ async function runTemplateCoverage(source: string, modelName: string) {
   if (typeof wasm.compile_to_json !== 'function') {
     throw new Error('Rumoca wasm export missing: compile_to_json')
   }
-  if (typeof wasm.render_template !== 'function') {
-    throw new Error('Rumoca wasm export missing: render_template')
-  }
+  assertTemplateRendererAvailable(wasm)
 
   const compiled = wasm.compile_to_json(source, modelName)
   const parsed = JSON.parse(compiled) as {
@@ -233,28 +267,27 @@ async function runTemplateCoverage(source: string, modelName: string) {
   const preparedStatus = getPreparedDaeStatus(dae)
   const preparedDiagnostics = getPreparedDaeDiagnostics(dae)
   const preparedPayload =
-    parsed.dae_prepared && typeof parsed.dae_prepared === 'object' && !Array.isArray(parsed.dae_prepared)
+    parsed.dae_prepared &&
+    typeof parsed.dae_prepared === 'object' &&
+    !Array.isArray(parsed.dae_prepared)
   if (preparedPayload && !preparedStatus) {
     throw new Error('Selected DAE is missing __rumoca_prepared_status metadata')
   }
 
-  const rendered = wasm.render_template(
-    JSON.stringify(dae),
+  const rendered = renderDiagnosticsTemplate(
+    wasm,
+    dae,
     '{{ dae.model_name | default("unknown") }}',
+    'template-check.jinja',
+    'template-check.txt',
   )
-  if (typeof rendered !== 'string' || rendered.length === 0) {
-    throw new Error('Rumoca render_template returned empty output')
-  }
 
   const templateResults: Record<
     string,
     { ok: boolean; preview: string; jsExecutable: boolean; expectedJs: boolean; abiOk?: boolean }
   > = {}
   for (const check of templateChecks) {
-    const out = wasm.render_template(JSON.stringify(dae), check.source)
-    if (typeof out !== 'string' || out.length === 0) {
-      throw new Error(`Template render failed or empty output: ${check.name}`)
-    }
+    const out = renderDiagnosticsTemplate(wasm, dae, check.source, check.name, check.name)
     for (const snippet of check.requiredSnippets) {
       if (!out.includes(snippet)) {
         throw new Error(`Template ${check.name} missing expected snippet: ${snippet}`)
@@ -263,11 +296,11 @@ async function runTemplateCoverage(source: string, modelName: string) {
     let jsExecutable = false
     let abiOk: boolean | undefined
     if (check.executableAsJs) {
-      const code = buildModelAbiValidationIframeCode(out)
+      const code = buildModelAbiValidationSandboxCode(out)
       const id = `modelica-template-abi-check-${check.name.replaceAll(/[^a-zA-Z0-9_-]/g, '_')}`
       const abort = new AbortController()
       try {
-        const rawAbiResult = await executeCodeInIframeSimple(
+        const rawAbiResult = await executeInWorkerSandbox(
           {
             id,
             code,
@@ -322,7 +355,8 @@ async function runTemplateCoverage(source: string, modelName: string) {
     preparedDiagnostics,
     exports: {
       compile_to_json: true,
-      render_template: true,
+      render_template: typeof wasm.render_template === 'function',
+      render_target: typeof wasm.render_target === 'function',
     },
     renderedPreview: rendered.slice(0, 80),
     templates: templateResults,
@@ -342,15 +376,22 @@ end Test;
 }
 
 export async function testModelicaDiagramSvgRenderSmoke() {
+  if (typeof Worker === 'undefined' || typeof document === 'undefined') {
+    return {
+      ok: true,
+      skipped: 'diagram-render-smoke requires browser Worker + DOM',
+    }
+  }
+
   const debug: Record<string, unknown> = {
     phase: 'init',
     sourceLength: MODELICA_DIAGRAM_SMOKE_SOURCE.length,
   }
   const worker = new ModelicaWorkerClient()
   let host: HTMLDivElement | null = null
-  let controller:
-    | ReturnType<typeof createGraphController<DiagramNodeData, DiagramEdgeData>>
-    | null = null
+  let controller: ReturnType<
+    typeof createGraphController<DiagramNodeData, DiagramEdgeData>
+  > | null = null
 
   try {
     debug.phase = 'worker-init'
@@ -467,7 +508,7 @@ end TestPreparedMeta;
     throw new Error('compile_to_json should not expose dae_prepared_diagnostics in native-only API')
   }
 
-  const build = (dae as Record<string, unknown>).__rumoca_build
+  const build = dae.__rumoca_build
   if (!build || typeof build !== 'object' || Array.isArray(build)) {
     throw new Error('Native DAE is missing __rumoca_build metadata')
   }
@@ -522,11 +563,12 @@ export async function testModelicaBooleanNetworkShimRuntime() {
   if (typeof wasm.compile_to_json !== 'function') {
     throw new Error('Rumoca wasm export missing: compile_to_json')
   }
-  if (typeof wasm.render_template !== 'function') {
-    throw new Error('Rumoca wasm export missing: render_template')
-  }
+  assertTemplateRendererAvailable(wasm)
 
-  const compiled = wasm.compile_to_json(MODELICA_BOOLEAN_NETWORK_SHIM_SOURCE, 'BooleanNetworkShimSmoke')
+  const compiled = wasm.compile_to_json(
+    MODELICA_BOOLEAN_NETWORK_SHIM_SOURCE,
+    'BooleanNetworkShimSmoke',
+  )
   const parsed = JSON.parse(compiled) as {
     dae?: unknown
     dae_native?: unknown
@@ -537,7 +579,13 @@ export async function testModelicaBooleanNetworkShimRuntime() {
     throw new Error('Rumoca compile_to_json returned no DAE payload')
   }
 
-  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  const rendered = renderDiagnosticsTemplate(
+    wasm,
+    dae,
+    javascriptTemplate,
+    'javascript.jinja',
+    'model.js',
+  )
   if (typeof rendered !== 'string' || !rendered.trim()) {
     throw new Error('Rendered JS is empty')
   }
@@ -551,13 +599,14 @@ export async function testModelicaBooleanNetworkShimRuntime() {
   const runId = 'modelica-boolean-network-shim-runtime'
   const abort = new AbortController()
   try {
-    const result = await executeCodeInIframeSimple<{
+    const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
+    const result = await executeInWorkerSandbox<{
       meta?: { stopReason?: unknown; stopError?: unknown }
       data?: { t?: unknown[] }
     }>(
       {
         id: runId,
-        code: buildIframeCode(rendered),
+        code: runCode,
         sourceURL: `${runId}.js`,
         stopSignal: abort.signal,
       },
@@ -606,14 +655,18 @@ export async function testModelicaBooleanNetworkShimRuntime() {
 
 export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
   const wasm = await getDiagnosticsWasm()
-  if (typeof wasm.compile_to_json !== 'function') {
-    throw new Error('Rumoca wasm export missing: compile_to_json')
-  }
-  if (typeof wasm.render_template !== 'function') {
-    throw new Error('Rumoca wasm export missing: render_template')
-  }
+  assertTemplateRendererAvailable(wasm)
 
-  const compiled = wasm.compile_to_json(MODELICA_BOOLEAN_SIGNAL_GENERATOR_SOURCE, 'BooleanSignalGenerator')
+  const debug: Record<string, unknown> = {
+    phase: 'compile',
+    model: 'BooleanSignalGenerator',
+  }
+  const compiled = await compileToJsonWithAutoMsl(
+    wasm,
+    MODELICA_BOOLEAN_SIGNAL_GENERATOR_SOURCE,
+    'BooleanSignalGenerator',
+    debug,
+  )
   const parsed = JSON.parse(compiled) as {
     dae?: unknown
     dae_native?: unknown
@@ -624,7 +677,13 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
     throw new Error('Rumoca compile_to_json returned no DAE payload')
   }
 
-  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  const rendered = renderDiagnosticsTemplate(
+    wasm,
+    dae,
+    javascriptTemplate,
+    'javascript.jinja',
+    'model.js',
+  )
   if (typeof rendered !== 'string' || !rendered.trim()) {
     throw new Error('Rendered JS is empty')
   }
@@ -632,13 +691,14 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
   const runId = 'modelica-boolean-signal-generator-waveform-regression'
   const abort = new AbortController()
   try {
-    const result = await executeCodeInIframeSimple<{
+    const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
+    const result = await executeInWorkerSandbox<{
       meta?: { stopReason?: unknown; stopError?: unknown }
       data?: { t?: unknown[]; y?: Record<string, unknown> }
     }>(
       {
         id: runId,
-        code: buildIframeCode(rendered),
+        code: runCode,
         sourceURL: `${runId}.js`,
         stopSignal: abort.signal,
       },
@@ -673,10 +733,19 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
     const pulse = result?.data?.y?.['booleanPulse.y']
     const real = result?.data?.y?.['booleanToReal.y']
     if (!Array.isArray(pulse) || !Array.isArray(real)) {
-      throw new Error('Expected y["booleanPulse.y"] and y["booleanToReal.y"] arrays in simulation output')
+      throw new Error(
+        'Expected y["booleanPulse.y"] and y["booleanToReal.y"] arrays in simulation output',
+      )
     }
     if (pulse.length !== real.length || pulse.length < 200) {
-      throw new Error(`Unexpected waveform sample lengths: pulse=${pulse.length}, real=${real.length}`)
+      throw new Error(
+        `Unexpected waveform sample lengths: pulse=${pulse.length}, real=${real.length}`,
+      )
+    }
+    if (pulse.length !== real.length || pulse.length < 200) {
+      throw new Error(
+        `Unexpected waveform sample lengths: pulse=${pulse.length}, real=${real.length}`,
+      )
     }
 
     const toBit = (v: unknown): 0 | 1 | null => {
@@ -701,10 +770,14 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
     const realZeros = realBits.filter((v) => v === 0).length
 
     if (pulseOnes < 100 || pulseZeros < 100) {
-      throw new Error(`booleanPulse.y does not toggle as expected (ones=${pulseOnes}, zeros=${pulseZeros})`)
+      throw new Error(
+        `booleanPulse.y does not toggle as expected (ones=${pulseOnes}, zeros=${pulseZeros})`,
+      )
     }
     if (realOnes < 100 || realZeros < 100) {
-      throw new Error(`booleanToReal.y does not toggle as expected (ones=${realOnes}, zeros=${realZeros})`)
+      throw new Error(
+        `booleanToReal.y does not toggle as expected (ones=${realOnes}, zeros=${realZeros})`,
+      )
     }
 
     const transitions = pulseBits.reduce<number>(
@@ -743,24 +816,23 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
     typeof wasm.compile_with_source_roots !== 'function' &&
     typeof wasm.compile_with_libraries !== 'function'
   ) {
-    throw new Error('Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries')
+    throw new Error(
+      'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
+    )
   }
-  if (typeof wasm.render_template !== 'function') {
-    throw new Error('Rumoca wasm export missing: render_template')
-  }
+  assertTemplateRendererAvailable(wasm)
 
   const debug: Record<string, unknown> = {
     phase: 'init',
     model: 'Modelica.Blocks.Examples.BooleanNetwork1',
   }
   await ensureDiagnosticsMslLoaded(wasm, debug)
-  const target = await getMslClassSourceForCompile(wasm, 'Modelica.Blocks.Examples.BooleanNetwork1')
+  const target = await getMslClassCompileTarget(wasm, 'Modelica.Blocks.Examples.BooleanNetwork1')
   debug.phase = 'source-loaded'
   debug.sourcePath = target.sourcePath
-  debug.sourceLength = target.source.length
   const sourcePath = target.sourcePath
 
-  const compiled = compileWithDiagnosticsMsl(wasm, target.source, target.className)
+  const compiled = compileWithDiagnosticsMsl(wasm, '', target.modelName)
   const parsed = JSON.parse(compiled) as {
     dae?: unknown
     dae_native?: unknown
@@ -771,7 +843,13 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
     throw new Error('Rumoca compile_to_json returned no DAE payload')
   }
 
-  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  const rendered = renderDiagnosticsTemplate(
+    wasm,
+    dae,
+    javascriptTemplate,
+    'javascript.jinja',
+    'model.js',
+  )
   if (typeof rendered !== 'string' || !rendered.trim()) {
     throw new Error('Rendered JS is empty')
   }
@@ -779,6 +857,15 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
   const runId = 'modelica-boolean-network1-runtime-regression'
   const abort = new AbortController()
   const timeoutMs = 10_000
+  type BooleanNetworkRunResult = {
+    meta?: {
+      stopReason?: unknown
+      stopError?: unknown
+      executionMode?: unknown
+      solverStats?: Record<string, unknown>
+    }
+    data?: { t?: unknown[]; y?: Record<string, unknown> }
+  }
   const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> =>
     await new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -792,24 +879,17 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
         },
         (error) => {
           clearTimeout(timer)
-          reject(error)
+          reject(error instanceof Error ? error : new Error(String(error)))
         },
       )
     })
   try {
-    const result = await withTimeout(
-      executeCodeInIframeSimple<{
-        meta?: {
-          stopReason?: unknown
-          stopError?: unknown
-          executionMode?: unknown
-          solverStats?: Record<string, unknown>
-        }
-        data?: { t?: unknown[]; y?: Record<string, unknown> }
-      }>(
+    const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
+    const result: BooleanNetworkRunResult = await withTimeout(
+      executeInWorkerSandbox<BooleanNetworkRunResult>(
         {
           id: runId,
-          code: buildIframeCode(rendered),
+          code: runCode,
           sourceURL: `${runId}.js`,
           stopSignal: abort.signal,
         },
@@ -855,7 +935,12 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
     const yChannels: Record<string, unknown> =
       result?.data?.y && typeof result.data.y === 'object' ? result.data.y : {}
     const channelKeys = Object.keys(yChannels)
-    const requiredChannels = ['booleanPulse1.y', 'booleanPulse2.y', 'booleanStep.y', 'triggeredAdd.y']
+    const requiredChannels = [
+      'booleanPulse1.y',
+      'booleanPulse2.y',
+      'booleanStep.y',
+      'triggeredAdd.y',
+    ]
     for (const key of requiredChannels) {
       if (!channelKeys.includes(key)) {
         throw new Error(`BooleanNetwork1 output missing required channel: ${key}`)
@@ -887,7 +972,10 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
       throw new Error(`booleanStep.y does not step (ones=${stepOnes}, zeros=${stepZeros})`)
     }
     const solverStats = result?.meta?.solverStats ?? {}
-    if (Number(solverStats.initAttempts ?? 0) !== 0 || Number(solverStats.flowStepCalls ?? 0) !== 0) {
+    if (
+      Number(solverStats.initAttempts ?? 0) !== 0 ||
+      Number(solverStats.flowStepCalls ?? 0) !== 0
+    ) {
       throw new Error(
         `BooleanNetwork1 should not use init/flow solves in algebraic_discrete mode (initAttempts=${String(solverStats.initAttempts)}, flowStepCalls=${String(solverStats.flowStepCalls)})`,
       )
@@ -911,6 +999,11 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
   } finally {
     abort.abort()
   }
+}
+testModelicaBooleanNetwork1RuntimeRegression.setup = async () => {
+  const wasm = await getDiagnosticsWasm()
+  const debug: Record<string, unknown> = {}
+  await ensureDiagnosticsMslLoaded(wasm, debug)
 }
 
 export async function testModelicaStaticModelExecutionModeRegression() {
@@ -938,7 +1031,7 @@ function Model() {
   const runId = 'modelica-static-model-execution-mode-regression'
   const abort = new AbortController()
   try {
-    const result = await executeCodeInIframeSimple<{
+    const result = await executeInWorkerSandbox<{
       meta?: {
         executionMode?: unknown
         warnings?: unknown
@@ -948,7 +1041,7 @@ function Model() {
     }>(
       {
         id: runId,
-        code: buildIframeCode(source),
+        code: buildWorkerSandboxCode(source),
         sourceURL: `${runId}.js`,
         stopSignal: abort.signal,
       },
@@ -976,7 +1069,9 @@ function Model() {
       throw new Error(`Static model stopped unexpectedly: ${stopReason}`)
     }
     if (result?.meta?.executionMode !== 'static_model') {
-      throw new Error(`Expected static_model execution mode, got ${String(result?.meta?.executionMode)}`)
+      throw new Error(
+        `Expected static_model execution mode, got ${String(result?.meta?.executionMode)}`,
+      )
     }
     const times = Array.isArray(result?.data?.t) ? result.data.t : []
     const p = result?.data?.p?.p
@@ -1022,9 +1117,7 @@ model BouncingBall             "The bouncing ball model"
   if (typeof wasm.compile_to_json !== 'function') {
     throw new Error('Rumoca wasm export missing: compile_to_json')
   }
-  if (typeof wasm.render_template !== 'function') {
-    throw new Error('Rumoca wasm export missing: render_template')
-  }
+  assertTemplateRendererAvailable(wasm)
 
   const compiled = wasm.compile_to_json(source, 'BouncingBall')
   const parsed = JSON.parse(compiled) as {
@@ -1047,14 +1140,43 @@ model BouncingBall             "The bouncing ball model"
       const value = asObj[key]
       return Array.isArray(value) ? value.length : 0
     }
+    const mapLen = (key: string) => {
+      if (!asObj) return 0
+      const value = asObj[key]
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return 0
+      return Object.keys(value as Record<string, unknown>).length
+    }
+    const xCount = mapLen('x')
+    const yCount = mapLen('y')
+    const zCount = mapLen('z')
+    const mCount = mapLen('m')
+    const wCount = mapLen('w')
+    const fxCount = len('f_x')
+    const solverNyCurrentTemplate = yCount + zCount + mCount + wCount
+    const dynamicUnknownsCurrentTemplate = xCount + solverNyCurrentTemplate
+    const dynamicUnknownsNoM = xCount + yCount + zCount + wCount
     return {
-      f_x: len('f_x'),
+      f_x: fxCount,
       f_c: len('f_c'),
       relation: len('relation'),
       synthetic_root_conditions: len('synthetic_root_conditions'),
       when_clauses: len('when_clauses'),
       f_z: len('f_z'),
       f_m: len('f_m'),
+      variableCounts: {
+        x: xCount,
+        y: yCount,
+        z: zCount,
+        m: mCount,
+        w: wCount,
+      },
+      dynamicBalance: {
+        solverNyCurrentTemplate,
+        dynamicUnknownsCurrentTemplate,
+        dynamicUnknownsNoM,
+        fxMinusDynamicUnknownsCurrentTemplate: fxCount - dynamicUnknownsCurrentTemplate,
+        fxMinusDynamicUnknownsNoM: fxCount - dynamicUnknownsNoM,
+      },
       prepared_status: getPreparedDaeStatus(asObj),
       prepared_diagnostics: getPreparedDaeDiagnostics(asObj),
     }
@@ -1064,7 +1186,13 @@ model BouncingBall             "The bouncing ball model"
   const nativeDaeSummary = summarizeDaeEventShape(parsed.dae_native ?? parsed.dae)
   const preparedDaeSummary = summarizeDaeEventShape(parsed.dae_prepared)
 
-  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  const rendered = renderDiagnosticsTemplate(
+    wasm,
+    dae,
+    javascriptTemplate,
+    'javascript.jinja',
+    'model.js',
+  )
   if (!rendered || typeof rendered !== 'string') {
     throw new Error('Rendering javascript.jinja failed for BouncingBall')
   }
@@ -1094,8 +1222,8 @@ model BouncingBall             "The bouncing ball model"
     )
   }
 
-  const runCode = buildIframeCode(rendered)
   const runId = 'modelica-bouncing-ball-event-localization'
+  const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
   const runAbort = new AbortController()
 
   type SimResult = {
@@ -1121,7 +1249,7 @@ model BouncingBall             "The bouncing ball model"
   }
   let runResult: SimResult | null = null
   try {
-    runResult = await executeCodeInIframeSimple(
+    runResult = await executeInWorkerSandbox(
       {
         id: runId,
         code: runCode,
@@ -1359,9 +1487,7 @@ model BouncingBall             "The bouncing ball model"
   if (typeof wasm.compile_to_json !== 'function') {
     throw new Error('Rumoca wasm export missing: compile_to_json')
   }
-  if (typeof wasm.render_template !== 'function') {
-    throw new Error('Rumoca wasm export missing: render_template')
-  }
+  assertTemplateRendererAvailable(wasm)
 
   const compiled = wasm.compile_to_json(source, 'BouncingBall')
   const parsed = JSON.parse(compiled) as {
@@ -1374,32 +1500,23 @@ model BouncingBall             "The bouncing ball model"
     throw new Error('Rumoca compile_to_json returned no DAE payload for BouncingBall')
   }
 
-  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  const rendered = renderDiagnosticsTemplate(
+    wasm,
+    dae,
+    javascriptTemplate,
+    'javascript.jinja',
+    'model.js',
+  )
   if (!rendered || typeof rendered !== 'string') {
     throw new Error('Rendering javascript.jinja failed for BouncingBall')
   }
 
-  const runCode = buildIframeCode(rendered)
   const runId = 'modelica-bouncing-ball-standard-settings'
+  const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
   const runAbort = new AbortController()
-  type SimResult = {
-    meta?: {
-      events?: unknown[]
-      solverStats?: Record<string, unknown>
-      stopReason?: string
-      stopError?: string
-      model?: {
-        stateNames?: string[]
-      }
-    }
-    data?: {
-      t?: unknown[]
-      x?: Record<string, unknown>
-    }
-  }
-  let runResult: SimResult | null = null
+  let runResult: DiagnosticsSimulationResult | null = null
   try {
-    runResult = await executeCodeInIframeSimple(
+    runResult = await executeInWorkerSandbox(
       {
         id: runId,
         code: runCode,
@@ -1446,90 +1563,137 @@ model BouncingBall             "The bouncing ball model"
     }
     return flips
   }
-
-  const tSeries = asFiniteSeries(runResult?.data?.t)
-  const hSeries = getSeriesByName(runResult?.data?.x, 'h')
-  const vSeries = getSeriesByName(runResult?.data?.x, 'v')
-  const minH = hSeries
-    .filter(Number.isFinite)
-    .reduce((m, v) => Math.min(m, v), Number.POSITIVE_INFINITY)
-  const maxH = hSeries
-    .filter(Number.isFinite)
-    .reduce((m, v) => Math.max(m, v), Number.NEGATIVE_INFINITY)
-  const vSignFlips = countSignFlips(vSeries)
-  const events = Array.isArray(runResult?.meta?.events) ? runResult?.meta?.events : []
-  const eventCountFromStats = Number(runResult?.meta?.solverStats?.eventCount ?? events.length)
-
-  const summary = {
-    nSamples: tSeries.length,
-    expectedGridSamples: Math.floor((2 - 0) / 0.1) + 1,
-    tStart: tSeries.length > 0 ? tSeries[0] : null,
-    tEnd: tSeries.length > 0 ? tSeries[tSeries.length - 1] : null,
-    minH: Number.isFinite(minH) ? minH : null,
-    maxH: Number.isFinite(maxH) ? maxH : null,
-    velocitySignFlips: vSignFlips,
-    eventCountFromStats: Number.isFinite(eventCountFromStats) ? eventCountFromStats : events.length,
-    stopReason: runResult?.meta?.stopReason ?? null,
-    stopError: runResult?.meta?.stopError ?? null,
-    stateNames: Array.isArray(runResult?.meta?.model?.stateNames)
-      ? runResult.meta.model.stateNames
-      : [],
+  const summarizeBounceRun = (label: string, result: DiagnosticsSimulationResult) => {
+    const tSeries = asFiniteSeries(result?.data?.t)
+    const hSeries = getSeriesByName(result?.data?.x, 'h')
+    const vSeries = getSeriesByName(result?.data?.x, 'v')
+    const minH = hSeries
+      .filter(Number.isFinite)
+      .reduce((m, v) => Math.min(m, v), Number.POSITIVE_INFINITY)
+    const maxH = hSeries
+      .filter(Number.isFinite)
+      .reduce((m, v) => Math.max(m, v), Number.NEGATIVE_INFINITY)
+    const velocitySignFlips = countSignFlips(vSeries)
+    const events = Array.isArray(result?.meta?.events) ? result.meta.events : []
+    const rawEventCount = result?.meta?.solverStats?.eventCount
+    const hasEventCountMetadata =
+      typeof rawEventCount === 'number' || typeof rawEventCount === 'string' || events.length > 0
+    const eventCountFromStats = hasEventCountMetadata
+      ? Number(rawEventCount ?? events.length)
+      : null
+    const summary = {
+      runtime: label,
+      executionMode: result?.meta?.executionMode ?? null,
+      requestedSolver: result?.meta?.requestedSolver ?? null,
+      nSamples: tSeries.length,
+      expectedGridSamples: Math.floor((2 - 0) / 0.1) + 1,
+      tStart: tSeries.length > 0 ? tSeries[0] : null,
+      tEnd: tSeries.length > 0 ? tSeries[tSeries.length - 1] : null,
+      minH: Number.isFinite(minH) ? minH : null,
+      maxH: Number.isFinite(maxH) ? maxH : null,
+      velocitySignFlips,
+      eventCountFromStats,
+      hasEventCountMetadata,
+      stopReason: result?.meta?.stopReason ?? null,
+      stopError: result?.meta?.stopError ?? null,
+      stateNames: Array.isArray(result?.meta?.model?.stateNames)
+        ? result.meta.model.stateNames
+        : [],
+    }
+    return {
+      tSeries,
+      hSeries,
+      vSeries,
+      minH,
+      velocitySignFlips,
+      eventCountFromStats,
+      hasEventCountMetadata,
+      summary,
+    }
+  }
+  const assertBounceRun = (
+    label: string,
+    result: DiagnosticsSimulationResult,
+    details: ReturnType<typeof summarizeBounceRun>,
+  ) => {
+    if (result?.meta?.stopReason) {
+      throw new Error(
+        [
+          `${label} stopped early: ${result.meta.stopReason}`,
+          `stopError=${String(result.meta.stopError ?? '')}`,
+          `summary=${serializeObject(details.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
+        ].join('\n'),
+      )
+    }
+    if (details.tSeries.length < 20 || details.tSeries.length > 25) {
+      throw new Error(
+        [
+          `${label} returned unexpected sample count for dt=0.1, tf=2 (expected about 21, got ${details.tSeries.length})`,
+          `summary=${serializeObject(details.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
+        ].join('\n'),
+      )
+    }
+    if (
+      details.hSeries.length !== details.tSeries.length ||
+      details.vSeries.length !== details.tSeries.length
+    ) {
+      throw new Error(
+        [
+          `${label} state series length mismatch: t=${details.tSeries.length}, h=${details.hSeries.length}, v=${details.vSeries.length}`,
+          `summary=${serializeObject(details.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
+        ].join('\n'),
+      )
+    }
+    if (!Number.isFinite(details.minH) || details.minH > 0.11) {
+      throw new Error(
+        [
+          `${label} did not reach ground contact (min h=${String(details.minH)})`,
+          `summary=${serializeObject(details.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
+        ].join('\n'),
+      )
+    }
+    if (details.hasEventCountMetadata && (details.eventCountFromStats ?? 0) <= 0) {
+      throw new Error(
+        [
+          `${label} produced no events, but the model should definitely bounce and trigger events`,
+          `summary=${serializeObject(details.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
+        ].join('\n'),
+      )
+    }
+    if (details.velocitySignFlips <= 0) {
+      throw new Error(
+        [
+          `${label} produced events but no velocity sign flip was observed`,
+          `summary=${serializeObject(details.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
+        ].join('\n'),
+      )
+    }
   }
 
-  if (runResult?.meta?.stopReason) {
-    throw new Error(
-      [
-        `BouncingBall standard-settings run stopped early: ${runResult.meta.stopReason}`,
-        `stopError=${String(runResult.meta.stopError ?? '')}`,
-        `summary=${serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-      ].join('\n'),
-    )
+  const jsSummary = summarizeBounceRun('generated-js sandbox run', runResult ?? {})
+  assertBounceRun('BouncingBall generated-js sandbox run', runResult ?? {}, jsSummary)
+
+  if (typeof wasm.simulate_model !== 'function') {
+    throw new Error('Rumoca wasm export missing: simulate_model')
   }
-  if (tSeries.length < 20 || tSeries.length > 25) {
-    throw new Error(
-      [
-        `Unexpected sample count for dt=0.1, tf=2 (expected about 21, got ${tSeries.length})`,
-        `summary=${serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-      ].join('\n'),
-    )
-  }
-  if (hSeries.length !== tSeries.length || vSeries.length !== tSeries.length) {
-    throw new Error(
-      [
-        `State series length mismatch: t=${tSeries.length}, h=${hSeries.length}, v=${vSeries.length}`,
-        `summary=${serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-      ].join('\n'),
-    )
-  }
-  if (!Number.isFinite(minH) || minH > 0.11) {
-    throw new Error(
-      [
-        `BouncingBall did not reach ground contact (min h=${String(minH)})`,
-        `summary=${serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-      ].join('\n'),
-    )
-  }
-  const eventCount = Number.isFinite(eventCountFromStats) ? eventCountFromStats : events.length
-  if (eventCount <= 0) {
-    throw new Error(
-      [
-        'BouncingBall produced no events, but the model should definitely bounce and trigger events',
-        `summary=${serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-      ].join('\n'),
-    )
-  }
-  if (vSignFlips <= 0) {
-    throw new Error(
-      [
-        'BouncingBall produced events but no velocity sign flip was observed',
-        `summary=${serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-      ].join('\n'),
-    )
-  }
+  const nativeRaw = JSON.parse(
+    String(wasm.simulate_model(source, 'BouncingBall', 2, 0.1, 'auto', '{}')),
+  ) as Record<string, unknown>
+  const nativeRunResult = normalizeRumocaNativeSimulationResult({
+    ...nativeRaw,
+    modelName: 'BouncingBall',
+    solver: 'auto',
+  })
+  const nativeSummary = summarizeBounceRun('rumoca native run', nativeRunResult)
+  assertBounceRun('BouncingBall rumoca native run', nativeRunResult, nativeSummary)
 
   return {
     ok: true,
-    summarySerialized: serializeObject(summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
+    summarySerialized: serializeObject(jsSummary.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
+    rumocaNativeSummarySerialized: serializeObject(
+      nativeSummary.summary,
+      MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+    ),
     generatedCodePreview: rendered.slice(0, 500),
   }
 }
@@ -1564,11 +1728,6 @@ end Test;
       shouldValidate: true,
     },
     {
-      name: 'standalone_html.jinja',
-      template: standaloneHtmlTemplate,
-      shouldValidate: false,
-    },
-    {
       name: 'base_dae.jinja',
       template: baseDaeTemplate,
       shouldValidate: false,
@@ -1599,7 +1758,15 @@ end Test;
   > = {}
 
   for (const c of cases) {
-    const rendered = wasm.render_template(daeJson, c.template)
+    const rendered = renderRumocaTemplate({
+      wasm,
+      daeJson,
+      templateSource: c.template,
+      modelName: getTemplateModelName(dae),
+      templatePath: c.name,
+      outputPath: c.name,
+      targetName: 'template',
+    })
     const decision = shouldValidateModelAbiForRenderedOutput(rendered)
     const renderedSummary = summarizeRenderedPreview(rendered)
     if (decision.shouldValidate !== c.shouldValidate) {
@@ -1615,12 +1782,12 @@ end Test;
     let abiValidationOk: boolean | undefined
     let abiSandboxExecuted = false
     if (decision.shouldValidate) {
-      const code = buildModelAbiValidationIframeCode(rendered)
+      const code = buildModelAbiValidationSandboxCode(rendered)
       const id = `modelica-abi-routing-${c.name.replaceAll(/[^a-zA-Z0-9_-]/g, '_')}`
       const abort = new AbortController()
       abiSandboxExecuted = true
       try {
-        const rawAbiResult = await executeCodeInIframeSimple(
+        const rawAbiResult = await executeInWorkerSandbox(
           {
             id,
             code,
@@ -1682,10 +1849,41 @@ export async function testModelicaForcedAbiValidationFailureModes() {
   return testModelicaAbiValidationRoutingRegression()
 }
 
-const MSL_LOCAL_ZIP_PATH = '/modelica-libraries/ModelicaStandardLibrary-4.1.0.zip'
+const MSL_DIAGNOSTICS_ZIP_URL = DEFAULT_MSL_ZIP_URL
+
 type DiagnosticsWasm = Awaited<ReturnType<typeof loadWasm>>
+type DiagnosticsSimulationResult = {
+  meta?: {
+    nSteps?: number
+    events?: unknown[]
+    solverStats?: Record<string, unknown>
+    stopReason?: string
+    stopError?: string
+    model?: {
+      modelName?: string
+      stateNames?: string[]
+      algebraicNames?: string[]
+      inputNames?: string[]
+      conditionNames?: string[]
+    }
+    requestedSolver?: string
+    executionMode?: string
+    rumoca?: unknown
+  }
+  data?: {
+    t?: unknown[]
+    x?: Record<string, unknown>
+    y?: Record<string, unknown>
+    u?: Record<string, unknown>
+    z?: Record<string, unknown>
+    c?: Record<string, unknown>
+  }
+}
 type MslLoadParsed = {
   parsed_count?: number
+  file_count?: number
+  class_count?: number
+  load_mode?: 'index' | 'parsed'
   skipped_files?: string[]
   conflicts?: string[]
   error_count?: number
@@ -1699,10 +1897,21 @@ type SharedMslLoadResult = MslLoadResult & {
   zipBytes: number
 }
 type DiagnosticsMslApi = {
+  compile_to_json?: (source: string, modelName: string) => string
   compile_with_source_roots?: (source: string, modelName: string, sourceRootsJson: string) => string
   compile_with_libraries?: (source: string, modelName: string, librariesJson: string) => string
+  simulate_model?: (
+    source: string,
+    modelName: string,
+    tEnd: number,
+    dt: number,
+    solver: string,
+    parameterOverridesJson: string,
+  ) => string
+  load_source_root_index?: (sourceRootsJson: string) => string
   load_source_roots?: (sourceRootsJson: string) => string
   load_libraries?: (librariesJson: string) => string
+  clear_source_root_cache?: () => void
   list_classes?: () => string
   get_class_info?: (qualifiedName: string) => string
   parse_source_root_file?: (source: string, filename: string) => string
@@ -1711,8 +1920,100 @@ type DiagnosticsMslApi = {
   lsp_completion_with_timing?: (source: string, line: number, character: number) => string
 }
 
+function normalizeRumocaNativeSimulationResult(
+  raw: Record<string, unknown>,
+): DiagnosticsSimulationResult {
+  const payloadSource =
+    raw.payload && typeof raw.payload === 'object' ? (raw.payload as Record<string, unknown>) : raw
+  const names = Array.isArray(payloadSource.names)
+    ? payloadSource.names.filter((entry): entry is string => typeof entry === 'string')
+    : []
+  const allData = Array.isArray(payloadSource.allData)
+    ? payloadSource.allData.map((column) =>
+        Array.isArray(column)
+          ? column.map((value) =>
+              typeof value === 'number' && Number.isFinite(value) ? value : Number.NaN,
+            )
+          : [],
+      )
+    : []
+  if (names.length === 0 || allData.length === 0) {
+    throw new Error('Rumoca simulation returned no time-series payload')
+  }
+
+  const nStatesRaw = Number(payloadSource.nStates)
+  const nStates = Number.isFinite(nStatesRaw) ? Math.max(0, Math.min(names.length, nStatesRaw)) : 0
+  const times = allData[0] ?? []
+  const stateNames = names.slice(0, nStates)
+  const algebraicNames = names.slice(nStates)
+  const stateSeries = stateNames.reduce<Record<string, number[]>>((acc, name, index) => {
+    acc[name] = allData[index + 1] ?? []
+    return acc
+  }, {})
+  const algebraicSeries = algebraicNames.reduce<Record<string, number[]>>((acc, name, index) => {
+    acc[name] = allData[nStates + index + 1] ?? []
+    return acc
+  }, {})
+
+  return {
+    meta: {
+      nSteps: times.length,
+      executionMode: nStates > 0 ? 'dynamic_dae' : 'algebraic_discrete',
+      model: {
+        modelName:
+          typeof raw.model === 'string'
+            ? raw.model
+            : typeof raw.modelName === 'string'
+              ? raw.modelName
+              : 'Model',
+        stateNames,
+        algebraicNames,
+        inputNames: [],
+        conditionNames: [],
+      },
+      requestedSolver: typeof raw.solver === 'string' ? raw.solver : 'auto',
+      rumoca: raw,
+    },
+    data: {
+      t: times,
+      x: stateSeries,
+      y: algebraicSeries,
+      u: {},
+      z: {},
+      c: {},
+    },
+  }
+}
+
 let sharedDiagnosticsWasmPromise: Promise<DiagnosticsWasm> | null = null
 let sharedDiagnosticsMslLoadPromise: Promise<SharedMslLoadResult> | null = null
+
+async function assertGeneratedJsSyntaxOrThrow(rendered: string, context: string): Promise<void> {
+  const check = await validateJavaScriptInSandbox(rendered)
+  if (check.valid) return
+  const details = [
+    `Generated JavaScript syntax check failed (${context})`,
+    `phase=${String(check.phase || 'unknown')}`,
+    `errorName=${String(check.errorName || 'unknown')}`,
+    `message=${String(check.message || 'unknown')}`,
+    `line=${String(check.line ?? 'n/a')}`,
+    `column=${String(check.column ?? 'n/a')}`,
+    check.snippet ? `snippet:\n${check.snippet}` : '',
+    check.rawError ? `rawError:\n${check.rawError}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+  throw new Error(details)
+}
+
+async function buildWorkerSandboxCodeChecked(
+  rendered: string,
+  context: string,
+  solverSource?: string,
+): Promise<string> {
+  await assertGeneratedJsSyntaxOrThrow(rendered, context)
+  return buildWorkerSandboxCode(rendered, solverSource)
+}
 
 async function getDiagnosticsWasm(): Promise<DiagnosticsWasm> {
   if (!sharedDiagnosticsWasmPromise) {
@@ -1724,13 +2025,24 @@ async function getDiagnosticsWasm(): Promise<DiagnosticsWasm> {
   return sharedDiagnosticsWasmPromise
 }
 
+function resetDiagnosticsMslLoadCache(): void {
+  sharedDiagnosticsMslLoadPromise = null
+}
+
+function clearDiagnosticsMslSession(wasm: DiagnosticsMslApi): void {
+  if (typeof wasm.clear_source_root_cache === 'function') {
+    wasm.clear_source_root_cache()
+  }
+  resetDiagnosticsMslLoadCache()
+}
+
 async function ensureDiagnosticsMslLoaded(
   wasm: DiagnosticsMslApi,
   debug: Record<string, unknown>,
 ): Promise<MslLoadResult> {
   if (!sharedDiagnosticsMslLoadPromise) {
     const loadDebug: Record<string, unknown> = {}
-    sharedDiagnosticsMslLoadPromise = loadLocalMslLibraries(wasm, loadDebug)
+    sharedDiagnosticsMslLoadPromise = loadLocalMslLibraries(wasm, loadDebug, 'parsed')
       .then(({ libraryFileCount, loadParsed }) => ({
         libraryFileCount,
         loadParsed,
@@ -1755,7 +2067,7 @@ async function ensureDiagnosticsMslLoaded(
   }
 }
 
-function buildModelConstructionProbeIframeCode(compiledJs: string): string {
+function buildModelConstructionProbeSandboxCode(compiledJs: string): string {
   return `
 (params, context) => {
   try {
@@ -1820,32 +2132,27 @@ function buildModelConstructionProbeIframeCode(compiledJs: string): string {
 }
 
 function normalizeLibraryEntryPath(path: string): string {
-  const parts = String(path || '')
-    .split('/')
-    .filter(Boolean)
-  if (parts.length > 1 && /(?:Standard)?Library|^MSL/i.test(parts[0] ?? '')) {
-    return parts.slice(1).join('/')
-  }
-  if (parts.length > 0) {
-    parts[0] = parts[0]!.replace(/[\s-][\d.]+$/, '')
-  }
-  return parts.join('/')
+  return normalizeModelicaLibraryEntryPath(path)
 }
 
 async function loadLocalMslLibraries(
   wasm: DiagnosticsMslApi,
   debug: Record<string, unknown>,
+  preferredMode: 'auto' | 'index' | 'parsed' = 'auto',
 ): Promise<MslLoadResult> {
+  const canLoadSourceRootIndex = typeof wasm.load_source_root_index === 'function'
   const canLoadSourceRoots = typeof wasm.load_source_roots === 'function'
   const canLoadLibraries = typeof wasm.load_libraries === 'function'
-  if (!canLoadSourceRoots && !canLoadLibraries) {
-    throw new Error('Rumoca wasm export missing: load_source_roots / load_libraries')
+  if (!canLoadSourceRootIndex && !canLoadSourceRoots && !canLoadLibraries) {
+    throw new Error(
+      'Rumoca wasm export missing: load_source_root_index / load_source_roots / load_libraries',
+    )
   }
 
-  const zipResponse = await fetch(MSL_LOCAL_ZIP_PATH)
+  const zipResponse = await fetch(MSL_DIAGNOSTICS_ZIP_URL)
   if (!zipResponse.ok) {
     throw new Error(
-      `Failed to fetch local MSL archive at ${MSL_LOCAL_ZIP_PATH}: HTTP ${zipResponse.status}`,
+      `Failed to fetch MSL archive at ${MSL_DIAGNOSTICS_ZIP_URL}: HTTP ${zipResponse.status}`,
     )
   }
 
@@ -1871,12 +2178,20 @@ async function loadLocalMslLibraries(
   }
   debug.libraryFileCount = libraryFileCount
 
-  const loadFn = canLoadSourceRoots ? wasm.load_source_roots : wasm.load_libraries
+  const useIndexLoad = preferredMode !== 'parsed' && canLoadSourceRootIndex
+  const loadFn = useIndexLoad
+    ? wasm.load_source_root_index
+    : canLoadSourceRoots
+      ? wasm.load_source_roots
+      : wasm.load_libraries
   if (typeof loadFn !== 'function') {
-    throw new Error('Rumoca wasm export missing: load_source_roots / load_libraries')
+    throw new Error(
+      'Rumoca wasm export missing: load_source_root_index / load_source_roots / load_libraries',
+    )
   }
   const loadRaw = loadFn(JSON.stringify(libraries))
   const loadParsed = JSON.parse(String(loadRaw)) as MslLoadParsed
+  loadParsed.load_mode = useIndexLoad ? 'index' : 'parsed'
   debug.loadParsed = loadParsed
 
   return {
@@ -1884,6 +2199,126 @@ async function loadLocalMslLibraries(
     loadParsed,
   }
 }
+
+export async function testModelicaMslLoadBenchmark() {
+  const debug: Record<string, unknown> = {
+    phase: 'init',
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
+  }
+
+  try {
+    const wasm = await getDiagnosticsWasm()
+    debug.phase = 'wasm-loaded'
+
+    const canIndex = typeof wasm.load_source_root_index === 'function'
+    const canParse = typeof wasm.load_source_roots === 'function'
+    if (!canIndex && !canParse) {
+      throw new Error('Rumoca wasm export missing: load_source_root_index / load_source_roots')
+    }
+
+    const runLoad = async (mode: 'index' | 'parsed') => {
+      clearDiagnosticsMslSession(wasm)
+      const started = performance.now()
+      const { libraryFileCount, loadParsed } = await loadLocalMslLibraries(wasm, debug, mode)
+      const loadMs = Math.round((performance.now() - started) * 10) / 10
+      const classTree =
+        typeof wasm.list_classes === 'function'
+          ? (JSON.parse(String(wasm.list_classes())) as {
+              total_classes?: unknown
+            })
+          : null
+      return {
+        mode,
+        libraryFileCount,
+        loadMs,
+        parsedCount: Number(loadParsed.parsed_count ?? 0),
+        classCount: Number(loadParsed.class_count ?? 0),
+        listedClassCount: Number(classTree?.total_classes ?? 0),
+        documentCount:
+          typeof wasm.get_source_root_document_count === 'function'
+            ? Number(wasm.get_source_root_document_count()) || 0
+            : 0,
+      }
+    }
+
+    const indexed = canIndex ? await runLoad('index') : null
+    const parsed = canParse ? await runLoad('parsed') : null
+    clearDiagnosticsMslSession(wasm)
+
+    return {
+      ok: true,
+      indexed,
+      parsed,
+      speedupVsParsed:
+        indexed && parsed && indexed.loadMs > 0
+          ? Math.round((parsed.loadMs / indexed.loadMs) * 100) / 100
+          : null,
+    }
+  } catch (err) {
+    const baseMessage = err instanceof Error ? err.message : String(err)
+    const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
+    throw new Error([baseMessage, `MSL load benchmark debug:\n${debugDump}`].join('\n'))
+  }
+}
+testModelicaMslLoadBenchmark.timeoutMs = 120_000
+
+export async function testModelicaTaskyonLazyMslIndexLoadsUnderTwoSeconds() {
+  const debug: Record<string, unknown> = {
+    phase: 'fetch',
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
+  }
+
+  try {
+    const zipResponse = await fetch(MSL_DIAGNOSTICS_ZIP_URL)
+    if (!zipResponse.ok) {
+      throw new Error(
+        `Failed to fetch MSL archive at ${MSL_DIAGNOSTICS_ZIP_URL}: HTTP ${zipResponse.status}`,
+      )
+    }
+    const zipBytes = new Uint8Array(await zipResponse.arrayBuffer())
+    if (zipBytes.length <= 1024) {
+      throw new Error('MSL archive appears to be invalid (too small)')
+    }
+    debug.zipBytes = zipBytes.length
+    debug.phase = 'lazy-index'
+
+    const started = performance.now()
+    const archive = unzipSync(zipBytes)
+    const lazyArchive = buildLazyModelicaLibraryByteArchive(archive)
+    const loadMs = Math.round((performance.now() - started) * 10) / 10
+    const modelicaRoot = findQualifiedClassNode(lazyArchive.index.classes, 'Modelica')
+
+    debug.loadMs = loadMs
+    debug.fileCount = lazyArchive.index.fileCount
+    debug.totalClasses = lazyArchive.index.totalClasses
+    debug.sourceRootUriCount = lazyArchive.index.sourceRootUris.length
+    debug.hasModelicaRoot = Boolean(modelicaRoot)
+
+    if (lazyArchive.index.fileCount <= 0 || lazyArchive.index.totalClasses <= 0) {
+      throw new Error('Taskyon lazy MSL index did not discover source files or classes')
+    }
+    if (!modelicaRoot) {
+      throw new Error('Taskyon lazy MSL index did not discover the Modelica root package')
+    }
+    if (loadMs > 2000) {
+      throw new Error(`Taskyon lazy MSL index exceeded 2000ms: ${loadMs}ms`)
+    }
+
+    return {
+      ok: true,
+      loadMs,
+      fileCount: lazyArchive.index.fileCount,
+      totalClasses: lazyArchive.index.totalClasses,
+      sourceRootUriCount: lazyArchive.index.sourceRootUris.length,
+      modelicaChildCount: Array.isArray(modelicaRoot.children) ? modelicaRoot.children.length : 0,
+    }
+  } catch (err) {
+    const baseMessage = err instanceof Error ? err.message : String(err)
+    const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
+    throw new Error([baseMessage, `Taskyon lazy MSL index debug:\n${debugDump}`].join('\n'))
+  }
+}
+testModelicaTaskyonLazyMslIndexLoadsUnderTwoSeconds.timeoutMs = 60_000
 
 function compileWithDiagnosticsMsl(
   wasm: DiagnosticsMslApi,
@@ -1897,6 +2332,33 @@ function compileWithDiagnosticsMsl(
     return wasm.compile_with_libraries(source, modelName, '{}')
   }
   throw new Error('Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries')
+}
+
+function sourceNeedsMsl(source: string): boolean {
+  return String(source || '').includes('Modelica.')
+}
+
+async function compileToJsonWithAutoMsl(
+  wasm: DiagnosticsMslApi,
+  source: string,
+  modelName: string,
+  debug: Record<string, unknown>,
+): Promise<string> {
+  if (typeof wasm.compile_to_json !== 'function') {
+    throw new Error('Rumoca wasm export missing: compile_to_json')
+  }
+
+  if (sourceNeedsMsl(source)) {
+    await ensureDiagnosticsMslLoaded(wasm, debug)
+    if (
+      typeof wasm.compile_with_source_roots === 'function' ||
+      typeof wasm.compile_with_libraries === 'function'
+    ) {
+      return compileWithDiagnosticsMsl(wasm, source, modelName)
+    }
+  }
+
+  return wasm.compile_to_json(source, modelName)
 }
 
 function parseSourceRootAstOrError(
@@ -1923,17 +2385,6 @@ function asStringOrEmpty(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
-function withLibraryContext(qualifiedName: string, sourceModelica: string): string {
-  const source = String(sourceModelica || '')
-  if (!source.trim()) return source
-  if (/^\s*within\s+[A-Za-z0-9_.]+\s*;/m.test(source)) return source
-  const parts = String(qualifiedName || '')
-    .split('.')
-    .filter(Boolean)
-  if (parts.length < 2) return source
-  return `within ${parts.slice(0, -1).join('.')};\n\n${source}`
-}
-
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -1958,37 +2409,78 @@ function extractClassSourceFromFile(fileSource: string, className: string): stri
   return fileSource.slice(startIndex, endIndex).trim()
 }
 
-async function getMslClassSourceForCompile(
+function hasClassDeclarationInFile(fileSource: string, className: string): boolean {
+  try {
+    extractClassSourceFromFile(fileSource, className)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function findMslSourceContainerPath(
+  archiveEntries: Record<string, string>,
+  qualifiedName: string,
+): string | null {
+  const parts = qualifiedName.split('.').filter(Boolean)
+  const className = parts.at(-1) || ''
+  if (!className) return null
+
+  const packageCandidates = parts
+    .slice(0, -1)
+    .map(
+      (_, index, allParts) => `${allParts.slice(0, allParts.length - index).join('/')}/package.mo`,
+    )
+
+  for (const candidate of packageCandidates) {
+    const normalizedCandidate = normalizeLibraryEntryPath(candidate)
+    const fileSource = archiveEntries[normalizedCandidate]
+    if (typeof fileSource !== 'string') continue
+    if (hasClassDeclarationInFile(fileSource, className)) {
+      return normalizedCandidate
+    }
+  }
+
+  for (const [path, fileSource] of Object.entries(archiveEntries)) {
+    if (!path.endsWith('/package.mo')) continue
+    if (hasClassDeclarationInFile(fileSource, className)) {
+      return path
+    }
+  }
+
+  return null
+}
+
+async function getMslClassCompileTarget(
   wasm: DiagnosticsMslApi,
   qualifiedName: string,
-): Promise<{ source: string; sourcePath: string; className: string }> {
+): Promise<{ sourcePath: string; modelName: string }> {
   if (typeof wasm.get_class_info !== 'function') {
     throw new Error('Rumoca wasm export missing: get_class_info')
   }
   const info = JSON.parse(String(wasm.get_class_info(qualifiedName))) as Record<string, unknown>
-  const className = qualifiedName.split('.').filter(Boolean).at(-1) || 'Model'
-  const sourceModelica = asStringOrEmpty(info.source_modelica)
   const sourceFile = asStringOrEmpty(info.source_file).trim()
 
-  if (sourceModelica.trim()) {
+  if (sourceFile) {
     return {
-      source: withLibraryContext(qualifiedName, sourceModelica),
-      sourcePath: sourceFile || `${qualifiedName.replaceAll('.', '/')}.mo`,
-      className,
+      sourcePath: sourceFile,
+      modelName: qualifiedName,
     }
   }
 
   const mslFiles = await loadMslSourcesFromZip()
+  const resolvedSourcePath = findMslSourceContainerPath(mslFiles, qualifiedName)
   const fallbackPath = `${qualifiedName.replaceAll('.', '/')}.mo`
-  const sourceFileEntry = readMslSourceFromZipByPath(mslFiles, sourceFile || fallbackPath)
+  const sourceFileEntry = readMslSourceFromZipByPath(
+    mslFiles,
+    resolvedSourcePath || sourceFile || fallbackPath,
+  )
   if (!sourceFileEntry) {
     throw new Error(`Could not locate source file in MSL zip for ${qualifiedName}`)
   }
-  const extractedClassSource = extractClassSourceFromFile(sourceFileEntry.source, className)
   return {
-    source: withLibraryContext(qualifiedName, extractedClassSource),
     sourcePath: sourceFileEntry.path,
-    className,
+    modelName: qualifiedName,
   }
 }
 
@@ -2011,10 +2503,10 @@ function readMslSourceFromZipByPath(
 }
 
 async function loadMslSourcesFromZip(): Promise<Record<string, string>> {
-  const zipResponse = await fetch(MSL_LOCAL_ZIP_PATH)
+  const zipResponse = await fetch(MSL_DIAGNOSTICS_ZIP_URL)
   if (!zipResponse.ok) {
     throw new Error(
-      `Failed to fetch local MSL archive at ${MSL_LOCAL_ZIP_PATH}: HTTP ${zipResponse.status}`,
+      `Failed to fetch MSL archive at ${MSL_DIAGNOSTICS_ZIP_URL}: HTTP ${zipResponse.status}`,
     )
   }
   const zipBytes = new Uint8Array(await zipResponse.arrayBuffer())
@@ -2064,6 +2556,41 @@ function collectQualifiedClassNames(
       out,
     )
   }
+}
+
+type DiagnosticsClassTreeNode = {
+  name?: unknown
+  qualified_name?: unknown
+  children?: unknown
+}
+
+function findQualifiedClassNode(
+  nodes: DiagnosticsClassTreeNode[],
+  qualifiedName: string,
+): DiagnosticsClassTreeNode | null {
+  for (const node of nodes) {
+    if (node.qualified_name === qualifiedName) {
+      return node
+    }
+    if (!Array.isArray(node.children)) continue
+    const nested = findQualifiedClassNode(
+      node.children as DiagnosticsClassTreeNode[],
+      qualifiedName,
+    )
+    if (nested) return nested
+  }
+  return null
+}
+
+function directQualifiedChildNames(node: DiagnosticsClassTreeNode | null): string[] {
+  if (!node || !Array.isArray(node.children)) return []
+  return node.children
+    .map((child) =>
+      typeof (child as DiagnosticsClassTreeNode).qualified_name === 'string'
+        ? ((child as DiagnosticsClassTreeNode).qualified_name as string)
+        : '',
+    )
+    .filter((name) => name.length > 0)
 }
 
 export async function testModelicaOptionalRayonInitialization() {
@@ -2165,13 +2692,13 @@ export async function testModelicaMslTreeViewData() {
     throw new Error('Rumoca wasm export missing: list_classes')
   }
 
-  const { libraryFileCount } = await ensureDiagnosticsMslLoaded(wasm, debug)
+  const { libraryFileCount, loadParsed } = await ensureDiagnosticsMslLoaded(wasm, debug)
   debug.phase = 'msl-loaded'
 
   const rawTree = wasm.list_classes()
   const tree = JSON.parse(String(rawTree)) as {
     total_classes?: unknown
-    classes?: Array<{ name?: unknown; qualified_name?: unknown; children?: unknown }>
+    classes?: DiagnosticsClassTreeNode[]
   }
   const classNodes = Array.isArray(tree.classes) ? tree.classes : []
   const allQualifiedNames: string[] = []
@@ -2188,19 +2715,84 @@ export async function testModelicaMslTreeViewData() {
     )
   }
 
+  const complexNode = findQualifiedClassNode(classNodes, 'Complex')
+  const complexChildNames = directQualifiedChildNames(complexNode)
+  const expectedComplexMembers =
+    loadParsed.load_mode === 'parsed'
+      ? [
+          "Complex.'constructor'",
+          "Complex.'constructor'.fromReal",
+          "Complex.'0'",
+          "Complex.'-'.negate",
+          "Complex.'-'.subtract",
+          "Complex.'*'.multiply",
+          "Complex.'*'.scalarProduct",
+          "Complex.'+'",
+          "Complex.'String'",
+        ]
+      : [
+          'Complex.constructor',
+          'Complex.constructor.fromReal',
+          'Complex.0',
+          'Complex.-.negate',
+          'Complex.-.subtract',
+          'Complex.*.multiply',
+          'Complex.*.scalarProduct',
+          'Complex.+',
+          'Complex.String',
+        ]
+  const missingExpectedComplexMembers = expectedComplexMembers.filter(
+    (qualifiedName) => !allQualifiedNames.includes(qualifiedName),
+  )
+  const leakedComplexMembers = [
+    'Complex.fromReal',
+    'Complex.negate',
+    'Complex.subtract',
+    'Complex.multiply',
+    'Complex.scalarProduct',
+    'Complex.function',
+    'Complex.constructor.s',
+    'Complex.constructor.fromReal.returns',
+    'Complex.*.scalarProduct.returns',
+    'Complex.*.s',
+    'Complex.containing',
+    'Complex.tests',
+  ].filter((qualifiedName) => allQualifiedNames.includes(qualifiedName))
+
+  debug.loadMode = loadParsed.load_mode
+  debug.complexChildNames = complexChildNames
+  debug.leakedComplexMembers = leakedComplexMembers
+  debug.missingExpectedComplexMembers = missingExpectedComplexMembers
+
+  if (!complexNode) {
+    throw new Error('Expected Complex root node in MSL class tree')
+  }
+  if (leakedComplexMembers.length > 0 || missingExpectedComplexMembers.length > 0) {
+    throw new Error(
+      [
+        'MSL class tree shape regression around Complex operator record.',
+        `leaked=${leakedComplexMembers.join(',') || 'none'}`,
+        `missing=${missingExpectedComplexMembers.join(',') || 'none'}`,
+        `complex_children=${complexChildNames.join(',') || 'none'}`,
+      ].join(' '),
+    )
+  }
+
   return {
     ok: true,
     libraryFileCount,
     totalClasses,
     hasModelicaRoot,
     hasKnownPackage,
+    loadMode: loadParsed.load_mode,
+    complexChildNames,
     classPreview: allQualifiedNames.slice(0, 20),
   }
 }
 
 export async function testModelicaMslCompileAndRunSmoke() {
   const debug: Record<string, unknown> = {
-    mslZipPath: MSL_LOCAL_ZIP_PATH,
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
     phase: 'init',
   }
   let fullGeneratedCode = ''
@@ -2217,9 +2809,7 @@ export async function testModelicaMslCompileAndRunSmoke() {
         'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
       )
     }
-    if (typeof wasm.render_template !== 'function') {
-      throw new Error('Rumoca wasm export missing: render_template')
-    }
+    assertTemplateRendererAvailable(wasm)
 
     const { libraryFileCount, loadParsed } = await ensureDiagnosticsMslLoaded(wasm, debug)
 
@@ -2245,7 +2835,13 @@ end MslConstRamp;
       throw new Error('MSL compile returned no DAE payload')
     }
 
-    const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+    const rendered = renderDiagnosticsTemplate(
+      wasm,
+      dae,
+      javascriptTemplate,
+      'javascript.jinja',
+      'model.js',
+    )
     if (!rendered || typeof rendered !== 'string') {
       throw new Error('Rendering javascript.jinja failed for MSL smoke model')
     }
@@ -2259,12 +2855,12 @@ end MslConstRamp;
     }
     debug.abiDecision = abiDecision
 
-    const modelProbeCode = buildModelConstructionProbeIframeCode(rendered)
+    const modelProbeCode = buildModelConstructionProbeSandboxCode(rendered)
     const modelProbeRunId = 'modelica-msl-smoke-model-probe'
     const modelProbeAbort = new AbortController()
     let modelProbeResult: unknown
     try {
-      modelProbeResult = await executeCodeInIframeSimple(
+      modelProbeResult = await executeInWorkerSandbox(
         {
           id: modelProbeRunId,
           code: modelProbeCode,
@@ -2289,11 +2885,11 @@ end MslConstRamp;
       throw new Error('Model construction probe failed')
     }
 
-    const abiCode = buildModelAbiValidationIframeCode(rendered)
+    const abiCode = buildModelAbiValidationSandboxCode(rendered)
     const abiRunId = 'modelica-msl-smoke-abi'
     const abiAbort = new AbortController()
     try {
-      const rawAbiResult = await executeCodeInIframeSimple(
+      const rawAbiResult = await executeInWorkerSandbox(
         {
           id: abiRunId,
           code: abiCode,
@@ -2321,8 +2917,8 @@ end MslConstRamp;
       abiAbort.abort()
     }
 
-    const runCode = buildIframeCode(rendered)
     const runId = 'modelica-msl-smoke-run'
+    const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
     const runAbort = new AbortController()
     const getSeriesSampleLength = (seriesData: unknown): number => {
       if (Array.isArray(seriesData)) return seriesData.length
@@ -2339,7 +2935,7 @@ end MslConstRamp;
     let runResult: SimResult
     let serializedRunResult = ''
     try {
-      runResult = await executeCodeInIframeSimple(
+      runResult = await executeInWorkerSandbox(
         {
           id: runId,
           code: runCode,
@@ -2380,7 +2976,7 @@ end MslConstRamp;
 
     return {
       ok: true,
-      mslZipPath: MSL_LOCAL_ZIP_PATH,
+      mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
       mslLibraryFiles: libraryFileCount,
       parsedCount: Number(loadParsed.parsed_count ?? 0),
       skippedCount: Array.isArray(loadParsed.skipped_files) ? loadParsed.skipped_files.length : 0,
@@ -2409,10 +3005,229 @@ end MslConstRamp;
   }
 }
 
+async function runModelicaMslFirstOrderRumocaSimulationInBrowser() {
+  const debug: Record<string, unknown> = {
+    phase: 'init',
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
+    runtime: 'browser-sandbox',
+  }
+  let fullGeneratedCode = ''
+
+  try {
+    const wasm = await getDiagnosticsWasm()
+    debug.phase = 'wasm-loaded'
+
+    if (
+      typeof wasm.compile_with_source_roots !== 'function' &&
+      typeof wasm.compile_with_libraries !== 'function'
+    ) {
+      throw new Error(
+        'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
+      )
+    }
+    assertTemplateRendererAvailable(wasm)
+
+    const { libraryFileCount, loadParsed } = await ensureDiagnosticsMslLoaded(wasm, debug)
+    debug.mslLibraryFiles = libraryFileCount
+    debug.mslParsedCount = Number(loadParsed.parsed_count ?? 0)
+
+    const source = `
+model MslFirstOrderRuntimeSmoke
+  Modelica.Blocks.Sources.Step step(height = 1, startTime = 0.1);
+  Modelica.Blocks.Continuous.FirstOrder firstOrder(T = 0.5, k = 1);
+equation
+  connect(step.y, firstOrder.u);
+end MslFirstOrderRuntimeSmoke;
+`.trim()
+
+    debug.phase = 'compile-with-libraries'
+    const compiledRaw = compileWithDiagnosticsMsl(wasm, source, 'MslFirstOrderRuntimeSmoke')
+    debug.phase = 'compiled'
+    const compiled = JSON.parse(String(compiledRaw)) as {
+      dae?: unknown
+      dae_native?: unknown
+      dae_prepared?: unknown
+      pretty?: string
+    }
+    const dae = selectDaeForTemplate(compiled, { usePreparedDae: true })
+    if (!dae) {
+      throw new Error('compile_to_json returned no DAE payload for MSL first-order runtime smoke')
+    }
+
+    debug.phase = 'render-javascript-template'
+    const rendered = renderDiagnosticsTemplate(
+      wasm,
+      dae,
+      javascriptTemplate,
+      'javascript.jinja',
+      'model.js',
+    )
+    fullGeneratedCode = rendered
+    debug.renderedPreview = rendered.slice(0, 220)
+    debug.generatedCodeLength = rendered.length
+
+    debug.phase = 'build-worker-sandbox-code'
+    const runId = 'modelica-msl-first-order-runtime-smoke'
+    const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
+    const runAbort = new AbortController()
+    type SimResult = {
+      meta?: {
+        nSteps?: number
+        stopReason?: string
+        stopError?: string
+        model?: {
+          stateNames?: string[]
+          algebraicNames?: string[]
+          inputNames?: string[]
+        }
+      }
+      data?: {
+        t?: unknown[]
+        x?: unknown[] | Record<string, unknown>
+        y?: unknown[] | Record<string, unknown>
+      }
+    }
+    const asFiniteSeries = (value: unknown): number[] =>
+      Array.isArray(value)
+        ? value.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
+        : []
+    const getSeriesByName = (bag: unknown, name: string): number[] => {
+      if (!bag || typeof bag !== 'object' || Array.isArray(bag)) return []
+      const record = bag as Record<string, unknown>
+      const direct = asFiniteSeries(record[name])
+      if (direct.length > 0) return direct
+      const alt = asFiniteSeries(record[name.replaceAll('.', '__')])
+      if (alt.length > 0) return alt
+      return []
+    }
+    const getSimulationSeriesByName = (
+      result: SimResult | undefined,
+      name: string,
+      preferredBag: 'x' | 'y',
+    ): number[] => {
+      const preferredSeries = getSeriesByName(result?.data?.[preferredBag], name)
+      if (preferredSeries.length > 0) return preferredSeries
+      const fallbackBag = preferredBag === 'x' ? 'y' : 'x'
+      return getSeriesByName(result?.data?.[fallbackBag], name)
+    }
+    const getBagKeys = (bag: unknown): string[] =>
+      bag && typeof bag === 'object' && !Array.isArray(bag)
+        ? Object.keys(bag as Record<string, unknown>)
+        : []
+
+    let runResult: SimResult
+    try {
+      debug.phase = 'execute-generated-js'
+      runResult = await executeInWorkerSandbox(
+        {
+          id: runId,
+          code: runCode,
+          sourceURL: `${runId}.js`,
+          stopSignal: runAbort.signal,
+        },
+        {
+          sim: {
+            t0: 0,
+            tf: 1,
+            dt: 0.02,
+          },
+        },
+        {
+          source: 'ModelicaDiagnostics',
+          __rumocaRunId: runId,
+        },
+      )
+    } finally {
+      runAbort.abort()
+    }
+
+    debug.phase = 'validate-simulation-payload'
+    const times = Array.isArray(runResult?.data?.t) ? runResult.data.t : []
+    const firstOrderSeries = getSimulationSeriesByName(runResult, 'firstOrder.y', 'x')
+    debug.runResultPreview = {
+      meta: runResult?.meta,
+      timeSamples: times.length,
+      yKeys: getBagKeys(runResult?.data?.y).slice(0, 20),
+      xKeys: getBagKeys(runResult?.data?.x).slice(0, 20),
+      firstOrderSamples: firstOrderSeries.slice(0, 8),
+    }
+
+    if (runResult?.meta?.stopReason) {
+      throw new Error(
+        `MSL first-order runtime smoke stopped early: ${runResult.meta.stopReason} (${runResult.meta.stopError ?? 'n/a'})`,
+      )
+    }
+    if (times.length < 10) {
+      throw new Error(
+        `MSL first-order runtime smoke returned too few time samples: ${times.length}`,
+      )
+    }
+    if (firstOrderSeries.length !== times.length) {
+      throw new Error(
+        `MSL first-order runtime smoke missing or mismatched firstOrder.y series: series=${firstOrderSeries.length}, times=${times.length}`,
+      )
+    }
+    if (firstOrderSeries.some((value) => !Number.isFinite(value))) {
+      throw new Error('MSL first-order runtime smoke produced non-finite firstOrder.y values')
+    }
+
+    const start = firstOrderSeries[0] ?? Number.NaN
+    const finish = firstOrderSeries[firstOrderSeries.length - 1] ?? Number.NaN
+    if (!(finish > start + 0.2)) {
+      throw new Error(
+        `MSL first-order runtime smoke did not respond to the step input as expected (start=${start}, end=${finish})`,
+      )
+    }
+
+    return {
+      ok: true,
+      runtime: 'browser-sandbox',
+      model: 'MslFirstOrderRuntimeSmoke',
+      timeSamples: times.length,
+      firstOrderStart: start,
+      firstOrderEnd: finish,
+      mslLibraryFiles: libraryFileCount,
+      parsedCount: Number(loadParsed.parsed_count ?? 0),
+      skippedCount: Array.isArray(loadParsed.skipped_files) ? loadParsed.skipped_files.length : 0,
+      conflictCount: Array.isArray(loadParsed.conflicts) ? loadParsed.conflicts.length : 0,
+    }
+  } catch (err) {
+    const baseMessage = err instanceof Error ? err.message : String(err)
+    const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
+    throw new Error(
+      [baseMessage, `MSL first-order runtime smoke debug:\n${debugDump}`].join('\n'),
+      {
+        cause: {
+          generatedCodeSerialized: serializeObject(
+            fullGeneratedCode || '[generated code unavailable]',
+            MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+          ),
+        },
+      },
+    )
+  }
+}
+
+export async function testModelicaMslFirstOrderRumocaSimulation() {
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    return runModelicaMslFirstOrderRumocaSimulationInBrowser()
+  }
+  const nodeDiagnosticsModule = './modelicaDiagnosticsCliNode.ts'
+  const { runModelicaCliMslFirstOrderRumocaSimulation } = (await import(
+    /* @vite-ignore */ nodeDiagnosticsModule
+  )) as {
+    runModelicaCliMslFirstOrderRumocaSimulation: () => ReturnType<
+      typeof runModelicaMslFirstOrderRumocaSimulationInBrowser
+    >
+  }
+  return runModelicaCliMslFirstOrderRumocaSimulation()
+}
+testModelicaMslFirstOrderRumocaSimulation.timeoutMs = 120_000
+
 export async function testModelicaMslResistorManualFlattenAndBaseDae() {
   const debug: Record<string, unknown> = {
     phase: 'init',
-    mslZipPath: MSL_LOCAL_ZIP_PATH,
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
   }
 
   const extendsResistorSource = `
@@ -2455,9 +3270,7 @@ end MslResistorManualFlattened;
         'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
       )
     }
-    if (typeof wasm.render_template !== 'function') {
-      throw new Error('Rumoca wasm export missing: render_template')
-    }
+    assertTemplateRendererAvailable(wasm)
 
     const { libraryFileCount, loadParsed } = await ensureDiagnosticsMslLoaded(wasm, debug)
     debug.mslLibraryFiles = libraryFileCount
@@ -2543,7 +3356,15 @@ end MslResistorManualFlattened;
       let baseDaeRendered = ''
       let baseDaeRenderError = ''
       try {
-        baseDaeRendered = wasm.render_template(daeJson, baseDaeTemplate)
+        baseDaeRendered = renderRumocaTemplate({
+          wasm,
+          daeJson,
+          templateSource: baseDaeTemplate,
+          modelName: getTemplateModelName(dae),
+          templatePath: 'base_dae.jinja',
+          outputPath: 'base_dae.txt',
+          targetName: 'template',
+        })
       } catch (err) {
         baseDaeRenderError = err instanceof Error ? err.message : String(err)
       }
@@ -2659,7 +3480,7 @@ end MslResistorManualFlattened;
 export async function testModelicaMslResistorExampleSimulation() {
   const debug: Record<string, unknown> = {
     phase: 'init',
-    mslZipPath: MSL_LOCAL_ZIP_PATH,
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
   }
   let fullGeneratedCode = ''
 
@@ -2675,9 +3496,7 @@ export async function testModelicaMslResistorExampleSimulation() {
         'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
       )
     }
-    if (typeof wasm.render_template !== 'function') {
-      throw new Error('Rumoca wasm export missing: render_template')
-    }
+    assertTemplateRendererAvailable(wasm)
 
     const { libraryFileCount, loadParsed } = await ensureDiagnosticsMslLoaded(wasm, debug)
     debug.mslLibraryFiles = libraryFileCount
@@ -2713,7 +3532,15 @@ end MslResistorExample;
     const derivativeRefsFromPretty = Array.from(new Set(prettyText.match(/der\([^)]+\)/g) ?? []))
     let derivativeRefs = derivativeRefsFromPretty
     try {
-      const baseDaeRendered = wasm.render_template(daeJson, baseDaeTemplate)
+      const baseDaeRendered = renderRumocaTemplate({
+        wasm,
+        daeJson,
+        templateSource: baseDaeTemplate,
+        modelName: getTemplateModelName(dae),
+        templatePath: 'base_dae.jinja',
+        outputPath: 'base_dae.txt',
+        targetName: 'template',
+      })
       const derivativeRefsFromTemplate: string[] = Array.from(
         new Set(String(baseDaeRendered).match(/der\([^)]+\)/g) ?? []),
       )
@@ -2736,7 +3563,15 @@ end MslResistorExample;
     }
 
     debug.phase = 'render-javascript-template'
-    const rendered = wasm.render_template(daeJson, javascriptTemplate)
+    const rendered = renderRumocaTemplate({
+      wasm,
+      daeJson,
+      templateSource: javascriptTemplate,
+      modelName: getTemplateModelName(dae),
+      templatePath: 'javascript.jinja',
+      outputPath: 'model.js',
+      targetName: 'template',
+    })
     if (!rendered || typeof rendered !== 'string') {
       throw new Error('Rendering javascript.jinja failed for MSL resistor example')
     }
@@ -2773,9 +3608,9 @@ end MslResistorExample;
       },
     }
 
-    debug.phase = 'build-iframe-code'
-    const runCode = buildIframeCode(rendered)
+    debug.phase = 'build-worker-sandbox-code'
     const runId = 'modelica-msl-resistor-example-run'
+    const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
     const runAbort = new AbortController()
     type SimResult = {
       meta?: {
@@ -2980,7 +3815,7 @@ end MslResistorExample;
     let serializedRunResult = ''
     try {
       debug.phase = 'execute-generated-js'
-      runResult = await executeCodeInIframeSimple(
+      runResult = await executeInWorkerSandbox(
         {
           id: runId,
           code: runCode,
@@ -3180,7 +4015,8 @@ end MslResistorExample;
     debug.runSignalStats = { xAmp, yAmp, xTemporal, yTemporal, xActive, yActive }
 
     if (stateCount === 0) {
-      const algebraicDynamicsDetected = yLen > 1 && yActive > 0 && Math.max(yAmp, yTemporal) > 1.0e-6
+      const algebraicDynamicsDetected =
+        yLen > 1 && yActive > 0 && Math.max(yAmp, yTemporal) > 1.0e-6
       if (!algebraicDynamicsDetected) {
         throw new Error(
           [
@@ -3476,9 +4312,7 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
   if (typeof wasm.compile_to_json !== 'function') {
     throw new Error('Rumoca wasm export missing: compile_to_json')
   }
-  if (typeof wasm.render_template !== 'function') {
-    throw new Error('Rumoca wasm export missing: render_template')
-  }
+  assertTemplateRendererAvailable(wasm)
 
   const compiled = wasm.compile_to_json(source, 'SatelliteOrbit2D')
   const parsed = JSON.parse(compiled) as {
@@ -3491,13 +4325,22 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
     throw new Error('Rumoca compile_to_json returned no DAE payload for SatelliteOrbit2D')
   }
 
-  const rendered = wasm.render_template(JSON.stringify(dae), javascriptTemplate)
+  const rendered = renderDiagnosticsTemplate(
+    wasm,
+    dae,
+    javascriptTemplate,
+    'javascript.jinja',
+    'model.js',
+  )
   if (!rendered || typeof rendered !== 'string') {
     throw new Error('Rendering javascript.jinja failed for SatelliteOrbit2D')
   }
   const generatedCodeDebug = summarizeGeneratedCodeForDebug(rendered)
 
-  const runCode = buildIframeCode(rendered)
+  const runCode = await buildWorkerSandboxCodeChecked(
+    rendered,
+    'modelica-satellite-orbit-2d-runtime',
+  )
   const mu = 398600.4418
   const r0 = 7000
   const v0 = Math.sqrt(mu / r0)
@@ -3550,7 +4393,7 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
   ): Promise<OrbitSolverRun> => {
     const abort = new AbortController()
     try {
-      return await executeCodeInIframeSimple(
+      return await executeInWorkerSandbox(
         {
           id: runId,
           code: runCode,
@@ -4282,17 +5125,17 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
 export async function testModelicaOrbitInvariantsCompareSolvers() {
   return runModelicaOrbitInvariantTest('compare')
 }
-testModelicaOrbitInvariantsCompareSolvers.timeoutMs = 180_000
+testModelicaOrbitInvariantsCompareSolvers.timeoutMs = 40_000
 
 export async function testModelicaOrbitInvariantsSdirkOnly() {
   return runModelicaOrbitInvariantTest('sdirk-only')
 }
-testModelicaOrbitInvariantsSdirkOnly.timeoutMs = 180_000
+testModelicaOrbitInvariantsSdirkOnly.timeoutMs = 40_000
 
 export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
   const debug: Record<string, unknown> = {
     phase: 'init',
-    mslZipPath: MSL_LOCAL_ZIP_PATH,
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
   }
   try {
     const wasm = await getDiagnosticsWasm()
@@ -4325,7 +5168,11 @@ export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
     const resolvedSourceFile = sourceFile.trim() || fallbackSourceFile
     const sourceModelicaFileName = `${sineVoltageQualified.replaceAll('.', '/')}.mo`
 
-    const sourceModelicaParse = parseSourceRootAstOrError(wasm, sourceModelica, sourceModelicaFileName)
+    const sourceModelicaParse = parseSourceRootAstOrError(
+      wasm,
+      sourceModelica,
+      sourceModelicaFileName,
+    )
     const mslFiles = await loadMslSourcesFromZip()
     const sourceFileEntry = readMslSourceFromZipByPath(mslFiles, resolvedSourceFile)
     if (!sourceFileEntry) {
@@ -4365,10 +5212,9 @@ export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
       classInfoParseError: sourceModelicaParse.ok ? null : sourceModelicaParse.error,
       iconHintInClassInfoSource,
       iconHintInSourceFile,
-      note:
-        sourceModelicaParse.ok
-          ? 'class_info source is round-trippable'
-          : 'class_info source parse failed; source-root fallback remains valid',
+      note: sourceModelicaParse.ok
+        ? 'class_info source is round-trippable'
+        : 'class_info source parse failed; source-root fallback remains valid',
     }
   } catch (err) {
     const baseMessage = err instanceof Error ? err.message : String(err)
@@ -4380,7 +5226,7 @@ export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
 export async function testModelicaMslResistorSineVoltageClassInfoRoundtripStrict() {
   const debug: Record<string, unknown> = {
     phase: 'init',
-    mslZipPath: MSL_LOCAL_ZIP_PATH,
+    mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
   }
   try {
     const wasm = await getDiagnosticsWasm()
@@ -4451,7 +5297,9 @@ end MslResistorStrictIconProbe;
 
     const iconHintInClassInfoSource = /annotation\s*\(\s*Icon\b|Icon\s*\(/.test(sourceModelica)
     if (!iconHintInClassInfoSource) {
-      throw new Error(`Class info source_modelica has no Icon annotation hint for ${sineVoltageQualified}`)
+      throw new Error(
+        `Class info source_modelica has no Icon annotation hint for ${sineVoltageQualified}`,
+      )
     }
 
     return {

@@ -96,7 +96,13 @@
 </template>
 
 <script setup lang="ts">
-import { matContentCopy, matDelete, matDownload, matFolder, matInfo } from '@quasar/extras/material-icons'
+import {
+  matContentCopy,
+  matDelete,
+  matDownload,
+  matFolder,
+  matInfo,
+} from '@quasar/extras/material-icons'
 import { mdiFile } from '@quasar/extras/mdi-v6'
 import type { QTreeNode } from 'quasar'
 import FileDropzone from '../components/FileDropzone.vue'
@@ -200,7 +206,7 @@ function formatModified(timestamp?: number) {
 
 /** OPFS directory handle with typed .entries() (just for TS) */
 type DirHandle = FileSystemDirectoryHandle & {
-  entries(): AsyncIterableIterator<[string, FileSystemHandle]>
+  entries(): AsyncIterableIterator<[string, FileSystemFileHandle | FileSystemDirectoryHandle]>
 }
 
 /** Our node extends Quasar’s, keeps TypeScript happy */
@@ -247,7 +253,10 @@ async function getDirectoryStats(dir: DirHandle, dirPath: string): Promise<Direc
         totalSize += child.totalSize
         fileCount += child.fileCount
         directoryCount += child.directoryCount
-        if (child.latestModified != null && (latestModified == null || child.latestModified > latestModified)) {
+        if (
+          child.latestModified != null &&
+          (latestModified == null || child.latestModified > latestModified)
+        ) {
           latestModified = child.latestModified
         }
       }

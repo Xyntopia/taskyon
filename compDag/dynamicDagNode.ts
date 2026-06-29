@@ -1,6 +1,6 @@
 import z from 'zod'
 import { createNode, oneOf } from './dagCore'
-import { executeCodeInIframeSimple } from '../modules/sandbox/iframeWorker'
+import { executeInWorkerSandbox } from '../modules/sandbox/workerSandbox'
 
 type JsonSchema = {
   type?: string | string[]
@@ -42,7 +42,8 @@ export type DynamicLegacyNodeDefinition = {
 
 export type DynamicAnyNodeDefinition = DynamicDagNodeDefinition | DynamicLegacyNodeDefinition
 
-const asArray = <T>(v: T | T[] | undefined): T[] => (Array.isArray(v) ? v : v === undefined ? [] : [v])
+const asArray = <T>(v: T | T[] | undefined): T[] =>
+  Array.isArray(v) ? v : v === undefined ? [] : [v]
 
 const toZod = (schema: JsonSchema | undefined): z.ZodTypeAny => {
   const s = schema ?? {}
@@ -94,10 +95,10 @@ const toObjectZod = (schema: JsonSchema): z.ZodObject<z.ZodRawShape> => {
 
 const createTimeoutSignal = (timeoutMs: number): { signal: AbortSignal; dispose: () => void } => {
   const controller = new AbortController()
-  const timeout = window.setTimeout(() => {
+  const timeout = globalThis.setTimeout(() => {
     controller.abort(`Dynamic node timed out after ${timeoutMs}ms`)
   }, timeoutMs)
-  return { signal: controller.signal, dispose: () => window.clearTimeout(timeout) }
+  return { signal: controller.signal, dispose: () => globalThis.clearTimeout(timeout) }
 }
 
 const normalizeLegacy = (def: DynamicLegacyNodeDefinition): DynamicDagNodeDefinition => {
@@ -132,8 +133,9 @@ const normalizeLegacy = (def: DynamicLegacyNodeDefinition): DynamicDagNodeDefini
 const isLegacy = (def: DynamicAnyNodeDefinition): def is DynamicLegacyNodeDefinition =>
   'code' in def && !('runCode' in def)
 
-export const normalizeDynamicDefinition = (def: DynamicAnyNodeDefinition): DynamicDagNodeDefinition =>
-  isLegacy(def) ? normalizeLegacy(def) : def
+export const normalizeDynamicDefinition = (
+  def: DynamicAnyNodeDefinition,
+): DynamicDagNodeDefinition => (isLegacy(def) ? normalizeLegacy(def) : def)
 
 export const compileDynamicDagNode = (args: {
   definition: DynamicAnyNodeDefinition
@@ -142,9 +144,13 @@ export const compileDynamicDagNode = (args: {
   const definition = normalizeDynamicDefinition(args.definition)
   const hiddenInputs: Record<string, unknown> = {}
   for (const [alias, ref] of Object.entries(definition.hiddenInputs ?? {})) {
-    if (!('nodeId' in ref)) throw new Error(`Dynamic node ${definition.id}: hidden input "${alias}" must be single node reference`)
+    if (!('nodeId' in ref))
+      throw new Error(
+        `Dynamic node ${definition.id}: hidden input "${alias}" must be single node reference`,
+      )
     const node = args.nodeById[ref.nodeId]
-    if (!node) throw new Error(`Dynamic node ${definition.id}: missing hidden input node ${ref.nodeId}`)
+    if (!node)
+      throw new Error(`Dynamic node ${definition.id}: missing hidden input node ${ref.nodeId}`)
     hiddenInputs[alias] = node
   }
   const exposedInputs: Record<string, unknown> = {}
@@ -152,7 +158,8 @@ export const compileDynamicDagNode = (args: {
     if ('kind' in ref && ref.kind === 'oneOf') {
       const nodes = ref.nodeIds.map((id) => {
         const node = args.nodeById[id]
-        if (!node) throw new Error(`Dynamic node ${definition.id}: missing exposed input node ${id}`)
+        if (!node)
+          throw new Error(`Dynamic node ${definition.id}: missing exposed input node ${id}`)
         return node as never
       })
       exposedInputs[alias] = oneOf(nodes)
@@ -161,7 +168,8 @@ export const compileDynamicDagNode = (args: {
         throw new Error(`Dynamic node ${definition.id}: exposed input "${alias}" must have nodeId`)
       }
       const node = args.nodeById[ref.nodeId]
-      if (!node) throw new Error(`Dynamic node ${definition.id}: missing exposed input node ${ref.nodeId}`)
+      if (!node)
+        throw new Error(`Dynamic node ${definition.id}: missing exposed input node ${ref.nodeId}`)
       exposedInputs[alias] = node
     }
   }
@@ -175,17 +183,16 @@ export const compileDynamicDagNode = (args: {
     exposedInputs: exposedInputs as never,
     policy: { cache: 'ReadWrite', scope: 'ModelState' },
     run: async (params, use) => {
-      if (typeof document === 'undefined') {
-        throw new Error('Dynamic DAG nodes require browser document for iframe execution.')
-      }
       const resolvedInputs: Record<string, unknown> = {}
-      for (const [alias, runner] of Object.entries(use as Record<string, () => Promise<unknown>>)) {
-        resolvedInputs[alias] = await runner()
+      for (const [alias, runner] of Object.entries(
+        use as Record<string, (params: Record<string, unknown>) => Promise<unknown>>,
+      )) {
+        resolvedInputs[alias] = await runner({})
       }
       const timeoutMs = Math.max(100, Math.min(definition.timeoutMs ?? 5_000, 60_000))
       const timeout = createTimeoutSignal(timeoutMs)
       try {
-        return await executeCodeInIframeSimple(
+        return await executeInWorkerSandbox(
           {
             id: `dynamic-node-${definition.id}`,
             code: definition.runCode,

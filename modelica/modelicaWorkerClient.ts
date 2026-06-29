@@ -1,3 +1,8 @@
+import type {
+  LazyModelicaClassTreeNode,
+  LazyModelicaLibraryIndex,
+} from './lazyModelicaLibraryIndex'
+
 type WorkerRequest =
   | { id: number; type: 'init'; payload?: { threads?: number } }
   | {
@@ -11,14 +16,40 @@ type WorkerRequest =
         useSourceRoots: boolean
       }
     }
-  | { id: number; type: 'load_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
+  | {
+      id: number
+      type: 'render_modelica_view'
+      payload: {
+        modelicaSource: string
+        modelName: string
+        useSourceRoots: boolean
+        view: 'base-modelica' | 'flat-modelica' | 'dae-modelica'
+      }
+    }
+  | {
+      id: number
+      type: 'load_msl_zip'
+      payload: { fileName: string; bytes: ArrayBuffer; lazyIndex?: LazyModelicaLibraryIndex }
+    }
   | { id: number; type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
+  | { id: number; type: 'materialize_library_classes'; payload: { qualifiedNames: string[] } }
+  | {
+      id: number
+      type: 'materialize_diagram_classes'
+      payload: { source: string; qualifiedName?: string; fileName?: string }
+    }
+  | { id: number; type: 'materialize_all_libraries' }
   | { id: number; type: 'clear_libraries' }
   | { id: number; type: 'list_classes' }
   | { id: number; type: 'get_class_info'; payload: { qualifiedName: string } }
   | {
       id: number
       type: 'extract_diagram'
+      payload: { source: string; qualifiedName?: string; fileName?: string }
+    }
+  | {
+      id: number
+      type: 'extract_diagram_preview'
       payload: { source: string; qualifiedName?: string; fileName?: string }
     }
   | {
@@ -31,6 +62,20 @@ type WorkerRequest =
       type: 'lsp_completion_with_timing'
       payload: { source: string; line: number; character: number }
     }
+  | {
+      id: number
+      type: 'get_simulation_models'
+      payload: { source: string; defaultModel?: string }
+    }
+  | {
+      id: number
+      type: 'start_simulation'
+      payload: { source: string; modelName: string; tEnd: number; dt: number; solver: string }
+    }
+  | { id: number; type: 'get_bundled_source_root_manifest' }
+  | { id: number; type: 'load_bundled_source_root_cache'; payload: { archiveId: string } }
+  | { id: number; type: 'export_source_root_binary_cache'; payload: { uris: string[] } }
+  | { id: number; type: 'restore_source_root_binary_cache'; payload: { bytes: ArrayBuffer } }
   | { id: number; type: 'get_source_root_document_count' }
 
 type WorkerRequestNoId =
@@ -45,13 +90,35 @@ type WorkerRequestNoId =
         useSourceRoots: boolean
       }
     }
-  | { type: 'load_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
+  | {
+      type: 'render_modelica_view'
+      payload: {
+        modelicaSource: string
+        modelName: string
+        useSourceRoots: boolean
+        view: 'base-modelica' | 'flat-modelica' | 'dae-modelica'
+      }
+    }
+  | {
+      type: 'load_msl_zip'
+      payload: { fileName: string; bytes: ArrayBuffer; lazyIndex?: LazyModelicaLibraryIndex }
+    }
   | { type: 'merge_msl_zip'; payload: { fileName: string; bytes: ArrayBuffer } }
+  | { type: 'materialize_library_classes'; payload: { qualifiedNames: string[] } }
+  | {
+      type: 'materialize_diagram_classes'
+      payload: { source: string; qualifiedName?: string; fileName?: string }
+    }
+  | { type: 'materialize_all_libraries' }
   | { type: 'clear_libraries' }
   | { type: 'list_classes' }
   | { type: 'get_class_info'; payload: { qualifiedName: string } }
   | {
       type: 'extract_diagram'
+      payload: { source: string; qualifiedName?: string; fileName?: string }
+    }
+  | {
+      type: 'extract_diagram_preview'
       payload: { source: string; qualifiedName?: string; fileName?: string }
     }
   | {
@@ -62,13 +129,38 @@ type WorkerRequestNoId =
       type: 'lsp_completion_with_timing'
       payload: { source: string; line: number; character: number }
     }
+  | {
+      type: 'get_simulation_models'
+      payload: { source: string; defaultModel?: string }
+    }
+  | {
+      type: 'start_simulation'
+      payload: { source: string; modelName: string; tEnd: number; dt: number; solver: string }
+    }
+  | { type: 'get_bundled_source_root_manifest' }
+  | { type: 'load_bundled_source_root_cache'; payload: { archiveId: string } }
+  | { type: 'export_source_root_binary_cache'; payload: { uris: string[] } }
+  | { type: 'restore_source_root_binary_cache'; payload: { bytes: ArrayBuffer } }
   | { type: 'get_source_root_document_count' }
 
-type WorkerResponse = { id: number; ok: true; result: unknown } | { id: number; ok: false; error: string }
+type WorkerResponse =
+  | { id: number; ok: true; result: unknown }
+  | { id: number; ok: false; error: string }
 
 type Pending = {
   resolve: (value: unknown) => void
   reject: (reason: Error) => void
+  requestType: WorkerRequestNoId['type']
+  startedAt: number
+}
+
+export type ModelicaWorkerActivityEvent = {
+  requestId: number
+  requestType: WorkerRequestNoId['type']
+  label: string
+  status: 'started' | 'finished' | 'failed'
+  elapsedMs?: number
+  error?: string
 }
 
 export type ModelicaWorkerInitInfo = {
@@ -78,12 +170,26 @@ export type ModelicaWorkerInitInfo = {
   rustBuildTimeUtc?: string
   packageBuiltTimeUtc?: string
   rayonEnabled: boolean
+  simulationAvailable?: boolean
+  simulationModelDiscoveryAvailable?: boolean
+}
+
+export type BundledSourceRootArchive = {
+  archiveId: string
+  fileName: string
+  fileCount: number
+  source?: string
+}
+
+export type BundledSourceRootManifest = {
+  archives: BundledSourceRootArchive[]
 }
 
 export class ModelicaWorkerClient {
   private worker: Worker
   private nextId = 1
   private pending = new Map<number, Pending>()
+  private activityListeners = new Set<(event: ModelicaWorkerActivityEvent) => void>()
 
   constructor() {
     this.worker = new Worker(new URL('./modelicaWorker.worker.ts', import.meta.url), {
@@ -94,23 +200,122 @@ export class ModelicaWorkerClient {
       const req = this.pending.get(msg.id)
       if (!req) return
       this.pending.delete(msg.id)
-      if (msg.ok) req.resolve(msg.result)
-      else req.reject(new Error(msg.error))
+      if (msg.ok) {
+        this.emitActivity({
+          requestId: msg.id,
+          requestType: req.requestType,
+          label: this.activityLabel(req.requestType),
+          status: 'finished',
+          elapsedMs: Math.round(performance.now() - req.startedAt),
+        })
+        req.resolve(msg.result)
+      } else {
+        this.emitActivity({
+          requestId: msg.id,
+          requestType: req.requestType,
+          label: this.activityLabel(req.requestType),
+          status: 'failed',
+          elapsedMs: Math.round(performance.now() - req.startedAt),
+          error: msg.error,
+        })
+        req.reject(new Error(msg.error))
+      }
     }
   }
 
   terminate() {
     this.worker.terminate()
-    for (const [, req] of this.pending) {
+    for (const [requestId, req] of this.pending) {
+      this.emitActivity({
+        requestId,
+        requestType: req.requestType,
+        label: this.activityLabel(req.requestType),
+        status: 'failed',
+        elapsedMs: Math.round(performance.now() - req.startedAt),
+        error: 'Modelica worker terminated',
+      })
       req.reject(new Error('Modelica worker terminated'))
     }
     this.pending.clear()
   }
 
+  onActivity(listener: (event: ModelicaWorkerActivityEvent) => void): () => void {
+    this.activityListeners.add(listener)
+    return () => {
+      this.activityListeners.delete(listener)
+    }
+  }
+
+  private emitActivity(event: ModelicaWorkerActivityEvent) {
+    this.activityListeners.forEach((listener) => listener(event))
+  }
+
+  private activityLabel(type: WorkerRequestNoId['type']): string {
+    switch (type) {
+      case 'compile_render':
+        return 'Compiling Modelica'
+      case 'extract_diagram':
+        return 'Building diagram'
+      case 'extract_diagram_preview':
+        return 'Loading diagram preview'
+      case 'render_modelica_view':
+        return 'Loading analysis view'
+      case 'get_class_info':
+        return 'Loading class info'
+      case 'load_msl_zip':
+      case 'merge_msl_zip':
+        return 'Loading libraries'
+      case 'materialize_library_classes':
+        return 'Loading library classes'
+      case 'materialize_diagram_classes':
+        return 'Loading diagram classes'
+      case 'materialize_all_libraries':
+        return 'Loading full library'
+      case 'list_classes':
+        return 'Listing classes'
+      case 'parse_source_ast':
+        return 'Parsing AST'
+      case 'clear_libraries':
+        return 'Clearing libraries'
+      case 'init':
+        return 'Initializing worker'
+      case 'get_source_root_document_count':
+        return 'Inspecting source roots'
+      case 'get_bundled_source_root_manifest':
+        return 'Inspecting bundled libraries'
+      case 'load_bundled_source_root_cache':
+        return 'Loading bundled libraries'
+      case 'export_source_root_binary_cache':
+        return 'Creating library cache'
+      case 'restore_source_root_binary_cache':
+        return 'Restoring library cache'
+      case 'lsp_completion_with_timing':
+        return 'Computing completion'
+      case 'get_simulation_models':
+        return 'Listing simulation models'
+      case 'start_simulation':
+        return 'Running Rumoca simulation'
+      default:
+        return 'Running worker task'
+    }
+  }
+
   private request<T = unknown>(msg: WorkerRequestNoId, transfer: Transferable[] = []): Promise<T> {
     const id = this.nextId++
+    const startedAt = performance.now()
+    this.emitActivity({
+      requestId: id,
+      requestType: msg.type,
+      label: this.activityLabel(msg.type),
+      status: 'started',
+    })
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject })
+      this.pending.set(id, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+        requestType: msg.type,
+        startedAt,
+      })
       const withId = { id, ...msg } as WorkerRequest
       this.worker.postMessage(withId, transfer)
     })
@@ -129,6 +334,7 @@ export class ModelicaWorkerClient {
   }): Promise<{
     compiled: Record<string, unknown>
     daeForTemplate: Record<string, unknown>
+    daePretty: string
     rendered: string
     modelName: string
     usedLibraries: boolean
@@ -136,12 +342,88 @@ export class ModelicaWorkerClient {
     return this.request({ type: 'compile_render', payload })
   }
 
-  loadMslZip(fileName: string, bytes: ArrayBuffer): Promise<{ fileCount: number; parsedCount: number; archiveName: string; documentCount: number }> {
-    return this.request({ type: 'load_msl_zip', payload: { fileName, bytes } }, [bytes])
+  renderModelicaView(payload: {
+    modelicaSource: string
+    modelName: string
+    useSourceRoots: boolean
+    view: 'base-modelica' | 'flat-modelica' | 'dae-modelica'
+  }): Promise<{ view: 'base-modelica' | 'flat-modelica' | 'dae-modelica'; rendered: string }> {
+    return this.request({ type: 'render_modelica_view', payload })
   }
 
-  mergeMslZip(fileName: string, bytes: ArrayBuffer): Promise<{ fileCount: number; parsedCount: number; archiveName: string; documentCount: number }> {
+  loadMslZip(
+    fileName: string,
+    bytes: ArrayBuffer,
+    lazyIndex?: LazyModelicaLibraryIndex,
+  ): Promise<{
+    fileCount: number
+    parsedCount: number
+    archiveName: string
+    documentCount: number
+    loadMode?: 'lazy-index' | 'index' | 'parsed'
+    classCount?: number
+    sourceRootUris: string[]
+    classes?: LazyModelicaClassTreeNode[]
+    lazyIndex?: LazyModelicaLibraryIndex
+  }> {
+    const payload: { fileName: string; bytes: ArrayBuffer; lazyIndex?: LazyModelicaLibraryIndex } =
+      {
+        fileName,
+        bytes,
+      }
+    if (lazyIndex) payload.lazyIndex = lazyIndex
+    return this.request({ type: 'load_msl_zip', payload }, [bytes])
+  }
+
+  mergeMslZip(
+    fileName: string,
+    bytes: ArrayBuffer,
+  ): Promise<{
+    fileCount: number
+    parsedCount: number
+    archiveName: string
+    documentCount: number
+    loadMode?: 'merge'
+    sourceRootUris: string[]
+  }> {
     return this.request({ type: 'merge_msl_zip', payload: { fileName, bytes } }, [bytes])
+  }
+
+  materializeLibraryClasses(qualifiedNames: string[]): Promise<{
+    parsedCount: number
+    insertedCount: number
+    documentCount: number
+    materializedFileCount: number
+    requestedClassCount: number
+  }> {
+    return this.request({
+      type: 'materialize_library_classes',
+      payload: { qualifiedNames },
+    })
+  }
+
+  materializeDiagramClasses(payload: {
+    source: string
+    qualifiedName?: string
+    fileName?: string
+  }): Promise<{
+    materializedFileCount: number
+    requestedClassCount: number
+    passCount: number
+  }> {
+    return this.request({
+      type: 'materialize_diagram_classes',
+      payload,
+    })
+  }
+
+  materializeAllLibraries(): Promise<{
+    parsedCount: number
+    insertedCount: number
+    documentCount: number
+    materializedFileCount: number
+  }> {
+    return this.request({ type: 'materialize_all_libraries' })
   }
 
   clearLibraries(): Promise<{ ok: true }> {
@@ -164,18 +446,76 @@ export class ModelicaWorkerClient {
     return this.request({ type: 'extract_diagram', payload })
   }
 
-  parseSourceAst(payload: {
+  extractDiagramPreview(payload: {
     source: string
+    qualifiedName?: string
     fileName?: string
   }): Promise<Record<string, unknown>> {
+    return this.request({ type: 'extract_diagram_preview', payload })
+  }
+
+  parseSourceAst(payload: { source: string; fileName?: string }): Promise<Record<string, unknown>> {
     return this.request({ type: 'parse_source_ast', payload })
   }
 
-  lspCompletionWithTiming(source: string, line: number, character: number): Promise<Record<string, unknown>> {
+  lspCompletionWithTiming(
+    source: string,
+    line: number,
+    character: number,
+  ): Promise<Record<string, unknown>> {
     return this.request({
       type: 'lsp_completion_with_timing',
       payload: { source, line, character },
     })
+  }
+
+  getSimulationModels(payload: { source: string; defaultModel?: string }): Promise<{
+    ok?: boolean
+    models?: string[]
+    selectedModel?: string | null
+    error?: string | null
+  }> {
+    return this.request({ type: 'get_simulation_models', payload })
+  }
+
+  startSimulation(payload: {
+    source: string
+    modelName: string
+    tEnd: number
+    dt: number
+    solver: string
+  }): Promise<Record<string, unknown>> {
+    return this.request({ type: 'start_simulation', payload })
+  }
+
+  getBundledSourceRootManifest(): Promise<BundledSourceRootManifest> {
+    return this.request<BundledSourceRootManifest>({ type: 'get_bundled_source_root_manifest' })
+  }
+
+  loadBundledSourceRootCache(
+    archiveId: string,
+  ): Promise<{ archiveId: string; documentCount: number }> {
+    return this.request({
+      type: 'load_bundled_source_root_cache',
+      payload: { archiveId },
+    })
+  }
+
+  exportSourceRootBinaryCache(uris: string[]): Promise<Uint8Array> {
+    return this.request<Uint8Array>({
+      type: 'export_source_root_binary_cache',
+      payload: { uris },
+    })
+  }
+
+  restoreSourceRootBinaryCache(bytes: ArrayBuffer): Promise<number> {
+    return this.request<number>(
+      {
+        type: 'restore_source_root_binary_cache',
+        payload: { bytes },
+      },
+      [bytes],
+    )
   }
 
   getSourceRootDocumentCount(): Promise<number> {

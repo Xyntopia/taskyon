@@ -85,6 +85,7 @@ export type DiagramComponent = {
   id: string
   name: string
   typeName: string
+  qualifiedTypeName?: string
   description?: string
   iconValues?: Record<string, string>
   placement?: DiagramPlacementTransform
@@ -112,6 +113,7 @@ export type DiagramConnection = {
 
 export type ModelicaDiagramDto = {
   className: string
+  classIcon?: DiagramIconSpec
   components: DiagramComponent[]
   connections: DiagramConnection[]
 }
@@ -124,4 +126,6 @@ export type DiagramExtractRequest = {
 
 export interface ModelicaDiagramExtractor {
   extract: (request: DiagramExtractRequest) => Promise<ModelicaDiagramDto>
+  extractPreview?: (request: DiagramExtractRequest) => Promise<ModelicaDiagramDto>
+  materialize?: (request: DiagramExtractRequest) => Promise<void>
 }

@@ -1,4 +1,3 @@
-<!-- eslint-disable vue/no-v-html -->
 <template>
   <div
     class="procedural-spaceship"
@@ -14,7 +13,12 @@
         :alt="`Procedural spaceship identicon generated from ${normalizedSeed}`"
         draggable="false"
       />
-      <div v-else-if="svgMarkup" class="procedural-spaceship__svg-fallback" v-html="svgMarkup" />
+      <SanitizedMarkup
+        v-else-if="sanitizedSvgMarkup"
+        class="procedural-spaceship__svg-fallback"
+        :markup="svgMarkup"
+        :sanitize="sanitizeSvgMarkup"
+      />
       <div v-else class="procedural-spaceship__placeholder" :style="placeholderStyle" />
     </div>
   </div>
@@ -22,12 +26,12 @@
 
 <script setup lang="ts">
 import type { RewindPolicy } from './spaceshipSchemas'
-import type {
-  SpaceshipLibraryFile,
-} from './spaceshipSchemas'
+import type { SpaceshipLibraryFile } from './spaceshipSchemas'
 import { spaceshipLibrarySchema } from './spaceshipSchemas'
 import { DEFAULT_SPACESHIP_LIBRARY } from './proceduralSpaceship'
 import { getSpaceshipImage, normalizeSpaceshipSeed } from './spaceshipIdenticonCache'
+import SanitizedMarkup from '../components/SanitizedMarkup.vue'
+import { sanitizeSvgMarkup } from '../modules/sanitizeMarkup'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 const DEBUG_SPACESHIP_IDENTICON = false
 
@@ -79,8 +83,11 @@ const containerStyle = computed(() => ({
   height: `${effectiveSize.value}px`,
 }))
 const placeholderStyle = computed(() => ({
-  background: effectiveLibrary.value.algorithm.showBackground ? props.backgroundFill : 'transparent',
+  background: effectiveLibrary.value.algorithm.showBackground
+    ? props.backgroundFill
+    : 'transparent',
 }))
+const sanitizedSvgMarkup = computed(() => sanitizeSvgMarkup(svgMarkup.value))
 
 function identiconDebug(message: string, details?: Record<string, unknown>) {
   if (!DEBUG_SPACESHIP_IDENTICON) return
@@ -120,7 +127,9 @@ watch(
     () => props.preferDeeperRewindOnRepeat,
     () => props.catalogVersion,
   ],
-  () => { scheduleRefresh('core prop watcher') },
+  () => {
+    scheduleRefresh('core prop watcher')
+  },
   { immediate: true, deep: true },
 )
 watch(
@@ -159,9 +168,7 @@ async function refreshImage(reason = 'unspecified') {
     stages: effectiveLibrary.value.algorithm.stages,
     gridSize: effectiveLibrary.value.algorithm.gridSize,
     randomSvgColors: effectiveLibrary.value.algorithm.randomSvgColors,
-    ...(props.maxGlobalRewinds !== undefined
-      ? { maxGlobalRewinds: props.maxGlobalRewinds }
-      : {}),
+    ...(props.maxGlobalRewinds !== undefined ? { maxGlobalRewinds: props.maxGlobalRewinds } : {}),
     ...(props.maxIntraStageBacktracks !== undefined
       ? { maxIntraStageBacktracks: props.maxIntraStageBacktracks }
       : {}),

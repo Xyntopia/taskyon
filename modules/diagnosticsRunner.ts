@@ -1,5 +1,6 @@
 export interface TaskyonTestFn {
   (opts?: { tyauth?: string; isCypress?: boolean }): unknown
+  setup?: (opts?: { tyauth?: string; isCypress?: boolean }) => unknown
   description?: string
   gui?: boolean
   experimental?: boolean
@@ -34,6 +35,8 @@ export type DiagnosticsRunResult = {
   details?: unknown
   error?: unknown
 }
+
+const MAX_DIAGNOSTICS_TEST_TIMEOUT_MS = 20_000
 
 function camelToNormal(input: string): string {
   if (!input) return ''
@@ -124,7 +127,8 @@ export async function runDiagnosticsTests(
   },
 ): Promise<DiagnosticsRunResult[]> {
   const details = opts?.details ?? false
-  const defaultTimeoutMs = opts?.timeoutMs ?? 60_000
+  const requestedDefaultTimeoutMs = opts?.timeoutMs ?? MAX_DIAGNOSTICS_TEST_TIMEOUT_MS
+  const defaultTimeoutMs = Math.min(requestedDefaultTimeoutMs, MAX_DIAGNOSTICS_TEST_TIMEOUT_MS)
   const out: DiagnosticsRunResult[] = []
 
   const withTimeout = async (name: string, timeoutMs: number, fn: () => Promise<unknown>) => {
@@ -156,9 +160,12 @@ export async function runDiagnosticsTests(
         if (opts?.tyauth !== undefined) testOpts.tyauth = opts.tyauth
         if (opts?.isCypress !== undefined) testOpts.isCypress = opts.isCypress
       }
+      if (typeof testFn.setup === 'function') {
+        await Promise.resolve(testFn.setup(testOpts))
+      }
       const timeoutMs = testFn.timeoutMs ?? defaultTimeoutMs
       const run = () => Promise.resolve(testFn(testOpts))
-      const result = timeoutMs !== undefined ? await withTimeout(name, timeoutMs, run) : await run()
+      const result = await withTimeout(name, timeoutMs, run)
       out.push({
         name,
         ok: true,

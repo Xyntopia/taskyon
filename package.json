@@ -21,6 +21,7 @@
     "@vueuse/core": "^14.2.1",
     "codemirror": "^6.0.1",
     "codemirror-lang-mermaid": "^0.5.0",
+    "dompurify": "^3.4.8",
     "echarts": "^6.0.0",
     "fast-equals": "^5.0.1",
     "fflate": "^0.8.2",
@@ -41,7 +42,7 @@
     "pmtiles": "^4.4.1",
     "prismjs": "^1.30.0",
     "qrcode": "^1.5.4",
-    "rumoca": "^0.8.13",
+    "rumoca-full-web": "npm:@cognipilot/rumoca@^0.9.8",
     "vue-codemirror": "^6.1.1"
   }
 }

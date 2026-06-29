@@ -228,7 +228,7 @@ ${sourcesSection}
 ## Generated JavaScript
 \`\`\`\n${jsSource.value}\n\`\`\`
 
-## Pretty DAE
+## Base DAE
 \`\`\`\n${daePrettyOutput.value}\n\`\`\`
 
 ## Recent logs
@@ -259,7 +259,6 @@ ${sourcesSection}
       return makeTaskResult([
         createChatCompletionTask({
           prompts: [contextPrompt],
-          goal: 'ChooseTool',
           allowedTools: [
             'updateModelicaDocument',
             'getModelicaCompilerStatus',
@@ -443,7 +442,6 @@ Constraints:
         [
           createChatCompletionTask({
             prompts: [cyclePrompt],
-            goal: 'ChooseTool',
             allowedTools: ['updateModelicaDocument'],
           }),
           toolCall({
@@ -529,7 +527,6 @@ Constraints:
             prompts: [
               'You called updateModelicaDocument but did not provide any patches or newContent. Provide edits or do not call the tool.',
             ],
-            goal: 'ChooseTool',
             allowedTools: ['updateModelicaDocument'],
           }),
         ])

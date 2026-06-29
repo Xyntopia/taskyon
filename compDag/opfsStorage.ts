@@ -1,6 +1,27 @@
 // opfsStorage.ts
 // Minimal OPFS helpers for read/write by path.
 
+export {}
+
+const hasBrowserOpfs = (): boolean =>
+  typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function'
+
+const nodeOpfsRoot = (): string => {
+  const proc = globalThis as unknown as { process?: { cwd?: () => string; env?: Record<string, string | undefined> } }
+  const cwd = proc.process?.cwd?.() ?? '.'
+  return proc.process?.env?.TASKYON_NODE_OPFS_ROOT ?? `${cwd}/.joulios/opfs`
+}
+
+const safeNodePath = async (path: string): Promise<string> => {
+  const pathMod = await import(/* @vite-ignore */ 'node:path')
+  const root = pathMod.resolve(nodeOpfsRoot())
+  const resolved = pathMod.resolve(root, path)
+  if (resolved !== root && !resolved.startsWith(`${root}${pathMod.sep}`)) {
+    throw new Error(`OPFS path escapes Node storage root: ${path}`)
+  }
+  return resolved
+}
+
 /**
  * Returns the origin private file system root directory handle.
  *
@@ -38,6 +59,11 @@ async function getFileHandle(path: string, create: boolean): Promise<FileSystemF
  * @returns the file contents as a File object
  */
 export async function openFile(path: string): Promise<File> {
+  if (!hasBrowserOpfs()) {
+    const fs = await import(/* @vite-ignore */ 'node:fs/promises')
+    const data = await fs.readFile(await safeNodePath(path))
+    return new File([data], path.split('/').pop() ?? 'data')
+  }
   const handle = await getFileHandle(path, false)
   return handle.getFile()
 }
@@ -50,6 +76,14 @@ export async function openFile(path: string): Promise<File> {
  * @returns a promise that resolves when the write completes
  */
 export async function writeFile(path: string, file: File): Promise<void> {
+  if (!hasBrowserOpfs()) {
+    const fs = await import(/* @vite-ignore */ 'node:fs/promises')
+    const pathMod = await import(/* @vite-ignore */ 'node:path')
+    const target = await safeNodePath(path)
+    await fs.mkdir(pathMod.dirname(target), { recursive: true })
+    await fs.writeFile(target, new Uint8Array(await file.arrayBuffer()))
+    return
+  }
   const handle = await getFileHandle(path, true)
   const writable = await handle.createWritable()
   await writable.write(file)
@@ -62,6 +96,11 @@ export async function writeFile(path: string, file: File): Promise<void> {
  * @param path the OPFS path to delete
  */
 export async function deleteFile(path: string): Promise<void> {
+  if (!hasBrowserOpfs()) {
+    const fs = await import(/* @vite-ignore */ 'node:fs/promises')
+    await fs.rm(await safeNodePath(path), { force: true })
+    return
+  }
   const root = await getRoot()
   const parts = path.split('/').filter((p) => p.length > 0)
   if (parts.length === 0) return
@@ -80,6 +119,11 @@ export async function deleteFile(path: string): Promise<void> {
  * @returns file names in the directory (not recursive)
  */
 export async function listFiles(dirPath: string): Promise<string[]> {
+  if (!hasBrowserOpfs()) {
+    const fs = await import(/* @vite-ignore */ 'node:fs/promises')
+    const entries = await fs.readdir(await safeNodePath(dirPath), { withFileTypes: true })
+    return entries.filter((entry) => entry.isFile()).map((entry) => entry.name)
+  }
   const root = await getRoot()
   const parts = dirPath.split('/').filter((p) => p.length > 0)
   let dir = root
