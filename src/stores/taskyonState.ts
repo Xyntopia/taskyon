@@ -719,8 +719,22 @@ const useApiManagement = (
       await ty.updateChatCompletionApiKey(name, value)
     }
     // and keep track of it internally
-    availableKeys.value[name] = value
+    availableKeys.value = { ...availableKeys.value, [name]: value }
   })
+
+  if (process.env.DEV && typeof window !== 'undefined') {
+    const target = window as Window & {
+      __taskyonE2E?: {
+        setProviderApiKey: (name: string, value: KeyString | undefined) => Promise<void>
+        availableProviders: () => string[]
+      }
+    }
+    target.__taskyonE2E = {
+      ...target.__taskyonE2E,
+      setProviderApiKey,
+      availableProviders: () => availableProviders.value,
+    }
+  }
 
   ///////////   computed properties
   const providerDefs = computed(() => Object.keys(stateRefs.llmSettings.llmApis))
@@ -1421,6 +1435,19 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           })
         return
       }
+      if (msg.type === 'createTaskChainRequest') {
+        void Promise.all(msg.tasks.map((task) => ensureValidTaskId(task)))
+          .then((tasks) => {
+            const taskIds = tasks.map((task) => task.id)
+            markTasksPendingCreation(taskIds)
+            if (msg.show) stateRefs.navigateToTask(taskIds.at(-1), { replace: true })
+            ty.port.send({ ...msg, tasks })
+          })
+          .catch((error) => {
+            console.error('an error occured during handling of the createTaskChain command', error)
+          })
+        return
+      }
       const parsed = TaskyonMessage.safeParse(msg)
       if (parsed.success) ty.port.send(parsed.data)
       else console.log('unknown message:', msg)
@@ -1433,7 +1460,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     console.log('checking if we are in an iframe!')
 
     /// -------   IFRAME operations --------
-    // We load the iframe here with the iframe=true parameter to make test in cypress work!
+    // We load the iframe here with the iframe=true parameter to make embedded e2e tests work.
     // set up iframe API and hook it up to our taskyon api
     //if ($q.platform.within.iframe) {
     if (stateRefs.isInIframe) {

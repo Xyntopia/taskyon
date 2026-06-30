@@ -112,7 +112,7 @@
 | Modelica CLI              | `yarn modelica:cli`                                              |
 | Modelica compare          | `yarn modelica:compare`                                          |
 | Modelica baseline diff    | `yarn modelica:baseline:diff`                                    |
-| Cypress e2e               | `yarn quasar test:e2e:cypress` (or via Quasar CLI)               |
+| Playwright e2e            | `yarn test:e2e`                                                  |
 
 ## Architecture
 

@@ -49,7 +49,9 @@ public/taskyon_settings.json
 public/docs/openapi-docs.yml
 
 # holds test results...
-test/cypress/screenshots
+test-results/playwright
+test-results/
+playwright-report/
 
 # this file holds secrets
 cypress.env.json

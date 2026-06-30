@@ -220,21 +220,24 @@ Notes:
 - Uses `OMC_PODMAN_IMAGE` (default `openmodelica/openmodelica:v1.26.1-gui`).
 - Output traces are written to `packages/rumoca/target/msl/results/sim_traces/omc`.
 
-### End-to-End (E2E) with Cypress
+### End-to-End (E2E) with Playwright
 
 - **Run headless**:
 
   ```bash
-  cypress run --e2e
+  yarn test:e2e
   ```
 
 - **Open interactive UI**:
 
   ```bash
-  yarn cypress open --e2e
+  yarn test:e2e:ui
   ```
 
-- **Video recordings**: Stored in `test/cypress/videos/` for post-mortem.
+- **Artifacts**: Reports are written to `playwright-report/`; traces, videos, and screenshots are
+  written to `test-results/`.
+- **Online tests**: Specs that call live model providers skip automatically unless
+  `cypress.env.json` contains `openai_api_key` and `openrouter_api_key`.
 
 All E2E tests must pass before merging feature branches.
 

@@ -145,6 +145,7 @@ export default defineConfig((ctx) => {
     './../packages/rumoca',
     './../packages/taskyon-vscode',
     './../packages/yatra',
+    './../tycli-e2e-runs',
   ]
 
   return {

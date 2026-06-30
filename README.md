@@ -133,6 +133,7 @@ Common commands:
 
 - `yarn dev` starts the development app.
 - `yarn build` creates a production build.
+- `yarn test:e2e` runs the Playwright browser E2E suite.
 - `yarn lint` runs typechecking and ESLint.
 - `yarn format:file <path...>` formats specific files.
 

@@ -1,7 +1,7 @@
 <template>
   <div class="column">
     <div class="col-6">
-      <!--We load the iframe here with the iframe=true parameter to make test in cypress work!-->
+      <!--We load the iframe here with the iframe=true parameter to make embedded e2e tests work.-->
       <iframe id="taskyon" frameborder="0" :src="iframeSrc" width="100%" height="500px"></iframe>
     </div>
     <div class="row">
@@ -162,7 +162,10 @@ async function startClientTest() {
     console.log('client received message from iframe:', msg)
   })*/
   try {
-    const res = await tyclient.value?.runTasks(tasks, 'message', { timeoutMs: 50000 })
+    const res = await tyclient.value?.runTasks(tasks, 'message', {
+      timeoutMs: 50000,
+      display: 'activeChat',
+    })
     taskResult.value = res
     console.log('client received result:')
   } catch (error) {
@@ -208,7 +211,7 @@ async function startFileUpload() {
       ],
     ],
     'message',
-    { timeoutMs: 50000 },
+    { timeoutMs: 50000, display: 'activeChat' },
   )
   taskResult.value = res
   console.log('client received result:')

@@ -71,7 +71,10 @@
     "tycli:lint": "yarn workspace @taskyon/tycli lint",
     "tycli:typecheck": "yarn workspace @taskyon/tycli typecheck",
     "tycli:prod": "yarn tycli:build && node packages/tycli/dist/cli.cjs",
-    "tycli": "yarn workspace @taskyon/tycli dev"
+    "tycli": "yarn workspace @taskyon/tycli dev",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.13",
@@ -128,10 +131,10 @@
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@intlify/unplugin-vue-i18n": "^11.0.3",
+    "@playwright/test": "^1.55.0",
     "@quasar/app-vite": "^2.3.0",
     "@quasar/cli": "^2.5.0",
     "@quasar/icongenie": "^5.0.0",
-    "@quasar/quasar-app-extension-testing-e2e-cypress": "^6.2.1",
     "@tauri-apps/cli": "^2.10.1",
     "@tauri-apps/tauricon": "github:tauri-apps/tauricon",
     "@types/html-to-text": "^9.0.4",
@@ -152,10 +155,8 @@
     "@vue/eslint-config-typescript": "^14.4.0",
     "@vue/test-utils": "^2.3.0",
     "autoprefixer": "^10.4.2",
-    "cypress": "^15.9.0",
     "dependency-cruiser": "^16.8.0",
     "eslint": "^9.14.0",
-    "eslint-plugin-cypress": "^2.15.1",
     "eslint-plugin-vue": "^10.4.0",
     "globals": "^16.4.0",
     "json-schema-to-ts": "^3.1.1",

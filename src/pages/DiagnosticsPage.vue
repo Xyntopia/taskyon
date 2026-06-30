@@ -173,6 +173,7 @@ import {
 } from '../../packages/taskyon/src/tests/conversation/test_time_question_conversation'
 import {
   buildDiagnosticsRegistry,
+  type DiagnosticsTestContext,
   runDiagnosticsTests,
   type TaskyonTestFn,
   type TestRecord,
@@ -186,6 +187,9 @@ const testModules = import.meta.glob(
     '!../../packages/taskyon/src/tests/test_entry_node_error_recovery.ts',
     '!../../packages/taskyon/src/tests/test_entry_node_websearch.ts',
     '!../../packages/taskyon/src/tests/test_remote_function_bridge.ts',
+    '!../../packages/taskyon/src/tests/test_taskyon.space_api.ts',
+    '!../../packages/taskyon/src/tests/test_taskyon_documentation_conversation.ts',
+    '!../../packages/taskyon/src/tests/test_task_worker_settlement.ts',
     '../../packages/common/modules/test_*.ts',
     '../../packages/surrogate/test_*.ts',
   ],
@@ -224,15 +228,46 @@ onMounted(async () => {
   })
 })
 
+const withDiagnosticsFlags = (
+  mod: unknown,
+  flagsByName: Record<string, Partial<Pick<TaskyonTestFn, 'experimental' | 'gui' | 'timeoutMs'>>>,
+) =>
+  Object.fromEntries(
+    Object.entries((mod ?? {}) as Record<string, unknown>).map(([name, value]) => {
+      if (typeof value !== 'function') return [name, value]
+      const testFn = ((context?: DiagnosticsTestContext) =>
+        Promise.resolve((value as TaskyonTestFn)(context))) as TaskyonTestFn
+      Object.assign(testFn, value, flagsByName[name] ?? {})
+      return [name, testFn]
+    }),
+  )
+
 const modules = Object.entries(testModules).map(([sourcePath, mod]) => ({ sourcePath, mod }))
-modules.push({ sourcePath: 'src/modules/taskyon/tests.ts', mod: TaskyonTests })
+modules.push({
+  sourcePath: 'src/modules/taskyon/tests.ts',
+  mod: withDiagnosticsFlags(TaskyonTests, {
+    testChatCompletionTaskyonProxyMetadata: { experimental: true },
+    testChatCompletionTaskyonProxyMint: { experimental: true },
+    testChatCompletionWebSearch: { experimental: true },
+    testFileUpload: { experimental: true },
+  }),
+})
 modules.push({
   sourcePath: 'src/modules/taskyon/taskyonUiInteractionTests.ts',
-  mod: TaskyonUiInteractionTests,
+  mod: withDiagnosticsFlags(TaskyonUiInteractionTests, {
+    testTaskyonUiSimpleChatInteraction: { gui: true },
+    testTaskyonUiToolInteraction: { gui: true },
+    testTaskyonUiWebSearchInteraction: { gui: true },
+  }),
 })
 modules.push({
   sourcePath: 'src/modules/modelica/modelicaDiagnostics.ts',
-  mod: ModelicaDiagnostics,
+  mod: withDiagnosticsFlags(
+    ModelicaDiagnostics,
+    Object.fromEntries(
+      Object.keys(ModelicaDiagnostics).map((name) => [name, { experimental: true }]),
+    ),
+  ),
 })
 modules.push({
   sourcePath: 'src/pages/DiagnosticsPage.vue',
@@ -244,6 +279,7 @@ modules.push({
       },
       {
         description: packageTimeQuestionConversationTest.description,
+        experimental: true,
         timeoutMs: packageTimeQuestionConversationTest.timeoutMs,
       },
     ),

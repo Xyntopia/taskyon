@@ -110,6 +110,7 @@ export type ProcessTasksInterruptHook = (
 export type processTasksOpts = {
   timeoutMs?: number
   signal?: AbortSignal
+  display?: 'activeChat' | 'background'
   show?: boolean
   throwOnError?: boolean
   interruptOnSettle?: ProcessTasksInterruptHook
@@ -251,11 +252,12 @@ const createSendTasks = <Rx extends { type: string }>(
 ): SendTasksFunction => {
   return async (taskList, opts) => {
     const tasks = await forgeTaskChain(taskList)
+    const show = opts.show ?? opts.display !== 'background'
 
     await createTaskChain({
       tasks: tasks,
       execute: true,
-      show: opts.show ?? true, // we want to show this task in our GUI as a succesful test
+      show,
     })
 
     const initialIds = tasks.map((t) => t.id)
