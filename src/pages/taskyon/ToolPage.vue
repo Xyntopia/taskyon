@@ -191,7 +191,7 @@ import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
 import { copyToClipboard } from '@taskyon/shared/modules/utils'
 import type { InternalTool, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
 import { craeteToolJsonSchema, createTaskNode, ToolBase } from '@taskyon/taskyon'
-import { createPortRpcClient, taskyonProtocol } from '@taskyon/tyclient'
+import { createTaskyonClient } from '@taskyon/tyclient'
 import TaskChainPublishDialog from 'src/components/taskyon/TaskChainPublishDialog.vue'
 import UnderConstructionHint from '@taskyon/shared/components/UnderConstructionHint.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
@@ -285,7 +285,7 @@ function switchTool(toolName?: string) {
 
 const allTools = asyncComputed(async () => {
   const ty = await tystate.taskyon
-  const tools = await createPortRpcClient(ty.port, taskyonProtocol.rpc.listTools)({})
+  const tools = await createTaskyonClient(ty.port).listTools({})
   return tools
 }, undefined)
 

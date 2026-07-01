@@ -7,8 +7,9 @@ import { appendFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/p
 import { join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { inspect } from 'node:util'
-import { createDuplexChannel, createUnavailableIframeMux } from '../../shared/modules/frpBus'
-import { createPortRpcClient, taskyonProtocol } from '@taskyon/tyclient'
+import type { createDuplexChannel } from '../../shared/modules/frpBus'
+import { createUnavailableIframeMux } from '../../shared/modules/frpBus'
+import { createProtocolPort, createTaskyonClient, taskyonProtocol } from '@taskyon/tyclient'
 import {
   createClientTool,
   createTaskNode,
@@ -1504,10 +1505,7 @@ async function handleProviderCommand(
 }
 
 async function handleToolsCommand(ty: Taskyon, target?: Record<string, { hideChat?: boolean }>) {
-  const all = await createPortRpcClient(
-    ty.port,
-    taskyonProtocol.rpc.listTools,
-  )({ includeHidden: true })
+  const all = await createTaskyonClient(ty.port).listTools({ includeHidden: true })
   if (target) {
     for (const key of Object.keys(target)) delete target[key]
     for (const [name, def] of Object.entries(
@@ -1532,10 +1530,7 @@ async function refreshToolRenderOptions(
   ty: Taskyon,
   target: Record<string, { hideChat?: boolean }>,
 ) {
-  const all = await createPortRpcClient(
-    ty.port,
-    taskyonProtocol.rpc.listTools,
-  )({ includeHidden: true })
+  const all = await createTaskyonClient(ty.port).listTools({ includeHidden: true })
   for (const key of Object.keys(target)) delete target[key]
   for (const [name, def] of Object.entries(
     all as Record<string, { renderOptions?: { hideChat?: boolean } }>,
@@ -1764,10 +1759,7 @@ async function main() {
     getToolCatalog: async () => {
       const ty = taskyonRef.current
       if (!ty) return []
-      const allTools = await createPortRpcClient(
-        ty.port,
-        taskyonProtocol.rpc.listTools,
-      )({ includeHidden: true })
+      const allTools = await createTaskyonClient(ty.port).listTools({ includeHidden: true })
       return Object.values(allTools)
         .filter(
           (tool: { name: string; description: string }) =>
@@ -1866,7 +1858,8 @@ async function main() {
     }
   }
 
-  const { x: clientPort, y: bridgePort } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()
+  const { x: clientPort, y: bridgePort } = createProtocolPort(taskyonProtocol)
+  const taskyonApi = createTaskyonClient(clientPort)
   const unsubscribeBridgeToTaskyon = bridgePort.receive((msg) => taskyon.port.send(msg))
   const unsubscribeTaskyonToBridge = taskyon.port.receive((msg) => bridgePort.send(msg))
 
@@ -2556,7 +2549,11 @@ async function main() {
       currentLeafId = taskChain[taskChain.length - 1]?.id ?? currentLeafId
       queueConversationPersist(currentLeafId)
 
-      clientPort.send({ type: 'tasks', tasks: taskChain, execute: true, show: true })
+      await taskyonApi.createTaskChain({
+        tasks: taskChain,
+        execute: true,
+        show: true,
+      })
       writeDebug(`queued task chain: ${taskChain.map((task) => task.id).join(', ')}`)
       try {
         waitingForTask = true

@@ -1,14 +1,13 @@
 import type { RpcMessagePort } from '@taskyon/shared/modules/frpBus'
-import { createStreamRpcRequest } from '@taskyon/shared/modules/frpBus'
+import { createPortClient, createStreamRpcRequest } from '@taskyon/shared/modules/frpBus'
 import type { ReadonlyDeep } from 'type-fest'
 import {
   MAX_REMOTE_FUNCTION_TIMEOUT_MS,
   REMOTE_FUNCTION_TIMEOUT_MS,
-  RemoteFunctionCall,
-  RemoteFunctionCancel,
-  RemoteFunctionResponse,
-} from '../types/messages'
-import { TaskyonMessage, type TaskyonMessage as TaskyonMessageType } from '../types/apiTypes'
+  taskyonProtocol,
+} from '../api/taskyonProtocol'
+import type { z } from 'zod'
+import type { TaskyonMessage as TaskyonMessageType } from '../types/apiTypes'
 import {
   createSubtasksResult,
   InternalTool as InternalToolSchema,
@@ -20,17 +19,29 @@ import { executeToolInWorkerSandbox } from '../utils/executeToolInWorkerSandbox'
 import { humanizeError, serializeError } from '../utils/error'
 import { bigIntToString } from '../utils/objHelpers'
 
-export type ToolRpcCallMessage = RemoteFunctionCall | RemoteFunctionCancel
+const remoteFunctionProtocol = taskyonProtocol.streams.toolExecution
+
+export type ToolRpcFunctionCallMessage = z.infer<typeof remoteFunctionProtocol.functionCall>
+export type ToolRpcFunctionCancelMessage = z.infer<typeof remoteFunctionProtocol.functionCancel>
+export type ToolRpcFunctionResponseMessage = z.infer<typeof remoteFunctionProtocol.functionResponse>
+
+export type ToolRpcCallMessage = ToolRpcFunctionCallMessage | ToolRpcFunctionCancelMessage
 export type ToolRpcCallerPort = RpcMessagePort<ToolRpcCallMessage>
-export type ToolRpcResponderPort = RpcMessagePort<RemoteFunctionResponse>
+export type ToolRpcResponderPort = RpcMessagePort<ToolRpcFunctionResponseMessage>
+export type ToolExecutionCallOptions = {
+  signal?: AbortSignal
+  stopSignal?: AbortSignal
+  taskId?: string | undefined
+  requestIdPrefix?: string
+  defaultTimeoutMs?: number
+}
 export type ToolRpcCreateContext = Parameters<typeof registerToolRpcExecutor>[0]['createContext']
 export type ToolRpcFunctionDescriptionMessage = Extract<
   TaskyonMessageType,
-  { type: 'functionDescription' }
+  { type: 'registerToolRequest' }
 >
-type ToolRpcNewToolStatusMessage = Extract<TaskyonMessageType, { type: 'status' }>
 type ToolRpcRegistrationPort = {
-  send: (message: RemoteFunctionResponse | ToolRpcFunctionDescriptionMessage) => void
+  send: (message: ToolRpcFunctionResponseMessage | ToolRpcFunctionDescriptionMessage) => void
   receive: ToolRpcResponderPort['receive'] & {
     wait: (opts: { timeoutMs?: number; signal?: AbortSignal }) => Promise<unknown>
   }
@@ -41,10 +52,13 @@ let remoteFunctionRequestCounter = 0
 const createRemoteFunctionRequestId = (name: string) =>
   `${name}-${Date.now()}-${remoteFunctionRequestCounter++}`
 
-const resolveRemoteFunctionTimeoutMs = (args: ReadonlyDeep<FunctionArguments>) => {
+const resolveRemoteFunctionTimeoutMs = (
+  args: ReadonlyDeep<FunctionArguments>,
+  defaultTimeoutMs = REMOTE_FUNCTION_TIMEOUT_MS,
+) => {
   const timeoutMs = args.timeoutMs
   if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs)) {
-    return REMOTE_FUNCTION_TIMEOUT_MS
+    return defaultTimeoutMs
   }
   return Math.min(
     Math.max(Math.trunc(timeoutMs), REMOTE_FUNCTION_TIMEOUT_MS),
@@ -61,36 +75,38 @@ function errorFromRemoteResponse(name: string, requestId: string, error: unknown
 export async function callToolOverRpc(
   func: ReadonlyDeep<FunctionCall>,
   port: ToolRpcCallerPort,
-  options?: {
-    stopSignal?: AbortSignal
-    taskId?: string | undefined
-  },
+  options?: ToolExecutionCallOptions,
 ): Promise<unknown> {
-  const requestId = createRemoteFunctionRequestId(func.name)
-  const timeoutMs = resolveRemoteFunctionTimeoutMs(func.arguments)
+  const requestId = createRemoteFunctionRequestId(options?.requestIdPrefix ?? func.name)
+  const timeoutMs = resolveRemoteFunctionTimeoutMs(func.arguments, options?.defaultTimeoutMs)
 
-  const message = RemoteFunctionCall.parse({
+  const message = remoteFunctionProtocol.functionCall.parse({
     type: 'functionCall',
     functionName: func.name,
     requestId,
     taskId: options?.taskId,
     arguments: func.arguments,
   })
-  return await createStreamRpcRequest<ToolRpcCallMessage, RemoteFunctionResponse, unknown, never>({
+  return await createStreamRpcRequest<
+    ToolRpcCallMessage,
+    ToolRpcFunctionResponseMessage,
+    unknown,
+    never
+  >({
     port,
     request: message,
     requestId,
     timeoutMs,
-    signal: options?.stopSignal,
+    signal: options?.signal ?? options?.stopSignal,
     createCancelRequest: (reason) =>
-      RemoteFunctionCancel.parse({
+      remoteFunctionProtocol.functionCancel.parse({
         type: 'functionCancel',
         functionName: func.name,
         requestId,
         reason,
       }),
     parseResponse: (value) => {
-      const response = RemoteFunctionResponse.safeParse(value)
+      const response = remoteFunctionProtocol.functionResponse.safeParse(value)
       if (response.success) return response.data
       return undefined
     },
@@ -107,17 +123,36 @@ export async function callToolOverRpc(
   })
 }
 
+export const createToolExecutionClient = (port: ToolRpcCallerPort) => ({
+  callTool: async (
+    name: string,
+    args: ReadonlyDeep<FunctionArguments>,
+    options?: ToolExecutionCallOptions,
+  ) =>
+    await callToolOverRpc(
+      {
+        name,
+        arguments: args,
+      },
+      port,
+      options,
+    ),
+})
+
 export function registerToolRpcBroker(options: {
   workerPort: ToolRpcResponderPort
   toolPort: ToolRpcCallerPort
   prepareFunctionCall: (
-    call: RemoteFunctionCall,
+    call: ToolRpcFunctionCallMessage,
     stopSignal: AbortSignal,
   ) => Promise<FunctionCall> | FunctionCall
 }) {
   const pending = new Map<string, AbortController>()
 
-  const respond = (call: RemoteFunctionCall, response: { response?: unknown; error?: unknown }) => {
+  const respond = (
+    call: ToolRpcFunctionCallMessage,
+    response: { response?: unknown; error?: unknown },
+  ) => {
     options.workerPort.send({
       type: 'functionResponse',
       ...response,
@@ -127,14 +162,14 @@ export function registerToolRpcBroker(options: {
   }
 
   const unsubscribe = options.workerPort.receive(async (msg) => {
-    const cancel = RemoteFunctionCancel.safeParse(msg)
+    const cancel = remoteFunctionProtocol.functionCancel.safeParse(msg)
     if (cancel.success) {
       pending.get(cancel.data.requestId)?.abort(cancel.data.reason)
       pending.delete(cancel.data.requestId)
       return
     }
 
-    const call = RemoteFunctionCall.safeParse(msg)
+    const call = remoteFunctionProtocol.functionCall.safeParse(msg)
     if (!call.success) return
 
     const abortController = new AbortController()
@@ -215,7 +250,8 @@ export function createExternalToolContext(stopSignal: AbortSignal): toolContext 
 export const createToolRpcFunctionDescriptionMessage = (
   tool: InternalTool,
 ): ToolRpcFunctionDescriptionMessage => ({
-  type: 'functionDescription',
+  type: 'registerToolRequest',
+  requestId: `registerTool-${tool.name}-${Date.now()}`,
   name: tool.name,
   description: tool.description,
   ...(tool.longDescription ? { longDescription: tool.longDescription } : {}),
@@ -223,30 +259,6 @@ export const createToolRpcFunctionDescriptionMessage = (
   parameters: tool.parameters,
   ...(tool.code ? { code: tool.code } : {}),
 })
-
-const isNewToolStatusFor = (
-  message: unknown,
-  toolName: string,
-): message is ToolRpcNewToolStatusMessage => {
-  const parsed = TaskyonMessage.safeParse(message)
-  return (
-    parsed.success &&
-    parsed.data.type === 'status' &&
-    parsed.data.data.type === 'newtool' &&
-    parsed.data.data.id === toolName
-  )
-}
-
-const waitForToolRegistration = async (
-  port: ToolRpcRegistrationPort,
-  toolName: string,
-  timeoutMs: number,
-): Promise<ToolRpcNewToolStatusMessage> => {
-  while (true) {
-    const message = await port.receive.wait({ timeoutMs })
-    if (isNewToolStatusFor(message, toolName)) return message
-  }
-}
 
 const parseExternalRpcTool = (tool: unknown): InternalTool => {
   const parsed = InternalToolSchema.parse(tool)
@@ -269,11 +281,10 @@ export async function registerToolRpcTools(options: {
 }) {
   const tools = options.tools.map(parseExternalRpcTool)
   const timeoutMs = options.timeoutMs ?? REMOTE_FUNCTION_TIMEOUT_MS
+  const taskyonApi = createPortClient(options.port, taskyonProtocol)
   await Promise.all(
     tools.map(async (tool) => {
-      const registration = waitForToolRegistration(options.port, tool.name, timeoutMs)
-      options.port.send(createToolRpcFunctionDescriptionMessage(tool))
-      await registration
+      await taskyonApi.registerTool({ ...tool, timeoutMs })
     }),
   )
   const toolMap = new Map(tools.filter((tool) => tool.function).map((tool) => [tool.name, tool]))
@@ -289,18 +300,21 @@ export function registerToolRpcExecutor(options: {
   port: ToolRpcResponderPort
   getTool: (name: string) => Promise<InternalTool | undefined> | InternalTool | undefined
   prepareFunctionCall?: (
-    call: RemoteFunctionCall,
+    call: ToolRpcFunctionCallMessage,
     tool: InternalTool,
     stopSignal: AbortSignal,
   ) => Promise<FunctionCall> | FunctionCall
   createContext: (
-    call: RemoteFunctionCall,
+    call: ToolRpcFunctionCallMessage,
     stopSignal: AbortSignal,
   ) => Promise<toolContext | { context: toolContext; cleanup?: () => void }> | toolContext
 }) {
   const pending = new Map<string, AbortController>()
 
-  const respond = (call: RemoteFunctionCall, response: { response?: unknown; error?: unknown }) => {
+  const respond = (
+    call: ToolRpcFunctionCallMessage,
+    response: { response?: unknown; error?: unknown },
+  ) => {
     options.port.send({
       type: 'functionResponse',
       ...response,
@@ -310,14 +324,14 @@ export function registerToolRpcExecutor(options: {
   }
 
   const unsubscribe = options.port.receive(async (msg) => {
-    const cancel = RemoteFunctionCancel.safeParse(msg)
+    const cancel = remoteFunctionProtocol.functionCancel.safeParse(msg)
     if (cancel.success) {
       pending.get(cancel.data.requestId)?.abort(cancel.data.reason)
       pending.delete(cancel.data.requestId)
       return
     }
 
-    const call = RemoteFunctionCall.safeParse(msg)
+    const call = remoteFunctionProtocol.functionCall.safeParse(msg)
     if (!call.success) return
 
     const tool = await options.getTool(call.data.functionName)

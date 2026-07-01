@@ -1,5 +1,7 @@
+import { defineFrpProtocol, mergeFrpProtocols } from '@taskyon/shared/modules/frpBus'
 import type { PartialDeep } from 'type-fest'
 import { z } from 'zod'
+import { taskyonProtocol } from '../api/taskyonProtocol'
 import { BaseMessage, TaskyonMessage } from './apiTypes'
 
 export type partialTyConfiguration = PartialDeep<{
@@ -17,10 +19,7 @@ const pastedFilePayload = z.object({
   }),
 })
 
-const tyConfigurationMessage = z.object({
-  type: z.literal('configurationMessage').meta({
-    description: 'Field to indicate that this is a configuration message.',
-  }),
+const configureTaskyon = z.object({
   persist: z.boolean().optional().meta({
     description:
       'persist the configuration on the disk, so that it is loaded faster on subsequent sessions.',
@@ -38,19 +37,42 @@ const tyConfigurationMessage = z.object({
   conf: z.record(z.string(), z.unknown()),
 })
 
-const tyPasteMessage = z.object({
-  type: z.literal('pasteMessage').meta({
-    description: 'Clipboard paste payload forwarded by the host iframe client.',
-  }),
+const pasteClipboard = z.object({
   text: z.string().optional(),
   html: z.string().optional(),
   files: z.array(pastedFilePayload).optional(),
 })
 
+const taskyonGuiCommandsProtocol = defineFrpProtocol({
+  id: 'taskyon.gui',
+  version: '1',
+  envelope: BaseMessage,
+  commands: {
+    configureTaskyon: {
+      request: configureTaskyon,
+    },
+    pasteClipboard: {
+      request: pasteClipboard,
+    },
+  },
+})
+
+export const taskyonGuiProtocol = mergeFrpProtocols({
+  id: 'taskyon.gui',
+  version: '1',
+  base: taskyonProtocol,
+  extension: taskyonGuiCommandsProtocol,
+})
+
 export const TaskyonGuiMessage = z.discriminatedUnion('type', [
   ...TaskyonMessage.options,
-  z.object({ ...BaseMessage.shape, ...tyConfigurationMessage.shape }),
-  z.object({ ...BaseMessage.shape, ...tyPasteMessage.shape }),
+  z.object({ ...BaseMessage.shape, ...taskyonGuiProtocol.commands.configureTaskyon.request.shape }),
+  z.object({
+    ...BaseMessage.shape,
+    ...taskyonGuiProtocol.commands.configureTaskyon.response.shape,
+  }),
+  z.object({ ...BaseMessage.shape, ...taskyonGuiProtocol.commands.pasteClipboard.request.shape }),
+  z.object({ ...BaseMessage.shape, ...taskyonGuiProtocol.commands.pasteClipboard.response.shape }),
 ])
 
 export type TaskyonGuiMessage = z.infer<typeof TaskyonGuiMessage>

@@ -132,6 +132,7 @@ import FadeAwayScrollPage from '@taskyon/shared/components/FadeAwayScrollPage.vu
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
 import { forgeTaskChain, type FunctionArguments, type TaskNode } from '@taskyon/taskyon'
 import { toolCall, type partialTaskDraft } from '@taskyon/taskyon/api'
+import { createTaskyonClient } from '@taskyon/tyclient'
 import type { JSONSchema7 } from 'json-schema'
 import type { iconMap } from 'src/modules/icons'
 import { iconRegistry } from 'src/modules/icons'
@@ -153,6 +154,7 @@ import { computed, onMounted, ref } from 'vue'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
+const taskyonClient = createTaskyonClient(tystate.api)
 
 const entryToolName = computed(() => state.llmSettings.entryFunction)
 
@@ -298,12 +300,10 @@ const runBrowserMcpImport = async () => {
   }) as partialTaskDraft
   const parentIds = state.selectedTaskId ? [state.selectedTaskId] : []
   const tasks = await forgeTaskChain([[toolTask]], parentIds)
-  tystate.api.send({
-    type: 'tasks',
+  await taskyonClient.createTaskChain({
     tasks,
     execute: true,
     show: true,
-    origin: window.location.origin,
   })
 }
 </script>

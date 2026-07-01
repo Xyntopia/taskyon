@@ -24,6 +24,7 @@ const jinaMarkdownReader = createTool({
     },
   } as const satisfies JSONSchema7,
   function: async ({ url, httpPolicy }) => {
+    if (typeof url !== 'string') throw new Error('jinaMarkdownReader requires a string URL.')
     const response = await politeFetch(
       `https://r.jina.ai/${url}`,
       undefined,

@@ -9,9 +9,10 @@ export { llmSettings, TyToolchainConfig } from './types/profiles'
 export {
   observeSubTaskStream,
   observeSubTaskStreamDetailed,
-  processTasks,
   processTasksDetailed,
-  sendTasks,
+  createTaskyonClient,
+  runTasks,
+  taskyonGuiProtocol,
   taskyonProtocol,
 } from './api/index'
 export { createTaskNode, ensureValidTaskId, forgeTaskChain } from './core/createTasks'

@@ -16,10 +16,10 @@ import type {
 } from '@taskyon/taskyon'
 import {
   base64ToPublixX25519,
-  createDuplexChannel,
   createClientTool,
   createSubtasksResult,
-  createPortApi,
+  createPortServer,
+  createProtocolPort,
   createStream,
   createTypeFilteredPort,
   cryptoKeyToBase64,
@@ -34,8 +34,8 @@ import {
   OAUTH_PROVIDERS,
   randomString,
   registerToolRpcTools,
+  sha256UrlSafeHashFromFile,
   TaskNode,
-  TaskyonGuiMessage,
   TaskyonMessage,
   tyCore,
 } from '@taskyon/taskyon'
@@ -46,7 +46,8 @@ import {
 import type { AuthenticationOptions, TokenGetter } from '@taskyon/taskyon/browser'
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
 import type { chunkStreamType } from '@taskyon/taskyon/tools/chatCompletionTool'
-import { createPortRpcClient, taskyonProtocol } from '@taskyon/tyclient'
+import { createTaskyonClient, taskyonGuiProtocol } from '@taskyon/tyclient'
+import type { TaskyonGuiMessage } from '@taskyon/tyclient'
 import { createStandardEntryNodeTool } from '@taskyon/taskyon/tools/entryNode'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
@@ -66,7 +67,6 @@ import { asyncComputed } from 'src/modules/vueUtils'
 import { match, P } from 'ts-pattern'
 import type { ReadonlyDeep } from 'type-fest'
 import { computed, onScopeDispose, onWatcherCleanup, readonly, ref, watch, watchEffect } from 'vue'
-import { sendFile } from '../../packages/taskyon/src/types/apiTypes'
 import { guiTools } from '../modules/taskyon/GuiTools'
 import {
   taskyonProfileSections,
@@ -340,8 +340,10 @@ function connectGdriveSync(
 
   const { port: subset } = createTypeFilteredPort(tyPort, [
     'taskCreated',
-    'addTasks',
-    'requestTask',
+    'importTaskArchiveRequest',
+    'importTaskArchiveResponse',
+    'requestTaskArchiveRequest',
+    'requestTaskArchiveResponse',
   ] as const)
 
   const portDisconnect = ref<(() => void) | false>(false)
@@ -1044,16 +1046,12 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
   }
 }
 
-const createTaskyonApi = (ty: Pick<Taskyon, 'port'>) => ({
-  listTools: createPortRpcClient(ty.port, taskyonProtocol.rpc.listTools),
-})
+type TaskyonClient = ReturnType<typeof createTaskyonClient>
 
-type TaskyonApi = ReturnType<typeof createTaskyonApi>
-
-function reactiveTools(taskyon: Promise<Taskyon>, taskyonApi: Promise<TaskyonApi>) {
+function reactiveTools(taskyon: Promise<Taskyon>, taskyonClient: Promise<TaskyonClient>) {
   const allTools = ref<Record<string, ToolBase>>({})
 
-  void Promise.all([taskyon, taskyonApi]).then(([ty, api]) => {
+  void Promise.all([taskyon, taskyonClient]).then(([ty, api]) => {
     const updateTools = async () => {
       allTools.value = await api.listTools({ includeHidden: true })
     }
@@ -1218,8 +1216,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       cs,
     )
   })
-  const taskyonApi = taskyon.then(createTaskyonApi)
-  const allTools = reactiveTools(taskyon, taskyonApi)
+  const taskyonClient = taskyon.then((ty) => createTaskyonClient(ty.port))
+  const allTools = reactiveTools(taskyon, taskyonClient)
 
   const entryNodeTool = createStandardEntryNodeTool({
     name: getEntryNodeToolName(buildEntryNodeDraft()),
@@ -1230,7 +1228,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       const cachedTools =
         Object.keys(allTools.value).length > 0
           ? allTools.value
-          : await (await taskyonApi).listTools({ includeHidden: true })
+          : await (await taskyonClient).listTools({ includeHidden: true })
       return Object.values(cachedTools)
         .filter((tool) => !['chatCompletion', 'entryNode', 'taskyonFlow'].includes(tool.name))
         .map((tool) => ({
@@ -1247,7 +1245,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       createContext: createTrustedUiToolContext(ty),
     })
     onScopeDispose(() => uiToolRpcExecutor.destroy())
-    await (await taskyonApi).listTools({})
+    await (await taskyonClient).listTools({})
   })
 
   const apiKeyManagement = useApiManagement(stateRefs, () => taskyon)
@@ -1300,10 +1298,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // For example the iframe is connected to iApiOutside because
   // it lives outside the taskyon logic. iApiInside is used by our internal
   // services e.g. the engine to communicate to the outside.
-  const { x: uiApiOutside, y: uiApiInside } = createDuplexChannel<
-    TaskyonGuiMessage,
-    TaskyonGuiMessage
-  >()
+  const { x: uiApiOutside, y: uiApiInside } = createProtocolPort(taskyonGuiProtocol)
+  const uiTaskyonClient = createTaskyonClient(uiApiOutside)
 
   void taskyon.then(async (ty) => {
     //const taskStream = tyInit.taskManagerInstance.taskStream
@@ -1314,11 +1310,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // TODO: red-define this as a middleware where we can intercept certain messages
     //       and also change the types of inside/outside ports...
     uiApiInside.receive((msg) => console.log('received message on UI port!', msg))
-    createPortApi(
+    createPortServer(
       uiApiInside,
-      TaskyonGuiMessage,
+      taskyonGuiProtocol,
       {
-        configurationMessage: async (msg) => {
+        configureTaskyon: async (msg) => {
           const newConfig = msg.conf
           const llmCfg = newConfig.llmSettings as Partial<TyProfile['llmSettings']> | undefined
           const appCfg = newConfig.appConfiguration as
@@ -1383,7 +1379,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           // TODO:  set taskyon-relevant settings in the "backend"
           //tyInit.outPort.send(msg)
         },
-        pasteMessage: (msg) => {
+        pasteClipboard: (msg) => {
           const pastedText = msg.text ?? msg.html ?? ''
           if (pastedText) {
             stateRefs.createTaskType = { type: 'message' }
@@ -1398,20 +1394,27 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
             stateRefs.queueDraftPasteFiles(pastedFiles)
           }
         },
-        task: async (msg) => {
-          // push the last task to execution queue right away...
-          await ensureValidTaskId(msg.task)
-          ty.port.send(msg)
-          // we don't forward this message to outPort, because we 've already processed everything relevant here..
-        },
       },
-      // simply send all other messages to our backend...
-      (msg) => {
-        const m = TaskyonMessage.safeParse(msg)
-        if (m.success) ty.port.send(m.data)
-        else console.log('unknown message:', m.data)
+      {
+        onError: (error) =>
+          console.error('an error occured during handling of the GUI protocol command', error),
       },
     )
+
+    uiApiInside.receive((msg) => {
+      if (msg.type === 'configureTaskyonRequest' || msg.type === 'pasteClipboardRequest') return
+      if (msg.type === 'createTaskRequest') {
+        void ensureValidTaskId(msg.task)
+          .then(() => ty.port.send(msg))
+          .catch((error) => {
+            console.error('an error occured during handling of the createTask command', error)
+          })
+        return
+      }
+      const parsed = TaskyonMessage.safeParse(msg)
+      if (parsed.success) ty.port.send(parsed.data)
+      else console.log('unknown message:', msg)
+    })
     // we manually connect our send port to the api here, because
     // we are already intercepting incoming messages with the API above
     // TODO: we have to change this! we would like to
@@ -1429,7 +1432,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       const iframePort = await waitForIframeDuplexChannel()
       // connect iframe API to internal GUI API which also connects to taskyon engine automatically.
       iframePort.connect(uiApiOutside)
-      iframePort.send('taskyon connected!')
+      iframePort.send({ type: 'taskyonReady' })
       console.log('taskyon connected to iframe!')
       stateRefs.taskyonRunmode = 'connected'
     }
@@ -1636,7 +1639,17 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   return {
     tyready: computed(() => tyready),
-    addFile: (file: File) => sendFile(uiApiOutside.send)(file),
+    addFile: async (file: File) => {
+      const id = await sha256UrlSafeHashFromFile(file)
+      await uiTaskyonClient.addFile({
+        id,
+        name: file.name,
+        mime: file.type,
+        size: file.size,
+        file,
+      })
+      return id
+    },
     setNewSession,
     newSessionFromGdrive,
     uploadSessionKey,

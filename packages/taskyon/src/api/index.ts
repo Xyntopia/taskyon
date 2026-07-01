@@ -1,38 +1,53 @@
 // TODO: we want to reduce dependencies to this file here!
 // TODO: maybe move the "Api" into its own package?
 import { forgeTaskChain } from '../core/createTasks'
+import { createToolExecutionClient, type ToolRpcCallerPort } from '../core/toolRpc'
 import type { chatCompletionParams } from '../tools/chatCompletionTool'
 import type { TaskyonMessage as TaskyonMessageType } from '../types/apiTypes'
 import type { TaskContentType, TaskNode } from '../types/taskNode'
 import { partialTaskDraft } from '../types/taskNode'
 import { createClientTool, createSubtasksResult, createTool, toolCall } from '../types/toolApi'
-import { createStream, type Port } from '@taskyon/shared/modules/frpBus'
+import { sha256UrlSafeHashFromFile } from '../utils/encoding'
+import { createPortClient, createStream, type Port } from '@taskyon/shared/modules/frpBus'
+import type {
+  ProtocolClientForPort,
+  ProtocolMessage,
+  RpcMessagePort,
+  UnaryPortRpcDefinition,
+} from '@taskyon/shared/modules/frpBus'
 import { taskyonProtocol } from './taskyonProtocol'
+import type { z } from 'zod'
 
-export { BaseMessage, sendFile, TaskyonMessage, TyP2P } from '../types/apiTypes'
+export { BaseMessage, TaskyonMessage, TyP2P } from '../types/apiTypes'
 export {
   TaskyonGuiMessage,
+  taskyonGuiProtocol,
   type guiMessageTypes,
   type partialTyConfiguration,
 } from '../types/guiApiTypes'
-export { REMOTE_FUNCTION_TIMEOUT_MS } from '../types/messages'
+export { REMOTE_FUNCTION_TIMEOUT_MS } from './taskyonProtocol'
 export { llmSettings, TyToolchainConfig } from '../types/profiles'
 export type { ClientTool, ClientToolContext, toolContext } from '../types/toolApi'
 export { FunctionArguments } from '../types/tools'
 export type { FunctionCall, ToolBase } from '../types/tools'
+export { sha256UrlSafeHashFromFile } from '../utils/encoding'
 export {
   createDuplexChannel, // utils/frpbus
   createStreamRpcRequest,
-  createPortRpcClient,
-  registerPortRpcHandler,
-  createPortApi, // utis/frpbus
+  createPortClient,
+  createProtocolPort,
+  createPortServer,
   MessageChannelBridge,
 } from '@taskyon/shared/modules/frpBus'
 export type {
   PortRpcClientOptions,
+  ProtocolServerHandlers,
+  ProtocolClientForPort,
   RpcMessagePort,
   RpcResponseResult,
   UnaryPortRpcDefinition,
+  ProtocolClient,
+  ProtocolMessage,
 } from '@taskyon/shared/modules/frpBus'
 
 export { createClientTool, createSubtasksResult, createTool, partialTaskDraft, toolCall }
@@ -40,15 +55,19 @@ export type { Port }
 export { taskyonProtocol }
 export {
   callToolOverRpc,
+  createToolExecutionClient,
   createExternalToolContext,
   createToolRpcFunctionDescriptionMessage,
   registerToolRpcExecutor,
   registerToolRpcTools,
 } from '../core/toolRpc'
 export type {
-  ToolRpcCreateContext,
+  ToolExecutionCallOptions,
   ToolRpcCallerPort,
+  ToolRpcCreateContext,
+  ToolRpcFunctionCallMessage,
   ToolRpcFunctionDescriptionMessage,
+  ToolRpcFunctionResponseMessage,
   ToolRpcResponderPort,
 } from '../core/toolRpc'
 
@@ -97,6 +116,19 @@ export type processTasksOpts = {
 
 type TaskSubStream = (cb: (task: TaskNode) => void) => () => void
 type TaskNodeWithParent = TaskNode & { parentID: string }
+type SendTasksResult = {
+  initialIds: string[]
+  subTaskStream: TaskSubStream
+}
+type SendTasksFunction = (
+  taskList: partialTaskDraft[][],
+  opts: processTasksOpts,
+) => Promise<SendTasksResult>
+type RunTasksFunction = (
+  taskList: partialTaskDraft[][],
+  quitCondition: ((t: TaskNode) => boolean) | TaskContentType | TaskContentType[],
+  opts: processTasksOpts,
+) => Promise<TaskNode>
 
 const isTaskCreatedMessage = (
   message: { type: string } | TaskyonMessageType,
@@ -125,7 +157,7 @@ const appendPendingTask = (
 }
 
 const createSubTaskStream = <T extends { type: string }>(
-  receive: Port<T | TaskyonMessageType>['receive'],
+  receive: Port<unknown, T | TaskyonMessageType>['receive'],
   initialIds: string[],
 ): TaskSubStream => {
   const trackedIds = new Set(initialIds)
@@ -153,23 +185,70 @@ const createSubTaskStream = <T extends { type: string }>(
   return subTaskBus.stream
 }
 
-const currentOrigin = () =>
-  typeof globalThis.location?.origin === 'string' ? globalThis.location.origin : 'taskyon-node'
-
 export const createChatCompletionTask = (args: chatCompletionParams) =>
   toolCall<chatCompletionParams>({ name: 'chatCompletion', arguments: args })
 
-export const sendTasks =
-  <T extends { type: string }>(tyPort: Port<T | TaskyonMessageType>) =>
-  async (taskList: partialTaskDraft[][], opts: processTasksOpts) => {
+type TaskyonProtocol = typeof taskyonProtocol
+type TaskyonCommandName = keyof TaskyonProtocol['commands']
+
+type TaskyonCommandParts<TName extends TaskyonCommandName> =
+  TaskyonProtocol['commands'][TName] extends UnaryPortRpcDefinition<
+    infer TRequest,
+    infer TResponse,
+    infer TArgs,
+    infer TResult,
+    infer TRequestSchema,
+    infer TResponseSchema
+  >
+    ? {
+        request: TRequest
+        response: TResponse
+        args: TArgs
+        result: TResult
+        requestSchema: TRequestSchema
+        responseSchema: TResponseSchema
+      }
+    : never
+
+type TaskyonCommandRequest<TName extends TaskyonCommandName> = TaskyonCommandParts<TName>['request']
+
+type TaskyonCommandResponse<TName extends TaskyonCommandName> =
+  TaskyonCommandParts<TName>['response']
+
+type TaskyonProtocolMessage = ProtocolMessage<TaskyonProtocol>
+type TaskCreatedMessage = z.output<TaskyonProtocol['streams']['taskUpdates']['taskCreated']>
+type SendTasksTx = TaskyonCommandRequest<'createTaskChain'>
+type SendTasksRx = TaskyonCommandResponse<'createTaskChain'> | TaskCreatedMessage
+type TaskyonClientPort<
+  Tx extends { type: string },
+  Rx extends { type: string },
+> = TaskyonProtocolMessage extends Tx
+  ? TaskyonProtocolMessage extends Rx
+    ? Port<Tx, Rx> & RpcMessagePort<TaskyonProtocolMessage, Rx> & ToolRpcCallerPort
+    : never
+  : never
+type CreateTaskChain = ProtocolClientForPort<
+  TaskyonProtocol,
+  TaskyonProtocolMessage,
+  TaskyonProtocolMessage
+>['createTaskChain']
+type AddFile = ProtocolClientForPort<
+  TaskyonProtocol,
+  TaskyonProtocolMessage,
+  TaskyonProtocolMessage
+>['addFile']
+
+const createSendTasks = <Rx extends { type: string }>(
+  tyPort: Port<unknown, Rx>,
+  createTaskChain: CreateTaskChain,
+): SendTasksFunction => {
+  return async (taskList, opts) => {
     const tasks = await forgeTaskChain(taskList)
 
-    tyPort.send({
-      type: 'tasks',
+    await createTaskChain({
       tasks: tasks,
       execute: true,
       show: opts.show ?? true, // we want to show this task in our GUI as a succesful test
-      origin: currentOrigin(),
     })
 
     const initialIds = tasks.map((t) => t.id)
@@ -177,6 +256,45 @@ export const sendTasks =
 
     return { initialIds, subTaskStream }
   }
+}
+
+const uploadFile = async (addFile: AddFile, file: File) => {
+  const id = await sha256UrlSafeHashFromFile(file)
+  await addFile({
+    id,
+    name: file.name,
+    mime: file.type,
+    size: file.size,
+    file,
+  })
+  return id
+}
+
+export const createTaskyonClient = <Tx extends { type: string }, Rx extends { type: string }>(
+  tyPort: TaskyonClientPort<Tx, Rx>,
+) => {
+  const protocolClient = createPortClient(tyPort, taskyonProtocol)
+  const toolExecutionClient = createToolExecutionClient(tyPort)
+  const send = createSendTasks(tyPort, protocolClient.createTaskChain)
+
+  return {
+    ...protocolClient,
+    runTasks: createRunTasks(send),
+    sendFile: (file: File) => uploadFile(protocolClient.addFile, file),
+    callTool: toolExecutionClient.callTool,
+  }
+}
+
+export type TaskyonClient = ReturnType<typeof createTaskyonClient>
+
+const createRunTasksSender = <Tx extends { type: string }, Rx extends { type: string }>(
+  tyPort: Port<Tx | SendTasksTx, Rx | SendTasksRx>,
+) =>
+  createSendTasks(
+    tyPort,
+    createPortClient<SendTasksTx, Rx | SendTasksRx, TaskyonProtocol>(tyPort, taskyonProtocol)
+      .createTaskChain,
+  )
 
 export const observeSubTaskStreamDetailed = async (
   subTaskStream: TaskSubStream,
@@ -292,15 +410,15 @@ export const observeSubTaskStreamDetailed = async (
 
 const createInterruptReason = (result: ObserveSubTaskStreamDetailedResult) => {
   if (result.status === 'matched') {
-    return `processTasks settled after matching ${result.result.content.type} task ${result.result.id}`
+    return `runTasks settled after matching ${result.result.content.type} task ${result.result.id}`
   }
   if (result.status === 'error') {
-    return `processTasks settled after error task ${result.errorTask.id}`
+    return `runTasks settled after error task ${result.errorTask.id}`
   }
   if (result.status === 'timeout') {
-    return `processTasks timed out after ${result.timeoutMs ?? 0}ms`
+    return `runTasks timed out after ${result.timeoutMs ?? 0}ms`
   }
-  return 'processTasks aborted'
+  return 'runTasks aborted'
 }
 
 export const observeSubTaskStream = async (
@@ -339,7 +457,7 @@ export const observeSubTaskStream = async (
 export const processTasksDetailed = <T extends { type: string }>(
   tyPort: Port<T | TaskyonMessageType>,
 ) => {
-  const send = sendTasks<T>(tyPort)
+  const send = createRunTasksSender(tyPort)
   return async (
     taskList: partialTaskDraft[][],
     quitCondition: ((t: TaskNode) => boolean) | TaskContentType | TaskContentType[],
@@ -354,14 +472,17 @@ export const processTasksDetailed = <T extends { type: string }>(
   }
 }
 
-export const processTasks = <T extends { type: string }>(tyPort: Port<T | TaskyonMessageType>) => {
-  const processDetailed = processTasksDetailed(tyPort)
+const createRunTasks = (send: SendTasksFunction): RunTasksFunction => {
   return async (
     taskList: partialTaskDraft[][],
     quitCondition: ((t: TaskNode) => boolean) | TaskContentType | TaskContentType[],
     opts: processTasksOpts,
   ) => {
-    const result = await processDetailed(taskList, quitCondition, opts)
+    const { subTaskStream } = await send(taskList, opts)
+    const result = await observeSubTaskStreamDetailed(subTaskStream, quitCondition, opts)
+    if (opts.interruptOnSettle) {
+      await opts.interruptOnSettle(createInterruptReason(result), result)
+    }
     if (result.status === 'matched') {
       return result.result
     }
@@ -376,3 +497,6 @@ export const processTasks = <T extends { type: string }>(tyPort: Port<T | Taskyo
     throw new Error(`Timeout after ${result.timeoutMs ?? 0}ms`)
   }
 }
+
+export const runTasks = <T extends { type: string }>(tyPort: Port<T | TaskyonMessageType>) =>
+  createRunTasks(createRunTasksSender(tyPort))

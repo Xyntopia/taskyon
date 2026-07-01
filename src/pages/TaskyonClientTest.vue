@@ -51,17 +51,6 @@ const dev = ref(true)
 const taskyonUrl = computed(() => (dev.value ? window.location.origin : 'https://taskyon.space'))
 const profileName = 'client_test_page'
 const state = useAppStateStore()
-const readOptionalStringParam = (
-  params: Record<string, unknown>,
-  key: string,
-): string | undefined => {
-  const value = params[key]
-  if (value === undefined || value === null) return undefined
-  if (typeof value !== 'string') {
-    throw new Error(`Expected ${key} to be a string.`)
-  }
-  return value
-}
 const iframeSrc = computed(() => {
   const params = new URLSearchParams({
     iframe: 'true',
@@ -130,9 +119,11 @@ const tools: ClientTool[] = [
     } as const satisfies JSONSchema7,
     function: (data) => {
       console.log('client received function call with data:', data)
-      const parameter1 = readOptionalStringParam(data, 'parameter1') ?? ''
-      const parameter2 = readOptionalStringParam(data, 'parameter2') ?? ''
-      const result = `${parameter1}${parameter2}`
+      const formatParameter = (value: unknown) =>
+        typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+          ? String(value)
+          : (JSON.stringify(value) ?? '')
+      const result = `${formatParameter(data.parameter1)}${formatParameter(data.parameter2)}`
       functionResult.value = result
       return result
     },
@@ -171,7 +162,7 @@ async function startClientTest() {
     console.log('client received message from iframe:', msg)
   })*/
   try {
-    const res = await tyclient.value?.waitForTaskResult(tasks, 'message', { timeoutMs: 50000 })
+    const res = await tyclient.value?.runTasks(tasks, 'message', { timeoutMs: 50000 })
     taskResult.value = res
     console.log('client received result:')
   } catch (error) {
@@ -199,7 +190,7 @@ async function startFileUpload() {
   console.log('finished sending file!', id)
 
   // now we can send
-  const res = await tyclient.value?.waitForTaskResult(
+  const res = await tyclient.value?.runTasks(
     [
       [
         {

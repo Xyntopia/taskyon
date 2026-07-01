@@ -5,12 +5,8 @@ import { join } from 'node:path'
 import { processTasksDetailed } from '../api'
 import { tyCore } from '../core/init'
 import { callToolOverRpc, registerToolRpcTools } from '../core/toolRpc'
+import type { ToolRpcCallMessage, ToolRpcFunctionResponseMessage } from '../core/toolRpc'
 import type { TaskyonMessage } from '../types/apiTypes'
-import type {
-  RemoteFunctionCall,
-  RemoteFunctionCancel,
-  RemoteFunctionResponse,
-} from '../types/messages'
 import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 
 const assert = (condition: unknown, message: string) => {
@@ -19,8 +15,8 @@ const assert = (condition: unknown, message: string) => {
 
 export const testRemoteFunctionBridgeHonorsToolTimeoutMs = async () => {
   const { x: workerPort, y: remotePort } = createDuplexChannel<
-    RemoteFunctionCall | RemoteFunctionCancel,
-    RemoteFunctionResponse
+    ToolRpcCallMessage,
+    ToolRpcFunctionResponseMessage
   >()
   const unsubscribe = remotePort.receive((msg) => {
     if (msg.type !== 'functionCall') return
@@ -82,17 +78,14 @@ export const testRemoteFunctionBridgeRegistersAndExecutesTool = async () => {
   const registrationPromise = registerToolRpcTools({ port: clientPort, tools: [echoTool] })
 
   const toolDescription = await toolDescriptionPromise
-  if (toolDescription.type !== 'functionDescription') {
-    throw new Error('expected functionDescription message')
+  if (toolDescription.type !== 'registerToolRequest') {
+    throw new Error('expected registerToolRequest message')
   }
   assert(toolDescription.name === 'remoteEcho', 'expected remoteEcho registration')
 
   taskyonPort.send({
-    type: 'status',
-    data: {
-      type: 'newtool',
-      id: 'remoteEcho',
-    },
+    type: 'registerToolResponse',
+    requestId: toolDescription.requestId,
   })
   const registration = await registrationPromise
 
@@ -144,17 +137,14 @@ export const testRemoteFunctionBridgeRejectsExternalSecretAccess = async () => {
   const registrationPromise = registerToolRpcTools({ port: clientPort, tools: [secretTool] })
 
   const toolDescription = await toolDescriptionPromise
-  if (toolDescription.type !== 'functionDescription') {
-    throw new Error('expected functionDescription message')
+  if (toolDescription.type !== 'registerToolRequest') {
+    throw new Error('expected registerToolRequest message')
   }
   assert(toolDescription.name === 'remoteSecretReader', 'expected remoteSecretReader registration')
 
   taskyonPort.send({
-    type: 'status',
-    data: {
-      type: 'newtool',
-      id: 'remoteSecretReader',
-    },
+    type: 'registerToolResponse',
+    requestId: toolDescription.requestId,
   })
   const registration = await registrationPromise
 
@@ -224,17 +214,14 @@ export const testRemoteFunctionBridgeAllowsExplicitExternalSecretContext = async
   })
 
   const toolDescription = await toolDescriptionPromise
-  if (toolDescription.type !== 'functionDescription') {
-    throw new Error('expected functionDescription message')
+  if (toolDescription.type !== 'registerToolRequest') {
+    throw new Error('expected registerToolRequest message')
   }
   assert(toolDescription.name === 'remoteSecretWriter', 'expected remoteSecretWriter registration')
 
   taskyonPort.send({
-    type: 'status',
-    data: {
-      type: 'newtool',
-      id: 'remoteSecretWriter',
-    },
+    type: 'registerToolResponse',
+    requestId: toolDescription.requestId,
   })
   const registration = await registrationPromise
 
@@ -366,8 +353,8 @@ export const testRemoteFunctionBridgeDoesNotExecuteCodeToolsOnClient = async () 
   const registrationPromise = registerToolRpcTools({ port: clientPort, tools: [codeTool] })
 
   const toolDescription = await toolDescriptionPromise
-  if (toolDescription.type !== 'functionDescription') {
-    throw new Error('expected functionDescription message')
+  if (toolDescription.type !== 'registerToolRequest') {
+    throw new Error('expected registerToolRequest message')
   }
   assert(
     toolDescription.name === 'remoteClientSideCodeBlock',
@@ -376,11 +363,8 @@ export const testRemoteFunctionBridgeDoesNotExecuteCodeToolsOnClient = async () 
   assert(toolDescription.code === codeTool.code, 'expected code to be advertised')
 
   taskyonPort.send({
-    type: 'status',
-    data: {
-      type: 'newtool',
-      id: 'remoteClientSideCodeBlock',
-    },
+    type: 'registerToolResponse',
+    requestId: toolDescription.requestId,
   })
   const registration = await registrationPromise
 

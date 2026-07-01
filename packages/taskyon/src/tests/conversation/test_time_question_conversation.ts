@@ -1,9 +1,8 @@
 import {
   buildCreateNewTaskChain,
-  createPortRpcClient,
+  createTaskyonClient,
   forgeTaskChain,
   partialTaskDraft,
-  taskyonProtocol,
   tyCore,
   type TaskNode,
   type Taskyon,
@@ -120,10 +119,7 @@ const createConversationHarness = async (): Promise<{ ty: Taskyon; cleanup: () =
     defaultAllowedTools: [],
     getToolCatalog: async () => {
       const ty = await tyPromise
-      const cachedTools = await createPortRpcClient(
-        ty.port,
-        taskyonProtocol.rpc.listTools,
-      )({ includeHidden: true })
+      const cachedTools = await createTaskyonClient(ty.port).listTools({ includeHidden: true })
       return Object.values(cachedTools)
         .filter((tool) => !['chatCompletion', 'entryNode', 'taskyonFlow'].includes(tool.name))
         .map((tool) => ({
@@ -395,15 +391,10 @@ const processConversationUntilReturn =
         })
       }, timeoutMs)
 
-      ty.port.send({
-        type: 'tasks',
+      void createTaskyonClient(ty.port).createTaskChain({
         tasks,
         execute: true,
         show: true,
-        origin:
-          typeof globalThis.location?.origin === 'string'
-            ? globalThis.location.origin
-            : 'taskyon-test',
       })
     })
   }

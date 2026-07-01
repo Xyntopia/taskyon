@@ -229,6 +229,7 @@ import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
 import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
 import { createNewTaskChain, partialTaskDraft, type MessageExecutionMode } from '@taskyon/taskyon'
+import { createTaskyonClient } from '@taskyon/tyclient'
 import { QSelect, useQuasar } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
@@ -256,6 +257,7 @@ const fileAttachments = defineModel<File[]>('fileAttachments', { default: [] })
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
+const taskyonClient = createTaskyonClient(tystate.api)
 const { navigateToTask } = useTaskNavigation()
 
 onMounted(() => {
@@ -363,12 +365,10 @@ async function addNewTask(mode: MessageExecutionMode, p2pTopic?: string) {
 
   if (newTaskId) {
     tystate.markTasksPendingCreation(createdTasks.map((task) => task.id))
-    tystate.api.send({
-      type: 'tasks',
+    await taskyonClient.createTaskChain({
       tasks: createdTasks,
       execute: true,
       show: true,
-      origin: window.location.origin,
     })
   }
 

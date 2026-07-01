@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { tyCore } from '../core/init'
+import { createTaskyonClient } from '../api'
 import { createStandardEntryNodeTool } from '../tools/entryNode'
 import {
   buildLinkedTaskChain,
@@ -120,8 +121,7 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async () => {
         }),
       ])
         .then((tasks) =>
-          ty.port.send({
-            type: 'tasks',
+          createTaskyonClient(ty.port).createTaskChain({
             execute: true,
             show: false,
             tasks,

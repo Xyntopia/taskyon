@@ -3,14 +3,12 @@
 import type { Port } from '@taskyon/taskyon/api'
 import {
   FunctionArguments as FunctionArgumentsSchema,
-  callToolOverRpc,
-  processTasks,
-  sendFile,
-  sendTasks,
+  createProtocolPort,
+  createTaskyonClient,
+  taskyonGuiProtocol,
 } from '@taskyon/taskyon/api'
 import {
   // from frp bux with only very few dependencies
-  createDuplexChannel, // utis/frpbus
   MessageChannelBridge, // utils/frpbus
   type ClientTool,
   registerToolRpcTools,
@@ -26,9 +24,8 @@ export {
   createClientTool,
   createTool, // toolApi
   observeSubTaskStream,
-  processTasks,
   processTasksDetailed,
-  sendTasks,
+  runTasks,
   toolCall, // toolApi
   type partialTaskDraft,
 } from '@taskyon/taskyon/api'
@@ -42,17 +39,21 @@ export type {
 export type { FunctionArguments, partialTyConfiguration, TaskyonGuiMessage }
 export { REMOTE_FUNCTION_TIMEOUT_MS } from '@taskyon/taskyon/api'
 export type { ToolBase as TaskyonToolDefinition } from '@taskyon/taskyon/api'
-export { createPortRpcClient, taskyonProtocol } from '@taskyon/taskyon/api'
+export {
+  createPortClient,
+  createProtocolPort,
+  createTaskyonClient,
+  MessageChannelBridge,
+  taskyonGuiProtocol,
+  taskyonProtocol,
+} from '@taskyon/taskyon/api'
 
 export async function callTaskyonTool(
   client: Pick<TyClient, 'port'>,
   name: string,
   args: Record<string, unknown>,
 ) {
-  return await callToolOverRpc(
-    { name, arguments: FunctionArgumentsSchema.parse(args) },
-    client.port,
-  )
+  return await createTaskyonClient(client.port).callTool(name, FunctionArgumentsSchema.parse(args))
 }
 
 function safeClone<T>(data: T): T {
@@ -108,10 +109,9 @@ const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
 }
 
 export interface TyClient {
-  sendTasks: ReturnType<typeof sendTasks>
-  waitForTaskResult: ReturnType<typeof processTasks>
+  runTasks: ReturnType<typeof createTaskyonClient>['runTasks']
   port: Port<TaskyonGuiMessage, TaskyonGuiMessage>
-  sendFile: (file: File) => Promise<string>
+  sendFile: ReturnType<typeof createTaskyonClient>['sendFile']
   reconfigure: (options: {
     name?: string
     persist?: boolean
@@ -142,10 +142,7 @@ export async function initializeTaskyon(options: {
 
   const taskyon = document.getElementById(options.iframeId ?? 'taskyon') as HTMLIFrameElement
 
-  const { x: clientSidePort, y: towardsIframe } = createDuplexChannel<
-    TaskyonGuiMessage,
-    TaskyonGuiMessage
-  >()
+  const { x: clientSidePort, y: towardsIframe } = createProtocolPort(taskyonGuiProtocol)
 
   if (!taskyon || taskyon.tagName !== 'IFRAME' || taskyon.contentWindow === null)
     throw new Error(`we could not find the taskyon iframe with id: ${options.iframeId}`)
@@ -161,7 +158,8 @@ export async function initializeTaskyon(options: {
 
   console.log('tyclient send our configuration!')
   send({
-    type: 'configurationMessage',
+    type: 'configureTaskyonRequest',
+    requestId: `configureTaskyon-${Date.now()}`,
     conf: options.configuration,
     persist: resolvedPersist,
     bindingKey: options.bindingKey,
@@ -172,6 +170,7 @@ export async function initializeTaskyon(options: {
   })
 
   clientSidePort.receive((msg: TaskyonGuiMessage) => console.log('tyclient received message', msg))
+  const taskyonClient = createTaskyonClient(clientSidePort)
   const toolRpcExecutor = await registerToolRpcTools({
     port: clientSidePort,
     tools: options.tools,
@@ -180,10 +179,9 @@ export async function initializeTaskyon(options: {
   void toolRpcExecutor
 
   return {
-    sendTasks: sendTasks(clientSidePort),
-    waitForTaskResult: processTasks(clientSidePort),
+    runTasks: taskyonClient.runTasks,
     port: clientSidePort,
-    sendFile: (file: File) => sendFile(clientSidePort.send)(file),
+    sendFile: taskyonClient.sendFile,
     reconfigure: (options: {
       name?: string
       persist?: boolean
@@ -195,7 +193,8 @@ export async function initializeTaskyon(options: {
     }) => {
       const nextName = options.name ?? resolvedName
       send({
-        type: 'configurationMessage',
+        type: 'configureTaskyonRequest',
+        requestId: `configureTaskyon-${Date.now()}`,
         conf: options.configuration,
         persist: options.persist ?? resolvedPersist,
         bindingKey: options.bindingKey,

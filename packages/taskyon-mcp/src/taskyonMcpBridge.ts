@@ -1,7 +1,6 @@
 import {
   callTaskyonTool,
-  createPortRpcClient,
-  taskyonProtocol,
+  createTaskyonClient,
   type TaskyonToolDefinition,
   type TyClient,
 } from '@taskyon/tyclient'
@@ -32,8 +31,8 @@ async function listMcpTools(
   client: Pick<TyClient, 'port'>,
   options: Pick<TaskyonMcpBridgeOptions, 'includeHiddenTools' | 'listToolsTimeoutMs'>,
 ): Promise<McpTool[]> {
-  const taskyonApiListTools = createPortRpcClient(client.port, taskyonProtocol.rpc.listTools)
-  const tools = await taskyonApiListTools({
+  const taskyonClient = createTaskyonClient(client.port)
+  const tools = await taskyonClient.listTools({
     ...(options.includeHiddenTools !== undefined
       ? { includeHidden: options.includeHiddenTools }
       : {}),

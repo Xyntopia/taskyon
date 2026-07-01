@@ -6,8 +6,10 @@
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useTaskyonStore } from 'src/stores/taskyonState'
+import { createTaskyonClient } from '@taskyon/tyclient'
 
 const tystate = useTaskyonStore()
+const taskyonClient = createTaskyonClient(tystate.api)
 const state = useAppStateStore()
 const { navigateToTask } = useTaskNavigation()
 
@@ -23,8 +25,7 @@ const onAddTasks = async () => {
     navigateToTask(newTaskId)
   } catch (error) {
     console.log('could not create taskchain from markdown!', error)
-    tystate.api.send({
-      type: 'task',
+    await taskyonClient.createTask({
       task: {
         role: 'system',
         content: {
@@ -34,7 +35,6 @@ const onAddTasks = async () => {
       },
       execute: false,
       show: true,
-      origin: window.location.origin,
     })
   }
   state.lockBottomScroll = props.scrollToBottom

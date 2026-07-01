@@ -3,7 +3,7 @@ import {
   partialTaskDraft,
   type partialTaskDraft as PartialTaskDraft,
 } from '@taskyon/taskyon'
-import { processTasks } from '@taskyon/taskyon/api'
+import { runTasks } from '@taskyon/tyclient'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 
 const tystate = useTaskyonStore()
@@ -66,7 +66,7 @@ export const testTaskyonUiSimpleChatInteraction = async () => {
     mode: 'message',
   })
 
-  const result = await processTasks(tystate.api)([taskChain], 'message', { timeoutMs: 50_000 })
+  const result = await runTasks(tystate.api)([taskChain], 'message', { timeoutMs: 50_000 })
   assert(result.content.type === 'message', `Expected message result, got ${result.content.type}`)
   assert(result.content.data.trim().length > 0, 'Expected non-empty assistant message')
 
@@ -98,7 +98,7 @@ export const testTaskyonUiWebSearchInteraction = async () => {
     'Expected websearch to be enabled in the entry node arguments',
   )
 
-  const result = await processTasks(tystate.api)([taskChain], 'message', { timeoutMs: 50_000 })
+  const result = await runTasks(tystate.api)([taskChain], 'message', { timeoutMs: 50_000 })
   assert(result.content.type === 'message', `Expected message result, got ${result.content.type}`)
   assert(result.content.data.trim().length > 0, 'Expected non-empty websearch response')
 
@@ -117,7 +117,7 @@ export const testTaskyonUiToolInteraction = async () => {
     mode: 'message',
   })
 
-  const result = await processTasks(tystate.api)([taskChain], 'toolresult', { timeoutMs: 20_000 })
+  const result = await runTasks(tystate.api)([taskChain], 'toolresult', { timeoutMs: 20_000 })
   assert(result.content.type === 'toolresult', `Expected toolresult, got ${result.content.type}`)
   const data = result.content.data
   assert(!!data && typeof data === 'object', 'Expected clock tool to return an object payload')

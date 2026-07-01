@@ -25,7 +25,6 @@ import { webResearchTools } from '../tools/webResearchTool'
 import { wfcGenerator } from '../tools/wavefunctioncollapse'
 import { appDevTools } from '../tools/webAppDev'
 import { TaskyonMessage } from '../types/apiTypes'
-import type { RemoteFunctionCall } from '../types/messages'
 import type { llmSettings } from '../types/profiles'
 import { createSubtasksResult, type InternalTool } from '../types/toolApi'
 import type { FunctionArguments } from '../types/tools'
@@ -43,11 +42,11 @@ import type { EncryptedDataRow } from '../utils/encrypt'
 import { encryptCompressObject } from '../utils/fileUtils'
 import type { extractStreamType, IframeMultiPlexer, Port } from '@taskyon/shared/modules/frpBus'
 import {
-  createDuplexChannel,
   createIframeMux,
   createMessagePortAdapter,
-  createPortApi,
-  registerPortRpcHandler,
+  createPortClient,
+  createProtocolPort,
+  createPortServer,
   createStream,
   createTypeFilteredPort,
   createUnavailableIframeMux,
@@ -60,7 +59,12 @@ import type { TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
 import { generateSecretId } from './taskFunctionExecutor'
 import { runTaskWorker } from './taskWorker'
-import { callToolOverRpc, registerToolRpcBroker, registerToolRpcExecutor } from './toolRpc'
+import {
+  createToolExecutionClient,
+  registerToolRpcBroker,
+  registerToolRpcExecutor,
+  type ToolRpcFunctionCallMessage,
+} from './toolRpc'
 import { materializeTaskyonFunctionArguments } from './taskVariables'
 import { createWithDefaults } from './tools'
 import type { ReadonlyDeep } from 'type-fest'
@@ -72,11 +76,13 @@ function createApi(
   cs: Thunk<CryptoSession>,
   sendEncryptedTasks?: Thunk<boolean>,
 ) {
-  createPortApi(
+  const taskyonApi = createPortClient(insidePort, taskyonProtocol)
+
+  createPortServer(
     insidePort,
-    TaskyonMessage,
+    taskyonProtocol,
     {
-      task: async (msg) => {
+      createTask: async (msg) => {
         const tn = await taskManagerInstance().addPartialTask2Tree({
           ...msg.task,
           //label: msg.origin ? [msg.origin] : undefined,
@@ -86,7 +92,7 @@ function createApi(
           queueTask(tn.id)
         }
       },
-      tasks: async (msg) => {
+      createTaskChain: async (msg) => {
         console.log('received tasks:', msg)
         const ts = await Promise.all(
           msg.tasks.map(
@@ -101,9 +107,9 @@ function createApi(
         // push the last task to execution queue right away...
         if (msg.execute) ts.forEach((t) => queueTask(t.id))
       },
-      functionDescription: (msg) => {
+      registerTool: (msg) => {
         const newFunc: ToolBase = msg
-        console.log(`functionDescription was sent by ${msg.origin}`, newFunc)
+        console.log('registerTool was sent', newFunc)
         void taskManagerInstance().addDefaultTools([newFunc])
         insidePort.send({
           type: 'status',
@@ -113,30 +119,18 @@ function createApi(
           },
         })
       },
-      file: async (msg) => {
+      addFile: async (msg) => {
         const id = await taskManagerInstance().addFiles([msg.file], msg.store ?? 'memory')
         console.log('received file...', id, msg)
       },
-      // dummy function to keep functionResponses from warning..
-      functionResponse: () => {},
-      /*configurationMessage: (msg) => {
-        const newConfig = msg.conf
-        console.log('setting our configuration')
-        if (newConfig.llmSettings) {
-          // TODO: make sure, this function is only temporary and doesn't overwrite our actualy llmSettings...
-          deepMergeReactive(llmSettings, newConfig.llmSettings, 'overwrite')
-        }
-      },*/
+      listTools: async (request) =>
+        await taskManagerInstance().updateToolDefinitions(request.includeHidden),
     },
-    (msg) => console.warn('taskyon receiving unknown message', msg),
-    (msg) => console.error('an error occured during handling of the message', msg),
-  )
-
-  registerPortRpcHandler(
-    insidePort,
-    taskyonProtocol.rpc.listTools,
-    async (request) => await taskManagerInstance().updateToolDefinitions(request.includeHidden),
-    (error) => console.error('an error occured during handling of the RPC request', error),
+    {
+      onError: (error) =>
+        console.error('an error occured during handling of the protocol command', error),
+      onUnknownMessage: (msg) => console.warn('taskyon receiving unknown message', msg),
+    },
   )
 
   let unsubscribeTaskStream: (() => void) | null = null
@@ -158,12 +152,15 @@ function createApi(
           )
           console.log('created encrypted task file...', id)
 
-          insidePort.send({
-            type: 'addTasks',
-            data: packed,
-            info: archiveName,
-            ids: [String(id)],
-          })
+          void taskyonApi
+            .importTaskArchive({
+              data: packed,
+              info: archiveName,
+              ids: [String(id)],
+            })
+            .catch((error) => {
+              console.error('failed to send encrypted task archive to peer', error)
+            })
         }
       }
     })
@@ -214,7 +211,7 @@ const staticContext = (createIframeMultiPlexer: CreateIframeMultiPlexer) => {
   // "outPort" is the outwards port which is used by 3rd party apps
   // to communicate with taskyon.
   // "inPort" is the other side of the channel and is used by taskyon itself
-  const { x: outsidePort, y: insidePort } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()
+  const { x: outsidePort, y: insidePort } = createProtocolPort(taskyonProtocol)
 
   // logging
   outsidePort.receive((msg) => {
@@ -353,7 +350,7 @@ const dynamicContext =
         }
       },
     })
-    const prepareToolCall = async (call: RemoteFunctionCall) => {
+    const prepareToolCall = async (call: ToolRpcFunctionCallMessage) => {
       const { tool } = await taskManagerInstance.getToolDefinition(call.functionName)
       if (!tool) {
         throw new Error(
@@ -377,7 +374,7 @@ const dynamicContext =
       }
     }
     const continuationTask = partialTaskDraft.parse(entryNode())
-    const { workerStream, toolRpcPort, stopAllTasks, queueTask } = runTaskWorker(
+    const { workerStream, toolRpcPort, workerStop, queueTask } = runTaskWorker(
       taskManagerInstance,
       continuationTask,
       continuationTask,
@@ -387,21 +384,15 @@ const dynamicContext =
       toolPort: workerport,
       prepareFunctionCall: prepareToolCall,
     })
+    const toolExecutionClient = createToolExecutionClient(workerport)
     //##################### END INIT CTX #################
     return {
       chatCompletionStream,
       workerStream,
-      callTool: (name: string, args: FunctionArguments) =>
-        callToolOverRpc(
-          {
-            name,
-            arguments: args,
-          },
-          workerport,
-        ),
-      stopAllTasks: (message: string) => {
+      callTool: (name: string, args: FunctionArguments) => toolExecutionClient.callTool(name, args),
+      workerStop: (message: string) => {
         console.log('tycore stopping all tasks:', message)
-        stopAllTasks(message)
+        workerStop(message)
         workerToolBroker.stop(message)
         coreToolExecutor.stop(message)
       },
@@ -499,7 +490,7 @@ export async function tyCore(
     chatCompletionStream: chatCompletionStream.stream,
     workerStream: workerStream.stream,
     taskStream: taskStream.stream,
-    workerStop: (message: string) => ctx.stopAllTasks(message),
+    workerStop: (message: string) => ctx.workerStop(message),
     // updating and getting ApiKeys for chat completion has a special
     // treatment here, because we need it very often in our UI
     updateChatCompletionApiKey: async (key: string, value?: string) => {

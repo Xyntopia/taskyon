@@ -1,7 +1,6 @@
 //iFrameClient.ts
 
-import { createDuplexChannel, MessageChannelBridge } from '@taskyon/taskyon'
-import type { TaskyonGuiMessage } from 'src/modules/taskyon/apiTypes'
+import { createProtocolPort, MessageChannelBridge, taskyonGuiProtocol } from '@taskyon/tyclient'
 
 export async function waitForMessagePort(
   filter: (ev: MessageEvent) => boolean,
@@ -39,7 +38,7 @@ export async function waitForIframeDuplexChannel() {
     //console.log('Message from unknown origin:', event.origin, event)
   })
   // create a channel from the mport:
-  const { x, y } = createDuplexChannel<TaskyonGuiMessage, unknown>()
+  const { x, y } = createProtocolPort(taskyonGuiProtocol)
   // connect the MessageChannel to our UI API
   MessageChannelBridge(x, mport)
   return y

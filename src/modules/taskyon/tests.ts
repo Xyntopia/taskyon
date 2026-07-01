@@ -32,8 +32,9 @@ import {
 } from '@taskyon/taskyon'
 import {
   createChatCompletionTask,
-  createPortRpcClient,
-  processTasks,
+  createPortClient,
+  createTaskyonClient,
+  runTasks,
   taskyonProtocol,
 } from '@taskyon/taskyon/api'
 import { authenticateWithPopup } from '@taskyon/taskyon/browser'
@@ -1324,12 +1325,11 @@ export async function testGdriveZipRoundtrip() {
     // we want to allow additional data to be send, for "upwards" compatibility
     // e.g. in the future we might want to add public keys and other things. Maybe we want to
     // encrypt tasks with synchronized session keys and similar things...
-    gdport.send({
-      type: 'addTasks',
+    const gdriveApi = createPortClient(gdport, taskyonProtocol)
+    await gdriveApi.importTaskArchive({
       data: packed,
       info: archiveName,
       ids: filenames,
-      additionalDataTest: 'hello!   we are simply testing additional keys',
     })
     // and send them of to gdrive...
     log('sent data to gdrive', { archiveName, filenames })
@@ -1355,10 +1355,10 @@ export async function testGdriveZipRoundtrip() {
 
     for (const name of filenames) {
       try {
-        gdport.send({ type: 'requestTask', id: name })
+        await gdriveApi.requestTaskArchive({ id: name })
         await new Promise<boolean>((resolve) => {
           const unsub = gdport.receive(async (msg) => {
-            if (msg.type === 'addTasks') {
+            if (msg.type === 'importTaskArchiveRequest') {
               const decompressed = await decompressEncryptedObject(
                 msg.data,
                 msg.info,
@@ -1448,7 +1448,7 @@ export async function testToolList() {
 
   const ty = await tystate.taskyon
 
-  const allTools = await createPortRpcClient(ty.port, taskyonProtocol.rpc.listTools)({})
+  const allTools = await createTaskyonClient(ty.port).listTools({})
   return {
     'all tools': summarizeTools(Object.keys(allTools), allTools),
   }
@@ -1557,7 +1557,7 @@ export const testChatCompletionWebSearch = async () => {
     ],
   ]
 
-  const result = await processTasks(tystate.api)(taskList, 'message', { timeoutMs: 50000 })
+  const result = await runTasks(tystate.api)(taskList, 'message', { timeoutMs: 50000 })
 
   const webSearchResponse = result.content.data
 
@@ -1693,7 +1693,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
       ],
     ]
 
-    const result = await processTasks(tystate.api)(taskList, ['message', 'return'], {
+    const result = await runTasks(tystate.api)(taskList, ['message', 'return'], {
       timeoutMs: 50000,
     })
     assert(
@@ -1811,7 +1811,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
       ],
     ]
 
-    const result = await processTasks(tystate.api)(taskList, ['message', 'return'], {
+    const result = await runTasks(tystate.api)(taskList, ['message', 'return'], {
       timeoutMs: 50000,
     })
     assert(
@@ -1911,7 +1911,7 @@ export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: st
       ],
     ]
 
-    const result = await processTasks(tystate.api)(taskList, ['message', 'return'], {
+    const result = await runTasks(tystate.api)(taskList, ['message', 'return'], {
       timeoutMs: 50000,
     })
     assert(
@@ -1999,7 +1999,7 @@ export const testFileUpload = async () => {
     console.log('upload file test received message', msg)
   })
 
-  const taskResult = await processTasks(tystate.api)([tasks], 'structured', { timeoutMs: 50000 })
+  const taskResult = await runTasks(tystate.api)([tasks], 'structured', { timeoutMs: 50000 })
 
   const res = taskResult.content.data as { weight?: string; price?: string }
 
@@ -2359,7 +2359,7 @@ export async function getTestMetaData() {
       const task = await ty.getTask(state.selectedTaskId)
       if (task) {
         const taskChain = await ty.getTaskChain(task.id)
-        const toolDefs = await createPortRpcClient(ty.port, taskyonProtocol.rpc.listTools)({})
+        const toolDefs = await createTaskyonClient(ty.port).listTools({})
         const res = await convertTaskNodesToOpenAIChat(
           taskChain,
           // we are not testing files right now...

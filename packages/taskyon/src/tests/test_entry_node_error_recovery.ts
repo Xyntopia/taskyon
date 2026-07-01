@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { mkdir } from 'node:fs/promises'
 import { tyCore } from '../core/init'
 import { registerToolRpcTools } from '../core/toolRpc'
+import { createTaskyonClient } from '../api'
 import { toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
 import { createStandardEntryNodeTool } from '../tools/entryNode'
@@ -104,8 +105,7 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async () => {
         }),
       ])
         .then((tasks) =>
-          ty.port.send({
-            type: 'tasks',
+          createTaskyonClient(ty.port).createTaskChain({
             execute: true,
             show: false,
             tasks,

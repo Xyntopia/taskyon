@@ -1,5 +1,11 @@
 // sync.ts
-import { createDuplexChannel, createPortApi, TyP2P } from '@taskyon/taskyon'
+import {
+  createDuplexChannel,
+  createPortClient,
+  createPortServer,
+  taskyonProtocol,
+} from '@taskyon/taskyon'
+import type { TyP2P } from '@taskyon/taskyon'
 import { useGdrive } from '../gdrive'
 
 // TODO: generalize this to all kinds of cloud storages / peers
@@ -15,11 +21,12 @@ export const gDriveSyncPort = (
     y: outsideGdrive, // used to send & receive messages from gdrive itself...
   } = createDuplexChannel<TyP2P, TyP2P>()
   const { uploadFileArchiveWMeta, downloadArchiveFile } = useGdrive(tokenGetter)
-  createPortApi(
+  const gdriveApi = createPortClient(insideGdrive, taskyonProtocol)
+  createPortServer(
     insideGdrive,
-    TyP2P,
+    taskyonProtocol,
     {
-      addTasks: async ({ data, info, ids }) => {
+      importTaskArchive: async ({ data, info, ids }) => {
         const msgpackFile = new File([data], info, {
           type: 'application/octet-stream',
         })
@@ -27,18 +34,23 @@ export const gDriveSyncPort = (
         insideGdrive.send({ type: 'taskCreated', ids, info: created.name })
         console.log('created file on gdrive:', created.webViewLink)
       },
-      requestTask: async ({ id }) => {
+      requestTaskArchive: async ({ id }) => {
         console.log('task requested with id:', id)
         const file = await downloadArchiveFile(directory, id)
         if (file) {
           const buffer = await file.arrayBuffer()
           const data = new Uint8Array(buffer)
-          insideGdrive.send({ type: 'addTasks', data, ids: [id], info: file.name })
+          void gdriveApi
+            .importTaskArchive({
+              data,
+              ids: [id],
+              info: file.name,
+            })
+            .catch(errorCatcher)
         }
       },
     },
-    console.warn,
-    errorCatcher,
+    { onError: errorCatcher },
   )
   // return the "outside" Port to Gdrive to connect to taskyon!
   return outsideGdrive
