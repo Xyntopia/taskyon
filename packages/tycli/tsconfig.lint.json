@@ -15,7 +15,8 @@
       "@taskyon/spaceships/*": ["../spaceships/*"],
       "@taskyon/surrogate/*": ["../surrogate/*"],
       "@taskyon/ui/*": ["../ui/*"],
-      "@taskyon/taskyon/api": ["../taskyon/src/api/index.ts"]
+      "@taskyon/taskyon/api": ["../taskyon/src/api/index.ts"],
+      "@taskyon/tyclient": ["../tyclient/src/index.ts"]
     }
   },
   "include": ["src/cli.ts", "src/cli/**/*.ts"]

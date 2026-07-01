@@ -7,7 +7,7 @@ import { createTaskyonClient } from '../api'
 import { createStandardEntryNodeTool } from '../tools/entryNode'
 import { createDefaultTaskyonToolSetup } from '../tools'
 import { buildLinkedTaskChain } from '../testSupport/onlineProviderSupport'
-import { registerToolRpcTools } from '../core/toolRpc'
+import { createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
 import { toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
 import { llmSettings } from '../types/profiles'
@@ -76,7 +76,17 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
     undefined,
     { toolSetup: createDefaultTaskyonToolSetup(), nodePgLiteDataDir: dataDir },
   )
-  const toolRpcExecutor = await registerToolRpcTools({ port: ty.port, tools: [entryNodeTool] })
+  const toolRpcExecutor = await registerToolRpcTools({
+    port: ty.port,
+    tools: [entryNodeTool],
+    createContext: (call, stopSignal) =>
+      createExternalToolContext(stopSignal, {
+        getExecutionTaskChain: () => {
+          if (!call.taskId) throw new Error('Expected task id for entryNode test')
+          return ty.getTaskChain(call.taskId)
+        },
+      }),
+  })
 
   const selectedApi = llmState.selectedApi ?? 'taskyon'
   const providerKey = context.providerKey

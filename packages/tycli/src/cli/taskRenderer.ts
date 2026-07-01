@@ -30,7 +30,7 @@ const INTERNAL_TASK_TYPES = new Set(['functioncall', 'toolresult', 'structured',
 const toYaml = (value: unknown) =>
   serializeObject(value, {
     format: 'yaml',
-    maxDepth: 5,
+    maxDepth: 8,
     maxArrayLength: 12,
     maxObjectKeys: 30,
     maxStringLength: 300,

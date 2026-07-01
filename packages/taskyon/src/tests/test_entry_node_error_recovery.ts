@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { mkdir } from 'node:fs/promises'
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
 import { tyCore } from '../core/init'
-import { registerToolRpcTools } from '../core/toolRpc'
+import { createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
 import { createTaskyonClient } from '../api'
 import { createSubtasksResult, toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
@@ -167,7 +167,17 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
     undefined,
     { toolSetup: createDefaultTaskyonToolSetup(), nodePgLiteDataDir: dataDir },
   )
-  const toolRpcExecutor = await registerToolRpcTools({ port: ty.port, tools: [entryNodeTool] })
+  const toolRpcExecutor = await registerToolRpcTools({
+    port: ty.port,
+    tools: [entryNodeTool],
+    createContext: (call, stopSignal) =>
+      createExternalToolContext(stopSignal, {
+        getExecutionTaskChain: () => {
+          if (!call.taskId) throw new Error('Expected task id for entryNode test')
+          return ty.getTaskChain(call.taskId)
+        },
+      }),
+  })
 
   const selectedApi = llmState.selectedApi ?? 'taskyon'
   const providerKey = context.providerKey

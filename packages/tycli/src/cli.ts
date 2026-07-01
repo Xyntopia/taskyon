@@ -108,6 +108,8 @@ import {
 import { createExplorationTool } from './tools/explorationTool'
 import { updateFilesTool } from './tools/patchTool'
 import { downloadFileTool } from './tools/downloadFileTool'
+import { githubIssuesTool } from './tools/githubIssuesTool'
+import { gitlabTool } from './tools/gitlabTool'
 
 type BashToolArgs = {
   command?: string
@@ -1166,8 +1168,16 @@ async function askClarificationQuestionInCli(
     ),
     'Custom answer',
   ]
-  const selected = await selectFromList(rl, `\n${question.question}`, options)
-  if (selected === null) return null
+  writeLine(`\n${question.question}`)
+  options.forEach((option, index) => {
+    writeLine(`${index + 1}. ${option}`)
+  })
+  const answerRaw = await askQuestion(rl, 'Select: ')
+  if (answerRaw === null) return null
+  const selected = Number(answerRaw.trim()) - 1
+  if (!Number.isInteger(selected) || selected < 0 || selected >= options.length) {
+    return answerRaw.trim() || null
+  }
   const customIndex = options.length - 1
   if (selected === customIndex) {
     const custom = await askTextInput(rl, 'Custom answer')
@@ -1186,34 +1196,38 @@ function createCliClarificationTool(
     parameters: clarificationToolParameters,
     renderOptions: { hideChat: false, hideLlm: false },
     async function(rawArgs) {
-      const rl = getReadline()
-      if (!rl) {
-        throw new Error('Clarification questions are only available in interactive tycli sessions.')
-      }
-      const args = ClarificationRequest.parse(rawArgs)
-      if (args.intro?.trim()) writeLine(args.intro.trim())
-      const answers: ClarificationResult['answers'] = []
-
-      for (const question of args.questions) {
-        const answer = await askClarificationQuestionInCli(rl, question)
-        if (answer === null) {
-          return {
-            cancelled: true,
-            answers,
-          }
+      return await withCliMenuInteraction(async () => {
+        const rl = getReadline()
+        if (!rl) {
+          throw new Error(
+            'Clarification questions are only available in interactive tycli sessions.',
+          )
         }
-        answers.push({
-          id: question.id,
-          question: question.question,
-          answer,
-        })
-      }
+        const args = ClarificationRequest.parse(rawArgs)
+        if (args.intro?.trim()) writeLine(args.intro.trim())
+        const answers: ClarificationResult['answers'] = []
 
-      return {
-        ...(args.intro ? { intro: args.intro } : {}),
-        instruction: CLARIFICATION_RESULT_INSTRUCTION,
-        answers,
-      }
+        for (const question of args.questions) {
+          const answer = await askClarificationQuestionInCli(rl, question)
+          if (answer === null) {
+            return {
+              cancelled: true,
+              answers,
+            }
+          }
+          answers.push({
+            id: question.id,
+            question: question.question,
+            answer,
+          })
+        }
+
+        return {
+          ...(args.intro ? { intro: args.intro } : {}),
+          instruction: CLARIFICATION_RESULT_INSTRUCTION,
+          answers,
+        }
+      })
     },
   })
 }
@@ -1224,13 +1238,25 @@ const ACTIVE_LLM_TOOLS = [
   EXPLORATION_TOOL_NAME,
   UPDATE_FILES_TOOL_NAME,
   DOWNLOAD_FILE_TOOL_NAME,
+  githubIssuesTool.name,
+  gitlabTool.name,
 ] as const
+
+const INTERACTIVE_PROMPT_TOOL_NAMES = new Set<string>([CLARIFICATION_TOOL_NAME])
 
 type ToolCatalogEntry = {
   name: string
   description: string
   renderOptions?: { hideChat?: boolean }
 }
+
+const isCliToolCatalogEntry = (tool: unknown): tool is ToolCatalogEntry =>
+  typeof tool === 'object' &&
+  tool !== null &&
+  'name' in tool &&
+  typeof tool.name === 'string' &&
+  'description' in tool &&
+  typeof tool.description === 'string'
 
 function buildCliStableContext(projectInstructions: string) {
   const shell = process.env.SHELL ?? process.env.ComSpec ?? 'unknown'
@@ -2556,6 +2582,7 @@ async function main() {
         includeHidden: true,
       })) as Record<string, ToolCatalogEntry>
       return Object.values(allTools)
+        .filter(isCliToolCatalogEntry)
         .filter(
           (tool) =>
             !['chatCompletion', 'entryNode', 'opfsStorage', 'taskyonFlow'].includes(tool.name),
@@ -2709,6 +2736,8 @@ async function main() {
     downloadFileTool,
     mapSearchTool,
     overpassMapTool,
+    githubIssuesTool,
+    gitlabTool,
     cliBashTool,
     createDocumentationIndexClientTool(documentationBases),
     createTaskyonDocumentationTool(),
@@ -2859,6 +2888,10 @@ async function main() {
 
   const updateWorkerStatusLine = (event: WorkerEvent, suppressed: boolean) => {
     if (activeTaskCount() <= 0) {
+      stopWorkerStatusLine()
+      return
+    }
+    if (isInteractivePromptWorkerEvent(event)) {
       stopWorkerStatusLine()
       return
     }
@@ -3053,6 +3086,12 @@ async function main() {
     if (taskId === null) return false
     if (suppressedTaskIds.has(taskId)) return true
     return false
+  }
+
+  const isInteractivePromptWorkerEvent = (event: WorkerEvent) => {
+    const functionName =
+      event.task?.content?.type === 'functioncall' ? event.task.content.data?.name : undefined
+    return typeof functionName === 'string' && INTERACTIVE_PROMPT_TOOL_NAMES.has(functionName)
   }
 
   const wrapThinkingText = (text: string, maxWidth = 88) => {

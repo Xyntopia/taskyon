@@ -4,9 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createTaskyonClient, processTasksDetailed } from '../api'
 import { tyCore } from '../core/init'
-import { callToolOverRpc, registerToolRpcTools } from '../core/toolRpc'
+import { callToolOverRpc, createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
 import type { ToolRpcCallMessage, ToolRpcFunctionResponseMessage } from '../core/toolRpc'
 import type { TaskyonMessage } from '../api/taskyonProtocol'
+import type { TaskNode } from '../types/taskNode'
 import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 import { createCryptoSession } from '../utils/cryptoSession'
 
@@ -232,6 +233,104 @@ export const testRemoteFunctionBridgeRejectsExternalSecretAccess = async () => {
 
 testRemoteFunctionBridgeRejectsExternalSecretAccess.description =
   'Rejects secret access from external remote tools until a scoped secret protocol is implemented.'
+
+export const testRemoteFunctionBridgeProvidesExternalExecutionTaskChain = async () => {
+  const { x: clientPort, y: taskyonPort } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()
+  const taskChain: TaskNode[] = [
+    {
+      id: 'user-task',
+      role: 'user',
+      content: {
+        type: 'message',
+        data: 'hello',
+      },
+    },
+    {
+      id: 'entry-task',
+      role: 'function',
+      priorID: 'user-task',
+      content: {
+        type: 'functioncall',
+        data: {
+          name: 'remoteTaskChainReader',
+          arguments: {},
+        },
+      },
+    },
+  ]
+  let requestedTaskId: string | undefined
+  const taskChainTool = createTool({
+    name: 'remoteTaskChainReader',
+    description: 'Read the current execution task chain through the remote tool bridge.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    } as const,
+    function: async (_args, ctx) => {
+      const chain = await ctx.getExecutionTaskChain()
+      return chain.map((task) => task.id)
+    },
+  })
+
+  const toolDescriptionPromise = taskyonPort.receive.wait({ timeoutMs: 1000 })
+  const registrationPromise = registerToolRpcTools({
+    port: clientPort,
+    tools: [taskChainTool],
+    createContext: (call, stopSignal) =>
+      createExternalToolContext(stopSignal, {
+        getExecutionTaskChain: () => {
+          if (!call.taskId) throw new Error('Expected task id for remote task-chain test')
+          requestedTaskId = call.taskId
+          return Promise.resolve(taskChain)
+        },
+      }),
+  })
+
+  const toolDescription = await toolDescriptionPromise
+  if (toolDescription.type !== 'registerToolRequest') {
+    throw new Error('expected registerToolRequest message')
+  }
+  assert(
+    toolDescription.name === 'remoteTaskChainReader',
+    'expected remoteTaskChainReader registration',
+  )
+
+  taskyonPort.send({
+    type: 'registerToolResponse',
+    requestId: toolDescription.requestId,
+  })
+  const registration = await registrationPromise
+
+  const responsePromise = taskyonPort.receive.wait({ timeoutMs: 1000 })
+  taskyonPort.send({
+    type: 'functionCall',
+    functionName: 'remoteTaskChainReader',
+    requestId: 'remote-task-chain-reader-1',
+    taskId: 'entry-task',
+    arguments: {},
+  })
+  const response = await responsePromise
+
+  registration.destroy()
+  if (response.type !== 'functionResponse') {
+    throw new Error('expected functionResponse message')
+  }
+  assert(
+    response.functionName === 'remoteTaskChainReader',
+    'expected remoteTaskChainReader response',
+  )
+  assert(response.requestId === 'remote-task-chain-reader-1', 'expected matching request id')
+  assert(!response.error, `expected no error, got ${JSON.stringify(response.error)}`)
+  assert(requestedTaskId === 'entry-task', `expected entry-task lookup, got ${requestedTaskId}`)
+  assert(
+    Array.isArray(response.response) && response.response.join(',') === 'user-task,entry-task',
+    `expected task chain ids, got ${JSON.stringify(response.response)}`,
+  )
+}
+
+testRemoteFunctionBridgeProvidesExternalExecutionTaskChain.description =
+  'Provides getExecutionTaskChain to external remote tools when the caller supplies a task id and resolver.'
 
 export const testRemoteFunctionBridgeAllowsExplicitExternalSecretContext = async () => {
   const { x: clientPort, y: taskyonPort } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()

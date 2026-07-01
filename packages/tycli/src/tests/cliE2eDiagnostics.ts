@@ -574,6 +574,71 @@ export async function testCliOverpassMapToolPrintsHtmlPreviewLink() {
   })
 }
 
+export async function testCliClarificationToolAcceptsTypedAnswers() {
+  const args = {
+    intro: 'Clarification example',
+    questions: [
+      {
+        id: 'project',
+        question: 'Which GitLab project should I inspect?',
+        options: [
+          { label: 'Taskyon frontend', description: 'Use the frontend application project.' },
+          { label: 'Taskyon API', description: 'Use the backend API project.' },
+        ],
+      },
+      {
+        id: 'criteria',
+        question: 'What should count as obsolete?',
+        options: [
+          { label: 'Closed elsewhere', description: 'Issues already replaced or completed.' },
+          { label: 'No activity', description: 'Issues with no recent activity.' },
+        ],
+      },
+    ],
+  }
+  const result = await runTycSession({
+    testName: 'testCliClarificationToolAcceptsTypedAnswers',
+    steps: [
+      {
+        waitFor: 'Slash commands:',
+        input: `/client callTool askClarifyingQuestions ${JSON.stringify(args)}\n`,
+      },
+      {
+        waitFor: '3. Custom answer',
+        failOn: ['[Max depth reached]', 'askClarifyingQuestions: processing'],
+        input: '2\n',
+      },
+      {
+        waitFor: '1. Closed elsewhere - Issues already replaced or completed.',
+        failOn: ['[Max depth reached]', 'askClarifyingQuestions: processing'],
+        input: '3\n',
+      },
+      {
+        waitFor: 'Custom answer:',
+        failOn: ['[Max depth reached]', 'askClarifyingQuestions: processing'],
+        input: 'Older than one year and superseded by another issue\n',
+      },
+      {
+        waitFor: '[system|toolresult]',
+        failOn: ['[Max depth reached]', 'askClarifyingQuestions: processing', 'Fatal error'],
+        input: '',
+      },
+    ],
+    acceptOutputAsExit: '[system|toolresult]',
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    runner: 'pty',
+    timeoutMs: 60_000,
+  })
+
+  if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
+  assertContains(result.output, 'Select:')
+  assertContains(result.output, 'Taskyon API - Use the backend API project.')
+  assertContains(result.output, 'Older than one year and superseded by another issue')
+  assertContains(result.output, 'Use these answers as decisions.')
+  assertNotContains(result.output, '[Max depth reached]')
+  assertNotContains(result.output, 'askClarifyingQuestions: processing')
+}
+
 export function testTaskRendererDoesNotPrintTransientWorkerProgress() {
   const lines: string[] = []
   const state = {

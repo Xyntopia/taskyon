@@ -8,6 +8,7 @@ import {
   testQuitPromptCtrlCCancelsAndCtrlDExits as runQuitPromptCtrlCCancelsAndCtrlDExits,
   testCliOverpassMapToolPrintsHtmlPreviewLink as runCliOverpassMapToolPrintsHtmlPreviewLink,
   testTaskRendererWritesHtmlPreviewForAssistantHtml as runTaskRendererWritesHtmlPreviewForAssistantHtml,
+  testCliClarificationToolAcceptsTypedAnswers as runCliClarificationToolAcceptsTypedAnswers,
 } from '../../tests/cliE2eDiagnostics'
 
 const assert = (condition: unknown, message: string) => {
@@ -180,6 +181,13 @@ export const testCliOverpassMapToolPrintsHtmlPreviewLink = async () =>
 testCliOverpassMapToolPrintsHtmlPreviewLink.description =
   'Runs overpassMapTool through tycli client mode with a local Overpass mock and verifies the CLI prints an HTML preview file URL.'
 testCliOverpassMapToolPrintsHtmlPreviewLink.timeoutMs = 100_000
+
+export const testCliClarificationToolAcceptsTypedAnswers = async () =>
+  await runCliClarificationToolAcceptsTypedAnswers()
+
+testCliClarificationToolAcceptsTypedAnswers.description =
+  'Starts tycli, calls askClarifyingQuestions through /client, and verifies typed option/custom answers complete cleanly.'
+testCliClarificationToolAcceptsTypedAnswers.timeoutMs = 70_000
 
 export const testCliTaskRendererHidesHiddenWorkerProgress = () =>
   runTaskRendererHidesHiddenWorkerProgress()

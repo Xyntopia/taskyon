@@ -10,6 +10,10 @@ Apply this policy when implementing, debugging, or evaluating `tycli`.
   implementation.
 - Use the exact provider and model requested for the workflow. Clarify an unavailable identifier
   rather than silently substituting another.
+- Full diagnostics include online provider-backed tests such as entry-node web search. They require
+  network access and valid provider credentials. In a restricted sandbox, failures such as
+  `EAI_AGAIN api.openai.com` can indicate unavailable networking rather than a regression; rerun
+  them with network access before treating them as product failures.
 
 ## Autonomous Evaluation
 

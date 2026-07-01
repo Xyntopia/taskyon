@@ -3,7 +3,7 @@ import { createTaskyonClient } from '../../api'
 import { buildCreateNewTaskChain } from '../../core/createNewTaskChain'
 import { forgeTaskChain } from '../../core/createTasks'
 import { tyCore, type Taskyon } from '../../core/init'
-import { registerToolRpcTools } from '../../core/toolRpc'
+import { createExternalToolContext, registerToolRpcTools } from '../../core/toolRpc'
 import { createDefaultTaskyonToolSetup } from '../../tools'
 import { createStandardEntryNodeTool } from '../../tools/entryNode'
 import { llmSettings } from '../../types/profiles'
@@ -112,7 +112,17 @@ const createConversationHarness = async (
     { toolSetup: createDefaultTaskyonToolSetup() },
   )
   const ty = await tyPromise
-  const toolRpcExecutor = await registerToolRpcTools({ port: ty.port, tools: [entryNodeTool] })
+  const toolRpcExecutor = await registerToolRpcTools({
+    port: ty.port,
+    tools: [entryNodeTool],
+    createContext: (call, stopSignal) =>
+      createExternalToolContext(stopSignal, {
+        getExecutionTaskChain: () => {
+          if (!call.taskId) throw new Error('Expected task id for entryNode test')
+          return ty.getTaskChain(call.taskId)
+        },
+      }),
+  })
 
   return { ty, cleanup: () => toolRpcExecutor.destroy() }
 }
