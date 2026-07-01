@@ -488,6 +488,7 @@ async function simulateModel({ model, sourceFile, useSourceRoots, tEnd, dt, solv
       Number.isFinite(tEnd) ? tEnd : 1,
       Number.isFinite(dt) ? dt : 0.01,
       asString(solver) || 'auto',
+      '{}',
     ),
   )
 

@@ -1533,6 +1533,7 @@ function runNativeRumocaSimulation({ modelName, t0, tf, dt, solverOptions }) {
     Number.isFinite(tf) ? tf : 5,
     Number.isFinite(dt) ? dt : 0.01,
     nativeSolverName(solverOptions),
+    '{}',
   )
   return {
     elapsedMs: Date.now() - startedAt,
