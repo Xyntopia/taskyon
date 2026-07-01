@@ -10,14 +10,6 @@
         :scroll-target="taskThreadContainer"
         @scroll="scm.onScroll"
       />
-      <!--
-      // TODO: I don't think we need this right now...
-      <q-resize-observer
-        :debounce="50"
-        :scroll-target="taskThreadContainer"
-        @resize="scm.autoScroll"
-      />
-      -->
       <!-- "Task" Display (.tasks-container & .task-container) -->
       <TaskChainViewer
         v-if="currentTaskForView && tystate.selectedThread.length > 0"

@@ -201,6 +201,10 @@ async function listTestFileEntries() {
       sourcePrefix: 'packages/tycli/src/diagnostics/tests/',
     },
     {
+      dirUrl: new URL('../../../shared/modules/', import.meta.url),
+      sourcePrefix: 'packages/shared/modules/',
+    },
+    {
       dirUrl: new URL('../../../shared/surrogate/', import.meta.url),
       sourcePrefix: 'packages/shared/surrogate/',
     },

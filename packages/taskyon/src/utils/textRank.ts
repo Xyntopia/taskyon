@@ -27,6 +27,7 @@ const DEFAULT_WINDOW_SIZE = 2
 const DEFAULT_DAMPING = 0.85
 const DEFAULT_MAX_ITERATIONS = 100
 const DEFAULT_CONVERGENCE_THRESHOLD = 0.0001
+export const DEFAULT_KEYWORD_STOP_WORDS = sw.eng
 
 const stripMarkdownCode = (text: string) =>
   text
@@ -70,7 +71,7 @@ const tokenize = (text: string): Token[] =>
     .filter((token) => token.term.length > 1)
 
 const uniqueStopWords = (customStopWords: readonly string[] | undefined) =>
-  new Set([...(customStopWords ?? sw.eng)].map((word) => word.toLowerCase()))
+  new Set([...(customStopWords ?? DEFAULT_KEYWORD_STOP_WORDS)].map((word) => word.toLowerCase()))
 
 const removeStopWords = (tokens: Token[], stopWords: Set<string>) =>
   tokens.filter((token) => !stopWords.has(token.term))

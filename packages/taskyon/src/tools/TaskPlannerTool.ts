@@ -155,7 +155,18 @@ export const buildTaskPlannerTaskChains = (
   )
 }
 
-// TODO: provide a link to the search page from the result!
+const taskManagerSearchUrl = (args: {
+  searchString?: string | undefined
+  k: number
+  taskType?: string | undefined
+}) => {
+  const params = new URLSearchParams()
+  params.set('k', String(args.k))
+  if (args.searchString) params.set('q', args.searchString)
+  if (args.taskType) params.set('ct', args.taskType)
+  return `/taskmanager?${params.toString()}`
+}
+
 export const taskSearcher = (taskManager: TyTaskManager) =>
   createTool({
     name: 'taskSearcher',
@@ -184,6 +195,7 @@ export const taskSearcher = (taskManager: TyTaskManager) =>
       required: [],
     } as const satisfies JSONSchema7,
     function: async ({ searchString, k, taskType }) => {
+      const limit = k ?? 5
       const jsonfilter = taskType
         ? {
             content: {
@@ -192,9 +204,15 @@ export const taskSearcher = (taskManager: TyTaskManager) =>
           }
         : undefined
       const result = searchString
-        ? await taskManager.filteredVectorSearch(searchString, k, jsonfilter)
+        ? await taskManager.filteredVectorSearch(searchString, limit, jsonfilter)
         : []
-      return result
+      return {
+        searchUrl: taskManagerSearchUrl({ searchString, k: limit, taskType }),
+        results: result.map((entry) => ({
+          ...entry,
+          taskUrl: `/detailed?t=${encodeURIComponent(entry.taskId)}`,
+        })),
+      }
     },
   })
 

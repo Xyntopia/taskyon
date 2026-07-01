@@ -2,6 +2,7 @@ import {
   convertTaskNodesToOpenAIChat,
   getCommandFromStructuredResponse,
 } from '../tools/chatCompletionTool'
+import { serializeObject } from '@taskyon/shared/modules/serializeObject'
 import { selectTaskChainIds } from '../core/taskChainSelection'
 import type { TaskNode } from '../types/taskNode'
 import type { ToolBase } from '../types/tools'
@@ -257,6 +258,67 @@ export const testOrphanedToolResultRendersAsSystemContext = async () => {
   return { success: true }
 }
 
+export const testSerializeObjectTruncationNoticeIsOptIn = () => {
+  const value = { a: 1, b: 2, c: 3 }
+
+  const defaultSerialized = serializeObject(value, {
+    format: 'yaml',
+    maxObjectKeys: 1,
+  })
+  const noticeSerialized = serializeObject(value, {
+    format: 'yaml',
+    maxObjectKeys: 1,
+    includeTruncationNotice: true,
+  })
+
+  assert(
+    !defaultSerialized.startsWith('Note: this serialized value was truncated'),
+    'Expected truncation notice to be opt-in',
+  )
+  assert(
+    noticeSerialized.startsWith('Note: this serialized value was truncated'),
+    'Expected opt-in truncation notice when object keys are omitted',
+  )
+
+  return { success: true }
+}
+
+export const testToolResultRenderingUsesBoundedSerializationForLlm = async () => {
+  const toolResult = task({
+    id: 'large-tool-result',
+    role: 'system',
+    created_at: 4,
+    content: {
+      type: 'toolresult',
+      data: {
+        rows: Array.from({ length: 65 }, (_, index) => ({
+          index,
+          value: `row-${index}`,
+        })),
+      },
+    },
+  })
+
+  const messages = await convertTaskNodesToOpenAIChat(
+    [toolResult],
+    () => Promise.resolve(null),
+    () => Promise.resolve(undefined),
+    false,
+    false,
+    {},
+  )
+
+  const content = messages[0]?.content
+  assert(typeof content === 'string', 'Expected tool result to render as text context')
+  assert(
+    content.includes('Note: this serialized value was truncated'),
+    'Expected LLM-facing tool result to state when data was truncated',
+  )
+  assert(content.includes('__omittedItems: 5'), 'Expected omitted array item count in tool result')
+
+  return { success: true }
+}
+
 export const testChooseToolPlainTextResponseDoesNotThrow = () => {
   const response = 'I cannot provide the current time.'
   const commands = getCommandFromStructuredResponse(response)
@@ -277,3 +339,7 @@ testChatCompletionContextSizeTrimsAfterLineageSelection.description =
   'chatCompletion context_size maps to maxFollow and limits the final lineage context after terminal subtask results are selected.'
 testOrphanedToolResultRendersAsSystemContext.description =
   'Terminal tool results without their hidden function-call parent render as system context instead of orphaned native tool output.'
+testSerializeObjectTruncationNoticeIsOptIn.description =
+  'serializeObject keeps existing output stable and only emits a truncation notice when requested.'
+testToolResultRenderingUsesBoundedSerializationForLlm.description =
+  'LLM-facing tool result rendering uses bounded serialization and explicitly marks truncated data.'

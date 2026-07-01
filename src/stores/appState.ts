@@ -167,7 +167,6 @@ function getInitialState() {
     // this is persisted in local storage, so that on the next page reload
     // taskyon will wait for the key before initializing taskyon code session
     initWBindingKey: false,
-    // TODO:
     initWSession: undefined as string | undefined,
 
     messageDebug: {} as Record<string, boolean | undefined>, // whether message with ID should be open or not...

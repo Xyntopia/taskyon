@@ -71,10 +71,22 @@ export interface PgLiteOptions {
   vectorDims?: number
 }
 
+const SQL_IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+function validateSqlIdentifier(identifier: string) {
+  if (!SQL_IDENTIFIER_PATTERN.test(identifier)) {
+    throw new Error(`Invalid SQL identifier: ${identifier}`)
+  }
+  return identifier
+}
+
 export async function createVecPgLiteTable(db: TyPGDB, options: PgLiteOptions) {
   if (options.pgvector) {
     options.additionalColumns = options.additionalColumns || []
     const vectorDims = options.vectorDims || 3
+    if (!Number.isInteger(vectorDims) || vectorDims < 1) {
+      throw new Error(`Invalid vector dimension count: ${vectorDims}`)
+    }
     options.additionalColumns.push(`vec vector(${vectorDims})`)
   }
 
@@ -83,21 +95,22 @@ export async function createVecPgLiteTable(db: TyPGDB, options: PgLiteOptions) {
     idColumn = 'id',
     dataColumn = 'data',
     additionalColumns,
-    createTableSql = `CREATE TABLE IF NOT EXISTS ${tableName} (
+    createTableSql,
+    pgvector = false,
+  } = options
+  validateSqlIdentifier(tableName)
+  validateSqlIdentifier(idColumn)
+  validateSqlIdentifier(dataColumn)
+  const defaultCreateTableSql = `CREATE TABLE IF NOT EXISTS ${tableName} (
       ${idColumn} VARCHAR(64) PRIMARY KEY,
       ${dataColumn} JSONB NOT NULL
       ${additionalColumns ? `, ${additionalColumns.join(', ')}` : ''}
-    );`,
-    pgvector = false,
-  } = options
+    );`
 
   // Incorporate the pgvector extension if needed
   if (pgvector) await db.exec('CREATE EXTENSION IF NOT EXISTS vector;')
 
-  // Create table if SQL provided
-  if (createTableSql) {
-    await db.exec(createTableSql)
-  }
+  await db.exec(createTableSql ?? defaultCreateTableSql)
 
   return { dataColumn, tableName, idColumn }
-} // TODO: add protections against SQL injection...
+}

@@ -4,11 +4,11 @@
 //import type pdfjsLibModule from 'pdfjs-dist'
 import { cleanWebpageEnhanced } from './cleanHtml'
 
-// TODO: handle compressed files
 // TODO: handle encrypted files
-// TODO: handle open office files
 // TODO: handle image some other files with content
-// TODO: handle excel files
+export type ConvertFileToTextOptions = {
+  htmlMode?: 'clean' | 'raw'
+}
 
 let pdfWorkerInitialized = false
 
@@ -45,8 +45,24 @@ async function read_docx(file: File) {
   return result.value
 }
 
-function detectByExtension(file: File): string | undefined {
-  const ext = file.name.split('.').pop()?.toLowerCase()
+async function read_spreadsheet(file: File) {
+  const XLSX = await import('xlsx')
+  const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+  return workbook.SheetNames.map((sheetName) => {
+    const sheet = workbook.Sheets[sheetName]
+    if (!sheet) return ''
+    const csv = XLSX.utils.sheet_to_csv(sheet)
+    return [`# Sheet: ${sheetName}`, csv].filter(Boolean).join('\n')
+  })
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+function detectByName(name: string): string | undefined {
+  const lowerName = name.toLowerCase()
+  if (lowerName.endsWith('.tar.gz')) return 'application/gzip'
+
+  const ext = lowerName.split('.').pop()
   switch (ext) {
     case 'txt':
     case 'log':
@@ -92,6 +108,14 @@ function detectByExtension(file: File): string | undefined {
       return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     case 'docm':
       return 'application/vnd.ms-word.document.macroEnabled.12' // treat like docx
+    case 'xlsx':
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    case 'xlsm':
+      return 'application/vnd.ms-excel.sheet.macroEnabled.12'
+    case 'xls':
+      return 'application/vnd.ms-excel'
+    case 'ods':
+      return 'application/vnd.oasis.opendocument.spreadsheet'
     case 'ipynb':
       return 'application/x-ipynb+json'
     case 'ics':
@@ -109,6 +133,10 @@ function detectByExtension(file: File): string | undefined {
     case 'gz':
       return 'application/gzip'
   }
+}
+
+function detectByExtension(file: File): string | undefined {
+  return detectByName(file.name)
 }
 
 type EncodingLabel = 'utf-8' | 'utf-16le' | 'utf-16be' | 'windows-1252' | 'iso-8859-1'
@@ -205,7 +233,18 @@ async function read_ipynb(file: File) {
   return mime
 }*/
 
-export async function convertFileToText(file: File): Promise<string> {
+export async function convertFileToText(
+  file: File,
+  options: ConvertFileToTextOptions = {},
+): Promise<string> {
+  return convertFileToTextInternal(file, options, 0)
+}
+
+async function convertFileToTextInternal(
+  file: File,
+  options: ConvertFileToTextOptions,
+  depth: number,
+): Promise<string> {
   let mime = file.type
   if (!mime || mime === 'application/octet-stream' || mime === 'text/plain') {
     mime = detectByExtension(file) || mime
@@ -220,11 +259,23 @@ export async function convertFileToText(file: File): Promise<string> {
     case 'application/vnd.ms-word.document.macroEnabled.12': // docm -> docx path
       return await read_docx(file)
 
+    case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+    case 'application/vnd.ms-excel.sheet.macroEnabled.12':
+    case 'application/vnd.ms-excel':
+    case 'application/vnd.oasis.opendocument.spreadsheet':
+      return await read_spreadsheet(file)
+
     case 'application/x-ipynb+json':
       return await read_ipynb(file)
 
     case 'application/gzip': {
       const ab = await maybeGunzip(file)
+      const innerName = file.name.replace(/\.gz$/i, '')
+      const innerMime = detectByName(innerName)
+      if (depth < 2 && innerMime && innerMime !== 'application/gzip') {
+        const innerFile = new File([ab], innerName || file.name, { type: innerMime })
+        return await convertFileToTextInternal(innerFile, options, depth + 1)
+      }
       return tryBestEffortArrayBuffer(ab)
     }
 
@@ -238,10 +289,8 @@ export async function convertFileToText(file: File): Promise<string> {
     case 'application/xml':
     case 'text/xml':
     case 'text/html': {
-      // TODO: somehow optionally make this accept the "original
-      // file" instead of the cleaned version...s
-      const cleaned = cleanWebpageEnhanced(await file.text())
-      return cleaned
+      const raw = await file.text()
+      return options.htmlMode === 'raw' ? raw : cleanWebpageEnhanced(raw)
     }
     case 'text/markdown':
     case 'text/csv':

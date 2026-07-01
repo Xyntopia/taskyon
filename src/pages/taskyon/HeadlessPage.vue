@@ -75,6 +75,7 @@ function getDiagnosticsTests() {
       '!../../packages/taskyon/src/tests/test_entry_node_error_recovery.ts',
       '!../../packages/taskyon/src/tests/test_entry_node_websearch.ts',
       '!../../packages/taskyon/src/tests/test_remote_function_bridge.ts',
+      '../../packages/shared/modules/test_*.ts',
       '../../packages/shared/surrogate/test_*.ts',
     ],
     { eager: true },

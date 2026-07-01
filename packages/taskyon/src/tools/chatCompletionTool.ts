@@ -1,4 +1,5 @@
 import { createStream } from '@taskyon/shared/modules/frpBus'
+import { serializeObject } from '@taskyon/shared/modules/serializeObject'
 import type {
   AssistantModelMessage,
   FilePart,
@@ -67,7 +68,6 @@ import {
   pickProperties,
 } from '../utils/objHelpers'
 import type { Thunk } from '../utils/tsHelpers'
-import { safeYamlDump } from '../utils/yamlUtils'
 
 type WebSearchOptions = {
   maxResults: number
@@ -262,7 +262,14 @@ const hasNonSystemMessages = (messages: ModelMessage[]): boolean =>
 const serializeRawChunkValue = (value: unknown): string => {
   if (typeof value === 'string') return value
   if (value === undefined) return ''
-  return safeYamlDump(value)
+  return serializeObject(value, {
+    format: 'yaml',
+    maxDepth: 4,
+    maxArrayLength: 30,
+    maxObjectKeys: 30,
+    maxStringLength: 8_000,
+    includeTruncationNotice: true,
+  })
 }
 
 const normalizePromptInjections = (value: unknown): PromptInjection[] =>
@@ -558,7 +565,7 @@ export async function convertTaskNodesToOpenAIChat(
   const messages: ModelMessage[] = []
 
   for (const task of taskChain) {
-    const referencedTasks = await renderReferencedTasksForLlm(
+    const missingReferencedTaskMessages = await renderMissingReferencedTasksForLlm(
       task,
       tasksById,
       renderedTaskIds,
@@ -566,7 +573,7 @@ export async function convertTaskNodesToOpenAIChat(
       variableService,
       getTaskById,
     )
-    messages.push(...referencedTasks)
+    messages.push(...missingReferencedTaskMessages)
 
     const renderedMessages = await convertTaskNodeToOpenAIMessage(
       task,
@@ -594,11 +601,20 @@ const renderTaskContentForLlm = (
 ) => {
   const variableName = variableService.getOrAssignVariableName(task, tasksById)
   const content =
-    task.content.type === 'message' ? String(task.content.data) : safeYamlDump(task.content.data)
+    task.content.type === 'message'
+      ? String(task.content.data)
+      : serializeObject(task.content.data, {
+          format: 'yaml',
+          maxDepth: 5,
+          maxArrayLength: 40,
+          maxObjectKeys: 40,
+          maxStringLength: 16_000,
+          includeTruncationNotice: true,
+        })
   return renderTaskyonVariableBlock(variableName, content)
 }
 
-const renderReferencedTasksForLlm = async (
+const renderMissingReferencedTasksForLlm = async (
   task: TaskNode,
   tasksById: Map<string, TaskNode>,
   renderedTaskIds: Set<string>,
@@ -1027,14 +1043,31 @@ async function convertTaskNodeToOpenAIMessage(
           content:
             `The following tool was used: ${functionCallName}.` +
             (!isEmpty(llmArguments)
-              ? ` The function arguments were: ${JSON.stringify(llmArguments)}`
+              ? ` The function arguments were: ${serializeObject(llmArguments, {
+                  format: 'json',
+                  maxDepth: 6,
+                  maxArrayLength: 40,
+                  maxObjectKeys: 40,
+                  maxStringLength: 12_000,
+                  includeTruncationNotice: true,
+                })}`
               : ''),
         },
       ]
     }
   } else if (task.content.type === 'toolresult') {
     const variableName = variableService.getOrAssignVariableName(task, tasksById)
-    const renderedBlock = renderTaskyonVariableBlock(variableName, safeYamlDump(task.content.data))
+    const renderedBlock = renderTaskyonVariableBlock(
+      variableName,
+      serializeObject(task.content.data, {
+        format: 'yaml',
+        maxDepth: 6,
+        maxArrayLength: 60,
+        maxObjectKeys: 60,
+        maxStringLength: 20_000,
+        includeTruncationNotice: true,
+      }),
+    )
     const toolCallTask = task.parentID ? tasksById.get(task.parentID) : undefined
     if (task.parentID && useNativeTools && toolCallTask?.content.type === 'functioncall') {
       // the parent task should be the tool call task...
@@ -1088,7 +1121,14 @@ async function convertTaskNodeToOpenAIMessage(
           type: 'text',
           text: renderTaskyonVariableBlock(
             variableService.getOrAssignVariableName(task, tasksById),
-            safeYamlDump(task.content.data),
+            serializeObject(task.content.data, {
+              format: 'yaml',
+              maxDepth: 6,
+              maxArrayLength: 50,
+              maxObjectKeys: 50,
+              maxStringLength: 16_000,
+              includeTruncationNotice: true,
+            }),
           ),
         },
       ],

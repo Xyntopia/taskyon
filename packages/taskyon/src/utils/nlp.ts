@@ -1,22 +1,30 @@
+import type * as TransformersRuntimeModule from '@huggingface/transformers'
+import type { Tensor, PreTrainedModel, PreTrainedTokenizer } from '@huggingface/transformers'
 import {
-  type Tensor,
-  cat,
-  mean,
-  cos_sim,
-  env,
-  type PreTrainedModel,
-  type PreTrainedTokenizer,
-  AutoModel,
-  AutoTokenizer,
-} from '@huggingface/transformers'
+  DEFAULT_KEYWORD_STOP_WORDS,
+  textRankTerms,
+  type RankedTextTerm,
+  type TextRankOptions,
+} from './textRank'
 
-env.allowLocalModels = false
-env.allowRemoteModels = true
+export { DEFAULT_KEYWORD_STOP_WORDS, textRankTerms }
+export type { RankedTextTerm, TextRankOptions }
+
+type TransformersRuntime = typeof TransformersRuntimeModule
+
+let transformersRuntime: Promise<TransformersRuntime> | undefined
+
+async function loadTransformersRuntime() {
+  transformersRuntime ??= import('@huggingface/transformers').then((runtime) => {
+    runtime.env.allowLocalModels = false
+    runtime.env.allowRemoteModels = true
+    return runtime
+  })
+  return transformersRuntime
+}
 //env.
 //env.localModelPath = '/path/to/local/models/';
 //env.cacheDir = '/path/to/cache/directory/';
-
-//import * as sw from 'stopword'; // Assuming this is the stopword library you are referring to
 
 // Include pako library
 // this piece of code loads a compressed vocabulary for vectorization tasks...
@@ -62,7 +70,9 @@ export async function loadModel(modelName: string) {
   // Check if loading already in progress
   if (!modelStore.models[modelName]) {
     //const tf = await loadTransformers();
-    modelStore.models[modelName] = AutoModel.from_pretrained(modelName)
+    modelStore.models[modelName] = loadTransformersRuntime().then(({ AutoModel }) =>
+      AutoModel.from_pretrained(modelName),
+    )
   }
   return await modelStore.models[modelName]
 }
@@ -70,7 +80,9 @@ export async function loadModel(modelName: string) {
 export async function loadTokenizer(modelName: string) {
   if (!modelStore.tokenizers[modelName]) {
     //const tf = await loadTransformers();
-    modelStore.tokenizers[modelName] = AutoTokenizer.from_pretrained(modelName)
+    modelStore.tokenizers[modelName] = loadTransformersRuntime().then(({ AutoTokenizer }) =>
+      AutoTokenizer.from_pretrained(modelName),
+    )
   }
   return await modelStore.tokenizers[modelName]
 }
@@ -94,8 +106,13 @@ function createChunks(tensor: Tensor, chunkSize: number, overlap: number) {
   return chunks
 }
 
-function mergeVectors(chunkVectors: Tensor[], overlap: number) {
+function mergeVectors(
+  chunkVectors: Tensor[],
+  overlap: number,
+  tensorOps: Pick<TransformersRuntime, 'cat' | 'mean'>,
+) {
   console.log('merge vectors')
+  const { cat, mean } = tensorOps
   const mergedVectors: Tensor[] = []
 
   const chunkLength = chunkVectors[0]!.dims[1]!
@@ -128,6 +145,8 @@ function mergeVectors(chunkVectors: Tensor[], overlap: number) {
 
 export async function vectorize(txt: string, modelName: string, chunkSize = 512, overlap = 50) {
   console.log('Calculating vectors for long text')
+  const tensorOps = await loadTransformersRuntime()
+  const { mean } = tensorOps
   const tokenizer = await loadTokenizer(modelName)
   const model = await loadModel(modelName)
   const maxChunkSize =
@@ -175,7 +194,7 @@ export async function vectorize(txt: string, modelName: string, chunkSize = 512,
   // Merge the chunk vectors
   let finalVector: Tensor | undefined
   if (chunkVectors.length > 1) {
-    finalVector = mergeVectors(chunkVectors, overlap)
+    finalVector = mergeVectors(chunkVectors, overlap, tensorOps)
   } else {
     finalVector = chunkVectors[0]
   }
@@ -199,7 +218,11 @@ export async function vectorize(txt: string, modelName: string, chunkSize = 512,
     //const res = (await model.generate(inputs))// as Record<string, Tensor>;
   }*/
 
-export function tokenVecsToWordVecs(tokens: string[], vectors: Tensor) {
+export function tokenVecsToWordVecs(
+  tokens: string[],
+  vectors: Tensor,
+  meanTensor: TransformersRuntime['mean'],
+) {
   const wordVectors: Tensor[] = []
   const words: string[] = []
   let currentWordStartIndex = 0
@@ -215,7 +238,7 @@ export function tokenVecsToWordVecs(tokens: string[], vectors: Tensor) {
       const tokenNum = i - currentWordStartIndex
       if (tokenNum > 1) {
         let meanVector = vectors.slice([currentWordStartIndex, i])
-        meanVector = mean(meanVector, 0)
+        meanVector = meanTensor(meanVector, 0)
         wordVectors.push(meanVector)
       } else {
         wordVectors.push(vectors.slice(currentWordStartIndex))
@@ -232,7 +255,7 @@ export function tokenVecsToWordVecs(tokens: string[], vectors: Tensor) {
   }
 
   let meanVector = vectors.slice([currentWordStartIndex, tokens.length])
-  meanVector = mean(meanVector, 0)
+  meanVector = meanTensor(meanVector, 0)
   wordVectors.push(meanVector)
   const nextWord = tokens
     .slice(currentWordStartIndex, tokens.length)
@@ -264,12 +287,13 @@ export async function extractKeywords(
   //const languageCode = detectedLanguage.languages[0].language; // Assuming the most probable language is the first one
 
   // First, we vectorize the text to get word vectors and the mean vector for the entire string
+  const { cat, cos_sim, mean } = await loadTransformersRuntime()
   const { individualVectors, token_ids } = await vectorize(txt, modelName)
 
   // Tokenize the text to get individual words
   const tokenizer = await loadTokenizer(modelName)
   const tokens = tokenIdsToTokens(tokenizer, token_ids.flatten().tolist())
-  const { words, wordVectors } = tokenVecsToWordVecs(tokens, individualVectors.squeeze(0))
+  const { words, wordVectors } = tokenVecsToWordVecs(tokens, individualVectors.squeeze(0), mean)
 
   // remove all stop words from text
 
@@ -294,9 +318,62 @@ export async function extractKeywords(
 
   // Filter out stopwords and select top N keywords
   const keywords = wordSimilarities
-    //TODO: reenable: .filter(({ word }) => !sw.eng[word])
+    .filter(({ word }) => !DEFAULT_KEYWORD_STOP_WORDS.includes(word.toLowerCase()))
     .slice(0, numKeywords)
     .map(({ word }) => word)
 
   return keywords
+}
+
+export function extractTextRankKeywords(
+  txt: string,
+  options: TextRankOptions = {},
+): RankedTextTerm[] {
+  return textRankTerms(txt, options)
+}
+
+export async function extractCombinedKeywords(
+  txt: string,
+  options: {
+    modelName?: string
+    maxTerms?: number
+    vectorWeight?: number
+    textRankOptions?: TextRankOptions
+  } = {},
+) {
+  const maxTerms = Math.max(1, options.maxTerms ?? 5)
+  const vectorWeight = options.vectorWeight ?? 0.5
+  const textRankWeight = 1 - vectorWeight
+  const textRankKeywords = extractTextRankKeywords(txt, {
+    ...options.textRankOptions,
+    maxTerms,
+  })
+
+  if (!options.modelName) {
+    return textRankKeywords.map((term) => term.display)
+  }
+
+  const vectorKeywords = await extractKeywords(txt, options.modelName, maxTerms)
+  const combined = new Map<string, { display: string; score: number; firstIndex: number }>()
+  for (const [index, keyword] of vectorKeywords.entries()) {
+    const term = keyword.toLowerCase()
+    combined.set(term, {
+      display: keyword,
+      score: vectorWeight * (maxTerms - index),
+      firstIndex: index,
+    })
+  }
+  for (const term of textRankKeywords) {
+    const current = combined.get(term.term)
+    combined.set(term.term, {
+      display: current?.display ?? term.display,
+      score: (current?.score ?? 0) + textRankWeight * term.score,
+      firstIndex: Math.min(current?.firstIndex ?? term.firstIndex, term.firstIndex),
+    })
+  }
+
+  return Array.from(combined.values())
+    .sort((a, b) => b.score - a.score || a.firstIndex - b.firstIndex)
+    .slice(0, maxTerms)
+    .map((entry) => entry.display)
 }

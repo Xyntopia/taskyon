@@ -1,7 +1,7 @@
 import { generateTaskKeyWords } from '../core/taskUtils'
 import { buildCreateNewTaskChain } from '../core/createNewTaskChain'
 import { firstWordsTaskName, generateTaskName, textRankTaskName } from '../core/taskNaming'
-import { textRankTerms } from '../core/textRank'
+import { extractCombinedKeywords, textRankTerms } from '../utils/nlp'
 import type { partialTaskDraft } from '../types/taskNode'
 
 const assert = (condition: unknown, message: string) => {
@@ -94,6 +94,16 @@ export const testGenerateTaskNameUsesTextRank = async () => {
   return { name }
 }
 
+export const testCombinedKeywordExtractorFallsBackToTextRank = async () => {
+  const keywords = await extractCombinedKeywords(
+    'solar battery inverter solar battery tariff solar battery planning notes',
+    { maxTerms: 3 },
+  )
+  assert(keywords.includes('solar'), `Expected solar keyword: ${JSON.stringify(keywords)}`)
+  assert(keywords.includes('battery'), `Expected battery keyword: ${JSON.stringify(keywords)}`)
+  return { keywords }
+}
+
 export const testCreateNewTaskChainUsesTextRankNameFromFirstHundredWords = () => {
   const draftTask: partialTaskDraft = {
     role: 'user',
@@ -152,5 +162,7 @@ testTextRankTaskNamePreservesFirstOccurrenceOrder.description =
 testCreateNewTaskChainUsesTextRankNameFromFirstHundredWords.description =
   'Creates local TextRank task names from the first 100 draft words.'
 testGenerateTaskNameUsesTextRank.description = 'Uses local TextRank mode without network access.'
+testCombinedKeywordExtractorFallsBackToTextRank.description =
+  'Routes local keyword extraction through nlp.ts without requiring a vector model.'
 testGenerateTaskKeywordsDoesNotNeedPyodide.description =
   'Keeps the generateTaskKeyWords compatibility wrapper independent of Pyodide.'

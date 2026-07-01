@@ -1,4 +1,4 @@
-import { textRankTerms } from './textRank'
+import { textRankTerms } from '../utils/nlp'
 
 export type TaskNameMode = 'first-words' | 'textrank'
 

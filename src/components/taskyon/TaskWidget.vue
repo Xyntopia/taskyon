@@ -99,11 +99,11 @@
       @update:message-debug="onUpdateMessageDebug"
     >
       <template #header>
-        Result: {{ safeYamlDump(task.content.data).split(' ').slice(0, 10).join(' ') }}...
+        Result: {{ summarizeTaskData(task.content.data).split(' ').slice(0, 10).join(' ') }}...
       </template>
       <div caption class="relative-position">
         <div class="scroll-area">
-          {{ safeYamlDump(task.content.data) }}
+          {{ summarizeTaskData(task.content.data) }}
         </div>
       </div>
     </TaskField>
@@ -253,6 +253,7 @@ import {
   mdiTools,
 } from '@quasar/extras/mdi-v6'
 import tyMarkdown from '@taskyon/shared/components/tyMarkdown.vue'
+import { serializeObject } from '@taskyon/shared/modules/serializeObject'
 import {
   humanizeError,
   safeYamlDump,
@@ -341,6 +342,14 @@ const rawConversationText = computed(() => {
   const debug = getRawConversationDebug(taskMeta.value)
   return hasRawConversationDebug(debug) ? formatRawConversationDebug(debug) : undefined
 })
+const summarizeTaskData = (value: unknown) =>
+  serializeObject(value, {
+    maxDepth: 4,
+    maxArrayLength: 20,
+    maxObjectKeys: 20,
+    maxStringLength: 2000,
+    format: 'yaml',
+  })
 const onUpdateMessageDebug = (value: boolean) => {
   emit('update:messageDebug', value)
 }

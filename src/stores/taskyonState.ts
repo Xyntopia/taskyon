@@ -285,11 +285,6 @@ You can select them in the "Chat Settings" section in the message input window.
 `,
     label: 'Show currently recommend models',
   },
-  // TODO:
-  //'How do I execute python code?',
-  //'how about testing out javascript? e.g. create some widgets on the fly...',
-  //'What are AI tools?',
-  //'How do I integrate Taskyon into my webpage?',
 ]
 
 const taskyonDocumentationUrls = import.meta.glob<string>('../../public/docs/**/*.md', {

@@ -4,10 +4,6 @@ export function sleep(ms: number) {
 }
 
 export class Lock {
-  //TODO: the function which is returned to resolve the promise
-  //      should be a callable object and automatically resolve
-  //      when it is destroyed for example when running out of scope
-  //      in a function...
   private _promise: Promise<void> | null = null
 
   /**
@@ -61,6 +57,15 @@ export class Lock {
       await this._promise
     }
   }
+
+  async withLock<T>(fn: () => T | Promise<T>): Promise<Awaited<T>> {
+    const release = await this.lock()
+    try {
+      return await fn()
+    } finally {
+      release()
+    }
+  }
 }
 
 // Wraps a function so it can only run one instance at a time
@@ -69,12 +74,7 @@ export function exclusive<F extends (...args: any) => any>(fn: F): F {
   const lock = new Lock()
 
   const wrapped = (async (...args: Parameters<F>): Promise<ReturnType<F>> => {
-    const release = await lock.lock()
-    try {
-      return await fn(...args)
-    } finally {
-      release()
-    }
+    return await lock.withLock(() => fn(...args))
   }) as F
 
   return wrapped
@@ -121,7 +121,6 @@ export function lockMap(name: string = 'item') {
   async function waitForItemUnlock(id: string | number) {
     const lock = locks.get(id)
     if (lock) {
-      // TODO: why is this called so often??
       //console.log('wait for unlock!');
       await lock.waitForUnlock()
     }

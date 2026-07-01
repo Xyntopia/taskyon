@@ -99,24 +99,24 @@ export const createNode = () => {
       syncInfo()
     }
     onSubscriptionChange()
+    const onSelfPeerUpdate = ({
+      detail: { peer },
+    }: {
+      detail: { peer: { id: { toString: () => string } } }
+    }) => {
+      activityStream.emit({ type: 'log', message: `peer updated: ${peer.id.toString()}` })
+      updateInfo({ peerTypes: getPeerTypes(n), nodePeerDetails: getPeerDetails(n) })
+    }
+    const onPeerDiscovery = (event: { detail: { id: { toString: () => string } } }) => {
+      const peer = event.detail
+      activityStream.emit({ type: 'log', message: `discovered peer: ${peer.id.toString()}` })
+      updateInfo({ peerCount: n.getConnections().length, peerTypes: getPeerTypes(n) })
+    }
 
     n.addEventListener('connection:open', onConnection)
     n.addEventListener('connection:close', onConnection)
-    n.addEventListener(
-      'self:peer:update',
-      ({ detail: { peer } }: { detail: { peer: { id: { toString: () => string } } } }) => {
-        activityStream.emit({ type: 'log', message: `peer updated: ${peer.id.toString()}` })
-        updateInfo({ peerTypes: getPeerTypes(n), nodePeerDetails: getPeerDetails(n) })
-      },
-    )
-    n.addEventListener(
-      'peer:discovery',
-      (event: { detail: { id: { toString: () => string } } }) => {
-        const peer = event.detail
-        activityStream.emit({ type: 'log', message: `discovered peer: ${peer.id.toString()}` })
-        updateInfo({ peerCount: n.getConnections().length, peerTypes: getPeerTypes(n) })
-      },
-    )
+    n.addEventListener('self:peer:update', onSelfPeerUpdate)
+    n.addEventListener('peer:discovery', onPeerDiscovery)
     n.services.pubsub.addEventListener('subscription-change', onSubscriptionChange)
 
     /*useEffect(() => {
@@ -129,7 +129,17 @@ export const createNode = () => {
       }
     }*/
 
-    return { ...useUniversalChat(n, options.chatTopic) }
+    const chat = useUniversalChat(n, options.chatTopic)
+    const cleanup = async () => {
+      n.removeEventListener('connection:open', onConnection)
+      n.removeEventListener('connection:close', onConnection)
+      n.removeEventListener('self:peer:update', onSelfPeerUpdate)
+      n.removeEventListener('peer:discovery', onPeerDiscovery)
+      n.services.pubsub.removeEventListener('subscription-change', onSubscriptionChange)
+      await chat.cleanup()
+    }
+
+    return { ...chat, cleanup }
   }
 
   /*export const getFormattedConnections = (connections: Connection[]) =>
@@ -157,11 +167,20 @@ export const createNode = () => {
     }
   }
 
+  const stop = async () => {
+    if (!started && !ctx) return
+    await ctx?.cleanup()
+    ctx = null
+    started = false
+    activityStream.emit({ type: 'log', message: 'Peer chat handlers stopped' })
+  }
+
   return {
     sendPublicMessage: (input: string) => ctx?.sendPublicMessage(input),
     id: getPeerId,
     messageStream: messageStream.stream,
     start,
+    stop,
     stream,
     getInfo: () => info,
     activityStream: activityStream.stream,
@@ -342,7 +361,6 @@ const useUniversalChat = (libp2p: libP2pNode, chatTopic: string) => {
     }
   }
 
-  // TODO: hook this up to a custom messagebus?
   libp2p.services.pubsub.addEventListener('message', messageCB)
   const files = new Map<string, ChatFile>()
   void libp2p.handle(FILE_EXCHANGE_PROTOCOL, (stream: unknown) => {
@@ -364,16 +382,17 @@ const useUniversalChat = (libp2p: libP2pNode, chatTopic: string) => {
     )
   })
 
-  // TODO: on exit/cleanup
-  /*return () => {
-      ;(async () => {
-        // Cleanup handlers 👇
-        libp2p.services.pubsub.removeEventListener('message', messageCB)
-        await libp2p.unhandle(FILE_EXCHANGE_PROTOCOL)
-      })()
-    }*/
+  let cleanedUp = false
+  const cleanup = async () => {
+    if (cleanedUp) return
+    cleanedUp = true
+    libp2p.services.pubsub.removeEventListener('message', messageCB)
+    libp2p.services.pubsub.unsubscribe(chatTopic)
+    libp2p.services.pubsub.unsubscribe(CHAT_FILE_TOPIC)
+    await libp2p.unhandle(FILE_EXCHANGE_PROTOCOL)
+  }
 
-  return { sendPublicMessage, messageStream }
+  return { sendPublicMessage, messageStream, cleanup }
 }
 
 let activeNode: ReturnType<typeof createNode> | null = null
