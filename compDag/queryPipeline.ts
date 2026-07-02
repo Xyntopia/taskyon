@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import z from 'zod'
-import { createNode } from './dagCore'
+import { createNode, type DagNode } from './dagCore'
+import { emptyObjectSchema, type DagJsonSchema } from './dagSchema'
 
 export type QueryOp = 'identity' | 'sum' | 'mean' | 'min' | 'max' | 'index'
 
@@ -148,33 +148,78 @@ export const evaluateQueryAxisValue = (raw: unknown, input: QueryAxisInput): num
   return reduceArray(raw, op)
 }
 
-const asRowSourceSchema = z.object({
-  params: z.record(z.string(), z.unknown()),
-  outputs: z.record(z.string(), z.unknown()),
-})
+const asRowSourceSchema = {
+  type: 'object',
+  properties: {
+    params: { type: 'object', additionalProperties: true },
+    outputs: { type: 'object', additionalProperties: true },
+  },
+  required: ['params', 'outputs'],
+  additionalProperties: false,
+} as const
 
-const asDatasetSourceSchema = z.object({
-  rows: z.array(asRowSourceSchema),
-})
+const asDatasetSourceSchema = {
+  type: 'object',
+  properties: {
+    rows: {
+      type: 'array',
+      items: asRowSourceSchema,
+    },
+  },
+  required: ['rows'],
+  additionalProperties: false,
+} as const
 
 const withUnique = (prefix: string): string => `${prefix}_${Math.random().toString(36).slice(2, 10)}`
 
+export type QuerySourceNode = DagNode<unknown, unknown>
+type QueryTransformNode = DagNode<unknown, unknown>
+type QueryNodeHelpers = { source: QuerySourceNode }
+type QueryNodeParams = Record<string, unknown>
+
+const unknownOutputSchema = {} as const
+
+const xySeriesSchema = {
+  type: 'object',
+  properties: {
+    kind: { const: 'xy-series' },
+    xValues: { type: 'array', items: { type: 'number' } },
+    yValues: { type: 'array', items: { type: 'number' } },
+  },
+  required: ['kind', 'xValues', 'yValues'],
+  additionalProperties: false,
+} as const
+
+const objectiveOutputSchema = {
+  type: 'object',
+  properties: { value: { type: ['number', 'null'] } },
+  required: ['value'],
+  additionalProperties: false,
+} as const
+
 export const createPathSelectNode = (args: {
   name: string
-  sourceNode: any
+  sourceNode: QuerySourceNode
   path: string
 }) => {
-  const sourceParamsSchema = (args.sourceNode as { paramsSchema?: z.ZodTypeAny }).paramsSchema
-  return createNode({
+  const sourceParamsSchema = (args.sourceNode as { paramsSchema?: DagJsonSchema }).paramsSchema
+  return createNode<
+    DagJsonSchema,
+    typeof unknownOutputSchema,
+    QueryNodeHelpers,
+    Record<never, never>,
+    QueryNodeParams,
+    unknown
+  >({
     name: args.name,
     version: 1,
     hiddenInputs: {
       source: args.sourceNode,
     },
-    localParams: (sourceParamsSchema as z.ZodObject<z.ZodRawShape>) ?? z.object({}),
-    outputSchema: z.unknown(),
+    localParams: sourceParamsSchema ?? emptyObjectSchema,
+    outputSchema: unknownOutputSchema,
     run: async (params, use) => {
-      const sourceOut = await use.source(params)
+      const sourceOut = await (use.source as (params: unknown) => Promise<unknown>)(params)
       const datasetValues = getDatasetPathValues(sourceOut, args.path)
       if (datasetValues) return datasetValues
       const value = getPathValue(sourceOut, args.path)
@@ -185,21 +230,28 @@ export const createPathSelectNode = (args: {
 
 export const createArrayReduceNode = (args: {
   name: string
-  sourceNode: any
+  sourceNode: QuerySourceNode
   op: Exclude<QueryOp, 'identity' | 'index'>
   mode: 'all' | 'perItem'
 }) => {
-  const sourceParamsSchema = (args.sourceNode as { paramsSchema?: z.ZodTypeAny }).paramsSchema
-  return createNode({
+  const sourceParamsSchema = (args.sourceNode as { paramsSchema?: DagJsonSchema }).paramsSchema
+  return createNode<
+    DagJsonSchema,
+    typeof unknownOutputSchema,
+    QueryNodeHelpers,
+    Record<never, never>,
+    QueryNodeParams,
+    unknown
+  >({
     name: args.name,
     version: 1,
     hiddenInputs: {
       source: args.sourceNode,
     },
-    localParams: (sourceParamsSchema as z.ZodObject<z.ZodRawShape>) ?? z.object({}),
-    outputSchema: z.unknown(),
+    localParams: sourceParamsSchema ?? emptyObjectSchema,
+    outputSchema: unknownOutputSchema,
     run: async (params, use) => {
-      const input = await use.source(params)
+      const input = await (use.source as (params: unknown) => Promise<unknown>)(params)
       if (!Array.isArray(input)) return null
       if (args.mode === 'all') return reduceArray(input, args.op)
       return input.map((item) => {
@@ -212,21 +264,28 @@ export const createArrayReduceNode = (args: {
 
 export const createArrayIndexNode = (args: {
   name: string
-  sourceNode: any
+  sourceNode: QuerySourceNode
   index: number
   mode: 'all' | 'perItem'
 }) => {
-  const sourceParamsSchema = (args.sourceNode as { paramsSchema?: z.ZodTypeAny }).paramsSchema
-  return createNode({
+  const sourceParamsSchema = (args.sourceNode as { paramsSchema?: DagJsonSchema }).paramsSchema
+  return createNode<
+    DagJsonSchema,
+    typeof unknownOutputSchema,
+    QueryNodeHelpers,
+    Record<never, never>,
+    QueryNodeParams,
+    unknown
+  >({
     name: args.name,
     version: 1,
     hiddenInputs: {
       source: args.sourceNode,
     },
-    localParams: (sourceParamsSchema as z.ZodObject<z.ZodRawShape>) ?? z.object({}),
-    outputSchema: z.unknown(),
+    localParams: sourceParamsSchema ?? emptyObjectSchema,
+    outputSchema: unknownOutputSchema,
     run: async (params, use) => {
-      const input = await use.source(params)
+      const input = await (use.source as (params: unknown) => Promise<unknown>)(params)
       if (!Array.isArray(input)) return null
       if (args.mode === 'all') {
         return input[args.index] ?? null
@@ -241,27 +300,30 @@ export const createArrayIndexNode = (args: {
 
 export const createTransposeForPlotNode = (args: {
   name: string
-  xNode: any
-  yNode: any
+  xNode: QuerySourceNode
+  yNode: QuerySourceNode
 }) => {
   const sourceParamsSchema =
-    (args.xNode as { paramsSchema?: z.ZodTypeAny }).paramsSchema ?? z.object({})
-  return createNode({
+    (args.xNode as { paramsSchema?: DagJsonSchema }).paramsSchema ?? emptyObjectSchema
+  return createNode<
+    DagJsonSchema,
+    typeof xySeriesSchema,
+    { x: QuerySourceNode; y: QuerySourceNode },
+    Record<never, never>,
+    QueryNodeParams,
+    { kind: 'xy-series'; xValues: number[]; yValues: number[] }
+  >({
     name: args.name,
     version: 1,
     hiddenInputs: {
       x: args.xNode,
       y: args.yNode,
     },
-    localParams: sourceParamsSchema as z.ZodObject<z.ZodRawShape>,
-    outputSchema: z.object({
-      kind: z.literal('xy-series'),
-      xValues: z.array(z.number()),
-      yValues: z.array(z.number()),
-    }),
+    localParams: sourceParamsSchema,
+    outputSchema: xySeriesSchema,
     run: async (params, use) => {
-      const rawX = await use.x(params)
-      const rawY = await use.y(params)
+      const rawX = await (use.x as (params: unknown) => Promise<unknown>)(params)
+      const rawY = await (use.y as (params: unknown) => Promise<unknown>)(params)
       if (!Array.isArray(rawX) || !Array.isArray(rawY)) {
         return { kind: 'xy-series' as const, xValues: [], yValues: [] }
       }
@@ -281,11 +343,11 @@ export const createTransposeForPlotNode = (args: {
 }
 
 const compileAxisForRow = (args: {
-  sourceNode: any
+  sourceNode: QuerySourceNode
   axis: QueryAxisSpec
   prefix: string
   debug: CompiledPipelineDebug
-}) => {
+}): QueryTransformNode => {
   const pathNode = createPathSelectNode({
     name: withUnique(`${args.prefix}_path_select`),
     sourceNode: args.sourceNode,
@@ -322,11 +384,11 @@ const compileAxisForRow = (args: {
 }
 
 const compileAxisForDataset = (args: {
-  sourceNode: any
+  sourceNode: QuerySourceNode
   axis: QueryAxisSpec
   prefix: string
   debug: CompiledPipelineDebug
-}) => {
+}): QueryTransformNode => {
   const pathNode = createPathSelectNode({
     name: withUnique(`${args.prefix}_path_select`),
     sourceNode: args.sourceNode,
@@ -363,11 +425,11 @@ const compileAxisForDataset = (args: {
 }
 
 export const compileObjectiveQuery = (args: {
-  sourceNode: any
+  sourceNode: QuerySourceNode
   objective: ObjectiveQuerySpec
   namePrefix?: string
 }): {
-  objectiveNode: any
+  objectiveNode: DagNode<QueryNodeParams, { value: number | null }>
   debug: CompiledPipelineDebug
 } => {
   const debug: CompiledPipelineDebug = {
@@ -383,17 +445,22 @@ export const compileObjectiveQuery = (args: {
     debug,
   })
 
-  const objectiveNode = createNode({
+  const objectiveNode = createNode<
+    DagJsonSchema,
+    typeof objectiveOutputSchema,
+    QueryNodeHelpers,
+    Record<never, never>,
+    QueryNodeParams,
+    { value: number | null }
+  >({
     name: withUnique(`${prefix}_terminal_scalar`),
     version: 1,
     hiddenInputs: { source: axisNode },
     localParams:
-      ((args.sourceNode as { paramsSchema?: z.ZodTypeAny }).paramsSchema as z.ZodObject<
-        z.ZodRawShape
-      >) ?? z.object({}),
-    outputSchema: z.object({ value: z.number().nullable() }),
+      (args.sourceNode as { paramsSchema?: DagJsonSchema }).paramsSchema ?? emptyObjectSchema,
+    outputSchema: objectiveOutputSchema,
     run: async (params, use) => {
-      const raw = await use.source(params)
+      const raw = await (use.source as (params: unknown) => Promise<unknown>)(params)
       const scalar = toFiniteNumber(raw)
       return { value: scalar }
     },
@@ -405,11 +472,11 @@ export const compileObjectiveQuery = (args: {
 }
 
 export const compilePlotQuery = (args: {
-  sourceNode: any
+  sourceNode: QuerySourceNode
   query: PlotQuerySpec
   namePrefix?: string
 }): {
-  plotNode: any
+  plotNode: DagNode<QueryNodeParams, { kind: 'xy-series'; xValues: number[]; yValues: number[] }>
   debug: CompiledPipelineDebug
 } => {
   const debug: CompiledPipelineDebug = {

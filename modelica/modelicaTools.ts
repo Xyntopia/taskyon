@@ -503,13 +503,15 @@ Constraints:
       required: ['updates'],
       additionalProperties: false,
     } as const satisfies JSONSchema7,
-    function: async ({
-      updates,
-      description,
-    }: {
-      updates: ModelicaDocumentUpdate[]
-      description?: string
-    }) => {
+    function: async (
+      {
+        updates,
+        description,
+      }: {
+        updates: ModelicaDocumentUpdate[]
+        description?: string
+      },
+    ) => {
       const totalEdits = updates.reduce((acc, update) => {
         const patchCount = Array.isArray(update.patches) ? update.patches.length : 0
         const newContentStr = typeof update.newContent === 'string' ? update.newContent : ''

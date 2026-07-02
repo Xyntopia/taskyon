@@ -1,6 +1,13 @@
 // optimization.ts
 import z from 'zod'
 import type { JSONSchema7, JSONSchema7Definition } from 'json-schema'
+import {
+  safeParseSchema,
+  schemaArrayElement,
+  schemaAtPath as jsonSchemaAtPath,
+  schemaDescription,
+  type DagJsonSchema,
+} from './dagSchema.ts'
 
 export const runModeSchema = z.enum(['explore', 'optimize'])
 export type RunMode = z.infer<typeof runModeSchema>
@@ -22,7 +29,7 @@ export const variableSpecSchema = z
           .optional()
           .describe('Human-readable variable description shown in the optimization UI.'),
         kind: z.literal('constant').describe('Use a constant value for this parameter.'),
-        value: z.any().optional().describe('Constant value. If omitted, the parameter is missing.'),
+        value: z.unknown().optional().describe('Constant value. If omitted, the parameter is missing.'),
       })
       .describe('Constant value'),
 
@@ -52,7 +59,7 @@ export const variableSpecSchema = z
         kind: z
           .literal('grid')
           .describe('Choose values from a fixed list and take the cartesian product.'),
-        values: z.array(z.any()).describe('Candidate values.'),
+        values: z.array(z.unknown()).describe('Candidate values.'),
       })
       .describe('Grid values'),
 
@@ -65,7 +72,7 @@ export const variableSpecSchema = z
         kind: z
           .literal('list')
           .describe('Choose values from a fixed list and take the cartesian product.'),
-        values: z.array(z.any()).describe('Candidate values.'),
+        values: z.array(z.unknown()).describe('Candidate values.'),
       })
       .describe('List values'),
   ])
@@ -247,42 +254,11 @@ export type OptimizationConfig = z.infer<typeof optimizationConfigSchema>
 // Schema utilities
 // -----------------------------
 
-const unwrapSchema = (schema: z.ZodTypeAny): z.ZodTypeAny => {
-  const def = (schema as unknown as { _def?: unknown })._def as
-    | { innerType?: z.ZodTypeAny; schema?: z.ZodTypeAny; in?: z.ZodTypeAny; typeName?: string }
-    | undefined
-
-  if (schema instanceof z.ZodDefault && def?.innerType) return unwrapSchema(def.innerType)
-  if (schema instanceof z.ZodOptional && def?.innerType) return unwrapSchema(def.innerType)
-  if (schema instanceof z.ZodNullable && def?.innerType) return unwrapSchema(def.innerType)
-
-  if (def?.typeName === 'ZodEffects' && def.schema) return unwrapSchema(def.schema)
-  if (def?.typeName === 'ZodPipeline' && def.in) return unwrapSchema(def.in)
-
-  return schema
-}
-
 const isArrayPath = (path: string) => path.includes('[]')
 const isExplodedAliasPath = (path: string, aliases: string[]) =>
   aliases.some((alias) => path === alias || path.startsWith(`${alias}.`))
 
-export const schemaAtPath = (schema: z.ZodTypeAny, path: string): z.ZodTypeAny | null => {
-  if (!path) return schema
-  const parts = path.split('.')
-  let cur: z.ZodTypeAny = schema
-
-  for (const rawSeg of parts) {
-    if (rawSeg.endsWith('[]')) return null
-    const u = unwrapSchema(cur)
-    if (!(u instanceof z.ZodObject)) return null
-    const shape = u.shape as Record<string, z.ZodTypeAny>
-    const next = shape[rawSeg]
-    if (!next) return null
-    cur = next
-  }
-
-  return cur
-}
+export const schemaAtPath = jsonSchemaAtPath
 
 export type SchemaPathKind =
   | 'number_scalar'
@@ -291,76 +267,58 @@ export type SchemaPathKind =
   | 'feature'
   | 'other'
 
-const zodSchemaDescription = (schema: z.ZodTypeAny | null | undefined): string | undefined => {
-  if (!schema) return undefined
+type DagJsonSchemaObject = Extract<DagJsonSchema, Record<string, unknown>>
 
-  const metaDescriptionOf = (node: z.ZodTypeAny): string | undefined => {
-    const metaFn = (node as unknown as { meta?: () => unknown }).meta
-    if (typeof metaFn !== 'function') return undefined
-    const meta = metaFn.call(node) as Record<string, unknown> | undefined
-    return typeof meta?.description === 'string' ? meta.description.trim() : undefined
-  }
+const isObjectSchema = (
+  schema: DagJsonSchema | null | undefined,
+): schema is DagJsonSchemaObject =>
+  typeof schema === 'object' && schema !== null && !Array.isArray(schema)
 
-  const seen = new Set<z.ZodTypeAny>()
-  const walk = (node: z.ZodTypeAny | null | undefined): string | undefined => {
-    if (!node || seen.has(node)) return undefined
-    seen.add(node)
-
-    const own = node.description?.trim() || metaDescriptionOf(node)
-    if (own) return own
-
-    const unwrapped = unwrapSchema(node)
-    if (unwrapped !== node) {
-      const unwrappedDesc = walk(unwrapped)
-      if (unwrappedDesc) return unwrappedDesc
-    }
-
-    const def = (node as unknown as { _def?: unknown })._def as
-      | { innerType?: z.ZodTypeAny; schema?: z.ZodTypeAny; in?: z.ZodTypeAny; out?: z.ZodTypeAny }
-      | undefined
-
-    return walk(def?.innerType) ?? walk(def?.schema) ?? walk(def?.in) ?? walk(def?.out)
-  }
-
-  return walk(schema)
+const schemaTypes = (schema: DagJsonSchema): string[] => {
+  if (!isObjectSchema(schema)) return []
+  const type = schema.type
+  return Array.isArray(type) ? type : typeof type === 'string' ? [type] : []
 }
 
-const isFeatureSchemaNode = (schema: z.ZodTypeAny | null | undefined): boolean => {
-  const desc = zodSchemaDescription(schema)?.toLowerCase() ?? ''
+const isFeatureSchemaNode = (schema: DagJsonSchema | null | undefined): boolean => {
+  const desc = schemaDescription(schema)?.toLowerCase() ?? ''
   return desc.includes('geojson feature') || desc.includes('feature geojson')
 }
 
-export const pathKindFromSchema = (schema: z.ZodTypeAny, path: string): SchemaPathKind => {
+export const pathKindFromSchema = (schema: DagJsonSchema, path: string): SchemaPathKind => {
   const atPath = schemaAtPath(schema, path)
   if (!atPath) return 'other'
-  const u = unwrapSchema(atPath)
-
-  if (u instanceof z.ZodNumber) return 'number_scalar'
-  if (u instanceof z.ZodArray) {
-    const el = unwrapSchema(u.element as z.ZodTypeAny)
-    return el instanceof z.ZodNumber ? 'number_array' : 'other'
+  const types = schemaTypes(atPath)
+  if (types.includes('number') || types.includes('integer')) return 'number_scalar'
+  if (types.includes('array') || (isObjectSchema(atPath) && 'items' in atPath)) {
+    const el = schemaArrayElement(atPath)
+    return el && schemaTypes(el).some((t) => t === 'number' || t === 'integer')
+      ? 'number_array'
+      : 'other'
   }
-  if (u instanceof z.ZodObject) return isFeatureSchemaNode(atPath) ? 'feature' : 'object'
-  if (isFeatureSchemaNode(atPath) || isFeatureSchemaNode(u)) return 'feature'
+  if (types.includes('object') || (isObjectSchema(atPath) && 'properties' in atPath)) {
+    return isFeatureSchemaNode(atPath) ? 'feature' : 'object'
+  }
+  if (isFeatureSchemaNode(atPath)) return 'feature'
   return 'other'
 }
 
-export const listSchemaPaths = (schema: z.ZodTypeAny, prefix = ''): string[] => {
-  const unwrapped = unwrapSchema(schema)
-
-  if (unwrapped instanceof z.ZodObject) {
-    const shape = unwrapped.shape
-    const paths = Object.keys(shape).flatMap((key) => {
+export const listSchemaPaths = (schema: DagJsonSchema, prefix = ''): string[] => {
+  if (isObjectSchema(schema) && 'properties' in schema && !Array.isArray(schema.properties)) {
+    const properties = schema.properties as Record<string, DagJsonSchema> | undefined
+    if (!properties) return prefix ? [prefix] : []
+    const paths = Object.keys(properties).flatMap((key) => {
       const nextPrefix = prefix ? `${prefix}.${key}` : key
-      return listSchemaPaths(shape[key] as z.ZodTypeAny, nextPrefix)
+      return listSchemaPaths(properties[key] as DagJsonSchema, nextPrefix)
     })
     return paths.length > 0 ? paths : prefix ? [prefix] : []
   }
 
-  if (unwrapped instanceof z.ZodArray) {
+  if (isObjectSchema(schema) && (schema.type === 'array' || 'items' in schema)) {
     // Arrays are not supported by setPathValue yet.
     const nextPrefix = prefix ? `${prefix}[]` : '[]'
-    const items = listSchemaPaths(unwrapped.element as z.ZodTypeAny, nextPrefix)
+    const itemSchema = schemaArrayElement(schema)
+    const items = itemSchema ? listSchemaPaths(itemSchema, nextPrefix) : []
     return items.length > 0 ? items : [nextPrefix]
   }
 
@@ -369,41 +327,33 @@ export const listSchemaPaths = (schema: z.ZodTypeAny, prefix = ''): string[] => 
 
 type LeafKind = 'number' | 'boolean' | 'string' | 'enum' | 'unknown'
 
-const isEnumLike = (schema: z.ZodTypeAny): boolean => {
-  const u = unwrapSchema(schema) as unknown as { _def?: { typeName?: string } }
-  if (schema instanceof z.ZodEnum) return true
-  // zod v4 does not export ZodNativeEnum as a class in some builds, so we detect it by typeName.
-  return u?._def?.typeName === 'ZodNativeEnum'
-}
-
-const leafKindOf = (schema: z.ZodTypeAny): LeafKind => {
-  const u = unwrapSchema(schema)
-  if (u instanceof z.ZodNumber) return 'number'
-  if (u instanceof z.ZodBoolean) return 'boolean'
-  if (u instanceof z.ZodString) return 'string'
-  if (u instanceof z.ZodEnum || isEnumLike(u)) return 'enum'
+const leafKindOf = (schema: DagJsonSchema): LeafKind => {
+  if (isObjectSchema(schema) && 'enum' in schema && Array.isArray(schema.enum)) return 'enum'
+  const types = schemaTypes(schema)
+  if (types.includes('number') || types.includes('integer')) return 'number'
+  if (types.includes('boolean')) return 'boolean'
+  if (types.includes('string')) return 'string'
   return 'unknown'
 }
-export const listNumericSchemaPaths = (schema: z.ZodTypeAny): string[] => {
-  const walk = (s: z.ZodTypeAny, prefix = ''): Array<{ path: string; kind: LeafKind }> => {
-    const u = unwrapSchema(s)
-
-    if (u instanceof z.ZodObject) {
-      const shape = u.shape
-      return Object.keys(shape).flatMap((key) => {
+export const listNumericSchemaPaths = (schema: DagJsonSchema): string[] => {
+  const walk = (s: DagJsonSchema, prefix = ''): Array<{ path: string; kind: LeafKind }> => {
+    if (isObjectSchema(s) && 'properties' in s && !Array.isArray(s.properties)) {
+      const properties = s.properties as Record<string, DagJsonSchema> | undefined
+      if (!properties) return []
+      return Object.keys(properties).flatMap((key) => {
         const nextPrefix = prefix ? `${prefix}.${key}` : key
-        return walk(shape[key] as z.ZodTypeAny, nextPrefix)
+        return walk(properties[key] as DagJsonSchema, nextPrefix)
       })
     }
 
-    if (u instanceof z.ZodArray) {
+    if (isObjectSchema(s) && (s.type === 'array' || 'items' in s)) {
       // objectives into arrays are not supported for now
       return []
     }
 
     return prefix
-      ? [{ path: prefix, kind: leafKindOf(u) }]
-      : [{ path: 'value', kind: leafKindOf(u) }]
+      ? [{ path: prefix, kind: leafKindOf(s) }]
+      : [{ path: 'value', kind: leafKindOf(s) }]
   }
 
   return walk(schema)
@@ -412,7 +362,7 @@ export const listNumericSchemaPaths = (schema: z.ZodTypeAny): string[] => {
 }
 
 export const createOptimizationConfig = (args: {
-  paramsSchema: z.ZodTypeAny
+  paramsSchema: DagJsonSchema
   explodedInputAliases?: string[]
 }): OptimizationConfig => {
   const explodedAliases = args.explodedInputAliases ?? []
@@ -487,27 +437,43 @@ export const getPathValue = (source: unknown, path: string): unknown => {
 // UI schema for ObjectView
 // -----------------------------
 
-const variableSpecSchemaForParam = (paramLeaf: z.ZodTypeAny, path: string): z.ZodTypeAny => {
-  const leaf = unwrapSchema(paramLeaf)
-  const isNumeric = leaf instanceof z.ZodNumber
-  const paramDescription = (zodSchemaDescription(paramLeaf) ?? '').trim()
+const zodForJsonLeaf = (schema: DagJsonSchema | null): z.ZodTypeAny => {
+  if (!schema || !isObjectSchema(schema)) return z.unknown()
+  const enumValues = 'enum' in schema && Array.isArray(schema.enum) ? schema.enum : []
+  if (enumValues.length > 0) {
+    const literals = enumValues.map((x: unknown) => z.literal(x as never))
+    return literals.length === 1
+      ? literals[0]!
+      : z.union(literals as unknown as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
+  }
+  const types = schemaTypes(schema)
+  if (types.includes('number') || types.includes('integer')) return z.number()
+  if (types.includes('boolean')) return z.boolean()
+  if (types.includes('string')) return z.string()
+  return z.unknown()
+}
+
+const variableSpecSchemaForParam = (paramLeaf: DagJsonSchema | null, path: string): z.ZodTypeAny => {
+  const leaf = zodForJsonLeaf(paramLeaf)
+  const isNumeric = paramLeaf ? leafKindOf(paramLeaf) === 'number' : false
+  const paramDescription = (schemaDescription(paramLeaf) ?? '').trim()
   const variableDescription = paramDescription
     ? `${paramDescription} (parameter path: ${path})`
     : `Optimization variable for parameter path: ${path}`
 
   const constant = z.object({
     kind: z.literal('constant').describe('Use a constant value.'),
-    value: paramLeaf.optional().describe('Constant value. Leave empty to mark this parameter as missing.'),
+    value: leaf.optional().describe('Constant value. Leave empty to mark this parameter as missing.'),
   })
 
   const grid = z.object({
     kind: z.literal('grid').describe('Grid search values.'),
-    values: z.array(paramLeaf).describe('Candidate values.'),
+    values: z.array(leaf).describe('Candidate values.'),
   })
 
   const list = z.object({
     kind: z.literal('list').describe('List of candidate values.'),
-    values: z.array(paramLeaf).describe('Candidate values.'),
+    values: z.array(leaf).describe('Candidate values.'),
   })
 
   const sweep = z.object({
@@ -527,8 +493,8 @@ const variableSpecSchemaForParam = (paramLeaf: z.ZodTypeAny, path: string): z.Zo
 }
 
 export const createOptimizationConfigUiJsonSchema = (args: {
-  paramsSchema: z.ZodTypeAny
-  outputSchema: z.ZodTypeAny
+  paramsSchema: DagJsonSchema
+  outputSchema: DagJsonSchema
   explodedInputAliases?: string[]
   explodedInputAliasDescriptions?: Record<string, string>
 }): JSONSchema7 => {
@@ -536,9 +502,7 @@ export const createOptimizationConfigUiJsonSchema = (args: {
   const variablePaths = listSchemaPaths(args.paramsSchema).filter(
     (p) => !isArrayPath(p) && !isExplodedAliasPath(p, explodedAliases),
   )
-  const paramsJsonSchema = z.toJSONSchema(args.paramsSchema, {
-    unrepresentable: 'any',
-  }) as JSONSchema7
+  const paramsJsonSchema = args.paramsSchema as JSONSchema7
   const paramDescriptionAtPath = (path: string): string | undefined => {
     const segments = path.split('.').filter((s) => s.length > 0)
     let cur: JSONSchema7 | undefined = paramsJsonSchema
@@ -554,7 +518,7 @@ export const createOptimizationConfigUiJsonSchema = (args: {
   }
   const objectivePaths = listNumericSchemaPaths(args.outputSchema).filter((p) => !isArrayPath(p))
   const objectivePathDescriptions = Object.fromEntries(
-    objectivePaths.map((path) => [path, zodSchemaDescription(schemaAtPath(args.outputSchema, path))]),
+    objectivePaths.map((path) => [path, schemaDescription(schemaAtPath(args.outputSchema, path))]),
   )
   const objectiveHelpLines = objectivePaths.map((path) => {
     const description = objectivePathDescriptions[path]
@@ -569,11 +533,11 @@ export const createOptimizationConfigUiJsonSchema = (args: {
   const variableDescriptionsByPath: Record<string, string> = {}
   for (const path of variablePaths) {
     const leaf = schemaAtPath(args.paramsSchema, path)
-    const leafDescription = (paramDescriptionAtPath(path) ?? zodSchemaDescription(leaf) ?? '').trim()
+    const leafDescription = (paramDescriptionAtPath(path) ?? schemaDescription(leaf) ?? '').trim()
     variableDescriptionsByPath[path] = leafDescription
       ? `${leafDescription} (parameter path: ${path})`
       : `Optimization variable for parameter path: ${path}`
-    variableShape[path] = variableSpecSchemaForParam(leaf ?? z.any(), path)
+    variableShape[path] = variableSpecSchemaForParam(leaf, path)
   }
 
   const inputShape: Record<string, z.ZodTypeAny> = {}
@@ -736,7 +700,7 @@ export type OptimizationValidationReport = {
 
 export const validateOptimizationBeforeRun = (args: {
   config: OptimizationConfig
-  nodeParamsSchema: z.ZodTypeAny
+  nodeParamsSchema: DagJsonSchema
 }): OptimizationValidationReport => {
   const issues: OptimizationValidationIssue[] = []
   const variables = (args.config as Partial<OptimizationConfig>).variables
@@ -845,17 +809,14 @@ export const validateOptimizationBeforeRun = (args: {
     })
   }
 
-  const parsed = args.nodeParamsSchema.safeParse(baseParamsRaw)
+  const parsed = safeParseSchema(args.nodeParamsSchema, baseParamsRaw)
   if (!parsed.success) {
     for (const i of parsed.error.issues) {
       const p = i.path.join('.')
-      const isMissingRequired =
-        i.code === 'invalid_type' &&
-        (i as unknown as { received?: unknown }).received === 'undefined'
 
       issues.push({
         path: p ? `variables.${p}.value` : 'variables',
-        message: isMissingRequired ? `Missing required parameter: ${p}` : i.message,
+        message: i.code === 'required' ? `Missing required parameter: ${p}` : i.message,
         code: i.code,
       })
     }
@@ -884,13 +845,13 @@ export const objectiveMapSchema = z.record(z.string(), objectiveValueSchema)
 export type ObjectiveMap = z.infer<typeof objectiveMapSchema>
 
 export const optimizationRunRecordSchema = z.object({
-  params: z.any().describe('Validated params used for this run.'),
+  params: z.unknown().describe('Validated params used for this run.'),
   outputs: z
-    .any()
+    .unknown()
     .describe('Outputs of the run. Typically the output of the selected output node.'),
   objectives: objectiveMapSchema.describe('Objective values computed from the node output.'),
   captured: z
-    .record(z.string(), z.any())
+    .record(z.string(), z.unknown())
     .optional()
     .describe('Explicitly captured internal values requested by the execution config.'),
 })
@@ -905,27 +866,29 @@ export const optimizationResultsSchema = z.object({
 })
 export type OptimizationResults = z.infer<typeof optimizationResultsSchema>
 
-const ensureObjectLikeOutputSchema = (schema: z.ZodTypeAny): z.ZodTypeAny => {
-  const u = unwrapSchema(schema)
-  if (u instanceof z.ZodObject) {
-    // Allow extra keys in UI because real outputs may contain extra fields.
-    return u.passthrough()
+const ensureObjectLikeOutputSchema = (schema: DagJsonSchema): JSONSchema7 => {
+  if (isObjectSchema(schema) && (schema.type === 'object' || 'properties' in schema)) {
+    return {
+      ...(schema as JSONSchema7),
+      additionalProperties: true,
+    }
   }
-  // Non-object node outputs are wrapped by the runner into { value: ... }
-  return z
-    .object({
-      value: schema,
-    })
-    .passthrough()
+  return {
+    type: 'object',
+    properties: {
+      value: schema as JSONSchema7,
+    },
+    additionalProperties: true,
+  }
 }
 
 export const createOptimizationResultsUiJsonSchema = (args: {
-  nodeParamsSchema: z.ZodTypeAny
-  nodeOutputSchema: z.ZodTypeAny
+  nodeParamsSchema: DagJsonSchema
+  nodeOutputSchema: DagJsonSchema
 }): JSONSchema7 => {
-  const outputsSchema = ensureObjectLikeOutputSchema(args.nodeOutputSchema).describe(
-    'Outputs of the run. If the run was configured to only record specific output paths, some fields may be missing.',
-  )
+  const outputsSchema = ensureObjectLikeOutputSchema(args.nodeOutputSchema)
+  outputsSchema.description =
+    'Outputs of the run. If the run was configured to only record specific output paths, some fields may be missing.'
 
   const uiSchema = z.object({
     nodeKey: optimizationResultsSchema.shape.nodeKey,
@@ -934,16 +897,26 @@ export const createOptimizationResultsUiJsonSchema = (args: {
     bestIndex: optimizationResultsSchema.shape.bestIndex,
     runs: z.array(
       z.object({
-        params: args.nodeParamsSchema.describe('Params used for this run.'),
-        outputs: outputsSchema,
+        params: z.unknown().describe('Params used for this run.'),
+        outputs: z.unknown(),
         objectives: objectiveMapSchema,
         captured: z
-          .record(z.string(), z.any())
+          .record(z.string(), z.unknown())
           .optional()
           .describe('Explicitly captured internal values requested by the execution config.'),
       }),
     ),
   })
 
-  return z.toJSONSchema(uiSchema, { unrepresentable: 'any' }) as JSONSchema7
+  const json = z.toJSONSchema(uiSchema, { unrepresentable: 'any' }) as JSONSchema7
+  const runSchema = (
+    ((json.properties?.runs as JSONSchema7 | undefined)?.items as JSONSchema7 | undefined)
+      ?.properties ?? {}
+  ) as Record<string, JSONSchema7Definition>
+  runSchema.params = {
+    ...(args.nodeParamsSchema as JSONSchema7),
+    description: 'Params used for this run.',
+  }
+  runSchema.outputs = outputsSchema
+  return json
 }

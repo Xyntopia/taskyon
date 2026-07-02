@@ -7,7 +7,9 @@ const hasBrowserOpfs = (): boolean =>
   typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function'
 
 const nodeOpfsRoot = (): string => {
-  const proc = globalThis as unknown as { process?: { cwd?: () => string; env?: Record<string, string | undefined> } }
+  const proc = globalThis as unknown as {
+    process?: { cwd?: () => string; env?: Record<string, string | undefined> }
+  }
   const cwd = proc.process?.cwd?.() ?? '.'
   return proc.process?.env?.TASKYON_NODE_OPFS_ROOT ?? `${cwd}/.joulios/opfs`
 }
@@ -62,7 +64,9 @@ export async function openFile(path: string): Promise<File> {
   if (!hasBrowserOpfs()) {
     const fs = await import(/* @vite-ignore */ 'node:fs/promises')
     const data = await fs.readFile(await safeNodePath(path))
-    return new File([data], path.split('/').pop() ?? 'data')
+    const bytes = new Uint8Array(data.byteLength)
+    bytes.set(data)
+    return new File([bytes], path.split('/').pop() ?? 'data')
   }
   const handle = await getFileHandle(path, false)
   return handle.getFile()

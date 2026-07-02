@@ -64,12 +64,14 @@ interface GenericMapProps {
   tileLayerOptions?: L.TileLayerOptions
   // eslint-disable-next-line vue/require-default-prop
   placeName?: string
+  preferCanvas?: boolean
 }
 
 const props = withDefaults(defineProps<GenericMapProps>(), {
   initialCenter: () => [0, 0],
   initialZoom: 10,
   useDefaultTileLayer: true,
+  preferCanvas: false,
 })
 
 const sidebarOpen = defineModel<boolean>('sidebarOpen', {
@@ -118,10 +120,7 @@ const createMap = () => {
     center: props.initialCenter,
     zoom: props.initialZoom,
     zoomControl: false,
-    // TODO: enable this, it mght make it much better :)
-    // right now, it simply causes skewed layers??
-    // probably due to resizing of the map after initializaton
-    preferCanvas: false, // makes it much more performant...
+    preferCanvas: props.preferCanvas,
   })
 
   console.log(`${logPrefix} map created`, { center: props.initialCenter, zoom: props.initialZoom })

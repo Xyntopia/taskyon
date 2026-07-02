@@ -52,6 +52,12 @@ export interface SerializeOptions {
    * Default: true
    */
   detectConstantArrayValues?: boolean
+
+  /**
+   * Prefix the serialized output with an explicit notice when any value was truncated.
+   * Default: false
+   */
+  includeTruncationNotice?: boolean
 }
 
 /**
@@ -74,9 +80,16 @@ export function serializeObject(value: unknown, options: SerializeOptions = {}):
     indent: options.indent ?? 2,
     includeTruncationMeta: options.includeTruncationMeta ?? true,
     detectConstantArrayValues: options.detectConstantArrayValues ?? true,
+    includeTruncationNotice: options.includeTruncationNotice ?? false,
   }
 
   const seen = new WeakSet<object>()
+  const truncation = {
+    maxDepth: 0,
+    strings: 0,
+    arrayItems: 0,
+    objectKeys: 0,
+  }
 
   function summarize(v: unknown, depth: number): unknown {
     // Primitives
@@ -118,6 +131,7 @@ export function serializeObject(value: unknown, options: SerializeOptions = {}):
       seen.add(v)
 
       if (depth >= resolved.maxDepth) {
+        truncation.maxDepth += 1
         return '[Max depth reached]'
       }
 
@@ -147,6 +161,7 @@ export function serializeObject(value: unknown, options: SerializeOptions = {}):
     // 'value' policy
     if (typeof v === 'string') {
       if (v.length > resolved.maxStringLength) {
+        truncation.strings += 1
         return v.slice(0, resolved.maxStringLength) + '… (truncated)'
       }
       return v
@@ -186,8 +201,12 @@ export function serializeObject(value: unknown, options: SerializeOptions = {}):
       result.push(summarize(arr[i], depth + 1))
     }
 
-    if (len > limit && resolved.includeTruncationMeta) {
-      result.push({ __omittedItems: len - limit })
+    if (len > limit) {
+      const omittedItems = len - limit
+      truncation.arrayItems += omittedItems
+      if (resolved.includeTruncationMeta) {
+        result.push({ __omittedItems: omittedItems })
+      }
     }
 
     return result
@@ -229,8 +248,12 @@ export function serializeObject(value: unknown, options: SerializeOptions = {}):
       result[key] = summarize(obj[key], depth + 1)
     }
 
-    if (keys.length > limit && resolved.includeTruncationMeta) {
-      result['__omittedKeys'] = keys.length - limit
+    if (keys.length > limit) {
+      const omittedKeys = keys.length - limit
+      truncation.objectKeys += omittedKeys
+      if (resolved.includeTruncationMeta) {
+        result['__omittedKeys'] = omittedKeys
+      }
     }
 
     return result
@@ -238,11 +261,33 @@ export function serializeObject(value: unknown, options: SerializeOptions = {}):
 
   const summarized = summarize(value, 0)
 
-  if (resolved.format === 'yaml') {
-    // YAML output
-    return yamlStringify(summarized)
-  }
+  const serialized =
+    resolved.format === 'yaml'
+      ? // YAML output
+        yamlStringify(summarized)
+      : // JSON output
+        JSON.stringify(summarized, null, resolved.indent)
 
-  // JSON output
-  return JSON.stringify(summarized, null, resolved.indent)
+  if (!resolved.includeTruncationNotice) return serialized
+
+  const notice = createTruncationNotice(truncation)
+  return notice ? `${notice}\n${serialized}` : serialized
+}
+
+function createTruncationNotice(truncation: {
+  maxDepth: number
+  strings: number
+  arrayItems: number
+  objectKeys: number
+}) {
+  const parts = [
+    truncation.maxDepth > 0 ? `${truncation.maxDepth} max-depth value(s)` : '',
+    truncation.strings > 0 ? `${truncation.strings} string value(s)` : '',
+    truncation.arrayItems > 0 ? `${truncation.arrayItems} array item(s)` : '',
+    truncation.objectKeys > 0 ? `${truncation.objectKeys} object key(s)` : '',
+  ].filter(Boolean)
+
+  return parts.length > 0
+    ? `Note: this serialized value was truncated for context size (${parts.join(', ')} omitted or shortened).`
+    : ''
 }

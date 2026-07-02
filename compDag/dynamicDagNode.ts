@@ -1,18 +1,6 @@
-import z from 'zod'
-import { createNode, oneOf } from './dagCore'
-import { executeInWorkerSandbox } from '../modules/sandbox/workerSandbox'
-
-type JsonSchema = {
-  type?: string | string[]
-  properties?: Record<string, JsonSchema>
-  items?: JsonSchema
-  required?: string[]
-  enum?: unknown[]
-  const?: unknown
-  default?: unknown
-  nullable?: boolean
-  additionalProperties?: boolean | JsonSchema
-}
+import { createNode, oneOf, type DagExposedInputDef, type DagNode } from './dagCore.ts'
+import type { DagJsonSchema } from './dagSchema.ts'
+import { executeInWorkerSandbox } from '../modules/sandbox/workerSandbox.ts'
 
 export type DynamicNodeInputRefSingle = { nodeId: string }
 export type DynamicNodeInputRefOneOf = {
@@ -24,9 +12,10 @@ export type DynamicDagNodeDefinition = {
   label: string
   version: number
   timeoutMs?: number
-  runCode: string
-  localParamsSchema: JsonSchema
-  outputSchema: JsonSchema
+  runCode?: string
+  run?: (ctx: { params: Record<string, unknown>; inputs: Record<string, unknown> }) => unknown
+  localParamsSchema: DagJsonSchema
+  outputSchema: DagJsonSchema
   hiddenInputs?: Record<string, DynamicNodeInputRefSingle>
   exposedInputs?: Record<string, DynamicNodeInputRefSingle | DynamicNodeInputRefOneOf>
 }
@@ -42,57 +31,6 @@ export type DynamicLegacyNodeDefinition = {
 
 export type DynamicAnyNodeDefinition = DynamicDagNodeDefinition | DynamicLegacyNodeDefinition
 
-const asArray = <T>(v: T | T[] | undefined): T[] =>
-  Array.isArray(v) ? v : v === undefined ? [] : [v]
-
-const toZod = (schema: JsonSchema | undefined): z.ZodTypeAny => {
-  const s = schema ?? {}
-  if (s.const !== undefined) return z.literal(s.const as never)
-  if (Array.isArray(s.enum) && s.enum.length > 0) {
-    if (s.enum.length === 1) return z.literal(s.enum[0] as never)
-    const values = s.enum.map((x) => z.literal(x as never))
-    return z.union(values as unknown as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
-  }
-
-  const types = asArray(s.type)
-  let base: z.ZodTypeAny
-  if (types.includes('object') || (!s.type && (s.properties || s.additionalProperties))) {
-    if (s.properties) {
-      const required = new Set(s.required ?? [])
-      const shape: Record<string, z.ZodTypeAny> = {}
-      for (const [key, child] of Object.entries(s.properties)) {
-        const zChild = toZod(child)
-        shape[key] = required.has(key) ? zChild : zChild.optional()
-      }
-      base = z.object(shape)
-    } else if (s.additionalProperties && typeof s.additionalProperties === 'object') {
-      base = z.record(z.string(), toZod(s.additionalProperties))
-    } else {
-      base = z.record(z.string(), z.unknown())
-    }
-  } else if (types.includes('array') || s.items) {
-    base = z.array(toZod(s.items))
-  } else if (types.includes('number') || types.includes('integer')) {
-    base = z.number()
-  } else if (types.includes('boolean')) {
-    base = z.boolean()
-  } else if (types.includes('string')) {
-    base = z.string()
-  } else {
-    base = z.unknown()
-  }
-
-  if (s.nullable || types.includes('null')) base = base.nullable()
-  if (s.default !== undefined) base = base.default(s.default as never)
-  return base
-}
-
-const toObjectZod = (schema: JsonSchema): z.ZodObject<z.ZodRawShape> => {
-  const zod = toZod(schema)
-  if (zod instanceof z.ZodObject) return zod
-  return z.object({ value: zod.optional() })
-}
-
 const createTimeoutSignal = (timeoutMs: number): { signal: AbortSignal; dispose: () => void } => {
   const controller = new AbortController()
   const timeout = globalThis.setTimeout(() => {
@@ -106,7 +44,7 @@ const normalizeLegacy = (def: DynamicLegacyNodeDefinition): DynamicDagNodeDefini
     id: def.id,
     label: def.label,
     version: def.version,
-    runCode: `(ctx) => ({ value: (${def.code})(ctx.params.input) })`,
+    runCode: `async (ctx) => ({ value: await (${def.code})(ctx.params.input) })`,
     localParamsSchema: {
       type: 'object',
       properties: {
@@ -174,24 +112,39 @@ export const compileDynamicDagNode = (args: {
     }
   }
 
-  return createNode({
+  return createNode<
+    DagJsonSchema,
+    DagJsonSchema,
+    Record<string, DagNode>,
+    Record<string, DagExposedInputDef>,
+    Record<string, unknown>,
+    unknown
+  >({
     name: definition.id,
     version: definition.version,
-    localParams: toObjectZod(definition.localParamsSchema),
-    outputSchema: toZod(definition.outputSchema),
-    hiddenInputs: hiddenInputs as never,
-    exposedInputs: exposedInputs as never,
+    localParams: definition.localParamsSchema,
+    outputSchema: definition.outputSchema,
+    hiddenInputs: hiddenInputs as Record<string, DagNode>,
+    exposedInputs: exposedInputs as Record<string, DagExposedInputDef>,
     policy: { cache: 'ReadWrite', scope: 'ModelState' },
-    run: async (params, use) => {
+    run: async (params: unknown, use: unknown) => {
       const resolvedInputs: Record<string, unknown> = {}
+      const exposedAliases = new Set(Object.keys(definition.exposedInputs ?? {}))
       for (const [alias, runner] of Object.entries(
-        use as Record<string, (params: Record<string, unknown>) => Promise<unknown>>,
+        use as Record<string, (params?: Record<string, unknown>) => Promise<unknown>>,
       )) {
-        resolvedInputs[alias] = await runner({})
+        resolvedInputs[alias] = exposedAliases.has(alias) ? await runner() : await runner({})
       }
       const timeoutMs = Math.max(100, Math.min(definition.timeoutMs ?? 5_000, 60_000))
       const timeout = createTimeoutSignal(timeoutMs)
       try {
+        if (definition.run) {
+          return await definition.run({
+            params: params as Record<string, unknown>,
+            inputs: resolvedInputs,
+          })
+        }
+        if (!definition.runCode) throw new Error(`Dynamic node ${definition.id}: missing runCode`)
         return await executeInWorkerSandbox(
           {
             id: `dynamic-node-${definition.id}`,

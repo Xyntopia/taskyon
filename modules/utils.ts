@@ -263,8 +263,6 @@ export function deepMerge<A, B>(
   return output as A & B
 }
 
-// TODO: add a small test to this :)
-// asyncLruCache.ts
 export function asyncLruCache(size: number, ignoreIndices: number[] = []) {
   return <TArgs extends unknown[], R>(fn: (...args: TArgs) => R | Promise<R>) => {
     const cache = new Map<string, R>()

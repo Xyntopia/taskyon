@@ -19,7 +19,8 @@ async function loadWorkerSandboxRuntime(
 ): Promise<WorkerSandboxRuntime> {
   if (isBrowserRuntime()) {
     if (options.browserRuntime === 'worker') {
-      const { BrowserNativeWorkerSandboxRuntime } = await import('./browserNativeWorkerSandboxRuntime')
+      const { BrowserNativeWorkerSandboxRuntime } =
+        await import('./browserNativeWorkerSandboxRuntime')
       return new BrowserNativeWorkerSandboxRuntime()
     }
     const { BrowserWorkerSandboxRuntime } = await import('./browserWorkerSandboxRuntime')

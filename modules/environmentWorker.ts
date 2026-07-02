@@ -57,7 +57,8 @@ export const createEnvironmentWorker = <Request, Response>(
   const local: EnvironmentWorkerLike<Request, Response> = {
     onmessage: null,
     onerror: null,
-    postMessage(request, _transfer) {
+    postMessage(request, transfer) {
+      void transfer
       if (terminated) return
       queueMicrotask(() => {
         const controller = new AbortController()
@@ -69,7 +70,9 @@ export const createEnvironmentWorker = <Request, Response>(
             code: buildSandboxBridgeCode(),
             sourceURL: `${workerId}.environment-worker.js`,
             stopSignal: controller.signal,
-            browserRuntime: options.browserRuntime,
+            ...(options.browserRuntime !== undefined
+              ? { browserRuntime: options.browserRuntime }
+              : {}),
             rpcHandlers: {
               'environmentWorker:handleRequest': async (sandboxRequest) => {
                 const responses: Response[] = []
