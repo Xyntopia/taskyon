@@ -78,6 +78,41 @@ type SlashParsed = {
   args: string
 }
 
+type JsonValue = string | number | boolean | null | JsonValue[] | JsonObject
+type JsonObject = { [key: string]: JsonValue | undefined }
+
+type TaskyonClientInvoker = {
+  listTools: (args: { includeHidden?: boolean }) => Promise<Record<string, ToolCatalogEntry>>
+  callTool: (name: string, args: JsonObject) => Promise<unknown>
+  createTaskChain: (args: {
+    tasks: TaskNode[]
+    execute?: boolean
+    show?: boolean
+  }) => Promise<unknown>
+  [methodName: string]: unknown
+}
+
+type TaskyonClientCommandRuntime = {
+  client: TaskyonClientInvoker
+  taskPort?: Parameters<typeof waitForTaskResult>[0]
+}
+
+type ParsedClientInvocation =
+  | {
+      kind: 'listTools'
+      includeHidden: boolean
+    }
+  | {
+      kind: 'callTool'
+      toolName: string
+      arguments: JsonObject
+    }
+  | {
+      kind: 'method'
+      methodName: string
+      arguments: unknown
+    }
+
 const DEFAULT_PROMPT_TEMPLATES = {
   basePrompt:
     'You are a helpful assistant called Taskyon. Return concise and correct Markdown answers.',
@@ -452,6 +487,162 @@ function parseSlashName(line: string): SlashParsed | null {
   return { name, args }
 }
 
+function splitFirstToken(input: string): { token: string; rest: string } {
+  const trimmed = input.trim()
+  if (!trimmed) return { token: '', rest: '' }
+  const match = /^(\S+)(?:\s+([\s\S]*))?$/.exec(trimmed)
+  return {
+    token: match?.[1] ?? '',
+    rest: match?.[2]?.trimStart() ?? '',
+  }
+}
+
+function parseJsonArgument(raw: string, fallback: JsonValue): JsonValue {
+  const trimmed = raw.trim()
+  if (!trimmed) return fallback
+  try {
+    return JSON.parse(trimmed) as JsonValue
+  } catch (error) {
+    throw new Error(
+      `Expected JSON arguments, got: ${trimmed}\n${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+}
+
+function assertJsonObject(value: unknown, label: string): JsonObject {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as JsonObject
+  }
+  throw new Error(`${label} must be a JSON object.`)
+}
+
+function normalizeClientMethodName(name: string): string {
+  const normalized = name.trim()
+  if (normalized === 'list-tools') return 'listTools'
+  if (normalized === 'call-tool') return 'callTool'
+  return normalized
+}
+
+function parseTaskyonClientInvocation(raw: string): ParsedClientInvocation {
+  const { token: rawMethodName, rest } = splitFirstToken(raw)
+  const methodName = normalizeClientMethodName(rawMethodName)
+  if (!methodName) {
+    throw new Error(
+      'Usage: client list-tools | client call-tool <toolName> [jsonArgs] | client <methodName> [jsonArgs]',
+    )
+  }
+
+  if (methodName === 'listTools') {
+    const args = assertJsonObject(parseJsonArgument(rest, {}), 'listTools arguments')
+    return {
+      kind: 'listTools',
+      includeHidden: typeof args.includeHidden === 'boolean' ? args.includeHidden : true,
+    }
+  }
+
+  if (methodName === 'callTool') {
+    if (rest.trimStart().startsWith('{')) {
+      const args = assertJsonObject(parseJsonArgument(rest, {}), 'callTool arguments')
+      const name = args.name
+      if (typeof name !== 'string' || !name.trim()) {
+        throw new Error(
+          'Usage: client call-tool <toolName> [jsonArgs] or client callTool {"name":"toolName","arguments":{...}}',
+        )
+      }
+      return {
+        kind: 'callTool',
+        toolName: name,
+        arguments: assertJsonObject(args.arguments ?? {}, 'callTool.arguments'),
+      }
+    }
+
+    const { token: toolName, rest: toolArgsRaw } = splitFirstToken(rest)
+    if (!toolName) {
+      throw new Error(
+        'Usage: client call-tool <toolName> [jsonArgs] or client callTool {"name":"toolName","arguments":{...}}',
+      )
+    }
+
+    return {
+      kind: 'callTool',
+      toolName,
+      arguments: assertJsonObject(parseJsonArgument(toolArgsRaw, {}), 'tool arguments'),
+    }
+  }
+
+  return {
+    kind: 'method',
+    methodName,
+    arguments: parseJsonArgument(rest, {}),
+  }
+}
+
+function parseTaskyonClientCliArgs(argv: string[]): string | null {
+  const [command, ...rest] = argv
+  if (command !== 'client' && command !== 'taskyon-client') return null
+  return rest.join(' ')
+}
+
+function formatJsonResult(value: unknown): string {
+  return JSON.stringify(value, null, 2)
+}
+
+function createCliTaskyonClient(port: unknown): TaskyonClientInvoker {
+  return createTaskyonClient(
+    port as Parameters<typeof createTaskyonClient>[0],
+  ) as TaskyonClientInvoker
+}
+
+async function invokeTaskyonToolTask(
+  runtime: TaskyonClientCommandRuntime,
+  invocation: { toolName: string; arguments: JsonObject },
+): Promise<unknown> {
+  if (!runtime.taskPort) {
+    return await runtime.client.callTool(invocation.toolName, invocation.arguments)
+  }
+
+  const taskChain = await createPreparedTaskChain([
+    toolCall({
+      name: invocation.toolName,
+      arguments: invocation.arguments,
+    }),
+  ])
+  await runtime.client.createTaskChain({
+    tasks: taskChain,
+    execute: true,
+    show: false,
+  })
+  const result = await waitForTaskResult(
+    runtime.taskPort,
+    taskChain.map((task) => task.id),
+    ['toolresult', 'return', 'error'],
+    10 * 60 * 1000,
+  )
+  if (result.content.type === 'error') {
+    throw new Error(`Tool '${invocation.toolName}' failed.`, { cause: result.content.data })
+  }
+  return result.content.data
+}
+
+async function invokeTaskyonClient(
+  runtime: TaskyonClientCommandRuntime,
+  raw: string,
+): Promise<unknown> {
+  const invocation = parseTaskyonClientInvocation(raw)
+  if (invocation.kind === 'listTools') {
+    return await runtime.client.listTools({ includeHidden: invocation.includeHidden })
+  }
+  if (invocation.kind === 'callTool') {
+    return await invokeTaskyonToolTask(runtime, invocation)
+  }
+
+  const method = (runtime.client as unknown as Record<string, unknown>)[invocation.methodName]
+  if (typeof method !== 'function') {
+    throw new Error(`Unknown taskyonClient method '${invocation.methodName}'.`)
+  }
+  return await method.call(runtime.client, invocation.arguments)
+}
+
 const cliBashTool: ClientTool = createClientTool({
   name: 'bash',
   description: 'Run a bash command on the host system and return stdout, stderr, and exit code.',
@@ -483,6 +674,12 @@ const ACTIVE_LLM_TOOLS = [
   UPDATE_FILES_TOOL_NAME,
   DOWNLOAD_FILE_TOOL_NAME,
 ] as const
+
+type ToolCatalogEntry = {
+  name: string
+  description: string
+  renderOptions?: { hideChat?: boolean }
+}
 
 function buildCliEnvironmentContext(
   toolResultSection = '(none)',
@@ -1506,7 +1703,7 @@ async function handleProviderCommand(
 }
 
 async function handleToolsCommand(ty: Taskyon, target?: Record<string, { hideChat?: boolean }>) {
-  const all = await createTaskyonClient(ty.port).listTools({ includeHidden: true })
+  const all = await createCliTaskyonClient(ty.port).listTools({ includeHidden: true })
   if (target) {
     for (const key of Object.keys(target)) delete target[key]
     for (const [name, def] of Object.entries(
@@ -1531,7 +1728,7 @@ async function refreshToolRenderOptions(
   ty: Taskyon,
   target: Record<string, { hideChat?: boolean }>,
 ) {
-  const all = await createTaskyonClient(ty.port).listTools({ includeHidden: true })
+  const all = await createCliTaskyonClient(ty.port).listTools({ includeHidden: true })
   for (const key of Object.keys(target)) delete target[key]
   for (const [name, def] of Object.entries(
     all as Record<string, { renderOptions?: { hideChat?: boolean } }>,
@@ -1588,6 +1785,11 @@ async function handleSettingsCommand(
   )
 }
 
+async function handleClientCommand(runtime: TaskyonClientCommandRuntime, parsedArgs: string) {
+  const result = await invokeTaskyonClient(runtime, parsedArgs)
+  writeLine(formatJsonResult(result))
+}
+
 async function resolveConversationToResume(
   rl: ReturnType<typeof createInterface>,
   configDir: string,
@@ -1639,6 +1841,8 @@ async function handleSlashCommand(
   parsed: SlashParsed,
   rl: ReturnType<typeof createInterface>,
   ty: Taskyon,
+  taskyonClient: TaskyonClientInvoker,
+  taskPort: Parameters<typeof waitForTaskResult>[0],
   llmState: llmSettings,
   uiSettings: { showRoleTag: boolean; showFullFunctionResults: boolean },
   toolRenderOptions: Record<string, { hideChat?: boolean }>,
@@ -1673,12 +1877,17 @@ async function handleSlashCommand(
     return true
   }
 
+  if (parsed.name === 'client') {
+    await handleClientCommand({ client: taskyonClient, taskPort }, parsed.args)
+    return true
+  }
+
   if (parsed.name === 'exit' || parsed.name === 'quit') {
     return false
   }
 
   writeError(
-    `Unknown command '/${parsed.name}'. Supported: /keys, /provider, /model, /tools, /debug, /settings, /resume, /exit, /quit`,
+    `Unknown command '/${parsed.name}'. Supported: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /exit, /quit`,
   )
   return true
 }
@@ -1708,6 +1917,7 @@ async function loadProjectInstructions(cwd: string): Promise<string> {
 
 async function main() {
   adoptInvocationWorkingDirectory()
+  const taskyonClientCommand = parseTaskyonClientCliArgs(process.argv.slice(2))
 
   let restoreConsoleLogging: (() => void) | undefined
   const sessionStartedAt = new Date()
@@ -1760,13 +1970,15 @@ async function main() {
     getToolCatalog: async () => {
       const ty = taskyonRef.current
       if (!ty) return []
-      const allTools = await createTaskyonClient(ty.port).listTools({ includeHidden: true })
+      const allTools = (await createCliTaskyonClient(ty.port).listTools({
+        includeHidden: true,
+      })) as Record<string, ToolCatalogEntry>
       return Object.values(allTools)
         .filter(
-          (tool: { name: string; description: string }) =>
+          (tool) =>
             !['chatCompletion', 'entryNode', 'opfsStorage', 'taskyonFlow'].includes(tool.name),
         )
-        .map((tool: { name: string; description: string }) => ({
+        .map((tool) => ({
           name: tool.name,
           description: tool.description,
         }))
@@ -1837,7 +2049,7 @@ async function main() {
     await taskyon.updateChatCompletionApiKey(selectedApi, bootstrapKey)
   }
 
-  if (llmState.selectedApi === 'local') {
+  if (llmState.selectedApi === 'local' && taskyonClientCommand === null) {
     const localApi = llmState.llmApis.local
     if (!localApi) throw new Error("Local provider config 'llmApis.local' is missing")
     const isReachable = await canReachLocalApi(localApi.baseURL)
@@ -1859,9 +2071,13 @@ async function main() {
   }
 
   const { x: clientPort, y: bridgePort } = createProtocolPort(taskyonProtocol)
-  const taskyonApi = createTaskyonClient(clientPort)
-  const unsubscribeBridgeToTaskyon = bridgePort.receive((msg) => taskyon.port.send(msg))
-  const unsubscribeTaskyonToBridge = taskyon.port.receive((msg) => bridgePort.send(msg))
+  const taskyonApi = createCliTaskyonClient(clientPort)
+  const unsubscribeBridgeToTaskyon = bridgePort.receive((msg: unknown) =>
+    taskyon.port.send(msg as Parameters<typeof taskyon.port.send>[0]),
+  )
+  const unsubscribeTaskyonToBridge = taskyon.port.receive((msg: unknown) =>
+    bridgePort.send(msg as Parameters<typeof bridgePort.send>[0]),
+  )
 
   const cliTools: InternalTool[] = [
     cliEntryNodeTool,
@@ -1886,6 +2102,31 @@ async function main() {
       }),
   })
   await refreshToolRenderOptions(taskyon, toolRenderOptions)
+
+  if (taskyonClientCommand !== null) {
+    try {
+      await handleClientCommand(
+        { client: taskyonApi, taskPort: clientPort as Parameters<typeof waitForTaskResult>[0] },
+        taskyonClientCommand,
+      )
+      await persistConfigPatch({
+        sessions: normalizeSessionRecords([
+          { ...currentSession, endedAt: new Date().toISOString() },
+          ...normalizeSessionRecords((await loadStoredConfig()).sessions).filter(
+            (session) => session.conversationPath !== currentSession.conversationPath,
+          ),
+        ]),
+      }).catch(() => {})
+    } finally {
+      cliToolRpcExecutor.destroy()
+      unsubscribeBridgeToTaskyon()
+      unsubscribeTaskyonToBridge()
+      taskyon.workerStop('tycli client command complete')
+      restoreConsoleLogging?.()
+      await runtimeLog?.flush().catch(() => {})
+    }
+    process.exit(0)
+  }
 
   const rl = createInterface({
     input: process.stdin,
@@ -2402,7 +2643,7 @@ async function main() {
   )
   writeNotice(
     'info',
-    'Slash commands: /keys, /provider, /model, /tools, /debug, /settings, /resume, /exit, /quit',
+    'Slash commands: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /exit, /quit',
   )
   if (debugLogsEnabled) writeNotice('warn', 'Debug logs enabled (TYCLI_DEBUG=1).')
   updateFooter()
@@ -2524,6 +2765,8 @@ async function main() {
           parsed,
           rl,
           taskyon,
+          taskyonApi,
+          clientPort as Parameters<typeof waitForTaskResult>[0],
           llmState,
           uiSettings,
           toolRenderOptions,
@@ -2579,7 +2822,7 @@ async function main() {
         taskInterruptKeysCleanup = startTaskInterruptKeys()
         activeTaskWaitController = new AbortController()
         const result = await waitForTaskResult(
-          clientPort,
+          clientPort as Parameters<typeof waitForTaskResult>[0],
           taskChain.map((task) => task.id),
           ['message', 'error', 'return'],
           10 * 60 * 1000,

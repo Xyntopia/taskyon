@@ -66,6 +66,7 @@ export const SLASH_COMMANDS = [
   'tools',
   'debug',
   'settings',
+  'client',
   'resume',
   'exit',
   'quit',
