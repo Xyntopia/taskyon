@@ -64,7 +64,9 @@ export async function openFile(path: string): Promise<File> {
   if (!hasBrowserOpfs()) {
     const fs = await import(/* @vite-ignore */ 'node:fs/promises')
     const data = await fs.readFile(await safeNodePath(path))
-    return new File([new Uint8Array(data)], path.split('/').pop() ?? 'data')
+    const bytes = new Uint8Array(data.byteLength)
+    bytes.set(data)
+    return new File([bytes], path.split('/').pop() ?? 'data')
   }
   const handle = await getFileHandle(path, false)
   return handle.getFile()

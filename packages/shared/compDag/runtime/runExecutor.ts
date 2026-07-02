@@ -1,4 +1,5 @@
 import type { EngineConfig, NodeContext, StudyOptions, StudyResult, StudyRowEvent } from '../dagCore'
+import { parseSchema, type DagJsonSchema } from '../dagSchema'
 import type { Objective, OptimizationConfig, OptimizationResults, OptimizationRunRecord } from '../optimization'
 import { setPathValue } from '../optimization'
 import { compileObjectiveQuery, createRowSourceNode } from '../queryPipeline'
@@ -95,7 +96,7 @@ export type ExecuteRunInput = {
   nodeKey: string
   node: {
     name: string
-    paramsSchema: { parse: (input: unknown) => unknown }
+    paramsSchema: DagJsonSchema
     call: (params: unknown) => {
       study: (
         opts: StudyOptions,
@@ -249,7 +250,7 @@ export const createRunExecutorService = (deps?: { now?: () => number }) => {
       const patch = combinations[i]!
       const params: Record<string, unknown> = clone(baseParams)
       for (const [path, value] of Object.entries(patch)) setPathValue(params, path, value)
-      const validated = node.paramsSchema.parse(params)
+      const validated = parseSchema(node.paramsSchema, params)
 
       const cleanedBudget: StudyOptions['budget'] = {}
       if (budgetMaxRows != null) {

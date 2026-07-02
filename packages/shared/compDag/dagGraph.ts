@@ -1,5 +1,5 @@
-import type { GraphData } from '../modules/graph'
-import { describeExploreInputs } from './dagCore'
+import type { GraphData } from '../modules/graph/types.ts'
+import { describeExploreInputs } from './dagCore.ts'
 
 type RuntimeDagNode = {
   name: string

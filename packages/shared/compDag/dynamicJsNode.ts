@@ -1,4 +1,3 @@
-import z from 'zod'
 import { executeInWorkerSandbox } from '../modules/sandbox/workerSandbox'
 import { createNode } from './dagCore'
 
@@ -15,13 +14,27 @@ export const defaultDynamicJsCode = `(input) => {
   return input
 }`
 
-export const dynamicJsNodeInputSchema = z.object({
-  input: z.record(z.string(), z.unknown()).default({}),
-})
+export const dynamicJsNodeInputSchema = {
+  type: 'object',
+  properties: {
+    input: {
+      type: 'object',
+      additionalProperties: true,
+      default: {},
+    },
+  },
+  required: ['input'],
+  additionalProperties: false,
+} as const
 
-export const dynamicJsNodeOutputSchema = z.object({
-  value: z.unknown(),
-})
+export const dynamicJsNodeOutputSchema = {
+  type: 'object',
+  properties: {
+    value: {},
+  },
+  required: ['value'],
+  additionalProperties: false,
+} as const
 
 const createTimeoutSignal = (timeoutMs: number): { signal: AbortSignal; dispose: () => void } => {
   const controller = new AbortController()
@@ -36,7 +49,14 @@ const createTimeoutSignal = (timeoutMs: number): { signal: AbortSignal; dispose:
 }
 
 export const createDynamicJsNode = (definition: DynamicJsNodeDefinition) =>
-  createNode({
+  createNode<
+    typeof dynamicJsNodeInputSchema,
+    typeof dynamicJsNodeOutputSchema,
+    Record<never, never>,
+    Record<never, never>,
+    { input: Record<string, unknown> },
+    { value: unknown }
+  >({
     name: definition.id,
     version: definition.version,
     localParams: dynamicJsNodeInputSchema,

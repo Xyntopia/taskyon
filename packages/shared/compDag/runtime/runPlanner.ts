@@ -1,5 +1,5 @@
-import type { ZodTypeAny } from 'zod'
 import type { StudyInputOption } from '../dagCore'
+import { parseSchema, type DagJsonSchema } from '../dagSchema'
 import {
   setPathValue,
   type Objective,
@@ -181,7 +181,7 @@ export const normalizeBudget = (
 
 export const buildRunPlan = (input: {
   config: OptimizationConfig
-  paramsSchema: ZodTypeAny
+  paramsSchema: DagJsonSchema
   implicitMaxRows?: number
 }): PlannedRunSetup => {
   const { config, paramsSchema } = input
@@ -204,7 +204,7 @@ export const buildRunPlan = (input: {
     setPathValue(baseParamsRaw, path, seed)
   }
 
-  const baseParams = paramsSchema.parse(baseParamsRaw) as Record<string, unknown>
+  const baseParams = parseSchema<Record<string, unknown>>(paramsSchema, baseParamsRaw)
   const combinations = buildCombinations(dims)
   const objective = config.objective
   const objectives = objective ? [objective] : []
@@ -220,4 +220,3 @@ export const buildRunPlan = (input: {
     dagInputs,
   }
 }
-

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // dagCore.ts
 // DAG core for a lazy, demand-driven, typed computational graph.
 //
@@ -12,9 +11,21 @@
 // This supports exploration/optimization workflows that need max/min search with fine-grained
 // control over evaluation order and caching.
 
-import z from 'zod'
-import type { DagStorageBackend } from './caching'
-import { canonicalHash, getDefaultInMemoryBackend, type Hash } from './caching'
+import type { DagStorageBackend } from './caching.ts'
+import { canonicalHash, getDefaultInMemoryBackend, type Hash } from './caching.ts'
+import {
+  combineObjectSchemas,
+  emptyObjectSchema,
+  objectSchema,
+  oneOfSchema,
+  parseSchema,
+  safeParseSchema,
+  schemaArrayElement,
+  schemaAtPath,
+  schemaDescription,
+  type DagJsonSchema,
+  type DagSchemaType,
+} from './dagSchema.ts'
 
 // -----------------------------
 // Core types
@@ -177,11 +188,11 @@ export type StudyResult<O> = {
 }
 
 // High-level node (no hashes visible here)
-interface DagNode<
-  P = any,
-  O = any,
-  PSchema extends z.ZodObject<z.ZodRawShape> = z.ZodObject<z.ZodRawShape>,
-  OSchema extends z.ZodTypeAny = z.ZodTypeAny,
+export interface DagNode<
+  P = unknown,
+  O = unknown,
+  PSchema extends DagJsonSchema = DagJsonSchema,
+  OSchema extends DagJsonSchema = DagJsonSchema,
 > {
   name: string
   version: number
@@ -196,9 +207,9 @@ interface DagNode<
   exposedInputs?: Record<string, ExposedInputDef> | undefined
 
   // internal implementation, used only by the engine
-  _runImpl: (params: any, helpers: any, ctx?: NodeContext) => any
+  _runImpl: (params: unknown, helpers: unknown, ctx?: NodeContext) => unknown
 
-  call: (params: P) => {
+  call(params: P): {
     // pass the node itself in order to make recursive execution possible...
     node: DagNode<P, O, PSchema, OSchema>
     params: P
@@ -255,20 +266,8 @@ export function getDefaultNodePolicies(): Record<string, NodePolicy> {
   return { ...defaultPolicyRegistry }
 }
 
-const combinedParams = <A extends z.ZodObject<z.ZodRawShape>, B extends z.ZodObject<z.ZodRawShape>>(
-  p1: A,
-  p2: B,
-) => {
-  return z.object({
-    ...p1.shape,
-    ...p2.shape,
-  })
-}
-
-type combinedParams<
-  A extends z.ZodObject<z.ZodRawShape>,
-  B extends z.ZodObject<z.ZodRawShape>,
-> = z.ZodObject<A['shape'] & B['shape']>
+const combinedParams = <A extends DagJsonSchema, B extends DagJsonSchema>(p1: A, p2: B) =>
+  combineObjectSchemas(p1, p2)
 
 type OneOfInput<Options extends readonly DagNode[]> = {
   kind: 'oneOf'
@@ -276,50 +275,39 @@ type OneOfInput<Options extends readonly DagNode[]> = {
 }
 
 type ExposedInputDef = DagNode | OneOfInput<readonly DagNode[]>
-
-type InputSchemaOf<I> = I extends DagNode<any, any, infer PSchema, any> ? PSchema : z.ZodTypeAny
+export type DagExposedInputDef = ExposedInputDef
 
 function isOneOfInput(value: ExposedInputDef): value is OneOfInput<readonly DagNode[]> {
   return typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'oneOf'
 }
 
-function oneOfSchemaFromInput(def: OneOfInput<readonly DagNode[]>): z.ZodTypeAny {
+function oneOfSchemaFromInput(def: OneOfInput<readonly DagNode[]>): DagJsonSchema {
   // Optional by default: resolver can auto-pick first valid provider.
   // If providers need explicit params, users can still pass params in call(...)/study(...).
-  const variants = def.options.map((n) => n.paramsSchema) as z.ZodTypeAny[]
-  if (variants.length === 0) return z.any().optional()
-  if (variants.length === 1) return variants[0]!.optional()
-  return z.union(variants as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]).optional()
+  return oneOfSchema(def.options.map((n) => n.paramsSchema))
 }
 
-function zodSchemaFromInputs<T extends Record<string, ExposedInputDef>>(defs: T) {
-  type Shape = {
-    [K in keyof T]: InputSchemaOf<T[K]>
-  }
-
-  const shape = {} as Shape
-
+function schemaFromInputs<T extends Record<string, ExposedInputDef>>(defs: T): DagJsonSchema {
+  const properties: Record<string, DagJsonSchema> = {}
+  const required: string[] = []
   for (const k in defs) {
     const def = defs[k]!
-    shape[k] = (isOneOfInput(def) ? oneOfSchemaFromInput(def) : def.paramsSchema) as Shape[keyof T]
+    properties[k] = isOneOfInput(def) ? oneOfSchemaFromInput(def) : def.paramsSchema
+    if (!isOneOfInput(def)) required.push(k)
   }
-
-  return z.object(shape)
+  return objectSchema({ properties, required, additionalProperties: false })
 }
-type zodSchemaFromInputs<T extends Record<string, ExposedInputDef>> = ReturnType<
-  typeof zodSchemaFromInputs<T>
->
 
-type OutputOf<N> = N extends DagNode<any, infer O, any, any> ? O : never
-type ParamsOf<N> = N extends DagNode<infer P, any, any, any> ? P : never
+type OutputOf<N> = N extends DagNode<unknown, infer O, DagJsonSchema, DagJsonSchema> ? O : never
+type ParamsOf<N> = N extends DagNode<infer P, unknown, DagJsonSchema, DagJsonSchema> ? P : never
 type OutputOfInput<I> =
-  I extends DagNode<any, infer O, any, any>
+  I extends DagNode<unknown, infer O, DagJsonSchema, DagJsonSchema>
     ? O
     : I extends OneOfInput<infer Options>
       ? OutputOf<Options[number]>
       : never
 type ParamsOfInput<I> =
-  I extends DagNode<infer P, any, any, any>
+  I extends DagNode<infer P, unknown, DagJsonSchema, DagJsonSchema>
     ? P
     : I extends OneOfInput<infer Options>
       ? ParamsOf<Options[number]>
@@ -349,71 +337,6 @@ type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}`
   : P extends keyof T
     ? T[P]
     : never
-
-const unwrapSchema = (schema: z.ZodTypeAny): z.ZodTypeAny => {
-  const def = (schema as unknown as { _def?: unknown })._def as
-    | { innerType?: z.ZodTypeAny; schema?: z.ZodTypeAny; in?: z.ZodTypeAny; typeName?: string }
-    | undefined
-
-  if (schema instanceof z.ZodDefault && def?.innerType) return unwrapSchema(def.innerType)
-  if (schema instanceof z.ZodOptional && def?.innerType) return unwrapSchema(def.innerType)
-  if (schema instanceof z.ZodNullable && def?.innerType) return unwrapSchema(def.innerType)
-
-  if (def?.typeName === 'ZodEffects' && def.schema) return unwrapSchema(def.schema)
-  if (def?.typeName === 'ZodPipeline' && def.in) return unwrapSchema(def.in)
-
-  return schema
-}
-
-const zodSchemaAtPath = (schema: z.ZodTypeAny, path: string): z.ZodTypeAny | null => {
-  if (!path) return schema
-  const parts = path.split('.')
-  let cur: z.ZodTypeAny = schema
-
-  for (const rawSeg of parts) {
-    const u = unwrapSchema(cur)
-    if (!(u instanceof z.ZodObject)) return null
-    const shape = u.shape as Record<string, z.ZodTypeAny>
-    const next = shape[rawSeg]
-    if (!next) return null
-    cur = next
-  }
-
-  return cur
-}
-
-const zodSchemaDescription = (schema: z.ZodTypeAny | null | undefined): string | undefined => {
-  if (!schema) return undefined
-
-  const metaDescriptionOf = (node: z.ZodTypeAny): string | undefined => {
-    const metaFn = (node as unknown as { meta?: () => unknown }).meta
-    if (typeof metaFn !== 'function') return undefined
-    const meta = metaFn.call(node) as Record<string, unknown> | undefined
-    return typeof meta?.description === 'string' ? meta.description.trim() : undefined
-  }
-
-  const seen = new Set<z.ZodTypeAny>()
-  const walk = (node: z.ZodTypeAny | null | undefined): string | undefined => {
-    if (!node || seen.has(node)) return undefined
-    seen.add(node)
-
-    const own = node.description?.trim() || metaDescriptionOf(node)
-    if (own) return own
-
-    const unwrapped = unwrapSchema(node)
-    if (unwrapped !== node) {
-      const d = walk(unwrapped)
-      if (d) return d
-    }
-
-    const def = (node as unknown as { _def?: unknown })._def as
-      | { innerType?: z.ZodTypeAny; schema?: z.ZodTypeAny; in?: z.ZodTypeAny; out?: z.ZodTypeAny }
-      | undefined
-    return walk(def?.innerType) ?? walk(def?.schema) ?? walk(def?.in) ?? walk(def?.out)
-  }
-
-  return walk(schema)
-}
 
 const getObjectPathValue = (source: unknown, path: string): unknown => {
   if (!path) return source
@@ -552,7 +475,7 @@ const selectInputNodeByParams = (
   if (provider !== undefined) return selectInputNode(input, provider)
 
   const matches = input.options.filter((node) =>
-    candidateParams.some((candidate) => node.paramsSchema.safeParse(candidate).success),
+    candidateParams.some((candidate) => safeParseSchema(node.paramsSchema, candidate).success),
   )
 
   if (matches.length === 1) return matches[0]!
@@ -592,7 +515,7 @@ export const describeExploreInputs = (node: {
     const isExploded = !!explodeMeta
     const explodeOutputDescription =
       explodeMeta &&
-      zodSchemaDescription(zodSchemaAtPath(explodeMeta.sourceNode.outputSchema, explodeMeta.path))
+      schemaDescription(schemaAtPath(explodeMeta.sourceNode.outputSchema, explodeMeta.path))
     out.push({
       alias,
       providers,
@@ -645,11 +568,13 @@ const resolveSourceParamsForExplodedInput = (
 
   for (const candidate of candidates) {
     const merged = { ...parentParams, ...candidate }
-    const parsed = explodeMeta.sourceNode.paramsSchema.safeParse(merged)
+    const parsed = safeParseSchema<Record<string, unknown>>(explodeMeta.sourceNode.paramsSchema, merged)
     if (parsed.success) return parsed.data
   }
 
-  const shapeKeys = Object.keys(explodeMeta.sourceNode.paramsSchema.shape)
+  const shapeKeys = Object.keys(
+    (explodeMeta.sourceNode.paramsSchema as { properties?: Record<string, unknown> }).properties ?? {},
+  )
   const reason =
     shapeKeys.length > 0 ? `required keys: ${shapeKeys.join(', ')}` : 'no required keys'
   throw new Error(
@@ -695,7 +620,7 @@ const getResolvedExplodedInputs = async (
       ? def.options
           .filter((candidateNode) =>
             [aliasCandidate, paramsValue, {}].some(
-              (candidateParams) => candidateNode.paramsSchema.safeParse(candidateParams).success,
+              (candidateParams) => safeParseSchema(candidateNode.paramsSchema, candidateParams).success,
             ),
           )
           .map((x) => x.name)
@@ -1024,14 +949,12 @@ export const createNearestByLatLonStudyStrategy = (args?: {
 }
 
 export function createNode<
-  LocalParamsSchema extends z.ZodObject<any> = z.ZodObject<Record<string, any>>,
-  OSchema extends z.ZodTypeAny = z.ZodTypeAny,
-  HiddenInputs extends Record<string, DagNode<any, any, z.ZodObject<z.ZodRawShape>>> = Record<
-    never,
-    never
-  >,
+  LocalParamsSchema extends DagJsonSchema = typeof emptyObjectSchema,
+  OSchema extends DagJsonSchema = DagJsonSchema,
+  HiddenInputs extends Record<string, DagNode> = Record<never, never>,
   ExposedInputs extends Record<string, ExposedInputDef> = Record<never, never>,
-  P = NodeParams<ExposedInputs> & z.infer<LocalParamsSchema>,
+  P = NodeParams<ExposedInputs> & DagSchemaType<LocalParamsSchema>,
+  O = DagSchemaType<OSchema>,
 >(args: {
   name: string
   version: number
@@ -1044,7 +967,7 @@ export function createNode<
   policy?: NodePolicy
 
   run: (
-    params: NodeParams<ExposedInputs> & z.infer<LocalParamsSchema>,
+    params: P,
     helpers: {
       [K in keyof ExposedInputs]: (
         maybeParams?: ParamsOfInput<ExposedInputs[K]>,
@@ -1057,17 +980,15 @@ export function createNode<
       ) => Promise<OutputOf<HiddenInputs[K]>>
     },
     ctx?: NodeContext,
-  ) => Promise<z.infer<OSchema>> | z.infer<OSchema>
+  ) => Promise<unknown> | unknown
 }) {
   const { name, version, exposedInputs, hiddenInputs, localParams, outputSchema, policy, run } =
     args
 
   const paramsSchema = combinedParams(
-    localParams ?? z.object({}),
-    exposedInputs ? zodSchemaFromInputs(exposedInputs) : z.object({}),
+    localParams ?? emptyObjectSchema,
+    exposedInputs ? schemaFromInputs(exposedInputs) : emptyObjectSchema,
   )
-
-  type O = z.infer<OSchema>
 
   const defaultPolicy: NodePolicy = policy ?? {
     cache: 'ReadWrite',
@@ -1076,7 +997,8 @@ export function createNode<
 
   defaultPolicyRegistry[name] = defaultPolicy
 
-  const node: DagNode<P, O> = {
+  let node!: DagNode<P, O>
+  const nodeImpl: DagNode<P, O> = {
     name,
     version,
     paramsSchema,
@@ -1085,14 +1007,32 @@ export function createNode<
     hiddenInputs,
     exposedInputs,
 
-    _runImpl: run,
+    _runImpl: (params: unknown, helpers: unknown, ctx?: NodeContext) =>
+      run(
+        params as P,
+        helpers as {
+          [K in keyof ExposedInputs]: (
+            maybeParams?: ParamsOfInput<ExposedInputs[K]>,
+            opts?: { ctx?: NodeContext },
+          ) => Promise<OutputOfInput<ExposedInputs[K]>>
+        } & {
+          [K in keyof HiddenInputs]: (
+            maybeParams?: ParamsOf<HiddenInputs[K]>,
+            opts?: { ctx?: NodeContext },
+          ) => Promise<OutputOf<HiddenInputs[K]>>
+        },
+        ctx,
+      ),
 
     call: (paramsValue: P) => ({
       node,
       params: paramsValue,
-      run: async (ctx, engineConfig) => {
+      run: async (ctx?: NodeContext, engineConfig?: EngineConfig) => {
         if (!ctx) {
-          ctx = { nowUtcMs: Date.now(), log: (msg, data) => console.log(msg, data ?? '') }
+          ctx = {
+            nowUtcMs: Date.now(),
+            log: (msg: string, data?: unknown) => console.log(msg, data ?? ''),
+          }
         }
         const actualEngineConfig = engineConfig ?? {}
         const executionMode: DagExecutionMode = actualEngineConfig.execution?.mode ?? 'worker'
@@ -1101,7 +1041,10 @@ export function createNode<
 
         if (executionMode === 'worker' && runNodeInRunner) {
           const backend = actualEngineConfig.storageBackend ?? getDefaultInMemoryBackend()
-          const validatedParams = node.paramsSchema.parse(paramsValue as Record<string, unknown>)
+          const validatedParams = parseSchema<unknown>(
+            node.paramsSchema,
+            paramsValue as Record<string, unknown>,
+          )
           const paramsHash = canonicalHash(validatedParams)
           const nodeCodeHash = getNodeCodeHash(node)
           const key = makeNodeKey(node, paramsHash, nodeCodeHash)
@@ -1125,13 +1068,18 @@ export function createNode<
             engineConfig: actualEngineConfig,
           })
           if (workerResult) {
+            const workerOutputSchema = node.outputSchema as DagJsonSchema
+            const value = parseSchema<unknown>(
+              workerOutputSchema,
+              workerResult.value,
+            )
             const artifactHash =
-              workerResult.artifactHash ?? (await backend.writeArtifact(workerResult.value))
+              workerResult.artifactHash ?? (await backend.writeArtifact(value))
             if (policy.cache === 'WriteOnly' || policy.cache === 'ReadWrite') {
               await backend.setCacheEntry(key, { artifact: artifactHash })
             }
             return {
-              value: workerResult.value,
+              value,
               artifactHash,
             } as { value: O; artifactHash: Hash }
           }
@@ -1152,10 +1100,10 @@ export function createNode<
 
         return { value: value as O, artifactHash } as { value: O; artifactHash: Hash }
       },
-      study: async (opts, ctx, engineConfig) => {
+      study: async (opts?: StudyOptions, ctx?: NodeContext, engineConfig?: EngineConfig) => {
         const actualCtx = ctx ?? {
           nowUtcMs: Date.now(),
-          log: (msg, data) => console.log(msg, data ?? ''),
+          log: (msg: string, data?: unknown) => console.log(msg, data ?? ''),
         }
         const actualEngineConfig = engineConfig ?? {}
         const executionMode: DagExecutionMode = actualEngineConfig.execution?.mode ?? 'worker'
@@ -1305,7 +1253,7 @@ export function createNode<
           rows.push(result.value)
           rowKeys.push(keyRow)
           const capturedEntries = await Promise.all(
-            (opts?.capture ?? []).map(async (spec) => [
+            (opts?.capture ?? []).map(async (spec: StudyCaptureSpec) => [
               spec.as ?? spec.path,
               await resolveCapturedValue({
                 node,
@@ -1369,7 +1317,7 @@ export function createNode<
           for (const [path, value] of Object.entries(patch)) {
             setPathValue(baseParams, path, value)
           }
-          const validatedBase = node.paramsSchema.parse(baseParams)
+          const validatedBase = parseSchema<Record<string, unknown>>(node.paramsSchema, baseParams)
 
           if (resolved.length === 0) {
             const stop = shouldStop()
@@ -1442,6 +1390,7 @@ export function createNode<
       },
     }),
   }
+  node = nodeImpl
 
   nodeRegistry.set(name, node as unknown as DagNode<unknown, unknown>)
 
@@ -1455,55 +1404,65 @@ export function oneOf<const Options extends readonly DagNode[]>(
 }
 
 export function explode<
-  SourceNode extends DagNode<any, any, z.ZodObject<z.ZodRawShape>, z.ZodTypeAny>,
+  SourceNode extends DagNode,
   Path extends ArrayPaths<OutputOf<SourceNode>> & string,
 >(sourceNode: SourceNode, path: Path) {
   type SourceOutput = OutputOf<SourceNode>
   type SelectedArray = PathValue<SourceOutput, Path>
   type Item = SelectedArray extends ReadonlyArray<infer TItem> ? TItem : never
 
-  const selectedSchema = zodSchemaAtPath(sourceNode.outputSchema, path)
-  const unwrapped = selectedSchema ? unwrapSchema(selectedSchema) : null
-  if (!(unwrapped instanceof z.ZodArray)) {
+  const selectedSchema = schemaAtPath(sourceNode.outputSchema, path)
+  const elementSchema = selectedSchema ? schemaArrayElement(selectedSchema) : null
+  if (!elementSchema) {
     throw new Error(
       `explode(${sourceNode?.name ?? 'unknown'}, ${path}): path must point to an array in outputSchema`,
     )
   }
+  type ExplodedParams = ParamsOf<SourceNode> & { itemIndex?: number }
+  const localParamsSchema = combinedParams(
+    sourceNode.paramsSchema,
+    objectSchema({
+      properties: {
+        itemIndex: {
+          type: 'integer',
+          minimum: 0,
+          description: 'Index into exploded array output from source node',
+        },
+      },
+    }),
+  )
+  const outputSchema = {
+    ...(typeof elementSchema === 'object' && elementSchema !== null ? elementSchema : {}),
+    description: `Exploded element from ${sourceNode.name}.${path} at params.itemIndex`,
+  } as DagJsonSchema
 
-  const elementSchema = unwrapped.element as z.ZodTypeAny
-
-  const explodedNode = createNode({
+  const explodedNode = createNode<
+    DagJsonSchema,
+    DagJsonSchema,
+    Record<'source', SourceNode>,
+    Record<never, never>,
+    ExplodedParams,
+    Item
+  >({
     name: `${sourceNode.name}__explode__${path.replace(/\./g, '_')}`,
     version: 1,
     hiddenInputs: {
       source: sourceNode,
     },
-    localParams: combinedParams(
-      sourceNode.paramsSchema,
-      z.object({
-        itemIndex: z
-          .number()
-          .int()
-          .nonnegative()
-          .optional()
-          .describe('Index into exploded array output from source node'),
-      }),
-    ),
-    outputSchema: (elementSchema as z.ZodType<Item>).describe(
-      `Exploded element from ${sourceNode.name}.${path} at params.itemIndex`,
-    ),
+    localParams: localParamsSchema,
+    outputSchema,
     run: async (params, use) => {
-      const sourceRunner = use.source as (p?: Record<string, unknown>) => Promise<SourceOutput>
       const sourceParams = { ...(params as Record<string, unknown>) }
       delete sourceParams.itemIndex
-      const sourceOut = await sourceRunner(sourceParams)
+      const sourceOut = await use.source(sourceParams as ParamsOf<SourceNode>)
       const arr = getObjectPathValue(sourceOut, path)
       if (!Array.isArray(arr)) {
         throw new Error(
           `explode(${sourceNode.name}, ${path}) expected array at runtime, received ${typeof arr}`,
         )
       }
-      const itemIndex = typeof params.itemIndex === 'number' ? params.itemIndex : 0
+      const paramsRecord = params as Record<string, unknown>
+      const itemIndex = typeof paramsRecord.itemIndex === 'number' ? paramsRecord.itemIndex : 0
       const item = arr[itemIndex]
       if (item === undefined) {
         throw new Error(
@@ -1532,7 +1491,7 @@ export async function executeNode(
   const backend = engineConfig.storageBackend ?? getDefaultInMemoryBackend()
 
   // TODO: it might make sense to make validation optional  for speed ups!
-  const validatedParams = node.paramsSchema.parse(paramsValue)
+  const validatedParams = parseSchema<Record<string, unknown>>(node.paramsSchema, paramsValue)
   const paramsHash = canonicalHash(validatedParams)
   const nodeCodeHash = getNodeCodeHash(node)
   const key = makeNodeKey(node, paramsHash, nodeCodeHash)
@@ -1572,7 +1531,8 @@ export async function executeNode(
     ...addInputs(node.exposedInputs, true),
   }
 
-  const value = await Promise.resolve(node._runImpl(validatedParams, use, ctx))
+  const rawValue = await Promise.resolve(node._runImpl(validatedParams, use, ctx))
+  const value = parseSchema(node.outputSchema, rawValue)
   const artifactHash = await backend.writeArtifact(value)
 
   if (policy.cache === 'WriteOnly' || policy.cache === 'ReadWrite') {
