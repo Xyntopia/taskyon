@@ -24,6 +24,7 @@
     "start": "node ./dist/cli.cjs"
   },
   "dependencies": {
+    "@taskyon/comp-dag": "workspace:*",
     "@taskyon/tyclient": "workspace:*",
     "@taskyon/ui": "workspace:*",
     "terminal-kit": "^3.1.2",

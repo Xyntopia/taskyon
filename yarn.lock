@@ -5142,6 +5142,7 @@ __metadata:
     ajv-formats: "npm:^3.0.1"
     prettier: "npm:^3.3.3"
     typescript: "npm:^5.9.2"
+    zod: "npm:^4.0.0-beta.20250505T195954"
   languageName: unknown
   linkType: soft
 
@@ -5242,6 +5243,7 @@ __metadata:
   dependencies:
     "@taskyon/comp-dag": "workspace:*"
     "@taskyon/p2p-core": "workspace:*"
+    ajv: "npm:^8.17.1"
     ts-pattern: "npm:^5.6.2"
   languageName: unknown
   linkType: soft
@@ -5250,6 +5252,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@taskyon/tycli@workspace:packages/tycli"
   dependencies:
+    "@taskyon/comp-dag": "workspace:*"
     "@taskyon/tyclient": "workspace:*"
     "@taskyon/ui": "workspace:*"
     terminal-kit: "npm:^3.1.2"

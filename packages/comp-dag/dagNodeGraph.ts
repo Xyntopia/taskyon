@@ -26,6 +26,48 @@ export const loadDagNodeRecordGraph = async (
 ): Promise<DagNodeRecordGraph> =>
   savedStoredNodesToRecordGraph(await loadStoredGraphNodeFiles(files))
 
+export const canReadStoredGraphNodeDirectory = (): boolean =>
+  typeof process !== 'undefined' && Boolean(process.versions?.node)
+
+export const readStoredGraphNodeDirectory = async (
+  dirUrl: URL,
+  opts?: { pathPrefix?: string },
+): Promise<StoredGraphNodeFile[]> => {
+  if (!canReadStoredGraphNodeDirectory()) {
+    throw new Error('Stored graph node directory loading requires Node.')
+  }
+
+  const [{ readFile, readdir }, { fileURLToPath }, path] = await Promise.all([
+    import('node:fs/promises'),
+    import('node:url'),
+    import('node:path'),
+  ])
+  const pathPrefix = opts?.pathPrefix ?? 'nodes'
+
+  const readDir = async (absDir: string, relDir: string): Promise<StoredGraphNodeFile[]> => {
+    const entries = await readdir(absDir, { withFileTypes: true })
+    const files = await Promise.all(
+      entries
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(async (entry) => {
+          const absPath = path.join(absDir, entry.name)
+          const relPath = relDir ? `${relDir}/${entry.name}` : entry.name
+          if (entry.isDirectory()) return await readDir(absPath, relPath)
+          if (!entry.isFile() || !entry.name.endsWith('.ts')) return []
+          return [
+            {
+              path: `${pathPrefix}/${relPath}`,
+              source: await readFile(absPath, 'utf8'),
+            },
+          ]
+        }),
+    )
+    return files.flat()
+  }
+
+  return await readDir(fileURLToPath(dirUrl), '')
+}
+
 export const getDagNodeRecordClosure = (graph: DagNodeRecordGraph, rootHash: Hash): Hash[] => {
   const visited = new Set<Hash>()
   const out: Hash[] = []

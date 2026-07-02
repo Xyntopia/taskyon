@@ -185,6 +185,10 @@ export const testCliToolsListsDocumentationTools = async () => {
     result.output.includes('documentationIndex'),
     `Expected documentationIndex in CLI /tools output.\n${result.output}`,
   )
+  assert(
+    result.output.includes('dagGraphProject'),
+    `Expected dagGraphProject in CLI /tools output.\n${result.output}`,
+  )
 
   return { success: true }
 }
@@ -313,6 +317,89 @@ export const testCliTaskPlannerUsesContractedSequentialHandoffs = async () => {
 testCliTaskPlannerUsesContractedSequentialHandoffs.description =
   'Starts tycli and verifies sequential task contracts hand off repository evidence without repeating discovery.'
 testCliTaskPlannerUsesContractedSequentialHandoffs.timeoutMs = 320_000
+
+export const testCliAiWorkstationCreatesAndOptimizesDagGraph = async () => {
+  const result = await runTycSession({
+    testName: 'testCliAiWorkstationCreatesAndOptimizesDagGraph',
+    steps: [
+      {
+        waitFor: 'tycli ready.',
+        input:
+          'I want to design a local AI workstation. Please start by asking me the most important questions about my budget, target models, power limits, noise constraints, and what I want to run locally.\n',
+      },
+      {
+        waitFor: '[assistant|message]',
+        failOn: [
+          '[system|error]',
+          'Cannot connect to API',
+          'No key configured',
+          'does not provide an export named',
+        ],
+        input:
+          'Budget is about 2600 USD before tax. I want to run 7B and 14B models locally, experiment with 32B quantized if possible, and do light coding agents. Power should stay under about 750W from the wall, noise should be office-friendly, and I prefer Linux-compatible commodity parts. Please now build this as a Taskyon DAG graph project using dagGraphProject: create fresh TypeScript nodes, patch at least one node after creating it, run a study over at least three GPU/CPU/RAM/storage variants, and recommend the best variant with the relevant hashes.\n',
+      },
+      {
+        waitFor: 'dagGraphProject',
+        failOn: [
+          '[system|error]',
+          'Cannot connect to API',
+          'No key configured',
+          'does not provide an export named',
+        ],
+        input: '',
+      },
+      {
+        waitFor: 'createNode',
+        failOn: ['[system|error]', 'Fatal error', 'does not provide an export named'],
+        input: '',
+      },
+      {
+        waitFor: 'patchNode',
+        failOn: ['[system|error]', 'Fatal error', 'does not provide an export named'],
+        input: '',
+      },
+      {
+        waitFor: 'studyRoot',
+        failOn: ['[system|error]', 'Fatal error', 'does not provide an export named'],
+        input: '',
+      },
+      {
+        waitFor: 'dagGraphStudyResult',
+        failOn: ['[system|error]', 'Fatal error', 'does not provide an export named'],
+        delayMs: 2_000,
+        input: '/exit\n',
+      },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    isolateHome: false,
+    timeoutMs: 320_000,
+    runner: 'pty',
+  })
+
+  const output = result.output
+  const lowerOutput = output.toLowerCase()
+  assert(result.code === 0, `Expected exit code 0, got ${String(result.code)}\n${output}`)
+  assert(output.includes('dagGraphProject'), `Expected dagGraphProject to be called.\n${output}`)
+  assert(output.includes('createNode'), `Expected at least one createNode action.\n${output}`)
+  assert(
+    output.includes('patchNode') || output.includes('graphPatchResult'),
+    `Expected the graph to be patched after initial creation.\n${output}`,
+  )
+  assert(
+    output.includes('studyRoot') || output.includes('dagGraphStudyResult'),
+    `Expected a studyRoot optimization run.\n${output}`,
+  )
+  assert(
+    lowerOutput.includes('recommend') || lowerOutput.includes('best'),
+    `Expected a final recommendation or best variant.\n${output}`,
+  )
+
+  return { success: true }
+}
+
+testCliAiWorkstationCreatesAndOptimizesDagGraph.description =
+  'Starts tycli with the local AI workstation prompt and verifies the agent creates, patches, studies, and recommends from a persisted DAG graph.'
+testCliAiWorkstationCreatesAndOptimizesDagGraph.timeoutMs = 340_000
 
 export const testCliQuitPromptCtrlCCancelsAndCtrlDExits = async () =>
   await runQuitPromptCtrlCCancelsAndCtrlDExits()

@@ -88,9 +88,7 @@ type RecordNodeFile = {
   label: string
 }
 
-const defaultSource = `import type { StoredDagNodeModule } from '@taskyon/comp-dag/dagNodeLoader'
-
-export default {
+const defaultSource = `export default {
   id: '${SELF_HASH_PLACEHOLDER}',
   localName: 'example_record_node',
   label: 'Example Record Node',
@@ -115,7 +113,7 @@ export default {
   run: ({ params }: { params: Record<string, unknown>; inputs: Record<string, unknown> }) => ({
     value: params.input ?? {},
   }),
-} satisfies StoredDagNodeModule
+}
 `
 
 const directory = ref('dag-record-nodes')

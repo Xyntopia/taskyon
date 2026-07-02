@@ -63,6 +63,17 @@ export default defineConfigWithVueTs(
   vueTsConfigs.recommendedTypeChecked,
 
   {
+    files: [
+      'packages/shared/compDag/examples/**/*.ts',
+      'packages/taskyon/src/examples/nodes/**/*.ts',
+    ],
+    rules: {
+      '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
+  },
+
+  {
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',

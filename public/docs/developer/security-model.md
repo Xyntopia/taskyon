@@ -49,5 +49,4 @@ modified Taskyon runtime, or a tool that deliberately sends a secret after recei
 - Remote MCP and model services must be treated as data recipients.
 
 See [Files, Storage, and Secrets](../user/storage-and-security.md) for the user-facing trust model.
-The target public/admin split is documented in the workspace-level
-`proposals/sandboxed-core-protocol.md` design document.
+The target public/admin split is maintained in workspace-level architectural proposals.

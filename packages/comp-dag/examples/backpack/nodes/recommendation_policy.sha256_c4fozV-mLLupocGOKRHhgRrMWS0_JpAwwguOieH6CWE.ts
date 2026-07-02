@@ -1,7 +1,6 @@
-import type { StoredDagNodeModule } from '@taskyon/comp-dag/dagNodeLoader'
-
 export default {
-  id: 'sha256:uGzoezHgY1VE3E32jXej3Myb9aLRqa-nwx0G3Wq5NrA',
+  formatVersion: 2,
+  id: 'sha256:c4fozV-mLLupocGOKRHhgRrMWS0_JpAwwguOieH6CWE',
   localName: 'recommendation_policy',
   label: 'Recommendation Policy',
   version: 1,
@@ -21,7 +20,7 @@ export default {
     type: 'object',
   },
   inputs: {},
-  run: () => ({
+  run: async () => ({
     mode: 'utility-first',
   }),
-} satisfies StoredDagNodeModule
+}

@@ -116,6 +116,7 @@ import { updateFilesTool } from './tools/patchTool'
 import { downloadFileTool } from './tools/downloadFileTool'
 import { githubIssuesTool } from './tools/githubIssuesTool'
 import { gitlabTool } from './tools/gitlabTool'
+import { dagGraphProjectTool } from './tools/dagGraphProjectTool'
 
 type BashToolArgs = {
   command?: string
@@ -1114,6 +1115,7 @@ function buildCliStableContext(projectInstructions: string) {
       '## Stable Runtime Context',
       `Current Working Directory: ${process.cwd()}`,
       `Shell: ${shell}`,
+      'Use dagGraphProject for reproducible design and optimization workflows: create TypeScript DAG nodes, patch roots, run studies over variants, and report the best root/hash-backed result.',
       '',
       '## Stable Tool Usage Rules',
       '1. Prefer answering directly when no tool action is needed.',
@@ -2576,6 +2578,7 @@ async function main() {
     overpassMapTool,
     githubIssuesTool,
     gitlabTool,
+    dagGraphProjectTool,
     cliBashTool,
     createDocumentationIndexClientTool(documentationBases),
     taskyonDocumentationTool,

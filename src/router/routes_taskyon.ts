@@ -216,6 +216,14 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         },
       },
       {
+        path: '/dag-nodes',
+        component: () => import('@taskyon/shared/pages/DagNodeEditorPage.vue'),
+        meta: {
+          title: 'DAG Node Editor',
+          description: 'Edit stored TypeScript DAG graph nodes.',
+        },
+      },
+      {
         path: '/p2p',
         component: () => import('pages/taskyon/Libp2pUniversalChat.vue'),
         meta: {

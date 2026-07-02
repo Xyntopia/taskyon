@@ -1,7 +1,6 @@
-import type { StoredDagNodeModule } from '@taskyon/comp-dag/dagNodeLoader'
-
 export default {
-  id: 'sha256:OxMDJ0HLWrB2kEUTbAQ7mLYhdHnfn2d34oAQOL02C-E',
+  formatVersion: 2,
+  id: 'sha256:_f9_PhbjBSxk-XoTB-XyMVqlrqKIv2Zk6GcSgDJF9u8',
   localName: 'item_candidates',
   label: 'Item Candidates',
   version: 1,
@@ -17,7 +16,7 @@ export default {
     type: 'object',
   },
   inputs: {},
-  run: () => ({
+  run: async () => ({
     items: [
       { name: 'tent', weightKg: 2.2, utility: 9, tags: ['sleep'] },
       { name: 'sleeping bag', weightKg: 1.4, utility: 8, tags: ['sleep'] },
@@ -29,4 +28,4 @@ export default {
       { name: 'camera', weightKg: 0.7, utility: 3, tags: ['fun'] },
     ],
   }),
-} satisfies StoredDagNodeModule
+}

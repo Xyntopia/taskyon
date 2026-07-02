@@ -6,17 +6,13 @@ import type {
   DagNodeInputRefSingle,
   DagNodeRecord,
   DagNodeRecordInputRef,
+  DagNodeRecordStructure,
 } from './dagNodeRecord.ts'
 import { hashDagNodeRecordInput } from './dagNodeRecord.ts'
 import type { DagJsonSchema } from './dagSchema.ts'
 
 export type StoredDagNodeDefinition = Omit<DagNodeRecord, 'id' | 'run'> & {
   id: Hash | typeof SELF_HASH_PLACEHOLDER
-}
-
-export type StoredDagNodeModule = Omit<DagNodeRecord, 'id' | 'run' | 'runSource' | 'runCode'> & {
-  id: Hash | typeof SELF_HASH_PLACEHOLDER
-  run: unknown
 }
 
 export type StoredGraphNodeFile = {
@@ -32,11 +28,13 @@ export type SavedStoredGraphNode = {
 }
 
 type ParsedNodeFields = {
+  formatVersion: 2
   id: string
   localName: string
   label: string
   version: number
   timeoutMs?: number
+  structure?: unknown
   localParamsSchema: DagJsonSchema
   outputSchema: DagJsonSchema
   inputs?: unknown
@@ -70,7 +68,15 @@ export const parseStoredGraphNodeHashFromPath = (path: string): Hash | null => {
   return match?.[1] ? hashFromFilePart(match[1]) : null
 }
 
-const loadTypescript = async (): Promise<typeof ts> => await import('typescript')
+const loadTypescript = async (): Promise<typeof ts> => {
+  const browserProcess = (
+    globalThis as unknown as {
+      process?: { versions?: Record<string, string | undefined> }
+    }
+  ).process
+  if (browserProcess && !browserProcess.versions) browserProcess.versions = {}
+  return await import('typescript')
+}
 
 const formatTypeScript = async (source: string): Promise<string> => {
   const prettier = (await import('prettier/standalone')) as PrettierStandaloneModule
@@ -281,6 +287,28 @@ const parseDagJsonSchema = (value: unknown, fieldName: string): DagJsonSchema =>
   throw new Error(`Stored graph node field "${fieldName}" must be a JSON schema`)
 }
 
+const parseNodeStructure = (value: unknown): DagNodeRecordStructure | undefined => {
+  if (value === undefined) return undefined
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Stored graph node field "structure" must be an object')
+  }
+  const structure = value as { kind?: unknown; sourceAlias?: unknown; path?: unknown }
+  if (
+    structure.kind !== 'explode' ||
+    typeof structure.sourceAlias !== 'string' ||
+    !structure.sourceAlias ||
+    typeof structure.path !== 'string' ||
+    !structure.path
+  ) {
+    throw new Error('Stored graph node explode structure requires sourceAlias and path')
+  }
+  return {
+    kind: 'explode',
+    sourceAlias: structure.sourceAlias,
+    path: structure.path,
+  }
+}
+
 const extractTranspiledExpression = (
   tsModule: typeof ts,
   source: string,
@@ -350,12 +378,18 @@ const parseSourceFields = async (source: string): Promise<ParsedNodeFields> => {
   if (!run) throw new Error('Stored graph node is missing required field "run"')
 
   const timeoutMs = parseOptionalNumberField(tsModule, fields, 'timeoutMs')
+  const formatVersion = parseNumberField(tsModule, fields, 'formatVersion')
+  if (formatVersion !== 2) {
+    throw new Error(`Stored graph node formatVersion must be 2, received ${formatVersion}`)
+  }
   return {
+    formatVersion,
     id: parseStringField(tsModule, fields, 'id'),
     localName: parseStringField(tsModule, fields, 'localName'),
     label: parseStringField(tsModule, fields, 'label'),
     version: parseNumberField(tsModule, fields, 'version'),
     ...(typeof timeoutMs === 'number' ? { timeoutMs } : {}),
+    structure: parseOptionalLiteralField(tsModule, fields, 'structure'),
     localParamsSchema: parseDagJsonSchema(
       parseOptionalLiteralField(tsModule, fields, 'localParamsSchema') ?? {},
       'localParamsSchema',
@@ -389,15 +423,14 @@ const jsLiteral = (value: unknown): string => JSON.stringify(sortedObject(value)
 const emitField = (name: string, value: unknown): string => `  ${name}: ${jsLiteral(value)},\n`
 
 const emitStoredGraphNodeSource = (node: StoredDagNodeDefinition): string => {
-  let source = `import type { StoredDagNodeModule } from '@taskyon/comp-dag/dagNodeLoader'
-
-export default {
-`
+  let source = `export default {\n`
+  source += emitField('formatVersion', node.formatVersion)
   source += emitField('id', node.id)
   source += emitField('localName', node.localName)
   source += emitField('label', node.label)
   source += emitField('version', node.version)
   if (typeof node.timeoutMs === 'number') source += emitField('timeoutMs', node.timeoutMs)
+  if (node.structure) source += emitField('structure', node.structure)
   source += emitField('localParamsSchema', node.localParamsSchema)
   source += emitField('outputSchema', node.outputSchema)
   if (node.inputs) {
@@ -407,34 +440,41 @@ export default {
     source += emitField('exposedInputs', node.exposedInputs ?? {})
   }
   source += `  run: ${node.runSource},\n`
-  source += `} satisfies StoredDagNodeModule\n`
+  source += `}\n`
   return source
 }
 
-const toStoredGraphNodeDefinition = (fields: ParsedNodeFields): StoredDagNodeDefinition => ({
-  id: fields.id === SELF_HASH_PLACEHOLDER ? SELF_HASH_PLACEHOLDER : (fields.id as Hash),
-  localName: fields.localName,
-  label: fields.label,
-  version: fields.version,
-  ...(typeof fields.timeoutMs === 'number' ? { timeoutMs: fields.timeoutMs } : {}),
-  localParamsSchema: fields.localParamsSchema,
-  outputSchema: fields.outputSchema,
-  ...(fields.inputs !== undefined
-    ? { inputs: parseRecordInputRefs(fields.inputs) }
-    : {
-        hiddenInputs: parseInputRefs(fields.hiddenInputs),
-        exposedInputs: parseExposedInputRefs(fields.exposedInputs),
-      }),
-  runSource: fields.runSource,
-  runCode: fields.runCode,
-})
+const toStoredGraphNodeDefinition = (fields: ParsedNodeFields): StoredDagNodeDefinition => {
+  const structure = parseNodeStructure(fields.structure)
+  return {
+    formatVersion: fields.formatVersion,
+    id: fields.id === SELF_HASH_PLACEHOLDER ? SELF_HASH_PLACEHOLDER : (fields.id as Hash),
+    localName: fields.localName,
+    label: fields.label,
+    version: fields.version,
+    ...(typeof fields.timeoutMs === 'number' ? { timeoutMs: fields.timeoutMs } : {}),
+    ...(structure ? { structure } : {}),
+    localParamsSchema: fields.localParamsSchema,
+    outputSchema: fields.outputSchema,
+    ...(fields.inputs !== undefined
+      ? { inputs: parseRecordInputRefs(fields.inputs) }
+      : {
+          hiddenInputs: parseInputRefs(fields.hiddenInputs),
+          exposedInputs: parseExposedInputRefs(fields.exposedInputs),
+        }),
+    runSource: fields.runSource,
+    runCode: fields.runCode,
+  }
+}
 
 const hashStoredGraphNodeDefinition = async (node: StoredDagNodeDefinition): Promise<Hash> => {
   return await hashDagNodeRecordInput({
+    formatVersion: node.formatVersion,
     localName: node.localName,
     label: node.label,
     version: node.version,
     ...(typeof node.timeoutMs === 'number' ? { timeoutMs: node.timeoutMs } : {}),
+    ...(node.structure ? { structure: node.structure } : {}),
     localParamsSchema: node.localParamsSchema,
     outputSchema: node.outputSchema,
     ...(node.inputs ? { inputs: node.inputs } : {}),

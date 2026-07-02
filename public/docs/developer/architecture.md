@@ -56,6 +56,5 @@ the message schema, and tool RPC correlates calls, responses, timeouts, cancella
 context. Host applications should register explicit client tools instead of exposing the parent
 window or a generic event bus.
 
-The long-term direction is tracked in the workspace-level
-`proposals/sandboxed-core-protocol.md` design document. Current code is still migrating direct
-`tyCore()` methods to protocol services one operation at a time.
+The long-term direction is maintained in workspace-level architectural proposals. Current code is
+still migrating direct `tyCore()` methods to protocol services one operation at a time.

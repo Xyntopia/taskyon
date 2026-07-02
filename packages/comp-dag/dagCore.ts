@@ -48,6 +48,7 @@ export interface EngineConfig {
   nodePolicies?: Record<string, NodePolicy>
   storageBackend?: DagStorageBackend
   execution?: DagExecutionConfig
+  parameterBindings?: Record<string, Record<string, unknown>>
 }
 
 export type DagExecutionMode = 'worker' | 'local'
@@ -252,6 +253,7 @@ function getNodeCodeHash(node: DagNode): Hash {
 
 function makeNodeKey(node: DagNode, paramsHash: Hash, nodeCodeHash: Hash): string {
   return JSON.stringify({
+    cacheFormatVersion: 2,
     nodeId: node.name,
     nodeVersion: node.version,
     nodeCodeHash,
@@ -1056,7 +1058,10 @@ export function createNode<
 
   defaultPolicyRegistry[name] = defaultPolicy
 
-  const node: DagNode<P, O> = {
+  // The node methods close over the final node object for recursive execution paths.
+  // eslint-disable-next-line prefer-const
+  let node!: DagNode<P, O>
+  const nodeImpl: DagNode<P, O> = {
     name,
     ...(localName ? { localName } : {}),
     ...(contentHash ? { contentHash } : {}),
@@ -1105,7 +1110,10 @@ export function createNode<
             node.paramsSchema,
             paramsValue as Record<string, unknown>,
           )
-          const paramsHash = canonicalHash(validatedParams)
+          const paramsHash = executionParamsHash(
+            validatedParams as Record<string, unknown>,
+            actualEngineConfig,
+          )
           const nodeCodeHash = getNodeCodeHash(node)
           const key = makeNodeKey(node, paramsHash, nodeCodeHash)
           const policy = actualEngineConfig.nodePolicies?.[node.name] ?? node.defaultPolicy
@@ -1455,6 +1463,7 @@ export function createNode<
       },
     }),
   }
+  node = nodeImpl
   nodeRegistry.set(name, node as unknown as DagNode<unknown, unknown>)
 
   return node
@@ -1468,8 +1477,18 @@ export function oneOf<const Options extends readonly DagNode[]>(
 
 export function explode<
   SourceNode extends DagNode,
-  Path extends ArrayPaths<OutputOf<SourceNode>> & string,
->(sourceNode: SourceNode, path: Path) {
+  Path extends (ArrayPaths<OutputOf<SourceNode>> & string) | (string & {}),
+>(
+  sourceNode: SourceNode,
+  path: Path,
+  identity?: {
+    name?: string
+    localName?: string
+    contentHash?: Hash
+    version?: number
+    outputSchema?: DagJsonSchema
+  },
+) {
   type SourceOutput = OutputOf<SourceNode>
   type SelectedArray = PathValue<SourceOutput, Path>
   type Item = SelectedArray extends ReadonlyArray<infer TItem> ? TItem : never
@@ -1489,15 +1508,18 @@ export function explode<
         itemIndex: {
           type: 'integer',
           minimum: 0,
+          default: 0,
           description: 'Index into exploded array output from source node',
         },
       },
     }),
   )
-  const outputSchema = {
-    ...(typeof elementSchema === 'object' && elementSchema !== null ? elementSchema : {}),
-    description: `Exploded element from ${sourceNode.name}.${path} at params.itemIndex`,
-  } as DagJsonSchema
+  const outputSchema =
+    identity?.outputSchema ??
+    ({
+      ...(typeof elementSchema === 'object' && elementSchema !== null ? elementSchema : {}),
+      description: `Exploded element from ${sourceNode.name}.${path} at params.itemIndex`,
+    } as DagJsonSchema)
 
   const explodedNode = createNode<
     DagJsonSchema,
@@ -1507,8 +1529,10 @@ export function explode<
     ExplodedParams,
     Item
   >({
-    name: `${sourceNode.name}__explode__${path.replace(/\./g, '_')}`,
-    version: 1,
+    name: identity?.name ?? `${sourceNode.name}__explode__${path.replace(/\./g, '_')}`,
+    ...(identity?.localName ? { localName: identity.localName } : {}),
+    ...(identity?.contentHash ? { contentHash: identity.contentHash } : {}),
+    version: identity?.version ?? 1,
     hiddenInputs: {
       source: sourceNode,
     },
@@ -1555,7 +1579,7 @@ export async function executeNode(
 
   // TODO: it might make sense to make validation optional  for speed ups!
   const validatedParams = parseSchema<Record<string, unknown>>(node.paramsSchema, paramsValue)
-  const paramsHash = canonicalHash(validatedParams)
+  const paramsHash = executionParamsHash(validatedParams, engineConfig)
   const nodeCodeHash = getNodeCodeHash(node)
   const key = makeNodeKey(node, paramsHash, nodeCodeHash)
 
@@ -1569,6 +1593,7 @@ export async function executeNode(
     }
   }
 
+  const childEngineConfig = bindExposedInputParams(node, validatedParams, engineConfig)
   const addInputs = (
     inputs: Record<string, DagNode> | Record<string, ExposedInputDef> | undefined,
     expose: boolean,
@@ -1584,7 +1609,7 @@ export async function executeNode(
         validatedParams,
         inputDef,
         ctx,
-        engineConfig,
+        childEngineConfig,
       )
     }
     return use
@@ -1662,8 +1687,42 @@ const createExecutionWithChecks =
       throw new Error(`Node ${node.name}: no provider resolved for input alias "${alias}".`)
     }
 
+    childParams = {
+      ...(engineConfig.parameterBindings?.[childNode.name] ?? {}),
+      ...childParams,
+    }
+
     // recursivly call child node
     const { value } = await executeNode(childNode, childParams, opts?.ctx ?? ctx, engineConfig)
 
     return value
   }
+
+const bindExposedInputParams = (
+  node: DagNode,
+  params: Record<string, unknown>,
+  engineConfig: EngineConfig,
+): EngineConfig => {
+  const additions = Object.entries(node.exposedInputs ?? {}).flatMap(([alias, input]) => {
+    const value = params[alias]
+    if ('kind' in input || typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return []
+    }
+    return [[input.name, value as Record<string, unknown>] as const]
+  })
+  if (additions.length === 0) return engineConfig
+  return {
+    ...engineConfig,
+    parameterBindings: {
+      ...Object.fromEntries(additions),
+      ...(engineConfig.parameterBindings ?? {}),
+    },
+  }
+}
+
+const executionParamsHash = (params: Record<string, unknown>, engineConfig: EngineConfig): Hash =>
+  canonicalHash(
+    engineConfig.parameterBindings
+      ? { params, parameterBindings: engineConfig.parameterBindings }
+      : params,
+  )

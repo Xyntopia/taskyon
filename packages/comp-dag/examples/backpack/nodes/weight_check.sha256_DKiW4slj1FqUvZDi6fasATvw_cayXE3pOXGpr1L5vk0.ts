@@ -1,7 +1,6 @@
-import type { StoredDagNodeModule } from '@taskyon/comp-dag/dagNodeLoader'
-
 export default {
-  id: 'sha256:H3H8QAty_5XQovoLjxchUis4AGlYuJd7xKUkX-MvMY0',
+  formatVersion: 2,
+  id: 'sha256:DKiW4slj1FqUvZDi6fasATvw_cayXE3pOXGpr1L5vk0',
   localName: 'weight_check',
   label: 'Weight Check',
   version: 1,
@@ -18,26 +17,27 @@ export default {
   },
   inputs: {
     candidates: {
-      nodeId: 'sha256:OxMDJ0HLWrB2kEUTbAQ7mLYhdHnfn2d34oAQOL02C-E',
+      nodeId: 'sha256:_f9_PhbjBSxk-XoTB-XyMVqlrqKIv2Zk6GcSgDJF9u8',
       role: 'internal',
     },
     requirements: {
-      nodeId: 'sha256:h_63zAb0lyL9HzAIgY6QLzv_Qg0qjiQHBGx9x8O0ckY',
+      nodeId: 'sha256:EXNCCXyfBC7KT0CDpYIP__d8AjYyaRzrZ2und-l_u-s',
       role: 'internal',
     },
   },
-  run: ({
-    inputs,
+  run: async ({
+    use,
   }: {
-    inputs: {
-      requirements: { maxWeightKg: number }
-      candidates: {
+    use: {
+      requirements: (params: {}) => Promise<{ maxWeightKg: number }>
+      candidates: (params: {}) => Promise<{
         items: Array<{ name: string; weightKg: number; utility: number; tags: string[] }>
-      }
+      }>
     }
   }) => {
-    const maxWeightKg = inputs.requirements.maxWeightKg
-    const sorted = [...inputs.candidates.items].sort((a, b) => b.utility - a.utility)
+    const [requirements, candidates] = await Promise.all([use.requirements({}), use.candidates({})])
+    const maxWeightKg = requirements.maxWeightKg
+    const sorted = [...candidates.items].sort((a, b) => b.utility - a.utility)
     const selected = []
     let totalWeightKg = 0
     for (const item of sorted) {
@@ -47,4 +47,4 @@ export default {
     }
     return { selected, totalWeightKg, maxWeightKg }
   },
-} satisfies StoredDagNodeModule
+}

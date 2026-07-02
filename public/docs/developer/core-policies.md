@@ -14,6 +14,8 @@ descending order of importance. When principles conflict, the earlier principle 
 - **Diagnostics are part of the product.** New behavior includes focused, executable diagnostics.
 - **Reproducible task trees.** Record explicit inputs, observations, results, and workflow
   decisions so task execution can be inspected, audited, and reconstructed.
+- **Demand-driven design graphs.** Evaluate a design-graph dependency only when a node explicitly
+  requests it; storage and sandbox adapters preserve the same lazy semantics.
 - **One source of truth.** Do not duplicate schemas, configuration, state, or behavior.
 - **Root cause first.** Fix values and contracts at their owner, not symptoms downstream.
 - **Consistency over novelty.** Extend established patterns unless they are demonstrably wrong.

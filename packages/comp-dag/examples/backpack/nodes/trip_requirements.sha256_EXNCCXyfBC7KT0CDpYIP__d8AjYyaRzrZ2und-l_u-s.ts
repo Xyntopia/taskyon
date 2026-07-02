@@ -1,7 +1,6 @@
-import type { StoredDagNodeModule } from '@taskyon/comp-dag/dagNodeLoader'
-
 export default {
-  id: 'sha256:h_63zAb0lyL9HzAIgY6QLzv_Qg0qjiQHBGx9x8O0ckY',
+  formatVersion: 2,
+  id: 'sha256:EXNCCXyfBC7KT0CDpYIP__d8AjYyaRzrZ2und-l_u-s',
   localName: 'trip_requirements',
   label: 'Trip Requirements',
   version: 1,
@@ -27,9 +26,9 @@ export default {
     type: 'object',
   },
   inputs: {},
-  run: () => ({
+  run: async () => ({
     days: 2,
     weather: 'rain',
     maxWeightKg: 7,
   }),
-} satisfies StoredDagNodeModule
+}

@@ -13,6 +13,7 @@ nearer package-level `AGENTS.md`.
 | [Protocols and runtime boundaries](protocols-and-runtime-boundaries.md) | Crossing process, UI, peer, browser, or Node boundaries                      |
 | [Local-first storage and security](local-first-storage-and-security.md) | Handling persistence, files, secrets, caches, remote storage, or P2P sharing |
 | [Testing and diagnostics](testing-and-diagnostics.md)                   | Adding behavior, tests, diagnostics, or verification                         |
+| [Design graph execution](design-graph-execution.md)                     | Changing DAG execution, stored nodes, patches, studies, or optimization      |
 | [Dependency policy](dependency-policy.md)                               | Adding, replacing, or widening a dependency                                  |
 | [Package and configuration](package-and-configuration.md)               | Changing package boundaries, exports, generated config, or persisted schemas |
 | [Repository workflow](repository-workflow.md)                           | Changing Git state, branches, commits, merges, or nested repositories        |

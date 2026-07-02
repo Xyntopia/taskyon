@@ -1,7 +1,6 @@
-import type { StoredDagNodeModule } from '@taskyon/comp-dag/dagNodeLoader'
-
 export default {
-  id: 'sha256:nsP-laxeiVM-v60R4IS8_JAOl9JMWIjk1CnxXuJemqg',
+  formatVersion: 2,
+  id: 'sha256:wnOLjdjLaifhj9vdFbTWEF98YwstC8JMUKOABW8CseY',
   localName: 'utility_score',
   label: 'Utility Score',
   version: 1,
@@ -18,26 +17,30 @@ export default {
   },
   inputs: {
     weatherCheck: {
-      nodeId: 'sha256:hlWLFmYGkB7CZhIbjaWyeW8wctpCAURZPcxt5pK6iKo',
+      nodeId: 'sha256:PTChioJ6O7AwmIEo-9uu1XJA056ggSdBGHJvDKj4dQQ',
       role: 'internal',
     },
     weightCheck: {
-      nodeId: 'sha256:H3H8QAty_5XQovoLjxchUis4AGlYuJd7xKUkX-MvMY0',
+      nodeId: 'sha256:DKiW4slj1FqUvZDi6fasATvw_cayXE3pOXGpr1L5vk0',
       role: 'internal',
     },
   },
-  run: ({
-    inputs,
+  run: async ({
+    use,
   }: {
-    inputs: {
-      weightCheck: {
+    use: {
+      weightCheck: (params: {}) => Promise<{
         selected: Array<{ name: string; weightKg: number; utility: number; tags: string[] }>
-      }
-      weatherCheck: { readyItems: Array<{ name: string }> }
+      }>
+      weatherCheck: (params: {}) => Promise<{ readyItems: Array<{ name: string }> }>
     }
   }) => {
-    const weatherReadyNames = new Set(inputs.weatherCheck.readyItems.map((item) => item.name))
-    const selected = inputs.weightCheck.selected.map((item) => ({
+    const [weightCheck, weatherCheck] = await Promise.all([
+      use.weightCheck({}),
+      use.weatherCheck({}),
+    ])
+    const weatherReadyNames = new Set(weatherCheck.readyItems.map((item) => item.name))
+    const selected = weightCheck.selected.map((item) => ({
       ...item,
       weatherReady: weatherReadyNames.has(item.name),
     }))
@@ -46,4 +49,4 @@ export default {
       score: selected.reduce((sum, item) => sum + item.utility + (item.weatherReady ? 2 : 0), 0),
     }
   },
-} satisfies StoredDagNodeModule
+}

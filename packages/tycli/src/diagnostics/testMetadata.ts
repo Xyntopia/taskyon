@@ -74,6 +74,10 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
     requiresNetwork: true,
     requiresLargeTokens: true,
   },
+  testCliAiWorkstationCreatesAndOptimizesDagGraph: {
+    requiresNetwork: true,
+    requiresLargeTokens: true,
+  },
   testWebResearchPlannerEnablesBrowserSetupAndWebSearchByDefault: {
     requiresLargeTokens: true,
   },

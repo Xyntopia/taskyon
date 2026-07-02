@@ -19,7 +19,7 @@ export type DagNodeRecordInputRef = DagNodeRecordInputRefSingle | DagNodeRecordI
 
 export type DagNodeRunContext = {
   params: Record<string, unknown>
-  inputs: Record<string, unknown>
+  use: Record<string, (params?: Record<string, unknown>) => Promise<unknown>>
 }
 
 export type DagNodeRunFunction = (ctx: DagNodeRunContext) => unknown
@@ -29,12 +29,20 @@ export type DagNodeStaticDependencyFingerprint = {
   lockfileHash?: Hash
 }
 
+export type DagNodeRecordStructure = {
+  kind: 'explode'
+  sourceAlias: string
+  path: string
+}
+
 export type DagNodeRecord = {
+  formatVersion: 2
   id: Hash
   localName: string
   label: string
   version: number
   timeoutMs?: number
+  structure?: DagNodeRecordStructure
   localParamsSchema: DagJsonSchema
   outputSchema: DagJsonSchema
   inputs?: Record<string, DagNodeRecordInputRef>
@@ -114,8 +122,10 @@ export const normalizeDagNodeRecordHashSource = (
     sortedRecordValue({
       label: record.label,
       localName: record.localName,
+      formatVersion: record.formatVersion,
       version: record.version,
       timeoutMs: record.timeoutMs ?? null,
+      structure: record.structure ?? null,
       localParamsSchema: record.localParamsSchema,
       outputSchema: record.outputSchema,
       inputs: record.inputs ?? null,
@@ -131,7 +141,7 @@ export const hashDagNodeRecordInput = async (
 ): Promise<Hash> =>
   await hashCanonicalDagNodeSource(
     JSON.stringify({
-      kind: 'taskyon.dagNodeRecord.v1',
+      kind: 'taskyon.dagNodeRecord.v2',
       source: normalizeDagNodeRecordHashSource(input),
     }),
   )
@@ -142,7 +152,7 @@ export const defineDagNodeRecord = async (
   const hashSource = normalizeDagNodeRecordHashSource(input)
   const id = await hashCanonicalDagNodeSource(
     JSON.stringify({
-      kind: 'taskyon.dagNodeRecord.v1',
+      kind: 'taskyon.dagNodeRecord.v2',
       source: hashSource,
     }),
   )

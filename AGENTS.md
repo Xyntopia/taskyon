@@ -109,19 +109,20 @@ tradeoff.
 
 Read every additional policy matching the work:
 
-| Work in scope                                                                                        | Required policy                                |
-| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| Taskyon tools, entry nodes, task chains, tool settings, or tool context                              | `policies/tools-and-workflows.md`              |
-| Ports, protocols, iframe/host boundaries, browser/Node boundaries, P2P, or remote tools              | `policies/protocols-and-runtime-boundaries.md` |
-| Persistence, projects, files, OPFS, databases, secrets, encryption, remote caches, or shared storage | `policies/local-first-storage-and-security.md` |
-| Tests, diagnostics, LLM tests, or cross-runtime verification                                         | `policies/testing-and-diagnostics.md`          |
-| Adding, replacing, or widening a dependency                                                          | `policies/dependency-policy.md`                |
-| Package exports, cross-package imports, published clients, generated configuration, or schema owners | `policies/package-and-configuration.md`        |
-| Git state, branches, commits, merges, rebases, backports, submodules, or nested repositories         | `policies/repository-workflow.md`              |
-| Vue, UI state, routes, styling, or user interaction                                                  | `policies/frontend.md`                         |
-| `tycli` implementation, debugging, or autonomous evaluation                                          | `policies/tycli-development.md`                |
-| Modelica compiler, generated code, templates, runtime, libraries, or simulation                      | `policies/modelica-development.md`             |
-| Rumoca source, semantics, tests, packaging, or pinned revision                                       | `policies/rumoca-development.md`               |
+| Work in scope                                                                                           | Required policy                                |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Taskyon tools, entry nodes, task chains, tool settings, or tool context                                 | `policies/tools-and-workflows.md`              |
+| Ports, protocols, iframe/host boundaries, browser/Node boundaries, P2P, or remote tools                 | `policies/protocols-and-runtime-boundaries.md` |
+| Persistence, projects, files, OPFS, databases, secrets, encryption, remote caches, or shared storage    | `policies/local-first-storage-and-security.md` |
+| Tests, diagnostics, LLM tests, or cross-runtime verification                                            | `policies/testing-and-diagnostics.md`          |
+| Design graphs, DAG execution, stored nodes, graph patches, studies, optimization, or computation caches | `policies/design-graph-execution.md`           |
+| Adding, replacing, or widening a dependency                                                             | `policies/dependency-policy.md`                |
+| Package exports, cross-package imports, published clients, generated configuration, or schema owners    | `policies/package-and-configuration.md`        |
+| Git state, branches, commits, merges, rebases, backports, submodules, or nested repositories            | `policies/repository-workflow.md`              |
+| Vue, UI state, routes, styling, or user interaction                                                     | `policies/frontend.md`                         |
+| `tycli` implementation, debugging, or autonomous evaluation                                             | `policies/tycli-development.md`                |
+| Modelica compiler, generated code, templates, runtime, libraries, or simulation                         | `policies/modelica-development.md`             |
+| Rumoca source, semantics, tests, packaging, or pinned revision                                          | `policies/rumoca-development.md`               |
 
 Read multiple policies when a change crosses multiple boundaries. A P2P DAG cache, for example,
 requires the protocol, storage/security, dependency, and testing policies.
