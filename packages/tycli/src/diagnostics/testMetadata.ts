@@ -56,6 +56,9 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
   testEntryNodeRecoversFromMalformedPythonToolCall: {
     requiresNetwork: true,
   },
+  testCliHelloWorldProducesAssistantResponse: {
+    requiresNetwork: true,
+  },
   testWebResearchPlannerEnablesBrowserSetupAndWebSearchByDefault: {
     requiresLargeTokens: true,
   },

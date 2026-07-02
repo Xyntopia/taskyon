@@ -12,6 +12,7 @@ import { createUnavailableIframeMux } from '../../shared/modules/frpBus'
 import { createProtocolPort, createTaskyonClient, taskyonProtocol } from '@taskyon/tyclient'
 import {
   createClientTool,
+  createExternalToolContext,
   createTaskNode,
   createStandardEntryNodeTool,
   getProviderOauthConfig,
@@ -1828,7 +1829,6 @@ async function main() {
   await persistConfigPatch({
     sessions: normalizeSessionRecords([currentSession, ...previousSessions]),
   })
-  await refreshToolRenderOptions(taskyon, toolRenderOptions)
 
   const persistedKey = await taskyon.getSecret(API_KEY_STORE_NAME, selectedApi, false, false)
   const bootstrapKey = persistedKey ?? config.key
@@ -1873,7 +1873,19 @@ async function main() {
   const cliToolRpcExecutor = await registerToolRpcTools({
     port: clientPort,
     tools: cliTools,
+    createContext: (call, stopSignal) =>
+      createExternalToolContext(stopSignal, {
+        getExecutionTaskChain: () => {
+          if (!call.taskId) {
+            throw new Error(
+              'getExecutionTaskChain is not available for this tool call because no task id was provided.',
+            )
+          }
+          return taskyon.getTaskChain(call.taskId)
+        },
+      }),
   })
+  await refreshToolRenderOptions(taskyon, toolRenderOptions)
 
   const rl = createInterface({
     input: process.stdin,

@@ -3,11 +3,13 @@ import { access, readFile } from 'node:fs/promises'
 import process from 'node:process'
 import { constants as fsConstants } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { TaskNode } from '../../../taskyon/src/types/taskNode'
 import { renderTaskProgress } from '../cli/taskRenderer'
 
 type SessionStep = {
   delayMs?: number
+  failOn?: string[]
   input: string
   waitFor?: string
   signal?: NodeJS.Signals
@@ -28,9 +30,11 @@ export type CliE2eSessionLog = {
 }
 
 const WAIT_AFTER_STEPS_MS = 500
-const TYCLI_RUN_COMMAND = 'yarn workspace @taskyon/tycli run run'
+const REPO_ROOT = fileURLToPath(new URL('../../../..', import.meta.url))
+const TYCLI_RUN_COMMAND = process.env.TYCLI_E2E_COMMAND ?? 'yarn tycli'
 const TEST_HOME = '/tmp/tycli-e2e-home'
-const DEFAULT_E2E_CWD = process.env.TYCLI_E2E_CWD ?? process.cwd()
+const DEFAULT_E2E_CWD = process.env.TYCLI_E2E_CWD ?? REPO_ROOT
+const TYCLI_PACKAGE_CWD = fileURLToPath(new URL('../..', import.meta.url))
 const sessionLogs: CliE2eSessionLog[] = []
 
 export function clearCliE2eSessionLogs() {
@@ -101,23 +105,34 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function waitForText(readOutput: () => string, needle: string, timeoutMs: number) {
+async function waitForText(
+  readOutput: () => string,
+  needle: string,
+  timeoutMs: number,
+  failOn: string[] = [],
+) {
   const startedAt = Date.now()
   while (Date.now() - startedAt < timeoutMs) {
-    if (readOutput().includes(needle)) return
+    const output = readOutput()
+    const failedMatch = failOn.find((entry) => output.includes(entry))
+    if (failedMatch) {
+      throw new Error(`Saw failure output "${failedMatch}" while waiting for "${needle}".`)
+    }
+    if (output.includes(needle)) return
     await delay(50)
   }
   throw new Error(`Timed out waiting for output "${needle}"`)
 }
 
-async function runTycSession(args: {
+export async function runTycSession(args: {
   testName: string
   steps: SessionStep[]
   timeoutMs?: number
   env?: Record<string, string>
   runner?: 'pty' | 'pipe'
+  isolateHome?: boolean
 }): Promise<SessionResult> {
-  const { testName, steps, timeoutMs = 20_000, env, runner = 'pty' } = args
+  const { testName, steps, timeoutMs = 20_000, env, runner = 'pty', isolateHome = true } = args
   const launchAttempts =
     runner === 'pty'
       ? await (async () => {
@@ -144,6 +159,7 @@ async function runTycSession(args: {
             label: 'direct node',
             command: (await findExecutableInPath('node')) || 'node',
             args: ['--import', './src/register.ts', '--experimental-strip-types', './src/cli.ts'],
+            cwd: TYCLI_PACKAGE_CWD,
           },
         ]
 
@@ -155,6 +171,7 @@ async function runTycSession(args: {
         testName,
         steps,
         timeoutMs,
+        isolateHome,
         ...(env ? { env } : {}),
       })
     } catch (error) {
@@ -169,21 +186,26 @@ async function runTycSession(args: {
 }
 
 async function runSpawnedSession(args: {
-  attempt: { label: string; command: string; args: string[] }
+  attempt: { label: string; command: string; args: string[]; cwd?: string }
   testName: string
   steps: SessionStep[]
   timeoutMs: number
+  isolateHome: boolean
   env?: Record<string, string>
 }): Promise<SessionResult> {
-  const { attempt, testName, steps, timeoutMs, env } = args
+  const { attempt, testName, steps, timeoutMs, isolateHome, env } = args
   return await new Promise((resolve, reject) => {
     const child = spawn(attempt.command, attempt.args, {
-      cwd: DEFAULT_E2E_CWD,
+      cwd: attempt.cwd ?? DEFAULT_E2E_CWD,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        HOME: TEST_HOME,
-        XDG_CONFIG_HOME: join(TEST_HOME, '.config'),
+        ...(isolateHome
+          ? {
+              HOME: TEST_HOME,
+              XDG_CONFIG_HOME: join(TEST_HOME, '.config'),
+            }
+          : {}),
         TYCLI_TERMINAL_UI: 'none',
         ...(env ?? {}),
       },
@@ -260,7 +282,7 @@ async function runSpawnedSession(args: {
             `CLI exited before test steps completed (code ${String(closedCode)}).\nOutput:\n${output}`,
           )
         }
-        if (step.waitFor) await waitForText(() => output, step.waitFor, timeoutMs)
+        if (step.waitFor) await waitForText(() => output, step.waitFor, timeoutMs, step.failOn)
         if (step.signal) {
           child.kill(step.signal)
           if (step.delayMs) await delay(step.delayMs)
@@ -282,7 +304,10 @@ async function runSpawnedSession(args: {
       if (done) return
       done = true
       clearTimeout(timer)
-      reject(error instanceof Error ? error : new Error(String(error)))
+      child.kill('SIGTERM')
+      recordSession(closedCode)
+      const message = error instanceof Error ? error.message : String(error)
+      reject(new Error(`${message}\nOutput:\n${output}`))
     })
   })
 }

@@ -14,6 +14,7 @@ import {
   type InternalTool,
   type toolContext,
 } from '../types/toolApi'
+import type { TaskNode } from '../types/taskNode'
 import type { FunctionArguments, FunctionCall } from '../types/tools'
 import { executeToolInWorkerSandbox } from '../utils/executeToolInWorkerSandbox'
 import { humanizeError, serializeError } from '../utils/error'
@@ -230,14 +231,22 @@ async function executeToolDefinition(
   return undefined
 }
 
-export function createExternalToolContext(stopSignal: AbortSignal): toolContext {
+export function createExternalToolContext(
+  stopSignal: AbortSignal,
+  options?: {
+    getExecutionTaskChain?: () => Promise<TaskNode[]>
+  },
+): toolContext {
   const unavailableSecretAccess = () => {
     throw new Error('Secret access is not implemented for external tool clients yet.')
   }
 
   return {
     getExecutionTaskChain: () => {
-      throw new Error('getExecutionTaskChain is not implemented for external tool clients yet.')
+      if (!options?.getExecutionTaskChain) {
+        throw new Error('getExecutionTaskChain is not available for this external tool client.')
+      }
+      return options.getExecutionTaskChain()
     },
     createSubtasksResult,
     getSecret: unavailableSecretAccess,

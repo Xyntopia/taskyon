@@ -9,6 +9,11 @@ import { type TyTaskManager } from './taskManager'
 import { MAX_REMOTE_FUNCTION_TIMEOUT_MS } from '../api/taskyonProtocol'
 import type { ToolRpcCallMessage, ToolRpcFunctionResponseMessage } from './toolRpc'
 import { createToolExecutionClient } from './toolRpc'
+import {
+  countAutonomousErrorAttempt,
+  createAutonomousErrorSignature,
+  MAX_AUTONOMOUS_RECOVERY_ATTEMPTS_PER_SIGNATURE,
+} from './taskWorkerErrors'
 
 export interface TyTaskStreamData {
   info?: string
@@ -208,32 +213,6 @@ function workerLoggingHelper(streamEmit: (value: TyTaskStreamData) => void) {
   }
 }
 
-const MAX_EQUIVALENT_AUTONOMOUS_ERRORS = 3
-
-const toAutonomousErrorText = (value: unknown): string => {
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-    return `${value}`
-  }
-  if (value instanceof Error) return value.message
-  return ''
-}
-
-const normalizeAutonomousErrorText = (value: unknown) =>
-  toAutonomousErrorText(value).toLowerCase().replace(/\s+/g, ' ').trim()
-
-const extractAutonomousErrorMessage = (error: unknown) => {
-  if (error instanceof Error) return error.message
-  if (typeof error === 'string') return error
-  if (error && typeof error === 'object' && 'message' in error) {
-    return toAutonomousErrorText((error as { message?: unknown }).message)
-  }
-  return ''
-}
-
-const createAutonomousErrorSignature = (error: unknown) =>
-  normalizeAutonomousErrorText(extractAutonomousErrorMessage(error))
-
 const isUnrecoverableAutonomousError = (error: unknown) => {
   const signature = createAutonomousErrorSignature(error)
   if (signature.length === 0) return false
@@ -272,6 +251,7 @@ const resolveAutonomousErrorHandlingDecision = (
   task: TaskNode,
   taskChain: TaskNode[],
   error: unknown,
+  runAttemptCount: number,
 ): AutonomousErrorHandlingDecision => {
   const signature = createAutonomousErrorSignature(error)
   const equivalentErrors = countEquivalentAutonomousErrors(taskChain, signature)
@@ -286,10 +266,13 @@ const resolveAutonomousErrorHandlingDecision = (
     }
   }
 
-  if (equivalentErrors + 1 >= MAX_EQUIVALENT_AUTONOMOUS_ERRORS) {
+  if (
+    equivalentErrors + 1 >= MAX_AUTONOMOUS_RECOVERY_ATTEMPTS_PER_SIGNATURE ||
+    runAttemptCount >= MAX_AUTONOMOUS_RECOVERY_ATTEMPTS_PER_SIGNATURE
+  ) {
     return {
       mode: 'stop',
-      reason: `Stopping autonomous recovery after ${MAX_EQUIVALENT_AUTONOMOUS_ERRORS} equivalent ${toolName} errors`,
+      reason: `Stopping autonomous recovery after ${MAX_AUTONOMOUS_RECOVERY_ATTEMPTS_PER_SIGNATURE} equivalent ${toolName} errors`,
       summary: `Repeated equivalent ${toolName} errors tripped the autonomous circuit breaker`,
     }
   }
@@ -303,12 +286,23 @@ function createHandleError(
   queueTask: (id: string) => void,
 ) {
   console.log('create error handler function...')
+  const autonomousErrorAttemptsBySignature = new Map<string, number>()
 
   return async (error: unknown, task: TaskNode, errorhandlerTask: partialTaskDraft) => {
     const debugInfo = createDebugInfoFromError(error)
     void taskManager.metaUpsert(task.id, debugInfo, 'shallow_merge')
     const taskChain = await taskManager.getTaskChain(task.id)
-    const errorHandlingDecision = resolveAutonomousErrorHandlingDecision(task, taskChain, error)
+    const runAttemptCount = countAutonomousErrorAttempt(
+      autonomousErrorAttemptsBySignature,
+      task,
+      error,
+    )
+    const errorHandlingDecision = resolveAutonomousErrorHandlingDecision(
+      task,
+      taskChain,
+      error,
+      runAttemptCount,
+    )
 
     // we are adding the error task chain as a subtaskchain with the parentID of this
     // particular task.

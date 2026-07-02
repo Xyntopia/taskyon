@@ -6,6 +6,7 @@ import { createCryptoSession, type Taskyon } from '@taskyon/taskyon'
 import { API_KEY_STORE_NAME, type StoredConfig } from './types'
 
 const PREFERRED_CONFIG_DIR = join(homedir(), '.config', 'tycli')
+const PREFERRED_CONFIG_FILE = join(PREFERRED_CONFIG_DIR, 'config.json')
 const FALLBACK_CONFIG_DIR = join('/tmp', 'tycli')
 let cachedConfigFile: string | null = null
 
@@ -20,10 +21,21 @@ export async function resolveConfigFilePath() {
   try {
     await mkdir(PREFERRED_CONFIG_DIR, { recursive: true })
     await access(PREFERRED_CONFIG_DIR, constants.W_OK)
-    cachedConfigFile = join(PREFERRED_CONFIG_DIR, 'config.json')
+    cachedConfigFile = PREFERRED_CONFIG_FILE
     return cachedConfigFile
   } catch {
     return await useFallbackConfigFile()
+  }
+}
+
+async function resolveReadableConfigFilePath() {
+  if (cachedConfigFile) return cachedConfigFile
+  try {
+    await access(PREFERRED_CONFIG_FILE, constants.R_OK)
+    cachedConfigFile = PREFERRED_CONFIG_FILE
+    return cachedConfigFile
+  } catch {
+    return await resolveConfigFilePath()
   }
 }
 
@@ -34,7 +46,7 @@ export async function resolveConfigDirectoryPath() {
 
 export async function loadStoredConfig(): Promise<StoredConfig> {
   try {
-    const configFile = await resolveConfigFilePath()
+    const configFile = await resolveReadableConfigFilePath()
     const raw = await readFile(configFile, 'utf8')
     const parsed = JSON.parse(raw) as StoredConfig
     return parsed ?? {}
