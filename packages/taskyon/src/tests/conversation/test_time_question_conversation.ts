@@ -1,15 +1,12 @@
-import {
-  buildCreateNewTaskChain,
-  createTaskyonClient,
-  forgeTaskChain,
-  partialTaskDraft,
-  tyCore,
-  type TaskNode,
-  type Taskyon,
-} from '../..'
-import { freeKey as taskyonDevFreeKey } from '../../../../../src/assets/taskyon_free_key'
+import type { DiagnosticsTestContext } from '../../../../shared/modules/diagnosticsRunner'
+import { createTaskyonClient } from '../../api'
+import { buildCreateNewTaskChain } from '../../core/createNewTaskChain'
+import { forgeTaskChain } from '../../core/createTasks'
+import { tyCore, type Taskyon } from '../../core/init'
 import { registerToolRpcTools } from '../../core/toolRpc'
 import { createStandardEntryNodeTool } from '../../tools/entryNode'
+import { llmSettings } from '../../types/profiles'
+import { partialTaskDraft, type TaskNode } from '../../types/taskNode'
 
 type TaskNodeWithParent = TaskNode & { parentID: string }
 
@@ -67,34 +64,9 @@ const taskyonFlowToolchainConfig = {
   },
 } as const
 
-const taskyonFlowLlmSettings = {
-  selectedApi: 'taskyon',
-  llmApis: {
-    taskyon: {
-      name: 'taskyon',
-      baseURL: 'https://share.taskyon.space',
-      defaultModel: 'google/gemini-2.5-flash-lite',
-      selectedModel: 'google/gemini-2.5-flash-lite',
-      streamSupport: true,
-      defaultHeaders: {
-        apiKey: 'sb_publishable_WrQ1aIRvl9BrMtpMQ9TocQ_JN7I9kJm',
-      },
-      routes: {
-        chatCompletion: '/chatCompletion/api/v1/',
-        models: '/chatCompletion/api/v1/models',
-      },
-    },
-  },
-  siteUrl: 'https://taskyon.space',
-  entryFunction: 'taskyonFlow',
-} as const
-
-const resolveStandaloneTaskyonApiKey = (tyauth?: string) =>
-  tyauth?.trim() || process.env.TASKYON_API_KEY?.trim() || taskyonDevFreeKey
-
-const initializeStandaloneTaskyonProviderKey = async (ty: Taskyon, key: string) => {
-  await ty.setSecret('AiProviderKey', taskyonFlowLlmSettings.selectedApi, key)
-  await ty.updateChatCompletionApiKey(taskyonFlowLlmSettings.selectedApi, key)
+const initializeProviderKey = async (ty: Taskyon, selectedApi: string, key: string) => {
+  await ty.setSecret('AiProviderKey', selectedApi, key)
+  await ty.updateChatCompletionApiKey(selectedApi, key)
 }
 
 const getEntryNodeDraft = (entryNodeArgs?: Record<string, unknown>) =>
@@ -111,7 +83,9 @@ const getEntryNodeDraft = (entryNodeArgs?: Record<string, unknown>) =>
     },
   })
 
-const createConversationHarness = async (): Promise<{ ty: Taskyon; cleanup: () => void }> => {
+const createConversationHarness = async (
+  runtimeLlmSettings: llmSettings,
+): Promise<{ ty: Taskyon; cleanup: () => void }> => {
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'taskyonFlow',
     renderOptions: { hideChat: true, hideLlm: true },
@@ -130,7 +104,7 @@ const createConversationHarness = async (): Promise<{ ty: Taskyon; cleanup: () =
   })
 
   const tyPromise: Promise<Taskyon> = tyCore(
-    () => taskyonFlowLlmSettings,
+    () => runtimeLlmSettings,
     () => getEntryNodeDraft(),
     () => taskyonFlowToolchainConfig,
   )
@@ -583,11 +557,28 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
 }
 runTimeQuestionConversationUsesClockToolScenario.helper = true
 
-export const testTimeQuestionConversationUsesClockTool = async (opts?: { tyauth?: string }) => {
-  const { ty, cleanup } = await createConversationHarness()
+export const testTimeQuestionConversationUsesClockTool = async (
+  context?: DiagnosticsTestContext,
+) => {
+  if (!context?.providerKey) {
+    return {
+      skipped: true,
+      reason: 'No configured provider key/session was available from the diagnostics harness.',
+    }
+  }
+  const parsedLlmSettings = llmSettings.safeParse(context.llmSettings)
+  if (!parsedLlmSettings.success) {
+    return {
+      skipped: true,
+      reason: 'No runtime llmSettings were provided by the diagnostics harness.',
+    }
+  }
+
+  const { ty, cleanup } = await createConversationHarness(parsedLlmSettings.data)
   try {
-    const taskyonApiKey = resolveStandaloneTaskyonApiKey(opts?.tyauth)
-    await initializeStandaloneTaskyonProviderKey(ty, taskyonApiKey)
+    const selectedApi = parsedLlmSettings.data.selectedApi ?? 'taskyon'
+    const providerKey = context.providerKey
+    await initializeProviderKey(ty, selectedApi, providerKey)
     return await runTimeQuestionConversationUsesClockToolScenario(ty)
   } finally {
     cleanup()

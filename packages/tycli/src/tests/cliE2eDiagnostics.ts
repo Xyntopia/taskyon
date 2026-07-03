@@ -5,7 +5,7 @@ import { constants as fsConstants } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { TaskNode } from '../../../taskyon/src/types/taskNode'
-import { renderTaskProgress } from '../cli/taskRenderer'
+import { renderTaskProgress, renderWorkerProgress } from '../cli/taskRenderer'
 
 type SessionStep = {
   delayMs?: number
@@ -110,6 +110,7 @@ async function waitForText(
   needle: string,
   timeoutMs: number,
   failOn: string[] = [],
+  isClosed?: () => boolean,
 ) {
   const startedAt = Date.now()
   while (Date.now() - startedAt < timeoutMs) {
@@ -119,6 +120,9 @@ async function waitForText(
       throw new Error(`Saw failure output "${failedMatch}" while waiting for "${needle}".`)
     }
     if (output.includes(needle)) return
+    if (isClosed?.()) {
+      throw new Error(`CLI exited while waiting for output "${needle}".`)
+    }
     await delay(50)
   }
   throw new Error(`Timed out waiting for output "${needle}"`)
@@ -127,12 +131,23 @@ async function waitForText(
 export async function runTycSession(args: {
   testName: string
   steps: SessionStep[]
+  acceptOutputAsExit?: string
+  homeKey?: string
   timeoutMs?: number
   env?: Record<string, string>
   runner?: 'pty' | 'pipe'
   isolateHome?: boolean
 }): Promise<SessionResult> {
-  const { testName, steps, timeoutMs = 20_000, env, runner = 'pty', isolateHome = true } = args
+  const {
+    testName,
+    steps,
+    acceptOutputAsExit,
+    homeKey,
+    timeoutMs = 20_000,
+    env,
+    runner = 'pty',
+    isolateHome = true,
+  } = args
   const launchAttempts =
     runner === 'pty'
       ? await (async () => {
@@ -170,6 +185,8 @@ export async function runTycSession(args: {
         attempt,
         testName,
         steps,
+        ...(acceptOutputAsExit ? { acceptOutputAsExit } : {}),
+        ...(homeKey ? { homeKey } : {}),
         timeoutMs,
         isolateHome,
         ...(env ? { env } : {}),
@@ -185,15 +202,21 @@ export async function runTycSession(args: {
   throw lastLaunchError instanceof Error ? lastLaunchError : new Error(String(lastLaunchError))
 }
 
+runTycSession.helper = true
+
 async function runSpawnedSession(args: {
   attempt: { label: string; command: string; args: string[]; cwd?: string }
   testName: string
   steps: SessionStep[]
+  acceptOutputAsExit?: string
+  homeKey?: string
   timeoutMs: number
   isolateHome: boolean
   env?: Record<string, string>
 }): Promise<SessionResult> {
-  const { attempt, testName, steps, timeoutMs, isolateHome, env } = args
+  const { attempt, testName, steps, acceptOutputAsExit, homeKey, timeoutMs, isolateHome, env } =
+    args
+  const testHome = join(TEST_HOME, (homeKey ?? testName).replace(/[^a-zA-Z0-9._-]/g, '_'))
   return await new Promise((resolve, reject) => {
     const child = spawn(attempt.command, attempt.args, {
       cwd: attempt.cwd ?? DEFAULT_E2E_CWD,
@@ -202,8 +225,8 @@ async function runSpawnedSession(args: {
         ...process.env,
         ...(isolateHome
           ? {
-              HOME: TEST_HOME,
-              XDG_CONFIG_HOME: join(TEST_HOME, '.config'),
+              HOME: testHome,
+              XDG_CONFIG_HOME: join(testHome, '.config'),
             }
           : {}),
         TYCLI_TERMINAL_UI: 'none',
@@ -242,12 +265,23 @@ async function runSpawnedSession(args: {
       recordSession(code)
       resolve({ code, output })
     }
+    const tryAcceptOutputAsExit = () => {
+      if (done || !stepsCompleted || closedCode !== null) return
+      if (!acceptOutputAsExit || !output.includes(acceptOutputAsExit)) return
+      child.kill('SIGTERM')
+      done = true
+      clearTimeout(timer)
+      recordSession(0)
+      resolve({ code: 0, output })
+    }
 
     child.stdout.on('data', (chunk) => {
       output += chunk.toString('utf8')
+      tryAcceptOutputAsExit()
     })
     child.stderr.on('data', (chunk) => {
       output += chunk.toString('utf8')
+      tryAcceptOutputAsExit()
     })
     child.on('error', (error) => {
       if (done) return
@@ -282,7 +316,15 @@ async function runSpawnedSession(args: {
             `CLI exited before test steps completed (code ${String(closedCode)}).\nOutput:\n${output}`,
           )
         }
-        if (step.waitFor) await waitForText(() => output, step.waitFor, timeoutMs, step.failOn)
+        if (step.waitFor) {
+          await waitForText(
+            () => output,
+            step.waitFor,
+            timeoutMs,
+            step.failOn,
+            () => closedCode !== null,
+          )
+        }
         if (step.signal) {
           child.kill(step.signal)
           if (step.delayMs) await delay(step.delayMs)
@@ -293,6 +335,8 @@ async function runSpawnedSession(args: {
       }
       await delay(WAIT_AFTER_STEPS_MS)
       stepsCompleted = true
+      tryAcceptOutputAsExit()
+      if (done) return
       child.stdin.end()
       if (closedCode !== null) {
         done = true
@@ -391,6 +435,64 @@ export function testTaskRendererDoesNotEchoUserPromptInput() {
   assertContains(output, 'assistant response')
 }
 
+export function testTaskRendererDoesNotPrintTransientWorkerProgress() {
+  const lines: string[] = []
+  const state = {
+    debugEnabled: () => false,
+    showRoleTag: () => true,
+    showFullFunctionResults: () => false,
+    isFunctionHiddenInChat: () => false,
+    clearThinkingPanel: () => {},
+    renderThinkingPanel: () => {},
+    writeLine: (text: string) => {
+      lines.push(text)
+    },
+  }
+  const task: TaskNode = {
+    id: 'tool-task',
+    role: 'function',
+    content: {
+      type: 'functioncall',
+      data: { name: 'taskyonDocumentation', arguments: {} },
+    },
+  }
+
+  renderWorkerProgress(state, { stage: 'processing', task })
+  renderWorkerProgress(state, { stage: 'subtasks', task })
+
+  const output = lines.join('\n')
+  assertNotContains(output, '[function|processing]')
+  assertNotContains(output, 'taskyonDocumentation')
+  assertNotContains(output, '[function|waiting for subtasks]')
+}
+
+export function testTaskRendererHidesHiddenWorkerProgress() {
+  const lines: string[] = []
+  const state = {
+    debugEnabled: () => false,
+    showRoleTag: () => true,
+    showFullFunctionResults: () => false,
+    isFunctionHiddenInChat: (name: string) => name === 'hiddenTool',
+    clearThinkingPanel: () => {},
+    renderThinkingPanel: () => {},
+    writeLine: (text: string) => {
+      lines.push(text)
+    },
+  }
+  const task: TaskNode = {
+    id: 'hidden-tool-task',
+    role: 'function',
+    content: {
+      type: 'functioncall',
+      data: { name: 'hiddenTool', arguments: {} },
+    },
+  }
+
+  renderWorkerProgress(state, { stage: 'processing', task })
+
+  assertNotContains(lines.join('\n'), 'hiddenTool')
+}
+
 export async function testSlashMenuOpensOnSingleSlash() {
   const result = await runTycSession({
     testName: 'testSlashMenuOpensOnSingleSlash',
@@ -466,6 +568,56 @@ export async function testIdleCtrlDReportsPathsAndExits() {
   assertContains(result.output, 'tycli log:')
 }
 
+export async function testQuitPromptCtrlCCancelsAndCtrlDExits() {
+  const cases: Array<{
+    name: string
+    steps: Parameters<typeof runTycSession>[0]['steps']
+    expected: string[]
+  }> = [
+    {
+      name: 'ctrl-d-from-main-prompt',
+      steps: [{ waitFor: 'Slash commands:', input: '\u0004' }],
+      expected: ['Ctrl-D', 'Conversation saved:'],
+    },
+    {
+      name: 'ctrl-c-ctrl-d',
+      steps: [
+        { waitFor: 'Slash commands:', input: '\u0003' },
+        { waitFor: 'Quit tycli? (y/N)', input: '\u0004' },
+      ],
+      expected: ['Quit tycli? (y/N)', 'Conversation saved:'],
+    },
+    {
+      name: 'ctrl-c-n-ctrl-d',
+      steps: [
+        { waitFor: 'Slash commands:', input: '\u0003' },
+        { waitFor: 'Quit tycli? (y/N)', input: 'n\n' },
+        { delayMs: 500, input: '\u0004' },
+      ],
+      expected: ['Quit tycli? (y/N)', 'Ctrl-D', 'Conversation saved:'],
+    },
+  ]
+
+  for (const testCase of cases) {
+    const result = await runTycSession({
+      testName: `testQuitPromptCtrlCCancelsAndCtrlDExits:${testCase.name}`,
+      steps: testCase.steps,
+      env: { TYCLI_HOTKEY_MENUS: '1' },
+      runner: 'pty',
+      acceptOutputAsExit: 'Conversation saved:',
+      timeoutMs: 30_000,
+    })
+    if (result.code !== 0) {
+      throw new Error(
+        `Expected exit code 0 for ${testCase.name}, got ${String(result.code)}\n${result.output}`,
+      )
+    }
+    for (const expected of testCase.expected) {
+      assertContains(result.output, expected)
+    }
+  }
+}
+
 export async function testCtrlCCancelsModelMenuAndKeepsPromptUsable() {
   const result = await runTycSession({
     testName: 'testCtrlCCancelsModelMenuAndKeepsPromptUsable',
@@ -485,39 +637,51 @@ export async function testCtrlCCancelsModelMenuAndKeepsPromptUsable() {
 }
 
 export async function testPromptHistoryCyclesPreviousInputWithArrowKeys() {
-  const initialResult = await runTycSession({
-    testName: 'testPromptHistoryCyclesPreviousInputWithArrowKeys',
-    steps: [
-      { waitFor: 'Slash commands:', input: '/tools\n' },
-      { waitFor: 'Active tool definitions:', input: '/exit\n' },
-    ],
-    env: { TYCLI_HOTKEY_MENUS: '0' },
-    runner: 'pty',
-  })
-  if (initialResult.code !== 0) {
-    throw new Error(`Expected initial exit code 0, got ${String(initialResult.code)}`)
-  }
+  for (const hotkeyMenus of ['0', '1']) {
+    const initialResult = await runTycSession({
+      testName: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}:initial`,
+      homeKey: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}`,
+      steps: [
+        { waitFor: 'Slash commands:', input: '/tools\n' },
+        { waitFor: 'Active tool definitions:', input: '/exit\n' },
+      ],
+      env: { TYCLI_HOTKEY_MENUS: hotkeyMenus },
+      runner: 'pty',
+    })
+    if (initialResult.code !== 0) {
+      throw new Error(
+        `Expected initial exit code 0 for hotkeyMenus=${hotkeyMenus}, got ${String(initialResult.code)}`,
+      )
+    }
 
-  const replayResult = await runTycSession({
-    testName: 'testPromptHistoryCyclesPreviousInputWithArrowKeys',
-    steps: [
-      { waitFor: 'Slash commands:', input: '\x1b[A\n' },
-      { waitFor: 'Active tool definitions:', input: '/exit\n' },
-    ],
-    env: { TYCLI_HOTKEY_MENUS: '0' },
-    runner: 'pty',
-  })
-  if (replayResult.code !== 0) {
-    throw new Error(`Expected replay exit code 0, got ${String(replayResult.code)}`)
-  }
-  if (!replayResult.output.includes('Active tool definitions:')) {
-    throw new Error(`Expected Up+Enter to replay persisted /tools.\n${replayResult.output}`)
+    const replayResult = await runTycSession({
+      testName: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}:replay`,
+      homeKey: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}`,
+      steps: [
+        { waitFor: 'Slash commands:', input: '\x1b[A\n' },
+        { waitFor: 'Active tool definitions:', input: '/exit\n' },
+      ],
+      env: { TYCLI_HOTKEY_MENUS: hotkeyMenus },
+      runner: 'pty',
+    })
+    if (replayResult.code !== 0) {
+      throw new Error(
+        `Expected replay exit code 0 for hotkeyMenus=${hotkeyMenus}, got ${String(replayResult.code)}`,
+      )
+    }
+    if (!replayResult.output.includes('Active tool definitions:')) {
+      throw new Error(
+        `Expected Up+Enter to replay persisted /tools for hotkeyMenus=${hotkeyMenus}.\n${replayResult.output}`,
+      )
+    }
+    assertNotContains(replayResult.output, '^[[A')
   }
 }
 
 export async function testResumeConversationReportsStorageAndLogs() {
   const initialResult = await runTycSession({
     testName: 'testResumeConversationReportsStorageAndLogs',
+    homeKey: 'testResumeConversationReportsStorageAndLogs',
     steps: [
       { waitFor: 'Slash commands:', input: '/tools\n' },
       { waitFor: 'Active tool definitions:', input: '/exit\n' },
@@ -536,6 +700,7 @@ export async function testResumeConversationReportsStorageAndLogs() {
   const conversationPath = saveMatch[1].trim()
   const resumeResult = await runTycSession({
     testName: 'testResumeConversationReportsStorageAndLogs',
+    homeKey: 'testResumeConversationReportsStorageAndLogs',
     steps: [
       { waitFor: 'Slash commands:', input: `/resume ${conversationPath}\n` },
       { waitFor: 'Current conversation storage:', input: '/exit\n' },
@@ -591,6 +756,8 @@ testIdleCtrlCShowsQuitPromptAndCanBeCancelled.description =
   'Idle Ctrl+C reports the interrupt, shows paths, and allows cancelling the quit prompt'
 testIdleCtrlDReportsPathsAndExits.description =
   'Idle Ctrl+D reports EOF, prints session paths, and exits cleanly'
+testQuitPromptCtrlCCancelsAndCtrlDExits.description =
+  'Ctrl+C and Ctrl+D combinations around the idle quit prompt stay usable and exit cleanly'
 testCtrlCCancelsModelMenuAndKeepsPromptUsable.description =
   'Ctrl+C cancels the raw model menu and returns to a usable prompt'
 testPromptHistoryCyclesPreviousInputWithArrowKeys.description =
@@ -605,6 +772,7 @@ testTerminalKitFooterOptInStartsAndExits.experimental = true
 testIdleCtrlCShowsQuitPromptAndCanBeCancelled.experimental = true
 testIdleCtrlCShowsQuitPromptAndCanBeCancelled.helper = true
 testIdleCtrlDReportsPathsAndExits.experimental = true
+testQuitPromptCtrlCCancelsAndCtrlDExits.experimental = true
 testCtrlCCancelsModelMenuAndKeepsPromptUsable.experimental = true
 testPromptHistoryCyclesPreviousInputWithArrowKeys.experimental = true
 testResumeConversationReportsStorageAndLogs.experimental = true

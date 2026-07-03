@@ -9,6 +9,7 @@ const PREFERRED_CONFIG_DIR = join(homedir(), '.config', 'tycli')
 const PREFERRED_CONFIG_FILE = join(PREFERRED_CONFIG_DIR, 'config.json')
 const FALLBACK_CONFIG_DIR = join('/tmp', 'tycli')
 let cachedConfigFile: string | null = null
+let configWriteQueue = Promise.resolve()
 
 async function useFallbackConfigFile() {
   await mkdir(FALLBACK_CONFIG_DIR, { recursive: true })
@@ -69,8 +70,14 @@ async function saveStoredConfig(next: StoredConfig) {
 }
 
 export async function persistConfigPatch(patch: Partial<StoredConfig>) {
-  const current = await loadStoredConfig()
-  await saveStoredConfig({ ...current, ...patch })
+  const write = configWriteQueue
+    .catch(() => {})
+    .then(async () => {
+      const current = await loadStoredConfig()
+      await saveStoredConfig({ ...current, ...patch })
+    })
+  configWriteQueue = write.catch(() => {})
+  await write
 }
 
 export function resolveStoredModel(stored: StoredConfig, provider: string): string | undefined {

@@ -63,7 +63,10 @@
           "
         >
           <div class="row no-wrap q-gutter-sm items-center">
-            <q-spinner-orbit v-if="isWorking" size="2em"></q-spinner-orbit>
+            <span v-if="isWorking" class="task-working-indicator">
+              <q-spinner-orbit size="2em" />
+              <q-tooltip> Tool or child tasks still running </q-tooltip>
+            </span>
             <q-icon :name="matCalculate" size="1.5em"></q-icon>
             <div class="ellipsis">{{ task.content.data.name }}</div>
             <q-btn

@@ -51,6 +51,7 @@ export async function syncProviderRuntimeConfig(
 }
 
 export async function bootstrapCliTaskyon(args?: {
+  nodePgLiteDataDir?: string
   selectedApi?: string
   model?: string
 }): Promise<{
@@ -65,7 +66,7 @@ export async function bootstrapCliTaskyon(args?: {
 }> {
   const { cryptoSession, stored } = await initPersistentCryptoSession()
   const configDir = await resolveConfigDirectoryPath()
-  const pgliteNodeDir = join(configDir, 'pglite')
+  const pgliteNodeDir = args?.nodePgLiteDataDir ?? join(configDir, 'pglite')
   await mkdir(pgliteNodeDir, { recursive: true })
 
   const selectedApi = args?.selectedApi ?? resolveProviderSelection(stored)

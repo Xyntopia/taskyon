@@ -4,6 +4,7 @@ import {
   Worker as NodeWorker,
 } from 'node:worker_threads'
 import { accessSync, constants as fsConstants } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const verbose =
@@ -26,6 +27,28 @@ const fileExists = (path: string) => {
     return false
   }
 }
+
+const importBaseCwd = () => process.env.TYCLI_EXEC_ARGV_CWD ?? process.cwd()
+
+const absolutizeImportSpecifier = (specifier: string) => {
+  if (!specifier.startsWith('.')) return specifier
+  return pathToFileURL(resolve(importBaseCwd(), specifier)).href
+}
+
+const normalizeExecArgvImports = (args: string[]) =>
+  args.flatMap((arg, index) => {
+    if (arg === '--import') {
+      const specifier = args[index + 1]
+      if (!specifier || specifier.startsWith('-')) return [arg]
+      return [arg, absolutizeImportSpecifier(specifier)]
+    }
+    if (index > 0 && args[index - 1] === '--import') return []
+    const importPrefix = '--import='
+    if (arg.startsWith(importPrefix)) {
+      return [`${importPrefix}${absolutizeImportSpecifier(arg.slice(importPrefix.length))}`]
+    }
+    return [arg]
+  })
 
 const toWorkerUrl = (specifier: string | URL) => {
   const url = typeof specifier === 'string' ? new URL(specifier, import.meta.url) : specifier
@@ -81,6 +104,7 @@ class BrowserCompatibleWorker {
     const workerUrl = toWorkerUrl(specifier)
     this.worker = new NodeWorker(createWorkerBootstrap(workerUrl), {
       eval: true,
+      execArgv: normalizeExecArgvImports(process.execArgv),
       name: options?.name,
       ...(options?.type === 'classic' ? {} : { type: 'module' }),
     })

@@ -21,6 +21,7 @@
             prop.node.task.role,
             Object.keys(prop.node.task.content)[0],
           ]"
+          :is-working="isProcessing(prop.node.task.id)"
           :show-meta="!!showIds"
           @click.stop
           @update:message-debug="(value) => (state.messageDebug[prop.node.task.id] = value)"
@@ -47,6 +48,7 @@
             prop.node.task.role,
             Object.keys(prop.node.task.content)[0],
           ]"
+          :is-working="isProcessing(prop.node.task.id)"
           :show-meta="!!showIds"
           @click.stop
           @update:message-debug="(value) => (state.messageDebug[prop.node.task.id] = value)"
@@ -181,11 +183,27 @@ watch(
   },
 )
 
-const isProcessing = (id: string) => {
+const taskById = computed(() => new Map(props.selectedThread.map((task) => [task.id, task])))
+
+const isSameTaskOrDescendant = (taskId: string, candidateId: string) => {
+  if (candidateId === taskId) return true
+  let cursor = taskById.value.get(candidateId)
+  while (cursor?.parentID) {
+    if (cursor.parentID === taskId) return true
+    cursor = taskById.value.get(cursor.parentID)
+  }
+  return false
+}
+
+const isTaskActive = (id: string) => {
   const lts = tystate.lastTaskState.get(id)
   if (!lts) return false
   return !['processed', 'all finished', 'aborted', 'error'].includes(lts)
 }
+
+const isProcessing = (id: string) =>
+  isTaskActive(id) ||
+  [...tystate.activeTaskIds].some((activeId) => isSameTaskOrDescendant(id, activeId))
 
 function formatTimeStamp(timestamp: string | number | Date): string {
   const date = new Date(timestamp)

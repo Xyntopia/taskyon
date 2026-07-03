@@ -4,7 +4,7 @@ import type { TaskNode } from '@taskyon/taskyon'
 export type WorkerEvent = {
   stage?: string
   taskId?: string | null
-  task?: { id?: string; content?: { type?: string; data?: { name?: string } } } | null
+  task?: TaskNode | null
   info?: string
 }
 
@@ -186,6 +186,9 @@ export const renderTaskProgress = (
 export const renderWorkerProgress = (state: RendererState, event: WorkerEvent): void => {
   const debugEnabled = state.debugEnabled()
   if (!shouldRenderWorker(event, debugEnabled)) return
+  const toolName =
+    event.task?.content?.type === 'functioncall' ? event.task.content.data?.name : undefined
+  if (!debugEnabled && toolName && state.isFunctionHiddenInChat(toolName)) return
   state.clearThinkingPanel()
   state.writeLine(`[worker] ${summarizeWorkerEvent(event)}`)
   if (debugEnabled) state.writeLine(`[worker yaml]\n${toYaml(event)}`)

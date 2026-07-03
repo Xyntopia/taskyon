@@ -4,6 +4,7 @@ export type DiagnosticsTestContext = {
   isCypress?: boolean
   selectedApi?: string
   model?: string
+  llmSettings?: unknown
   providerKey?: string
   providerAccessToken?: string
   accountId?: string

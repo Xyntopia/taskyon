@@ -388,12 +388,11 @@ const createTaskProcessor = (
       // we can continue processing this task...
       if (task.priorID && !(await isTaskFinished(task.priorID))) {
         streamEmit({ stage: 'subtasks', task, taskId: task.id })
-        // we need to wait until all subtasks from its previous tasks are finished before
-        // continuing with this task so we simply push this task back onto the stack
         console.log('sleep-waiting for task to finish', task.id)
         await sleep(500)
         queueTask(task.id)
-        // we don't add an "out-of-loop" here, because we are still processing this task
+        // Keep the task in the in-progress set while it waits, so callers can
+        // still see unfinished subtask work.
         return // early return, because this task is not ready yet
       }
 

@@ -30,6 +30,15 @@ const getFunctionCallName = (task: unknown) => {
   return data && typeof data === 'object' && 'name' in data ? data.name : undefined
 }
 
+const getMessageData = (task: unknown) => {
+  if (!task || typeof task !== 'object' || !('content' in task)) return undefined
+  const content = task.content
+  if (!content || typeof content !== 'object' || !('type' in content) || !('data' in content)) {
+    return undefined
+  }
+  return content.type === 'message' ? content.data : undefined
+}
+
 export const testDocumentationIndexStatusStartsEmpty = async () => {
   const db = await getDatabase(`documentation-status-test-${Date.now()}`)
   const tool = createDocumentationIndexTool(db)
@@ -76,7 +85,42 @@ export const testTaskyonDocumentationCreatesConsentReentryChain = async () => {
   return { success: true }
 }
 
+export const testTaskyonDocumentationAllowIndexAnnouncesIndexing = async () => {
+  const db = await getDatabase(`documentation-allow-index-test-${Date.now()}`)
+  const tool = createTaskyonDocumentationTool(db)
+  const result = await tool.function?.(
+    { query: 'How do Taskyon tools work?', allowIndex: true },
+    createTestContext(),
+  )
+
+  assert(result && typeof result === 'object', 'Expected task result object')
+  assert(
+    'taskChainList' in result &&
+      Array.isArray(result.taskChainList) &&
+      result.taskChainList[0]?.length === 3,
+    'Expected indexing notice followed by provider and re-entry function calls',
+  )
+  const chain = 'taskChainList' in result ? result.taskChainList[0] : undefined
+  const indexingNotice = getMessageData(chain?.[0])
+  assert(
+    typeof indexingNotice === 'string' && indexingNotice.includes('Indexing Taskyon documentation'),
+    'Expected indexing notice message before loading docs',
+  )
+  assert(
+    getFunctionCallName(chain?.[1]) === 'getTaskyonDocumentationDocuments',
+    'Expected workflow to load bundled docs after indexing notice',
+  )
+  assert(
+    getFunctionCallName(chain?.[2]) === 'taskyonDocumentation',
+    'Expected workflow to re-enter taskyonDocumentation after loading docs',
+  )
+
+  return { success: true }
+}
+
 testDocumentationIndexStatusStartsEmpty.description =
   'Checks that a new documentation index corpus reports empty status without indexing documents.'
 testTaskyonDocumentationCreatesConsentReentryChain.description =
   'Checks that Taskyon documentation search asks for in-chat indexing consent before first use.'
+testTaskyonDocumentationAllowIndexAnnouncesIndexing.description =
+  'Checks that Taskyon documentation auto-indexing emits a visible progress message before loading docs.'

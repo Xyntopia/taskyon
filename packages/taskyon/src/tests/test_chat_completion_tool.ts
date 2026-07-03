@@ -258,6 +258,47 @@ export const testOrphanedToolResultRendersAsSystemContext = async () => {
   return { success: true }
 }
 
+export const testHiddenToolCallResultRendersAsSystemContext = async () => {
+  const hiddenToolCall = task({
+    id: 'hidden-docs-provider-call',
+    role: 'function',
+    created_at: 2,
+    content: {
+      type: 'functioncall',
+      data: { name: 'getTaskyonDocumentationDocuments', arguments: {} },
+    },
+  })
+  const toolResult = task({
+    id: 'hidden-docs-provider-result',
+    role: 'system',
+    parentID: hiddenToolCall.id,
+    created_at: 3,
+    content: { type: 'toolresult', data: { documents: [{ id: 'taskyon.md' }] } },
+  })
+  const tools: Record<string, ToolBase> = {
+    getTaskyonDocumentationDocuments: {
+      name: 'getTaskyonDocumentationDocuments',
+      description: 'Hidden docs provider',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
+      renderOptions: { hideLlm: true },
+    },
+  }
+
+  const messages = await convertTaskNodesToOpenAIChat(
+    [hiddenToolCall, toolResult],
+    () => Promise.resolve(null),
+    () => Promise.resolve(undefined),
+    false,
+    true,
+    tools,
+  )
+
+  assert(messages.length === 1, `Expected one rendered message, got ${messages.length}`)
+  assert(messages[0]?.role === 'system', 'Expected hidden tool result to render as system context')
+
+  return { success: true }
+}
+
 export const testSerializeObjectTruncationNoticeIsOptIn = () => {
   const value = { a: 1, b: 2, c: 3 }
 

@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process'
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import process from 'node:process'
+import { pathToFileURL } from 'node:url'
 import { inspect } from 'node:util'
 import type { createDuplexChannel } from '../../shared/modules/frpBus'
 import { createUnavailableIframeMux } from '../../shared/modules/frpBus'
@@ -28,6 +29,7 @@ import {
   type Taskyon,
   type TaskyonMessage,
 } from '@taskyon/taskyon'
+import { createNodeTaskyonDocumentationProviderTool } from '@taskyon/taskyon/tools/nodeTaskyonDocumentationProvider'
 import { InternalTool as InternalToolSchema } from '../../taskyon/src/types/toolApi'
 import {
   initPersistentCryptoSession,
@@ -152,8 +154,75 @@ const FILE_PICKER_EXCLUDED_DIRS = new Set([
 const fileIndexCache = new Map<string, string[]>()
 let fatalErrorHandled = false
 const RUNTIME_LOG_MAX_BYTES = 100 * 1024 * 1024
+let clearTransientStatusLine: (() => void) | undefined
+
+function absolutizeRelativeExecArgvImports(cwd: string) {
+  process.execArgv = process.execArgv.flatMap((arg, index, args) => {
+    if (arg === '--import') {
+      const specifier = args[index + 1]
+      if (!specifier || specifier.startsWith('-')) return [arg]
+      return [arg, absolutizeImportSpecifier(cwd, specifier)]
+    }
+    if (index > 0 && args[index - 1] === '--import') return []
+    const importPrefix = '--import='
+    if (arg.startsWith(importPrefix)) {
+      return [`${importPrefix}${absolutizeImportSpecifier(cwd, arg.slice(importPrefix.length))}`]
+    }
+    return [arg]
+  })
+}
+
+const splitNodeOptions = (value: string) => value.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []
+
+const unquoteNodeOption = (value: string) => {
+  if (value.length < 2) return value
+  const first = value[0]
+  const last = value[value.length - 1]
+  if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+    return value.slice(1, -1)
+  }
+  return value
+}
+
+function absolutizeRelativeNodeOptionsImports(cwd: string) {
+  const nodeOptions = process.env.NODE_OPTIONS
+  if (!nodeOptions) return
+  const tokens = splitNodeOptions(nodeOptions)
+  const next: string[] = []
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = unquoteNodeOption(tokens[index] ?? '')
+    if (token === '--import') {
+      const specifier = tokens[index + 1]
+      if (!specifier || unquoteNodeOption(specifier).startsWith('-')) {
+        next.push(token)
+        continue
+      }
+      next.push(token, absolutizeImportSpecifier(cwd, unquoteNodeOption(specifier)))
+      index += 1
+      continue
+    }
+    const importPrefix = '--import='
+    if (token.startsWith(importPrefix)) {
+      next.push(
+        `${importPrefix}${absolutizeImportSpecifier(cwd, token.slice(importPrefix.length))}`,
+      )
+      continue
+    }
+    next.push(tokens[index] ?? '')
+  }
+  process.env.NODE_OPTIONS = next.join(' ')
+}
+
+function absolutizeImportSpecifier(cwd: string, specifier: string) {
+  if (!specifier.startsWith('.')) return specifier
+  return pathToFileURL(resolve(cwd, specifier)).href
+}
 
 function adoptInvocationWorkingDirectory() {
+  const originalCwd = process.cwd()
+  process.env.TYCLI_EXEC_ARGV_CWD = originalCwd
+  absolutizeRelativeExecArgvImports(originalCwd)
+  absolutizeRelativeNodeOptionsImports(originalCwd)
   const cwd =
     process.env.TYCLI_CWD?.trim() || process.env.PROJECT_CWD?.trim() || process.env.INIT_CWD?.trim()
   if (!cwd || cwd === process.cwd()) return
@@ -190,16 +259,19 @@ function formatPromptPrefixLine(status: PromptPrefixStatus): string {
 }
 
 function writeLine(text: string) {
+  clearTransientStatusLine?.()
   runtimeLog?.append('stdout', `${text}\n`)
   process.stdout.write(`${text}\n`)
 }
 
 function writeError(text: string) {
+  clearTransientStatusLine?.()
   runtimeLog?.append('stderr', `${text}\n`)
   process.stderr.write(`${text}\n`)
 }
 
 function writeNotice(kind: 'info' | 'success' | 'warn' | 'error', text: string) {
+  clearTransientStatusLine?.()
   runtimeLog?.append(kind === 'error' ? 'stderr' : 'stdout', `${text}\n`)
   const prefix = kind === 'error' ? 'error: ' : kind === 'warn' ? 'warning: ' : ''
   const stream = kind === 'error' ? process.stderr : process.stdout
@@ -207,6 +279,7 @@ function writeNotice(kind: 'info' | 'success' | 'warn' | 'error', text: string) 
 }
 
 function writeStartupNote(title: string, lines: string[]) {
+  clearTransientStatusLine?.()
   runtimeLog?.append('stdout', `${title}\n${lines.join('\n')}\n`)
   process.stdout.write(`${title}\n${lines.join('\n')}\n`)
 }
@@ -225,11 +298,13 @@ function writeSessionLocations(title: string, info: SessionLocationInfo) {
 }
 
 function writeIntro(title: string) {
+  clearTransientStatusLine?.()
   runtimeLog?.append('stdout', `${title}\n`)
   process.stdout.write(`${title}\n`)
 }
 
 function writeOutro(message: string) {
+  clearTransientStatusLine?.()
   runtimeLog?.append('stdout', `${message}\n`)
   process.stdout.write(`${message}\n`)
 }
@@ -790,6 +865,8 @@ async function waitForTaskResult(
   quitCondition: string | string[],
   timeoutMs: number,
   signal?: AbortSignal,
+  fallbackCondition?: (task: TaskNode) => boolean,
+  isFallbackReady?: () => boolean,
 ) {
   const subTasks = new Set<string>(initialIds)
   const quitTypes = Array.isArray(quitCondition) ? quitCondition : [quitCondition]
@@ -802,9 +879,19 @@ async function waitForTaskResult(
       cleanup()
       reject(new Error(`Timeout after ${timeoutMs}ms`))
     }, timeoutMs)
+    let fallbackTask: TaskNode | undefined
+    const fallbackInterval =
+      fallbackCondition && isFallbackReady
+        ? setInterval(() => {
+            if (!fallbackTask || !isFallbackReady()) return
+            cleanup()
+            resolve(fallbackTask)
+          }, 50)
+        : undefined
 
     const cleanup = () => {
       clearTimeout(timeout)
+      if (fallbackInterval) clearInterval(fallbackInterval)
       unsubscribe()
       signal?.removeEventListener('abort', onAbort)
     }
@@ -819,6 +906,14 @@ async function waitForTaskResult(
       if (!msg.task.parentID || !subTasks.has(msg.task.parentID)) return
       subTasks.add(msg.task.id)
       if (!quitTypes.includes(msg.task.content.type)) return
+      if (fallbackCondition?.(msg.task)) {
+        fallbackTask = msg.task
+        if (isFallbackReady?.()) {
+          cleanup()
+          resolve(msg.task)
+        }
+        return
+      }
       cleanup()
       resolve(msg.task)
     })
@@ -1292,16 +1387,22 @@ function isReadlineClosed(rl: ReturnType<typeof createInterface>): boolean {
 async function askQuestion(
   rl: ReturnType<typeof createInterface>,
   prompt: string,
+  options?: { signal?: AbortSignal; interruptNotice?: boolean; onSigint?: () => void },
 ): Promise<string | null> {
   if (isReadlineClosed(rl)) return null
+  const onReadlineSigint = () => options?.onSigint?.()
+  if (options?.onSigint) rl.on('SIGINT', onReadlineSigint)
   try {
+    if (options?.signal) return await rl.question(prompt, { signal: options.signal })
     return await rl.question(prompt)
   } catch (error) {
     if (isInterruptError(error)) {
-      writeLine('\nPrompt interrupted.')
+      if (options?.interruptNotice !== false) writeLine('\nPrompt interrupted.')
       return null
     }
     throw error
+  } finally {
+    if (options?.onSigint) rl.off('SIGINT', onReadlineSigint)
   }
 }
 
@@ -1419,6 +1520,7 @@ async function promptForMainInput(
   promptText: string,
   onSlashRequested: () => Promise<string | null>,
   onFileRequested: () => Promise<string | null>,
+  onCtrlCRequested?: () => void,
   onCtrlDRequested?: () => void,
 ): Promise<string | null> {
   const stdin = process.stdin
@@ -1428,6 +1530,12 @@ async function promptForMainInput(
   emitKeypressEvents(stdin, rl)
   rl.setPrompt(promptText)
   rl.prompt()
+  try {
+    stdin.setRawMode(true)
+    stdin.resume()
+  } catch {
+    // Readline still works without raw mode, but hotkeys and history may be terminal-dependent.
+  }
 
   return await new Promise<string | null>((resolve) => {
     let settled = false
@@ -1439,6 +1547,7 @@ async function promptForMainInput(
       stdin.off('keypress', onKeypress)
       rl.off('line', onLine)
       rl.off('close', onClose)
+      restoreTerminalInput()
       resolve(value)
     }
 
@@ -1448,6 +1557,11 @@ async function promptForMainInput(
     }
     const onClose = () => finish(null)
     const onKeypress = (str: string, key: { ctrl?: boolean; name?: string; sequence?: string }) => {
+      if (key.ctrl && key.name === 'c') {
+        onCtrlCRequested?.()
+        finish(null)
+        return
+      }
       if (key.ctrl && key.name === 'd') {
         onCtrlDRequested?.()
         finish(null)
@@ -1921,12 +2035,15 @@ async function main() {
 
   let restoreConsoleLogging: (() => void) | undefined
   const sessionStartedAt = new Date()
+  writeLine('Starting tycli...')
   try {
+    writeLine('Initializing runtime log...')
     runtimeLog = await createRuntimeLog()
     restoreConsoleLogging = installRuntimeConsoleLogging(runtimeLog)
   } catch (error) {
     writeError(`Runtime log unavailable: ${error instanceof Error ? error.message : String(error)}`)
   }
+  writeLine('Loading CLI configuration...')
   const startupMeta = await loadStartupMeta()
   const { cryptoSession, stored } = await initPersistentCryptoSession()
   const configDir = await resolveConfigDirectoryPath()
@@ -1962,6 +2079,7 @@ async function main() {
   const toolRenderOptions: Record<string, { hideChat?: boolean }> = {}
   const projectInstructions = await loadProjectInstructions(process.cwd())
   const taskyonRef: { current?: Taskyon } = {}
+  writeLine(`Initializing Taskyon runtime for provider '${selectedApi}'...`)
   const cliEntryNodeTool = createStandardEntryNodeTool({
     name: ENTRY_NODE_TOOL_NAME,
     renderOptions: { hideLlm: true, hideChat: true },
@@ -2023,7 +2141,9 @@ async function main() {
     },
   )
   taskyonRef.current = taskyon
+  writeLine('Synchronizing provider credentials...')
   await syncProviderRuntimeConfig(taskyon, llmState, selectedApi)
+  writeLine('Preparing conversation storage...')
   const conversationPersistence = await createConversationPersistence({
     taskyon,
     configDir,
@@ -2054,19 +2174,9 @@ async function main() {
     if (!localApi) throw new Error("Local provider config 'llmApis.local' is missing")
     const isReachable = await canReachLocalApi(localApi.baseURL)
     if (!isReachable) {
-      const taskyonKey = await taskyon.getSecret(API_KEY_STORE_NAME, 'taskyon', false, false)
-      if (taskyonKey) {
-        llmState.selectedApi = 'taskyon'
-        await persistConfigPatch({ selectedApi: 'taskyon' })
-        await taskyon.updateChatCompletionApiKey('taskyon', taskyonKey)
-        writeLine(
-          "Local LLM at http://localhost:8080 is unreachable. Switched provider to 'taskyon'.",
-        )
-      } else {
-        writeLine(
-          'Warning: local provider selected but http://localhost:8080 is unreachable. Configure a provider via /keys and switch with /provider.',
-        )
-      }
+      writeLine(
+        'Warning: local provider selected but http://localhost:8080 is unreachable. Configure a provider via /keys and switch with /provider.',
+      )
     }
   }
 
@@ -2079,12 +2189,14 @@ async function main() {
     bridgePort.send(msg as Parameters<typeof bridgePort.send>[0]),
   )
 
+  writeLine('Registering CLI tools...')
   const cliTools: InternalTool[] = [
     cliEntryNodeTool,
     explorationTool,
     updateFilesTool,
     downloadFileTool,
     cliBashTool,
+    createNodeTaskyonDocumentationProviderTool(),
   ].map((tool) => InternalToolSchema.parse(tool))
   const cliToolRpcExecutor = await registerToolRpcTools({
     port: clientPort,
@@ -2102,6 +2214,7 @@ async function main() {
       }),
   })
   await refreshToolRenderOptions(taskyon, toolRenderOptions)
+  writeLine('Opening interactive prompt...')
 
   if (taskyonClientCommand !== null) {
     try {
@@ -2152,6 +2265,7 @@ async function main() {
   let interruptedCurrentTask = false
   let interruptNoticePrinted = false
   let requestQuitOnNextPrompt = false
+  let quitPromptAbortController: AbortController | null = null
   let eofRequested = false
   let inMenuInteraction = false
   let shuttingDown = false
@@ -2173,6 +2287,71 @@ async function main() {
   const taskFeed: TaskNode[] = []
   const taskSnapshotById = new Map<string, string>()
   const footer = await createCliFooter()
+  const workerSpinnerFrames = ['-', '\\', '|', '/']
+  let workerStatusTimer: ReturnType<typeof setInterval> | null = null
+  let workerStatusFrameIndex = 0
+  let workerStatusText = ''
+  let workerStatusRendered = false
+
+  const clearWorkerStatusLine = () => {
+    if (!workerStatusRendered) return
+    process.stdout.write('\r\x1b[2K')
+    workerStatusRendered = false
+  }
+
+  clearTransientStatusLine = clearWorkerStatusLine
+
+  const renderWorkerStatusLine = () => {
+    if (!process.stdout.isTTY || !workerStatusText) return
+    const frame = workerSpinnerFrames[workerStatusFrameIndex % workerSpinnerFrames.length] ?? '-'
+    workerStatusFrameIndex += 1
+    process.stdout.write(`\r\x1b[2K${frame} ${workerStatusText}`)
+    workerStatusRendered = true
+  }
+
+  const setWorkerStatusLine = (text: string) => {
+    if (!process.stdout.isTTY) return
+    workerStatusText = text
+    if (workerStatusTimer === null) {
+      workerStatusTimer = setInterval(renderWorkerStatusLine, 120)
+      workerStatusTimer.unref()
+    }
+    renderWorkerStatusLine()
+  }
+
+  const stopWorkerStatusLine = () => {
+    if (workerStatusTimer !== null) {
+      clearInterval(workerStatusTimer)
+      workerStatusTimer = null
+    }
+    workerStatusText = ''
+    workerStatusFrameIndex = 0
+    clearWorkerStatusLine()
+  }
+
+  const visibleWorkerStatusText = (event: WorkerEvent): string | null => {
+    const stage = event.stage ?? ''
+    if (stage !== 'processing' && stage !== 'subtasks') return null
+    const task = event.task
+    const functionName =
+      task?.content?.type === 'functioncall' ? task.content.data?.name : undefined
+    const toolName = functionName ?? (event.taskId ? event.taskId.slice(0, 12) : 'task')
+    if (functionName && toolRenderOptions[functionName]?.hideChat) {
+      return null
+    }
+    const status = stage === 'subtasks' ? 'waiting for subtasks' : 'processing'
+    return `${toolName}: ${status}`
+  }
+
+  const updateWorkerStatusLine = (event: WorkerEvent, suppressed: boolean) => {
+    if (activeTaskCount() <= 0) {
+      stopWorkerStatusLine()
+      return
+    }
+    if (suppressed) return
+    const text = visibleWorkerStatusText(event)
+    if (text) setWorkerStatusLine(text)
+  }
 
   const queueConversationPersist = (leafId: string | undefined = currentLeafId) => {
     if (!leafId) return
@@ -2214,6 +2393,51 @@ async function main() {
       waitingForTask,
       activeWorkerTaskCount: activeWorkerTasks.size,
       hasWorkerProcessing,
+    })
+
+  const workerIdleWaiters = new Set<() => void>()
+
+  const notifyWorkerIdleWaiters = () => {
+    if (activeTaskCount() > 0) return
+    const waiters = [...workerIdleWaiters]
+    workerIdleWaiters.clear()
+    waiters.forEach((resolve) => resolve())
+  }
+
+  const waitForWorkerIdle = async (timeoutMs: number, signal?: AbortSignal) =>
+    await new Promise<void>((resolve, reject) => {
+      if (activeTaskCount() <= 0) {
+        resolve()
+        return
+      }
+      if (signal?.aborted) {
+        reject(new DOMException('Worker idle wait aborted', 'AbortError'))
+        return
+      }
+
+      const timeout = setTimeout(() => {
+        cleanup()
+        reject(new Error(`Timed out waiting for worker to settle after ${timeoutMs}ms`))
+      }, timeoutMs)
+
+      const cleanup = () => {
+        clearTimeout(timeout)
+        workerIdleWaiters.delete(onIdle)
+        signal?.removeEventListener('abort', onAbort)
+      }
+
+      const onIdle = () => {
+        cleanup()
+        resolve()
+      }
+
+      const onAbort = () => {
+        cleanup()
+        reject(new DOMException('Worker idle wait aborted', 'AbortError'))
+      }
+
+      workerIdleWaiters.add(onIdle)
+      signal?.addEventListener('abort', onAbort, { once: true })
     })
 
   const updateFooter = () => {
@@ -2276,6 +2500,7 @@ async function main() {
 
   const resetThinking = () => {
     clearThinkingPanel()
+    stopWorkerStatusLine()
     thinkingLines = []
     thinkingText = ''
     activeWorkerTasks.clear()
@@ -2349,6 +2574,7 @@ async function main() {
       return
     }
 
+    clearWorkerStatusLine()
     process.stdout.write(`${panel.join('\n')}\n`)
     thinkingPanelHeight = panel.length
     renderedThinkingPanelText = panelText
@@ -2409,6 +2635,7 @@ async function main() {
       hasWorkerProcessing = false
       taskProcessingStatus = 'finished'
       clearWorkerCleanupNoticeTimer()
+      stopWorkerStatusLine()
     }
     if (stage === 'processed' || stage === 'aborted' || stage === 'error') {
       if (taskId) activeWorkerTasks.delete(taskId)
@@ -2416,8 +2643,10 @@ async function main() {
       if (activeWorkerTasks.size === 0 && stage === 'processed') hasWorkerProcessing = false
       if (activeWorkerTasks.size === 0 && !hasWorkerProcessing) taskProcessingStatus = 'finished'
       if (stage !== 'processed') clearWorkerCleanupNoticeTimer()
+      if (activeTaskCount() <= 0) stopWorkerStatusLine()
     }
     updateFooter()
+    notifyWorkerIdleWaiters()
   }
 
   const appendThinkingText = (delta: string) => {
@@ -2437,6 +2666,7 @@ async function main() {
     interruptedCurrentTask = true
     requestQuitOnNextPrompt = false
     clearThinkingPanel()
+    stopWorkerStatusLine()
     footer.restore()
     writeSessionLocations('Session Locations', currentSessionLocations())
     restoreTerminalInput()
@@ -2491,6 +2721,7 @@ async function main() {
     noteInterruptPhase('Ctrl-C received.')
     if (requestQuitOnNextPrompt) {
       requestQuitOnNextPrompt = false
+      quitPromptAbortController?.abort()
       writeLine('Quit cancelled.')
       return
     }
@@ -2512,6 +2743,13 @@ async function main() {
     }
     if (hasActiveWorkerTask()) {
       interruptCurrentTask('Ctrl-D')
+      return
+    }
+    if (requestQuitOnNextPrompt) {
+      eofRequested = true
+      requestQuitOnNextPrompt = false
+      quitPromptAbortController?.abort()
+      noteInterruptPhase('Ctrl-D received.')
       return
     }
     eofRequested = true
@@ -2602,13 +2840,14 @@ async function main() {
       queueConversationPersist(taskId)
     }
     trackWorkerProgress(workerEvent)
+    updateWorkerStatusLine(workerEvent, suppressed)
     if (suppressed) return
     renderWorkerProgress(
       {
         debugEnabled: () => debugLogsEnabled,
         showRoleTag: () => uiSettings.showRoleTag,
         showFullFunctionResults: () => uiSettings.showFullFunctionResults,
-        isFunctionHiddenInChat: () => false,
+        isFunctionHiddenInChat: (name: string) => Boolean(toolRenderOptions[name]?.hideChat),
         clearThinkingPanel,
         renderThinkingPanel,
         writeLine,
@@ -2657,7 +2896,18 @@ async function main() {
         updateFooter()
         footer.beforePrompt()
         writePromptPrefix()
-        const answerRaw = await askQuestion(rl, '> ')
+        quitPromptAbortController = new AbortController()
+        const answerRaw = await askQuestion(rl, '> ', {
+          signal: quitPromptAbortController.signal,
+          interruptNotice: false,
+          onSigint,
+        })
+        quitPromptAbortController = null
+        if (eofRequested) {
+          eofRequested = false
+          requestImmediateShutdown('EOF/Readline closed', 0)
+          break
+        }
         requestQuitOnNextPrompt = false
         if (answerRaw === null) {
           if (shuttingDown || isReadlineClosed(rl)) break
@@ -2688,6 +2938,7 @@ async function main() {
           inMenuInteraction = false
           return selected ? `@${selected}` : null
         },
+        onSigint,
         onCtrld,
       )
       if (inputRaw === null) {
@@ -2827,22 +3078,26 @@ async function main() {
           ['message', 'error', 'return'],
           10 * 60 * 1000,
           activeTaskWaitController.signal,
+          (task) => task.content.type === 'message',
+          () => activeTaskCount() <= 0,
         )
+        currentLeafId = result.id
+        writeDebug(`received result task: ${result.id} (${result.content.type})`)
+        await waitForWorkerIdle(10 * 60 * 1000, activeTaskWaitController.signal)
         waitingForTask = false
         activeTaskWaitController = undefined
         taskInterruptKeysCleanup?.()
         taskInterruptKeysCleanup = undefined
         clearWorkerCleanupNoticeTimer()
         clearThinkingPanel()
+        stopWorkerStatusLine()
         if (interruptedCurrentTask) {
           await flushConversationPersist()
           writeTaskInterruptedNotice()
           restorePromptIfIdle()
           continue
         }
-        currentLeafId = result.id
         await flushConversationPersist()
-        writeDebug(`received result task: ${result.id} (${result.content.type})`)
         restorePromptIfIdle()
       } catch (error) {
         waitingForTask = false
@@ -2851,6 +3106,7 @@ async function main() {
         taskInterruptKeysCleanup = undefined
         clearWorkerCleanupNoticeTimer()
         clearThinkingPanel()
+        stopWorkerStatusLine()
         if (interruptedCurrentTask) {
           await flushConversationPersist()
           writeTaskInterruptedNotice()
@@ -2880,6 +3136,8 @@ async function main() {
     taskInterruptKeysCleanup?.()
     taskInterruptKeysCleanup = undefined
     clearWorkerCleanupNoticeTimer()
+    stopWorkerStatusLine()
+    clearTransientStatusLine = undefined
     await flushConversationPersist().catch(() => {})
     taskyon.workerStop('tycli exit')
     writeOutro(`Conversation saved: ${conversationPersistence.filePath}`)

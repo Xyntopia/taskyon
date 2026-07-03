@@ -6,8 +6,9 @@ import {
   type TaskyonTestFn,
   type TestRecord,
 } from '../../../shared/modules/diagnosticsRunner'
-import { readFile, readdir } from 'node:fs/promises'
-import { basename } from 'node:path'
+import { mkdtemp, readFile, readdir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
 import process from 'node:process'
 import { bootstrapCliTaskyon } from '../cli/runtime'
 import { diagnosticsTestMetadata, unsupportedModuleFallbacks } from './testMetadata'
@@ -502,7 +503,9 @@ async function main() {
     process.exit(1)
   }
 
+  const diagnosticsDataDir = await mkdtemp(join(tmpdir(), 'tycli-diagnostics-pglite-'))
   const runtime = await bootstrapCliTaskyon({
+    nodePgLiteDataDir: diagnosticsDataDir,
     ...(opts.provider ? { selectedApi: opts.provider } : {}),
     ...(opts.model ? { model: opts.model } : {}),
   })
@@ -510,6 +513,7 @@ async function main() {
     ...(opts.tyauth ? { tyauth: opts.tyauth } : {}),
     allowLongRun: opts.allowLongRun,
     selectedApi: runtime.selectedApi,
+    llmSettings: runtime.llmState,
     ...(runtime.model ? { model: runtime.model } : {}),
     ...(runtime.providerKey ? { providerKey: runtime.providerKey } : {}),
     ...(runtime.oauthSession?.accessToken

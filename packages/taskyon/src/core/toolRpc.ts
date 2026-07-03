@@ -141,6 +141,7 @@ export const createToolExecutionClient = (port: ToolRpcCallerPort) => ({
 })
 
 export function registerToolRpcBroker(options: {
+  defaultTimeoutMs?: number
   workerPort: ToolRpcResponderPort
   toolPort: ToolRpcCallerPort
   prepareFunctionCall: (
@@ -179,6 +180,9 @@ export function registerToolRpcBroker(options: {
     try {
       const preparedFunc = await options.prepareFunctionCall(call.data, abortController.signal)
       const result = await callToolOverRpc(preparedFunc, options.toolPort, {
+        ...(options.defaultTimeoutMs === undefined
+          ? {}
+          : { defaultTimeoutMs: options.defaultTimeoutMs }),
         stopSignal: abortController.signal,
         taskId: call.data.taskId,
       })

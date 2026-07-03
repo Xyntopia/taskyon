@@ -1069,7 +1069,16 @@ async function convertTaskNodeToOpenAIMessage(
       }),
     )
     const toolCallTask = task.parentID ? tasksById.get(task.parentID) : undefined
-    if (task.parentID && useNativeTools && toolCallTask?.content.type === 'functioncall') {
+    const parentToolName =
+      toolCallTask?.content.type === 'functioncall' ? toolCallTask.content.data.name : undefined
+    const parentToolVisibleToLlm =
+      parentToolName !== undefined && !toolCollection[parentToolName]?.renderOptions?.hideLlm
+    if (
+      task.parentID &&
+      useNativeTools &&
+      toolCallTask?.content.type === 'functioncall' &&
+      parentToolVisibleToLlm
+    ) {
       // the parent task should be the tool call task...
       const name = toolCallTask.content.data.name
       const output: ToolResultPart['output'] = {

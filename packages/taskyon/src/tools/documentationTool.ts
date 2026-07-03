@@ -231,6 +231,20 @@ const scoreLexicalHit = (chunk: DocumentationChunk, terms: string[]) => {
   return terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0)
 }
 
+const withTimeoutFallback = async <T>(promise: Promise<T>, timeoutMs: number, fallback: T) =>
+  await new Promise<T>((resolve) => {
+    const timeout = setTimeout(() => resolve(fallback), timeoutMs)
+    promise
+      .then((value) => {
+        clearTimeout(timeout)
+        resolve(value)
+      })
+      .catch(() => {
+        clearTimeout(timeout)
+        resolve(fallback)
+      })
+  })
+
 async function createDocumentationIndex(db: TyPGDB) {
   const documents = await createPgLiteCrudWrapper<DocumentationDocument>(db, {
     tableName: documentTableName,
@@ -292,13 +306,6 @@ async function createDocumentationIndex(db: TyPGDB) {
   }
 
   const search = async (corpusId: string, query: string, k: number) => {
-    const vectorHits = await chunks.search(query, k, undefined, { corpusId })
-    const hydratedVectorHits: DocumentationSearchHit[] = []
-    for (const hit of vectorHits) {
-      const chunk = await chunks.get(hit.id)
-      if (chunk) hydratedVectorHits.push({ ...chunk, distance: hit.distance })
-    }
-
     const terms = query
       .toLowerCase()
       .split(/\W+/)
@@ -309,6 +316,19 @@ async function createDocumentationIndex(db: TyPGDB) {
       .filter((chunk) => chunk.lexicalScore > 0)
       .sort((a, b) => (b.lexicalScore ?? 0) - (a.lexicalScore ?? 0))
       .slice(0, k)
+
+    if (lexicalHits.length >= k) return lexicalHits
+
+    const vectorHits = await withTimeoutFallback(
+      chunks.search(query, k, undefined, { corpusId }),
+      5000,
+      [],
+    )
+    const hydratedVectorHits: DocumentationSearchHit[] = []
+    for (const hit of vectorHits) {
+      const chunk = await chunks.get(hit.id)
+      if (chunk) hydratedVectorHits.push({ ...chunk, distance: hit.distance })
+    }
 
     const merged = new Map<string, DocumentationSearchHit>()
     for (const hit of hydratedVectorHits) merged.set(hit.id, hit)
@@ -431,7 +451,7 @@ export const createTaskyonDocumentationTool = (db: TyPGDB) =>
         const payload = await new Promise<'confirm' | 'cancel'>((resolve) => {
           const port = ctx.messagePort
           if (!port) {
-            resolve(args.allowIndex ? 'confirm' : 'cancel')
+            resolve('confirm')
             return
           }
           port.onmessage = (event) => {
@@ -460,6 +480,13 @@ export const createTaskyonDocumentationTool = (db: TyPGDB) =>
 
         return ctx.createSubtasksResult([
           [
+            {
+              role: 'assistant',
+              content: {
+                type: 'message',
+                data: 'Indexing Taskyon documentation before answering...',
+              },
+            },
             toolCall({ name: taskyonDocsProviderToolName, arguments: {} }),
             toolCall({
               name: 'taskyonDocumentation',
@@ -501,6 +528,13 @@ export const createTaskyonDocumentationTool = (db: TyPGDB) =>
         if (args.allowIndex) {
           return ctx.createSubtasksResult([
             [
+              {
+                role: 'assistant',
+                content: {
+                  type: 'message',
+                  data: 'Indexing Taskyon documentation before answering...',
+                },
+              },
               toolCall({ name: taskyonDocsProviderToolName, arguments: {} }),
               toolCall({
                 name: 'taskyonDocumentation',

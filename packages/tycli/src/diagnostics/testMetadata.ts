@@ -56,10 +56,21 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
   testEntryNodeRecoversFromMalformedPythonToolCall: {
     requiresNetwork: true,
   },
+  testEntryNodeWebsearchProducesHostedSearchUsage: {
+    requiresNetwork: true,
+  },
   testCliHelloWorldProducesAssistantResponse: {
     requiresNetwork: true,
   },
+  testCliDocumentationQuestionCompletesWithoutFatal: {
+    requiresNetwork: true,
+    requiresLargeTokens: true,
+  },
   testWebResearchPlannerEnablesBrowserSetupAndWebSearchByDefault: {
+    requiresLargeTokens: true,
+  },
+  testTaskyonCliConversationUsesDocumentationTool: {
+    requiresNetwork: true,
     requiresLargeTokens: true,
   },
 }

@@ -54,7 +54,7 @@ import {
 import { createProxyApi, createProxyFunction } from '../utils/objHelpers'
 import { configureNodePgLiteDataDir, getDatabase } from '../utils/pglite.api'
 import type { Thunk } from '../utils/tsHelpers'
-import { taskyonProtocol } from '../api/taskyonProtocol'
+import { MAX_REMOTE_FUNCTION_TIMEOUT_MS, taskyonProtocol } from '../api/taskyonProtocol'
 import type { TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
 import { generateSecretId } from './taskFunctionExecutor'
@@ -383,6 +383,7 @@ const dynamicContext =
       workerPort: toolRpcPort,
       toolPort: workerport,
       prepareFunctionCall: prepareToolCall,
+      defaultTimeoutMs: MAX_REMOTE_FUNCTION_TIMEOUT_MS,
     })
     const toolExecutionClient = createToolExecutionClient(workerport)
     //##################### END INIT CTX #################

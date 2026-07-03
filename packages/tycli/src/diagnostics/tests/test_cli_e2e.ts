@@ -1,4 +1,10 @@
-import { runTycSession } from '../../tests/cliE2eDiagnostics'
+import {
+  runTycSession,
+  testTaskRendererDoesNotPrintTransientWorkerProgress as runTaskRendererDoesNotPrintTransientWorkerProgress,
+  testTaskRendererHidesHiddenWorkerProgress as runTaskRendererHidesHiddenWorkerProgress,
+  testPromptHistoryCyclesPreviousInputWithArrowKeys as runPromptHistoryCyclesPreviousInputWithArrowKeys,
+  testQuitPromptCtrlCCancelsAndCtrlDExits as runQuitPromptCtrlCCancelsAndCtrlDExits,
+} from '../../tests/cliE2eDiagnostics'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -32,7 +38,6 @@ export const testCliHelloWorldProducesAssistantResponse = async () => {
     env: { TYCLI_HOTKEY_MENUS: '0' },
     timeoutMs: 90_000,
     runner: 'pty',
-    isolateHome: false,
   })
 
   assert(result.code === 0, `Expected exit code 0, got ${String(result.code)}\n${result.output}`)
@@ -53,3 +58,114 @@ export const testCliHelloWorldProducesAssistantResponse = async () => {
 testCliHelloWorldProducesAssistantResponse.description =
   'Starts yarn tycli, sends hello world through the configured provider, and expects an assistant response.'
 testCliHelloWorldProducesAssistantResponse.timeoutMs = 110_000
+
+export const testCliToolsListsTaskyonDocumentationProvider = async () => {
+  const result = await runTycSession({
+    testName: 'testCliToolsListsTaskyonDocumentationProvider',
+    steps: [
+      { waitFor: 'tycli ready.', input: '/tools\n' },
+      {
+        waitFor: 'getTaskyonDocumentationDocuments',
+        failOn: ['Fatal error', 'does not provide an export named'],
+        input: '/exit\n',
+      },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    timeoutMs: 60_000,
+    runner: 'pty',
+  })
+
+  assert(result.code === 0, `Expected exit code 0, got ${String(result.code)}\n${result.output}`)
+  assert(
+    result.output.includes('taskyonDocumentation'),
+    `Expected taskyonDocumentation in CLI /tools output.\n${result.output}`,
+  )
+  assert(
+    result.output.includes('getTaskyonDocumentationDocuments'),
+    `Expected getTaskyonDocumentationDocuments in CLI /tools output.\n${result.output}`,
+  )
+
+  return { success: true }
+}
+
+testCliToolsListsTaskyonDocumentationProvider.description =
+  'Starts yarn tycli, runs /tools, and verifies the Taskyon docs provider is registered in the real CLI.'
+testCliToolsListsTaskyonDocumentationProvider.timeoutMs = 70_000
+
+export const testCliDocumentationQuestionCompletesWithoutFatal = async () => {
+  const result = await runTycSession({
+    testName: 'testCliDocumentationQuestionCompletesWithoutFatal',
+    steps: [
+      {
+        waitFor: 'tycli ready.',
+        input:
+          'cool... According to the Taskyon docs, what is the difference between parentID and priorID in a tasknode?\n',
+      },
+      {
+        waitFor: 'taskyonDocumentation',
+        failOn: [
+          'Fatal error',
+          "Cannot find module '/workspace/src/register.ts'",
+          'No key configured',
+          'Cannot connect to API',
+        ],
+        input: '',
+      },
+      {
+        waitFor: '| finished]',
+        failOn: ['Fatal error', "Cannot find module '/workspace/src/register.ts'"],
+        input: '/exit\n',
+      },
+    ],
+    env: {
+      TYCLI_HOTKEY_MENUS: '0',
+      NODE_OPTIONS: '--import ./src/register.ts',
+    },
+    isolateHome: false,
+    timeoutMs: 180_000,
+    runner: 'pipe',
+  })
+
+  assert(result.code === 0, `Expected exit code 0, got ${String(result.code)}\n${result.output}`)
+  assert(
+    result.output.includes('taskyonDocumentation'),
+    `Expected taskyonDocumentation to be called.\n${result.output}`,
+  )
+  assert(
+    result.output.includes('parentID') && result.output.includes('priorID'),
+    `Expected final answer to mention parentID and priorID.\n${result.output}`,
+  )
+  assert(!result.output.includes('Fatal error'), `Unexpected fatal error.\n${result.output}`)
+
+  return { success: true }
+}
+
+testCliDocumentationQuestionCompletesWithoutFatal.description =
+  'Starts yarn tycli, asks a Taskyon docs question through the real CLI, and verifies it exits without the inherited loader fatal.'
+testCliDocumentationQuestionCompletesWithoutFatal.timeoutMs = 200_000
+
+export const testCliQuitPromptCtrlCCancelsAndCtrlDExits = async () =>
+  await runQuitPromptCtrlCCancelsAndCtrlDExits()
+
+testCliQuitPromptCtrlCCancelsAndCtrlDExits.description =
+  'Starts yarn tycli and verifies Ctrl+C cancels the quit prompt while Ctrl+D still exits.'
+testCliQuitPromptCtrlCCancelsAndCtrlDExits.timeoutMs = 40_000
+
+export const testCliPromptHistoryCyclesPreviousInputWithArrowKeys = async () =>
+  await runPromptHistoryCyclesPreviousInputWithArrowKeys()
+
+testCliPromptHistoryCyclesPreviousInputWithArrowKeys.description =
+  'Starts yarn tycli and verifies Up replays persisted prompt history without literal escape bytes.'
+testCliPromptHistoryCyclesPreviousInputWithArrowKeys.timeoutMs = 60_000
+
+export const testCliTaskRendererDoesNotPrintTransientWorkerProgress = () =>
+  runTaskRendererDoesNotPrintTransientWorkerProgress()
+
+testCliTaskRendererDoesNotPrintTransientWorkerProgress.description =
+  'Verifies tycli does not print transient worker progress as repeated transcript lines.'
+
+export const testCliTaskRendererHidesHiddenWorkerProgress = () =>
+  runTaskRendererHidesHiddenWorkerProgress()
+
+testCliTaskRendererHidesHiddenWorkerProgress.description =
+  'Verifies tycli suppresses worker progress for tools hidden from chat.'
