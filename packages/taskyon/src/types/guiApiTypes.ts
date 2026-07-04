@@ -1,4 +1,8 @@
-import { defineFrpProtocol, mergeFrpProtocols } from '@taskyon/shared/modules/frpBus'
+import {
+  defineFrpProtocol,
+  mergeFrpProtocols,
+  type ProtocolMessage,
+} from '@taskyon/shared/modules/frpBus'
 import type { PartialDeep } from 'type-fest'
 import { z } from 'zod'
 import { taskyonProtocol } from '../api/taskyonProtocol'
@@ -75,5 +79,5 @@ export const TaskyonGuiMessage = z.discriminatedUnion('type', [
   z.object({ ...BaseMessage.shape, ...taskyonGuiProtocol.commands.pasteClipboard.response.shape }),
 ])
 
-export type TaskyonGuiMessage = z.infer<typeof TaskyonGuiMessage>
+export type TaskyonGuiMessage = ProtocolMessage<typeof taskyonGuiProtocol>
 export type guiMessageTypes = TaskyonGuiMessage['type']

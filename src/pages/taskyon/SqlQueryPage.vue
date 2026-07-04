@@ -442,7 +442,7 @@ Only use the tool 'setSqlQuery' Tool if you think the user wants to change the S
 
         return ctx.createSubtasksResult([
           createChatCompletionTask({
-            prompts: [toolPrompt],
+            appendSystemPrompts: [toolPrompt],
             allowedTools: ['setSqlQuery'],
           }),
         ])

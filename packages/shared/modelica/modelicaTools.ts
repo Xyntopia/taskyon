@@ -258,7 +258,7 @@ ${sourcesSection}
 
       return ctx.createSubtasksResult([
         createChatCompletionTask({
-          prompts: [contextPrompt],
+          appendSystemPrompts: [contextPrompt],
           allowedTools: [
             'updateModelicaDocument',
             'getModelicaCompilerStatus',
@@ -441,7 +441,7 @@ Constraints:
       return ctx.createSubtasksResult([
         [
           createChatCompletionTask({
-            prompts: [cyclePrompt],
+            appendSystemPrompts: [cyclePrompt],
             allowedTools: ['updateModelicaDocument'],
           }),
           toolCall({
@@ -527,7 +527,7 @@ Constraints:
         })
         return ctx.createSubtasksResult([
           createChatCompletionTask({
-            prompts: [
+            appendSystemPrompts: [
               'You called updateModelicaDocument but did not provide any patches or newContent. Provide edits or do not call the tool.',
             ],
             allowedTools: ['updateModelicaDocument'],

@@ -125,8 +125,7 @@
 <script setup lang="ts">
 import { matArrowDropDown } from '@quasar/extras/material-icons'
 import tyMarkdown from '@taskyon/shared/components/tyMarkdown.vue'
-import type { TaskTreeNode } from '@taskyon/taskyon'
-import { type TaskNode } from '@taskyon/taskyon'
+import type { TaskNode } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
@@ -339,53 +338,72 @@ const taskHierarchy = computed(() => {
   return taskTree
 })
 
-const tyList2QTree = (tasklist: TaskTreeNode[]) =>
-  tasklist.map((ttn) => ({
-    label: ttn.task.name || ttn.task.id.toString().slice(-5),
-    taskid: ttn.task.id,
-    task: ttn.task,
-    // we can only have expandable subchains, if our tasks are a "functioncall"
-    lazy: ttn.task.content.type === 'functioncall',
-  })) as taskTreeNodeType[]
+const taskCreatedAt = (task: TaskNode) => task.created_at ?? 0
 
-const tyChain2QTree = (taskChain: TaskTreeNode[][]) => {
-  if (taskChain.length > 1) {
-    return taskChain.map((tc) => ({
-      label: `SubChain ${tc[0]?.task.id.slice(0, 3)}`,
-      taskid: `SubChain ${tc[0]?.task.id}`,
-      children: tyList2QTree(tc),
-      lazy: false,
-    })) as taskTreeNodeType[]
-  } else if (taskChain.length === 1) {
-    return tyList2QTree(taskChain[0]!)
-  } else {
-    return []
+const createTaskTreeMap = (extraTasks: readonly TaskNode[] = []) =>
+  new Map([...props.selectedThread, ...extraTasks].map((task) => [task.id, task]))
+
+const createTaskTreeNode = (task: TaskNode, children: taskTreeNodeType[] = []) => ({
+  label: task.name || task.id.toString().slice(-5),
+  taskid: task.id,
+  task,
+  ...(children.length > 0 ? { children } : {}),
+  lazy: task.content.type === 'functioncall',
+})
+
+const findDirectChildTasks = (taskId: string, tasks: ReadonlyMap<string, TaskNode>) =>
+  [...tasks.values()]
+    .filter((task) => task.parentID === taskId && !task.priorID)
+    .sort((a, b) => taskCreatedAt(a) - taskCreatedAt(b))
+
+const findNextSiblingTask = (taskId: string, tasks: ReadonlyMap<string, TaskNode>) =>
+  [...tasks.values()]
+    .filter((task) => task.priorID === taskId)
+    .sort((a, b) => taskCreatedAt(a) - taskCreatedAt(b))[0]
+
+const buildSiblingQTree = (
+  firstTask: TaskNode,
+  tasks: ReadonlyMap<string, TaskNode>,
+  includeChildren: boolean,
+) => {
+  const branch: taskTreeNodeType[] = []
+  const visited = new Set<string>()
+  let current: TaskNode | undefined = firstTask
+
+  while (current && !visited.has(current.id)) {
+    visited.add(current.id)
+    const children = includeChildren ? taskChainsToQTree(buildChildChains(current.id, tasks)) : []
+    branch.push(createTaskTreeNode(current, children))
+    current = findNextSiblingTask(current.id, tasks)
   }
+
+  return branch
 }
 
-const getQTree = async (taskID: string, justChildren = false) => {
-  const ty = await tystate.taskyon
+const buildChildChains = (taskId: string, tasks: ReadonlyMap<string, TaskNode>) =>
+  findDirectChildTasks(taskId, tasks).map((child) => buildSiblingQTree(child, tasks, false))
 
-  const { task, children } = await ty.buildTaskTreeNode(taskID, 1)
+const taskChainsToQTree = (taskChains: taskTreeNodeType[][]) => {
+  if (taskChains.length > 1) {
+    return taskChains.map((chain) => ({
+      label: `SubChain ${chain[0]?.taskid.slice(0, 3)}`,
+      taskid: `SubChain ${chain[0]?.taskid}`,
+      children: chain,
+      lazy: false,
+    }))
+  }
+  return taskChains[0] ?? []
+}
 
-  const childrenTrees = tyChain2QTree(children)
+const getQTree = async (taskID: string, justChildren = false): Promise<taskTreeNodeType[]> => {
+  const taskyonClient = await tystate.taskyonClient
+  const fetchedTask = taskById.value.get(taskID) ?? (await taskyonClient.getTask(taskID))
+  if (!fetchedTask) return []
+  const tasks = createTaskTreeMap([fetchedTask])
 
-  if (justChildren) return childrenTrees
+  if (justChildren) return taskChainsToQTree(buildChildChains(taskID, tasks))
 
-  const siblings = await ty.buildSiblingChain(taskID, 1)
-  const siblingNodes = tyList2QTree(siblings)
-
-  const taskTree: taskTreeNodeType[] = [
-    {
-      label: task.name || task.id.toString().slice(-5),
-      taskid: task.id,
-      task,
-      children: childrenTrees,
-    },
-  ]
-
-  taskTree.push(...siblingNodes.slice(1))
-  return taskTree
+  return buildSiblingQTree(fetchedTask, tasks, true)
 }
 
 const taskTree = asyncComputed<taskTreeNodeType[]>(async () => {

@@ -41,7 +41,7 @@ export type SlashParsed = {
 export type ChatCompletionTaskArgs = {
   allowedTools: string[]
   goal?: 'SimpleCompletion' | 'ChooseTool'
-  prompts?: string[]
+  appendSystemPrompts?: string[]
 }
 
 export type LlmModel = {
@@ -68,6 +68,7 @@ export const SLASH_COMMANDS = [
   'settings',
   'client',
   'resume',
+  'tree',
   'exit',
   'quit',
 ] as const

@@ -34,17 +34,18 @@
 import { matMoreHoriz } from '@quasar/extras/material-icons'
 import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
 import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
-import { EntryNodeSettingsSchema } from '@taskyon/taskyon'
 import type { JSONSchema7 } from 'json-schema'
 import type { iconMap } from 'src/modules/icons'
 import { iconRegistry, settingsIcons } from 'src/modules/icons'
 import { appConfiguration } from 'src/modules/taskyon/types'
 import { buildSlimView } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, reactive } from 'vue'
 import z from 'zod'
 
 const state = useAppStateStore()
+const tystate = useTaskyonStore()
 
 const em = computed(() => state.appConfiguration.expertMode)
 const entryNodePickKeys = [
@@ -59,6 +60,48 @@ const entryNodePickKeys = [
 const slimChatKeys = computed(() => (em.value ? entryNodePickKeys : ['reasoning_effort']))
 
 const entryNode = computed(() => state.toolchainConfig[state.llmSettings.entryFunction]!)
+type ToolSettingsObjectSchema = {
+  type: 'object'
+  properties: Record<string, unknown>
+  required?: string[]
+}
+const emptyToolSettingsSchema = (): ToolSettingsObjectSchema => ({
+  type: 'object',
+  properties: {},
+})
+const entryNodeSchema = computed((): ToolSettingsObjectSchema => {
+  const parameters = tystate.allTools[state.llmSettings.entryFunction]?.parameters
+  if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)) {
+    return emptyToolSettingsSchema()
+  }
+  const properties = parameters.properties
+  if (!properties || typeof properties !== 'object' || Array.isArray(properties)) {
+    return emptyToolSettingsSchema()
+  }
+  return {
+    type: 'object',
+    properties: properties as Record<string, unknown>,
+    ...(Array.isArray(parameters.required) ? { required: parameters.required } : {}),
+  }
+})
+const entryNodeWebSearchSchema = computed(() => {
+  const webSearch = entryNodeSchema.value.properties.websearch
+  return webSearch && typeof webSearch === 'object' && !Array.isArray(webSearch)
+    ? ({
+        type: 'object',
+        properties:
+          'properties' in webSearch &&
+          webSearch.properties &&
+          typeof webSearch.properties === 'object' &&
+          !Array.isArray(webSearch.properties)
+            ? (webSearch.properties as Record<string, unknown>)
+            : {},
+        ...('required' in webSearch && Array.isArray(webSearch.required)
+          ? { required: webSearch.required }
+          : {}),
+      } satisfies ToolSettingsObjectSchema)
+    : emptyToolSettingsSchema()
+})
 type EntryNodeWebSearchSettings = {
   enabled?: boolean
   max_results?: number
@@ -98,19 +141,14 @@ const slimView = computed(() =>
     },
     {
       obj: entryNode.value,
-      schema: EntryNodeSettingsSchema,
+      schema: entryNodeSchema.value,
       pickKeys: [...slimChatKeys.value],
     },
     ...(em.value
       ? [
           {
             obj: entryNodeWebSearch,
-            schema:
-              EntryNodeSettingsSchema.properties.websearch &&
-              typeof EntryNodeSettingsSchema.properties.websearch === 'object' &&
-              !Array.isArray(EntryNodeSettingsSchema.properties.websearch)
-                ? EntryNodeSettingsSchema.properties.websearch
-                : { type: 'object', properties: {} },
+            schema: entryNodeWebSearchSchema.value,
             pickKeys: ['max_results'],
           },
         ]

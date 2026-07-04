@@ -1,5 +1,10 @@
 import { TaskNode as TaskNodeSchema, type TaskNode } from '../types/taskNode'
-import { buildTaskPlannerTaskChains, normalizePlannedTaskInput } from '../tools/TaskPlannerTool'
+import { createSubtasksResult, type toolContext } from '../types/toolApi'
+import {
+  buildTaskPlannerTaskChains,
+  normalizePlannedTaskInput,
+  taskPlanner,
+} from '../tools/TaskPlannerTool'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -48,10 +53,10 @@ export const testTaskPlannerBuildsParallelAndSequentialChains = () => {
 
   assert(chains.length === 2, `Expected 2 parallel chains, got ${chains.length}`)
   assert(
-    chains[0]?.length === 8,
-    `Expected 8 tasks in first sequential chain, got ${chains[0]?.length}`,
+    chains[0]?.length === 10,
+    `Expected 10 tasks in first sequential chain, got ${chains[0]?.length}`,
   )
-  assert(chains[1]?.length === 4, `Expected 4 tasks in second chain, got ${chains[1]?.length}`)
+  assert(chains[1]?.length === 6, `Expected 6 tasks in second chain, got ${chains[1]?.length}`)
 
   const firstTask = chains[0]?.[0]
   assert(firstTask?.role === 'user', 'Expected first planner bootstrap task to be a user message')
@@ -81,9 +86,9 @@ export const testTaskPlannerBuildsParallelAndSequentialChains = () => {
       planningCall.arguments &&
       typeof planningCall.arguments === 'object' &&
       !('goal' in planningCall.arguments) &&
-      'prompts' in planningCall.arguments &&
-      Array.isArray(planningCall.arguments.prompts),
-    'Expected planner chatCompletion to use prompts without deprecated goal',
+      'appendSystemPrompts' in planningCall.arguments &&
+      Array.isArray(planningCall.arguments.appendSystemPrompts),
+    'Expected planner chatCompletion to use appendSystemPrompts without deprecated goal',
   )
 
   const firstEntryNodeCall = getFunctionCall(chains[0]?.[3])
@@ -115,6 +120,22 @@ export const testTaskPlannerBuildsParallelAndSequentialChains = () => {
       Array.isArray(restrictedEntryNodeCall.arguments.allowedTools) &&
       restrictedEntryNodeCall.arguments.allowedTools[0] === 'websearch',
     'Expected object tasks to forward allowedTools to entryNode',
+  )
+
+  const reviewMessage = chains[0]?.[8]
+  assert(
+    reviewMessage?.content.type === 'message' &&
+      reviewMessage.content.data.includes('Planner review checkpoint.'),
+    'Expected planner branch to end with a review checkpoint message',
+  )
+
+  const reviewEntryNodeCall = getFunctionCall(chains[0]?.[9])
+  assert(
+    reviewEntryNodeCall &&
+      typeof reviewEntryNodeCall === 'object' &&
+      'name' in reviewEntryNodeCall &&
+      reviewEntryNodeCall.name === 'entryNode',
+    'Expected planner review checkpoint to re-enter entryNode',
   )
 
   return { success: true }
@@ -149,7 +170,32 @@ export const testTaskPlannerNormalizesTaskInputs = () => {
   return { success: true }
 }
 
+export const testTaskPlannerBreakdownBranchTerminates = async () => {
+  if (!taskPlanner.function) throw new Error('Expected taskPlanner to have a function')
+
+  const context: toolContext = {
+    getExecutionTaskChain: async () => createPlannerContext(),
+    createSubtasksResult,
+    getSecret: async () => null,
+    setSecret: async () => undefined,
+    stopSignal: new AbortController().signal,
+    toolId: 'test-task-planner',
+  }
+  const result = await taskPlanner.function({ tasks: [['Inspect project']] }, context)
+  const firstBranch = result.taskChainList[0]
+  const terminalTask = firstBranch?.at(-1)
+
+  assert(
+    terminalTask?.content.type === 'return',
+    'Expected taskPlanner bookkeeping branch to end with a return task',
+  )
+
+  return { success: true }
+}
+
 testTaskPlannerBuildsParallelAndSequentialChains.description =
   'Builds planner task chains where outer groups are parallel and inner tasks expand into sequential entryNode bootstrap chains.'
 testTaskPlannerNormalizesTaskInputs.description =
   'Normalizes planner task inputs and rejects invalid task planner objects at the boundary.'
+testTaskPlannerBreakdownBranchTerminates.description =
+  'Ensures taskPlanner bookkeeping branches terminate so parent tasks do not wait forever.'

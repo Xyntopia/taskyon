@@ -423,7 +423,7 @@ const createTools = () => {
       },
     },
     createChatCompletionTask({
-      prompts: [
+      appendSystemPrompts: [
         [
           'Summarize the updates you just completed for the user.',
           'Keep the answer short and concrete.',
@@ -461,7 +461,9 @@ const createTools = () => {
 
         return ctx.createSubtasksResult([
           createChatCompletionTask({
-            prompts: [buildAssistantContext({ toolResultSection: toolResultSection || '(none)' })],
+            appendSystemPrompts: [
+              buildAssistantContext({ toolResultSection: toolResultSection || '(none)' }),
+            ],
             allowedTools: ['searchWorkspaceFiles', 'readWorkspaceFiles', 'updateFiles'],
           }),
         ])

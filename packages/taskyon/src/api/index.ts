@@ -9,6 +9,7 @@ import { partialTaskDraft } from '../types/taskNode'
 import { createClientTool, createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 import { sha256UrlSafeHashFromFile } from '../utils/encoding'
 import { createPortClient, createStream, type Port } from '@taskyon/shared/modules/frpBus'
+import { createLruCache } from '@taskyon/shared/modules/lruCache'
 import type {
   ProtocolClientForPort,
   ProtocolMessage,
@@ -129,13 +130,19 @@ type RunTasksFunction = (
   quitCondition: ((t: TaskNode) => boolean) | TaskContentType | TaskContentType[],
   opts: processTasksOpts,
 ) => Promise<TaskNode>
+type TaskyonClientOptions = {
+  taskCacheSize?: number
+}
 
 const isTaskCreatedMessage = (
-  message: { type: string } | TaskyonMessageType,
+  message: unknown,
 ): message is Extract<TaskyonMessageType, { type: 'taskCreated' }> & {
   task: TaskNodeWithParent
 } => {
   return (
+    typeof message === 'object' &&
+    message !== null &&
+    'type' in message &&
     message.type === 'taskCreated' &&
     'task' in message &&
     !!message.task &&
@@ -272,13 +279,31 @@ const uploadFile = async (addFile: AddFile, file: File) => {
 
 export const createTaskyonClient = <Tx extends { type: string }, Rx extends { type: string }>(
   tyPort: TaskyonClientPort<Tx, Rx>,
+  options: TaskyonClientOptions = {},
 ) => {
   const protocolClient = createPortClient(tyPort, taskyonProtocol)
   const toolExecutionClient = createToolExecutionClient(tyPort)
   const send = createSendTasks(tyPort, protocolClient.createTaskChain)
+  const taskCache =
+    options.taskCacheSize && options.taskCacheSize > 0
+      ? createLruCache<string, TaskNode>(options.taskCacheSize)
+      : undefined
+
+  if (taskCache) {
+    tyPort.receive((msg) => {
+      if (isTaskCreatedMessage(msg)) taskCache.set(msg.task.id, msg.task)
+    })
+  }
 
   return {
     ...protocolClient,
+    getTask: async (taskId: string) => {
+      const cachedTask = taskCache?.get(taskId)
+      if (cachedTask) return cachedTask
+      const task = await protocolClient.getTask({ id: taskId })
+      if (task) taskCache?.set(task.id, task)
+      return task
+    },
     runTasks: createRunTasks(send),
     sendFile: (file: File) => uploadFile(protocolClient.addFile, file),
     callTool: toolExecutionClient.callTool,

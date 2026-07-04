@@ -136,7 +136,7 @@ const getFunctionArgs = (data: unknown): Record<string, unknown> | undefined => 
 
 const hasPromptSnippet = (data: unknown, snippet: string): boolean => {
   const args = getFunctionArgs(data)
-  const prompts = args?.prompts
+  const prompts = args?.appendSystemPrompts
   return (
     Array.isArray(prompts) &&
     prompts.some((prompt) => typeof prompt === 'string' && prompt.includes(snippet))

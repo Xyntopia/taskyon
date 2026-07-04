@@ -8,6 +8,7 @@ type DownloadFileArgs = {
   filePath?: string
   artifactRoot?: string
   expectedFileType?: 'pdf'
+  maxBytes?: number
   timeoutMs?: number
 }
 
@@ -58,6 +59,12 @@ export const downloadFileTool = createTool({
         description:
           'Optional expected file type. When set to pdf, the tool rejects HTML/error pages and only saves real PDF bytes.',
       },
+      maxBytes: {
+        type: 'integer',
+        minimum: 1,
+        description:
+          'Optional byte limit. Use this for raw HTML/text/page downloads when a normalized summary or manifest is enough; omit it for expected large PDFs or datasets.',
+      },
       timeoutMs: {
         type: 'integer',
         default: 120000,
@@ -94,6 +101,11 @@ export const downloadFileTool = createTool({
         const contentType = response.headers.get('content-type') ?? 'application/octet-stream'
         const bytes = new Uint8Array(await response.arrayBuffer())
         if (bytes.length === 0) throw new Error('Download returned an empty response.')
+        if (args.maxBytes !== undefined && bytes.length > args.maxBytes) {
+          throw new Error(
+            `Download returned ${bytes.length} bytes, exceeding maxBytes ${args.maxBytes}.`,
+          )
+        }
         if (shouldValidatePdf(args) && !looksLikePdf(bytes)) {
           throw new Error(
             `Download did not return PDF bytes. Content-Type was ${contentType}; first bytes were ${Array.from(

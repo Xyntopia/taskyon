@@ -3,7 +3,9 @@
 .corepack
 .yarn
 .tmp
+tycli-e2e-runs
 node_modules
+.pnpm-store
 
 # Quasar core related directories
 .quasar

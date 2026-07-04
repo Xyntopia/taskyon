@@ -95,29 +95,28 @@ is now unreadable.
     },
   })
 
-export const createAddNewToolTool = () => {
-  const toolJsonSchema = craeteToolJsonSchema()
-  return createTool({
-    name: 'addNewTool',
-    description: 'Validates and registers a new tool with taskyon.',
-    longDescription: `This tool takes a tool definition, validates it and registers it with taskyon.
+export const addNewTool = createTool({
+  name: 'addNewTool',
+  description: 'Validates and registers a new tool with taskyon.',
+  longDescription: `This tool takes a tool definition, validates it and registers it with taskyon.
 If you need examples of how to create tools, you can use the toolSearcher to retrieve
 existing tool definitions, including their source code when available. Additionally, you can use the toolCreationWizard
 to get some more general information how to create tools.`,
-    parameters: toolJsonSchema as JSONSchema7 & Record<string, unknown> & Readonly<JSONSchema>,
-    function: (toolDef: unknown, ctx) => {
-      const toolDefinition = ToolBase.parse(toolDef)
-      return ctx.createSubtasksResult([
-        [
-          {
-            role: 'assistant',
-            content: { type: 'tooldefinition', data: toolDefinition },
-          },
-        ],
-      ])
-    },
-  })
-}
+  parameters: craeteToolJsonSchema() as JSONSchema7 &
+    Record<string, unknown> &
+    Readonly<JSONSchema>,
+  function: (toolDef: unknown, ctx) => {
+    const toolDefinition = ToolBase.parse(toolDef)
+    return ctx.createSubtasksResult([
+      [
+        {
+          role: 'assistant',
+          content: { type: 'tooldefinition', data: toolDefinition },
+        },
+      ],
+    ])
+  },
+})
 
 export const toolCreationWizard = createTool({
   parameters: {
@@ -142,7 +141,7 @@ export const toolCreationWizard = createTool({
           arguments: { withCode: true, analyze: false },
         }),
         createChatCompletionTask({
-          prompts: [
+          appendSystemPrompts: [
             `You need to retrieve an example of an existing tool in order to help you to create the new tool.
 If there are none that are similar just make a guess which tool code might be helpful to you!
 From the list of tools you just extracted with the toolSearcher, you have to choose one!
@@ -151,14 +150,14 @@ Explain in one sentence, why you are choosing this tool.
           ],
         }),
         createChatCompletionTask({
-          prompts: [
+          appendSystemPrompts: [
             `- Use the toolSearcher function again. You are required to use it.
 - Use the name you selected for the "toolName" argument in the "toolSearcher" tool`,
           ],
           allowedTools: ['toolSearcher'],
         }),
         createChatCompletionTask({
-          prompts: [
+          appendSystemPrompts: [
             `
 You can return different types of tasks by calling createSubtasksResult.
 createSubtasksResult accepts a list of task *chains* (an array of arrays of tasks).

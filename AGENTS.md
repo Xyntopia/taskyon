@@ -13,6 +13,10 @@
 - No generic `isRecord`-style guards. Narrow at the domain boundary, then pass typed values downstream.
 - No fake no-op implementations. Model unavailable capabilities as optional.
 - Before creating or refactoring a tool, first search for similar tools in `packages/taskyon/src/tools/` and inspect how they are implemented. Reuse local patterns like `ctx.createSubtasksResult`, `toolCall`, `chatCompletion`, and re-entry chains instead of inventing a new orchestration style.
+- Taskyon tool declarations should keep the tool object readable in one place. Prefer one explicit `createTool({ ... })` declaration with the name, description, parameters schema, render options, and `function` body together. Do not split a tool into a wrapper factory, separate parameter constant, or delegated `function: (...) => runSomeTool(...)` unless that abstraction is reused by multiple tools or removes real complexity.
+- Tool parameter schemas are the source of truth for tool settings. Do not export or import separate tool-specific settings schemas for UI shortcuts. UI settings views should read schemas from runtime tool definitions, the same way execution reads tool defaults from `tool.parameters`.
+- If a `createTool` function body grows too large, extract detail logic into named helper functions, but keep the top-level workflow visible inside the inline `function` body. For example, routing logic such as an entry-node `match(...)` should stay in the tool function so a developer can understand the tool flow in one place.
+- When a Taskyon tool returns workflow composition, make the returned task chain explicit at the call site. Prefer visible arrays such as `[task1, task2, task3]` or `[[...branchA], [...branchB]]` near `createSubtasksResult(...)`. Do not hide the number, order, or branching shape of returned tasks behind thin helpers.
 - Diagnostics and Taskyon test modules must stay compatible with both browser diagnostics and Node/`tycli` diagnostics. Do not add tests that only work in one runtime unless the unsupported runtime is explicitly modeled and skipped at the diagnostics boundary.
 - Diagnostics that exercise LLM behavior must reuse the active runtime/profile settings from the harness (browser profile, `tycli` config, or explicit diagnostic overrides). Do not construct parallel provider/model/API config inside individual tests; if a standard baseline is needed, reset or select that profile before running the diagnostic.
 - Do not auto-run `yarn lint` or `yarn lint:fix` (neither repo-wide nor targeted) unless the user explicitly asks. Linting is intentionally not default because it is comparatively expensive. Instead, remind the user to run `yarn lint` themselves before committing, or ask whether they want you to run it when wrapping up. Targeted `yarn eslint <path>` is fine only when needed to verify a specific change and only when explicitly requested.
@@ -75,6 +79,7 @@
 ## `tycli` development workflow
 
 - When implementing or debugging `tycli` behavior, use `tycli` yourself first. Start it with `yarn tycli`, run the real user-facing prompt or command, and let the observed behavior drive the fix.
+- In tycli e2e experiments, do not take over implementation, test fixes, README fixes, or project artifact patches yourself after tycli has started. If independent verification fails, treat the run as failed or unfinished, feed the concise failure evidence back into tycli, and let tycli perform the correction. Manual edits to experiment projects are diagnostic only and do not count as a successful no-intervention proof run.
 - Use the provider and model requested for the workflow. For the current web-research workflow, use the `chatgpt-codex` provider and the requested mini model. If the requested model name does not match an available model id, stop and clarify instead of silently substituting another model.
 - Inspect the generated `tycli` log and saved conversation transcript for every non-trivial `tycli` debugging pass. The transcript often contains worker/tool-call details that are not visible in the terminal UI.
 - Track bugs found while using `tycli`. Fix bugs that block the requested workflow first when they are on the same root-cause path.
@@ -121,6 +126,13 @@
 - **`packages/secure-tunnel`** — secure tunnel. Built with Vite.
 - **`packages/rumoca`** — **git submodule** (separate repo, Rust/Modelica compiler). See its own `AGENTS.md`. Excluded from root ESLint.
 - **`packages/yatra`** — **separate git repo** (Python). Excluded from root ESLint.
+
+## Package boundaries
+
+- Keep `packages/tyclient` as small as practical while still convenient to use. Before adding a
+  dependency to tyclient, check whether the needed helper can live in a tiny dedicated module rather
+  than importing from a broad shared utility barrel. Prefer narrow, tree-shakeable imports and avoid
+  pulling large shared surfaces into the published client package.
 
 ## Style
 

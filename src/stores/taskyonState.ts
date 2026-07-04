@@ -1216,7 +1216,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       cs,
     )
   })
-  const taskyonClient = taskyon.then((ty) => createTaskyonClient(ty.port))
+  const taskyonClient = taskyon.then((ty) => createTaskyonClient(ty.port, { taskCacheSize: 0 }))
   const allTools = reactiveTools(taskyon, taskyonClient)
 
   const entryNodeTool = createStandardEntryNodeTool({
@@ -1299,7 +1299,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   // it lives outside the taskyon logic. iApiInside is used by our internal
   // services e.g. the engine to communicate to the outside.
   const { x: uiApiOutside, y: uiApiInside } = createProtocolPort(taskyonGuiProtocol)
-  const uiTaskyonClient = createTaskyonClient(uiApiOutside)
+  const uiTaskyonClient = createTaskyonClient(uiApiOutside, { taskCacheSize: 0 })
 
   void taskyon.then(async (ty) => {
     //const taskStream = tyInit.taskManagerInstance.taskStream
@@ -1658,6 +1658,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     getMeta,
     getDeviceId,
     taskyon,
+    taskyonClient,
     setNewContentDraft,
     setContentDraftFromTask,
     allTools: computed(() => allTools.value),

@@ -15,7 +15,7 @@ import { proceduralTools } from '../tools/proceduralGraphics'
 import { taskOrganizationTools, taskSearcher } from '../tools/TaskPlannerTool'
 import { testingTools } from '../tools/testTools'
 import {
-  createAddNewToolTool,
+  addNewTool,
   createMcpToolImporter,
   createToolSearcher,
   toolCreationWizard,
@@ -40,7 +40,12 @@ import type { CryptoSession } from '../utils/cryptoSession'
 import { createCryptoSession } from '../utils/cryptoSession'
 import type { EncryptedDataRow } from '../utils/encrypt'
 import { encryptCompressObject } from '../utils/fileUtils'
-import type { extractStreamType, IframeMultiPlexer, Port } from '@taskyon/shared/modules/frpBus'
+import type {
+  extractStreamType,
+  IframeMultiPlexer,
+  Port,
+  ProtocolMessage,
+} from '@taskyon/shared/modules/frpBus'
 import {
   createIframeMux,
   createMessagePortAdapter,
@@ -69,8 +74,10 @@ import { materializeTaskyonFunctionArguments } from './taskVariables'
 import { createWithDefaults } from './tools'
 import type { ReadonlyDeep } from 'type-fest'
 
+type TaskyonProtocolMessage = ProtocolMessage<typeof taskyonProtocol>
+
 function createApi(
-  insidePort: Port<TaskyonMessage, TaskyonMessage>,
+  insidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
   taskManagerInstance: Thunk<TyTaskManager>,
   queueTask: (id: string) => void,
   cs: Thunk<CryptoSession>,
@@ -125,6 +132,7 @@ function createApi(
       },
       listTools: async (request) =>
         await taskManagerInstance().updateToolDefinitions(request.includeHidden),
+      getTask: async ({ id }) => (await taskManagerInstance().getTask(id)) ?? null,
     },
     {
       onError: (error) =>
@@ -192,7 +200,7 @@ const staticContext = (createIframeMultiPlexer: CreateIframeMultiPlexer) => {
     ...taskOrganizationTools,
     ...webResearchTools,
     ...proceduralTools,
-    createAddNewToolTool(),
+    addNewTool,
     wfcGenerator,
     executePythonScript,
     executeJavaScript,
@@ -234,8 +242,8 @@ const dynamicContext =
     llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
     entryNode: Thunk<ReadonlyDeep<partialTaskDraft>>,
     ToolList: InternalTool[],
-    outsidePort: Port<TaskyonMessage, TaskyonMessage>,
-    insidePort: Port<TaskyonMessage, TaskyonMessage>,
+    outsidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
+    insidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
     iframeMultiPlexer: IframeMultiPlexer,
     toolchainConfig: Thunk<Record<string, FunctionArguments>>,
     options: { indexTaskVectors: boolean },
@@ -539,7 +547,6 @@ export async function tyCore(
         // TODO:  what do these funcitons here do?
         //        I think they bulid a treeview from tasks..  but it might make sense
         //        to move them out of tycore and have them as seperate functions!
-        'buildTaskTreeNode',
         'buildSiblingChain',
         'deleteAllTasks',
       ],

@@ -1581,7 +1581,7 @@ export const testChatCompletion = async () => {
     structuredResponse = await chatCompletion.function(
       {
         model: 'google/gemini-2.5-flash-lite',
-        prompts: [
+        appendSystemPrompts: [
           `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
         ],
         schema: {
@@ -1975,7 +1975,7 @@ export const testFileUpload = async () => {
       content: { type: 'files', data: [id] },
     },
     createChatCompletionTask({
-      prompts: ['The user just uploaded a file, can you extract the data below?'],
+      appendSystemPrompts: ['The user just uploaded a file, can you extract the data below?'],
       options: { verbosity: 'high' },
       reasoning_effort: 'low',
       //reasoning_effort: undefined,

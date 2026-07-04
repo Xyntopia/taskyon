@@ -126,7 +126,7 @@ const createPlannerTaskChain = (
     },
   },
   createChatCompletionTask({
-    prompts: [plannerTaskChainPrompt],
+    appendSystemPrompts: [plannerTaskChainPrompt],
   }),
   {
     role: 'user',
@@ -143,16 +143,41 @@ const createPlannerTaskChain = (
   }),
 ]
 
+const createPlannerReviewTaskChain = (plannerContext: string): partialTaskDraft[] => [
+  {
+    role: 'user',
+    content: {
+      type: 'message',
+      data: [
+        'Planner review checkpoint.',
+        '',
+        'Compare the completed delegated work in this branch against the original request and shared planner context.',
+        '',
+        'Shared planner context:',
+        plannerContext,
+        '',
+        'If the requested outcome is not complete, continue autonomously using taskPlanner or the available execution tools.',
+        'If the requested outcome is complete, give a concise final report with verification evidence and human-check instructions.',
+      ].join('\n'),
+    },
+  },
+  toolCall({
+    name: 'entryNode',
+    arguments: {},
+  }),
+]
+
 export const buildTaskPlannerTaskChains = (
   taskGroups: readonly (readonly PlannedTaskInput[])[],
   taskChain: readonly TaskNode[],
 ) => {
   const plannerContext = summarizePlannerContext([...taskChain])
-  return taskGroups.map((group) =>
-    group.flatMap((item) =>
+  return taskGroups.map((group) => [
+    ...group.flatMap((item) =>
       createPlannerTaskChain(normalizePlannedTaskInput(item), plannerContext),
     ),
-  )
+    ...createPlannerReviewTaskChain(plannerContext),
+  ])
 }
 
 const taskManagerSearchUrl = (args: {
@@ -219,12 +244,20 @@ export const taskSearcher = (taskManager: TyTaskManager) =>
 export const taskPlanner = createTool({
   name: 'taskPlanner',
   description:
-    'Launches delegated subtasks. Use one outer group per parallel branch and one inner list for sequential work inside that branch.',
-  longDescription: `Use this tool only when a task is complex enough to benefit from delegated subtasks.
+    'Plans and launches bounded packets of delegated work. Use one outer group per parallel branch and one inner list for sequential work inside that branch.',
+  longDescription: `Use this tool only when a task is complex enough to benefit from delegated subtasks. Do not use it for simple one-step answers or small single-artifact edits where ordinary tools can finish the work directly.
 
 The "tasks" parameter is a list of groups:
 - Each outer group runs in parallel with the other groups.
 - Each inner list runs in sequence from left to right.
+
+Choose the packet size dynamically:
+- Use one task when the next step depends on unknown exploration or a risky result.
+- Use a short sequential packet when several steps are obvious and low-risk.
+- Use parallel groups when branches are independent and can be merged later.
+- Re-enter taskPlanner after uncertainty boundaries such as exploration, edits, tests, external calls, or errors only when the next plan genuinely needs to adapt.
+
+Do not keep hidden planner state. Any plan, checklist, status, acceptance criteria, or evidence should be represented in visible task messages, structured results, or delegated task outputs so the task tree remains the source of truth.
 
 Each task item should usually be a short plain string that states the broad objective. Keep these broad and compact so the delegated agent can refine the task locally.
 
@@ -245,7 +278,7 @@ For every delegated task, Taskyon first creates a fresh local context, expands t
           items: plannerTaskItemSchema,
         },
         description:
-          'Parallel groups of delegated work. Each outer array item runs in parallel. Each inner array item runs sequentially. Each task item is usually a short string objective, or optionally an object with { task, allowedTools }.',
+          'A bounded execution packet. Each outer array item runs in parallel. Each inner array item runs sequentially. Emit only the next useful packet before replanning: one task for uncertain steps, a short sequential list for obvious low-risk steps, or parallel groups for independent work. Add a later planning/review step only when adaptation or final acceptance checking cannot be handled by the current packet.',
       },
     },
     required: ['tasks'],
@@ -275,6 +308,10 @@ For every delegated task, Taskyon first creates a fresh local context, expands t
             type: 'message',
             data: `Task Breakdown:\n${groupsFormatted}`,
           },
+        },
+        {
+          role: 'system',
+          content: { type: 'return', data: 'task breakdown recorded' },
         },
       ],
       ...buildTaskPlannerTaskChains(tasks, await context.getExecutionTaskChain()),

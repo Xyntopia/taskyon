@@ -150,6 +150,15 @@ export const taskyonProtocol = defineFrpProtocol({
         .describe('The currently registered Taskyon tool definitions keyed by tool name.'),
       defaultTimeoutMs: 30_000,
     },
+    getTask: {
+      request: z
+        .object({
+          id: z.string().describe('Task id to fetch from the local Taskyon task store.'),
+        })
+        .describe('Request a task by id from the local Taskyon task store.'),
+      response: TaskNode.nullable().describe('The matching task, or null when it is unavailable.'),
+      defaultTimeoutMs: 30_000,
+    },
     createTask: {
       request: task,
     },

@@ -581,7 +581,7 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
           ? [createChatCompletionTask({ websearch: { enabled: true, max_results: 5 } })]
           : []),
         createChatCompletionTask({
-          prompts: [contextPrompt],
+          appendSystemPrompts: [contextPrompt],
           allowedTools: ['updateDocument'],
         }),
       ])
@@ -652,7 +652,7 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
         })
         return ctx.createSubtasksResult([
           createChatCompletionTask({
-            prompts: [
+            appendSystemPrompts: [
               "It seems you called updateDocument but did not provide any edits or new content. Please make sure to include the changes you want to apply. Or don't call it at all",
             ],
             allowedTools: ['updateDocument'],
@@ -741,7 +741,7 @@ Your goal is to **keep the document in sync with the user's intent**. When in do
         })
         return ctx.createSubtasksResult([
           createChatCompletionTask({
-            prompts: [
+            appendSystemPrompts: [
               `updateDocument failed while applying patches: ${msg}\nPlease resend the updateDocument call with corrected, non-overlapping, in-range patches.`,
             ],
             allowedTools: ['updateDocument'],

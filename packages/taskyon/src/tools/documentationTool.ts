@@ -81,91 +81,6 @@ const chunkOverlap = 250
 
 const headingRegex = /^(#{1,6})\s+(.+)$/gm
 
-const documentationIndexParameters = {
-  type: 'object',
-  required: ['action'],
-  additionalProperties: false,
-  properties: {
-    action: {
-      type: 'string',
-      enum: ['status', 'index', 'search', 'getDocument', 'clear'],
-      description: 'Index operation to perform.',
-    },
-    corpusId: {
-      type: 'string',
-      description: 'Logical documentation corpus to index or search.',
-      default: taskyonDocsCorpusId,
-    },
-    documents: {
-      type: 'array',
-      description: 'Documents to index when action is index.',
-      items: {
-        type: 'object',
-        required: ['id', 'path', 'content'],
-        additionalProperties: false,
-        properties: {
-          id: { type: 'string' },
-          path: { type: 'string' },
-          title: { type: 'string' },
-          url: { type: 'string' },
-          content: { type: 'string' },
-          metadata: { type: 'object', additionalProperties: true },
-        },
-      },
-    },
-    query: {
-      type: 'string',
-      description: 'Natural language or exact text query for search.',
-    },
-    k: {
-      type: 'number',
-      description: 'Maximum number of results to return.',
-      default: 5,
-    },
-    documentId: {
-      type: 'string',
-      description: 'Document id to retrieve.',
-    },
-    forceRefresh: {
-      type: 'boolean',
-      description: 'When indexing, clear existing chunks for the corpus before writing.',
-      default: false,
-    },
-  },
-} as const satisfies JSONSchema7
-
-const taskyonDocumentationParameters = {
-  type: 'object',
-  required: ['query'],
-  additionalProperties: false,
-  properties: {
-    query: {
-      type: 'string',
-      description: 'Question to answer from the Taskyon documentation.',
-    },
-    k: {
-      type: 'number',
-      description: 'Maximum number of documentation chunks to retrieve.',
-      default: 5,
-    },
-    allowIndex: {
-      type: 'boolean',
-      description: 'Allow indexing without showing the in-chat confirmation UI.',
-      default: false,
-    },
-    forceRefresh: {
-      type: 'boolean',
-      description: 'Rebuild the Taskyon docs index even if it already exists.',
-      default: false,
-    },
-    phase: {
-      type: 'string',
-      enum: ['awaitConsent', 'indexProviderResult'],
-      description: 'Internal workflow phase used by Taskyon re-entry calls.',
-    },
-  },
-} as const satisfies JSONSchema7
-
 const escapeHtml = (value: string) =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
@@ -414,7 +329,58 @@ export const createDocumentationIndexTool = (db: TyPGDB) =>
     longDescription:
       'Generic local documentation index backed by PGlite vector search plus lexical fallback. Use this for project documentation corpora when documents are supplied directly by a caller or provider tool.',
     renderOptions: { hideChat: true, hideLlm: false, hideVector: true },
-    parameters: documentationIndexParameters,
+    parameters: {
+      type: 'object',
+      required: ['action'],
+      additionalProperties: false,
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['status', 'index', 'search', 'getDocument', 'clear'],
+          description: 'Index operation to perform.',
+        },
+        corpusId: {
+          type: 'string',
+          description: 'Logical documentation corpus to index or search.',
+          default: taskyonDocsCorpusId,
+        },
+        documents: {
+          type: 'array',
+          description: 'Documents to index when action is index.',
+          items: {
+            type: 'object',
+            required: ['id', 'path', 'content'],
+            additionalProperties: false,
+            properties: {
+              id: { type: 'string' },
+              path: { type: 'string' },
+              title: { type: 'string' },
+              url: { type: 'string' },
+              content: { type: 'string' },
+              metadata: { type: 'object', additionalProperties: true },
+            },
+          },
+        },
+        query: {
+          type: 'string',
+          description: 'Natural language or exact text query for search.',
+        },
+        k: {
+          type: 'number',
+          description: 'Maximum number of results to return.',
+          default: 5,
+        },
+        documentId: {
+          type: 'string',
+          description: 'Document id to retrieve.',
+        },
+        forceRefresh: {
+          type: 'boolean',
+          description: 'When indexing, clear existing chunks for the corpus before writing.',
+          default: false,
+        },
+      },
+    } as const satisfies JSONSchema7,
     function: async (rawArgs) => {
       const args = DocumentationActionArgs.parse(rawArgs)
       const index = await createDocumentationIndex(db)
@@ -442,7 +408,37 @@ export const createTaskyonDocumentationTool = (db: TyPGDB) =>
     longDescription:
       'Searches the local Taskyon documentation index. On first browser use, it asks for consent inside the chat, loads the bundled Taskyon markdown docs through the UI provider, indexes them locally, and then answers with cited documentation snippets.',
     renderOptions: { hideChat: false, hideLlm: false, hideVector: true },
-    parameters: taskyonDocumentationParameters,
+    parameters: {
+      type: 'object',
+      required: ['query'],
+      additionalProperties: false,
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Question to answer from the Taskyon documentation.',
+        },
+        k: {
+          type: 'number',
+          description: 'Maximum number of documentation chunks to retrieve.',
+          default: 5,
+        },
+        allowIndex: {
+          type: 'boolean',
+          description: 'Allow indexing without showing the in-chat confirmation UI.',
+          default: false,
+        },
+        forceRefresh: {
+          type: 'boolean',
+          description: 'Rebuild the Taskyon docs index even if it already exists.',
+          default: false,
+        },
+        phase: {
+          type: 'string',
+          enum: ['awaitConsent', 'indexProviderResult'],
+          description: 'Internal workflow phase used by Taskyon re-entry calls.',
+        },
+      },
+    } as const satisfies JSONSchema7,
     function: async (rawArgs: FunctionArguments, ctx) => {
       const args = TaskyonDocumentationArgs.parse(rawArgs)
       const index = await createDocumentationIndex(db)
@@ -598,7 +594,7 @@ export const createTaskyonDocumentationTool = (db: TyPGDB) =>
           toolCall({
             name: 'chatCompletion',
             arguments: {
-              prompts: [
+              appendSystemPrompts: [
                 `Answer the user's Taskyon documentation question using only the documentation search results above. Cite the source path for every important claim. Question: ${args.query}`,
               ],
             },

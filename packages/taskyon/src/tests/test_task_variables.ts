@@ -313,4 +313,4 @@ testTaskyonVariableCommentSanitizationPreservesCode.description =
 testTaskyonVariableCommentSanitizationIgnoresNormalComments.description =
   'Leaves non-Taskyon HTML comments untouched during persistence sanitization.'
 testPromptInjectionPlacement.description =
-  'Places transient prompt injections before the rendered chat and prompts after it.'
+  'Places prependSystemPrompts before the rendered chat and appendSystemPrompts after it.'

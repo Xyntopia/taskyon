@@ -116,9 +116,46 @@ export const testDownloadFileRejectsPathsOutsideArtifactRoot = async () =>
     return { success: true }
   })
 
+export const testDownloadFileReturnsRecoverableFailureForMaxBytes = async () =>
+  await withTempCwd(
+    'tycli-download-file-max-bytes',
+    async () =>
+      await withMockFetch(
+        () =>
+          Promise.resolve(
+            new Response('large page body', {
+              status: 200,
+              headers: { 'content-type': 'text/html' },
+            }),
+          ),
+        async () => {
+          const result = await downloadFileTool.function?.({
+            url: 'https://example.test/page.html',
+            filePath: 'research/page.html',
+            maxBytes: 4,
+          })
+
+          assert(
+            result &&
+              typeof result === 'object' &&
+              'ok' in result &&
+              result.ok === false &&
+              'error' in result &&
+              typeof result.error === 'string' &&
+              result.error.includes('exceeding maxBytes 4'),
+            `Expected recoverable maxBytes failure result, got ${JSON.stringify(result)}`,
+          )
+
+          return { success: true }
+        },
+      ),
+  )
+
 testDownloadFileReturnsRecoverableFailureForHttpErrors.description =
   'downloadFile returns ok=false instead of throwing for HTTP download failures.'
 testDownloadFileReturnsRecoverableFailureForNonPdfBytes.description =
   'downloadFile returns ok=false instead of throwing when a requested PDF URL returns HTML.'
 testDownloadFileRejectsPathsOutsideArtifactRoot.description =
   'downloadFile rejects research downloads that try to write outside the selected artifact root.'
+testDownloadFileReturnsRecoverableFailureForMaxBytes.description =
+  'downloadFile returns ok=false when a raw download exceeds the requested maxBytes limit.'

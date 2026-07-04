@@ -4,13 +4,13 @@ import { createInterface } from 'node:readline/promises'
 import { emitKeypressEvents } from 'node:readline'
 import { spawn } from 'node:child_process'
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { join, relative, resolve } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import { inspect } from 'node:util'
 import type { createDuplexChannel } from '../../shared/modules/frpBus'
 import { createUnavailableIframeMux } from '../../shared/modules/frpBus'
-import { createProtocolPort, createTaskyonClient, taskyonProtocol } from '@taskyon/tyclient'
+import { serializeObject } from '@taskyon/shared/modules/serializeObject'
 import {
   createClientTool,
   createExternalToolContext,
@@ -29,6 +29,8 @@ import {
   type Taskyon,
   type TaskyonMessage,
 } from '@taskyon/taskyon'
+import { createProtocolPort, createTaskyonClient, taskyonProtocol } from '@taskyon/taskyon/api'
+import { setChatCompletionTraceWriter } from '@taskyon/taskyon/tools/chatCompletionTrace'
 import { createNodeTaskyonDocumentationProviderTool } from '@taskyon/taskyon/tools/nodeTaskyonDocumentationProvider'
 import { InternalTool as InternalToolSchema } from '../../taskyon/src/types/toolApi'
 import {
@@ -65,7 +67,7 @@ import {
   SUPPORTED_PROVIDERS,
   type TycliSessionRecord,
 } from './cli/types'
-import { formatExplorationContext, createExplorationTool } from './tools/explorationTool'
+import { createExplorationTool } from './tools/explorationTool'
 import { updateFilesTool } from './tools/patchTool'
 import { downloadFileTool } from './tools/downloadFileTool'
 
@@ -83,16 +85,7 @@ type SlashParsed = {
 type JsonValue = string | number | boolean | null | JsonValue[] | JsonObject
 type JsonObject = { [key: string]: JsonValue | undefined }
 
-type TaskyonClientInvoker = {
-  listTools: (args: { includeHidden?: boolean }) => Promise<Record<string, ToolCatalogEntry>>
-  callTool: (name: string, args: JsonObject) => Promise<unknown>
-  createTaskChain: (args: {
-    tasks: TaskNode[]
-    execute?: boolean
-    show?: boolean
-  }) => Promise<unknown>
-  [methodName: string]: unknown
-}
+type TaskyonClientInvoker = ReturnType<typeof createTaskyonClient>
 
 type TaskyonClientCommandRuntime = {
   client: TaskyonClientInvoker
@@ -248,6 +241,132 @@ type SessionLocationInfo = {
 }
 
 let runtimeLog: RuntimeLog | undefined
+
+const CHAT_COMPLETION_TRACE_DIR_ENV = 'TYCLI_CHAT_COMPLETION_TRACE_DIR'
+const CHAT_COMPLETION_TRACE_LABEL_ENV = 'TYCLI_CHAT_COMPLETION_TRACE_LABEL'
+const CHAT_COMPLETION_TRACE_RAW_ENV = 'TYCLI_CHAT_COMPLETION_TRACE_RAW'
+
+const shouldKeepRawChatCompletionTracePayloads = () =>
+  ['1', 'true', 'yes'].includes(
+    process.env[CHAT_COMPLETION_TRACE_RAW_ENV]?.trim().toLowerCase() ?? '',
+  )
+
+const summarizeRawTraceString = (value: string) => ({
+  omitted: true,
+  chars: value.length,
+  preview: value.slice(0, 2_000),
+})
+
+const sanitizeChatCompletionTracePayload = (value: unknown, keepRawPayloads: boolean): unknown => {
+  if (keepRawPayloads || !value || typeof value !== 'object') return value
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeChatCompletionTracePayload(item, keepRawPayloads))
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      key === 'rawOutput' && typeof entry === 'string'
+        ? summarizeRawTraceString(entry)
+        : sanitizeChatCompletionTracePayload(entry, keepRawPayloads),
+    ]),
+  )
+}
+
+const sanitizeTraceFilePart = (value: string) =>
+  value
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'trace'
+
+const createJsonReplacer = () => {
+  const seen = new WeakSet<object>()
+  return (_key: string, value: unknown) => {
+    if (typeof value === 'function') return `[Function ${value.name || 'anonymous'}]`
+    if (typeof value === 'bigint') return value.toString()
+    if (value && typeof value === 'object') {
+      if (seen.has(value)) return '[Circular]'
+      seen.add(value)
+    }
+    return value
+  }
+}
+
+const stringifyTraceJson = (value: unknown) => JSON.stringify(value, createJsonReplacer(), 2)
+
+function createCliChatCompletionTraceWriter(traceDir: string) {
+  let sequence = 0
+  const keepRawPayloads = shouldKeepRawChatCompletionTracePayloads()
+  const pendingSequences = new Map<string, number[]>()
+  const keyFor = (payload: { taskId: string; label?: string }) =>
+    `${payload.label ?? ''}\n${payload.taskId}`
+  const fileNameFor = (
+    sequenceId: number,
+    payload: { taskId: string; label?: string },
+    side: 'input' | 'output',
+  ) => {
+    const parts = [
+      String(sequenceId).padStart(4, '0'),
+      ...(payload.label ? [sanitizeTraceFilePart(payload.label)] : []),
+      sanitizeTraceFilePart(payload.taskId),
+      side,
+    ]
+    return `${parts.join('_')}.json`
+  }
+
+  return {
+    writeInput: async (payload: { taskId: string; label?: string; input: unknown }) => {
+      await mkdir(traceDir, { recursive: true })
+      const sequenceId = ++sequence
+      const key = keyFor(payload)
+      pendingSequences.set(key, [...(pendingSequences.get(key) ?? []), sequenceId])
+      await writeFile(
+        join(traceDir, fileNameFor(sequenceId, payload, 'input')),
+        stringifyTraceJson({
+          side: 'input',
+          sequence: sequenceId,
+          taskId: payload.taskId,
+          ...(payload.label ? { label: payload.label } : {}),
+          input: payload.input,
+        }),
+        'utf8',
+      )
+    },
+    writeOutput: async (payload: {
+      taskId: string
+      label?: string
+      input: unknown
+      output: unknown
+    }) => {
+      await mkdir(traceDir, { recursive: true })
+      const key = keyFor(payload)
+      const pending = pendingSequences.get(key) ?? []
+      const sequenceId = pending.shift() ?? ++sequence
+      if (pending.length > 0) pendingSequences.set(key, pending)
+      else pendingSequences.delete(key)
+      await writeFile(
+        join(traceDir, fileNameFor(sequenceId, payload, 'output')),
+        stringifyTraceJson({
+          side: 'output',
+          sequence: sequenceId,
+          taskId: payload.taskId,
+          ...(payload.label ? { label: payload.label } : {}),
+          output: sanitizeChatCompletionTracePayload(payload.output, keepRawPayloads),
+        }),
+        'utf8',
+      )
+    },
+  }
+}
+
+const resolveCliChatCompletionTrace = () => {
+  const traceDir = process.env[CHAT_COMPLETION_TRACE_DIR_ENV]?.trim()
+  if (!traceDir) return undefined
+  return {
+    dir: traceDir,
+    label: process.env[CHAT_COMPLETION_TRACE_LABEL_ENV]?.trim() || undefined,
+  }
+}
 
 function formatPromptTaskState(status: PromptPrefixStatus): string {
   if (status.activeTasks <= 0) return status.taskState
@@ -662,10 +781,129 @@ function formatJsonResult(value: unknown): string {
   return JSON.stringify(value, null, 2)
 }
 
+const taskCreatedAt = (task: TaskNode) => task.created_at ?? 0
+
+type CompactTaskTreeNode = {
+  id: string
+  role: TaskNode['role']
+  type: TaskNode['content']['type']
+  tool?: string
+  branches?: CompactTaskTreeNode[][]
+}
+
+type CompactTaskTree = {
+  branch: CompactTaskTreeNode[]
+}
+
+function compactTaskNode(
+  task: TaskNode,
+  taskById: ReadonlyMap<string, TaskNode>,
+  visited: ReadonlySet<string>,
+): CompactTaskTreeNode {
+  const tool = task.content.type === 'functioncall' ? task.content.data.name : undefined
+  const nextVisited = new Set([...visited, task.id])
+  const branches = findDirectChildren(task.id, taskById)
+    .map((child) => buildCompactSiblingChain(child, taskById, nextVisited))
+    .filter((branch) => branch.length > 0)
+
+  return {
+    id: task.id.slice(0, 12),
+    role: task.role,
+    type: task.content.type,
+    ...(tool ? { tool } : {}),
+    ...(branches.length > 0 ? { branches } : {}),
+  }
+}
+
+function findDirectChildren(taskId: string, taskById: ReadonlyMap<string, TaskNode>) {
+  return [...taskById.values()]
+    .filter((task) => task.parentID === taskId && !task.priorID)
+    .sort((a, b) => taskCreatedAt(a) - taskCreatedAt(b))
+}
+
+function findNextSibling(taskId: string, taskById: ReadonlyMap<string, TaskNode>) {
+  return [...taskById.values()]
+    .filter((task) => task.priorID === taskId)
+    .sort((a, b) => taskCreatedAt(b) - taskCreatedAt(a))[0]
+}
+
+function findRootTask(task: TaskNode, taskById: ReadonlyMap<string, TaskNode>) {
+  let current = task
+  const visited = new Set<string>()
+
+  while (!visited.has(current.id)) {
+    visited.add(current.id)
+    const previousId = current.priorID ?? current.parentID
+    const previous = previousId ? taskById.get(previousId) : undefined
+    if (!previous) return current
+    current = previous
+  }
+
+  return current
+}
+
+function buildCompactSiblingChain(
+  firstTask: TaskNode,
+  taskById: ReadonlyMap<string, TaskNode>,
+  visited: ReadonlySet<string> = new Set(),
+) {
+  const branch: CompactTaskTreeNode[] = []
+  let current: TaskNode | undefined = firstTask
+  const branchVisited = new Set(visited)
+
+  while (current && !branchVisited.has(current.id)) {
+    branch.push(compactTaskNode(current, taskById, branchVisited))
+    branchVisited.add(current.id)
+    current = findNextSibling(current.id, taskById)
+  }
+
+  return branch
+}
+
+function buildCompactTaskTree(tasks: readonly TaskNode[], leafId: string): CompactTaskTree {
+  const taskById = new Map(tasks.map((task) => [task.id, task]))
+  const leafTask = taskById.get(leafId)
+  if (!leafTask) throw new Error(`No task '${leafId}' found in the active CLI task feed.`)
+  const rootTask = findRootTask(leafTask, taskById)
+  return { branch: buildCompactSiblingChain(rootTask, taskById) }
+}
+
+async function backfillLinkedTasks(client: TaskyonClientInvoker, leafId: string) {
+  const taskById = new Map<string, TaskNode>()
+  const pending = [leafId]
+  const visited = new Set<string>()
+
+  while (pending.length > 0) {
+    const taskId = pending.pop()
+    if (!taskId || visited.has(taskId)) continue
+    visited.add(taskId)
+
+    const task = await client.getTask(taskId)
+    if (!task) continue
+    taskById.set(task.id, task)
+    if (task.parentID && !taskById.has(task.parentID)) pending.push(task.parentID)
+    if (task.priorID && !taskById.has(task.priorID)) pending.push(task.priorID)
+  }
+
+  return [...taskById.values()]
+}
+
+function buildTaskTreeYaml(tasks: readonly TaskNode[], leafId: string) {
+  const tree = buildCompactTaskTree(tasks, leafId)
+  return serializeObject(tree, {
+    format: 'yaml',
+    maxDepth: 1e9,
+    maxArrayLength: 1e9,
+    maxObjectKeys: 1e9,
+    maxStringLength: 1e9,
+    includeTruncationMeta: false,
+  })
+}
+
 function createCliTaskyonClient(port: unknown): TaskyonClientInvoker {
-  return createTaskyonClient(
-    port as Parameters<typeof createTaskyonClient>[0],
-  ) as TaskyonClientInvoker
+  return createTaskyonClient(port as Parameters<typeof createTaskyonClient>[0], {
+    taskCacheSize: 0,
+  })
 }
 
 async function invokeTaskyonToolTask(
@@ -741,9 +979,109 @@ const cliBashTool: ClientTool = createClientTool({
       },
     },
   } as const,
-  function: (args) => executeBashCommand(args),
+  function: async ({ command, cwd, timeoutMs = 120000 }: BashToolArgs) => {
+    if (!command || !command.trim()) throw new Error('bash tool requires a non-empty command')
+
+    const shellCandidates = Array.from(
+      new Set([process.env.SHELL, 'bash', 'sh'].filter((value): value is string => !!value)),
+    )
+
+    const runWithShell = async (shell: string) =>
+      await new Promise<{
+        command: string
+        cwd: string
+        exitCode: number | null
+        ok: boolean
+        signal: NodeJS.Signals | null
+        stderr: string
+        stdout: string
+      }>((resolve, reject) => {
+        const child = spawn(shell, ['-lc', command], {
+          cwd: cwd ?? process.cwd(),
+          env: process.env,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
+
+        let stdout = ''
+        let stderr = ''
+        let settled = false
+
+        const finish = (
+          result:
+            | {
+                type: 'resolve'
+                value: {
+                  command: string
+                  cwd: string
+                  exitCode: number | null
+                  ok: boolean
+                  signal: NodeJS.Signals | null
+                  stderr: string
+                  stdout: string
+                }
+              }
+            | { type: 'reject'; error: Error },
+        ) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          if (result.type === 'resolve') resolve(result.value)
+          else reject(result.error)
+        }
+
+        const timer = setTimeout(() => {
+          child.kill('SIGTERM')
+          setTimeout(() => child.kill('SIGKILL'), 1000).unref()
+          finish({
+            type: 'reject',
+            error: new Error(`bash command timed out after ${timeoutMs}ms`),
+          })
+        }, timeoutMs)
+
+        child.stdout.on('data', (chunk: Buffer | string) => {
+          stdout += chunk.toString()
+        })
+
+        child.stderr.on('data', (chunk: Buffer | string) => {
+          stderr += chunk.toString()
+        })
+
+        child.on('error', (error) => finish({ type: 'reject', error }))
+
+        child.on('close', (exitCode, signal) => {
+          finish({
+            type: 'resolve',
+            value: {
+              command,
+              cwd: cwd ?? process.cwd(),
+              exitCode,
+              signal,
+              stdout,
+              stderr,
+              ok: exitCode === 0,
+            },
+          })
+        })
+      })
+
+    let lastError: Error | null = null
+    for (const shell of shellCandidates) {
+      try {
+        writeDebug(`bash tool trying shell: ${shell}`)
+        return await runWithShell(shell)
+      } catch (error) {
+        const asError = error instanceof Error ? error : new Error(String(error))
+        lastError = asError
+        if (!asError.message.includes('ENOENT')) throw asError
+        writeDebug(`shell not found: ${shell}`)
+      }
+    }
+
+    throw lastError ?? new Error('No usable shell found for bash tool execution')
+  },
 })
 const ACTIVE_LLM_TOOLS = [
+  'taskPlanner',
   cliBashTool.name,
   EXPLORATION_TOOL_NAME,
   UPDATE_FILES_TOOL_NAME,
@@ -756,40 +1094,34 @@ type ToolCatalogEntry = {
   renderOptions?: { hideChat?: boolean }
 }
 
-function buildCliEnvironmentContext(
-  toolResultSection = '(none)',
-  explorationContext = 'Loaded file context: (none)',
-) {
-  const now = new Date()
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+function buildCliStableContext(projectInstructions: string) {
   const shell = process.env.SHELL ?? process.env.ComSpec ?? 'unknown'
   return [
-    'You are the Taskyon CLI assistant.',
-    'This is a terminal-focused environment. Be concise, actionable, and explicit.',
-    '',
-    '## Runtime Context',
-    `Timestamp (ISO): ${now.toISOString()}`,
-    `Local Time: ${now.toString()}`,
-    `Timezone: ${timezone}`,
-    `Platform: ${process.platform}`,
-    `Arch: ${process.arch}`,
-    `Node: ${process.version}`,
-    `Current Working Directory: ${process.cwd()}`,
-    `Shell: ${shell}`,
-    `LLM-callable tools: ${ACTIVE_LLM_TOOLS.join(', ')}`,
-    '',
-    '## Recent Tool Result',
-    toolResultSection,
-    '',
-    '## Project Context',
-    explorationContext,
-    '',
-    '## Tool Usage Rules',
-    '1. Prefer answering directly when no tool action is needed.',
-    '2. For repository exploration, use the exploration tool first: list/search for files, grep for text, view for focused file chunks, add/context for persistent file context.',
-    '3. Use bash only when command execution is required beyond file discovery, text search, or file viewing.',
-    '4. Keep destructive or risky shell commands clearly justified and minimal.',
-  ].join('\n')
+    projectInstructions,
+    [
+      'You are the Taskyon CLI assistant.',
+      'This is a terminal-focused environment. Be concise, actionable, and explicit.',
+      '',
+      '## Stable Runtime Context',
+      `Current Working Directory: ${process.cwd()}`,
+      `Shell: ${shell}`,
+      `LLM-callable tools: ${ACTIVE_LLM_TOOLS.join(', ')}`,
+      '',
+      '## Stable Tool Usage Rules',
+      '1. Prefer answering directly when no tool action is needed.',
+      '2. For repository exploration, use the exploration tool first: list/search for files, grep for text, view for focused file chunks, add/context for persistent file context.',
+      '3. Use bash only when command execution is required beyond file discovery, text search, or file viewing.',
+      '4. Keep destructive or risky shell commands clearly justified and minimal.',
+      '5. After a tool result, continue the task: call one next tool when more work is needed, otherwise answer concisely.',
+    ].join('\n'),
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+function buildCliVolatileContext(now = new Date()) {
+  const localTime = now.toString()
+  return `Runtime reference only: now_utc=${now.toISOString()} local_time=${localTime}`
 }
 
 function levenshteinDistance(a: string, b: string): number {
@@ -836,10 +1168,17 @@ function fuzzyFilterOptions<T>(
 }
 
 function isTaskCreatedMessage(
-  msg: TaskyonMessage,
+  msg: unknown,
 ): msg is { type: 'taskCreated'; task: TaskNode; parentID?: string } {
-  const candidate = msg as { type?: unknown; task?: unknown }
-  return candidate.type === 'taskCreated' && !!candidate.task
+  return (
+    typeof msg === 'object' &&
+    msg !== null &&
+    'type' in msg &&
+    'task' in msg &&
+    msg.type === 'taskCreated' &&
+    typeof msg.task === 'object' &&
+    msg.task !== null
+  )
 }
 
 async function createPreparedTaskChain(
@@ -919,104 +1258,6 @@ async function waitForTaskResult(
     })
     signal?.addEventListener('abort', onAbort, { once: true })
   })
-}
-
-async function executeBashCommand({ command, cwd, timeoutMs = 120000 }: BashToolArgs) {
-  if (!command || !command.trim()) throw new Error('bash tool requires a non-empty command')
-
-  const shellCandidates = Array.from(
-    new Set([process.env.SHELL, 'bash', 'sh'].filter((value): value is string => !!value)),
-  )
-
-  const runWithShell = async (shell: string) =>
-    await new Promise<{
-      command: string
-      cwd: string
-      exitCode: number | null
-      ok: boolean
-      signal: NodeJS.Signals | null
-      stderr: string
-      stdout: string
-    }>((resolve, reject) => {
-      const child = spawn(shell, ['-lc', command], {
-        cwd: cwd ?? process.cwd(),
-        env: process.env,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
-
-      let stdout = ''
-      let stderr = ''
-      let settled = false
-
-      const finish = (
-        result:
-          | {
-              type: 'resolve'
-              value: {
-                command: string
-                cwd: string
-                exitCode: number | null
-                ok: boolean
-                signal: NodeJS.Signals | null
-                stderr: string
-                stdout: string
-              }
-            }
-          | { type: 'reject'; error: Error },
-      ) => {
-        if (settled) return
-        settled = true
-        clearTimeout(timer)
-        if (result.type === 'resolve') resolve(result.value)
-        else reject(result.error)
-      }
-
-      const timer = setTimeout(() => {
-        child.kill('SIGTERM')
-        setTimeout(() => child.kill('SIGKILL'), 1000).unref()
-        finish({ type: 'reject', error: new Error(`bash command timed out after ${timeoutMs}ms`) })
-      }, timeoutMs)
-
-      child.stdout.on('data', (chunk: Buffer | string) => {
-        stdout += chunk.toString()
-      })
-
-      child.stderr.on('data', (chunk: Buffer | string) => {
-        stderr += chunk.toString()
-      })
-
-      child.on('error', (error) => finish({ type: 'reject', error }))
-
-      child.on('close', (exitCode, signal) => {
-        finish({
-          type: 'resolve',
-          value: {
-            command,
-            cwd: cwd ?? process.cwd(),
-            exitCode,
-            signal,
-            stdout,
-            stderr,
-            ok: exitCode === 0,
-          },
-        })
-      })
-    })
-
-  let lastError: Error | null = null
-  for (const shell of shellCandidates) {
-    try {
-      writeDebug(`bash tool trying shell: ${shell}`)
-      return await runWithShell(shell)
-    } catch (error) {
-      const asError = error instanceof Error ? error : new Error(String(error))
-      lastError = asError
-      if (!asError.message.includes('ENOENT')) throw asError
-      writeDebug(`shell not found: ${shell}`)
-    }
-  }
-
-  throw lastError ?? new Error('No usable shell found for bash tool execution')
 }
 
 function normalizeThinkingChunk(chunk: unknown): string {
@@ -1904,6 +2145,26 @@ async function handleClientCommand(runtime: TaskyonClientCommandRuntime, parsedA
   writeLine(formatJsonResult(result))
 }
 
+async function handleTreeCommand(args: {
+  client: TaskyonClientInvoker
+  leafId: string | undefined
+  commandArgs: string
+}) {
+  if (!args.leafId) {
+    writeLine('No active task tree yet.')
+    return
+  }
+
+  const tasks = await backfillLinkedTasks(args.client, args.leafId)
+  const yaml = buildTaskTreeYaml(tasks, args.leafId)
+  const outputPath = args.commandArgs.trim() || 'taskyon-task-tree.yml'
+
+  const resolvedPath = resolve(outputPath)
+  await mkdir(dirname(resolvedPath), { recursive: true })
+  await writeFile(resolvedPath, yaml)
+  writeNotice('success', `Task tree written: ${resolvedPath}`)
+}
+
 async function resolveConversationToResume(
   rl: ReturnType<typeof createInterface>,
   configDir: string,
@@ -1960,6 +2221,7 @@ async function handleSlashCommand(
   llmState: llmSettings,
   uiSettings: { showRoleTag: boolean; showFullFunctionResults: boolean },
   toolRenderOptions: Record<string, { hideChat?: boolean }>,
+  currentLeafId: string | undefined,
 ): Promise<boolean> {
   if (parsed.name === 'keys') {
     await handleKeysCommand(rl, ty, llmState)
@@ -1996,17 +2258,27 @@ async function handleSlashCommand(
     return true
   }
 
+  if (parsed.name === 'tree') {
+    await handleTreeCommand({
+      client: taskyonClient,
+      leafId: currentLeafId,
+      commandArgs: parsed.args,
+    })
+    return true
+  }
+
   if (parsed.name === 'exit' || parsed.name === 'quit') {
     return false
   }
 
   writeError(
-    `Unknown command '/${parsed.name}'. Supported: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /exit, /quit`,
+    `Unknown command '/${parsed.name}'. Supported: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /tree, /exit, /quit`,
   )
   return true
 }
 
 async function loadProjectInstructions(cwd: string): Promise<string> {
+  const root = await resolveProjectInstructionRoot(cwd, process.env.TYCLI_CWD?.trim())
   const parts: string[] = []
   let current = resolve(cwd)
   for (;;) {
@@ -2021,12 +2293,57 @@ async function loadProjectInstructions(cwd: string): Promise<string> {
         // File doesn't exist or is unreadable — skip.
       }
     }
+    if (current === root) break
     const parentDir = resolve(current, '..')
     if (parentDir === current) break
     current = parentDir
   }
   if (parts.length <= 0) return ''
   return `## Project Instructions\n\nThe following project instructions were loaded from files found in the workspace:\n\n${parts.reverse().join('\n\n')}`
+}
+
+async function resolveProjectInstructionRoot(
+  cwd: string,
+  explicitInvocationCwd?: string,
+): Promise<string> {
+  if (explicitInvocationCwd && resolve(explicitInvocationCwd) === resolve(cwd)) {
+    const cwdIsProjectRoot = await directoryContainsAnyFile(cwd, ['.git', 'package.json'])
+    if (!cwdIsProjectRoot) return resolve(cwd)
+  }
+  const nearestRoot = await findNearestAncestorWithAnyFile(cwd, ['.git', 'package.json'])
+  return nearestRoot ?? resolve(cwd)
+}
+
+async function directoryContainsAnyFile(cwd: string, names: string[]): Promise<boolean> {
+  for (const name of names) {
+    try {
+      await stat(join(cwd, name))
+      return true
+    } catch {
+      // Try the next root marker.
+    }
+  }
+  return false
+}
+
+async function findNearestAncestorWithAnyFile(
+  cwd: string,
+  names: string[],
+): Promise<string | undefined> {
+  let current = resolve(cwd)
+  for (;;) {
+    for (const name of names) {
+      try {
+        await stat(join(current, name))
+        return current
+      } catch {
+        // Try the next root marker.
+      }
+    }
+    const parentDir = resolve(current, '..')
+    if (parentDir === current) return undefined
+    current = parentDir
+  }
 }
 
 async function main() {
@@ -2068,6 +2385,12 @@ async function main() {
     ...(model ? { model } : {}),
     ...(providerKey ? { key: providerKey } : {}),
   } as CliApiConfig
+  const chatCompletionTrace = resolveCliChatCompletionTrace()
+  if (chatCompletionTrace) {
+    setChatCompletionTraceWriter(createCliChatCompletionTraceWriter(chatCompletionTrace.dir))
+  } else {
+    setChatCompletionTraceWriter(undefined)
+  }
   const explorationContextFiles: Record<string, string> = {}
   const explorationTool = createExplorationTool(explorationContextFiles)
 
@@ -2101,16 +2424,9 @@ async function main() {
           description: tool.description,
         }))
     },
-    extraContext: ({ toolResultSection }: { toolResultSection?: string }) =>
-      [
-        projectInstructions,
-        buildCliEnvironmentContext(
-          toolResultSection || '(none)',
-          formatExplorationContext(explorationContextFiles),
-        ),
-      ]
-        .filter(Boolean)
-        .join('\n\n'),
+    stableContext: () => buildCliStableContext(projectInstructions),
+    extraContext: () => buildCliVolatileContext(),
+    includeRoutinePrompt: false,
   })
   const cliEntryTask = toolCall({
     name: ENTRY_NODE_TOOL_NAME,
@@ -2129,6 +2445,14 @@ async function main() {
         use_baseprompt: true,
         use_multimodal: true,
         max_error_retries: 3,
+        ...(chatCompletionTrace
+          ? {
+              trace: {
+                enabled: true,
+                ...(chatCompletionTrace.label ? { label: chatCompletionTrace.label } : {}),
+              },
+            }
+          : {}),
         prompt_templates: DEFAULT_PROMPT_TEMPLATES,
       },
     }),
@@ -2235,6 +2559,7 @@ async function main() {
       unsubscribeBridgeToTaskyon()
       unsubscribeTaskyonToBridge()
       taskyon.workerStop('tycli client command complete')
+      setChatCompletionTraceWriter(undefined)
       restoreConsoleLogging?.()
       await runtimeLog?.flush().catch(() => {})
     }
@@ -2280,11 +2605,11 @@ async function main() {
   let thinkingPanelHeight = 0
   let thinkingRenderTimer: ReturnType<typeof setTimeout> | null = null
   let renderedThinkingPanelText = ''
+  let workerIdleSettleTimer: ReturnType<typeof setTimeout> | null = null
   const activeWorkerTasks = new Set<string>()
   const suppressedTaskIds = new Set<string>()
   let hasWorkerProcessing = false
   let taskProcessingStatus: 'idle' | 'processing' | 'finished' = 'idle'
-  const taskFeed: TaskNode[] = []
   const taskSnapshotById = new Map<string, string>()
   const footer = await createCliFooter()
   const workerSpinnerFrames = ['-', '\\', '|', '/']
@@ -2327,6 +2652,12 @@ async function main() {
     workerStatusText = ''
     workerStatusFrameIndex = 0
     clearWorkerStatusLine()
+  }
+
+  const clearWorkerIdleSettleTimer = () => {
+    if (workerIdleSettleTimer === null) return
+    clearTimeout(workerIdleSettleTimer)
+    workerIdleSettleTimer = null
   }
 
   const visibleWorkerStatusText = (event: WorkerEvent): string | null => {
@@ -2501,6 +2832,7 @@ async function main() {
   const resetThinking = () => {
     clearThinkingPanel()
     stopWorkerStatusLine()
+    clearWorkerIdleSettleTimer()
     thinkingLines = []
     thinkingText = ''
     activeWorkerTasks.clear()
@@ -2623,6 +2955,7 @@ async function main() {
   const trackWorkerProgress = (event: WorkerEvent) => {
     const taskId = event.task?.id ?? event.taskId ?? null
     const stage = event.stage ?? ''
+    if (stage !== 'waiting') clearWorkerIdleSettleTimer()
     if (stage === 'queued' || stage === 'processing') {
       if (taskId) activeWorkerTasks.add(taskId)
       if (stage === 'processing') hasWorkerProcessing = true
@@ -2631,11 +2964,25 @@ async function main() {
       taskProcessingStatus = 'processing'
     }
     if (stage === 'all finished') {
+      clearWorkerIdleSettleTimer()
       activeWorkerTasks.clear()
       hasWorkerProcessing = false
       taskProcessingStatus = 'finished'
       clearWorkerCleanupNoticeTimer()
       stopWorkerStatusLine()
+    }
+    if (stage === 'waiting' && activeTaskCount() > 0 && workerIdleSettleTimer === null) {
+      workerIdleSettleTimer = setTimeout(() => {
+        workerIdleSettleTimer = null
+        activeWorkerTasks.clear()
+        hasWorkerProcessing = false
+        taskProcessingStatus = 'finished'
+        clearWorkerCleanupNoticeTimer()
+        stopWorkerStatusLine()
+        updateFooter()
+        notifyWorkerIdleWaiters()
+      }, 100)
+      workerIdleSettleTimer.unref()
     }
     if (stage === 'processed' || stage === 'aborted' || stage === 'error') {
       if (taskId) activeWorkerTasks.delete(taskId)
@@ -2802,7 +3149,7 @@ async function main() {
       appendThinkingText(normalizeThinkingChunk(chunk))
     },
   )
-  const unsubscribeTaskProgress = clientPort.receive((msg: TaskyonMessage) => {
+  const unsubscribeTaskProgress = clientPort.receive((msg) => {
     if (!isTaskCreatedMessage(msg)) return
     const task = msg.task
     const suppressed = isSuppressedTask(task)
@@ -2810,9 +3157,6 @@ async function main() {
     const prev = taskSnapshotById.get(task.id)
     if (prev === snapshot) return
     taskSnapshotById.set(task.id, snapshot)
-    const existingIdx = taskFeed.findIndex((t) => t.id === task.id)
-    if (existingIdx >= 0) taskFeed[existingIdx] = task
-    else taskFeed.push(task)
     currentLeafId = task.id
     queueConversationPersist(task.id)
     if (suppressed) return
@@ -2882,7 +3226,7 @@ async function main() {
   )
   writeNotice(
     'info',
-    'Slash commands: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /exit, /quit',
+    'Slash commands: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /tree, /exit, /quit',
   )
   if (debugLogsEnabled) writeNotice('warn', 'Debug logs enabled (TYCLI_DEBUG=1).')
   updateFooter()
@@ -3021,6 +3365,7 @@ async function main() {
           llmState,
           uiSettings,
           toolRenderOptions,
+          currentLeafId,
         )
         inMenuInteraction = false
         if (!keepRunning) {
@@ -3140,6 +3485,7 @@ async function main() {
     clearTransientStatusLine = undefined
     await flushConversationPersist().catch(() => {})
     taskyon.workerStop('tycli exit')
+    setChatCompletionTraceWriter(undefined)
     writeOutro(`Conversation saved: ${conversationPersistence.filePath}`)
     writeOutro(`tycli log: ${runtimeLog?.filePath ?? 'unavailable'}`)
     await persistConfigPatch({

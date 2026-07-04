@@ -68,6 +68,10 @@ import {
   pickProperties,
 } from '../utils/objHelpers'
 import type { Thunk } from '../utils/tsHelpers'
+import {
+  writeChatCompletionTraceInput,
+  writeChatCompletionTraceOutput,
+} from './chatCompletionTrace'
 
 type WebSearchOptions = {
   maxResults: number
@@ -151,8 +155,8 @@ export async function processChatTask(
   // can we get rid of taskManager here in order to make our task more functional :)?
   taskManager: TyTaskManager,
   lastTaskBeforeChatCompletion: TaskNode | undefined,
-  prompts: string[],
-  promptInjections: PromptInjection[],
+  appendSystemPrompts: string[],
+  prependSystemPrompts: PromptInjection[],
   variableService?: TaskVariablePresentationService,
   contextOptions?: ChatCompletionContextOptions,
 ) {
@@ -189,7 +193,7 @@ export async function processChatTask(
   } else {
     chatCompletionMessages = []
   }
-  const promptMessages = toPromptMessages(prompts, promptInjections)
+  const promptMessages = toPromptMessages(appendSystemPrompts, prependSystemPrompts)
   chatCompletionMessages = [
     ...promptMessages.prependMessages,
     ...chatCompletionMessages,
@@ -256,6 +260,57 @@ const collectSystemInstructions = (messages: ModelMessage[]): string | undefined
   return instructions.length > 0 ? instructions : undefined
 }
 
+const extractLeadingSystemMessagesForProviderInstructions = (
+  messages: ModelMessage[],
+): {
+  instructions: string | undefined
+  messages: ModelMessage[]
+} => {
+  const leadingSystemMessages: SystemModelMessage[] = []
+  const remainingMessages: ModelMessage[] = []
+  let sawNonSystemMessage = false
+
+  for (const message of messages) {
+    if (!sawNonSystemMessage && message.role === 'system') {
+      leadingSystemMessages.push(message)
+      continue
+    }
+
+    sawNonSystemMessage = true
+    remainingMessages.push(message)
+  }
+
+  return {
+    instructions: collectSystemInstructions(leadingSystemMessages),
+    messages: remainingMessages,
+  }
+}
+
+const hashStringForPromptCacheKey = (value: string): string => {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+const messageContentForPromptCacheKey = (message: ModelMessage | undefined): string => {
+  if (!message) return ''
+  if (typeof message.content === 'string') return message.content
+  try {
+    return JSON.stringify(message.content)
+  } catch {
+    return ''
+  }
+}
+
+const buildPromptCacheKey = (messages: ModelMessage[], selectedModel: string): string => {
+  const firstUserMessage = messages.find((message) => message.role === 'user')
+  const seed = `${selectedModel}\n${messageContentForPromptCacheKey(firstUserMessage).slice(0, 8_000)}`
+  return `taskyon-${hashStringForPromptCacheKey(seed)}`
+}
+
 const hasNonSystemMessages = (messages: ModelMessage[]): boolean =>
   messages.some((message) => message.role !== 'system')
 
@@ -303,6 +358,17 @@ const classifyStreamingFailure = (
         'Chat completion timed out before finishing. Partial assistant output was preserved.',
     }
   }
+  if (
+    /(overloaded|temporarily unavailable|rate limit|rate-limited|429|503|server busy)/.test(msg)
+  ) {
+    return {
+      shortReason: 'transient provider failure',
+      assistantPrefix:
+        'Generation stopped because the provider was temporarily unavailable. Keeping the partial response below.',
+      systemNote:
+        'Chat completion hit a transient provider failure. Partial assistant output was preserved.',
+    }
+  }
   return {
     shortReason: 'failed',
     assistantPrefix: 'Generation ended early due to an error. Keeping the partial response below.',
@@ -334,6 +400,7 @@ async function llmRequest(
     verbosity,
   })
   let model
+  let requestMessages = openAIConversationThread
   const overrideOpts: Record<string, unknown> = {}
   switch (api.name) {
     case 'openai':
@@ -363,14 +430,24 @@ async function llmRequest(
             reasoningEffort: gptReasoning,
             reasoningSummary: 'auto', // 'auto' for condensed or 'detailed' for comprehensive
             ...(api.name === 'chatgpt-codex'
-              ? {
-                  instructions: collectSystemInstructions(openAIConversationThread),
-                  ...(hasNonSystemMessages(openAIConversationThread)
-                    ? { systemMessageMode: 'remove' as const }
-                    : {}),
-                  store: false,
-                }
+              ? (() => {
+                  const split =
+                    extractLeadingSystemMessagesForProviderInstructions(openAIConversationThread)
+                  requestMessages = split.messages
+                  return {
+                    instructions: split.instructions,
+                    promptCacheKey: buildPromptCacheKey(requestMessages, selectedModel),
+                    ...(hasNonSystemMessages(requestMessages)
+                      ? { systemMessageMode: 'developer' as const }
+                      : {}),
+                    store: false,
+                  }
+                })()
               : {}),
+            // TODO: Map provider-native parallel tool calls to Taskyon parallel task branches
+            // before enabling this. The current adapter returns generated tool calls as one
+            // sequential branch, which is not equivalent to parallel tool-call semantics.
+            parallelToolCalls: false,
           },
         }
         if (webSearch?.maxResults) {
@@ -484,7 +561,7 @@ async function llmRequest(
   // https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-text
   const streamOpts: streamOptsType = {
     model,
-    messages: openAIConversationThread,
+    messages: requestMessages,
     tools,
     ...(toolChoice ? { toolChoice } : {}),
     ...overrideOpts,
@@ -1267,135 +1344,6 @@ export type chunkStreamType = {
   chunk: streamChunk
 }
 
-export const chatCompletionToolParameters = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    model: {
-      type: 'string',
-      description:
-        'The name of the model to use for the completion. Optional, will choose default model if not provided',
-    },
-    allowedTools: {
-      type: 'array',
-      description:
-        'Optional Parameter. If provided, chatCompletion enables provider-native tool calling and limits calls to this tool set.',
-      items: {
-        type: 'string',
-      },
-    },
-    toolChoice: {
-      type: 'object',
-      description:
-        'Optional Parameter. Use to explicitly control provider-native tool choice when allowedTools are provided.',
-      additionalProperties: false,
-      properties: {
-        type: {
-          type: 'string',
-          enum: ['auto', 'required', 'tool'],
-        },
-        toolName: {
-          type: 'string',
-          description: 'Required when type is "tool". Names one allowed tool to call.',
-        },
-      },
-      required: ['type'],
-    },
-    prompts: {
-      type: 'array',
-      description:
-        'Optional Parameter. Append transient system prompts after the rendered task chat. These prompts augment the chatCompletion input only and are not stored as tasks.',
-      items: {
-        type: 'string',
-      },
-    },
-    prompt_injections: {
-      type: 'array',
-      description:
-        'Optional Parameter. Prepend transient system prompts before the rendered task chat. These prompts augment the chatCompletion input only and are not stored as tasks.',
-      items: {
-        type: 'string',
-      },
-    },
-    schema: {
-      type: 'object',
-      description:
-        'A json schema object which we can use to generate a specific response and parse it.',
-      additionalProperties: true,
-    },
-    reasoning_effort: {
-      enum: ['low', 'high', 'medium', 'none'],
-      description: 'How many reasoning tokens should models with reasoning capability use?',
-      title: 'Reasoning Effort',
-    },
-    websearch: {
-      type: 'object',
-      description: 'Optional websearch configuration. Websearch runs only when enabled is true.',
-      additionalProperties: false,
-      properties: {
-        enabled: {
-          type: 'boolean',
-          title: 'Enabled',
-          default: false,
-          description: 'Explicitly enable websearch for this request.',
-        },
-        max_results: {
-          type: 'integer',
-          description: 'How many web results should be retrieved at max when websearch is enabled.',
-          title: 'Max Results',
-          default: 5,
-        },
-      },
-    },
-    use_multimodal: {
-      type: 'boolean',
-      title: 'Use Vision',
-      description:
-        'Allow models to use their vision/audio & document undestanding capabilities if their are any files in the prompt.',
-    },
-    context_size: {
-      type: 'integer',
-      description:
-        '[Optional] How many of the peceding tasks are going to be used for the chatCompletion?',
-    },
-    options: {
-      type: 'object',
-      description:
-        '[Optional] This is where we can specify additional options for the chat completion.',
-      additionalProperties: true,
-      properties: {
-        verbosity: {
-          type: 'string',
-          enum: ['low', 'high', 'medium'],
-          description: 'how verbose should the reponse be?',
-        },
-        artificial_streaming: {
-          type: 'boolean',
-          description: 'Optional. If true, smooths output chunks for UI readability.',
-          default: true,
-        },
-      },
-    },
-    timeouts: {
-      type: 'object',
-      description: '[Optional] We can specify different timeouts for the chat completion.',
-      properties: {
-        totalMs: {
-          type: 'integer',
-          description: 'Total timeout in milliseconds for the entire chat completion process.',
-          default: 10 * 60 * 1000, // 10 minutes
-        },
-        stepMs: {
-          type: 'integer',
-          description:
-            'Timeout in milliseconds for each individual step when interacting with agents.',
-          default: 10 * 60 * 1000, // 10 minutes
-        },
-      },
-    },
-  },
-} as const satisfies JSONSchema7
-
 export function createChatCompletionTool(
   // TODO: move these apiSettings here right into the 'normal' chatCompletion parameters!
   apiSettings: Thunk<{
@@ -1417,18 +1365,165 @@ export function createChatCompletionTool(
     longDescription: `This tool interfaces with an OpenAI-compatible API to generate completions for
   conversation prompts. Useful for generating natural language responses in a chat setting.
   It will convert the chain pointed to by the previous Task (priorID) into openAI compatible message
-  list and generate a response`,
+    list and generate a response`,
     name: chatCompletionToolName,
     renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
-    parameters: chatCompletionToolParameters,
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        model: {
+          type: 'string',
+          description:
+            'The name of the model to use for the completion. Optional, will choose default model if not provided',
+        },
+        allowedTools: {
+          type: 'array',
+          description:
+            'Optional Parameter. If provided, chatCompletion enables provider-native tool calling and limits calls to this tool set.',
+          items: {
+            type: 'string',
+          },
+        },
+        toolChoice: {
+          type: 'object',
+          description:
+            'Optional Parameter. Use to explicitly control provider-native tool choice when allowedTools are provided.',
+          additionalProperties: false,
+          properties: {
+            type: {
+              type: 'string',
+              enum: ['auto', 'required', 'tool'],
+            },
+            toolName: {
+              type: 'string',
+              description: 'Required when type is "tool". Names one allowed tool to call.',
+            },
+          },
+          required: ['type'],
+        },
+        appendSystemPrompts: {
+          type: 'array',
+          description:
+            'Optional Parameter. Append transient system prompts after the rendered task chat. Use this for volatile late context such as current time or editor state.',
+          items: {
+            type: 'string',
+          },
+        },
+        prependSystemPrompts: {
+          type: 'array',
+          description:
+            'Optional Parameter. Prepend stable system prompts before the rendered task chat. Keep these cache-friendly and avoid volatile values.',
+          items: {
+            type: 'string',
+          },
+        },
+        schema: {
+          type: 'object',
+          description:
+            'A json schema object which we can use to generate a specific response and parse it.',
+          additionalProperties: true,
+        },
+        reasoning_effort: {
+          enum: ['low', 'high', 'medium', 'none'],
+          description: 'How many reasoning tokens should models with reasoning capability use?',
+          title: 'Reasoning Effort',
+        },
+        websearch: {
+          type: 'object',
+          description:
+            'Optional websearch configuration. Websearch runs only when enabled is true.',
+          additionalProperties: false,
+          properties: {
+            enabled: {
+              type: 'boolean',
+              title: 'Enabled',
+              default: false,
+              description: 'Explicitly enable websearch for this request.',
+            },
+            max_results: {
+              type: 'integer',
+              description:
+                'How many web results should be retrieved at max when websearch is enabled.',
+              title: 'Max Results',
+              default: 5,
+            },
+          },
+        },
+        use_multimodal: {
+          type: 'boolean',
+          title: 'Use Vision',
+          description:
+            'Allow models to use their vision/audio & document undestanding capabilities if their are any files in the prompt.',
+        },
+        context_size: {
+          type: 'integer',
+          description:
+            '[Optional] How many of the peceding tasks are going to be used for the chatCompletion?',
+        },
+        options: {
+          type: 'object',
+          description:
+            '[Optional] This is where we can specify additional options for the chat completion.',
+          additionalProperties: true,
+          properties: {
+            verbosity: {
+              type: 'string',
+              enum: ['low', 'high', 'medium'],
+              description: 'how verbose should the reponse be?',
+            },
+            artificial_streaming: {
+              type: 'boolean',
+              description: 'Optional. If true, smooths output chunks for UI readability.',
+              default: true,
+            },
+          },
+        },
+        timeouts: {
+          type: 'object',
+          description: '[Optional] We can specify different timeouts for the chat completion.',
+          properties: {
+            totalMs: {
+              type: 'integer',
+              description: 'Total timeout in milliseconds for the entire chat completion process.',
+              default: 10 * 60 * 1000, // 10 minutes
+            },
+            stepMs: {
+              type: 'integer',
+              description:
+                'Timeout in milliseconds for each individual step when interacting with agents.',
+              default: 10 * 60 * 1000, // 10 minutes
+            },
+          },
+        },
+        trace: {
+          type: 'object',
+          description:
+            'Optional request tracing. When enabled and the runtime installed a trace writer, Taskyon records the exact LLM input and output separately.',
+          additionalProperties: false,
+          properties: {
+            enabled: {
+              type: 'boolean',
+              default: false,
+              description: 'Enable request/response tracing for this chatCompletion call.',
+            },
+            label: {
+              type: 'string',
+              description:
+                'Optional stable label added to trace file names, for example a benchmark task id.',
+            },
+          },
+        },
+      },
+    } as const satisfies JSONSchema7,
     function: async (opts, context: toolContext) => {
       //////////   INITIALIZATION
       const {
         model,
         allowedTools,
         toolChoice,
-        prompts,
-        prompt_injections,
+        appendSystemPrompts,
+        prependSystemPrompts,
         schema,
         websearch,
         reasoning_effort: reasoningEffort,
@@ -1437,9 +1532,11 @@ export function createChatCompletionTool(
         use_multimodal = true,
         context_size,
         timeouts,
+        trace,
       } = opts
       const { verbosity, artificial_streaming } = options || {}
-      const promptInjections = normalizePromptInjections(prompt_injections)
+      const normalizedPrependSystemPrompts = normalizePromptInjections(prependSystemPrompts)
+      const normalizedAppendSystemPrompts = appendSystemPrompts ?? []
 
       const timeout = {
         totalMs: timeouts?.totalMs ?? 10 * 60 * 1000,
@@ -1515,8 +1612,8 @@ export function createChatCompletionTool(
         },
         taskManager,
         lastTaskBeforeChatCompletion,
-        prompts ?? [],
-        promptInjections,
+        normalizedAppendSystemPrompts,
+        normalizedPrependSystemPrompts,
         variableService,
         getChatCompletionContextOptions(context_size),
       )
@@ -1542,6 +1639,21 @@ export function createChatCompletionTool(
         verbosity,
         normalizedToolChoice,
       )
+      const traceEnabled = trace?.enabled === true
+      const traceTaskId = currentTask?.id ?? 'N/A'
+      const traceLabel = typeof trace?.label === 'string' ? trace.label : undefined
+      const traceInputPayload = {
+        taskId: traceTaskId,
+        ...(traceLabel ? { label: traceLabel } : {}),
+        input: {
+          api: selectedApi,
+          model: selectedModel,
+          request: streamOpts,
+        },
+      }
+      if (traceEnabled) {
+        await writeChatCompletionTraceInput(traceInputPayload)
+      }
 
       let errorCapture: unknown
       const { streamText } = await import('ai')
@@ -1589,7 +1701,12 @@ export function createChatCompletionTool(
               'Suggested fix: use a model/provider route with tool-call support, relax provider filters, or disable tool use for this run.',
               'Reference: https://openrouter.ai/docs/guides/routing/provider-selection',
             ].join('\n')
-          : humanized
+          : failure.shortReason === 'transient provider failure'
+            ? [
+                humanized,
+                'Suggested autonomous recovery: retry the same immediate objective once after the task tree records this error. If it repeats, reduce context or pause with the exact provider error instead of looping indefinitely.',
+              ].join('\n')
+            : humanized
         const partialContent = partialTextOutput.trim() || cleanupRawStreamOutput(rawOutput)
         const sanitizedPartialContent =
           partialContent.length > 0
@@ -1650,6 +1767,18 @@ export function createChatCompletionTool(
           errorCapture,
           failure,
         })
+        if (traceEnabled) {
+          await writeChatCompletionTraceOutput({
+            ...traceInputPayload,
+            output: {
+              ok: false,
+              rawOutput,
+              partialTextOutput,
+              error: serializeError(effectiveErr),
+              failure,
+            },
+          })
+        }
         return context.createSubtasksResult([
           ...(sanitizedPartialContent
             ? [
@@ -1696,6 +1825,19 @@ export function createChatCompletionTool(
       // in case a schema was given, we simply use that schema and return it as a structured message
       // for further processing (e.g. a contextFunction)...
       const output = await chatCompletion.output
+      if (traceEnabled) {
+        await writeChatCompletionTraceOutput({
+          ...traceInputPayload,
+          output: {
+            ok: true,
+            response: res,
+            output,
+            rawOutput,
+            text: partialTextOutput,
+            usage: await chatCompletion.totalUsage,
+          },
+        })
+      }
       // convert sources
       const sources = (await chatCompletion.sources)
         .map<Annotation | undefined>((source) => {

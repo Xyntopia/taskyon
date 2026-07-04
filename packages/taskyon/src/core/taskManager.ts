@@ -565,6 +565,11 @@ export async function useTyTaskManager(
     },
   )
 
+  const invalidateTaskRelationCaches = (task: Pick<TaskNode, 'parentID' | 'priorID'>) => {
+    if (task.parentID && !task.priorID) immediateChildrenMap.delete(task.parentID)
+    if (task.priorID) nextSiblingMap.delete(task.priorID)
+  }
+
   // all children: just parentID match
   const searchAllChildren = createCachedIdSearch(
     parentToChildMap,
@@ -622,7 +627,7 @@ export async function useTyTaskManager(
     return leafTasks
   }
 
-  // Recursively builds a tree node for the given task id.
+  // Builds the task subtree rooted at the given task id.
   async function buildTaskTreeNode(taskId: string, maxDepth: number): Promise<TaskTreeNode> {
     const task = await taskDb.get(taskId)
     if (!task) throw new Error(`Task ${taskId} not found`)
@@ -916,6 +921,7 @@ export async function useTyTaskManager(
     const addedTaskList: TaskNode[] = []
     for (const task of taskList) {
       const addedTask = await addPartialTask2Tree({ ...task, priorID: lastTaskId, parentID })
+      invalidateTaskRelationCaches(addedTask)
       lastTaskId = addedTask.id
       addedTaskList.push(addedTask)
     }

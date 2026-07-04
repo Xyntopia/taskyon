@@ -72,7 +72,7 @@ export const ragSearchTool = createTool({
             toolCall({
               name: 'chatCompletion',
               arguments: {
-                prompts: [
+                appendSystemPrompts: [
                   `Based on the search results above, please provide a comprehensive answer to the query: "${searchText}".
                   Use the information from the search results and format your response in a clear, well-structured way.`,
                 ],
@@ -97,7 +97,7 @@ export const ragSearchTool = createTool({
           toolCall({
             name: 'chatCompletion',
             arguments: {
-              prompts: [
+              appendSystemPrompts: [
                 `Based on the web search results above, please provide a comprehensive answer to the query: "${searchText}".
                 Use the information from the search results and format your response in a clear, well-structured way.
                 List all the references below the answer, make sure all the links open in a new tab.`,

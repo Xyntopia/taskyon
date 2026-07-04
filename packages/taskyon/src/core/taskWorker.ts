@@ -391,8 +391,9 @@ const createTaskProcessor = (
         console.log('sleep-waiting for task to finish', task.id)
         await sleep(500)
         queueTask(task.id)
-        // Keep the task in the in-progress set while it waits, so callers can
-        // still see unfinished subtask work.
+        // The task is queued for a later attempt, but it is not actively
+        // executing while it waits for its prior chain to settle.
+        taskOutOfLoop(task.id, 'waiting')
         return // early return, because this task is not ready yet
       }
 

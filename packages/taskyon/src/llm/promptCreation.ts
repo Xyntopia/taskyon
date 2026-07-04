@@ -160,8 +160,8 @@ export function addPrompts(
     toolResult: string
   },
   chatCompletionMessages: ModelMessage[],
-  prompts: string[],
-  promptInjections: PromptInjection[] = [],
+  appendSystemPrompts: string[],
+  prependSystemPrompts: PromptInjection[] = [],
   allowedTools: string[],
   lastMessage: unknown,
   goal?: Goals,
@@ -188,7 +188,6 @@ export function addPrompts(
   const prependMessagesList: string[] = []
   const appendMessagesList: string[] = []
   const appendSystemMessage: string[] = []
-  const prependPromptTexts = promptInjections
 
   // we always prepend our "fancy" prompt, if we use "native" tools...
   if ((goal === 'SimpleCompletion' && useBasePrompt) || useNativeTools || goal === 'WebSearch') {
@@ -207,7 +206,7 @@ export function addPrompts(
       }
     }
   }
-  prependMessagesList.push(...prependPromptTexts)
+  prependMessagesList.push(...prependSystemPrompts)
   if (goal && goal !== 'SimpleCompletion' && goal !== 'WebSearch') {
     // only add tools, if we don#t use the native API already
     if (!useNativeTools) {
@@ -215,10 +214,10 @@ export function addPrompts(
     }
     // put custom prompts between general instruction, tool lists and
     // the schema enforcer
-    appendMessagesList.push(...prompts)
+    appendMessagesList.push(...appendSystemPrompts)
     if (!useNativeTools) appendSystemMessage.push(taskChatTemplates.schemaReminder)
   } else {
-    appendMessagesList.push(...prompts)
+    appendMessagesList.push(...appendSystemPrompts)
     if (schema && !nativeStructuredResponse) {
       appendSystemMessage.push(taskChatTemplates.schemaReminder)
     }
