@@ -1,8 +1,4 @@
-import {
-  createDuplexChannel,
-  type Port,
-  type Unsubscribe,
-} from '../../shared/modules/frpBus'
+import { createDuplexChannel, type Port, type Unsubscribe } from '@taskyon/common/modules/frpBus'
 import {
   createP2pManager,
   type CreateP2pManagerOptions,
@@ -45,10 +41,7 @@ export type P2pBus = {
   destroy: () => void
 }
 
-function forwardManagerEvent(
-  event: P2pManagerEvent,
-  emit: (event: P2pBusEvent) => void,
-) {
+function forwardManagerEvent(event: P2pManagerEvent, emit: (event: P2pBusEvent) => void) {
   switch (event.type) {
     case 'log':
       emit({ type: 'p2p.log', message: event.message })

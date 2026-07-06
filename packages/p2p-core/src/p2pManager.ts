@@ -13,11 +13,7 @@ import {
   SUBNETWORK_PEER_DISCOVERY_EVENT,
 } from './constants'
 import { deriveDiscoveryTokens, deriveSubnetworkMessageTopic } from './discovery'
-import {
-  createStream,
-  type Stream,
-  type Unsubscribe,
-} from '../../shared/modules/frpBus'
+import { createStream, type Stream, type Unsubscribe } from '@taskyon/common/modules/frpBus'
 import {
   headlessBrowserDiscoveryTestNetwork,
   p2pTestNetworks,
@@ -158,8 +154,7 @@ export type CreateP2pManagerOptions = {
   startNode?: (opts: { subnetworkSecrets: string[] }) => Promise<BrowserLibp2pNode>
 }
 
-const DEFAULT_BROWSER_LOG_NAMESPACES =
-  'p2p-core:*,libp2p:*,-libp2p:connection-manager:*,-*:trace'
+const DEFAULT_BROWSER_LOG_NAMESPACES = 'p2p-core:*,libp2p:*,-libp2p:connection-manager:*,-*:trace'
 const DISCOVERED_PEER_TTL_MS = 20_000
 const NEIGHBOR_PING_INTERVAL_MS = 5_000
 const NEIGHBOR_OFFLINE_TTL_MS = 60_000
@@ -206,7 +201,8 @@ function getPeerDetails(libp2p: Libp2p) {
       .filter((ma) => Circuit.exactMatch(ma as unknown as Parameters<typeof Circuit.exactMatch>[0]))
     const relayPeers = relayMultiaddrs
       .map((ma) =>
-        ma.getComponents()
+        ma
+          .getComponents()
           .filter(({ name }) => name === 'p2p')
           .map(({ value }) => value),
       )
@@ -495,7 +491,9 @@ export function createP2pManager(options: CreateP2pManagerOptions = {}): P2pMana
     if (!node) return
 
     const uniquePeers = new Map(
-      node.getConnections().map((connection) => [connection.remotePeer.toString(), connection.remotePeer]),
+      node
+        .getConnections()
+        .map((connection) => [connection.remotePeer.toString(), connection.remotePeer]),
     )
 
     for (const [peerId, remotePeer] of uniquePeers.entries()) {
@@ -616,7 +614,11 @@ export function createP2pManager(options: CreateP2pManagerOptions = {}): P2pMana
     const onSubscriptionChange = () => refreshNodeInfo()
     const onPeerDiscovery = (
       event: Event & {
-        detail?: { id: string; matchedToken?: string; multiaddrs?: Array<{ toString: () => string }> }
+        detail?: {
+          id: string
+          matchedToken?: string
+          multiaddrs?: Array<{ toString: () => string }>
+        }
       },
     ) => {
       if (!event.detail || typeof event.detail.id !== 'string') return
@@ -681,7 +683,9 @@ export function createP2pManager(options: CreateP2pManagerOptions = {}): P2pMana
   const syncSubnetworkTokens = async () => {
     for (const network of state.subnetworks) {
       network.discoveryTokens = await deriveDiscoveryTokens(network.secret ? [network.secret] : [])
-      network.messageTopic = network.secret ? await deriveSubnetworkMessageTopic(network.secret) : ''
+      network.messageTopic = network.secret
+        ? await deriveSubnetworkMessageTopic(network.secret)
+        : ''
     }
     emitState()
   }

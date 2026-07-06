@@ -1,5 +1,5 @@
 import type { ReadonlyDeep, WritableDeep } from 'type-fest'
-import { transformMarkdownTextOutsideCode } from '@taskyon/shared/modules/markdownText'
+import { transformMarkdownTextOutsideCode } from '@taskyon/common/modules/markdownText'
 import type { TaskNode, TaskGetter } from '../types/taskNode'
 import type { FunctionArguments } from '../types/tools'
 import { safeYamlDump } from '../utils/yamlUtils'

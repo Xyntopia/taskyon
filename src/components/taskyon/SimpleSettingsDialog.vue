@@ -32,8 +32,8 @@
 
 <script setup lang="ts">
 import { matMoreHoriz } from '@quasar/extras/material-icons'
-import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
-import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
+import ResponsiveMenuDialogBtn from '@taskyon/ui/components/ResponsiveMenuDialogBtn.vue'
+import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
 import type { JSONSchema7 } from 'json-schema'
 import type { iconMap } from 'src/modules/icons'
 import { iconRegistry, settingsIcons } from 'src/modules/icons'

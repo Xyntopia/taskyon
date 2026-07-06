@@ -1,0 +1,24 @@
+{
+  "name": "@taskyon/common",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./modules/*": "./modules/*"
+  },
+  "dependencies": {
+    "@mdit/plugin-katex": "^0.24.1",
+    "@resvg/resvg-wasm": "^2.6.2",
+    "@vueuse/core": "^14.2.1",
+    "dompurify": "^3.4.8",
+    "fast-equals": "^5.0.1",
+    "fflate": "^0.8.2",
+    "mathjs": "^11.8.2",
+    "pmtiles": "^4.4.1",
+    "qrcode": "^1.5.4"
+  },
+  "peerDependencies": {
+    "vue": "^3.4.0"
+  }
+}

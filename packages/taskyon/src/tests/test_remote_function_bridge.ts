@@ -1,4 +1,4 @@
-import { createDuplexChannel } from '@taskyon/shared/modules/frpBus'
+import { createDuplexChannel } from '@taskyon/common/modules/frpBus'
 import { mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

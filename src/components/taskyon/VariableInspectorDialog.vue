@@ -41,7 +41,7 @@
 
 <script setup lang="ts">
 import { matClose } from '@quasar/extras/material-icons'
-import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
+import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
 import type { TaskNode } from '@taskyon/taskyon'
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 

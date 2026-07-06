@@ -154,12 +154,12 @@
 
 <script setup lang="ts">
 import { matContentCopy } from '@quasar/extras/material-icons'
-import PasswordRequestDialog from '@taskyon/shared/components/PasswordRequestDialog.vue'
+import PasswordRequestDialog from '@taskyon/ui/components/PasswordRequestDialog.vue'
 import { randomString } from '@taskyon/taskyon'
 import { dump } from 'js-yaml'
 import { exportFile } from 'quasar'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
-import * as ModelicaDiagnostics from '@taskyon/shared/modelica/modelicaDiagnostics'
+import * as ModelicaDiagnostics from '@taskyon/modelica/modelicaDiagnostics'
 import { runMarkdownDetectionTests } from 'src/modules/taskyon/runMarkdownDetectionTests'
 import * as TaskyonTests from 'src/modules/taskyon/tests'
 import * as TaskyonUiInteractionTests from 'src/modules/taskyon/taskyonUiInteractionTests'
@@ -176,9 +176,9 @@ import {
   runDiagnosticsTests,
   type TaskyonTestFn,
   type TestRecord,
-} from '../../packages/shared/modules/diagnosticsRunner'
-import { syncRefsWithLocalStorage } from '../../packages/shared/modules/saveState'
-import { copyToClipboard, getEnvironmentInfo } from '../../packages/shared/modules/utils'
+} from '@taskyon/common/modules/diagnosticsRunner'
+import { syncRefsWithLocalStorage } from '@taskyon/common/modules/saveState'
+import { copyToClipboard, getEnvironmentInfo } from '@taskyon/common/modules/utils'
 
 const testModules = import.meta.glob(
   [
@@ -186,8 +186,8 @@ const testModules = import.meta.glob(
     '!../../packages/taskyon/src/tests/test_entry_node_error_recovery.ts',
     '!../../packages/taskyon/src/tests/test_entry_node_websearch.ts',
     '!../../packages/taskyon/src/tests/test_remote_function_bridge.ts',
-    '../../packages/shared/modules/test_*.ts',
-    '../../packages/shared/surrogate/test_*.ts',
+    '../../packages/common/modules/test_*.ts',
+    '../../packages/surrogate/test_*.ts',
   ],
   { eager: true }, // so modules are imported at build time (synchronously)
 )

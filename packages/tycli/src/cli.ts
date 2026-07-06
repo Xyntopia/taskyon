@@ -8,9 +8,9 @@ import { dirname, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import { inspect } from 'node:util'
-import type { createDuplexChannel } from '../../shared/modules/frpBus'
-import { createUnavailableIframeMux } from '../../shared/modules/frpBus'
-import { serializeObject } from '@taskyon/shared/modules/serializeObject'
+import type { createDuplexChannel } from '@taskyon/common/modules/frpBus'
+import { createUnavailableIframeMux } from '@taskyon/common/modules/frpBus'
+import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import {
   createClientTool,
   createExternalToolContext,

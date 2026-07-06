@@ -1,4 +1,4 @@
-import { serializeObject } from '@taskyon/shared/modules/serializeObject'
+import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import type { TaskNodeMeta } from '@taskyon/taskyon'
 
 export type ConversationEntry = {

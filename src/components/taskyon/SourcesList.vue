@@ -80,7 +80,7 @@
 </template>
 
 <script lang="ts" setup>
-import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
+import ResponsiveMenuDialogBtn from '@taskyon/ui/components/ResponsiveMenuDialogBtn.vue'
 import type { Annotation } from '@taskyon/taskyon'
 import { computed, ref } from 'vue'
 

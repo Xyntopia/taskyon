@@ -74,7 +74,7 @@ import {
   matTravelExplore,
 } from '@quasar/extras/material-icons'
 import type { P2pManagerSnapshot } from '@taskyon/p2p-core'
-import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
+import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
 import { computed, ref } from 'vue'
 
 const { status, busy = false } = defineProps<{

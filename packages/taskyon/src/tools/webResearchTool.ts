@@ -3,7 +3,7 @@ import {
   proxyWebReaderProviderIds,
   resolveProxyWebReaderArgs,
   type ResolvedProxyWebReaderArgs,
-} from '@taskyon/shared/modules/webFetching'
+} from '@taskyon/common/modules/webFetching'
 import { buildTaskPlannerTaskChains } from './TaskPlannerTool'
 import { createTool, toolCall } from '../types/toolApi'
 import type { partialTaskDraft } from '../types/taskNode'

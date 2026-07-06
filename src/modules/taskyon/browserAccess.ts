@@ -1,5 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
-import { proxyWebReaderProviderIds } from '@taskyon/shared/modules/webFetching'
+import { proxyWebReaderProviderIds } from '@taskyon/common/modules/webFetching'
 import type { TaskNode } from '@taskyon/taskyon'
 
 export type BrowserAccessActivity = {

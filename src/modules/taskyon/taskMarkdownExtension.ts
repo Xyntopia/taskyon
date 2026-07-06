@@ -1,9 +1,9 @@
-import { serializeObject } from '@taskyon/shared/modules/serializeObject'
+import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import {
   escapeHtml,
   renderInlineActionButton,
   type MarkdownExtension,
-} from '@taskyon/shared/modules/markdownUtils '
+} from '@taskyon/common/modules/markdownUtils '
 import type { TaskNode } from '@taskyon/taskyon'
 
 const VARIABLE_REGEX = /{{\s*(_t:[^{}]+?)\s*}}/g

@@ -181,7 +181,7 @@ import {
   matSearch,
 } from '@quasar/extras/material-icons'
 import { mdiForum, mdiForumPlus } from '@quasar/extras/mdi-v6'
-import ResponsiveMenuDialogBtn from '@taskyon/shared/components/ResponsiveMenuDialogBtn.vue'
+import ResponsiveMenuDialogBtn from '@taskyon/ui/components/ResponsiveMenuDialogBtn.vue'
 import { QToolbar } from 'quasar'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useAppStateStore } from 'src/stores/appState'

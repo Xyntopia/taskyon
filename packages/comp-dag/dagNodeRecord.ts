@@ -1,0 +1,142 @@
+import type { Hash } from './caching.ts'
+import { hashStaticDagNodeSource } from './dagNodeIdentity.ts'
+import type { DagJsonSchema } from './dagSchema.ts'
+
+export type DagNodeInputRefSingle = { nodeId: Hash }
+export type DagNodeInputRefOneOf = {
+  kind: 'oneOf'
+  nodeIds: Hash[]
+}
+
+export type DagNodeInputRole = 'internal' | 'exposed'
+export type DagNodeRecordInputRefSingle = DagNodeInputRefSingle & {
+  role: DagNodeInputRole
+}
+export type DagNodeRecordInputRefOneOf = DagNodeInputRefOneOf & {
+  role: 'exposed'
+}
+export type DagNodeRecordInputRef = DagNodeRecordInputRefSingle | DagNodeRecordInputRefOneOf
+
+export type DagNodeRunContext = {
+  params: Record<string, unknown>
+  inputs: Record<string, unknown>
+}
+
+export type DagNodeRunFunction = (ctx: DagNodeRunContext) => unknown
+
+export type DagNodeStaticDependencyFingerprint = {
+  importSpecifiers?: readonly string[]
+  lockfileHash?: Hash
+}
+
+export type DagNodeRecord = {
+  id: Hash
+  localName: string
+  label: string
+  version: number
+  timeoutMs?: number
+  localParamsSchema: DagJsonSchema
+  outputSchema: DagJsonSchema
+  inputs?: Record<string, DagNodeRecordInputRef>
+  hiddenInputs?: Record<string, DagNodeInputRefSingle>
+  exposedInputs?: Record<string, DagNodeInputRefSingle | DagNodeInputRefOneOf>
+  runSource: string
+  runCode?: string
+  run?: DagNodeRunFunction
+  staticDependencyFingerprint?: DagNodeStaticDependencyFingerprint
+}
+
+export type DagNodeRecordAuthoringInput = Omit<DagNodeRecord, 'id'> & {
+  staticDependencyFingerprint: DagNodeStaticDependencyFingerprint
+}
+
+export const recordInputsToRuntimeInputs = (
+  record: Pick<DagNodeRecord, 'inputs' | 'hiddenInputs' | 'exposedInputs'>,
+): {
+  hiddenInputs: Record<string, DagNodeInputRefSingle>
+  exposedInputs: Record<string, DagNodeInputRefSingle | DagNodeInputRefOneOf>
+} => {
+  if (!record.inputs) {
+    return {
+      hiddenInputs: record.hiddenInputs ?? {},
+      exposedInputs: record.exposedInputs ?? {},
+    }
+  }
+
+  const hiddenInputs: Record<string, DagNodeInputRefSingle> = {}
+  const exposedInputs: Record<string, DagNodeInputRefSingle | DagNodeInputRefOneOf> = {}
+  for (const [alias, ref] of Object.entries(record.inputs)) {
+    if (ref.role === 'internal') {
+      if ('kind' in ref) {
+        throw new Error(`DagNodeRecord input "${alias}" cannot use oneOf with internal role`)
+      }
+      hiddenInputs[alias] = { nodeId: ref.nodeId }
+    } else if ('kind' in ref) {
+      exposedInputs[alias] = { kind: 'oneOf', nodeIds: ref.nodeIds }
+    } else {
+      exposedInputs[alias] = { nodeId: ref.nodeId }
+    }
+  }
+  return { hiddenInputs, exposedInputs }
+}
+
+export const runtimeInputsToRecordInputs = (args: {
+  hiddenInputs?: Record<string, DagNodeInputRefSingle>
+  exposedInputs?: Record<string, DagNodeInputRefSingle | DagNodeInputRefOneOf>
+}): Record<string, DagNodeRecordInputRef> => {
+  const inputs: Record<string, DagNodeRecordInputRef> = {}
+  for (const [alias, ref] of Object.entries(args.hiddenInputs ?? {})) {
+    inputs[alias] = { ...ref, role: 'internal' }
+  }
+  for (const [alias, ref] of Object.entries(args.exposedInputs ?? {})) {
+    inputs[alias] = 'kind' in ref ? { ...ref, role: 'exposed' } : { ...ref, role: 'exposed' }
+  }
+  return inputs
+}
+
+export const getDagNodeRecordInputHashes = (record: DagNodeRecord): Hash[] =>
+  Object.values(recordInputsToRuntimeInputs(record)).flatMap((inputMap) =>
+    Object.values(inputMap).flatMap((ref) => ('kind' in ref ? ref.nodeIds : [ref.nodeId])),
+  )
+
+const sortedRecordValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(sortedRecordValue)
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const key of Object.keys(value).sort()) {
+      out[key] = sortedRecordValue((value as Record<string, unknown>)[key])
+    }
+    return out
+  }
+  return value
+}
+
+export const normalizeDagNodeRecordHashSource = (
+  record: Omit<DagNodeRecord, 'id' | 'run' | 'runCode'>,
+): string =>
+  JSON.stringify(
+    sortedRecordValue({
+      label: record.label,
+      localName: record.localName,
+      version: record.version,
+      timeoutMs: record.timeoutMs ?? null,
+      localParamsSchema: record.localParamsSchema,
+      outputSchema: record.outputSchema,
+      inputs: record.inputs ?? null,
+      hiddenInputs: record.hiddenInputs ?? {},
+      exposedInputs: record.exposedInputs ?? {},
+      runSource: record.runSource,
+      staticDependencyFingerprint: record.staticDependencyFingerprint ?? null,
+    }),
+  )
+
+export const defineDagNodeRecord = async (
+  input: DagNodeRecordAuthoringInput,
+): Promise<DagNodeRecord> => {
+  const hashSource = normalizeDagNodeRecordHashSource(input)
+  const id = await hashStaticDagNodeSource(hashSource, input.staticDependencyFingerprint)
+  return {
+    ...input,
+    id,
+  }
+}

@@ -92,12 +92,12 @@ import { matContentCopy, matDeleteForever, matSave } from '@quasar/extras/materi
 import { mdiTools } from '@quasar/extras/mdi-v6'
 import { Dialog } from 'quasar'
 import { generateSecretId } from '../../../packages/taskyon/src/core/taskFunctionExecutor'
-import { copyToClipboard } from '@taskyon/shared/modules/utils'
+import { copyToClipboard } from '@taskyon/common/modules/utils'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { onMounted, ref, watch } from 'vue'
-import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
-import SecretInput from '@taskyon/shared/components/varViews/SecretInput.vue'
+import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
+import SecretInput from '@taskyon/ui/components/varViews/SecretInput.vue'
 
 const { onlyThisKey = undefined, title = undefined } = defineProps<{
   title?: string

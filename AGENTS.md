@@ -3,7 +3,7 @@
 ## Required reading before code changes
 
 - `development_instructions.md` — typing, lint, and root-cause rules (mandatory).
-- `packages/shared/modelica/README.md` — before any Modelica compiler, template, runtime, or simulation change.
+- `packages/modelica/README.md` — before any Modelica compiler, template, runtime, or simulation change.
 - `packages/rumoca/AGENTS.md` — before any rumoca change (separate submodule with own spec system).
 
 ## Key rules
@@ -118,7 +118,12 @@
 
 - **Monorepo**: Yarn 4 workspaces. Root `package.json` is the Quasar/Tauri app (Vue 3 + Pinia + Vue Router).
 - **`packages/taskyon`** (`@taskyon/taskyon`) — core task engine. Exports raw TS via `exports` map (no build step). Entry points: `index.ts`, `browser.ts`, `tools/index.ts`, `db.ts`, `api/index.ts`.
-- **`packages/shared`** (`@taskyon/shared`) — shared Vue components, Modelica tooling, UI utilities.
+- **`packages/common`** (`@taskyon/common`) — common modules, diagnostics runner, worker/sandbox, graph helpers, storage, plotting helpers, and utilities.
+- **`packages/comp-dag`** (`@taskyon/comp-dag`) — computational DAG core, optimization, dynamic node records/loaders, runtime, and query pipeline.
+- **`packages/ui`** (`@taskyon/ui`) — reusable Vue components and generic shared pages.
+- **`packages/modelica`** (`@taskyon/modelica`) — Modelica runtime, editor, diagnostics, templates, scripts, and library catalog.
+- **`packages/surrogate`** (`@taskyon/surrogate`) — surrogate model utilities.
+- **`packages/spaceships`** (`@taskyon/spaceships`) — procedural spaceship assets/components.
 - **`packages/tycli`** (`@taskyon/tycli`) — Node CLI surface for chat and Node diagnostics. Built with tsup for the chat bundle; diagnostics scripts run directly via `--experimental-strip-types`.
 - **`packages/tyclient`** (`@taskyon/tyclient`) — published client library (npm). Built with tsup.
 - **`packages/p2p-core`** — libp2p networking. Built with tsup.
@@ -147,12 +152,12 @@
 
 ## Gotchas
 
-- Modelica library archives are not bundled by app builds. Do not put large library files such as the MSL archive in `public/`, GitHub Pages, or other repository-published static assets. Mirror them to external object storage such as S3 instead, and use `yarn modelica:libraries:publish` manually to update `packages/shared/modelica/modelica_libraries.json`.
+- Modelica library archives are not bundled by app builds. Do not put large library files such as the MSL archive in `public/`, GitHub Pages, or other repository-published static assets. Mirror them to external object storage such as S3 instead, and use `yarn modelica:libraries:publish` manually to update `packages/modelica/modelica_libraries.json`.
 - Builds need `--max-old-space-size=8192` (set in Nix shell; set manually if not using Nix: `export NODE_OPTIONS="--max-old-space-size=8192"`).
 - `packages/rumoca` and `packages/yatra` are separate git repos. Changes there should follow their own workflows, not root-level commands.
 - `packages/tycli` diagnostics scripts use `--experimental-strip-types` instead of a compile step. Don't add a separate build step for them.
 - `COREPACK_HOME` must be outside the repo (ESM/CJS conflict). The Nix shell handles this; if bypassing Nix, set `COREPACK_HOME` to a path outside any `type: "module"` package boundary.
 - The `packages/taskyon` package exports TS source files directly. Import it via the `exports` map paths, not by relative file paths.
 - Keep browser UI mode and Node headless mode aligned. Changes in shared runtime paths must work in both environments; do not fix headless by introducing a Node-only shortcut into code that is also used by the browser UI.
-- When working on Modelica runtime bugs: debug generated JS first, then backport fixes to templates. See `packages/shared/modelica/README.md` for the mandatory debug loop.
+- When working on Modelica runtime bugs: debug generated JS first, then backport fixes to templates. See `packages/modelica/README.md` for the mandatory debug loop.
 - When the persisted Taskyon profile schema changes, bump the profile version in both `src/modules/taskyon/types.ts` and `src/assets/taskyon_settings.json`. Prefer invalidating old persisted profiles through the version number instead of adding one-off cleanup code for removed fields.

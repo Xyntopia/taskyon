@@ -1,0 +1,11 @@
+{
+  "name": "@taskyon/surrogate",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./index.ts",
+    "./*": "./*"
+  }
+}

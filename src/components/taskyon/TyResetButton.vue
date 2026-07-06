@@ -65,7 +65,7 @@
 
 <script setup lang="ts">
 import { matDeleteForever, matWarning } from '@quasar/extras/material-icons'
-import DialogButton from '@taskyon/shared/components/DialogButton.vue'
+import DialogButton from '@taskyon/ui/components/DialogButton.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 

@@ -5,7 +5,7 @@
 
 import { lockMap } from '@taskyon/taskyon'
 import axios from 'axios'
-import { asyncLruCache } from '../../packages/shared/modules/utils'
+import { asyncLruCache } from '@taskyon/common/modules/utils'
 
 type gDriveFile = {
   id: string

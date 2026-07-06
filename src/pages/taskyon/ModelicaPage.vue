@@ -23,7 +23,7 @@
 <script setup lang="ts">
 import { matRocketLaunch } from '@quasar/extras/material-icons'
 import type { partialTyConfiguration } from '@taskyon/tyclient'
-import ModelicaEditor from '@taskyon/shared/modelica/ModelicaEditor.vue'
+import ModelicaEditor from '@taskyon/modelica/ModelicaEditor.vue'
 import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import FixedHeightPage from 'src/pages/FixedHeightPage.vue'
 import { useAppStateStore } from 'src/stores/appState'

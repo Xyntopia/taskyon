@@ -204,8 +204,20 @@ export default defineConfig((ctx) => {
           ts.compilerOptions.paths['@taskyon/tyclient'] = ['./../packages/tyclient/src/index.ts']
           ts.compilerOptions.paths['@taskyon/p2p-core'] = ['./../packages/p2p-core/src/index.ts']
           ts.compilerOptions.paths['@taskyon/p2p-core/*'] = ['./../packages/p2p-core/src/*']
-          ts.compilerOptions.paths['@taskyon/shared'] = ['./../packages/shared']
-          ts.compilerOptions.paths['@taskyon/shared/*'] = ['./../packages/shared/*']
+          ts.compilerOptions.paths['@taskyon/common'] = ['./../packages/common']
+          ts.compilerOptions.paths['@taskyon/common/*'] = ['./../packages/common/*']
+          ts.compilerOptions.paths['@taskyon/comp-dag'] = ['./../packages/comp-dag/dagCore.ts']
+          ts.compilerOptions.paths['@taskyon/comp-dag/*'] = ['./../packages/comp-dag/*']
+          ts.compilerOptions.paths['@taskyon/modelica'] = ['./../packages/modelica/modelica.ts']
+          ts.compilerOptions.paths['@taskyon/modelica/*'] = ['./../packages/modelica/*']
+          ts.compilerOptions.paths['@taskyon/spaceships'] = [
+            './../packages/spaceships/proceduralSpaceship.ts',
+          ]
+          ts.compilerOptions.paths['@taskyon/spaceships/*'] = ['./../packages/spaceships/*']
+          ts.compilerOptions.paths['@taskyon/surrogate'] = ['./../packages/surrogate/index.ts']
+          ts.compilerOptions.paths['@taskyon/surrogate/*'] = ['./../packages/surrogate/*']
+          ts.compilerOptions.paths['@taskyon/ui'] = ['./../packages/ui']
+          ts.compilerOptions.paths['@taskyon/ui/*'] = ['./../packages/ui/*']
           return ts
         },
       },
@@ -276,7 +288,12 @@ export default defineConfig((ctx) => {
           new URL('./packages/p2p-core/src/index.ts', import.meta.url),
         )
         const p2pCoreSrcPath = fileURLToPath(new URL('./packages/p2p-core/src', import.meta.url))
-        const sharedAliasPath = fileURLToPath(new URL('./packages/shared', import.meta.url))
+        const commonAliasPath = fileURLToPath(new URL('./packages/common', import.meta.url))
+        const compDagAliasPath = fileURLToPath(new URL('./packages/comp-dag', import.meta.url))
+        const modelicaAliasPath = fileURLToPath(new URL('./packages/modelica', import.meta.url))
+        const spaceshipsAliasPath = fileURLToPath(new URL('./packages/spaceships', import.meta.url))
+        const surrogateAliasPath = fileURLToPath(new URL('./packages/surrogate', import.meta.url))
+        const uiAliasPath = fileURLToPath(new URL('./packages/ui', import.meta.url))
         const existingAliases = viteConf.resolve.alias
 
         if (Array.isArray(existingAliases)) {
@@ -284,7 +301,12 @@ export default defineConfig((ctx) => {
             { find: '@taskyon/tyclient', replacement: clientAliasPath },
             { find: /^@taskyon\/p2p-core$/, replacement: p2pCoreAliasPath },
             { find: /^@taskyon\/p2p-core\/(.*)$/, replacement: `${p2pCoreSrcPath}/$1` },
-            { find: '@taskyon/shared', replacement: sharedAliasPath },
+            { find: '@taskyon/common', replacement: commonAliasPath },
+            { find: '@taskyon/comp-dag', replacement: compDagAliasPath },
+            { find: '@taskyon/modelica', replacement: modelicaAliasPath },
+            { find: '@taskyon/spaceships', replacement: spaceshipsAliasPath },
+            { find: '@taskyon/surrogate', replacement: surrogateAliasPath },
+            { find: '@taskyon/ui', replacement: uiAliasPath },
           )
         } else {
           const aliasEntries = Object.entries(existingAliases || {}).map(([find, replacement]) => ({
@@ -296,7 +318,12 @@ export default defineConfig((ctx) => {
             { find: '@taskyon/tyclient', replacement: clientAliasPath },
             { find: /^@taskyon\/p2p-core$/, replacement: p2pCoreAliasPath },
             { find: /^@taskyon\/p2p-core\/(.*)$/, replacement: `${p2pCoreSrcPath}/$1` },
-            { find: '@taskyon/shared', replacement: sharedAliasPath },
+            { find: '@taskyon/common', replacement: commonAliasPath },
+            { find: '@taskyon/comp-dag', replacement: compDagAliasPath },
+            { find: '@taskyon/modelica', replacement: modelicaAliasPath },
+            { find: '@taskyon/spaceships', replacement: spaceshipsAliasPath },
+            { find: '@taskyon/surrogate', replacement: surrogateAliasPath },
+            { find: '@taskyon/ui', replacement: uiAliasPath },
           ]
         }
 

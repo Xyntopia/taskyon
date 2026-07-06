@@ -1,7 +1,10 @@
 import process from 'node:process'
 import { writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
-import { buildDiagnosticsRegistry, runDiagnosticsTests } from '@taskyon/shared/modules/diagnosticsRunner'
+import {
+  buildDiagnosticsRegistry,
+  runDiagnosticsTests,
+} from '@taskyon/common/modules/diagnosticsRunner'
 import * as cliE2eDiagnostics from './cliE2eDiagnostics'
 
 function safeTimestamp(date: Date) {
@@ -65,7 +68,9 @@ async function main() {
   const startedAt = new Date()
   cliE2eDiagnostics.clearCliE2eSessionLogs()
   const registry = buildDiagnosticsRegistry({
-    modules: [{ sourcePath: 'packages/tycli/src/tests/cliE2eDiagnostics.ts', mod: cliE2eDiagnostics }],
+    modules: [
+      { sourcePath: 'packages/tycli/src/tests/cliE2eDiagnostics.ts', mod: cliE2eDiagnostics },
+    ],
   })
   const includeExperimental = process.env.TYCLI_E2E_INCLUDE_EXPERIMENTAL === '1'
   const selectedTests = includeExperimental
@@ -97,6 +102,8 @@ async function main() {
 }
 
 void main().catch((error) => {
-  process.stderr.write(`CLI diagnostics runner failed: ${error instanceof Error ? error.message : String(error)}\n`)
+  process.stderr.write(
+    `CLI diagnostics runner failed: ${error instanceof Error ? error.message : String(error)}\n`,
+  )
   process.exitCode = 1
 })

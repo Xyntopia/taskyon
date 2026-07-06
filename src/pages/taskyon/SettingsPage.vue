@@ -95,8 +95,8 @@
 </template>
 
 <script setup lang="ts">
-import FadeAwayScrollPage from '@taskyon/shared/components/FadeAwayScrollPage.vue'
-import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
+import FadeAwayScrollPage from '@taskyon/ui/components/FadeAwayScrollPage.vue'
+import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
 import {
   convertZodToJsonSchemaCached,
   FunctionArguments as FunctionArgumentsSchema,

@@ -211,7 +211,7 @@ yarn run modelica:compare run \
 To generate OMC simulation references + trace JSON files for the MSL target set:
 
 ```bash
-bash ./packages/shared/modelica/scripts/generate-omc-traces-via-podman.sh
+bash ./packages/modelica/scripts/generate-omc-traces-via-podman.sh
 ```
 
 Notes:

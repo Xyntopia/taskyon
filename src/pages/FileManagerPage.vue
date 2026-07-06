@@ -69,8 +69,8 @@
 <script setup lang="ts">
 import { matContentCopy, matDelete, matDownload, matFolder } from '@quasar/extras/material-icons'
 import { mdiFile } from '@quasar/extras/mdi-v6'
-import FileDropzone from '@taskyon/shared/components/FileDropzone.vue'
-import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
+import FileDropzone from '@taskyon/ui/components/FileDropzone.vue'
+import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
 import type { QTreeNode } from 'quasar'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 

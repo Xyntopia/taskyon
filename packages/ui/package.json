@@ -1,0 +1,48 @@
+{
+  "name": "@taskyon/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./components/*": "./components/*",
+    "./pages/*": "./pages/*"
+  },
+  "dependencies": {
+    "@codemirror/lang-cpp": "^6.0.3",
+    "@codemirror/lang-html": "^6.4.11",
+    "@codemirror/lang-javascript": "^6.2.2",
+    "@codemirror/lang-jinja": "^6.0.0",
+    "@codemirror/lang-json": "^6.0.1",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/lang-rust": "^6.0.2",
+    "@codemirror/lang-sql": "^6.10.0",
+    "@codemirror/language": "^6.9.0",
+    "@codemirror/legacy-modes": "^6.5.2",
+    "@codemirror/state": "^6.5.0",
+    "@codemirror/theme-one-dark": "^6.1.2",
+    "@taskyon/common": "workspace:*",
+    "@taskyon/comp-dag": "workspace:*",
+    "codemirror": "^6.0.1",
+    "codemirror-lang-mermaid": "^0.5.0",
+    "echarts": "^6.0.0",
+    "leaflet": "^1.9.4",
+    "maplibre-gl": "^5.23.0",
+    "markdown-it": "^14.1.0",
+    "markdown-it-abbr": "^2.0.0",
+    "markdown-it-container": "^4.0.0",
+    "markdown-it-deflist": "^3.0.0",
+    "markdown-it-emoji": "^3.0.0",
+    "markdown-it-footnote": "^4.0.0",
+    "markdown-it-ins": "^4.0.0",
+    "markdown-it-mark": "^4.0.0",
+    "markdown-it-sub": "^2.0.0",
+    "markdown-it-sup": "^2.0.0",
+    "mermaid": "^11.6.0",
+    "prismjs": "^1.30.0",
+    "vue-codemirror": "^6.1.1"
+  },
+  "peerDependencies": {
+    "quasar": "^2.16.0",
+    "vue": "^3.4.0"
+  }
+}

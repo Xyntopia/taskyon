@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { createUnavailableIframeMux } from '../../../shared/modules/frpBus'
+import { createUnavailableIframeMux } from '@taskyon/common/modules/frpBus'
 import { tyCore } from '../../../taskyon/src/core/init'
 import type { Taskyon } from '../../../taskyon/src/core/init'
 import type { llmSettings } from '../../../taskyon/src/types/profiles'

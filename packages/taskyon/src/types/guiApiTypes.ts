@@ -2,7 +2,7 @@ import {
   defineFrpProtocol,
   mergeFrpProtocols,
   type ProtocolMessage,
-} from '@taskyon/shared/modules/frpBus'
+} from '@taskyon/common/modules/frpBus'
 import type { PartialDeep } from 'type-fest'
 import { z } from 'zod'
 import { taskyonProtocol } from '../api/taskyonProtocol'

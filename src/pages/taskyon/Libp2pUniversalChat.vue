@@ -166,7 +166,7 @@ import {
   type P2pChatMessage,
   type P2pManagerSnapshot,
 } from '@taskyon/p2p-core'
-import ProceduralSpaceshipIdenticon from '@taskyon/shared/spaceships/ProceduralSpaceshipIdenticon.vue'
+import ProceduralSpaceshipIdenticon from '@taskyon/spaceships/ProceduralSpaceshipIdenticon.vue'
 import { copyToClipboard } from 'quasar'
 import Libp2pStatus from 'src/components/taskyon/Libp2pStatus.vue'
 import NetworkManager from 'src/components/taskyon/NetworkManager.vue'

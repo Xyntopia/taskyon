@@ -6,23 +6,17 @@
     "moduleResolution": "bundler",
     "noUncheckedIndexedAccess": false,
     "exactOptionalPropertyTypes": false,
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "paths": {
-      "@taskyon/taskyon/*": [
-        "../taskyon/src/*"
-      ],
-      "@taskyon/shared/*": [
-        "../shared/*"
-      ],
-      "@taskyon/taskyon/api": [
-        "../taskyon/src/api/index.ts"
-      ]
+      "@taskyon/taskyon/*": ["../taskyon/src/*"],
+      "@taskyon/common/*": ["../common/*"],
+      "@taskyon/comp-dag/*": ["../comp-dag/*"],
+      "@taskyon/modelica/*": ["../modelica/*"],
+      "@taskyon/spaceships/*": ["../spaceships/*"],
+      "@taskyon/surrogate/*": ["../surrogate/*"],
+      "@taskyon/ui/*": ["../ui/*"],
+      "@taskyon/taskyon/api": ["../taskyon/src/api/index.ts"]
     }
   },
-  "include": [
-    "src/cli.ts",
-    "src/cli/**/*.ts"
-  ]
+  "include": ["src/cli.ts", "src/cli/**/*.ts"]
 }

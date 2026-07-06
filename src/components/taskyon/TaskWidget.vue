@@ -255,8 +255,8 @@ import {
   mdiHeadCog,
   mdiTools,
 } from '@quasar/extras/mdi-v6'
-import tyMarkdown from '@taskyon/shared/components/tyMarkdown.vue'
-import { serializeObject } from '@taskyon/shared/modules/serializeObject'
+import tyMarkdown from '@taskyon/ui/components/tyMarkdown.vue'
+import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import {
   humanizeError,
   safeYamlDump,

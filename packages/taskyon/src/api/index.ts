@@ -8,14 +8,14 @@ import type { TaskContentType, TaskNode } from '../types/taskNode'
 import { partialTaskDraft } from '../types/taskNode'
 import { createClientTool, createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 import { sha256UrlSafeHashFromFile } from '../utils/encoding'
-import { createPortClient, createStream, type Port } from '@taskyon/shared/modules/frpBus'
-import { createLruCache } from '@taskyon/shared/modules/lruCache'
+import { createPortClient, createStream, type Port } from '@taskyon/common/modules/frpBus'
+import { createLruCache } from '@taskyon/common/modules/lruCache'
 import type {
   ProtocolClientForPort,
   ProtocolMessage,
   RpcMessagePort,
   UnaryPortRpcDefinition,
-} from '@taskyon/shared/modules/frpBus'
+} from '@taskyon/common/modules/frpBus'
 import { taskyonProtocol } from './taskyonProtocol'
 import type { z } from 'zod'
 
@@ -39,7 +39,7 @@ export {
   createProtocolPort,
   createPortServer,
   MessageChannelBridge,
-} from '@taskyon/shared/modules/frpBus'
+} from '@taskyon/common/modules/frpBus'
 export type {
   PortRpcClientOptions,
   ProtocolServerHandlers,
@@ -49,7 +49,7 @@ export type {
   UnaryPortRpcDefinition,
   ProtocolClient,
   ProtocolMessage,
-} from '@taskyon/shared/modules/frpBus'
+} from '@taskyon/common/modules/frpBus'
 
 export { createClientTool, createSubtasksResult, createTool, partialTaskDraft, toolCall }
 export type { Port }

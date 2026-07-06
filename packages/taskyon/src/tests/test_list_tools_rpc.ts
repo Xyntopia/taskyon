@@ -2,7 +2,7 @@ import {
   createDuplexChannel,
   createPortClient,
   createPortServer,
-} from '@taskyon/shared/modules/frpBus'
+} from '@taskyon/common/modules/frpBus'
 import { taskyonProtocol } from '../api/taskyonProtocol'
 import type { TaskyonMessage } from '../types/apiTypes'
 import type { ToolBase } from '../types/tools'

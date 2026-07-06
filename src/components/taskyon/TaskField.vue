@@ -221,9 +221,9 @@ import {
   matMoreHoriz,
   matShield,
 } from '@quasar/extras/material-icons'
-import ResponsiveMenuDialog from '@taskyon/shared/components/ResponsiveMenuDialog.vue'
+import ResponsiveMenuDialog from '@taskyon/ui/components/ResponsiveMenuDialog.vue'
 import type { TaskNode } from '@taskyon/taskyon'
-import { copyToClipboard } from '@taskyon/shared/modules/utils'
+import { copyToClipboard } from '@taskyon/common/modules/utils'
 import { useTextSelection } from '@vueuse/core'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
 import { type QMenu } from 'quasar'
@@ -232,7 +232,7 @@ import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, defineAsyncComponent, ref, useTemplateRef } from 'vue'
 import { useRouter } from 'vue-router'
-import { openrouterPricing } from '../../../packages/shared/modules/utils'
+import { openrouterPricing } from '@taskyon/common/modules/utils'
 import TaskDebugTabs from './TaskDebugTabs.vue'
 import TaskMenu from './TaskMenu.vue'
 

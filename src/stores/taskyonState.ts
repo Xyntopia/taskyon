@@ -56,7 +56,7 @@ import { useQuasar } from 'quasar' // load dynamically! :)
 import { freeKey } from 'src/assets/taskyon_free_key'
 import { setColors } from 'src/boot/brand-colors'
 import { useGdrive } from 'src/modules/gdrive'
-import { setPrismTheme } from '@taskyon/shared/modules/markdownUtils '
+import { setPrismTheme } from '@taskyon/common/modules/markdownUtils '
 import {
   initCryptoSessionFromBrowser,
   persistSession,

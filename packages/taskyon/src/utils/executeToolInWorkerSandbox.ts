@@ -1,8 +1,8 @@
 import type {
   ExecuteInWorkerSandboxOptions,
   WorkerSandboxRpcHandlers,
-} from '@taskyon/shared/modules/sandbox/workerSandbox'
-import { executeInWorkerSandbox } from '@taskyon/shared/modules/sandbox/workerSandbox'
+} from '@taskyon/common/modules/sandbox/workerSandbox'
+import { executeInWorkerSandbox } from '@taskyon/common/modules/sandbox/workerSandbox'
 import { partialTaskDraft } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
 

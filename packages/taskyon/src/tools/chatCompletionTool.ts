@@ -1,5 +1,5 @@
-import { createStream } from '@taskyon/shared/modules/frpBus'
-import { serializeObject } from '@taskyon/shared/modules/serializeObject'
+import { createStream } from '@taskyon/common/modules/frpBus'
+import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import type {
   AssistantModelMessage,
   FilePart,

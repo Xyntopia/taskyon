@@ -1,6 +1,6 @@
 //runMarkdownDetectionTests.ts
-import { hasMarkdownElements, containsHtmlTags } from '@taskyon/shared/modules/markdownDetection'
-import { stripHtmlCommentsOutsideMarkdownCode } from '@taskyon/shared/modules/markdownText'
+import { hasMarkdownElements, containsHtmlTags } from '@taskyon/common/modules/markdownDetection'
+import { stripHtmlCommentsOutsideMarkdownCode } from '@taskyon/common/modules/markdownText'
 
 // Assuming hasMarkdownElements and containsHtmlTags are in scope
 // import { hasMarkdownElements, containsHtmlTags } from './your-module'

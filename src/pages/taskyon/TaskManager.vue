@@ -119,8 +119,8 @@ import {
   mdiForum,
   mdiRefresh,
 } from '@quasar/extras/mdi-v6'
-import FadeAwayScrollPage from '@taskyon/shared/components/FadeAwayScrollPage.vue'
-import Search from '@taskyon/shared/components/SearchInput.vue'
+import FadeAwayScrollPage from '@taskyon/ui/components/FadeAwayScrollPage.vue'
+import Search from '@taskyon/ui/components/SearchInput.vue'
 import type { TaskNode } from '@taskyon/taskyon'
 import { TaskContent } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'

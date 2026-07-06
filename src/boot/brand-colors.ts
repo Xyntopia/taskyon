@@ -1,7 +1,7 @@
 // $
 import { defineBoot } from '#q-app/wrappers'
 import { setCssVar } from 'quasar'
-import { hexToRgb } from '../../packages/shared/modules/utils'
+import { hexToRgb } from '@taskyon/common/modules/utils'
 import { initialStoredStateObj } from '../modules/ui/initialState'
 
 function normalizeHexColor(color: string | undefined): string | undefined {

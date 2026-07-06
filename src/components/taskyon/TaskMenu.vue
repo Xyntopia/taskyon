@@ -131,7 +131,7 @@ import {
 } from '@quasar/extras/material-icons'
 import { mdiFileTree, mdiForumPlus, mdiLanguageMarkdown } from '@quasar/extras/mdi-v6'
 import type { TaskNode } from '@taskyon/taskyon'
-import { copyToClipboard } from '../../../packages/shared/modules/utils'
+import { copyToClipboard } from '@taskyon/common/modules/utils'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useAppStateStore } from 'src/stores/appState'
 

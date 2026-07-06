@@ -103,10 +103,10 @@
 <script setup lang="ts">
 import { matHelpOutline, matSettings } from '@quasar/extras/material-icons'
 import { mdiGithub, mdiHospital, mdiInformationVariant, mdiWrench } from '@quasar/extras/mdi-v6'
-import { getEnvironmentInfo } from '@taskyon/shared/modules/utils'
+import { getEnvironmentInfo } from '@taskyon/common/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { ref } from 'vue'
-import DarkModeButton from '@taskyon/shared/components/DarkModeButton.vue'
+import DarkModeButton from '@taskyon/ui/components/DarkModeButton.vue'
 
 defineProps<{
   btnSize: 'md' | 'sm' | 'xs' | 'lg' | 'xl'

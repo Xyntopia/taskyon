@@ -39,7 +39,7 @@ import {
 } from '@taskyon/taskyon/api'
 import { authenticateWithPopup } from '@taskyon/taskyon/browser'
 import { getDatabase } from '@taskyon/taskyon/db'
-import { reconcileWithDefaults } from '@taskyon/shared/modules/utils'
+import { reconcileWithDefaults } from '@taskyon/common/modules/utils'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { createSubtasksResult } from '../../../packages/taskyon/src/types/toolApi'

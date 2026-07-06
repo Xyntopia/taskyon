@@ -128,8 +128,8 @@
 </template>
 
 <script setup lang="ts">
-import FadeAwayScrollPage from '@taskyon/shared/components/FadeAwayScrollPage.vue'
-import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
+import FadeAwayScrollPage from '@taskyon/ui/components/FadeAwayScrollPage.vue'
+import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
 import { forgeTaskChain, type FunctionArguments, type TaskNode } from '@taskyon/taskyon'
 import { toolCall, type partialTaskDraft } from '@taskyon/taskyon/api'
 import { createTaskyonClient } from '@taskyon/tyclient'

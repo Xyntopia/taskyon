@@ -11,9 +11,7 @@
     "baseUrl": "..",
     "paths": {
       "@taskyon/tyclient": ["tyclient/src/index.ts"],
-      "@taskyon/taskyon/api": ["taskyon/src/api/index.ts"],
-      "@taskyon/shared": ["shared"],
-      "@taskyon/shared/*": ["shared/*"]
+      "@taskyon/taskyon/api": ["taskyon/src/api/index.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"]

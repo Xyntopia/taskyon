@@ -241,9 +241,9 @@ insert into the settings below."
 
 <script setup lang="ts">
 import { matEdit, matKey } from '@quasar/extras/material-icons'
-import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
-import TyMarkdown from '@taskyon/shared/components/tyMarkdown.vue'
-import JsonInput from '@taskyon/shared/components/varViews/JsonInput.vue'
+import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
+import TyMarkdown from '@taskyon/ui/components/tyMarkdown.vue'
+import JsonInput from '@taskyon/ui/components/varViews/JsonInput.vue'
 import { freeKey } from 'src/assets/taskyon_free_key'
 import { useAppStateStore } from 'src/stores/appState'
 import { AiProvideKeyStoreName, useTaskyonStore } from 'src/stores/taskyonState'
@@ -262,8 +262,8 @@ import {
 } from '@taskyon/taskyon/browser'
 import { useQuasar } from 'quasar'
 import { computed, ref, useTemplateRef } from 'vue'
-import DialogButton from '@taskyon/shared/components/DialogButton.vue'
-import SecretInput from '@taskyon/shared/components/varViews/SecretInput.vue'
+import DialogButton from '@taskyon/ui/components/DialogButton.vue'
+import SecretInput from '@taskyon/ui/components/varViews/SecretInput.vue'
 import ApiSelect from './ApiSelect.vue'
 import PasswordManager from './PasswordManager.vue'
 

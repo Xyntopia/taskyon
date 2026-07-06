@@ -2,14 +2,14 @@ import type { TaskNode, partialTaskDraft } from '../types/taskNode'
 import { taskResult } from '../types/toolApi'
 import { createAsyncQueue, sleep } from '../utils/asyncUtils'
 import { humanizeError, serializeError } from '../utils/error'
-import type { Port, RpcMessagePort } from '@taskyon/shared/modules/frpBus'
-import { createDuplexChannel, createStream } from '@taskyon/shared/modules/frpBus'
+import type { Port, RpcMessagePort } from '@taskyon/common/modules/frpBus'
+import { createDuplexChannel, createStream } from '@taskyon/common/modules/frpBus'
 import { serializeForJson } from '../utils/objHelpers'
 import { type TyTaskManager } from './taskManager'
 import { MAX_REMOTE_FUNCTION_TIMEOUT_MS } from '../api/taskyonProtocol'
 import type { ToolRpcCallMessage, ToolRpcFunctionResponseMessage } from './toolRpc'
 import { createToolExecutionClient } from './toolRpc'
-import { createLruCache } from '@taskyon/shared/modules/lruCache'
+import { createLruCache } from '@taskyon/common/modules/lruCache'
 import {
   countAutonomousErrorAttempt,
   createAutonomousErrorSignature,

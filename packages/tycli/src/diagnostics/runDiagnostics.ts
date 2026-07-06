@@ -5,7 +5,7 @@ import {
   type DiagnosticsTestContext,
   type TaskyonTestFn,
   type TestRecord,
-} from '../../../shared/modules/diagnosticsRunner'
+} from '@taskyon/common/modules/diagnosticsRunner'
 import { mkdtemp, readFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
@@ -202,12 +202,12 @@ async function listTestFileEntries() {
       sourcePrefix: 'packages/tycli/src/diagnostics/tests/',
     },
     {
-      dirUrl: new URL('../../../shared/modules/', import.meta.url),
-      sourcePrefix: 'packages/shared/modules/',
+      dirUrl: new URL('../../../common/modules/', import.meta.url),
+      sourcePrefix: 'packages/common/modules/',
     },
     {
-      dirUrl: new URL('../../../shared/surrogate/', import.meta.url),
-      sourcePrefix: 'packages/shared/surrogate/',
+      dirUrl: new URL('../../../surrogate/', import.meta.url),
+      sourcePrefix: 'packages/surrogate/',
     },
   ]
 

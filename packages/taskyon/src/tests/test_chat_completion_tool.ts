@@ -2,7 +2,7 @@ import {
   convertTaskNodesToOpenAIChat,
   getCommandFromStructuredResponse,
 } from '../tools/chatCompletionTool'
-import { serializeObject } from '@taskyon/shared/modules/serializeObject'
+import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import { selectTaskChainIds } from '../core/taskChainSelection'
 import type { TaskNode } from '../types/taskNode'
 import type { ToolBase } from '../types/tools'

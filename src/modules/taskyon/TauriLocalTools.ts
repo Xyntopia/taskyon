@@ -1,7 +1,7 @@
 import { createClientTool, toolCall } from '@taskyon/tyclient'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import type { JSONSchema7 } from 'json-schema'
-import { serializeObject } from '@taskyon/shared/modules/serializeObject'
+import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import {
   applyFileUpdateToContent,
   normalizeFileUpdate,

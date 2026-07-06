@@ -18,7 +18,7 @@
 </template>
 
 <script setup lang="ts">
-import FadeAwayScrollPage from '@taskyon/shared/components/FadeAwayScrollPage.vue'
+import FadeAwayScrollPage from '@taskyon/ui/components/FadeAwayScrollPage.vue'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
 import GetStarted from 'components/taskyon/GetStarted.vue'
 import { warmupTaskChatPage } from 'src/router/taskChatLoader'

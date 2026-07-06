@@ -605,6 +605,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@codemirror/autocomplete@npm:^6.18.6":
+  version: 6.20.3
+  resolution: "@codemirror/autocomplete@npm:6.20.3"
+  dependencies:
+    "@codemirror/language": "npm:^6.0.0"
+    "@codemirror/state": "npm:^6.0.0"
+    "@codemirror/view": "npm:^6.17.0"
+    "@lezer/common": "npm:^1.0.0"
+  checksum: 10c0/c8aa358d25cde007a7073fb39fd268d1908aa0f664047cc44af0f7a6b2835f227c9bd60f0c7cde5914cf2c9ef9c014fee6e322832e83d9f1c1b55872d2300b69
+  languageName: node
+  linkType: hard
+
 "@codemirror/commands@npm:6.x, @codemirror/commands@npm:^6.0.0":
   version: 6.8.1
   resolution: "@codemirror/commands@npm:6.8.1"
@@ -5370,6 +5382,52 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@taskyon/common@workspace:*, @taskyon/common@workspace:packages/common":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/common@workspace:packages/common"
+  dependencies:
+    "@mdit/plugin-katex": "npm:^0.24.1"
+    "@resvg/resvg-wasm": "npm:^2.6.2"
+    "@vueuse/core": "npm:^14.2.1"
+    dompurify: "npm:^3.4.8"
+    fast-equals: "npm:^5.0.1"
+    fflate: "npm:^0.8.2"
+    mathjs: "npm:^11.8.2"
+    pmtiles: "npm:^4.4.1"
+    qrcode: "npm:^1.5.4"
+  peerDependencies:
+    vue: ^3.4.0
+  languageName: unknown
+  linkType: soft
+
+"@taskyon/comp-dag@workspace:*, @taskyon/comp-dag@workspace:packages/comp-dag":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/comp-dag@workspace:packages/comp-dag"
+  dependencies:
+    "@taskyon/common": "workspace:*"
+    ajv: "npm:^8.17.1"
+    ajv-formats: "npm:^3.0.1"
+    prettier: "npm:^3.3.3"
+    typescript: "npm:^5.9.2"
+  languageName: unknown
+  linkType: soft
+
+"@taskyon/modelica@workspace:*, @taskyon/modelica@workspace:packages/modelica":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/modelica@workspace:packages/modelica"
+  dependencies:
+    "@codemirror/autocomplete": "npm:^6.18.6"
+    "@codemirror/state": "npm:^6.5.0"
+    "@taskyon/common": "workspace:*"
+    "@taskyon/ui": "workspace:*"
+    "@vueuse/core": "npm:^14.2.1"
+    rumoca-full-web: "npm:@cognipilot/rumoca@^0.9.8"
+  peerDependencies:
+    quasar: ^2.16.0
+    vue: ^3.4.0
+  languageName: unknown
+  linkType: soft
+
 "@taskyon/p2p-core@workspace:*, @taskyon/p2p-core@workspace:packages/p2p-core":
   version: 0.0.0-use.local
   resolution: "@taskyon/p2p-core@workspace:packages/p2p-core"
@@ -5413,50 +5471,18 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@taskyon/shared@workspace:*, @taskyon/shared@workspace:packages/shared":
+"@taskyon/spaceships@workspace:*, @taskyon/spaceships@workspace:packages/spaceships":
   version: 0.0.0-use.local
-  resolution: "@taskyon/shared@workspace:packages/shared"
+  resolution: "@taskyon/spaceships@workspace:packages/spaceships"
   dependencies:
-    "@codemirror/lang-cpp": "npm:^6.0.3"
-    "@codemirror/lang-html": "npm:^6.4.11"
-    "@codemirror/lang-javascript": "npm:^6.2.2"
-    "@codemirror/lang-jinja": "npm:^6.0.0"
-    "@codemirror/lang-json": "npm:^6.0.1"
-    "@codemirror/lang-python": "npm:^6.2.1"
-    "@codemirror/lang-rust": "npm:^6.0.2"
-    "@codemirror/lang-sql": "npm:^6.10.0"
-    "@codemirror/language": "npm:^6.9.0"
-    "@codemirror/legacy-modes": "npm:^6.5.2"
-    "@codemirror/state": "npm:^6.5.0"
-    "@codemirror/theme-one-dark": "npm:^6.1.2"
-    "@mdit/plugin-katex": "npm:^0.24.1"
-    "@resvg/resvg-wasm": "npm:^2.6.2"
-    "@vueuse/core": "npm:^14.2.1"
-    codemirror: "npm:^6.0.1"
-    codemirror-lang-mermaid: "npm:^0.5.0"
-    dompurify: "npm:^3.4.8"
-    echarts: "npm:^6.0.0"
-    fast-equals: "npm:^5.0.1"
-    fflate: "npm:^0.8.2"
-    leaflet: "npm:^1.9.4"
-    maplibre-gl: "npm:^5.23.0"
-    markdown-it: "npm:^14.1.0"
-    markdown-it-abbr: "npm:^2.0.0"
-    markdown-it-container: "npm:^4.0.0"
-    markdown-it-deflist: "npm:^3.0.0"
-    markdown-it-emoji: "npm:^3.0.0"
-    markdown-it-footnote: "npm:^4.0.0"
-    markdown-it-ins: "npm:^4.0.0"
-    markdown-it-mark: "npm:^4.0.0"
-    markdown-it-sub: "npm:^2.0.0"
-    markdown-it-sup: "npm:^2.0.0"
-    mathjs: "npm:^11.8.2"
-    mermaid: "npm:^11.6.0"
-    pmtiles: "npm:^4.4.1"
-    prismjs: "npm:^1.30.0"
-    qrcode: "npm:^1.5.4"
-    rumoca-full-web: "npm:@cognipilot/rumoca@^0.9.8"
-    vue-codemirror: "npm:^6.1.1"
+    "@taskyon/common": "workspace:*"
+    "@taskyon/ui": "workspace:*"
+  languageName: unknown
+  linkType: soft
+
+"@taskyon/surrogate@workspace:*, @taskyon/surrogate@workspace:packages/surrogate":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/surrogate@workspace:packages/surrogate"
   languageName: unknown
   linkType: soft
 
@@ -5499,6 +5525,48 @@ __metadata:
     type-fest: "npm:^4.30.1"
   peerDependencies:
     zod: ^4.0.0
+  languageName: unknown
+  linkType: soft
+
+"@taskyon/ui@workspace:*, @taskyon/ui@workspace:packages/ui":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/ui@workspace:packages/ui"
+  dependencies:
+    "@codemirror/lang-cpp": "npm:^6.0.3"
+    "@codemirror/lang-html": "npm:^6.4.11"
+    "@codemirror/lang-javascript": "npm:^6.2.2"
+    "@codemirror/lang-jinja": "npm:^6.0.0"
+    "@codemirror/lang-json": "npm:^6.0.1"
+    "@codemirror/lang-python": "npm:^6.2.1"
+    "@codemirror/lang-rust": "npm:^6.0.2"
+    "@codemirror/lang-sql": "npm:^6.10.0"
+    "@codemirror/language": "npm:^6.9.0"
+    "@codemirror/legacy-modes": "npm:^6.5.2"
+    "@codemirror/state": "npm:^6.5.0"
+    "@codemirror/theme-one-dark": "npm:^6.1.2"
+    "@taskyon/common": "workspace:*"
+    "@taskyon/comp-dag": "workspace:*"
+    codemirror: "npm:^6.0.1"
+    codemirror-lang-mermaid: "npm:^0.5.0"
+    echarts: "npm:^6.0.0"
+    leaflet: "npm:^1.9.4"
+    maplibre-gl: "npm:^5.23.0"
+    markdown-it: "npm:^14.1.0"
+    markdown-it-abbr: "npm:^2.0.0"
+    markdown-it-container: "npm:^4.0.0"
+    markdown-it-deflist: "npm:^3.0.0"
+    markdown-it-emoji: "npm:^3.0.0"
+    markdown-it-footnote: "npm:^4.0.0"
+    markdown-it-ins: "npm:^4.0.0"
+    markdown-it-mark: "npm:^4.0.0"
+    markdown-it-sub: "npm:^2.0.0"
+    markdown-it-sup: "npm:^2.0.0"
+    mermaid: "npm:^11.6.0"
+    prismjs: "npm:^1.30.0"
+    vue-codemirror: "npm:^6.1.1"
+  peerDependencies:
+    quasar: ^2.16.0
+    vue: ^3.4.0
   languageName: unknown
   linkType: soft
 
@@ -7474,6 +7542,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"ajv-formats@npm:^3.0.1":
+  version: 3.0.1
+  resolution: "ajv-formats@npm:3.0.1"
+  dependencies:
+    ajv: "npm:^8.0.0"
+  peerDependencies:
+    ajv: ^8.0.0
+  peerDependenciesMeta:
+    ajv:
+      optional: true
+  checksum: 10c0/168d6bca1ea9f163b41c8147bae537e67bd963357a5488a1eaf3abe8baa8eec806d4e45f15b10767e6020679315c7e1e5e6803088dfb84efa2b4e9353b83dd0a
+  languageName: node
+  linkType: hard
+
 "ajv@npm:^6.12.4":
   version: 6.12.6
   resolution: "ajv@npm:6.12.6"
@@ -7483,6 +7565,18 @@ __metadata:
     json-schema-traverse: "npm:^0.4.1"
     uri-js: "npm:^4.2.2"
   checksum: 10c0/41e23642cbe545889245b9d2a45854ebba51cda6c778ebced9649420d9205f2efb39cb43dbc41e358409223b1ea43303ae4839db682c848b891e4811da1a5a71
+  languageName: node
+  linkType: hard
+
+"ajv@npm:^8.0.0":
+  version: 8.20.0
+  resolution: "ajv@npm:8.20.0"
+  dependencies:
+    fast-deep-equal: "npm:^3.1.3"
+    fast-uri: "npm:^3.0.1"
+    json-schema-traverse: "npm:^1.0.0"
+    require-from-string: "npm:^2.0.2"
+  checksum: 10c0/5df9a1c8f83863cde1bd3a9ddb426f599718f88e3dc9153616c79fb28e0be455335830d7f21d745576519f057b371352daa31047b6a33d7036fe08777d60cf2a
   languageName: node
   linkType: hard
 
@@ -21261,8 +21355,13 @@ __metadata:
     "@resvg/resvg-wasm": "npm:^2.6.2"
     "@scure/bip39": "npm:^1.5.0"
     "@supabase/supabase-js": "npm:^2.39.0"
+    "@taskyon/common": "workspace:*"
+    "@taskyon/comp-dag": "workspace:*"
+    "@taskyon/modelica": "workspace:*"
     "@taskyon/p2p-core": "workspace:*"
-    "@taskyon/shared": "workspace:*"
+    "@taskyon/spaceships": "workspace:*"
+    "@taskyon/surrogate": "workspace:*"
+    "@taskyon/ui": "workspace:*"
     "@tauri-apps/api": "npm:^2.10.1"
     "@tauri-apps/cli": "npm:^2.10.1"
     "@tauri-apps/plugin-http": "npm:^2.5.7"

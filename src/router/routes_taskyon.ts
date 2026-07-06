@@ -1,7 +1,7 @@
 import { type RouteRecordRaw } from 'vue-router'
 import { mdRoutes } from './routes_default'
 import { defineAsyncComponent } from 'vue'
-import LoadCircle from '@taskyon/shared/components/LoadingCircle.vue'
+import LoadCircle from '@taskyon/ui/components/LoadingCircle.vue'
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import { loadTaskChatPage } from './taskChatLoader'
 
@@ -304,7 +304,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
   },
   {
     path: '/spaceships',
-    component: () => import('@taskyon/shared/spaceships/ProceduralSpaceshipLabPage.vue'),
+    component: () => import('@taskyon/spaceships/ProceduralSpaceshipLabPage.vue'),
     meta: {
       title: 'Procedural Spaceship Lab',
       description: 'Inspect deterministic procedural spaceships generated from seed strings.',

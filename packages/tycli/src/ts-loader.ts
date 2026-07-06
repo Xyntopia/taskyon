@@ -68,9 +68,20 @@ async function tryResolveWorkspaceAlias(specifier: string): Promise<string | nul
     return tryResolveFile(resolvePath(repoRoot, 'packages/taskyon/src', rest))
   }
 
-  if (specifier.startsWith('@taskyon/shared/')) {
-    const rest = specifier.slice('@taskyon/shared/'.length)
-    return tryResolveFile(resolvePath(repoRoot, 'packages/shared', rest))
+  const sourcePackagePrefixes = [
+    ['@taskyon/common/', 'packages/common/'],
+    ['@taskyon/comp-dag/', 'packages/comp-dag/'],
+    ['@taskyon/modelica/', 'packages/modelica/'],
+    ['@taskyon/spaceships/', 'packages/spaceships/'],
+    ['@taskyon/surrogate/', 'packages/surrogate/'],
+    ['@taskyon/ui/', 'packages/ui/'],
+  ] as const
+
+  for (const [prefix, packagePath] of sourcePackagePrefixes) {
+    if (specifier.startsWith(prefix)) {
+      const rest = specifier.slice(prefix.length)
+      return tryResolveFile(resolvePath(repoRoot, packagePath, rest))
+    }
   }
 
   if (specifier.startsWith('@taskyon/p2p-core/')) {

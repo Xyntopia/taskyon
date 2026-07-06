@@ -45,7 +45,7 @@ import type {
   IframeMultiPlexer,
   Port,
   ProtocolMessage,
-} from '@taskyon/shared/modules/frpBus'
+} from '@taskyon/common/modules/frpBus'
 import {
   createIframeMux,
   createMessagePortAdapter,
@@ -55,7 +55,7 @@ import {
   createStream,
   createTypeFilteredPort,
   createUnavailableIframeMux,
-} from '@taskyon/shared/modules/frpBus'
+} from '@taskyon/common/modules/frpBus'
 import { createProxyApi, createProxyFunction } from '../utils/objHelpers'
 import { configureNodePgLiteDataDir, getDatabase } from '../utils/pglite.api'
 import type { Thunk } from '../utils/tsHelpers'

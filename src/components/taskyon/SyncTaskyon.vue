@@ -265,10 +265,10 @@ import {
   matWarning,
 } from '@quasar/extras/material-icons'
 import { mdiAccountKey, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
-import FileDropzone from '@taskyon/shared/components/FileDropzone.vue'
-import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
+import FileDropzone from '@taskyon/ui/components/FileDropzone.vue'
+import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { copyToClipboard, deepMergeReactive } from '@taskyon/shared/modules/utils'
+import { copyToClipboard, deepMergeReactive } from '@taskyon/common/modules/utils'
 import { generateSeedPhrase, keyPairFromMnemonic } from '@taskyon/taskyon'
 import yaml from 'js-yaml'
 import { exportFile, extend, useQuasar } from 'quasar'

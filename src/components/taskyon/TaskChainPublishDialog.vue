@@ -173,9 +173,9 @@ import {
   symOutlinedMarkdown,
   symOutlinedPublic,
 } from '@quasar/extras/material-symbols-outlined'
-import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
-import QrCode from '@taskyon/shared/components/QrCode.vue'
-import { copyToClipboard } from '@taskyon/shared/modules/utils'
+import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
+import QrCode from '@taskyon/ui/components/QrCode.vue'
+import { copyToClipboard } from '@taskyon/common/modules/utils'
 import { chat2Md, chatToYaml, type TaskNode } from '@taskyon/taskyon'
 import { exportFile, useQuasar } from 'quasar'
 import { getFileId, useGdrive } from 'src/modules/gdrive'

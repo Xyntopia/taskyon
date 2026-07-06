@@ -1,4 +1,4 @@
-import type { DiagnosticsTestContext } from '../../../../shared/modules/diagnosticsRunner'
+import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
 import { createTaskyonClient } from '../../api'
 import { buildCreateNewTaskChain } from '../../core/createNewTaskChain'
 import { forgeTaskChain } from '../../core/createTasks'

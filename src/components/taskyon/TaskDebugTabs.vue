@@ -68,7 +68,7 @@
 
 <script setup lang="ts">
 import type { TaskNode } from '@taskyon/taskyon'
-import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
+import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, ref, watchEffect } from 'vue'
 import {

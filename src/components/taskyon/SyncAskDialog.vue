@@ -117,9 +117,9 @@
 <script setup lang="ts">
 import { matContentCopy, matDevices, matKeyOff, matSync } from '@quasar/extras/material-icons'
 import { mdiConnection, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
-import InfoDialog from '@taskyon/shared/components/InfoDialog.vue'
-import QrCode from '@taskyon/shared/components/QrCode.vue'
-import { copyToClipboard } from '@taskyon/shared/modules/utils'
+import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
+import QrCode from '@taskyon/ui/components/QrCode.vue'
+import { copyToClipboard } from '@taskyon/common/modules/utils'
 import { computedAsync } from '@vueuse/core'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'

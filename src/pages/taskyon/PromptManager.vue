@@ -57,18 +57,18 @@
 </template>
 
 <script setup lang="ts">
-import tyMarkdown from '@taskyon/shared/components/tyMarkdown.vue'
+import tyMarkdown from '@taskyon/ui/components/tyMarkdown.vue'
 import { ref, computed } from 'vue'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
-import UnderConstructionHint from '@taskyon/shared/components/UnderConstructionHint.vue'
+import UnderConstructionHint from '@taskyon/ui/components/UnderConstructionHint.vue'
 import TaskChainViewer from 'components/taskyon/TaskChainViewer.vue'
 import { mdiMagicStaff } from '@quasar/extras/mdi-v6'
 import CreateTaskButton from 'components/taskyon/CreateTaskButton.vue'
 import { dump } from 'js-yaml'
 import { useAppStateStore } from 'src/stores/appState'
 import { buildEntryNodePromptPreviewMessages, normalizeEntryNodeSettings } from '@taskyon/taskyon'
-import ObjectView from '@taskyon/shared/components/varViews/ObjectView.vue'
+import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()

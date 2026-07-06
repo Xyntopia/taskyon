@@ -12,7 +12,7 @@
 import { getActiveP2pNode } from '@taskyon/taskyon'
 import { until } from '@vueuse/core'
 import { dump } from 'js-yaml'
-import * as ModelicaDiagnostics from '@taskyon/shared/modelica/modelicaDiagnostics'
+import * as ModelicaDiagnostics from '@taskyon/modelica/modelicaDiagnostics'
 import { runMarkdownDetectionTests } from 'src/modules/taskyon/runMarkdownDetectionTests'
 import * as TaskyonTests from 'src/modules/taskyon/tests'
 import { testBuildSlimView } from 'src/modules/vueUtils'
@@ -25,12 +25,12 @@ import {
   runDiagnosticsTests,
   type TaskyonTestFn,
   type TestRecord,
-} from '../../../packages/shared/modules/diagnosticsRunner'
+} from '@taskyon/common/modules/diagnosticsRunner'
 import {
   runTimeQuestionConversationUsesClockToolScenario,
   testTimeQuestionConversationUsesClockTool as packageTimeQuestionConversationTest,
 } from '../../../packages/taskyon/src/tests/conversation/test_time_question_conversation'
-import { getEnvironmentInfo } from '../../../packages/shared/modules/utils'
+import { getEnvironmentInfo } from '@taskyon/common/modules/utils'
 
 const route = useRoute()
 const state = useTaskyonStore()
@@ -75,8 +75,8 @@ function getDiagnosticsTests() {
       '!../../packages/taskyon/src/tests/test_entry_node_error_recovery.ts',
       '!../../packages/taskyon/src/tests/test_entry_node_websearch.ts',
       '!../../packages/taskyon/src/tests/test_remote_function_bridge.ts',
-      '../../packages/shared/modules/test_*.ts',
-      '../../packages/shared/surrogate/test_*.ts',
+      '../../packages/common/modules/test_*.ts',
+      '../../packages/surrogate/test_*.ts',
     ],
     { eager: true },
   )

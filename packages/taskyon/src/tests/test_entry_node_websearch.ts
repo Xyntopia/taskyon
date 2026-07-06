@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { DiagnosticsTestContext } from '../../../shared/modules/diagnosticsRunner'
+import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
 import { tyCore } from '../core/init'
 import { createTaskyonClient } from '../api'
 import { createStandardEntryNodeTool } from '../tools/entryNode'

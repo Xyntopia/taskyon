@@ -1,4 +1,4 @@
-import { defineFrpProtocol } from '@taskyon/shared/modules/frpBus'
+import { defineFrpProtocol } from '@taskyon/common/modules/frpBus'
 import { z } from 'zod'
 import { partialTaskDraft, TaskNode } from '../types/taskNode'
 import { FunctionArguments, ToolBase } from '../types/tools'
