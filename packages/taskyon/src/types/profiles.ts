@@ -31,6 +31,18 @@ export const llmSettings = z.object({
 When a user starts a conversation, this is always the first function that is called.
 `,
   }),
+  taskWorker: z
+    .object({
+      maxConcurrency: z
+        .number()
+        .int()
+        .min(1)
+        .default(4)
+        .meta({ description: 'Maximum number of Taskyon worker tasks to process in parallel.' }),
+    })
+    .default({ maxConcurrency: 4 })
+    .optional()
+    .meta({ description: 'Runtime settings for the Taskyon task worker.' }),
 })
 export type llmSettings = z.infer<typeof llmSettings>
 

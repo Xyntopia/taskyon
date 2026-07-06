@@ -1,5 +1,5 @@
 {
-  "version": 26,
+  "version": 27,
   "appConfiguration": {
     "darkTheme": "auto",
     "appConfigurationUrl": "/taskyon_settings.json",
@@ -129,6 +129,9 @@
         }
       }
     },
-    "siteUrl": "https://taskyon.space"
+    "siteUrl": "https://taskyon.space",
+    "taskWorker": {
+      "maxConcurrency": 4
+    }
   }
 }

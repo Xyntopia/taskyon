@@ -111,7 +111,6 @@ function createApi(
           ),
         )
         console.log('executing tasks', ts)
-        // push the last task to execution queue right away...
         if (msg.execute) ts.forEach((t) => queueTask(t.id))
       },
       registerTool: (msg) => {
@@ -382,10 +381,12 @@ const dynamicContext =
       }
     }
     const continuationTask = partialTaskDraft.parse(entryNode())
+    const taskWorkerConfig = llmSettings().taskWorker
     const { workerStream, toolRpcPort, workerStop, queueTask } = runTaskWorker(
       taskManagerInstance,
       continuationTask,
       continuationTask,
+      taskWorkerConfig?.maxConcurrency ?? 4,
     )
     const workerToolBroker = registerToolRpcBroker({
       workerPort: toolRpcPort,

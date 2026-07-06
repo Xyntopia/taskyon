@@ -102,7 +102,7 @@
             style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"
             class="text-caption text-weight-light"
           >
-            {{ lastWorkerEvent.stage !== 'all finished' ? 'Processing:' : ''
+            {{ lastWorkerEvent.stage !== 'all processed' ? 'Processing:' : ''
             }}{{ lastWorkerEvent?.stage }}
             {{ lastWorkerEvent?.info }}
           </span>
@@ -197,7 +197,7 @@ const isSameTaskOrDescendant = (taskId: string, candidateId: string) => {
 const isTaskActive = (id: string) => {
   const lts = tystate.lastTaskState.get(id)
   if (!lts) return false
-  return !['processed', 'all finished', 'aborted', 'error'].includes(lts)
+  return !['processed', 'finished', 'all processed', 'aborted', 'error'].includes(lts)
 }
 
 const isProcessing = (id: string) =>

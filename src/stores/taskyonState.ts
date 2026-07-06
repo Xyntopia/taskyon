@@ -161,18 +161,27 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
   const lastActiveTaskId = ref<string | null>(null)
   const lastTaskState = ref(new Map<string, TyTaskStreamData['stage']>())
   const activeTaskIds = ref(new Set<string>())
-  const taskFinishedStages = new Set<TyTaskStreamData['stage']>(['processed', 'error', 'aborted'])
+  const taskFinishedStages = new Set<TyTaskStreamData['stage']>([
+    'processed',
+    'finished',
+    'error',
+    'aborted',
+  ])
   const taskActiveStages = new Set<TyTaskStreamData['stage']>(['processing', 'in loop', 'subtasks'])
 
   void taskyon.then(({ workerStream }) => {
     void workerStream((data) => {
-      if (data.stage === 'all finished') taskWorkerWaiting.value = true
+      if (data.stage === 'all processed') taskWorkerWaiting.value = true
       else if (data.stage === 'processing') taskWorkerWaiting.value = false
     })
 
     void workerStream((data) => {
       console.log(`worker: ${data.stage}, ${data.taskId || data.task?.id}`)
-      if (['all finished', 'processing', 'processed', 'error', 'aborted'].includes(data.stage)) {
+      if (
+        ['all processed', 'processing', 'processed', 'finished', 'error', 'aborted'].includes(
+          data.stage,
+        )
+      ) {
         workerStreamLogs.value.push({ ...data, timestamp: new Date() })
         // Ensure the log doesn't exceed the maximum number of rows
         if (workerStreamLogs.value.length > maxLogRows) {
@@ -183,8 +192,8 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
 
     void workerStream((data) => {
       const id = data.task?.id || data.taskId
-      if (data.stage === 'all finished' || (data.stage === 'aborted' && !id)) {
-        // "all finished" and global abort do not carry a task id, so clear stale in-progress states.
+      if (data.stage === 'all processed' || (data.stage === 'aborted' && !id)) {
+        // "all processed" and global abort do not carry a task id, so clear stale in-progress states.
         lastTaskState.value.clear()
         activeTaskIds.value.clear()
         return
@@ -208,6 +217,7 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
       (data) =>
         data.stage === 'processing' ||
         data.stage === 'processed' ||
+        data.stage === 'finished' ||
         data.stage === 'error' ||
         (data.stage === 'aborted' && !!(data.taskId || data.task?.id)),
     )((data) => {

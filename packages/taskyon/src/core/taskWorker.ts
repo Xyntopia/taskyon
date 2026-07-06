@@ -9,6 +9,7 @@ import { type TyTaskManager } from './taskManager'
 import { MAX_REMOTE_FUNCTION_TIMEOUT_MS } from '../api/taskyonProtocol'
 import type { ToolRpcCallMessage, ToolRpcFunctionResponseMessage } from './toolRpc'
 import { createToolExecutionClient } from './toolRpc'
+import { createLruCache } from '@taskyon/shared/modules/lruCache'
 import {
   countAutonomousErrorAttempt,
   createAutonomousErrorSignature,
@@ -19,15 +20,15 @@ export interface TyTaskStreamData {
   info?: string
   task?: TaskNode | null | undefined
   taskId?: string | null | undefined
-  // "all finished" means the task has been processes AND all its subtasks have been finished..
   stage:
     | 'in loop' // task is put it the loop in order to check if it has subtasks
     | 'processing' // means, the task enters the loop of processing
-    | 'processed'
+    | 'processed' // task processing returned, but child task chains may still be running
+    | 'finished' // task processing returned and all child task chains are finished
     | 'error'
     | 'waiting'
     | 'subtasks'
-    | 'all finished'
+    | 'all processed'
     | 'aborted'
     | 'queued'
 }
@@ -35,6 +36,15 @@ export interface TyTaskStreamData {
 type FunctionRpcWorkerPort = RpcMessagePort<ToolRpcCallMessage>
 export type TaskWorkerToolRpcPort = Port<ToolRpcFunctionResponseMessage, ToolRpcCallMessage>
 type ToolExecutionClient = ReturnType<typeof createToolExecutionClient>
+const FINISHED_TASK_CACHE_SIZE = 50_000
+
+function createFinishedTaskCache(maxSize: number) {
+  const cache = createLruCache<string, true>(maxSize)
+  return {
+    has: (taskId: string) => cache.has(taskId),
+    markFinished: (taskId: string) => cache.set(taskId, true),
+  }
+}
 
 async function safeExecuteTask(
   task: TaskNode,
@@ -103,14 +113,14 @@ function createTaskTracker(tm: TyTaskManager) {
     }
   }*/
 
-  // TODO: speed up this function by tracking the unfinished subtasks...
-  //       every time a subtask finished, we should actively decrease the number of of unfinished
-  //       subtasks that its parent has.
-  //       so basically, whenever some subtask chain finishes, it should propagate this information
-  //       to its parent task somehow..
+  // TODO: speed up isTaskFinished by tracking unfinished child-chain counts per parent.
+  //       The worker now propagates semantic "finished" events upward for scheduling,
+  //       but completion checks still recompute child leaves through the task manager.
 
-  // TODO: make this an "LRU" cache or something like that...
-  const isFinishedCache = new Set<string>()
+  // TODO: this positive-only cache assumes new child chains are not added after a task
+  //       was marked finished. P2P/editable task-tree workflows may need invalidation
+  //       or task-version-aware completion caching.
+  const isFinishedCache = createFinishedTaskCache(FINISHED_TASK_CACHE_SIZE)
 
   async function isTaskFinishedCached(taskId: string): Promise<boolean> {
     if (isFinishedCache.has(taskId)) {
@@ -118,7 +128,7 @@ function createTaskTracker(tm: TyTaskManager) {
     } else {
       const isFinished = await isTaskFinished(taskId)
       if (isFinished) {
-        isFinishedCache.add(taskId)
+        isFinishedCache.markFinished(taskId)
       }
       return isFinished
     }
@@ -181,7 +191,9 @@ function createTaskTracker(tm: TyTaskManager) {
 
   return {
     isTaskFinished: isTaskFinishedCached,
-    setTaskFinished: (id: string) => isFinishedCache.add(id),
+    setTaskFinished: (id: string) => {
+      isFinishedCache.markFinished(id)
+    },
   }
 }
 
@@ -191,11 +203,6 @@ function workerLoggingHelper(streamEmit: (value: TyTaskStreamData) => void) {
     tasksInProgress.add(taskId)
     streamEmit({ stage: 'in loop', taskId, info: tasksInProgress.size.toString() })
   }
-  const allTasksFinished = () => {
-    // this means that all tasks are finished and we can emit a final message
-    tasksInProgress = new Set<string>()
-    streamEmit({ stage: 'all finished' })
-  }
   const taskOutOfLoop = (taskId: string, toolName?: string) => {
     tasksInProgress.delete(taskId)
     streamEmit({
@@ -203,13 +210,14 @@ function workerLoggingHelper(streamEmit: (value: TyTaskStreamData) => void) {
       taskId,
       info: `${toolName ? toolName + ', ' : ''}queue: ${tasksInProgress.size.toString()}`,
     })
-    if (tasksInProgress.size === 0) allTasksFinished()
   }
   return {
-    allTasksFinished,
     taskisInLoop,
     taskOutOfLoop,
     getTasksInProgress: () => tasksInProgress.size,
+    clearTasksInProgress: () => {
+      tasksInProgress = new Set<string>()
+    },
   }
 }
 
@@ -372,7 +380,6 @@ const createTaskProcessor = (
 ) => {
   // this is uses to track how long a list of tasks has been processing
   const handleError = createHandleError(taskManager, currentTaskCtrl, queueTask)
-  const { isTaskFinished, setTaskFinished } = createTaskTracker(taskManager)
 
   return async (
     taskId: string,
@@ -383,19 +390,6 @@ const createTaskProcessor = (
     if (task && !currentTaskCtrl.signal.aborted) {
       // make sure we know from outside that the worker is active...
       taskisInLoop(taskId)
-
-      // check if the previous task was finished. only of all prior tasks are finished
-      // we can continue processing this task...
-      if (task.priorID && !(await isTaskFinished(task.priorID))) {
-        streamEmit({ stage: 'subtasks', task, taskId: task.id })
-        console.log('sleep-waiting for task to finish', task.id)
-        await sleep(500)
-        queueTask(task.id)
-        // The task is queued for a later attempt, but it is not actively
-        // executing while it waits for its prior chain to settle.
-        taskOutOfLoop(task.id, 'waiting')
-        return // early return, because this task is not ready yet
-      }
 
       // we don't need to process tasks which aren't a function...
       // we also don't need tasksInProgress to push them back in the queue...
@@ -476,34 +470,7 @@ const createTaskProcessor = (
           })()
         }
 
-        // if all subtasks in this chain are finished (means
-        // there are no functions tasks in it), we can set this task as finished
-        const chainHasFunctionTasks = newTasks.map((taskList: TaskNode[]) => {
-          // set finishedTask as completed
-          //  - if all subtaskChains don't contain any functioncall task
-          const hasFunctionTasks = taskList.some((t) => t.content.type === 'functioncall')
-          const lastTask = taskList.at(-1)
-
-          if (lastTask && !hasFunctionTasks) {
-            // we can set the leaf of this chain as finished
-            // if it doesn't contain any functioncall tasks
-            // this is not strictly necessary, but it helps to speed up
-            // the search for unfinished tasks
-            setTaskFinished(lastTask.id)
-          }
-
-          // queue all tasks...  our taskWorker will automatically
-          // sort out all non-function tasks
-          taskList.forEach((t) => {
-            queueTask(t.id)
-          })
-
-          return hasFunctionTasks
-        })
-        // if no function tasks are int eh result, we can set this task as finished as well..
-        if (chainHasFunctionTasks.every((status) => status === false)) {
-          setTaskFinished(task.id)
-        }
+        newTasks.flat().forEach((createdTask) => queueTask(createdTask.id))
       } catch (error) {
         if (currentTaskCtrl.signal.aborted) {
           streamEmit({
@@ -541,19 +508,76 @@ const setupRun = (
   streamEmit: (value: TyTaskStreamData) => void,
   taskManager: TyTaskManager,
   rpcPort: FunctionRpcWorkerPort,
+  maxConcurrency: number,
 ) => {
   console.log('setting up task worker run...')
   const currentTaskCtrl: AbortController = new AbortController()
   const toolExecutionClient = createToolExecutionClient(rpcPort)
 
-  const processTasksQueue = createAsyncQueue<string>()
-  const queueTask = (id: string) => {
-    if (!currentTaskCtrl.signal.aborted) {
-      streamEmit({ stage: 'queued', taskId: id })
-      processTasksQueue.push(id)
+  const readyQueue = createAsyncQueue<string>()
+  const pendingByPrior = new Map<string, Set<string>>()
+  const activeTaskIds = new Set<string>()
+  const taskTracker = createTaskTracker(taskManager)
+  let routingTaskCount = 0
+  let didEmitAllProcessed = false
+
+  const normalizedMaxConcurrency = Math.max(1, Math.floor(maxConcurrency))
+  const hasPendingWork = () =>
+    readyQueue.count() > 0 ||
+    pendingByPrior.size > 0 ||
+    routingTaskCount > 0 ||
+    activeTaskIds.size > 0
+
+  const emitAllProcessedIfIdle = () => {
+    if (hasPendingWork()) {
+      didEmitAllProcessed = false
+      return
     }
+    if (didEmitAllProcessed) return
+    didEmitAllProcessed = true
+    streamEmit({ stage: 'all processed' })
   }
-  const { allTasksFinished, taskisInLoop, taskOutOfLoop, getTasksInProgress } =
+
+  const enqueueReadyTask = (id: string) => {
+    if (currentTaskCtrl.signal.aborted) return
+    streamEmit({ stage: 'queued', taskId: id })
+    readyQueue.push(id)
+  }
+
+  const waitForPriorTask = (task: TaskNode) => {
+    const priorID = task.priorID
+    if (!priorID) return
+    const waitingTasks = pendingByPrior.get(priorID) ?? new Set<string>()
+    waitingTasks.add(task.id)
+    pendingByPrior.set(priorID, waitingTasks)
+    streamEmit({ stage: 'waiting', taskId: task.id, info: `prior: ${priorID}` })
+  }
+
+  const queueTask = (id: string) => {
+    if (currentTaskCtrl.signal.aborted) return
+
+    didEmitAllProcessed = false
+    routingTaskCount += 1
+    void (async () => {
+      let wasRouted = false
+      try {
+        const task = await taskManager.getTask(id)
+        if (!task || currentTaskCtrl.signal.aborted) return
+        if (task.priorID && !(await taskTracker.isTaskFinished(task.priorID))) {
+          waitForPriorTask(task)
+        } else {
+          enqueueReadyTask(task.id)
+        }
+        wasRouted = true
+      } catch (error) {
+        streamEmit({ stage: 'error', taskId: id, info: humanizeError(error) })
+      } finally {
+        routingTaskCount -= 1
+        if (!wasRouted) emitAllProcessedIfIdle()
+      }
+    })()
+  }
+  const { taskisInLoop, taskOutOfLoop, getTasksInProgress, clearTasksInProgress } =
     workerLoggingHelper(streamEmit)
 
   const asyncProcessTask = createTaskProcessor(
@@ -566,24 +590,90 @@ const setupRun = (
     toolExecutionClient,
   )
 
-  const run = async (defaultTask: partialTaskDraft, errorTask: partialTaskDraft) => {
-    console.log('starting task worker run...')
+  const releaseTasksWaitingFor = (taskId: string) => {
+    const waitingTasks = pendingByPrior.get(taskId)
+    if (!waitingTasks) return
+
+    pendingByPrior.delete(taskId)
+    waitingTasks.forEach((waitingTaskId) => {
+      enqueueReadyTask(waitingTaskId)
+    })
+  }
+
+  const markFinishedAndRelease = async (taskId: string) => {
+    const visited = new Set<string>()
+    let currentTaskId: string | undefined = taskId
+
+    while (currentTaskId && !visited.has(currentTaskId)) {
+      visited.add(currentTaskId)
+      if (!(await taskTracker.isTaskFinished(currentTaskId))) return
+
+      taskTracker.setTaskFinished(currentTaskId)
+      streamEmit({ stage: 'finished', taskId: currentTaskId })
+      releaseTasksWaitingFor(currentTaskId)
+
+      const currentTask = await taskManager.getTask(currentTaskId)
+      currentTaskId = currentTask?.parentID
+    }
+  }
+
+  const reconcilePendingTasks = async () => {
+    const pendingPriorIds = Array.from(pendingByPrior.keys())
+    await Promise.all(
+      pendingPriorIds.map(async (priorID) => {
+        if (await taskTracker.isTaskFinished(priorID)) {
+          taskTracker.setTaskFinished(priorID)
+          streamEmit({ stage: 'finished', taskId: priorID })
+          releaseTasksWaitingFor(priorID)
+        }
+      }),
+    )
+  }
+
+  const runWorkerLoop = async (defaultTask: partialTaskDraft, errorTask: partialTaskDraft) => {
     while (!currentTaskCtrl.signal.aborted) {
-      if (getTasksInProgress() <= 0) {
-        streamEmit({ stage: 'waiting' })
-      }
       let taskId: string
       try {
-        taskId = await processTasksQueue.pop(currentTaskCtrl.signal)
+        taskId = await readyQueue.pop(currentTaskCtrl.signal)
       } catch {
-        streamEmit({ stage: 'aborted' })
         break
       }
-      void asyncProcessTask(taskId, defaultTask, errorTask)
+
+      activeTaskIds.add(taskId)
+      try {
+        await asyncProcessTask(taskId, defaultTask, errorTask)
+        await markFinishedAndRelease(taskId)
+      } finally {
+        activeTaskIds.delete(taskId)
+        emitAllProcessedIfIdle()
+      }
     }
-    processTasksQueue.clear()
-    allTasksFinished()
-    streamEmit({ stage: 'all finished' })
+  }
+
+  const run = async (defaultTask: partialTaskDraft, errorTask: partialTaskDraft) => {
+    console.log('starting task worker run...')
+    const reconciliationInterval = setInterval(() => {
+      if (getTasksInProgress() <= 0 && readyQueue.count() === 0 && pendingByPrior.size > 0) {
+        streamEmit({ stage: 'waiting' })
+      }
+      void reconcilePendingTasks().finally(() => emitAllProcessedIfIdle())
+    }, 1000)
+
+    try {
+      await Promise.all(
+        Array.from({ length: normalizedMaxConcurrency }, () =>
+          runWorkerLoop(defaultTask, errorTask),
+        ),
+      )
+    } finally {
+      clearInterval(reconciliationInterval)
+    }
+    readyQueue.clear()
+    pendingByPrior.clear()
+    activeTaskIds.clear()
+    routingTaskCount = 0
+    clearTasksInProgress()
+    streamEmit({ stage: 'all processed' })
   }
 
   return {
@@ -617,6 +707,7 @@ export function runTaskWorker(
   taskManager: TyTaskManager,
   defaultTask: partialTaskDraft,
   errorTask: partialTaskDraft,
+  maxConcurrency = 4,
 ) {
   console.log('starting task worker listener...')
 
@@ -648,7 +739,7 @@ export function runTaskWorker(
         run,
         queueTask: newQueueTask,
         currentTaskCtrl: newTaskCtrl,
-      } = setupRun(taskProcessingStream.emit, taskManager, workerRpcPort)
+      } = setupRun(taskProcessingStream.emit, taskManager, workerRpcPort, maxConcurrency)
       currentTaskCtrl = newTaskCtrl
       queueTask = newQueueTask
       console.log('restarting task worker run...')
