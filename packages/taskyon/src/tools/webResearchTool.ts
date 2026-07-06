@@ -6,6 +6,7 @@ import {
 } from '@taskyon/shared/modules/webFetching'
 import { buildTaskPlannerTaskChains } from './TaskPlannerTool'
 import { createTool, toolCall } from '../types/toolApi'
+import type { partialTaskDraft } from '../types/taskNode'
 import {
   parsePoliteHttpPolicy,
   politeFetch,
@@ -332,6 +333,49 @@ const formatResearchBreakdown = (taskGroups: ReturnType<typeof buildWebResearchT
     .map((group, index) => `Branch ${index + 1}: ${group.map((task) => task.task).join(' -> ')}`)
     .join('\n')
 
+const buildResearchSynthesisTaskChain = (args: WebResearchPlannerArgs): partialTaskDraft[] => {
+  const objective = ensureNonEmptyString(args.objective, 'objective')
+  const artifactRoot = resolveResearchArtifactRoot(args, objective)
+  const entryNodeArguments = buildResearchEntryNodeArguments({
+    ...args,
+    supportTools: ['updateFiles', 'bash'],
+    enableWebSearch: false,
+  })
+
+  return [
+    {
+      role: 'user',
+      content: {
+        type: 'message',
+        data: [
+          'Research synthesis checkpoint.',
+          '',
+          `Original research objective: ${objective}.`,
+          `Shared artifact root: ${artifactRoot}.`,
+          args.deliverable ? `Requested deliverable: ${args.deliverable}.` : '',
+          '',
+          'Review the completed research notes and saved artifacts in the task tree and local artifact root.',
+          'Create the final user-facing deliverable requested by the original objective instead of leaving only branch-local notes.',
+          'If the task asks for a memo, report, comparison, summary, or recommendation, write one clear final Markdown file under the shared artifact root and update or create an index that points to it.',
+          'Also create a top-level README.md with one simple command a human can run from the project root to inspect the result.',
+          'If the requested deliverable includes a visual artifact, make the README command open, render, or verify that visual artifact directly, not only print the text report. In headless/local CLI contexts, a small python or shell command that parses or checks the visual file is acceptable.',
+          'When using updateFiles for both artifact-root files and top-level README.md, omit artifactRoot and use full relative paths for every file, or split the README.md write into a separate updateFiles call. Do not pass artifactRoot while writing README.md.',
+          'Use a command that works locally without login; for research artifacts this is usually a cat command for the final Markdown file.',
+          'Finish with concise verification evidence and the human-check command.',
+        ]
+          .filter((line) => line.length > 0)
+          .join('\n'),
+      },
+    },
+    toolCall({
+      name: 'entryNode',
+      arguments: entryNodeArguments ?? {
+        allowedTools: ['updateFiles', 'bash'],
+      },
+    }),
+  ]
+}
+
 const formatStartupInstructions = (startupInstructions: string) =>
   startupInstructions
     .split('\n')
@@ -622,8 +666,10 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
       },
       searchQueries: {
         type: 'array',
+        maxItems: 4,
         items: { type: 'string' },
-        description: 'One query per parallel research branch.',
+        description:
+          'One query per research packet. Use 1-3 queries for normal reports or memos; use 4 only when the requested output truly needs distinct source families.',
       },
       artifactRoot: {
         type: 'string',
@@ -729,6 +775,7 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
     const delegatedChains = buildTaskPlannerTaskChains(
       taskGroups,
       await context.getExecutionTaskChain(),
+      { includeReview: false },
     ).map((chain) => {
       const entryNodeArguments = buildResearchEntryNodeArguments(args)
       if (!entryNodeArguments) return chain
@@ -745,6 +792,7 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
         })
       })
     })
+    const researchWorkflow = [...delegatedChains.flat(), ...buildResearchSynthesisTaskChain(args)]
 
     return context.createSubtasksResult([
       [
@@ -756,7 +804,7 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
           },
         },
       ],
-      ...delegatedChains,
+      researchWorkflow,
     ])
   },
 })

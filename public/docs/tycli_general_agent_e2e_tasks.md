@@ -39,15 +39,20 @@ For every experiment:
 5. Give `tycli` one realistic prompt. The prompt should describe the desired outcome and
    acceptance criteria, but it should not tell the agent which tools, files, or shell commands to
    use.
-6. Require the final project to include a README or README section written by `tycli` that tells a
+6. If `tycli` asks structured clarification questions before starting, answer them as normal user
+   input and record the selected or custom answers in the run report. This is allowed only when
+   the agent initiated the questions because the request had blocking ambiguity. Do not use the
+   answers to smuggle tool instructions, implementation details, or corrective feedback. After the
+   clarification answers, the run must continue without evaluator steering.
+7. Require the final project to include a README or README section written by `tycli` that tells a
    human exactly how to install, run, and manually verify the result. The README must include one
    simple command that can be run from the final project's top-level directory to show the result
    of the task, such as starting the completed web app, launching the CLI/demo, opening a generated
    report, or running the project-specific verification view.
-7. Track the project URL/revision, prompt, tycli conversation file, tycli runtime log, trace
-   directory, task-tree visualization, interventions, bugs found, restarts, changed files, and
-   verification commands.
-8. If `tycli` exposes a Taskyon bug, stop the experiment, fix the upstream bug, restart from a
+8. Track the project URL/revision, prompt, clarification answers, tycli conversation file, tycli
+   runtime log, trace directory, task-tree visualization, interventions, bugs found, restarts,
+   changed files, and verification commands.
+9. If `tycli` exposes a Taskyon bug, stop the experiment, fix the upstream bug, restart from a
    clean external project when reasonable, and rerun.
 
 Exploratory development may use checkpoints to avoid repeating slow setup. For example, keep a
@@ -60,8 +65,9 @@ exactly which baseline was reused and why it is acceptable.
 
 - Exploratory runs may include a few corrective prompts. Record every correction and what failure
   mode it addressed.
-- Final proof runs must be autonomous: one prompt, no evaluator correction, no interruption, and no
-  manual file edits.
+- Final proof runs must be autonomous: one initial prompt, no evaluator correction, no
+  interruption, and no manual file edits. If `tycli` asks its own structured clarification
+  questions, answer only those questions, record the answers, and then do not intervene again.
 - Long-running tasks may reuse downloaded dependencies or a prepared project during exploration.
   The final report must state exactly what was fresh and what was reused.
 - For final proof on long-running tasks, a checkpointed starting state is allowed only when it is a

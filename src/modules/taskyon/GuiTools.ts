@@ -2,7 +2,16 @@ import type { QDialogInputPrompt, QDialogOptions, QDialogSelectionPrompt } from 
 import { Dialog } from 'quasar'
 import type { JSONSchema7 } from 'json-schema'
 import { createClientTool } from '@taskyon/tyclient'
+import {
+  CLARIFICATION_TOOL_NAME,
+  ClarificationRequest,
+  clarificationToolDescription,
+  clarificationToolLongDescription,
+  clarificationToolParameters,
+  type ClarificationResult,
+} from '@taskyon/taskyon/tools/clarificationTool'
 import { tauriLocalTools } from './TauriLocalTools'
+import ClarificationQuestionsDialog from 'components/taskyon/ClarificationQuestionsDialog.vue'
 
 export const simpleDialogSchema = {
   $id: 'SimpleQDialogOptions',
@@ -171,4 +180,26 @@ export const quasarDialogTool = createClientTool({
   },
 })
 
-export const guiTools = [quasarDialogTool, ...tauriLocalTools]
+export const clarificationQuestionsTool = createClientTool({
+  name: CLARIFICATION_TOOL_NAME,
+  description: clarificationToolDescription,
+  longDescription: clarificationToolLongDescription,
+  parameters: clarificationToolParameters,
+  renderOptions: { hideChat: false, hideLlm: false },
+  async function(rawArgs): Promise<ClarificationResult | { cancelled: true }> {
+    const request = ClarificationRequest.parse(rawArgs)
+    return await new Promise((resolve) => {
+      Dialog.create({
+        component: ClarificationQuestionsDialog,
+        componentProps: {
+          request,
+        },
+      })
+        .onOk((result: ClarificationResult) => resolve(result))
+        .onCancel(() => resolve({ cancelled: true }))
+        .onDismiss(() => resolve({ cancelled: true }))
+    })
+  },
+})
+
+export const guiTools = [quasarDialogTool, clarificationQuestionsTool, ...tauriLocalTools]

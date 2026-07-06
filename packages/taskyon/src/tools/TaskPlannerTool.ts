@@ -49,6 +49,7 @@ const plannerContinuationPrompt = (allowedTools?: string[]) =>
   [
     'Continue this delegated subtask using the detailed objective above.',
     'Carry out the work autonomously and continue the chain normally.',
+    'Do not ask whether to continue; finish this delegated branch with saved artifacts, verification evidence, or a concise completion status. Later planned tasks will continue automatically.',
     ...(allowedTools
       ? [
           allowedTools.length > 0
@@ -170,13 +171,15 @@ const createPlannerReviewTaskChain = (plannerContext: string): partialTaskDraft[
 export const buildTaskPlannerTaskChains = (
   taskGroups: readonly (readonly PlannedTaskInput[])[],
   taskChain: readonly TaskNode[],
+  options?: { includeReview?: boolean },
 ) => {
   const plannerContext = summarizePlannerContext([...taskChain])
+  const includeReview = options?.includeReview ?? true
   return taskGroups.map((group) => [
     ...group.flatMap((item) =>
       createPlannerTaskChain(normalizePlannedTaskInput(item), plannerContext),
     ),
-    ...createPlannerReviewTaskChain(plannerContext),
+    ...(includeReview ? createPlannerReviewTaskChain(plannerContext) : []),
   ])
 }
 
@@ -244,17 +247,17 @@ export const taskSearcher = (taskManager: TyTaskManager) =>
 export const taskPlanner = createTool({
   name: 'taskPlanner',
   description:
-    'Plans and launches bounded packets of delegated work. Use one outer group per parallel branch and one inner list for sequential work inside that branch.',
+    'Plans and launches bounded packets of delegated work. Defaults to one sequential workflow; opt into parallel branches only for truly independent work.',
   longDescription: `Use this tool only when a task is complex enough to benefit from delegated subtasks. Do not use it for simple one-step answers or small single-artifact edits where ordinary tools can finish the work directly.
 
-The "tasks" parameter is a list of groups:
-- Each outer group runs in parallel with the other groups.
-- Each inner list runs in sequence from left to right.
+The "tasks" parameter is a list of groups. By default, Taskyon flattens all groups into one sequential workflow because most project work has dependencies between exploration, implementation, documentation, and verification. Set "parallel" to true only when the outer groups are genuinely independent and can safely edit or gather results without racing each other.
+
+For artifact-building tasks, use the default sequential mode. Do not split implementation, README writing, and verification into parallel groups; verification must run after implementation exists, and documentation should match the final artifact.
 
 Choose the packet size dynamically:
 - Use one task when the next step depends on unknown exploration or a risky result.
 - Use a short sequential packet when several steps are obvious and low-risk.
-- Use parallel groups when branches are independent and can be merged later.
+- Use parallel groups with "parallel": true only when branches are independent and can be merged later.
 - Re-enter taskPlanner after uncertainty boundaries such as exploration, edits, tests, external calls, or errors only when the next plan genuinely needs to adapt.
 
 Do not keep hidden planner state. Any plan, checklist, status, acceptance criteria, or evidence should be represented in visible task messages, structured results, or delegated task outputs so the task tree remains the source of truth.
@@ -278,13 +281,20 @@ For every delegated task, Taskyon first creates a fresh local context, expands t
           items: plannerTaskItemSchema,
         },
         description:
-          'A bounded execution packet. Each outer array item runs in parallel. Each inner array item runs sequentially. Emit only the next useful packet before replanning: one task for uncertain steps, a short sequential list for obvious low-risk steps, or parallel groups for independent work. Add a later planning/review step only when adaptation or final acceptance checking cannot be handled by the current packet.',
+          'A bounded execution packet. By default all outer groups are flattened into one sequential workflow. Each inner array item is a sequential step. Use multiple outer groups only with parallel=true and only for independent work. Emit only the next useful packet before replanning: one task for uncertain steps or a short sequential list for obvious low-risk steps.',
+      },
+      parallel: {
+        type: 'boolean',
+        default: false,
+        description:
+          'Set true only when each outer tasks group is independent and safe to run in parallel. Leave false for normal project work, especially implementation plus README plus verification workflows.',
       },
     },
     required: ['tasks'],
   } as const satisfies JSONSchema7,
-  function: async ({ tasks }, context) => {
-    const normalizedGroups = tasks.map((group) =>
+  function: async ({ tasks, parallel = false }, context) => {
+    const taskGroups = parallel ? tasks : [tasks.flat()]
+    const normalizedGroups = taskGroups.map((group) =>
       group.map((item) => normalizePlannedTaskInput(item)),
     )
     const groupsFormatted = normalizedGroups
@@ -314,7 +324,7 @@ For every delegated task, Taskyon first creates a fresh local context, expands t
           content: { type: 'return', data: 'task breakdown recorded' },
         },
       ],
-      ...buildTaskPlannerTaskChains(tasks, await context.getExecutionTaskChain()),
+      ...buildTaskPlannerTaskChains(taskGroups, await context.getExecutionTaskChain()),
     ])
   },
 })

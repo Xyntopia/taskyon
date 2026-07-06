@@ -29,6 +29,15 @@ import {
   type Taskyon,
   type TaskyonMessage,
 } from '@taskyon/taskyon'
+import {
+  CLARIFICATION_TOOL_NAME,
+  CLARIFICATION_RESULT_INSTRUCTION,
+  ClarificationRequest,
+  clarificationToolDescription,
+  clarificationToolLongDescription,
+  clarificationToolParameters,
+  type ClarificationResult,
+} from '@taskyon/taskyon/tools/clarificationTool'
 import { createProtocolPort, createTaskyonClient, taskyonProtocol } from '@taskyon/taskyon/api'
 import { setChatCompletionTraceWriter } from '@taskyon/taskyon/tools/chatCompletionTrace'
 import { createNodeTaskyonDocumentationProviderTool } from '@taskyon/taskyon/tools/nodeTaskyonDocumentationProvider'
@@ -148,6 +157,7 @@ const fileIndexCache = new Map<string, string[]>()
 let fatalErrorHandled = false
 const RUNTIME_LOG_MAX_BYTES = 100 * 1024 * 1024
 let clearTransientStatusLine: (() => void) | undefined
+let activeCliMenuDepth = 0
 
 function absolutizeRelativeExecArgvImports(cwd: string) {
   process.execArgv = process.execArgv.flatMap((arg, index, args) => {
@@ -608,6 +618,16 @@ function exitAfterFatalError(code = 1) {
 function writeDebug(text: string) {
   if (!debugLogsEnabled) return
   process.stderr.write(`[debug] ${text}\n`)
+}
+
+async function withCliMenuInteraction<T>(run: () => Promise<T>): Promise<T> {
+  activeCliMenuDepth += 1
+  clearTransientStatusLine?.()
+  try {
+    return await run()
+  } finally {
+    activeCliMenuDepth = Math.max(0, activeCliMenuDepth - 1)
+  }
 }
 
 process.title = 'tycli'
@@ -1080,7 +1100,70 @@ const cliBashTool: ClientTool = createClientTool({
     throw lastError ?? new Error('No usable shell found for bash tool execution')
   },
 })
+
+async function askClarificationQuestionInCli(
+  rl: ReturnType<typeof createInterface>,
+  question: ClarificationRequest['questions'][number],
+) {
+  const options = [
+    ...question.options.map((option) =>
+      option.description ? `${option.label} - ${option.description}` : option.label,
+    ),
+    'Custom answer',
+  ]
+  const selected = await selectFromList(rl, `\n${question.question}`, options)
+  if (selected === null) return null
+  const customIndex = options.length - 1
+  if (selected === customIndex) {
+    const custom = await askTextInput(rl, 'Custom answer')
+    return custom?.trim() || null
+  }
+  return question.options[selected]?.label ?? null
+}
+
+function createCliClarificationTool(
+  getReadline: () => ReturnType<typeof createInterface> | undefined,
+): ClientTool {
+  return createClientTool({
+    name: CLARIFICATION_TOOL_NAME,
+    description: clarificationToolDescription,
+    longDescription: clarificationToolLongDescription,
+    parameters: clarificationToolParameters,
+    renderOptions: { hideChat: false, hideLlm: false },
+    async function(rawArgs) {
+      const rl = getReadline()
+      if (!rl) {
+        throw new Error('Clarification questions are only available in interactive tycli sessions.')
+      }
+      const args = ClarificationRequest.parse(rawArgs)
+      if (args.intro?.trim()) writeLine(args.intro.trim())
+      const answers: ClarificationResult['answers'] = []
+
+      for (const question of args.questions) {
+        const answer = await askClarificationQuestionInCli(rl, question)
+        if (answer === null) {
+          return {
+            cancelled: true,
+            answers,
+          }
+        }
+        answers.push({
+          id: question.id,
+          question: question.question,
+          answer,
+        })
+      }
+
+      return {
+        ...(args.intro ? { intro: args.intro } : {}),
+        instruction: CLARIFICATION_RESULT_INSTRUCTION,
+        answers,
+      }
+    },
+  })
+}
 const ACTIVE_LLM_TOOLS = [
+  CLARIFICATION_TOOL_NAME,
   'taskPlanner',
   cliBashTool.name,
   EXPLORATION_TOOL_NAME,
@@ -1113,6 +1196,11 @@ function buildCliStableContext(projectInstructions: string) {
       '3. Use bash only when command execution is required beyond file discovery, text search, or file viewing.',
       '4. Keep destructive or risky shell commands clearly justified and minimal.',
       '5. After a tool result, continue the task: call one next tool when more work is needed, otherwise answer concisely.',
+      "6. If verification fails because a local dependency command is missing, inspect the project's package metadata and try the normal install/setup command once before treating it as blocked.",
+      '7. For project tasks that create, change, or document a runnable result, leave a project-local README or documentation note with one simple command a human can run from the project root to verify the result.',
+      '8. Match verification scope to the change: for documentation-only or task-discovery changes, prefer the smallest command that validates the documented workflow over a full dependency-installing test suite.',
+      '9. In Ruby/Rake projects, when `ruby -S rake` is available, use it for focused task-discovery verification before trying `bundle exec` or dependency setup.',
+      '10. After editing source files, inspect the resulting diff for accidental formatting noise; when the project exposes a focused formatter or tidy command, run it before final verification.',
     ].join('\n'),
   ]
     .filter(Boolean)
@@ -1422,24 +1510,26 @@ async function selectFromList(
     optionsForQuery?: (query: string) => string[]
   },
 ) {
-  const initialQuery = config?.initialQuery ?? ''
-  const optionsForQuery = config?.optionsForQuery
-  const stdin = process.stdin
-  const stdout = process.stdout
-  const optionsFor = (query: string) => optionsForQuery?.(query) ?? options
-  if (!stdin.isTTY || !stdout.isTTY || typeof stdin.setRawMode !== 'function') {
-    const currentOptions = optionsFor(initialQuery)
-    writeLine(title)
-    currentOptions.forEach((option, idx) => writeLine(`${idx + 1}. ${option}`))
-    const answerRaw = await askQuestion(rl, 'Select: ')
-    if (answerRaw === null) return null
-    const answer = answerRaw.trim()
-    const num = Number(answer)
-    if (!Number.isInteger(num) || num < 1 || num > currentOptions.length) return null
-    return num - 1
-  }
+  return await withCliMenuInteraction(async () => {
+    const initialQuery = config?.initialQuery ?? ''
+    const optionsForQuery = config?.optionsForQuery
+    const stdin = process.stdin
+    const stdout = process.stdout
+    const optionsFor = (query: string) => optionsForQuery?.(query) ?? options
+    if (!stdin.isTTY || !stdout.isTTY || typeof stdin.setRawMode !== 'function') {
+      const currentOptions = optionsFor(initialQuery)
+      writeLine(title)
+      currentOptions.forEach((option, idx) => writeLine(`${idx + 1}. ${option}`))
+      const answerRaw = await askQuestion(rl, 'Select: ')
+      if (answerRaw === null) return null
+      const answer = answerRaw.trim()
+      const num = Number(answer)
+      if (!Number.isInteger(num) || num < 1 || num > currentOptions.length) return null
+      return num - 1
+    }
 
-  return selectFromListRaw(title, options, config)
+    return selectFromListRaw(title, options, config)
+  })
 }
 
 async function selectSlashCommand(
@@ -2306,24 +2396,16 @@ async function resolveProjectInstructionRoot(
   cwd: string,
   explicitInvocationCwd?: string,
 ): Promise<string> {
-  if (explicitInvocationCwd && resolve(explicitInvocationCwd) === resolve(cwd)) {
-    const cwdIsProjectRoot = await directoryContainsAnyFile(cwd, ['.git', 'package.json'])
-    if (!cwdIsProjectRoot) return resolve(cwd)
+  if (explicitInvocationCwd) {
+    const explicitRoot = resolve(explicitInvocationCwd)
+    const current = resolve(cwd)
+    const relativeToExplicitRoot = relative(explicitRoot, current)
+    if (!relativeToExplicitRoot || !relativeToExplicitRoot.startsWith('..')) {
+      return explicitRoot
+    }
   }
   const nearestRoot = await findNearestAncestorWithAnyFile(cwd, ['.git', 'package.json'])
   return nearestRoot ?? resolve(cwd)
-}
-
-async function directoryContainsAnyFile(cwd: string, names: string[]): Promise<boolean> {
-  for (const name of names) {
-    try {
-      await stat(join(cwd, name))
-      return true
-    } catch {
-      // Try the next root marker.
-    }
-  }
-  return false
 }
 
 async function findNearestAncestorWithAnyFile(
@@ -2514,8 +2596,10 @@ async function main() {
   )
 
   writeLine('Registering CLI tools...')
+  let interactiveReadline: ReturnType<typeof createInterface> | undefined
   const cliTools: InternalTool[] = [
     cliEntryNodeTool,
+    createCliClarificationTool(() => interactiveReadline),
     explorationTool,
     updateFilesTool,
     downloadFileTool,
@@ -2574,6 +2658,7 @@ async function main() {
     historySize: 500,
     removeHistoryDuplicates: false,
   })
+  interactiveReadline = rl
   rl.on('history', (history) => {
     const normalized = normalizeInputHistory(history)
     history.splice(0, history.length, ...normalized)
@@ -2627,7 +2712,7 @@ async function main() {
   clearTransientStatusLine = clearWorkerStatusLine
 
   const renderWorkerStatusLine = () => {
-    if (!process.stdout.isTTY || !workerStatusText) return
+    if (!process.stdout.isTTY || !workerStatusText || activeCliMenuDepth > 0) return
     const frame = workerSpinnerFrames[workerStatusFrameIndex % workerSpinnerFrames.length] ?? '-'
     workerStatusFrameIndex += 1
     process.stdout.write(`\r\x1b[2K${frame} ${workerStatusText}`)
@@ -2636,6 +2721,11 @@ async function main() {
 
   const setWorkerStatusLine = (text: string) => {
     if (!process.stdout.isTTY) return
+    if (activeCliMenuDepth > 0) {
+      clearWorkerStatusLine()
+      workerStatusText = text
+      return
+    }
     workerStatusText = text
     if (workerStatusTimer === null) {
       workerStatusTimer = setInterval(renderWorkerStatusLine, 120)
@@ -2677,6 +2767,10 @@ async function main() {
   const updateWorkerStatusLine = (event: WorkerEvent, suppressed: boolean) => {
     if (activeTaskCount() <= 0) {
       stopWorkerStatusLine()
+      return
+    }
+    if (activeCliMenuDepth > 0) {
+      clearWorkerStatusLine()
       return
     }
     if (suppressed) return
@@ -2963,7 +3057,7 @@ async function main() {
     if (stage === 'processing' || stage === 'in loop' || stage === 'subtasks') {
       taskProcessingStatus = 'processing'
     }
-    if (stage === 'all finished') {
+    if (stage === 'all processed') {
       clearWorkerIdleSettleTimer()
       activeWorkerTasks.clear()
       hasWorkerProcessing = false
@@ -2984,12 +3078,14 @@ async function main() {
       }, 100)
       workerIdleSettleTimer.unref()
     }
-    if (stage === 'processed' || stage === 'aborted' || stage === 'error') {
+    if (stage === 'processed' || stage === 'finished' || stage === 'aborted' || stage === 'error') {
       if (taskId) activeWorkerTasks.delete(taskId)
-      if (stage !== 'processed') hasWorkerProcessing = false
-      if (activeWorkerTasks.size === 0 && stage === 'processed') hasWorkerProcessing = false
+      if (stage !== 'processed' && stage !== 'finished') hasWorkerProcessing = false
+      if (activeWorkerTasks.size === 0 && (stage === 'processed' || stage === 'finished')) {
+        hasWorkerProcessing = false
+      }
       if (activeWorkerTasks.size === 0 && !hasWorkerProcessing) taskProcessingStatus = 'finished'
-      if (stage !== 'processed') clearWorkerCleanupNoticeTimer()
+      if (stage !== 'processed' && stage !== 'finished') clearWorkerCleanupNoticeTimer()
       if (activeTaskCount() <= 0) stopWorkerStatusLine()
     }
     updateFooter()

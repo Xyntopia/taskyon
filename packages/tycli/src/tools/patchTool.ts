@@ -29,7 +29,7 @@ export const updateFilesTool = createTool({
       artifactRoot: {
         type: 'string',
         description:
-          'Optional relative directory that all research artifact files in this update must stay under, for example research/solar-cell-spec-sheets/.',
+          'Optional relative directory that all files in this one updateFiles call must stay under, for example research/solar-cell-spec-sheets/. Omit artifactRoot when the same call also writes top-level files such as README.md, or split those writes into a separate updateFiles call.',
       },
       updates: {
         type: 'array',
@@ -69,14 +69,25 @@ export const updateFilesTool = createTool({
               type: 'array',
               minItems: 1,
               description:
-                'Search/replace patches for an existing file. Do not include newContent or regexReplacements with this mode. Use exact current context; after a mismatch, inspect the file again before retrying.',
+                'Search/replace patches for an existing file. Do not include newContent or regexReplacements with this mode. Use exact current context; after a mismatch, inspect the file again before retrying. For Markdown or other small generated sections, prefer newContent for the full file over repeated fragile boundary patches.',
               items: {
                 type: 'object',
                 additionalProperties: false,
                 properties: {
-                  search: { type: 'string' },
-                  searchStart: { type: 'string' },
-                  searchEnd: { type: 'string' },
+                  search: {
+                    type: 'string',
+                    description: 'Exact text to replace. Prefer this when the block is not huge.',
+                  },
+                  searchStart: {
+                    type: 'string',
+                    description:
+                      'Exact start boundary for a large replacement. Must contain at least 3 complete lines from the current file.',
+                  },
+                  searchEnd: {
+                    type: 'string',
+                    description:
+                      'Exact end boundary for a large replacement. Must contain at least 3 complete lines from the current file.',
+                  },
                   contextLines: { type: 'integer' },
                   replace: { type: 'string' },
                 },

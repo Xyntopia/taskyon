@@ -141,6 +141,27 @@ export const testTaskPlannerBuildsParallelAndSequentialChains = () => {
   return { success: true }
 }
 
+export const testTaskPlannerCanBuildChainsWithoutReviewCheckpoint = () => {
+  const chains = buildTaskPlannerTaskChains([['Inspect project']], createPlannerContext(), {
+    includeReview: false,
+  })
+
+  assert(chains.length === 1, `Expected 1 chain, got ${chains.length}`)
+  assert(
+    chains[0]?.length === 4,
+    `Expected one planner task without review checkpoint, got ${chains[0]?.length}`,
+  )
+  const reviewTask = chains[0]?.find(
+    (task) =>
+      task.content.type === 'message' &&
+      typeof task.content.data === 'string' &&
+      task.content.data.includes('Planner review checkpoint.'),
+  )
+  assert(!reviewTask, 'Expected no planner review checkpoint when includeReview is false')
+
+  return { success: true }
+}
+
 export const testTaskPlannerNormalizesTaskInputs = () => {
   const stringTask = normalizePlannedTaskInput('  Search with a different angle  ')
   assert(stringTask.task === 'Search with a different angle', 'Expected string tasks to be trimmed')
@@ -193,9 +214,44 @@ export const testTaskPlannerBreakdownBranchTerminates = async () => {
   return { success: true }
 }
 
+export const testTaskPlannerDefaultsToSequentialGroups = async () => {
+  if (!taskPlanner.function) throw new Error('Expected taskPlanner to have a function')
+
+  const context: toolContext = {
+    getExecutionTaskChain: async () => createPlannerContext(),
+    createSubtasksResult,
+    getSecret: async () => null,
+    setSecret: async () => undefined,
+    stopSignal: new AbortController().signal,
+    toolId: 'test-task-planner',
+  }
+  const result = await taskPlanner.function(
+    {
+      tasks: [['Implement artifact'], ['Write README'], ['Run verification']],
+    },
+    context,
+  )
+  const delegatedBranches = result.taskChainList.slice(1)
+
+  assert(
+    delegatedBranches.length === 1,
+    `Expected default planner mode to create one sequential branch, got ${delegatedBranches.length}`,
+  )
+  assert(
+    delegatedBranches[0]?.length === 14,
+    `Expected one branch with three sequential planner tasks plus review, got ${delegatedBranches[0]?.length}`,
+  )
+
+  return { success: true }
+}
+
 testTaskPlannerBuildsParallelAndSequentialChains.description =
   'Builds planner task chains where outer groups are parallel and inner tasks expand into sequential entryNode bootstrap chains.'
+testTaskPlannerCanBuildChainsWithoutReviewCheckpoint.description =
+  'Builds planner task chains without branch-local review checkpoints when a parent tool owns final synthesis.'
 testTaskPlannerNormalizesTaskInputs.description =
   'Normalizes planner task inputs and rejects invalid task planner objects at the boundary.'
 testTaskPlannerBreakdownBranchTerminates.description =
   'Ensures taskPlanner bookkeeping branches terminate so parent tasks do not wait forever.'
+testTaskPlannerDefaultsToSequentialGroups.description =
+  'Ensures taskPlanner flattens dependent groups into one sequential branch unless parallel execution is explicit.'

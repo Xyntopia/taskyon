@@ -5,14 +5,123 @@ import type { DiagnosticsTestContext } from '../../../shared/modules/diagnostics
 import { tyCore } from '../core/init'
 import { registerToolRpcTools } from '../core/toolRpc'
 import { createTaskyonClient } from '../api'
-import { toolCall } from '../types/toolApi'
+import { createSubtasksResult, toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
 import { createStandardEntryNodeTool } from '../tools/entryNode'
+import { CLARIFICATION_TOOL_NAME } from '../tools/clarificationTool'
 import { buildLinkedTaskChain } from '../testSupport/onlineProviderSupport'
 import { llmSettings } from '../types/profiles'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
+}
+
+const getFunctionCall = (task: unknown) => {
+  if (!task || typeof task !== 'object' || !('content' in task)) return undefined
+  const content = task.content
+  if (!content || typeof content !== 'object' || !('type' in content) || !('data' in content)) {
+    return undefined
+  }
+  return content.type === 'functioncall' ? content.data : undefined
+}
+
+export const testEntryNodeDoesNotAskClarificationDuringErrorRecovery = async () => {
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+    defaultAllowedTools: ['bash', CLARIFICATION_TOOL_NAME],
+    toolChooser: { enabled: true, useTools: true },
+  })
+  const taskChain: TaskNode[] = [
+    {
+      id: 'user',
+      role: 'user',
+      content: {
+        type: 'message',
+        data: 'Research this autonomously.',
+      },
+    },
+    {
+      id: 'failed-chat',
+      role: 'function',
+      priorID: 'user',
+      content: {
+        type: 'functioncall',
+        data: {
+          name: 'chatCompletion',
+          arguments: {
+            allowedTools: ['bash', CLARIFICATION_TOOL_NAME],
+          },
+        },
+      },
+    },
+    {
+      id: 'error',
+      role: 'system',
+      parentID: 'failed-chat',
+      content: {
+        type: 'error',
+        data: {
+          message: 'server_is_overloaded',
+        },
+      },
+    },
+    {
+      id: 'entry-node',
+      role: 'function',
+      priorID: 'error',
+      content: {
+        type: 'functioncall',
+        data: {
+          name: 'entryNode',
+          arguments: {},
+        },
+      },
+    },
+  ]
+
+  const result = await entryNodeTool.function?.(
+    {},
+    {
+      getExecutionTaskChain: async () => taskChain,
+      createSubtasksResult,
+      getSecret: async () => null,
+      setSecret: async () => undefined,
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-node-error-test',
+    },
+  )
+
+  assert(
+    result && typeof result === 'object' && 'taskChainList' in result,
+    'Expected entryNode to return a task result',
+  )
+
+  const chatCompletionCall = getFunctionCall(result.taskChainList[0]?.[0])
+  const args =
+    chatCompletionCall &&
+    typeof chatCompletionCall === 'object' &&
+    'arguments' in chatCompletionCall &&
+    chatCompletionCall.arguments &&
+    typeof chatCompletionCall.arguments === 'object'
+      ? chatCompletionCall.arguments
+      : undefined
+  const allowedTools = args && 'allowedTools' in args ? args.allowedTools : undefined
+
+  assert(
+    Array.isArray(allowedTools),
+    'Expected error recovery chatCompletion to include allowed tools',
+  )
+  assert(
+    allowedTools.includes('bash'),
+    'Expected error recovery to preserve non-clarification tools',
+  )
+  assert(
+    !allowedTools.includes(CLARIFICATION_TOOL_NAME),
+    'Expected error recovery to filter askClarifyingQuestions from allowed tools',
+  )
+
+  return { success: true }
 }
 
 export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
@@ -182,3 +291,6 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
 testEntryNodeRecoversFromMalformedPythonToolCall.description =
   'EntryNode should recover from malformed executePythonScript parameters by retrying with corrected arguments.'
 testEntryNodeRecoversFromMalformedPythonToolCall.timeoutMs = 210_000
+
+testEntryNodeDoesNotAskClarificationDuringErrorRecovery.description =
+  'EntryNode should not ask human clarification questions while recovering from a tool error.'

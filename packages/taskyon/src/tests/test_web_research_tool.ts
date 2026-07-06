@@ -397,6 +397,34 @@ export const testWebResearchPlannerUsesWebSearchFirstByDefault = async () => {
     'Expected default delegated research branches to enable chatCompletion web search and expose local save, verified download, shell fallback, and page-validation tools only',
   )
 
+  const workflow = initialResult.taskChainList[1] ?? []
+  const synthesisMessage = workflow.find(
+    (task) =>
+      task.content.type === 'message' &&
+      typeof task.content.data === 'string' &&
+      task.content.data.includes('Research synthesis checkpoint.'),
+  )
+  const synthesisEntryNode = getFunctionCall(workflow.at(-1))
+  const branchReviewMessage = workflow.find(
+    (task) =>
+      task.content.type === 'message' &&
+      typeof task.content.data === 'string' &&
+      task.content.data.includes('Planner review checkpoint.'),
+  )
+
+  assert(
+    synthesisMessage,
+    'Expected webResearchPlanner to append a final synthesis checkpoint after delegated research',
+  )
+  assert(
+    synthesisEntryNode?.name === 'entryNode',
+    'Expected webResearchPlanner synthesis checkpoint to re-enter entryNode',
+  )
+  assert(
+    !branchReviewMessage,
+    'Expected webResearchPlanner to skip branch-local planner reviews and rely on final synthesis',
+  )
+
   return { success: true }
 }
 

@@ -1,5 +1,6 @@
 import { createChatCompletionTask } from '../api'
 import { toPromptMessages } from '../llm/promptMessages'
+import { CLARIFICATION_TOOL_NAME } from './clarificationTool'
 import { match, P } from 'ts-pattern'
 import { createTool, toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
@@ -450,6 +451,15 @@ const buildToolShortlistPrompt = (
         'replanning.',
       ].join('\n')
     : ''
+  const clarificationGuidance = toolCatalog.some((tool) => tool.name === 'askClarifyingQuestions')
+    ? [
+        '',
+        'Important: choose askClarifyingQuestions as the first step only when important',
+        'requirements are unclear enough that starting work would likely be wrong. Ask',
+        '4-5 compact multiple-choice questions for ambiguous project work. Do not ask',
+        'questions just to collect preferences when practical defaults are obvious.',
+      ].join('\n')
+    : ''
 
   return `Here is list of all the tools which are available to you:
 
@@ -463,8 +473,10 @@ Examples are:
 - a math problem
 - something that requires an API call
 - a multi-step task that should be planned, verified, or split into packets
+- a task with blocking ambiguity that should start with structured clarification questions
 - ... and more! make sure to think about it!
 ${taskPlannerGuidance}
+${clarificationGuidance}
 
 If you are sure that none of the tools are relevant, your choice should be simple string "no".
 
@@ -502,6 +514,11 @@ const resolveFallbackToolNames = (
   allowedTools: readonly string[],
   defaultAllowedTools: readonly string[],
 ) => (allowedTools.length > 0 ? [...allowedTools] : [...defaultAllowedTools])
+
+const resolveAllowedToolsForMode = (mode: EntryNodeMode, allowedTools: readonly string[]) =>
+  mode === 'error'
+    ? allowedTools.filter((toolName) => toolName !== CLARIFICATION_TOOL_NAME)
+    : [...allowedTools]
 
 const withReasoningEffort = (reasoningEffort: ResolvedEntryNodeSettings['reasoning_effort']) =>
   reasoningEffort ? { reasoning_effort: reasoningEffort } : {}
@@ -569,9 +586,10 @@ const createEntryNodeRuntimeState = async (
     toolResultSection === undefined ? promptArgsBase : { ...promptArgsBase, toolResultSection },
   )
   const stableContext = config.stableContext?.(promptArgsBase)
-  const allowedTools =
+  const rawAllowedTools =
     allowedToolsOverride ??
     resolveAllowedToolsFromFailedTask(taskChain, previousTask, config.defaultAllowedTools ?? [])
+  const allowedTools = resolveAllowedToolsForMode(mode, rawAllowedTools)
   const normalizedSettings = normalizeEntryNodeSettings(settings)
   const promptContext = {
     mode,
