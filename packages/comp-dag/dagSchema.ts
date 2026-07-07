@@ -56,7 +56,13 @@ const isSchemaObject = (value: DagJsonSchema | null | undefined): value is DagJs
 export const cloneJson = <T>(value: T): T => {
   const sc = (globalThis as unknown as { structuredClone?: (v: unknown) => unknown })
     .structuredClone
-  if (typeof sc === 'function') return sc(value) as T
+  if (typeof sc === 'function') {
+    try {
+      return sc(value) as T
+    } catch {
+      // fall through
+    }
+  }
   return JSON.parse(JSON.stringify(value)) as T
 }
 

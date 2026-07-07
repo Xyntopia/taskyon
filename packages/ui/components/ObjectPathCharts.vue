@@ -1,13 +1,21 @@
 <template>
-  <div class="object-path-charts column q-gutter-md">
+  <div class="object-path-charts column q-gutter-md" data-cy="object-path-charts">
     <div v-if="showControls" class="row items-center q-gutter-sm">
-      <q-btn dense flat color="primary" label="Add Chart" @click="addChartAndOpen" />
+      <q-btn
+        dense
+        flat
+        color="primary"
+        label="Add Chart"
+        data-cy="object-path-charts-add-chart"
+        @click="addChartAndOpen"
+      />
       <q-btn
         v-if="props.showAddMapButton"
         dense
         flat
         color="primary"
         label="Add Map"
+        data-cy="object-path-charts-add-map"
         @click="addMapAndOpen"
       />
       <q-btn
@@ -15,6 +23,7 @@
         flat
         color="primary"
         label="Auto Interesting"
+        data-cy="object-path-charts-auto-interesting"
         :disable="resolvedPathOptions.length < 2"
         @click="populateInterestingCharts"
       />
@@ -23,6 +32,7 @@
         flat
         color="secondary"
         label="Update All Charts"
+        data-cy="object-path-charts-update-all"
         :disable="chartList.length === 0"
         @click="updateAllCharts"
       />
@@ -55,6 +65,7 @@
       flat
       bordered
       class="object-path-charts__card"
+      data-cy="object-path-charts-card"
     >
       <q-card-section class="q-gutter-y-sm">
         <div class="row items-center">
@@ -461,7 +472,11 @@ import {
   pickCoordinatePaths,
   type MapExternalFeatureLayer,
 } from '@taskyon/common/modules/plotMapLayers'
-import type { PlotFlatRow, PlotResolution, PlotSparseHeatmapValue } from '@taskyon/common/modules/plotMath'
+import type {
+  PlotFlatRow,
+  PlotResolution,
+  PlotSparseHeatmapValue,
+} from '@taskyon/common/modules/plotMath'
 import { buildPlotValueFromRows } from '@taskyon/common/modules/plotMath'
 import { useSharedRunLogs } from '@taskyon/common/modules/runLogs'
 import type { ObjectPathChartDefinition } from './ObjectPathChartAxesEditor.vue'

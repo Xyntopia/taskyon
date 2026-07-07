@@ -453,7 +453,14 @@ const resolveCapturedValue = async (args: {
 const cloneValue = <T>(value: T): T => {
   const sc = (globalThis as unknown as { structuredClone?: (v: unknown) => unknown })
     .structuredClone
-  return typeof sc === 'function' ? (sc(value) as T) : (JSON.parse(JSON.stringify(value)) as T)
+  if (typeof sc === 'function') {
+    try {
+      return sc(value) as T
+    } catch {
+      // fall through
+    }
+  }
+  return JSON.parse(JSON.stringify(value)) as T
 }
 
 const sortBySpecs = (items: unknown[], specs: SortSpec[] | undefined): number[] => {
