@@ -13,6 +13,7 @@ import {
 } from './types'
 import {
   initPersistentCryptoSession,
+  createCliSecretStore,
   resolveConfigDirectoryPath,
   resolveKeyForProvider,
   resolveProviderSelection,
@@ -26,6 +27,22 @@ import {
 import { readProviderOauthAccountId, resolveCachedProviderOauthSession } from '../oauthLogin'
 
 const DIAGNOSTICS_ENTRY_NODE_NAME = 'entryNode'
+
+const runtimeDirectoryName = () => {
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return [
+    now.getUTCFullYear(),
+    pad(now.getUTCMonth() + 1),
+    pad(now.getUTCDate()),
+    '-',
+    pad(now.getUTCHours()),
+    pad(now.getUTCMinutes()),
+    pad(now.getUTCSeconds()),
+    '-',
+    process.pid,
+  ].join('')
+}
 
 export async function syncProviderRuntimeConfig(
   ty: Taskyon,
@@ -66,8 +83,10 @@ export async function bootstrapCliTaskyon(args?: {
 }> {
   const { cryptoSession, stored } = await initPersistentCryptoSession()
   const configDir = await resolveConfigDirectoryPath()
-  const pgliteNodeDir = args?.nodePgLiteDataDir ?? join(configDir, 'pglite')
+  const pgliteNodeDir =
+    args?.nodePgLiteDataDir ?? join(configDir, 'runtime', runtimeDirectoryName(), 'pglite')
   await mkdir(pgliteNodeDir, { recursive: true })
+  const cliSecretStore = createCliSecretStore(cryptoSession)
 
   const selectedApi = args?.selectedApi ?? resolveProviderSelection(stored)
   if (!SUPPORTED_PROVIDERS.includes(selectedApi as (typeof SUPPORTED_PROVIDERS)[number])) {
@@ -101,6 +120,7 @@ export async function bootstrapCliTaskyon(args?: {
       createIframeMultiPlexer: () =>
         createUnavailableIframeMux('Iframe message bridging is not available in tycli.'),
       nodePgLiteDataDir: pgliteNodeDir,
+      secretStore: cliSecretStore,
     },
   )
 

@@ -34,6 +34,7 @@ import {
   createCombinedCrudWrapper,
   createMapCrudWrapper,
   createPgLiteCrudWrapper,
+  type SecretStore,
   withSecretStore,
 } from '../utils/crudWrapper'
 import type { CryptoSession } from '../utils/cryptoSession'
@@ -245,7 +246,7 @@ const dynamicContext =
     insidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
     iframeMultiPlexer: IframeMultiPlexer,
     toolchainConfig: Thunk<Record<string, FunctionArguments>>,
-    options: { indexTaskVectors: boolean },
+    options: { indexTaskVectors: boolean; secretStore?: SecretStore },
   ) =>
   async (cs: CryptoSession) => {
     // if our cryptoSession changes, we need to re-calculate everything below!
@@ -257,19 +258,21 @@ const dynamicContext =
       indexTaskVectors: options.indexTaskVectors,
     })
     console.log('tycore finished taskManager initialization')
-    const secretStore = withSecretStore(
-      createCombinedCrudWrapper([
-        createMapCrudWrapper(new Map<string, EncryptedDataRow>()),
-        await createPgLiteCrudWrapper<EncryptedDataRow>(db, {
-          tableName: 'vault',
-        }),
-      ]),
-      () => cs.getUserPublicKey().publicKey,
-      () => {
-        //console.log('importing fixed key for secretStore...')
-        return cs.getSessionKey()
-      },
-    )
+    const secretStore =
+      options.secretStore ??
+      withSecretStore(
+        createCombinedCrudWrapper([
+          createMapCrudWrapper(new Map<string, EncryptedDataRow>()),
+          await createPgLiteCrudWrapper<EncryptedDataRow>(db, {
+            tableName: 'vault',
+          }),
+        ]),
+        () => cs.getUserPublicKey().publicKey,
+        () => {
+          //console.log('importing fixed key for secretStore...')
+          return cs.getSessionKey()
+        },
+      )
 
     // add tools which have access to the taskManagerInstance itself and need to be
     // regenerated for each session
@@ -423,6 +426,7 @@ export async function tyCore(
     createIframeMultiPlexer?: CreateIframeMultiPlexer
     indexTaskVectors?: boolean
     nodePgLiteDataDir?: string
+    secretStore?: SecretStore
   },
 ) {
   // TODO: make webpack automatically add all tool files from /tools/*
@@ -450,7 +454,10 @@ export async function tyCore(
     insidePort,
     iframeMultiPlexer,
     toolchainConfig,
-    { indexTaskVectors: options?.indexTaskVectors !== false },
+    {
+      indexTaskVectors: options?.indexTaskVectors !== false,
+      ...(options?.secretStore ? { secretStore: options.secretStore } : {}),
+    },
   )
 
   // TODO: we need to integrate all of these with our API.

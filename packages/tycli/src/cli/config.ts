@@ -2,7 +2,9 @@ import { constants } from 'node:fs'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
-import { createCryptoSession, type Taskyon } from '@taskyon/taskyon'
+import { createCryptoSession, type CryptoSession, type Taskyon } from '@taskyon/taskyon'
+import { type CrudWrapper, withSecretStore } from '../../../taskyon/src/utils/crudWrapper'
+import { EncryptedDataRow } from '../../../taskyon/src/utils/encrypt'
 import { API_KEY_STORE_NAME, type StoredConfig } from './types'
 
 const PREFERRED_CONFIG_DIR = join(homedir(), '.config', 'tycli')
@@ -176,6 +178,60 @@ export async function initPersistentCryptoSession() {
   })
 
   return { cryptoSession: cs, stored }
+}
+
+const createConfigSecretCrud = (): CrudWrapper<EncryptedDataRow> => {
+  const readSecrets = async () => (await loadStoredConfig()).cliSecrets ?? {}
+  const writeSecrets = async (cliSecrets: NonNullable<StoredConfig['cliSecrets']>) => {
+    await persistConfigPatch({ cliSecrets })
+  }
+  const readRows = async () =>
+    Object.entries(await readSecrets()).flatMap(([id, data]) => {
+      const parsed = EncryptedDataRow.safeParse(data)
+      return parsed.success ? [{ id, data: parsed.data }] : []
+    })
+
+  return {
+    async set(id, data) {
+      const cliSecrets = await readSecrets()
+      await writeSecrets({ ...cliSecrets, [String(id)]: data })
+    },
+    async get(id) {
+      const row = (await readSecrets())[String(id)]
+      const parsed = row ? EncryptedDataRow.safeParse(row) : null
+      return parsed?.success ? parsed.data : null
+    },
+    async delete(id) {
+      const cliSecrets = { ...(await readSecrets()) }
+      delete cliSecrets[String(id)]
+      await writeSecrets(cliSecrets)
+    },
+    async listIds() {
+      return (await readRows()).map((row) => row.id)
+    },
+    async list() {
+      return await readRows()
+    },
+    async listAll() {
+      return await readRows()
+    },
+    async clear() {
+      await writeSecrets({})
+    },
+    async upsert(id, data) {
+      const cliSecrets = await readSecrets()
+      await writeSecrets({ ...cliSecrets, [String(id)]: data })
+      return data
+    },
+  }
+}
+
+export function createCliSecretStore(cryptoSession: CryptoSession) {
+  return withSecretStore(
+    createConfigSecretCrud(),
+    () => cryptoSession.getUserPublicKey().publicKey,
+    () => cryptoSession.getSessionKey(),
+  )
 }
 
 export function resolveProviderSelection(stored: StoredConfig): string {

@@ -85,6 +85,20 @@ export const summarizeWorkerEvent = (event: WorkerEvent): string => {
   return `stage=${event.stage ?? 'unknown'} task=${taskId}${tool}${info}`
 }
 
+export const resolveWorkerStatusText = (
+  event: WorkerEvent,
+  isFunctionHiddenInChat: (name: string) => boolean,
+): string | null => {
+  const stage = event.stage ?? ''
+  if (stage !== 'processing' && stage !== 'subtasks') return null
+  const task = event.task
+  const functionName = task?.content?.type === 'functioncall' ? task.content.data?.name : undefined
+  if (functionName && isFunctionHiddenInChat(functionName)) return null
+  const toolName = functionName ?? (event.taskId ? event.taskId.slice(0, 12) : 'task')
+  const status = stage === 'subtasks' ? 'waiting for subtasks' : 'processing'
+  return `${toolName}: ${status}`
+}
+
 const renderTaskSummary = (task: TaskNode, showRoleTag: boolean): string => {
   const role = task.role ?? 'unknown'
   if (task.content.type === 'message')

@@ -5,7 +5,11 @@ import { constants as fsConstants } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { TaskNode } from '../../../taskyon/src/types/taskNode'
-import { renderTaskProgress, renderWorkerProgress } from '../cli/taskRenderer'
+import {
+  renderTaskProgress,
+  renderWorkerProgress,
+  resolveWorkerStatusText,
+} from '../cli/taskRenderer'
 
 type SessionStep = {
   delayMs?: number
@@ -121,11 +125,11 @@ async function waitForText(
     }
     if (output.includes(needle)) return
     if (isClosed?.()) {
-      throw new Error(`CLI exited while waiting for output "${needle}".`)
+      throw new Error(`CLI exited while waiting for output "${needle}".\nOutput:\n${output}`)
     }
     await delay(50)
   }
-  throw new Error(`Timed out waiting for output "${needle}"`)
+  throw new Error(`Timed out waiting for output "${needle}".\nOutput:\n${readOutput()}`)
 }
 
 export async function runTycSession(args: {
@@ -491,6 +495,57 @@ export function testTaskRendererHidesHiddenWorkerProgress() {
   renderWorkerProgress(state, { stage: 'processing', task })
 
   assertNotContains(lines.join('\n'), 'hiddenTool')
+}
+
+export function testWorkerStatusTextHidesHiddenTools() {
+  const visibleTask: TaskNode = {
+    id: 'visible-tool-task',
+    role: 'function',
+    content: {
+      type: 'functioncall',
+      data: { name: 'visibleTool', arguments: {} },
+    },
+  }
+  const hiddenTask: TaskNode = {
+    id: 'hidden-tool-task',
+    role: 'function',
+    content: {
+      type: 'functioncall',
+      data: { name: 'hiddenTool', arguments: {} },
+    },
+  }
+
+  const isHidden = (name: string) => name === 'hiddenTool'
+  const visible = resolveWorkerStatusText({ stage: 'processing', task: visibleTask }, isHidden)
+  const hidden = resolveWorkerStatusText({ stage: 'processing', task: hiddenTask }, isHidden)
+
+  if (visible !== 'visibleTool: processing') {
+    throw new Error(`Expected visible worker status text, got ${String(visible)}`)
+  }
+  if (hidden !== null) {
+    throw new Error(`Expected hidden worker status text to be null, got ${String(hidden)}`)
+  }
+}
+
+export async function testCliConcurrentSessionsStartWithSharedHome() {
+  const runSession = (label: string) =>
+    runTycSession({
+      testName: `testCliConcurrentSessionsStartWithSharedHome-${label}`,
+      homeKey: 'testCliConcurrentSessionsStartWithSharedHome',
+      steps: [{ waitFor: 'tycli ready.', failOn: ['Fatal error'], input: '/exit\n' }],
+      env: { TYCLI_HOTKEY_MENUS: '0' },
+      runner: 'pty',
+      timeoutMs: 60_000,
+    })
+
+  const results = await Promise.all([runSession('first'), runSession('second')])
+  for (const result of results) {
+    if (result.code !== 0) {
+      throw new Error(`Expected tycli exit code 0, got ${String(result.code)}.\n${result.output}`)
+    }
+    assertContains(result.output, 'tycli ready.')
+    assertNotContains(result.output, 'Fatal error')
+  }
 }
 
 export async function testSlashMenuOpensOnSingleSlash() {

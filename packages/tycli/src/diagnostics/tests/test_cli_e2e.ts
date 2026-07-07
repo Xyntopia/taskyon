@@ -2,6 +2,8 @@ import {
   runTycSession,
   testTaskRendererDoesNotPrintTransientWorkerProgress as runTaskRendererDoesNotPrintTransientWorkerProgress,
   testTaskRendererHidesHiddenWorkerProgress as runTaskRendererHidesHiddenWorkerProgress,
+  testWorkerStatusTextHidesHiddenTools as runWorkerStatusTextHidesHiddenTools,
+  testCliConcurrentSessionsStartWithSharedHome as runCliConcurrentSessionsStartWithSharedHome,
   testPromptHistoryCyclesPreviousInputWithArrowKeys as runPromptHistoryCyclesPreviousInputWithArrowKeys,
   testQuitPromptCtrlCCancelsAndCtrlDExits as runQuitPromptCtrlCCancelsAndCtrlDExits,
 } from '../../tests/cliE2eDiagnostics'
@@ -169,3 +171,15 @@ export const testCliTaskRendererHidesHiddenWorkerProgress = () =>
 
 testCliTaskRendererHidesHiddenWorkerProgress.description =
   'Verifies tycli suppresses worker progress for tools hidden from chat.'
+
+export const testCliWorkerStatusTextHidesHiddenTools = () => runWorkerStatusTextHidesHiddenTools()
+
+testCliWorkerStatusTextHidesHiddenTools.description =
+  'Verifies tycli does not keep a stale visible spinner label when hidden tools are processing.'
+
+export const testCliConcurrentSessionsStartWithSharedHome = async () =>
+  await runCliConcurrentSessionsStartWithSharedHome()
+
+testCliConcurrentSessionsStartWithSharedHome.description =
+  'Starts two tycli processes with one shared CLI home and verifies both reach the prompt without PGlite storage contention.'
+testCliConcurrentSessionsStartWithSharedHome.timeoutMs = 100_000

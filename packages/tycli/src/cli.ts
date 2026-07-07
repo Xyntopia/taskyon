@@ -51,6 +51,7 @@ import {
   resolveProviderSelection,
   resolveStoredModel,
   resolveConfigDirectoryPath,
+  createCliSecretStore,
 } from './cli/config'
 import { createConversationPersistence } from './cli/conversationPersistence'
 import { createCliFooter } from './cli/ui'
@@ -66,7 +67,12 @@ import {
 } from './cli/models'
 import { hasInterruptibleWorkerActivity } from './cli/interruptState'
 import { syncProviderRuntimeConfig } from './cli/runtime'
-import { renderTaskProgress, renderWorkerProgress, type WorkerEvent } from './cli/taskRenderer'
+import {
+  renderTaskProgress,
+  renderWorkerProgress,
+  resolveWorkerStatusText,
+  type WorkerEvent,
+} from './cli/taskRenderer'
 import {
   API_KEY_STORE_NAME,
   type CliApiConfig,
@@ -2448,8 +2454,9 @@ async function main() {
   const configDir = await resolveConfigDirectoryPath()
   const previousSessions = normalizeSessionRecords(stored.sessions)
   const previousSession = previousSessions[0]
-  const pgliteNodeDir = join(configDir, 'pglite')
+  const pgliteNodeDir = join(configDir, 'runtime', `${errorTimestamp()}-${process.pid}`, 'pglite')
   await mkdir(pgliteNodeDir, { recursive: true })
+  const cliSecretStore = createCliSecretStore(cryptoSession)
   const selectedApi = resolveProviderSelection(stored)
 
   if (!SUPPORTED_PROVIDERS.includes(selectedApi as (typeof SUPPORTED_PROVIDERS)[number])) {
@@ -2544,6 +2551,7 @@ async function main() {
         createUnavailableIframeMux('Iframe message bridging is not available in tycli.'),
       indexTaskVectors: false,
       nodePgLiteDataDir: pgliteNodeDir,
+      secretStore: cliSecretStore,
     },
   )
   taskyonRef.current = taskyon
@@ -2750,20 +2758,6 @@ async function main() {
     workerIdleSettleTimer = null
   }
 
-  const visibleWorkerStatusText = (event: WorkerEvent): string | null => {
-    const stage = event.stage ?? ''
-    if (stage !== 'processing' && stage !== 'subtasks') return null
-    const task = event.task
-    const functionName =
-      task?.content?.type === 'functioncall' ? task.content.data?.name : undefined
-    const toolName = functionName ?? (event.taskId ? event.taskId.slice(0, 12) : 'task')
-    if (functionName && toolRenderOptions[functionName]?.hideChat) {
-      return null
-    }
-    const status = stage === 'subtasks' ? 'waiting for subtasks' : 'processing'
-    return `${toolName}: ${status}`
-  }
-
   const updateWorkerStatusLine = (event: WorkerEvent, suppressed: boolean) => {
     if (activeTaskCount() <= 0) {
       stopWorkerStatusLine()
@@ -2774,8 +2768,11 @@ async function main() {
       return
     }
     if (suppressed) return
-    const text = visibleWorkerStatusText(event)
+    const text = resolveWorkerStatusText(event, (name) =>
+      Boolean(toolRenderOptions[name]?.hideChat),
+    )
     if (text) setWorkerStatusLine(text)
+    else stopWorkerStatusLine()
   }
 
   const queueConversationPersist = (leafId: string | undefined = currentLeafId) => {
