@@ -1,7 +1,7 @@
 import type { Hash } from './caching.ts'
 import type { DagNode } from './dagCore.ts'
 import { getDagNodeRecordInputHashes, type DagNodeRecord } from './dagNodeRecord.ts'
-import { compileDagNodeRecord } from './dynamicDagNode.ts'
+import { compileDagNodeRecord } from './dagNodeRecordCompiler.ts'
 import {
   loadStoredGraphNodeFiles,
   type SavedStoredGraphNode,

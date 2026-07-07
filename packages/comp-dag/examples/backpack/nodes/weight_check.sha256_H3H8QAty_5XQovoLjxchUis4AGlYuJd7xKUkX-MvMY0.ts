@@ -1,7 +1,7 @@
 import type { StoredDagNodeModule } from '@taskyon/comp-dag/dagNodeLoader'
 
 export default {
-  id: 'sha256:ESU-osE9xaSNLCo6xryeGMe78enpuSvjCq1O8X4vxLs',
+  id: 'sha256:H3H8QAty_5XQovoLjxchUis4AGlYuJd7xKUkX-MvMY0',
   localName: 'weight_check',
   label: 'Weight Check',
   version: 1,
@@ -18,11 +18,11 @@ export default {
   },
   inputs: {
     candidates: {
-      nodeId: 'sha256:FhZ8dHgrhPdpjqVA-_-7pZQ1lhcVV50xou2yPkUdctc',
+      nodeId: 'sha256:OxMDJ0HLWrB2kEUTbAQ7mLYhdHnfn2d34oAQOL02C-E',
       role: 'internal',
     },
     requirements: {
-      nodeId: 'sha256:7pUkjhlI3XyXUsL-choKxiAWGguRspkjkcAsNmnG8Bo',
+      nodeId: 'sha256:h_63zAb0lyL9HzAIgY6QLzv_Qg0qjiQHBGx9x8O0ckY',
       role: 'internal',
     },
   },

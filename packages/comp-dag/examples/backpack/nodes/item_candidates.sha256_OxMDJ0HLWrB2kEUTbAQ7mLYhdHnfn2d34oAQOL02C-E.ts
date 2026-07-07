@@ -1,7 +1,7 @@
 import type { StoredDagNodeModule } from '@taskyon/comp-dag/dagNodeLoader'
 
 export default {
-  id: 'sha256:FhZ8dHgrhPdpjqVA-_-7pZQ1lhcVV50xou2yPkUdctc',
+  id: 'sha256:OxMDJ0HLWrB2kEUTbAQ7mLYhdHnfn2d34oAQOL02C-E',
   localName: 'item_candidates',
   label: 'Item Candidates',
   version: 1,

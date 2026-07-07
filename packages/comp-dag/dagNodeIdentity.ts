@@ -1,5 +1,4 @@
 import type { Hash } from './caching.ts'
-import type { DagNodeStaticDependencyFingerprint } from './dagNodeRecord.ts'
 
 export const SELF_HASH_PLACEHOLDER = '__TASKYON_SELF_HASH__'
 
@@ -25,22 +24,4 @@ export const hashCanonicalDagNodeSource = async (source: string): Promise<Hash> 
   }
   const digest = await cryptoImpl.subtle.digest('SHA-256', new TextEncoder().encode(source))
   return `sha256:${base64UrlFromBytes(new Uint8Array(digest))}`
-}
-
-export const hashStaticDagNodeSource = async (
-  source: string,
-  fingerprint: DagNodeStaticDependencyFingerprint,
-): Promise<Hash> => {
-  // TODO: Replace or augment this Option A dependency fingerprint with a Vite/Rollup
-  // bundled emitted-artifact hash so third-party implementation changes are captured directly.
-  return await hashCanonicalDagNodeSource(
-    JSON.stringify({
-      kind: 'taskyon.staticDagNode.v1',
-      source,
-      fingerprint: {
-        importSpecifiers: [...(fingerprint.importSpecifiers ?? [])].sort(),
-        lockfileHash: fingerprint.lockfileHash ?? null,
-      },
-    }),
-  )
 }

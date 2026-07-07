@@ -1,5 +1,5 @@
 import type { Hash } from './caching.ts'
-import { hashStaticDagNodeSource } from './dagNodeIdentity.ts'
+import { hashCanonicalDagNodeSource } from './dagNodeIdentity.ts'
 import type { DagJsonSchema } from './dagSchema.ts'
 
 export type DagNodeInputRefSingle = { nodeId: Hash }
@@ -44,10 +44,6 @@ export type DagNodeRecord = {
   runCode?: string
   run?: DagNodeRunFunction
   staticDependencyFingerprint?: DagNodeStaticDependencyFingerprint
-}
-
-export type DagNodeRecordAuthoringInput = Omit<DagNodeRecord, 'id'> & {
-  staticDependencyFingerprint: DagNodeStaticDependencyFingerprint
 }
 
 export const recordInputsToRuntimeInputs = (
@@ -130,11 +126,26 @@ export const normalizeDagNodeRecordHashSource = (
     }),
   )
 
+export const hashDagNodeRecordInput = async (
+  input: Omit<DagNodeRecord, 'id' | 'run' | 'runCode'>,
+): Promise<Hash> =>
+  await hashCanonicalDagNodeSource(
+    JSON.stringify({
+      kind: 'taskyon.dagNodeRecord.v1',
+      source: normalizeDagNodeRecordHashSource(input),
+    }),
+  )
+
 export const defineDagNodeRecord = async (
-  input: DagNodeRecordAuthoringInput,
+  input: Omit<DagNodeRecord, 'id'>,
 ): Promise<DagNodeRecord> => {
   const hashSource = normalizeDagNodeRecordHashSource(input)
-  const id = await hashStaticDagNodeSource(hashSource, input.staticDependencyFingerprint)
+  const id = await hashCanonicalDagNodeSource(
+    JSON.stringify({
+      kind: 'taskyon.dagNodeRecord.v1',
+      source: hashSource,
+    }),
+  )
   return {
     ...input,
     id,

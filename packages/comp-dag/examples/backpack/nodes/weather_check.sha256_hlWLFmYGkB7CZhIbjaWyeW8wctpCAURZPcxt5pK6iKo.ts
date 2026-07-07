@@ -1,7 +1,7 @@
 import type { StoredDagNodeModule } from '@taskyon/comp-dag/dagNodeLoader'
 
 export default {
-  id: 'sha256:dDfrvNKGdZXdVEX1I1PYacBED7g-HmIZv8lo88wLlPE',
+  id: 'sha256:hlWLFmYGkB7CZhIbjaWyeW8wctpCAURZPcxt5pK6iKo',
   localName: 'weather_check',
   label: 'Weather Check',
   version: 1,
@@ -18,11 +18,11 @@ export default {
   },
   inputs: {
     candidates: {
-      nodeId: 'sha256:FhZ8dHgrhPdpjqVA-_-7pZQ1lhcVV50xou2yPkUdctc',
+      nodeId: 'sha256:OxMDJ0HLWrB2kEUTbAQ7mLYhdHnfn2d34oAQOL02C-E',
       role: 'internal',
     },
     requirements: {
-      nodeId: 'sha256:7pUkjhlI3XyXUsL-choKxiAWGguRspkjkcAsNmnG8Bo',
+      nodeId: 'sha256:h_63zAb0lyL9HzAIgY6QLzv_Qg0qjiQHBGx9x8O0ckY',
       role: 'internal',
     },
   },

@@ -1,25 +1,20 @@
 import type * as ts from 'typescript'
 import type { Hash } from './caching.ts'
-import {
-  SELF_HASH_PLACEHOLDER,
-  hashCanonicalDagNodeSource,
-  hashFilePart,
-  hashFromFilePart,
-} from './dagNodeIdentity.ts'
+import { SELF_HASH_PLACEHOLDER, hashFilePart, hashFromFilePart } from './dagNodeIdentity.ts'
 import type {
   DagNodeInputRefOneOf,
   DagNodeInputRefSingle,
   DagNodeRecord,
   DagNodeRecordInputRef,
 } from './dagNodeRecord.ts'
+import { hashDagNodeRecordInput } from './dagNodeRecord.ts'
 import type { DagJsonSchema } from './dagSchema.ts'
 
-export type StoredDagNodeDefinition = Omit<DagNodeRecord, 'id' | 'run' | 'runCode'> & {
+export type StoredDagNodeDefinition = Omit<DagNodeRecord, 'id' | 'run'> & {
   id: Hash | typeof SELF_HASH_PLACEHOLDER
-  runCode: string
 }
 
-export type StoredDagNodeModule = Omit<DagNodeRecord, 'id' | 'run' | 'runCode' | 'runSource'> & {
+export type StoredDagNodeModule = Omit<DagNodeRecord, 'id' | 'run' | 'runSource' | 'runCode'> & {
   id: Hash | typeof SELF_HASH_PLACEHOLDER
   run: unknown
 }
@@ -31,7 +26,7 @@ export type StoredGraphNodeFile = {
 
 export type SavedStoredGraphNode = {
   hash: Hash
-  node: StoredDagNodeDefinition & { id: Hash }
+  node: DagNodeRecord
   file: StoredGraphNodeFile
   normalizedSource: string
 }
@@ -434,6 +429,24 @@ const toStoredGraphNodeDefinition = (fields: ParsedNodeFields): StoredDagNodeDef
   runCode: fields.runCode,
 })
 
+const hashStoredGraphNodeDefinition = async (node: StoredDagNodeDefinition): Promise<Hash> => {
+  return await hashDagNodeRecordInput({
+    localName: node.localName,
+    label: node.label,
+    version: node.version,
+    ...(typeof node.timeoutMs === 'number' ? { timeoutMs: node.timeoutMs } : {}),
+    localParamsSchema: node.localParamsSchema,
+    outputSchema: node.outputSchema,
+    ...(node.inputs ? { inputs: node.inputs } : {}),
+    ...(node.hiddenInputs ? { hiddenInputs: node.hiddenInputs } : {}),
+    ...(node.exposedInputs ? { exposedInputs: node.exposedInputs } : {}),
+    runSource: node.runSource,
+    ...(node.staticDependencyFingerprint
+      ? { staticDependencyFingerprint: node.staticDependencyFingerprint }
+      : {}),
+  })
+}
+
 export const normalizeStoredGraphNodeSource = async (
   source: string,
   opts?: { id?: Hash | typeof SELF_HASH_PLACEHOLDER },
@@ -453,7 +466,7 @@ export const hashStoredGraphNodeSource = async (source: string): Promise<Hash> =
   const normalized = await normalizeStoredGraphNodeSource(source, {
     id: SELF_HASH_PLACEHOLDER,
   })
-  return await hashCanonicalDagNodeSource(normalized.source)
+  return await hashStoredGraphNodeDefinition(normalized.node)
 }
 
 export const saveStoredGraphNodeSource = async (
@@ -463,7 +476,7 @@ export const saveStoredGraphNodeSource = async (
   const placeholder = await normalizeStoredGraphNodeSource(source, {
     id: SELF_HASH_PLACEHOLDER,
   })
-  const hash = await hashCanonicalDagNodeSource(placeholder.source)
+  const hash = await hashStoredGraphNodeDefinition(placeholder.node)
   const final = await normalizeStoredGraphNodeSource(source, { id: hash })
   const rehashed = await hashStoredGraphNodeSource(final.source)
   if (rehashed !== hash) {

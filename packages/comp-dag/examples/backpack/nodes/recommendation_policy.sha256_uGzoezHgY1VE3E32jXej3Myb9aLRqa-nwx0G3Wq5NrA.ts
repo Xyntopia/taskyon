@@ -1,9 +1,9 @@
 import type { StoredDagNodeModule } from '@taskyon/comp-dag/dagNodeLoader'
 
 export default {
-  id: 'sha256:7pUkjhlI3XyXUsL-choKxiAWGguRspkjkcAsNmnG8Bo',
-  localName: 'trip_requirements',
-  label: 'Trip Requirements',
+  id: 'sha256:uGzoezHgY1VE3E32jXej3Myb9aLRqa-nwx0G3Wq5NrA',
+  localName: 'recommendation_policy',
+  label: 'Recommendation Policy',
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -13,23 +13,15 @@ export default {
   outputSchema: {
     additionalProperties: false,
     properties: {
-      days: {
-        type: 'number',
-      },
-      maxWeightKg: {
-        type: 'number',
-      },
-      weather: {
+      mode: {
         type: 'string',
       },
     },
-    required: ['days', 'weather', 'maxWeightKg'],
+    required: ['mode'],
     type: 'object',
   },
   inputs: {},
   run: () => ({
-    days: 2,
-    weather: 'rain',
-    maxWeightKg: 7,
+    mode: 'utility-first',
   }),
 } satisfies StoredDagNodeModule
