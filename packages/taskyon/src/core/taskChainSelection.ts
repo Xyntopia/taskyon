@@ -3,12 +3,12 @@ import type { TaskGetter, TaskNode } from '../types/taskNode'
 export type TaskChainSelection =
   | {
       method: 'flattened'
-      untilTaskID?: string
-      onlyFirstChild?: boolean
+      untilTaskID?: string | undefined
+      onlyFirstChild?: boolean | undefined
     }
   | {
       method: 'lineage'
-      includeSubtaskResults?: 'terminal-visible' | 'none'
+      includeSubtaskResults?: 'terminal-visible' | 'none' | undefined
     }
 
 export type TaskChainSelectionAccess = {

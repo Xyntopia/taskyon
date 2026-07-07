@@ -6,7 +6,7 @@
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { createTaskyonClient } from '@taskyon/tyclient'
+import { createTaskChainFromMarkdown, createTaskyonClient } from '@taskyon/tyclient'
 
 const tystate = useTaskyonStore()
 const taskyonClient = createTaskyonClient(tystate.api)
@@ -19,13 +19,12 @@ const props = defineProps<{
 }>()
 
 const onAddTasks = async () => {
-  const ty = await tystate.taskyon
   try {
-    const newTaskId = await ty.addMdTaskChain(props.markdown)
+    const newTaskId = await createTaskChainFromMarkdown(taskyonClient, props.markdown)
     navigateToTask(newTaskId)
   } catch (error) {
     console.log('could not create taskchain from markdown!', error)
-    await taskyonClient.createTask({
+    await taskyonClient.task.create({
       task: {
         role: 'system',
         content: {

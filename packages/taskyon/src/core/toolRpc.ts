@@ -7,7 +7,6 @@ import {
   taskyonProtocol,
 } from '../api/taskyonProtocol'
 import type { z } from 'zod'
-import type { TaskyonMessage as TaskyonMessageType } from '../types/apiTypes'
 import {
   createSubtasksResult,
   InternalTool as InternalToolSchema,
@@ -20,7 +19,7 @@ import { executeToolInWorkerSandbox } from '../utils/executeToolInWorkerSandbox'
 import { humanizeError, serializeError } from '../utils/error'
 import { bigIntToString } from '../utils/objHelpers'
 
-const remoteFunctionProtocol = taskyonProtocol.streams.toolExecution
+const remoteFunctionProtocol = taskyonProtocol.streams['tools.execution']
 
 export type ToolRpcFunctionCallMessage = z.infer<typeof remoteFunctionProtocol.functionCall>
 export type ToolRpcFunctionCancelMessage = z.infer<typeof remoteFunctionProtocol.functionCancel>
@@ -38,8 +37,8 @@ export type ToolExecutionCallOptions = {
 }
 export type ToolRpcCreateContext = Parameters<typeof registerToolRpcExecutor>[0]['createContext']
 export type ToolRpcFunctionDescriptionMessage = Extract<
-  TaskyonMessageType,
-  { type: 'registerToolRequest' }
+  z.infer<(typeof taskyonProtocol.commands)['tools.register']['request']>,
+  { type: 'tools.registerRequest' }
 >
 type ToolRpcRegistrationPort = {
   send: (message: ToolRpcFunctionResponseMessage | ToolRpcFunctionDescriptionMessage) => void
@@ -263,8 +262,8 @@ export function createExternalToolContext(
 export const createToolRpcFunctionDescriptionMessage = (
   tool: InternalTool,
 ): ToolRpcFunctionDescriptionMessage => ({
-  type: 'registerToolRequest',
-  requestId: `registerTool-${tool.name}-${Date.now()}`,
+  type: 'tools.registerRequest',
+  requestId: `tools.register-${tool.name}-${Date.now()}`,
   name: tool.name,
   description: tool.description,
   ...(tool.longDescription ? { longDescription: tool.longDescription } : {}),
@@ -297,7 +296,7 @@ export async function registerToolRpcTools(options: {
   const taskyonApi = createPortClient(options.port, taskyonProtocol)
   await Promise.all(
     tools.map(async (tool) => {
-      await taskyonApi.registerTool({ ...tool, timeoutMs })
+      await taskyonApi.tools.register({ ...tool, timeoutMs })
     }),
   )
   const toolMap = new Map(tools.filter((tool) => tool.function).map((tool) => [tool.name, tool]))

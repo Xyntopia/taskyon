@@ -26,28 +26,30 @@ export const gDriveSyncPort = (
     insideGdrive,
     taskyonProtocol,
     {
-      importTaskArchive: async ({ data, info, ids }) => {
-        const msgpackFile = new File([data], info, {
-          type: 'application/octet-stream',
-        })
-        const created = await uploadFileArchiveWMeta(directory, msgpackFile, ids, /*share*/ false)
-        insideGdrive.send({ type: 'taskCreated', ids, info: created.name })
-        console.log('created file on gdrive:', created.webViewLink)
-      },
-      requestTaskArchive: async ({ id }) => {
-        console.log('task requested with id:', id)
-        const file = await downloadArchiveFile(directory, id)
-        if (file) {
-          const buffer = await file.arrayBuffer()
-          const data = new Uint8Array(buffer)
-          void gdriveApi
-            .importTaskArchive({
-              data,
-              ids: [id],
-              info: file.name,
-            })
-            .catch(errorCatcher)
-        }
+      archive: {
+        importTask: async ({ data, info, ids }) => {
+          const msgpackFile = new File([data], info, {
+            type: 'application/octet-stream',
+          })
+          const created = await uploadFileArchiveWMeta(directory, msgpackFile, ids, /*share*/ false)
+          insideGdrive.send({ type: 'taskCreated', ids, info: created.name })
+          console.log('created file on gdrive:', created.webViewLink)
+        },
+        requestTask: async ({ id }) => {
+          console.log('task requested with id:', id)
+          const file = await downloadArchiveFile(directory, id)
+          if (file) {
+            const buffer = await file.arrayBuffer()
+            const data = new Uint8Array(buffer)
+            void gdriveApi.archive
+              .importTask({
+                data,
+                ids: [id],
+                info: file.name,
+              })
+              .catch(errorCatcher)
+          }
+        },
       },
     },
     { onError: errorCatcher },

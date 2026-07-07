@@ -10,6 +10,10 @@ simple storage protocol, with configurable backends and gateways behind it.
 This should reduce direct dependencies on PGlite, OPFS, Node filesystem paths,
 browser-only APIs, and ad-hoc tool-local storage.
 
+This document describes the runtime service model. The concrete encrypted object
+format, chunking policy, manifest repair strategy, and lazy lookup flow are
+specified in `taskyon_encrypted_storage_objects.md`.
+
 ## Short Proposal
 
 Taskyon should move durable runtime storage behind one scoped storage client.
@@ -35,6 +39,9 @@ The proposed direction is:
   be rebuilt by scanning available objects with the correct key.
 - Add P2P as a sync/import gateway over the same storage protocol instead of
   making P2P a separate storage API.
+- Store durable records and blobs as encrypted storage objects with bucketed
+  chunking, repairable manifests, and deterministic HMAC object names as
+  described in `taskyon_encrypted_storage_objects.md`.
 
 This means a storage service should be the first durable replacement for
 persistent PGlite. A local file/object store is the simplest backend for that
@@ -70,6 +77,9 @@ objects instead of becoming a separate storage model.
 - Storage operations themselves should remain explicit request/response calls.
 - Lightweight clients and transient workers should be able to run with only a
   small local cache and use storage services announced by the subnetwork.
+- Durable storage should be recoverable from encrypted object contents where a
+  backend can list objects; manifests should speed lookup, not become the only
+  recovery path.
 
 ## Core Idea
 
@@ -249,6 +259,11 @@ deduplication across encrypted users/devices can leak equality information.
 
 A streaming API can come later; the data model should support chunking from the
 start.
+
+Chunk size selection should use bucketed policies rather than exact file-size
+chunks. The detailed object-level proposal is in
+`taskyon_encrypted_storage_objects.md`; the runtime storage layer should only
+depend on the resulting blob refs and manifests.
 
 ### Manifests And Repair
 
@@ -502,6 +517,9 @@ Peers should exchange:
 - DAG node records/blobs
 - artifact refs
 
+Those exchanged objects should use the same encrypted storage object format as
+local backends. P2P should not define a parallel task/blob format.
+
 Gateways decide what crosses a boundary:
 
 ```text
@@ -555,7 +573,8 @@ indexes -> not authoritative, usually not synced
 7. Keep PGlite for local indexes and vectors.
 8. Move task graph queries into typed repository helpers over storage/indexes.
 9. Add chunked blob storage.
-10. Add P2P/cloud gateways that exchange encrypted records, blobs, and manifests.
+10. Add manifest repair by scanning local encrypted objects where possible.
+11. Add P2P/cloud gateways that exchange encrypted records, blobs, and manifests.
 
 ## Summary
 

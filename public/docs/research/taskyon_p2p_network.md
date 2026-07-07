@@ -43,6 +43,11 @@ The protocol should be consistent whether peers run on the same machine or
 across the world. The transport can change, but Taskyon should avoid separate
 local-only APIs when the same FRP protocol can express the behavior.
 
+Storage services in this network should exchange the encrypted storage object
+format described in `taskyon_encrypted_storage_objects.md`. The P2P layer
+should route and replicate those objects; it should not create a separate
+storage model.
+
 ## Service Announcements
 
 When a peer joins a subnetwork, it should mainly announce the services it
@@ -119,6 +124,22 @@ The backend is hidden behind the storage service. This lets a lightweight
 Taskyon client start quickly, discover available storage, and operate without
 owning durable storage locally.
 
+The unit of durable exchange is an encrypted storage object:
+
+```text
+encrypted record envelope
+encrypted blob manifest
+encrypted blob chunk
+directory/namespace/latest-version manifest
+DAG node record/blob
+artifact ref
+```
+
+Objects are encrypted before they reach untrusted peers or remote stores. Local
+indexes such as vectors, documentation search, and full-text indexes are
+normally rebuilt locally from imported records/blobs. They can be synced later
+as an optimization, but they should not be authoritative.
+
 For correctness, storage routing should be deterministic:
 
 ```text
@@ -130,6 +151,20 @@ namespace -> optional mirrors/archive services
 Avoid "whoever answers first" reads. Multiple storage services are useful, but
 they need explicit roles such as primary, mirror, cache, archive, read-only
 import, or untrusted encrypted blob sink.
+
+Normal network read flow should be:
+
+```text
+read local store/index
+if missing:
+  request manifest/object from selected storage peers or gateways
+  verify, decrypt, and import locally
+  read through the local storage/index path
+```
+
+This keeps peer reuse compatible with local-first behavior and makes DAG node
+results reusable across the subnetwork without turning remote peers into an
+implicit database.
 
 ## Abstract Requirements for the P2P Network
 
@@ -177,6 +212,7 @@ worker -> storage namespace assigned to task       allowed
 remote peer -> secret namespace                    blocked by default
 public P2P -> raw tool execution                   blocked by default
 gateway -> encrypted blob import/export           allowed by policy
+remote peer -> encrypted artifact/DAG object       allowed by namespace policy
 ```
 
 This keeps the subnetwork model powerful without turning every peer into an

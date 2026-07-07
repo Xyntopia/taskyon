@@ -121,7 +121,8 @@
 
 <script setup lang="ts">
 import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
-import { fetchMarkdown, getTextFile, sleep } from '@taskyon/taskyon'
+import { createTaskNode, fetchMarkdown, getTextFile, sleep } from '@taskyon/taskyon'
+import { createTaskChainFromMarkdown, createTaskyonClient } from '@taskyon/tyclient'
 import { isTauri } from '@tauri-apps/api/core'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
 import GetStarted from 'components/taskyon/GetStarted.vue'
@@ -211,6 +212,7 @@ function activateAfter(ms: number) {
 const $q = useQuasar()
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
+const taskyonClient = createTaskyonClient(tystate.api)
 const { navigateToTask } = useTaskNavigation()
 const taskThreadContainer = ref<HTMLElement | undefined>()
 const fileAttachments = ref<File[]>([]) // holds all attached files as a "tasklist"
@@ -240,7 +242,6 @@ const openPopupMessage = (message: string) => {
 
 async function updateChatThread() {
   console.log('update chat thread')
-  const ty = await tystate.taskyon
   if (props.taskId) {
     return
   } else if (props.gdriveFileId) {
@@ -250,7 +251,7 @@ async function updateChatThread() {
     invitedChat.value = true
     try {
       const markdownContent = await getTextFile(markdownUrl)
-      const newTaskId = await ty.addMdTaskChain(markdownContent)
+      const newTaskId = await createTaskChainFromMarkdown(taskyonClient, markdownContent)
       navigateToTask(newTaskId, { replace: true })
     } catch (error) {
       console.error('Error loading from Google Drive:', error)
@@ -267,7 +268,7 @@ async function updateChatThread() {
     if (markdownUrl) {
       state.lockBottomScroll = false
       const markdownContent = await getTextFile(markdownUrl)
-      const newTaskId = await ty.addMdTaskChain(markdownContent)
+      const newTaskId = await createTaskChainFromMarkdown(taskyonClient, markdownContent)
       navigateToTask(newTaskId, { replace: true })
     }
   } else if (props.filePath) {
@@ -276,15 +277,14 @@ async function updateChatThread() {
     try {
       const markdownContent = await fetchMarkdown(props.folder || '', props.filePath)
       try {
-        newTaskId = await ty.addMdTaskChain(markdownContent)
+        newTaskId = await createTaskChainFromMarkdown(taskyonClient, markdownContent)
       } catch (error) {
         console.error(error)
         const message = error instanceof Error ? error.message : String(error)
-        newTaskId = (
-          await ty.addPartialTask2Tree({
-            content: {
-              type: 'error',
-              data: `# Markdown Import Failed
+        const task = await createTaskNode({
+          content: {
+            type: 'error',
+            data: `# Markdown Import Failed
 
 Taskyon loaded the markdown file \`${props.filePath}\`, but it could not import the task chain.
 
@@ -294,18 +294,18 @@ Taskyon loaded the markdown file \`${props.filePath}\`, but it could not import 
 ${message}
 \`\`\`
 `,
-            },
-            role: 'system',
-          })
-        ).id
+          },
+          role: 'system',
+        })
+        await taskyonClient.task.create({ task, execute: false, show: true })
+        newTaskId = task.id
       }
     } catch (error) {
       console.error(error)
-      newTaskId = (
-        await ty.addPartialTask2Tree({
-          content: {
-            type: 'error',
-            data: `# 404 - Markdown Not Found
+      const task = await createTaskNode({
+        content: {
+          type: 'error',
+          data: `# 404 - Markdown Not Found
 
 ${error instanceof Error ? error.message : String(error)}
 
@@ -319,10 +319,11 @@ The markdown file \`${props.filePath}\` does not exist.
 
 Please check the path and try again.
 `,
-          },
-          role: 'system',
-        })
-      ).id
+        },
+        role: 'system',
+      })
+      await taskyonClient.task.create({ task, execute: false, show: true })
+      newTaskId = task.id
     }
     navigateToTask(newTaskId, { replace: true })
   }

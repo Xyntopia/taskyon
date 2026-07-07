@@ -8,6 +8,7 @@ import type {
   Port,
   TaskNodeMeta,
   Taskyon,
+  TaskyonMessageType,
   ToolRpcCreateContext,
   ToolBase,
   Thunk,
@@ -36,7 +37,6 @@ import {
   registerToolRpcTools,
   sha256UrlSafeHashFromFile,
   TaskNode,
-  TaskyonMessage,
   tyCore,
 } from '@taskyon/taskyon'
 import {
@@ -47,7 +47,7 @@ import type { AuthenticationOptions, TokenGetter } from '@taskyon/taskyon/browse
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
 import { createTaskyonDocumentationProviderTool } from '@taskyon/taskyon/tools/documentationProviderTool'
 import type { chunkStreamType } from '@taskyon/taskyon/tools/chatCompletionTool'
-import { createTaskyonClient, taskyonGuiProtocol } from '@taskyon/tyclient'
+import { createTaskyonClient, taskyonGuiProtocol, taskyonProtocol } from '@taskyon/tyclient'
 import type { TaskyonGuiMessage } from '@taskyon/tyclient'
 import { createStandardEntryNodeTool } from '@taskyon/taskyon/tools/entryNode'
 import {
@@ -333,10 +333,10 @@ function connectGdriveSync(
 
   const { port: subset } = createTypeFilteredPort(tyPort, [
     'taskCreated',
-    'importTaskArchiveRequest',
-    'importTaskArchiveResponse',
-    'requestTaskArchiveRequest',
-    'requestTaskArchiveResponse',
+    'archive.importTaskRequest',
+    'archive.importTaskResponse',
+    'archive.requestTaskRequest',
+    'archive.requestTaskResponse',
   ] as const)
 
   const portDisconnect = ref<(() => void) | false>(false)
@@ -529,7 +529,10 @@ function defineTyGuiTools(
   ]
 }
 
-function createTrustedUiToolContext(ty: Taskyon): ToolRpcCreateContext {
+function createTrustedUiToolContext(
+  ty: Taskyon,
+  taskyonClient: TaskyonClient,
+): ToolRpcCreateContext {
   return (call, stopSignal) => {
     const toolSecretId = call.functionName
     return {
@@ -539,7 +542,7 @@ function createTrustedUiToolContext(ty: Taskyon): ToolRpcCreateContext {
             'getExecutionTaskChain is not available for this UI tool call because no task id was provided.',
           )
         }
-        return ty.getTaskChain(call.taskId)
+        return taskyonClient.task.getChain({ id: call.taskId })
       },
       createSubtasksResult,
       getSecret: async (name, askNew, saveNew = true) =>
@@ -842,7 +845,11 @@ const useApiManagement = (
   }
 }
 
-function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof useAppStateStore>) {
+function taskUiUpdates(
+  taskyon: Promise<Taskyon>,
+  taskyonClient: TaskyonClient,
+  stateRefs: ReturnType<typeof useAppStateStore>,
+) {
   // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
   // we want to oad them gradually into our UI
   const currentTask = ref<TaskNode | null>(null)
@@ -874,7 +881,7 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
         // we need to make sure, that our task is not already
         // the "parent" of another task in that case we only want the leaf task which is already present...
         for (const taskId of stateRefs.chatHistory) {
-          const otherTask = await ty.getTask(taskId)
+          const otherTask = await taskyonClient.task.get({ id: taskId })
           if (otherTask?.priorID === id || otherTask?.parentID === id) return
         }
       } else if (msg === 'delete') {
@@ -904,7 +911,9 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
       if (!task) return
 
       // Remove any entries which are a parent of the current task (keeping only leaf IDs)
-      const currentTaskChain = (await ty.getTaskIdChain(task.id, 50)).slice(0, -1)
+      const currentTaskChain = (
+        await taskyonClient.task.getIdChain({ id: task.id, maxFollow: 50 })
+      ).slice(0, -1)
       stateRefs.chatHistory = stateRefs.chatHistory.filter(
         (t) => t !== task.priorID && t !== task.parentID && !currentTaskChain.includes(t),
         //(t) => t !== task.priorID && t !== task.parentID,
@@ -971,7 +980,7 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
           currentTaskResolutionStatus.value = newSelectedTask ? 'loading' : 'idle'
         } else if (newSelectedTask) {
           currentTaskResolutionStatus.value = 'loading'
-          const task = await ty.getTask(newSelectedTask)
+          const task = await taskyonClient.task.get({ id: newSelectedTask })
           if (cancelled) return
           currentTask.value = task
           currentTaskResolutionStatus.value = task
@@ -1004,7 +1013,7 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
       () => [stateRefs.selectedTaskId, stateRefs.taskyonSessionStatus] as const,
       async ([selectedTask, sessionStatus]) => {
         if (selectedTask && sessionStatus === 'ready') {
-          const taskNode = await ty.getTask(selectedTask)
+          const taskNode = await taskyonClient.task.get({ id: selectedTask })
           if (taskNode) void add2ChatHistory(taskNode, taskNode.id, 'existing')
         }
       },
@@ -1019,7 +1028,7 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
         return []
       } else if (newSelectedTask) {
         const ty = await taskyon
-        const selectedThreadIDs = await ty.getTaskIdChain(newSelectedTask)
+        const selectedThreadIDs = await taskyonClient.task.getIdChain({ id: newSelectedTask })
         return await ty.convertTaskIDs(selectedThreadIDs)
       } else {
         return []
@@ -1045,12 +1054,12 @@ function taskUiUpdates(taskyon: Promise<Taskyon>, stateRefs: ReturnType<typeof u
 
 type TaskyonClient = ReturnType<typeof createTaskyonClient>
 
-function reactiveTools(taskyon: Promise<Taskyon>, taskyonClient: Promise<TaskyonClient>) {
+function reactiveTools(taskyon: Promise<Taskyon>, taskyonClient: TaskyonClient) {
   const allTools = ref<Record<string, ToolBase>>({})
 
-  void Promise.all([taskyon, taskyonClient]).then(([ty, api]) => {
+  void taskyon.then((ty) => {
     const updateTools = async () => {
-      allTools.value = await api.listTools({ includeHidden: true })
+      allTools.value = await taskyonClient.tools.list({ includeHidden: true })
     }
     void updateTools()
 
@@ -1213,7 +1222,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       cs,
     )
   })
-  const taskyonClient = taskyon.then((ty) => createTaskyonClient(ty.port, { taskCacheSize: 0 }))
+  const { x: taskyonClientPort, y: taskyonCorePort } = createProtocolPort(taskyonProtocol)
+  const taskyonClient = createTaskyonClient(taskyonClientPort, { taskCacheSize: 0 })
+  void taskyon.then((ty) => {
+    taskyonCorePort.connect(ty.port)
+  })
   const allTools = reactiveTools(taskyon, taskyonClient)
 
   const entryNodeTool = createStandardEntryNodeTool({
@@ -1222,10 +1235,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     toolChooser: { enabled: true, useTools: true },
     defaultAllowedTools: [],
     getToolCatalog: async () => {
-      const cachedTools =
+      const cachedTools: Record<string, ToolBase> =
         Object.keys(allTools.value).length > 0
           ? allTools.value
-          : await (await taskyonClient).listTools({ includeHidden: true })
+          : await taskyonClient.tools.list({ includeHidden: true })
       return Object.values(cachedTools)
         .filter((tool) => !['chatCompletion', 'entryNode', 'taskyonFlow'].includes(tool.name))
         .map((tool) => ({
@@ -1239,10 +1252,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     const uiToolRpcExecutor = await registerToolRpcTools({
       port: ty.port,
       tools: [entryNodeTool, ...defineTyGuiTools(stateRefs, ty)],
-      createContext: createTrustedUiToolContext(ty),
+      createContext: createTrustedUiToolContext(ty, taskyonClient),
     })
     onScopeDispose(() => uiToolRpcExecutor.destroy())
-    await (await taskyonClient).listTools({})
+    await taskyonClient.tools.list({})
   })
 
   const apiKeyManagement = useApiManagement(stateRefs, () => taskyon)
@@ -1288,7 +1301,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   )
 
   const { currentTask, currentTaskResolutionStatus, markTasksPendingCreation, selectedThread } =
-    taskUiUpdates(taskyon, stateRefs)
+    taskUiUpdates(taskyon, taskyonClient, stateRefs)
 
   // iApiOutside is the port to the "outside" of taskyon UI. It is the port used to
   // communicate towards the taskyon engine. iApiInside communicates to the outside of taskyon.
@@ -1400,7 +1413,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
     uiApiInside.receive((msg) => {
       if (msg.type === 'configureTaskyonRequest' || msg.type === 'pasteClipboardRequest') return
-      if (msg.type === 'createTaskRequest') {
+      if (msg.type === 'task.createRequest') {
         void ensureValidTaskId(msg.task)
           .then(() => ty.port.send(msg))
           .catch((error) => {
@@ -1408,7 +1421,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           })
         return
       }
-      if (msg.type === 'createTaskChainRequest') {
+      if (msg.type === 'task.createChainRequest') {
         void Promise.all(msg.tasks.map((task) => ensureValidTaskId(task)))
           .then((tasks) => {
             const taskIds = tasks.map((task) => task.id)
@@ -1421,8 +1434,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           })
         return
       }
-      const parsed = TaskyonMessage.safeParse(msg)
-      if (parsed.success) ty.port.send(parsed.data)
+      const parsed = taskyonProtocol.message.safeParse(msg)
+      if (parsed.success) ty.port.send(parsed.data as TaskyonMessageType)
       else console.log('unknown message:', msg)
     })
     // we manually connect our send port to the api here, because
@@ -1651,7 +1664,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     tyready: computed(() => tyready),
     addFile: async (file: File) => {
       const id = await sha256UrlSafeHashFromFile(file)
-      await uiTaskyonClient.addFile({
+      await uiTaskyonClient.files.add({
         id,
         name: file.name,
         mime: file.type,

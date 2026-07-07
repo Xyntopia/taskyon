@@ -209,7 +209,7 @@ async function fetchAndDisplayTasks() {
   console.log('get task data from IDs')
   for (const task of searchResults.value) {
     if (!taskDataMap.value[task.taskId]) {
-      const taskData = await tystate.taskyon.then((ty) => ty.getTask(task.taskId))
+      const taskData = await tystate.taskyonClient.task.get({ id: task.taskId })
       if (taskData) taskDataMap.value[task.taskId] = taskData
     }
   }
@@ -236,7 +236,7 @@ async function searchTasks(params: searchParams & { k: string }) {
   if (params.q) {
     result = await ty.filteredVectorSearch(params.q, parseInt(params.k), jsonfilter)
   } else if (params.t) {
-    const task = await ty.getTask(params.t)
+    const task = await tystate.taskyonClient.task.get({ id: params.t })
     if (task) {
       result = await ty.searchSimilarTasks(task, parseInt(params.k))
     }

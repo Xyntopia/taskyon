@@ -347,8 +347,7 @@ async function addNewTask(mode: MessageExecutionMode, p2pTopic?: string) {
   //          otherwise, it won't get executed but simply saved into the tree
   console.log('adding new task...')
   if (!currentnewTask.value) throw new Error('No task to add!')
-  const ty = await tystate.taskyon
-  const fileIds = await ty.addFiles(fileAttachments.value, 'opfs')
+  const fileIds = await taskyonClient.sendFiles(fileAttachments.value)
   const previousTaskId = state.selectedTaskId
   const createTaskChainArgs = {
     currentTask: tystate.currentTask.value,
@@ -365,7 +364,7 @@ async function addNewTask(mode: MessageExecutionMode, p2pTopic?: string) {
 
   if (newTaskId) {
     tystate.markTasksPendingCreation(createdTasks.map((task) => task.id))
-    await taskyonClient.createTaskChain({
+    await taskyonClient.task.createChain({
       tasks: createdTasks,
       execute: true,
       show: true,

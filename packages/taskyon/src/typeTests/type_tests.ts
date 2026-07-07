@@ -1,6 +1,6 @@
 // type_tests.ts
 import type OpenAI from 'openai'
-import type { TaskyonMessage } from '../types/apiTypes'
+import type { TaskyonMessage } from '../api/taskyonProtocol'
 import type { ChatResponseType } from '../types/chatCompletion'
 import { assertType } from '../utils/tsHelpers'
 import { createDuplexChannel } from '@taskyon/common/modules/frpBus'

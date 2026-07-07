@@ -22,6 +22,8 @@ import type {
 export {
   createChatCompletionTask,
   createClientTool,
+  createTaskChainFromMarkdown,
+  createMarkdownTaskChain,
   createSubtasksResult,
   createTool, // toolApi
   observeSubTaskStream,
@@ -112,7 +114,7 @@ const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
 export interface TyClient {
   runTasks: ReturnType<typeof createTaskyonClient>['runTasks']
   port: Port<TaskyonGuiMessage, TaskyonGuiMessage>
-  sendFile: ReturnType<typeof createTaskyonClient>['sendFile']
+  sendFiles: ReturnType<typeof createTaskyonClient>['sendFiles']
   reconfigure: (options: {
     name?: string
     persist?: boolean
@@ -182,7 +184,7 @@ export async function initializeTaskyon(options: {
   return {
     runTasks: taskyonClient.runTasks,
     port: clientSidePort,
-    sendFile: taskyonClient.sendFile,
+    sendFiles: taskyonClient.sendFiles,
     reconfigure: (options: {
       name?: string
       persist?: boolean

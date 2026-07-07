@@ -235,15 +235,14 @@ const hasTaskChanged = computed(() => {
 
 const selectedTaskList = asyncComputed(
   async () => {
-    const ty = await tystate.taskyon
     if (single) {
       if (typeof taskOrId === 'string') {
-        const task = await ty.getTask(taskId.value)
+        const task = await tystate.taskyonClient.task.get({ id: taskId.value })
         return task ? [task] : []
       }
       return [taskOrId]
     }
-    const taskList = await ty.getTaskChain(taskId.value)
+    const taskList = await tystate.taskyonClient.task.getChain({ id: taskId.value })
     return taskList
   },
   [],

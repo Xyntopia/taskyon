@@ -214,7 +214,7 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
         }),
       ])
         .then((tasks) =>
-          createTaskyonClient(ty.port).createTaskChain({
+          createTaskyonClient(ty.port).task.createChain({
             execute: true,
             show: false,
             tasks,

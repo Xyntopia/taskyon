@@ -120,6 +120,7 @@ import { matAutorenew, matFileUpload, matSearch } from '@quasar/extras/material-
 import { mdiForumPlus, mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import FileDropzone from '@taskyon/ui/components/FileDropzone.vue'
 import { generateTaskKeyWords, type TaskNode } from '@taskyon/taskyon'
+import { createTaskChainFromMarkdown } from '@taskyon/tyclient'
 import { watchThrottled } from '@vueuse/core'
 import { useQuasar } from 'quasar'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
@@ -180,11 +181,10 @@ const updateNameWithTextRank = async (id: string) => {
   namingInProgress.add(id)
 
   try {
-    const ty = await tystate.taskyon
-    const task = await ty.getTask(id)
+    const task = await tystate.taskyonClient.task.get({ id })
     if (!task) return
 
-    const taskChain = await ty.getTaskChain(id)
+    const taskChain = await tystate.taskyonClient.task.getChain({ id })
     const kws = await generateTaskKeyWords(task, taskChain, {
       mode: 'textrank',
       maxWords: 4,
@@ -198,10 +198,10 @@ const updateNameWithTextRank = async (id: string) => {
 // TODO: this is probably a good idea to move this into "taskyon core"
 async function updateName(id: string) {
   console.log('update name...', id)
-  const ty = await tystate.taskyon
-  const task = await ty.getTask(id)
+  const task = await tystate.taskyonClient.task.get({ id })
   if (!task) return
 
+  const ty = await tystate.taskyon
   const taskMeta = await ty.getMeta(id)
   const cachedName = taskMeta?.name?.trim()
   if (cachedName) {
@@ -209,7 +209,7 @@ async function updateName(id: string) {
     return
   }
 
-  const taskChain = await ty.getTaskChain(id)
+  const taskChain = await tystate.taskyonClient.task.getChain({ id })
   const displayName =
     task.name?.trim() ||
     firstExistingTaskName(taskChain) ||
@@ -246,7 +246,7 @@ async function loadConversations(files: File[]) {
   for (const file of files) {
     try {
       if (file.type === 'text/markdown') {
-        last_loaded_id = await ty.addMdTaskChain(await file.text())
+        last_loaded_id = await createTaskChainFromMarkdown(tystate.taskyonClient, await file.text())
       } else if (file.type === 'application/yaml') {
         last_loaded_id = await ty.loadYamlConversation(file)
       } else {

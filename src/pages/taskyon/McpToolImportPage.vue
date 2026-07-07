@@ -103,6 +103,7 @@ import FadeAwayScrollPage from '@taskyon/ui/components/FadeAwayScrollPage.vue'
 import JsonInput from '@taskyon/ui/components/varViews/JsonInput.vue'
 import type { partialTaskDraft, TaskNode, ToolBase } from '@taskyon/taskyon'
 import { createTaskNode, ToolBase as ToolBaseSchema } from '@taskyon/taskyon'
+import { createTaskyonClient } from '@taskyon/tyclient'
 import type { JSONSchema7 } from 'json-schema'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
@@ -368,8 +369,10 @@ const preliminaryTaskNode = asyncComputed<TaskNode | undefined>(async () => {
 }, undefined)
 
 async function addNewTask(task: partialTaskDraft) {
-  const ty = await tystate.taskyon
-  return await ty.addPartialTask2Tree(task)
+  const taskyonClient = createTaskyonClient(tystate.api)
+  const newTask = await createTaskNode(task)
+  await taskyonClient.task.create({ task: newTask, execute: false, show: true })
+  return newTask
 }
 
 async function saveTool() {

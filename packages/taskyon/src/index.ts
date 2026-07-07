@@ -1,5 +1,4 @@
 // types exports
-export { BaseMessage, TaskyonMessage, TyP2P } from './types/apiTypes'
 export {
   TaskyonGuiMessage,
   type guiMessageTypes,
@@ -14,6 +13,9 @@ export {
   runTasks,
   taskyonGuiProtocol,
   taskyonProtocol,
+  TaskyonMessage,
+  type TaskyonMessage as TaskyonMessageType,
+  type TyP2P,
 } from './api/index'
 export { createTaskNode, ensureValidTaskId, forgeTaskChain } from './core/createTasks'
 export * from './core/createNewTaskChain'

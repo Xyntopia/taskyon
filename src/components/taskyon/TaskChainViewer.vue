@@ -396,8 +396,8 @@ const taskChainsToQTree = (taskChains: taskTreeNodeType[][]) => {
 }
 
 const getQTree = async (taskID: string, justChildren = false): Promise<taskTreeNodeType[]> => {
-  const taskyonClient = await tystate.taskyonClient
-  const fetchedTask = taskById.value.get(taskID) ?? (await taskyonClient.getTask(taskID))
+  const fetchedTask =
+    taskById.value.get(taskID) ?? (await tystate.taskyonClient.task.get({ id: taskID }))
   if (!fetchedTask) return []
   const tasks = createTaskTreeMap([fetchedTask])
 

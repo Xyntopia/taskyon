@@ -1,4 +1,8 @@
-import { defineFrpProtocol } from '@taskyon/common/modules/frpBus'
+import {
+  defineFrpServiceProtocol,
+  mergeFrpProtocols,
+  type ProtocolMessage,
+} from '@taskyon/common/modules/frpBus'
 import { z } from 'zod'
 import { partialTaskDraft, TaskNode } from '../types/taskNode'
 import { FunctionArguments, ToolBase } from '../types/tools'
@@ -56,6 +60,34 @@ const tasks = z.object({
 const functionDescription = ToolBase.extend({}).meta({
   description: 'Register a tool definition with this Taskyon peer.',
 })
+
+const ping = z
+  .object({
+    nonce: z.string().optional(),
+  })
+  .describe('Check whether this Taskyon peer is ready to handle core protocol requests.')
+
+const pingResult = z
+  .object({
+    ok: z.literal(true),
+    protocol: z.literal('taskyon.core'),
+    version: z.literal('1'),
+    status: z.literal('ready'),
+    nonce: z.string().optional(),
+  })
+  .describe('Taskyon core protocol readiness response.')
+
+const taskChainSelection = z.discriminatedUnion('method', [
+  z.object({
+    method: z.literal('flattened'),
+    untilTaskID: z.string().optional(),
+    onlyFirstChild: z.boolean().optional(),
+  }),
+  z.object({
+    method: z.literal('lineage'),
+    includeSubtaskResults: z.enum(['terminal-visible', 'none']).optional(),
+  }),
+])
 
 const taskyonReady = z.object({}).meta({
   description: 'simple message which signals, that our API is ready!',
@@ -131,12 +163,31 @@ const functionCancel = remoteFunctionBase
     description: 'Cancels a pending remote function call identified by requestId.',
   })
 
-export const taskyonProtocol = defineFrpProtocol({
-  id: 'taskyon.core',
+export const taskyonPeerProtocol = defineFrpServiceProtocol({
+  service: 'peer',
   version: '1',
   envelope: baseMessage,
   commands: {
-    listTools: {
+    ping: {
+      request: ping,
+      response: pingResult,
+      defaultTimeoutMs: 5_000,
+    },
+  },
+  streams: {
+    lifecycle: {
+      taskyonReady,
+      status,
+    },
+  },
+})
+
+export const taskyonToolsProtocol = defineFrpServiceProtocol({
+  service: 'tools',
+  version: '1',
+  envelope: baseMessage,
+  commands: {
+    list: {
       request: z
         .object({
           includeHidden: z
@@ -150,7 +201,25 @@ export const taskyonProtocol = defineFrpProtocol({
         .describe('The currently registered Taskyon tool definitions keyed by tool name.'),
       defaultTimeoutMs: 30_000,
     },
-    getTask: {
+    register: {
+      request: functionDescription,
+    },
+  },
+  streams: {
+    execution: {
+      functionCall,
+      functionResponse,
+      functionCancel,
+    },
+  },
+})
+
+export const taskyonTaskProtocol = defineFrpServiceProtocol({
+  service: 'task',
+  version: '1',
+  envelope: baseMessage,
+  commands: {
+    get: {
       request: z
         .object({
           id: z.string().describe('Task id to fetch from the local Taskyon task store.'),
@@ -159,37 +228,114 @@ export const taskyonProtocol = defineFrpProtocol({
       response: TaskNode.nullable().describe('The matching task, or null when it is unavailable.'),
       defaultTimeoutMs: 30_000,
     },
-    createTask: {
+    getIdChain: {
+      request: z
+        .object({
+          id: z.string().describe('Task id whose chain should be selected.'),
+          maxFollow: z
+            .number()
+            .optional()
+            .describe('Maximum number of task ids to include from the selected chain.'),
+          selection: taskChainSelection
+            .optional()
+            .describe('Task-chain traversal strategy and options.'),
+        })
+        .describe('Request a selected task id chain from the local Taskyon task store.'),
+      response: z.array(z.string()).describe('Selected task ids in chain order.'),
+      defaultTimeoutMs: 30_000,
+    },
+    getChain: {
+      request: z
+        .object({
+          id: z.string().describe('Task id whose chain should be loaded.'),
+          maxFollow: z
+            .number()
+            .optional()
+            .describe('Maximum number of tasks to include from the selected chain.'),
+          selection: taskChainSelection
+            .optional()
+            .describe('Task-chain traversal strategy and options.'),
+        })
+        .describe('Request a selected task chain from the local Taskyon task store.'),
+      response: z.array(TaskNode).describe('Selected tasks in chain order.'),
+      defaultTimeoutMs: 30_000,
+    },
+    create: {
       request: task,
     },
-    createTaskChain: {
+    createChain: {
       request: tasks,
-    },
-    addFile: {
-      request: file,
-    },
-    registerTool: {
-      request: functionDescription,
-    },
-    requestTaskArchive: {
-      request: requestTaskArchive,
-    },
-    importTaskArchive: {
-      request: importTaskArchive,
     },
   },
   streams: {
-    taskUpdates: {
+    updates: {
       taskCreated,
-    },
-    peerLifecycle: {
-      taskyonReady,
-      status,
-    },
-    toolExecution: {
-      functionCall,
-      functionResponse,
-      functionCancel,
     },
   },
 })
+
+export const taskyonFilesProtocol = defineFrpServiceProtocol({
+  service: 'files',
+  version: '1',
+  envelope: baseMessage,
+  commands: {
+    add: {
+      request: file,
+    },
+  },
+})
+
+export const taskyonArchiveProtocol = defineFrpServiceProtocol({
+  service: 'archive',
+  version: '1',
+  envelope: baseMessage,
+  commands: {
+    requestTask: {
+      request: requestTaskArchive,
+    },
+    importTask: {
+      request: importTaskArchive,
+    },
+  },
+})
+
+const taskyonPeerTaskProtocol = mergeFrpProtocols({
+  id: 'taskyon.peer',
+  version: '1',
+  base: taskyonPeerProtocol,
+  extension: taskyonTaskProtocol,
+})
+
+const taskyonPeerTaskToolsProtocol = mergeFrpProtocols({
+  id: 'taskyon.peer',
+  version: '1',
+  base: taskyonPeerTaskProtocol,
+  extension: taskyonToolsProtocol,
+})
+
+const taskyonPeerTaskToolsFilesProtocol = mergeFrpProtocols({
+  id: 'taskyon.peer',
+  version: '1',
+  base: taskyonPeerTaskToolsProtocol,
+  extension: taskyonFilesProtocol,
+})
+
+export const taskyonProtocol = mergeFrpProtocols({
+  id: 'taskyon.peer',
+  version: '1',
+  base: taskyonPeerTaskToolsFilesProtocol,
+  extension: taskyonArchiveProtocol,
+})
+
+export const TaskyonMessage = taskyonProtocol.message
+export type TaskyonMessage = ProtocolMessage<typeof taskyonProtocol>
+export type TaskyonMessageType = TaskyonMessage
+export type messageTypes = TaskyonMessage['type']
+export type TyP2P = Extract<
+  TaskyonMessage,
+  | { type: 'archive.importTaskRequest' }
+  | { type: 'archive.importTaskResponse' }
+  | { type: 'archive.requestTaskRequest' }
+  | { type: 'archive.requestTaskResponse' }
+  | { type: 'taskCreated' }
+>

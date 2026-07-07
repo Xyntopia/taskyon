@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { mkdir } from 'node:fs/promises'
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
-import { processTasksDetailed } from '../api'
+import { createTaskyonClient, processTasksDetailed } from '../api'
 import { tyCore } from '../core/init'
 import { createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
 import { createStandardEntryNodeTool } from '../tools/entryNode'
@@ -128,7 +128,7 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
           if (!current || !call.taskId) {
             throw new Error('Expected a task id while executing the documentation conversation.')
           }
-          return current.getTaskChain(call.taskId)
+          return createTaskyonClient(current.port).task.getChain({ id: call.taskId })
         },
       }),
   })

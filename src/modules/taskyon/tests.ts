@@ -42,7 +42,6 @@ import { getDatabase } from '@taskyon/taskyon/db'
 import { reconcileWithDefaults } from '@taskyon/common/modules/utils'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
-import { createSubtasksResult } from '../../../packages/taskyon/src/types/toolApi'
 import {
   buildTaskyonProfileSectionResetPatch,
   validateTaskyonProfileSettingsPatch,
@@ -1326,7 +1325,7 @@ export async function testGdriveZipRoundtrip() {
     // e.g. in the future we might want to add public keys and other things. Maybe we want to
     // encrypt tasks with synchronized session keys and similar things...
     const gdriveApi = createPortClient(gdport, taskyonProtocol)
-    await gdriveApi.importTaskArchive({
+    await gdriveApi.archive.importTask({
       data: packed,
       info: archiveName,
       ids: filenames,
@@ -1355,10 +1354,10 @@ export async function testGdriveZipRoundtrip() {
 
     for (const name of filenames) {
       try {
-        await gdriveApi.requestTaskArchive({ id: name })
+        await gdriveApi.archive.requestTask({ id: name })
         await new Promise<boolean>((resolve) => {
           const unsub = gdport.receive(async (msg) => {
-            if (msg.type === 'importTaskArchiveRequest') {
+            if (msg.type === 'archive.importTaskRequest') {
               const decompressed = await decompressEncryptedObject(
                 msg.data,
                 msg.info,
@@ -1448,7 +1447,7 @@ export async function testToolList() {
 
   const ty = await tystate.taskyon
 
-  const allTools = await createTaskyonClient(ty.port).listTools({})
+  const allTools = await createTaskyonClient(ty.port).tools.list({})
   return {
     'all tools': summarizeTools(Object.keys(allTools), allTools),
   }
@@ -1570,62 +1569,55 @@ export const testChatCompletionWebSearch = async () => {
 testChatCompletionWebSearch.description = 'test taskyon chatCompletion websearch'
 
 export const testChatCompletion = async () => {
-  const ty = await tystate.taskyon
-
-  const stopSignal = new AbortController().signal
-
-  // Invoke the real tool
-  const { tool: chatCompletion } = await ty.getToolDefinition('chatCompletion')
-  let structuredResponse
-  if (chatCompletion && 'function' in chatCompletion && chatCompletion.function !== undefined) {
-    structuredResponse = await chatCompletion.function(
-      {
-        model: 'google/gemini-2.5-flash-lite',
-        appendSystemPrompts: [
-          `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
-        ],
-        schema: {
-          type: 'object',
-          properties: {
-            user: {
-              type: 'object',
-              description: new Date().toISOString(),
-              properties: {
-                id: { type: 'string' },
-                name: { type: 'string' },
-              },
-              additionalProperties: false,
-              required: ['id', 'name'],
-            },
-            preferences: {
-              type: 'object',
-              properties: {
-                theme: { type: 'string', enum: ['light', 'dark'] },
-              },
-              additionalProperties: false,
-              required: ['theme'],
-            },
+  const taskResult = await runTasks(tystate.api)(
+    [
+      [
+        {
+          role: 'user',
+          content: {
+            type: 'message',
+            data: 'Create a random user preferences object that matches the requested schema.',
           },
-          additionalProperties: false,
-          required: ['user', 'preferences'],
         },
-      },
-      {
-        getExecutionTaskChain: () => Promise.resolve([]),
-        createSubtasksResult,
-        getSecret: (name) => tystate.getProviderApiKey(name),
-        setSecret: () => {
-          console.log('set test secret')
-          return Promise.resolve()
-        },
-        stopSignal,
-        toolId: 'N/A',
-      },
-    )
-  }
+        createChatCompletionTask({
+          model: 'google/gemini-2.5-flash-lite',
+          appendSystemPrompts: [
+            `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
+          ],
+          schema: {
+            type: 'object',
+            properties: {
+              user: {
+                type: 'object',
+                description: new Date().toISOString(),
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                },
+                additionalProperties: false,
+                required: ['id', 'name'],
+              },
+              preferences: {
+                type: 'object',
+                properties: {
+                  theme: { type: 'string', enum: ['light', 'dark'] },
+                },
+                additionalProperties: false,
+                required: ['theme'],
+              },
+            },
+            additionalProperties: false,
+            required: ['user', 'preferences'],
+          },
+        }),
+      ],
+    ],
+    ['structured', 'message'],
+    { timeoutMs: 50000 },
+  )
 
   return {
-    structuredResponse,
+    structuredResponse: taskResult.content.data,
   }
 }
 
@@ -2285,7 +2277,7 @@ export async function markdownGeneration() {
   //const newTaskId = await state.addMdTasks(markdownContent, undefined);
   // and delete this conversation again :)
   if (lastLoadedTaskId) {
-    const taskList = await ty.getTaskChain(lastLoadedTaskId)
+    const taskList = await createTaskyonClient(ty.port).task.getChain({ id: lastLoadedTaskId })
     const markdown = chat2Md(taskList)
     await ty.deleteTaskThread(lastLoadedTaskId)
     return {
@@ -2355,11 +2347,13 @@ export async function getTestMetaData() {
       chatID: state.selectedTaskId,
     }
     if (state.selectedTaskId) {
-      tyChat.taskIdChain = await ty.getTaskIdChain(state.selectedTaskId)
-      const task = await ty.getTask(state.selectedTaskId)
+      tyChat.taskIdChain = await tystate.taskyonClient.task.getIdChain({
+        id: state.selectedTaskId,
+      })
+      const task = await createTaskyonClient(ty.port).task.get({ id: state.selectedTaskId })
       if (task) {
-        const taskChain = await ty.getTaskChain(task.id)
-        const toolDefs = await createTaskyonClient(ty.port).listTools({})
+        const taskChain = await createTaskyonClient(ty.port).task.getChain({ id: task.id })
+        const toolDefs = await createTaskyonClient(ty.port).tools.list({})
         const res = await convertTaskNodesToOpenAIChat(
           taskChain,
           // we are not testing files right now...

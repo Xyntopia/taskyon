@@ -32,7 +32,7 @@ async function listMcpTools(
   options: Pick<TaskyonMcpBridgeOptions, 'includeHiddenTools' | 'listToolsTimeoutMs'>,
 ): Promise<McpTool[]> {
   const taskyonClient = createTaskyonClient(client.port)
-  const tools = await taskyonClient.listTools({
+  const tools = await taskyonClient.tools.list({
     ...(options.includeHiddenTools !== undefined
       ? { includeHidden: options.includeHiddenTools }
       : {}),

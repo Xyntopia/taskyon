@@ -189,7 +189,8 @@ async function startFileUpload() {
   const testPdf = await urlToFile('/tests/product_specs_long.pdf')
   if (!tyclient.value) return
 
-  const id = await tyclient.value.sendFile(testPdf)
+  const [id] = await tyclient.value.sendFiles([testPdf])
+  if (!id) throw new Error('Expected uploaded file id')
   console.log('finished sending file!', id)
 
   // now we can send

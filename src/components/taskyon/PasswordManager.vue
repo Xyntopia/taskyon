@@ -93,6 +93,8 @@ import { mdiTools } from '@quasar/extras/mdi-v6'
 import { Dialog } from 'quasar'
 import { generateSecretId } from '../../../packages/taskyon/src/core/taskFunctionExecutor'
 import { copyToClipboard } from '@taskyon/common/modules/utils'
+import type { ToolBase } from '@taskyon/taskyon'
+import { createTaskyonClient } from '@taskyon/tyclient'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { onMounted, ref, watch } from 'vue'
@@ -107,6 +109,7 @@ const { onlyThisKey = undefined, title = undefined } = defineProps<{
 }>()
 
 const tystate = useTaskyonStore()
+const taskyonClient = createTaskyonClient(tystate.api)
 const secretList = ref<Record<string, Record<string, string>>>({})
 const loadingSecrets = ref<boolean>(false)
 
@@ -182,16 +185,15 @@ const saveSecret = async (secretId: string, secretName: string) => {
 
 const toolMap = asyncComputed(
   async () => {
-    const ty = await tystate.taskyon
+    const listedTools: Record<string, ToolBase> = await taskyonClient.tools.list({
+      includeHidden: true,
+    })
     const tools: Record<string, string> = {}
     const rtools: Record<string, string> = {}
-    for (const c of Object.values(tystate.allTools)) {
-      const { tool, def } = await ty.getToolDefinition(c.name)
-      if (tool) {
-        const id = await generateSecretId(def?.id, tool)
-        tools[id] = def?.id ?? c.name
-        rtools[c.name] = id
-      }
+    for (const tool of Object.values(listedTools)) {
+      const id = await generateSecretId(undefined, tool)
+      tools[id] = tool.name
+      rtools[tool.name] = id
     }
     return { t: tools, r: rtools }
   },

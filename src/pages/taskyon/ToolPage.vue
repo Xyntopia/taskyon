@@ -92,11 +92,6 @@
       >
         <template #code>
           <div class="fit">
-            <div v-if="selectedTool && selectedTool.function" class="q-pa-lg text-negative">
-              The currently selected Tool is a Taskyon-internal tool with a "function" property and
-              can not be edited here. You can however replace it with your own tool with the same
-              name.
-            </div>
             <div v-if="toolDraft.code" class="column">
               <q-btn
                 class="self-end"
@@ -189,7 +184,7 @@ import FadeAwayScrollPage from '@taskyon/ui/components/FadeAwayScrollPage.vue'
 import JsonInput from '@taskyon/ui/components/varViews/JsonInput.vue'
 import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
 import { copyToClipboard } from '@taskyon/common/modules/utils'
-import type { InternalTool, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
+import type { partialTaskDraft, TaskNode, ToolBase as ToolBaseType } from '@taskyon/taskyon'
 import { craeteToolJsonSchema, createTaskNode, ToolBase } from '@taskyon/taskyon'
 import { createTaskyonClient } from '@taskyon/tyclient'
 import TaskChainPublishDialog from 'src/components/taskyon/TaskChainPublishDialog.vue'
@@ -283,11 +278,11 @@ function switchTool(toolName?: string) {
   void router.push({ path: '/tool' + (toolName ? `/${toolName}` : '') })
 }
 
-const allTools = asyncComputed(async () => {
+const allTools = asyncComputed<Record<string, ToolBaseType>>(async () => {
   const ty = await tystate.taskyon
-  const tools = await createTaskyonClient(ty.port).listTools({})
+  const tools = await createTaskyonClient(ty.port).tools.list({})
   return tools
-}, undefined)
+}, {})
 
 const alphabeticalTools = computed(() => {
   return allTools.value
@@ -295,14 +290,13 @@ const alphabeticalTools = computed(() => {
     : undefined
 })
 
-const selectedTool = asyncComputed<InternalTool | undefined>(
+const selectedTool = asyncComputed<ToolBaseType | undefined>(
   async () => {
-    const ty = await tystate.taskyon
     if (name) {
-      const { tool } = await ty.getToolDefinition(name)
+      const tool = allTools.value?.[name]
       if (tool) return tool
       // otherwise check if name is actually a task id...
-      const toolDefTask = await ty.getTask(name)
+      const toolDefTask = await createTaskyonClient(tystate.api).task.get({ id: name })
       if (toolDefTask?.content.type === 'tooldefinition') return toolDefTask.content.data
     }
     return undefined
@@ -355,8 +349,9 @@ const preliminaryTaskNode = asyncComputed<TaskNode | undefined>(async () => {
 }, undefined)
 
 async function addNewTask(task: partialTaskDraft) {
-  const ty = await tystate.taskyon
-  const newTask = await ty.addPartialTask2Tree(task)
+  const taskyonClient = createTaskyonClient(tystate.api)
+  const newTask = await createTaskNode(task)
+  await taskyonClient.task.create({ task: newTask, execute: false, show: true })
   void router.push({
     params: { name: newTask.id },
   })

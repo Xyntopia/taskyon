@@ -295,7 +295,7 @@ const humanReadableTaskCosts = computed(() => {
 })
 
 async function editTask(taskId: string) {
-  const task = await (await tystate.taskyon).getTask(taskId)
+  const task = await tystate.taskyonClient.task.get({ id: taskId })
   if (task?.content?.type === 'tooldefinition') {
     void router.push(`/tool/${task.id}`)
   } else {
@@ -305,15 +305,14 @@ async function editTask(taskId: string) {
 }
 
 async function deleteTask(taskId: string) {
-  const ty = await tystate.taskyon
-  const task = await ty.getTask(taskId)
-  if (task) void ty.deleteTask(task.id)
+  const task = await tystate.taskyonClient.task.get({ id: taskId })
+  if (task) void (await tystate.taskyon).deleteTask(task.id)
   navigateToTask(task?.priorID || task?.parentID)
 }
 
 async function createNewConversation(taskId: string) {
   console.log('create new conversation...')
-  const task = await (await tystate.taskyon).getTask(taskId)
+  const task = await tystate.taskyonClient.task.get({ id: taskId })
   tystate.setContentDraftFromTask(task)
 
   // we simply need to tell our task manager that we don't have any task selected

@@ -93,7 +93,7 @@ const createConversationHarness = async (
     defaultAllowedTools: [],
     getToolCatalog: async () => {
       const ty = await tyPromise
-      const cachedTools = await createTaskyonClient(ty.port).listTools({ includeHidden: true })
+      const cachedTools = await createTaskyonClient(ty.port).tools.list({ includeHidden: true })
       return Object.values(cachedTools)
         .filter((tool) => !['chatCompletion', 'entryNode', 'taskyonFlow'].includes(tool.name))
         .map((tool) => ({
@@ -287,7 +287,8 @@ const getConversationTasks = async (ty: Taskyon, processingResult: ConversationR
   if (!terminalTaskId) {
     throw new Error('Expected a terminal task id for the created conversation')
   }
-  return await ty.convertTaskIDs(await ty.getTaskIdChain(terminalTaskId))
+  const taskIdChain = await createTaskyonClient(ty.port).task.getIdChain({ id: terminalTaskId })
+  return await ty.convertTaskIDs(taskIdChain)
 }
 
 const processConversationUntilReturn =
@@ -365,7 +366,7 @@ const processConversationUntilReturn =
         })
       }, timeoutMs)
 
-      void createTaskyonClient(ty.port).createTaskChain({
+      void createTaskyonClient(ty.port).task.createChain({
         tasks,
         execute: true,
         show: true,

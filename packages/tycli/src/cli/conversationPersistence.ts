@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { chat2Md, type Taskyon } from '@taskyon/taskyon'
+import { createTaskyonClient } from '@taskyon/taskyon/api'
 
 export type ConversationPersistence = {
   filePath: string
@@ -32,7 +33,7 @@ export const createConversationPersistence = async (args: {
 
   const persist = async (leafId: string | undefined) => {
     if (!leafId) return
-    const chain = await args.taskyon.getTaskChain(leafId)
+    const chain = await createTaskyonClient(args.taskyon.port).task.getChain({ id: leafId })
     const markdown = chat2Md(chain, false)
     await mkdir(dirname(filePath), { recursive: true })
     await writeFile(filePath, `${markdown}\n`, 'utf8')

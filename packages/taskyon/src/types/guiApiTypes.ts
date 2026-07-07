@@ -6,7 +6,6 @@ import {
 import type { PartialDeep } from 'type-fest'
 import { z } from 'zod'
 import { taskyonProtocol } from '../api/taskyonProtocol'
-import { BaseMessage, TaskyonMessage } from './apiTypes'
 
 export type partialTyConfiguration = PartialDeep<{
   llmSettings: Record<string, unknown>
@@ -50,7 +49,7 @@ const pasteClipboard = z.object({
 const taskyonGuiCommandsProtocol = defineFrpProtocol({
   id: 'taskyon.gui',
   version: '1',
-  envelope: BaseMessage,
+  envelope: taskyonProtocol.envelope,
   commands: {
     configureTaskyon: {
       request: configureTaskyon,
@@ -68,16 +67,6 @@ export const taskyonGuiProtocol = mergeFrpProtocols({
   extension: taskyonGuiCommandsProtocol,
 })
 
-export const TaskyonGuiMessage = z.discriminatedUnion('type', [
-  ...TaskyonMessage.options,
-  z.object({ ...BaseMessage.shape, ...taskyonGuiProtocol.commands.configureTaskyon.request.shape }),
-  z.object({
-    ...BaseMessage.shape,
-    ...taskyonGuiProtocol.commands.configureTaskyon.response.shape,
-  }),
-  z.object({ ...BaseMessage.shape, ...taskyonGuiProtocol.commands.pasteClipboard.request.shape }),
-  z.object({ ...BaseMessage.shape, ...taskyonGuiProtocol.commands.pasteClipboard.response.shape }),
-])
-
+export const TaskyonGuiMessage = taskyonGuiProtocol.message
 export type TaskyonGuiMessage = ProtocolMessage<typeof taskyonGuiProtocol>
 export type guiMessageTypes = TaskyonGuiMessage['type']

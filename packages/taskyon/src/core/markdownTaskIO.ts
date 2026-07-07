@@ -1,5 +1,6 @@
 import { load } from 'js-yaml'
 import z from 'zod'
+import { createTaskNode } from './createTasks'
 import { createTaskVariablePresentationService, TASK_REF_PREFIX } from './taskVariables'
 import type { TaskNode } from '../types/taskNode'
 import { partialTaskDraft } from '../types/taskNode'
@@ -268,6 +269,16 @@ export const addMarkdownTaskChain = async (
   }
 
   return addedTasks
+}
+
+export const createMarkdownTaskChain = async (markdown?: string): Promise<TaskNode[]> => {
+  if (!markdown) return []
+  let lastTaskId: string | undefined
+  return await addMarkdownTaskChain(markdown, async (task) => {
+    const taskNode = await createTaskNode({ ...task, priorID: lastTaskId })
+    lastTaskId = taskNode.id
+    return taskNode
+  })
 }
 
 export const chatToYaml = (taskList: TaskNode[]) => safeYamlDump(taskList)

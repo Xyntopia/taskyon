@@ -28,7 +28,6 @@ import { useFullSmallTools } from '../tools/usefulSmallTools'
 import { webResearchTools } from '../tools/webResearchTool'
 import { wfcGenerator } from '../tools/wavefunctioncollapse'
 import { appDevTools } from '../tools/webAppDev'
-import { TaskyonMessage } from '../types/apiTypes'
 import type { llmSettings } from '../types/profiles'
 import { createSubtasksResult, type InternalTool } from '../types/toolApi'
 import type { FunctionArguments } from '../types/tools'
@@ -92,53 +91,72 @@ function createApi(
   taskManagerInstance: TyTaskManager,
   queueTask: (id: string) => void,
 ) {
-  return createPortServer(
+  const unsubscribeApiServer = createPortServer(
     insidePort,
     taskyonProtocol,
     {
-      createTask: async (msg) => {
-        const tn = await taskManagerInstance.addPartialTask2Tree({
-          ...msg.task,
-          //label: msg.origin ? [msg.origin] : undefined,
-        })
-        // push the last task to execution queue right away...
-        if (msg.execute) {
-          queueTask(tn.id)
-        }
+      peer: {
+        ping: ({ nonce }) => ({
+          ok: true,
+          protocol: 'taskyon.core',
+          version: '1',
+          status: 'ready',
+          ...(nonce ? { nonce } : {}),
+        }),
       },
-      createTaskChain: async (msg) => {
-        console.log('received tasks:', msg)
-        const ts = await Promise.all(
-          msg.tasks.map(
-            async (t) =>
-              await taskManagerInstance.addPartialTask2Tree({
-                ...t,
-                //label: msg.origin ? [msg.origin] : undefined,
-              }),
-          ),
-        )
-        console.log('executing tasks', ts)
-        if (msg.execute) ts.forEach((t) => queueTask(t.id))
+      task: {
+        create: async (msg) => {
+          const tn = await taskManagerInstance.addPartialTask2Tree({
+            ...msg.task,
+            //label: msg.origin ? [msg.origin] : undefined,
+          })
+          // push the last task to execution queue right away...
+          if (msg.execute) {
+            queueTask(tn.id)
+          }
+        },
+        createChain: async (msg) => {
+          console.log('received tasks:', msg)
+          const ts = await Promise.all(
+            msg.tasks.map(
+              async (t) =>
+                await taskManagerInstance.addPartialTask2Tree({
+                  ...t,
+                  //label: msg.origin ? [msg.origin] : undefined,
+                }),
+            ),
+          )
+          console.log('executing tasks', ts)
+          if (msg.execute) ts.forEach((t) => queueTask(t.id))
+        },
+        get: async ({ id }) => (await taskManagerInstance.getTask(id)) ?? null,
+        getIdChain: async ({ id, maxFollow, selection }) =>
+          await taskManagerInstance.getTaskIdChain(id, maxFollow, selection),
+        getChain: async ({ id, maxFollow, selection }) =>
+          await taskManagerInstance.getTaskChain(id, maxFollow, selection),
       },
-      registerTool: (msg) => {
-        const newFunc: ToolBase = msg
-        console.log('registerTool was sent', newFunc)
-        void taskManagerInstance.addDefaultTools([newFunc])
-        insidePort.send({
-          type: 'status',
-          data: {
-            type: 'newtool',
-            id: msg.name,
-          },
-        })
+      tools: {
+        register: (msg) => {
+          const newFunc: ToolBase = msg
+          console.log('registerTool was sent', newFunc)
+          void taskManagerInstance.addDefaultTools([newFunc])
+          insidePort.send({
+            type: 'status',
+            data: {
+              type: 'newtool',
+              id: msg.name,
+            },
+          })
+        },
+        list: async (request) =>
+          await taskManagerInstance.updateToolDefinitions(request.includeHidden),
       },
-      addFile: async (msg) => {
-        const id = await taskManagerInstance.addFiles([msg.file], msg.store ?? 'memory')
-        console.log('received file...', id, msg)
+      files: {
+        add: async (msg) => {
+          const id = await taskManagerInstance.addFiles([msg.file], msg.store ?? 'memory')
+          console.log('received file...', id, msg)
+        },
       },
-      listTools: async (request) =>
-        await taskManagerInstance.updateToolDefinitions(request.includeHidden),
-      getTask: async ({ id }) => (await taskManagerInstance.getTask(id)) ?? null,
     },
     {
       onError: (error) =>
@@ -146,6 +164,9 @@ function createApi(
       onUnknownMessage: (msg) => console.warn('taskyon receiving unknown message', msg),
     },
   )
+  insidePort.send({ type: 'taskyonReady' })
+
+  return unsubscribeApiServer
 }
 
 type CreateIframeMultiPlexer = () => IframeMultiPlexer
@@ -396,8 +417,8 @@ const dynamicContext =
             )
             console.log('created encrypted task file...', id)
 
-            void taskyonApi
-              .importTaskArchive({
+            void taskyonApi.archive
+              .importTask({
                 data: packed,
                 info: archiveName,
                 ids: [String(id)],
@@ -540,19 +561,13 @@ export async function tyCore(
     ...createProxyApi(
       () => ctx.taskManagerInstance,
       [
-        'getTask',
-        'getTaskIdChain',
         'convertTaskIDs',
-        'addPartialTask2Tree',
         'getMeta',
         'metaUpsert',
         'metaLiveRead',
-        'getTaskChain',
         // TODO: md taskchain and yaml loading might be better as "utility-functions?" without a dependency
         //       on taskManagerinstance..
-        'addMdTaskChain',
         'loadYamlConversation',
-        'getToolDefinition',
         'countTasks',
         'countVecs',
         'syncVectorIndexWithTasks',
@@ -565,14 +580,9 @@ export async function tyCore(
         'deleteTask',
         'getUploadedFile',
         'getFileMappingByUuid',
-        'addFiles',
         // TODO: also the following functionsnot sure, maybe we can generalize backup a bit more?
         'getJsonTaskBackup',
         'addTaskBackup',
-        // TODO:  what do these funcitons here do?
-        //        I think they bulid a treeview from tasks..  but it might make sense
-        //        to move them out of tycore and have them as seperate functions!
-        'buildSiblingChain',
         'deleteAllTasks',
       ],
     ),
@@ -621,7 +631,7 @@ export function createOpenAPIDocs() {
 
   console.log('generate docs...')
 
-  const schemas = [ToolBase, TaskyonMessage].map((zType) =>
+  const schemas = [ToolBase, taskyonProtocol.message].map((zType) =>
     z.toJSONSchema(zType, { unrepresentable: 'any' }),
   )
 

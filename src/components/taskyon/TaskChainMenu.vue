@@ -47,10 +47,9 @@ async function onDeleteThread(conversationId: string) {
 
 async function onDownloadChat(conversationId: string) {
   console.log('download thread!!', conversationId)
-  const ty = await tystate.taskyon
-  const task = await ty.getTask(conversationId)
+  const task = await tystate.taskyonClient.task.get({ id: conversationId })
   if (task) {
-    const taskList = await ty.getTaskChain(conversationId)
+    const taskList = await tystate.taskyonClient.task.getChain({ id: conversationId })
     const taskThreadYaml = chatToYaml(taskList)
     if (taskThreadYaml) {
       const fileName = `tyn-${task.name || ''}.yaml`

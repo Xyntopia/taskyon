@@ -306,7 +306,7 @@ const sourceTaskId = computed(() =>
   task.value.content.type === 'error' ? (task.value.parentID ?? task.value.priorID) : undefined,
 )
 const loadTaskById = async (taskId: string) =>
-  (await (await tystate.taskyon).getTask(taskId)) ?? undefined
+  (await tystate.taskyonClient.task.get({ id: taskId })) ?? undefined
 const taskMeta = tystate.getTaskMetaRef(task.value.id)
 const resolvedMessageContent = ref(
   task.value.content.type === 'message' ? task.value.content.data : '',

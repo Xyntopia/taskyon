@@ -38,7 +38,12 @@ import {
   clarificationToolParameters,
   type ClarificationResult,
 } from '@taskyon/taskyon/tools/clarificationTool'
-import { createProtocolPort, createTaskyonClient, taskyonProtocol } from '@taskyon/taskyon/api'
+import {
+  createProtocolPort,
+  createTaskChainFromMarkdown,
+  createTaskyonClient,
+  taskyonProtocol,
+} from '@taskyon/taskyon/api'
 import { setChatCompletionTraceWriter } from '@taskyon/taskyon/tools/chatCompletionTrace'
 import { createNodeTaskyonDocumentationProviderTool } from '@taskyon/taskyon/tools/nodeTaskyonDocumentationProvider'
 import { InternalTool as InternalToolSchema } from '../../taskyon/src/types/toolApi'
@@ -904,7 +909,7 @@ async function backfillLinkedTasks(client: TaskyonClientInvoker, leafId: string)
     if (!taskId || visited.has(taskId)) continue
     visited.add(taskId)
 
-    const task = await client.getTask(taskId)
+    const task = await client.task.get({ id: taskId })
     if (!task) continue
     taskById.set(task.id, task)
     if (task.parentID && !taskById.has(task.parentID)) pending.push(task.parentID)
@@ -946,7 +951,7 @@ async function invokeTaskyonToolTask(
       arguments: invocation.arguments,
     }),
   ])
-  await runtime.client.createTaskChain({
+  await runtime.client.task.createChain({
     tasks: taskChain,
     execute: true,
     show: false,
@@ -969,7 +974,7 @@ async function invokeTaskyonClient(
 ): Promise<unknown> {
   const invocation = parseTaskyonClientInvocation(raw)
   if (invocation.kind === 'listTools') {
-    return await runtime.client.listTools({ includeHidden: invocation.includeHidden })
+    return await runtime.client.tools.list({ includeHidden: invocation.includeHidden })
   }
   if (invocation.kind === 'callTool') {
     return await invokeTaskyonToolTask(runtime, invocation)
@@ -2154,7 +2159,7 @@ async function handleProviderCommand(
 }
 
 async function handleToolsCommand(ty: Taskyon, target?: Record<string, { hideChat?: boolean }>) {
-  const all = await createCliTaskyonClient(ty.port).listTools({ includeHidden: true })
+  const all = await createCliTaskyonClient(ty.port).tools.list({ includeHidden: true })
   if (target) {
     for (const key of Object.keys(target)) delete target[key]
     for (const [name, def] of Object.entries(
@@ -2179,7 +2184,7 @@ async function refreshToolRenderOptions(
   ty: Taskyon,
   target: Record<string, { hideChat?: boolean }>,
 ) {
-  const all = await createCliTaskyonClient(ty.port).listTools({ includeHidden: true })
+  const all = await createCliTaskyonClient(ty.port).tools.list({ includeHidden: true })
   for (const key of Object.keys(target)) delete target[key]
   for (const [name, def] of Object.entries(
     all as Record<string, { renderOptions?: { hideChat?: boolean } }>,
@@ -2296,7 +2301,7 @@ async function handleResumeCommand(args: {
   )
   if (!conversationPath) return undefined
   const markdown = await readFile(conversationPath, 'utf8')
-  const leafId = await args.ty.addMdTaskChain(markdown)
+  const leafId = await createTaskChainFromMarkdown(createCliTaskyonClient(args.ty.port), markdown)
   const sourceSession = findSessionForConversation(args.sessions, conversationPath)
 
   writeNote('Conversation Resumed', [
@@ -2500,7 +2505,7 @@ async function main() {
     getToolCatalog: async () => {
       const ty = taskyonRef.current
       if (!ty) return []
-      const allTools = (await createCliTaskyonClient(ty.port).listTools({
+      const allTools = (await createCliTaskyonClient(ty.port).tools.list({
         includeHidden: true,
       })) as Record<string, ToolCatalogEntry>
       return Object.values(allTools)
@@ -2625,7 +2630,7 @@ async function main() {
               'getExecutionTaskChain is not available for this tool call because no task id was provided.',
             )
           }
-          return taskyon.getTaskChain(call.taskId)
+          return taskyonApi.task.getChain({ id: call.taskId })
         },
       }),
   })
@@ -3493,7 +3498,7 @@ async function main() {
       currentLeafId = taskChain[taskChain.length - 1]?.id ?? currentLeafId
       queueConversationPersist(currentLeafId)
 
-      await taskyonApi.createTaskChain({
+      await taskyonApi.task.createChain({
         tasks: taskChain,
         execute: true,
         show: true,

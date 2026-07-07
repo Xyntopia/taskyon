@@ -2,11 +2,11 @@ import { createDuplexChannel } from '@taskyon/common/modules/frpBus'
 import { mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { processTasksDetailed } from '../api'
+import { createTaskyonClient, processTasksDetailed } from '../api'
 import { tyCore } from '../core/init'
 import { callToolOverRpc, registerToolRpcTools } from '../core/toolRpc'
 import type { ToolRpcCallMessage, ToolRpcFunctionResponseMessage } from '../core/toolRpc'
-import type { TaskyonMessage } from '../types/apiTypes'
+import type { TaskyonMessage } from '../api/taskyonProtocol'
 import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 import { createCryptoSession } from '../utils/cryptoSession'
 
@@ -82,18 +82,26 @@ export const testTyCoreStableTaskStreamSurvivesSessionSwitch = async () => {
 
   try {
     const beforeSwitch = waitForMessage('before session switch')
-    await ty.addPartialTask2Tree({
-      role: 'user',
-      content: { type: 'message', data: 'before session switch' },
+    await createTaskyonClient(ty.port).task.create({
+      execute: false,
+      show: false,
+      task: {
+        role: 'user',
+        content: { type: 'message', data: 'before session switch' },
+      },
     })
     await beforeSwitch
 
     await ty.setNewSession(await createCryptoSession())
 
     const afterSwitch = waitForMessage('after session switch')
-    await ty.addPartialTask2Tree({
-      role: 'user',
-      content: { type: 'message', data: 'after session switch' },
+    await createTaskyonClient(ty.port).task.create({
+      execute: false,
+      show: false,
+      task: {
+        role: 'user',
+        content: { type: 'message', data: 'after session switch' },
+      },
     })
     await afterSwitch
   } finally {
@@ -128,13 +136,13 @@ export const testRemoteFunctionBridgeRegistersAndExecutesTool = async () => {
   const registrationPromise = registerToolRpcTools({ port: clientPort, tools: [echoTool] })
 
   const toolDescription = await toolDescriptionPromise
-  if (toolDescription.type !== 'registerToolRequest') {
-    throw new Error('expected registerToolRequest message')
+  if (toolDescription.type !== 'tools.registerRequest') {
+    throw new Error('expected tools.registerRequest message')
   }
   assert(toolDescription.name === 'remoteEcho', 'expected remoteEcho registration')
 
   taskyonPort.send({
-    type: 'registerToolResponse',
+    type: 'tools.registerResponse',
     requestId: toolDescription.requestId,
   })
   const registration = await registrationPromise
@@ -187,13 +195,13 @@ export const testRemoteFunctionBridgeRejectsExternalSecretAccess = async () => {
   const registrationPromise = registerToolRpcTools({ port: clientPort, tools: [secretTool] })
 
   const toolDescription = await toolDescriptionPromise
-  if (toolDescription.type !== 'registerToolRequest') {
-    throw new Error('expected registerToolRequest message')
+  if (toolDescription.type !== 'tools.registerRequest') {
+    throw new Error('expected tools.registerRequest message')
   }
   assert(toolDescription.name === 'remoteSecretReader', 'expected remoteSecretReader registration')
 
   taskyonPort.send({
-    type: 'registerToolResponse',
+    type: 'tools.registerResponse',
     requestId: toolDescription.requestId,
   })
   const registration = await registrationPromise
@@ -264,13 +272,13 @@ export const testRemoteFunctionBridgeAllowsExplicitExternalSecretContext = async
   })
 
   const toolDescription = await toolDescriptionPromise
-  if (toolDescription.type !== 'registerToolRequest') {
-    throw new Error('expected registerToolRequest message')
+  if (toolDescription.type !== 'tools.registerRequest') {
+    throw new Error('expected tools.registerRequest message')
   }
   assert(toolDescription.name === 'remoteSecretWriter', 'expected remoteSecretWriter registration')
 
   taskyonPort.send({
-    type: 'registerToolResponse',
+    type: 'tools.registerResponse',
     requestId: toolDescription.requestId,
   })
   const registration = await registrationPromise
@@ -403,8 +411,8 @@ export const testRemoteFunctionBridgeDoesNotExecuteCodeToolsOnClient = async () 
   const registrationPromise = registerToolRpcTools({ port: clientPort, tools: [codeTool] })
 
   const toolDescription = await toolDescriptionPromise
-  if (toolDescription.type !== 'registerToolRequest') {
-    throw new Error('expected registerToolRequest message')
+  if (toolDescription.type !== 'tools.registerRequest') {
+    throw new Error('expected tools.registerRequest message')
   }
   assert(
     toolDescription.name === 'remoteClientSideCodeBlock',
@@ -413,7 +421,7 @@ export const testRemoteFunctionBridgeDoesNotExecuteCodeToolsOnClient = async () 
   assert(toolDescription.code === codeTool.code, 'expected code to be advertised')
 
   taskyonPort.send({
-    type: 'registerToolResponse',
+    type: 'tools.registerResponse',
     requestId: toolDescription.requestId,
   })
   const registration = await registrationPromise

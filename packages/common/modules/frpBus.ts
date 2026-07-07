@@ -404,6 +404,16 @@ export type PortRpcClientOptions = {
   signal?: AbortSignal
 }
 
+export type PortClientBeforeRequest = (event: {
+  command: string
+  args: PortRpcClientOptions
+}) => void | Promise<void>
+
+export type PortClientOptions = {
+  beforeRequest?: PortClientBeforeRequest
+  skipBeforeRequestFor?: readonly string[]
+}
+
 export type UnaryPortRpcDefinition<
   TRequest extends { requestId: string },
   TResponse extends { requestId: string },
@@ -506,6 +516,86 @@ type FrpMessageGroupDefinitions<TMessages extends FrpMessageGroupConfig> = {
 
 type FrpStreamDefinitions<TStreams extends Record<string, FrpMessageGroupConfig>> = {
   [K in keyof TStreams]: FrpMessageGroupDefinitions<TStreams[K]>
+}
+
+type PrefixKeys<TPrefix extends string, TRecord extends Record<string, unknown>> = {
+  [K in keyof TRecord as K extends string ? `${TPrefix}.${K}` : never]: TRecord[K]
+}
+
+type UnionToIntersection<TUnion> = (
+  TUnion extends unknown ? (value: TUnion) => void : never
+) extends (value: infer TIntersection) => void
+  ? TIntersection
+  : never
+
+type NestedPathObject<TPath extends string, TValue> = TPath extends `${infer THead}.${infer TTail}`
+  ? { [K in THead]: NestedPathObject<TTail, TValue> }
+  : { [K in TPath]: TValue }
+
+type DeepPartialObject<TValue> = TValue extends (...args: infer TArgs) => infer TResult
+  ? (...args: TArgs) => TResult
+  : {
+      [K in keyof TValue]?: DeepPartialObject<TValue[K]>
+    }
+
+type CommandClientFunction<TDefinition> = (
+  args: UnaryRpcParts<TDefinition>['args'] & PortRpcClientOptions,
+) => Promise<UnaryRpcParts<TDefinition>['result']>
+
+type NestedProtocolClient<TCommands> =
+  TCommands extends Record<string, unknown>
+    ? UnionToIntersection<
+        {
+          [TName in keyof TCommands & string]: NestedPathObject<
+            TName,
+            CommandClientFunction<TCommands[TName]>
+          >
+        }[keyof TCommands & string]
+      >
+    : EmptyObject
+
+type AvailableCommandClientEntry<TCommands, Tx, Rx, TName extends keyof TCommands & string> =
+  MessageUnionIncludes<Tx, UnaryRpcParts<TCommands[TName]>['request']> extends true
+    ? [UnaryRpcParts<TCommands[TName]>['result']] extends [void]
+      ? NestedPathObject<TName, CommandClientFunction<TCommands[TName]>>
+      : MessageUnionIncludes<Rx, UnaryRpcParts<TCommands[TName]>['response']> extends true
+        ? NestedPathObject<TName, CommandClientFunction<TCommands[TName]>>
+        : never
+    : never
+
+type CommandServerHandler<TProtocol, TDefinition> = (
+  request: ProtocolEnvelope<TProtocol> & UnaryRpcParts<TDefinition>['request'],
+) => UnaryRpcParts<TDefinition>['result'] | Promise<UnaryRpcParts<TDefinition>['result']>
+
+type NestedProtocolServerHandlers<TProtocol> = TProtocol extends {
+  commands: infer TCommands
+}
+  ? DeepPartialObject<
+      UnionToIntersection<
+        {
+          [TName in keyof TCommands & string]: NestedPathObject<
+            TName,
+            CommandServerHandler<TProtocol, TCommands[TName]>
+          >
+        }[keyof TCommands & string]
+      >
+    >
+  : EmptyObject
+
+type RuntimeProtocolMessageDefinition = {
+  safeParse: (value: unknown) => { success: boolean }
+}
+
+type RuntimeProtocolDefinition = {
+  envelope: RuntimeProtocolMessageDefinition | undefined
+  commands: Record<
+    string,
+    {
+      request: RuntimeProtocolMessageDefinition
+      response: RuntimeProtocolMessageDefinition
+    }
+  >
+  streams: Record<string, Record<string, RuntimeProtocolMessageDefinition>>
 }
 
 const hasCommandResponse = (
@@ -621,6 +711,95 @@ const createStreamDefinitions = <const TStreams extends Record<string, FrpMessag
   return streamDefinitions as FrpStreamDefinitions<TStreams>
 }
 
+type PrefixedCommandDefinitions<
+  TPrefix extends string,
+  TCommands extends Record<string, FrpCommandConfig>,
+> = {
+  [TName in keyof TCommands & string as `${TPrefix}.${TName}`]: CommandDefinitionFromConfig<
+    `${TPrefix}.${TName}`,
+    TCommands[TName]
+  >
+}
+
+const createPrefixedProtocolName = <const TPrefix extends string, const TName extends string>(
+  prefix: TPrefix,
+  name: TName,
+): `${TPrefix}.${TName}` => `${prefix}.${name}`
+
+const createPrefixedCommandDefinitions = <
+  const TPrefix extends string,
+  const TCommands extends Record<string, FrpCommandConfig>,
+>(
+  prefix: TPrefix,
+  commands: TCommands,
+): PrefixedCommandDefinitions<TPrefix, TCommands> => {
+  const commandDefinitions = {} as PrefixedCommandDefinitions<TPrefix, TCommands>
+  const writableCommandDefinitions = commandDefinitions as Record<
+    string,
+    CommandDefinitionFromConfig<`${TPrefix}.${string}`, TCommands[keyof TCommands & string]>
+  >
+  const entries = Object.entries(commands) as Array<
+    [keyof TCommands & string, TCommands[keyof TCommands & string]]
+  >
+  for (const [name, config] of entries) {
+    const prefixedName = createPrefixedProtocolName(prefix, name)
+    writableCommandDefinitions[prefixedName] = createUnaryCommandDefinition(prefixedName, config)
+  }
+  return commandDefinitions
+}
+
+const createPrefixedStreamDefinitions = <
+  const TPrefix extends string,
+  const TStreams extends Record<string, FrpMessageGroupConfig>,
+>(
+  prefix: TPrefix,
+  streams: TStreams,
+): PrefixKeys<TPrefix, FrpStreamDefinitions<TStreams>> =>
+  prefixRecordKeys(prefix, createStreamDefinitions(streams))
+
+const prefixRecordKeys = <
+  const TPrefix extends string,
+  const TRecord extends Record<string, unknown>,
+>(
+  prefix: TPrefix,
+  record: TRecord,
+): PrefixKeys<TPrefix, TRecord> => {
+  const prefixed = {} as PrefixKeys<TPrefix, TRecord>
+  const writablePrefixed = prefixed as Record<string, TRecord[keyof TRecord]>
+  const entries = Object.entries(record) as Array<[keyof TRecord & string, TRecord[keyof TRecord]]>
+  for (const [key, value] of entries) {
+    writablePrefixed[`${prefix}.${key}`] = value
+  }
+  return prefixed
+}
+
+const setNestedPathValue = (target: Record<string, unknown>, path: string, value: unknown) => {
+  const parts = path.split('.')
+  let current = target
+  for (const part of parts.slice(0, -1)) {
+    const existing = current[part]
+    if (typeof existing === 'object' && existing !== null && !Array.isArray(existing)) {
+      current = existing as Record<string, unknown>
+      continue
+    }
+    const next: Record<string, unknown> = {}
+    current[part] = next
+    current = next
+  }
+  const leaf = parts.at(-1)
+  if (!leaf) throw new Error(`Cannot create protocol client entry for empty command path "${path}"`)
+  current[leaf] = value
+}
+
+const getNestedPathValue = (source: unknown, path: string): unknown => {
+  let current = source
+  for (const part of path.split('.')) {
+    if (typeof current !== 'object' || current === null || Array.isArray(current)) return undefined
+    current = (current as Record<string, unknown>)[part]
+  }
+  return current
+}
+
 export type FrpProtocolDefinition<
   TCommands extends Record<string, unknown>,
   TStreams extends Record<string, unknown> = EmptyObject,
@@ -631,6 +810,7 @@ export type FrpProtocolDefinition<
   envelope: TEnvelope
   commands: TCommands
   streams: TStreams
+  message: z.ZodType
 }
 
 type ProtocolCommandRequests<TProtocol> = TProtocol extends {
@@ -694,11 +874,7 @@ export type ProtocolMessage<TProtocol> = ProtocolEnvelope<TProtocol> &
 export type ProtocolClient<TProtocol> = TProtocol extends {
   commands: infer TCommands
 }
-  ? {
-      [TName in keyof TCommands]: (
-        args: UnaryRpcParts<TCommands[TName]>['args'] & PortRpcClientOptions,
-      ) => Promise<UnaryRpcParts<TCommands[TName]>['result']>
-    }
+  ? NestedProtocolClient<TCommands>
   : EmptyObject
 
 type MessageType<TMessage> = TMessage extends { type: infer TType } ? TType : never
@@ -711,38 +887,36 @@ type MessageUnionIncludes<TUnion, TMessage> = [
 export type ProtocolClientForPort<TProtocol, Tx, Rx> = TProtocol extends {
   commands: infer TCommands
 }
-  ? {
-      [TName in keyof TCommands as MessageUnionIncludes<
-        Tx,
-        UnaryRpcParts<TCommands[TName]>['request']
-      > extends true
-        ? [UnaryRpcParts<TCommands[TName]>['result']] extends [void]
-          ? TName
-          : MessageUnionIncludes<Rx, UnaryRpcParts<TCommands[TName]>['response']> extends true
-            ? TName
-            : never
-        : never]: (
-        args: UnaryRpcParts<TCommands[TName]>['args'] & PortRpcClientOptions,
-      ) => Promise<UnaryRpcParts<TCommands[TName]>['result']>
-    }
+  ? UnionToIntersection<
+      {
+        [TName in keyof TCommands & string]: AvailableCommandClientEntry<TCommands, Tx, Rx, TName>
+      }[keyof TCommands & string]
+    >
   : EmptyObject
 
-export type ProtocolServerHandlers<TProtocol> = TProtocol extends {
-  commands: infer TCommands
-}
-  ? {
-      [TName in keyof TCommands]?: (
-        request: ProtocolEnvelope<TProtocol> & UnaryRpcParts<TCommands[TName]>['request'],
-      ) =>
-        | UnaryRpcParts<TCommands[TName]>['result']
-        | Promise<UnaryRpcParts<TCommands[TName]>['result']>
-    }
-  : EmptyObject
+export type ProtocolServerHandlers<TProtocol> = NestedProtocolServerHandlers<TProtocol>
 
 export type ProtocolServerOptions = {
   onError?: (error: unknown) => void
   onUnhandledCommand?: (event: { command: string; request: { requestId: string } }) => void
   onUnknownMessage?: (message: unknown) => void
+}
+
+const createProtocolMessageSchema = <const TProtocol extends RuntimeProtocolDefinition>(
+  protocol: TProtocol,
+): z.ZodType<ProtocolMessage<TProtocol>> => {
+  const messageDefinitions: RuntimeProtocolMessageDefinition[] = [
+    ...Object.values(protocol.commands).flatMap((definition) => [
+      definition.request,
+      definition.response,
+    ]),
+    ...Object.values(protocol.streams).flatMap((messages) => Object.values(messages)),
+  ]
+
+  return z.custom<ProtocolMessage<TProtocol>>((value) => {
+    if (protocol.envelope && !protocol.envelope.safeParse(value).success) return false
+    return messageDefinitions.some((definition) => definition.safeParse(value).success)
+  })
 }
 
 export function defineFrpProtocol<
@@ -770,23 +944,68 @@ export function defineFrpProtocol<
       config,
     ) as FrpCommandDefinitions<TCommands>[typeof name]
   }
+  const commands = commandDefinitions as FrpCommandDefinitions<TCommands>
+  const streams = createStreamDefinitions((definition.streams ?? {}) as TStreams)
   return {
     ...definition,
     envelope: definition.envelope as TEnvelope,
-    commands: commandDefinitions as FrpCommandDefinitions<TCommands>,
-    streams: createStreamDefinitions((definition.streams ?? {}) as TStreams),
+    commands,
+    streams,
+    message: createProtocolMessageSchema({
+      envelope: definition.envelope,
+      commands,
+      streams,
+    }),
+  }
+}
+
+export function defineFrpServiceProtocol<
+  const TService extends string,
+  const TCommands extends Record<string, FrpCommandConfig> = EmptyObject,
+  const TStreams extends Record<string, FrpMessageGroupConfig> = EmptyObject,
+  const TEnvelope extends z.ZodType | undefined = undefined,
+>(definition: {
+  service: TService
+  id?: string
+  version: string
+  envelope?: TEnvelope
+  commands?: TCommands
+  streams?: TStreams
+}): FrpProtocolDefinition<
+  PrefixedCommandDefinitions<TService, TCommands>,
+  PrefixKeys<TService, FrpStreamDefinitions<TStreams>>,
+  TEnvelope
+> {
+  const commands = createPrefixedCommandDefinitions(
+    definition.service,
+    definition.commands ?? ({} as TCommands),
+  )
+  const streams = createPrefixedStreamDefinitions(
+    definition.service,
+    definition.streams ?? ({} as TStreams),
+  )
+  const protocol = {
+    id: definition.id ?? `taskyon.${definition.service}`,
+    version: definition.version,
+    envelope: definition.envelope as TEnvelope,
+    commands,
+    streams,
+  }
+  return {
+    ...protocol,
+    message: createProtocolMessageSchema(protocol),
   }
 }
 
 export function mergeFrpProtocols<
   const TBase extends FrpProtocolDefinition<
-    Record<string, unknown>,
-    Record<string, unknown>,
+    RuntimeProtocolDefinition['commands'],
+    RuntimeProtocolDefinition['streams'],
     z.ZodType | undefined
   >,
   const TExtension extends FrpProtocolDefinition<
-    Record<string, unknown>,
-    Record<string, unknown>,
+    RuntimeProtocolDefinition['commands'],
+    RuntimeProtocolDefinition['streams'],
     z.ZodType | undefined
   >,
 >(definition: {
@@ -799,18 +1018,25 @@ export function mergeFrpProtocols<
   TBase['streams'] & TExtension['streams'],
   TExtension['envelope']
 > {
+  const commands = {
+    ...definition.base.commands,
+    ...definition.extension.commands,
+  } as TBase['commands'] & TExtension['commands']
+  const streams = {
+    ...definition.base.streams,
+    ...definition.extension.streams,
+  } as TBase['streams'] & TExtension['streams']
   return {
     id: definition.id,
     version: definition.version,
     envelope: definition.extension.envelope,
-    commands: {
-      ...definition.base.commands,
-      ...definition.extension.commands,
-    },
-    streams: {
-      ...definition.base.streams,
-      ...definition.extension.streams,
-    },
+    commands,
+    streams,
+    message: createProtocolMessageSchema({
+      envelope: definition.extension.envelope,
+      commands,
+      streams,
+    }),
   }
 }
 
@@ -839,15 +1065,15 @@ type RuntimeRpcDefinition = {
   createCancelRequest?: (request: { requestId: string }, reason: string) => { requestId: string }
 }
 
-type RuntimeProtocolMessageDefinition = {
-  safeParse: (value: unknown) => { success: boolean }
-}
-
 const createRuntimePortRpcClient = <Tx, Rx>(
   port: RpcMessagePort<Tx, Rx>,
   definition: RuntimeRpcDefinition,
+  options: PortClientOptions = {},
 ) => {
   return async (args: Record<string, unknown> & PortRpcClientOptions): Promise<unknown> => {
+    if (!options.skipBeforeRequestFor?.includes(definition.name)) {
+      await options.beforeRequest?.({ command: definition.name, args })
+    }
     const requestId = createPortRpcRequestId(definition.name)
     const request = definition.createRequest(args, requestId)
     const portRequest = request as Tx
@@ -924,6 +1150,7 @@ export function createPortClient<
 >(
   port: RpcMessagePort<ProtocolMessage<TProtocol>, Rx>,
   protocol: TProtocol,
+  options?: PortClientOptions,
 ): ProtocolClient<TProtocol>
 export function createPortClient<
   Tx,
@@ -933,7 +1160,11 @@ export function createPortClient<
     Record<string, unknown>,
     z.ZodType | undefined
   >,
->(port: RpcMessagePort<Tx, Rx>, protocol: TProtocol): ProtocolClientForPort<TProtocol, Tx, Rx>
+>(
+  port: RpcMessagePort<Tx, Rx>,
+  protocol: TProtocol,
+  options?: PortClientOptions,
+): ProtocolClientForPort<TProtocol, Tx, Rx>
 export function createPortClient(
   port: RpcMessagePort<never, unknown>,
   protocol?: FrpProtocolDefinition<
@@ -941,14 +1172,16 @@ export function createPortClient(
     Record<string, unknown>,
     z.ZodType | undefined
   >,
+  options: PortClientOptions = {},
 ): unknown {
   if (protocol) {
-    const client: Record<
-      string,
-      (args: Record<string, unknown> & PortRpcClientOptions) => Promise<unknown>
-    > = {}
+    const client: Record<string, unknown> = {}
     for (const [name, definition] of Object.entries(protocol.commands)) {
-      client[name] = createRuntimePortRpcClient(port, definition as RuntimeRpcDefinition)
+      setNestedPathValue(
+        client,
+        name,
+        createRuntimePortRpcClient(port, definition as RuntimeRpcDefinition, options),
+      )
     }
     return client
   }
@@ -1001,7 +1234,11 @@ export function createPortServer<
       if (!parsed.success || !parsed.data) continue
       const request = parsed.data
 
-      const handler = runtimeHandlers[name]
+      const nestedHandler = getNestedPathValue(runtimeHandlers, name)
+      const handler =
+        typeof nestedHandler === 'function'
+          ? (nestedHandler as (request: { requestId: string }) => unknown)
+          : undefined
       if (!handler) {
         options.onUnhandledCommand?.({ command: name, request })
         return

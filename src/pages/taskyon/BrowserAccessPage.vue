@@ -300,7 +300,7 @@ const runBrowserMcpImport = async () => {
   }) as partialTaskDraft
   const parentIds = state.selectedTaskId ? [state.selectedTaskId] : []
   const tasks = await forgeTaskChain([[toolTask]], parentIds)
-  await taskyonClient.createTaskChain({
+  await taskyonClient.task.createChain({
     tasks,
     execute: true,
     show: true,
