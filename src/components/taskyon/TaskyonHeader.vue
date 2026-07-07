@@ -97,7 +97,7 @@
         round
         :size="btnSize"
         :icon="matHelpOutline"
-        to="/docs/index"
+        to="/docs"
       >
         <q-tooltip> Open Taskyon Documentation </q-tooltip>
       </q-btn>

@@ -14,6 +14,7 @@
 - No fake no-op implementations. Model unavailable capabilities as optional.
 - Before creating or refactoring a tool, first search for similar tools in `packages/taskyon/src/tools/` and inspect how they are implemented. Reuse local patterns like `ctx.createSubtasksResult`, `toolCall`, `chatCompletion`, and re-entry chains instead of inventing a new orchestration style.
 - Taskyon tool declarations should keep the tool object readable in one place. Prefer one explicit `createTool({ ... })` declaration with the name, description, parameters schema, render options, and `function` body together. Do not split a tool into a wrapper factory, separate parameter constant, or delegated `function: (...) => runSomeTool(...)` unless that abstraction is reused by multiple tools or removes real complexity.
+- Do not add named one-line pass-through functions only to adapt arguments, capture module variables, or rename another function call, such as `async function loadThing() { return await loadThingFromSource(source) }`. Keep that dependency visible as an explicit argument, for example `createThingLoader(source)`, instead of hiding module state in a deferred callback. Add a named helper only when it contains meaningful logic, is reused, or makes a non-trivial domain step clearer.
 - Tool parameter schemas are the source of truth for tool settings. Do not export or import separate tool-specific settings schemas for UI shortcuts. UI settings views should read schemas from runtime tool definitions, the same way execution reads tool defaults from `tool.parameters`.
 - If a `createTool` function body grows too large, extract detail logic into named helper functions, but keep the top-level workflow visible inside the inline `function` body. For example, routing logic such as an entry-node `match(...)` should stay in the tool function so a developer can understand the tool flow in one place.
 - When a Taskyon tool returns workflow composition, make the returned task chain explicit at the call site. Prefer visible arrays such as `[task1, task2, task3]` or `[[...branchA], [...branchB]]` near `createSubtasksResult(...)`. Do not hide the number, order, or branching shape of returned tasks behind thin helpers.
@@ -75,6 +76,10 @@
   if a function becomes harder to read, split it by responsibility.
 - Extract helpers when they remove real duplication or clarify a distinct step.
   Do not extract helpers only to make code look abstract.
+- Avoid hidden module-level dependencies in helpers and callbacks. If a
+  function depends on a value from the surrounding module, pass that value as an
+  explicit argument to the helper or loader constructor instead of capturing it
+  implicitly.
 
 ## `tycli` development workflow
 
