@@ -174,6 +174,7 @@ export type PortClientFromMessages<Tx, Rx> = {
 export function MessageChannelBridge<Tx, Rx = Tx>(dport: Port<Tx, Rx>, mport: MessagePort) {
   const unsub = dport.receive((msg) => mport.postMessage(msg))
   mport.onmessage = (msg) => dport.send(msg.data)
+  mport.start()
 
   const destroy = () => {
     unsub()
