@@ -22,6 +22,7 @@ import type {
 export {
   createChatCompletionTask,
   createClientTool,
+  createSubtasksResult,
   createTool, // toolApi
   observeSubTaskStream,
   processTasksDetailed,

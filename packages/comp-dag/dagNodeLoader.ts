@@ -182,7 +182,7 @@ const parseOptionalLiteralField = (
   tsModule: typeof ts,
   fields: Map<string, ts.Expression>,
   name: string,
-): unknown | undefined => {
+): unknown => {
   const value = fields.get(name)
   return value ? parseLiteralValue(tsModule, value) : undefined
 }

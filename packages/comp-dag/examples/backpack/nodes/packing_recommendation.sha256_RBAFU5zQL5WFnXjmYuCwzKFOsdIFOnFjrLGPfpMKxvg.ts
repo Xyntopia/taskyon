@@ -1,7 +1,7 @@
 import type { StoredDagNodeModule } from '@taskyon/comp-dag/dagNodeLoader'
 
 export default {
-  id: 'sha256:qjGROtwWW4Vn_US15Kkhlp24SXkxz1VgFKF9hJYC5-E',
+  id: 'sha256:RBAFU5zQL5WFnXjmYuCwzKFOsdIFOnFjrLGPfpMKxvg',
   localName: 'packing_recommendation',
   label: 'Packing Recommendation',
   version: 1,
@@ -18,19 +18,19 @@ export default {
   },
   inputs: {
     policy: {
-      nodeId: 'sha256:rNDU_wD8Y3t2p9k-nPqM_rCDU69hTyvpe3Q5qnAOHB4',
+      nodeId: 'sha256:uG3mRzNB9ghKBV3kXa-p_jSKGjRNaF4ynN922x5hw6g',
       role: 'exposed',
     },
     score: {
-      nodeId: 'sha256:H58TdrdMud9H2Xzn-TwD2-vPkWM61Omu9npJwgst1Gc',
+      nodeId: 'sha256:MXpklGAvvhhZ68QSQw099lA4QmhSSfcbQ5bxLO_duZ8',
       role: 'internal',
     },
     weightCheck: {
-      nodeId: 'sha256:K4y6lAXg79-h9KtydIABt6l1Vhuxvu5jrl9M1dDd1iU',
+      nodeId: 'sha256:ESU-osE9xaSNLCo6xryeGMe78enpuSvjCq1O8X4vxLs',
       role: 'internal',
     },
   },
-  run: async ({
+  run: ({
     inputs,
   }: {
     inputs: {

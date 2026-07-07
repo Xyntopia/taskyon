@@ -1,7 +1,7 @@
 import type { StoredDagNodeModule } from '@taskyon/comp-dag/dagNodeLoader'
 
 export default {
-  id: 'sha256:H58TdrdMud9H2Xzn-TwD2-vPkWM61Omu9npJwgst1Gc',
+  id: 'sha256:MXpklGAvvhhZ68QSQw099lA4QmhSSfcbQ5bxLO_duZ8',
   localName: 'utility_score',
   label: 'Utility Score',
   version: 1,
@@ -18,15 +18,15 @@ export default {
   },
   inputs: {
     weatherCheck: {
-      nodeId: 'sha256:PoxZDcXLmV-6qvqOm52fS_SsDmLhtIkdpycsbtTIh2k',
+      nodeId: 'sha256:dDfrvNKGdZXdVEX1I1PYacBED7g-HmIZv8lo88wLlPE',
       role: 'internal',
     },
     weightCheck: {
-      nodeId: 'sha256:K4y6lAXg79-h9KtydIABt6l1Vhuxvu5jrl9M1dDd1iU',
+      nodeId: 'sha256:ESU-osE9xaSNLCo6xryeGMe78enpuSvjCq1O8X4vxLs',
       role: 'internal',
     },
   },
-  run: async ({
+  run: ({
     inputs,
   }: {
     inputs: {

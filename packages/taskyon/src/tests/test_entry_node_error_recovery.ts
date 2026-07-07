@@ -11,18 +11,19 @@ import { createStandardEntryNodeTool } from '../tools/entryNode'
 import { CLARIFICATION_TOOL_NAME } from '../tools/clarificationTool'
 import { buildLinkedTaskChain } from '../testSupport/onlineProviderSupport'
 import { llmSettings } from '../types/profiles'
+import { FunctionCall } from '../types/tools'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
 }
 
-const getFunctionCall = (task: unknown) => {
+const getFunctionCall = (task: unknown): FunctionCall | undefined => {
   if (!task || typeof task !== 'object' || !('content' in task)) return undefined
   const content = task.content
   if (!content || typeof content !== 'object' || !('type' in content) || !('data' in content)) {
     return undefined
   }
-  return content.type === 'functioncall' ? content.data : undefined
+  return content.type === 'functioncall' ? FunctionCall.parse(content.data) : undefined
 }
 
 export const testEntryNodeDoesNotAskClarificationDuringErrorRecovery = async () => {
@@ -83,10 +84,10 @@ export const testEntryNodeDoesNotAskClarificationDuringErrorRecovery = async () 
   const result = await entryNodeTool.function?.(
     {},
     {
-      getExecutionTaskChain: async () => taskChain,
+      getExecutionTaskChain: () => Promise.resolve(taskChain),
       createSubtasksResult,
-      getSecret: async () => null,
-      setSecret: async () => undefined,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
       stopSignal: new AbortController().signal,
       toolId: 'entry-node-error-test',
     },
@@ -108,10 +109,9 @@ export const testEntryNodeDoesNotAskClarificationDuringErrorRecovery = async () 
       : undefined
   const allowedTools = args && 'allowedTools' in args ? args.allowedTools : undefined
 
-  assert(
-    Array.isArray(allowedTools),
-    'Expected error recovery chatCompletion to include allowed tools',
-  )
+  if (!Array.isArray(allowedTools)) {
+    throw new Error('Expected error recovery chatCompletion to include allowed tools')
+  }
   assert(
     allowedTools.includes('bash'),
     'Expected error recovery to preserve non-clarification tools',

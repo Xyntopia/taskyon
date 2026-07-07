@@ -200,6 +200,7 @@ export default defineConfig((ctx) => {
           delete ts.compilerOptions?.paths['app/*']
 
           ts.compilerOptions ??= {}
+          ts.compilerOptions.allowImportingTsExtensions = true
           ts.compilerOptions.paths ??= {}
           ts.compilerOptions.paths['@taskyon/tyclient'] = ['./../packages/tyclient/src/index.ts']
           ts.compilerOptions.paths['@taskyon/p2p-core'] = ['./../packages/p2p-core/src/index.ts']

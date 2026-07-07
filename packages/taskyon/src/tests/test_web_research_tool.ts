@@ -18,18 +18,19 @@ import {
 import type { TaskNode } from '../types/taskNode'
 import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 import { registerToolRpcTools } from '../core/toolRpc'
+import { FunctionCall } from '../types/tools'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
 }
 
-const getFunctionCall = (task: unknown) => {
+const getFunctionCall = (task: unknown): FunctionCall | undefined => {
   if (!task || typeof task !== 'object' || !('content' in task)) return undefined
   const content = task.content
   if (!content || typeof content !== 'object' || !('type' in content) || !('data' in content)) {
     return undefined
   }
-  return content.type === 'functioncall' ? content.data : undefined
+  return content.type === 'functioncall' ? FunctionCall.parse(content.data) : undefined
 }
 
 const updateFilesStub = createTool({

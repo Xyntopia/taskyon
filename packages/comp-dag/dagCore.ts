@@ -1028,7 +1028,7 @@ export function createNode<
       ) => Promise<OutputOf<HiddenInputs[K]>>
     },
     ctx?: NodeContext,
-  ) => Promise<unknown> | unknown
+  ) => Promise<O> | O
 }) {
   const {
     name,
@@ -1055,8 +1055,7 @@ export function createNode<
 
   defaultPolicyRegistry[name] = defaultPolicy
 
-  let node!: DagNode<P, O>
-  const nodeImpl: DagNode<P, O> = {
+  const node: DagNode<P, O> = {
     name,
     ...(localName ? { localName } : {}),
     ...(contentHash ? { contentHash } : {}),
@@ -1128,8 +1127,7 @@ export function createNode<
             engineConfig: actualEngineConfig,
           })
           if (workerResult) {
-            const workerOutputSchema = node.outputSchema as DagJsonSchema
-            const value = parseSchema<unknown>(workerOutputSchema, workerResult.value)
+            const value = parseSchema<unknown>(node.outputSchema, workerResult.value)
             const artifactHash = workerResult.artifactHash ?? (await backend.writeArtifact(value))
             if (policy.cache === 'WriteOnly' || policy.cache === 'ReadWrite') {
               await backend.setCacheEntry(key, { artifact: artifactHash })
@@ -1456,8 +1454,6 @@ export function createNode<
       },
     }),
   }
-  node = nodeImpl
-
   nodeRegistry.set(name, node as unknown as DagNode<unknown, unknown>)
 
   return node

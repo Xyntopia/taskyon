@@ -1,4 +1,3 @@
-import z from 'zod'
 import { createNode, type DagNode } from './dagCore'
 import { emptyObjectSchema, type DagJsonSchema } from './dagSchema'
 
@@ -99,7 +98,8 @@ export const normalizeQueryAxisSpec = (input: QueryAxisInput): QueryAxisSpec | n
 
     const op = input[1]
     if (op === 'index') {
-      const index = typeof input[2] === 'number' && Number.isInteger(input[2]) && input[2] >= 0 ? input[2] : 0
+      const index =
+        typeof input[2] === 'number' && Number.isInteger(input[2]) && input[2] >= 0 ? input[2] : 0
       return { path, op: 'index', index }
     }
     return { path, op: op ?? 'identity' }
@@ -170,7 +170,8 @@ const asDatasetSourceSchema = {
   additionalProperties: false,
 } as const
 
-const withUnique = (prefix: string): string => `${prefix}_${Math.random().toString(36).slice(2, 10)}`
+const withUnique = (prefix: string): string =>
+  `${prefix}_${Math.random().toString(36).slice(2, 10)}`
 
 export type QuerySourceNode = DagNode<unknown, unknown>
 type QueryTransformNode = DagNode<unknown, unknown>

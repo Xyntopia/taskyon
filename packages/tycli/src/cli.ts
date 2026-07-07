@@ -2596,10 +2596,10 @@ async function main() {
   )
 
   writeLine('Registering CLI tools...')
-  let interactiveReadline: ReturnType<typeof createInterface> | undefined
+  const interactiveReadlineRef: { current?: ReturnType<typeof createInterface> } = {}
   const cliTools: InternalTool[] = [
     cliEntryNodeTool,
-    createCliClarificationTool(() => interactiveReadline),
+    createCliClarificationTool(() => interactiveReadlineRef.current),
     explorationTool,
     updateFilesTool,
     downloadFileTool,
@@ -2658,7 +2658,7 @@ async function main() {
     historySize: 500,
     removeHistoryDuplicates: false,
   })
-  interactiveReadline = rl
+  interactiveReadlineRef.current = rl
   rl.on('history', (history) => {
     const normalized = normalizeInputHistory(history)
     history.splice(0, history.length, ...normalized)

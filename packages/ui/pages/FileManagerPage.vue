@@ -209,6 +209,9 @@ type DirHandle = FileSystemDirectoryHandle & {
   entries(): AsyncIterableIterator<[string, FileSystemFileHandle | FileSystemDirectoryHandle]>
 }
 
+const isFileHandle = (handle: FileSystemHandle): handle is FileSystemFileHandle =>
+  handle.kind === 'file'
+
 /** Our node extends Quasar’s, keeps TypeScript happy */
 interface TreeNode extends QTreeNode {
   handle: FileSystemHandle
@@ -240,8 +243,8 @@ async function getDirectoryStats(dir: DirHandle, dirPath: string): Promise<Direc
 
     for await (const [name, handle] of dir.entries()) {
       const fullPath = dirPath ? `${dirPath}/${name}` : name
-      if (handle.kind === 'file') {
-        const file = await (handle as FileSystemFileHandle).getFile()
+      if (isFileHandle(handle)) {
+        const file = await handle.getFile()
         totalSize += file.size
         fileCount += 1
         if (latestModified == null || file.lastModified > latestModified) {
@@ -298,9 +301,8 @@ async function dirHandleToNodes(dir: DirHandle, parentPath = ''): Promise<TreeNo
     console.log('  ├─ found', name, 'kind=', handle.kind)
     const fullPath = parentPath ? `${parentPath}/${name}` : name
 
-    if (handle.kind === 'file') {
-      const fileHandle = handle as FileSystemFileHandle
-      const file = await fileHandle.getFile()
+    if (isFileHandle(handle)) {
+      const file = await handle.getFile()
       out.push({
         id: fullPath,
         label: name,

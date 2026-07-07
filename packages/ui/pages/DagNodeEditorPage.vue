@@ -1,115 +1,70 @@
 <template>
   <q-page class="q-pa-md column q-gutter-md">
     <div class="row items-center q-gutter-sm">
-      <div class="text-h5">DAG Nodes</div>
+      <div class="text-h5">DAG Record Nodes</div>
       <q-space />
-      <q-btn outline icon="account_tree" label="Graph" to="/project/graph" />
-      <q-btn color="primary" icon="add" label="Add" @click="addNode" />
+      <q-btn outline icon="refresh" label="Refresh" @click="refreshFiles" />
+      <q-btn color="primary" icon="add" label="New" @click="createDraft" />
     </div>
 
     <div class="row q-col-gutter-md node-editor-body">
       <div class="col-12 col-md-3">
         <q-list bordered separator>
-          <q-item-label header>Default dynamic nodes</q-item-label>
+          <q-item-label header>Stored record nodes</q-item-label>
           <q-item
-            v-for="node in builtInNodes"
-            :key="node.id"
+            v-for="file in files"
+            :key="file.path"
             clickable
-            :active="node.id === selectedId && selectedKind === 'builtin'"
-            @click="selectNode('builtin', node.id)"
+            :active="file.path === selectedPath"
+            @click="selectFile(file.path)"
           >
             <q-item-section>
-              <q-item-label>{{ node.label }}</q-item-label>
-              <q-item-label caption>{{ node.id }}</q-item-label>
-            </q-item-section>
-            <q-item-section side>
-              <q-icon name="lock" size="18px" />
-            </q-item-section>
-          </q-item>
-
-          <q-separator />
-
-          <q-item-label header>Project dynamic nodes</q-item-label>
-          <q-item
-            v-for="node in projectNodes"
-            :key="node.id"
-            clickable
-            :active="node.id === selectedId && selectedKind === 'project'"
-            @click="selectNode('project', node.id)"
-          >
-            <q-item-section>
-              <q-item-label>{{ node.label }}</q-item-label>
-              <q-item-label caption>{{ node.id }}</q-item-label>
+              <q-item-label>{{ file.label }}</q-item-label>
+              <q-item-label caption>{{ file.path }}</q-item-label>
             </q-item-section>
           </q-item>
         </q-list>
       </div>
 
       <div class="col-12 col-md-9">
-        <q-card v-if="selectedNode" flat bordered>
+        <q-card flat bordered>
           <q-card-section class="row items-center q-gutter-sm">
             <div>
-              <div class="text-subtitle1">{{ selectedNode.label }}</div>
-              <div class="text-caption text-grey-7">{{ selectedNode.id }}</div>
+              <div class="text-subtitle1">{{ selectedLabel }}</div>
+              <div class="text-caption text-grey-7">{{ selectedPath ?? directory }}</div>
             </div>
             <q-space />
-            <q-chip dense square :color="isReadonly ? 'grey-7' : 'primary'" text-color="white">
-              {{ isReadonly ? 'Default' : 'Project' }}
+            <q-chip v-if="normalizedHash" dense square color="primary" text-color="white">
+              {{ normalizedHash }}
             </q-chip>
           </q-card-section>
 
           <q-separator />
 
           <q-card-section class="column q-gutter-md">
-            <q-input v-model="form.label" dense outlined label="Label" :readonly="isReadonly" />
-            <q-input
-              v-model.number="form.timeoutMs"
-              dense
-              outlined
-              type="number"
-              min="100"
-              max="60000"
-              step="100"
-              label="Timeout ms"
-              :readonly="isReadonly"
-            />
-            <q-input
-              v-model="form.inputJson"
-              outlined
-              type="textarea"
-              autogrow
-              label="Input JSON"
-              :readonly="isReadonly"
-            />
-            <CodeEditor v-model="form.code" language="javascript" class="code-editor" />
+            <q-input v-model="directory" dense outlined label="Record node directory" />
+            <CodeEditor v-model="source" language="typescript" class="code-editor" />
           </q-card-section>
 
           <q-separator />
 
           <q-card-actions align="right">
             <q-btn
-              v-if="!isReadonly"
+              v-if="selectedPath"
               flat
               color="negative"
               icon="delete"
               label="Delete"
               @click="deleteSelected"
             />
-            <q-btn outline icon="play_arrow" label="Test" @click="testSelected" />
-            <q-btn
-              v-if="!isReadonly"
-              outline
-              icon="check_circle"
-              label="Use Node"
-              @click="useSelected"
-            />
-            <q-btn v-if="!isReadonly" color="primary" icon="save" label="Save" @click="saveSelected" />
+            <q-btn outline icon="check" label="Validate" @click="validateSource" />
+            <q-btn color="primary" icon="save" label="Normalize & Save" @click="saveSource" />
           </q-card-actions>
         </q-card>
 
-        <q-card v-if="testResult !== null" flat bordered class="q-mt-md">
+        <q-card v-if="status" flat bordered class="q-mt-md">
           <q-card-section>
-            <pre class="node-test-result">{{ testResult }}</pre>
+            <pre class="node-status">{{ status }}</pre>
           </q-card-section>
         </q-card>
       </div>
@@ -118,130 +73,157 @@
 </template>
 
 <script setup lang="ts">
-import CodeEditor from '@taskyon/ui/components/CodeEditor.vue'
-import { computed, reactive, ref, watch } from 'vue'
-import { useJouliosModel } from 'src/stores/model/model'
+import { deleteFile, listFiles, openFile, writeFile } from '@taskyon/comp-dag/opfsStorage'
+import {
+  normalizeStoredGraphNodeSource,
+  saveStoredGraphNodeSource,
+} from '@taskyon/comp-dag/dagNodeLoader'
+import { SELF_HASH_PLACEHOLDER } from '@taskyon/comp-dag/dagNodeIdentity'
+import type { Hash } from '@taskyon/comp-dag/caching'
+import { computed, onMounted, ref } from 'vue'
+import CodeEditor from '../components/CodeEditor.vue'
 
-type NodeKind = 'builtin' | 'project'
-
-const model = useJouliosModel()
-const selectedId = ref<string | null>(null)
-const selectedKind = ref<NodeKind>('builtin')
-const testResult = ref<string | null>(null)
-
-const form = reactive({
-  label: '',
-  timeoutMs: 5_000,
-  inputJson: '{}',
-  code: '',
-})
-
-const builtInNodes = computed(() =>
-  Object.values(model.builtInDynamicNodeDefinitions).sort((a, b) => a.id.localeCompare(b.id)),
-)
-const projectNodes = computed(() =>
-  Object.values(model.dynamicNodeDefinitions).sort((a, b) => a.id.localeCompare(b.id)),
-)
-const selectedNode = computed(() => {
-  if (!selectedId.value) return null
-  return selectedKind.value === 'builtin'
-    ? model.builtInDynamicNodeDefinitions[selectedId.value]
-    : model.dynamicNodeDefinitions[selectedId.value]
-})
-const isReadonly = computed(() => selectedKind.value === 'builtin')
-
-const formatJson = (value: unknown): string => JSON.stringify(value, null, 2)
-
-const readInputJson = (): Record<string, unknown> => {
-  const parsed = JSON.parse(form.inputJson) as unknown
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Input JSON must be an object.')
-  }
-  return parsed as Record<string, unknown>
+type RecordNodeFile = {
+  path: string
+  label: string
 }
 
-const inputDefault = (node: NonNullable<typeof selectedNode.value>): unknown =>
-  (((typeof node.localParamsSchema === 'object' && node.localParamsSchema !== null && 'properties' in node.localParamsSchema
-    ? node.localParamsSchema.properties
-    : undefined) as Record<string, unknown> | undefined)
-    ?.input as Record<string, unknown> | undefined)?.default ?? {}
+const defaultSource = `import type { StoredDagNodeModule } from '@taskyon/comp-dag/dagNodeLoader'
 
-const loadForm = () => {
-  const node = selectedNode.value
-  if (!node) return
-  form.label = node.label
-  form.timeoutMs = node.timeoutMs ?? 5_000
-  form.inputJson = formatJson(inputDefault(node))
-  const runCode = typeof node.runCode === 'string' ? node.runCode : String(node.run ?? '(ctx) => ctx.params')
-  const legacyMatch = runCode.match(/^\(ctx\)\s*=>\s*\(\{\s*value:\s*\(([\s\S]+)\)\(ctx\.params\.input\)\s*\}\)\s*$/)
-  form.code = legacyMatch?.[1]?.trim() ?? runCode
-  testResult.value = null
-}
-
-const selectNode = (kind: NodeKind, id: string) => {
-  selectedKind.value = kind
-  selectedId.value = id
-}
-
-const addNode = () => {
-  const node = model.createDynamicNode()
-  selectNode('project', node.id)
-}
-
-const saveSelected = () => {
-  if (isReadonly.value) return
-  const id = selectedId.value
-  if (!id) return
-  model.updateDynamicNode(id, {
-    label: form.label,
-    timeoutMs: form.timeoutMs,
-    input: readInputJson(),
-    code: form.code,
-  })
-  loadForm()
-}
-
-const useSelected = () => {
-  if (isReadonly.value) return
-  const id = selectedId.value
-  if (!id) return
-  saveSelected()
-  model.selectedOutputNode = id
-}
-
-const testSelected = async () => {
-  const id = selectedId.value
-  if (!id) return
-  try {
-    if (!isReadonly.value) saveSelected()
-    const node = model.getOutputNode(id)
-    const { value } = await node.call({ input: readInputJson() } as never).run()
-    testResult.value = formatJson(value)
-  } catch (error) {
-    testResult.value = error instanceof Error ? error.message : String(error)
-  }
-}
-
-const deleteSelected = () => {
-  if (isReadonly.value) return
-  const id = selectedId.value
-  if (!id) return
-  model.deleteDynamicNode(id)
-  const next = projectNodes.value[0] ?? builtInNodes.value[0]
-  if (next) selectNode(projectNodes.value[0] ? 'project' : 'builtin', next.id)
-}
-
-watch([selectedId, selectedKind], loadForm)
-watch(
-  [builtInNodes, projectNodes],
-  () => {
-    if (selectedNode.value) return
-    const first = builtInNodes.value[0] ?? projectNodes.value[0]
-    if (!first) return
-    selectNode(builtInNodes.value[0] ? 'builtin' : 'project', first.id)
+export default {
+  id: '${SELF_HASH_PLACEHOLDER}',
+  localName: 'example_record_node',
+  label: 'Example Record Node',
+  version: 1,
+  localParamsSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      input: {
+        type: 'object',
+        additionalProperties: true,
+        default: {},
+      },
+    },
   },
-  { immediate: true },
-)
+  outputSchema: {
+    type: 'object',
+    additionalProperties: true,
+    properties: {},
+  },
+  inputs: {},
+  run: ({ params }: { params: Record<string, unknown>; inputs: Record<string, unknown> }) => ({
+    value: params.input ?? {},
+  }),
+} satisfies StoredDagNodeModule
+`
+
+const directory = ref('dag-record-nodes')
+const files = ref<RecordNodeFile[]>([])
+const selectedPath = ref<string | null>(null)
+const source = ref(defaultSource)
+const status = ref<string | null>(null)
+const normalizedHash = ref<Hash | null>(null)
+
+const selectedLabel = computed(() => {
+  if (!selectedPath.value) return 'New record node'
+  return files.value.find((file) => file.path === selectedPath.value)?.label ?? selectedPath.value
+})
+
+const nodePath = (fileName: string): string => `${directory.value.replace(/\/+$/, '')}/${fileName}`
+
+const fileLabel = (fileName: string): string => fileName.replace(/\.sha256_[A-Za-z0-9_-]+\.ts$/, '')
+
+const setStatus = (message: string, data?: unknown) => {
+  status.value = data === undefined ? message : `${message}\n${JSON.stringify(data, null, 2)}`
+}
+
+const refreshFiles = async () => {
+  try {
+    const names = await listFiles(directory.value)
+    files.value = names
+      .filter((name) => name.endsWith('.ts'))
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ path: nodePath(name), label: fileLabel(name) }))
+    setStatus(`Loaded ${files.value.length} record node file(s).`)
+  } catch (error) {
+    files.value = []
+    setStatus(error instanceof Error ? error.message : String(error))
+  }
+}
+
+const createDraft = () => {
+  selectedPath.value = null
+  source.value = defaultSource
+  normalizedHash.value = null
+  status.value = null
+}
+
+const selectFile = async (path: string) => {
+  selectedPath.value = path
+  normalizedHash.value = null
+  try {
+    source.value = await (await openFile(path)).text()
+    await validateSource()
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : String(error))
+  }
+}
+
+const validateSource = async () => {
+  try {
+    const normalized = await normalizeStoredGraphNodeSource(source.value)
+    normalizedHash.value = normalized.node.id === SELF_HASH_PLACEHOLDER ? null : normalized.node.id
+    setStatus('Record node source is valid.', {
+      id: normalized.node.id,
+      localName: normalized.node.localName,
+      label: normalized.node.label,
+      version: normalized.node.version,
+    })
+  } catch (error) {
+    normalizedHash.value = null
+    setStatus(error instanceof Error ? error.message : String(error))
+  }
+}
+
+const saveSource = async () => {
+  try {
+    const saved = await saveStoredGraphNodeSource(source.value, { directory: directory.value })
+    if (selectedPath.value && selectedPath.value !== saved.file.path) {
+      await deleteFile(selectedPath.value)
+    }
+    await writeFile(
+      saved.file.path,
+      new File([saved.file.source], saved.file.path.split('/').at(-1) ?? 'node.ts', {
+        type: 'text/typescript',
+      }),
+    )
+    selectedPath.value = saved.file.path
+    source.value = saved.file.source
+    normalizedHash.value = saved.hash
+    await refreshFiles()
+    setStatus('Record node normalized and saved.', {
+      path: saved.file.path,
+      hash: saved.hash,
+      localName: saved.node.localName,
+    })
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : String(error))
+  }
+}
+
+const deleteSelected = async () => {
+  if (!selectedPath.value) return
+  try {
+    await deleteFile(selectedPath.value)
+    createDraft()
+    await refreshFiles()
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : String(error))
+  }
+}
+
+onMounted(refreshFiles)
 </script>
 
 <style scoped>
@@ -250,11 +232,11 @@ watch(
 }
 
 .code-editor {
-  min-height: 280px;
+  min-height: 460px;
   border: 1px solid rgba(127, 127, 127, 0.35);
 }
 
-.node-test-result {
+.node-status {
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

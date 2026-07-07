@@ -195,10 +195,10 @@ export const testTaskPlannerBreakdownBranchTerminates = async () => {
   if (!taskPlanner.function) throw new Error('Expected taskPlanner to have a function')
 
   const context: toolContext = {
-    getExecutionTaskChain: async () => createPlannerContext(),
+    getExecutionTaskChain: () => Promise.resolve(createPlannerContext()),
     createSubtasksResult,
-    getSecret: async () => null,
-    setSecret: async () => undefined,
+    getSecret: () => Promise.resolve(null),
+    setSecret: () => Promise.resolve(),
     stopSignal: new AbortController().signal,
     toolId: 'test-task-planner',
   }
@@ -218,10 +218,10 @@ export const testTaskPlannerDefaultsToSequentialGroups = async () => {
   if (!taskPlanner.function) throw new Error('Expected taskPlanner to have a function')
 
   const context: toolContext = {
-    getExecutionTaskChain: async () => createPlannerContext(),
+    getExecutionTaskChain: () => Promise.resolve(createPlannerContext()),
     createSubtasksResult,
-    getSecret: async () => null,
-    setSecret: async () => undefined,
+    getSecret: () => Promise.resolve(null),
+    setSecret: () => Promise.resolve(),
     stopSignal: new AbortController().signal,
     toolId: 'test-task-planner',
   }

@@ -32,7 +32,7 @@ export const objectSchema = <
 >(args?: {
   properties?: Properties
   required?: Required
-  additionalProperties?: boolean | DagJsonSchema
+  additionalProperties?: DagJsonSchema
   description?: string
   title?: string
 }) =>
@@ -146,10 +146,7 @@ export const schemaArrayElement = (schema: DagJsonSchema): DagJsonSchema | null 
   return items as DagJsonSchema
 }
 
-export const combineObjectSchemas = (
-  left: DagJsonSchema,
-  right: DagJsonSchema,
-): DagJsonSchema => {
+export const combineObjectSchemas = (left: DagJsonSchema, right: DagJsonSchema): DagJsonSchema => {
   const leftObj = isObjectRecord(left) ? left : {}
   const rightObj = isObjectRecord(right) ? right : {}
   return {

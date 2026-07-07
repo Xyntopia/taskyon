@@ -1,6 +1,11 @@
 // modelicaTools.ts
 
-import { createChatCompletionTask, createTool, makeTaskResult, toolCall } from '@taskyon/tyclient'
+import {
+  createChatCompletionTask,
+  createClientTool,
+  createSubtasksResult,
+  toolCall,
+} from '@taskyon/tyclient'
 import type { JSONSchema7 } from 'json-schema'
 import { Notify } from 'quasar'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
@@ -154,7 +159,7 @@ export const createModelicatools = ({
   createNewVersion: (description?: string) => void
   compileNow?: () => Promise<{ ok: boolean; message?: string }>
 }) => [
-  createTool({
+  createClientTool({
     name: 'modelicaDocumentAssistant',
     description:
       'Main assistant that inspects the current Modelica and template sources and decides on edits.',
@@ -181,7 +186,7 @@ export const createModelicatools = ({
       const compileLooksBroken = compileStatus.state === 'error'
 
       if (useTools && compileLooksBroken) {
-        return makeTaskResult([
+        return createSubtasksResult([
           {
             role: 'assistant',
             content: {
@@ -256,9 +261,9 @@ ${sourcesSection}
 5. If compilation is failing, prefer calling autoFixModelicaCompilationCycle.
 `
 
-      return makeTaskResult([
+      return createSubtasksResult([
         createChatCompletionTask({
-          prompts: [contextPrompt],
+          appendSystemPrompts: [contextPrompt],
           allowedTools: [
             'updateModelicaDocument',
             'getModelicaCompilerStatus',
@@ -269,7 +274,7 @@ ${sourcesSection}
     },
   }),
 
-  createTool({
+  createClientTool({
     name: 'getModelicaCompilerStatus',
     description:
       'Return the latest compile / ABI status and recent relevant logs so the agent can decide next edits.',
@@ -316,7 +321,7 @@ ${sourcesSection}
         payload.templateSourceWithLines = formatContentWithLineNumbers(templateSource.value || '')
       }
 
-      return makeTaskResult([
+      return createSubtasksResult([
         {
           role: 'system',
           content: {
@@ -328,7 +333,7 @@ ${sourcesSection}
     },
   }),
 
-  createTool({
+  createClientTool({
     name: 'autoFixModelicaCompilationCycle',
     description:
       'Autonomous compile-fix loop: inspect latest compile errors, patch documents, and re-check until success.',
@@ -373,7 +378,7 @@ ${sourcesSection}
               : 'error'
 
       if (compileState === 'success') {
-        return makeTaskResult([
+        return createSubtasksResult([
           {
             role: 'system',
             content: {
@@ -385,7 +390,7 @@ ${sourcesSection}
       }
 
       if (round > max) {
-        return makeTaskResult([
+        return createSubtasksResult([
           {
             role: 'system',
             content: {
@@ -438,10 +443,10 @@ Constraints:
 - Prefer fixing template/solver when error is JS/render/runtime.
 `
 
-      return makeTaskResult([
+      return createSubtasksResult([
         [
           createChatCompletionTask({
-            prompts: [cyclePrompt],
+            appendSystemPrompts: [cyclePrompt],
             allowedTools: ['updateModelicaDocument'],
           }),
           toolCall({
@@ -457,7 +462,7 @@ Constraints:
     },
   }),
 
-  createTool({
+  createClientTool({
     name: 'updateModelicaDocument',
     description:
       'Apply line-based updates to Modelica and or template and create a version snapshot.',
@@ -503,15 +508,13 @@ Constraints:
       required: ['updates'],
       additionalProperties: false,
     } as const satisfies JSONSchema7,
-    function: async (
-      {
-        updates,
-        description,
-      }: {
-        updates: ModelicaDocumentUpdate[]
-        description?: string
-      },
-    ) => {
+    function: async ({
+      updates,
+      description,
+    }: {
+      updates: ModelicaDocumentUpdate[]
+      description?: string
+    }) => {
       const totalEdits = updates.reduce((acc, update) => {
         const patchCount = Array.isArray(update.patches) ? update.patches.length : 0
         const newContentStr = typeof update.newContent === 'string' ? update.newContent : ''
@@ -524,9 +527,9 @@ Constraints:
           type: 'warning',
           message: 'No edits provided in updateModelicaDocument call',
         })
-        return makeTaskResult([
+        return createSubtasksResult([
           createChatCompletionTask({
-            prompts: [
+            appendSystemPrompts: [
               'You called updateModelicaDocument but did not provide any patches or newContent. Provide edits or do not call the tool.',
             ],
             allowedTools: ['updateModelicaDocument'],
@@ -614,7 +617,7 @@ Constraints:
         }
       }
 
-      return makeTaskResult([
+      return createSubtasksResult([
         {
           role: 'system',
           content: {
