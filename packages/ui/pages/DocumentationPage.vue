@@ -161,15 +161,9 @@ watch(
   width: 300px
   min-width: 240px
   max-width: 34vw
-  border-right: 1px solid rgba(0, 0, 0, 0.12)
-  background: #fafafa
 
 .documentation-page__sidebar-header
   padding: 16px
-
-.documentation-page__item--active
-  background: rgba(25, 118, 210, 0.1)
-  color: #0d47a1
 
 .documentation-page__content
   flex: 1
@@ -192,5 +186,4 @@ watch(
     max-width: none
     height: 240px
     border-right: 0
-    border-bottom: 1px solid rgba(0, 0, 0, 0.12)
 </style>

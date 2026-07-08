@@ -6,9 +6,9 @@ import type { FunctionArguments } from '../types/tools'
 import { createPgLiteCrudWrapper, createVectorStore } from '../utils/crudWrapper'
 import { sha256UrlSafeHash } from '../utils/encoding'
 import type { TyPGDB } from '../utils/pglite.api'
+import { taskyonDocsProviderToolName } from './documentationProviderTool'
 
 export const taskyonDocsCorpusId = 'taskyon-docs'
-export const taskyonDocsProviderToolName = 'getTaskyonDocumentationDocuments'
 
 const DocumentationDocument = z.object({
   id: z.string().min(1),

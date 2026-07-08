@@ -156,6 +156,36 @@ html.no-ptr
   .raw-markdown
     white-space: pre-wrap // This will display newlines and wrap text
 
+  .documentation-page
+    color: var(--frontpage-ink)
+
+  .documentation-page__sidebar
+    background: var(--frontpage-card-bg)
+    border-right: 1px solid var(--frontpage-hairline)
+
+  .documentation-page__sidebar-header
+    border-bottom: 1px solid var(--frontpage-hairline)
+
+  .documentation-page__content-header
+    border-bottom: 1px solid var(--frontpage-hairline)
+
+  .documentation-page__item
+    color: var(--frontpage-ink)
+
+    &:hover
+      background: var(--chat-sidebar-row-bg)
+
+  .documentation-page__item--active
+    background: var(--chat-sidebar-active-bg)
+    color: var(--frontpage-ink)
+
+  .documentation-page .q-item__label--caption
+    color: var(--frontpage-muted)
+
+  @media (max-width: 720px)
+    .documentation-page__sidebar
+      border-bottom: 1px solid var(--frontpage-hairline)
+
   .chat-drop-zone
     color: rgb($secondary)
 

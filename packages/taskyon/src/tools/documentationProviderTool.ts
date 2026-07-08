@@ -1,8 +1,17 @@
 import type { JSONSchema7 } from 'json-schema'
 import type { ClientTool } from '../types/toolApi'
 import { createClientTool } from '../types/toolApi'
-import type { DocumentationDocument } from './documentationTool'
-import { taskyonDocsProviderToolName } from './documentationTool'
+
+export const taskyonDocsProviderToolName = 'getTaskyonDocumentationDocuments'
+
+export type DocumentationDocument = {
+  id: string
+  path: string
+  title?: string
+  url?: string
+  content: string
+  metadata?: Record<string, unknown>
+}
 
 export type DocumentationProviderLoader = () => Promise<{
   documents: DocumentationDocument[]
