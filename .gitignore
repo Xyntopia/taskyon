@@ -55,6 +55,7 @@ playwright-report/
 
 # this file holds secrets
 cypress.env.json
+playwright.env.json
 .aider*
 
 # here we compile public libraries that other people might want to use for taskyon:
