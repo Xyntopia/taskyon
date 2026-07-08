@@ -1,5 +1,5 @@
 import { constants } from 'node:fs'
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 import { createCryptoSession, type CryptoSession, type Taskyon } from '@taskyon/taskyon'
@@ -10,8 +10,13 @@ import { API_KEY_STORE_NAME, type StoredConfig } from './types'
 const PREFERRED_CONFIG_DIR = join(homedir(), '.config', 'tycli')
 const PREFERRED_CONFIG_FILE = join(PREFERRED_CONFIG_DIR, 'config.json')
 const FALLBACK_CONFIG_DIR = join('/tmp', 'tycli')
+const CONFIG_LOCK_STALE_MS = 30_000
+const CONFIG_LOCK_TIMEOUT_MS = 10_000
+const CONFIG_LOCK_RETRY_MS = 50
 let cachedConfigFile: string | null = null
 let configWriteQueue = Promise.resolve()
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 async function useFallbackConfigFile() {
   await mkdir(FALLBACK_CONFIG_DIR, { recursive: true })
@@ -61,13 +66,59 @@ export async function loadStoredConfig(): Promise<StoredConfig> {
 async function saveStoredConfig(next: StoredConfig) {
   const configFile = await resolveConfigFilePath()
   const body = `${JSON.stringify(next, null, 2)}\n`
+  const writeAtomically = async (filePath: string) => {
+    const tmpFile = `${filePath}.${process.pid}.${Date.now()}.tmp`
+    await writeFile(tmpFile, body, 'utf8')
+    await rename(tmpFile, filePath)
+  }
+
   try {
     await mkdir(dirname(configFile), { recursive: true })
-    await writeFile(configFile, body, 'utf8')
+    await writeAtomically(configFile)
   } catch (error) {
     if (configFile.includes(FALLBACK_CONFIG_DIR)) throw error
     const fallbackFile = await useFallbackConfigFile()
-    await writeFile(fallbackFile, body, 'utf8')
+    await writeAtomically(fallbackFile)
+  }
+}
+
+async function removeStaleConfigLock(lockDir: string) {
+  try {
+    const info = await stat(lockDir)
+    if (Date.now() - info.mtimeMs > CONFIG_LOCK_STALE_MS) {
+      await rm(lockDir, { recursive: true, force: true })
+    }
+  } catch {
+    // Missing or unreadable lock state is handled by the next mkdir attempt.
+  }
+}
+
+async function acquireConfigFileLock(lockDir: string) {
+  const startedAt = Date.now()
+  for (;;) {
+    try {
+      await mkdir(lockDir)
+      return
+    } catch (error) {
+      const code = error && typeof error === 'object' ? Reflect.get(error, 'code') : undefined
+      if (code !== 'EEXIST') throw error
+      await removeStaleConfigLock(lockDir)
+      if (Date.now() - startedAt > CONFIG_LOCK_TIMEOUT_MS) {
+        throw new Error(`Timed out waiting for tycli config lock: ${lockDir}`)
+      }
+      await sleep(CONFIG_LOCK_RETRY_MS)
+    }
+  }
+}
+
+async function withConfigFileLock<T>(run: () => Promise<T>): Promise<T> {
+  const configFile = await resolveConfigFilePath()
+  const lockDir = join(dirname(configFile), 'config.lock')
+  await acquireConfigFileLock(lockDir)
+  try {
+    return await run()
+  } finally {
+    await rm(lockDir, { recursive: true, force: true })
   }
 }
 
@@ -75,8 +126,10 @@ export async function persistConfigPatch(patch: Partial<StoredConfig>) {
   const write = configWriteQueue
     .catch(() => {})
     .then(async () => {
-      const current = await loadStoredConfig()
-      await saveStoredConfig({ ...current, ...patch })
+      await withConfigFileLock(async () => {
+        const current = await loadStoredConfig()
+        await saveStoredConfig({ ...current, ...patch })
+      })
     })
   configWriteQueue = write.catch(() => {})
   await write
@@ -142,42 +195,44 @@ async function createPersistableDeviceKeyPair(): Promise<CryptoKeyPair> {
 }
 
 export async function initPersistentCryptoSession() {
-  const stored = await loadStoredConfig()
-  const persistedDevice = stored.deviceKeyPairJwk
-    ? await importDeviceKeyPair(stored.deviceKeyPairJwk)
-    : await createPersistableDeviceKeyPair()
+  return await withConfigFileLock(async () => {
+    const stored = await loadStoredConfig()
+    const persistedDevice = stored.deviceKeyPairJwk
+      ? await importDeviceKeyPair(stored.deviceKeyPairJwk)
+      : await createPersistableDeviceKeyPair()
 
-  const cs = await createCryptoSession({
-    deviceKeyPair: persistedDevice,
-    wrappedSK: stored.wrappedSessionKey,
-  })
-
-  let exported: Awaited<ReturnType<typeof exportDeviceKeyPair>>
-  try {
-    exported = await exportDeviceKeyPair(cs.getDeviceKey())
-  } catch {
-    const freshPair = await createPersistableDeviceKeyPair()
-    const refreshed = await createCryptoSession({
-      deviceKeyPair: freshPair,
+    const cs = await createCryptoSession({
+      deviceKeyPair: persistedDevice,
       wrappedSK: stored.wrappedSessionKey,
     })
-    exported = await exportDeviceKeyPair(refreshed.getDeviceKey())
-    const wrappedSessionKey = await refreshed.exportSessionKey()
+
+    let exported: Awaited<ReturnType<typeof exportDeviceKeyPair>>
+    try {
+      exported = await exportDeviceKeyPair(cs.getDeviceKey())
+    } catch {
+      const freshPair = await createPersistableDeviceKeyPair()
+      const refreshed = await createCryptoSession({
+        deviceKeyPair: freshPair,
+        wrappedSK: stored.wrappedSessionKey,
+      })
+      exported = await exportDeviceKeyPair(refreshed.getDeviceKey())
+      const wrappedSessionKey = await refreshed.exportSessionKey()
+      await saveStoredConfig({
+        ...stored,
+        deviceKeyPairJwk: exported,
+        wrappedSessionKey,
+      })
+      return { cryptoSession: refreshed, stored }
+    }
+    const wrappedSessionKey = await cs.exportSessionKey()
     await saveStoredConfig({
       ...stored,
       deviceKeyPairJwk: exported,
       wrappedSessionKey,
     })
-    return { cryptoSession: refreshed, stored }
-  }
-  const wrappedSessionKey = await cs.exportSessionKey()
-  await saveStoredConfig({
-    ...stored,
-    deviceKeyPairJwk: exported,
-    wrappedSessionKey,
-  })
 
-  return { cryptoSession: cs, stored }
+    return { cryptoSession: cs, stored }
+  })
 }
 
 const createConfigSecretCrud = (): CrudWrapper<EncryptedDataRow> => {

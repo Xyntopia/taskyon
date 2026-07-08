@@ -1,6 +1,10 @@
 import { dump } from 'js-yaml'
 import z from 'zod'
-import { chatCompletionToolName, createChatCompletionTool } from '../tools/chatCompletionTool'
+import {
+  chatCompletionToolName,
+  createChatCompletionTool,
+  type chunkStreamType,
+} from '../tools/chatCompletionTool'
 import { devTools } from '../tools/devTools'
 import {
   createDocumentationIndexTool,
@@ -41,12 +45,7 @@ import type { CryptoSession } from '../utils/cryptoSession'
 import { createCryptoSession } from '../utils/cryptoSession'
 import type { EncryptedDataRow } from '../utils/encrypt'
 import { encryptCompressObject } from '../utils/fileUtils'
-import type {
-  extractStreamType,
-  IframeMultiPlexer,
-  Port,
-  ProtocolMessage,
-} from '@taskyon/common/modules/frpBus'
+import type { IframeMultiPlexer, Port, ProtocolMessage } from '@taskyon/common/modules/frpBus'
 import {
   createIframeMux,
   createMessagePortAdapter,
@@ -64,7 +63,7 @@ import { MAX_REMOTE_FUNCTION_TIMEOUT_MS, taskyonProtocol } from '../api/taskyonP
 import type { TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
 import { generateSecretId } from './taskFunctionExecutor'
-import { runTaskWorker } from './taskWorker'
+import { runTaskWorker, type TyTaskStreamData } from './taskWorker'
 import {
   createToolExecutionClient,
   registerToolRpcBroker,
@@ -76,22 +75,29 @@ import { createWithDefaults } from './tools'
 import type { ReadonlyDeep } from 'type-fest'
 
 type TaskyonProtocolMessage = ProtocolMessage<typeof taskyonProtocol>
+type TaskStreamEvent = Parameters<TyTaskManager['taskStream']>[0] extends (
+  event: infer Event,
+) => void | Promise<void>
+  ? Event
+  : never
+
+type SessionStreamObservers = {
+  worker: (event: TyTaskStreamData) => void
+  chatCompletion: (event: chunkStreamType) => void
+  task: Parameters<TyTaskManager['taskStream']>[0]
+}
 
 function createApi(
   insidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
-  taskManagerInstance: Thunk<TyTaskManager>,
+  taskManagerInstance: TyTaskManager,
   queueTask: (id: string) => void,
-  cs: Thunk<CryptoSession>,
-  sendEncryptedTasks?: Thunk<boolean>,
 ) {
-  const taskyonApi = createPortClient(insidePort, taskyonProtocol)
-
-  createPortServer(
+  return createPortServer(
     insidePort,
     taskyonProtocol,
     {
       createTask: async (msg) => {
-        const tn = await taskManagerInstance().addPartialTask2Tree({
+        const tn = await taskManagerInstance.addPartialTask2Tree({
           ...msg.task,
           //label: msg.origin ? [msg.origin] : undefined,
         })
@@ -105,7 +111,7 @@ function createApi(
         const ts = await Promise.all(
           msg.tasks.map(
             async (t) =>
-              await taskManagerInstance().addPartialTask2Tree({
+              await taskManagerInstance.addPartialTask2Tree({
                 ...t,
                 //label: msg.origin ? [msg.origin] : undefined,
               }),
@@ -117,7 +123,7 @@ function createApi(
       registerTool: (msg) => {
         const newFunc: ToolBase = msg
         console.log('registerTool was sent', newFunc)
-        void taskManagerInstance().addDefaultTools([newFunc])
+        void taskManagerInstance.addDefaultTools([newFunc])
         insidePort.send({
           type: 'status',
           data: {
@@ -127,12 +133,12 @@ function createApi(
         })
       },
       addFile: async (msg) => {
-        const id = await taskManagerInstance().addFiles([msg.file], msg.store ?? 'memory')
+        const id = await taskManagerInstance.addFiles([msg.file], msg.store ?? 'memory')
         console.log('received file...', id, msg)
       },
       listTools: async (request) =>
-        await taskManagerInstance().updateToolDefinitions(request.includeHidden),
-      getTask: async ({ id }) => (await taskManagerInstance().getTask(id)) ?? null,
+        await taskManagerInstance.updateToolDefinitions(request.includeHidden),
+      getTask: async ({ id }) => (await taskManagerInstance.getTask(id)) ?? null,
     },
     {
       onError: (error) =>
@@ -140,44 +146,6 @@ function createApi(
       onUnknownMessage: (msg) => console.warn('taskyon receiving unknown message', msg),
     },
   )
-
-  let unsubscribeTaskStream: (() => void) | null = null
-  const reconnectTaskStreamBridge = () => {
-    unsubscribeTaskStream?.()
-    unsubscribeTaskStream = taskManagerInstance().taskStream(async ({ data: task, id }) => {
-      // if task is not null, it was freshly created/updated
-      if (task) {
-        insidePort.send({ type: 'taskCreated', task })
-
-        if (sendEncryptedTasks?.()) {
-          const archiveName = `${id}.tyt`
-
-          const packed = await encryptCompressObject(
-            task,
-            archiveName,
-            () => cs().getUserPublicKey()?.publicKey,
-            () => cs().getSessionKey(),
-          )
-          console.log('created encrypted task file...', id)
-
-          void taskyonApi
-            .importTaskArchive({
-              data: packed,
-              info: archiveName,
-              ids: [String(id)],
-            })
-            .catch((error) => {
-              console.error('failed to send encrypted task archive to peer', error)
-            })
-        }
-      }
-    })
-  }
-  reconnectTaskStreamBridge()
-
-  return {
-    reconnectTaskStreamBridge,
-  }
 }
 
 type CreateIframeMultiPlexer = () => IframeMultiPlexer
@@ -241,12 +209,17 @@ const dynamicContext =
   (
     llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
     entryNode: Thunk<ReadonlyDeep<partialTaskDraft>>,
-    ToolList: InternalTool[],
+    baseToolList: InternalTool[],
     outsidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
     insidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
     iframeMultiPlexer: IframeMultiPlexer,
     toolchainConfig: Thunk<Record<string, FunctionArguments>>,
-    options: { indexTaskVectors: boolean; secretStore?: SecretStore },
+    options: {
+      indexTaskVectors: boolean
+      secretStore?: SecretStore
+      sendEncryptedTasks?: Thunk<boolean>
+      streamObservers: SessionStreamObservers
+    },
   ) =>
   async (cs: CryptoSession) => {
     // if our cryptoSession changes, we need to re-calculate everything below!
@@ -288,7 +261,8 @@ const dynamicContext =
       }
     }, taskManagerInstance)
 
-    ToolList.push(
+    const sessionToolList = [
+      ...baseToolList,
       localVectorStore(db),
       createDocumentationIndexTool(db),
       createTaskyonDocumentationTool(db),
@@ -296,19 +270,21 @@ const dynamicContext =
       createToolSearcher(taskManagerInstance),
       createMcpToolImporter(taskManagerInstance),
       taskSearcher(taskManagerInstance),
-    )
-    taskManagerInstance.addDefaultTools(ToolList)
+    ]
+    taskManagerInstance.addDefaultTools(sessionToolList)
     await taskManagerInstance.updateToolDefinitions()
     //const { port: taskPort } = createZodPort(inPort, TaskWorkerMessage)
 
     // keys could porentially be reactive here, so in theory, when they change in the GUI,
     // taskyon should automatically pick up on this...
     console.log('starting taskyon worker')
-    const { port: workerport } = createTypeFilteredPort(insidePort, ['functionResponse'])
-    const { port: coreToolRpcPort } = createTypeFilteredPort(outsidePort, [
+    const workerPortFilter = createTypeFilteredPort(insidePort, ['functionResponse'])
+    const workerport = workerPortFilter.port
+    const coreToolRpcPortFilter = createTypeFilteredPort(outsidePort, [
       'functionCall',
       'functionCancel',
     ])
+    const coreToolRpcPort = coreToolRpcPortFilter.port
     const coreToolExecutor = registerToolRpcExecutor({
       port: coreToolRpcPort,
       getTool: async (name) => {
@@ -398,16 +374,69 @@ const dynamicContext =
       defaultTimeoutMs: MAX_REMOTE_FUNCTION_TIMEOUT_MS,
     })
     const toolExecutionClient = createToolExecutionClient(workerport)
+    const taskyonApi = createPortClient(insidePort, taskyonProtocol)
+    const unsubscribeApiServer = createApi(insidePort, taskManagerInstance, (id: string) =>
+      queueTask(id),
+    )
+    let disposed = false
+    const unsubscribeTaskStreamBridge = taskManagerInstance.taskStream(
+      async ({ data: task, id }) => {
+        // if task is not null, it was freshly created/updated
+        if (task) {
+          insidePort.send({ type: 'taskCreated', task })
+
+          if (options.sendEncryptedTasks?.()) {
+            const archiveName = `${id}.tyt`
+
+            const packed = await encryptCompressObject(
+              task,
+              archiveName,
+              () => cs.getUserPublicKey()?.publicKey,
+              () => cs.getSessionKey(),
+            )
+            console.log('created encrypted task file...', id)
+
+            void taskyonApi
+              .importTaskArchive({
+                data: packed,
+                info: archiveName,
+                ids: [String(id)],
+              })
+              .catch((error) => {
+                console.error('failed to send encrypted task archive to peer', error)
+              })
+          }
+        }
+      },
+    )
+    const unsubscribeSessionStreams = [
+      workerStream(options.streamObservers.worker),
+      chatCompletionStream(options.streamObservers.chatCompletion),
+      taskManagerInstance.taskStream(options.streamObservers.task),
+    ]
     //##################### END INIT CTX #################
     return {
-      chatCompletionStream,
-      workerStream,
       callTool: (name: string, args: FunctionArguments) => toolExecutionClient.callTool(name, args),
       workerStop: (message: string) => {
         console.log('tycore stopping all tasks:', message)
         workerStop(message)
         workerToolBroker.stop(message)
         coreToolExecutor.stop(message)
+      },
+      dispose: (message: string) => {
+        if (disposed) return
+        disposed = true
+        console.log('tycore disposing session context:', message)
+        unsubscribeSessionStreams.forEach((unsubscribe) => unsubscribe())
+        workerStop(message)
+        workerToolBroker.stop(message)
+        coreToolExecutor.stop(message)
+        unsubscribeApiServer()
+        unsubscribeTaskStreamBridge()
+        workerToolBroker.destroy()
+        coreToolExecutor.destroy()
+        workerPortFilter.destroy()
+        coreToolRpcPortFilter.destroy()
       },
       queueTask,
       taskManagerInstance,
@@ -438,6 +467,9 @@ export async function tyCore(
   const { outsidePort, insidePort, iframeMultiPlexer, ToolList } = staticContext(
     options?.createIframeMultiPlexer ?? createRuntimeIframeMux,
   )
+  const workerStream = createStream<TyTaskStreamData>()
+  const chatCompletionStream = createStream<chunkStreamType>()
+  const taskStream = createStream<TaskStreamEvent>()
 
   // TODO: encapsulate this into a "createCtx" function
   //       which also handles the initilaization of ctx..
@@ -457,6 +489,11 @@ export async function tyCore(
     {
       indexTaskVectors: options?.indexTaskVectors !== false,
       ...(options?.secretStore ? { secretStore: options.secretStore } : {}),
+      streamObservers: {
+        worker: workerStream.emit,
+        chatCompletion: chatCompletionStream.emit,
+        task: taskStream.emit,
+      },
     },
   )
 
@@ -464,39 +501,19 @@ export async function tyCore(
   //       ideally, the API would be the only thing that communicates with the outside!
   let ctx = await ctxCreator(cs)
 
-  // receive events
-  // the Api is static and never needs to change!
-  const apiBridge = createApi(
-    insidePort,
-    () => ctx.taskManagerInstance,
-    (id: string) => ctx.queueTask(id),
-    () => cs,
-  )
-
-  const workerStream = createStream<extractStreamType<typeof ctx.workerStream>>()
-  const chatCompletionStream = createStream<extractStreamType<typeof ctx.chatCompletionStream>>()
-  const taskStream = createStream<extractStreamType<typeof ctx.taskManagerInstance.taskStream>>()
-
-  const connectStreams = () => {
-    // re-connect all streams
-    ctx.workerStream(workerStream.emit)
-    ctx.chatCompletionStream(chatCompletionStream.emit)
-    ctx.taskManagerInstance.taskStream(taskStream.emit)
-  }
-
-  connectStreams()
-
-  const setNewSession = async (newCs: CryptoSession) => {
-    console.log('tycore setting new crypto session...')
+  const replaceSessionContext = async (newCs: CryptoSession) => {
+    ctx.dispose('switching crypto session')
     cs = newCs
     // we need to re-initialize our entire context in order to have access to key store, decrypted data
     // etc with the new session...
     ctx = await ctxCreator(cs)
 
-    connectStreams()
-    apiBridge.reconnectTaskStreamBridge()
-
     console.log('tycore finished initializing new session...')
+  }
+
+  const setNewSession = async (newCs: CryptoSession) => {
+    console.log('tycore setting new crypto session...')
+    await replaceSessionContext(newCs)
   }
 
   const api = {

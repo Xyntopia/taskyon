@@ -8,6 +8,7 @@ import { callToolOverRpc, registerToolRpcTools } from '../core/toolRpc'
 import type { ToolRpcCallMessage, ToolRpcFunctionResponseMessage } from '../core/toolRpc'
 import type { TaskyonMessage } from '../types/apiTypes'
 import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
+import { createCryptoSession } from '../utils/cryptoSession'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -53,6 +54,55 @@ export const testRemoteFunctionBridgeHonorsToolTimeoutMs = async () => {
 testRemoteFunctionBridgeHonorsToolTimeoutMs.description =
   'Honors a remote tool call timeoutMs value instead of timing out all remote bridge calls after 30 seconds.'
 testRemoteFunctionBridgeHonorsToolTimeoutMs.timeoutMs = 35_000
+
+export const testTyCoreStableTaskStreamSurvivesSessionSwitch = async () => {
+  const dataDir = join(tmpdir(), `taskyon-session-stream-${Date.now()}`)
+  await mkdir(dataDir, { recursive: true })
+  const ty = await tyCore(
+    () => ({
+      selectedApi: 'test',
+      llmApis: {},
+      siteUrl: 'https://taskyon.space',
+      entryFunction: 'entryNode',
+    }),
+    () =>
+      toolCall({
+        name: 'entryNode',
+        arguments: {},
+      }),
+    () => ({}),
+    undefined,
+    { indexTaskVectors: false, nodePgLiteDataDir: dataDir },
+  )
+
+  const waitForMessage = (message: string) =>
+    ty.taskStream
+      .filter(({ data }) => data?.content.type === 'message' && data.content.data === message)
+      .wait({ timeoutMs: 1000 })
+
+  try {
+    const beforeSwitch = waitForMessage('before session switch')
+    await ty.addPartialTask2Tree({
+      role: 'user',
+      content: { type: 'message', data: 'before session switch' },
+    })
+    await beforeSwitch
+
+    await ty.setNewSession(await createCryptoSession())
+
+    const afterSwitch = waitForMessage('after session switch')
+    await ty.addPartialTask2Tree({
+      role: 'user',
+      content: { type: 'message', data: 'after session switch' },
+    })
+    await afterSwitch
+  } finally {
+    ty.workerStop('stable task stream diagnostic complete')
+  }
+}
+
+testTyCoreStableTaskStreamSurvivesSessionSwitch.description =
+  'Keeps the public task stream connected across a crypto session switch without caller-side reconnects.'
 
 export const testRemoteFunctionBridgeRegistersAndExecutesTool = async () => {
   const { x: clientPort, y: taskyonPort } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()

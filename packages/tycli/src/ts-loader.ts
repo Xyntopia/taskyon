@@ -1,4 +1,4 @@
-import { access, stat } from 'node:fs/promises'
+import { access, readFile, stat } from 'node:fs/promises'
 import { dirname, resolve as resolvePath } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -47,7 +47,25 @@ async function tryResolveFile(basePath: string): Promise<string | null> {
 async function tryResolveRelative(specifier: string, parentURL?: string): Promise<string | null> {
   if (!parentURL?.startsWith('file:')) return null
   const parentPath = dirname(fileURLToPath(parentURL))
+  if (specifier.endsWith('?raw') || specifier.endsWith('?url')) {
+    const query = specifier.endsWith('?raw') ? '?raw' : '?url'
+    const rawPath = specifier.slice(0, -query.length)
+    const resolved = await tryResolveFile(resolvePath(parentPath, rawPath))
+    return resolved ? `${resolved}${query}` : null
+  }
   return tryResolveFile(resolvePath(parentPath, specifier))
+}
+
+async function tryResolvePackageAsset(specifier: string): Promise<string | null> {
+  if (!specifier.endsWith('?url')) return null
+
+  const assetPath = specifier.slice(0, -'?url'.length)
+  const parts = assetPath.split('/')
+  const packageName = assetPath.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
+  const subpath = assetPath.startsWith('@') ? parts.slice(2) : parts.slice(1)
+  if (!packageName || subpath.length === 0) return null
+
+  return tryResolveFile(resolvePath(repoRoot, 'node_modules', packageName, ...subpath))
 }
 
 async function tryResolveWorkspaceAlias(specifier: string): Promise<string | null> {
@@ -107,11 +125,31 @@ type DefaultResolve = (
   nextResolve: DefaultResolve,
 ) => Promise<ResolveResult>
 
+type LoadContext = {
+  format?: string
+}
+
+type LoadResult = {
+  format: 'module'
+  shortCircuit?: boolean
+  source: string
+}
+
+type DefaultLoad = (url: string, context: LoadContext, nextLoad: DefaultLoad) => Promise<LoadResult>
+
 export async function resolve(
   specifier: string,
   context: ResolveContext,
   defaultResolve: DefaultResolve,
 ): Promise<ResolveResult> {
+  const packageAsset = await tryResolvePackageAsset(specifier)
+  if (packageAsset) {
+    return {
+      shortCircuit: true,
+      url: `${packageAsset}?url`,
+    }
+  }
+
   const aliased = await tryResolveWorkspaceAlias(specifier)
   if (aliased) {
     return {
@@ -131,4 +169,32 @@ export async function resolve(
   }
 
   return defaultResolve(specifier, context, defaultResolve)
+}
+
+export async function load(
+  url: string,
+  context: LoadContext,
+  defaultLoad: DefaultLoad,
+): Promise<LoadResult> {
+  const parsed = new URL(url)
+  if (parsed.protocol === 'file:' && parsed.search === '?raw') {
+    parsed.search = ''
+    const source = await readFile(fileURLToPath(parsed), 'utf8')
+    return {
+      format: 'module',
+      shortCircuit: true,
+      source: `export default ${JSON.stringify(source)};\n`,
+    }
+  }
+
+  if (parsed.protocol === 'file:' && parsed.search === '?url') {
+    parsed.search = ''
+    return {
+      format: 'module',
+      shortCircuit: true,
+      source: `export default ${JSON.stringify(parsed.href)};\n`,
+    }
+  }
+
+  return defaultLoad(url, context, defaultLoad)
 }
