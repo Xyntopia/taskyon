@@ -5,7 +5,7 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    "./modules/*": "./modules/*"
+    "./modules/*": "./modules/*.ts"
   },
   "dependencies": {
     "@mdit/plugin-katex": "^0.24.1",
