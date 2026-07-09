@@ -12,6 +12,7 @@ import type { createDuplexChannel } from '@taskyon/common/modules/frpBus'
 import { createUnavailableIframeMux } from '@taskyon/common/modules/frpBus'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import {
+  connectTaskManagerStorageFromProtocol,
   createClientTool,
   createExternalToolContext,
   createTaskNode,
@@ -43,6 +44,7 @@ import {
   createTaskChainFromMarkdown,
   createTaskyonClient,
   taskyonProtocol,
+  taskyonStorageProtocol,
 } from '@taskyon/taskyon/api'
 import { setChatCompletionTraceWriter } from '@taskyon/taskyon/tools/chatCompletionTrace'
 import { createNodeTaskyonDocumentationProviderTool } from '@taskyon/taskyon/tools/nodeTaskyonDocumentationProvider'
@@ -56,9 +58,11 @@ import {
   resolveProviderSelection,
   resolveStoredModel,
   resolveConfigDirectoryPath,
+  resolveDataDirectoryPath,
   createCliSecretStore,
 } from './cli/config'
 import { createConversationPersistence } from './cli/conversationPersistence'
+import { createCliFileStorageService } from './cli/fileStorage'
 import { createCliFooter } from './cli/ui'
 import {
   applyCodexAccountHeader,
@@ -2457,6 +2461,7 @@ async function main() {
   const startupMeta = await loadStartupMeta()
   const { cryptoSession, stored } = await initPersistentCryptoSession()
   const configDir = await resolveConfigDirectoryPath()
+  const dataDir = await resolveDataDirectoryPath()
   const previousSessions = normalizeSessionRecords(stored.sessions)
   const previousSession = previousSessions[0]
   const pgliteNodeDir = join(configDir, 'runtime', `${errorTimestamp()}-${process.pid}`, 'pglite')
@@ -2530,6 +2535,9 @@ async function main() {
     ...llmState,
     entryFunction: ENTRY_NODE_TOOL_NAME,
   }
+  const { x: taskStorageClientPort, y: taskStorageServicePort } =
+    createProtocolPort(taskyonStorageProtocol)
+  createCliFileStorageService(taskStorageServicePort, join(dataDir, 'storage'))
   const taskyon = await tyCore(
     () => llmState,
     () => cliEntryTask,
@@ -2557,6 +2565,8 @@ async function main() {
       indexTaskVectors: false,
       nodePgLiteDataDir: pgliteNodeDir,
       secretStore: cliSecretStore,
+      taskManagerStorageFactory: ({ sessionId }) =>
+        connectTaskManagerStorageFromProtocol(taskStorageClientPort, sessionId),
     },
   )
   taskyonRef.current = taskyon

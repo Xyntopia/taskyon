@@ -17,7 +17,9 @@ import type {
 } from '@taskyon/taskyon'
 import {
   base64ToPublixX25519,
+  connectTaskManagerStorageFromProtocol,
   createClientTool,
+  createPgLiteTaskManagerStorageService,
   createSubtasksResult,
   createPortServer,
   createProtocolPort,
@@ -28,6 +30,7 @@ import {
   ensureValidTaskId,
   exclusive,
   getCurrentModel,
+  getDatabase,
   getDefaultParametersForTool,
   isTaskyonKey,
   latestOnly,
@@ -38,6 +41,7 @@ import {
   sha256UrlSafeHashFromFile,
   TaskNode,
   tyCore,
+  taskyonStorageProtocol,
 } from '@taskyon/taskyon'
 import {
   createPersistentOauthTokenGetter,
@@ -1192,6 +1196,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         },
       },
     }) as partialTaskDraft
+  const { x: taskStorageClientPort, y: taskStorageServicePort } =
+    createProtocolPort(taskyonStorageProtocol)
+  const unsubscribeTaskStorageService = createPgLiteTaskManagerStorageService(
+    taskStorageServicePort,
+    getDatabase,
+  )
+  onScopeDispose(unsubscribeTaskStorageService)
   // this means previously, we have loaded a session with a binding key.
   // so we would like to wait a little bit, if we will get that same binding key...
   const taskyon = (async () => {
@@ -1220,6 +1231,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       buildEntryNodeDraft,
       () => stateRefs.toolchainConfig,
       cs,
+      {
+        taskManagerStorageFactory: ({ sessionId }) =>
+          connectTaskManagerStorageFromProtocol(taskStorageClientPort, sessionId),
+      },
     )
   })
   const { x: taskyonClientPort, y: taskyonCorePort } = createProtocolPort(taskyonProtocol)

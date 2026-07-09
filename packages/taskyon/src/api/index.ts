@@ -50,6 +50,15 @@ export { createClientTool, createSubtasksResult, createTool, partialTaskDraft, t
 export type { Port }
 export { taskyonProtocol }
 export {
+  createProtocolStorageCrudWrapper,
+  createStorageProtocolServer,
+  createStorageRecordBackend,
+  taskyonStorageProtocol,
+  type StorageRecordBackend,
+  type StorageRecordCrud,
+  type TaskyonStorageMessage,
+} from './storageProtocol'
+export {
   callToolOverRpc,
   createToolExecutionClient,
   createExternalToolContext,

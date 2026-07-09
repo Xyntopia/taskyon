@@ -6,9 +6,11 @@ import {
 } from '@taskyon/common/modules/frpBus'
 import { createTaskyonClient } from '../api'
 import { taskyonProtocol } from '../api/taskyonProtocol'
+import { useTyTaskManager } from '../core/taskManager'
 import type { TaskyonMessage } from '../api/taskyonProtocol'
 import type { TaskNode } from '../types/taskNode'
 import type { ToolBase } from '../types/tools'
+import { getDatabase } from '../utils/pglite.api'
 
 type TestMessage = TaskyonMessage | { type: 'funnyMessage'; data: string }
 type TaskyonProtocolMessage = ProtocolMessage<typeof taskyonProtocol>
@@ -296,6 +298,42 @@ export const testTaskyonClientGetsTaskChainThroughProtocol = async () => {
 
 testTaskyonClientGetsTaskChainThroughProtocol.description =
   'Reads selected task chains through the Taskyon protocol client.'
+
+export const testTaskGetChainMissingTaskReturnsProtocolValidErrorTask = async () => {
+  const taskManager = await useTyTaskManager(
+    await getDatabase(`taskyon-missing-chain-${Date.now()}`),
+    {
+      indexTaskVectors: false,
+    },
+  )
+  const { x: clientPort, y: taskyonPort } = createDuplexChannel<
+    TaskyonProtocolMessage,
+    TaskyonProtocolMessage
+  >()
+  const unsubscribe = createPortServer(taskyonPort, taskyonProtocol, {
+    task: {
+      getChain: async ({ id, maxFollow, selection }) =>
+        await taskManager.getTaskChain(id, maxFollow, selection),
+    },
+  })
+
+  try {
+    const tasks = await createTaskyonClient(clientPort, {
+      deferUntilReady: false,
+    }).task.getChain({
+      id: 'missing-task',
+      timeoutMs: 1000,
+    })
+    const fallbackTask = tasks[0]
+    assert(fallbackTask?.id === 'missing-task', 'Expected missing task fallback to preserve id')
+    assert(fallbackTask.content.type === 'error', 'Expected missing task fallback to be an error')
+  } finally {
+    unsubscribe()
+  }
+}
+
+testTaskGetChainMissingTaskReturnsProtocolValidErrorTask.description =
+  'Returns schema-valid error tasks when task.getChain references an inaccessible task id.'
 
 export const testListToolsRpcIgnoresUnrelatedResponses = async () => {
   const { x: clientPort, y: taskyonPort } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()

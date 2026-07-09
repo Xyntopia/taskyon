@@ -1,8 +1,10 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { createUnavailableIframeMux } from '@taskyon/common/modules/frpBus'
+import { createProtocolPort, createUnavailableIframeMux } from '@taskyon/common/modules/frpBus'
 import { tyCore } from '../../../taskyon/src/core/init'
 import type { Taskyon } from '../../../taskyon/src/core/init'
+import { connectTaskManagerStorageFromProtocol } from '../../../taskyon/src/core/taskManager'
+import { taskyonStorageProtocol } from '../../../taskyon/src/api/storageProtocol'
 import type { llmSettings } from '../../../taskyon/src/types/profiles'
 import { toolCall } from '../../../taskyon/src/types/toolApi'
 import {
@@ -14,11 +16,13 @@ import {
 import {
   initPersistentCryptoSession,
   createCliSecretStore,
+  resolveDataDirectoryPath,
   resolveConfigDirectoryPath,
   resolveKeyForProvider,
   resolveProviderSelection,
   resolveStoredModel,
 } from './config'
+import { createCliFileStorageService } from './fileStorage'
 import {
   applyCodexAccountHeader,
   createCliLlmSettings,
@@ -83,6 +87,7 @@ export async function bootstrapCliTaskyon(args?: {
 }> {
   const { cryptoSession, stored } = await initPersistentCryptoSession()
   const configDir = await resolveConfigDirectoryPath()
+  const dataDir = await resolveDataDirectoryPath()
   const pgliteNodeDir =
     args?.nodePgLiteDataDir ?? join(configDir, 'runtime', runtimeDirectoryName(), 'pglite')
   await mkdir(pgliteNodeDir, { recursive: true })
@@ -107,6 +112,9 @@ export async function bootstrapCliTaskyon(args?: {
   }
 
   const llmState = createCliLlmSettings(config)
+  const { x: taskStorageClientPort, y: taskStorageServicePort } =
+    createProtocolPort(taskyonStorageProtocol)
+  createCliFileStorageService(taskStorageServicePort, join(dataDir, 'storage'))
   const taskyon = await tyCore(
     () => llmState,
     () =>
@@ -121,6 +129,8 @@ export async function bootstrapCliTaskyon(args?: {
         createUnavailableIframeMux('Iframe message bridging is not available in tycli.'),
       nodePgLiteDataDir: pgliteNodeDir,
       secretStore: cliSecretStore,
+      taskManagerStorageFactory: ({ sessionId }) =>
+        connectTaskManagerStorageFromProtocol(taskStorageClientPort, sessionId),
     },
   )
 

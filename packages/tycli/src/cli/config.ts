@@ -13,7 +13,13 @@ const FALLBACK_CONFIG_DIR = join('/tmp', 'tycli')
 const CONFIG_LOCK_STALE_MS = 30_000
 const CONFIG_LOCK_TIMEOUT_MS = 10_000
 const CONFIG_LOCK_RETRY_MS = 50
+const PREFERRED_DATA_DIR = join(
+  process.env.XDG_DATA_HOME?.trim() || join(homedir(), '.local', 'share'),
+  'tycli',
+)
+const FALLBACK_DATA_DIR = join('/tmp', 'tycli', 'data')
 let cachedConfigFile: string | null = null
+let cachedDataDir: string | null = null
 let configWriteQueue = Promise.resolve()
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -50,6 +56,20 @@ async function resolveReadableConfigFilePath() {
 export async function resolveConfigDirectoryPath() {
   const configFile = await resolveConfigFilePath()
   return dirname(configFile)
+}
+
+export async function resolveDataDirectoryPath() {
+  if (cachedDataDir) return cachedDataDir
+  try {
+    await mkdir(PREFERRED_DATA_DIR, { recursive: true })
+    await access(PREFERRED_DATA_DIR, constants.W_OK)
+    cachedDataDir = PREFERRED_DATA_DIR
+    return cachedDataDir
+  } catch {
+    await mkdir(FALLBACK_DATA_DIR, { recursive: true })
+    cachedDataDir = FALLBACK_DATA_DIR
+    return cachedDataDir
+  }
 }
 
 export async function loadStoredConfig(): Promise<StoredConfig> {
@@ -122,15 +142,19 @@ async function withConfigFileLock<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+async function updateStoredConfig(
+  update: (current: StoredConfig) => StoredConfig | Promise<StoredConfig>,
+) {
+  await withConfigFileLock(async () => {
+    const current = await loadStoredConfig()
+    await saveStoredConfig(await update(current))
+  })
+}
+
 export async function persistConfigPatch(patch: Partial<StoredConfig>) {
   const write = configWriteQueue
     .catch(() => {})
-    .then(async () => {
-      await withConfigFileLock(async () => {
-        const current = await loadStoredConfig()
-        await saveStoredConfig({ ...current, ...patch })
-      })
-    })
+    .then(async () => updateStoredConfig((current) => ({ ...current, ...patch })))
   configWriteQueue = write.catch(() => {})
   await write
 }
@@ -146,15 +170,16 @@ export function resolveStoredModel(stored: StoredConfig, provider: string): stri
 }
 
 export async function persistProviderModel(provider: string, model: string) {
-  const current = await loadStoredConfig()
-  const providerModels = {
-    ...(current.providerModels ?? {}),
-    [provider]: model,
-  }
-  await saveStoredConfig({
-    ...current,
-    providerModels,
-    ...(current.selectedApi === provider ? { taskyonModel: model } : {}),
+  await updateStoredConfig((current) => {
+    const providerModels = {
+      ...(current.providerModels ?? {}),
+      [provider]: model,
+    }
+    return {
+      ...current,
+      providerModels,
+      ...(current.selectedApi === provider ? { taskyonModel: model } : {}),
+    }
   })
 }
 
@@ -237,9 +262,6 @@ export async function initPersistentCryptoSession() {
 
 const createConfigSecretCrud = (): CrudWrapper<EncryptedDataRow> => {
   const readSecrets = async () => (await loadStoredConfig()).cliSecrets ?? {}
-  const writeSecrets = async (cliSecrets: NonNullable<StoredConfig['cliSecrets']>) => {
-    await persistConfigPatch({ cliSecrets })
-  }
   const readRows = async () =>
     Object.entries(await readSecrets()).flatMap(([id, data]) => {
       const parsed = EncryptedDataRow.safeParse(data)
@@ -248,8 +270,10 @@ const createConfigSecretCrud = (): CrudWrapper<EncryptedDataRow> => {
 
   return {
     async set(id, data) {
-      const cliSecrets = await readSecrets()
-      await writeSecrets({ ...cliSecrets, [String(id)]: data })
+      await updateStoredConfig((current) => ({
+        ...current,
+        cliSecrets: { ...(current.cliSecrets ?? {}), [String(id)]: data },
+      }))
     },
     async get(id) {
       const row = (await readSecrets())[String(id)]
@@ -257,9 +281,11 @@ const createConfigSecretCrud = (): CrudWrapper<EncryptedDataRow> => {
       return parsed?.success ? parsed.data : null
     },
     async delete(id) {
-      const cliSecrets = { ...(await readSecrets()) }
-      delete cliSecrets[String(id)]
-      await writeSecrets(cliSecrets)
+      await updateStoredConfig((current) => {
+        const cliSecrets = { ...(current.cliSecrets ?? {}) }
+        delete cliSecrets[String(id)]
+        return { ...current, cliSecrets }
+      })
     },
     async listIds() {
       return (await readRows()).map((row) => row.id)
@@ -271,11 +297,13 @@ const createConfigSecretCrud = (): CrudWrapper<EncryptedDataRow> => {
       return await readRows()
     },
     async clear() {
-      await writeSecrets({})
+      await updateStoredConfig((current) => ({ ...current, cliSecrets: {} }))
     },
     async upsert(id, data) {
-      const cliSecrets = await readSecrets()
-      await writeSecrets({ ...cliSecrets, [String(id)]: data })
+      await updateStoredConfig((current) => ({
+        ...current,
+        cliSecrets: { ...(current.cliSecrets ?? {}), [String(id)]: data },
+      }))
       return data
     },
   }

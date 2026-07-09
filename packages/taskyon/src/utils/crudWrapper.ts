@@ -678,6 +678,17 @@ export const withSecretStore = (
 
   const encryptedCrud = withEncryption(base, askSessionKey, publicRecoveryKey)
   type SecretData = Record<string, string>
+  const readSecretData = async (id: string | number): Promise<SecretData> => {
+    try {
+      return ((await encryptedCrud.get(id)) as SecretData) || {}
+    } catch (error) {
+      console.warn('failed to decrypt secret row; treating it as empty', {
+        id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return {}
+    }
+  }
 
   /**
    * Stores or updates a secret for a given ID and secret name.
@@ -689,7 +700,7 @@ export const withSecretStore = (
   ): Promise<void> => {
     console.log('set new secret:', id, secretName)
     // Get the existing secrets for the ID
-    const existingSecrets: SecretData = ((await encryptedCrud.get(id)) as SecretData) || {}
+    const existingSecrets = await readSecretData(id)
     // Add or update the secret
     existingSecrets[secretName] = secretData
     // Save the updated secrets
@@ -712,7 +723,7 @@ export const withSecretStore = (
       // forceNew: boolean,
     ): Promise<string | null> {
       // Get the existing secrets for the ID
-      const existingSecrets = (await encryptedCrud.get(id)) as SecretData
+      const existingSecrets = await readSecretData(id)
       // Return the specific secret if it exists
       let secret = existingSecrets ? existingSecrets[secretName] || null : null
 
@@ -730,8 +741,8 @@ export const withSecretStore = (
      */
     async deleteSecret(id: string | number, secretName: string): Promise<void> {
       // Get the existing secrets for the ID
-      const existingSecrets = (await encryptedCrud.get(id)) as SecretData
-      if (existingSecrets && secretName in existingSecrets) {
+      const existingSecrets = await readSecretData(id)
+      if (secretName in existingSecrets) {
         // Delete the specific secret
         delete existingSecrets[secretName]
         // Save the updated secrets
@@ -752,7 +763,7 @@ export const withSecretStore = (
      */
     async listSecrets(id: string | number): Promise<Record<string, string>> {
       // Get all secrets for the ID
-      return ((await encryptedCrud.get(id)) as SecretData) || {}
+      return await readSecretData(id)
     },
 
     listSecretIds: async (): Promise<(string | number)[]> => {

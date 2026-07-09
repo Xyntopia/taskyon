@@ -1,11 +1,20 @@
 import { load } from 'js-yaml'
 import type { PartialDeep } from 'type-fest'
 import z from 'zod'
-import type { TaskNodeMeta } from '../types/chatCompletion'
+import { TaskNodeMeta } from '../types/chatCompletion'
 import type { FileMapping, TaskNodeType, TaskTreeNode } from '../types/taskNode'
 import { TaskNode, partialTaskDraft } from '../types/taskNode'
 import type { InternalTool } from '../types/toolApi'
 import { ToolBase } from '../types/tools'
+import {
+  createProtocolStorageCrudWrapper,
+  createStorageProtocolServer,
+  createStorageRecordBackend,
+  type StorageRecordBackend,
+  type StorageRecordCrud,
+  type TaskyonStorageMessage,
+} from '../api/storageProtocol'
+import type { Port } from '@taskyon/common/modules/frpBus'
 import { lockMap, sleep } from '../utils/asyncUtils'
 import {
   createCombinedCrudWrapper,
@@ -22,6 +31,128 @@ import type { TyPGDB } from '../utils/pglite.api'
 import { createTaskNode } from './createTasks'
 import { addMarkdownTaskChain } from './markdownTaskIO'
 import { selectTaskChainIds, type TaskChainSelection } from './taskChainSelection'
+
+export const FileMappingSchema: z.ZodType<FileMapping> = z
+  .object({
+    id: z.string(),
+    name: z.string().optional(),
+    size: z.number().optional(),
+    opfs: z.string().optional(),
+    openAIFileId: z.string().optional(),
+    type: z.string(),
+    data: z.string().optional(),
+  })
+  .transform(
+    (value): FileMapping => ({
+      id: value.id,
+      type: value.type,
+      ...(value.name !== undefined ? { name: value.name } : {}),
+      ...(value.size !== undefined ? { size: value.size } : {}),
+      ...(value.opfs !== undefined ? { opfs: value.opfs } : {}),
+      ...(value.openAIFileId !== undefined ? { openAIFileId: value.openAIFileId } : {}),
+      ...(value.data !== undefined ? { data: value.data } : {}),
+    }),
+  )
+
+export type TaskManagerStorage = {
+  tasks: StorageRecordCrud<TaskNode>
+  meta: StorageRecordCrud<TaskNodeMeta>
+  files: StorageRecordCrud<FileMapping>
+}
+
+const taskStorageTables = ['taskyonNodes', 'metaDb', 'filemapping'] as const
+type TaskStorageTable = (typeof taskStorageTables)[number]
+
+const isTaskStorageTable = (value: string): value is TaskStorageTable =>
+  taskStorageTables.some((table) => table === value)
+
+const taskManagerStorageNamespace = (sessionId: string, table: TaskStorageTable) =>
+  `${sessionId}/${table}`
+
+const parseTaskManagerStorageNamespace = (namespace: string) => {
+  const separator = namespace.lastIndexOf('/')
+  if (separator <= 0 || separator === namespace.length - 1) {
+    throw new Error(`Invalid Taskyon task storage namespace: ${namespace}`)
+  }
+  const sessionId = namespace.slice(0, separator)
+  const table = namespace.slice(separator + 1)
+  if (!isTaskStorageTable(table)) {
+    throw new Error(`Unknown Taskyon task storage table: ${table}`)
+  }
+  return { sessionId, table }
+}
+
+export const createPgLiteTaskManagerStorage = async (
+  taskyonDb: TyPGDB,
+): Promise<TaskManagerStorage> => ({
+  tasks: await createPgLiteCrudWrapper<TaskNode>(taskyonDb, {
+    tableName: 'taskyonNodes',
+  }),
+  meta: await createPgLiteCrudWrapper<TaskNodeMeta>(taskyonDb, {
+    tableName: 'metaDb',
+  }),
+  files: await createPgLiteCrudWrapper<FileMapping>(taskyonDb, {
+    tableName: 'filemapping',
+  }),
+})
+
+export const connectTaskManagerStorageFromProtocol = (
+  port: Port<TaskyonStorageMessage, TaskyonStorageMessage>,
+  sessionId: string,
+): TaskManagerStorage => ({
+  tasks: createProtocolStorageCrudWrapper(
+    port,
+    taskManagerStorageNamespace(sessionId, 'taskyonNodes'),
+    TaskNode,
+  ),
+  meta: createProtocolStorageCrudWrapper(
+    port,
+    taskManagerStorageNamespace(sessionId, 'metaDb'),
+    TaskNodeMeta,
+  ),
+  files: createProtocolStorageCrudWrapper(
+    port,
+    taskManagerStorageNamespace(sessionId, 'filemapping'),
+    FileMappingSchema,
+  ),
+})
+
+export const createPgLiteTaskManagerStorageService = (
+  port: Port<TaskyonStorageMessage, TaskyonStorageMessage>,
+  getDb: (sessionId: string) => Promise<TyPGDB>,
+) => {
+  const sessionStorage = new Map<string, Promise<TaskManagerStorage>>()
+  const backendCache = new Map<string, Promise<StorageRecordBackend>>()
+  const storageForSession = (sessionId: string) => {
+    const existing = sessionStorage.get(sessionId)
+    if (existing) return existing
+    const created = getDb(sessionId).then(createPgLiteTaskManagerStorage)
+    sessionStorage.set(sessionId, created)
+    return created
+  }
+
+  const resolveBackend = async (namespace: string): Promise<StorageRecordBackend> => {
+    const cached = backendCache.get(namespace)
+    if (cached) return cached
+    const created = storageForSession(parseTaskManagerStorageNamespace(namespace).sessionId).then(
+      (storage) => {
+        const { table } = parseTaskManagerStorageNamespace(namespace)
+        switch (table) {
+          case 'taskyonNodes':
+            return createStorageRecordBackend(storage.tasks, TaskNode)
+          case 'metaDb':
+            return createStorageRecordBackend(storage.meta, TaskNodeMeta)
+          case 'filemapping':
+            return createStorageRecordBackend(storage.files, FileMappingSchema)
+        }
+      },
+    )
+    backendCache.set(namespace, created)
+    return created
+  }
+
+  return createStorageProtocolServer(port, resolveBackend)
+}
 
 /**
  *
@@ -47,11 +178,7 @@ export async function findRootTask(taskId: string, getTask: TyTaskManager['getTa
   return currentTaskID // Return null if the loop exits without finding a root task
 }
 
-async function useFileManager(db: TyPGDB) {
-  const fileTable = await createPgLiteCrudWrapper<FileMapping>(db, {
-    tableName: 'filemapping',
-  })
-
+function useFileManager(fileTable: StorageRecordCrud<FileMapping>) {
   const fileMemory = new Map<string, File>()
 
   async function addFiles(newFiles: File[], storage: 'memory' | 'opfs') {
@@ -357,9 +484,12 @@ const withLock =
 */
 export async function useTyTaskManager(
   taskyonDb: TyPGDB,
-  options: { indexTaskVectors: boolean } = { indexTaskVectors: true },
+  options: { indexTaskVectors: boolean; storage?: TaskManagerStorage } = {
+    indexTaskVectors: true,
+  },
 ) {
   console.log('Initialize task manager with db:', taskyonDb.name)
+  const storage = options.storage ?? (await createPgLiteTaskManagerStorage(taskyonDb))
 
   // because our tasks only have parent IDs defined, we keep a cache of
   // child IDs in order to be able to do faster tree traversals...
@@ -415,13 +545,10 @@ export async function useTyTaskManager(
     }
   }
 
-  const tySqlCrud = await createPgLiteCrudWrapper<TaskNode>(taskyonDb, {
-    tableName: 'taskyonNodes',
-  })
   // make sure that we remove the "upsert" function for tyCrud in order
   // to make sure the data inside stays immutable...
   const mod = withLiveStreams(
-    createCombinedCrudWrapper([createMapCrudWrapper(new Map<string, TaskNode>()), tySqlCrud]),
+    createCombinedCrudWrapper([createMapCrudWrapper(new Map<string, TaskNode>()), storage.tasks]),
   )
   const tyCrud = withImmutable(mod, {
     hash: (data: TaskNode) => {
@@ -499,9 +626,7 @@ export async function useTyTaskManager(
     withLiveStreams(
       createCombinedCrudWrapper([
         createMapCrudWrapper<TaskNodeMeta>(new Map<string, TaskNodeMeta>()),
-        await createPgLiteCrudWrapper<TaskNodeMeta>(taskyonDb, {
-          tableName: 'metaDb',
-        }),
+        storage.meta,
       ]),
     ),
   )
@@ -512,19 +637,12 @@ export async function useTyTaskManager(
 
   function createCachedIdSearch(
     cache: Map<string, Set<string>>,
-    buildSelector: (
-      key: string,
-    ) => (
-      db: TyPGDB,
-      idColumn: string,
-      dataColumn: string,
-      tableName: string,
-    ) => Promise<Set<string>>,
+    findTaskIds: (key: string) => Promise<Set<string>>,
   ) {
     return async (key: string): Promise<Set<string>> => {
       const cached = cache.get(key)
       if (!cached) {
-        const dbResults = await tySqlCrud.callDb(buildSelector(key))
+        const dbResults = await findTaskIds(key)
         cache.set(key, dbResults)
         return dbResults
       } else {
@@ -533,35 +651,21 @@ export async function useTyTaskManager(
     }
   }
 
-  const searchNextSibling = createCachedIdSearch(
-    nextSiblingMap,
-    (priorID) => async (db, idColumn, dataColumn, tableName) => {
-      const res = await db.query<{ id: string }>(
-        `
-        SELECT ${idColumn} AS id
-        FROM ${tableName}
-        WHERE ${dataColumn} @> $1
-      `,
-        [JSON.stringify({ priorID })],
-      )
-      return new Set(res.rows.map((r) => r.id))
-    },
-  )
+  const searchNextSibling = createCachedIdSearch(nextSiblingMap, async (priorID) => {
+    const tasks = await storage.tasks.find({ priorID })
+    return new Set(Object.keys(tasks))
+  })
 
   // direct children: parentID match AND (no priorID key OR priorID is null)
   const searchAllDirectChildren = createCachedIdSearch(
     immediateChildrenMap,
-    (parentID: string) => async (db, idColumn, dataColumn, tableName) => {
-      const { rows } = await db.query<{ id: string }>(
-        `
-        SELECT ${idColumn}::text AS id
-        FROM ${tableName}
-        WHERE ${dataColumn} @> $1
-          AND (NOT (${dataColumn} ? $2) OR (${dataColumn} -> $2) IS NULL)
-      `,
-        [JSON.stringify({ parentID }), 'priorID'],
+    async (parentID: string) => {
+      const tasks = await storage.tasks.find({ parentID })
+      return new Set(
+        Object.values(tasks)
+          .filter((task) => !task.priorID)
+          .map((task) => task.id),
       )
-      return new Set(rows.map((r) => r.id))
     },
   )
 
@@ -571,20 +675,10 @@ export async function useTyTaskManager(
   }
 
   // all children: just parentID match
-  const searchAllChildren = createCachedIdSearch(
-    parentToChildMap,
-    (parentID: string) => async (db, idColumn, dataColumn, tableName) => {
-      const { rows } = await db.query<{ id: string }>(
-        `
-        SELECT ${idColumn}::text AS id
-        FROM ${tableName}
-        WHERE ${dataColumn} @> $1
-      `,
-        [JSON.stringify({ parentID })],
-      )
-      return new Set(rows.map((r) => r.id))
-    },
-  )
+  const searchAllChildren = createCachedIdSearch(parentToChildMap, async (parentID: string) => {
+    const tasks = await storage.tasks.find({ parentID })
+    return new Set(Object.keys(tasks))
+  })
 
   async function convertTaskIDs(taskIds: string[]) {
     const taskList = await Promise.all(
@@ -593,12 +687,13 @@ export async function useTyTaskManager(
         if (t != null || t != undefined) return t
         console.log('no acces to task:', tid)
         return {
+          id: tid,
           role: 'system',
           content: {
             type: 'error',
             data: `We can not access Task #${tid}`,
           },
-        } as TaskNode
+        } satisfies TaskNode
       }),
     )
 
@@ -791,7 +886,7 @@ export async function useTyTaskManager(
   }
 
   const searchTasks: (where: PartialDeep<TaskNode>) => Promise<Record<string, TaskNode>> =
-    tySqlCrud.find
+    storage.tasks.find
 
   /**
    * removeFunction will remove all "internal" functions from the returned tool list...
@@ -903,7 +998,7 @@ export async function useTyTaskManager(
     }
   }
 
-  const fm = await useFileManager(taskyonDb)
+  const fm = useFileManager(storage.files)
 
   // add a task to the db. Adding some default information such as timestamps etc...
   // whats important here is that the TaskNode can only have one type of content

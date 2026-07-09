@@ -59,7 +59,7 @@ import { createProxyApi, createProxyFunction } from '../utils/objHelpers'
 import { configureNodePgLiteDataDir, getDatabase } from '../utils/pglite.api'
 import type { Thunk } from '../utils/tsHelpers'
 import { MAX_REMOTE_FUNCTION_TIMEOUT_MS, taskyonProtocol } from '../api/taskyonProtocol'
-import type { TyTaskManager } from './taskManager'
+import type { TaskManagerStorage, TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
 import { generateSecretId } from './taskFunctionExecutor'
 import { runTaskWorker, type TyTaskStreamData } from './taskWorker'
@@ -85,6 +85,11 @@ type SessionStreamObservers = {
   chatCompletion: (event: chunkStreamType) => void
   task: Parameters<TyTaskManager['taskStream']>[0]
 }
+
+type TaskManagerStorageFactory = (args: {
+  sessionId: string
+  db: Awaited<ReturnType<typeof getDatabase>>
+}) => Promise<TaskManagerStorage> | TaskManagerStorage
 
 function createApi(
   insidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
@@ -240,6 +245,7 @@ const dynamicContext =
       secretStore?: SecretStore
       sendEncryptedTasks?: Thunk<boolean>
       streamObservers: SessionStreamObservers
+      taskManagerStorageFactory?: TaskManagerStorageFactory
     },
   ) =>
   async (cs: CryptoSession) => {
@@ -248,8 +254,12 @@ const dynamicContext =
     const sessionKeyId = await cs.getSessionId()
     const db = await getDatabase(sessionKeyId)
     console.log('tycore starting new session with id:', sessionKeyId)
+    const storage = options.taskManagerStorageFactory
+      ? await options.taskManagerStorageFactory({ sessionId: sessionKeyId, db })
+      : undefined
     const taskManagerInstance = await useTyTaskManager(db, {
       indexTaskVectors: options.indexTaskVectors,
+      ...(storage ? { storage } : {}),
     })
     console.log('tycore finished taskManager initialization')
     const secretStore =
@@ -477,6 +487,7 @@ export async function tyCore(
     indexTaskVectors?: boolean
     nodePgLiteDataDir?: string
     secretStore?: SecretStore
+    taskManagerStorageFactory?: TaskManagerStorageFactory
   },
 ) {
   // TODO: make webpack automatically add all tool files from /tools/*
@@ -515,6 +526,9 @@ export async function tyCore(
         chatCompletion: chatCompletionStream.emit,
         task: taskStream.emit,
       },
+      ...(options?.taskManagerStorageFactory
+        ? { taskManagerStorageFactory: options.taskManagerStorageFactory }
+        : {}),
     },
   )
 

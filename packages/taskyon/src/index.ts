@@ -10,10 +10,17 @@ export {
   observeSubTaskStreamDetailed,
   processTasksDetailed,
   createTaskyonClient,
+  createProtocolStorageCrudWrapper,
+  createStorageProtocolServer,
+  createStorageRecordBackend,
   runTasks,
   taskyonGuiProtocol,
   taskyonProtocol,
+  taskyonStorageProtocol,
   TaskyonMessage,
+  type StorageRecordBackend,
+  type StorageRecordCrud,
+  type TaskyonStorageMessage,
   type TaskyonMessage as TaskyonMessageType,
   type TyP2P,
 } from './api/index'
@@ -72,6 +79,7 @@ export * from './utils/fileUtils'
 export * from '@taskyon/common/modules/frpBus'
 export * from './utils/httpUtils'
 export * from './utils/objHelpers'
+export { getDatabase } from './utils/pglite.api'
 export * from './utils/providerAuth'
 export * from './utils/schema'
 export * from './utils/tsHelpers'
