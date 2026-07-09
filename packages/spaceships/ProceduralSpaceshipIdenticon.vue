@@ -54,11 +54,15 @@ const props = withDefaults(
     preferDeeperRewindOnRepeat?: boolean | undefined
   }>(),
   {
+    library: undefined,
+    size: undefined,
     backgroundFill: 'rgba(6, 14, 24, 0.92)',
     renderMode: 'png-first',
     disableCache: false,
     clearCache: false,
     debugBounds: false,
+    focusedModuleId: undefined,
+    catalogVersion: undefined,
     maxGlobalRewinds: 2,
     maxIntraStageBacktracks: 2,
     rewindPolicy: 'quality-first',

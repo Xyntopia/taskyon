@@ -13,6 +13,7 @@ const props = withDefaults(
     tag?: string | undefined
   }>(),
   {
+    sanitize: undefined,
     tag: 'div',
   },
 )

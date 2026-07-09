@@ -152,6 +152,8 @@ const props = withDefaults(
     plotResolutionOptions: Array<{ label: string; value: PlotResolution }>
   }>(),
   {
+    detectedLatPath: undefined,
+    detectedLonPath: undefined,
     showRemove: false,
   },
 )

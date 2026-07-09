@@ -75,7 +75,7 @@ const buttonClicks = ref(0)
 const store = createPageIOSessionStore()
 const abortController = new AbortController()
 const context: ClientToolContext = {
-  getExecutionTaskChain: async () => [],
+  getExecutionTaskChain: () => Promise.resolve([]),
   createSubtasksResult,
   stopSignal: abortController.signal,
 }
@@ -86,19 +86,19 @@ let screenshotCallCount = 0
 
 const screenshotTool = makePageIOTool({
   screenshot: {
-    requestConsent: async () => {
+    requestConsent: () => {
       consentCallCount += 1
-      return consentAllowed
+      return Promise.resolve(consentAllowed)
     },
-    capture: async () => {
+    capture: () => {
       screenshotCallCount += 1
-      return {
+      return Promise.resolve({
         bytes:
           'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
         mediaType: 'image/png',
         width: 1,
         height: 1,
-      }
+      })
     },
     store,
   },

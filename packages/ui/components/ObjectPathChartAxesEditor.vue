@@ -216,6 +216,8 @@ const props = withDefaults(
     showRemove?: boolean
   }>(),
   {
+    scalarPathOptions: undefined,
+    arrayPathOptions: undefined,
     showRemove: false,
   },
 )

@@ -608,6 +608,16 @@ const props = withDefaults(
     lazy?: boolean
   }>(),
   {
+    source: undefined,
+    mapRows: undefined,
+    mapRuns: undefined,
+    pathUnits: undefined,
+    pathOptions: undefined,
+    pathKindByPath: undefined,
+    seriesResolver: undefined,
+    plotPayloadResolver: undefined,
+    mapPayloadResolver: undefined,
+    favoriteKeys: undefined,
     showAddMapButton: true,
     showControls: true,
     enableDefaultPlotRenderer: true,
