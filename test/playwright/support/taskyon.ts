@@ -7,7 +7,7 @@ import type { KeyString } from '@taskyon/taskyon'
 export const testModelId = 'google/gemini-2.5-flash-lite'
 
 const modelSelectLabel = 'Select LLM Model for answering/solving the task.'
-const onlineEnvKeys = ['openai_api_key', 'openrouter_api_key'] as const
+const onlineEnvKeys = ['taskyon_key', 'openai_api_key', 'openrouter_api_key'] as const
 
 type OnlineEnv = Record<(typeof onlineEnvKeys)[number], KeyString>
 
@@ -22,6 +22,7 @@ const parseOnlineEnv = (value: unknown): OnlineEnv | undefined => {
   if (!onlineEnvKeys.every((key) => hasNonEmptyProperty(value, key))) return undefined
 
   return {
+    taskyon_key: Object.getOwnPropertyDescriptor(value, 'taskyon_key')?.value as KeyString,
     openai_api_key: Object.getOwnPropertyDescriptor(value, 'openai_api_key')?.value as KeyString,
     openrouter_api_key: Object.getOwnPropertyDescriptor(value, 'openrouter_api_key')
       ?.value as KeyString,
@@ -132,6 +133,7 @@ export const startNewChat = async (page: Page) => {
 
 export const addAiServices = async (page: Page, env: OnlineEnv) => {
   const providerKeys = {
+    taskyon: env.taskyon_key,
     openai: env.openai_api_key,
     'openrouter.ai': env.openrouter_api_key,
   }
@@ -139,19 +141,32 @@ export const addAiServices = async (page: Page, env: OnlineEnv) => {
   await page.goto('/settings/aiserviceprovider')
   const providerPanel = page.locator('.llm-providers')
   await expect(providerPanel).toBeVisible()
+  await expect(providerPanel.getByText(/currently using Taskyon’s free version/i)).toBeVisible()
   const keyExpansion = providerPanel.getByText('Add API keys for AI services below:')
   await keyExpansion.click()
 
   for (const [provider, key] of Object.entries(providerKeys)) {
     await providerPanel.getByRole('button', { name: provider, exact: true }).click()
-    const input = dataCy(page, `add-${provider}`).locator('input')
+    const input = page.getByLabel(`${provider} key`, { exact: true })
     await expect(input).toBeVisible()
     await input.fill(key)
     await page.getByRole('button', { name: 'OK', exact: true }).last().click()
-    await page.keyboard.press('Escape')
+    await expect(input).toBeHidden()
+    if (provider === 'taskyon') {
+      await expect(providerPanel.getByText(/currently using Taskyon’s free version/i)).toBeHidden()
+    }
   }
 
-  await expect(dataCy(page, 'provider-select')).toContainText(/openai|openrouter\.ai/i)
+  const providerSelect = page.getByRole('combobox', { name: 'Provider' })
+  await providerSelect.click()
+  for (const provider of Object.keys(providerKeys)) {
+    await expect(
+      page.locator(
+        `.provider-select-popup:visible [data-cy="provider-option"][data-provider="${provider}"]`,
+      ),
+    ).toBeVisible()
+  }
+  await page.keyboard.press('Escape')
 }
 
 export const expectTaskResultMessage = async (text: string, expectedText?: string) => {

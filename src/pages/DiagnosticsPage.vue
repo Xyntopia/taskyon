@@ -258,6 +258,7 @@ modules.push({
   mod: withDiagnosticsFlags(TaskyonUiInteractionTests, {
     testTaskyonUiSimpleChatInteraction: { gui: true },
     testTaskyonUiToolInteraction: { gui: true },
+    testTaskyonUiListsAndUsesAvailableTools: { gui: true, timeoutMs: 420_000 },
     testTaskyonUiWebSearchInteraction: { gui: true },
   }),
 })

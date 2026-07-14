@@ -295,6 +295,19 @@ export const taskyonTaskProtocol = defineFrpServiceProtocol({
       response: z.array(TaskNode).describe('Selected tasks in chain order.'),
       defaultTimeoutMs: 30_000,
     },
+    getChildChains: {
+      request: z
+        .object({
+          id: z
+            .string()
+            .describe('Parent task id whose first-level child chains should be loaded.'),
+        })
+        .describe('Request every first-level child chain below one task.'),
+      response: z
+        .array(z.array(TaskNode))
+        .describe('First-level child chains, with each sibling chain in execution order.'),
+      defaultTimeoutMs: 30_000,
+    },
     create: {
       request: task,
     },

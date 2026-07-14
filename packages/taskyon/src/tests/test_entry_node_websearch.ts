@@ -83,7 +83,7 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
       createExternalToolContext(stopSignal, {
         getExecutionTaskChain: () => {
           if (!call.taskId) throw new Error('Expected task id for entryNode test')
-          return ty.getTaskChain(call.taskId)
+          return createTaskyonClient(ty.port).task.getChain({ id: call.taskId })
         },
       }),
   })

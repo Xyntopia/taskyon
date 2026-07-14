@@ -21,9 +21,12 @@ import {
   createExternalToolContext,
   createTaskNode,
   createStandardEntryNodeTool,
+  getTaskQueueLabel,
   getProviderOauthConfig,
   getProviderOauthCredentialsSecretName,
   registerToolRpcTools,
+  selectChildTaskChains,
+  selectTaskQueueBranches,
   toolCall,
   tyCore,
   type ClientTool,
@@ -33,6 +36,7 @@ import {
   type TaskNode,
   type Taskyon,
   type TaskyonMessage,
+  type TyTaskStreamData,
 } from '@taskyon/taskyon'
 import {
   CLARIFICATION_TOOL_NAME,
@@ -51,7 +55,7 @@ import {
   taskyonProtocol,
   taskyonStorageProtocol,
 } from '@taskyon/taskyon/api'
-import { createDefaultTaskyonToolSetup } from '@taskyon/taskyon/tools'
+import { createDefaultTaskyonToolSetup, resolveAgentToolCatalog } from '@taskyon/taskyon/tools'
 import { setChatCompletionTraceWriter } from '@taskyon/taskyon/tools/chatCompletionTrace'
 import { createNodeResourceFilesLoader } from '@taskyon/taskyon/tools/nodeTaskyonDocumentationProvider'
 import {
@@ -160,9 +164,6 @@ const DEFAULT_PROMPT_TEMPLATES = {
 }
 const ENTRY_NODE_TOOL_NAME = 'entryNode'
 let debugLogsEnabled = process.env.TYCLI_DEBUG === '1'
-const EXPLORATION_TOOL_NAME = 'exploration'
-const UPDATE_FILES_TOOL_NAME = 'updateFiles'
-const DOWNLOAD_FILE_TOOL_NAME = 'downloadFile'
 const FILE_PICKER_MAX_DEPTH = 3
 const FILE_PICKER_MAX_ENTRIES = 5000
 const FILE_PICKER_MAX_OPTIONS = 30
@@ -283,34 +284,6 @@ let runtimeLog: RuntimeLog | undefined
 
 const CHAT_COMPLETION_TRACE_DIR_ENV = 'TYCLI_CHAT_COMPLETION_TRACE_DIR'
 const CHAT_COMPLETION_TRACE_LABEL_ENV = 'TYCLI_CHAT_COMPLETION_TRACE_LABEL'
-const CHAT_COMPLETION_TRACE_RAW_ENV = 'TYCLI_CHAT_COMPLETION_TRACE_RAW'
-
-const shouldKeepRawChatCompletionTracePayloads = () =>
-  ['1', 'true', 'yes'].includes(
-    process.env[CHAT_COMPLETION_TRACE_RAW_ENV]?.trim().toLowerCase() ?? '',
-  )
-
-const summarizeRawTraceString = (value: string) => ({
-  omitted: true,
-  chars: value.length,
-  preview: value.slice(0, 2_000),
-})
-
-const sanitizeChatCompletionTracePayload = (value: unknown, keepRawPayloads: boolean): unknown => {
-  if (keepRawPayloads || !value || typeof value !== 'object') return value
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeChatCompletionTracePayload(item, keepRawPayloads))
-  }
-
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [
-      key,
-      key === 'rawOutput' && typeof entry === 'string'
-        ? summarizeRawTraceString(entry)
-        : sanitizeChatCompletionTracePayload(entry, keepRawPayloads),
-    ]),
-  )
-}
 
 const sanitizeTraceFilePart = (value: string) =>
   value
@@ -335,62 +308,27 @@ const stringifyTraceJson = (value: unknown) => JSON.stringify(value, createJsonR
 
 function createCliChatCompletionTraceWriter(traceDir: string) {
   let sequence = 0
-  const keepRawPayloads = shouldKeepRawChatCompletionTracePayloads()
-  const pendingSequences = new Map<string, number[]>()
-  const keyFor = (payload: { taskId: string; label?: string }) =>
-    `${payload.label ?? ''}\n${payload.taskId}`
-  const fileNameFor = (
-    sequenceId: number,
-    payload: { taskId: string; label?: string },
-    side: 'input' | 'output',
-  ) => {
+  const fileNameFor = (sequenceId: number, record: { taskId: string; label?: string }) => {
     const parts = [
       String(sequenceId).padStart(4, '0'),
-      ...(payload.label ? [sanitizeTraceFilePart(payload.label)] : []),
-      sanitizeTraceFilePart(payload.taskId),
-      side,
+      ...(record.label ? [sanitizeTraceFilePart(record.label)] : []),
+      sanitizeTraceFilePart(record.taskId),
+      'record',
     ]
     return `${parts.join('_')}.json`
   }
 
   return {
-    writeInput: async (payload: { taskId: string; label?: string; input: unknown }) => {
+    write: async (record: { taskId: string; label?: string; providerRequest: unknown }) => {
       await mkdir(traceDir, { recursive: true })
       const sequenceId = ++sequence
-      const key = keyFor(payload)
-      pendingSequences.set(key, [...(pendingSequences.get(key) ?? []), sequenceId])
       await writeFile(
-        join(traceDir, fileNameFor(sequenceId, payload, 'input')),
+        join(traceDir, fileNameFor(sequenceId, record)),
         stringifyTraceJson({
-          side: 'input',
           sequence: sequenceId,
-          taskId: payload.taskId,
-          ...(payload.label ? { label: payload.label } : {}),
-          input: payload.input,
-        }),
-        'utf8',
-      )
-    },
-    writeOutput: async (payload: {
-      taskId: string
-      label?: string
-      input: unknown
-      output: unknown
-    }) => {
-      await mkdir(traceDir, { recursive: true })
-      const key = keyFor(payload)
-      const pending = pendingSequences.get(key) ?? []
-      const sequenceId = pending.shift() ?? ++sequence
-      if (pending.length > 0) pendingSequences.set(key, pending)
-      else pendingSequences.delete(key)
-      await writeFile(
-        join(traceDir, fileNameFor(sequenceId, payload, 'output')),
-        stringifyTraceJson({
-          side: 'output',
-          sequence: sequenceId,
-          taskId: payload.taskId,
-          ...(payload.label ? { label: payload.label } : {}),
-          output: sanitizeChatCompletionTracePayload(payload.output, keepRawPayloads),
+          taskId: record.taskId,
+          ...(record.label ? { label: record.label } : {}),
+          providerRequest: record.providerRequest,
         }),
         'utf8',
       )
@@ -1229,32 +1167,22 @@ function createCliClarificationTool(
     },
   })
 }
-const ACTIVE_LLM_TOOLS = [
-  CLARIFICATION_TOOL_NAME,
-  'taskPlanner',
-  cliBashTool.name,
-  EXPLORATION_TOOL_NAME,
-  UPDATE_FILES_TOOL_NAME,
-  DOWNLOAD_FILE_TOOL_NAME,
-  githubIssuesTool.name,
-  gitlabTool.name,
-] as const
+const CLI_UNAVAILABLE_TOOL_NAMES = new Set([
+  'animatedClock',
+  'getGitlabInfo',
+  'issueListGenerator',
+  'location',
+  'newWindowOpener',
+  'notification',
+  'opfsStorage',
+  'proceduralTreeGenerator',
+  'tauriHttpWebReader',
+  'waitForPostMessage',
+  'wfcGenerator',
+  'windowManager',
+])
 
 const INTERACTIVE_PROMPT_TOOL_NAMES = new Set<string>([CLARIFICATION_TOOL_NAME])
-
-type ToolCatalogEntry = {
-  name: string
-  description: string
-  renderOptions?: { hideChat?: boolean }
-}
-
-const isCliToolCatalogEntry = (tool: unknown): tool is ToolCatalogEntry =>
-  typeof tool === 'object' &&
-  tool !== null &&
-  'name' in tool &&
-  typeof tool.name === 'string' &&
-  'description' in tool &&
-  typeof tool.description === 'string'
 
 function buildCliStableContext(projectInstructions: string) {
   const shell = process.env.SHELL ?? process.env.ComSpec ?? 'unknown'
@@ -1267,7 +1195,6 @@ function buildCliStableContext(projectInstructions: string) {
       '## Stable Runtime Context',
       `Current Working Directory: ${process.cwd()}`,
       `Shell: ${shell}`,
-      `LLM-callable tools: ${ACTIVE_LLM_TOOLS.join(', ')}`,
       '',
       '## Stable Tool Usage Rules',
       '1. Prefer answering directly when no tool action is needed.',
@@ -2209,6 +2136,9 @@ async function handleProviderCommand(
 
 async function handleToolsCommand(ty: Taskyon, target?: Record<string, { hideChat?: boolean }>) {
   const all = await createCliTaskyonClient(ty.port).tools.list({ includeHidden: true })
+  const agentToolNames = new Set(
+    resolveAgentToolCatalog(all, CLI_UNAVAILABLE_TOOL_NAMES).map((tool) => tool.name),
+  )
   if (target) {
     for (const key of Object.keys(target)) delete target[key]
     for (const [name, def] of Object.entries(
@@ -2220,7 +2150,7 @@ async function handleToolsCommand(ty: Taskyon, target?: Record<string, { hideCha
   const allToolNames = Object.keys(all).sort()
   writeLine('\nActive tool definitions:')
   allToolNames.forEach((toolName, idx) => {
-    const kind = ACTIVE_LLM_TOOLS.includes(toolName)
+    const kind = agentToolNames.has(toolName)
       ? 'llm-allowed'
       : toolName === ENTRY_NODE_TOOL_NAME
         ? 'entry-node'
@@ -2548,24 +2478,14 @@ async function main() {
   const cliEntryNodeTool = createStandardEntryNodeTool({
     name: ENTRY_NODE_TOOL_NAME,
     renderOptions: { hideLlm: true, hideChat: true },
-    defaultAllowedTools: [...ACTIVE_LLM_TOOLS],
     toolChooser: { enabled: true, useTools: true },
     getToolCatalog: async () => {
       const ty = taskyonRef.current
       if (!ty) return []
-      const allTools = (await createCliTaskyonClient(ty.port).tools.list({
+      const allTools = await createCliTaskyonClient(ty.port).tools.list({
         includeHidden: true,
-      })) as Record<string, ToolCatalogEntry>
-      return Object.values(allTools)
-        .filter(isCliToolCatalogEntry)
-        .filter(
-          (tool) =>
-            !['chatCompletion', 'entryNode', 'opfsStorage', 'taskyonFlow'].includes(tool.name),
-        )
-        .map((tool) => ({
-          name: tool.name,
-          description: tool.description,
-        }))
+      })
+      return resolveAgentToolCatalog(allTools, CLI_UNAVAILABLE_TOOL_NAMES)
     },
     stableContext: () => buildCliStableContext(projectInstructions),
     extraContext: () => buildCliVolatileContext(),
@@ -2611,7 +2531,9 @@ async function main() {
     }),
     cryptoSession,
     {
-      toolSetup: createDefaultTaskyonToolSetup(),
+      toolSetup: createDefaultTaskyonToolSetup({
+        unavailableToolNames: CLI_UNAVAILABLE_TOOL_NAMES,
+      }),
       createIframeMultiPlexer: () =>
         createUnavailableIframeMux('Iframe message bridging is not available in tycli.'),
       indexTaskVectors: false,
@@ -2807,6 +2729,8 @@ async function main() {
   let hasWorkerProcessing = false
   let taskProcessingStatus: 'idle' | 'processing' | 'finished' = 'idle'
   const taskSnapshotById = new Map<string, string>()
+  const taskById = new Map<string, TaskNode>()
+  const workerTaskStateById = new Map<string, TyTaskStreamData['stage']>()
   const footer = await createCliFooter()
   const workerSpinnerFrames = ['-', '\\', '|', '/']
   let workerStatusTimer: ReturnType<typeof setInterval> | null = null
@@ -3034,6 +2958,7 @@ async function main() {
     thinkingLines = []
     thinkingText = ''
     activeWorkerTasks.clear()
+    workerTaskStateById.clear()
     hasWorkerProcessing = false
   }
 
@@ -3098,8 +3023,44 @@ async function main() {
 
   const renderThinkingPanel = () => {
     if (!waitingForTask) return
+    const currentTask = currentLeafId ? taskById.get(currentLeafId) : undefined
+    const siblingChains = currentTask?.parentID
+      ? selectChildTaskChains(currentTask.parentID, taskById.values())
+      : []
+    const lineage: TaskNode[] = []
+    const visited = new Set<string>()
+    let cursor = currentTask
+    while (cursor && !visited.has(cursor.id)) {
+      visited.add(cursor.id)
+      lineage.push(cursor)
+      cursor = cursor.parentID ? taskById.get(cursor.parentID) : undefined
+    }
+    const childChains = lineage
+      .filter((task) => task.content.type === 'functioncall')
+      .flatMap((task) => selectChildTaskChains(task.id, taskById.values()))
+    const queuedTasks = selectTaskQueueBranches(
+      [...siblingChains, ...childChains],
+      workerTaskStateById,
+    )
+      .flatMap((branch) => branch.pendingTasks)
+      .filter(
+        (task) =>
+          task.content.type === 'message' ||
+          (task.content.type === 'functioncall' &&
+            !toolRenderOptions[task.content.data.name]?.hideChat),
+      )
+    const queueLines =
+      queuedTasks.length > 0
+        ? [
+            `[queue] ${queuedTasks.length} ${queuedTasks.length === 1 ? 'task' : 'tasks'} queued`,
+            ...queuedTasks.slice(0, 3).map((task) => `  - ${getTaskQueueLabel(task)}`),
+            ...(queuedTasks.length > 3 ? [`  - ... ${queuedTasks.length - 3} more`] : []),
+          ]
+        : []
     const recent = thinkingLines.slice(-5)
-    const panel = recent.length > 0 ? ['[thinking]', ...recent.map((line) => `  ${line}`)] : []
+    const thinkingPanel =
+      recent.length > 0 ? ['[thinking]', ...recent.map((line) => `  ${line}`)] : []
+    const panel = [...queueLines, ...thinkingPanel]
     const panelText = panel.join('\n')
     if (panelText === renderedThinkingPanelText) return
 
@@ -3159,6 +3120,14 @@ async function main() {
   const trackWorkerProgress = (event: WorkerEvent) => {
     const taskId = event.task?.id ?? event.taskId ?? null
     const stage = event.stage ?? ''
+    if (taskId && event.stage) {
+      if (['processed', 'finished', 'aborted', 'error'].includes(event.stage)) {
+        workerTaskStateById.delete(taskId)
+      } else {
+        workerTaskStateById.set(taskId, event.stage)
+      }
+      scheduleThinkingRender()
+    }
     if (stage !== 'waiting') clearWorkerIdleSettleTimer()
     if (stage === 'queued' || stage === 'processing') {
       if (taskId) activeWorkerTasks.add(taskId)
@@ -3363,9 +3332,11 @@ async function main() {
     const prev = taskSnapshotById.get(task.id)
     if (prev === snapshot) return
     taskSnapshotById.set(task.id, snapshot)
+    taskById.set(task.id, task)
     currentLeafId = task.id
     queueConversationPersist(task.id)
     if (suppressed) return
+    scheduleThinkingRender()
     renderTaskProgress(
       {
         debugEnabled: () => debugLogsEnabled,

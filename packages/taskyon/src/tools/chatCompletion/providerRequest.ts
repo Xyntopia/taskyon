@@ -1,7 +1,8 @@
 import type { ModelMessage, streamText, SystemModelMessage, ToolChoice, ToolSet } from 'ai'
 import { jsonSchema, Output } from 'ai'
 import type OpenAI from 'openai'
-import type { apiConfig } from '../../types/chatCompletion'
+import type { apiConfig, ProviderRequestTrace } from '../../types/chatCompletion'
+import { createChatCompletionRecordingFetch } from '../chatCompletionTrace'
 
 const collectSystemInstructions = (messages: ModelMessage[]) => {
   const instructions = messages
@@ -77,6 +78,7 @@ export const buildChatProviderRequest = async (input: {
   reasoningEffort?: 'low' | 'high' | 'medium' | 'none'
   verbosity?: OpenAI.ChatCompletionCreateParams['verbosity']
   toolChoice?: ToolChoice<ToolSet>
+  providerRequest?: ProviderRequestTrace
 }) => {
   console.log('Creating chat completion request', {
     siteUrl: input.siteUrl,
@@ -88,6 +90,9 @@ export const buildChatProviderRequest = async (input: {
   let model
   let requestMessages = input.messages
   const overrideOptions: Record<string, unknown> = {}
+  const recordingFetch = input.providerRequest
+    ? createChatCompletionRecordingFetch(input.providerRequest, fetch)
+    : undefined
 
   switch (input.api.name) {
     case 'openai':
@@ -96,6 +101,7 @@ export const buildChatProviderRequest = async (input: {
       const openai = createOpenAI({
         apiKey: input.apiKey,
         ...(input.api.defaultHeaders ? { headers: input.api.defaultHeaders } : {}),
+        ...(recordingFetch ? { fetch: recordingFetch } : {}),
         ...(input.api.name === 'chatgpt-codex' ? { baseURL: input.api.baseURL } : {}),
       })
       model = openai(input.selectedModel)
@@ -143,11 +149,11 @@ export const buildChatProviderRequest = async (input: {
     case 'openrouter.ai': {
       const { createOpenRouter } = await import('@openrouter/ai-sdk-provider')
       const stripUserAgentFetch: typeof fetch = (requestInput, init) => {
-        if (!init?.headers) return fetch(requestInput, init)
+        if (!init?.headers) return (recordingFetch ?? fetch)(requestInput, init)
         const headers = new Headers(init.headers)
         headers.delete('user-agent')
         headers.delete('User-Agent')
-        return fetch(requestInput, { ...init, headers })
+        return (recordingFetch ?? fetch)(requestInput, { ...init, headers })
       }
       const openrouter = createOpenRouter({
         apiKey: input.apiKey,
@@ -197,6 +203,7 @@ export const buildChatProviderRequest = async (input: {
         apiKey: input.apiKey,
         baseURL: input.api.baseURL + input.api.routes.chatCompletion,
         name: input.api.name,
+        ...(recordingFetch ? { fetch: recordingFetch } : {}),
       })
       model = openai(input.selectedModel)
     }

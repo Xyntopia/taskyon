@@ -66,13 +66,30 @@ const collectLineageIds = async (taskId: string, getTask: TaskGetter) => {
   return newestFirst.reverse()
 }
 
-const resolveVisibleLeafResult = async (leafTaskId: string, getTask: TaskGetter) => {
-  const leafTask = await getRequiredTask(leafTaskId, getTask)
-  if (isVisibleTerminalTask(leafTask)) return leafTask.id
-  if (leafTask.content.type !== 'return' || !leafTask.priorID) return undefined
+const resolveVisibleTerminalResults = async (
+  taskId: string,
+  access: TaskChainSelectionAccess,
+  visited: ReadonlySet<string> = new Set(),
+): Promise<string[]> => {
+  if (visited.has(taskId)) return []
+  const visitedWithTask = new Set([...visited, taskId])
+  const task = await getRequiredTask(taskId, access.getTask)
+  if (isVisibleTerminalTask(task)) return [task.id]
 
-  const previousTask = await getRequiredTask(leafTask.priorID, getTask)
-  return isVisibleTerminalTask(previousTask) ? previousTask.id : undefined
+  if (task.content.type === 'return' && task.priorID) {
+    return await resolveVisibleTerminalResults(task.priorID, access, visitedWithTask)
+  }
+
+  const childIds = Array.from(await access.searchAllDirectChildren(task.id))
+  const nestedResultIds = await Promise.all(
+    childIds.map(async (childId) => {
+      const leafIds = await access.findSiblingLeafTasks(childId)
+      return await Promise.all(
+        leafIds.map((leafId) => resolveVisibleTerminalResults(leafId, access, visitedWithTask)),
+      )
+    }),
+  )
+  return Array.from(new Set(nestedResultIds.flat(2)))
 }
 
 const collectDirectSubtaskResults = async (taskId: string, access: TaskChainSelectionAccess) => {
@@ -81,12 +98,12 @@ const collectDirectSubtaskResults = async (taskId: string, access: TaskChainSele
     childIds.map(async (childId) => {
       const leafIds = await access.findSiblingLeafTasks(childId)
       return await Promise.all(
-        leafIds.map((leafId) => resolveVisibleLeafResult(leafId, access.getTask)),
+        leafIds.map((leafId) => resolveVisibleTerminalResults(leafId, access)),
       )
     }),
   )
 
-  return leafResultIds.flat().filter((id): id is string => typeof id === 'string')
+  return Array.from(new Set(leafResultIds.flat(2)))
 }
 
 const addIdOnce = (ids: string[], seen: Set<string>, id: string) => {

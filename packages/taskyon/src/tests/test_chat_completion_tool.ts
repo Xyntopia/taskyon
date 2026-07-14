@@ -3,12 +3,14 @@ import {
   getCommandFromStructuredResponse,
   prepareChatCompletionContext,
 } from '../tools/chatCompletionTool'
+import { createChatCompletionRecordingFetch } from '../tools/chatCompletionTrace'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import { selectTaskChainIds } from '../core/taskChainSelection'
 import { createTaskVariablePresentationService } from '../core/taskVariables'
 import { buildChatProviderRequest } from '../tools/chatCompletion/providerRequest'
 import { interpretAssistantMessage } from '../tools/chatCompletion/response'
 import { classifyStreamingFailure } from '../tools/chatCompletion/streamResult'
+import type { ProviderRequestTrace } from '../types/chatCompletion'
 import type { TaskNode } from '../types/taskNode'
 import type { ToolBase } from '../types/tools'
 
@@ -140,10 +142,39 @@ export const testChatCompletionContextUsesLineageAndTerminalSubtaskResults = asy
       content: { type: 'structured', data: { result: 'Branch B final summary.' } },
     }),
     task({
+      id: 'branch-c-entry',
+      role: 'function',
+      parentID: 'planner-call',
+      created_at: 11,
+      content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+    }),
+    task({
+      id: 'branch-c-completion',
+      role: 'function',
+      parentID: 'branch-c-entry',
+      created_at: 12,
+      content: { type: 'functioncall', data: { name: 'chatCompletion', arguments: {} } },
+    }),
+    task({
+      id: 'branch-c-message',
+      role: 'assistant',
+      parentID: 'branch-c-completion',
+      created_at: 13,
+      content: { type: 'message', data: 'Branch C visible summary.' },
+    }),
+    task({
+      id: 'branch-c-structured-result',
+      role: 'assistant',
+      parentID: 'branch-c-completion',
+      priorID: 'branch-c-message',
+      created_at: 14,
+      content: { type: 'structured', data: { result: 'Branch C contracted handoff.' } },
+    }),
+    task({
       id: 'continue-user',
       role: 'user',
       priorID: 'planner-call',
-      created_at: 11,
+      created_at: 15,
       content: { type: 'message', data: 'Continue from the research results.' },
     }),
   ]
@@ -162,6 +193,7 @@ export const testChatCompletionContextUsesLineageAndTerminalSubtaskResults = asy
         'planner-call',
         'branch-a-result',
         'branch-b-result',
+        'branch-c-structured-result',
         'continue-user',
       ]),
     `Expected lineage plus terminal direct subtask results, got ${JSON.stringify(selectedIds)}`,
@@ -174,6 +206,12 @@ export const testChatCompletionContextUsesLineageAndTerminalSubtaskResults = asy
   assert(
     !selectedIds.includes('nested-noise-result'),
     'Expected nested subtask output to stay hidden from the parent chat context',
+  )
+  assert(
+    !selectedIds.includes('branch-c-entry') &&
+      !selectedIds.includes('branch-c-completion') &&
+      !selectedIds.includes('branch-c-message'),
+    'Expected only the terminal visible result from a nested task chain',
   )
 
   return { success: true }
@@ -449,6 +487,61 @@ export const testChatCompletionMixedTextAndNativeToolCallContinuesWithTool = () 
   return { success: true }
 }
 
+export const testChatCompletionRejectsToolArgumentsOutsideDeclaredSchema = () => {
+  const plannerDefinition: ToolBase = {
+    name: 'taskPlanner',
+    description: 'Delegate grouped tasks.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        tasks: {
+          type: 'array',
+          items: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+        },
+        parallel: { type: 'boolean' },
+      },
+      required: ['tasks'],
+    },
+  }
+  let errorMessage = ''
+
+  try {
+    interpretAssistantMessage(
+      [],
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'malformed-planner-call',
+            toolName: 'taskPlanner',
+            input: {
+              tasks: [['List available tools', 'Get the weather'], 'parallel=false] }'],
+            },
+          },
+        ],
+      },
+      true,
+      { taskPlanner: plannerDefinition },
+      createTaskVariablePresentationService(),
+    )
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : String(error)
+  }
+
+  assert(
+    errorMessage.includes('Invalid arguments for tool "taskPlanner"') &&
+      errorMessage.includes('/tasks/1'),
+    `Expected malformed planner arguments to be rejected at the provider boundary, got ${errorMessage}`,
+  )
+
+  return { success: true }
+}
+
 export const testChatCompletionCodexRequestMovesLeadingSystemPromptToInstructions = async () => {
   const request = await buildChatProviderRequest({
     messages: [
@@ -475,6 +568,78 @@ export const testChatCompletionCodexRequestMovesLeadingSystemPromptToInstruction
   assert(
     request.providerOptions?.openai?.instructions === 'Follow the system instructions.',
     'Expected Codex provider instructions to contain the leading system prompt',
+  )
+
+  return { success: true }
+}
+
+export const testTaskContractMessagesRenderOnceWithoutHiddenEntryNodeArguments = async () => {
+  const agentInstructions = 'Act as a cybersecurity reviewer.'
+  const objective = 'Audit the authentication boundary.'
+  const doneWhen = 'Every trust boundary has an evidence note.'
+  const tasks = [
+    task({
+      id: 'contract-system',
+      role: 'system',
+      content: { type: 'message', data: agentInstructions },
+    }),
+    task({
+      id: 'contract-user',
+      role: 'user',
+      priorID: 'contract-system',
+      content: {
+        type: 'message',
+        data: `Task objective:\n${objective}\n\nComplete when:\n- ${doneWhen}`,
+      },
+    }),
+    task({
+      id: 'contract-entry',
+      role: 'function',
+      priorID: 'contract-user',
+      content: {
+        type: 'functioncall',
+        data: {
+          name: 'entryNode',
+          arguments: {
+            taskContract: {
+              objective,
+              agentInstructions,
+              doneWhen: [doneWhen],
+              result: { mode: 'message' },
+            },
+          },
+        },
+      },
+    }),
+  ]
+  const messages = await convertTaskNodesToOpenAIChat(
+    tasks,
+    () => Promise.resolve(null),
+    () => Promise.resolve(undefined),
+    false,
+    true,
+    {
+      entryNode: {
+        name: 'entryNode',
+        description: 'Hidden entry node',
+        parameters: { type: 'object', properties: {}, additionalProperties: true },
+        renderOptions: { hideLlm: true },
+      },
+    },
+  )
+  const rendered = JSON.stringify(messages)
+
+  assert(
+    rendered.split(agentInstructions).length - 1 === 1,
+    'Expected agent instructions to appear exactly once in the rendered model context',
+  )
+  assert(
+    rendered.split(objective).length - 1 === 1 && rendered.split(doneWhen).length - 1 === 1,
+    'Expected objective and completion criteria to appear exactly once in model context',
+  )
+  assert(
+    !rendered.includes('taskContract'),
+    'Expected hidden entry-node arguments not to render into model context',
   )
 
   return { success: true }
@@ -570,6 +735,8 @@ testChatCompletionContextVariableNamesAreInvocationScoped.description =
   'Independent chatCompletion invocations derive deterministic variable names without sharing mutable presentation state.'
 testChatCompletionMixedTextAndNativeToolCallContinuesWithTool.description =
   'A provider response containing both text and a native tool call continues with the tool instead of returning prematurely.'
+testChatCompletionRejectsToolArgumentsOutsideDeclaredSchema.description =
+  'Provider-native tool calls are rejected before execution when their arguments violate the declared tool schema.'
 testChatCompletionCodexRequestMovesLeadingSystemPromptToInstructions.description =
   'Codex provider requests move the leading system prompt into provider instructions without making a network request.'
 testChatCompletionStreamingFailureClassification.description =
@@ -578,6 +745,106 @@ testChatCompletionRendersUploadedTextFile.description =
   'chatCompletion renders an uploaded text file into model-readable context.'
 testChatCompletionAnswerCompilesPresentationVariable.description =
   'Assistant answers compile request-scoped presentation variables back to durable task references.'
+
+export const testChatCompletionWireTraceRecordsRedactedProviderAttempts = async () => {
+  const providerRequest: ProviderRequestTrace = {
+    provider: 'chatgpt-codex',
+    model: 'gpt-5.4',
+    taskId: 'chat-task',
+    attempts: [],
+  }
+  let calls = 0
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const request = new Request(input, init)
+    const body = await request.text()
+    assert(
+      body.includes('keep this prompt'),
+      'Expected the provider fetch to receive the original body',
+    )
+    calls += 1
+    if (calls === 1) {
+      return new Response(JSON.stringify({ error: { message: 'bad token', api_key: 'secret' } }), {
+        status: 429,
+        headers: {
+          'content-type': 'application/json',
+          'x-request-id': 'request-one',
+          'set-cookie': 'session=secret',
+        },
+      })
+    }
+    if (calls === 2) {
+      return new Response('stream remains readable', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream', 'x-oai-request-id': 'request-two' },
+      })
+    }
+    throw new Error('Provider rejected Bearer secret with api_key=secret')
+  }
+  const recordingFetch = createChatCompletionRecordingFetch(providerRequest, fetchImpl)
+  const request = {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer secret',
+      'content-type': 'application/json',
+      'x-api-key': 'secret',
+    },
+    body: JSON.stringify({
+      input: 'keep this prompt',
+      api_key: 'secret',
+      file_data: 'large file payload',
+      image_url: { url: 'data:image/png;base64,secret' },
+    }),
+  }
+
+  await recordingFetch('https://provider.example/v1/responses', request)
+  const secondResponse = await recordingFetch('https://provider.example/v1/responses', request)
+  await recordingFetch('https://provider.example/v1/responses', request).catch(() => undefined)
+
+  assert(
+    (await secondResponse.text()) === 'stream remains readable',
+    'Expected response stream to remain readable',
+  )
+  assert(providerRequest.attempts.length === 3, 'Expected all provider attempts in one record')
+  const firstAttempt = providerRequest.attempts[0]
+  const secondAttempt = providerRequest.attempts[1]
+  const failedAttempt = providerRequest.attempts[2]
+  assert(
+    firstAttempt?.url === 'https://provider.example/v1/responses',
+    'Expected final provider URL',
+  )
+  assert(
+    firstAttempt?.requestHeaders.authorization === undefined &&
+      firstAttempt?.requestHeaders['x-api-key'] === undefined,
+    'Expected sensitive request headers to stay out of the trace',
+  )
+  assert(
+    JSON.stringify(firstAttempt?.requestBody).includes('[[redacted]]') &&
+      JSON.stringify(firstAttempt?.requestBody).includes('[[omitted]]'),
+    'Expected sensitive fields and binary payloads to be redacted',
+  )
+  assert(
+    firstAttempt?.response?.headers['set-cookie'] === undefined &&
+      JSON.stringify(firstAttempt?.response?.errorBody).includes('[[redacted]]'),
+    'Expected failure headers and body secrets to be redacted',
+  )
+  assert(
+    firstAttempt?.response?.requestId === 'request-one' &&
+      secondAttempt?.response?.requestId === 'request-two',
+    'Expected provider request IDs to remain available for both attempts',
+  )
+  assert(
+    failedAttempt?.error?.message.includes('secret') === false &&
+      failedAttempt?.error?.message.includes('[[redacted]]') === true,
+    'Expected transport errors to redact embedded credentials',
+  )
+
+  return { success: true }
+}
+
+testTaskContractMessagesRenderOnceWithoutHiddenEntryNodeArguments.description =
+  'Task-contract role, objective, and completion messages render once while hidden entry-node arguments stay out of model context.'
+testChatCompletionWireTraceRecordsRedactedProviderAttempts.description =
+  'chatCompletion records exact provider-wire attempts while preserving response streams and redacting credentials and binary payloads.'
 testChatCompletionContextUsesLineageAndTerminalSubtaskResults.description =
   'chatCompletion context follows parent/prior lineage and exposes terminal direct subtask results without flattening branch internals.'
 testChatCompletionContextSizeTrimsAfterLineageSelection.description =

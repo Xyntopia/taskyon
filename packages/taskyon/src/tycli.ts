@@ -3,6 +3,13 @@ export { tyCore } from './core/init'
 export type { Taskyon } from './core/init'
 export { chat2Md } from './core/markdownTaskIO'
 export {
+  getTaskQueueLabel,
+  selectChildTaskChains,
+  selectTaskQueueBranches,
+} from './core/taskQueueSelection'
+export type { TaskQueueBranch } from './core/taskQueueSelection'
+export type { TyTaskStreamData } from './core/taskWorker'
+export {
   connectTaskManagerStorageFromProtocol,
   createPgLiteTaskManagerStorageService,
 } from './core/taskManager'

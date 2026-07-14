@@ -136,7 +136,7 @@ export const createStorageProtocolServer = (
     storage: {
       records: {
         get: async ({ namespace, id }) => ({
-          value: await (await resolveBackend(namespace)).get(id),
+          value: (await (await resolveBackend(namespace)).get(id)) ?? null,
         }),
         set: async ({ namespace, id, value }) => {
           await (await resolveBackend(namespace)).set(id, value)

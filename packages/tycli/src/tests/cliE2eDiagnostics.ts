@@ -117,15 +117,18 @@ async function waitForText(
   timeoutMs: number,
   failOn: string[] = [],
   isClosed?: () => boolean,
-) {
+  fromIndex = 0,
+): Promise<number> {
   const startedAt = Date.now()
   while (Date.now() - startedAt < timeoutMs) {
     const output = readOutput()
-    const failedMatch = failOn.find((entry) => output.includes(entry))
+    const remainingOutput = output.slice(fromIndex)
+    const failedMatch = failOn.find((entry) => remainingOutput.includes(entry))
     if (failedMatch) {
       throw new Error(`Saw failure output "${failedMatch}" while waiting for "${needle}".`)
     }
-    if (output.includes(needle)) return
+    const matchIndex = remainingOutput.indexOf(needle)
+    if (matchIndex >= 0) return fromIndex + matchIndex + needle.length
     if (isClosed?.()) {
       throw new Error(`CLI exited while waiting for output "${needle}".\nOutput:\n${output}`)
     }
@@ -370,6 +373,7 @@ async function runSpawnedSession(args: {
     })
     child.on('close', (code) => finish(code))
     ;(async () => {
+      let outputOffset = 0
       for (const step of steps) {
         if (closedCode !== null) {
           throw new Error(
@@ -377,12 +381,13 @@ async function runSpawnedSession(args: {
           )
         }
         if (step.waitFor) {
-          await waitForText(
+          outputOffset = await waitForText(
             () => output,
             step.waitFor,
             timeoutMs,
             step.failOn,
             () => closedCode !== null,
+            outputOffset,
           )
         }
         if (step.signal) {

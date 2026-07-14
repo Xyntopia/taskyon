@@ -1,17 +1,28 @@
 import type { JSONSchema7 } from 'json-schema'
 import type { TyTaskManager } from '../core/taskManager'
-import { createChatCompletionTask } from '../api'
-import type { partialTaskDraft, TaskNode } from '../types/taskNode'
+import type { partialTaskDraft } from '../types/taskNode'
 import { taskTypeOptions } from '../types/taskNode'
+import {
+  taskContractResultSchema,
+  type TaskContract,
+  type TaskContractResult,
+} from '../types/taskContract'
 import { createTool, toolCall } from '../types/toolApi'
-import { safeYamlDump } from '../utils/yamlUtils'
 
 type PlannedTaskConfig = {
-  task: string
+  taskContract: TaskContract
   allowedTools?: string[]
 }
 
-type PlannedTaskInput = string | PlannedTaskConfig
+type PlannedTaskInput =
+  | string
+  | {
+      task: string
+      agentInstructions?: string
+      allowedTools?: string[]
+      doneWhen?: string[]
+      result?: TaskContractResult
+    }
 
 const plannerTaskObjectSchema = {
   type: 'object',
@@ -19,16 +30,19 @@ const plannerTaskObjectSchema = {
   properties: {
     task: {
       type: 'string',
-      description: 'Broad objective for this subtask. Keep it short and goal-oriented.',
+      description: 'Objective for this task. Keep it concrete and goal-oriented.',
     },
-    allowedTools: {
-      type: 'array',
-      items: {
-        type: 'string',
-      },
+    agentInstructions: {
+      type: 'string',
       description:
-        'Optional restrictive override for the exact tools this subtask may use. Only set this when you are truly certain no other tools are needed.',
+        'Optional task-specific behavior instructions, such as acting as a security reviewer or system architect.',
     },
+    doneWhen: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Optional semantic criteria that define when the task is complete.',
+    },
+    result: taskContractResultSchema,
   },
   required: ['task'],
 } as const satisfies JSONSchema7
@@ -37,30 +51,28 @@ const plannerTaskItemSchema = {
   anyOf: [{ type: 'string' }, plannerTaskObjectSchema],
 } as const satisfies JSONSchema7
 
-const plannerTaskChainPrompt = [
-  'You are starting a delegated subtask.',
-  'Read the previous user message and expand it into a more detailed local objective and execution strategy for this subtask.',
-  'Keep the original intent intact, but make the next execution phase more concrete.',
-  'Do not call any tools yet.',
-  'Respond only with the detailed objective and short execution strategy as assistant text.',
-].join('\n')
-
-const plannerContinuationPrompt = (allowedTools?: string[]) =>
-  [
-    'Continue this delegated subtask using the detailed objective above.',
-    'Carry out the work autonomously and continue the chain normally.',
-    'Do not ask whether to continue; finish this delegated branch with saved artifacts, verification evidence, or a concise completion status. Later planned tasks will continue automatically.',
-    ...(allowedTools
-      ? [
-          allowedTools.length > 0
-            ? `Important: the callable helper tools for this subtask are intentionally restricted to: ${allowedTools.join(', ')}. Configured entry-node capabilities such as web search may still be available; use them when the objective asks for discovery.`
-            : 'Important: this subtask should not call tools. Use the configured entry-node capabilities directly.',
-        ]
-      : []),
-  ].join('\n')
-
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === 'string')
+
+const isJsonSchema = (value: unknown): value is JSONSchema7 & Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value)
+
+const normalizeTaskResult = (value: unknown): TaskContractResult => {
+  if (value === undefined) return { mode: 'message' }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Planner task "result" must be an object.')
+  }
+
+  const candidate: { mode?: unknown; schema?: unknown } = value
+  if (candidate.mode === 'message') return { mode: 'message' }
+  if (candidate.mode !== 'structured') {
+    throw new Error('Planner task result mode must be "message" or "structured".')
+  }
+  if (!isJsonSchema(candidate.schema)) {
+    throw new Error(`Planner task result mode "${candidate.mode}" requires a JSON schema.`)
+  }
+  return { mode: candidate.mode, schema: candidate.schema }
+}
 
 export const normalizePlannedTaskInput = (value: unknown): PlannedTaskConfig => {
   if (typeof value === 'string') {
@@ -68,119 +80,124 @@ export const normalizePlannedTaskInput = (value: unknown): PlannedTaskConfig => 
     if (task.length === 0) {
       throw new Error('Planner task strings must not be empty.')
     }
-    return { task }
+    return {
+      taskContract: {
+        objective: task,
+        result: { mode: 'message' },
+      },
+    }
   }
 
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Planner tasks must be either a string or an object with a task field.')
   }
 
-  const candidate: { task?: unknown; allowedTools?: unknown } = value
+  const candidate: {
+    task?: unknown
+    agentInstructions?: unknown
+    allowedTools?: unknown
+    doneWhen?: unknown
+    result?: unknown
+  } = value
   const rawTask = candidate.task
   if (typeof rawTask !== 'string' || rawTask.trim().length === 0) {
     throw new Error('Planner task objects require a non-empty "task" string.')
   }
 
+  const rawAgentInstructions = candidate.agentInstructions
+  if (rawAgentInstructions !== undefined && typeof rawAgentInstructions !== 'string') {
+    throw new Error('Planner task "agentInstructions" must be a string when provided.')
+  }
   const rawAllowedTools = candidate.allowedTools
   if (rawAllowedTools !== undefined && !isStringArray(rawAllowedTools)) {
     throw new Error('Planner task "allowedTools" must be an array of strings when provided.')
   }
+  const rawDoneWhen = candidate.doneWhen
+  if (rawDoneWhen !== undefined && !isStringArray(rawDoneWhen)) {
+    throw new Error('Planner task "doneWhen" must be an array of strings when provided.')
+  }
 
   return {
-    task: rawTask.trim(),
+    taskContract: {
+      objective: rawTask.trim(),
+      ...(rawAgentInstructions !== undefined && rawAgentInstructions.trim().length > 0
+        ? { agentInstructions: rawAgentInstructions.trim() }
+        : {}),
+      ...(rawDoneWhen !== undefined
+        ? { doneWhen: rawDoneWhen.map((criterion) => criterion.trim()).filter(Boolean) }
+        : {}),
+      result: normalizeTaskResult(candidate.result),
+    },
     ...(rawAllowedTools !== undefined ? { allowedTools: rawAllowedTools } : {}),
   }
 }
 
-const summarizePlannerContext = (taskChain: TaskNode[]) => {
-  const contextItems = taskChain
-    .filter((task) => ['message', 'toolresult', 'structured', 'error'].includes(task.content.type))
-    .slice(-6)
-    .map((task) => ({
-      role: task.role,
-      type: task.content.type,
-      data: task.content.data,
-    }))
-
-  return contextItems.length > 0 ? safeYamlDump(contextItems) : 'No additional context provided.'
-}
-
-const createPlannerBootstrapMessage = (task: PlannedTaskConfig, plannerContext: string) =>
+const renderTaskContractMessage = (contract: TaskContract) =>
   [
-    `Subtask objective: ${task.task}`,
-    '',
-    'Shared planner context:',
-    plannerContext,
-    '',
-    'First, expand this into a more detailed local objective and execution strategy before continuing.',
+    'Task objective:',
+    contract.objective,
+    ...(contract.doneWhen && contract.doneWhen.length > 0
+      ? ['', 'Complete when:', ...contract.doneWhen.map((criterion) => `- ${criterion}`)]
+      : []),
   ].join('\n')
 
 const createPlannerTaskChain = (
   task: PlannedTaskConfig,
-  plannerContext: string,
+  entryNodeName: string,
 ): partialTaskDraft[] => [
+  ...(task.taskContract.agentInstructions
+    ? [
+        {
+          role: 'system' as const,
+          content: {
+            type: 'message' as const,
+            data: task.taskContract.agentInstructions,
+          },
+        },
+      ]
+    : []),
   {
     role: 'user',
     content: {
       type: 'message',
-      data: createPlannerBootstrapMessage(task, plannerContext),
-    },
-  },
-  createChatCompletionTask({
-    appendSystemPrompts: [plannerTaskChainPrompt],
-  }),
-  {
-    role: 'user',
-    content: {
-      type: 'message',
-      data: plannerContinuationPrompt(task.allowedTools),
+      data: renderTaskContractMessage(task.taskContract),
     },
   },
   toolCall({
-    name: 'entryNode',
+    name: entryNodeName,
     arguments: {
+      taskContract: task.taskContract,
       ...(task.allowedTools !== undefined ? { allowedTools: task.allowedTools } : {}),
     },
   }),
 ]
 
-const createPlannerReviewTaskChain = (plannerContext: string): partialTaskDraft[] => [
-  {
-    role: 'user',
-    content: {
-      type: 'message',
-      data: [
-        'Planner review checkpoint.',
-        '',
-        'Compare the completed delegated work in this branch against the original request and shared planner context.',
-        '',
-        'Shared planner context:',
-        plannerContext,
-        '',
-        'If the requested outcome is not complete, continue autonomously using taskPlanner or the available execution tools.',
-        'If the requested outcome is complete, give a concise final report with verification evidence and human-check instructions.',
-      ].join('\n'),
-    },
-  },
-  toolCall({
-    name: 'entryNode',
-    arguments: {},
-  }),
-]
-
 export const buildTaskPlannerTaskChains = (
   taskGroups: readonly (readonly PlannedTaskInput[])[],
-  taskChain: readonly TaskNode[],
-  options?: { includeReview?: boolean },
-) => {
-  const plannerContext = summarizePlannerContext([...taskChain])
-  const includeReview = options?.includeReview ?? true
-  return taskGroups.map((group) => [
-    ...group.flatMap((item) =>
-      createPlannerTaskChain(normalizePlannedTaskInput(item), plannerContext),
-    ),
-    ...(includeReview ? createPlannerReviewTaskChain(plannerContext) : []),
-  ])
+  entryNodeName = 'entryNode',
+) =>
+  taskGroups.map((group) =>
+    group.flatMap((item) => createPlannerTaskChain(normalizePlannedTaskInput(item), entryNodeName)),
+  )
+
+const resolvePlannerEntryNodeName = (taskChain: readonly partialTaskDraft[]) => {
+  const functionCalls = taskChain.filter(
+    (task) => task.content.type === 'functioncall' && task.content.data.name !== 'chatCompletion',
+  )
+  const selectedPlannerCall = [...functionCalls].reverse().find((task) => {
+    if (task.content.type !== 'functioncall') return false
+    const allowedTools = task.content.data.arguments.allowedTools
+    return Array.isArray(allowedTools) && allowedTools.includes('taskPlanner')
+  })
+  if (selectedPlannerCall?.content.type === 'functioncall') {
+    return selectedPlannerCall.content.data.name
+  }
+  const initialEntryCall = functionCalls.find(
+    (task) => task.content.type === 'functioncall' && task.content.data.name !== 'taskPlanner',
+  )
+  return initialEntryCall?.content.type === 'functioncall'
+    ? initialEntryCall.content.data.name
+    : 'entryNode'
 }
 
 const taskManagerSearchUrl = (args: {
@@ -215,7 +232,7 @@ export const taskSearcher = (taskManager: TyTaskManager) =>
         },
         taskType: {
           type: 'string',
-          enum: taskTypeOptions.filter(option => typeof option !== 'bigint'),
+          enum: taskTypeOptions.filter((option) => typeof option !== 'bigint'),
           default: undefined,
           description: `Filter tasks by type. If not provided, all types are included.`,
         },
@@ -262,14 +279,22 @@ Choose the packet size dynamically:
 
 Do not keep hidden planner state. Any plan, checklist, status, acceptance criteria, or evidence should be represented in visible task messages, structured results, or delegated task outputs so the task tree remains the source of truth.
 
-Each task item should usually be a short plain string that states the broad objective. Keep these broad and compact so the delegated agent can refine the task locally.
+Preserve the requested work when constructing delegated objectives:
+- Emit one concrete task per requested objective when the request explicitly identifies separate tasks.
+- Do not add a meta-task that merely says to plan, coordinate, or execute the remaining tasks; taskPlanner already performs that orchestration.
+- Preserve explicit requested actions and named capabilities. Do not rewrite an executable action as an explanation of capability limitations.
+- Do not combine several distinct requested objectives into one delegated task.
+
+Each task item may be a short plain string when a normal message result is sufficient.
 
 Optionally, a task item may instead be:
-{ task: string, allowedTools?: string[] }
+{ task: string, agentInstructions?: string, doneWhen?: string[], result?: { mode: "message" } | { mode: "structured", schema: JSONSchema } }
 
-Only use "allowedTools" when you are truly certain that no other tools are needed. It is restrictive and should remain rare.
+Each delegated entryNode runs the normal dynamic tool chooser for its own objective. Do not select execution tools on behalf of delegated tasks.
 
-For every delegated task, Taskyon first creates a fresh local context, expands the broad objective into a more detailed local plan, and then launches entryNode to continue the subtask normally.`,
+Use "agentInstructions" for task-specific behavior such as acting as a security reviewer or system architect. Keep it distinct from the task objective. For dependent sequential work, provide explicit "doneWhen" criteria and a structured result schema when the next task needs a reliable handoff.
+
+Taskyon renders each contract once as task-chain messages and launches entryNode directly. Previous task results remain available through task lineage; do not copy them into later task descriptions.`,
   parameters: {
     type: 'object',
     additionalProperties: false,
@@ -281,52 +306,23 @@ For every delegated task, Taskyon first creates a fresh local context, expands t
           items: plannerTaskItemSchema,
         },
         description:
-          'A bounded execution packet. By default all outer groups are flattened into one sequential workflow. Each inner array item is a sequential step. Use multiple outer groups only with parallel=true and only for independent work. Emit only the next useful packet before replanning: one task for uncertain steps or a short sequential list for obvious low-risk steps.',
+          'A bounded execution packet. By default all outer groups are flattened into one sequential workflow. Each inner array item is a sequential step. Use multiple outer groups only with parallel=true and only for independent work. Every delegated task must surface a useful final message or structured result. Use structured fields when a later task needs a reliable handoff. Emit one concrete task per requested objective when the request explicitly identifies separate tasks. Preserve explicit requested actions and named capabilities; do not add a meta-task that plans the plan, combine distinct objectives, or rewrite executable work as a capability explanation. Each delegated entryNode chooses its execution tools dynamically. For map/reduce work, keep the outer workflow sequential: first delegate one collection task that may call taskPlanner recursively with parallel=true, then add an explicit synthesis task after it. The worker waits for the nested branches and surfaces their terminal results through lineage. Omit synthesis when independent branch results are already the requested deliverables. Stop recursive planning once tasks are concrete enough to execute; do not recursively restate the same work. Emit only the next useful packet before replanning: one task for uncertain steps or a short sequential list for obvious low-risk steps.',
       },
       parallel: {
         type: 'boolean',
-        default: false,
         description:
-          'Set true only when each outer tasks group is independent and safe to run in parallel. Leave false for normal project work, especially implementation plus README plus verification workflows.',
+          'Set true only when each outer tasks group is independent and safe to run in parallel. Omit this parameter for normal sequential work.',
       },
     },
     required: ['tasks'],
   } as const satisfies JSONSchema7,
   function: async ({ tasks, parallel = false }, context) => {
     const taskGroups = parallel ? tasks : [tasks.flat()]
-    const normalizedGroups = taskGroups.map((group) =>
-      group.map((item) => normalizePlannedTaskInput(item)),
-    )
-    const groupsFormatted = normalizedGroups
-      .map((group, index) => {
-        const description = group
-          .map((item) =>
-            item.allowedTools && item.allowedTools.length > 0
-              ? `${item.task} [allowedTools: ${item.allowedTools.join(', ')}]`
-              : item.task,
-          )
-          .join(' -> ')
-        return `Group ${index + 1}: ${description}`
-      })
-      .join('\n')
-
-    return context.createSubtasksResult([
-      [
-        {
-          role: 'assistant',
-          content: {
-            type: 'message',
-            data: `Task Breakdown:\n${groupsFormatted}`,
-          },
-        },
-        {
-          role: 'system',
-          content: { type: 'return', data: 'task breakdown recorded' },
-        },
-      ],
-      ...buildTaskPlannerTaskChains(taskGroups, await context.getExecutionTaskChain()),
-    ])
+    const taskChain = await context.getExecutionTaskChain()
+    const entryNodeName = resolvePlannerEntryNodeName(taskChain)
+    return context.createSubtasksResult(buildTaskPlannerTaskChains(taskGroups, entryNodeName))
   },
+  renderOptions: { hideLlm: true, hideVector: true },
 })
 
 export const taskOrganizationTools = [taskPlanner]

@@ -16,12 +16,15 @@ import {
   addNewTool,
   createMcpToolImporter,
   createToolSearcher,
+  resolveAgentToolCatalog,
   toolCreationWizard,
 } from './toolTools'
 import { useFullSmallTools } from './usefulSmallTools'
 import { appDevTools } from './webAppDev'
 import { webResearchTools } from './webResearchTool'
 import { wfcGenerator } from './wavefunctioncollapse'
+
+export { resolveAgentToolCatalog } from './toolTools'
 
 const createChatCompletionSettings = (llmSettings: Thunk<ReadonlyDeep<llmSettings>>) => {
   const settings = llmSettings()
@@ -32,7 +35,9 @@ const createChatCompletionSettings = (llmSettings: Thunk<ReadonlyDeep<llmSetting
   }
 }
 
-export const createDefaultTaskyonToolSetup = (): TyCoreToolSetup => ({
+export const createDefaultTaskyonToolSetup = (options?: {
+  unavailableToolNames?: ReadonlySet<string>
+}): TyCoreToolSetup => ({
   baseTools: [
     ...smallHelperTools,
     ...appDevTools,
@@ -66,7 +71,9 @@ export const createDefaultTaskyonToolSetup = (): TyCoreToolSetup => ({
       tools: [
         localVectorStore(db),
         chatCompletion,
-        createToolSearcher(taskManager),
+        createToolSearcher(taskManager, (tools) =>
+          resolveAgentToolCatalog(tools, options?.unavailableToolNames),
+        ),
         createMcpToolImporter(taskManager),
         taskSearcher(taskManager),
       ],

@@ -82,12 +82,7 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
                         :label="api.name + ' key'"
                         filled
                         :data-cy="'add-' + api.name"
-                        @keyup.enter="
-                          () => {
-                            addNewPw(api.name, currentNewPassword)
-                            close()
-                          }
-                        "
+                        @keyup.enter="addNewPw(api.name, currentNewPassword, close)"
                       />
                     </q-card-section>
                     <q-card-section v-if="providerHasOauth(api)">
@@ -102,7 +97,11 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
                     </q-card-section>
                     <q-card-actions align="evenly">
                       <q-btn flat label="Cancel" />
-                      <q-btn flat label="OK" @click="addNewPw(api.name, currentNewPassword)" />
+                      <q-btn
+                        flat
+                        label="OK"
+                        @click.stop="addNewPw(api.name, currentNewPassword, close)"
+                      />
                     </q-card-actions>
                   </q-card>
                 </template>
@@ -291,10 +290,11 @@ const providerIsAvailable = (providerName: string) =>
 const activateProvider = (providerName: string) => state.setLLMSettings('selectedApi', providerName)
 const providerOauthIcon = () => matKey
 
-const addNewPw = async (name: string, newPw: string | undefined) => {
+const addNewPw = async (name: string, newPw: string | undefined, close: () => void) => {
   await tystate.setProviderApiKey(name, newPw as KeyString)
   await passwords.value?.reloadSecrets()
   currentNewPassword.value = ''
+  close()
 }
 
 const loginProviderWithOauth = async (

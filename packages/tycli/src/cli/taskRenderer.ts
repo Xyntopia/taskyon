@@ -1,5 +1,5 @@
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
-import type { TaskNode } from '@taskyon/taskyon'
+import type { TaskNode, TyTaskStreamData } from '@taskyon/taskyon'
 import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 
 export type WorkerEvent = {
-  stage?: string
+  stage?: TyTaskStreamData['stage']
   taskId?: string | null
   task?: TaskNode | null
   info?: string

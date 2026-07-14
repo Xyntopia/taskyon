@@ -27,6 +27,509 @@ const getFunctionCall = (task: unknown): FunctionCall | undefined => {
   return content.type === 'functioncall' ? FunctionCall.parse(content.data) : undefined
 }
 
+export const testEntryNodePropagatesTaskContractWithoutPromptDuplication = async () => {
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+    defaultAllowedTools: ['bash'],
+    toolChooser: { enabled: false },
+  })
+  const completionCriterion = 'Every trust boundary has an evidence note.'
+  const taskContract = {
+    objective: 'Audit the authentication boundary.',
+    agentInstructions: 'Act as a cybersecurity reviewer.',
+    doneWhen: [completionCriterion],
+    result: { mode: 'message' as const },
+  }
+  const taskChain: TaskNode[] = [
+    {
+      id: 'task-message',
+      role: 'user',
+      content: {
+        type: 'message',
+        data: [
+          'Task objective:',
+          taskContract.objective,
+          '',
+          'Complete when:',
+          `- ${completionCriterion}`,
+        ].join('\n'),
+      },
+    },
+    {
+      id: 'entry-node',
+      role: 'function',
+      priorID: 'task-message',
+      content: {
+        type: 'functioncall',
+        data: {
+          name: 'entryNode',
+          arguments: { taskContract },
+        },
+      },
+    },
+  ]
+
+  const result = await entryNodeTool.function?.(
+    {
+      taskContract,
+      providerToolCalling: false,
+    },
+    {
+      getExecutionTaskChain: () => Promise.resolve(taskChain),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-node-task-contract-test',
+    },
+  )
+
+  assert(
+    result && typeof result === 'object' && 'taskChainList' in result,
+    'Expected entryNode to create a continuation chain',
+  )
+  const continuation = result.taskChainList[0]
+  const chatCompletionCall = getFunctionCall(continuation?.[0])
+  const chatArguments = chatCompletionCall?.arguments
+  const appendedPrompts =
+    chatArguments &&
+    typeof chatArguments === 'object' &&
+    'appendSystemPrompts' in chatArguments &&
+    Array.isArray(chatArguments.appendSystemPrompts)
+      ? chatArguments.appendSystemPrompts.join('\n')
+      : ''
+
+  assert(
+    !appendedPrompts.includes(taskContract.objective) &&
+      !appendedPrompts.includes(taskContract.agentInstructions) &&
+      !appendedPrompts.includes(completionCriterion),
+    'Expected entryNode prompts not to duplicate visible task-contract information',
+  )
+  assert(
+    continuation?.length === 1 &&
+      chatArguments &&
+      typeof chatArguments === 'object' &&
+      Array.isArray(chatArguments.allowedTools) &&
+      chatArguments.allowedTools.length === 1 &&
+      chatArguments.allowedTools[0] === 'entryNode' &&
+      chatArguments.toolChoice &&
+      typeof chatArguments.toolChoice === 'object' &&
+      !Array.isArray(chatArguments.toolChoice) &&
+      chatArguments.toolChoice.toolName === 'entryNode' &&
+      !('schema' in chatArguments) &&
+      !('resultMode' in chatArguments),
+    'Expected the decision completion to expose and force only the entryNode tool',
+  )
+
+  return { success: true }
+}
+
+export const testEntryNodeForwardsContractedResultSchema = async () => {
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+    defaultAllowedTools: [],
+    toolChooser: { enabled: false },
+  })
+  const resultSchema = {
+    type: 'object' as const,
+    additionalProperties: false,
+    properties: {
+      findings: { type: 'array' as const, items: { type: 'string' as const } },
+    },
+    required: ['findings'],
+  }
+  const taskContract = {
+    objective: 'Review the authentication boundary.',
+    result: {
+      mode: 'structured' as const,
+      schema: resultSchema,
+    },
+  }
+  const taskChain: TaskNode[] = [
+    {
+      id: 'task-message',
+      role: 'user',
+      content: { type: 'message', data: `Task objective:\n${taskContract.objective}` },
+    },
+    {
+      id: 'entry-node',
+      role: 'function',
+      priorID: 'task-message',
+      content: {
+        type: 'functioncall',
+        data: { name: 'entryNode', arguments: { taskContract } },
+      },
+    },
+  ]
+
+  const result = await entryNodeTool.function?.(
+    { taskContract },
+    {
+      getExecutionTaskChain: () => Promise.resolve(taskChain),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-node-contracted-result-test',
+    },
+  )
+  assert(
+    result && typeof result === 'object' && 'taskChainList' in result,
+    'Expected entryNode to create a contracted chat completion',
+  )
+
+  const chatCompletionCall = getFunctionCall(result.taskChainList[0]?.[0])
+  const chatArguments = chatCompletionCall?.arguments
+  assert(
+    chatArguments &&
+      typeof chatArguments === 'object' &&
+      'schema' in chatArguments &&
+      JSON.stringify(chatArguments.schema) === JSON.stringify(resultSchema) &&
+      !('resultMode' in chatArguments),
+    'Expected entryNode to forward the contract schema through the existing chatCompletion interface',
+  )
+
+  return { success: true }
+}
+
+export const testEntryNodeHonorsExplicitAllowedToolRestrictions = async () => {
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+    defaultAllowedTools: [
+      'bash',
+      'taskSearcher',
+      'gitlab',
+      'downloadFile',
+      'taskPlanner',
+      'askClarifyingQuestions',
+    ],
+    getToolCatalog: () =>
+      Promise.resolve([
+        { name: 'bash', description: 'Run a shell command.' },
+        { name: 'taskSearcher', description: 'Search prior tasks.' },
+        { name: 'gitlab', description: 'Use the GitLab API.' },
+        { name: 'downloadFile', description: 'Download a file.' },
+        { name: 'taskPlanner', description: 'Plan multi-step work.' },
+        { name: 'askClarifyingQuestions', description: 'Ask blocking questions.' },
+      ]),
+    toolChooser: { enabled: true, useTools: true },
+  })
+  const taskChain: TaskNode[] = [
+    {
+      id: 'task-message',
+      role: 'user',
+      content: { type: 'message', data: 'Summarize the prior handoff.' },
+    },
+    {
+      id: 'entry-node',
+      role: 'function',
+      priorID: 'task-message',
+      content: {
+        type: 'functioncall',
+        data: { name: 'entryNode', arguments: {} },
+      },
+    },
+  ]
+  const context = {
+    getExecutionTaskChain: () => Promise.resolve(taskChain),
+    createSubtasksResult,
+    getSecret: () => Promise.resolve(null),
+    setSecret: () => Promise.resolve(),
+    stopSignal: new AbortController().signal,
+    toolId: 'entry-node-allowed-tools-test',
+  }
+
+  const shortlistResult = await entryNodeTool.function?.({}, context)
+  assert(
+    shortlistResult && typeof shortlistResult === 'object' && 'taskChainList' in shortlistResult,
+    'Expected entryNode to create a shortlist continuation',
+  )
+  const shortlistContinuation = shortlistResult.taskChainList[0]
+  const shortlistArguments = getFunctionCall(shortlistContinuation?.[0])?.arguments
+  assert(
+    shortlistContinuation?.length === 1 &&
+      shortlistArguments &&
+      typeof shortlistArguments === 'object' &&
+      Array.isArray(shortlistArguments.allowedTools) &&
+      shortlistArguments.allowedTools.length === 1 &&
+      shortlistArguments.allowedTools[0] === 'entryNode' &&
+      shortlistArguments.toolChoice &&
+      typeof shortlistArguments.toolChoice === 'object' &&
+      !Array.isArray(shortlistArguments.toolChoice) &&
+      shortlistArguments.toolChoice.toolName === 'entryNode' &&
+      !('schema' in shortlistArguments) &&
+      !('resultMode' in shortlistArguments),
+    'Expected shortlist chatCompletion to expose and force only the entryNode tool',
+  )
+
+  const noToolsResult = await entryNodeTool.function?.({ allowedTools: [] }, context)
+  assert(
+    noToolsResult && typeof noToolsResult === 'object' && 'taskChainList' in noToolsResult,
+    'Expected entryNode to create a tool-free continuation',
+  )
+  const noToolsArguments = getFunctionCall(noToolsResult.taskChainList[0]?.[0])?.arguments
+  assert(
+    noToolsArguments &&
+      typeof noToolsArguments === 'object' &&
+      !('allowedTools' in noToolsArguments),
+    'Expected an explicit empty allowedTools override not to fall back to default tools',
+  )
+
+  const bashOnlyResult = await entryNodeTool.function?.({ allowedTools: ['bash'] }, context)
+  assert(
+    bashOnlyResult && typeof bashOnlyResult === 'object' && 'taskChainList' in bashOnlyResult,
+    'Expected entryNode to create a restricted continuation',
+  )
+  const bashOnlyArguments = getFunctionCall(bashOnlyResult.taskChainList[0]?.[0])?.arguments
+  assert(
+    bashOnlyArguments &&
+      typeof bashOnlyArguments === 'object' &&
+      'allowedTools' in bashOnlyArguments &&
+      Array.isArray(bashOnlyArguments.allowedTools) &&
+      bashOnlyArguments.allowedTools.length === 1 &&
+      bashOnlyArguments.allowedTools[0] === 'bash',
+    'Expected allowedTools to filter the configured tool catalog',
+  )
+
+  const postToolResult = await entryNodeTool.function?.(
+    { allowedTools: ['bash'] },
+    {
+      ...context,
+      getExecutionTaskChain: () =>
+        Promise.resolve([
+          taskChain[0] as TaskNode,
+          taskChain[1] as TaskNode,
+          {
+            id: 'bash-call',
+            role: 'function',
+            parentID: 'entry-node',
+            content: { type: 'functioncall', data: { name: 'bash', arguments: {} } },
+          },
+          {
+            id: 'bash-result',
+            role: 'system',
+            parentID: 'bash-call',
+            content: { type: 'toolresult', data: { stdout: 'done' } },
+          },
+          {
+            id: 'post-tool-entry',
+            role: 'function',
+            priorID: 'bash-result',
+            content: {
+              type: 'functioncall',
+              data: { name: 'entryNode', arguments: { allowedTools: ['bash'] } },
+            },
+          },
+        ]),
+    },
+  )
+  assert(
+    postToolResult && typeof postToolResult === 'object' && 'taskChainList' in postToolResult,
+    'Expected entryNode to continue after a tool result',
+  )
+  const postToolArguments = getFunctionCall(postToolResult.taskChainList[0]?.[0])?.arguments
+  assert(
+    postToolArguments &&
+      typeof postToolArguments === 'object' &&
+      'allowedTools' in postToolArguments &&
+      !('toolChoice' in postToolArguments),
+    'Expected a previously selected tool to remain available without forcing it again after its result',
+  )
+
+  return { success: true }
+}
+
+export const testEntryNodeSeparatesStructuredContractsFromNativeToolCalls = async () => {
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+    defaultAllowedTools: ['bash'],
+    toolChooser: { enabled: false },
+  })
+  const taskContract = {
+    objective: 'Inspect the CLI documentation.',
+    result: {
+      mode: 'structured' as const,
+      schema: {
+        type: 'object' as const,
+        properties: { summary: { type: 'string' as const } },
+        required: ['summary'],
+        additionalProperties: false,
+      },
+    },
+  }
+  const taskChain: TaskNode[] = [
+    {
+      id: 'task-message',
+      role: 'user',
+      content: { type: 'message', data: `Task objective:\n${taskContract.objective}` },
+    },
+    {
+      id: 'entry-node',
+      role: 'function',
+      priorID: 'task-message',
+      content: {
+        type: 'functioncall',
+        data: {
+          name: 'entryNode',
+          arguments: {
+            taskContract,
+            providerToolCalling: true,
+            trace: { enabled: true, label: 'contract-routing' },
+          },
+        },
+      },
+    },
+  ]
+
+  const result = await entryNodeTool.function?.(
+    {
+      taskContract,
+      providerToolCalling: true,
+      trace: { enabled: true, label: 'contract-routing' },
+    },
+    {
+      getExecutionTaskChain: () => Promise.resolve(taskChain),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-node-structured-tool-decision-test',
+    },
+  )
+  assert(
+    result && typeof result === 'object' && 'taskChainList' in result,
+    'Expected entryNode to create a structured tool-decision chain',
+  )
+
+  const continuation = result.taskChainList[0]
+  const chatArguments = getFunctionCall(continuation?.[0])?.arguments
+  assert(
+    chatArguments &&
+      typeof chatArguments === 'object' &&
+      Array.isArray(chatArguments.allowedTools) &&
+      chatArguments.allowedTools.length === 1 &&
+      chatArguments.allowedTools[0] === 'entryNode' &&
+      chatArguments.toolChoice &&
+      typeof chatArguments.toolChoice === 'object' &&
+      !Array.isArray(chatArguments.toolChoice) &&
+      chatArguments.toolChoice.toolName === 'entryNode' &&
+      !('schema' in chatArguments) &&
+      !('resultMode' in chatArguments),
+    'Expected a forced native entryNode call before contracted result finalization',
+  )
+
+  const selectedToolResult = await entryNodeTool.function?.(
+    {},
+    {
+      getExecutionTaskChain: () =>
+        Promise.resolve([
+          taskChain[0] as TaskNode,
+          taskChain[1] as TaskNode,
+          {
+            id: 'tool-decision-chat',
+            role: 'function',
+            parentID: 'entry-node',
+            content: {
+              type: 'functioncall',
+              data: { name: 'chatCompletion', arguments: {} },
+            },
+          },
+          {
+            id: 'tool-decision-reentry',
+            role: 'function',
+            parentID: 'tool-decision-chat',
+            content: {
+              type: 'functioncall',
+              data: { name: 'entryNode', arguments: { allowedTools: ['bash'] } },
+            },
+          },
+        ]),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-node-selected-tool-test',
+    },
+  )
+  assert(
+    selectedToolResult &&
+      typeof selectedToolResult === 'object' &&
+      'taskChainList' in selectedToolResult,
+    'Expected entryNode to continue with the selected native tool',
+  )
+
+  const selectedToolArguments = getFunctionCall(selectedToolResult.taskChainList[0]?.[0])?.arguments
+  assert(
+    selectedToolArguments &&
+      typeof selectedToolArguments === 'object' &&
+      'allowedTools' in selectedToolArguments &&
+      Array.isArray(selectedToolArguments.allowedTools) &&
+      selectedToolArguments.allowedTools[0] === 'bash' &&
+      !('schema' in selectedToolArguments) &&
+      'trace' in selectedToolArguments,
+    'Expected the real entryNode to inherit deterministic settings from lineage without applying the contracted result schema during tool execution',
+  )
+
+  const postToolResult = await entryNodeTool.function?.(
+    {},
+    {
+      getExecutionTaskChain: () =>
+        Promise.resolve([
+          ...taskChain,
+          {
+            id: 'tool-decision-reentry',
+            role: 'function',
+            content: {
+              type: 'functioncall',
+              data: { name: 'entryNode', arguments: { allowedTools: ['bash'] } },
+            },
+          },
+          {
+            id: 'bash-result',
+            role: 'system',
+            content: { type: 'toolresult', data: { stdout: 'done' } },
+          },
+          {
+            id: 'post-tool-entry',
+            role: 'function',
+            content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+          },
+        ]),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-node-structured-post-tool-test',
+    },
+  )
+  assert(
+    postToolResult && typeof postToolResult === 'object' && 'taskChainList' in postToolResult,
+    'Expected entryNode to decide whether more tool work is needed after a structured task tool result',
+  )
+  const postToolArguments = getFunctionCall(postToolResult.taskChainList[0]?.[0])?.arguments
+  const postToolPrompts =
+    postToolArguments &&
+    typeof postToolArguments === 'object' &&
+    'appendSystemPrompts' in postToolArguments &&
+    Array.isArray(postToolArguments.appendSystemPrompts)
+      ? postToolArguments.appendSystemPrompts.join('\n')
+      : ''
+  assert(
+    postToolArguments &&
+      typeof postToolArguments === 'object' &&
+      'trace' in postToolArguments &&
+      postToolPrompts.includes('Do not select a tool merely because it is available') &&
+      postToolPrompts.includes('empty allowedTools list'),
+    'Expected structured post-tool selection to avoid repeated work and preserve tracing',
+  )
+
+  return { success: true }
+}
+
 export const testEntryNodeDoesNotAskClarificationDuringErrorRecovery = async () => {
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'entryNode',
@@ -174,7 +677,7 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
       createExternalToolContext(stopSignal, {
         getExecutionTaskChain: () => {
           if (!call.taskId) throw new Error('Expected task id for entryNode test')
-          return ty.getTaskChain(call.taskId)
+          return createTaskyonClient(ty.port).task.getChain({ id: call.taskId })
         },
       }),
   })
@@ -305,3 +808,9 @@ testEntryNodeRecoversFromMalformedPythonToolCall.timeoutMs = 210_000
 
 testEntryNodeDoesNotAskClarificationDuringErrorRecovery.description =
   'EntryNode should not ask human clarification questions while recovering from a tool error.'
+testEntryNodePropagatesTaskContractWithoutPromptDuplication.description =
+  'EntryNode should carry task contracts through re-entry without repeating visible contract text in system prompts.'
+testEntryNodeForwardsContractedResultSchema.description =
+  'EntryNode should forward contracted structured result requirements to final chat completions.'
+testEntryNodeHonorsExplicitAllowedToolRestrictions.description =
+  'EntryNode should enforce empty and restricted allowedTools overrides against the configured tool catalog.'

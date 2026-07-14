@@ -318,6 +318,52 @@ export const testTaskyonClientGetsTaskIdChainThroughProtocol = async () => {
 testTaskyonClientGetsTaskIdChainThroughProtocol.description =
   'Reads selected task id chains through the Taskyon protocol client.'
 
+export const testTaskyonClientGetsFirstLevelChildChainsThroughProtocol = async () => {
+  const { x: clientPort, y: taskyonPort } = createDuplexChannel<
+    TaskyonProtocolMessage,
+    TaskyonProtocolMessage
+  >()
+  const childChains = [
+    [
+      {
+        id: 'branch-a',
+        role: 'user' as const,
+        parentID: 'planner',
+        content: { type: 'message' as const, data: 'Branch A' },
+      },
+    ],
+    [
+      {
+        id: 'branch-b',
+        role: 'user' as const,
+        parentID: 'planner',
+        content: { type: 'message' as const, data: 'Branch B' },
+      },
+    ],
+  ]
+  const unsubscribe = createPortServer(taskyonPort, taskyonProtocol, {
+    task: {
+      getChildChains: ({ id }) => {
+        assert(id === 'planner', 'Expected parent task id to be forwarded')
+        return childChains
+      },
+    },
+  })
+
+  try {
+    const result = await createTaskyonClient(clientPort, {
+      deferUntilReady: false,
+    }).task.getChildChains({ id: 'planner' })
+    assert(result.length === 2, `Expected two child chains, got ${result.length}`)
+    assert(result[1]?.[0]?.id === 'branch-b', 'Expected complete first-level child chains')
+  } finally {
+    unsubscribe()
+  }
+}
+
+testTaskyonClientGetsFirstLevelChildChainsThroughProtocol.description =
+  'Reads every first-level child chain through the Taskyon protocol, independent of the selected branch.'
+
 export const testTaskyonClientGetsTaskChainThroughProtocol = async () => {
   const { x: clientPort, y: taskyonPort } = createDuplexChannel<
     TaskyonProtocolMessage,

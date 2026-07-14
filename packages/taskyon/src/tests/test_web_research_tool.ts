@@ -369,7 +369,10 @@ export const testWebResearchPlannerUsesWebSearchFirstByDefault = async () => {
     'Expected webResearchPlanner to return a task result',
   )
 
-  const firstCall = getFunctionCall(initialResult.taskChainList[1]?.[3])
+  const firstCall = initialResult.taskChainList
+    .flat()
+    .map((task) => getFunctionCall(task))
+    .find((call) => call && typeof call === 'object' && 'name' in call && call.name === 'entryNode')
   assert(
     firstCall &&
       typeof firstCall === 'object' &&
@@ -399,7 +402,7 @@ export const testWebResearchPlannerUsesWebSearchFirstByDefault = async () => {
     'Expected default delegated research branches to enable chatCompletion web search and expose local save, verified download, shell fallback, and page-validation tools only',
   )
 
-  const workflow = initialResult.taskChainList[1] ?? []
+  const workflow = initialResult.taskChainList[0] ?? []
   const synthesisMessage = workflow.find(
     (task) =>
       task.content.type === 'message' &&
@@ -521,7 +524,7 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
       (task) =>
         task.content.type === 'message' &&
         typeof task.content.data === 'string' &&
-        task.content.data.includes('Subtask objective: Research objective:'),
+        task.content.data.includes('Task objective:\nResearch objective:'),
     )
     const delegatedBootstrap =
       delegatedBootstrapTask?.content.type === 'message' &&

@@ -328,11 +328,6 @@ export const buildWebResearchTaskGroups = (args: WebResearchPlannerArgs) => {
   ])
 }
 
-const formatResearchBreakdown = (taskGroups: ReturnType<typeof buildWebResearchTaskGroups>) =>
-  taskGroups
-    .map((group, index) => `Branch ${index + 1}: ${group.map((task) => task.task).join(' -> ')}`)
-    .join('\n')
-
 const buildResearchSynthesisTaskChain = (args: WebResearchPlannerArgs): partialTaskDraft[] => {
   const objective = ensureNonEmptyString(args.objective, 'objective')
   const artifactRoot = resolveResearchArtifactRoot(args, objective)
@@ -743,40 +738,37 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
     },
     required: ['objective', 'searchQueries'],
   } as const satisfies JSONSchema7,
-  function: async (args, context) => {
+  function: (args, context) => {
     const browserTools = trimNonEmptyStrings(args.browserTools)
     if (shouldEnsureBrowserMcp(args)) {
-      return context.createSubtasksResult([
-        [
-          {
-            role: 'assistant',
-            content: {
-              type: 'message',
-              data: 'Ensuring browser MCP access before launching the research branches.',
+      return Promise.resolve(
+        context.createSubtasksResult([
+          [
+            {
+              role: 'assistant',
+              content: {
+                type: 'message',
+                data: 'Ensuring browser MCP access before launching the research branches.',
+              },
             },
-          },
-          toolCall({
-            name: 'ensureBrowserMcpTools',
-            arguments: browserTools.length > 0 ? { toolNames: browserTools } : {},
-          }),
-          toolCall({
-            name: 'webResearchPlanner',
-            arguments: {
-              ...args,
-              ensureBrowserMcp: false,
-            },
-          }),
-        ],
-      ])
+            toolCall({
+              name: 'ensureBrowserMcpTools',
+              arguments: browserTools.length > 0 ? { toolNames: browserTools } : {},
+            }),
+            toolCall({
+              name: 'webResearchPlanner',
+              arguments: {
+                ...args,
+                ensureBrowserMcp: false,
+              },
+            }),
+          ],
+        ]),
+      )
     }
 
     const taskGroups = buildWebResearchTaskGroups(args)
-    const breakdown = formatResearchBreakdown(taskGroups)
-    const delegatedChains = buildTaskPlannerTaskChains(
-      taskGroups,
-      await context.getExecutionTaskChain(),
-      { includeReview: false },
-    ).map((chain) => {
+    const delegatedChains = buildTaskPlannerTaskChains(taskGroups).map((chain) => {
       const entryNodeArguments = buildResearchEntryNodeArguments(args)
       if (!entryNodeArguments) return chain
       return chain.map((task) => {
@@ -794,18 +786,7 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
     })
     const researchWorkflow = [...delegatedChains.flat(), ...buildResearchSynthesisTaskChain(args)]
 
-    return context.createSubtasksResult([
-      [
-        {
-          role: 'assistant',
-          content: {
-            type: 'message',
-            data: `Research Breakdown:\n${breakdown}`,
-          },
-        },
-      ],
-      researchWorkflow,
-    ])
+    return Promise.resolve(context.createSubtasksResult([researchWorkflow]))
   },
 })
 

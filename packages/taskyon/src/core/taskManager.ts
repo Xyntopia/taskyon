@@ -784,6 +784,9 @@ export async function useTyTaskManager(
     return chain
   }
 
+  const getChildChains = async (taskId: string): Promise<TaskNode[][]> =>
+    (await buildTaskTreeNode(taskId, 1)).children.map((chain) => chain.map((node) => node.task))
+
   async function getFlattenedChain(
     taskId: string,
     maxFollow: number,
@@ -1129,6 +1132,7 @@ export async function useTyTaskManager(
     convertTaskIDs,
     buildSiblingChain,
     buildTaskTreeNode,
+    getChildChains,
     addPartialTask2Tree,
     addTaskChain,
     addMdTaskChain,

@@ -6,7 +6,26 @@ import { createTool, toolCall } from '../types/toolApi'
 import { ToolBase } from '../types/tools'
 import { createChatCompletionTask } from '../api'
 
-export const createToolSearcher = (taskManager: TyTaskManager) =>
+const INTERNAL_AGENT_TOOL_NAMES = new Set(['chatCompletion', 'entryNode', 'taskyonFlow'])
+
+export type AgentToolCatalogEntry = { name: string; description: string }
+
+export const resolveAgentToolCatalog = (
+  tools: Readonly<Record<string, ToolBase>>,
+  unavailableToolNames: ReadonlySet<string> = new Set(),
+): AgentToolCatalogEntry[] =>
+  Object.values(tools)
+    .filter(
+      (tool) => !INTERNAL_AGENT_TOOL_NAMES.has(tool.name) && !unavailableToolNames.has(tool.name),
+    )
+    .map(({ name, description }) => ({ name, description }))
+
+export const createToolSearcher = (
+  taskManager: TyTaskManager,
+  resolveToolCatalog: (
+    tools: Readonly<Record<string, ToolBase>>,
+  ) => AgentToolCatalogEntry[] = resolveAgentToolCatalog,
+) =>
   createTool({
     name: 'toolSearcher',
     description: `You can use this tool to do the following:
@@ -35,34 +54,27 @@ is now unreadable.
         },
         analyze: {
           type: 'boolean',
-          default: false,
-          description: `Automatically interpret the result with an AI.`,
+          default: true,
+          description: `Continue through the entry node so the result is interpreted and surfaced as a final answer. Set false only when the raw tool-result task is the intended terminal output.`,
         },
       },
       required: [],
     } as const satisfies JSONSchema7,
     function: async ({ toolName, withCode, analyze }, ctx) => {
       const allTools = await taskManager.updateToolDefinitions(true)
-      if (withCode) {
-        for (const key in allTools) {
-          if (!allTools[key]!.code) {
-            delete allTools[key]
-          }
-        }
-      }
-      const normalizedTools = Object.keys(allTools).reduce(
+      const searchableTools = withCode
+        ? Object.fromEntries(Object.entries(allTools).filter(([, tool]) => !!tool.code))
+        : allTools
+      const normalizedTools = Object.keys(searchableTools).reduce(
         (acc, key) => {
-          acc[key.toLowerCase()] = allTools[key]!
+          acc[key.toLowerCase()] = searchableTools[key]!
           return acc
         },
-        {} as Record<string, (typeof allTools)[keyof typeof allTools]>,
+        {} as Record<string, (typeof searchableTools)[keyof typeof searchableTools]>,
       )
       console.log('searching for tools: ', toolName)
 
-      const toolList = Object.values(allTools).map((t) => ({
-        name: t.name,
-        description: t.description,
-      }))
+      const toolList = resolveToolCatalog(searchableTools)
 
       let result: unknown
       if (toolName && normalizedTools[toolName.toLowerCase()]) {

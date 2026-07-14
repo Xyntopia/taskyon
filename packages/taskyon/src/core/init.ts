@@ -137,6 +137,7 @@ function createApi(
           await taskManagerInstance.getTaskIdChain(id, maxFollow, selection),
         getChain: async ({ id, maxFollow, selection }) =>
           await taskManagerInstance.getTaskChain(id, maxFollow, selection),
+        getChildChains: async ({ id }) => await taskManagerInstance.getChildChains(id),
       },
       tools: {
         register: (msg) => {

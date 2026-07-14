@@ -108,6 +108,35 @@ export const TaskDebugError = z
   })
   .passthrough()
 
+const ProviderRequestAttempt = z.object({
+  method: z.string(),
+  url: z.string(),
+  requestHeaders: z.record(z.string(), z.string()),
+  requestBody: z.unknown().optional(),
+  response: z
+    .object({
+      status: z.number(),
+      headers: z.record(z.string(), z.string()),
+      requestId: z.string().optional(),
+      errorBody: z.unknown().optional(),
+    })
+    .optional(),
+  error: z
+    .object({
+      name: z.string().optional(),
+      message: z.string(),
+    })
+    .optional(),
+})
+
+export const ProviderRequestTrace = z.object({
+  provider: z.string(),
+  model: z.string(),
+  taskId: z.string(),
+  attempts: z.array(ProviderRequestAttempt),
+})
+export type ProviderRequestTrace = z.infer<typeof ProviderRequestTrace>
+
 export const TaskNodeMeta = z
   .object({
     threadMessage: z.any().optional(), // Replace with the correct Zod schema if available
@@ -133,6 +162,10 @@ export const TaskNodeMeta = z
       description:
         'We can optionally add some raw result data for debugging purposes, e.g. chatcompletion ...',
     }), // Replace with the correct Zod schema if available
+    providerRequest: ProviderRequestTrace.optional().meta({
+      description:
+        'Redacted provider-wire request and response metadata captured for each chat completion attempt.',
+    }),
     assistantOutputSanitation: z
       .object({
         rawIncomingMessage: z.string(),

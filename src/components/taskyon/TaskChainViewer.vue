@@ -64,7 +64,35 @@
       :show-ids="showIds"
       :selected-thread="selectedThread"
       :expert-mode="expertMode"
+      :hidden-task-ids="queuedVisibleTaskIds"
     />
+    <q-expansion-item
+      v-if="queuedTaskCount > 0"
+      dense
+      header-class="text-caption text-weight-medium"
+      class="task-queue"
+      :label="queueSummary"
+    >
+      <div
+        v-for="branch in queuedDisplayBranches"
+        :key="branch.tasks[0]?.id"
+        class="task-queue-branch"
+      >
+        <button
+          type="button"
+          class="task-queue-branch-button"
+          @click="selectQueueBranch(branch.tasks)"
+        >
+          <span class="task-queue-branch-label">{{ queueBranchLabel(branch.tasks) }}</span>
+          <span class="text-caption text-weight-light">{{ queueBranchStatus(branch) }}</span>
+        </button>
+        <ul class="task-queue-list">
+          <li v-for="task in branch.pendingTasks" :key="task.id">
+            {{ getTaskQueueLabel(task) }}
+          </li>
+        </ul>
+      </div>
+    </q-expansion-item>
     <!--Render tasks which are in progress-->
     <div class="task-logs q-py-sm">
       <template v-if="currentMsgStream && currentMsgStream.reasoning.length > 0">
@@ -125,9 +153,16 @@
 <script setup lang="ts">
 import { matArrowDropDown } from '@quasar/extras/material-icons'
 import tyMarkdown from '@taskyon/ui/components/tyMarkdown.vue'
-import type { TaskNode } from '@taskyon/taskyon'
+import {
+  getTaskQueueLabel,
+  selectSiblingTaskChain,
+  selectTaskQueueBranches,
+  type TaskNode,
+  type TaskQueueBranch,
+} from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
+import { isTaskVisibleInChat } from 'src/modules/taskyon/taskChatVisibility'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
@@ -183,6 +218,74 @@ watch(
 )
 
 const taskById = computed(() => new Map(props.selectedThread.map((task) => [task.id, task])))
+
+const siblingTaskChain = computed(() => selectSiblingTaskChain(props.selectedThread))
+
+const relatedTaskChains = asyncComputed<TaskNode[][]>(
+  async () => {
+    const childChains = await Promise.all(
+      props.selectedThread
+        .filter((task) => task.content.type === 'functioncall')
+        .map((task) => tystate.taskyonClient.task.getChildChains({ id: task.id })),
+    )
+    return [siblingTaskChain.value, ...childChains.flat()]
+  },
+  [],
+  () => [tystate.taskTreeRevision, ...props.selectedThread.map((task) => task.id)],
+)
+
+const queueBranches = computed(() =>
+  selectTaskQueueBranches(relatedTaskChains.value, tystate.lastTaskState),
+)
+
+const queuedDisplayBranches = computed(() =>
+  queueBranches.value
+    .map((branch) => ({
+      ...branch,
+      pendingTasks: branch.pendingTasks.filter((task) =>
+        isTaskVisibleInChat(task, tystate.allTools, props.expertMode ?? false),
+      ),
+      activeTasks: branch.activeTasks.filter((task) =>
+        isTaskVisibleInChat(task, tystate.allTools, props.expertMode ?? false),
+      ),
+    }))
+    .filter((branch) => branch.pendingTasks.length > 0),
+)
+
+const queuedVisibleTaskIds = computed(
+  () =>
+    new Set(
+      queuedDisplayBranches.value.flatMap((branch) => branch.pendingTasks.map(({ id }) => id)),
+    ),
+)
+
+const queuedTaskCount = computed(() =>
+  queuedDisplayBranches.value.reduce((count, branch) => count + branch.pendingTasks.length, 0),
+)
+
+const queueSummary = computed(() => {
+  const taskLabel = `${queuedTaskCount.value} ${queuedTaskCount.value === 1 ? 'task' : 'tasks'} queued`
+  return queuedDisplayBranches.value.length > 1
+    ? `${queuedDisplayBranches.value.length} branches · ${taskLabel}`
+    : taskLabel
+})
+
+const queueBranchLabel = (tasks: readonly TaskNode[]) => {
+  const task =
+    tasks.find((candidate) =>
+      isTaskVisibleInChat(candidate, tystate.allTools, props.expertMode ?? false),
+    ) ?? tasks[0]
+  return task ? getTaskQueueLabel(task) : 'Queued branch'
+}
+
+const queueBranchStatus = (branch: TaskQueueBranch) =>
+  branch.activeTasks.length > 0
+    ? 'running'
+    : `${branch.pendingTasks.length} ${branch.pendingTasks.length === 1 ? 'task' : 'tasks'} queued`
+
+const selectQueueBranch = (tasks: readonly TaskNode[]) => {
+  state.navigateToTask(tasks.at(-1)?.id)
+}
 
 const isSameTaskOrDescendant = (taskId: string, candidateId: string) => {
   if (candidateId === taskId) return true
@@ -451,4 +554,33 @@ async function onLazyLoad({
     width: 0.8em
     height: 0.8em
     z-index: 9
+
+.task-queue
+  margin: 0.25rem 0
+
+.task-queue-branch
+  padding: 0 1rem 0.5rem
+
+.task-queue-branch-button
+  display: flex
+  width: 100%
+  align-items: center
+  justify-content: space-between
+  gap: 0.75rem
+  padding: 0.25rem 0
+  border: 0
+  color: inherit
+  background: transparent
+  text-align: left
+  cursor: pointer
+
+.task-queue-branch-label
+  overflow: hidden
+  text-overflow: ellipsis
+  white-space: nowrap
+
+.task-queue-list
+  margin: 0
+  padding-left: 1.25rem
+  font-size: 0.75rem
 </style>

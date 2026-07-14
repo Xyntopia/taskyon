@@ -8,14 +8,17 @@ export const testProviderModelDiscoveryCachesNormallyAndRefreshesOnDemand = asyn
   const originalFetch = globalThis.fetch
   const requestedUrls: string[] = []
   let responseModel = 'gpt-current-1'
-  globalThis.fetch = async (input) => {
-    requestedUrls.push(String(input))
-    return new Response(
-      JSON.stringify({ models: [{ slug: responseModel, input_modalities: ['text', 'image'] }] }),
-      {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      },
+  globalThis.fetch = (input) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    requestedUrls.push(url)
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({ models: [{ slug: responseModel, input_modalities: ['text', 'image'] }] }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
     )
   }
 
@@ -23,6 +26,8 @@ export const testProviderModelDiscoveryCachesNormallyAndRefreshesOnDemand = asyn
     const api = {
       name: 'chatgpt-codex',
       baseURL: 'https://models.test/codex',
+      defaultModel: 'gpt-current-1',
+      streamSupport: true,
       routes: { models: '/models', chatCompletion: '/responses' },
     }
     const first = await fetchProviderModels('chatgpt-codex', api, 'token')

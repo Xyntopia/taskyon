@@ -99,6 +99,60 @@ tycli-dev
 
 Type `exit` or `quit` to leave the chat.
 
+## Planner task contracts
+
+`taskPlanner` can describe delegated work with a compact task contract:
+
+```yaml
+task: Inspect authentication boundaries
+agentInstructions: Act as a cybersecurity reviewer.
+allowedTools:
+  - bash
+doneWhen:
+  - Every trust boundary has an evidence note.
+result:
+  mode: message
+```
+
+Taskyon renders task-specific behavior once as a system message and the objective/completion
+criteria once as a user message. The hidden `entryNode` call carries the same contract for
+continuation and result validation; it does not copy the contract back into model prompts.
+
+```mermaid
+flowchart LR
+  P[taskPlanner contract] --> S[Optional system message]
+  S --> U[Task objective and doneWhen]
+  P --> E[Hidden entryNode arguments]
+  U --> E
+  E --> T[Enforce allowedTools]
+  T --> C[chatCompletion and tools]
+  C --> R[Message or structured result]
+```
+
+For structured handoffs, set `result.mode` to `structured` and provide the JSON Schema for the
+structured value. A completion produces one provider-derived message or one structured result; it
+does not split one structured response into synthetic sibling messages. Keep large evidence in
+persisted artifacts and put only summaries and artifact references in task results.
+
+Sequential tasks receive terminal message and structured results even when those values are nested
+inside entry-node execution chains. Internal prompts, function calls, and return nodes stay hidden.
+Taskyon validates structured results against the contract schema.
+
+`allowedTools` is an exact restriction, not a preference. Use an empty array for a handoff-only
+synthesis or review task that should consume prior task results without making new tool calls.
+When an objective names exact tools to call, include those tools in `allowedTools` so the delegated
+task cannot select a broader workflow tool and duplicate the plan.
+
+Planner groups are sequential by default. Use parallel groups only for independent work whose
+results do not depend on each other. When parallel findings need one combined result, delegate an
+outer sequential workflow: first run a research task that may call `taskPlanner` recursively for
+parallel branches, then run an explicit synthesis task. Each delegated branch must surface a useful
+message or structured result; `taskPlanner` does not insert implicit review tasks.
+
+While work is running, `tycli` shows pending first-level sibling tasks above the thinking output.
+The browser chat shows the same pending work in a compact expandable queue, grouped by parallel
+branch.
+
 ## HTML previews
 
 Browser Taskyon renders assistant HTML messages in sandboxed message iframes. A terminal cannot

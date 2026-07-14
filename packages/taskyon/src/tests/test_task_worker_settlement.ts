@@ -233,3 +233,101 @@ export const testTaskWorkerSettlesAfterPriorFunctionCreatesSubtasks = async () =
 
 testTaskWorkerSettlesAfterPriorFunctionCreatesSubtasks.description =
   'Ensures dependency waiters settle after a prior function creates subtasks late in execution.'
+
+export const testTaskWorkerWaitsForParallelSubtreeBeforeSequentialReducer = async () => {
+  const ty = await createTaskWorkerTestRuntime('parallel-subtree-reducer')
+  const events: TyTaskStreamData[] = []
+  const unsubscribeWorkerStream = ty.workerStream((event) => {
+    events.push(event)
+  })
+  const branchNames = ['researchBranchA', 'researchBranchB', 'researchBranchC']
+  const branchTools = branchNames.map((name, index) =>
+    createTool({
+      name,
+      description: `Complete parallel research branch ${index + 1}.`,
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {},
+      } as const,
+      function: async () => {
+        await sleep(20 * (index + 1))
+        return createSubtasksResult({
+          role: 'system',
+          content: { type: 'return', data: `${name} complete` },
+        })
+      },
+    }),
+  )
+  const parallelResearchTool = createTool({
+    name: 'parallelResearch',
+    description: 'Delegate independent research branches in parallel.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    } as const,
+    function: (_args, ctx) =>
+      ctx.createSubtasksResult(branchNames.map((name) => [toolCall({ name, arguments: {} })])),
+  })
+  const reducerTool = createTool({
+    name: 'reduceParallelResearch',
+    description: 'Reduce all completed parallel research branches.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    } as const,
+    function: (_args, ctx) =>
+      ctx.createSubtasksResult({
+        role: 'system',
+        content: { type: 'return', data: 'parallel research reduced' },
+      }),
+  })
+  const registration = await registerToolRpcTools({
+    port: ty.port,
+    tools: [parallelResearchTool, reducerTool, ...branchTools],
+  })
+
+  try {
+    const result = await processTasksDetailed(ty.port)(
+      [
+        [
+          toolCall({ name: 'parallelResearch', arguments: {} }),
+          toolCall({ name: 'reduceParallelResearch', arguments: {} }),
+        ],
+      ],
+      (task) => task.content.type === 'return' && task.content.data === 'parallel research reduced',
+      { timeoutMs: 5_000 },
+    )
+
+    assert(result.status === 'matched', `Expected matched result, got ${result.status}`)
+    await waitForWorkerSettlement(events, 1_000)
+    const reducerTaskId = result.initialIds[1]
+    if (!reducerTaskId) throw new Error('Expected a reducer task id')
+    const reducerProcessingIndex = findEventIndex(events, 'processing', reducerTaskId)
+    assert(reducerProcessingIndex >= 0, 'Expected the reducer to start processing')
+
+    for (const branchName of branchNames) {
+      const branchEvent = events.find(
+        (event) =>
+          event.task?.content.type === 'functioncall' &&
+          event.task.content.data.name === branchName,
+      )
+      const branchTaskId = branchEvent?.taskId ?? branchEvent?.task?.id
+      if (!branchTaskId) throw new Error(`Expected a task id for ${branchName}`)
+      const branchFinishedIndex = findEventIndex(events, 'finished', branchTaskId)
+      assert(
+        branchFinishedIndex >= 0 && branchFinishedIndex < reducerProcessingIndex,
+        `Expected ${branchName} to finish before the reducer started`,
+      )
+    }
+  } finally {
+    unsubscribeWorkerStream()
+    registration.destroy()
+    ty.workerStop('parallel subtree reducer diagnostic complete')
+  }
+}
+
+testTaskWorkerWaitsForParallelSubtreeBeforeSequentialReducer.description =
+  'Ensures a sequential reducer waits for every branch in the prior parallel subtree.'

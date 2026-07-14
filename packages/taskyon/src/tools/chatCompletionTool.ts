@@ -14,7 +14,7 @@ import {
   verifyServiceToken,
 } from '../taskyon.space/taskyon.space_api'
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
-import type { apiConfig, TaskNodeMeta } from '../types/chatCompletion'
+import type { apiConfig, ProviderRequestTrace, TaskNodeMeta } from '../types/chatCompletion'
 import { getCurrentModel, type ChatCompletionStreamEvent } from '../types/chatCompletion'
 import type { Annotation, partialTaskDraft, TaskNode } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
@@ -30,30 +30,13 @@ import {
   parseStructuredResponse,
 } from './chatCompletion/response'
 import { cleanupRawStreamOutput, runChatCompletionStream } from './chatCompletion/streamResult'
-import {
-  writeChatCompletionTraceInput,
-  writeChatCompletionTraceOutput,
-} from './chatCompletionTrace'
+import { writeChatCompletionTrace } from './chatCompletionTrace'
 
 export {
   convertTaskNodesToOpenAIChat,
   prepareChatCompletionContext,
 } from './chatCompletion/context'
 export { convertFunctionCall, getCommandFromStructuredResponse } from './chatCompletion/response'
-
-const getChatTaskChainSelection = (
-  contextOptions:
-    | {
-        includeSubtaskResults?: 'terminal-visible' | 'none'
-        maxFollow?: number
-      }
-    | undefined,
-) => ({
-  method: 'lineage' as const,
-  ...(contextOptions?.includeSubtaskResults
-    ? { includeSubtaskResults: contextOptions.includeSubtaskResults }
-    : {}),
-})
 
 const getChatCompletionContextOptions = (maxFollow: number | undefined) =>
   maxFollow === undefined ? undefined : { maxFollow }
@@ -324,7 +307,9 @@ export function createChatCompletionTool(
         ? await capabilities.getTaskChain(
             lastTaskBeforeChatCompletion.id,
             contextOptions?.maxFollow,
-            getChatTaskChainSelection(contextOptions),
+            {
+              method: 'lineage',
+            },
           )
         : []
       const chatInfo = await prepareChatCompletionContext({
@@ -339,6 +324,14 @@ export function createChatCompletionTool(
         getTaskById: capabilities.getTask,
       })
 
+      const traceTaskId = currentTask?.id ?? 'N/A'
+      const traceLabel = typeof trace?.label === 'string' ? trace.label : undefined
+      const providerRequest: ProviderRequestTrace = {
+        provider: selectedApi,
+        model: selectedModel,
+        taskId: traceTaskId,
+        attempts: [],
+      }
       const streamOpts = await buildChatProviderRequest({
         messages: chatInfo.messages,
         tools: chatInfo.tools,
@@ -358,22 +351,9 @@ export function createChatCompletionTool(
         ...(reasoningEffort ? { reasoningEffort } : {}),
         ...(verbosity ? { verbosity } : {}),
         ...(normalizedToolChoice ? { toolChoice: normalizedToolChoice } : {}),
+        providerRequest,
       })
       const traceEnabled = trace?.enabled === true
-      const traceTaskId = currentTask?.id ?? 'N/A'
-      const traceLabel = typeof trace?.label === 'string' ? trace.label : undefined
-      const traceInputPayload = {
-        taskId: traceTaskId,
-        ...(traceLabel ? { label: traceLabel } : {}),
-        input: {
-          api: selectedApi,
-          model: selectedModel,
-          request: streamOpts,
-        },
-      }
-      if (traceEnabled) {
-        await writeChatCompletionTraceInput(traceInputPayload)
-      }
 
       const streamResult = await runChatCompletionStream({
         streamText,
@@ -457,6 +437,7 @@ export function createChatCompletionTool(
               ...(partialAssistantSanitation
                 ? { assistantOutputSanitation: partialAssistantSanitation }
                 : {}),
+              providerRequest,
             },
             'shallow_merge',
           )
@@ -468,15 +449,10 @@ export function createChatCompletionTool(
           failure,
         })
         if (traceEnabled) {
-          await writeChatCompletionTraceOutput({
-            ...traceInputPayload,
-            output: {
-              ok: false,
-              rawOutput,
-              partialTextOutput,
-              error: serializeError(effectiveErr),
-              failure,
-            },
+          await writeChatCompletionTrace({
+            taskId: traceTaskId,
+            ...(traceLabel ? { label: traceLabel } : {}),
+            providerRequest,
           })
         }
         return context.createSubtasksResult([
@@ -519,24 +495,24 @@ export function createChatCompletionTool(
           delegatedTokenJti,
           capabilities.metaUpsert,
         )
-        console.log('saving task metadata', metaInfo)
+        metaInfo.providerRequest = providerRequest
+        console.log('saving task metadata', {
+          taskId: currentTask.id,
+          providerAttempts: providerRequest.attempts.length,
+        })
         void capabilities.metaUpsert(currentTask.id, metaInfo, 'shallow_merge')
+      } else if (currentTask) {
+        void capabilities.metaUpsert(currentTask.id, { providerRequest }, 'shallow_merge')
       }
 
       // in case a schema was given, we simply use that schema and return it as a structured message
       // for further processing (e.g. a contextFunction)...
       const output = await chatCompletion.output
       if (traceEnabled) {
-        await writeChatCompletionTraceOutput({
-          ...traceInputPayload,
-          output: {
-            ok: true,
-            response: res,
-            output,
-            rawOutput,
-            text: partialTextOutput,
-            usage: await chatCompletion.totalUsage,
-          },
+        await writeChatCompletionTrace({
+          taskId: traceTaskId,
+          ...(traceLabel ? { label: traceLabel } : {}),
+          providerRequest,
         })
       }
       // convert sources

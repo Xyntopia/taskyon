@@ -80,6 +80,12 @@ An executable task should be treated as a reducer:
 next tasks = reducer(selected task projection, explicit arguments, persisted artifacts)
 ```
 
+Task trees aim to make workflows reproducible by aligning their composition with functional
+programming where practical. External effects such as files, processes, networks, and user actions
+cannot always produce the same result when repeated. Keep those effects explicit at tool and
+runtime boundaries, and record the arguments, observations, results, and decisions that matter in
+the tree.
+
 Workflow progress belongs in visible tasks, explicit arguments, or durable storage. Do not keep an
 important plan, loop counter, intermediate decision, or retry state only in a long-running tool
 closure. A resumable iterative workflow normally has:
@@ -123,6 +129,12 @@ result, or error. The standard entry node decides whether to:
 Entry-node settings own prompt templates, default tools, tool-choice behavior, reasoning,
 multimodal input, and web-search flags. `chatCompletion` remains the model gateway.
 
+When tool choosing is enabled and the available tool count exceeds `tool_chooser_min_tools`, the
+shortlist phase runs a `chatCompletion` that exposes and forces only the current entry node. The
+model calls that entry node with a narrowed `allowedTools` list. The new entry node inherits the
+preceding entry node's other deterministic settings and performs the next tool-selection step; no
+intermediate structured routing result is added to the task chain.
+
 Use a custom entry node when a page needs domain context, deterministic routing, or a deliberately
 narrow tool set. Keep its top-level branch visible in the tool function rather than hiding the
 workflow shape behind wrappers.
@@ -134,7 +146,8 @@ flowchart TD
   Router --> Shortlist[Tool shortlist]
   Router --> Search[Hosted web search]
   Router --> Recover[Error recovery]
-  Shortlist --> Chat
+  Shortlist --> NarrowedRouter[Entry node with allowed tools]
+  NarrowedRouter --> Chat
   Search --> Chat
   Recover --> Chat
   Chat --> Answer[Assistant message]

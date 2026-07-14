@@ -28,6 +28,9 @@ export const testTaskManagerCanUseProtocolBackedStorage = async () => {
       indexTaskVectors: false,
       storage: connectTaskManagerStorageFromProtocol(storageClientPort, sessionId),
     })
+    const missingTask = await reader.getTask('missing-task')
+
+    assert(missingTask === null, 'Expected missing protocol-backed tasks to resolve as null')
 
     const task = await writer.addPartialTask2Tree({
       role: 'user',

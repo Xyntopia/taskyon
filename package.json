@@ -49,7 +49,7 @@
     "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .prettierignore",
     "format:file": "prettier --write --ignore-path .prettierignore",
     "lint:fix": "eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}' './packages/**/*.{ts,js,cjs,mjs,vue}' --fix",
-    "lint": "vue-tsc --noEmit && eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}' './packages/**/*.{ts,js,cjs,mjs,vue}'",
+    "lint": "vue-tsc --noEmit && eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}' './packages/**/*.{ts,js,cjs,mjs,vue}' && yarn test:e2e:discover",
     "relay": "yarn workspace @taskyon/relay start",
     "tauri:dev": "tauri dev",
     "tauri:dev:headless": "tauri dev -- -- --headless",
@@ -76,7 +76,8 @@
     "tycli": "yarn workspace @taskyon/tycli dev",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:discover": "playwright test --list",
+    "test:e2e:ui": "yarn test:e2e:discover && playwright test --ui"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.13",

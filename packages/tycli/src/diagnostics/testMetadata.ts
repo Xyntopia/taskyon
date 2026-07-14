@@ -62,7 +62,15 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
   testCliHelloWorldProducesAssistantResponse: {
     requiresNetwork: true,
   },
+  testCliListsAndUsesAvailableTools: {
+    requiresNetwork: true,
+    requiresLargeTokens: true,
+  },
   testCliDocumentationQuestionCompletesWithoutFatal: {
+    requiresNetwork: true,
+    requiresLargeTokens: true,
+  },
+  testCliTaskPlannerUsesContractedSequentialHandoffs: {
     requiresNetwork: true,
     requiresLargeTokens: true,
   },

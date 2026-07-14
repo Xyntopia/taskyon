@@ -1,4 +1,5 @@
 import type { AssistantModelMessage, ModelMessage, ToolCallPart, ToolModelMessage } from 'ai'
+import Ajv from 'ajv'
 import { load } from 'js-yaml'
 import {
   compileTaskyonFunctionArguments,
@@ -121,20 +122,31 @@ export const convertFunctionCall = (
   tools: Record<string, ToolBase>,
   variableService?: ReturnType<typeof createTaskVariablePresentationService>,
 ) => {
-  let argumentsValue: FunctionArguments = {}
-  try {
-    argumentsValue = FunctionArguments.parse(content.input)
-  } catch (error) {
-    console.warn('Failed to parse arguments as JSON:', error)
+  const tool = tools[content.toolName]
+  if (!tool) return undefined
+
+  const parsedArguments = FunctionArguments.safeParse(content.input)
+  if (!parsedArguments.success) {
+    throw new Error(
+      `Invalid arguments for tool "${content.toolName}": ${parsedArguments.error.message}`,
+    )
+  }
+
+  const ajv = new Ajv()
+  const validate = ajv.compile(tool.parameters as object)
+  if (!validate(parsedArguments.data)) {
+    throw new Error(
+      `Invalid arguments for tool "${content.toolName}": ${ajv.errorsText(validate.errors)}`,
+    )
   }
 
   const functionCall: FunctionCall = {
     name: content.toolName,
     arguments: variableService
-      ? compileTaskyonFunctionArguments(argumentsValue, variableService)
-      : argumentsValue,
+      ? compileTaskyonFunctionArguments(parsedArguments.data, variableService)
+      : parsedArguments.data,
   }
-  return tools[functionCall.name] ? functionCall : undefined
+  return functionCall
 }
 
 export const interpretAssistantMessage = (

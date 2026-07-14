@@ -51,7 +51,7 @@ import {
 } from '@taskyon/taskyon/browser'
 import type { AuthenticationOptions, TokenGetter } from '@taskyon/taskyon/browser'
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
-import { createDefaultTaskyonToolSetup } from '@taskyon/taskyon/tools'
+import { createDefaultTaskyonToolSetup, resolveAgentToolCatalog } from '@taskyon/taskyon/tools'
 import {
   createDocumentationIndexClientTool,
   loadDocumentationDocumentsFromManifest,
@@ -69,6 +69,7 @@ import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { defineStore } from 'pinia'
 import { useQuasar } from 'quasar' // load dynamically! :)
+import { isTauri } from '@tauri-apps/api/core'
 import { freeKey } from 'src/assets/taskyon_free_key'
 import { setColors } from 'src/boot/brand-colors'
 import { useGdrive } from 'src/modules/gdrive'
@@ -534,6 +535,13 @@ function defineTyGuiTools(
   ]
 }
 
+const getBrowserUnavailableToolNames = () =>
+  new Set(
+    isTauri()
+      ? []
+      : ['tauriBashTool', 'tauriExploreWorkspace', 'tauriHttpWebReader', 'tauriPatchWorkspace'],
+  )
+
 function createTrustedUiToolContext(
   ty: Taskyon,
   taskyonClient: TaskyonClient,
@@ -846,6 +854,9 @@ function taskUiUpdates(
   const currentTask = ref<TaskNode | null>(null)
   const pendingCreatedTaskIds = ref(new Set<string>())
   const taskSelectionRevision = ref(0)
+  const taskTreeRevision = ref(0)
+  const followedTaskId = ref<string>()
+  const pendingFollowTaskIds = new Set<string>()
   const currentTaskResolutionStatus = ref<'idle' | 'loading' | 'resolved' | 'missing'>('idle')
 
   function markTasksPendingCreation(taskIds: readonly string[]) {
@@ -921,6 +932,7 @@ function taskUiUpdates(
     }
 
     ty.taskStream(({ id, data: task }) => {
+      taskTreeRevision.value += 1
       if (!task) {
         void add2ChatHistory(task, id.toString(), 'delete')
         return
@@ -932,11 +944,14 @@ function taskUiUpdates(
         taskSelectionRevision.value += 1
       }
       const selectedTaskId = stateRefs.selectedTaskId
+      const selectedOrPendingTaskId = followedTaskId.value ?? selectedTaskId
       if (
-        selectedTaskId &&
-        selectedTaskId !== id &&
-        (task.parentID === selectedTaskId || task.priorID === selectedTaskId)
+        selectedOrPendingTaskId &&
+        selectedOrPendingTaskId !== id &&
+        (task.parentID === selectedOrPendingTaskId || task.priorID === selectedOrPendingTaskId)
       ) {
+        followedTaskId.value = id.toString()
+        pendingFollowTaskIds.add(id.toString())
         stateRefs.navigateToTask(id.toString(), { replace: true })
       }
       if (currentTask.value?.id === id) {
@@ -971,7 +986,14 @@ function taskUiUpdates(
           currentTaskResolutionStatus.value = newSelectedTask ? 'loading' : 'idle'
         } else if (newSelectedTask) {
           currentTaskResolutionStatus.value = 'loading'
-          const task = await taskyonClient.task.get({ id: newSelectedTask })
+          let task: TaskNode | null
+          try {
+            task = await taskyonClient.task.get({ id: newSelectedTask })
+          } catch (error) {
+            if (cancelled) return
+            console.error(`Failed to resolve selected task ${newSelectedTask}`, error)
+            task = null
+          }
           if (cancelled) return
           currentTask.value = task
           currentTaskResolutionStatus.value = task
@@ -1003,6 +1025,13 @@ function taskUiUpdates(
     watch(
       () => [stateRefs.selectedTaskId, stateRefs.taskyonSessionStatus] as const,
       async ([selectedTask, sessionStatus]) => {
+        if (selectedTask && pendingFollowTaskIds.has(selectedTask)) {
+          if (selectedTask === followedTaskId.value) pendingFollowTaskIds.clear()
+          else pendingFollowTaskIds.delete(selectedTask)
+        } else {
+          followedTaskId.value = selectedTask
+          pendingFollowTaskIds.clear()
+        }
         if (selectedTask && sessionStatus === 'ready') {
           const taskNode = await taskyonClient.task.get({ id: selectedTask })
           if (taskNode) void add2ChatHistory(taskNode, taskNode.id, 'existing')
@@ -1037,6 +1066,7 @@ function taskUiUpdates(
 
   return {
     selectedThread,
+    taskTreeRevision: readonly(taskTreeRevision),
     currentTask: computed(() => currentTask),
     currentTaskResolutionStatus: computed(() => currentTaskResolutionStatus.value),
     markTasksPendingCreation,
@@ -1215,7 +1245,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       () => stateRefs.effectiveToolchainConfig,
       cs,
       {
-        toolSetup: createDefaultTaskyonToolSetup(),
+        toolSetup: createDefaultTaskyonToolSetup({
+          unavailableToolNames: getBrowserUnavailableToolNames(),
+        }),
         taskManagerStorageFactory: ({ sessionId }) =>
           connectTaskManagerStorageFromProtocol(taskStorageClientPort, sessionId),
       },
@@ -1271,18 +1303,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     name: getEntryNodeToolName(buildEntryNodeDraft()),
     renderOptions: { hideChat: true, hideLlm: true },
     toolChooser: { enabled: true, useTools: true },
-    defaultAllowedTools: [],
     getToolCatalog: async () => {
-      const cachedTools: Record<string, ToolBase> =
-        Object.keys(allTools.value).length > 0
-          ? allTools.value
-          : await taskyonClient.tools.list({ includeHidden: true })
-      return Object.values(cachedTools)
-        .filter((tool) => !['chatCompletion', 'entryNode', 'taskyonFlow'].includes(tool.name))
-        .map((tool) => ({
-          name: tool.name,
-          description: tool.description,
-        }))
+      const currentTools: Record<string, ToolBase> = await taskyonClient.tools.list({
+        includeHidden: true,
+      })
+      return resolveAgentToolCatalog(currentTools, getBrowserUnavailableToolNames())
     },
   })
 
@@ -1338,8 +1363,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     },
   )
 
-  const { currentTask, currentTaskResolutionStatus, markTasksPendingCreation, selectedThread } =
-    taskUiUpdates(taskyon, taskyonClient, stateRefs)
+  const {
+    currentTask,
+    currentTaskResolutionStatus,
+    markTasksPendingCreation,
+    selectedThread,
+    taskTreeRevision,
+  } = taskUiUpdates(taskyon, taskyonClient, stateRefs)
 
   // iApiOutside is the port to the "outside" of taskyon UI. It is the port used to
   // communicate towards the taskyon engine. iApiInside communicates to the outside of taskyon.
@@ -1729,6 +1759,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     switchTaskType,
     taskContentDraft,
     selectedThread,
+    taskTreeRevision,
     currentTask,
     currentTaskResolutionStatus,
     markTasksPendingCreation,

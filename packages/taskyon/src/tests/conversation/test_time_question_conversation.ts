@@ -91,7 +91,7 @@ const createConversationHarness = async (
     name: 'taskyonFlow',
     renderOptions: { hideChat: true, hideLlm: true },
     toolChooser: { enabled: true, useTools: true },
-    defaultAllowedTools: [],
+    defaultAllowedTools: ['clock'],
     getToolCatalog: async () => {
       const ty = await tyPromise
       const cachedTools = await createTaskyonClient(ty.port).tools.list({ includeHidden: true })
@@ -119,7 +119,7 @@ const createConversationHarness = async (
       createExternalToolContext(stopSignal, {
         getExecutionTaskChain: () => {
           if (!call.taskId) throw new Error('Expected task id for entryNode test')
-          return ty.getTaskChain(call.taskId)
+          return createTaskyonClient(ty.port).task.getChain({ id: call.taskId })
         },
       }),
   })
@@ -156,19 +156,23 @@ const hasPromptSnippet = (data: unknown, snippet: string): boolean => {
   )
 }
 
-const hasToolChoiceSchema = (data: unknown): boolean => {
+const forcesEntryNodeTool = (data: unknown, entryNodeName: string): boolean => {
   const args = getFunctionArgs(data)
-  const schema = args?.schema
-  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return false
-  const properties = (schema as Record<string, unknown>).properties
-  if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return false
-  return 'choice' in (properties as Record<string, unknown>)
+  const toolChoice = args?.toolChoice
+  return (
+    Array.isArray(args?.allowedTools) &&
+    args.allowedTools.length === 1 &&
+    args.allowedTools[0] === entryNodeName &&
+    toolChoice !== null &&
+    typeof toolChoice === 'object' &&
+    !Array.isArray(toolChoice) &&
+    (toolChoice as Record<string, unknown>).toolName === entryNodeName
+  )
 }
 
-const hasToolChoice = (data: unknown, toolName: string): boolean => {
-  if (!data || typeof data !== 'object' || !('choice' in data)) return false
-  const choice = data.choice
-  return Array.isArray(choice) && choice.includes(toolName)
+const hasAllowedTool = (data: unknown, toolName: string): boolean => {
+  const args = getFunctionArgs(data)
+  return Array.isArray(args?.allowedTools) && args.allowedTools.includes(toolName)
 }
 
 const isClockToolResult = (task: TaskNode): boolean => {
@@ -415,23 +419,25 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
       (task: TaskNode) =>
         task.content.type === 'functioncall' &&
         isNamedFunctionCall(task.content.data, 'chatCompletion') &&
-        hasToolChoiceSchema(task.content.data) &&
-        hasPromptSnippet(task.content.data, 'Return only the structured shortlist result.'),
+        forcesEntryNodeTool(task.content.data, 'taskyonFlow') &&
+        hasPromptSnippet(
+          task.content.data,
+          'Call taskyonFlow with only the allowedTools argument.',
+        ),
     )
     const shortlistCall =
       shortlistCallIndex >= 0 ? conversationTasks[shortlistCallIndex] : undefined
     const shortlistResult = conversationTasks.find(
       (task: TaskNode) =>
-        task.content.type === 'structured' && hasToolChoice(task.content.data, 'clock'),
+        task.content.type === 'functioncall' &&
+        isNamedFunctionCall(task.content.data, 'taskyonFlow') &&
+        hasAllowedTool(task.content.data, 'clock'),
     )
     const chooseToolCall = conversationTasks.find(
       (task: TaskNode) =>
         task.content.type === 'functioncall' &&
         isNamedFunctionCall(task.content.data, 'chatCompletion') &&
-        hasPromptSnippet(
-          task.content.data,
-          'Use exactly one of the allowed tools when needed to answer the previous user request.',
-        ),
+        hasAllowedTool(task.content.data, 'clock'),
     )
     const clockCallIndex = conversationTasks.findIndex(
       (task: TaskNode) =>
@@ -491,7 +497,7 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
     )
     await assertWithDiagnostics(
       !!chooseToolCall,
-      'Expected a ChooseTool phase after the shortlist result',
+      'Expected a narrowed tool-selection phase after the shortlist entryNode call',
       ty,
       taskChain,
       observedTasks,
@@ -599,5 +605,5 @@ export const testTimeQuestionConversationUsesClockTool = async (
   }
 }
 testTimeQuestionConversationUsesClockTool.description =
-  'Runs the exact UI-style initial Taskyon chain for a time question with the entry-node tool chooser forced on, then verifies shortlist, ChooseTool, clock execution, and final assistant response without intermediate error returns.'
+  'Runs the exact UI-style initial Taskyon chain for a time question with the entry-node tool chooser forced on, then verifies the shortlist entryNode call, narrowed clock execution, and final assistant response without intermediate error returns.'
 testTimeQuestionConversationUsesClockTool.timeoutMs = 30_000
