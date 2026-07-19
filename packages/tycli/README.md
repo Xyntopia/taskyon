@@ -2,18 +2,27 @@
 
 Node-first Taskyon CLI for interactive chat and Node diagnostics.
 
-It exposes CLI-safe tools to the model, including:
+The CLI registers host capabilities alongside Taskyon's shared model and workflow tools:
 
-- `bash`: run a command on the host via `bash -lc`
-- `updateFiles`: create or update local text files
-- `downloadFile`: save validated downloads to the local workspace
-- `mapSearchTool` / `overpassMapTool`: build OpenStreetMap/Overpass map results
+- workspace exploration and file reads;
+- structured file updates;
+- verified URL downloads;
+- shell commands through `bash -lc`;
+- `mapSearchTool` and `overpassMapTool` for OpenStreetMap and Overpass results;
+- the active Taskyon documentation corpus;
+- interactive clarification requests.
+
+These tools operate in the environment where `tycli` is running. Use a container, VM, or other
+sandbox when the model should not have direct access to the host workspace.
 
 The CLI supports slash commands:
 
-- `/keys`: add/remove provider API keys
-- `/provider`: select a provider and run OAuth login flows
-- `/model`: change provider/model settings
+- `/keys`, `/provider`, and `/model`: configure model access.
+- `/tools`: inspect registered tools.
+- `/debug` and `/settings`: change CLI diagnostics and display behavior.
+- `/client`: invoke the connected Taskyon client API.
+- `/resume` and `/tree`: restore or inspect task history.
+- `/exit` and `/quit`: end the session.
 
 ## Usage
 
@@ -93,14 +102,16 @@ Type `exit` or `quit` to leave the chat.
 
 ## HTML previews
 
-Browser Taskyon can render assistant HTML messages inline in sandboxed message iframes. `tycli`
-cannot embed an iframe in the terminal, so when an assistant message contains HTML, it writes the
-HTML to a temporary preview file and prints a clickable `file://` URL next to the message.
+Browser Taskyon renders assistant HTML messages in sandboxed message iframes. A terminal cannot
+embed that iframe, so `tycli` writes assistant HTML to a temporary preview file and prints a
+clickable `file://` URL.
 
-This is generic behavior for HTML assistant messages, not specific to one tool. For example, map
-tools can return an interactive MapLibre/PMTiles HTML view; in `tycli` the transcript includes a
-local preview link that can be opened from terminals that support clickable links.
+This applies to any HTML assistant message. For example, map tools can return an interactive
+MapLibre or PMTiles view that can be opened from terminals supporting clickable links.
 
 ## Security
 
-Because the `bash` tool gives the model full shell access to the host, you should **run the coding agent in a sandboxed environment** (e.g., a container, VM, or Nix sandbox) whenever possible. Running it directly on your host machine carries the risk of unintended filesystem changes, dependency conflicts, or other side effects from model-generated commands.
+The shell and workspace tools can read and modify files visible to the process. Run the coding agent
+in an appropriately scoped sandbox whenever possible. Running it directly on a host can cause
+unintended filesystem changes, dependency conflicts, or other effects from model-generated
+commands.

@@ -1,180 +1,136 @@
 # Agent Instructions
 
-## Required reading before code changes
+Read the canonical
+[Taskyon Core Policies](public/docs/developer/core-policies.md) before every
+change. They are the public project philosophy and apply to agents and human contributors alike.
 
-- `development_instructions.md` — typing, lint, and root-cause rules (mandatory).
-- `test_instructions.md` — before adding or changing tests.
-- `packages/modelica/README.md` — before any Modelica compiler, template, runtime, or simulation change.
-- `packages/rumoca/AGENTS.md` — before any rumoca change (separate submodule with own spec system).
+The operational rules in this file apply to every agent change. The routing table at the end points
+to additional stable policies for specialized work.
 
-## Key rules
+Do not use this file as evidence of current commands, package layout, versions, feature support, or
+implementation status. Inspect the current owning code, configuration, package README, or active
+developer documentation for those changing facts.
 
-- Fix root causes: keep values strongly typed at their source. No `as any`, `as unknown as`, JSON round-trip hacks, or widening types to silence errors.
-- If a fix starts cascading into broad type churn, readonly workarounds, or many unrelated file edits, stop and step back. Revert the speculative path and choose the smallest boundary fix instead of spreading the workaround through the codebase.
-- No generic `isRecord`-style guards. Narrow at the domain boundary, then pass typed values downstream.
-- No fake no-op implementations. Model unavailable capabilities as optional.
-- Before creating or refactoring a tool, first search for similar tools in `packages/taskyon/src/tools/` and inspect how they are implemented. Reuse local patterns like `ctx.createSubtasksResult`, `toolCall`, `chatCompletion`, and re-entry chains instead of inventing a new orchestration style.
-- Taskyon tool declarations should keep the tool object readable in one place. Prefer one explicit `createTool({ ... })` declaration with the name, description, parameters schema, render options, and `function` body together. Do not split a tool into a wrapper factory, separate parameter constant, or delegated `function: (...) => runSomeTool(...)` unless that abstraction is reused by multiple tools or removes real complexity.
-- Do not add named one-line pass-through functions only to adapt arguments, capture module variables, or rename another function call, such as `async function loadThing() { return await loadThingFromSource(source) }`. Keep that dependency visible as an explicit argument, for example `createThingLoader(source)`, instead of hiding module state in a deferred callback. Add a named helper only when it contains meaningful logic, is reused, or makes a non-trivial domain step clearer.
-- Do not add default factories, one-line pass-through wrappers, or convenience helpers that only bind one dependency, rename another function, forward arguments, or hide an import. Keep dependencies explicit at the call site, for example call `createPgLiteTaskManagerStorageService(port, getDatabase)` instead of adding `createDefaultTaskManagerStorageService(port)`.
-- Avoid unnecessary nesting and factory layers. If an object or function exists only to return another object or function without owning meaningful logic, remove it and keep the flow flat and explicit.
-- Tool parameter schemas are the source of truth for tool settings. Do not export or import separate tool-specific settings schemas for UI shortcuts. UI settings views should read schemas from runtime tool definitions, the same way execution reads tool defaults from `tool.parameters`.
-- Taskyon peer protocols should be authored as service-scoped subprotocols with local command names. Do not hand-prefix every command inside a service. Let the FRP protocol helper compose service names into one flat wire protocol, and let `createPortClient` expose a nested service client such as `client.task.get(...)` over that same flat port.
-- If a `createTool` function body grows too large, extract detail logic into named helper functions, but keep the top-level workflow visible inside the inline `function` body. For example, routing logic such as an entry-node `match(...)` should stay in the tool function so a developer can understand the tool flow in one place.
-- When a Taskyon tool returns workflow composition, make the returned task chain explicit at the call site. Prefer visible arrays such as `[task1, task2, task3]` or `[[...branchA], [...branchB]]` near `createSubtasksResult(...)`. Do not hide the number, order, or branching shape of returned tasks behind thin helpers.
-- Diagnostics and Taskyon test modules must stay compatible with both browser diagnostics and Node/`tycli` diagnostics. Do not add tests that only work in one runtime unless the unsupported runtime is explicitly modeled and skipped at the diagnostics boundary.
-- Diagnostics that exercise LLM behavior must reuse the active runtime/profile settings from the harness (browser profile, `tycli` config, or explicit diagnostic overrides). Do not construct parallel provider/model/API config inside individual tests; if a standard baseline is needed, reset or select that profile before running the diagnostic.
-- Do not auto-run `yarn lint` or `yarn lint:fix` (neither repo-wide nor targeted) unless the user explicitly asks. Linting is intentionally not default because it is comparatively expensive. Instead, remind the user to run `yarn lint` themselves before committing, or ask whether they want you to run it when wrapping up. Targeted `yarn eslint <path>` is fine only when needed to verify a specific change and only when explicitly requested.
-- Always run the formatter on every file you edited yourself, without waiting for the user to ask. Format only the edited files: `yarn format:file <path...>`
-- When adding a test, make sure it is part of the diagnostics suite. Prefer locations already discovered by `packages/taskyon-headless` (for example `packages/taskyon/src/tests/test*.ts`) or wire the new test into the appropriate diagnostics runner.
-- Prefer explicit event/function flow over Vue watchers. Watchers are hard to trace and should be used only when reacting to external reactive state is genuinely the simplest boundary; do not use a watcher to bounce one source of truth into another.
+When project principles compete, use the order in the core policy document. Correctness and the
+user's requested scope take precedence over implementation preferences. State any material
+tradeoff.
 
-## Critical evaluation
+## Root Cause And Evidence
 
-- Be more critical of user requests than feels comfortable. Do not treat the requested implementation shape as correct just because the user suggested it.
-- Before adding a helper, abstraction, schema, wrapper, or new file, actively look for the existing upstream boundary that should own the behavior. Prefer extending that boundary over creating a parallel path.
-- If the user suggests something that duplicates existing logic, weakens a source-of-truth boundary, or adds coordination state, push back clearly and propose the smaller/root-cause alternative.
-- Ask whether a change is really needed when the codebase already has an idiomatic mechanism. Agreement is not useful unless the request survives that check.
+- Trace requests and failures to the highest owning source before editing consumers.
+- Read the relevant call flow, types, tests, logs, generated output, and runtime behavior before
+  deciding on a change.
+- Revise the approach when evidence contradicts the initial assumption.
+- Fix values and types at their source instead of patching symptoms downstream.
+- Validate dynamic data once at its domain boundary, convert it to a strong type, and pass that
+  typed value downstream.
+- When a persisted schema changes incompatibly, handle migration or version invalidation at the
+  schema owner instead of adding scattered consumer cleanup.
+- If a narrow change starts causing broad unrelated churn, stop and reconsider the ownership
+  boundary rather than spreading workarounds.
+- If typing cannot be made correct without weakening the contract, stop and explain the blocker.
 
-## TypeScript readability
+## Type Safety
 
-- Optimize TypeScript for local readability first, then reuse. Strong types are
-  required, but do not split every tiny local concept into top-level aliases just
-  to make the type graph look tidy.
-- Use separate named types when the name carries domain meaning, the type is
-  reused, it is a public API boundary, or it is complex enough that naming makes
-  the code easier to read.
-- Prefer inline unions or a single nearby options type for small local details.
-  Avoid extra aliases such as one-off mode unions, one-off legacy arg wrappers,
-  or types that merely mirror part of another type without adding meaning.
-- Keep types close to the code that uses them. Do not create a broad shared
-  "normalized type universe" for implementation details.
-- For APIs with multiple strategies, prefer an explicit required `mode` or
-  `method` field when callers must choose behavior, and implement the branch with
-  a simple `switch` statement.
-- Do not merge unrelated controls into one parameter. For example, a traversal
-  limit such as `maxFollow` should stay separate from an options object that
-  selects the traversal strategy.
+- Do not use `as any`, `as unknown as`, JSON round trips, broad type widening, or type invalidation
+  to silence errors.
+- Do not add generic `isRecord`-style guards. Narrow dynamic input with a domain-specific parser at
+  the real boundary.
+- Do not return fake no-op implementations to preserve an API shape. Model unavailable
+  capabilities explicitly as optional.
+- Do not create parallel local types or schemas that duplicate an owning public or domain
+  contract.
+- Keep types close to their use. Name them when they carry domain meaning, are reused, form a
+  public boundary, or are genuinely complex.
+- Keep small local unions and implementation options inline or in one nearby options type.
+- Require an explicit `mode` or `method` when callers must choose among strategies.
+- Keep unrelated controls separate instead of combining them into one options object.
 
-## Coding principles
+## Critical Evaluation
 
-- Prefer functional style and composition, but keep the code readable. Avoid
-  unnecessary nesting, clever abstractions, and indirection that makes the
-  control flow harder to follow.
-- Prefer stateless functions wherever possible. Keep workflow state explicit in
-  task data, persisted artifacts, or caller-provided arguments instead of hidden
-  tool-local state, so interrupted Taskyon workflows can be resumed and audited.
-- Taskyon tools should be stateless wherever possible. Do not hide workflow
-  progress, loop state, or intermediate decisions in local runtime state inside
-  a tool.
-- Taskyon core owns neutral task storage, traversal, scheduling, and execution
-  capabilities. Each tool owns how it selects, folds, and interprets task-tree
-  context for its own reducer. Core must not import concrete tool
-  implementations or define an LLM-specific context policy.
-- Keep tool-specific utilities with their owning tool. Promote a utility to a
-  shared tool-utility module only after multiple tools need the same semantics;
-  shared tool utilities must remain stateless, dependency-injected, and
-  independent of concrete tool implementations.
-- Prefer task-tree orchestration over imperative tool-local orchestration.
-  Long-running workflows should be represented as explicit task chains with
-  reducer or continuation tasks, not as hidden loops or internal `processTasks`
-  calls inside one tool.
-- Treat executable Taskyon tasks as reducers over an explicit task-tree
-  projection. They should consume visible prior tasks, child results, explicit
-  arguments, and persisted artifacts, then produce new task nodes or plain
-  results. Keep reducer inputs and outputs inspectable instead of relying on
-  hidden runtime state.
-- Keep functions focused on one purpose. Around 40 lines is a useful guideline:
-  if a function becomes harder to read, split it by responsibility.
-- Extract helpers when they remove real duplication or clarify a distinct step.
-  Do not extract helpers only to make code look abstract.
-- Avoid hidden module-level dependencies in helpers and callbacks. If a
-  function depends on a value from the surrounding module, pass that value as an
-  explicit argument to the helper or loader constructor instead of capturing it
-  implicitly.
+- Evaluate requests for duplication, hidden state, unnecessary coordination, weak ownership, and
+  simpler existing mechanisms.
+- Do not treat a requested implementation shape as correct merely because it was suggested.
+- Prefer extending the existing source of truth over creating a parallel helper, schema, type, or
+  state path.
+- Search for existing equivalent logic before adding code.
+- Explain concrete risks and alternatives when pushing back.
 
-## `tycli` development workflow
+## General Programming Guidelines
 
-- When implementing or debugging `tycli` behavior, use `tycli` yourself first. Start it with `yarn tycli`, run the real user-facing prompt or command, and let the observed behavior drive the fix.
-- In tycli e2e experiments, do not take over implementation, test fixes, README fixes, or project artifact patches yourself after tycli has started. If independent verification fails, treat the run as failed or unfinished, feed the concise failure evidence back into tycli, and let tycli perform the correction. Manual edits to experiment projects are diagnostic only and do not count as a successful no-intervention proof run.
-- Use the provider and model requested for the workflow. For the current web-research workflow, use the `chatgpt-codex` provider and the requested mini model. If the requested model name does not match an available model id, stop and clarify instead of silently substituting another model.
-- Inspect the generated `tycli` log and saved conversation transcript for every non-trivial `tycli` debugging pass. The transcript often contains worker/tool-call details that are not visible in the terminal UI.
-- Track bugs found while using `tycli`. Fix bugs that block the requested workflow first when they are on the same root-cause path.
-- Treat unrelated discoveries as sidequests. Before starting a sidequest, stop and ask the user whether to handle it now. After resolving a sidequest, stop again and ask whether to continue the main task.
-- If questions or ambiguous choices arise during development, ask the user clearly before proceeding.
-- After the workflow works manually in `tycli`, add a regression diagnostic that exercises the same behavior through `processTask` where possible.
-- Because Taskyon workflows should work in both `tycli` and the browser, ask the user to run the new/changed diagnostic in the browser as part of final verification.
+- Prefer pure or stateless functions and explicit dependency passing.
+- Prefer composition over inheritance and functions over classes unless a class owns meaningful
+  lifecycle or protocol state.
+- Keep side effects isolated at explicit runtime, storage, network, or UI boundaries.
+- Prefer immutable values, declarative transformations, and explicit control flow.
+- Keep functions focused. Around 40 lines is a useful target; split when responsibilities become
+  difficult to understand, not to manufacture abstraction.
+- Reuse existing helpers and extract new helpers only when they remove real duplication or clarify
+  a non-trivial domain step.
+- Do not add pass-through wrappers, default factories, hidden module captures, or nesting layers
+  that only rename, bind, or forward another operation.
+- Keep workflow and resumable state in caller-provided values, task data, persisted artifacts, or
+  other inspectable records instead of hidden process state.
+- Do not use hidden global or module state for values that can be passed explicitly.
+- Prefer currying only when it makes composition or reuse clearer.
+- Optimize local readability before speculative reuse or abstraction.
+- Prefer explicit function and event flow over implicit synchronization.
 
-## Branches
+## Scope And Repository Care
 
-- `dev` is the open-source integration branch. Backport general Taskyon fixes here only when they do not depend on commercial services or taskyon.space-specific files.
-- `taskyon` is also open source and tracks the public Taskyon app line.
+- Implement only the requested behavior and the changes required to make it correct.
+- Do not refactor adjacent code merely because it could be improved.
+- Preserve unrelated worktree and index changes.
+- Work with overlapping user changes instead of reverting them.
+- Do not use destructive Git commands unless the user explicitly requests the operation.
+- Use current repository configuration as the source of truth for commands, formatting, versions,
+  and package layout.
 
-## Commands
+## Tests, Documentation, And Formatting
 
-| Task                      | Command                                                          |
-| ------------------------- | ---------------------------------------------------------------- |
-| Install                   | `yarn install` (Yarn 4 via Corepack; `nodeLinker: node-modules`) |
-| Dev server                | `yarn dev`                                                       |
-| HTTP dev server           | `yarn dev:http`                                                  |
-| Full build                | `yarn build` (pack:tyclient → quasar build)                      |
-| Lint (typecheck + eslint) | `yarn lint`                                                      |
-| Lint fix (targeted)       | `yarn lint:fix -- <path...>`                                     |
-| Format file               | `yarn format:file <path...>`                                     |
-| tycli dev                 | `yarn tycli`                                                     |
-| tycli build               | `yarn tycli:build`                                               |
-| tycli lint / typecheck    | `yarn tycli:lint` / `yarn tycli:typecheck`                       |
-| tycli e2e                 | `yarn workspace @taskyon/tycli test:e2e`                         |
-| Tauri desktop dev         | `yarn tauri:dev`                                                 |
-| Modelica CLI              | `yarn modelica:cli`                                              |
-| Modelica compare          | `yarn modelica:compare`                                          |
-| Modelica baseline diff    | `yarn modelica:baseline:diff`                                    |
-| Playwright e2e            | `yarn test:e2e`                                                  |
+- Write or update the targeted test before implementation when a change requires a behavioral or
+  regression test.
+- Keep tests focused on the requested behavior and use production sources of truth rather than
+  duplicating helpers in tests.
+- Add meaningful behavior to the normal diagnostics boundary where the project uses diagnostics.
+- Run focused type checks, diagnostics, and tests for the changed ownership boundary.
+- Never weaken a test to make it pass.
+- Update relevant documentation when behavior, workflow, runtime configuration, or a public
+  ownership boundary changes.
+- Include Mermaid workflow updates when an affected document uses such a diagram.
+- Format every file you edit using the repository formatter, targeting only edited files.
+- Do not run lint or lint-fix unless the user explicitly requests it. When requested, target only
+  the relevant files unless the user asks for a broader pass.
+- Do not automatically run slow test suites unless explicitly requested or justified by the scope.
+  Targeted checks are preferred.
+- Report which checks ran, what did not run, and any environmental limitation.
 
-## Architecture
+## Specialized Policy Routing
 
-- **Monorepo**: Yarn 4 workspaces. Root `package.json` is the Quasar/Tauri app (Vue 3 + Pinia + Vue Router).
-- **`packages/taskyon`** (`@taskyon/taskyon`) — core task engine. Exports raw TS via `exports` map (no build step). Entry points: `index.ts`, `browser.ts`, `tools/index.ts`, `db.ts`, `api/index.ts`.
-- **`packages/common`** (`@taskyon/common`) — common modules, diagnostics runner, worker/sandbox, graph helpers, storage, plotting helpers, and utilities.
-- **`packages/comp-dag`** (`@taskyon/comp-dag`) — computational DAG core, optimization, dynamic node records/loaders, runtime, and query pipeline.
-- **`packages/ui`** (`@taskyon/ui`) — reusable Vue components and generic shared pages.
-- **`packages/modelica`** (`@taskyon/modelica`) — Modelica runtime, editor, diagnostics, templates, scripts, and library catalog.
-- **`packages/surrogate`** (`@taskyon/surrogate`) — surrogate model utilities.
-- **`packages/spaceships`** (`@taskyon/spaceships`) — procedural spaceship assets/components.
-- **`packages/tycli`** (`@taskyon/tycli`) — Node CLI surface for chat and Node diagnostics. Built with tsup for the chat bundle; diagnostics scripts run directly via `--experimental-strip-types`.
-- **`packages/tyclient`** (`@taskyon/tyclient`) — published client library (npm). Built with tsup.
-- **`packages/p2p-core`** — libp2p networking. Built with tsup.
-- **`packages/relay`** — P2P relay server. Built with Vite.
-- **`packages/secure-tunnel`** — secure tunnel. Built with Vite.
-- **`packages/rumoca`** — **git submodule** (separate repo, Rust/Modelica compiler). See its own `AGENTS.md`. Excluded from root ESLint.
-- **`packages/yatra`** — **separate git repo** (Python). Excluded from root ESLint.
+Read every additional policy matching the work:
 
-## Package boundaries
+| Work in scope                                                                                        | Required policy                                |
+| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Taskyon tools, entry nodes, task chains, tool settings, or tool context                              | `policies/tools-and-workflows.md`              |
+| Ports, protocols, iframe/host boundaries, browser/Node boundaries, P2P, or remote tools              | `policies/protocols-and-runtime-boundaries.md` |
+| Persistence, projects, files, OPFS, databases, secrets, encryption, remote caches, or shared storage | `policies/local-first-storage-and-security.md` |
+| Tests, diagnostics, LLM tests, or cross-runtime verification                                         | `policies/testing-and-diagnostics.md`          |
+| Adding, replacing, or widening a dependency                                                          | `policies/dependency-policy.md`                |
+| Package exports, cross-package imports, published clients, generated configuration, or schema owners | `policies/package-and-configuration.md`        |
+| Git state, branches, commits, merges, rebases, backports, submodules, or nested repositories         | `policies/repository-workflow.md`              |
+| Vue, UI state, routes, styling, or user interaction                                                  | `policies/frontend.md`                         |
+| `tycli` implementation, debugging, or autonomous evaluation                                          | `policies/tycli-development.md`                |
+| Modelica compiler, generated code, templates, runtime, libraries, or simulation                      | `policies/modelica-development.md`             |
+| Rumoca source, semantics, tests, packaging, or pinned revision                                       | `policies/rumoca-development.md`               |
 
-- Keep `packages/tyclient` as small as practical while still convenient to use. Before adding a
-  dependency to tyclient, check whether the needed helper can live in a tiny dedicated module rather
-  than importing from a broad shared utility barrel. Prefer narrow, tree-shakeable imports and avoid
-  pulling large shared surfaces into the published client package.
+Read multiple policies when a change crosses multiple boundaries. A P2P DAG cache, for example,
+requires the protocol, storage/security, dependency, and testing policies.
 
-## Style
+## Policy Use
 
-- Prettier: no semicolons, single quotes, 100-char print width, 2-space indent.
-- ESLint: Vue `flat/recommended` + TypeScript `recommendedTypeChecked`. `consistent-type-imports` enforced (`type` imports required).
-- `tsconfig.json` extends `.quasar/tsconfig.json` (auto-generated by Quasar). Do not put
-  persistent compiler, include, or exclude settings directly in root `tsconfig.json`; Quasar can
-  overwrite those changes. Put durable TypeScript/Quasar config changes in `quasar.config.ts` so
-  they are merged into the generated config.
-- TypeScript: strict via `vue-tsc`. The `yarn lint` command runs `vue-tsc --noEmit` then ESLint.
-- Put color, theme, shadow, border, background, and other visual styling in `src/css/app.sass`; Vue component styles should generally contain layout, sizing, spacing, positioning, and responsive structure only.
-
-## Gotchas
-
-- Modelica library archives are not bundled by app builds. Do not put large library files such as the MSL archive in `public/`, GitHub Pages, or other repository-published static assets. Mirror them to external object storage such as S3 instead, and use `yarn modelica:libraries:publish` manually to update `packages/modelica/modelica_libraries.json`.
-- Builds need `--max-old-space-size=8192` (set in Nix shell; set manually if not using Nix: `export NODE_OPTIONS="--max-old-space-size=8192"`).
-- `packages/rumoca` and `packages/yatra` are separate git repos. Changes there should follow their own workflows, not root-level commands.
-- `packages/tycli` diagnostics scripts use `--experimental-strip-types` instead of a compile step. Don't add a separate build step for them.
-- `COREPACK_HOME` must be outside the repo (ESM/CJS conflict). The Nix shell handles this; if bypassing Nix, set `COREPACK_HOME` to a path outside any `type: "module"` package boundary.
-- The `packages/taskyon` package exports TS source files directly. Import it via the `exports` map paths, not by relative file paths.
-- Keep browser UI mode and Node headless mode aligned. Changes in shared runtime paths must work in both environments; do not fix headless by introducing a Node-only shortcut into code that is also used by the browser UI.
-- When working on Modelica runtime bugs: debug generated JS first, then backport fixes to templates. See `packages/modelica/README.md` for the mandatory debug loop.
-- When the persisted Taskyon profile schema changes, bump the profile version in both `src/modules/taskyon/types.ts` and `src/assets/taskyon_settings.json`. Prefer invalidating old persisted profiles through the version number instead of adding one-off cleanup code for removed fields.
+- The nearest `AGENTS.md` adds narrower instructions for its subtree.
+- Policy documents define durable decision rules. They are not evidence of current software
+  behavior.
+- When exact commands, paths, versions, schemas, or supported features matter, inspect their
+  current owning source.
+- Do not bypass a policy by moving the implementation to a different layer.

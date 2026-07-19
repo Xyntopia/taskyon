@@ -114,9 +114,9 @@ Taskyon follows local-first principles wherever possible:
 ## Try Taskyon
 
 - Run locally with the development commands below.
-- Documentation: [public/docs/index.md](public/docs/index.md)
-- Broader chat and agent features: [docs/taskyon_chat_and_agent_features.md](/docs/taskyon_chat_and_agent_features)
-- Feature comparison: [docs/taskyon_features.md](/docs/taskyon_features)
+- Documentation: [public/docs/user/index.md](public/docs/user/index.md)
+- Getting started: [public/docs/user/getting-started.md](public/docs/user/getting-started.md)
+- Developer guide: [public/docs/developer/index.md](public/docs/developer/index.md)
 - DeepWiki notes: [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Xyntopia/taskyon)
 
 ## Development
@@ -137,7 +137,8 @@ Common commands:
 - `yarn lint` runs typechecking and ESLint.
 - `yarn format:file <path...>` formats specific files.
 
-See `AGENTS.md` and `development_instructions.md` before making code changes.
+See `AGENTS.md` before making code changes. It contains the general programming guardrails and
+routes specialized work to focused policies under `policies/`.
 
 ## Contributing
 
@@ -156,4 +157,4 @@ Join the Matrix channel: [Taskyon Matrix](https://matrix.to/#/!UNCbKcBpdEjFduzzM
 
 ## License
 
-MIT. See `LICENSE.md` for details.
+MIT. See [LICENSE](LICENSE) for details.

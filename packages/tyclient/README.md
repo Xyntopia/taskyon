@@ -1,57 +1,27 @@
-# Taskyon Client Library
+# `@taskyon/tyclient`
 
-This is a lightweight library that lets you interact with a taskyon instance
+Browser client for embedding Taskyon and using its typed port protocol.
 
-- sending tasks & waiting for results
-- initialize taskyon in iframe
+The package exports iframe initialization, client-tool registration, task execution, tool calls,
+file upload, Markdown task import, and the supported `@taskyon/taskyon/api` contracts.
 
-... and more
+```ts
+import { initializeTaskyon } from '@taskyon/tyclient'
 
-## Development
+const client = await initializeTaskyon({
+  iframeId: 'taskyon',
+  tools: [],
+  configuration: {},
+})
 
-We can use this package in a different app during development like this:
-
-### Using `@taskyon/tyclient` Locally (Before Publishing)
-
-You can test this package in another app without publishing to npm.  
-Choose the method that fits your setup:
-
-#### 1. Yarn Workspaces (best if in the same monorepo)
-
-Add the dependency in the consuming app’s `package.json`:
-
-```json
-"dependencies": {
-  "@taskyon/tyclient": "0.4.6"
-}
+await client.runTasks(taskChains, 'return', { timeoutMs: 60_000 })
 ```
 
-Run `yarn install` — Yarn will automatically link the local package.
-
-#### 2. Local File Install (recommended for external repos)
-
-Install from a relative path:
+Build the package from the repository root:
 
 ```bash
-yarn add file:../taskyon_front/packages/tyclient
+yarn build:tyclient
 ```
 
-This emulates a real npm install using your local build output.
-
-#### 3. Yarn Link (quick symlink testing)
-
-In the package:
-
-```bash
-cd packages/tyclient
-yarn link
-```
-
-In the consuming app:
-
-```bash
-yarn link @taskyon/tyclient
-```
-
-This symlinks the package into `node_modules`.
-⚠️ May cause duplicate dependency issues.
+Use a workspace dependency inside this monorepo. For external development, build and pack the
+package rather than relying on `yarn link`, which can create duplicate runtime dependencies.

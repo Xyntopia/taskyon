@@ -1,5 +1,13 @@
 # Taskyon VS Code Extension (Dev)
 
+The extension adds a Taskyon activity-bar webview and commands to open Taskyon in the webview or an
+external browser.
+
+Settings:
+
+- `taskyon.url`: Taskyon base URL.
+- `taskyon.openIn`: `webview` or `external`.
+
 ## Build / Watch
 
 ```bash
@@ -9,6 +17,12 @@ yarn --cwd packages/taskyon-vscode build
 
 # or keep a watch build running
 yarn --cwd packages/taskyon-vscode watch
+```
+
+Package a VSIX with:
+
+```bash
+yarn --cwd packages/taskyon-vscode package
 ```
 
 ## Run Extension Host from Repo Root
