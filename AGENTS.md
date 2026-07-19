@@ -67,6 +67,14 @@
 - Taskyon tools should be stateless wherever possible. Do not hide workflow
   progress, loop state, or intermediate decisions in local runtime state inside
   a tool.
+- Taskyon core owns neutral task storage, traversal, scheduling, and execution
+  capabilities. Each tool owns how it selects, folds, and interprets task-tree
+  context for its own reducer. Core must not import concrete tool
+  implementations or define an LLM-specific context policy.
+- Keep tool-specific utilities with their owning tool. Promote a utility to a
+  shared tool-utility module only after multiple tools need the same semantics;
+  shared tool utilities must remain stateless, dependency-injected, and
+  independent of concrete tool implementations.
 - Prefer task-tree orchestration over imperative tool-local orchestration.
   Long-running workflows should be represented as explicit task chains with
   reducer or continuation tasks, not as hidden loops or internal `processTasks`

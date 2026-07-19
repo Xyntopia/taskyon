@@ -1,9 +1,14 @@
 import {
   convertTaskNodesToOpenAIChat,
   getCommandFromStructuredResponse,
+  prepareChatCompletionContext,
 } from '../tools/chatCompletionTool'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import { selectTaskChainIds } from '../core/taskChainSelection'
+import { createTaskVariablePresentationService } from '../core/taskVariables'
+import { buildChatProviderRequest } from '../tools/chatCompletion/providerRequest'
+import { interpretAssistantMessage } from '../tools/chatCompletion/response'
+import { classifyStreamingFailure } from '../tools/chatCompletion/streamResult'
 import type { TaskNode } from '../types/taskNode'
 import type { ToolBase } from '../types/tools'
 
@@ -372,8 +377,207 @@ export const testChooseToolPlainTextResponseDoesNotThrow = () => {
     commands,
   }
 }
+
+export const testChatCompletionContextVariableNamesAreInvocationScoped = async () => {
+  const contextTask = task({
+    id: 'context-message',
+    role: 'user',
+    created_at: 1,
+    content: { type: 'message', data: 'Stable context.' },
+  })
+  const prepare = () =>
+    prepareChatCompletionContext({
+      taskChain: [contextTask],
+      allowedTools: [],
+      toolDefinitions: {},
+      appendSystemPrompts: [],
+      prependSystemPrompts: [],
+      useVisionModels: false,
+      getFileMapping: () => Promise.resolve(null),
+      getUploadedFile: () => Promise.resolve(undefined),
+      getTaskById: () => Promise.resolve(null),
+    })
+
+  const first = await prepare()
+  const second = await prepare()
+
+  assert(
+    JSON.stringify(first.messages) === JSON.stringify(second.messages),
+    'Expected independent chat invocations to render identical context messages',
+  )
+  assert(
+    first.variableService !== second.variableService,
+    'Expected each chat invocation to own its variable-presentation state',
+  )
+
+  return { success: true }
+}
+
+export const testChatCompletionMixedTextAndNativeToolCallContinuesWithTool = () => {
+  const toolDefinition: ToolBase = {
+    name: 'clock',
+    description: 'Read the clock.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+  }
+  const outcome = interpretAssistantMessage(
+    [],
+    {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: 'I will check.' },
+        {
+          type: 'tool-call',
+          toolCallId: 'clock-call',
+          toolName: 'clock',
+          input: {},
+        },
+      ],
+    },
+    true,
+    { clock: toolDefinition },
+    createTaskVariablePresentationService(),
+  )
+
+  assert(outcome.kind === 'tool-calls', 'Expected native tool call to control continuation')
+  assert(outcome.calls.length === 1, 'Expected one interpreted tool call')
+  assert(outcome.calls[0]?.name === 'clock', 'Expected the clock tool call')
+
+  return { success: true }
+}
+
+export const testChatCompletionCodexRequestMovesLeadingSystemPromptToInstructions = async () => {
+  const request = await buildChatProviderRequest({
+    messages: [
+      { role: 'system', content: 'Follow the system instructions.' },
+      { role: 'user', content: 'Hello.' },
+    ],
+    tools: {},
+    selectedModel: 'gpt-5',
+    api: {
+      name: 'chatgpt-codex',
+      baseURL: 'https://example.test/v1',
+      defaultModel: 'gpt-5',
+      streamSupport: true,
+      routes: {
+        chatCompletion: '/responses',
+        models: '/models',
+      },
+    },
+    apiKey: 'diagnostic-key',
+  })
+
+  assert(request.messages?.length === 1, 'Expected leading system prompt outside request messages')
+  assert(request.messages?.[0]?.role === 'user', 'Expected user message to remain')
+  assert(
+    request.providerOptions?.openai?.instructions === 'Follow the system instructions.',
+    'Expected Codex provider instructions to contain the leading system prompt',
+  )
+
+  return { success: true }
+}
+
+export const testChatCompletionStreamingFailureClassification = () => {
+  const interrupted = classifyStreamingFailure(new Error('request aborted'), false)
+  const transient = classifyStreamingFailure(new Error('503 server busy'), false)
+
+  assert(interrupted.shortReason === 'interrupted', 'Expected abort classification')
+  assert(
+    transient.shortReason === 'transient provider failure',
+    'Expected transient provider classification',
+  )
+
+  return { success: true }
+}
+
+export const testChatCompletionRendersUploadedTextFile = async () => {
+  const fileTask = task({
+    id: 'uploaded-files',
+    role: 'user',
+    created_at: 1,
+    content: { type: 'files', data: ['file-1'] },
+  })
+  const uploadedFile = new File(['hello from the file'], 'notes.txt', {
+    type: 'text/plain',
+  })
+  const messages = await convertTaskNodesToOpenAIChat(
+    [fileTask],
+    () =>
+      Promise.resolve({
+        id: 'file-1',
+        name: 'notes.txt',
+        type: 'text/plain',
+      }),
+    () => Promise.resolve(uploadedFile),
+    false,
+    false,
+    {},
+  )
+
+  assert(messages[0]?.role === 'system', 'Expected uploaded-file summary first')
+  assert(messages[1]?.role === 'user', 'Expected uploaded file content as user context')
+  assert(
+    messages[1]?.role === 'user' &&
+      Array.isArray(messages[1].content) &&
+      messages[1].content.some(
+        (content) =>
+          content.type === 'file' &&
+          typeof content.data === 'string' &&
+          content.data.includes('hello from the file'),
+      ),
+    'Expected uploaded text content in the rendered file part',
+  )
+
+  return { success: true }
+}
+
+export const testChatCompletionAnswerCompilesPresentationVariable = () => {
+  const sourceTask = task({
+    id: 'answer-source',
+    role: 'assistant',
+    created_at: 1,
+    content: { type: 'message', data: 'Source value.' },
+  })
+  const tasksById = new Map([[sourceTask.id, sourceTask]])
+  const variableService = createTaskVariablePresentationService()
+  variableService.getOrAssignVariableName(sourceTask, tasksById)
+  const outcome = interpretAssistantMessage(
+    [{ type: 'url', title: 'Source', url: 'https://example.test' }],
+    {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Use {{message1}}.' }],
+    },
+    false,
+    {},
+    variableService,
+  )
+
+  assert(outcome.kind === 'answers', 'Expected an assistant answer outcome')
+  assert(
+    outcome.answers[0]?.content === 'Use {{_t:answer-source}}.',
+    'Expected presentation variable to compile to its durable task reference',
+  )
+  assert(outcome.answers[0]?.annotations?.length === 1, 'Expected sources on the first answer')
+
+  return { success: true }
+}
 testChooseToolPlainTextResponseDoesNotThrow.description =
   'Plain text LLM output in ChooseTool/AnalyzeToolResult mode must not crash the structured command parser.'
+testChatCompletionContextVariableNamesAreInvocationScoped.description =
+  'Independent chatCompletion invocations derive deterministic variable names without sharing mutable presentation state.'
+testChatCompletionMixedTextAndNativeToolCallContinuesWithTool.description =
+  'A provider response containing both text and a native tool call continues with the tool instead of returning prematurely.'
+testChatCompletionCodexRequestMovesLeadingSystemPromptToInstructions.description =
+  'Codex provider requests move the leading system prompt into provider instructions without making a network request.'
+testChatCompletionStreamingFailureClassification.description =
+  'Chat completion stream failures distinguish interruption and transient provider failures.'
+testChatCompletionRendersUploadedTextFile.description =
+  'chatCompletion renders an uploaded text file into model-readable context.'
+testChatCompletionAnswerCompilesPresentationVariable.description =
+  'Assistant answers compile request-scoped presentation variables back to durable task references.'
 testChatCompletionContextUsesLineageAndTerminalSubtaskResults.description =
   'chatCompletion context follows parent/prior lineage and exposes terminal direct subtask results without flattening branch internals.'
 testChatCompletionContextSizeTrimsAfterLineageSelection.description =

@@ -54,7 +54,14 @@ export const createDefaultTaskyonToolSetup = (): TyCoreToolSetup => ({
   createSessionTools: ({ db, llmSettings, taskManager }) => {
     const { chatCompletion, stream } = createChatCompletionTool(
       () => createChatCompletionSettings(llmSettings),
-      taskManager,
+      {
+        getTaskChain: taskManager.getTaskChain,
+        getTask: taskManager.getTask,
+        getFileMappingByUuid: taskManager.getFileMappingByUuid,
+        getUploadedFile: taskManager.getUploadedFile,
+        updateToolDefinitions: taskManager.updateToolDefinitions,
+        metaUpsert: taskManager.metaUpsert,
+      },
     )
     return {
       tools: [

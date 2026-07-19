@@ -26,7 +26,11 @@ The system maintains caches to efficiently traverse these relationships in both 
 
 - **Hierarchical and Sequential Links:** TaskNodes reference their **parentID** (denoting hierarchical relationships) and **priorID** (capturing sequential dependencies). This linkage forms a structured TaskTree where tasks build upon each other.
 - **Subtasks and Results:** New tasks are appended as child TaskNodes, preserving context while keeping each node immutable.
-- **Task Execution and Propagation:** Executable tasks consume a selected view of the task tree and append new task nodes as their result. Child workflow results propagate through explicit result, `toolresult`, or `return` nodes rather than by mutating or moving existing nodes.
+- **Task Execution and Propagation:** Executable tasks consume a tool-selected view of the task tree
+  and append new task nodes as their result. Taskyon core supplies neutral graph access; the
+  executing tool owns the projection and interpretation appropriate for its reducer. Child workflow
+  results propagate through explicit result, `toolresult`, or `return` nodes rather than by mutating
+  or moving existing nodes.
 
 #### Tasks as Reducers
 
@@ -45,9 +49,9 @@ This reducer model has two important consequences:
 
 - Workflow state should live in the task tree, persisted artifacts, or explicit arguments, not in
   hidden tool-local runtime state.
-- Context rendering is part of the reducer API. The system should pass a deliberate projection of
-  parents, previous siblings, child results, and summaries instead of blindly flattening every
-  subtask into every downstream LLM/tool call.
+- Context selection and rendering are part of the tool's reducer behavior. A tool should deliberately
+  select parents, previous siblings, child results, and summaries instead of relying on one
+  framework-wide projection or blindly flattening every subtask.
 
 #### Task Chain Processing and Parallelization
 

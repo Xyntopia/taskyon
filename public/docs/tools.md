@@ -18,11 +18,15 @@ For end-to-end workflow patterns (entry nodes, tool chains, return tasks), see:
 
 ### Context
 
-All taskyon functions have access to the _tree context_ of the node that is currently processed.
-This means they receive a selected projection of the preceding task tree. Taskyon derives this view
-by walking through `priorID` and `parentID` links and by including the task results that matter for
-the current reducer. The projection should expose useful parents, siblings, child results, and
-summaries without blindly flattening every subtask.
+All Taskyon functions can use the _tree context_ of the node that is currently processed. Taskyon
+core provides neutral task storage and traversal capabilities; each tool owns the projection it
+needs for its reducer. For example, `chatCompletion` decides how to walk `priorID` and `parentID`
+links, which child results belong in model context, and how those tasks are rendered. Another tool
+may choose a different projection without changing Taskyon core.
+
+Tools should keep their projection policy self-contained. When multiple tools need the same
+stateless traversal operation with the same semantics, that operation can be promoted to a shared
+tool utility with explicit dependencies. Core must not import a concrete tool implementation.
 
 ## Tool Categories
 
