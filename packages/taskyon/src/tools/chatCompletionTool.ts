@@ -308,10 +308,7 @@ export function createChatCompletionTool(
         requestApiKey = delegationToken
       }
 
-      const selectedModel =
-        selectedApi === 'chatgpt-codex'
-          ? getCurrentModel(requestApi)
-          : (model ?? getCurrentModel(requestApi))
+      const selectedModel = model ?? getCurrentModel(requestApi)
       console.log('calling chat completion tool...', selectedModel, useProviderToolCalling)
       // the current task doesn't *have* to exist. We can also works solely with prompts...
       const executionTaskChain = await context.getExecutionTaskChain()
