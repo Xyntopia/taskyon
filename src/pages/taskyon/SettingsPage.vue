@@ -135,9 +135,9 @@ const tystate = useTaskyonStore()
 const tabPanelClass = 'column items-center'
 
 const toolchainEntries = computed(() =>
-  Object.keys(state.toolchainConfig).map((key) => ({
+  Object.keys(state.toolchainProfiles.base).map((key) => ({
     key,
-    value: state.toolchainConfig[key]!,
+    value: state.toolchainProfiles.base[key]!,
   })),
 )
 
@@ -157,7 +157,7 @@ const getToolchainIcons = (key: string): iconMap => {
 const applyToolchainUpdate = (key: string, nextValue: unknown) => {
   const parsed = FunctionArgumentsSchema.safeParse(nextValue)
   if (!parsed.success) return
-  const target = state.toolchainConfig[key]
+  const target = state.toolchainProfiles.base[key]
   if (!target) return
   Object.assign(target, parsed.data)
 }

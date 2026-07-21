@@ -1,5 +1,5 @@
 {
-  "version": 28,
+  "version": 29,
   "appConfiguration": {
     "darkTheme": "auto",
     "appConfigurationUrl": "/taskyon_settings.json",
@@ -13,65 +13,68 @@
     "primaryColor": "#2A3548",
     "secondaryColor": "#F78F3B"
   },
-  "toolchainConfig": {
-    "chatCompletion": {
-      "timeouts": {
-        "totalMs": 600000,
-        "stepMs": 600000
-      }
-    },
-    "taskyonFlow": {
-      "use_baseprompt": true,
-      "use_tool_chooser": true,
-      "tool_chooser_min_tools": 5,
-      "max_error_retries": 3,
-      "providerToolCalling": true,
-      "use_multimodal": true,
-      "reasoning_effort": "low",
-      "websearch": {
-        "max_results": 5
+  "toolchainProfiles": {
+    "base": {
+      "chatCompletion": {
+        "timeouts": {
+          "totalMs": 600000,
+          "stepMs": 600000
+        }
       },
-      "prompt_templates": {
-        "basePrompt": "You are a helpful assistant called **Taskyon**.  \nReturn answers in **Markdown**.\n\nTaskyon may inject internal variable blocks as HTML comments. These comments are reserved system syntax, not user text. Never write, copy, continue, close, or imitate Taskyon variable HTML comments.\n\nWhen a previous Taskyon variable is already visible and you intentionally need to reference it, use the existing `{{message1}}` style variable name exactly as provided. Do not invent new variable names.\n\nUse advanced Markdown features only when they improve clarity.\n\n---\n\n## Code\nUse fenced code blocks:\n\n```<language>\n...\n```\n\n---\n\n## Mermaid diagrams (STRICT)\n\nUse Mermaid **only if syntax is guaranteed to be valid**.\n\n**Rules:**\n\n* No parentheses `()` in node labels\n* No special characters in node text: `() [] {} | / \\ : ;`\n* Use simple alphanumeric text, spaces or underscores only\n* Prefer fewer nodes over complex diagrams\n* If unsure, do not use Mermaid; explain in text instead\n\nInclude diagrams, mindmaps, Gantt diagrams, quadrants, and XY charts using the `mermaid` keyword in fenced code blocks.\n\n---\n\n## Other features\n\n* Inline HTML (SVG, simple widgets) when useful\n* MathJax: `$inline$`, `$$block$$`\n\n---\n\n## Style\n\n* Be concise and technical\n* Prefer correctness over cleverness\n* Explicitly say if something is a bad idea\n* Ask for missing info instead of guessing",
-        "instruction": "You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented,\nand adheres to YAML standards. Do not include any explanatory text in your YAML responses. \nRemember, the focus is on the precision and correctness of the YAML output.",
-        "toolResult": "**Instruction:**\n\nPlease evaluate the tool/function result and provide the response in the specified schema format. The response should **only** contain the requested schema, formatted as {format}.\n\n---\n\n**Result of the Tool/Function:**\n\n```\n{message}\n```",
-        "task": "COMPLETE THE FOLLOWING TASK:\n\n``` \n{message}\n```\n\nProvide only the precise information requested without context.",
-        "schemaReminder": "Your output must strictly follow these rules:\n\n1. **Exact Format:** Output exactly in {format} with no additional text, commentary, or formatting.\n2. **Strict Schema:** Include only the specified schema below—every property (including any questions) must be present and exactly as defined.\n3. **No Deviations:** Do not add, omit, or alter any parts of the schema. Extra keys, explanations, or commentary are forbidden.\n4. **Full Parseability:** The final output must be fully parseable as {format}. Any deviation from the schema renders the response invalid.\n5. **Single Schema:** Fill in the schema exactly once without repeating it.\n6. **JSON Schema Instance:** If `schemaType: json schema` is specified, output a valid instance that conforms to the JSON Schema rather than reproducing the schema definition itself.\n\nSchema: \n\n{schema}",
-        "tools": "Choose one of the following tools if it helps you to complete the task:\n\n${tools}"
+      "taskyonFlow": {
+        "use_baseprompt": true,
+        "use_tool_chooser": true,
+        "tool_chooser_min_tools": 5,
+        "max_error_retries": 3,
+        "providerToolCalling": true,
+        "use_multimodal": true,
+        "reasoning_effort": "low",
+        "websearch": {
+          "max_results": 5
+        },
+        "prompt_templates": {
+          "basePrompt": "You are a helpful assistant called **Taskyon**.  \nReturn answers in **Markdown**.\n\nTaskyon may inject internal variable blocks as HTML comments. These comments are reserved system syntax, not user text. Never write, copy, continue, close, or imitate Taskyon variable HTML comments.\n\nWhen a previous Taskyon variable is already visible and you intentionally need to reference it, use the existing `{{message1}}` style variable name exactly as provided. Do not invent new variable names.\n\nUse advanced Markdown features only when they improve clarity.\n\n---\n\n## Code\nUse fenced code blocks:\n\n```<language>\n...\n```\n\n---\n\n## Mermaid diagrams (STRICT)\n\nUse Mermaid **only if syntax is guaranteed to be valid**.\n\n**Rules:**\n\n* No parentheses `()` in node labels\n* No special characters in node text: `() [] {} | / \\ : ;`\n* Use simple alphanumeric text, spaces or underscores only\n* Prefer fewer nodes over complex diagrams\n* If unsure, do not use Mermaid; explain in text instead\n\nInclude diagrams, mindmaps, Gantt diagrams, quadrants, and XY charts using the `mermaid` keyword in fenced code blocks.\n\n---\n\n## Other features\n\n* Inline HTML (SVG, simple widgets) when useful\n* MathJax: `$inline$`, `$$block$$`\n\n---\n\n## Style\n\n* Be concise and technical\n* Prefer correctness over cleverness\n* Explicitly say if something is a bad idea\n* Ask for missing info instead of guessing",
+          "instruction": "You are a helpful assistant tasked with accurately completing the given task by producing valid YAML code when requested. When responding with YAML, ensure that the syntax is correct, properly indented,\nand adheres to YAML standards. Do not include any explanatory text in your YAML responses. \nRemember, the focus is on the precision and correctness of the YAML output.",
+          "toolResult": "**Instruction:**\n\nPlease evaluate the tool/function result and provide the response in the specified schema format. The response should **only** contain the requested schema, formatted as {format}.\n\n---\n\n**Result of the Tool/Function:**\n\n```\n{message}\n```",
+          "task": "COMPLETE THE FOLLOWING TASK:\n\n``` \n{message}\n```\n\nProvide only the precise information requested without context.",
+          "schemaReminder": "Your output must strictly follow these rules:\n\n1. **Exact Format:** Output exactly in {format} with no additional text, commentary, or formatting.\n2. **Strict Schema:** Include only the specified schema below—every property (including any questions) must be present and exactly as defined.\n3. **No Deviations:** Do not add, omit, or alter any parts of the schema. Extra keys, explanations, or commentary are forbidden.\n4. **Full Parseability:** The final output must be fully parseable as {format}. Any deviation from the schema renders the response invalid.\n5. **Single Schema:** Fill in the schema exactly once without repeating it.\n6. **JSON Schema Instance:** If `schemaType: json schema` is specified, output a valid instance that conforms to the JSON Schema rather than reproducing the schema definition itself.\n\nSchema: \n\n{schema}",
+          "tools": "Choose one of the following tools if it helps you to complete the task:\n\n${tools}"
+        }
+      },
+      "importBrowserMcpTools": {
+        "serverUrl": "http://127.0.0.1:8931/mcp",
+        "serverName": "local-browser-mcp"
+      },
+      "ensureBrowserMcpTools": {
+        "serverUrl": "http://127.0.0.1:8931/mcp",
+        "serverName": "local-browser-mcp",
+        "startupInstructions": "Start your browser MCP server manually so it exposes an HTTP MCP endpoint.\nThis can be a local process or a container such as Podman, as long as it binds to the configured MCP URL.\nAfter the endpoint is reachable, click Continue in chat or retry import from the Browser Access page."
+      },
+      "webResearchPlanner": {
+        "researchMode": "websearch-first",
+        "supportTools": ["proxyWebReader", "tauriHttpWebReader"],
+        "enableWebSearch": true,
+        "webSearchMaxResults": 5,
+        "maxSourcesPerQuery": 5,
+        "mustDownload": true,
+        "fileTypeHints": ["pdf"],
+        "deliverable": "manufacturer, product name, source page URL, direct document URL"
+      },
+      "proxyWebReader": {
+        "providerPreset": "scraperapi",
+        "providerLabel": "ScraperAPI",
+        "docsUrl": "https://docs.scraperapi.com/",
+        "pricingUrl": "https://www.scraperapi.com/pricing/",
+        "serviceUrl": "https://api.scraperapi.com/",
+        "apiKeySecretName": "API_KEY",
+        "apiKeyHeader": "",
+        "apiKeyScheme": "",
+        "apiKeyLocation": "query",
+        "apiKeyQueryParam": "api_key",
+        "targetUrlParam": "url"
       }
     },
-    "importBrowserMcpTools": {
-      "serverUrl": "http://127.0.0.1:8931/mcp",
-      "serverName": "local-browser-mcp"
-    },
-    "ensureBrowserMcpTools": {
-      "serverUrl": "http://127.0.0.1:8931/mcp",
-      "serverName": "local-browser-mcp",
-      "startupInstructions": "Start your browser MCP server manually so it exposes an HTTP MCP endpoint.\nThis can be a local process or a container such as Podman, as long as it binds to the configured MCP URL.\nAfter the endpoint is reachable, click Continue in chat or retry import from the Browser Access page."
-    },
-    "webResearchPlanner": {
-      "researchMode": "websearch-first",
-      "supportTools": ["proxyWebReader", "tauriHttpWebReader"],
-      "enableWebSearch": true,
-      "webSearchMaxResults": 5,
-      "maxSourcesPerQuery": 5,
-      "mustDownload": true,
-      "fileTypeHints": ["pdf"],
-      "deliverable": "manufacturer, product name, source page URL, direct document URL"
-    },
-    "proxyWebReader": {
-      "providerPreset": "scraperapi",
-      "providerLabel": "ScraperAPI",
-      "docsUrl": "https://docs.scraperapi.com/",
-      "pricingUrl": "https://www.scraperapi.com/pricing/",
-      "serviceUrl": "https://api.scraperapi.com/",
-      "apiKeySecretName": "API_KEY",
-      "apiKeyHeader": "",
-      "apiKeyScheme": "",
-      "apiKeyLocation": "query",
-      "apiKeyQueryParam": "api_key",
-      "targetUrlParam": "url"
-    }
+    "profiles": {}
   },
   "llmSettings": {
     "entryFunction": "taskyonFlow",

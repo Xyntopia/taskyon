@@ -1,4 +1,4 @@
-import { llmSettings, partialTaskDraft, TyToolchainConfig } from '@taskyon/taskyon/api'
+import { llmSettings, partialTaskDraft, ToolchainProfiles } from '@taskyon/taskyon/api'
 import { z } from 'zod'
 
 export const taskTemplateTypes = {
@@ -130,13 +130,14 @@ export const appConfiguration = z.object({
 export type appConfiguration = z.infer<typeof appConfiguration>
 
 export const TyProfile = z.object({
-  version: z.literal(28).meta({
+  version: z.literal(29).meta({
     description:
       'whenever the schema of the settings change, this number will get changed as well...',
   }),
   appConfiguration,
   llmSettings,
-  toolchainConfig: TyToolchainConfig,
+  toolchainProfiles: ToolchainProfiles,
+  selectedToolchainProfile: z.string().optional(),
   signatureOrKey: z.string().optional()
     .describe(`By specifying a signature it is possible to circumvent
 usage of an API key. This way you can give your users access to taskyon with your own restrictions.`),

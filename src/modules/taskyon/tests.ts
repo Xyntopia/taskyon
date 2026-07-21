@@ -75,11 +75,12 @@ const getCurrentProfileSettingsForDiagnostics = (): TaskyonProfileSettings => {
   const snapshot = state.getProfileSnapshot().sections
   assert(snapshot.appConfiguration !== undefined, 'Expected appConfiguration in profile snapshot')
   assert(snapshot.llmSettings !== undefined, 'Expected llmSettings in profile snapshot')
-  assert(snapshot.toolchainConfig !== undefined, 'Expected toolchainConfig in profile snapshot')
+  assert(snapshot.toolchainProfiles !== undefined, 'Expected toolchainProfiles in profile snapshot')
   return {
     appConfiguration: snapshot.appConfiguration,
     llmSettings: snapshot.llmSettings,
-    toolchainConfig: snapshot.toolchainConfig,
+    toolchainProfiles: snapshot.toolchainProfiles,
+    selectedToolchainProfile: snapshot.selectedToolchainProfile,
   }
 }
 
@@ -133,10 +134,12 @@ export function testTaskyonProfileSettingsHelpers() {
   const patched = validateTaskyonProfileSettingsPatch(current, {
     appConfiguration: { primaryColor: '#123456' },
     llmSettings: { selectedApi: 'taskyon' },
-    toolchainConfig: {
-      entryNode: {
-        prompt_templates: {
-          basePrompt: 'Diagnostic base prompt',
+    toolchainProfiles: {
+      base: {
+        entryNode: {
+          prompt_templates: {
+            basePrompt: 'Diagnostic base prompt',
+          },
         },
       },
     },
@@ -151,14 +154,50 @@ export function testTaskyonProfileSettingsHelpers() {
     'Expected llmSettings patch to update selectedApi',
   )
   assert(
-    patched.toolchainConfig?.entryNode?.prompt_templates !== undefined &&
-      patched.toolchainConfig.entryNode.prompt_templates !== null &&
-      typeof patched.toolchainConfig.entryNode.prompt_templates === 'object' &&
-      !Array.isArray(patched.toolchainConfig.entryNode.prompt_templates) &&
-      'basePrompt' in patched.toolchainConfig.entryNode.prompt_templates &&
-      patched.toolchainConfig.entryNode.prompt_templates.basePrompt === 'Diagnostic base prompt',
-    'Expected toolchainConfig patch to update entryNode prompt templates',
+    patched.toolchainProfiles?.base.entryNode?.prompt_templates !== undefined &&
+      patched.toolchainProfiles.base.entryNode.prompt_templates !== null &&
+      typeof patched.toolchainProfiles.base.entryNode.prompt_templates === 'object' &&
+      !Array.isArray(patched.toolchainProfiles.base.entryNode.prompt_templates) &&
+      'basePrompt' in patched.toolchainProfiles.base.entryNode.prompt_templates &&
+      patched.toolchainProfiles.base.entryNode.prompt_templates.basePrompt ===
+        'Diagnostic base prompt',
+    'Expected toolchainProfiles patch to update base entryNode prompt templates',
   )
+
+  const withDiagnosticProfile = validateTaskyonProfileSettingsPatch(current, {
+    toolchainProfiles: {
+      profiles: {
+        diagnostic: {
+          chatCompletion: { model: 'diagnostic-model' },
+        },
+      },
+    },
+  })
+  assert(
+    withDiagnosticProfile.toolchainProfiles !== undefined,
+    'Expected the diagnostic toolchain profile patch',
+  )
+  const selectedDiagnosticProfile = validateTaskyonProfileSettingsPatch(
+    {
+      ...current,
+      toolchainProfiles: withDiagnosticProfile.toolchainProfiles,
+    },
+    { selectedToolchainProfile: 'diagnostic' },
+  )
+  assert(
+    selectedDiagnosticProfile.selectedToolchainProfile === 'diagnostic',
+    'Expected a defined toolchain profile to be selectable',
+  )
+
+  let rejectedUnknownToolchainProfile = false
+  try {
+    validateTaskyonProfileSettingsPatch(current, {
+      selectedToolchainProfile: 'missing-diagnostic-profile',
+    })
+  } catch {
+    rejectedUnknownToolchainProfile = true
+  }
+  assert(rejectedUnknownToolchainProfile, 'Expected an unknown toolchain profile to be rejected')
 
   let rejectedInvalidColor = false
   try {
@@ -172,7 +211,7 @@ export function testTaskyonProfileSettingsHelpers() {
 
   const resetPatch = buildTaskyonProfileSectionResetPatch(current, ['appConfiguration'])
   assert(
-    !!resetPatch.appConfiguration && !resetPatch.llmSettings && !resetPatch.toolchainConfig,
+    !!resetPatch.appConfiguration && !resetPatch.llmSettings && !resetPatch.toolchainProfiles,
     'Expected appConfiguration-only reset patch',
   )
 
@@ -194,7 +233,7 @@ export function testTaskyonProfileSettingsHelpers() {
   }
 }
 testTaskyonProfileSettingsHelpers.description =
-  'Validates Taskyon profile patch/reset helpers for appConfiguration, llmSettings, and toolchainConfig.'
+  'Validates Taskyon profile patch/reset helpers for appConfiguration, llmSettings, and toolchainProfiles.'
 
 function structurallyEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true
@@ -2406,8 +2445,8 @@ export async function getTestMetaData() {
           // we are not testing files right now...
           () => Promise.resolve(null),
           () => Promise.resolve(undefined),
-          !!state.toolchainConfig.entryNode?.use_multimodal,
-          !!state.toolchainConfig.entryNode?.providerToolCalling,
+          !!state.effectiveToolchainConfig.entryNode?.use_multimodal,
+          !!state.effectiveToolchainConfig.entryNode?.providerToolCalling,
           toolDefs,
         )
         tyChat.thread = res

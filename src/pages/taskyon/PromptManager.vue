@@ -5,8 +5,10 @@
       <div class="col fit">
         <q-toggle v-model="edit" label="Manually edit prompts" />
         <ObjectView
-          v-if="edit && state.toolchainConfig.entryNode?.prompt_templates"
-          v-model="state.toolchainConfig.entryNode.prompt_templates as Record<string, unknown>"
+          v-if="edit && state.toolchainProfiles.base.entryNode?.prompt_templates"
+          v-model="
+            state.toolchainProfiles.base.entryNode.prompt_templates as Record<string, unknown>
+          "
         />
         <q-card v-else flat>
           <q-card-section>
@@ -102,7 +104,7 @@ name: current taskyon prompts
 label: ["discard", "hide"]
 -->
 
-${dump(state.toolchainConfig.entryNode?.prompt_templates, { forceQuotes: true })}
+${dump(state.toolchainProfiles.base.entryNode?.prompt_templates, { forceQuotes: true })}
 
 ---
 
@@ -119,7 +121,7 @@ is added which explains the required return format.
 
 Available prompts are:
 
-${Object.keys(state.toolchainConfig.entryNode?.prompt_templates ?? {})
+${Object.keys(state.toolchainProfiles.base.entryNode?.prompt_templates ?? {})
   .map((x) => '- ' + x)
   .join('\n')}
 
@@ -140,7 +142,7 @@ How would you like to change the prompt?
 
 const structuredResponsePrompt = computed(() => {
   if (tystate.taskContentDraft) {
-    const settings = normalizeEntryNodeSettings(state.toolchainConfig.entryNode)
+    const settings = normalizeEntryNodeSettings(state.toolchainProfiles.base.entryNode)
     const allowedTools = Object.keys(tystate.allTools)
     return buildEntryNodePromptPreviewMessages({
       prompt:

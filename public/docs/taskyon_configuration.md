@@ -21,11 +21,23 @@ To integrate Taskyon into your webpage, you will need to create an iframe elemen
 
 ### Example Configuration
 
-CHeck out this link for taskyons default configuration on this server: [/taskyon_settings.json](/taskyon_settings.json)
+Check Taskyon's default configuration on this server: [/taskyon_settings.json](/taskyon_settings.json)
+
+### Toolchain Profiles
+
+Tool settings are stored under `toolchainProfiles`. The `base` profile contains the common
+settings and is the configuration currently edited by the settings screens. Named profiles under
+`toolchainProfiles.profiles` can override any part of `base`.
+
+When `selectedToolchainProfile` names a profile, Taskyon recursively applies that profile over
+`base` for execution. Arrays are replaced, and an explicit `null` remains an overriding value. If
+no profile is selected, execution uses an independent copy of `base`. An unknown profile name is a
+configuration error and does not fall back to another model or provider.
 
 ### Entry-Node-Centric Prompting
 
-Taskyon now treats `toolchainConfig.entryNode` as the primary orchestration config surface.
+Taskyon treats `toolchainProfiles.base.entryNode` as the primary editable orchestration config
+surface.
 
 - Prompt templates (`prompt_templates`) live under `entryNode` settings.
 - Tool-calling behavior (`providerToolCalling`) is configured at `entryNode`.
@@ -37,7 +49,7 @@ Taskyon now treats `toolchainConfig.entryNode` as the primary orchestration conf
 
 ### Research Access Mode
 
-Structured research defaults live under `toolchainConfig.webResearchPlanner`.
+Structured research defaults live under `toolchainProfiles.base.webResearchPlanner`.
 
 - `researchMode: "websearch-first"` starts with chatCompletion web search and fallback readers.
 - `researchMode: "browser-mcp-first"` checks and imports Browser MCP tools before research branches fan out.

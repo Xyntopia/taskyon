@@ -186,17 +186,17 @@ const entryNodeWebSearchSchema = {
 } as const satisfies JSONSchema7
 
 const ensureToolchainObject = <T extends FunctionArguments>(key: string, defaults: T): T => {
-  const current = state.toolchainConfig[key]
+  const current = state.toolchainProfiles.base[key]
   if (!current || typeof current !== 'object' || Array.isArray(current)) {
-    state.toolchainConfig[key] = structuredClone(defaults)
+    state.toolchainProfiles.base[key] = structuredClone(defaults)
   }
-  return state.toolchainConfig[key] as T
+  return state.toolchainProfiles.base[key] as T
 }
 
 const browserMcpModel = computed({
   get: () => ensureToolchainObject('importBrowserMcpTools', browserAccessMcpDefaults),
   set: (value) => {
-    state.toolchainConfig.importBrowserMcpTools = value
+    state.toolchainProfiles.base.importBrowserMcpTools = value
     const ensureSettings = ensureToolchainObject(
       'ensureBrowserMcpTools',
       browserAccessEnsureDefaults,
@@ -212,21 +212,21 @@ const browserMcpModel = computed({
 const browserEnsureModel = computed({
   get: () => ensureToolchainObject('ensureBrowserMcpTools', browserAccessEnsureDefaults),
   set: (value) => {
-    state.toolchainConfig.ensureBrowserMcpTools = value
+    state.toolchainProfiles.base.ensureBrowserMcpTools = value
   },
 })
 
 const browserProxyModel = computed({
   get: () => ensureToolchainObject('proxyWebReader', browserAccessProxyDefaults),
   set: (value) => {
-    state.toolchainConfig.proxyWebReader = value
+    state.toolchainProfiles.base.proxyWebReader = value
   },
 })
 
 const browserResearchModel = computed({
   get: () => ensureToolchainObject('webResearchPlanner', browserAccessResearchDefaults),
   set: (value) => {
-    state.toolchainConfig.webResearchPlanner = value
+    state.toolchainProfiles.base.webResearchPlanner = value
   },
 })
 

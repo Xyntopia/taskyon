@@ -405,7 +405,8 @@ function defineTyGuiTools(
     .object({
       appConfiguration: z.record(z.string(), z.unknown()).optional(),
       llmSettings: z.record(z.string(), z.unknown()).optional(),
-      toolchainConfig: z.record(z.string(), z.unknown()).optional(),
+      toolchainProfiles: z.record(z.string(), z.unknown()).optional(),
+      selectedToolchainProfile: z.string().nullable().optional(),
     })
     .strict()
     .refine((patch) => Object.keys(patch).length > 0, {
@@ -436,7 +437,10 @@ function defineTyGuiTools(
     const next: TaskyonProfileSettingsInput = {}
     if (patch.appConfiguration !== undefined) next.appConfiguration = patch.appConfiguration
     if (patch.llmSettings !== undefined) next.llmSettings = patch.llmSettings
-    if (patch.toolchainConfig !== undefined) next.toolchainConfig = patch.toolchainConfig
+    if (patch.toolchainProfiles !== undefined) next.toolchainProfiles = patch.toolchainProfiles
+    if (patch.selectedToolchainProfile !== undefined) {
+      next.selectedToolchainProfile = patch.selectedToolchainProfile
+    }
     return next
   }
 
@@ -477,7 +481,7 @@ function defineTyGuiTools(
       },
       description: 'Read, patch, or reset the active Taskyon profile settings.',
       longDescription:
-        'This tool can inspect the current Taskyon profile, patch appConfiguration, llmSettings, or toolchainConfig, reset those sections to the bundled defaults, and read the current execution task chain. It never exposes or mutates secrets or signatureOrKey.',
+        'This tool can inspect the current Taskyon profile, patch appConfiguration, llmSettings, toolchainProfiles, or selectedToolchainProfile, reset those sections to the bundled defaults, and read the current execution task chain. It never exposes or mutates secrets or signatureOrKey.',
       name: 'manageTaskyonProfile',
       parameters: {
         type: 'object',
@@ -499,7 +503,7 @@ function defineTyGuiTools(
           patch: {
             type: 'object',
             description:
-              'Section-level patch for appConfiguration, llmSettings, and/or toolchainConfig.',
+              'Section-level patch for appConfiguration, llmSettings, toolchainProfiles, and/or selectedToolchainProfile.',
             properties: {
               appConfiguration: {
                 type: 'object',
@@ -511,11 +515,16 @@ function defineTyGuiTools(
                 description: 'Partial LLM settings patch.',
                 additionalProperties: true,
               },
-              toolchainConfig: {
+              toolchainProfiles: {
                 type: 'object',
                 description:
-                  'Partial toolchain configuration patch. For prompt templates, patch toolchainConfig.entryNode.prompt_templates.',
+                  'Partial toolchain profiles patch. For base prompt templates, patch toolchainProfiles.base.entryNode.prompt_templates.',
                 additionalProperties: true,
+              },
+              selectedToolchainProfile: {
+                type: ['string', 'null'],
+                description:
+                  'Named toolchain profile to apply over base, or null to use base alone.',
               },
             },
             additionalProperties: false,
@@ -1216,7 +1225,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         entryNode: buildEntryNodeDraft(),
       }),
       buildEntryNodeDraft,
-      () => stateRefs.toolchainConfig,
+      () => stateRefs.effectiveToolchainConfig,
       cs,
       {
         toolSetup: createDefaultTaskyonToolSetup(),
@@ -1363,7 +1372,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
             missingBindingKeyPolicy: msg.missingBindingKeyPolicy,
             hasLlmSettings: !!newConfig.llmSettings,
             hasAppConfiguration: !!newConfig.appConfiguration,
-            hasToolchainConfig: !!newConfig.toolchainConfig,
+            hasToolchainProfiles: !!newConfig.toolchainProfiles,
+            selectedToolchainProfile: newConfig.selectedToolchainProfile,
             hasSignatureOrKey: !!newConfig.signatureOrKey,
             selectedApi: llmCfg?.selectedApi,
             incomingPrimaryColor: appCfg?.primaryColor,

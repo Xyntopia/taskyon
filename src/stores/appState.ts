@@ -24,6 +24,7 @@ import {
   base64ToPublixX25519,
   cryptoKeyToBase64,
   generateAssymetricKeyDeriver,
+  resolveToolchainConfig,
   sleep,
   type FunctionCall,
 } from '@taskyon/taskyon'
@@ -137,6 +138,7 @@ function getInitialState() {
   // the rest of the state is either secret (keys) or temporary states which don't need to be saved
   const initialState = {
     ...defaultStorableSettings,
+    selectedToolchainProfile: defaultStorableSettings.selectedToolchainProfile,
     // app State which should be part of the configuration
     // the things below should only represent transitional states
     // which have no relevance in the actual configuration of the app.
@@ -195,16 +197,36 @@ function getInitialState() {
 
 type initialState = ReturnType<typeof getInitialState>['initialState']
 
+const reconcileStoredTaskyonState = (
+  stored: Partial<initialState>,
+  defaults: initialState,
+): initialState => {
+  const reconciled = reconcileWithDefaults(stored, defaults)
+  const toolchainProfiles = TyProfile.shape.toolchainProfiles.safeParse(stored.toolchainProfiles)
+  if (toolchainProfiles.success) {
+    reconciled.toolchainProfiles = toolchainProfiles.data
+  }
+  if (typeof stored.selectedToolchainProfile === 'string') {
+    resolveToolchainConfig(reconciled.toolchainProfiles, stored.selectedToolchainProfile)
+    reconciled.selectedToolchainProfile = stored.selectedToolchainProfile
+  }
+  return reconciled
+}
+
 export const taskyonProfileSections = [
   'appConfiguration',
   'llmSettings',
-  'toolchainConfig',
+  'toolchainProfiles',
+  'selectedToolchainProfile',
 ] as const
 export type TaskyonProfileSection = (typeof taskyonProfileSections)[number]
 export type TaskyonProfileSettings = Pick<TyProfile, TaskyonProfileSection>
-export type TaskyonProfileSettingsInput = Partial<
-  Record<TaskyonProfileSection, Record<string, unknown>>
->
+export type TaskyonProfileSettingsInput = {
+  appConfiguration?: Record<string, unknown>
+  llmSettings?: Record<string, unknown>
+  toolchainProfiles?: Record<string, unknown>
+  selectedToolchainProfile?: string | null
+}
 export type TaskyonProfileSettingsPatch = Partial<TaskyonProfileSettings>
 
 const cloneProfileValue = <T>(value: T): T => structuredClone(toRaw(value))
@@ -225,8 +247,10 @@ export function createTaskyonProfileSettingsSnapshot(
       snapshot.appConfiguration = cloneProfileValue(profile.appConfiguration)
     } else if (section === 'llmSettings') {
       snapshot.llmSettings = cloneProfileValue(profile.llmSettings)
+    } else if (section === 'toolchainProfiles') {
+      snapshot.toolchainProfiles = cloneProfileValue(profile.toolchainProfiles)
     } else {
-      snapshot.toolchainConfig = cloneProfileValue(profile.toolchainConfig)
+      snapshot.selectedToolchainProfile = profile.selectedToolchainProfile
     }
   }
   return snapshot
@@ -266,14 +290,31 @@ export function validateTaskyonProfileSettingsPatch(
     next.llmSettings = parsed.data
   }
 
-  if (patch.toolchainConfig) {
-    const merged = deepMerge(cloneProfileValue(current.toolchainConfig), patch.toolchainConfig)
-    const parsed = TyProfile.shape.toolchainConfig.safeParse(merged)
+  if (patch.toolchainProfiles) {
+    const merged = deepMerge(cloneProfileValue(current.toolchainProfiles), patch.toolchainProfiles)
+    const parsed = TyProfile.shape.toolchainProfiles.safeParse(merged)
     if (!parsed.success) {
-      throw new Error(formatProfileValidationError('toolchainConfig', parsed.error))
+      throw new Error(formatProfileValidationError('toolchainProfiles', parsed.error))
     }
-    next.toolchainConfig = parsed.data
+    next.toolchainProfiles = parsed.data
   }
+
+  if ('selectedToolchainProfile' in patch) {
+    const parsed = TyProfile.shape.selectedToolchainProfile.safeParse(
+      patch.selectedToolchainProfile ?? undefined,
+    )
+    if (!parsed.success) {
+      throw new Error(formatProfileValidationError('selectedToolchainProfile', parsed.error))
+    }
+    next.selectedToolchainProfile = parsed.data
+  }
+
+  resolveToolchainConfig(
+    next.toolchainProfiles ?? current.toolchainProfiles,
+    'selectedToolchainProfile' in next
+      ? next.selectedToolchainProfile
+      : current.selectedToolchainProfile,
+  )
 
   return next
 }
@@ -292,7 +333,8 @@ function loadConfigurationFile(initialState: initialState, stateRefs: Reactive<i
           version?: number
           llmSettings: typeof initialState.llmSettings
           appConfiguration: typeof initialState.appConfiguration
-          toolchainConfig: typeof initialState.toolchainConfig
+          toolchainProfiles: typeof initialState.toolchainProfiles
+          selectedToolchainProfile?: string
         }
       | undefined
     >(stateRefs.appConfiguration.appConfigurationUrl)
@@ -317,7 +359,11 @@ function loadConfigurationFile(initialState: initialState, stateRefs: Reactive<i
             : { arrays: 'concat', objects: 'merge', typeMismatch: 'target', primitives: 'preserve' }
           deepMergeReactive(stateRefs.appConfiguration, config.appConfiguration, mergeStrategy)
           deepMergeReactive(stateRefs.llmSettings, config.llmSettings, mergeStrategy)
-          deepMergeReactive(stateRefs.toolchainConfig, config.toolchainConfig, mergeStrategy)
+          deepMergeReactive(stateRefs.toolchainProfiles, config.toolchainProfiles, mergeStrategy)
+          if ('selectedToolchainProfile' in config) {
+            resolveToolchainConfig(stateRefs.toolchainProfiles, config.selectedToolchainProfile)
+            stateRefs.selectedToolchainProfile = config.selectedToolchainProfile
+          }
         } else {
           console.warn(
             `Config version (${config.version || 'undefined'}) is not compatible with current version (${initialState.version}). Skipping dynamic config merge.`,
@@ -402,7 +448,7 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
     initialStoredStateObjTyped.version === initialState.version
   ) {
     console.log(`[PERSIST] load saved ui state from profile "${initialProfileName}"`)
-    const storedInitialState = reconcileWithDefaults(initialStoredStateObjTyped, initialState)
+    const storedInitialState = reconcileStoredTaskyonState(initialStoredStateObjTyped, initialState)
     stateRefs = reactive(storedInitialState)
   } else {
     // TODO: pop up a dialog or a separate migration page where we
@@ -468,7 +514,7 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
       persist,
       hasLlmSettings: !!newConfig.llmSettings,
       hasAppConfiguration: !!newConfig.appConfiguration,
-      hasToolchainConfig: !!newConfig.toolchainConfig,
+      hasToolchainProfiles: !!newConfig.toolchainProfiles,
       incomingPrimaryColor: newConfig.appConfiguration?.primaryColor,
       incomingSecondaryColor: newConfig.appConfiguration?.secondaryColor,
     })
@@ -484,8 +530,12 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
     if (newConfig.appConfiguration) {
       deepMergeReactive(stateRefs.appConfiguration, newConfig.appConfiguration)
     }
-    if (newConfig.toolchainConfig) {
-      deepMergeReactive(stateRefs.toolchainConfig, newConfig.toolchainConfig)
+    if (newConfig.toolchainProfiles) {
+      deepMergeReactive(stateRefs.toolchainProfiles, newConfig.toolchainProfiles)
+    }
+    if ('selectedToolchainProfile' in newConfig) {
+      resolveToolchainConfig(stateRefs.toolchainProfiles, newConfig.selectedToolchainProfile)
+      stateRefs.selectedToolchainProfile = newConfig.selectedToolchainProfile
     }
     finishSettingsChange(persist)
     console.log('[PERSIST] overRideSettings colors merged', {
@@ -508,8 +558,11 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
     if (newConfig.llmSettings) {
       stateRefs.llmSettings = cloneProfileValue(newConfig.llmSettings)
     }
-    if (newConfig.toolchainConfig) {
-      stateRefs.toolchainConfig = cloneProfileValue(newConfig.toolchainConfig)
+    if (newConfig.toolchainProfiles) {
+      stateRefs.toolchainProfiles = cloneProfileValue(newConfig.toolchainProfiles)
+    }
+    if ('selectedToolchainProfile' in newConfig) {
+      stateRefs.selectedToolchainProfile = newConfig.selectedToolchainProfile
     }
     finishSettingsChange(persist)
   }
@@ -577,6 +630,19 @@ export const useAppStateStore = defineStore('ui-state', () => {
     initialState,
     () => activeProfileNameRef.value,
   )
+  const applyStoredProfile = (profileName: string) => {
+    const storedProfile = getTaskyonUiProfile(profileName) as Partial<initialState> | undefined
+    if (!storedProfile) return
+    if (storedProfile.version !== initialState.version) {
+      console.warn(
+        `Stored settings version (${storedProfile.version || 'undefined'}) is not compatible with current version (${initialState.version}). Using default settings.`,
+      )
+      LocalStorage.removeItem(getProfileStorageKey(profileName))
+      Object.assign(stateRefs, initialState)
+      return
+    }
+    Object.assign(stateRefs, reconcileStoredTaskyonState(storedProfile, initialState))
+  }
   const route = useRoute()
   const router = useRouter()
   const selectedTaskId = computed(() =>
@@ -603,6 +669,8 @@ export const useAppStateStore = defineStore('ui-state', () => {
     console.log('Resetting Taskyon!!')
     stateRefs.appConfiguration = defaultStorableSettings.appConfiguration
     stateRefs.llmSettings = defaultStorableSettings.llmSettings
+    stateRefs.toolchainProfiles = defaultStorableSettings.toolchainProfiles
+    stateRefs.selectedToolchainProfile = defaultStorableSettings.selectedToolchainProfile
     stateRefs.version = 0 as typeof stateRefs.version // set the version to 0, hoping, that this will trigger a reset on page reload..
     clearBrowserStorage()
     console.log('done, resetting! reloading page now...')
@@ -658,10 +726,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
     if (profileMode === 'session-driven') {
       switchCurrentActiveProfilePointer(profileName)
     }
-    const storedProfile = getTaskyonUiProfile(profileName)
-    if (storedProfile) {
-      Object.assign(stateRefs, storedProfile)
-    }
+    applyStoredProfile(profileName)
   }
 
   // our sessions only get saved once we have a legitimate session key!
@@ -694,10 +759,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
       urlProfile: urlConfig.profile,
     })
     // re-load state with new profile!
-    const storedProfile = getTaskyonUiProfile(profileToLoad)
-    if (storedProfile) {
-      Object.assign(stateRefs, storedProfile)
-    }
+    applyStoredProfile(profileToLoad)
   }
 
   const setTaskyonAuthLoading = (loading: boolean) => {
@@ -715,6 +777,9 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // The next issue is that typescript isn't able to recognize the type anymore when
   // we do the toRefs operation, so we simply reassign the same type "stateRefs" to it again which seems to work...
   const allRefs = toRefs(stateRefs) as unknown as typeof stateRefs
+  const effectiveToolchainConfig = computed(() =>
+    resolveToolchainConfig(stateRefs.toolchainProfiles, stateRefs.selectedToolchainProfile),
+  )
 
   const authToken = ref<KeyString>()
   const iframeApiKey = ref<KeyString>() // used to pass api keys if we are running this as  an iframe
@@ -730,7 +795,8 @@ export const useAppStateStore = defineStore('ui-state', () => {
   const getProfileSettings = (): TaskyonProfileSettings => ({
     appConfiguration: cloneProfileValue(stateRefs.appConfiguration),
     llmSettings: cloneProfileValue(stateRefs.llmSettings),
-    toolchainConfig: cloneProfileValue(stateRefs.toolchainConfig),
+    toolchainProfiles: cloneProfileValue(stateRefs.toolchainProfiles),
+    selectedToolchainProfile: stateRefs.selectedToolchainProfile,
   })
 
   const getProfileSnapshot = (
@@ -838,6 +904,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
     isInIframe: urlConfig.isInIframe,
     isInVscode: urlConfig.isInVscode,
     ...allRefs,
+    effectiveToolchainConfig,
     selectedTaskId,
     navigateToTask,
     llmSettings: computed(

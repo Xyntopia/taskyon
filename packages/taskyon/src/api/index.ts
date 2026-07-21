@@ -28,7 +28,12 @@ export {
 } from '../types/guiApiTypes'
 export { REMOTE_FUNCTION_TIMEOUT_MS } from './taskyonProtocol'
 export { createMarkdownTaskChain } from '../core/markdownTaskIO'
-export { llmSettings, TyToolchainConfig } from '../types/profiles'
+export {
+  llmSettings,
+  resolveToolchainConfig,
+  ToolchainProfiles,
+  TyToolchainConfig,
+} from '../types/profiles'
 export type { ClientTool, ClientToolContext, toolContext } from '../types/toolApi'
 export { FunctionArguments } from '../types/tools'
 export type { FunctionCall, ToolBase } from '../types/tools'

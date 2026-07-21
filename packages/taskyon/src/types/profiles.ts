@@ -1,4 +1,5 @@
 import z from 'zod'
+import { deepCopy, deepMerge } from '../utils/objHelpers'
 import { apiConfig } from './chatCompletion'
 import { FunctionArguments } from './tools'
 
@@ -63,3 +64,22 @@ Taskyon lets you configure each tool with optional default values.
 Taskyon provides the option of letting profiles partially be overriden by each other.`)
 
 export type TyToolchainConfig = z.infer<typeof TyToolchainConfig>
+
+export const ToolchainProfiles = z.object({
+  base: TyToolchainConfig,
+  profiles: z.record(z.string(), TyToolchainConfig).default({}),
+})
+
+export type ToolchainProfiles = z.infer<typeof ToolchainProfiles>
+
+export const resolveToolchainConfig = (
+  toolchainProfiles: ToolchainProfiles,
+  selectedProfile?: string,
+): TyToolchainConfig => {
+  if (!selectedProfile) return deepCopy(toolchainProfiles.base)
+
+  const profile = toolchainProfiles.profiles[selectedProfile]
+  if (!profile) throw new Error(`Unknown toolchain profile: ${selectedProfile}`)
+
+  return deepMerge(deepCopy(toolchainProfiles.base), deepCopy(profile), 'overwrite')
+}

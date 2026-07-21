@@ -4,7 +4,12 @@ export {
   type guiMessageTypes,
   type partialTyConfiguration,
 } from './types/guiApiTypes'
-export { llmSettings, TyToolchainConfig } from './types/profiles'
+export {
+  llmSettings,
+  resolveToolchainConfig,
+  ToolchainProfiles,
+  TyToolchainConfig,
+} from './types/profiles'
 export {
   observeSubTaskStream,
   observeSubTaskStreamDetailed,

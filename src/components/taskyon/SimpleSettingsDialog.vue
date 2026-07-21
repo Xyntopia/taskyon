@@ -59,7 +59,7 @@ const entryNodePickKeys = [
 ] as const
 const slimChatKeys = computed(() => (em.value ? entryNodePickKeys : ['reasoning_effort']))
 
-const entryNode = computed(() => state.toolchainConfig[state.llmSettings.entryFunction]!)
+const entryNode = computed(() => state.toolchainProfiles.base[state.llmSettings.entryFunction]!)
 type ToolSettingsObjectSchema = {
   type: 'object'
   properties: Record<string, unknown>

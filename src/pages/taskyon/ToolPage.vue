@@ -200,9 +200,9 @@ const { name = undefined } = defineProps<{ name?: string }>()
 const state = useAppStateStore()
 
 const toolSettings = computed({
-  get: () => (name ? state.toolchainConfig[name] : undefined),
+  get: () => (name ? state.toolchainProfiles.base[name] : undefined),
   set: (v) => {
-    if (name && v) state.toolchainConfig[name] = v
+    if (name && v) state.toolchainProfiles.base[name] = v
   },
 })
 
