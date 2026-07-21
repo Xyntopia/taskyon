@@ -247,13 +247,7 @@ function getNodeCodeHash(node: DagNode): Hash {
   if (node.contentHash) return node.contentHash
 
   // Legacy fallback for code-defined nodes that do not yet provide content identity.
-  const text = `${node.name}@${node.version}`
-  let acc = 0
-  for (let i = 0; i < text.length; i++) {
-    acc = (acc * 31 + text.charCodeAt(i)) >>> 0
-  }
-  const hex = acc.toString(16).padStart(8, '0')
-  return `sha256:${hex.padEnd(64, '0')}`
+  return canonicalHash(`${node.name}@${node.version}`)
 }
 
 function makeNodeKey(node: DagNode, paramsHash: Hash, nodeCodeHash: Hash): string {

@@ -1,10 +1,8 @@
-import { dump } from 'js-yaml'
-import z from 'zod'
 import type { ChatCompletionStreamEvent } from '../types/chatCompletion'
 import type { llmSettings } from '../types/profiles'
 import { createSubtasksResult, type InternalTool } from '../types/toolApi'
 import type { FunctionArguments } from '../types/tools'
-import { ToolBase } from '../types/tools'
+import type { ToolBase } from '../types/tools'
 import { partialTaskDraft } from '../types/taskNode'
 import {
   createCombinedCrudWrapper,
@@ -38,6 +36,7 @@ import { configureNodePgLiteDataDir, getDatabase } from '../utils/pglite.api'
 import type { TyPGDB } from '../utils/pglite.api'
 import type { Thunk } from '../utils/tsHelpers'
 import { MAX_REMOTE_FUNCTION_TIMEOUT_MS, taskyonProtocol } from '../api/taskyonProtocol'
+import { createTaskyonApiDescription } from '../api/taskyonOpenApi'
 import type { TaskManagerStorage, TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
 import { generateSecretId } from './taskFunctionExecutor'
@@ -100,6 +99,13 @@ function createApi(
           status: 'ready',
           ...(nonce ? { nonce } : {}),
         }),
+      },
+      discovery: {
+        describe: async () =>
+          createTaskyonApiDescription(
+            taskyonProtocol,
+            await taskManagerInstance.updateToolDefinitions(true),
+          ),
       },
       task: {
         create: async (msg) => {
@@ -586,48 +592,3 @@ export async function tyCore(
 }
 
 export type Taskyon = Awaited<ReturnType<typeof tyCore>>
-
-/*function stringifyIfNotString(obj: unknown): string | undefined {
-    if (typeof obj === 'undefined') return undefined;
-    return typeof obj === 'string' ? obj : JSON.stringify(obj);
-  }*/
-
-export function createOpenAPIDocs() {
-  /** This function creates openAPI docs for taskyon and saves them inside the public folder.
-   *  the reason we're doing this her as msot clients will simply want to get the json and
-   * not have to run the entire taskyon app in order to generate the docs...
-   */
-  // make sure to validate this using https://editor.swagger.io/
-
-  /*const docs = new OpenApiGeneratorV3(registry.definitions).generateDocument(
-    config,
-  );*/
-
-  console.log('generate docs...')
-
-  const schemas = [ToolBase, taskyonProtocol.message].map((zType) =>
-    z.toJSONSchema(zType, { unrepresentable: 'any' }),
-  )
-
-  const openapiDoc = {
-    openapi: '3.0.0',
-    info: {
-      title: 'Taskyon API',
-      version: '1.0.0', // you can pull this from your package.json
-      description: 'Auto‑generated schema for Taskyon postmessage/iframe API',
-    },
-    paths: {}, // add path defs here if you have any
-    components: {
-      schemas,
-    },
-  }
-
-  const openApiYaml = dump(openapiDoc)
-
-  /*const destPath = path.resolve(__dirname, 'public/docs/openapi-docs.yml')
-  fs.mkdirSync(path.dirname(destPath), { recursive: true })
-  fs.writeFileSync(destPath, openApiYaml, { encoding: 'utf-8' })*/
-
-  //console.log(`OpenAPI docs written to ${destPath}`)
-  return openApiYaml
-}

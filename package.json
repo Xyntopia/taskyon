@@ -23,7 +23,7 @@
     "packages/ui"
   ],
   "scripts": {
-    "build": "yarn pack:tyclient && yarn build:app",
+    "build": "yarn docs:check && yarn links:check && yarn pack:tyclient && yarn build:app",
     "build:app": "yarn run quasar build",
     "build:app:diagnostics": "TASKYON_FAST_DEV_BUILD=1 yarn run quasar build --debug",
     "build:desktop": "docker build --file Dockerfile --target export --output type=local,dest=./dist-desktop .",
@@ -44,6 +44,8 @@
     "pack:tyclient": "mkdir -p public/lib && yarn workspace @taskyon/tyclient pack --filename ../../public/lib/tyclient-$npm_package_version.tgz && cp packages/tyclient/dist/tyclient.* public/lib/",
     "dev": "yarn run quasar dev",
     "dev:http": "TASKYON_HTTP=1 yarn run quasar dev",
+    "docs:check": "node --experimental-strip-types scripts/check-documentation.mjs",
+    "links:check": "node --experimental-strip-types scripts/check-app-links.mjs",
     "format": "prettier --write \"**/*.{js,ts,vue,,html,md,json}\" --ignore-path .prettierignore",
     "format:file": "prettier --write --ignore-path .prettierignore",
     "lint:fix": "eslint -c ./eslint.config.js './src*/**/*.{ts,js,cjs,mjs,vue}' './packages/**/*.{ts,js,cjs,mjs,vue}' --fix",

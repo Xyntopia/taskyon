@@ -3,6 +3,8 @@ import {
   mergeFrpProtocols,
   type ProtocolMessage,
 } from '@taskyon/common/modules/frpBus'
+import { TaskyonOpenApiDocumentSchema } from '@taskyon/common/modules/openApi'
+import type { Sha256Hash } from '@taskyon/common/modules/canonicalHash'
 import { z } from 'zod'
 import { partialTaskDraft, TaskNode } from '../types/taskNode'
 import { FunctionArguments, ToolBase } from '../types/tools'
@@ -15,15 +17,21 @@ const baseMessage = z.object({
   peerId: z.string().optional(),
 })
 
-const importTaskArchive = z.object({
-  data: z.instanceof(Uint8Array<ArrayBuffer>) as z.ZodType<Uint8Array<ArrayBuffer>>,
-  info: z.string(),
-  ids: z.array(z.string()),
-})
+const importTaskArchive = z
+  .object({
+    data: (z.instanceof(Uint8Array<ArrayBuffer>) as z.ZodType<Uint8Array<ArrayBuffer>>).describe(
+      'Binary task archive data.',
+    ),
+    info: z.string().describe('Human-readable archive information.'),
+    ids: z.array(z.string()).describe('Task ids contained in the archive.'),
+  })
+  .describe('Import a Taskyon task archive into the local task store.')
 
-const requestTaskArchive = z.object({
-  id: z.string(),
-})
+const requestTaskArchive = z
+  .object({
+    id: z.string().describe('Task id whose archive should be requested.'),
+  })
+  .describe('Request an exportable archive for a task and its related data.')
 
 const taskCreated = z.object({
   type: z.literal('taskCreated'),
@@ -49,13 +57,15 @@ const task = z
       'With this message type we can send tasks to taskyon from outside, e.g. a parent to a taskyon iframe',
   })
 
-const tasks = z.object({
-  execute: z.boolean().default(false),
-  tasks: partialTaskDraft.array(),
-  show: z.boolean().default(false).meta({
-    description: 'select the last task in the GUI',
-  }),
-})
+const tasks = z
+  .object({
+    execute: z.boolean().default(false).describe('Queue the created task chain for execution.'),
+    tasks: partialTaskDraft.array().describe('Ordered task drafts to create as one chain.'),
+    show: z.boolean().default(false).meta({
+      description: 'select the last task in the GUI',
+    }),
+  })
+  .describe('Create an ordered Taskyon task chain.')
 
 const functionDescription = ToolBase.extend({}).meta({
   description: 'Register a tool definition with this Taskyon peer.',
@@ -106,14 +116,16 @@ const browserFile = z.custom<File>(
   (value) => typeof globalThis.File !== 'undefined' && value instanceof globalThis.File,
 )
 
-const file = z.object({
-  id: z.string(),
-  name: z.string(),
-  mime: z.string(),
-  size: z.number(),
-  store: z.enum(['memory', 'opfs']).optional(),
-  file: browserFile, // only supported over MessageChannel for now
-})
+const file = z
+  .object({
+    id: z.string().describe('Content-derived file id.'),
+    name: z.string().describe('Original file name.'),
+    mime: z.string().describe('File media type.'),
+    size: z.number().describe('File size in bytes.'),
+    store: z.enum(['memory', 'opfs']).optional().describe('Requested local file storage backend.'),
+    file: browserFile.describe('Browser File payload transferred over MessageChannel.'),
+  })
+  .describe('Register a file with the local Taskyon peer.')
 
 const remoteFunctionBase = z.object({
   functionName: z.string().meta({
@@ -178,6 +190,29 @@ export const taskyonPeerProtocol = defineFrpServiceProtocol({
     lifecycle: {
       taskyonReady,
       status,
+    },
+  },
+})
+
+export const taskyonDiscoveryProtocol = defineFrpServiceProtocol({
+  service: 'discovery',
+  version: '1',
+  envelope: baseMessage,
+  commands: {
+    describe: {
+      request: z.object({}).describe('Request the current peer API and tool description.'),
+      response: z
+        .object({
+          document: TaskyonOpenApiDocumentSchema,
+          revision: z
+            .custom<Sha256Hash>(
+              (value) => typeof value === 'string' && /^sha256:[a-f0-9]{64}$/.test(value),
+              'Invalid SHA-256 revision.',
+            )
+            .describe('Canonical SHA-256 revision of the OpenAPI document.'),
+        })
+        .describe('Current OpenAPI description advertised by this Taskyon peer.'),
+      defaultTimeoutMs: 30_000,
     },
   },
 })
@@ -299,10 +334,17 @@ export const taskyonArchiveProtocol = defineFrpServiceProtocol({
   },
 })
 
+const taskyonDiscoveryPeerProtocol = mergeFrpProtocols({
+  id: 'taskyon.peer',
+  version: '1',
+  base: taskyonDiscoveryProtocol,
+  extension: taskyonPeerProtocol,
+})
+
 const taskyonPeerTaskProtocol = mergeFrpProtocols({
   id: 'taskyon.peer',
   version: '1',
-  base: taskyonPeerProtocol,
+  base: taskyonDiscoveryPeerProtocol,
   extension: taskyonTaskProtocol,
 })
 

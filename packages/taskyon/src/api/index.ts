@@ -67,6 +67,7 @@ export {
 }
 export type { Port }
 export { taskyonProtocol }
+export { createTaskyonApiDescription, type TaskyonApiDescription } from './taskyonOpenApi'
 export {
   createProtocolStorageCrudWrapper,
   createStorageProtocolServer,
@@ -234,6 +235,7 @@ export const createChatCompletionTask = (args: chatCompletionParams) =>
   toolCall<chatCompletionParams>({ name: 'chatCompletion', arguments: args })
 
 const READY_EVENT_GRACE_MS = 250
+const READY_PING_ATTEMPT_MS = 250
 
 const uploadFile = async (
   addFile: (args: {
@@ -256,6 +258,29 @@ const uploadFile = async (
   return id
 }
 
+const pingUntilReady = async (
+  ping: (args: { timeoutMs?: number; signal?: AbortSignal }) => Promise<unknown>,
+  deadline: number,
+  signal: AbortSignal,
+) => {
+  let lastError: unknown
+
+  do {
+    try {
+      await ping({
+        timeoutMs: Math.min(READY_PING_ATTEMPT_MS, Math.max(1, deadline - Date.now())),
+        signal,
+      })
+      return
+    } catch (error) {
+      if (signal.aborted) throw error
+      lastError = error
+    }
+  } while (Date.now() < deadline)
+
+  throw lastError instanceof Error ? lastError : new Error('Taskyon readiness timed out')
+}
+
 const waitForTaskyonReady = async <Rx extends { type: string }>(
   tyPort: Port<unknown, Rx>,
   ping: (args: { timeoutMs?: number; signal?: AbortSignal }) => Promise<unknown>,
@@ -263,26 +288,34 @@ const waitForTaskyonReady = async <Rx extends { type: string }>(
 ) => {
   const timeoutMs = opts.readinessTimeoutMs ?? 5_000
   const deadline = Date.now() + timeoutMs
+  const readyEvents = tyPort.receive.narrow(
+    (message): message is Extract<Rx, { type: 'taskyonReady' }> => isTaskyonReadyMessage(message),
+  )
 
   try {
     const waitOptions = {
       timeoutMs: Math.min(READY_EVENT_GRACE_MS, timeoutMs),
       ...(opts.signal ? { signal: opts.signal } : {}),
     }
-    await tyPort.receive
-      .narrow((message): message is Extract<Rx, { type: 'taskyonReady' }> =>
-        isTaskyonReadyMessage(message),
-      )
-      .wait(waitOptions)
+    await readyEvents.wait(waitOptions)
     return
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw error
   }
 
-  await ping({
-    timeoutMs: Math.max(1, deadline - Date.now()),
-    ...(opts.signal ? { signal: opts.signal } : {}),
-  })
+  const remainingMs = Math.max(1, deadline - Date.now())
+  const fallbackController = new AbortController()
+  const abortFallback = () => fallbackController.abort(opts.signal?.reason)
+  opts.signal?.addEventListener('abort', abortFallback, { once: true })
+  try {
+    await Promise.race([
+      readyEvents.wait({ timeoutMs: remainingMs, signal: fallbackController.signal }),
+      pingUntilReady(ping, deadline, fallbackController.signal),
+    ])
+  } finally {
+    fallbackController.abort()
+    opts.signal?.removeEventListener('abort', abortFallback)
+  }
 }
 
 const createAbortError = () => {

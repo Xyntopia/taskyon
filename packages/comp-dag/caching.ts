@@ -1,6 +1,9 @@
-// caching.ts
+import {
+  canonicalHash as hashCanonicalJson,
+  type Sha256Hash,
+} from '@taskyon/common/modules/canonicalHash'
 
-export type Hash = `sha256:${string}`
+export type Hash = Sha256Hash
 
 // Storage backend abstraction
 export interface DagStorageBackend {
@@ -10,48 +13,13 @@ export interface DagStorageBackend {
   setCacheEntry(key: string, entry: { artifact: Hash }): Promise<void> | void
 }
 
-// small, deterministic, JSON-based hashing
 /**
- * Produces a JSON-stable version of the input by ordering object keys.
- *
- * @param value the value to normalize
- * @returns a value with deterministic key ordering
- */
-function stableValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(stableValue)
-  }
-  if (value && typeof value === 'object') {
-    const obj = value as Record<string, unknown>
-    const keys = Object.keys(obj).sort()
-    const out: Record<string, unknown> = {}
-    for (const k of keys) {
-      out[k] = stableValue(obj[k])
-    }
-    return out
-  }
-  return value
-}
-
-// TODO: we declare this function async to be able to use real hashes in later stages
-// TODO: use hash-wasm xxHash64 + stableStringify for this here
-/**
- * Computes a deterministic hash string for the provided value.
+ * Computes a deterministic SHA-256 hash for a JSON-serializable value.
  *
  * @param value the value to hash
- * @returns the pseudo SHA-256 hash string
+ * @returns the SHA-256 hash string
  */
-export function canonicalHash(value: unknown): Hash {
-  const stable = stableValue(value)
-  const json = JSON.stringify(stable)
-  // simple non-crypto hash for tests
-  let acc = 0
-  for (let i = 0; i < json.length; i++) {
-    acc = (acc * 31 + json.charCodeAt(i)) >>> 0
-  }
-  const hex = acc.toString(16).padStart(8, '0')
-  return `sha256:${hex.padEnd(64, '0')}`
-}
+export const canonicalHash = (value: unknown): Hash => hashCanonicalJson(value)
 
 // -----------------------------
 // In-memory artifact store & cache catalog (default backend)

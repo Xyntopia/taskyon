@@ -132,6 +132,61 @@ export const testTaskyonClientWaitUntilReadyFallsBackToSinglePing = async () => 
 testTaskyonClientWaitUntilReadyFallsBackToSinglePing.description =
   'Falls back to one Taskyon core ping when no initial taskyonReady event is observed.'
 
+export const testTaskyonClientAcceptsReadyEventAfterPingFallback = async () => {
+  const { x: clientPort, y: taskyonPort } = createDuplexChannel<
+    TaskyonProtocolMessage,
+    TaskyonProtocolMessage
+  >()
+  const ready = createTaskyonClient(clientPort).waitUntilReady({
+    readinessTimeoutMs: 1000,
+  })
+
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  taskyonPort.send({ type: 'taskyonReady' })
+  await ready
+}
+
+testTaskyonClientAcceptsReadyEventAfterPingFallback.description =
+  'Accepts a delayed taskyonReady event while readiness probes are pending.'
+
+export const testTaskyonClientReadinessSurvivesLateTransportConnection = async () => {
+  const { x: clientPort, y: clientTransportPort } = createDuplexChannel<
+    TaskyonProtocolMessage,
+    TaskyonProtocolMessage
+  >()
+  const { x: coreTransportPort, y: taskyonPort } = createDuplexChannel<
+    TaskyonProtocolMessage,
+    TaskyonProtocolMessage
+  >()
+  const unsubscribeServer = createPortServer(taskyonPort, taskyonProtocol, {
+    peer: {
+      ping: ({ nonce }) => ({
+        ok: true,
+        protocol: 'taskyon.core',
+        version: '1',
+        status: 'ready',
+        ...(nonce ? { nonce } : {}),
+      }),
+    },
+  })
+
+  const ready = createTaskyonClient(clientPort).waitUntilReady({
+    readinessTimeoutMs: 1000,
+  })
+  await new Promise((resolve) => setTimeout(resolve, 400))
+  const disconnectTransport = clientTransportPort.connect(coreTransportPort)
+
+  try {
+    await ready
+  } finally {
+    disconnectTransport()
+    unsubscribeServer()
+  }
+}
+
+testTaskyonClientReadinessSurvivesLateTransportConnection.description =
+  'Retries readiness probes when the Taskyon transport connects after the first probe was sent.'
+
 export const testTaskyonClientDefersApiCallsUntilReadyEvent = async () => {
   const { x: clientPort, y: taskyonPort } = createDuplexChannel<
     TaskyonProtocolMessage,

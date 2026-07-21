@@ -28,30 +28,49 @@ export const Annotation = z.union([
 export type Annotation = z.infer<typeof Annotation>
 
 const MessageContent = z.object({
-  type: z.literal('message'),
-  data: z.string(),
-  ann: Annotation.array().optional(),
+  type: z.literal('message').describe('Identifies conversational text content.'),
+  data: z.string().describe('Text presented as the task message.'),
+  ann: Annotation.array().optional().describe('Source annotations attached to the message.'),
 })
 const StructuredContent = z.object({
-  type: z.literal('structured'),
-  data: z.unknown(),
+  type: z.literal('structured').describe('Identifies machine-readable structured content.'),
+  data: z.unknown().describe('Structured task value defined by the producing tool or workflow.'),
 })
-const ToolCallContent = z.object({ type: z.literal('functioncall'), data: FunctionCall })
+const ToolCallContent = z.object({
+  type: z.literal('functioncall').describe('Identifies a requested tool call.'),
+  data: FunctionCall.describe('Tool name and arguments to invoke.'),
+})
 const UploadedFilesContent = z.object({
-  type: z.literal('files'),
-  data: z.array(z.string()),
+  type: z.literal('files').describe('Identifies file-reference content.'),
+  data: z.array(z.string()).describe('Identifiers of files attached to the task.'),
 })
-const ToolResultContent = z.object({ type: z.literal('toolresult'), data: z.unknown() })
-const ToolDefinition = z.object({ type: z.literal('tooldefinition'), data: ToolBase })
-const ErrorContent = z.object({ type: z.literal('error'), data: z.unknown() }).meta({
-  description: 'Gets created if any error occurs during task processing.',
+const ToolResultContent = z.object({
+  type: z.literal('toolresult').describe('Identifies the result of a tool call.'),
+  data: z.unknown().describe('Result value returned by the tool.'),
 })
-const Return = z.object({ type: z.literal('return'), data: z.string() }).describe(
-  `A Termination task always indicates the end of an autonomous task chat execution.
+const ToolDefinition = z.object({
+  type: z.literal('tooldefinition').describe('Identifies a Taskyon tool definition.'),
+  data: ToolBase.describe('Tool definition made available by this task.'),
+})
+const ErrorContent = z
+  .object({
+    type: z.literal('error').describe('Identifies task-processing error content.'),
+    data: z.unknown().describe('Error details reported by the failed task step.'),
+  })
+  .meta({
+    description: 'Gets created if any error occurs during task processing.',
+  })
+const Return = z
+  .object({
+    type: z.literal('return').describe('Identifies a terminal task result.'),
+    data: z.string().describe('Human-readable reason or final result for task termination.'),
+  })
+  .describe(
+    `A Termination task always indicates the end of an autonomous task chat execution.
 Every Leaf task which is not a Termination task can potentially continue to be executed...
 
 We can indicate the reason for termination here as well...`,
-)
+  )
 
 // TODO: I am not sure, if we need this here...
 const ChatCompletionContent = z.union([MessageContent, ToolResultContent, ErrorContent])
@@ -80,7 +99,9 @@ export const TaskNode = z.object({
   // "pubKey:gen" if the task was automatically generated && pubKey if it wasn't
   // OR: we could simply check the parents & priors of tasks. if tasks have a parent, they were generated
   // by a function. user-generated message should not have a parent...
-  role: z.enum(['system', 'user', 'assistant', 'function']),
+  role: z
+    .enum(['system', 'user', 'assistant', 'function'])
+    .describe('Message role used when the task is presented to a language model.'),
   name: z.string().optional().meta({
     description: 'An optional name for the task',
   }),
@@ -89,7 +110,7 @@ export const TaskNode = z.object({
 For example this is, what an LLM would actually get to see. There are only a few different ways
 of how content can be structured. `,
   ),
-  label: z.array(z.string()).optional(),
+  label: z.array(z.string()).optional().describe('Optional labels used to categorize the task.'),
   parentID: z.string().optional().meta({
     description: 'The ID of the parent task which created this subtask on a lower stack level',
   }),
@@ -97,9 +118,12 @@ of how content can be structured. `,
     description: 'The ID of the previous task in the same stack level.',
   }),
   // TODO: validate this ID using our content address creation functions
-  id: z.string(),
-  authorId: z.string().optional(),
-  created_at: z.number().optional(),
+  id: z.string().describe('Content-derived task identifier.'),
+  authorId: z.string().optional().describe('Identifier of the task author, when known.'),
+  created_at: z
+    .number()
+    .optional()
+    .describe('Task creation time as milliseconds since the Unix epoch.'),
   acl: z.string().array().optional()
     .describe(`A number of public keys which act as access control lists (ACL).
 They are given certain as a list of public keys + type of ownership.
