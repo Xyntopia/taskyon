@@ -9,6 +9,7 @@ import {
   testCliOverpassMapToolPrintsHtmlPreviewLink as runCliOverpassMapToolPrintsHtmlPreviewLink,
   testTaskRendererWritesHtmlPreviewForAssistantHtml as runTaskRendererWritesHtmlPreviewForAssistantHtml,
   testCliClarificationToolAcceptsTypedAnswers as runCliClarificationToolAcceptsTypedAnswers,
+  testBracketedPastePreservesMultilinePrompt as runBracketedPastePreservesMultilinePrompt,
 } from '../../tests/cliE2eDiagnostics'
 
 const assert = (condition: unknown, message: string) => {
@@ -21,6 +22,13 @@ const forbiddenStartupRegressions = [
   'getExecutionTaskChain is not available for this external tool client',
   '[function|functioncall]\n  name: entryNode',
 ]
+
+export const testCliBracketedPastePreservesMultilinePrompt =
+  runBracketedPastePreservesMultilinePrompt
+testCliBracketedPastePreservesMultilinePrompt.description =
+  runBracketedPastePreservesMultilinePrompt.description
+testCliBracketedPastePreservesMultilinePrompt.timeoutMs =
+  runBracketedPastePreservesMultilinePrompt.timeoutMs
 
 export const testCliHelloWorldProducesAssistantResponse = async () => {
   const result = await runTycSession({

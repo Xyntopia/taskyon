@@ -463,7 +463,7 @@ export async function testTerminalKitFooterOptInStartsAndExits() {
 }
 
 export function testTaskRendererDoesNotEchoUserPromptInput() {
-  const lines: string[] = []
+  const lines = ['[chatgpt-codex | gpt-5.4 | processing:1]']
   const userTask: TaskNode = {
     id: 'user-task',
     role: 'user',
@@ -480,6 +480,14 @@ export function testTaskRendererDoesNotEchoUserPromptInput() {
       data: 'assistant response',
     },
   }
+  const functionTask: TaskNode = {
+    id: 'function-task',
+    role: 'function',
+    content: {
+      type: 'functioncall',
+      data: { name: 'clock', arguments: {} },
+    },
+  }
   const state = {
     debugEnabled: () => false,
     showRoleTag: () => true,
@@ -493,11 +501,13 @@ export function testTaskRendererDoesNotEchoUserPromptInput() {
   }
 
   renderTaskProgress(state, userTask, false)
+  renderTaskProgress(state, functionTask, false)
   renderTaskProgress(state, assistantTask, false)
 
   const output = lines.join('\n')
   assertNotContains(output, 'already echoed by readline')
   assertContains(output, 'assistant response')
+  assertContains(output, '[chatgpt-codex | gpt-5.4 | processing:1]\n\n[function|functioncall]')
 }
 
 export async function testTaskRendererWritesHtmlPreviewForAssistantHtml() {
@@ -1002,12 +1012,53 @@ export async function testTaskInterruptReportsStatusAndPersistsConversation() {
   assertContains(markdown, 'hello')
 }
 
+export async function testBracketedPastePreservesMultilinePrompt() {
+  const firstLine = 'Complete these as two separate sequential delegated tasks.'
+  const secondLine = 'First, list every available tool.'
+  const thirdLine = 'Second, get the current weather.'
+  const textTypedAfterPaste = 'AFTER_PASTE_BEFORE_ENTER'
+  const result = await runTycSession({
+    testName: 'testBracketedPastePreservesMultilinePrompt',
+    steps: [
+      {
+        waitFor: 'Slash commands:',
+        input: `\u001b[200~${firstLine}\r\r${secondLine}\r\r${thirdLine}\r\u001b[201~`,
+      },
+      { delayMs: 300, input: textTypedAfterPaste },
+      { delayMs: 200, input: '\r' },
+      { waitFor: 'task: processing', input: '' },
+    ],
+    acceptOutputAsExit: 'task: processing',
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    timeoutMs: 45_000,
+    runner: 'pty',
+  })
+
+  const storageMatch = result.output.match(/Conversation storage: (.+\.md)/)
+  if (!storageMatch?.[1]) {
+    throw new Error(`Could not find conversation storage path.\n${result.output}`)
+  }
+  const markdown = await readFile(storageMatch[1].trim(), 'utf8')
+  assertContains(result.output, '\u001b[?2004h')
+  assertContains(result.output, '\u001b[?2004l')
+  const renderedThirdLineCount = result.output.split(thirdLine).length - 1
+  if (renderedThirdLineCount !== 1) {
+    throw new Error(
+      `Expected the pasted line to render once, got ${String(renderedThirdLineCount)}.\n${result.output}`,
+    )
+  }
+  assertContains(markdown, `${firstLine}\n\n${secondLine}\n\n${thirdLine}\n${textTypedAfterPaste}`)
+}
+
 testCliStartupShowsVersionCommitAndBuildDate.description =
   'CLI startup prints version, commit, and build date'
 testTerminalKitFooterOptInStartsAndExits.description =
   'Terminal Kit footer backend can be enabled without making tycli depend on it for startup'
 testTaskRendererDoesNotEchoUserPromptInput.description =
   'Task renderer does not duplicate user prompt input in normal CLI output'
+testBracketedPastePreservesMultilinePrompt.description =
+  'Bracketed multiline paste stays in one prompt until a separate Enter submits it'
+testBracketedPastePreservesMultilinePrompt.timeoutMs = 60_000
 testSlashMenuOpensOnSingleSlash.description = 'Slash menu opens immediately on "/" keypress'
 testAtFileCommandAddsContextForDirectPath.description =
   '@<path> adds file content to CLI context without opening picker'

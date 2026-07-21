@@ -615,6 +615,11 @@ type ReadlineWithMutableHistory = ReturnType<typeof createInterface> & {
   history?: string[]
 }
 
+type ReadlineWithMutableInput = ReturnType<typeof createInterface> & {
+  cursor: number
+  line: string
+}
+
 async function runGit(args: string[]): Promise<string | null> {
   return await new Promise((resolve) => {
     const child = spawn('git', args, { stdio: ['ignore', 'pipe', 'ignore'] })
@@ -1771,6 +1776,19 @@ function getCurrentInputText(rl: ReturnType<typeof createInterface>): string {
   return rl.line.trim()
 }
 
+function insertPromptNewline(rl: ReturnType<typeof createInterface>) {
+  const input = rl as ReadlineWithMutableInput
+  input.line = `${input.line.slice(0, input.cursor)}\n${input.line.slice(input.cursor)}`
+  input.cursor += 1
+  rl.prompt(true)
+}
+
+const isShiftEnterSequence = (sequence: string | undefined) =>
+  sequence === '\x1bOM' || sequence === '\x1b[13;2u' || sequence === '\x1b[13;2~'
+
+const ENABLE_BRACKETED_PASTE = '\x1b[?2004h'
+const DISABLE_BRACKETED_PASTE = '\x1b[?2004l'
+
 function isRecordableInputHistoryValue(value: string) {
   const trimmed = value.trim()
   return !['', 'exit', 'quit', '/exit', '/quit'].includes(trimmed)
@@ -1861,8 +1879,9 @@ async function promptForMainInput(
 ): Promise<string | null> {
   const stdin = process.stdin
   if (!stdin.isTTY) return askQuestion(rl, promptText)
-  if (process.env.TYCLI_HOTKEY_MENUS === '0') return askQuestion(rl, promptText)
+  const hotkeyMenusEnabled = process.env.TYCLI_HOTKEY_MENUS !== '0'
 
+  process.stdout.write(ENABLE_BRACKETED_PASTE)
   emitKeypressEvents(stdin, rl)
   rl.setPrompt(promptText)
   rl.prompt()
@@ -1876,6 +1895,14 @@ async function promptForMainInput(
   return await new Promise<string | null>((resolve) => {
     let settled = false
     let menuOpen = false
+    let activePaste:
+      | {
+          initialLine: string
+          initialCursor: number
+          text: string
+          history: string[] | undefined
+        }
+      | undefined
 
     const finish = (value: string | null) => {
       if (settled) return
@@ -1883,16 +1910,48 @@ async function promptForMainInput(
       stdin.off('keypress', onKeypress)
       rl.off('line', onLine)
       rl.off('close', onClose)
+      process.stdout.write(DISABLE_BRACKETED_PASTE)
       restoreTerminalInput()
       resolve(value)
     }
 
     const onLine = (line: string) => {
-      if (menuOpen) return
+      if (menuOpen || activePaste) return
       finish(line)
     }
     const onClose = () => finish(null)
-    const onKeypress = (str: string, key: { ctrl?: boolean; name?: string; sequence?: string }) => {
+    const onKeypress = (
+      str: string | undefined,
+      key: { ctrl?: boolean; name?: string; sequence?: string },
+    ) => {
+      if (key.name === 'paste-start') {
+        const input = rl as ReadlineWithMutableInput
+        const history = getReadlineHistory(rl)
+        activePaste = {
+          initialLine: input.line,
+          initialCursor: input.cursor,
+          text: '',
+          history: history ? [...history] : undefined,
+        }
+        return
+      }
+      if (activePaste) {
+        if (key.name === 'paste-end') {
+          const input = rl as ReadlineWithMutableInput
+          const pastedText = activePaste.text.replace(/\r\n?/g, '\n')
+          input.line = `${activePaste.initialLine.slice(0, activePaste.initialCursor)}${pastedText}${activePaste.initialLine.slice(activePaste.initialCursor)}`
+          input.cursor = activePaste.initialCursor + pastedText.length
+          const history = getReadlineHistory(rl)
+          if (history && activePaste.history) {
+            history.splice(0, history.length, ...activePaste.history)
+            rl.emit('history', history)
+          }
+          activePaste = undefined
+        } else if (str) {
+          activePaste.text += str
+        }
+        return
+      }
       if (key.ctrl && key.name === 'c') {
         onCtrlCRequested?.()
         finish(null)
@@ -1907,6 +1966,7 @@ async function promptForMainInput(
         stdin.off('keypress', onKeypress)
         rl.off('line', onLine)
         rl.off('close', onClose)
+        process.stdout.write(DISABLE_BRACKETED_PASTE)
         restoreTerminalInput()
         suspendProcess()
         settled = true
@@ -1914,8 +1974,12 @@ async function promptForMainInput(
         return
       }
       if (key.ctrl) return
-      const typedSlash = str === '/' || key.sequence === '/'
-      const typedAt = str === '@' || key.sequence === '@'
+      if (isShiftEnterSequence(key.sequence)) {
+        insertPromptNewline(rl)
+        return
+      }
+      const typedSlash = hotkeyMenusEnabled && (str === '/' || key.sequence === '/')
+      const typedAt = hotkeyMenusEnabled && (str === '@' || key.sequence === '@')
       if (!typedSlash && !typedAt) return
       const current = getCurrentInputText(rl)
       const triggerChar = typedSlash ? '/' : '@'
@@ -2803,7 +2867,9 @@ async function main() {
       Boolean(toolRenderOptions[name]?.hideChat),
     )
     if (text) setWorkerStatusLine(text)
-    else stopWorkerStatusLine()
+    else if (event.stage === 'processing' || event.stage === 'subtasks') {
+      setWorkerStatusLine('task: processing')
+    } else stopWorkerStatusLine()
   }
 
   const queueConversationPersist = (leafId: string | undefined = currentLeafId) => {
@@ -3591,6 +3657,7 @@ async function main() {
         taskProcessingStatus = 'processing'
         hasWorkerProcessing = true
         updateFooter()
+        setWorkerStatusLine('task: processing')
         renderThinkingPanel()
         taskInterruptKeysCleanup = startTaskInterruptKeys()
         activeTaskWaitController = new AbortController()

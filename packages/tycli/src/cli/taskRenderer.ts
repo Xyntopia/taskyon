@@ -229,18 +229,17 @@ export const renderTaskProgress = (
     return
   if (!shouldRenderTask(task, debugEnabled)) return
   state.clearThinkingPanel()
+  state.writeLine('')
   const prefix = debugEnabled ? (previousSnapshotExists ? '[task updated] ' : '[task] ') : ''
   const summary = renderTaskSummary(task, state.showRoleTag())
   if (!debugEnabled && task.content.type === 'toolresult' && !state.showFullFunctionResults()) {
     const [header, ...body] = summary.split('\n')
     const compact = truncateToLines(body.join('\n'), MAX_RESULT_LINES)
     state.writeLine(`${prefix}${header}\n${compact.text}`)
-    state.writeLine('')
     state.renderThinkingPanel()
     return
   }
   state.writeLine(`${prefix}${summary}`)
-  state.writeLine('')
   state.renderThinkingPanel()
 }
 

@@ -98,6 +98,7 @@ tycli-dev
 ```
 
 Type `exit` or `quit` to leave the chat.
+Press Shift+Enter to insert a newline without submitting the prompt.
 
 ## Planner task contracts
 
