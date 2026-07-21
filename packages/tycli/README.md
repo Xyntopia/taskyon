@@ -65,7 +65,6 @@ yarn run
 Optional environment variables:
 
 - `TASKYON_SELECTED_API`
-- `TASKYON_MODEL`
 - `OPENAI_API_KEY`
 - `OPENROUTER_API_KEY`
 - `TASKYON_API_KEY`

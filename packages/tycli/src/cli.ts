@@ -80,11 +80,9 @@ import { createCliFooter } from './cli/ui'
 import {
   applyCodexAccountHeader,
   canReachLocalApi,
-  codexModelOptions,
   createCliLlmSettings,
   fetchProviderModels,
   getAllowedTaskyonModels,
-  normalizeStoredModelForProvider,
   modelOptionsForProvider,
 } from './cli/models'
 import { hasInterruptibleWorkerActivity } from './cli/interruptState'
@@ -1718,10 +1716,7 @@ async function selectModelInteractive(
 async function setSelectedApi(ty: Taskyon, llmState: llmSettings, nextApi: string) {
   await persistConfigPatch({ selectedApi: nextApi })
   const stored = await loadStoredConfig()
-  const configuredModel = normalizeStoredModelForProvider(
-    nextApi,
-    resolveStoredModel(stored, nextApi),
-  )
+  const configuredModel = resolveStoredModel(stored, nextApi)
   const currentApi = llmState.llmApis[nextApi]
   if (currentApi) {
     llmState.llmApis[nextApi] = {
@@ -2085,24 +2080,6 @@ async function handleModelCommand(
       writeError(`No API definition for '${selectedApi}'.`)
       return
     }
-    if (selectedApi === 'chatgpt-codex') {
-      const options = codexModelOptions()
-      rl.pause()
-      let model: string | null = null
-      try {
-        model = await selectModelInteractive(rl, options)
-      } finally {
-        rl.resume()
-      }
-      if (!model) {
-        writeNotice('warn', 'Model selection cancelled.')
-        return
-      }
-      llmState.llmApis[selectedApi] = { ...api, selectedModel: model }
-      await persistProviderModel(selectedApi, model)
-      writeNotice('success', `Selected model for ${selectedApi}: ${model}`)
-      return
-    }
     const key =
       (await ty.getSecret(API_KEY_STORE_NAME, selectedApi, false, false)) ??
       resolveKeyForProvider(selectedApi)
@@ -2120,7 +2097,7 @@ async function handleModelCommand(
           'Hint: You can inspect Taskyon model availability and details at https://taskyon.space/pricing',
         )
       }
-      modelMap = await fetchProviderModels(selectedApi, api, key)
+      modelMap = await fetchProviderModels(selectedApi, api, key, { forceRefresh: true })
     } catch (error) {
       writeError(error instanceof Error ? error.message : String(error))
       return
@@ -2543,9 +2520,7 @@ async function main() {
     )
   }
 
-  const model =
-    process.env.TASKYON_MODEL ??
-    normalizeStoredModelForProvider(selectedApi, resolveStoredModel(stored, selectedApi))
+  const model = resolveStoredModel(stored, selectedApi)
   const providerKey = resolveKeyForProvider(selectedApi)
   const config = {
     selectedApi,

@@ -85,7 +85,6 @@ function parseArgs(args: string[]): CliOptions {
     ...(process.env.TASKYON_SELECTED_API?.trim()
       ? { provider: process.env.TASKYON_SELECTED_API.trim() }
       : {}),
-    ...(process.env.TASKYON_MODEL?.trim() ? { model: process.env.TASKYON_MODEL.trim() } : {}),
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -441,7 +440,6 @@ function buildSummary(
 function applyDiagnosticsEnvironment(context: DiagnosticsTestContext) {
   if (context.selectedApi) process.env.TASKYON_SELECTED_API = context.selectedApi
   if (context.model) {
-    process.env.TASKYON_MODEL = context.model
     process.env.TASKYON_TEST_MODEL = context.model
   }
   if (context.tyauth) {

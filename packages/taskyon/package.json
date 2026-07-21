@@ -25,6 +25,9 @@
     },
     "./documentationManifest": {
       "import": "./src/documentationManifest.ts"
+    },
+    "./utils/caching": {
+      "import": "./src/utils/caching.ts"
     }
   },
   "scripts": {

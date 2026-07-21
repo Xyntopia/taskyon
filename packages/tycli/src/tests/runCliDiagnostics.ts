@@ -6,6 +6,7 @@ import {
   runDiagnosticsTests,
 } from '@taskyon/common/modules/diagnosticsRunner'
 import * as cliE2eDiagnostics from './cliE2eDiagnostics'
+import * as cliModelDiagnostics from './cliModelDiagnostics'
 
 function safeTimestamp(date: Date) {
   return date.toISOString().replace(/[:.]/g, '-')
@@ -70,6 +71,7 @@ async function main() {
   const registry = buildDiagnosticsRegistry({
     modules: [
       { sourcePath: 'packages/tycli/src/tests/cliE2eDiagnostics.ts', mod: cliE2eDiagnostics },
+      { sourcePath: 'packages/tycli/src/tests/cliModelDiagnostics.ts', mod: cliModelDiagnostics },
     ],
   })
   const includeExperimental = process.env.TYCLI_E2E_INCLUDE_EXPERIMENTAL === '1'

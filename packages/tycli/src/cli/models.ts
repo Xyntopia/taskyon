@@ -4,34 +4,8 @@ import {
   type apiConfig,
   type llmSettings,
 } from '@taskyon/taskyon'
+import { asyncTimeLruCache } from '@taskyon/taskyon/utils/caching'
 import type { CliApiConfig, LlmModel } from './types'
-
-export const CHATGPT_CODEX_ALLOWED_MODELS = new Set([
-  'gpt-5.5',
-  'gpt-5.4',
-  'gpt-5.4-mini',
-  'gpt-5.3-codex-spark',
-])
-
-export function isChatgptCodexModelSupported(model: string): boolean {
-  if (CHATGPT_CODEX_ALLOWED_MODELS.has(model)) return true
-  const match = model.match(/^gpt-(\d+\.\d+)/)
-  return match ? Number.parseFloat(match[1] ?? '') > 5.4 : false
-}
-
-export function codexModelOptions(): { label: string; value: string }[] {
-  return [...CHATGPT_CODEX_ALLOWED_MODELS].map((model) => ({ label: model, value: model }))
-}
-
-export function normalizeStoredModelForProvider(
-  provider: string,
-  model: string | undefined,
-): string | undefined {
-  const normalized = model?.trim()
-  if (!normalized) return undefined
-  if (provider !== 'chatgpt-codex') return normalized
-  return isChatgptCodexModelSupported(normalized) ? normalized : undefined
-}
 
 export const DEFAULT_PROMPT_TEMPLATES = {
   basePrompt:
@@ -45,6 +19,8 @@ export const DEFAULT_PROMPT_TEMPLATES = {
     'Output must strictly match {format} and this schema:\\n\\n{schema}\\n\\nDo not add extra text.',
   tools: 'Available tools:\\n\\n${tools}',
 }
+
+const CODEX_MODELS_CLIENT_VERSION = '0.144.5'
 
 export const baseApiDefinitions: Record<string, apiConfig> = {
   taskyon: {
@@ -153,14 +129,30 @@ function joinUrl(base: string, path: string): string {
   return `${left}/${right}`
 }
 
-export async function fetchProviderModels(
+type ProviderModelsResponse =
+  | LlmModel[]
+  | {
+      data?: LlmModel[]
+      models?: Array<{ slug: string; input_modalities?: string[] }>
+    }
+
+async function fetchProviderModelsUncached(
   provider: string,
   api: NonNullable<llmSettings['llmApis']>[string],
   key: string,
+  forceRefresh = false,
 ): Promise<Record<string, LlmModel>> {
   let modelsUrl = joinUrl(api.baseURL, api.routes.models)
   if (provider === 'openrouter.ai') modelsUrl = `${TOKEN_SERVICE_BASE_URL}/api/models_openrouter`
   if (provider === 'taskyon') modelsUrl = `${TOKEN_SERVICE_BASE_URL}/api/models`
+  if (provider === 'chatgpt-codex' || forceRefresh) {
+    const url = new URL(modelsUrl)
+    if (provider === 'chatgpt-codex') {
+      url.searchParams.set('client_version', CODEX_MODELS_CLIENT_VERSION)
+    }
+    if (forceRefresh) url.searchParams.set('_', String(Date.now()))
+    modelsUrl = url.toString()
+  }
   const response = await fetch(modelsUrl, {
     method: 'GET',
     headers: {
@@ -170,12 +162,33 @@ export async function fetchProviderModels(
     },
   })
   if (!response.ok) throw new Error(`Failed to fetch models (${response.status}) from ${modelsUrl}`)
-  const raw = (await response.json()) as { data?: LlmModel[] } | LlmModel[]
-  const list = Array.isArray(raw) ? raw : (raw.data ?? [])
+  const raw = (await response.json()) as ProviderModelsResponse
+  const list = Array.isArray(raw)
+    ? raw
+    : provider === 'chatgpt-codex'
+      ? (raw.models ?? []).map((model) => ({
+          id: model.slug,
+          ...(model.input_modalities?.includes('image')
+            ? { architecture: { modality: 'text+image->text' } }
+            : {}),
+        }))
+      : (raw.data ?? [])
   return list.reduce<Record<string, LlmModel>>((acc, m) => {
     if (m?.id) acc[m.id] = m
     return acc
   }, {})
+}
+
+const fetchCachedProviderModels = asyncTimeLruCache(10, 5 * 60 * 1000)(fetchProviderModelsUncached)
+
+export async function fetchProviderModels(
+  provider: string,
+  api: NonNullable<llmSettings['llmApis']>[string],
+  key: string,
+  options: { forceRefresh?: boolean } = {},
+): Promise<Record<string, LlmModel>> {
+  if (options.forceRefresh) return await fetchProviderModelsUncached(provider, api, key, true)
+  return await fetchCachedProviderModels(provider, api, key)
 }
 
 export function getAllowedTaskyonModels(key: string | undefined): string[] | undefined {

@@ -24,11 +24,7 @@ import {
   resolveStoredModel,
 } from './config'
 import { createCliFileStorageService } from './fileStorage'
-import {
-  applyCodexAccountHeader,
-  createCliLlmSettings,
-  normalizeStoredModelForProvider,
-} from './models'
+import { applyCodexAccountHeader, createCliLlmSettings } from './models'
 import { readProviderOauthAccountId, resolveCachedProviderOauthSession } from '../oauthLogin'
 
 const DIAGNOSTICS_ENTRY_NODE_NAME = 'entryNode'
@@ -101,10 +97,7 @@ export async function bootstrapCliTaskyon(args?: {
     )
   }
 
-  const model =
-    args?.model ??
-    process.env.TASKYON_MODEL ??
-    normalizeStoredModelForProvider(selectedApi, resolveStoredModel(stored, selectedApi))
+  const model = args?.model ?? resolveStoredModel(stored, selectedApi)
   const envProviderKey = resolveKeyForProvider(selectedApi)
   const config: CliApiConfig = {
     selectedApi,
