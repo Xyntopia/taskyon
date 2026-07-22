@@ -1,6 +1,6 @@
 import type { ResourceFilesLoader } from '@taskyon/common/modules/resourceFiles'
 
-export type OpfsResourceEntry = {
+type OpfsResourceEntry = {
   name: string
   path: string
   kind: 'file' | 'directory'
@@ -11,7 +11,7 @@ type OpfsDirectoryHandle = FileSystemDirectoryHandle & {
   entries(): AsyncIterableIterator<[string, FileSystemFileHandle | FileSystemDirectoryHandle]>
 }
 
-export const resolveOpfsResourceHandle = async (path: string) => {
+const resolveOpfsResourceHandle = async (path: string) => {
   const segments = path.split('/').filter(Boolean)
   let directory = (await navigator.storage.getDirectory()) as OpfsDirectoryHandle
   for (const [index, segment] of segments.entries()) {
@@ -28,7 +28,7 @@ export const resolveOpfsResourceHandle = async (path: string) => {
   return directory
 }
 
-export const listOpfsResourceEntries = async (path: string): Promise<OpfsResourceEntry[]> => {
+const listOpfsResourceEntries = async (path: string): Promise<OpfsResourceEntry[]> => {
   const handle = await resolveOpfsResourceHandle(path)
   if (handle.kind !== 'directory') throw new Error(`OPFS resource is not a directory: ${path}`)
   const entries: OpfsResourceEntry[] = []

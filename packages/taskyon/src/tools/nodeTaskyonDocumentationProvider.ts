@@ -1,7 +1,5 @@
 import type { ResourceFilesLoader } from '@taskyon/common/modules/resourceFiles'
-import type { EngineConfig } from '@taskyon/comp-dag'
 import type { TaskyonApiDescription } from '../api/taskyonOpenApi'
-import { createTaskyonDocumentationProviderTool } from './documentationProviderTool'
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { basename, join, relative } from 'node:path'
 
@@ -55,13 +53,3 @@ export const createNodeResourceFilesLoader = (
       }
     }
   }
-
-export const createNodeTaskyonDocumentationProviderTool = (options: {
-  docsRoot: string
-  describeApi: () => Promise<TaskyonApiDescription>
-  engineConfig?: EngineConfig
-}) =>
-  createTaskyonDocumentationProviderTool(
-    createNodeResourceFilesLoader(options.docsRoot, options.describeApi),
-    options.engineConfig,
-  )

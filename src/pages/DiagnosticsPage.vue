@@ -36,7 +36,7 @@
             <q-toggle v-model="state.detailedTests" label="detailed"></q-toggle>
           </div>
           <div>
-            <q-btn flat label="open markdown test page" to="/docs/markdown_it_test_page" />
+            <q-btn flat label="open markdown test page" to="/md/tests/docs/markdown_it_test_page" />
             <q-btn flat label="IPFS status" to="ipfsmonitor"></q-btn>
             <q-btn
               v-if="diagnostics"
@@ -191,6 +191,7 @@ const testModules = import.meta.glob(
     '!../../packages/taskyon/src/tests/test_taskyon_documentation_conversation.ts',
     '!../../packages/taskyon/src/tests/test_task_worker_settlement.ts',
     '../../packages/common/modules/test_*.ts',
+    '../../packages/comp-dag/test_*.ts',
     '../../packages/surrogate/test_*.ts',
   ],
   { eager: true }, // so modules are imported at build time (synchronously)

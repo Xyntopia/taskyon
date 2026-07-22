@@ -195,6 +195,11 @@ function shouldRespond(req: JsonRpcRequest): req is JsonRpcRequest & { id: JsonR
   return 'id' in req
 }
 
+/**
+ * Creates a transport-neutral MCP JSON-RPC request handler.
+ *
+ * The host remains responsible for stdio, HTTP, or other transport framing.
+ */
 export function createMcpProtocolBridge(deps: McpProtocolBridgeDependencies) {
   async function handleRequest(raw: unknown): Promise<JsonRpcResponse | null> {
     let req: JsonRpcRequest

@@ -13,12 +13,17 @@ export const mdRoutes: RouteRecordRaw[] = [
   },
   {
     path: '/docs/',
-    component: () => import('pages/TaskyonDocumentationPage.vue'),
+    redirect: '/docs/taskyon',
     meta: { description: 'Taskyon Documentation' },
   },
   {
-    path: '/docs/:filePath([^.]*)*',
+    path: '/docs/:baseId',
     component: () => import('pages/TaskyonDocumentationPage.vue'),
-    meta: { description: 'Taskyon Documentation' },
+    meta: { description: 'Documentation' },
+  },
+  {
+    path: '/docs/:baseId/:filePath(.*)*',
+    component: () => import('pages/TaskyonDocumentationPage.vue'),
+    meta: { description: 'Documentation' },
   },
 ]

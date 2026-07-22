@@ -34,4 +34,4 @@
 - [Design Proposals](proposals.md)
 
 The running peer's FRP services, streams, and tools are available through the
-[runtime API resource](/resources/peers/local/api).
+[runtime API documentation](/docs/taskyon/openapi/taskyon-peer-api).

@@ -5,6 +5,9 @@ export interface HttpResponse {
   body: Uint8Array
 }
 
+/**
+ * Encodes an HTTP/1.1 request for transmission over an established TLS connection.
+ */
 export function buildHttpRequest(
   method: string,
   urlStr: string,
@@ -61,6 +64,9 @@ export function buildHttpRequest(
   return headBytes
 }
 
+/**
+ * Reads and decodes one HTTP/1.1 response from a TLS byte-stream reader.
+ */
 export async function parseHttpResponse(
   reader: () => Promise<Uint8Array | null>,
 ): Promise<HttpResponse> {

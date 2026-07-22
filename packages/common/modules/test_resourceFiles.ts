@@ -49,30 +49,6 @@ export const testDocumentationManifestExpandsSourcesIntoFiles = async () => {
   return { success: true }
 }
 
-export const testDocumentationManifestAppliesObjectSourceAliases = async () => {
-  const loadFiles: ResourceFilesLoader = async function* (source) {
-    yield await Promise.resolve(textFile(source, '# Task Trees'))
-  }
-
-  const result = await loadDocumentationManifestFiles(
-    {
-      internal: [
-        {
-          url: '/docs/user/task-trees.md',
-          aliases: ['task_trees', 'conversations/taskyon_description'],
-        },
-      ],
-      external: [],
-    },
-    loadFiles,
-  )
-
-  assert(result.errors.length === 0, 'Expected the aliased source to load.')
-  assert(result.files.length === 1, 'Expected one resolved manifest file.')
-  assert(result.files[0]?.aliases.length === 2, 'Expected aliases on the resolved file.')
-  return { success: true }
-}
-
 export const testDocumentationManifestKeepsSuccessfulSourcesWhenOneFails = async () => {
   const loadFiles: ResourceFilesLoader = async function* (source) {
     if (source === '/missing/') throw new Error('not found')
@@ -131,8 +107,6 @@ export const testDocumentationManifestPreservesChapterOrderAndPaths = async () =
 
 testDocumentationManifestExpandsSourcesIntoFiles.description =
   'Expands file or directory manifest sources into files without resource-kind metadata.'
-testDocumentationManifestAppliesObjectSourceAliases.description =
-  'Applies legacy aliases from an object-form documentation source.'
 testDocumentationManifestKeepsSuccessfulSourcesWhenOneFails.description =
   'Reports source-level failures without discarding files loaded from other sources.'
 testDocumentationManifestPreservesChapterOrderAndPaths.description =

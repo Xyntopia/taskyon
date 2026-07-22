@@ -92,6 +92,18 @@ export const testDocumentationIndexRegistersAndSearchesManifestBase = async () =
     result && typeof result === 'object' && 'hits' in result && Array.isArray(result.hits),
     'Expected documentation search hits.',
   )
+  if (!result || typeof result !== 'object' || !('hits' in result) || !Array.isArray(result.hits)) {
+    throw new Error('Expected documentation search hits.')
+  }
+  const firstHit = result.hits[0]
+  assert(
+    firstHit && typeof firstHit === 'object' && firstHit.url === '/docs/guide/guide.md',
+    'Expected the tool and documentation page to use the same canonical document URL.',
+  )
+  assert(
+    firstHit && typeof firstHit === 'object' && !('sourceUrl' in firstHit),
+    'Expected raw loader URLs to remain internal instead of becoming alternate citations.',
+  )
   return { success: true }
 }
 

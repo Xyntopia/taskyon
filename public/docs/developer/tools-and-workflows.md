@@ -120,6 +120,6 @@ complex domain behavior, but keep Taskyon workflow semantics in visible task nod
 inside library callbacks.
 
 The current peer advertises its FRP services, streams, and registered tools at
-[`/resources/peers/local/api`](/resources/peers/local/api). This runtime OpenAPI document is the
+[`/resources/peers/local/api`](/docs/taskyon/openapi/taskyon-peer-api). This runtime OpenAPI document is the
 tool and protocol reference; it changes when the registered capabilities change. TypeScript SDK
 interfaces remain owned by the exported package source.

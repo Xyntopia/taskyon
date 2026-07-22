@@ -7,7 +7,7 @@
           $q.platform.within.iframe
             ? `## Welcome to Taskyon!
 
-Please ensure that your application provides a valid API key. For more information, see our [provider guide](/docs/user/providers-and-models). Alternatively, for development purposes, you can manually enter a key using the button below.`
+Please ensure that your application provides a valid API key. For more information, see our [provider guide](/docs/taskyon/user/providers-and-models.md). Alternatively, for development purposes, you can manually enter a key using the button below.`
             : `## Welcome to Taskyon!
 
 To get started, you'll need an API key for an OpenAI-compatible AI service. You can choose from a variety of options, including third-party services or even hosting your own inference server.`

@@ -39,6 +39,9 @@
       >
         <div class="welcome-message column col-auto items-center scroll overflow-auto no-wrap">
           <GetStarted>
+            <template #welcome>
+              {{ state.appConfiguration.welcomeMsg }}
+            </template>
             <template #hero-input>
               <CreateNewTask
                 v-model:file-attachments="fileAttachments"

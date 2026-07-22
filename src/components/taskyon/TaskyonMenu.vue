@@ -22,7 +22,7 @@
           <q-item-section>Visit our Taskyon repository</q-item-section>
         </q-item>
         <q-separator />
-        <q-item v-ripple clickable to="/docs/index" exact active-class="text-secondary">
+        <q-item v-ripple clickable to="/docs/taskyon" exact active-class="text-secondary">
           <q-item-section avatar>
             <q-icon :name="matHelpOutline" />
           </q-item-section>

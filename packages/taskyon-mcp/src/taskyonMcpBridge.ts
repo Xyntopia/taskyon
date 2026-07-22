@@ -41,6 +41,9 @@ async function listMcpTools(
   return Object.values(tools).map(mapToolToMcpTool)
 }
 
+/**
+ * Adapts the tools exposed by a connected Taskyon client to MCP request handling.
+ */
 export function createTaskyonMcpBridge(
   client: Pick<TyClient, 'port'>,
   options: TaskyonMcpBridgeOptions = {},

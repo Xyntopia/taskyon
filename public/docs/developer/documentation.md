@@ -9,18 +9,15 @@ configured filesystem storage backend.
 
 ## Manifest contract
 
-A manifest has `internal` and `external` arrays. Each entry is a source URL, a source with optional
-legacy aliases, or a named chapter whose value contains more entries. The object keys define the
-visible chapter hierarchy and array order defines document order.
+A manifest has `internal` and `external` arrays. Each entry is a source URL or a named chapter
+whose value contains more entries. The object keys define the visible chapter hierarchy and array
+order defines document order.
 
 ```json
 {
   "internal": [
     {
-      "Guides": [
-        "/docs/getting-started.md",
-        { "url": "/docs/workflows.md", "aliases": ["old-workflows"] }
-      ]
+      "Guides": ["/docs/getting-started.md", "/docs/workflows.md"]
     },
     { "API": ["/resources/peers/local/api"] }
   ],
@@ -31,7 +28,8 @@ visible chapter hierarchy and array order defines document order.
 Sources may resolve to individual files or directories. The runtime resource loader expands
 directories recursively and converts supported files to searchable text. Markdown titles come from
 the first H1, with the filename as a fallback; manifests do not require YAML frontmatter, document
-IDs, or duplicated titles.
+IDs, or duplicated titles. The loaded resource path becomes the exact document ID used for lookup;
+the viewer does not rewrite extensions or resolve aliases.
 
 ## Loading and caching
 
@@ -62,9 +60,9 @@ function. Search is local and supports literal text or an explicit regular expre
 build a vector index. Clearing the page filter restores the complete manifest tree.
 
 The Taskyon manifest also includes the local peer discovery endpoint. At runtime that endpoint
-publishes the peer's OpenAPI document, including its registered tools. The generic loader turns the
-OpenAPI operations, streams, tools, and schemas into searchable documents. The documentation page
-renders those entries with the reusable OpenAPI viewer instead of generating static Markdown.
+publishes the peer's OpenAPI document, including its registered tools. The generic loader keeps the
+complete OpenAPI JSON as one searchable document. Documentation tools read that JSON directly,
+while the documentation page renders the same content with the reusable OpenAPI viewer.
 
 Search results link to `/docs/<base>/<document>`. Markdown links remain relative to the selected
 base, so the same authored documents can be reused by multiple documentation bases.

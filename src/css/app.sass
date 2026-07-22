@@ -166,8 +166,13 @@ html.no-ptr
   .documentation-page__sidebar-header
     border-bottom: 1px solid var(--frontpage-hairline)
 
-  .documentation-page__content-header
-    border-bottom: 1px solid var(--frontpage-hairline)
+  .documentation-page__folder
+    min-height: 36px
+    color: var(--frontpage-ink)
+    font-weight: 600
+
+    .q-icon
+      color: var(--q-secondary)
 
   .documentation-page__item
     color: var(--frontpage-ink)
@@ -176,8 +181,9 @@ html.no-ptr
       background: var(--chat-sidebar-row-bg)
 
   .documentation-page__item--active
-    background: var(--chat-sidebar-active-bg)
-    color: var(--frontpage-ink)
+    background: color-mix(in oklch, var(--q-secondary) 14%, var(--frontpage-card-bg))
+    box-shadow: inset 3px 0 0 var(--q-secondary)
+    color: var(--q-secondary)
 
   .documentation-page .q-item__label--caption
     color: var(--frontpage-muted)

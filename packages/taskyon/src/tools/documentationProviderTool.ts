@@ -7,8 +7,9 @@ import {
   type DocumentationManifest,
   type ResourceFilesLoader,
 } from '@taskyon/common/modules/resourceFiles'
-import { createOpenApiDocumentationSections } from '@taskyon/common/modules/openApiDocumentation'
+import { createOpenApiDocumentationDocument } from '@taskyon/common/modules/openApiDocumentation'
 import {
+  documentationBaseUrl,
   searchDocumentation,
   createDocumentationDocument,
   titleFromDocumentationPath,
@@ -19,9 +20,7 @@ import { convertFileToText } from '../utils/loadFiles'
 import { sha256HashBytes } from '@taskyon/common/modules/canonicalHash'
 import { createResourceFetchNode } from '@taskyon/comp-dag/resourceFetchNode'
 import type { EngineConfig } from '@taskyon/comp-dag'
-import { taskyonDocumentationManifest } from '../documentationManifest'
 
-export const taskyonDocsProviderToolName = 'getTaskyonDocumentationDocuments'
 export const documentationIndexToolName = 'documentationIndex'
 
 const DocumentationIndexArgs = z.discriminatedUnion('action', [
@@ -49,12 +48,11 @@ export type DocumentationDocument = {
   title?: string
   url?: string
   content: string
-  aliases: string[]
   chapters: string[]
   metadata?: Record<string, unknown>
 }
 
-export type DocumentationProviderLoader = () => Promise<{
+type DocumentationProviderResult = Promise<{
   documents: DocumentationDocument[]
   errors?: Array<{ source: string; message: string }>
 }>
@@ -69,14 +67,12 @@ const markdownDocument = async (
   url: string,
   file: File,
   path: string,
-  aliases: string[],
   chapters: string[],
 ): Promise<DocumentationDocument[]> => {
   return [
     createDocumentationDocument({
       path,
       url,
-      aliases,
       chapters,
       content: await file.text(),
     }),
@@ -87,7 +83,6 @@ const resourceFileDocuments = async (
   url: string,
   file: File,
   resourcePath: string | undefined,
-  aliases: string[],
   chapters: string[],
 ): Promise<DocumentationDocument[]> => {
   const name = file.name.toLowerCase()
@@ -97,17 +92,13 @@ const resourceFileDocuments = async (
     name.endsWith('.openapi.yaml') ||
     name.endsWith('.openapi.yml')
   if (isOpenApiCandidate) {
-    return createOpenApiDocumentationSections(await file.text(), url).map((document) => ({
-      ...document,
-      chapters,
-    }))
+    return [{ ...createOpenApiDocumentationDocument(await file.text(), url), chapters }]
   }
   if (file.type === 'text/markdown' || name.endsWith('.md') || name.endsWith('.mdx')) {
     return await markdownDocument(
       url,
       file,
       resourcePath ?? documentationPathFromUrl(url),
-      aliases,
       chapters,
     )
   }
@@ -120,7 +111,6 @@ const resourceFileDocuments = async (
       title: titleFromDocumentationPath(path),
       url,
       content: await convertFileToText(file, { htmlMode: 'raw' }),
-      aliases,
       chapters,
       metadata: {
         format: file.type || 'application/octet-stream',
@@ -134,11 +124,11 @@ export const loadDocumentationDocumentsFromManifest = async (
   manifest: DocumentationManifest,
   loadFiles: ResourceFilesLoader,
   engineConfig?: EngineConfig,
-): ReturnType<DocumentationProviderLoader> => {
+): DocumentationProviderResult => {
   const loaded = await loadDocumentationManifestFiles(manifest, loadFiles)
   const documents = (
     await Promise.all(
-      loaded.files.map(async ({ url, path, file, cache, source, aliases, chapters }) => {
+      loaded.files.map(async ({ url, path, file, cache, source, chapters }) => {
         const revision =
           cache === 'internal'
             ? sha256HashBytes(new Uint8Array(await file.arrayBuffer()))
@@ -177,14 +167,9 @@ export const loadDocumentationDocumentsFromManifest = async (
                 },
               )
             : file
-        return (await resourceFileDocuments(url, materializedFile, path, aliases, chapters)).map(
+        return (await resourceFileDocuments(url, materializedFile, path, chapters)).map(
           (document) => ({
             ...document,
-            chapters:
-              document.metadata?.format === 'openapi' &&
-              typeof document.metadata.category === 'string'
-                ? [...chapters, titleFromDocumentationPath(document.metadata.category)]
-                : document.chapters,
             metadata: {
               ...(document.metadata ?? {}),
               cache,
@@ -201,25 +186,6 @@ export const loadDocumentationDocumentsFromManifest = async (
     ...(loaded.errors.length > 0 ? { errors: loaded.errors } : {}),
   }
 }
-
-export const createDocumentationProviderTool = (input: {
-  name: string
-  description: string
-  longDescription: string
-  loadDocuments: DocumentationProviderLoader
-}): ClientTool =>
-  createClientTool({
-    function: input.loadDocuments,
-    description: input.description,
-    longDescription: input.longDescription,
-    name: input.name,
-    renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
-    parameters: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {},
-    } as const satisfies JSONSchema7,
-  })
 
 export const createDocumentationIndexClientTool = (
   bases: ReturnType<typeof createDocumentationBaseStore>,
@@ -253,7 +219,7 @@ export const createDocumentationIndexClientTool = (
         return {
           bases: (await bases.list()).map((base) => ({
             id: base.id,
-            url: `/docs/${base.id}`,
+            url: documentationBaseUrl(base.id),
           })),
         }
       }
@@ -267,7 +233,11 @@ export const createDocumentationIndexClientTool = (
 
       const documents = await bases.load(args.baseId)
       if (args.action === 'refresh') {
-        return { baseId: args.baseId, documentCount: documents.length, url: `/docs/${args.baseId}` }
+        return {
+          baseId: args.baseId,
+          documentCount: documents.length,
+          url: documentationBaseUrl(args.baseId),
+        }
       }
       if (args.action === 'getDocument') {
         return documents.find((document) => document.id === args.documentId) ?? null
@@ -276,24 +246,7 @@ export const createDocumentationIndexClientTool = (
         query: args.query,
         mode: args.mode,
         limit: args.limit,
-      }).map((hit) => ({
-        ...hit,
-        sourceUrl: hit.url,
-        url: `/docs/${args.baseId}/${hit.documentId.replace(/\.md$/, '')}`,
-      }))
-      return { baseId: args.baseId, url: `/docs/${args.baseId}`, hits }
+      })
+      return { baseId: args.baseId, url: documentationBaseUrl(args.baseId), hits }
     },
-  })
-
-export const createTaskyonDocumentationProviderTool = (
-  loadFiles: ResourceFilesLoader,
-  engineConfig?: EngineConfig,
-): ClientTool =>
-  createDocumentationProviderTool({
-    name: taskyonDocsProviderToolName,
-    loadDocuments: () =>
-      loadDocumentationDocumentsFromManifest(taskyonDocumentationManifest, loadFiles, engineConfig),
-    description: 'Load the bundled Taskyon markdown documentation for local indexing.',
-    longDescription:
-      'Runtime provider for the Taskyon documentation workflow. It expands the Taskyon documentation manifest, including the current peer OpenAPI description, and returns searchable documents for local indexing.',
   })

@@ -21,7 +21,6 @@ const DocumentationSearchHit = z.object({
   heading: z.string(),
   content: z.string(),
   score: z.number(),
-  sourceUrl: z.string().optional(),
 })
 type DocumentationSearchHit = z.infer<typeof DocumentationSearchHit>
 

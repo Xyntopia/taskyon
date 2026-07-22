@@ -1,7 +1,10 @@
 import { canonicalHash } from './canonicalHash'
-import type { LoadedDocumentationDocument } from './documentation'
 import {
-  documentationSourceUrl,
+  documentationBaseUrl,
+  documentationDocumentUrl,
+  type LoadedDocumentationDocument,
+} from './documentation'
+import {
   flattenDocumentationManifestSources,
   parseDocumentationManifest,
   type DocumentationManifest,
@@ -20,7 +23,7 @@ export type DocumentationBase = {
 }
 
 const manifestSources = (manifest: DocumentationManifest) =>
-  flattenDocumentationManifestSources(manifest).map(({ source }) => documentationSourceUrl(source))
+  flattenDocumentationManifestSources(manifest).map(({ source }) => source)
 
 const sourceSlug = (manifest: DocumentationManifest) => {
   const source = manifestSources(manifest)[0] ?? 'documentation'
@@ -50,14 +53,18 @@ export const createDocumentationBaseStore = (
 
   const register = async (manifest: DocumentationManifest, preferredId?: string) => {
     const parsed = parseDocumentationManifest(manifest)
+    if (preferredId) {
+      await storage.set(preferredId, parsed)
+      return { id: preferredId, url: documentationBaseUrl(preferredId) }
+    }
     const bases = await list()
     const existing = bases.find((base) => sameSources(base.manifest, parsed))
-    const slug = preferredId ?? existing?.id ?? sourceSlug(parsed)
+    const slug = existing?.id ?? sourceSlug(parsed)
     const collision = bases.find((base) => base.id === slug && !sameSources(base.manifest, parsed))
     const hashStart = 'sha256:'.length
     const id = collision ? `${slug}-${canonicalHash(parsed).slice(hashStart, hashStart + 8)}` : slug
     await storage.set(id, parsed)
-    return { id, url: `/docs/${id}` }
+    return { id, url: documentationBaseUrl(id) }
   }
 
   const get = async (id: string) => {
@@ -73,7 +80,10 @@ export const createDocumentationBaseStore = (
     load: async (id: string) => {
       const base = await get(id)
       if (!base) throw new Error(`Documentation base not found: ${id}`)
-      return await loadDocuments(base.manifest)
+      return (await loadDocuments(base.manifest)).map((document) => ({
+        ...document,
+        url: documentationDocumentUrl(id, document.id),
+      }))
     },
   }
 }

@@ -1,69 +1,46 @@
 import { fileURLToPath } from 'node:url'
 import { taskyonProtocol } from '../../../../taskyon/src/api/taskyonProtocol'
 import { createTaskyonApiDescription } from '../../../../taskyon/src/api/taskyonOpenApi'
-import { createNodeTaskyonDocumentationProviderTool } from '../../../../taskyon/src/tools/nodeTaskyonDocumentationProvider'
-import { createSubtasksResult } from '../../../../taskyon/src/types/toolApi'
+import { taskyonDocumentationManifest } from '../../../../taskyon/src/documentationManifest'
+import { loadDocumentationDocumentsFromManifest } from '../../../../taskyon/src/tools/documentationProviderTool'
+import { createNodeResourceFilesLoader } from '../../../../taskyon/src/tools/nodeTaskyonDocumentationProvider'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
 }
 
-export const testNodeDocumentationProviderLoadsManifestSources = async () => {
-  const provider = createNodeTaskyonDocumentationProviderTool({
-    docsRoot: fileURLToPath(new URL('../../../../../public/docs', import.meta.url)),
-    describeApi: () => Promise.resolve(createTaskyonApiDescription(taskyonProtocol, {})),
-  })
-  const result = await provider.function?.(
-    {},
-    {
-      getExecutionTaskChain: () => Promise.resolve([]),
-      createSubtasksResult,
-      stopSignal: new AbortController().signal,
-    },
+export const testNodeDocumentationLoaderLoadsManifestSources = async () => {
+  const loadFiles = createNodeResourceFilesLoader(
+    fileURLToPath(new URL('../../../../../public/docs', import.meta.url)),
+    () => Promise.resolve(createTaskyonApiDescription(taskyonProtocol, {})),
   )
-
-  assert(result && typeof result === 'object', 'Expected documentation provider result.')
-  if (!result || typeof result !== 'object' || !('documents' in result)) {
-    throw new Error('Expected documentation provider documents.')
-  }
-  const documents = result.documents
-  assert(Array.isArray(documents) && documents.length > 0, 'Expected manifest documentation.')
-  if (!Array.isArray(documents)) throw new Error('Expected a document array.')
+  const { documents } = await loadDocumentationDocumentsFromManifest(
+    taskyonDocumentationManifest,
+    loadFiles,
+  )
+  assert(documents.length > 0, 'Expected manifest documentation.')
 
   const authoredDocuments = documents.filter(
-    (document) =>
-      document &&
-      typeof document === 'object' &&
-      'path' in document &&
-      typeof document.path === 'string' &&
-      (document.path.startsWith('user/') || document.path.startsWith('developer/')),
+    (document) => document.path.startsWith('user/') || document.path.startsWith('developer/'),
   )
   assert(authoredDocuments.length > 0, 'Expected authored user and developer documentation.')
+  const openApiDocuments = documents.filter((document) => document.metadata?.format === 'openapi')
+  assert(openApiDocuments.length === 1, 'Expected one runtime OpenAPI document.')
   assert(
-    documents.some(
-      (document) =>
-        document &&
-        typeof document === 'object' &&
-        'path' in document &&
-        typeof document.path === 'string' &&
-        document.path.startsWith('openapi/'),
-    ),
-    'Expected the runtime OpenAPI description.',
+    openApiDocuments[0]?.path === 'openapi/taskyon-peer-api',
+    'Expected a stable route for the complete OpenAPI document.',
   )
   assert(
-    documents.every(
-      (document) =>
-        document &&
-        typeof document === 'object' &&
-        'content' in document &&
-        typeof document.content === 'string' &&
-        !document.content.startsWith('---'),
-    ),
-    'Expected provider content without YAML frontmatter.',
+    JSON.parse(openApiDocuments[0]?.content ?? '{}').openapi === '3.1.0',
+    'Expected the tool-visible document content to remain raw OpenAPI JSON.',
+  )
+  assert(
+    documents.every((document) => !document.content.startsWith('---')),
+    'Expected document content without YAML frontmatter.',
   )
 
   return { success: true, documentCount: documents.length }
 }
 
-testNodeDocumentationProviderLoadsManifestSources.description =
+testNodeDocumentationLoaderLoadsManifestSources.description =
   'Loads authored files and runtime OpenAPI from the Taskyon documentation manifest.'

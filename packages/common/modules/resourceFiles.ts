@@ -1,6 +1,4 @@
-export type DocumentationSource = string | { url: string; aliases: string[] }
-
-export type DocumentationManifestEntry = DocumentationSource | DocumentationChapter
+export type DocumentationManifestEntry = string | DocumentationChapter
 
 export type DocumentationChapter = Record<string, DocumentationManifestEntry[]>
 
@@ -20,7 +18,6 @@ export type ResourceFilesLoader = (source: string) => AsyncIterable<LoadedResour
 export type DocumentationManifestFile = LoadedResourceFile & {
   source: string
   cache: 'internal' | 'external'
-  aliases: string[]
   chapters: string[]
 }
 
@@ -29,31 +26,10 @@ export type DocumentationManifestLoadError = {
   message: string
 }
 
-const parseDocumentationSource = (value: unknown): DocumentationSource => {
-  if (typeof value === 'string') return value
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    !('url' in value) ||
-    typeof value.url !== 'string' ||
-    !('aliases' in value) ||
-    !Array.isArray(value.aliases) ||
-    !value.aliases.every((alias) => typeof alias === 'string')
-  ) {
-    throw new Error('Documentation sources must be URLs or objects with url and aliases.')
-  }
-  return { url: value.url, aliases: value.aliases }
-}
-
 const parseDocumentationManifestEntries = (value: unknown): DocumentationManifestEntry[] => {
   if (!Array.isArray(value)) throw new Error('Documentation manifest sections must be arrays.')
   return value.map((entry) => {
-    if (
-      typeof entry === 'string' ||
-      (typeof entry === 'object' && entry !== null && 'url' in entry)
-    ) {
-      return parseDocumentationSource(entry)
-    }
+    if (typeof entry === 'string') return entry
     if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
       throw new Error('Documentation chapter entries must be objects.')
     }
@@ -81,18 +57,12 @@ export const parseDocumentationManifest = (value: unknown): DocumentationManifes
   }
 }
 
-export const documentationSourceUrl = (source: DocumentationSource) =>
-  typeof source === 'string' ? source : source.url
-
-export const documentationSourceAliases = (source: DocumentationSource) =>
-  typeof source === 'string' ? [] : source.aliases
-
-const isDocumentationSource = (entry: DocumentationManifestEntry): entry is DocumentationSource =>
-  typeof entry === 'string' || 'url' in entry
+const isDocumentationSource = (entry: DocumentationManifestEntry): entry is string =>
+  typeof entry === 'string'
 
 const filterDocumentationManifestEntries = (
   entries: DocumentationManifestEntry[],
-  predicate: (source: DocumentationSource) => boolean,
+  predicate: (source: string) => boolean,
 ): DocumentationManifestEntry[] =>
   entries.flatMap((entry): DocumentationManifestEntry[] => {
     if (isDocumentationSource(entry)) return predicate(entry) ? [entry] : []
@@ -104,7 +74,7 @@ const filterDocumentationManifestEntries = (
 
 export const filterDocumentationManifestSources = (
   manifest: DocumentationManifest,
-  predicate: (source: DocumentationSource) => boolean,
+  predicate: (source: string) => boolean,
 ): DocumentationManifest => ({
   internal: filterDocumentationManifestEntries(manifest.internal, predicate),
   external: filterDocumentationManifestEntries(manifest.external, predicate),
@@ -115,7 +85,7 @@ const flattenDocumentationManifestEntries = (
   cache: 'internal' | 'external',
   chapters: string[] = [],
 ): Array<{
-  source: DocumentationSource
+  source: string
   cache: 'internal' | 'external'
   chapters: string[]
 }> =>
@@ -180,25 +150,17 @@ export const loadDocumentationManifestFiles = async (
   }
 
   for (const { source: entry, cache, chapters } of sources) {
-    const source = documentationSourceUrl(entry)
-    const aliases = documentationSourceAliases(entry)
+    const source = entry
     try {
       const loadedFiles: LoadedResourceFile[] = []
       for await (const loaded of loadFiles(source)) {
         loadedFiles.push(loaded)
-      }
-      if (aliases.length > 0 && loadedFiles.length !== 1) {
-        errors.push({
-          source,
-          message: `Documentation aliases require a source that resolves to exactly one file; received ${loadedFiles.length}.`,
-        })
       }
       for (const loaded of loadedFiles) {
         files.push({
           ...loaded,
           source,
           cache,
-          aliases: loadedFiles.length === 1 ? aliases : [],
           chapters,
         })
       }

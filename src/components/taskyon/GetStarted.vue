@@ -1,5 +1,32 @@
 <template>
-  <section class="frontpage-hero column items-center no-wrap">
+  <section v-if="$slots.welcome" class="context-welcome column items-center">
+    <p class="context-welcome-message text-center">
+      <slot name="welcome" />
+    </p>
+
+    <div class="context-welcome-input">
+      <slot name="hero-input" />
+    </div>
+
+    <div v-if="customSuggestions.length > 0" class="context-welcome-suggestions row justify-center">
+      <div
+        v-for="suggestion in customSuggestions"
+        :key="suggestion.label"
+        class="context-welcome-suggestion"
+      >
+        <CreateTaskButton
+          v-if="'md' in suggestion"
+          :markdown="suggestion.md"
+          :label="suggestion.label"
+          outline
+          no-caps
+        />
+        <q-btn v-else :to="suggestion.url" :label="suggestion.label" outline no-caps />
+      </div>
+    </div>
+  </section>
+
+  <section v-else class="frontpage-hero column items-center no-wrap">
     <svg class="frontpage-tree frontpage-tree--left" viewBox="0 0 360 640" aria-hidden="true">
       <g class="tree-lines tree-lines--primary">
         <path d="M106 618V386" />
@@ -187,12 +214,14 @@ import {
   matSmartToy,
 } from '@quasar/extras/material-icons'
 import { useAppStateStore } from 'src/stores/appState'
+import CreateTaskButton from './CreateTaskButton.vue'
 import logoSvg from 'src/assets/taskyon_logo_complex_animated.svg?raw'
 import logoSvgStatic from 'src/assets/taskyon_logo_complex_static.svg?raw'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 const state = useAppStateStore()
 const isTauriApp = process.env.CLIENT ? isTauri() : false
+const customSuggestions = computed(() => state.appConfiguration.chatSuggestions ?? [])
 
 const stages = [
   {
@@ -263,6 +292,35 @@ function startExample(prompt: string) {
 </script>
 
 <style scoped>
+.context-welcome {
+  width: min(100%, 44rem);
+  min-width: 0;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.context-welcome-message {
+  max-width: 36rem;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.context-welcome-input,
+.context-welcome-suggestions {
+  width: 100%;
+  min-width: 0;
+}
+
+.context-welcome-suggestions {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.context-welcome-suggestion {
+  max-width: 18rem;
+}
+
 .frontpage-hero {
   position: relative;
   width: min(100%, 64rem);

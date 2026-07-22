@@ -41,17 +41,20 @@ export const testDocumentationFallsBackToHumanizedFilename = () => {
   return { success: true }
 }
 
-export const testDocumentationResolvesManifestAliases = () => {
+export const testDocumentationResolvesExactDocumentIds = () => {
   const document = createDocumentationDocument({
     path: 'user/task-trees.md',
     url: '/docs/user/task-trees.md',
     content: '# Task Trees',
-    aliases: ['task_trees', 'conversations/taskyon_description'],
     chapters: ['User', 'Workflows'],
   })
   assert(
-    resolveDocumentationDocumentId([document], 'task_trees') === 'user/task-trees.md',
-    'Expected a manifest alias to resolve to its generated document ID.',
+    resolveDocumentationDocumentId([document], 'user/task-trees.md') === 'user/task-trees.md',
+    'Expected the exact document ID to resolve.',
+  )
+  assert(
+    resolveDocumentationDocumentId([document], 'user/task-trees') === undefined,
+    'Expected document routes to require the exact ID, including its extension.',
   )
   assert(
     document.chapters.join('/') === 'User/Workflows',
@@ -75,7 +78,6 @@ export const testDocumentationSearchSupportsLiteralAndRegexQueries = () => {
       path: 'guides/workflows.md',
       url: '/docs/example/guides/workflows',
       content: '# Workflow Guide\n\nTask trees keep related work inspectable.',
-      aliases: ['task_trees'],
     }),
     createDocumentationDocument({
       path: 'reference/storage.md',
@@ -132,18 +134,69 @@ export const testDocumentationBasesGenerateStableRoutesAndHandleCollisions = asy
       },
       list: () => Promise.resolve(Array.from(records, ([id, data]) => ({ id, data }))),
     },
-    () => Promise.resolve([]),
+    () =>
+      Promise.resolve([
+        createDocumentationDocument({
+          path: 'guides/getting-started.md',
+          url: 'https://example.com/source.md',
+          content: '# Getting Started',
+        }),
+      ]),
   )
   const first = { internal: [], external: ['https://example.com/project/docs.json'] }
   const collision = { internal: [], external: ['https://another.example/project/docs.json'] }
   const initial = await store.register(first)
   const updated = await store.register(first)
   const second = await store.register(collision)
+  const [document] = await store.load(initial.id)
 
   assert(initial.id === 'docs', 'Expected a readable slug from the source filename.')
   assert(updated.id === initial.id, 'Expected the same sources to retain their documentation ID.')
   assert(second.id.startsWith('docs-'), 'Expected a short hash suffix for slug collisions.')
   assert(initial.url === '/docs/docs', 'Expected the canonical documentation base route.')
+  assert(
+    document?.url === '/docs/docs/guides/getting-started.md',
+    'Expected loaded documents to use their canonical documentation viewer route.',
+  )
+  return { success: true }
+}
+
+export const testDocumentationBasesReplaceExplicitIdWithoutReadingStoredValue = async () => {
+  const manifest: DocumentationManifest = {
+    internal: ['/docs/current.md'],
+    external: [],
+  }
+  let stored: DocumentationManifest | undefined
+  let listed = false
+  const store = createDocumentationBaseStore(
+    {
+      get: () => Promise.resolve(null),
+      set: (_id, value) => {
+        stored = value
+        return Promise.resolve()
+      },
+      delete: () => Promise.resolve(),
+      list: () => {
+        listed = true
+        return Promise.resolve([
+          {
+            id: 'taskyon',
+            data: { internal: [{ url: '/docs/old.md', aliases: [] }], external: [] },
+          },
+        ])
+      },
+    },
+    () => Promise.resolve([]),
+  )
+
+  const registered = await store.register(manifest, 'taskyon')
+
+  assert(registered.id === 'taskyon', 'Expected the explicit documentation base ID.')
+  assert(
+    JSON.stringify(stored) === JSON.stringify(manifest),
+    'Expected the explicit base manifest to replace the stored value.',
+  )
+  assert(!listed, 'Expected explicit registration not to parse existing documentation bases.')
   return { success: true }
 }
 
@@ -153,8 +206,8 @@ testDocumentationIgnoresOptionalFrontmatter.description =
   'Removes optional third-party frontmatter without using it as documentation metadata.'
 testDocumentationFallsBackToHumanizedFilename.description =
   'Falls back to a humanized filename when a document has no H1.'
-testDocumentationResolvesManifestAliases.description =
-  'Resolves optional legacy aliases supplied by a documentation manifest.'
+testDocumentationResolvesExactDocumentIds.description =
+  'Resolves exact document IDs without compatibility aliases or extension rewriting.'
 testDocumentationUsesNaturalPathOrder.description =
   'Orders folder indexes first and applies natural numeric path ordering.'
 testDocumentationSearchSupportsLiteralAndRegexQueries.description =
@@ -163,3 +216,5 @@ testDocumentationSearchRejectsInvalidRegex.description =
   'Rejects malformed documentation regular expressions with a useful error.'
 testDocumentationBasesGenerateStableRoutesAndHandleCollisions.description =
   'Generates stable documentation base routes and disambiguates source slug collisions.'
+testDocumentationBasesReplaceExplicitIdWithoutReadingStoredValue.description =
+  'Replaces an explicitly named documentation base without reading an obsolete stored manifest.'

@@ -64,9 +64,19 @@
       </div>
     </aside>
 
-    <main class="documentation-page__content column">
+    <main
+      :class="[
+        'documentation-page__content column',
+        { 'documentation-page__content--openapi': currentOpenApiDocument },
+      ]"
+    >
       <div class="col overflow-auto">
-        <div class="documentation-page__markdown">
+        <div
+          :class="[
+            'documentation-page__markdown',
+            { 'documentation-page__markdown--openapi': currentOpenApiDocument },
+          ]"
+        >
           <q-inner-loading :showing="loading">
             <q-spinner />
           </q-inner-loading>
@@ -80,7 +90,12 @@
             :document="currentDocument"
             :content="currentContent"
           >
-            <ty-markdown v-if="currentContent" :src="currentContent" no-line-numbers />
+            <OpenApiView
+              v-if="currentOpenApiDocument"
+              :document="currentOpenApiDocument"
+              class="fit"
+            />
+            <ty-markdown v-else-if="currentContent" :src="currentContent" no-line-numbers />
           </slot>
           <q-banner v-else-if="missingDocument" class="bg-negative text-white">
             Documentation page not found: {{ props.initialDocumentId }}.
@@ -95,6 +110,11 @@
 <script setup lang="ts">
 import { matChevronRight, matExpandMore, matSearch } from '@quasar/extras/material-icons'
 import { mdiRegex } from '@quasar/extras/mdi-v6'
+import {
+  TaskyonOpenApiDocumentSchema,
+  type TaskyonOpenApiDocument,
+} from '@taskyon/common/modules/openApi'
+import OpenApiView from '../components/OpenApiView.vue'
 import TyMarkdown from '../components/tyMarkdown.vue'
 import {
   compareDocumentationPaths,
@@ -318,6 +338,18 @@ const currentContent = computed(() => {
   return document.content ?? loadedContentById.value[document.id] ?? ''
 })
 
+const currentOpenApiDocument = computed<TaskyonOpenApiDocument | undefined>(() => {
+  if (currentDocument.value?.metadata?.format !== 'openapi' || !currentContent.value) {
+    return undefined
+  }
+  try {
+    const parsed = TaskyonOpenApiDocumentSchema.safeParse(JSON.parse(currentContent.value))
+    return parsed.success ? parsed.data : undefined
+  } catch {
+    return undefined
+  }
+})
+
 const selectDocument = (documentId: string) => {
   selectedDocumentId.value = documentId
   emit('select', documentId)
@@ -432,6 +464,14 @@ watch([selectedDocumentId, filterText], () => void scrollSelectedDocumentIntoVie
   position: relative
   max-width: 980px
   padding: 24px
+
+.documentation-page__content--openapi > .col
+  overflow: hidden !important
+
+.documentation-page__markdown--openapi
+  height: 100%
+  max-width: none
+  padding: 0
 
 .documentation-page__tree-icon
   min-width: 28px

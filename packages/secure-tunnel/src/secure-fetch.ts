@@ -19,6 +19,11 @@ export interface SecureFetchResponse {
   json<T = unknown>(): T
 }
 
+/**
+ * Sends an HTTPS request through a WebSocket tunnel with TLS terminated in this client.
+ *
+ * A trusted `tunnelUrl` must be supplied explicitly.
+ */
 export async function secureFetch(
   urlStr: string,
   options: SecureFetchOptions = {},

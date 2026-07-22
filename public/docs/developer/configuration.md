@@ -21,7 +21,7 @@ shape changes, bump the profile version in both places rather than adding one-of
 Tool parameter schemas are the source of truth for tool settings. Settings UIs should read the
 runtime tool definition instead of importing a second tool-specific settings schema. The current
 runtime tool schemas are visible in the
-[peer API resource](/resources/peers/local/api); shipped application defaults remain owned by
+[peer API documentation](/docs/taskyon/openapi/taskyon-peer-api); shipped application defaults remain owned by
 `src/assets/taskyon_settings.json`.
 
 Named profiles recursively override `base`. Arrays are replaced, and an explicit `null` remains an

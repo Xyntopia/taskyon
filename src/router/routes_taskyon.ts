@@ -142,11 +142,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
           description: 'Configure browser MCP, proxy fallback, and research web access.',
         },
       },
-      {
-        path: 'docindex',
-        component: () => import('pages/DocumentationIndex.vue'),
-        meta: { title: 'Documentation', description: 'Taskyon Documentation' },
-      },
       // mdRoutes should have our normal taskyon layout thats why we put them in here :)
       ...mdRoutes,
       ...universalTyRoutes,

@@ -4,7 +4,7 @@ import {
   createProtocolOpenApiDocument,
   resolveOpenApiReferences,
 } from './openApi'
-import { createOpenApiDocumentationSections } from './openApiDocumentation'
+import { createOpenApiDocumentationDocument } from './openApiDocumentation'
 import { z } from 'zod'
 
 const assert = (condition: unknown, message: string) => {
@@ -49,7 +49,7 @@ export const testFrpProtocolGeneratesDeterministicOpenApi = () => {
   return { success: true }
 }
 
-export const testOpenApiProducesSearchableDocumentationSections = () => {
+export const testOpenApiCreatesRawDocumentationDocument = () => {
   const protocol = defineFrpServiceProtocol({
     service: 'catalog',
     version: '1',
@@ -61,18 +61,18 @@ export const testOpenApiProducesSearchableDocumentationSections = () => {
     },
   })
   const document = createProtocolOpenApiDocument(protocol)
-  const sections = createOpenApiDocumentationSections(
+  const documentation = createOpenApiDocumentationDocument(
     JSON.stringify(document),
     '/resources/peers/local/api',
   )
 
   assert(
-    sections.some(
-      (section) =>
-        section.title === 'catalog.list' &&
-        section.url === '/resources/peers/local/api#operation-catalog-list',
-    ),
-    'Expected an independently searchable operation with a viewer anchor.',
+    documentation.id === 'openapi/taskyon-catalog',
+    'Expected one stable document ID for the complete OpenAPI description.',
+  )
+  assert(
+    JSON.parse(documentation.content).paths['/frp/catalog.list'] !== undefined,
+    'Expected the raw OpenAPI JSON to remain available to documentation tools.',
   )
 
   return { success: true }
@@ -140,8 +140,8 @@ export const testOpenApiCreatesOperationDocumentationModels = () => {
 
 testFrpProtocolGeneratesDeterministicOpenApi.description =
   'Generates stable OpenAPI 3.1 documentation from FRP command and stream schemas.'
-testOpenApiProducesSearchableDocumentationSections.description =
-  'Converts OpenAPI operations into independently searchable documentation sections.'
+testOpenApiCreatesRawDocumentationDocument.description =
+  'Keeps one raw OpenAPI JSON document for search tools and structured documentation viewers.'
 testOpenApiResolvesLocalSchemaReferencesForDisplay.description =
   'Resolves local component references into complete request and response schemas for display.'
 testOpenApiCreatesOperationDocumentationModels.description =

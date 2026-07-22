@@ -3,7 +3,6 @@ export type DocumentationPageDocument = {
   path: string
   title: string
   url: string
-  aliases: string[]
   chapters: string[]
   content?: string
   metadata?: Record<string, unknown>
@@ -37,11 +36,10 @@ const naturalCollator = new Intl.Collator(undefined, { numeric: true, sensitivit
 
 const trimLeadingSlash = (value: string) => value.replace(/^\/+/, '')
 
-const normalizeDocumentationAlias = (value: string) =>
-  trimLeadingSlash(value)
-    .replace(/^docs\//, '')
-    .replace(/\.md$/, '')
-    .replace(/\/+$/, '')
+export const documentationBaseUrl = (baseId: string) => `/docs/${trimLeadingSlash(baseId)}`
+
+export const documentationDocumentUrl = (baseId: string, documentId: string) =>
+  `${documentationBaseUrl(baseId)}/${trimLeadingSlash(documentId)}`
 
 const stripOptionalFrontmatter = (content: string) =>
   content.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n)*/, '')
@@ -118,7 +116,7 @@ export const searchDocumentation = (
   return documents
     .flatMap((document) =>
       documentationSearchSections(document).map(({ heading, content }) => {
-        const metadata = `${document.title} ${document.path} ${document.aliases.join(' ')} ${heading}`
+        const metadata = `${document.title} ${document.path} ${heading}`
         const score = match(metadata) * 2 + match(content)
         return {
           documentId: document.id,
@@ -191,7 +189,6 @@ export const createDocumentationDocument = (input: {
   path: string
   url: string
   content: string
-  aliases?: string[]
   chapters?: string[]
   metadata?: Record<string, unknown>
 }): LoadedDocumentationDocument => {
@@ -201,7 +198,6 @@ export const createDocumentationDocument = (input: {
     path: input.path,
     title: parsed.title,
     url: input.url,
-    aliases: input.aliases ?? [],
     chapters: input.chapters ?? [],
     content: parsed.content,
     ...(input.metadata ? { metadata: input.metadata } : {}),
@@ -235,7 +231,6 @@ export const buildDocumentationDocumentsFromGlob = (
         path,
         title: titleFromDocumentationPath(path),
         url,
-        aliases: [],
         chapters: [],
       }
     })
@@ -254,7 +249,6 @@ export const loadDocumentationDocumentContents = async (
       return createDocumentationDocument({
         path: document.path,
         url: document.url,
-        aliases: document.aliases,
         chapters: document.chapters,
         content: await response.text(),
       })
@@ -270,12 +264,4 @@ export const createDocumentationDocumentLoader =
 export const resolveDocumentationDocumentId = (
   documents: readonly DocumentationPageDocument[],
   requestedPath: string,
-) => {
-  const requested = normalizeDocumentationAlias(requestedPath)
-  const match = documents.find(
-    (document) =>
-      normalizeDocumentationAlias(document.id) === requested ||
-      document.aliases.some((alias) => normalizeDocumentationAlias(alias) === requested),
-  )
-  return match?.id
-}
+) => documents.find((document) => document.id === requestedPath)?.id

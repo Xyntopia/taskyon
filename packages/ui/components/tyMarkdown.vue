@@ -88,9 +88,7 @@ function resolveInternalPath(href: string) {
     const base = new URL(route.fullPath, window.location.origin)
     const resolved = new URL(href, base)
     if (resolved.origin !== window.location.origin) return null
-    let path = resolved.pathname
-    if (path.endsWith('.md')) path = path.slice(0, -3)
-    return `${path}${resolved.search}${resolved.hash}`
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`
   } catch {
     return null
   }

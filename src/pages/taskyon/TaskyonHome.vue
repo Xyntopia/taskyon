@@ -2,6 +2,9 @@
   <FadeAwayScrollPage class="taskyon-home q-pa-sm welcome frontpage-welcome">
     <div class="taskyon-home__content welcome-message column items-center no-wrap">
       <GetStarted>
+        <template v-if="$q.platform.within.iframe" #welcome>
+          {{ state.appConfiguration.welcomeMsg }}
+        </template>
         <template #hero-input>
           <CreateNewTask
             v-model:file-attachments="fileAttachments"
@@ -24,8 +27,10 @@ import GetStarted from 'components/taskyon/GetStarted.vue'
 import { warmupTaskChatPage } from 'src/router/taskChatLoader'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
+import { useQuasar } from 'quasar'
 import { onMounted, ref } from 'vue'
 
+const $q = useQuasar()
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const fileAttachments = ref<File[]>([])

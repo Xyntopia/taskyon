@@ -51,6 +51,9 @@ export {
   taskyonProtocol,
 } from '@taskyon/taskyon/api'
 
+/**
+ * Calls a registered Taskyon tool through the connected tool RPC port.
+ */
 export async function callTaskyonTool(
   client: Pick<TyClient, 'port'>,
   name: string,
@@ -111,6 +114,9 @@ const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
   })
 }
 
+/**
+ * Connected iframe client with task execution, file upload, and reconfiguration operations.
+ */
 export interface TyClient {
   runTasks: ReturnType<typeof createTaskyonClient>['runTasks']
   port: Port<TaskyonGuiMessage, TaskyonGuiMessage>
@@ -126,6 +132,12 @@ export interface TyClient {
   }) => void
 }
 
+/**
+ * Connects to a Taskyon iframe, applies its profile configuration, and registers host tools.
+ *
+ * The iframe must already exist in the document. The promise resolves after the message-port
+ * handshake and tool registration complete.
+ */
 export async function initializeTaskyon(options: {
   name?: string
   persist?: boolean
