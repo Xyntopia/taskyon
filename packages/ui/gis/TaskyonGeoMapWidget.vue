@@ -90,9 +90,10 @@ const toLngLat = (coordinates: readonly number[]): [number, number] | null => {
 
 const flattenGeometryCoordinates = (geometry: Geometry): [number, number][] => {
   switch (geometry.type) {
-    case 'Point':
+    case 'Point': {
       const coordinate = toLngLat(geometry.coordinates)
       return coordinate ? [coordinate] : []
+    }
     case 'MultiPoint':
     case 'LineString':
       return geometry.coordinates.flatMap((entry) => {

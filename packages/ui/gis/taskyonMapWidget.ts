@@ -485,6 +485,6 @@ export const buildTaskyonMapWidgetHtml = (args: {
         setTimeout(sendState, 1000)
       })
     }
-  <\/script>
+  </script>
 </div>`
 }

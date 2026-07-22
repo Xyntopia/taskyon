@@ -1,6 +1,6 @@
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import type { streamText as streamTextType } from 'ai'
-import { smoothStream, streamText } from 'ai'
+import { smoothStream } from 'ai'
 import type { ChatCompletionStreamChunk } from '../../types/chatCompletion'
 import { humanizeError } from '../../utils/error'
 

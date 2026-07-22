@@ -60,31 +60,34 @@ export const testTaskyonMapWidgetStateParser = () => {
 
 export const testOverpassMapToolBuildsChatMapWidget = async () => {
   const originalFetch = globalThis.fetch
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    if (String(input) !== 'https://overpass-api.de/api/interpreter') {
-      throw new Error(`Unexpected fetch URL: ${String(input)}`)
+  globalThis.fetch = ((input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    if (url !== 'https://overpass-api.de/api/interpreter') {
+      throw new Error(`Unexpected fetch URL: ${url}`)
     }
 
-    return new Response(
-      JSON.stringify({
-        elements: [
-          {
-            type: 'node',
-            id: 1,
-            lat: 52.521,
-            lon: 13.4094,
-            tags: { name: 'Cafe Alexanderplatz', amenity: 'cafe' },
-          },
-          {
-            type: 'node',
-            id: 2,
-            lat: 52.5263,
-            lon: 13.4112,
-            tags: { name: 'Cafe Rosa Luxemburg', amenity: 'cafe' },
-          },
-        ],
-      }),
-      { status: 200, headers: { 'content-type': 'application/json' } },
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          elements: [
+            {
+              type: 'node',
+              id: 1,
+              lat: 52.521,
+              lon: 13.4094,
+              tags: { name: 'Cafe Alexanderplatz', amenity: 'cafe' },
+            },
+            {
+              type: 'node',
+              id: 2,
+              lat: 52.5263,
+              lon: 13.4112,
+              tags: { name: 'Cafe Rosa Luxemburg', amenity: 'cafe' },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
     )
   }) as typeof fetch
 
