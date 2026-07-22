@@ -11,6 +11,8 @@ export type WorkerEvent = {
   taskId?: string | null
   task?: TaskNode | null
   info?: string
+  toolName?: string
+  progress?: TyTaskStreamData['progress']
 }
 
 export type RendererWrite = (text: string) => void
@@ -137,11 +139,16 @@ export const resolveWorkerStatusText = (
   isFunctionHiddenInChat: (name: string) => boolean,
 ): string | null => {
   const stage = event.stage ?? ''
-  if (stage !== 'processing' && stage !== 'subtasks') return null
+  if (stage !== 'processing' && stage !== 'subtasks' && stage !== 'tool progress') return null
   const task = event.task
   const functionName = task?.content?.type === 'functioncall' ? task.content.data?.name : undefined
-  if (functionName && isFunctionHiddenInChat(functionName)) return null
-  const toolName = functionName ?? (event.taskId ? event.taskId.slice(0, 12) : 'task')
+  const knownToolName = functionName ?? event.toolName
+  if (knownToolName && isFunctionHiddenInChat(knownToolName)) return null
+  const toolName = knownToolName ?? (event.taskId ? event.taskId.slice(0, 12) : 'task')
+  if (stage === 'tool progress') {
+    const message = event.progress?.message.replace(/\s+/g, ' ').trim().slice(-160)
+    return message ? `${toolName}: ${message}` : null
+  }
   const status = stage === 'subtasks' ? 'waiting for subtasks' : 'processing'
   return `${toolName}: ${status}`
 }

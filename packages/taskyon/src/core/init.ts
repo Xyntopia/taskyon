@@ -270,7 +270,10 @@ const dynamicContext =
     // keys could porentially be reactive here, so in theory, when they change in the GUI,
     // taskyon should automatically pick up on this...
     console.log('starting taskyon worker')
-    const workerPortFilter = createTypeFilteredPort(insidePort, ['functionResponse'])
+    const workerPortFilter = createTypeFilteredPort(insidePort, [
+      'functionProgress',
+      'functionResponse',
+    ])
     const workerport = workerPortFilter.port
     const coreToolRpcPortFilter = createTypeFilteredPort(outsidePort, [
       'functionCall',

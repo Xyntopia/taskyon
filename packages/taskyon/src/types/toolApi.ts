@@ -5,6 +5,15 @@ import { partialTaskDraft, type TaskNode } from './taskNode'
 import type { FunctionCall } from './tools'
 import { ToolBase, taskMarker } from './tools'
 
+export const ToolProgress = z.object({
+  message: z.string(),
+  kind: z.enum(['status', 'stdout', 'stderr']).optional(),
+  completed: z.number().nonnegative().optional(),
+  total: z.number().positive().optional(),
+  checkpoint: z.boolean().optional(),
+})
+export type ToolProgress = z.infer<typeof ToolProgress>
+
 /**
  * Represents the context passed to tools within the Taskyon system.
  *
@@ -29,6 +38,7 @@ export type toolContext = {
   setSecret: (name: string, value: string) => Promise<void>
   stopSignal: AbortSignal
   toolId: string
+  reportProgress?: (progress: ToolProgress) => Promise<void>
   messagePort?: MessagePort // optional message port for communication
 }
 

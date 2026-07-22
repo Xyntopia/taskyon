@@ -91,6 +91,7 @@ import {
 } from './cli/models'
 import { hasInterruptibleWorkerActivity } from './cli/interruptState'
 import { syncProviderRuntimeConfig } from './cli/runtime'
+import { runBashCommand } from './cli/bash'
 import {
   renderHtmlPreviewText,
   renderTaskProgress,
@@ -997,105 +998,15 @@ const cliBashTool: ClientTool = createClientTool({
       },
     },
   } as const,
-  function: async ({ command, cwd, timeoutMs = 120000 }: BashToolArgs) => {
+  function: async ({ command, cwd, timeoutMs = 120000 }: BashToolArgs, ctx) => {
     if (!command || !command.trim()) throw new Error('bash tool requires a non-empty command')
-
-    const shellCandidates = Array.from(
-      new Set([process.env.SHELL, 'bash', 'sh'].filter((value): value is string => !!value)),
+    return await runBashCommand(
+      { command, cwd: cwd ?? process.cwd(), timeoutMs },
+      {
+        stopSignal: ctx.stopSignal,
+        reportProgress: ctx.reportProgress ?? (() => Promise.resolve()),
+      },
     )
-
-    const runWithShell = async (shell: string) =>
-      await new Promise<{
-        command: string
-        cwd: string
-        exitCode: number | null
-        ok: boolean
-        signal: NodeJS.Signals | null
-        stderr: string
-        stdout: string
-      }>((resolve, reject) => {
-        const child = spawn(shell, ['-lc', command], {
-          cwd: cwd ?? process.cwd(),
-          env: process.env,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
-
-        let stdout = ''
-        let stderr = ''
-        let settled = false
-
-        const finish = (
-          result:
-            | {
-                type: 'resolve'
-                value: {
-                  command: string
-                  cwd: string
-                  exitCode: number | null
-                  ok: boolean
-                  signal: NodeJS.Signals | null
-                  stderr: string
-                  stdout: string
-                }
-              }
-            | { type: 'reject'; error: Error },
-        ) => {
-          if (settled) return
-          settled = true
-          clearTimeout(timer)
-          if (result.type === 'resolve') resolve(result.value)
-          else reject(result.error)
-        }
-
-        const timer = setTimeout(() => {
-          child.kill('SIGTERM')
-          setTimeout(() => child.kill('SIGKILL'), 1000).unref()
-          finish({
-            type: 'reject',
-            error: new Error(`bash command timed out after ${timeoutMs}ms`),
-          })
-        }, timeoutMs)
-
-        child.stdout.on('data', (chunk: Buffer | string) => {
-          stdout += chunk.toString()
-        })
-
-        child.stderr.on('data', (chunk: Buffer | string) => {
-          stderr += chunk.toString()
-        })
-
-        child.on('error', (error) => finish({ type: 'reject', error }))
-
-        child.on('close', (exitCode, signal) => {
-          finish({
-            type: 'resolve',
-            value: {
-              command,
-              cwd: cwd ?? process.cwd(),
-              exitCode,
-              signal,
-              stdout,
-              stderr,
-              ok: exitCode === 0,
-            },
-          })
-        })
-      })
-
-    let lastError: Error | null = null
-    for (const shell of shellCandidates) {
-      try {
-        writeDebug(`bash tool trying shell: ${shell}`)
-        return await runWithShell(shell)
-      } catch (error) {
-        const asError = error instanceof Error ? error : new Error(String(error))
-        lastError = asError
-        if (!asError.message.includes('ENOENT')) throw asError
-        writeDebug(`shell not found: ${shell}`)
-      }
-    }
-
-    throw lastError ?? new Error('No usable shell found for bash tool execution')
   },
 })
 
@@ -2783,6 +2694,7 @@ async function main() {
   let taskInterruptKeysCleanup: (() => void) | undefined
   let activeTaskWaitController: AbortController | undefined
   let thinkingLines: string[] = []
+  let toolProgressLines: string[] = []
   let thinkingText = ''
   let thinkingPanelHeight = 0
   let thinkingRenderTimer: ReturnType<typeof setTimeout> | null = null
@@ -3022,6 +2934,7 @@ async function main() {
     stopWorkerStatusLine()
     clearWorkerIdleSettleTimer()
     thinkingLines = []
+    toolProgressLines = []
     thinkingText = ''
     activeWorkerTasks.clear()
     workerTaskStateById.clear()
@@ -3124,9 +3037,13 @@ async function main() {
           ]
         : []
     const recent = thinkingLines.slice(-5)
+    const progressPanel =
+      toolProgressLines.length > 0
+        ? ['[tool progress]', ...toolProgressLines.map((line) => `  ${line}`)]
+        : []
     const thinkingPanel =
       recent.length > 0 ? ['[thinking]', ...recent.map((line) => `  ${line}`)] : []
-    const panel = [...queueLines, ...thinkingPanel]
+    const panel = [...queueLines, ...progressPanel, ...thinkingPanel]
     const panelText = panel.join('\n')
     if (panelText === renderedThinkingPanelText) return
 
@@ -3186,6 +3103,19 @@ async function main() {
   const trackWorkerProgress = (event: WorkerEvent) => {
     const taskId = event.task?.id ?? event.taskId ?? null
     const stage = event.stage ?? ''
+    if (stage === 'tool progress' && event.progress) {
+      const prefix = event.progress.kind ? `[${event.progress.kind}] ` : ''
+      const lines = event.progress.message
+        .replace(/\r\n?/g, '\n')
+        .split('\n')
+        .filter((line) => line.length > 0)
+        .map((line) => `${prefix}${line.slice(0, 160)}`)
+      toolProgressLines = [...toolProgressLines, ...lines].slice(-5)
+      writeDebug(
+        `tool progress: ${JSON.stringify({ taskId, toolName: event.toolName, ...event.progress })}`,
+      )
+      scheduleThinkingRender()
+    }
     if (taskId && event.stage) {
       if (['processed', 'finished', 'aborted', 'error'].includes(event.stage)) {
         workerTaskStateById.delete(taskId)

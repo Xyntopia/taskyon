@@ -3,7 +3,7 @@
 import { forgeTaskChain } from '../core/createTasks'
 import { createMarkdownTaskChain } from '../core/markdownTaskIO'
 import { createToolExecutionClient, type ToolRpcCallerPort } from '../core/toolRpc'
-import type { chatCompletionParams } from '../tools/chatCompletionTool'
+import type { ChatCompletionArgs } from '../tools/chatCompletionTool'
 import type { TaskContentType, TaskNode } from '../types/taskNode'
 import { partialTaskDraft } from '../types/taskNode'
 import {
@@ -93,7 +93,9 @@ export type {
   ToolRpcCreateContext,
   ToolRpcFunctionCallMessage,
   ToolRpcFunctionDescriptionMessage,
+  ToolRpcFunctionProgressMessage,
   ToolRpcFunctionResponseMessage,
+  ToolRpcResponderMessage,
   ToolRpcResponderPort,
 } from '../core/toolRpc'
 
@@ -233,8 +235,8 @@ const createSubTaskStream = <T extends { type: string }>(
   return subTaskBus.stream
 }
 
-export const createChatCompletionTask = (args: chatCompletionParams) =>
-  toolCall<chatCompletionParams>({ name: 'chatCompletion', arguments: args })
+export const createChatCompletionTask = (args: ChatCompletionArgs) =>
+  toolCall<ChatCompletionArgs>({ name: 'chatCompletion', arguments: args })
 
 const READY_EVENT_GRACE_MS = 250
 const READY_PING_ATTEMPT_MS = 250

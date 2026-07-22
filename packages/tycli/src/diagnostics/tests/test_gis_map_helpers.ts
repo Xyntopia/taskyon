@@ -60,10 +60,10 @@ export const testTaskyonMapWidgetStateParser = () => {
 
 export const testOverpassMapToolBuildsChatMapWidget = async () => {
   const originalFetch = globalThis.fetch
-  globalThis.fetch = ((input: RequestInfo | URL) => {
+  globalThis.fetch = (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     if (url !== 'https://overpass-api.de/api/interpreter') {
-      throw new Error(`Unexpected fetch URL: ${url}`)
+      return Promise.reject(new Error(`Unexpected fetch URL: ${url}`))
     }
 
     return Promise.resolve(
@@ -89,7 +89,7 @@ export const testOverpassMapToolBuildsChatMapWidget = async () => {
         { status: 200, headers: { 'content-type': 'application/json' } },
       ),
     )
-  }) as typeof fetch
+  }
 
   try {
     const result = await buildMapToolDataResult({

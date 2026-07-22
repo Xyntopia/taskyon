@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { createTaskyonClient, processTasksDetailed } from '../api'
 import { tyCore } from '../core/init'
 import { callToolOverRpc, createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
-import type { ToolRpcCallMessage, ToolRpcFunctionResponseMessage } from '../core/toolRpc'
+import type { ToolRpcCallMessage, ToolRpcResponderMessage } from '../core/toolRpc'
 import type { TaskyonMessage } from '../api/taskyonProtocol'
 import type { TaskNode } from '../types/taskNode'
 import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
@@ -18,7 +18,7 @@ const assert = (condition: unknown, message: string) => {
 export const testRemoteFunctionBridgeHonorsToolTimeoutMs = async () => {
   const { x: workerPort, y: remotePort } = createDuplexChannel<
     ToolRpcCallMessage,
-    ToolRpcFunctionResponseMessage
+    ToolRpcResponderMessage
   >()
   const unsubscribe = remotePort.receive((msg) => {
     if (msg.type !== 'functionCall') return
@@ -288,8 +288,8 @@ export const testRemoteFunctionBridgeProvidesExternalExecutionTaskChain = async 
   })
 
   const toolDescription = await toolDescriptionPromise
-  if (toolDescription.type !== 'registerToolRequest') {
-    throw new Error('expected registerToolRequest message')
+  if (toolDescription.type !== 'tools.registerRequest') {
+    throw new Error('expected tools.registerRequest message')
   }
   assert(
     toolDescription.name === 'remoteTaskChainReader',
@@ -297,7 +297,7 @@ export const testRemoteFunctionBridgeProvidesExternalExecutionTaskChain = async 
   )
 
   taskyonPort.send({
-    type: 'registerToolResponse',
+    type: 'tools.registerResponse',
     requestId: toolDescription.requestId,
   })
   const registration = await registrationPromise

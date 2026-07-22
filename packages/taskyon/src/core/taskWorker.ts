@@ -1,5 +1,5 @@
 import type { TaskNode, partialTaskDraft } from '../types/taskNode'
-import { taskResult } from '../types/toolApi'
+import { taskResult, type ToolProgress } from '../types/toolApi'
 import { createAsyncQueue, sleep } from '../utils/asyncUtils'
 import { humanizeError, serializeError } from '../utils/error'
 import type { Port, RpcMessagePort } from '@taskyon/common/modules/frpBus'
@@ -7,7 +7,7 @@ import { createDuplexChannel, createStream } from '@taskyon/common/modules/frpBu
 import { serializeForJson } from '../utils/objHelpers'
 import { type TyTaskManager } from './taskManager'
 import { MAX_REMOTE_FUNCTION_TIMEOUT_MS } from '../api/taskyonProtocol'
-import type { ToolRpcCallMessage, ToolRpcFunctionResponseMessage } from './toolRpc'
+import type { ToolRpcCallMessage, ToolRpcResponderMessage } from './toolRpc'
 import { createToolExecutionClient } from './toolRpc'
 import { createLruCache } from '@taskyon/common/modules/lruCache'
 import {
@@ -20,6 +20,8 @@ export interface TyTaskStreamData {
   info?: string
   task?: TaskNode | null | undefined
   taskId?: string | null | undefined
+  toolName?: string
+  progress?: ToolProgress
   stage:
     | 'in loop' // task is put it the loop in order to check if it has subtasks
     | 'processing' // means, the task enters the loop of processing
@@ -31,10 +33,11 @@ export interface TyTaskStreamData {
     | 'all processed'
     | 'aborted'
     | 'queued'
+    | 'tool progress'
 }
 
 type FunctionRpcWorkerPort = RpcMessagePort<ToolRpcCallMessage>
-export type TaskWorkerToolRpcPort = Port<ToolRpcFunctionResponseMessage, ToolRpcCallMessage>
+export type TaskWorkerToolRpcPort = Port<ToolRpcResponderMessage, ToolRpcCallMessage>
 type ToolExecutionClient = ReturnType<typeof createToolExecutionClient>
 const FINISHED_TASK_CACHE_SIZE = 50_000
 
@@ -50,6 +53,7 @@ async function safeExecuteTask(
   task: TaskNode,
   toolExecutionClient: ToolExecutionClient,
   stopSignal: AbortSignal,
+  streamEmit: (value: TyTaskStreamData) => void,
 ): Promise<unknown> {
   if (task.content.type === 'functioncall') {
     // calculate function result
@@ -59,6 +63,14 @@ async function safeExecuteTask(
       signal: stopSignal,
       requestIdPrefix: `${func.name}-${task.id}`,
       defaultTimeoutMs: MAX_REMOTE_FUNCTION_TIMEOUT_MS,
+      onProgress: (progress) =>
+        streamEmit({
+          stage: 'tool progress',
+          taskId: task.id,
+          toolName: func.name,
+          info: progress.message,
+          progress,
+        }),
     })
   } else {
     throw new Error(
@@ -405,7 +417,12 @@ const createTaskProcessor = (
       let newTasks: TaskNode[][] = []
       try {
         // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
-        const funcR = await safeExecuteTask(task, toolExecutionClient, currentTaskCtrl.signal)
+        const funcR = await safeExecuteTask(
+          task,
+          toolExecutionClient,
+          currentTaskCtrl.signal,
+          streamEmit,
+        )
 
         // We check the result of the task here to see whether it contains
         // a lists of tasks. If thats the case we return
@@ -707,7 +724,7 @@ export function runTaskWorker(
   const taskProcessingStream = createStream<TyTaskStreamData>()
   const { x: workerRpcPort, y: toolRpcPort } = createDuplexChannel<
     ToolRpcCallMessage,
-    ToolRpcFunctionResponseMessage
+    ToolRpcResponderMessage
   >()
   let currentTaskCtrl: AbortController | undefined = new AbortController()
   let queueTask: ((id: string) => void) | undefined = undefined

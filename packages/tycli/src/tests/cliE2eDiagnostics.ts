@@ -733,12 +733,36 @@ export function testWorkerStatusTextHidesHiddenTools() {
   const isHidden = (name: string) => name === 'hiddenTool'
   const visible = resolveWorkerStatusText({ stage: 'processing', task: visibleTask }, isHidden)
   const hidden = resolveWorkerStatusText({ stage: 'processing', task: hiddenTask }, isHidden)
+  const progress = resolveWorkerStatusText(
+    {
+      stage: 'tool progress',
+      taskId: visibleTask.id,
+      toolName: 'visibleTool',
+      progress: { kind: 'stdout', message: 'first line\nsecond line\n' },
+    },
+    isHidden,
+  )
+  const hiddenProgress = resolveWorkerStatusText(
+    {
+      stage: 'tool progress',
+      taskId: hiddenTask.id,
+      toolName: 'hiddenTool',
+      progress: { kind: 'stdout', message: 'private output' },
+    },
+    isHidden,
+  )
 
   if (visible !== 'visibleTool: processing') {
     throw new Error(`Expected visible worker status text, got ${String(visible)}`)
   }
   if (hidden !== null) {
     throw new Error(`Expected hidden worker status text to be null, got ${String(hidden)}`)
+  }
+  if (progress !== 'visibleTool: first line second line') {
+    throw new Error(`Expected one-line tool progress, got ${String(progress)}`)
+  }
+  if (hiddenProgress !== null) {
+    throw new Error(`Expected hidden tool progress to be null, got ${String(hiddenProgress)}`)
   }
 }
 

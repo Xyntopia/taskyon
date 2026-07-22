@@ -2,7 +2,12 @@ import type { TaskNode } from '../types/taskNode'
 import type { TyTaskStreamData } from './taskWorker'
 
 const pendingStages = new Set<TyTaskStreamData['stage']>(['queued', 'waiting'])
-const activeStages = new Set<TyTaskStreamData['stage']>(['processing', 'in loop', 'subtasks'])
+const activeStages = new Set<TyTaskStreamData['stage']>([
+  'processing',
+  'in loop',
+  'subtasks',
+  'tool progress',
+])
 
 export type TaskQueueBranch = {
   tasks: readonly TaskNode[]

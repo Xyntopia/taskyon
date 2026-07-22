@@ -366,7 +366,7 @@ export const testTaskQueueSelectionGroupsPendingParallelBranches = () => {
     }),
   ]
   const stages = new Map([
-    ['a-message', 'processing' as const],
+    ['a-message', 'tool progress' as const],
     ['a-entry', 'waiting' as const],
     ['b-message', 'queued' as const],
   ])

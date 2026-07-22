@@ -184,7 +184,12 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
     'error',
     'aborted',
   ])
-  const taskActiveStages = new Set<TyTaskStreamData['stage']>(['processing', 'in loop', 'subtasks'])
+  const taskActiveStages = new Set<TyTaskStreamData['stage']>([
+    'processing',
+    'in loop',
+    'subtasks',
+    'tool progress',
+  ])
 
   void taskyon.then(({ workerStream }) => {
     void workerStream((data) => {
@@ -195,9 +200,15 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
     void workerStream((data) => {
       console.log(`worker: ${data.stage}, ${data.taskId || data.task?.id}`)
       if (
-        ['all processed', 'processing', 'processed', 'finished', 'error', 'aborted'].includes(
-          data.stage,
-        )
+        [
+          'all processed',
+          'processing',
+          'processed',
+          'finished',
+          'error',
+          'aborted',
+          'tool progress',
+        ].includes(data.stage)
       ) {
         workerStreamLogs.value.push({ ...data, timestamp: new Date() })
         // Ensure the log doesn't exceed the maximum number of rows
@@ -233,6 +244,7 @@ function connectWorkerStream(taskyon: Promise<Taskyon>) {
     workerStream.filter(
       (data) =>
         data.stage === 'processing' ||
+        data.stage === 'tool progress' ||
         data.stage === 'processed' ||
         data.stage === 'finished' ||
         data.stage === 'error' ||

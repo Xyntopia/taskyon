@@ -16,6 +16,7 @@ type BrowserSandboxEntry = {
 }
 
 const browserSandboxFrames = new Map<string, BrowserSandboxEntry>()
+const BROWSER_SANDBOX_READY_TIMEOUT_MS = 10_000
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
@@ -43,18 +44,30 @@ async function createBrowserSandbox(
 
   iframe.srcdoc = `<script>\nwindow.id = "${id}";\n${browserWorkerSandboxSource}\n//# sourceURL=BWS_${id}\n</script>`
 
-  const ready = await new Promise<{ iframe: HTMLIFrameElement; port: MessagePort }>((resolve) => {
-    const onReady = (event: MessageEvent) => {
-      if (!event.data?.ready || event.source !== iframe.contentWindow) return
-      const [port] = event.ports || []
-      if (!port) return
-      window.removeEventListener('message', onReady)
-      port.start()
-      browserSandboxFrames.set(id, { iframe, port })
-      resolve({ iframe, port })
-    }
-    window.addEventListener('message', onReady)
-  })
+  const ready = await new Promise<{ iframe: HTMLIFrameElement; port: MessagePort }>(
+    (resolve, reject) => {
+      const onReady = (event: MessageEvent) => {
+        if (!event.data?.ready || event.source !== iframe.contentWindow) return
+        const [port] = event.ports || []
+        if (!port) return
+        clearTimeout(timeout)
+        window.removeEventListener('message', onReady)
+        port.start()
+        browserSandboxFrames.set(id, { iframe, port })
+        resolve({ iframe, port })
+      }
+      const timeout = window.setTimeout(() => {
+        window.removeEventListener('message', onReady)
+        iframe.remove()
+        reject(
+          new Error(
+            `Browser tool sandbox did not become ready within ${BROWSER_SANDBOX_READY_TIMEOUT_MS}ms`,
+          ),
+        )
+      }, BROWSER_SANDBOX_READY_TIMEOUT_MS)
+      window.addEventListener('message', onReady)
+    },
+  )
 
   await sleep(100)
   return ready

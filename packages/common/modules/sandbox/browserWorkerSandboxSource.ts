@@ -7,7 +7,7 @@ const pendingRpc = new Map()
 let rpcCounter = 0
 
 function getSandboxId() {
-  const value = (window as unknown as { id?: string | number }).id
+  const value = Reflect.get(window, 'id')
   return typeof value === 'string' || typeof value === 'number' ? String(value) : ''
 }
 

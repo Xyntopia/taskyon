@@ -95,6 +95,9 @@
     </q-expansion-item>
     <!--Render tasks which are in progress-->
     <div class="task-logs q-py-sm">
+      <pre v-if="currentToolProgress" class="text-caption tool-progress">{{
+        currentToolProgress
+      }}</pre>
       <template v-if="currentMsgStream && currentMsgStream.reasoning.length > 0">
         <div class="text-caption">THINKING:</div>
         <div
@@ -306,6 +309,24 @@ const isTaskActive = (id: string) => {
 const isProcessing = (id: string) =>
   isTaskActive(id) ||
   [...tystate.activeTaskIds].some((activeId) => isSameTaskOrDescendant(id, activeId))
+
+const currentToolProgress = computed(() => {
+  const lines = tystate.workerStreamLogs
+    .filter(
+      (event) =>
+        event.stage === 'tool progress' &&
+        event.taskId &&
+        isSameTaskOrDescendant(props.currentTask.id, event.taskId),
+    )
+    .slice(-5)
+    .flatMap((event) =>
+      (event.progress?.message ?? event.info ?? '')
+        .replace(/\r\n?/g, '\n')
+        .split('\n')
+        .filter(Boolean),
+    )
+  return lines.slice(-5).join('\n')
+})
 
 function formatTimeStamp(timestamp: string | number | Date): string {
   const date = new Date(timestamp)
@@ -583,4 +604,11 @@ async function onLazyLoad({
   margin: 0
   padding-left: 1.25rem
   font-size: 0.75rem
+
+.tool-progress
+  max-height: 8rem
+  margin: 0 0 0.5rem
+  overflow: auto
+  white-space: pre-wrap
+  overflow-wrap: anywhere
 </style>

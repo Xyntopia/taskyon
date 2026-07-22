@@ -7,6 +7,7 @@ import { TaskyonOpenApiDocumentSchema } from '@taskyon/common/modules/openApi'
 import type { Sha256Hash } from '@taskyon/common/modules/canonicalHash'
 import { z } from 'zod'
 import { partialTaskDraft, TaskNode } from '../types/taskNode'
+import { ToolProgress } from '../types/toolApi'
 import { FunctionArguments, ToolBase } from '../types/tools'
 
 export const REMOTE_FUNCTION_TIMEOUT_MS = 30_000
@@ -165,6 +166,15 @@ const functionResponse = remoteFunctionBase
       'This type is used for sending messages with the result of a remote function call between windows. E.g. from parent to taskyon iframe',
   })
 
+const functionProgress = remoteFunctionBase
+  .extend({
+    taskId: z.string().optional(),
+    progress: ToolProgress,
+  })
+  .meta({
+    description: 'Reports non-terminal progress for a pending remote function call.',
+  })
+
 const functionCancel = remoteFunctionBase
   .extend({
     reason: z.string().optional().meta({
@@ -243,6 +253,7 @@ export const taskyonToolsProtocol = defineFrpServiceProtocol({
   streams: {
     execution: {
       functionCall,
+      functionProgress,
       functionResponse,
       functionCancel,
     },

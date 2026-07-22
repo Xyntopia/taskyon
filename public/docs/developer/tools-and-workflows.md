@@ -114,6 +114,15 @@ Tool code runs with the capabilities of its runtime unless an external sandbox n
 Browser CSP, iframe isolation, message ports, process boundaries, and MCP approval are separate
 controls; a tool declaration alone is not a security boundary.
 
+Run tool implementations in a sandbox when their required capabilities are available through its
+explicit context. Reserve trusted typed functions for host capabilities that cannot safely or
+practically execute there, and keep privileged effects in narrowly scoped host tools. Sandboxed
+tools can compose those capabilities through explicit child tool calls.
+
+For local browser debugging only, `VITE_TASKYON_TOOL_EXECUTION=main-thread` can isolate
+sandbox-specific failures. Do not enable this override in committed test commands, CI, or
+production; regression diagnostics must continue to exercise the sandboxed path.
+
 Before adding a third-party library, check browser and Node compatibility, package size, license,
 network behavior, and whether the same capability already exists. Prefer established libraries for
 complex domain behavior, but keep Taskyon workflow semantics in visible task nodes rather than

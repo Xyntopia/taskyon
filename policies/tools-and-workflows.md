@@ -44,6 +44,14 @@ or tool-visible capabilities.
 
 - Taskyon core owns neutral task storage, traversal, scheduling, and execution capabilities. Each
   tool owns how it selects, folds, and interprets task-tree context for its reducer.
+- Execute tool implementations in a sandbox whenever their required capabilities are available
+  through the sandbox's explicit context. Use a trusted typed function only for host capabilities
+  that cannot safely or practically run there.
+- Keep privileged effects in narrowly scoped host tools. Sandboxed tools may compose those
+  capabilities through explicit child tool calls in the task tree.
+- `VITE_TASKYON_TOOL_EXECUTION=main-thread` is a browser-development override for diagnosing
+  sandbox-specific failures. Never enable it in committed test commands, CI, or production;
+  regression diagnostics must continue to exercise the sandboxed path.
 - Core must not import concrete tool implementations or impose an LLM-specific context policy.
 - Promote a tool-specific utility to a shared tool utility only when multiple tools need the same
   semantics. Shared utilities remain stateless, dependency-injected, and independent of concrete

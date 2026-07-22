@@ -73,6 +73,7 @@ export {
   createSubtasksResult,
   createTool,
   taskResult,
+  ToolProgress,
   toolCall,
 } from './types/toolApi'
 export * from './types/tools'

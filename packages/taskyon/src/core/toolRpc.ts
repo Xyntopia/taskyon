@@ -11,6 +11,7 @@ import {
   createSubtasksResult,
   InternalTool as InternalToolSchema,
   type InternalTool,
+  type ToolProgress,
   type toolContext,
 } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
@@ -23,17 +24,22 @@ const remoteFunctionProtocol = taskyonProtocol.streams['tools.execution']
 
 export type ToolRpcFunctionCallMessage = z.infer<typeof remoteFunctionProtocol.functionCall>
 export type ToolRpcFunctionCancelMessage = z.infer<typeof remoteFunctionProtocol.functionCancel>
+export type ToolRpcFunctionProgressMessage = z.infer<typeof remoteFunctionProtocol.functionProgress>
 export type ToolRpcFunctionResponseMessage = z.infer<typeof remoteFunctionProtocol.functionResponse>
 
 export type ToolRpcCallMessage = ToolRpcFunctionCallMessage | ToolRpcFunctionCancelMessage
+export type ToolRpcResponderMessage =
+  | ToolRpcFunctionProgressMessage
+  | ToolRpcFunctionResponseMessage
 export type ToolRpcCallerPort = RpcMessagePort<ToolRpcCallMessage>
-export type ToolRpcResponderPort = RpcMessagePort<ToolRpcFunctionResponseMessage>
+export type ToolRpcResponderPort = RpcMessagePort<ToolRpcResponderMessage>
 export type ToolExecutionCallOptions = {
   signal?: AbortSignal
   stopSignal?: AbortSignal
   taskId?: string | undefined
   requestIdPrefix?: string
   defaultTimeoutMs?: number
+  onProgress?: (progress: ToolProgress) => Promise<void> | void
 }
 export type ToolRpcCreateContext = Parameters<typeof registerToolRpcExecutor>[0]['createContext']
 export type ToolRpcFunctionDescriptionMessage = Extract<
@@ -41,13 +47,14 @@ export type ToolRpcFunctionDescriptionMessage = Extract<
   { type: 'tools.registerRequest' }
 >
 type ToolRpcRegistrationPort = {
-  send: (message: ToolRpcFunctionResponseMessage | ToolRpcFunctionDescriptionMessage) => void
+  send: (message: ToolRpcResponderMessage | ToolRpcFunctionDescriptionMessage) => void
   receive: ToolRpcResponderPort['receive'] & {
     wait: (opts: { timeoutMs?: number; signal?: AbortSignal }) => Promise<unknown>
   }
 }
 
 let remoteFunctionRequestCounter = 0
+const REMOTE_FUNCTION_TIMEOUT_GRACE_MS = 5_000
 
 const createRemoteFunctionRequestId = (name: string) =>
   `${name}-${Date.now()}-${remoteFunctionRequestCounter++}`
@@ -61,7 +68,7 @@ const resolveRemoteFunctionTimeoutMs = (
     return defaultTimeoutMs
   }
   return Math.min(
-    Math.max(Math.trunc(timeoutMs), REMOTE_FUNCTION_TIMEOUT_MS),
+    Math.max(Math.trunc(timeoutMs) + REMOTE_FUNCTION_TIMEOUT_GRACE_MS, REMOTE_FUNCTION_TIMEOUT_MS),
     MAX_REMOTE_FUNCTION_TIMEOUT_MS,
   )
 }
@@ -91,7 +98,8 @@ export async function callToolOverRpc(
     ToolRpcCallMessage,
     ToolRpcFunctionResponseMessage,
     unknown,
-    never
+    never,
+    unknown
   >({
     port,
     request: message,
@@ -106,6 +114,11 @@ export async function callToolOverRpc(
         reason,
       }),
     parseResponse: (value) => {
+      const progress = remoteFunctionProtocol.functionProgress.safeParse(value)
+      if (progress.success && progress.data.requestId === requestId) {
+        void options?.onProgress?.(progress.data.progress)
+        return undefined
+      }
       const response = remoteFunctionProtocol.functionResponse.safeParse(value)
       if (response.success) return response.data
       return undefined
@@ -184,6 +197,15 @@ export function registerToolRpcBroker(options: {
           : { defaultTimeoutMs: options.defaultTimeoutMs }),
         stopSignal: abortController.signal,
         taskId: call.data.taskId,
+        onProgress: (progress) => {
+          options.workerPort.send({
+            type: 'functionProgress',
+            functionName: call.data.functionName,
+            requestId: call.data.requestId,
+            taskId: call.data.taskId,
+            progress,
+          })
+        },
       })
       respond(call.data, { response: result })
     } catch (error) {
@@ -363,7 +385,22 @@ export function registerToolRpcExecutor(options: {
         arguments: call.data.arguments ?? {},
       }
       const contextResult = await options.createContext(call.data, abortController.signal)
-      const context = 'context' in contextResult ? contextResult.context : contextResult
+      const baseContext = 'context' in contextResult ? contextResult.context : contextResult
+      const context: toolContext = {
+        ...baseContext,
+        reportProgress: (progress) => {
+          options.port.send(
+            remoteFunctionProtocol.functionProgress.parse({
+              type: 'functionProgress',
+              functionName: call.data.functionName,
+              requestId: call.data.requestId,
+              taskId: call.data.taskId,
+              progress,
+            }),
+          )
+          return Promise.resolve()
+        },
+      }
       cleanupContext = 'context' in contextResult ? contextResult.cleanup : undefined
       const result = await executeToolDefinition(
         preparedFunc,

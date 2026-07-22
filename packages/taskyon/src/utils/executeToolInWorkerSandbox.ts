@@ -87,12 +87,35 @@ function buildRpcHandlers(context: toolContext): WorkerSandboxRpcHandlers {
   }
 }
 
+const shouldExecuteToolInMainThread = () =>
+  typeof window !== 'undefined' &&
+  import.meta.env?.DEV === true &&
+  import.meta.env.VITE_TASKYON_TOOL_EXECUTION === 'main-thread'
+
+const executeToolInMainThread = async (
+  code: string,
+  args: { params: unknown; context: toolContext },
+  sourceURL: string,
+) => {
+  console.warn('Executing tool code without a sandbox because development override is enabled.')
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+  const toolFunction: unknown = new Function(
+    `return (${code})\n//# sourceURL=${sourceURL.replace(/[\r\n]/g, '')}`,
+  )()
+  if (typeof toolFunction !== 'function') {
+    throw new Error('Tool code did not evaluate to a function')
+  }
+  return await Reflect.apply(toolFunction, undefined, [args.params, args.context])
+}
+
 export function executeToolInWorkerSandbox(
   code: string,
   args: { params: unknown; context: toolContext },
   sourceURL = 'worker-sandbox-tool.js',
   stopSignal: AbortSignal,
 ): Promise<unknown> {
+  if (shouldExecuteToolInMainThread()) return executeToolInMainThread(code, args, sourceURL)
+
   const { toolId, messagePort } = args.context
   const options: ExecuteInWorkerSandboxOptions = {
     id: toolId,
