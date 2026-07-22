@@ -89,6 +89,9 @@ export const taskyonStorageProtocol = defineFrpServiceProtocol({
 
 export type TaskyonStorageMessage = ProtocolMessage<typeof taskyonStorageProtocol>
 
+export const createStorageClient = (port: Port<TaskyonStorageMessage, TaskyonStorageMessage>) =>
+  createPortClient(port, taskyonStorageProtocol).storage.records
+
 export type StorageRecordCrud<T> = CrudWrapper<T> & {
   find: (where: PartialDeep<T>) => Promise<Record<string, T>>
 }

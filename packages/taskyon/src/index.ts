@@ -16,6 +16,7 @@ export {
   processTasksDetailed,
   createTaskyonClient,
   createProtocolStorageCrudWrapper,
+  createStorageClient,
   createStorageProtocolServer,
   createStorageRecordBackend,
   runTasks,

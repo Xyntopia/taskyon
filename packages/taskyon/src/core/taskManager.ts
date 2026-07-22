@@ -120,6 +120,7 @@ export const connectTaskManagerStorageFromProtocol = (
 export const createPgLiteTaskManagerStorageService = (
   port: Port<TaskyonStorageMessage, TaskyonStorageMessage>,
   getDb: (sessionId: string) => Promise<TyPGDB>,
+  resolveFallback?: (namespace: string) => Promise<StorageRecordBackend> | StorageRecordBackend,
 ) => {
   const sessionStorage = new Map<string, Promise<TaskManagerStorage>>()
   const backendCache = new Map<string, Promise<StorageRecordBackend>>()
@@ -134,6 +135,14 @@ export const createPgLiteTaskManagerStorageService = (
   const resolveBackend = async (namespace: string): Promise<StorageRecordBackend> => {
     const cached = backendCache.get(namespace)
     if (cached) return cached
+    const separator = namespace.lastIndexOf('/')
+    const table = separator > 0 ? namespace.slice(separator + 1) : ''
+    if (!isTaskStorageTable(table)) {
+      if (!resolveFallback) throw new Error(`Unknown Taskyon storage namespace: ${namespace}`)
+      const fallback = Promise.resolve(resolveFallback(namespace))
+      backendCache.set(namespace, fallback)
+      return await fallback
+    }
     const created = storageForSession(parseTaskManagerStorageNamespace(namespace).sessionId).then(
       (storage) => {
         const { table } = parseTaskManagerStorageNamespace(namespace)

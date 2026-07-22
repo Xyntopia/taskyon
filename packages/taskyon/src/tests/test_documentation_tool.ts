@@ -1,10 +1,13 @@
+import { createTaskyonDocumentationTool } from '../tools/documentationTool'
 import {
-  createDocumentationIndexTool,
-  createTaskyonDocumentationTool,
-} from '../tools/documentationTool'
+  createDocumentationIndexClientTool,
+  loadDocumentationDocumentsFromManifest,
+} from '../tools/documentationProviderTool'
+import { createDocumentationBaseStore } from '@taskyon/common/modules/documentationBases'
+import { createDocumentationDocument } from '@taskyon/common/modules/documentation'
+import type { DocumentationManifest } from '@taskyon/common/modules/resourceFiles'
 import type { TaskNode } from '../types/taskNode'
 import { createSubtasksResult } from '../types/toolApi'
-import { getDatabase } from '../utils/pglite.api'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -39,88 +42,106 @@ const getMessageData = (task: unknown) => {
   return content.type === 'message' ? content.data : undefined
 }
 
-export const testDocumentationIndexStatusStartsEmpty = async () => {
-  const db = await getDatabase(`documentation-status-test-${Date.now()}`)
-  const tool = createDocumentationIndexTool(db)
-  const result = await tool.function?.({ action: 'status', corpusId: 'diagnostic-docs' })
-
-  assert(result && typeof result === 'object', 'Expected documentation status object')
-  if (!result || typeof result !== 'object') throw new Error('Expected documentation status object')
-  assert(
-    'indexed' in result && result.indexed === false,
-    'Expected new documentation corpus to be empty',
+export const testDocumentationIndexRegistersAndSearchesManifestBase = async () => {
+  const records = new Map<string, DocumentationManifest>()
+  const bases = createDocumentationBaseStore(
+    {
+      get: (id) => Promise.resolve(records.get(id) ?? null),
+      set: (id, manifest) => {
+        records.set(id, manifest)
+        return Promise.resolve()
+      },
+      delete: (id) => {
+        records.delete(id)
+        return Promise.resolve()
+      },
+      list: () => Promise.resolve(Array.from(records, ([id, data]) => ({ id, data }))),
+    },
+    () =>
+      Promise.resolve([
+        createDocumentationDocument({
+          path: 'guide.md',
+          url: 'https://example.com/guide.md',
+          content: '# Guide\n\nTask trees preserve inspectable workflow history.',
+        }),
+      ]),
+  )
+  const tool = createDocumentationIndexClientTool(bases)
+  const registered = await tool.function?.(
+    {
+      action: 'register',
+      manifest: { internal: [], external: ['https://example.com/guide.md'] },
+    },
+    createTestContext(),
+  )
+  const result = await tool.function?.(
+    {
+      action: 'search',
+      baseId: 'guide',
+      query: 'task trees',
+      mode: 'literal',
+      limit: 5,
+    },
+    createTestContext(),
   )
   assert(
-    'chunkCount' in result && result.chunkCount === 0,
-    'Expected empty corpus to have no chunks',
+    registered && typeof registered === 'object' && 'url' in registered,
+    'Expected registration to return the documentation page URL.',
   )
-
+  assert(
+    result && typeof result === 'object' && 'hits' in result && Array.isArray(result.hits),
+    'Expected documentation search hits.',
+  )
   return { success: true }
 }
 
-export const testTaskyonDocumentationCreatesConsentReentryChain = async () => {
-  const db = await getDatabase(`documentation-consent-test-${Date.now()}`)
-  const tool = createTaskyonDocumentationTool(db)
+export const testDocumentationManifestMaterializesEachSourceOnce = async () => {
+  let loads = 0
+  const result = await loadDocumentationDocumentsFromManifest(
+    { internal: ['/guide.md'], external: [] },
+    async function* (source) {
+      await Promise.resolve()
+      loads += 1
+      yield {
+        url: source,
+        file: new File(['# Guide\n\nLoaded once.'], 'guide.md', { type: 'text/markdown' }),
+      }
+    },
+  )
+
+  assert(loads === 1, `Expected one source load, received ${loads}.`)
+  assert(result.documents.length === 1, 'Expected one materialized document.')
+  return { success: true }
+}
+
+export const testTaskyonDocumentationLoadsDocumentsWithoutIndexConsent = async () => {
+  const tool = createTaskyonDocumentationTool()
   const result = await tool.function?.({ query: 'How do Taskyon tools work?' }, createTestContext())
 
   assert(result && typeof result === 'object', 'Expected task result object')
   assert(
     'taskChainList' in result &&
       Array.isArray(result.taskChainList) &&
-      result.taskChainList[0]?.length === 2,
-    'Expected consent message followed by re-entry function call',
-  )
-  const chain = 'taskChainList' in result ? result.taskChainList[0] : undefined
-  const message = chain?.[0]
-  assert(
-    message?.content.type === 'message' &&
-      message.content.data.includes('taskyon-docs-index-confirm'),
-    'Expected consent UI message to include the docs confirm action',
-  )
-  assert(
-    getFunctionCallName(chain?.[1]) === 'taskyonDocumentation',
-    'Expected workflow to re-enter taskyonDocumentation after consent UI',
-  )
-
-  return { success: true }
-}
-
-export const testTaskyonDocumentationAllowIndexAnnouncesIndexing = async () => {
-  const db = await getDatabase(`documentation-allow-index-test-${Date.now()}`)
-  const tool = createTaskyonDocumentationTool(db)
-  const result = await tool.function?.(
-    { query: 'How do Taskyon tools work?', allowIndex: true },
-    createTestContext(),
-  )
-
-  assert(result && typeof result === 'object', 'Expected task result object')
-  assert(
-    'taskChainList' in result &&
-      Array.isArray(result.taskChainList) &&
       result.taskChainList[0]?.length === 3,
-    'Expected indexing notice followed by provider and re-entry function calls',
+    'Expected loading notice, provider call, and re-entry function call',
   )
   const chain = 'taskChainList' in result ? result.taskChainList[0] : undefined
-  const indexingNotice = getMessageData(chain?.[0])
   assert(
-    typeof indexingNotice === 'string' && indexingNotice.includes('Indexing Taskyon documentation'),
-    'Expected indexing notice message before loading docs',
+    getMessageData(chain?.[0]) === 'Searching Taskyon documentation...',
+    'Expected a plain search notice without indexing consent.',
   )
   assert(
-    getFunctionCallName(chain?.[1]) === 'getTaskyonDocumentationDocuments',
-    'Expected workflow to load bundled docs after indexing notice',
-  )
-  assert(
-    getFunctionCallName(chain?.[2]) === 'taskyonDocumentation',
-    'Expected workflow to re-enter taskyonDocumentation after loading docs',
+    getFunctionCallName(chain?.[1]) === 'documentationIndex' &&
+      getFunctionCallName(chain?.[2]) === 'taskyonDocumentation',
+    'Expected the provider followed by Taskyon documentation re-entry.',
   )
 
   return { success: true }
 }
 
-testDocumentationIndexStatusStartsEmpty.description =
-  'Checks that a new documentation index corpus reports empty status without indexing documents.'
-testTaskyonDocumentationCreatesConsentReentryChain.description =
-  'Checks that Taskyon documentation search asks for in-chat indexing consent before first use.'
-testTaskyonDocumentationAllowIndexAnnouncesIndexing.description =
-  'Checks that Taskyon documentation auto-indexing emits a visible progress message before loading docs.'
+testDocumentationIndexRegistersAndSearchesManifestBase.description =
+  'Registers a manifest-backed documentation base and searches its normalized documents.'
+testDocumentationManifestMaterializesEachSourceOnce.description =
+  'Materializes each manifest source once before handing it to the DAG cache node.'
+testTaskyonDocumentationLoadsDocumentsWithoutIndexConsent.description =
+  'Loads documentation directly without asking for obsolete vector-index consent.'

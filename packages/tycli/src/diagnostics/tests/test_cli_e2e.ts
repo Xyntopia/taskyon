@@ -63,13 +63,13 @@ testCliHelloWorldProducesAssistantResponse.description =
   'Starts yarn tycli, sends hello world through the configured provider, and expects an assistant response.'
 testCliHelloWorldProducesAssistantResponse.timeoutMs = 110_000
 
-export const testCliToolsListsTaskyonDocumentationProvider = async () => {
+export const testCliToolsListsDocumentationTools = async () => {
   const result = await runTycSession({
-    testName: 'testCliToolsListsTaskyonDocumentationProvider',
+    testName: 'testCliToolsListsDocumentationTools',
     steps: [
       { waitFor: 'tycli ready.', input: '/tools\n' },
       {
-        waitFor: 'getTaskyonDocumentationDocuments',
+        waitFor: 'documentationIndex',
         failOn: ['Fatal error', 'does not provide an export named'],
         input: '/exit\n',
       },
@@ -85,16 +85,16 @@ export const testCliToolsListsTaskyonDocumentationProvider = async () => {
     `Expected taskyonDocumentation in CLI /tools output.\n${result.output}`,
   )
   assert(
-    result.output.includes('getTaskyonDocumentationDocuments'),
-    `Expected getTaskyonDocumentationDocuments in CLI /tools output.\n${result.output}`,
+    result.output.includes('documentationIndex'),
+    `Expected documentationIndex in CLI /tools output.\n${result.output}`,
   )
 
   return { success: true }
 }
 
-testCliToolsListsTaskyonDocumentationProvider.description =
-  'Starts yarn tycli, runs /tools, and verifies the Taskyon docs provider is registered in the real CLI.'
-testCliToolsListsTaskyonDocumentationProvider.timeoutMs = 70_000
+testCliToolsListsDocumentationTools.description =
+  'Starts yarn tycli, runs /tools, and verifies both runtime documentation tools are registered.'
+testCliToolsListsDocumentationTools.timeoutMs = 70_000
 
 export const testCliDocumentationQuestionCompletesWithoutFatal = async () => {
   const result = await runTycSession({

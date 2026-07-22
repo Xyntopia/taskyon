@@ -4,7 +4,6 @@ import type { llmSettings } from '../types/profiles'
 import type { Thunk } from '../utils/tsHelpers'
 import { chatCompletionToolName, createChatCompletionTool } from './chatCompletionTool'
 import { devTools } from './devTools'
-import { createDocumentationIndexTool, createTaskyonDocumentationTool } from './documentationTool'
 import { executeJavaScript } from './executeJavaScript'
 import { executePythonScript } from './executePython'
 import { fileTools } from './fileTools'
@@ -66,8 +65,6 @@ export const createDefaultTaskyonToolSetup = (): TyCoreToolSetup => ({
     return {
       tools: [
         localVectorStore(db),
-        createDocumentationIndexTool(db),
-        createTaskyonDocumentationTool(db),
         chatCompletion,
         createToolSearcher(taskManager),
         createMcpToolImporter(taskManager),

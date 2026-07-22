@@ -206,6 +206,10 @@ async function listTestFileEntries() {
       sourcePrefix: 'packages/common/modules/',
     },
     {
+      dirUrl: new URL('../../../comp-dag/', import.meta.url),
+      sourcePrefix: 'packages/comp-dag/',
+    },
+    {
       dirUrl: new URL('../../../surrogate/', import.meta.url),
       sourcePrefix: 'packages/surrogate/',
     },

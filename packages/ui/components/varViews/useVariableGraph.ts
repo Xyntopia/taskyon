@@ -47,6 +47,7 @@ export interface VariableNode {
   children?: VariableNode[]
   lazy?: boolean
   missing?: boolean
+  required?: boolean
 }
 
 type SchemaWithMeta =
@@ -65,6 +66,7 @@ export type UseVariableGraphOptions = {
   inputFieldBehavior: 'auto' | 'textarea' | 'autogrow'
   lazyRender: boolean
   icons: iconMap
+  schemaDocumentation: boolean
 }
 
 const isMissing = (value: unknown) => value === undefined || value === null
@@ -392,6 +394,7 @@ const buildVariableNodes = (
     subschema: SchemaWithMeta,
     path: string[],
     preferSchemaKeysOnlyForChildren: boolean,
+    required?: boolean,
   ): VariableNode | null => {
     const missing = isMissing(value)
     const { descriptionsAsLabels, inputFieldBehavior, lazyRender } = options
@@ -417,6 +420,7 @@ const buildVariableNodes = (
       label,
       kind: 'unknown',
       missing,
+      ...(required !== undefined ? { required } : {}),
       ...(desc ? { description: desc } : {}),
       ...(effectiveSubschema ? { schema: effectiveSubschema } : {}),
     }
@@ -507,10 +511,19 @@ const buildVariableNodes = (
       case 'array': {
         const arrVal =
           !isUndef && Array.isArray(value) ? (value as unknown[]) : isUndef ? [] : [value]
+        const itemDefinition = Array.isArray(effectiveSubschema?.items)
+          ? effectiveSubschema.items[0]
+          : effectiveSubschema?.items
+        const itemSchema = normalizeSchemaDef(itemDefinition)
+        const children =
+          options.schemaDocumentation && itemSchema?.type === 'object'
+            ? buildVariableNodes({}, itemSchema, newPath, options)
+            : undefined
         return {
           ...base,
           value: arrVal,
           kind: 'array',
+          ...(children ? { children } : {}),
         }
       }
       case 'string': {
@@ -585,7 +598,14 @@ const buildVariableNodes = (
       .map((key) => {
         const subschemaDef = schemaProps[key] ?? additionalPropSchema
         const sub = normalizeSchemaDef(subschemaDef as JSONSchema7Definition) as SchemaWithMeta
-        return mapEntry(key, obj[key], sub, keyPath, effectivePreferSchemaKeysOnly)
+        return mapEntry(
+          key,
+          obj[key],
+          sub,
+          keyPath,
+          effectivePreferSchemaKeysOnly,
+          schemaKeys.includes(key) ? (s.required ?? []).includes(key) : undefined,
+        )
       })
       .filter((n): n is VariableNode => n !== null)
   }

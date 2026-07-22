@@ -1,13 +1,22 @@
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { mkdir } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
+import { createDocumentationBaseStore } from '@taskyon/common/modules/documentationBases'
+import type { DocumentationManifest } from '@taskyon/common/modules/resourceFiles'
 import { createTaskyonClient, processTasksDetailed } from '../api'
 import { tyCore } from '../core/init'
 import { createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
 import { createDefaultTaskyonToolSetup } from '../tools'
 import { createStandardEntryNodeTool } from '../tools/entryNode'
-import { createNodeTaskyonDocumentationProviderTool } from '../tools/nodeTaskyonDocumentationProvider'
+import { createNodeResourceFilesLoader } from '../tools/nodeTaskyonDocumentationProvider'
+import {
+  createDocumentationIndexClientTool,
+  loadDocumentationDocumentsFromManifest,
+} from '../tools/documentationProviderTool'
+import { createTaskyonDocumentationTool } from '../tools/documentationTool'
+import { taskyonDocumentationManifest } from '../documentationManifest'
 import { llmSettings } from '../types/profiles'
 import type { TaskNode } from '../types/taskNode'
 import { toolCall } from '../types/toolApi'
@@ -16,7 +25,7 @@ const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
 }
 
-const docsProviderToolName = 'getTaskyonDocumentationDocuments'
+const documentationIndexToolName = 'documentationIndex'
 const documentationToolName = 'taskyonDocumentation'
 const entryNodeToolName = 'entryNode'
 
@@ -49,10 +58,10 @@ const isExpectedAssistantAnswer =
     return expected.every((snippet) => text.includes(snippet.toLowerCase()))
   }
 
-const isIndexingNotice = (task: TaskNode) =>
+const isDocumentationLoadingNotice = (task: TaskNode) =>
   task.role === 'assistant' &&
   task.content.type === 'message' &&
-  String(task.content.data ?? '').includes('Indexing Taskyon documentation')
+  String(task.content.data ?? '').includes('Searching Taskyon documentation')
 
 const summarizeTask = (task: TaskNode) => ({
   id: task.id,
@@ -120,9 +129,46 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
   await ty.setSecret('chatCompletionApiKeys', selectedApi, providerKey)
   await ty.updateChatCompletionApiKey(selectedApi, providerKey)
 
+  const manifests = new Map<string, DocumentationManifest>()
+  const loadFiles = createNodeResourceFilesLoader(
+    fileURLToPath(new URL('../../../../public/docs', import.meta.url)),
+    async () => {
+      const current = taskyonRef.current
+      if (!current) throw new Error('Expected Taskyon while describing documentation API.')
+      return await createTaskyonClient(current.port).discovery.describe({})
+    },
+  )
+  const documentationBases = createDocumentationBaseStore(
+    {
+      get: (id) => Promise.resolve(manifests.get(id) ?? null),
+      set: (id, manifest) => {
+        manifests.set(id, manifest)
+        return Promise.resolve()
+      },
+      delete: (id) => {
+        manifests.delete(id)
+        return Promise.resolve()
+      },
+      list: () => Promise.resolve(Array.from(manifests, ([id, data]) => ({ id, data }))),
+    },
+    async (manifest) =>
+      (await loadDocumentationDocumentsFromManifest(manifest, loadFiles)).documents.map(
+        (document) => ({
+          ...document,
+          title: document.title ?? document.path,
+          url: document.url ?? document.path,
+        }),
+      ),
+  )
+  await documentationBases.register(taskyonDocumentationManifest, 'taskyon')
+
   const toolRpcExecutor = await registerToolRpcTools({
     port: ty.port,
-    tools: [entryNodeTool, createNodeTaskyonDocumentationProviderTool()],
+    tools: [
+      entryNodeTool,
+      createDocumentationIndexClientTool(documentationBases),
+      createTaskyonDocumentationTool(),
+    ],
     createContext: (call, stopSignal) =>
       createExternalToolContext(stopSignal, {
         getExecutionTaskChain: () => {
@@ -183,17 +229,17 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
       `Expected a matching assistant answer, got ${result.status}`,
     )
     const answerTask = result.observedTasks.find(isExpectedAssistantAnswer(selected.expected))
-    const indexingNotice = result.observedTasks.find(isIndexingNotice)
+    const loadingNotice = result.observedTasks.find(isDocumentationLoadingNotice)
     const docsToolCall = result.observedTasks.find((task) =>
       isNamedFunctionCall(task, documentationToolName),
     )
-    const docsProviderCall = result.observedTasks.find((task) =>
-      isNamedFunctionCall(task, docsProviderToolName),
+    const documentationIndexCall = result.observedTasks.find((task) =>
+      isNamedFunctionCall(task, documentationIndexToolName),
     )
-    assert(!!indexingNotice, 'Expected taskyonDocumentation to announce documentation indexing.')
+    assert(!!loadingNotice, 'Expected taskyonDocumentation to announce documentation loading.')
     assert(!!answerTask, 'Expected a matching assistant answer before the final return.')
     assert(!!docsToolCall, 'Expected the conversation to call taskyonDocumentation.')
-    assert(!!docsProviderCall, 'Expected taskyonDocumentation to load docs through the provider.')
+    assert(!!documentationIndexCall, 'Expected taskyonDocumentation to use documentationIndex.')
 
     return {
       success: true,

@@ -1,6 +1,12 @@
 <!-- TreeVariablesView.vue -->
 <template>
-  <q-tree :nodes="treeNodes" node-key="key" class="object-tree-view" @lazy-load="onLazyLoad">
+  <q-tree
+    v-model:expanded="expandedKeys"
+    :nodes="treeNodes"
+    node-key="key"
+    class="object-tree-view"
+    @lazy-load="onLazyLoad"
+  >
     <template #default-header></template>
 
     <template #header-object="prop">
@@ -17,6 +23,7 @@
         :renderers="renderers"
         :show-label="true"
         :show-missing-indicator="showMissingIndicator"
+        :schema-documentation="schemaDocumentation"
         @update="(value) => emitUpdate(prop.node.varNode, value)"
         @reset="() => emitReset(prop.node.varNode)"
         @copy="() => emitCopy(prop.node.varNode.path)"
@@ -46,6 +53,7 @@
         :renderers="renderers"
         :show-label="separateLabels"
         :show-missing-indicator="showMissingIndicator"
+        :schema-documentation="schemaDocumentation"
         @update="(value) => emitUpdate(prop.node.varNode, value)"
         @reset="() => emitReset(prop.node.varNode)"
         @copy="() => emitCopy(prop.node.varNode.path)"
@@ -64,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { type QTreeNode } from 'quasar'
 import type { JSONSchema7 } from 'json-schema'
 import type z from 'zod'
@@ -89,6 +97,8 @@ const props = defineProps<{
   fullViewPaths?: string[]
   renderers?: CustomRenderer[]
   showMissingIndicator?: boolean
+  defaultExpandedDepth?: number
+  schemaDocumentation?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -109,6 +119,30 @@ const chartPaths = computed(() => props.chartPaths ?? [])
 const fullViewPaths = computed(() => props.fullViewPaths ?? [])
 const renderers = props.renderers ?? []
 const showMissingIndicator = props.showMissingIndicator ?? true
+const schemaDocumentation = props.schemaDocumentation ?? false
+
+const isContainerNode = (node: VariableNode) =>
+  node.kind === 'object' || (node.kind === 'array' && node.children !== undefined)
+
+const expandedNodeKeys = (nodes: VariableNode[], depth: number): string[] =>
+  depth <= 0
+    ? []
+    : nodes.flatMap((node) => [
+        ...(isContainerNode(node) ? [node.id] : []),
+        ...expandedNodeKeys(node.children ?? [], depth - 1),
+      ])
+
+const expandedKeys = ref<string[]>([])
+let initialExpansionApplied = false
+watch(
+  () => props.nodes,
+  (nodes) => {
+    if (initialExpansionApplied || nodes.length === 0) return
+    expandedKeys.value = expandedNodeKeys(nodes, props.defaultExpandedDepth ?? 0)
+    initialExpansionApplied = true
+  },
+  { immediate: true },
+)
 
 const toQTreeNode = (node: VariableNode): QTreeNode => ({
   key: node.id,
@@ -116,7 +150,7 @@ const toQTreeNode = (node: VariableNode): QTreeNode => ({
   ...(node.icon ? { icon: node.icon } : {}),
   children: node.children?.map(toQTreeNode) ?? [],
   ...(node.lazy ? { lazy: true } : {}),
-  ...(node.kind === 'object' ? { header: 'object' } : { body: 'field' }),
+  ...(isContainerNode(node) ? { header: 'object' } : { body: 'field' }),
   varNode: node,
 })
 

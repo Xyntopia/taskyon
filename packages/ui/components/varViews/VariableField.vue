@@ -5,10 +5,12 @@
     :show-label="showLabel"
     :reset="!node.missing && node.default !== undefined"
     :copy="copyBtn && !node.missing"
+    :description-inline="schemaDocumentation"
     @reset="emit('reset')"
     @copy="emit('copy')"
   >
     <template #header-extra>
+      <q-badge v-if="schemaDocumentation" color="grey-7" outline>{{ schemaType }}</q-badge>
       <q-badge v-if="showMissingIndicator && node.missing" color="grey" outline>missing</q-badge>
       <slot name="header-extra" :node="node" />
     </template>
@@ -23,8 +25,11 @@
         @update="emitUpdate"
       />
       <template v-else>
+        <template v-if="schemaDocumentation">
+          <div />
+        </template>
         <!-- missing placeholder -->
-        <template v-if="node.missing && !readOnly">
+        <template v-else-if="node.missing && !readOnly">
           <q-btn
             flat
             dense
@@ -42,7 +47,7 @@
         </template>
         <template v-else>
           <!-- object: header only -->
-          <template v-if="node.kind === 'object'">
+          <template v-if="node.kind === 'object' || (node.kind === 'array' && node.children)">
             <div />
           </template>
 
@@ -308,6 +313,7 @@ const props = defineProps<{
   renderers?: CustomRenderer[]
   showLabel?: boolean
   showMissingIndicator?: boolean
+  schemaDocumentation?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -328,12 +334,20 @@ const fullViewPaths = computed(() => props.fullViewPaths ?? [])
 const renderers = props.renderers ?? []
 const showLabel = props.showLabel ?? true
 const showMissingIndicator = props.showMissingIndicator ?? true
+const schemaDocumentation = props.schemaDocumentation ?? false
+
+const schemaType = computed(() => {
+  const type = props.node.schema?.type
+  if (Array.isArray(type)) return type.join(' | ')
+  return type ?? props.node.kind
+})
 
 const fieldItem = computed(() => ({
   ...(props.node.icon ? { icon: props.node.icon } : {}),
   ...(props.node.description ? { description: props.node.description } : {}),
   ...(props.node.label ? { label: props.node.label } : {}),
   ...(props.node.default !== undefined ? { default: props.node.default } : {}),
+  ...(props.node.required === false ? { optional: true } : {}),
 }))
 
 const emitUpdate = (value: unknown) => emit('update', value)

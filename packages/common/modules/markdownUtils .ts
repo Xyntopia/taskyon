@@ -490,7 +490,7 @@ export const md2Html = async (
     highlight: highlighter,
   })
 
-  resolveExtensionPlugins(extensions).forEach((plugin) => {
+  resolveExtensionPlugins(resolveMarkdownExtensions(extensions)).forEach((plugin) => {
     md.use(plugin)
   })
   md.use(katex, {

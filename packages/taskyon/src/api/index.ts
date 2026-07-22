@@ -70,6 +70,7 @@ export { taskyonProtocol }
 export { createTaskyonApiDescription, type TaskyonApiDescription } from './taskyonOpenApi'
 export {
   createProtocolStorageCrudWrapper,
+  createStorageClient,
   createStorageProtocolServer,
   createStorageRecordBackend,
   taskyonStorageProtocol,
@@ -377,6 +378,12 @@ const createReadinessGate = <Rx extends { type: string }>(
   }
 }
 
+/**
+ * Creates a typed Taskyon client over an existing protocol and tool-RPC port.
+ *
+ * The client exposes nested protocol services plus task execution, file upload, readiness, and
+ * direct tool-call helpers.
+ */
 export const createTaskyonClient = <Tx extends { type: string }, Rx extends { type: string }>(
   tyPort: Port<Tx, Rx> & RpcMessagePort<TaskyonMessageType, Rx> & ToolRpcCallerPort,
   options: TaskyonClientOptions = {},
@@ -449,6 +456,9 @@ export const createTaskyonClient = <Tx extends { type: string }, Rx extends { ty
 
 export type TaskyonClient = ReturnType<typeof createTaskyonClient>
 
+/**
+ * Parses Taskyon Markdown, stores the resulting chain, and returns its leaf task ID.
+ */
 export const createTaskChainFromMarkdown = async (
   client: Pick<TaskyonClient, 'task'>,
   markdown?: string,
@@ -644,6 +654,9 @@ export const observeSubTaskStream = async (
 
 // we make the opts mandatory on purpose so that people think about
 // some sort of quit condition.
+/**
+ * Creates a task runner that reports matched, timeout, aborted, and error settlement states.
+ */
 export const processTasksDetailed = <T extends { type: string }>(
   tyPort: Port<T | TaskyonMessageType>,
 ) => {
@@ -688,5 +701,8 @@ const createRunTasks = (send: SendTasksFunction): RunTasksFunction => {
   }
 }
 
+/**
+ * Creates a task runner that returns the matching task and throws for all non-matching settlements.
+ */
 export const runTasks = <T extends { type: string }>(tyPort: Port<T | TaskyonMessageType>) =>
   createRunTasks(createRunTasksSender(tyPort))

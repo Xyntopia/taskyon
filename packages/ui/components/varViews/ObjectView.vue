@@ -60,6 +60,8 @@
       :full-view-paths="fullViewPaths"
       :renderers="renderers"
       :show-missing-indicator="showMissingIndicator"
+      :default-expanded-depth="defaultExpandedDepth"
+      :schema-documentation="schemaDocumentation"
       v-bind="$attrs"
       @update="({ path, value }) => updateByPath(path, value)"
       @reset="(node) => resetNode(node)"
@@ -211,6 +213,8 @@ const {
   copyObjectBtn = false,
   copyObjectWarnLeavesLimit = 5000,
   allowObjectStructureEditing = false,
+  defaultExpandedDepth = 0,
+  schemaDocumentation = false,
 } = defineProps<{
   readOnly?: boolean
   inputFieldBehavior?: 'auto' | 'textarea' | 'autogrow'
@@ -247,6 +251,12 @@ const {
    * Enables editing object structure in tree/flat views (add/delete keys).
    */
   allowObjectStructureEditing?: boolean
+
+  /** Number of object levels expanded when the tree view is first rendered. */
+  defaultExpandedDepth?: number
+
+  /** Renders schema types and expandable array item schemas for documentation. */
+  schemaDocumentation?: boolean
 }>()
 
 const modelValue = defineModel<Record<string, unknown> | undefined>({ required: true })
@@ -277,6 +287,7 @@ const optionsRef = computed(() => ({
   inputFieldBehavior,
   lazyRender: effectiveLazy.value,
   icons,
+  schemaDocumentation,
 }))
 
 const { rootNodes, buildChildrenForPath, getValueByPath } = useVariableGraph(
