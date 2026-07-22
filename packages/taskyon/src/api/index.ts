@@ -31,6 +31,7 @@ export { createMarkdownTaskChain } from '../core/markdownTaskIO'
 export {
   llmSettings,
   resolveToolchainConfig,
+  updateToolchainConfigValue,
   ToolchainProfiles,
   TyToolchainConfig,
 } from '../types/profiles'

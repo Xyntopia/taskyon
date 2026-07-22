@@ -26,6 +26,7 @@ import {
   generateAssymetricKeyDeriver,
   resolveToolchainConfig,
   sleep,
+  updateToolchainConfigValue,
   type FunctionCall,
 } from '@taskyon/taskyon'
 import {
@@ -780,6 +781,46 @@ export const useAppStateStore = defineStore('ui-state', () => {
   const effectiveToolchainConfig = computed(() =>
     resolveToolchainConfig(stateRefs.toolchainProfiles, stateRefs.selectedToolchainProfile),
   )
+  const selectedToolchainProfileConfig = computed(() => {
+    const selectedProfile = stateRefs.selectedToolchainProfile
+    if (!selectedProfile) return stateRefs.toolchainProfiles.base
+    const profile = stateRefs.toolchainProfiles.profiles[selectedProfile]
+    if (!profile) throw new Error(`Unknown toolchain profile: ${selectedProfile}`)
+    return profile
+  })
+
+  const setSelectedToolchainProfile = (profileName?: string) => {
+    resolveToolchainConfig(stateRefs.toolchainProfiles, profileName)
+    stateRefs.selectedToolchainProfile = profileName
+  }
+
+  const setActiveToolchainValue = (path: readonly string[], value: unknown) => {
+    stateRefs.toolchainProfiles = updateToolchainConfigValue(
+      stateRefs.toolchainProfiles,
+      stateRefs.selectedToolchainProfile,
+      path,
+      value,
+    )
+  }
+
+  const createToolchainProfile = (profileName: string) => {
+    const name = profileName.trim()
+    if (!name) throw new Error('Toolchain profile name cannot be empty')
+    if (name === 'base') throw new Error('Toolchain profile name "base" is reserved')
+    if (Object.hasOwn(stateRefs.toolchainProfiles.profiles, name)) {
+      throw new Error(`Toolchain profile already exists: ${name}`)
+    }
+    stateRefs.toolchainProfiles.profiles[name] = {}
+    return name
+  }
+
+  const deleteToolchainProfile = (profileName: string) => {
+    if (!Object.hasOwn(stateRefs.toolchainProfiles.profiles, profileName)) return
+    delete stateRefs.toolchainProfiles.profiles[profileName]
+    if (stateRefs.selectedToolchainProfile === profileName) {
+      stateRefs.selectedToolchainProfile = undefined
+    }
+  }
 
   const authToken = ref<KeyString>()
   const iframeApiKey = ref<KeyString>() // used to pass api keys if we are running this as  an iframe
@@ -905,6 +946,11 @@ export const useAppStateStore = defineStore('ui-state', () => {
     isInVscode: urlConfig.isInVscode,
     ...allRefs,
     effectiveToolchainConfig,
+    selectedToolchainProfileConfig,
+    setSelectedToolchainProfile,
+    setActiveToolchainValue,
+    createToolchainProfile,
+    deleteToolchainProfile,
     selectedTaskId,
     navigateToTask,
     llmSettings: computed(

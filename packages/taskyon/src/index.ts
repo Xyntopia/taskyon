@@ -7,6 +7,7 @@ export {
 export {
   llmSettings,
   resolveToolchainConfig,
+  updateToolchainConfigValue,
   ToolchainProfiles,
   TyToolchainConfig,
 } from './types/profiles'

@@ -47,23 +47,119 @@
           />
         </q-tab-panel>
         <q-tab-panel name="agent config" :class="tabPanelClass">
-          <div>AI/LLM toolchain configurations</div>
-          <template v-for="{ key, value } in toolchainEntries" :key="key">
-            {{ key }}
-            <ObjectView
-              :enable-expert-mode="state.appConfiguration.expertMode"
-              :model-value="value"
-              :schema="tystate.allTools[key]?.parameters"
-              class="fit"
-              copy-object-btn
-              show-missing-mode-select
-              :show-header-row="state.appConfiguration.expertMode"
-              :icons="getToolchainIcons(key)"
-              missing-mode="hide"
-              copy-btn
-              @update:model-value="(nextVal) => applyToolchainUpdate(key, nextVal)"
+          <div class="column q-gutter-md fit" style="max-width: 900px">
+            <div class="text-h6">AI/LLM toolchain configurations</div>
+            <q-select
+              :model-value="state.selectedToolchainProfile ?? null"
+              :options="toolchainProfileOptions"
+              label="Runtime toolchain profile"
+              emit-value
+              map-options
+              outlined
+              @update:model-value="selectToolchainProfile"
             />
-          </template>
+            <div class="text-caption">
+              Selecting a profile changes runtime settings. Expanding a profile below only edits it.
+            </div>
+
+            <div class="text-subtitle1">Base settings</div>
+            <template
+              v-for="{ key, value } in getToolchainEntries(state.toolchainProfiles.base)"
+              :key="`base:${key}`"
+            >
+              <div class="text-subtitle2">{{ key }}</div>
+              <ObjectView
+                :enable-expert-mode="state.appConfiguration.expertMode"
+                :model-value="value"
+                :schema="tystate.allTools[key]?.parameters"
+                class="fit"
+                copy-object-btn
+                show-missing-mode-select
+                :show-header-row="state.appConfiguration.expertMode"
+                :icons="getToolchainIcons(key)"
+                missing-mode="hide"
+                copy-btn
+                @update:model-value="
+                  (nextVal) => applyToolchainUpdate(state.toolchainProfiles.base, key, nextVal)
+                "
+              />
+            </template>
+
+            <q-separator />
+            <div class="row items-start q-gutter-sm">
+              <q-input
+                v-model="newToolchainProfileName"
+                class="col"
+                label="New profile name"
+                outlined
+                dense
+                :error="!!newToolchainProfileError"
+                :error-message="newToolchainProfileError"
+                @keyup.enter="createToolchainProfile"
+              />
+              <q-btn
+                label="Add profile"
+                color="primary"
+                :disable="!canCreateToolchainProfile"
+                @click="createToolchainProfile"
+              />
+            </div>
+
+            <div v-if="!toolchainProfileNames.length" class="text-caption">
+              No named toolchain profiles yet.
+            </div>
+            <q-expansion-item
+              v-for="profileName in toolchainProfileNames"
+              :key="profileName"
+              :label="profileName"
+              expand-separator
+            >
+              <template #header>
+                <q-item-section>{{ profileName }}</q-item-section>
+                <q-item-section side>
+                  <q-btn
+                    flat
+                    dense
+                    color="negative"
+                    label="Delete"
+                    @click.stop="deleteToolchainProfile(profileName)"
+                  />
+                </q-item-section>
+              </template>
+              <div class="column q-gutter-sm q-pa-sm">
+                <div class="text-caption">
+                  Only explicit overrides are stored here. Deleting an override uses the base value.
+                </div>
+                <template
+                  v-for="{ key, value } in getProfileToolchainEntries(profileName)"
+                  :key="`${profileName}:${key}`"
+                >
+                  <div class="text-subtitle2">{{ key }}</div>
+                  <ObjectView
+                    :enable-expert-mode="state.appConfiguration.expertMode"
+                    :model-value="value"
+                    :schema="tystate.allTools[key]?.parameters"
+                    class="fit"
+                    copy-object-btn
+                    show-missing-mode-select
+                    :show-header-row="state.appConfiguration.expertMode"
+                    :icons="getToolchainIcons(key)"
+                    missing-mode="placeholders"
+                    allow-object-structure-editing
+                    copy-btn
+                    @update:model-value="
+                      (nextVal) =>
+                        applyToolchainUpdate(
+                          state.toolchainProfiles.profiles[profileName]!,
+                          key,
+                          nextVal,
+                        )
+                    "
+                  />
+                </template>
+              </div>
+            </q-expansion-item>
+          </div>
           <q-separator size="xl" spaced class="self-stretch" />
           other settings:
           <ObjectView
@@ -134,12 +230,48 @@ const tystate = useTaskyonStore()
 
 const tabPanelClass = 'column items-center'
 
-const toolchainEntries = computed(() =>
-  Object.keys(state.toolchainProfiles.base).map((key) => ({
-    key,
-    value: state.toolchainProfiles.base[key]!,
-  })),
+const toolchainProfileNames = computed(() => Object.keys(state.toolchainProfiles.profiles).sort())
+const toolchainProfileOptions = computed(() => [
+  { label: 'Base only', value: null },
+  ...toolchainProfileNames.value.map((name) => ({ label: name, value: name })),
+])
+const newToolchainProfileName = ref('')
+const newToolchainProfileError = computed(() => {
+  const name = newToolchainProfileName.value.trim()
+  if (!name) return ''
+  if (name === 'base') return 'The name "base" is reserved'
+  if (Object.hasOwn(state.toolchainProfiles.profiles, name)) return 'This profile already exists'
+  return ''
+})
+const canCreateToolchainProfile = computed(
+  () => !!newToolchainProfileName.value.trim() && !newToolchainProfileError.value,
 )
+
+const getToolchainEntries = (config: Record<string, Record<string, unknown>>) =>
+  Object.keys(config)
+    .sort()
+    .map((key) => ({ key, value: config[key]! }))
+
+const getProfileToolchainEntries = (profileName: string) => {
+  const profile = state.toolchainProfiles.profiles[profileName]!
+  const keys = new Set([...Object.keys(state.toolchainProfiles.base), ...Object.keys(profile)])
+  return [...keys].sort().map((key) => ({ key, value: profile[key] ?? {} }))
+}
+
+const selectToolchainProfile = (profileName: string | null) => {
+  state.setSelectedToolchainProfile(profileName ?? undefined)
+}
+
+const createToolchainProfile = () => {
+  if (!canCreateToolchainProfile.value) return
+  state.createToolchainProfile(newToolchainProfileName.value)
+  newToolchainProfileName.value = ''
+}
+
+const deleteToolchainProfile = (profileName: string) => {
+  if (!window.confirm(`Delete toolchain profile "${profileName}"?`)) return
+  state.deleteToolchainProfile(profileName)
+}
 
 const getToolchainIcons = (key: string): iconMap => {
   const directIcons = iconRegistry[key]
@@ -154,12 +286,14 @@ const getToolchainIcons = (key: string): iconMap => {
   return {}
 }
 
-const applyToolchainUpdate = (key: string, nextValue: unknown) => {
+const applyToolchainUpdate = (
+  config: Record<string, Record<string, unknown>>,
+  key: string,
+  nextValue: unknown,
+) => {
   const parsed = FunctionArgumentsSchema.safeParse(nextValue)
   if (!parsed.success) return
-  const target = state.toolchainProfiles.base[key]
-  if (!target) return
-  Object.assign(target, parsed.data)
+  config[key] = parsed.data
 }
 
 const llmSettingsModel = computed({

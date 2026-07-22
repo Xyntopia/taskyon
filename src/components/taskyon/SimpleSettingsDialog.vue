@@ -10,8 +10,11 @@
   >
     <template #btnContent><q-tooltip> More AI Settings</q-tooltip></template>
     <div class="q-pa-sm" @click.stop>
+      <div class="text-caption q-mb-sm">
+        Toolchain profile: {{ state.selectedToolchainProfile ?? 'Base' }}
+      </div>
       <ObjectView
-        v-if="entryNode"
+        v-if="effectiveEntryNode"
         v-model="slimViewModel"
         view-mode="flat"
         :schema="slimView.jsonSchema as JSONSchema7"
@@ -38,10 +41,10 @@ import type { JSONSchema7 } from 'json-schema'
 import type { iconMap } from 'src/modules/icons'
 import { iconRegistry, settingsIcons } from 'src/modules/icons'
 import { appConfiguration } from 'src/modules/taskyon/types'
-import { buildSlimView } from 'src/modules/vueUtils'
+import { buildSlimSchema } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { computed, reactive } from 'vue'
+import { computed } from 'vue'
 import z from 'zod'
 
 const state = useAppStateStore()
@@ -59,7 +62,9 @@ const entryNodePickKeys = [
 ] as const
 const slimChatKeys = computed(() => (em.value ? entryNodePickKeys : ['reasoning_effort']))
 
-const entryNode = computed(() => state.toolchainProfiles.base[state.llmSettings.entryFunction]!)
+const effectiveEntryNode = computed(
+  () => state.effectiveToolchainConfig[state.llmSettings.entryFunction],
+)
 type ToolSettingsObjectSchema = {
   type: 'object'
   properties: Record<string, unknown>
@@ -102,59 +107,33 @@ const entryNodeWebSearchSchema = computed(() => {
       } satisfies ToolSettingsObjectSchema)
     : emptyToolSettingsSchema()
 })
-type EntryNodeWebSearchSettings = {
-  enabled?: boolean
-  max_results?: number
-}
-
-const getEntryNodeWebSearch = (): EntryNodeWebSearchSettings => {
-  const webSearch = entryNode.value.websearch
+const getEntryNodeWebSearchMaxResults = () => {
+  const webSearch = effectiveEntryNode.value?.websearch
   if (!webSearch || typeof webSearch !== 'object' || Array.isArray(webSearch)) {
-    return {}
+    return 5
   }
-
-  return {
-    ...(typeof webSearch.enabled === 'boolean' ? { enabled: webSearch.enabled } : {}),
-    ...(typeof webSearch.max_results === 'number' ? { max_results: webSearch.max_results } : {}),
-  }
+  return typeof webSearch.max_results === 'number' ? webSearch.max_results : 5
 }
-
-const entryNodeWebSearch = reactive({
-  get max_results() {
-    return getEntryNodeWebSearch().max_results ?? 5
-  },
-  set max_results(value: number) {
-    const currentWebSearch = getEntryNodeWebSearch()
-    entryNode.value.websearch = {
-      ...currentWebSearch,
-      max_results: value,
-    }
-  },
-})
 
 const slimView = computed(() =>
-  buildSlimView(
+  buildSlimSchema(
     {
-      obj: state.appConfiguration,
       schema: z.toJSONSchema(appConfiguration, { unrepresentable: 'any' }),
       pickKeys: ['expertMode'],
     },
     {
-      obj: entryNode.value,
       schema: entryNodeSchema.value,
       pickKeys: [...slimChatKeys.value],
     },
     ...(em.value
       ? [
           {
-            obj: entryNodeWebSearch,
             schema: entryNodeWebSearchSchema.value,
             pickKeys: ['max_results'],
           },
         ]
       : []),
     {
-      obj: state.appConfiguration,
       schema: z.toJSONSchema(appConfiguration, { unrepresentable: 'any' }),
       pickKeys: ['primaryColor', 'secondaryColor'],
     },
@@ -162,19 +141,44 @@ const slimView = computed(() =>
 )
 
 const slimViewModel = computed({
-  get: () => {
-    const view = slimView.value.reactiveView as Record<string, unknown>
-    return Object.keys(view).reduce(
-      (acc, key) => {
-        acc[key] = view[key]
-        return acc
-      },
-      {} as Record<string, unknown>,
-    )
-  },
+  get: () => ({
+    expertMode: state.appConfiguration.expertMode,
+    ...Object.fromEntries(slimChatKeys.value.map((key) => [key, effectiveEntryNode.value?.[key]])),
+    ...(em.value ? { max_results: getEntryNodeWebSearchMaxResults() } : {}),
+    primaryColor: state.appConfiguration.primaryColor,
+    secondaryColor: state.appConfiguration.secondaryColor,
+  }),
   set: (nextValue) => {
     if (!nextValue) return
-    Object.assign(slimView.value.reactiveView, nextValue)
+    const currentValue = slimViewModel.value
+    if (!Object.is(currentValue.expertMode, nextValue.expertMode)) {
+      state.appConfiguration.expertMode = appConfiguration.shape.expertMode.parse(
+        nextValue.expertMode,
+      )
+    }
+    if (!Object.is(currentValue.primaryColor, nextValue.primaryColor)) {
+      state.appConfiguration.primaryColor = appConfiguration.shape.primaryColor.parse(
+        nextValue.primaryColor,
+      )
+    }
+    if (!Object.is(currentValue.secondaryColor, nextValue.secondaryColor)) {
+      state.appConfiguration.secondaryColor = appConfiguration.shape.secondaryColor.parse(
+        nextValue.secondaryColor,
+      )
+    }
+
+    const entryFunction = state.llmSettings.entryFunction
+    for (const key of slimChatKeys.value) {
+      if (!Object.is(currentValue[key], nextValue[key])) {
+        state.setActiveToolchainValue([entryFunction, key], nextValue[key])
+      }
+    }
+    if (em.value && !Object.is(currentValue.max_results, nextValue.max_results)) {
+      state.setActiveToolchainValue(
+        [entryFunction, 'websearch', 'max_results'],
+        nextValue.max_results,
+      )
+    }
   },
 })
 </script>

@@ -1,4 +1,8 @@
-import { resolveToolchainConfig, type ToolchainProfiles } from '../types/profiles'
+import {
+  resolveToolchainConfig,
+  updateToolchainConfigValue,
+  type ToolchainProfiles,
+} from '../types/profiles'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -145,3 +149,56 @@ export const testToolchainProfilesRejectUnknownSelection = () => {
 
 testToolchainProfilesRejectUnknownSelection.description =
   'Rejects a selected toolchain profile that is not defined.'
+
+export const testToolchainProfileWritesFollowCurrentOwner = () => {
+  const toolchainProfiles = {
+    base: {
+      entryNode: {
+        reasoning_effort: 'medium',
+        websearch: { max_results: 5 },
+      },
+    },
+    profiles: {
+      research: {
+        entryNode: {
+          reasoning_effort: 'high',
+        },
+      },
+    },
+  } satisfies ToolchainProfiles
+
+  const withProfileSetting = updateToolchainConfigValue(
+    toolchainProfiles,
+    'research',
+    ['entryNode', 'reasoning_effort'],
+    'low',
+  )
+  const withBaseSetting = updateToolchainConfigValue(
+    withProfileSetting,
+    'research',
+    ['entryNode', 'websearch', 'max_results'],
+    10,
+  )
+
+  assert(
+    withBaseSetting.profiles.research?.entryNode?.reasoning_effort === 'low',
+    'Expected an existing selected-profile path to remain provider-specific',
+  )
+  assert(
+    withBaseSetting.base.entryNode?.websearch !== null &&
+      typeof withBaseSetting.base.entryNode?.websearch === 'object' &&
+      !Array.isArray(withBaseSetting.base.entryNode.websearch) &&
+      withBaseSetting.base.entryNode.websearch.max_results === 10,
+    'Expected a path absent from the selected profile to update base',
+  )
+  assert(
+    toolchainProfiles.profiles.research.entryNode.reasoning_effort === 'high' &&
+      toolchainProfiles.base.entryNode.websearch.max_results === 5,
+    'Expected profile updates not to mutate the input profiles',
+  )
+
+  return { success: true }
+}
+
+testToolchainProfileWritesFollowCurrentOwner.description =
+  'Writes settings to the profile that currently owns the exact setting path.'

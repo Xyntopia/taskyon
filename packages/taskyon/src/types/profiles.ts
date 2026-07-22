@@ -83,3 +83,63 @@ export const resolveToolchainConfig = (
 
   return deepMerge(deepCopy(toolchainProfiles.base), deepCopy(profile), 'overwrite')
 }
+
+const hasOwnPath = (value: Record<string, unknown>, path: readonly string[]) => {
+  let current: unknown = value
+  for (const key of path) {
+    if (
+      current === null ||
+      typeof current !== 'object' ||
+      Array.isArray(current) ||
+      !Object.hasOwn(current, key)
+    ) {
+      return false
+    }
+    current = (current as Record<string, unknown>)[key]
+  }
+  return true
+}
+
+const setObjectPath = (
+  object: Record<string, unknown>,
+  [key, ...remainingPath]: readonly string[],
+  value: unknown,
+): Record<string, unknown> => {
+  if (!key) throw new Error('Cannot update an empty toolchain config path')
+  if (!remainingPath.length) return { ...object, [key]: value }
+
+  const current = object[key]
+  const child =
+    current !== null && typeof current === 'object' && !Array.isArray(current) ? current : {}
+  return {
+    ...object,
+    [key]: setObjectPath(child, remainingPath, value),
+  }
+}
+
+export const updateToolchainConfigValue = (
+  toolchainProfiles: ToolchainProfiles,
+  selectedProfile: string | undefined,
+  path: readonly string[],
+  value: unknown,
+): ToolchainProfiles => {
+  const profile = selectedProfile ? toolchainProfiles.profiles[selectedProfile] : undefined
+  if (selectedProfile && !profile) {
+    throw new Error(`Unknown toolchain profile: ${selectedProfile}`)
+  }
+
+  if (profile && hasOwnPath(profile, path)) {
+    return {
+      ...toolchainProfiles,
+      profiles: {
+        ...toolchainProfiles.profiles,
+        [selectedProfile]: TyToolchainConfig.parse(setObjectPath(profile, path, value)),
+      },
+    }
+  }
+
+  return {
+    ...toolchainProfiles,
+    base: TyToolchainConfig.parse(setObjectPath(toolchainProfiles.base, path, value)),
+  }
+}

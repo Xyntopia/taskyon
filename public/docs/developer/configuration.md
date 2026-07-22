@@ -28,8 +28,10 @@ Named profiles recursively override `base`. Arrays are replaced, and an explicit
 override. With no selected profile, execution uses an independent copy of `base`; selecting an
 unknown profile is a configuration error.
 
-The settings screens edit `toolchainProfiles.base`. Runtime execution resolves the selected named
-profile over that base.
+The AI Configuration page selects the runtime profile independently from the profile editors.
+Opening a named profile does not activate it. Quick Settings displays effective values and writes
+each changed tool setting back to its current owner. A selected named profile owns a setting only
+when that exact path exists in the profile; otherwise the setting is written to `base`.
 
 ## Entry-node settings
 

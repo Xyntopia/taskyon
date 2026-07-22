@@ -33,10 +33,13 @@ type SingleSource<O extends Record<string, unknown>> = {
   pickKeys: Array<keyof O & string>
 }
 
-export function buildSlimView<O extends Record<string, unknown>, S extends SingleSource<O>[]>(
-  ...sources: S
-) {
-  const mergedJsonSchema: JsonSchemaObject = sources.reduce(
+type SlimSchemaSource = {
+  schema: JsonSchemaObject
+  pickKeys: readonly string[]
+}
+
+export function buildSlimSchema(...sources: SlimSchemaSource[]) {
+  return sources.reduce(
     (acc, { schema, pickKeys }) => {
       const srcProps = schema.properties ?? {}
       const srcRequired = Array.isArray(schema.required) ? schema.required : []
@@ -68,8 +71,12 @@ export function buildSlimView<O extends Record<string, unknown>, S extends Singl
     },
     { type: 'object', properties: {}, required: [] } as JsonSchemaObject,
   )
+}
 
-  const jsonSchema = mergedJsonSchema
+export function buildSlimView<O extends Record<string, unknown>, S extends SingleSource<O>[]>(
+  ...sources: S
+) {
+  const jsonSchema = buildSlimSchema(...sources)
 
   const plainRefMap = sources.reduce(
     (acc, { obj, pickKeys }) => {
