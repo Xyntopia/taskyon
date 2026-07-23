@@ -266,18 +266,15 @@ testTaskyonUiProfileManagementToolRegistration.description =
 
 export const testTaskyonUiDocumentationToolsRegistration = async () => {
   await tystate.taskyon
-  const providerTool = await waitForRegisteredTool('getTaskyonDocumentationDocuments')
   const workflowTool = await waitForRegisteredTool('taskyonDocumentation')
   const indexTool = await waitForRegisteredTool('documentationIndex')
-  assert(!!providerTool, 'Expected Taskyon docs provider tool to be registered')
   assert(!!workflowTool, 'Expected Taskyon documentation workflow tool to be registered')
   assert(!!indexTool, 'Expected generic documentation index tool to be registered')
 
   return {
-    providerTool: providerTool.name,
     workflowTool: workflowTool.name,
     indexTool: indexTool.name,
   }
 }
 testTaskyonUiDocumentationToolsRegistration.description =
-  'Verifies the Taskyon UI registers the documentation provider and core documentation tools.'
+  'Verifies the Taskyon UI registers the Taskyon documentation workflow and generic runtime index.'

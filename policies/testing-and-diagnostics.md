@@ -42,6 +42,11 @@ are added.
 - Diagnostics involving an LLM use the active runtime/profile settings or explicit harness
   overrides.
 - Do not construct a hidden provider, model, credential, or API configuration inside a test.
+- Treat existing provider, credential, fixture, and environment setup as evidence of intentional
+  coverage. Do not remove, relocate, mock, skip, or reclassify that setup to make a test local or
+  deterministic without confirming the coverage change with the user first.
+- When provider-independent coverage is also useful, add a separate focused test. Do not replace or
+  narrow an existing external-service test.
 - Mark network, paid-service, large-token, and other external requirements explicitly.
 - Separate failures in external availability from regressions in local behavior.
 

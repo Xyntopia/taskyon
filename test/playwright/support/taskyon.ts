@@ -36,7 +36,7 @@ export const dataCyMenu = (page: Page | Locator, value: string): Locator =>
   page.locator(`[data-cy="${value}"], [data-cy-menu="${value}"]`)
 
 export const readOnlineEnv = (projectRoot: string): OnlineEnv | undefined => {
-  const envFilePath = join(projectRoot, 'cypress.env.json')
+  const envFilePath = join(projectRoot, 'playwright.env.json')
   if (!existsSync(envFilePath)) return undefined
 
   const parsed = JSON.parse(readFileSync(envFilePath, 'utf8')) as unknown
@@ -65,10 +65,26 @@ export const setSettingsToggle = async (page: Page, label: string, enabled: bool
   await expect.poll(() => isToggleOn(toggle), { message: `${label} toggle state` }).toBe(enabled)
 }
 
+export const expectSettingsToggle = async (page: Page, label: string, enabled: boolean) => {
+  const toggle = settingsToggle(page, label)
+  await expect(toggle).toBeVisible()
+  await expect.poll(() => isToggleOn(toggle), { message: `${label} toggle state` }).toBe(enabled)
+}
+
 export const closeAiSettings = async (page: Page) => {
   await expect(dataCyMenu(page, 'ai-settings')).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(dataCyMenu(page, 'ai-settings')).toBeHidden()
+}
+
+export const waitForTaskyonSession = async (page: Page) => {
+  const sidebarButton = page.getByRole('button', { name: 'Open Sidebar' })
+  await sidebarButton.click()
+  const sessionStatus = page.locator('.chat-sidebar__dev')
+  await expect(sessionStatus).toBeVisible()
+  await expect(sessionStatus).not.toContainText('session: N/A')
+  await page.locator('.q-drawer__backdrop').click()
+  await expect(sessionStatus).toBeHidden()
 }
 
 const modelField = (page: Page): Locator =>

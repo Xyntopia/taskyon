@@ -1,13 +1,19 @@
 import { expect, test } from '@playwright/test'
 
-import { addAiServices, dataCy, readOnlineEnv, selectLlmModel } from '../support/taskyon'
+import {
+  addAiServices,
+  dataCy,
+  readOnlineEnv,
+  selectLlmModel,
+  waitForTaskyonSession,
+} from '../support/taskyon'
 
 const diagnosticsTimeoutMs = 200_000
 const toolWorkflowTimeoutMs = 450_000
 const onlineEnv = readOnlineEnv(process.cwd())
 
 test.describe('diagnostics page', () => {
-  test.skip(!onlineEnv, 'requires cypress.env.json with OpenAI and OpenRouter API keys')
+  test.skip(!onlineEnv, 'requires playwright.env.json with OpenAI and OpenRouter API keys')
   test.setTimeout(diagnosticsTimeoutMs + 30_000)
 
   test('runs browser diagnostics through the UI', async ({ page }) => {
@@ -15,7 +21,7 @@ test.describe('diagnostics page', () => {
 
     await page.goto('/')
     await expect(page.getByText('Start with a guided design question')).toBeVisible()
-    await page.waitForTimeout(3_000)
+    await waitForTaskyonSession(page)
 
     await addAiServices(page, onlineEnv)
 
@@ -42,7 +48,8 @@ test.describe('diagnostics page', () => {
 
     const okCount = diagnosticsText.match(/ok/gi)?.length ?? 0
     expect(okCount).toBeGreaterThan(10)
-    expect(diagnosticsText).not.toMatch(/error/i)
+    expect(diagnosticsText).not.toContain('status: ERROR')
+    expect(diagnosticsText).toMatch(/failed tests: 0\/\d+/)
   })
 
   test('plans separate tool tasks and opens the animated clock popup', async ({
@@ -54,7 +61,7 @@ test.describe('diagnostics page', () => {
 
     await page.goto('/')
     await expect(page.getByText('Start with a guided design question')).toBeVisible()
-    await page.waitForTimeout(3_000)
+    await waitForTaskyonSession(page)
 
     await addAiServices(page, onlineEnv)
     await page.getByLabel('go to chat').click()

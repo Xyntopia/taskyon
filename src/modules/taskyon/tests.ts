@@ -1699,7 +1699,7 @@ export const testChatCompletion = async () => {
       ],
     ],
     ['structured', 'message'],
-    { timeoutMs: 50000 },
+    { timeoutMs: 50000, display: 'background' },
   )
 
   return {

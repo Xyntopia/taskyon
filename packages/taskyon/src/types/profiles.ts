@@ -110,7 +110,9 @@ const setObjectPath = (
 
   const current = object[key]
   const child =
-    current !== null && typeof current === 'object' && !Array.isArray(current) ? current : {}
+    current !== null && typeof current === 'object' && !Array.isArray(current)
+      ? Object.fromEntries(Object.entries(current))
+      : {}
   return {
     ...object,
     [key]: setObjectPath(child, remainingPath, value),
@@ -123,18 +125,18 @@ export const updateToolchainConfigValue = (
   path: readonly string[],
   value: unknown,
 ): ToolchainProfiles => {
-  const profile = selectedProfile ? toolchainProfiles.profiles[selectedProfile] : undefined
-  if (selectedProfile && !profile) {
-    throw new Error(`Unknown toolchain profile: ${selectedProfile}`)
-  }
+  if (selectedProfile) {
+    const profile = toolchainProfiles.profiles[selectedProfile]
+    if (!profile) throw new Error(`Unknown toolchain profile: ${selectedProfile}`)
 
-  if (profile && hasOwnPath(profile, path)) {
-    return {
-      ...toolchainProfiles,
-      profiles: {
-        ...toolchainProfiles.profiles,
-        [selectedProfile]: TyToolchainConfig.parse(setObjectPath(profile, path, value)),
-      },
+    if (hasOwnPath(profile, path)) {
+      return {
+        ...toolchainProfiles,
+        profiles: {
+          ...toolchainProfiles.profiles,
+          [selectedProfile]: TyToolchainConfig.parse(setObjectPath(profile, path, value)),
+        },
+      }
     }
   }
 

@@ -17,7 +17,7 @@
         v-if="effectiveEntryNode"
         v-model="slimViewModel"
         view-mode="flat"
-        :schema="slimView.jsonSchema as JSONSchema7"
+        :schema="slimView as JSONSchema7"
         dense
         :icons="{
           ...(settingsIcons.appConfiguration as iconMap),
@@ -140,7 +140,7 @@ const slimView = computed(() =>
   ),
 )
 
-const slimViewModel = computed({
+const slimViewModel = computed<Record<string, unknown>>({
   get: () => ({
     expertMode: state.appConfiguration.expertMode,
     ...Object.fromEntries(slimChatKeys.value.map((key) => [key, effectiveEntryNode.value?.[key]])),

@@ -10,7 +10,7 @@ import {
 const onlineEnv = readOnlineEnv(process.cwd())
 
 test.describe('sharing functionality', () => {
-  test.skip(!onlineEnv, 'requires cypress.env.json with OpenAI and OpenRouter API keys')
+  test.skip(!onlineEnv, 'requires playwright.env.json with OpenAI and OpenRouter API keys')
 
   test('can open sharing for an assistant message', async ({ page }) => {
     if (!onlineEnv) throw new Error('online env missing')

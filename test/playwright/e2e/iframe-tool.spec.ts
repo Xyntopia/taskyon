@@ -34,7 +34,7 @@ test.describe('iframe integration', () => {
 
     await expect(dataCy(page, 'client-ready')).toContainText('client ready')
     await frame.getByRole('button', { name: 'Open Sidebar' }).click()
-    await expect(frame.getByText('Start with a guided design question')).toBeVisible()
+    await expect(frame.getByText(/profile: client_test_page/)).toBeVisible()
 
     await page.waitForTimeout(2_000)
     await page.getByRole('button', { name: 'Execute Client Test Function' }).click()

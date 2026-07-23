@@ -203,6 +203,12 @@ const reconcileStoredTaskyonState = (
   defaults: initialState,
 ): initialState => {
   const reconciled = reconcileWithDefaults(stored, defaults)
+  const llmSettings = TyProfile.shape.llmSettings.safeParse(
+    deepMerge(cloneProfileValue(defaults.llmSettings), stored.llmSettings ?? {}),
+  )
+  if (llmSettings.success) {
+    reconciled.llmSettings = llmSettings.data
+  }
   const toolchainProfiles = TyProfile.shape.toolchainProfiles.safeParse(stored.toolchainProfiles)
   if (toolchainProfiles.success) {
     reconciled.toolchainProfiles = toolchainProfiles.data
