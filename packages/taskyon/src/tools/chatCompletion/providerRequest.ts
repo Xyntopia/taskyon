@@ -1,7 +1,10 @@
 import type { ModelMessage, streamText, SystemModelMessage, ToolChoice, ToolSet } from 'ai'
 import { jsonSchema, Output } from 'ai'
 import type OpenAI from 'openai'
-import type { apiConfig, ProviderRequestTrace } from '../../types/chatCompletion'
+import type {
+  ChatCompletionProviderSettings,
+  ProviderRequestTrace,
+} from '../../types/chatCompletion'
 import { createChatCompletionRecordingFetch } from '../chatCompletionTrace'
 
 const collectSystemInstructions = (messages: ModelMessage[]) => {
@@ -67,10 +70,9 @@ export const buildChatProviderRequest = async (input: {
   messages: ModelMessage[]
   tools: ToolSet
   selectedModel: string
-  api: apiConfig
+  api: ChatCompletionProviderSettings
   apiKey: string
   schema?: Record<string, unknown>
-  siteUrl?: string
   webSearch?: {
     maxResults: number
     searchContextSize: 'low' | 'high' | 'medium'
@@ -81,7 +83,6 @@ export const buildChatProviderRequest = async (input: {
   providerRequest?: ProviderRequestTrace
 }) => {
   console.log('Creating chat completion request', {
-    siteUrl: input.siteUrl,
     webSearch: input.webSearch,
     reasoning_effort: input.reasoningEffort,
     verbosity: input.verbosity,
@@ -94,7 +95,7 @@ export const buildChatProviderRequest = async (input: {
     ? createChatCompletionRecordingFetch(input.providerRequest, fetch)
     : undefined
 
-  switch (input.api.name) {
+  switch (input.api.provider) {
     case 'openai':
     case 'chatgpt-codex': {
       const { createOpenAI } = await import('@ai-sdk/openai')
@@ -102,7 +103,7 @@ export const buildChatProviderRequest = async (input: {
         apiKey: input.apiKey,
         ...(input.api.defaultHeaders ? { headers: input.api.defaultHeaders } : {}),
         ...(recordingFetch ? { fetch: recordingFetch } : {}),
-        ...(input.api.name === 'chatgpt-codex' ? { baseURL: input.api.baseURL } : {}),
+        ...(input.api.provider === 'chatgpt-codex' ? { baseURL: input.api.baseURL } : {}),
       })
       model = openai(input.selectedModel)
 
@@ -115,7 +116,7 @@ export const buildChatProviderRequest = async (input: {
         openai: {
           reasoningEffort,
           reasoningSummary: 'auto',
-          ...(input.api.name === 'chatgpt-codex'
+          ...(input.api.provider === 'chatgpt-codex'
             ? (() => {
                 const split = extractLeadingSystemMessagesForProviderInstructions(input.messages)
                 requestMessages = split.messages
@@ -157,7 +158,8 @@ export const buildChatProviderRequest = async (input: {
       }
       const openrouter = createOpenRouter({
         apiKey: input.apiKey,
-        ...(input.api.name === 'taskyon'
+        ...(input.api.defaultHeaders ? { headers: input.api.defaultHeaders } : {}),
+        ...(input.api.provider === 'taskyon'
           ? { baseURL: input.api.baseURL + input.api.routes.chatCompletion }
           : {}),
         fetch: stripUserAgentFetch,
@@ -203,6 +205,7 @@ export const buildChatProviderRequest = async (input: {
         apiKey: input.apiKey,
         baseURL: input.api.baseURL + input.api.routes.chatCompletion,
         name: input.api.name,
+        ...(input.api.defaultHeaders ? { headers: input.api.defaultHeaders } : {}),
         ...(recordingFetch ? { fetch: recordingFetch } : {}),
       })
       model = openai(input.selectedModel)

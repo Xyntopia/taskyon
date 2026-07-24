@@ -436,9 +436,6 @@ export const testWebResearchPlannerUsesWebSearchFirstByDefault = async () => {
 export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
   const ty = await tyCore(
     () => ({
-      selectedApi: 'test',
-      llmApis: {},
-      siteUrl: 'https://taskyon.space',
       entryFunction: 'entryNode',
     }),
     () =>
@@ -446,7 +443,19 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
         name: 'entryNode',
         arguments: {},
       }),
-    () => ({}),
+    {
+      chatCompletion: {
+        provider: 'test',
+        name: 'test',
+        model: 'test',
+        baseURL: 'https://example.test',
+        streamSupport: true,
+        routes: {
+          chatCompletion: '/chat/completions',
+          models: '/models',
+        },
+      },
+    },
     undefined,
     { toolSetup: createDefaultTaskyonToolSetup() },
   )

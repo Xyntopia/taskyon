@@ -17,14 +17,11 @@ const createTaskWorkerTestRuntime = async (label: string) => {
   await mkdir(dataDir, { recursive: true })
   return await tyCore(
     () => ({
-      selectedApi: 'test',
-      llmApis: {},
-      siteUrl: 'https://taskyon.space',
       entryFunction: 'entryNode',
       taskWorker: { maxConcurrency: 4 },
     }),
     () => toolCall({ name: 'entryNode', arguments: {} }),
-    () => ({}),
+    {},
     undefined,
     { indexTaskVectors: false, nodePgLiteDataDir: dataDir },
   )

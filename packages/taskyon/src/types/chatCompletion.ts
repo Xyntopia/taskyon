@@ -274,7 +274,5 @@ export const chatCompletionConnectionSettings = chatCompletionProviderSettings
     description:
       'Immutable provider connection captured when Taskyon creates the chatCompletion tool.',
   })
-export type ChatCompletionConnection = z.infer<typeof chatCompletionConnectionSettings>
-
 export const resolveChatCompletionConnection = (settings: unknown) =>
   chatCompletionConnectionSettings.parse(settings)

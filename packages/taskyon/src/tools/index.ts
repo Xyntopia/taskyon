@@ -1,7 +1,5 @@
-import type { ReadonlyDeep } from 'type-fest'
 import type { TyCoreToolSetup } from '../core/init'
-import type { llmSettings } from '../types/profiles'
-import type { Thunk } from '../utils/tsHelpers'
+import { resolveChatCompletionConnection } from '../types/chatCompletion'
 import { chatCompletionToolName, createChatCompletionTool } from './chatCompletionTool'
 import { devTools } from './devTools'
 import { executeJavaScript } from './executeJavaScript'
@@ -26,15 +24,6 @@ import { wfcGenerator } from './wavefunctioncollapse'
 
 export { resolveAgentToolCatalog } from './toolTools'
 
-const createChatCompletionSettings = (llmSettings: Thunk<ReadonlyDeep<llmSettings>>) => {
-  const settings = llmSettings()
-  return {
-    selectedApi: settings.selectedApi ?? 'taskyon',
-    llmApis: settings.llmApis,
-    siteUrl: settings.siteUrl,
-  }
-}
-
 export const createDefaultTaskyonToolSetup = (options?: {
   unavailableToolNames?: ReadonlySet<string>
 }): TyCoreToolSetup => ({
@@ -55,29 +44,36 @@ export const createDefaultTaskyonToolSetup = (options?: {
     toolCreationWizard,
   ],
   chatCompletionToolName,
-  createSessionTools: ({ db, llmSettings, taskManager }) => {
-    const { chatCompletion, stream } = createChatCompletionTool(
-      () => createChatCompletionSettings(llmSettings),
-      {
+  createSessionTools: ({ db, taskManager, toolchainConfig }) => {
+    const createChatCompletion = (config: typeof toolchainConfig) =>
+      createChatCompletionTool(resolveChatCompletionConnection(config.chatCompletion), {
         getTaskChain: taskManager.getTaskChain,
         getTask: taskManager.getTask,
         getFileMappingByUuid: taskManager.getFileMappingByUuid,
         getUploadedFile: taskManager.getUploadedFile,
         updateToolDefinitions: taskManager.updateToolDefinitions,
         metaUpsert: taskManager.metaUpsert,
-      },
-    )
+      })
+    const chatCompletion = createChatCompletion(toolchainConfig)
+
     return {
       tools: [
         localVectorStore(db),
-        chatCompletion,
+        chatCompletion.chatCompletion,
         createToolSearcher(taskManager, (tools) =>
           resolveAgentToolCatalog(tools, options?.unavailableToolNames),
         ),
         createMcpToolImporter(taskManager),
         taskSearcher(taskManager),
       ],
-      chatCompletionStream: stream,
+      chatCompletionStream: chatCompletion.stream,
+      recreateConfiguredTools: (nextConfig) => {
+        const replacement = createChatCompletion(nextConfig)
+        return {
+          tools: [replacement.chatCompletion],
+          chatCompletionStream: replacement.stream,
+        }
+      },
     }
   },
 })

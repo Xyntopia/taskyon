@@ -61,9 +61,6 @@ export const testTyCoreStableTaskStreamSurvivesSessionSwitch = async () => {
   await mkdir(dataDir, { recursive: true })
   const ty = await tyCore(
     () => ({
-      selectedApi: 'test',
-      llmApis: {},
-      siteUrl: 'https://taskyon.space',
       entryFunction: 'entryNode',
     }),
     () =>
@@ -71,7 +68,7 @@ export const testTyCoreStableTaskStreamSurvivesSessionSwitch = async () => {
         name: 'entryNode',
         arguments: {},
       }),
-    () => ({}),
+    {},
     undefined,
     { indexTaskVectors: false, nodePgLiteDataDir: dataDir },
   )
@@ -416,9 +413,6 @@ export const testRemoteFunctionBridgeRegistersAndExecutesCodeTool = async () => 
   await mkdir(dataDir, { recursive: true })
   const ty = await tyCore(
     () => ({
-      selectedApi: 'test',
-      llmApis: {},
-      siteUrl: 'https://taskyon.space',
       entryFunction: 'entryNode',
     }),
     () =>
@@ -426,7 +420,7 @@ export const testRemoteFunctionBridgeRegistersAndExecutesCodeTool = async () => 
         name: 'entryNode',
         arguments: {},
       }),
-    () => ({}),
+    {},
     undefined,
     { nodePgLiteDataDir: dataDir },
   )

@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { partialTaskDraft, TaskNode } from '../types/taskNode'
 import { ToolProgress } from '../types/toolApi'
 import { FunctionArguments, ToolBase } from '../types/tools'
+import { TyToolchainConfig } from '../types/profiles'
 
 export const REMOTE_FUNCTION_TIMEOUT_MS = 30_000
 export const MAX_REMOTE_FUNCTION_TIMEOUT_MS = 10 * 60 * 1000
@@ -227,6 +228,35 @@ export const taskyonDiscoveryProtocol = defineFrpServiceProtocol({
   },
 })
 
+export const taskyonRuntimeProtocol = defineFrpServiceProtocol({
+  service: 'runtime',
+  version: '1',
+  envelope: baseMessage,
+  commands: {
+    configure: {
+      request: z
+        .object({
+          toolchainConfig: TyToolchainConfig,
+        })
+        .describe('Apply one resolved flat toolchain configuration to this Taskyon runtime.'),
+      response: z
+        .discriminatedUnion('ok', [
+          z.object({
+            ok: z.literal(true),
+          }),
+          z.object({
+            ok: z.literal(false),
+            error: z.string(),
+          }),
+        ])
+        .describe('Reports whether the runtime configuration and configured tools became active.'),
+      defaultTimeoutMs: 30_000,
+    },
+  },
+})
+
+export const taskyonHostProtocol = taskyonRuntimeProtocol
+
 export const taskyonToolsProtocol = defineFrpServiceProtocol({
   service: 'tools',
   version: '1',
@@ -396,6 +426,7 @@ export const taskyonProtocol = mergeFrpProtocols({
 export const TaskyonMessage = taskyonProtocol.message
 export type TaskyonMessage = ProtocolMessage<typeof taskyonProtocol>
 export type TaskyonMessageType = TaskyonMessage
+export type TaskyonHostMessage = ProtocolMessage<typeof taskyonHostProtocol>
 export type messageTypes = TaskyonMessage['type']
 export type TyP2P = Extract<
   TaskyonMessage,

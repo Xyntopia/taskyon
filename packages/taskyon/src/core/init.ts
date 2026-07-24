@@ -1,5 +1,5 @@
 import type { ChatCompletionStreamEvent } from '../types/chatCompletion'
-import type { llmSettings } from '../types/profiles'
+import { TyToolchainConfig, type llmSettings } from '../types/profiles'
 import { createSubtasksResult, type InternalTool } from '../types/toolApi'
 import type { FunctionArguments } from '../types/tools'
 import type { ToolBase } from '../types/tools'
@@ -35,7 +35,11 @@ import { createProxyApi, createProxyFunction } from '../utils/objHelpers'
 import { configureNodePgLiteDataDir, getDatabase } from '../utils/pglite.api'
 import type { TyPGDB } from '../utils/pglite.api'
 import type { Thunk } from '../utils/tsHelpers'
-import { MAX_REMOTE_FUNCTION_TIMEOUT_MS, taskyonProtocol } from '../api/taskyonProtocol'
+import {
+  MAX_REMOTE_FUNCTION_TIMEOUT_MS,
+  taskyonHostProtocol,
+  taskyonProtocol,
+} from '../api/taskyonProtocol'
 import { createTaskyonApiDescription } from '../api/taskyonOpenApi'
 import type { TaskManagerStorage, TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
@@ -52,6 +56,7 @@ import { createWithDefaults } from './tools'
 import type { ReadonlyDeep } from 'type-fest'
 
 type TaskyonProtocolMessage = ProtocolMessage<typeof taskyonProtocol>
+type TaskyonHostMessage = ProtocolMessage<typeof taskyonHostProtocol>
 type TaskStreamEvent = Parameters<TyTaskManager['taskStream']>[0] extends (
   event: infer Event,
 ) => void | Promise<void>
@@ -74,11 +79,15 @@ export type TyCoreToolSetup = {
   chatCompletionToolName: string
   createSessionTools: (deps: {
     db: TyPGDB
-    llmSettings: Thunk<ReadonlyDeep<llmSettings>>
     taskManager: TyTaskManager
+    toolchainConfig: TyToolchainConfig
   }) => {
     tools: InternalTool[]
     chatCompletionStream?: Stream<ChatCompletionStreamEvent>
+    recreateConfiguredTools?: (toolchainConfig: TyToolchainConfig) => {
+      tools: InternalTool[]
+      chatCompletionStream?: Stream<ChatCompletionStreamEvent>
+    }
   }
 }
 
@@ -194,6 +203,7 @@ const staticContext = (createIframeMultiPlexer: CreateIframeMultiPlexer) => {
   // to communicate with taskyon.
   // "inPort" is the other side of the channel and is used by taskyon itself
   const { x: outsidePort, y: insidePort } = createProtocolPort(taskyonProtocol)
+  const { x: hostPort, y: insideHostPort } = createProtocolPort(taskyonHostProtocol)
 
   // logging
   outsidePort.receive((msg) => {
@@ -206,6 +216,8 @@ const staticContext = (createIframeMultiPlexer: CreateIframeMultiPlexer) => {
   return {
     outsidePort,
     insidePort,
+    hostPort,
+    insideHostPort,
     iframeMultiPlexer,
   }
 }
@@ -217,8 +229,8 @@ const dynamicContext =
     toolSetup: TyCoreToolSetup,
     outsidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
     insidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
+    insideHostPort: Port<TaskyonHostMessage, TaskyonHostMessage>,
     iframeMultiPlexer: IframeMultiPlexer,
-    toolchainConfig: Thunk<Record<string, FunctionArguments>>,
     options: {
       indexTaskVectors: boolean
       secretStore?: SecretStore
@@ -227,7 +239,7 @@ const dynamicContext =
       taskManagerStorageFactory?: TaskManagerStorageFactory
     },
   ) =>
-  async (cs: CryptoSession) => {
+  async (cs: CryptoSession, initialToolchainConfig: TyToolchainConfig) => {
     // if our cryptoSession changes, we need to re-calculate everything below!
     //#####################  INIT CTX ####################
     const sessionKeyId = await cs.getSessionId()
@@ -257,14 +269,59 @@ const dynamicContext =
         },
       )
 
+    const runtimeConfiguration = {
+      toolchainConfig: initialToolchainConfig,
+    }
     const sessionTools = toolSetup.createSessionTools({
       db,
-      llmSettings,
       taskManager: taskManagerInstance,
+      toolchainConfig: runtimeConfiguration.toolchainConfig,
     })
     const sessionToolList = [...toolSetup.baseTools, ...sessionTools.tools]
     taskManagerInstance.addDefaultTools(sessionToolList)
     await taskManagerInstance.updateToolDefinitions()
+    let unsubscribeChatCompletion =
+      sessionTools.chatCompletionStream?.(options.streamObservers.chatCompletion) ?? (() => {})
+    let configureRuntimePromise = Promise.resolve()
+    const configureRuntime = (toolchainConfig: TyToolchainConfig) => {
+      const nextConfiguration = TyToolchainConfig.parse(toolchainConfig)
+      const nextRun = configureRuntimePromise
+        .catch(() => undefined)
+        .then(async () => {
+          const refreshed = sessionTools.recreateConfiguredTools?.(nextConfiguration)
+          const unsubscribeReplacementStream =
+            refreshed?.chatCompletionStream?.(options.streamObservers.chatCompletion) ?? (() => {})
+          try {
+            taskManagerInstance.addDefaultTools(refreshed?.tools ?? [])
+            await taskManagerInstance.updateToolDefinitions()
+          } catch (error) {
+            unsubscribeReplacementStream()
+            throw error
+          }
+          if (refreshed) {
+            unsubscribeChatCompletion()
+            unsubscribeChatCompletion = unsubscribeReplacementStream
+          }
+          runtimeConfiguration.toolchainConfig = nextConfiguration
+        })
+      configureRuntimePromise = nextRun
+      return nextRun
+    }
+    const unsubscribeHostApiServer = createPortServer(insideHostPort, taskyonHostProtocol, {
+      runtime: {
+        configure: async ({ toolchainConfig }) => {
+          try {
+            await configureRuntime(toolchainConfig)
+            return { ok: true as const }
+          } catch (error) {
+            return {
+              ok: false as const,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          }
+        },
+      },
+    })
     //const { port: taskPort } = createZodPort(inPort, TaskWorkerMessage)
 
     // keys could porentially be reactive here, so in theory, when they change in the GUI,
@@ -339,7 +396,7 @@ const dynamicContext =
         )
       }
       const rawArguments = call.arguments ?? {}
-      const funcSettings = toolchainConfig()[call.functionName]
+      const funcSettings = runtimeConfiguration.toolchainConfig[call.functionName]
       const materializedArguments = await materializeTaskyonFunctionArguments(rawArguments, {
         surface: 'execution',
         getTaskById: taskManagerInstance.getTask,
@@ -406,12 +463,12 @@ const dynamicContext =
     )
     const unsubscribeSessionStreams = [
       workerStream(options.streamObservers.worker),
-      sessionTools.chatCompletionStream?.(options.streamObservers.chatCompletion) ?? (() => {}),
       taskManagerInstance.taskStream(options.streamObservers.task),
     ]
     //##################### END INIT CTX #################
     return {
       callTool: (name: string, args: FunctionArguments) => toolExecutionClient.callTool(name, args),
+      runtimeConfiguration,
       workerStop: (message: string) => {
         console.log('tycore stopping all tasks:', message)
         workerStop(message)
@@ -422,11 +479,13 @@ const dynamicContext =
         if (disposed) return
         disposed = true
         console.log('tycore disposing session context:', message)
+        unsubscribeChatCompletion()
         unsubscribeSessionStreams.forEach((unsubscribe) => unsubscribe())
         workerStop(message)
         workerToolBroker.stop(message)
         coreToolExecutor.stop(message)
         unsubscribeApiServer()
+        unsubscribeHostApiServer()
         unsubscribeTaskStreamBridge()
         workerToolBroker.destroy()
         coreToolExecutor.destroy()
@@ -444,7 +503,7 @@ export async function tyCore(
   //       but then....   we als want taskyon to be as "stateless" as possible..
   llmSettings: Thunk<ReadonlyDeep<llmSettings>>,
   entryNode: Thunk<ReadonlyDeep<partialTaskDraft>>,
-  toolchainConfig: Thunk<Record<string, FunctionArguments>>,
+  initialToolchainConfig: TyToolchainConfig,
   initialCryptoSession?: CryptoSession,
   options?: {
     toolSetup?: TyCoreToolSetup
@@ -459,7 +518,7 @@ export async function tyCore(
     options?.nodePgLiteDataDir ? (name) => `${options.nodePgLiteDataDir}/${name}` : undefined,
   )
 
-  const { outsidePort, insidePort, iframeMultiPlexer } = staticContext(
+  const { outsidePort, insidePort, hostPort, insideHostPort, iframeMultiPlexer } = staticContext(
     options?.createIframeMultiPlexer ?? createRuntimeIframeMux,
   )
   const workerStream = createStream<TyTaskStreamData>()
@@ -470,6 +529,7 @@ export async function tyCore(
     chatCompletionToolName: 'chatCompletion',
     createSessionTools: () => ({ tools: [] }),
   }
+  const parsedInitialToolchainConfig = TyToolchainConfig.parse(initialToolchainConfig)
 
   // TODO: encapsulate this into a "createCtx" function
   //       which also handles the initilaization of ctx..
@@ -484,8 +544,8 @@ export async function tyCore(
     toolSetup,
     outsidePort,
     insidePort,
+    insideHostPort,
     iframeMultiPlexer,
-    toolchainConfig,
     {
       indexTaskVectors: options?.indexTaskVectors !== false,
       ...(options?.secretStore ? { secretStore: options.secretStore } : {}),
@@ -502,14 +562,15 @@ export async function tyCore(
 
   // TODO: we need to integrate all of these with our API.
   //       ideally, the API would be the only thing that communicates with the outside!
-  let ctx = await ctxCreator(cs)
+  let ctx = await ctxCreator(cs, parsedInitialToolchainConfig)
 
   const replaceSessionContext = async (newCs: CryptoSession) => {
+    const currentToolchainConfig = ctx.runtimeConfiguration.toolchainConfig
     ctx.dispose('switching crypto session')
     cs = newCs
     // we need to re-initialize our entire context in order to have access to key store, decrypted data
     // etc with the new session...
-    ctx = await ctxCreator(cs)
+    ctx = await ctxCreator(cs, currentToolchainConfig)
 
     console.log('tycore finished initializing new session...')
   }
@@ -528,8 +589,6 @@ export async function tyCore(
     workerStream: workerStream.stream,
     taskStream: taskStream.stream,
     workerStop: (message: string) => ctx.workerStop(message),
-    // updating and getting ApiKeys for chat completion has a special
-    // treatment here, because we need it very often in our UI
     updateChatCompletionApiKey: async (key: string, value?: string) => {
       const { tool, def } = await ctx.taskManagerInstance.getToolDefinition(
         toolSetup.chatCompletionToolName,
@@ -589,6 +648,7 @@ export async function tyCore(
     connectMessageIframe: createProxyFunction(() => iframeMultiPlexer.attachIframe),
 
     port: outsidePort,
+    hostPort,
     getCryptoSession: () => cs,
     setNewSession,
   }

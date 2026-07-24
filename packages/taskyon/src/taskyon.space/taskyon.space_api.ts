@@ -67,7 +67,7 @@ export async function returnToken(
 }
 
 export async function getTaskyonCosts(
-  siteUrl: string, // to add an indicator to the request which app/site this request is coming from
+  providerHeaders: Readonly<Record<string, string>> | undefined,
   anonymousTaskyonKey: string,
   apiKey: string,
   completionId: string | undefined,
@@ -93,6 +93,12 @@ export async function getTaskyonCosts(
   const maxDelayMs = 30000
   const backoffMultiplier = 1.5
   let delayMs = initialDelayMs
+  const attributionHeaders = {
+    ...(providerHeaders?.['HTTP-Referer']
+      ? { 'HTTP-Referer': providerHeaders['HTTP-Referer'] }
+      : {}),
+    ...(providerHeaders?.['X-Title'] ? { 'X-Title': providerHeaders['X-Title'] } : {}),
+  }
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (delayMs > 0) {
       await sleep(delayMs)
@@ -103,8 +109,7 @@ export async function getTaskyonCosts(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
         apiKey: anonymousTaskyonKey,
-        'HTTP-Referer': `${siteUrl}`, // To identify your app. Can be set to localhost for testing
-        'X-Title': `${siteUrl}`, // Optional. Shows on openrouter.ai
+        ...attributionHeaders,
       },
     })
     if (!response.ok) {

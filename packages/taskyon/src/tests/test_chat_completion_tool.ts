@@ -1,5 +1,6 @@
 import {
   convertTaskNodesToOpenAIChat,
+  createChatCompletionTool,
   getCommandFromStructuredResponse,
   prepareChatCompletionContext,
 } from '../tools/chatCompletionTool'
@@ -10,7 +11,9 @@ import { createTaskVariablePresentationService } from '../core/taskVariables'
 import { buildChatProviderRequest } from '../tools/chatCompletion/providerRequest'
 import { interpretAssistantMessage } from '../tools/chatCompletion/response'
 import { classifyStreamingFailure } from '../tools/chatCompletion/streamResult'
-import type { ProviderRequestTrace } from '../types/chatCompletion'
+import { resolveChatCompletionConnection, type ProviderRequestTrace } from '../types/chatCompletion'
+import { getTaskyonCosts } from '../taskyon.space/taskyon.space_api'
+import { streamText } from 'ai'
 import type { TaskNode } from '../types/taskNode'
 import type { ToolBase } from '../types/tools'
 
@@ -19,6 +22,62 @@ function assert(condition: boolean, message: string): asserts condition {
 }
 
 const task = (node: TaskNode) => node
+
+export const testChatCompletionConnectionIsAnImmutableCreationSnapshot = () => {
+  const providerSettings = {
+    provider: 'openai',
+    name: 'openai',
+    baseURL: 'https://api.openai.com',
+    defaultHeaders: {
+      'HTTP-Referer': 'https://taskyon.space',
+      'X-Title': 'Taskyon',
+    },
+    streamSupport: true,
+    routes: {
+      chatCompletion: '/v1/chat/completions',
+      models: '/v1/models',
+    },
+    model: 'gpt-5',
+  }
+  const connection = resolveChatCompletionConnection(providerSettings)
+  providerSettings.baseURL = 'https://attacker.example'
+  providerSettings.defaultHeaders['HTTP-Referer'] = 'https://attacker.example'
+  providerSettings.routes.chatCompletion = '/capture'
+  providerSettings.model = 'gpt-5.1'
+
+  assert(connection.baseURL === 'https://api.openai.com', 'Expected a captured target URL')
+  assert(
+    connection.defaultHeaders?.['HTTP-Referer'] === 'https://taskyon.space',
+    'Expected captured provider headers',
+  )
+  assert(
+    connection.routes.chatCompletion === '/v1/chat/completions',
+    'Expected captured connection routes',
+  )
+  assert(!('model' in connection), 'Model must remain a materialized tool parameter')
+
+  const unavailable = async () => {
+    throw new Error('Not used by this schema-boundary test.')
+  }
+  const { chatCompletion } = createChatCompletionTool(connection, {
+    getTaskChain: unavailable,
+    getTask: unavailable,
+    getFileMappingByUuid: unavailable,
+    getUploadedFile: unavailable,
+    updateToolDefinitions: unavailable,
+    metaUpsert: unavailable,
+  })
+  const properties = chatCompletion.parameters.properties
+
+  assert('model' in properties, 'Expected model to remain in chatCompletion parameters')
+  assert(!('provider' in properties), 'Provider must not be an executable tool parameter')
+  assert(!('baseURL' in properties), 'Target URL must not be an executable tool parameter')
+  assert(
+    !('defaultHeaders' in properties),
+    'Provider headers must not be executable tool parameters',
+  )
+  assert(!('routes' in properties), 'Connection routes must not be executable tool parameters')
+}
 
 const createTaskAccess = (tasks: TaskNode[]) => {
   const tasksById = new Map(tasks.map((node) => [node.id, node]))
@@ -551,9 +610,10 @@ export const testChatCompletionCodexRequestMovesLeadingSystemPromptToInstruction
     tools: {},
     selectedModel: 'gpt-5',
     api: {
+      provider: 'chatgpt-codex',
       name: 'chatgpt-codex',
+      model: 'gpt-5',
       baseURL: 'https://example.test/v1',
-      defaultModel: 'gpt-5',
       streamSupport: true,
       routes: {
         chatCompletion: '/responses',
@@ -572,6 +632,120 @@ export const testChatCompletionCodexRequestMovesLeadingSystemPromptToInstruction
 
   return { success: true }
 }
+
+export const testTaskyonCostLookupOnlyForwardsAttributionHeaders = async () => {
+  const originalFetch = globalThis.fetch
+  let requestHeaders: Headers | undefined
+  globalThis.fetch = async (_input, init) => {
+    requestHeaders = new Headers(init?.headers)
+    return new Response(JSON.stringify([{ used_credits: 0.25 }]), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
+
+  try {
+    const cost = await getTaskyonCosts(
+      {
+        'HTTP-Referer': 'https://taskyon.space',
+        'X-Title': 'Taskyon',
+        'X-Unrelated': 'must-not-leak',
+      },
+      'anonymous-key',
+      'user-token',
+      undefined,
+      '',
+      'task-id',
+    )
+    assert(cost === 0.25, 'Expected the mocked Taskyon cost result')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  assert(requestHeaders?.get('HTTP-Referer') === 'https://taskyon.space', 'Expected referer')
+  assert(requestHeaders?.get('X-Title') === 'Taskyon', 'Expected application title')
+  assert(!requestHeaders?.has('X-Unrelated'), 'Expected unrelated provider headers to stay private')
+
+  return { success: true }
+}
+
+testTaskyonCostLookupOnlyForwardsAttributionHeaders.description =
+  'Forwards only allowlisted provider attribution headers to the Taskyon cost endpoint.'
+
+export const testProviderRequestsApplyProfileHeaders = async () => {
+  const originalFetch = globalThis.fetch
+  const requests: Headers[] = []
+  globalThis.fetch = async (_input, init) => {
+    requests.push(new Headers(init?.headers))
+    return new Response(
+      'data: {"id":"test","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+      { status: 200, headers: { 'content-type': 'text/event-stream' } },
+    )
+  }
+
+  try {
+    for (const provider of ['openrouter.ai', 'local'] as const) {
+      const request = await buildChatProviderRequest({
+        messages: [{ role: 'user', content: 'Hello.' }],
+        tools: {},
+        selectedModel: 'test-model',
+        api: {
+          provider,
+          name: provider,
+          model: 'test-model',
+          baseURL: 'https://provider.example',
+          streamSupport: true,
+          defaultHeaders: { 'X-Profile-Header': provider },
+          routes: {
+            chatCompletion: '/v1/',
+            models: '/v1/models',
+          },
+        },
+        apiKey: 'diagnostic-key',
+      })
+      await streamText(request).text
+    }
+
+    const requestWithoutHeaders = await buildChatProviderRequest({
+      messages: [{ role: 'user', content: 'Hello.' }],
+      tools: {},
+      selectedModel: 'test-model',
+      api: {
+        provider: 'local',
+        name: 'local',
+        model: 'test-model',
+        baseURL: 'https://provider.example',
+        streamSupport: true,
+        routes: {
+          chatCompletion: '/v1/',
+          models: '/v1/models',
+        },
+      },
+      apiKey: 'diagnostic-key',
+    })
+    await streamText(requestWithoutHeaders).text
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  assert(
+    requests[0]?.get('X-Profile-Header') === 'openrouter.ai',
+    'Expected OpenRouter to send profile headers',
+  )
+  assert(
+    requests[1]?.get('X-Profile-Header') === 'local',
+    'Expected the generic compatible adapter to send profile headers',
+  )
+  assert(
+    !requests[2]?.has('X-Profile-Header'),
+    'Expected providers without configured headers not to receive attribution',
+  )
+
+  return { success: true }
+}
+
+testProviderRequestsApplyProfileHeaders.description =
+  'Applies immutable profile headers to OpenRouter and generic compatible provider requests.'
 
 export const testTaskContractMessagesRenderOnceWithoutHiddenEntryNodeArguments = async () => {
   const agentInstructions = 'Act as a cybersecurity reviewer.'

@@ -3,6 +3,7 @@ import { streamText, type ReasoningOutput } from 'ai'
 import { default as Ajv } from 'ajv'
 import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
+import type { ReadonlyDeep } from 'type-fest'
 import type { TyTaskManager } from '../core/taskManager'
 import { sanitizeTaskyonVariableCommentsOutsideCode } from '../core/taskVariables'
 import { isTaskyonKey } from '../core/tyCrypto'
@@ -14,14 +15,17 @@ import {
   verifyServiceToken,
 } from '../taskyon.space/taskyon.space_api'
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
-import type { apiConfig, ProviderRequestTrace, TaskNodeMeta } from '../types/chatCompletion'
-import { getCurrentModel, type ChatCompletionStreamEvent } from '../types/chatCompletion'
+import {
+  resolveChatCompletionConnection,
+  type ChatCompletionStreamEvent,
+  type ProviderRequestTrace,
+  type TaskNodeMeta,
+} from '../types/chatCompletion'
 import type { Annotation, partialTaskDraft, TaskNode } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
 import { createTool } from '../types/toolApi'
 import { humanizeError, serializeError } from '../utils/error'
 import { createDotPathTransformer } from '../utils/objHelpers'
-import type { Thunk } from '../utils/tsHelpers'
 import { prepareChatCompletionContext } from './chatCompletion/context'
 import { buildChatProviderRequest } from './chatCompletion/providerRequest'
 import {
@@ -47,10 +51,16 @@ const normalizePromptInjections = (value: unknown): PromptInjection[] =>
 export const chatCompletionToolName = 'chatCompletion'
 
 export function createChatCompletionTool(
-  apiSettings: Thunk<{
-    selectedApi: string
-    llmApis: Record<string, apiConfig>
-    siteUrl: string
+  connection: ReadonlyDeep<{
+    provider: string
+    name: string
+    baseURL: string
+    streamSupport: boolean
+    defaultHeaders?: Record<string, string> | undefined
+    routes: {
+      chatCompletion: string
+      models: string
+    }
   }>,
   capabilities: {
     getTaskChain: TyTaskManager['getTaskChain']
@@ -61,6 +71,7 @@ export function createChatCompletionTool(
     metaUpsert: TyTaskManager['metaUpsert']
   },
 ) {
+  const providerConnection = resolveChatCompletionConnection(connection)
   const ajv = new Ajv()
   const chatCompletionStream = createStream<ChatCompletionStreamEvent>()
   const chatCompletion = createTool({
@@ -78,7 +89,7 @@ export function createChatCompletionTool(
         model: {
           type: 'string',
           description:
-            'The name of the model to use for the completion. Optional, will choose default model if not provided',
+            'The model selected by the active provider profile for this chat completion.',
         },
         allowedTools: {
           type: 'array',
@@ -257,15 +268,8 @@ export function createChatCompletionTool(
             : toolChoice?.type === 'auto'
               ? ('auto' as const)
               : undefined
-      const { selectedApi, llmApis, siteUrl } = apiSettings()
-
-      if (!selectedApi) {
-        throw new Error('No API selected!')
-      }
-      const requestApi = llmApis[selectedApi]
-      if (!requestApi) {
-        throw new Error(`api doesn't exist! ${selectedApi || 'no api selected!'}`)
-      }
+      if (!model) throw new Error('chatCompletion requires an explicit model parameter.')
+      const selectedApi = providerConnection.provider
 
       // maybe ask for the llm api secrets in the future?
       const apiKey = await context.getSecret(selectedApi, false, false)
@@ -291,7 +295,7 @@ export function createChatCompletionTool(
         requestApiKey = delegationToken
       }
 
-      const selectedModel = model ?? getCurrentModel(requestApi)
+      const selectedModel = model
       console.log('calling chat completion tool...', selectedModel, useProviderToolCalling)
       // the current task doesn't *have* to exist. We can also works solely with prompts...
       const executionTaskChain = await context.getExecutionTaskChain()
@@ -336,10 +340,9 @@ export function createChatCompletionTool(
         messages: chatInfo.messages,
         tools: chatInfo.tools,
         selectedModel,
-        api: requestApi,
+        api: { ...providerConnection, model: selectedModel },
         apiKey: requestApiKey,
         ...(schema ? { schema } : {}),
-        ...(siteUrl ? { siteUrl } : {}),
         ...(websearch?.enabled === true
           ? {
               webSearch: {
@@ -362,7 +365,8 @@ export function createChatCompletionTool(
         useArtificialStreaming,
         abortSignal: context.stopSignal,
         onChunk(chunk) {
-          chatCompletionStream.emit({ taskId: currentTask?.id ?? 'N/A', chunk })
+          const event = { taskId: currentTask?.id ?? 'N/A', chunk }
+          chatCompletionStream.emit(event)
         },
       })
       const { completion: chatCompletion, rawOutput, partialTextOutput } = streamResult
@@ -489,9 +493,9 @@ export function createChatCompletionTool(
           rawOutput,
           res,
           currentTask,
-          siteUrl,
+          providerConnection.defaultHeaders,
           apiKey,
-          llmApis['taskyon']?.defaultHeaders?.apiKey ?? '',
+          providerConnection.defaultHeaders?.apiKey ?? '',
           delegatedTokenJti,
           capabilities.metaUpsert,
         )
@@ -653,7 +657,7 @@ async function getMetaInfos(
   rawOutput: string,
   res: Awaited<ReturnType<typeof streamText>['response']>,
   currentTask: TaskNode,
-  siteUrl: string,
+  providerHeaders: Readonly<Record<string, string>> | undefined,
   apiKey: string,
   taskyonKey: string,
   delegatedTokenJti: string | undefined,
@@ -708,7 +712,14 @@ async function getMetaInfos(
     const hasUserJwt = !!apiKey && !isTaskyonKey(apiKey, false)
     if (hasUserJwt) {
       console.log('getting taskyon generation info')
-      void getTaskyonCosts(siteUrl, taskyonKey, apiKey, res.id, delegatedTokenJti, currentTask?.id)
+      void getTaskyonCosts(
+        providerHeaders,
+        taskyonKey,
+        apiKey,
+        res.id,
+        delegatedTokenJti,
+        currentTask?.id,
+      )
         .then((costs) => {
           if (typeof costs === 'number') {
             console.log('found new task costs:', costs)

@@ -17,7 +17,12 @@ import { sha256UrlSafeHashFromFile } from '../utils/encoding'
 import { createPortClient, createStream, type Port } from '@taskyon/common/modules/frpBus'
 import { createLruCache } from '@taskyon/common/modules/lruCache'
 import type { RpcMessagePort } from '@taskyon/common/modules/frpBus'
-import { taskyonProtocol, type TaskyonMessageType } from './taskyonProtocol'
+import {
+  taskyonHostProtocol,
+  taskyonProtocol,
+  taskyonRuntimeProtocol,
+  type TaskyonMessageType,
+} from './taskyonProtocol'
 
 export { TaskyonMessage, type TaskyonMessageType, type TyP2P } from './taskyonProtocol'
 export {
@@ -69,7 +74,7 @@ export {
   toolCall,
 }
 export type { Port }
-export { taskyonProtocol }
+export { taskyonHostProtocol, taskyonProtocol, taskyonRuntimeProtocol }
 export { createTaskyonApiDescription, type TaskyonApiDescription } from './taskyonOpenApi'
 export {
   createProtocolStorageCrudWrapper,
