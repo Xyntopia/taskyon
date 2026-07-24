@@ -10,7 +10,7 @@
           <ty-markdown
             class="pricing-page-intro"
             :src="`
-List of all of our currently available models in ${state.llmSettings.selectedApi} and their prices.
+List of all of our currently available models in ${state.selectedToolchainProfile} and their prices.
 The selected AI provider has to provide price information through an API in order to show them
 on this list.
 
@@ -24,7 +24,10 @@ For in in-depth comparison check out webpages like the following
 `"
           />
         </q-expansion-item>
-        <ApiSelect v-model="state.llmSettings.selectedApi" />
+        <ApiSelect
+          v-model="selectedProviderProfile"
+          :options="tystate.availableProviders"
+        />
       </q-card-section>
 
       <!-- ───────── Toggles ───────── -->
@@ -124,7 +127,7 @@ For in in-depth comparison check out webpages like the following
                 <ty-markdown
                   :src="
                     props.row.description ??
-                    `No information provided by Backend: **${state.llmSettings.selectedApi}**`
+                    `No information provided by Backend: **${state.selectedToolchainProfile}**`
                   "
                 />
                 <ObjectView v-model="props.row" read-only copy-btn dense missing-mode="hide" />
@@ -235,6 +238,10 @@ const pricingOptions = ['$/token', 'pages/0.01$', '$/million tokens'] as const
 /* ─────────── Stores & router ─────────── */
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
+const selectedProviderProfile = computed({
+  get: () => state.selectedToolchainProfile ?? null,
+  set: (profileName) => state.setSelectedToolchainProfile(profileName ?? undefined),
+})
 
 const route = useRoute()
 const router = useRouter()

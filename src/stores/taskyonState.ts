@@ -19,6 +19,7 @@ import {
   base64ToPublixX25519,
   connectTaskManagerStorageFromProtocol,
   createClientTool,
+  createPortClient,
   createPgLiteTaskManagerStorageService,
   createSubtasksResult,
   createPortServer,
@@ -30,12 +31,12 @@ import {
   deriveKeyFromPwd,
   ensureValidTaskId,
   exclusive,
-  getCurrentModel,
+  getToolchainProviderProfiles,
   getDatabase,
   getDefaultParametersForTool,
   isTaskyonKey,
   latestOnly,
-  fetchModelsForSelectedApi,
+  fetchModelsForProvider,
   OAUTH_PROVIDERS,
   randomString,
   registerToolRpcTools,
@@ -43,6 +44,7 @@ import {
   TaskNode,
   tyCore,
   taskyonStorageProtocol,
+  taskyonRuntimeProtocol,
 } from '@taskyon/taskyon'
 import type { ChatCompletionStreamEvent } from '@taskyon/taskyon'
 import {
@@ -82,7 +84,6 @@ import { gDriveSyncPort } from 'src/modules/taskyon/sync'
 import { type TyProfile } from 'src/modules/taskyon/types'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { match, P } from 'ts-pattern'
-import type { ReadonlyDeep } from 'type-fest'
 import { computed, onScopeDispose, onWatcherCleanup, readonly, ref, watch, watchEffect } from 'vue'
 import { guiTools } from '../modules/taskyon/GuiTools'
 import {
@@ -161,11 +162,11 @@ export function asyncProxy<T extends object>(initializer: () => Promise<T>): Asy
 }
 
 async function updateLlmModels(
-  llmSettings: ReadonlyDeep<TyProfile['llmSettings']>,
+  provider: Parameters<typeof fetchModelsForProvider>[0],
   getApiKey: (name: string) => Promise<string | null>,
 ) {
   console.log('downloading models...')
-  return await fetchModelsForSelectedApi(llmSettings, getApiKey, {
+  return await fetchModelsForProvider(provider, getApiKey, {
     useTokenServiceForOpenrouter: true,
     useTokenServiceForTaskyon: true,
   })
@@ -581,8 +582,6 @@ function createTrustedUiToolContext(
   }
 }
 
-export const AiProvideKeyStoreName = 'AiProviderKey'
-
 function resolveTaskyonKey(args: {
   authToken?: KeyString | undefined
   iframeToken?: KeyString | undefined
@@ -602,6 +601,8 @@ function resolveTaskyonKey(args: {
     freeKey) as KeyString
 }
 
+export const AiProvideKeyStoreName = 'AiProviderKey'
+
 const useApiManagement = (
   stateRefs: ReturnType<typeof useAppStateStore>,
   taskyon: Thunk<Promise<Taskyon>>,
@@ -615,20 +616,23 @@ const useApiManagement = (
     return (await ty.getSecret(AiProvideKeyStoreName, name, false, false)) as KeyString | null
   }
 
-  function getSelectedModel() {
-    const selected = stateRefs.llmSettings.selectedApi
-    if (selected) {
-      const api = stateRefs.llmSettings.llmApis[selected]
-      if (api) {
-        return getCurrentModel(api)
-      }
-    }
-  }
+  const providerProfiles = computed(() => getToolchainProviderProfiles(stateRefs.toolchainProfiles))
+  const selectedProviderProfile = computed(() => {
+    const selected = stateRefs.selectedToolchainProfile
+    return selected ? providerProfiles.value[selected] : undefined
+  })
+  const selectedProviderId = computed(() => selectedProviderProfile.value?.provider)
+  const getSelectedModel = () => selectedProviderProfile.value?.model
 
   const updateModelList = latestOnly(async () => {
     console.log('Update model list!')
-    const m = await updateLlmModels(stateRefs.llmSettings, getProviderApiKey)
-    llmModelsInternal.value = m
+    const provider = selectedProviderProfile.value
+    llmModelsInternal.value = provider
+      ? await updateLlmModels(
+          provider,
+          async (name) => (availableKeys.value[name] as KeyString | undefined) ?? null,
+        )
+      : {}
   })
 
   // TODO: add apis to model history as well!
@@ -649,27 +653,23 @@ const useApiManagement = (
     console.log('getting an api & bot update', {
       'new name': newName,
       'new service': newService,
-      'old name':
-        stateRefs.llmSettings.llmApis[stateRefs.llmSettings.selectedApi || '']?.selectedModel,
-      'old service': stateRefs.llmSettings.llmApis[stateRefs.llmSettings.selectedApi || '']?.name,
+      'old name': selectedProviderProfile.value?.model,
+      'old service': stateRefs.selectedToolchainProfile,
     })
 
     if (newService) {
-      stateRefs.setLLMSettings('selectedApi', newService)
+      stateRefs.setSelectedToolchainProfile(newService)
     }
-    if (stateRefs.llmSettings.selectedApi) {
-      console.log('update model for api:', stateRefs.llmSettings.selectedApi, newName)
-      stateRefs.setLLMSettings(
-        ['llmApis', stateRefs.llmSettings.selectedApi, 'selectedModel'],
-        newName,
-      )
+    if (selectedProviderProfile.value) {
+      console.log('update model for provider profile:', stateRefs.selectedToolchainProfile, newName)
+      stateRefs.setActiveToolchainValue(['chatCompletion', 'model'], newName)
     }
     addModelToHistory(newName)
   }
 
   const taskyonKey = computed(() => {
-    const api = stateRefs.llmSettings.selectedApi
-    if (api === 'taskyon') {
+    const provider = selectedProviderProfile.value?.provider
+    if (provider === 'taskyon') {
       console.log('check if we are using a taskyon key!')
       // if we have a taskyon key defined only display the models allowed for that key..
       const key = isTaskyonKey(availableKeys.value.taskyon ?? undefined, false)
@@ -683,14 +683,15 @@ const useApiManagement = (
   }
 
   const currentKeyString = computed(() => {
-    const api = stateRefs.llmSettings.selectedApi
-    if (api) return availableKeys.value[api] ?? null
+    const provider = selectedProviderProfile.value?.provider
+    if (provider) return availableKeys.value[provider] ?? null
     return null
   })
 
   const usingFreeTaskyonKey = computed(() => {
     const useFreeKey =
-      stateRefs.llmSettings.selectedApi === 'taskyon' && availableKeys.value['taskyon'] === freeKey
+      selectedProviderProfile.value?.provider === 'taskyon' &&
+      availableKeys.value['taskyon'] === freeKey
     console.log('using free key:', useFreeKey)
     return useFreeKey
   })
@@ -712,22 +713,24 @@ const useApiManagement = (
   const setProviderApiKey = exclusive(async (name: string, value: KeyString | undefined) => {
     console.log('set new provider key:', name, value?.slice(-5))
     const ty = await taskyon()
-    if (!value) {
-      await ty.deleteSecret(AiProvideKeyStoreName, name)
-      await ty.updateChatCompletionApiKey(name, undefined)
-    } else {
-      await ty.setSecret(AiProvideKeyStoreName, name, value)
-      await ty.updateChatCompletionApiKey(name, value)
-    }
+    if (value) await ty.setSecret(AiProvideKeyStoreName, name, value)
+    else await ty.deleteSecret(AiProvideKeyStoreName, name)
+    await ty.updateChatCompletionApiKey(name, value)
     // and keep track of it internally
-    availableKeys.value = { ...availableKeys.value, [name]: value }
+    if (value) {
+      availableKeys.value = { ...availableKeys.value, [name]: value }
+    } else {
+      const { [name]: _removed, ...remainingKeys } = availableKeys.value
+      availableKeys.value = remainingKeys
+    }
   })
 
   ///////////   computed properties
-  const providerDefs = computed(() => Object.keys(stateRefs.llmSettings.llmApis))
+  const providerDefs = computed(() => Object.keys(providerProfiles.value))
   const availableProviders = computed(() => {
-    //return Array.from(new Set(availableKeys.value).intersection(new Set(providerDefs.value)))
-    return Object.keys(availableKeys.value)
+    return Object.entries(providerProfiles.value)
+      .filter(([, provider]) => Object.hasOwn(availableKeys.value, provider.provider))
+      .map(([profileName]) => profileName)
   })
 
   // Computed property to determine the currently selected bot name
@@ -737,29 +740,23 @@ const useApiManagement = (
     return currentModelId.value ? llmModelsInternal.value[currentModelId.value] : null
   })
 
-  const noAiService = asyncComputed(async () => {
-    if (stateRefs.llmSettings.selectedApi) {
-      const apiK = await getProviderApiKey(stateRefs.llmSettings.selectedApi)
-      return apiK == null
-    } else return true
-  }, true)
+  const noAiService = computed(() => currentKeyString.value == null)
 
   function getValidModel(key: tyPublicApiKeyObject) {
     const cm = getSelectedModel()
     console.log('currently selected model', cm)
     const keyModels = getKeyModels(key)
-    if (cm && keyModels?.includes(cm)) {
+    if (!keyModels) return
+    if (cm && keyModels.includes(cm)) {
       console.log('currrent model is already in allowed list!', cm, tyKeyAllowedModels.value)
     } else if (cm) {
       console.log('currently selected model is not in allowed list', tyKeyAllowedModels.value, cm)
-      return keyModels?.[0] ?? cm
+      return keyModels[0]
     }
   }
 
-  const getStoredTaskyonKey = async () => (await getProviderApiKey('taskyon')) ?? undefined
-
   const ensureValidModel = (keystr?: KeyString) => {
-    if (stateRefs.llmSettings.selectedApi !== 'taskyon') {
+    if (selectedProviderProfile.value?.provider !== 'taskyon') {
       return
     }
     const tykey = isTaskyonKey(keystr ?? undefined, false)
@@ -790,44 +787,44 @@ const useApiManagement = (
       iframeApiKey: stateRefs.iframeApiKey,
     })
 
-    let storedKeyStr = await getStoredTaskyonKey()
+    const storedKeys = await ty.listSecrets(AiProvideKeyStoreName)
+    let storedKeyStr = storedKeys.taskyon as KeyString | undefined
     if (shouldUpdateFreeKey(storedKeyStr)) storedKeyStr = freeKey as KeyString
     const selectedKey = resolveTaskyonKey({
       authToken: stateRefs.authToken,
       iframeToken: stateRefs.iframeApiKey,
       storedKeyStr,
     })
-    // update the secretstore with this key in order to give chatCompletion the correct key!
     console.log('setting selected key:', selectedKey?.slice(-5))
-    await setProviderApiKey('taskyon', selectedKey)
+    if (selectedKey !== storedKeyStr) {
+      await setProviderApiKey('taskyon', selectedKey)
+    }
+    availableKeys.value = { ...storedKeys, ...availableKeys.value, taskyon: selectedKey }
     ensureValidModel(selectedKey)
-
-    const keys = await ty.listSecrets(AiProvideKeyStoreName)
-    availableKeys.value = keys
   }
 
   // make sure we update our model list whenever anything changes for our
   // endpoints...
-  // TODO: there is a potential infinite loop here with
-  // TODO: get rid of this..  we need this to be explicit!
-  // "ensureValidModel" setting a new "selectedModel" inside stateRefs.llmSettings.llmApis
-  //  which then triggers this watch again... we need to be careful here!
+  // Keep model discovery aligned with explicit provider-profile and secret changes.
   watch(
-    [() => stateRefs.llmSettings.selectedApi, () => stateRefs.llmSettings.llmApis, availableKeys],
-    async ([newSelectedApi, newApiConfigs, availableKeys]) => {
+    [() => stateRefs.selectedToolchainProfile, providerProfiles, availableKeys],
+    async ([newSelectedProfile, newProfiles, availableKeys]) => {
       console.log('update models... due to api/key change', {
-        newSelectedApi,
-        newApiConfigs,
+        newSelectedProfile,
+        newProfiles,
         availableKeys,
       })
-      if (newSelectedApi === 'taskyon') {
-        console.log('ensure, we have a valid model for taskyon key...')
-        const selectedKey = resolveTaskyonKey({
-          authToken: stateRefs.authToken,
-          iframeToken: stateRefs.iframeApiKey,
-          storedKeyStr: await getStoredTaskyonKey(),
-        })
-        ensureValidModel(selectedKey)
+      if (selectedProviderProfile.value?.provider === 'taskyon') {
+        const storedKeyStr = availableKeys.taskyon as KeyString | undefined
+        if (storedKeyStr || stateRefs.authToken || stateRefs.iframeApiKey) {
+          console.log('ensure, we have a valid model for taskyon key...')
+          const selectedKey = resolveTaskyonKey({
+            authToken: stateRefs.authToken,
+            iframeToken: stateRefs.iframeApiKey,
+            storedKeyStr,
+          })
+          ensureValidModel(selectedKey)
+        }
       }
       await updateModelList()
     },
@@ -847,6 +844,8 @@ const useApiManagement = (
     usingFreeTaskyonKey,
     availableProviders,
     providerDefs,
+    providerProfiles,
+    selectedProviderId,
     noAiService,
     setProviderApiKey,
     getProviderApiKey,
@@ -1254,7 +1253,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         entryNode: buildEntryNodeDraft(),
       }),
       buildEntryNodeDraft,
-      () => stateRefs.effectiveToolchainConfig,
+      stateRefs.effectiveToolchainConfig,
       cs,
       {
         toolSetup: createDefaultTaskyonToolSetup({
@@ -1267,6 +1266,17 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   })
   const { x: taskyonClientPort, y: taskyonCorePort } = createProtocolPort(taskyonProtocol)
   const taskyonClient = createTaskyonClient(taskyonClientPort, { taskCacheSize: 0 })
+  const taskyonRuntimeClient = taskyon.then((ty) =>
+    createPortClient(ty.hostPort, taskyonRuntimeProtocol),
+  )
+  watch(
+    () => stateRefs.effectiveToolchainConfig,
+    async (toolchainConfig) => {
+      const result = await (await taskyonRuntimeClient).runtime.configure({ toolchainConfig })
+      if (!result.ok) throw new Error(`Could not configure Taskyon runtime: ${result.error}`)
+    },
+    { deep: true },
+  )
   const storageClient = createStorageClient(taskStorageClientPort)
   const dagStorageBackend = createStorageDagBackend({
     get: async (namespace, id) => (await storageClient.get({ namespace, id })).value,
@@ -1406,7 +1416,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       {
         configureTaskyon: async (msg) => {
           const newConfig = msg.conf
-          const llmCfg = newConfig.llmSettings as Partial<TyProfile['llmSettings']> | undefined
           const appCfg = newConfig.appConfiguration as
             | Partial<TyProfile['appConfiguration']>
             | undefined
@@ -1443,7 +1452,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
             hasToolchainProfiles: !!newConfig.toolchainProfiles,
             selectedToolchainProfile: newConfig.selectedToolchainProfile,
             hasSignatureOrKey: !!newConfig.signatureOrKey,
-            selectedApi: llmCfg?.selectedApi,
             incomingPrimaryColor: appCfg?.primaryColor,
             incomingSecondaryColor: appCfg?.secondaryColor,
           })

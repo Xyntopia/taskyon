@@ -482,10 +482,11 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
       })
       console.log('[PERSIST] saved ui profile', {
         profile: pn,
-        selectedApi: newState.llmSettings.selectedApi,
+        selectedToolchainProfile: newState.selectedToolchainProfile,
         selectedModel:
-          newState.llmSettings.selectedApi &&
-          newState.llmSettings.llmApis[newState.llmSettings.selectedApi]?.selectedModel,
+          newState.selectedToolchainProfile &&
+          newState.toolchainProfiles.profiles[newState.selectedToolchainProfile]?.chatCompletion
+            ?.model,
         chatHistoryLen: newState.chatHistory.length,
         modelHistoryLen: newState.modelHistory.length,
       })

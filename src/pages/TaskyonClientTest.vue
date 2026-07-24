@@ -69,17 +69,19 @@ const clientReady = ref(false)
 
 // Configuration
 const configuration: partialTyConfiguration = {
-  llmSettings: {
-    selectedApi: 'taskyon',
-    llmApis: {
-      taskyon: {
-        selectedModel: 'meta-llama/llama-3.3-70b-instruct',
+  selectedToolchainProfile: 'taskyon',
+  toolchainProfiles: {
+    base: {
+      entryNode: {
+        use_tool_chooser: true,
       },
     },
-  },
-  toolchainConfig: {
-    entryNode: {
-      use_tool_chooser: true,
+    profiles: {
+      taskyon: {
+        chatCompletion: {
+          model: 'meta-llama/llama-3.3-70b-instruct',
+        },
+      },
     },
   },
   appConfiguration: {

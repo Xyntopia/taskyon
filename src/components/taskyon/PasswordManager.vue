@@ -123,16 +123,8 @@ async function loadSecrets() {
   const ty = await tystate.taskyon
   if (onlyThisKey) {
     console.log('load secrets!', toolMap.value)
-    const secs = await ty.listSecrets(onlyThisKey)
-    if (secs) {
-      secretList.value[onlyThisKey] = secs
-    } else {
-      // if we didn't find it search among the toolnames...
-      const secId = toolMap.value.r[onlyThisKey]
-      if (secId) {
-        secretList.value[secId] = await ty.listSecrets(secId)
-      }
-    }
+    const secretId = toolMap.value.r[onlyThisKey] ?? onlyThisKey
+    secretList.value = { [secretId]: await ty.listSecrets(secretId) }
   } else {
     const ids = await ty.listSecretIds()
     const entries = await Promise.all(

@@ -1,5 +1,5 @@
 {
-  "version": 29,
+  "version": 31,
   "appConfiguration": {
     "darkTheme": "auto",
     "appConfigurationUrl": "/taskyon_settings.json",
@@ -74,66 +74,112 @@
         "targetUrlParam": "url"
       }
     },
-    "profiles": {}
-  },
-  "llmSettings": {
-    "entryFunction": "taskyonFlow",
-    "llmApis": {
+    "profiles": {
       "taskyon": {
-        "name": "taskyon",
-        "baseURL": "https://share.taskyon.space",
-        "defaultModel": "google/gemini-2.5-flash-lite",
-        "streamSupport": true,
-        "defaultHeaders": {
-          "apiKey": "sb_publishable_WrQ1aIRvl9BrMtpMQ9TocQ_JN7I9kJm"
-        },
-        "routes": {
-          "chatCompletion": "/chatCompletion/api/v1/",
-          "models": "/chatCompletion/api/v1/models"
+        "chatCompletion": {
+          "provider": "taskyon",
+          "name": "taskyon",
+          "model": "google/gemini-2.5-flash-lite",
+          "baseURL": "https://share.taskyon.space",
+          "streamSupport": true,
+          "defaultHeaders": {
+            "apiKey": "sb_publishable_WrQ1aIRvl9BrMtpMQ9TocQ_JN7I9kJm",
+            "HTTP-Referer": "https://taskyon.space",
+            "X-Title": "Taskyon"
+          },
+          "routes": {
+            "chatCompletion": "/chatCompletion/api/v1/",
+            "models": "/chatCompletion/api/v1/models"
+          }
         }
       },
       "huggingface.co": {
-        "name": "huggingface.co",
-        "baseURL": "https://router.huggingface.co",
-        "defaultModel": "meta-llama/llama-3.3-70b-instruct",
-        "streamSupport": true,
-        "routes": {
-          "chatCompletion": "/v1",
-          "models": "https://huggingface.co/api/models"
+        "chatCompletion": {
+          "provider": "huggingface.co",
+          "name": "huggingface.co",
+          "model": "meta-llama/llama-3.3-70b-instruct",
+          "baseURL": "https://router.huggingface.co",
+          "streamSupport": true,
+          "routes": {
+            "chatCompletion": "/v1",
+            "models": "https://huggingface.co/api/models"
+          }
         }
       },
       "openai": {
-        "name": "openai",
-        "baseURL": "https://api.openai.com",
-        "defaultModel": "gpt-5.1",
-        "streamSupport": true,
-        "routes": {
-          "chatCompletion": "/v1/",
-          "models": "/v1/models"
+        "chatCompletion": {
+          "provider": "openai",
+          "name": "openai",
+          "model": "gpt-5.1",
+          "baseURL": "https://api.openai.com",
+          "streamSupport": true,
+          "routes": {
+            "chatCompletion": "/v1/",
+            "models": "/v1/models"
+          }
+        }
+      },
+      "chatgpt-codex": {
+        "chatCompletion": {
+          "provider": "chatgpt-codex",
+          "name": "chatgpt-codex",
+          "model": "gpt-5.4",
+          "baseURL": "https://chatgpt.com/backend-api/codex",
+          "streamSupport": true,
+          "auth": {
+            "type": "oauth",
+            "oauth": {
+              "authorizationUrl": "https://auth.openai.com/oauth/authorize",
+              "tokenUrl": "https://auth.openai.com/oauth/token",
+              "clientId": "app_EMoamEEZ73f0CkXaXp7hrann",
+              "scope": "openid profile email offline_access",
+              "authorizeQuery": {
+                "id_token_add_organizations": "true",
+                "codex_cli_simplified_flow": "true"
+              }
+            }
+          },
+          "routes": {
+            "chatCompletion": "/responses",
+            "models": "/models"
+          }
         }
       },
       "openrouter.ai": {
-        "name": "openrouter.ai",
-        "baseURL": "https://openrouter.ai",
-        "defaultModel": "google/gemini-2.5-flash-lite",
-        "streamSupport": true,
-        "routes": {
-          "chatCompletion": "/api/v1/",
-          "models": "/api/v1/models"
+        "chatCompletion": {
+          "provider": "openrouter.ai",
+          "name": "openrouter.ai",
+          "model": "google/gemini-2.5-flash-lite",
+          "baseURL": "https://openrouter.ai",
+          "streamSupport": true,
+          "defaultHeaders": {
+            "HTTP-Referer": "https://taskyon.space",
+            "X-Title": "Taskyon"
+          },
+          "routes": {
+            "chatCompletion": "/api/v1/",
+            "models": "/api/v1/models"
+          }
         }
       },
       "local": {
-        "name": "local LLM server",
-        "baseURL": "http://localhost:8080",
-        "defaultModel": "qwen3-4b",
-        "streamSupport": true,
-        "routes": {
-          "chatCompletion": "/v1/",
-          "models": "/v1/models"
+        "chatCompletion": {
+          "provider": "local",
+          "name": "local LLM server",
+          "model": "qwen3-4b",
+          "baseURL": "http://localhost:8080",
+          "streamSupport": true,
+          "routes": {
+            "chatCompletion": "/v1/",
+            "models": "/v1/models"
+          }
         }
       }
-    },
-    "siteUrl": "https://taskyon.space",
+    }
+  },
+  "selectedToolchainProfile": "taskyon",
+  "llmSettings": {
+    "entryFunction": "taskyonFlow",
     "taskWorker": {
       "maxConcurrency": 4
     }

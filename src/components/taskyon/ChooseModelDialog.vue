@@ -13,13 +13,17 @@
       <div data-cy="model-id" class="q-pl-xs ellipsis">
         {{ `${tystate.currentModelId}` }}
       </div>
-      <div class="text-weight-thin gt-xs">/{{ state.llmSettings.selectedApi }}</div>
+      <div class="text-weight-thin gt-xs">/{{ state.selectedToolchainProfile }}</div>
     </template>
     <template #default="{ close }">
       <q-list dense style="min-width: 100px">
         <div class="row">
           <q-btn square flat :icon="matSmartToy" label="Model List" to="/pricing" />
-          <ApiSelect v-model="state.llmSettings.selectedApi" more-settings />
+          <ApiSelect
+            v-model="selectedProviderProfile"
+            more-settings
+            :options="tystate.availableProviders"
+          />
         </div>
         <q-separator />
         <q-item-label header>Previously selected AI models!</q-item-label>
@@ -37,10 +41,11 @@
         </q-item>
         <q-separator />
         <ModelSelection
-          v-model:selected-api="selectedApi"
+          v-model:selected-profile="selectedProviderProfile"
           class="q-px-xs self-stretch"
           :used-key="tystate.taskyonKey"
           :selected-model="tystate.currentModelId ?? 'no valid model selected...'"
+          :provider-id="tystate.selectedProviderId"
           :model-list="state.appConfiguration.expertMode"
           :select-api="state.appConfiguration.expertMode"
           :model-options="Object.values(tystate.llmModels)"
@@ -76,12 +81,15 @@ import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
 import ResponsiveMenuDialogBtn from '@taskyon/ui/components/ResponsiveMenuDialogBtn.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { toRefs } from 'vue'
+import { computed } from 'vue'
 import ApiSelect from './ApiSelect.vue'
 import ModelSelection from './ModelSelection.vue'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 
-const { selectedApi } = toRefs(state.llmSettings)
+const selectedProviderProfile = computed({
+  get: () => state.selectedToolchainProfile ?? null,
+  set: (profileName) => state.setSelectedToolchainProfile(profileName ?? undefined),
+})
 </script>

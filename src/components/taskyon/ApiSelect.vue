@@ -10,7 +10,7 @@
       color="secondary"
       dense
       label="Provider"
-      :options="tystate.availableProviders"
+      :options="options"
     >
       <template #option="{ itemProps, opt }">
         <q-item v-bind="itemProps" data-cy="provider-option" :data-provider="opt">
@@ -35,13 +35,11 @@
 
 <script setup lang="ts">
 import { matElectricalServices, matSettings } from '@quasar/extras/material-icons'
-import { useTaskyonStore } from 'src/stores/taskyonState'
 
 const model = defineModel<string | null>()
 
 defineProps<{
   moreSettings?: boolean
+  options: string[]
 }>()
-
-const tystate = useTaskyonStore()
 </script>

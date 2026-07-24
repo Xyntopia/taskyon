@@ -133,7 +133,7 @@ export function testTaskyonProfileSettingsHelpers() {
   const current = getCurrentProfileSettingsForDiagnostics()
   const patched = validateTaskyonProfileSettingsPatch(current, {
     appConfiguration: { primaryColor: '#123456' },
-    llmSettings: { selectedApi: 'taskyon' },
+    selectedToolchainProfile: 'taskyon',
     toolchainProfiles: {
       base: {
         entryNode: {
@@ -150,8 +150,8 @@ export function testTaskyonProfileSettingsHelpers() {
     'Expected appConfiguration patch to update primaryColor',
   )
   assert(
-    patched.llmSettings?.selectedApi === 'taskyon',
-    'Expected llmSettings patch to update selectedApi',
+    patched.selectedToolchainProfile === 'taskyon',
+    'Expected the patch to select the taskyon provider profile',
   )
   assert(
     patched.toolchainProfiles?.base.entryNode?.prompt_templates !== undefined &&
@@ -1708,8 +1708,8 @@ export const testChatCompletion = async () => {
 }
 
 export const testChatCompletionTaskyonProxyMint = async () => {
-  const prevSelectedApi = state.llmSettings.selectedApi
-  state.setLLMSettings('selectedApi', 'taskyon')
+  const prevSelectedProfile = state.selectedToolchainProfile
+  state.setSelectedToolchainProfile('taskyon')
 
   const streamStats = new Map<
     string,
@@ -1807,7 +1807,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
     }
   } finally {
     stopStreamProbe()
-    state.setLLMSettings('selectedApi', prevSelectedApi || 'taskyon')
+    state.setSelectedToolchainProfile(prevSelectedProfile ?? 'taskyon')
   }
 }
 testChatCompletionTaskyonProxyMint.description =
@@ -1815,7 +1815,7 @@ testChatCompletionTaskyonProxyMint.description =
 
 export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
   const ty = await tystate.taskyon
-  const prevSelectedApi = state.llmSettings.selectedApi
+  const prevSelectedProfile = state.selectedToolchainProfile
   const prevTaskyonKey = tystate.getTaskyonKeyString()
   const userAuthToken = state.authToken
   if (!(typeof userAuthToken === 'string' && userAuthToken.length > 0)) {
@@ -1826,7 +1826,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
     }
   }
   await tystate.setProviderApiKey('taskyon', userAuthToken)
-  state.setLLMSettings('selectedApi', 'taskyon')
+  state.setSelectedToolchainProfile('taskyon')
 
   const streamStats = new Map<
     string,
@@ -1953,7 +1953,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
   } finally {
     stopStreamProbe()
     await tystate.setProviderApiKey('taskyon', prevTaskyonKey as KeyString | undefined)
-    state.setLLMSettings('selectedApi', prevSelectedApi || 'taskyon')
+    state.setSelectedToolchainProfile(prevSelectedProfile ?? 'taskyon')
   }
 }
 testChatCompletionTaskyonProxyMintSupabaseCosts.description =
@@ -1961,7 +1961,7 @@ testChatCompletionTaskyonProxyMintSupabaseCosts.description =
 
 export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: string }) => {
   const ty = await tystate.taskyon
-  const prevSelectedApi = state.llmSettings.selectedApi
+  const prevSelectedProfile = state.selectedToolchainProfile
   const prevTaskyonKey = tystate.getTaskyonKeyString()
   const tyauth = ctx?.tyauth
 
@@ -1971,7 +1971,7 @@ export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: st
   )
 
   await tystate.setProviderApiKey('taskyon', tyauth as KeyString)
-  state.setLLMSettings('selectedApi', 'taskyon')
+  state.setSelectedToolchainProfile('taskyon')
 
   try {
     const taskList: partialTaskDraft[][] = [
@@ -2035,7 +2035,7 @@ export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: st
     }
   } finally {
     await tystate.setProviderApiKey('taskyon', prevTaskyonKey as KeyString | undefined)
-    state.setLLMSettings('selectedApi', prevSelectedApi || 'taskyon')
+    state.setSelectedToolchainProfile(prevSelectedProfile ?? 'taskyon')
   }
 }
 testChatCompletionTaskyonProxyMetadata.description =

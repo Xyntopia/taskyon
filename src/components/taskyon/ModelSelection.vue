@@ -34,7 +34,7 @@
           </q-item>
         </template>
         <template #prepend>
-          <q-icon v-if="selectedApi === 'taskyon' && usedKey" :name="mdiKeyLink">
+          <q-icon v-if="providerId === 'taskyon' && usedKey" :name="mdiKeyLink">
             <q-tooltip>Only models allowed from key: {{ usedKey.name }}</q-tooltip>
           </q-icon>
         </template>
@@ -61,6 +61,7 @@ import { computed, ref } from 'vue'
 
 const props = defineProps<{
   selectedModel: string | null
+  providerId?: string | undefined
   modelList?: boolean
   selectApi?: boolean
   modelOptions: {
@@ -72,7 +73,7 @@ const props = defineProps<{
   usedKey?: { name?: string | undefined } | undefined
 }>()
 
-const selectedApi = defineModel<string | null>('selectedApi', {
+const selectedProfile = defineModel<string | null>('selectedProfile', {
   required: true,
 })
 const showVisionModels = ref(false)
@@ -91,7 +92,7 @@ const selectModelInput = ref()
 const computedModelOptions = computed(() => {
   // openai has no pricing information attached, so we sort it in different ways...
   console.log('calculate model options!')
-  if (selectedApi.value === 'openai') {
+  if (props.providerId === 'openai') {
     const options = [...props.modelOptions]
       .sort((m1, m2) => m1.id.localeCompare(m2.id))
       .map((m) => ({
@@ -126,7 +127,7 @@ function onModelSelect(value: string) {
   console.log('selecting a new model...', value)
   emit('updateBotName', {
     newName: value,
-    newService: selectedApi.value,
+    newService: selectedProfile.value,
   })
 }
 

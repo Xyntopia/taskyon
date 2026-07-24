@@ -130,7 +130,7 @@ export const appConfiguration = z.object({
 export type appConfiguration = z.infer<typeof appConfiguration>
 
 export const TyProfile = z.object({
-  version: z.literal(29).meta({
+  version: z.literal(31).meta({
     description:
       'whenever the schema of the settings change, this number will get changed as well...',
   }),
