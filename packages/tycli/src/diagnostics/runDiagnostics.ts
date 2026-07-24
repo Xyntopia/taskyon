@@ -198,6 +198,10 @@ async function listTestFileEntries() {
       sourcePrefix: 'packages/taskyon/src/tests/',
     },
     {
+      dirUrl: new URL('../../../runtime-browser/src/tests/', import.meta.url),
+      sourcePrefix: 'packages/runtime-browser/src/tests/',
+    },
+    {
       dirUrl: new URL('./tests/', import.meta.url),
       sourcePrefix: 'packages/tycli/src/diagnostics/tests/',
     },

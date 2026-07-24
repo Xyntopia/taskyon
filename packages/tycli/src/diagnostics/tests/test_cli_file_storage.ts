@@ -41,6 +41,28 @@ export const testCliFileStoragePersistsTaskRecordsAndFindsRelations = async () =
   await firstStorage.tasks.set('parent-task', parentTask)
   await firstStorage.tasks.set('child-task', childTask)
   await firstStorage.tasks.set('sibling-task', siblingTask)
+  await firstStorage.meta.upsert(
+    'child-task',
+    {
+      rawOutput: {
+        nested: {
+          left: true,
+        },
+      },
+    },
+    'replace',
+  )
+  await firstStorage.meta.upsert(
+    'child-task',
+    {
+      rawOutput: {
+        nested: {
+          right: true,
+        },
+      },
+    },
+    'deepmerge',
+  )
   stopFirstService()
 
   const secondPort = createProtocolPort(taskyonStorageProtocol)
@@ -49,6 +71,7 @@ export const testCliFileStoragePersistsTaskRecordsAndFindsRelations = async () =
 
   try {
     const loadedChild = await secondStorage.tasks.get('child-task')
+    const childMeta = await secondStorage.meta.get('child-task')
     const children = await secondStorage.tasks.find({ parentID: 'parent-task' })
     const nextSiblings = await secondStorage.tasks.find({ priorID: 'child-task' })
 
@@ -64,6 +87,18 @@ export const testCliFileStoragePersistsTaskRecordsAndFindsRelations = async () =
     assert(
       nextSiblings['sibling-task']?.id === 'sibling-task',
       'Expected priorID find to include sibling',
+    )
+    assert(
+      childMeta?.rawOutput &&
+        typeof childMeta.rawOutput === 'object' &&
+        'nested' in childMeta.rawOutput &&
+        childMeta.rawOutput.nested &&
+        typeof childMeta.rawOutput.nested === 'object' &&
+        'left' in childMeta.rawOutput.nested &&
+        childMeta.rawOutput.nested.left === true &&
+        'right' in childMeta.rawOutput.nested &&
+        childMeta.rawOutput.nested.right === true,
+      'Expected deepmerge upsert to roundtrip through the shared record-file backend',
     )
   } finally {
     stopSecondService()

@@ -1,0 +1,17 @@
+{
+  "name": "@taskyon/runtime-browser",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts"
+    },
+    "./storage": {
+      "import": "./src/storage.ts"
+    }
+  },
+  "dependencies": {
+    "@taskyon/taskyon": "workspace:*"
+  }
+}

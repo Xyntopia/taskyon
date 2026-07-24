@@ -42,7 +42,7 @@ export {
   ToolchainProfiles,
   TyToolchainConfig,
 } from '../types/profiles'
-export type { ClientTool, ClientToolContext, toolContext } from '../types/toolApi'
+export type { ClientTool, ClientToolContext, InternalTool, toolContext } from '../types/toolApi'
 export { FunctionArguments } from '../types/tools'
 export type { FunctionCall, ToolBase } from '../types/tools'
 export { sha256UrlSafeHashFromFile } from '../utils/encoding'
@@ -86,6 +86,13 @@ export {
   type StorageRecordCrud,
   type TaskyonStorageMessage,
 } from './storageProtocol'
+export {
+  createStorageRecordFileBackend,
+  parseStorageRecordFile,
+  storageRecordFilePath,
+  storageRecordNamespacePath,
+  type StorageRecordFileAdapter,
+} from './storageRecordFileBackend'
 export {
   callToolOverRpc,
   createToolExecutionClient,

@@ -73,6 +73,7 @@ type TaskManagerStorageFactory = (args: {
   sessionId: string
   db: Awaited<ReturnType<typeof getDatabase>>
 }) => Promise<TaskManagerStorage> | TaskManagerStorage
+type TaskyonDatabaseFactory = (name: string) => Promise<TyPGDB>
 
 export type TyCoreToolSetup = {
   baseTools: InternalTool[]
@@ -233,6 +234,7 @@ const dynamicContext =
     iframeMultiPlexer: IframeMultiPlexer,
     options: {
       indexTaskVectors: boolean
+      databaseFactory: TaskyonDatabaseFactory
       secretStore?: SecretStore
       sendEncryptedTasks?: Thunk<boolean>
       streamObservers: SessionStreamObservers
@@ -243,7 +245,7 @@ const dynamicContext =
     // if our cryptoSession changes, we need to re-calculate everything below!
     //#####################  INIT CTX ####################
     const sessionKeyId = await cs.getSessionId()
-    const db = await getDatabase(sessionKeyId)
+    const db = await options.databaseFactory(sessionKeyId)
     console.log('tycore starting new session with id:', sessionKeyId)
     const storage = options.taskManagerStorageFactory
       ? await options.taskManagerStorageFactory({ sessionId: sessionKeyId, db })
@@ -509,6 +511,7 @@ export async function tyCore(
     toolSetup?: TyCoreToolSetup
     createIframeMultiPlexer?: CreateIframeMultiPlexer
     indexTaskVectors?: boolean
+    databaseFactory?: TaskyonDatabaseFactory
     nodePgLiteDataDir?: string
     secretStore?: SecretStore
     taskManagerStorageFactory?: TaskManagerStorageFactory
@@ -548,6 +551,7 @@ export async function tyCore(
     iframeMultiPlexer,
     {
       indexTaskVectors: options?.indexTaskVectors !== false,
+      databaseFactory: options?.databaseFactory ?? getDatabase,
       ...(options?.secretStore ? { secretStore: options.secretStore } : {}),
       streamObservers: {
         worker: workerStream.emit,
@@ -589,6 +593,7 @@ export async function tyCore(
     workerStream: workerStream.stream,
     taskStream: taskStream.stream,
     workerStop: (message: string) => ctx.workerStop(message),
+    dispose: (message: string) => ctx.dispose(message),
     updateChatCompletionApiKey: async (key: string, value?: string) => {
       const { tool, def } = await ctx.taskManagerInstance.getToolDefinition(
         toolSetup.chatCompletionToolName,

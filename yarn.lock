@@ -5196,6 +5196,14 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@taskyon/runtime-browser@workspace:*, @taskyon/runtime-browser@workspace:packages/runtime-browser":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/runtime-browser@workspace:packages/runtime-browser"
+  dependencies:
+    "@taskyon/taskyon": "workspace:*"
+  languageName: unknown
+  linkType: soft
+
 "@taskyon/secure-tunnel@workspace:packages/secure-tunnel":
   version: 0.0.0-use.local
   resolution: "@taskyon/secure-tunnel@workspace:packages/secure-tunnel"
@@ -20073,6 +20081,7 @@ __metadata:
     "@taskyon/comp-dag": "workspace:*"
     "@taskyon/modelica": "workspace:*"
     "@taskyon/p2p-core": "workspace:*"
+    "@taskyon/runtime-browser": "workspace:*"
     "@taskyon/spaceships": "workspace:*"
     "@taskyon/surrogate": "workspace:*"
     "@taskyon/ui": "workspace:*"

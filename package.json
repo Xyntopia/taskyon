@@ -18,6 +18,7 @@
     "packages/taskyon",
     "packages/taskyon-mcp",
     "packages/taskyon-vscode",
+    "packages/runtime-browser",
     "packages/tycli",
     "packages/tyclient",
     "packages/ui"
@@ -98,6 +99,7 @@
     "@taskyon/comp-dag": "workspace:*",
     "@taskyon/modelica": "workspace:*",
     "@taskyon/p2p-core": "workspace:*",
+    "@taskyon/runtime-browser": "workspace:*",
     "@taskyon/spaceships": "workspace:*",
     "@taskyon/surrogate": "workspace:*",
     "@taskyon/ui": "workspace:*",

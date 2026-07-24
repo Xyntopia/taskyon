@@ -10,6 +10,7 @@ export type TyPGDB =
   | (PGlite & { live?: LiveNamespace; name?: string })
 
 const pgInstances = new Map<string, TyPGDB>()
+const memoryPgInstances = new Map<string, TyPGDB>()
 let nodeDataDirResolver: ((name: string) => string) | null = null
 
 const useNodePgLite = () => typeof indexedDB === 'undefined'
@@ -58,6 +59,21 @@ export const getDatabase: (name: string) => Promise<TyPGDB> = async (name) => {
   pgInstances.set(name, newInstance)
   newInstance.name = name
   return newInstance
+}
+
+export const getInMemoryDatabase = async (name: string): Promise<TyPGDB> => {
+  const existingDb = memoryPgInstances.get(name)
+  if (existingDb) return existingDb
+
+  const database: TyPGDB = await PGlite.create({
+    dataDir: 'memory://',
+    extensions: {
+      vector,
+    },
+  })
+  database.name = name
+  memoryPgInstances.set(name, database)
+  return database
 }
 
 export interface PgLiteOptions {

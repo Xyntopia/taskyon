@@ -183,6 +183,7 @@ import { copyToClipboard, getEnvironmentInfo } from '@taskyon/common/modules/uti
 
 const testModules = import.meta.glob(
   [
+    '../../packages/runtime-browser/src/tests/**/*.ts',
     '../../packages/taskyon/src/tests/**/*.ts',
     '!../../packages/taskyon/src/tests/test_entry_node_error_recovery.ts',
     '!../../packages/taskyon/src/tests/test_entry_node_websearch.ts',
