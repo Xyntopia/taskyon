@@ -54,31 +54,34 @@ const mockOverpassApi = async (page: Page) => {
 }
 
 const mockChatCompletionApi = async (page: Page) => {
-  await page.route('**/chat/completions', async (route) => {
-    const chunk = {
-      id: 'chatcmpl-map-widget-test',
-      object: 'chat.completion.chunk',
-      created: 0,
-      model: 'map-widget-test',
-      choices: [
-        {
-          index: 0,
-          delta: { content: JSON.stringify({ overpassQuery: cafeOverpassQuery }) },
-          finish_reason: null,
-        },
-      ],
-    }
-    const done = {
-      ...chunk,
-      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
-    }
+  await page.route(
+    /\/(?:chatCompletion\/api\/v1\/.*|chat\/completions)(?:\?.*)?$/,
+    async (route) => {
+      const chunk = {
+        id: 'chatcmpl-map-widget-test',
+        object: 'chat.completion.chunk',
+        created: 0,
+        model: 'map-widget-test',
+        choices: [
+          {
+            index: 0,
+            delta: { content: JSON.stringify({ overpassQuery: cafeOverpassQuery }) },
+            finish_reason: null,
+          },
+        ],
+      }
+      const done = {
+        ...chunk,
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }
 
-    await route.fulfill({
-      status: 200,
-      contentType: 'text/event-stream',
-      body: `data: ${JSON.stringify(chunk)}\n\ndata: ${JSON.stringify(done)}\n\ndata: [DONE]\n\n`,
-    })
-  })
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: `data: ${JSON.stringify(chunk)}\n\ndata: ${JSON.stringify(done)}\n\ndata: [DONE]\n\n`,
+      })
+    },
+  )
 }
 
 const latestMapWidgetFrame = (page: Page): FrameLocator =>

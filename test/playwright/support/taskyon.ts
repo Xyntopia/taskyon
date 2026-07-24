@@ -158,22 +158,24 @@ export const addAiServices = async (page: Page, env: OnlineEnv) => {
   const providerPanel = page.locator('.llm-providers')
   await expect(providerPanel).toBeVisible()
   await expect(providerPanel.getByText(/currently using Taskyon’s free version/i)).toBeVisible()
-  const keyExpansion = providerPanel.getByText('Add API keys for AI services below:')
-  await keyExpansion.click()
+  await dataCy(providerPanel, 'provider-api-keys').getByRole('button').first().click()
 
   for (const [provider, key] of Object.entries(providerKeys)) {
     await providerPanel.getByRole('button', { name: provider, exact: true }).click()
-    const input = page.getByLabel(`${provider} key`, { exact: true })
+    const input = page.getByRole('textbox', { name: `${provider} key`, exact: true })
     await expect(input).toBeVisible()
     await input.fill(key)
-    await page.getByRole('button', { name: 'OK', exact: true }).last().click()
-    await expect(input).toBeHidden()
+    const dialog = page.getByRole('dialog').filter({ has: input })
+    await dialog.getByRole('button', { name: 'OK', exact: true }).click()
     if (provider === 'taskyon') {
       await expect(providerPanel.getByText(/currently using Taskyon’s free version/i)).toBeHidden()
     }
+    await expect(input).toBeHidden()
   }
 
-  const providerSelect = page.getByRole('combobox', { name: 'Provider' })
+  const providerSelect = dataCy(providerPanel, 'settings-provider-select').getByRole('combobox', {
+    name: 'Provider',
+  })
   await providerSelect.click()
   for (const provider of Object.keys(providerKeys)) {
     await expect(
