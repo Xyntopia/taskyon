@@ -21,7 +21,7 @@ type PlannedTaskInput =
       agentInstructions?: string
       allowedTools?: string[]
       doneWhen?: string[]
-      result?: TaskContractResult
+      result?: TaskContractResult | 'message' | null
     }
 
 const plannerTaskObjectSchema = {
@@ -42,7 +42,9 @@ const plannerTaskObjectSchema = {
       items: { type: 'string' },
       description: 'Optional semantic criteria that define when the task is complete.',
     },
-    result: taskContractResultSchema,
+    result: {
+      anyOf: [taskContractResultSchema, { type: 'null' }, { const: 'message' }],
+    },
   },
   required: ['task'],
 } as const satisfies JSONSchema7
@@ -58,7 +60,7 @@ const isJsonSchema = (value: unknown): value is JSONSchema7 & Record<string, unk
   value !== null && typeof value === 'object' && !Array.isArray(value)
 
 const normalizeTaskResult = (value: unknown): TaskContractResult => {
-  if (value === undefined) return { mode: 'message' }
+  if (value === undefined || value === null || value === 'message') return { mode: 'message' }
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Planner task "result" must be an object.')
   }

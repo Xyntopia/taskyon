@@ -7,7 +7,7 @@ import { createExternalToolContext, registerToolRpcTools } from '../core/toolRpc
 import { createTaskyonClient } from '../api'
 import { createSubtasksResult, toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
-import { createStandardEntryNodeTool } from '../tools/entryNode'
+import { createStandardEntryNodeTool, normalizeEntryNodeSettings } from '../tools/entryNode'
 import { createDefaultTaskyonToolSetup } from '../tools'
 import { CLARIFICATION_TOOL_NAME } from '../tools/clarificationTool'
 import { buildLinkedTaskChain } from '../testSupport/onlineProviderSupport'
@@ -17,6 +17,40 @@ import { FunctionCall } from '../types/tools'
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
 }
+
+export const testEntryNodeDefaultsNullTaskContractResultToMessage = () => {
+  const normalized = normalizeEntryNodeSettings({
+    taskContract: {
+      objective: 'Use the clock tool.',
+      result: null,
+    } as never,
+  })
+
+  assert(
+    normalized.taskContract?.result.mode === 'message',
+    'Expected a null provider-generated task result contract to default to message mode.',
+  )
+  return { success: true }
+}
+testEntryNodeDefaultsNullTaskContractResultToMessage.description =
+  'Defaults a provider-generated null task contract result to message mode before entry-node execution.'
+
+export const testEntryNodeNormalizesScalarMessageTaskContractResult = () => {
+  const normalized = normalizeEntryNodeSettings({
+    taskContract: {
+      objective: 'Use the clock tool.',
+      result: 'message',
+    } as never,
+  })
+
+  assert(
+    normalized.taskContract?.result.mode === 'message',
+    'Expected a provider-generated scalar message result to normalize to message mode.',
+  )
+  return { success: true }
+}
+testEntryNodeNormalizesScalarMessageTaskContractResult.description =
+  'Normalizes a provider-generated scalar message task result before entry-node execution.'
 
 const getFunctionCall = (task: unknown): FunctionCall | undefined => {
   if (!task || typeof task !== 'object' || !('content' in task)) return undefined

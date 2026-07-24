@@ -195,6 +195,15 @@ export const testTaskPlannerNormalizesTaskInputs = () => {
   )
   assert(!stringTask.allowedTools, 'Expected plain string tasks to keep allowedTools undefined')
 
+  const scalarResultTask = normalizePlannedTaskInput({
+    task: 'Open the clock.',
+    result: 'message',
+  } as never)
+  assert(
+    scalarResultTask.taskContract.result.mode === 'message',
+    'Expected a provider-generated scalar message result to normalize to message mode',
+  )
+
   const objectTask = normalizePlannedTaskInput({
     task: 'Summarize the findings',
     agentInstructions: 'Act as a concise technical editor.',

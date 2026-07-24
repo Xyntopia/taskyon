@@ -6,7 +6,11 @@ import { createTool } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
 import type { JSONSchema7 } from '../utils/jsonSchema'
-import { taskContractSchema, type TaskContract } from '../types/taskContract'
+import {
+  taskContractResultSchema,
+  taskContractSchema,
+  type TaskContract,
+} from '../types/taskContract'
 import { safeYamlDump } from '../utils/yamlUtils'
 
 type EntryNodeMode = 'message' | 'toolresult' | 'error' | 'structured' | 'fallback'
@@ -97,6 +101,17 @@ export type ResolvedEntryNodeSettings = {
   prompt_templates: EntryNodePromptTemplates
 }
 
+const entryNodeTaskContractSchema = {
+  ...taskContractSchema,
+  properties: {
+    ...taskContractSchema.properties,
+    result: {
+      anyOf: [taskContractResultSchema, { type: 'null' }, { const: 'message' }],
+    },
+  },
+  required: ['objective'],
+} as const satisfies JSONSchema7
+
 const stringifyPromptValue = (value: unknown) =>
   typeof value === 'string' ? value : safeYamlDump(value)
 
@@ -121,35 +136,50 @@ const resolvePromptTemplates = (
 
 export const normalizeEntryNodeSettings = (
   input: Partial<EntryNodeArgs> | undefined,
-): ResolvedEntryNodeSettings => ({
-  ...(input?.taskContract ? { taskContract: input.taskContract } : {}),
-  use_baseprompt: input?.use_baseprompt ?? true,
-  providerToolCalling:
-    input?.taskContract?.result.mode !== undefined && input.taskContract.result.mode !== 'message'
-      ? false
-      : (input?.providerToolCalling ??
-        (input as { nativeToolCalling?: boolean } | undefined)?.nativeToolCalling ??
-        (input as { llmTools?: boolean } | undefined)?.llmTools ??
-        true),
-  use_tool_chooser: input?.use_tool_chooser ?? true,
-  tool_chooser_min_tools: input?.tool_chooser_min_tools ?? 5,
-  max_error_retries: input?.max_error_retries ?? 3,
-  ...(input?.reasoning_effort ? { reasoning_effort: input.reasoning_effort } : {}),
-  use_multimodal: input?.use_multimodal ?? true,
-  websearch: {
-    enabled: input?.websearch?.enabled ?? false,
-    max_results: input?.websearch?.max_results ?? 5,
-  },
-  ...(input?.trace?.enabled === true
+): ResolvedEntryNodeSettings => {
+  const rawTaskContractResult = input?.taskContract?.result as unknown
+  const taskContract = input?.taskContract
     ? {
-        trace: {
-          enabled: true,
-          ...(typeof input.trace.label === 'string' ? { label: input.trace.label } : {}),
-        },
+        ...input.taskContract,
+        result:
+          rawTaskContractResult === null ||
+          rawTaskContractResult === undefined ||
+          rawTaskContractResult === 'message'
+            ? { mode: 'message' as const }
+            : input.taskContract.result,
       }
-    : {}),
-  prompt_templates: resolvePromptTemplates(input?.prompt_templates),
-})
+    : undefined
+
+  return {
+    ...(taskContract ? { taskContract } : {}),
+    use_baseprompt: input?.use_baseprompt ?? true,
+    providerToolCalling:
+      taskContract?.result.mode !== undefined && taskContract.result.mode !== 'message'
+        ? false
+        : (input?.providerToolCalling ??
+          (input as { nativeToolCalling?: boolean } | undefined)?.nativeToolCalling ??
+          (input as { llmTools?: boolean } | undefined)?.llmTools ??
+          true),
+    use_tool_chooser: input?.use_tool_chooser ?? true,
+    tool_chooser_min_tools: input?.tool_chooser_min_tools ?? 5,
+    max_error_retries: input?.max_error_retries ?? 3,
+    ...(input?.reasoning_effort ? { reasoning_effort: input.reasoning_effort } : {}),
+    use_multimodal: input?.use_multimodal ?? true,
+    websearch: {
+      enabled: input?.websearch?.enabled ?? false,
+      max_results: input?.websearch?.max_results ?? 5,
+    },
+    ...(input?.trace?.enabled === true
+      ? {
+          trace: {
+            enabled: true,
+            ...(typeof input.trace.label === 'string' ? { label: input.trace.label } : {}),
+          },
+        }
+      : {}),
+    prompt_templates: resolvePromptTemplates(input?.prompt_templates),
+  }
+}
 
 export const buildEntryNodePromptAugmentations = (args: {
   mode: EntryNodeMode
@@ -679,7 +709,7 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
             type: 'string',
           },
         },
-        taskContract: taskContractSchema,
+        taskContract: entryNodeTaskContractSchema,
         use_baseprompt: {
           type: 'boolean',
           default: true,
