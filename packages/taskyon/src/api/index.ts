@@ -29,8 +29,10 @@ export {
 export { REMOTE_FUNCTION_TIMEOUT_MS } from './taskyonProtocol'
 export { createMarkdownTaskChain } from '../core/markdownTaskIO'
 export {
+  getToolchainProviderProfiles,
   llmSettings,
   resolveToolchainConfig,
+  resolveToolchainProvider,
   updateToolchainConfigValue,
   ToolchainProfiles,
   TyToolchainConfig,

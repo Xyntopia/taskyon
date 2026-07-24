@@ -5,8 +5,10 @@ export {
   type partialTyConfiguration,
 } from './types/guiApiTypes'
 export {
+  getToolchainProviderProfiles,
   llmSettings,
   resolveToolchainConfig,
+  resolveToolchainProvider,
   updateToolchainConfigValue,
   ToolchainProfiles,
   TyToolchainConfig,

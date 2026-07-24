@@ -1,5 +1,4 @@
-import type { ReadonlyDeep } from 'type-fest'
-import type { llmSettings } from '../types/profiles'
+import type { ChatCompletionProviderSettings } from '../types/chatCompletion'
 import { availableModels } from './chat'
 import { TOKEN_SERVICE_BASE_URL } from '../taskyon.space/tokenservice.types'
 import { joinUrl } from '../utils/httpUtils'
@@ -10,44 +9,40 @@ type ModelDiscoveryOptions = {
 }
 
 const resolveModelEndpoint = (
-  api: NonNullable<llmSettings['llmApis']>[string],
+  api: ChatCompletionProviderSettings,
   options: ModelDiscoveryOptions,
 ): string => {
-  if (api.name === 'openrouter.ai' && options.useTokenServiceForOpenrouter) {
+  if (api.provider === 'openrouter.ai' && options.useTokenServiceForOpenrouter) {
     return `${TOKEN_SERVICE_BASE_URL}/api/models_openrouter`
   }
-  if (api.name === 'taskyon' && options.useTokenServiceForTaskyon) {
+  if (api.provider === 'taskyon' && options.useTokenServiceForTaskyon) {
     return `${TOKEN_SERVICE_BASE_URL}/api/models`
   }
   return joinUrl(api.baseURL, api.routes.models)
 }
 
 const resolveModelApiKey = async (
-  api: NonNullable<llmSettings['llmApis']>[string],
+  api: ChatCompletionProviderSettings,
   getApiKey: (name: string) => Promise<string | null>,
   options: ModelDiscoveryOptions,
 ): Promise<string> => {
-  if (api.name === 'openrouter.ai' && options.useTokenServiceForOpenrouter) {
-    return (await getApiKey('taskyon')) || (await getApiKey(api.name)) || ''
+  if (api.provider === 'openrouter.ai' && options.useTokenServiceForOpenrouter) {
+    return (await getApiKey('taskyon')) || (await getApiKey(api.provider)) || ''
   }
-  if (api.name === 'taskyon' && options.useTokenServiceForTaskyon) {
+  if (api.provider === 'taskyon' && options.useTokenServiceForTaskyon) {
     return (await getApiKey('taskyon')) || ''
   }
-  return (await getApiKey(api.name)) || ''
+  return (await getApiKey(api.provider)) || ''
 }
 
-export async function fetchModelsForSelectedApi(
-  settings: ReadonlyDeep<Pick<llmSettings, 'selectedApi' | 'llmApis'>>,
+export async function fetchModelsForProvider(
+  api: ChatCompletionProviderSettings,
   getApiKey: (name: string) => Promise<string | null>,
   options: ModelDiscoveryOptions = {
     useTokenServiceForOpenrouter: false,
     useTokenServiceForTaskyon: false,
   },
 ) {
-  const selectedApi = settings.selectedApi || ''
-  const api = settings.llmApis[selectedApi]
-  if (!api) return {}
-
   let modelsUrl: string
   try {
     modelsUrl = resolveModelEndpoint(api, options)

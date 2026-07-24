@@ -1,5 +1,7 @@
 import {
+  getToolchainProviderProfiles,
   resolveToolchainConfig,
+  resolveToolchainProvider,
   updateToolchainConfigValue,
   type ToolchainProfiles,
 } from '../types/profiles'
@@ -202,3 +204,72 @@ export const testToolchainProfileWritesFollowCurrentOwner = () => {
 
 testToolchainProfileWritesFollowCurrentOwner.description =
   'Writes settings to the profile that currently owns the exact setting path.'
+
+const providerSettings = (provider: string, model: string) => ({
+  provider,
+  name: provider,
+  model,
+  baseURL: `https://${provider}.example`,
+  streamSupport: true,
+  routes: {
+    chatCompletion: '/v1/',
+    models: '/v1/models',
+  },
+})
+
+export const testToolchainProviderProfiles = () => {
+  const toolchainProfiles = {
+    base: {
+      chatCompletion: {
+        timeouts: { totalMs: 60_000 },
+      },
+    },
+    profiles: {
+      openai: {
+        chatCompletion: providerSettings('openai', 'gpt-test'),
+      },
+      research: {
+        entryNode: { reasoning_effort: 'high' },
+      },
+    },
+  } satisfies ToolchainProfiles
+
+  const providers = getToolchainProviderProfiles(toolchainProfiles)
+  const selected = resolveToolchainProvider(toolchainProfiles, 'openai')
+
+  assert(Object.keys(providers).length === 1, 'Expected only provider profiles to be returned')
+  assert(providers.openai?.model === 'gpt-test', 'Expected the provider model from the profile')
+  assert(selected.provider === 'openai', 'Expected the selected provider ID')
+  assert(selected.model === 'gpt-test', 'Expected the selected profile model')
+
+  return { success: true }
+}
+
+testToolchainProviderProfiles.description =
+  'Discovers provider profiles and resolves the selected chatCompletion provider configuration.'
+
+export const testProviderProfileRetainsAttributionHeaders = () => {
+  const settings = {
+    ...providerSettings('openrouter.ai', 'gpt-test'),
+    defaultHeaders: {
+      'HTTP-Referer': 'https://taskyon.space',
+      'X-Title': 'Taskyon',
+    },
+  }
+  const toolchainProfiles = {
+    base: {},
+    profiles: {
+      'openrouter.ai': { chatCompletion: settings },
+    },
+  } satisfies ToolchainProfiles
+  const provider = resolveToolchainProvider(toolchainProfiles, 'openrouter.ai')
+  assert(
+    provider.defaultHeaders?.['HTTP-Referer'] === 'https://taskyon.space',
+    'Expected provider-specific attribution headers',
+  )
+
+  return { success: true }
+}
+
+testProviderProfileRetainsAttributionHeaders.description =
+  'Keeps service-specific attribution headers in the owning provider profile.'

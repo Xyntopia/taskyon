@@ -189,7 +189,7 @@ export const TaskNodeMeta = z
 
 export type TaskNodeMeta = z.infer<typeof TaskNodeMeta>
 
-export const apiConfig = z
+export const providerEndpointConfig = z
   .object({
     name: z.string().meta({
       description: 'The name of the API.',
@@ -197,28 +197,12 @@ export const apiConfig = z
     baseURL: z.string().meta({
       description: 'Base URL of the api.',
     }),
-    defaultModel: z.string().meta({
-      description: 'the default model which should be used for this API.',
-    }),
-    selectedModel: z.string().optional().meta({
-      description: 'which model is currently selected.',
-    }),
-    models: z
-      .object({
-        instruction: z.string(),
-        chat: z.string(),
-        free: z.string(),
-      })
-      .partial()
-      .optional()
-      .meta({
-        description: 'Define default models for some tasks.',
-      }),
     streamSupport: z.boolean().meta({
       description: 'Does the API support streaming?',
     }),
     defaultHeaders: z.record(z.string(), z.string()).optional().meta({
-      description: 'If the API needs some special headers for communication (e.g. an API key.)',
+      description:
+        'Static non-secret headers required by this provider. Credentials belong in the secret store.',
     }),
     auth: z
       .object({
@@ -266,10 +250,31 @@ export const apiConfig = z
     }),
   })
   .meta({
-    description: 'Definition of an OpenAI Compatible API.',
+    description: 'Connection settings for an OpenAI-compatible API.',
   })
-export type apiConfig = z.infer<typeof apiConfig>
+export type ProviderEndpointConfig = z.infer<typeof providerEndpointConfig>
 
-export function getCurrentModel(api: apiConfig) {
-  return api.selectedModel || api.defaultModel || api.models?.free || 'No model selected!'
-}
+export const chatCompletionProviderSettings = providerEndpointConfig
+  .extend({
+    provider: z.string().meta({
+      description: 'Stable provider ID used to select the matching secret.',
+    }),
+    model: z.string().meta({
+      description: 'The model selected for this provider profile.',
+    }),
+  })
+  .meta({
+    description: 'Provider-owned chatCompletion settings stored in a toolchain profile.',
+  })
+export type ChatCompletionProviderSettings = z.infer<typeof chatCompletionProviderSettings>
+
+export const chatCompletionConnectionSettings = chatCompletionProviderSettings
+  .omit({ model: true })
+  .meta({
+    description:
+      'Immutable provider connection captured when Taskyon creates the chatCompletion tool.',
+  })
+export type ChatCompletionConnection = z.infer<typeof chatCompletionConnectionSettings>
+
+export const resolveChatCompletionConnection = (settings: unknown) =>
+  chatCompletionConnectionSettings.parse(settings)

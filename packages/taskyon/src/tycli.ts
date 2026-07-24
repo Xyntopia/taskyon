@@ -18,8 +18,11 @@ export { isTaskyonKey } from './core/tyCrypto'
 export { TOKEN_SERVICE_BASE_URL } from './taskyon.space/tokenservice.types'
 export { createStandardEntryNodeTool } from './tools/entryNode'
 export { TaskyonMessage } from './api/index'
-export type { apiConfig } from './types/chatCompletion'
-export { llmSettings } from './types/profiles'
+export {
+  chatCompletionProviderSettings,
+  type ChatCompletionProviderSettings,
+} from './types/chatCompletion'
+export { resolveToolchainConfig, type llmSettings, type ToolchainProfiles } from './types/profiles'
 export { partialTaskDraft, TaskNode } from './types/taskNode'
 export type { ClientTool, InternalTool } from './types/toolApi'
 export { createClientTool, toolCall } from './types/toolApi'

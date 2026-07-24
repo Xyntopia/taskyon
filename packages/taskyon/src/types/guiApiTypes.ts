@@ -10,7 +10,11 @@ import { taskyonProtocol } from '../api/taskyonProtocol'
 export type partialTyConfiguration = PartialDeep<{
   llmSettings: Record<string, unknown>
   appConfiguration: Record<string, unknown>
-  toolchainConfig: Record<string, Record<string, unknown>>
+  toolchainProfiles: {
+    base: Record<string, Record<string, unknown>>
+    profiles: Record<string, Record<string, Record<string, unknown>>>
+  }
+  selectedToolchainProfile: string
   signatureOrKey: unknown
 }>
 

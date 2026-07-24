@@ -1,4 +1,4 @@
-import type { apiConfig } from '../types/chatCompletion'
+import type { ProviderEndpointConfig } from '../types/chatCompletion'
 import type { OAuthCredentials } from './oauth'
 
 export type ProviderOauthConfig = {
@@ -27,7 +27,9 @@ const readConfigValue = (
   return undefined
 }
 
-export const getProviderOauthConfig = (api: apiConfig): ProviderOauthConfig | undefined => {
+export const getProviderOauthConfig = (
+  api: ProviderEndpointConfig,
+): ProviderOauthConfig | undefined => {
   const oauthURL =
     api.auth?.oauth?.authorizationUrl ||
     readConfigValue(api.defaultHeaders, [
@@ -42,9 +44,12 @@ export const getProviderOauthConfig = (api: apiConfig): ProviderOauthConfig | un
   if (!oauthURL || !clientId) return undefined
 
   const scope =
-    api.auth?.oauth?.scope || readConfigValue(api.defaultHeaders, ['oauthScope', 'oauth_scope']) || ''
+    api.auth?.oauth?.scope ||
+    readConfigValue(api.defaultHeaders, ['oauthScope', 'oauth_scope']) ||
+    ''
   const tokenUrl =
-    api.auth?.oauth?.tokenUrl || readConfigValue(api.defaultHeaders, ['oauthTokenUrl', 'oauth_token_url'])
+    api.auth?.oauth?.tokenUrl ||
+    readConfigValue(api.defaultHeaders, ['oauthTokenUrl', 'oauth_token_url'])
   const tokenExchangeUrl = api.auth?.oauth?.tokenExchange?.tokenUrl || tokenUrl
   return {
     oauthURL,
@@ -66,7 +71,7 @@ export const getProviderOauthConfig = (api: apiConfig): ProviderOauthConfig | un
   }
 }
 
-export const hasProviderOauthConfig = (api: apiConfig): boolean => {
+export const hasProviderOauthConfig = (api: ProviderEndpointConfig): boolean => {
   return !!getProviderOauthConfig(api)
 }
 
@@ -77,7 +82,7 @@ export const getProviderOauthCredentialsSecretName = (providerName: string) =>
 
 export async function resolveProviderAccessToken(
   creds: OAuthCredentials,
-  api: apiConfig,
+  api: ProviderEndpointConfig,
 ): Promise<string> {
   const cfg = getProviderOauthConfig(api)
   if (!cfg?.tokenExchange) return creds.access_token

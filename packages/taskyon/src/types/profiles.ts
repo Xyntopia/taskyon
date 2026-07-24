@@ -1,9 +1,11 @@
 import z from 'zod'
 import { deepCopy, deepMerge } from '../utils/objHelpers'
-import { apiConfig } from './chatCompletion'
+import {
+  chatCompletionProviderSettings,
+  type ChatCompletionProviderSettings,
+} from './chatCompletion'
 import { FunctionArguments } from './tools'
 
-// TODO: rename llmSettings to "tyOptions"
 export const llmSettings = z.object({
   userId: z.string().nullish().optional().meta({
     description:
@@ -11,21 +13,6 @@ export const llmSettings = z.object({
   }),
   secretPublicKey: z.string().nullish().optional().meta({
     description: 'A (public) cryptographic key which is used to encrypt secrets',
-  }),
-  // TODO:  simply add apiconfig here..  if we want a different one, we would
-  // simply load an entirely different settings profile
-  // TODO: also:  move this to chatCompletion..  we are using chatCompletion for this after all!
-  // we could also define a second tool for chatCompletion to get a list of models. which
-  // we can then also use in our frontend
-  selectedApi: z.string().nullish().default('taskyon').meta({
-    description: 'which of the defined APIs are we currently using?',
-  }),
-  llmApis: z.record(z.string(), apiConfig).default({}).meta({
-    description: 'A list of OpenAI compatible API definitions.',
-  }),
-  siteUrl: z.string().default('https://taskyon.space').meta({
-    description:
-      'wha is the URL of this page?. This helps identifying Backends, where the request is coming from.',
   }),
   entryFunction: z.string().meta({
     description: `The function which is used as an entry point for taskyon.
@@ -83,6 +70,25 @@ export const resolveToolchainConfig = (
 
   return deepMerge(deepCopy(toolchainProfiles.base), deepCopy(profile), 'overwrite')
 }
+
+export const getToolchainProviderProfiles = (
+  toolchainProfiles: ToolchainProfiles,
+): Record<string, ChatCompletionProviderSettings> =>
+  Object.entries(toolchainProfiles.profiles).reduce<Record<string, ChatCompletionProviderSettings>>(
+    (providers, [profileName, profile]) => {
+      const parsed = chatCompletionProviderSettings.safeParse(profile.chatCompletion)
+      return parsed.success ? { ...providers, [profileName]: parsed.data } : providers
+    },
+    {},
+  )
+
+export const resolveToolchainProvider = (
+  toolchainProfiles: ToolchainProfiles,
+  selectedProfile: string | undefined,
+) =>
+  chatCompletionProviderSettings.parse(
+    resolveToolchainConfig(toolchainProfiles, selectedProfile).chatCompletion,
+  )
 
 const hasOwnPath = (value: Record<string, unknown>, path: readonly string[]) => {
   let current: unknown = value

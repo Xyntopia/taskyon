@@ -1,4 +1,4 @@
-import type { apiConfig } from '../types/chatCompletion'
+import type { ProviderEndpointConfig } from '../types/chatCompletion'
 import type { AuthenticationOptions, TokenGetter } from './oauthUi'
 import { usePersistentOauth } from './oauthUi'
 import { getProviderOauthConfig, getProviderOauthCredentialsKey } from './providerAuth'
@@ -14,14 +14,14 @@ export const createPersistentOauthTokenGetter = (secretStore: OauthSecretStore):
 
 export async function loginWithProviderOauth(
   providerName: string,
-  api: apiConfig,
+  api: ProviderEndpointConfig,
   getToken: TokenGetter,
   options?: AuthenticationOptions,
 ) {
   const cfg = getProviderOauthConfig(api)
   if (!cfg) {
     throw new Error(
-      `OAuth is not configured for "${providerName}". Please define llmApis.${providerName}.auth.oauth.authorizationUrl and llmApis.${providerName}.auth.oauth.clientId.`,
+      `OAuth is not configured for "${providerName}". Define auth.oauth.authorizationUrl and auth.oauth.clientId in that provider's chatCompletion profile.`,
     )
   }
   return await getToken(getProviderOauthCredentialsKey(providerName), cfg, undefined, options)
