@@ -11,7 +11,7 @@ import { createStandardEntryNodeTool } from '../tools/entryNode'
 import { createDefaultTaskyonToolSetup } from '../tools'
 import { CLARIFICATION_TOOL_NAME } from '../tools/clarificationTool'
 import { buildLinkedTaskChain } from '../testSupport/onlineProviderSupport'
-import { llmSettings } from '../types/profiles'
+import { resolveDiagnosticsRuntimeConfig } from '../testSupport/onlineProviderSupport'
 import { FunctionCall } from '../types/tools'
 
 const assert = (condition: unknown, message: string) => {
@@ -637,15 +637,14 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
       reason: 'No configured provider key/session was available from the diagnostics harness.',
     }
   }
-  const parsedLlmSettings = llmSettings.safeParse(context.llmSettings)
-  if (!parsedLlmSettings.success) {
+  const runtimeConfig = resolveDiagnosticsRuntimeConfig(context)
+  if (!runtimeConfig) {
     return {
       skipped: true,
       reason: 'No runtime llmSettings were provided by the diagnostics harness.',
     }
   }
 
-  const llmState = parsedLlmSettings.data
   const dataDir = join(tmpdir(), `taskyon-entrynode-test-${Date.now()}`)
   await mkdir(dataDir, { recursive: true })
   const entryNodeTool = createStandardEntryNodeTool({
@@ -656,17 +655,18 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
   })
 
   const ty = await tyCore(
-    () => llmState,
+    () => runtimeConfig.settings,
     () =>
       toolCall({
         name: 'entryNode',
         arguments: {},
       }),
-    () => ({
+    {
+      chatCompletion: runtimeConfig.providerSettings,
       entryNode: {
         providerToolCalling: true,
       },
-    }),
+    },
     undefined,
     { toolSetup: createDefaultTaskyonToolSetup(), nodePgLiteDataDir: dataDir },
   )
@@ -682,9 +682,8 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
       }),
   })
 
-  const selectedApi = llmState.selectedApi ?? 'taskyon'
+  const selectedApi = runtimeConfig.providerSettings.provider
   const providerKey = context.providerKey
-  await ty.setSecret('chatCompletionApiKeys', selectedApi, providerKey)
   await ty.updateChatCompletionApiKey(selectedApi, providerKey)
 
   const observed: TaskNode[] = []
@@ -790,7 +789,7 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
   return {
     success: true,
     model: context.model,
-    selectedApi: llmState.selectedApi,
+    selectedApi,
     assistantMessage:
       finish.assistant.content.type === 'message' ? finish.assistant.content.data : '',
     counts: {

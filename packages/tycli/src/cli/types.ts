@@ -30,6 +30,8 @@ export type CliApiConfig = {
   selectedApi: string
 }
 
+export const API_KEY_STORE_NAME = 'AiProviderKey'
+
 export type BashToolArgs = {
   command?: string
   cwd?: string
@@ -53,7 +55,6 @@ export type LlmModel = {
   pricing?: { prompt?: string; completion?: string }
 }
 
-export const API_KEY_STORE_NAME = 'AiProviderKey'
 export const SUPPORTED_PROVIDERS = [
   'openai',
   'openrouter.ai',

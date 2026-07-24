@@ -1,7 +1,10 @@
 import {
   TOKEN_SERVICE_BASE_URL,
+  chatCompletionProviderSettings,
   isTaskyonKey,
-  type apiConfig,
+  resolveToolchainConfig,
+  type ChatCompletionProviderSettings,
+  type ToolchainProfiles,
   type llmSettings,
 } from '@taskyon/taskyon'
 import { asyncTimeLruCache } from '@taskyon/taskyon/utils/caching'
@@ -22,14 +25,17 @@ export const DEFAULT_PROMPT_TEMPLATES = {
 
 const CODEX_MODELS_CLIENT_VERSION = '0.144.5'
 
-export const baseApiDefinitions: Record<string, apiConfig> = {
+export const baseProviderProfiles: Record<string, ChatCompletionProviderSettings> = {
   taskyon: {
+    provider: 'taskyon',
     name: 'taskyon',
     baseURL: 'https://share.taskyon.space',
-    defaultModel: 'google/gemini-2.5-flash-lite',
+    model: 'google/gemini-2.5-flash-lite',
     streamSupport: true,
     defaultHeaders: {
       apiKey: 'sb_publishable_WrQ1aIRvl9BrMtpMQ9TocQ_JN7I9kJm',
+      'HTTP-Referer': 'https://tycli.local',
+      'X-Title': 'tycli',
     },
     routes: {
       chatCompletion: '/chatCompletion/api/v1/',
@@ -37,9 +43,10 @@ export const baseApiDefinitions: Record<string, apiConfig> = {
     },
   },
   openai: {
+    provider: 'openai',
     name: 'openai',
     baseURL: 'https://api.openai.com',
-    defaultModel: 'gpt-5.1',
+    model: 'gpt-5.1',
     streamSupport: true,
     routes: {
       chatCompletion: '/v1/',
@@ -47,9 +54,10 @@ export const baseApiDefinitions: Record<string, apiConfig> = {
     },
   },
   'chatgpt-codex': {
+    provider: 'chatgpt-codex',
     name: 'chatgpt-codex',
     baseURL: 'https://chatgpt.com/backend-api/codex',
-    defaultModel: 'gpt-5.4',
+    model: 'gpt-5.4',
     streamSupport: true,
     auth: {
       type: 'oauth',
@@ -70,19 +78,25 @@ export const baseApiDefinitions: Record<string, apiConfig> = {
     },
   },
   'openrouter.ai': {
+    provider: 'openrouter.ai',
     name: 'openrouter.ai',
     baseURL: 'https://openrouter.ai',
-    defaultModel: 'google/gemini-2.5-flash-lite',
+    model: 'google/gemini-2.5-flash-lite',
     streamSupport: true,
+    defaultHeaders: {
+      'HTTP-Referer': 'https://tycli.local',
+      'X-Title': 'tycli',
+    },
     routes: {
       chatCompletion: '/api/v1/',
       models: '/api/v1/models',
     },
   },
   local: {
+    provider: 'local',
     name: 'local LLM server',
     baseURL: 'http://localhost:8080',
-    defaultModel: 'qwen3-4b',
+    model: 'qwen3-4b',
     streamSupport: true,
     routes: {
       chatCompletion: '/v1/',
@@ -91,35 +105,82 @@ export const baseApiDefinitions: Record<string, apiConfig> = {
   },
 }
 
-export function createCliLlmSettings(config: CliApiConfig): llmSettings {
-  const selectedApiConfig = baseApiDefinitions[config.selectedApi]
-  if (!selectedApiConfig) {
+export type CliLlmState = {
+  settings: llmSettings
+  toolchainProfiles: ToolchainProfiles
+  selectedToolchainProfile: string
+}
+
+export function createCliLlmState(config: CliApiConfig): CliLlmState {
+  const selectedProviderSettings = baseProviderProfiles[config.selectedApi]
+  if (!selectedProviderSettings) {
     throw new Error(`Unsupported provider: ${config.selectedApi}`)
   }
   return {
-    selectedApi: config.selectedApi,
-    llmApis: {
-      ...baseApiDefinitions,
-      [config.selectedApi]: {
-        ...selectedApiConfig,
-        ...(config.model ? { selectedModel: config.model } : {}),
-      },
+    settings: {
+      entryFunction: 'entryNode',
     },
-    siteUrl: 'https://tycli.local',
-    entryFunction: 'entryNode',
+    toolchainProfiles: {
+      base: {},
+      profiles: Object.fromEntries(
+        Object.entries(baseProviderProfiles).map(([provider, settings]) => [
+          provider,
+          {
+            chatCompletion: {
+              ...settings,
+              ...(provider === config.selectedApi && config.model ? { model: config.model } : {}),
+            },
+          },
+        ]),
+      ),
+    },
+    selectedToolchainProfile: config.selectedApi,
+  }
+}
+
+export const getProviderSettings = (llmState: CliLlmState, provider: string) => {
+  const settings = llmState.toolchainProfiles.profiles[provider]?.chatCompletion
+  return settings ? chatCompletionProviderSettings.parse(settings) : undefined
+}
+
+export const getSelectedProviderSettings = (llmState: CliLlmState) =>
+  chatCompletionProviderSettings.parse(getSelectedToolchainConfig(llmState).chatCompletion)
+
+export const getSelectedToolchainConfig = (llmState: CliLlmState) =>
+  resolveToolchainConfig(llmState.toolchainProfiles, llmState.selectedToolchainProfile)
+
+export const setSelectedProvider = (llmState: CliLlmState, provider: string) => {
+  if (!getProviderSettings(llmState, provider)) throw new Error(`Unknown provider: ${provider}`)
+  llmState.selectedToolchainProfile = provider
+}
+
+export const setProviderModel = (llmState: CliLlmState, provider: string, model: string) => {
+  const profile = llmState.toolchainProfiles.profiles[provider]
+  const settings = getProviderSettings(llmState, provider)
+  if (!profile || !settings) throw new Error(`Unknown provider: ${provider}`)
+  llmState.toolchainProfiles.profiles[provider] = {
+    ...profile,
+    chatCompletion: { ...settings, model },
   }
 }
 
 export function applyCodexAccountHeader(
-  llmState: llmSettings,
+  llmState: CliLlmState,
   accountId: string | undefined,
 ): void {
-  const codexApi = llmState.llmApis['chatgpt-codex']
-  if (!codexApi) return
-  const nextHeaders = { ...(codexApi.defaultHeaders ?? {}) }
+  const codexProfile = llmState.toolchainProfiles.profiles['chatgpt-codex']
+  const codexSettings = getProviderSettings(llmState, 'chatgpt-codex')
+  if (!codexProfile || !codexSettings) return
+  const nextHeaders = { ...(codexSettings.defaultHeaders ?? {}) }
   if (accountId) nextHeaders['ChatGPT-Account-Id'] = accountId
   else delete nextHeaders['ChatGPT-Account-Id']
-  codexApi.defaultHeaders = nextHeaders
+  llmState.toolchainProfiles.profiles['chatgpt-codex'] = {
+    ...codexProfile,
+    chatCompletion: {
+      ...codexSettings,
+      defaultHeaders: nextHeaders,
+    },
+  }
 }
 
 function joinUrl(base: string, path: string): string {
@@ -138,7 +199,7 @@ type ProviderModelsResponse =
 
 async function fetchProviderModelsUncached(
   provider: string,
-  api: NonNullable<llmSettings['llmApis']>[string],
+  api: ChatCompletionProviderSettings,
   key: string,
   forceRefresh = false,
 ): Promise<Record<string, LlmModel>> {
@@ -183,7 +244,7 @@ const fetchCachedProviderModels = asyncTimeLruCache(10, 5 * 60 * 1000)(fetchProv
 
 export async function fetchProviderModels(
   provider: string,
-  api: NonNullable<llmSettings['llmApis']>[string],
+  api: ChatCompletionProviderSettings,
   key: string,
   options: { forceRefresh?: boolean } = {},
 ): Promise<Record<string, LlmModel>> {

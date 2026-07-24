@@ -6,7 +6,9 @@ import { tyCore, type Taskyon } from '../../core/init'
 import { createExternalToolContext, registerToolRpcTools } from '../../core/toolRpc'
 import { createDefaultTaskyonToolSetup } from '../../tools'
 import { createStandardEntryNodeTool } from '../../tools/entryNode'
-import { llmSettings } from '../../types/profiles'
+import { resolveDiagnosticsRuntimeConfig } from '../../testSupport/onlineProviderSupport'
+import type { ChatCompletionProviderSettings } from '../../types/chatCompletion'
+import type { llmSettings } from '../../types/profiles'
 import { partialTaskDraft, type TaskNode } from '../../types/taskNode'
 
 type TaskNodeWithParent = TaskNode & { parentID: string }
@@ -65,11 +67,6 @@ const taskyonFlowToolchainConfig = {
   },
 } as const
 
-const initializeProviderKey = async (ty: Taskyon, selectedApi: string, key: string) => {
-  await ty.setSecret('AiProviderKey', selectedApi, key)
-  await ty.updateChatCompletionApiKey(selectedApi, key)
-}
-
 const getEntryNodeDraft = (entryNodeArgs?: Record<string, unknown>) =>
   partialTaskDraft.parse({
     role: 'system',
@@ -86,6 +83,7 @@ const getEntryNodeDraft = (entryNodeArgs?: Record<string, unknown>) =>
 
 const createConversationHarness = async (
   runtimeLlmSettings: llmSettings,
+  providerSettings: ChatCompletionProviderSettings,
 ): Promise<{ ty: Taskyon; cleanup: () => void }> => {
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'taskyonFlow',
@@ -107,7 +105,10 @@ const createConversationHarness = async (
   const tyPromise: Promise<Taskyon> = tyCore(
     () => runtimeLlmSettings,
     () => getEntryNodeDraft(),
-    () => taskyonFlowToolchainConfig,
+    {
+      ...taskyonFlowToolchainConfig,
+      chatCompletion: providerSettings,
+    },
     undefined,
     { toolSetup: createDefaultTaskyonToolSetup() },
   )
@@ -586,19 +587,21 @@ export const testTimeQuestionConversationUsesClockTool = async (
       reason: 'No configured provider key/session was available from the diagnostics harness.',
     }
   }
-  const parsedLlmSettings = llmSettings.safeParse(context.llmSettings)
-  if (!parsedLlmSettings.success) {
+  const runtimeConfig = resolveDiagnosticsRuntimeConfig(context)
+  if (!runtimeConfig) {
     return {
       skipped: true,
       reason: 'No runtime llmSettings were provided by the diagnostics harness.',
     }
   }
 
-  const { ty, cleanup } = await createConversationHarness(parsedLlmSettings.data)
+  const { ty, cleanup } = await createConversationHarness(
+    runtimeConfig.settings,
+    runtimeConfig.providerSettings,
+  )
   try {
-    const selectedApi = parsedLlmSettings.data.selectedApi ?? 'taskyon'
     const providerKey = context.providerKey
-    await initializeProviderKey(ty, selectedApi, providerKey)
+    await ty.updateChatCompletionApiKey(runtimeConfig.providerSettings.provider, providerKey)
     return await runTimeQuestionConversationUsesClockToolScenario(ty)
   } finally {
     cleanup()

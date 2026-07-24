@@ -5,6 +5,7 @@ export type DiagnosticsTestContext = {
   selectedApi?: string
   model?: string
   llmSettings?: unknown
+  toolchainConfig?: unknown
   providerKey?: string
   providerAccessToken?: string
   accountId?: string

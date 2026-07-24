@@ -10,6 +10,7 @@ import { mkdtemp, readFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import process from 'node:process'
+import { getSelectedProviderSettings } from '../cli/models'
 import { bootstrapCliTaskyon } from '../cli/runtime'
 import { diagnosticsTestMetadata, unsupportedModuleFallbacks } from './testMetadata'
 
@@ -515,7 +516,10 @@ async function main() {
     ...(opts.tyauth ? { tyauth: opts.tyauth } : {}),
     allowLongRun: opts.allowLongRun,
     selectedApi: runtime.selectedApi,
-    llmSettings: runtime.llmState,
+    llmSettings: runtime.llmState.settings,
+    toolchainConfig: {
+      chatCompletion: getSelectedProviderSettings(runtime.llmState),
+    },
     ...(runtime.model ? { model: runtime.model } : {}),
     ...(runtime.providerKey ? { providerKey: runtime.providerKey } : {}),
     ...(runtime.oauthSession?.accessToken

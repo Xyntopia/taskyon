@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import process from 'node:process'
 import type { Taskyon } from '../../taskyon/src/core/init'
-import type { apiConfig } from '../../taskyon/src/types/chatCompletion'
+import type { ProviderEndpointConfig } from '../../taskyon/src/types/chatCompletion'
 import {
   type ProviderOauthConfig,
   getProviderOauthConfig,
@@ -517,7 +517,7 @@ export async function resolveCachedProviderOauthSession({
   taskyon,
 }: {
   providerName: string
-  api: apiConfig
+  api: ProviderEndpointConfig
   taskyon: Taskyon
 }): Promise<null | { accessToken: string; accountId?: string }> {
   const oauth = getProviderOauthConfig(api)
@@ -629,7 +629,7 @@ export async function loginWithProviderOauthCli({
   timeoutMs = 5 * 60 * 1000,
 }: {
   providerName: string
-  api: apiConfig
+  api: ProviderEndpointConfig
   taskyon: Taskyon
   forceReauth?: boolean
   timeoutMs?: number
@@ -637,7 +637,7 @@ export async function loginWithProviderOauthCli({
   const oauth = getProviderOauthConfig(api)
   if (!oauth) {
     throw new Error(
-      `OAuth is not configured for "${providerName}". Set llmApis.${providerName}.auth.oauth.* in settings.`,
+      `OAuth is not configured for provider profile "${providerName}". Add auth.oauth settings to its chatCompletion configuration.`,
     )
   }
   if (!oauth.tokenUrl) {

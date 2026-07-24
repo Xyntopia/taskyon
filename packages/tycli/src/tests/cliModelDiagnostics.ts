@@ -24,9 +24,10 @@ export const testProviderModelDiscoveryCachesNormallyAndRefreshesOnDemand = asyn
 
   try {
     const api = {
+      provider: 'chatgpt-codex',
       name: 'chatgpt-codex',
       baseURL: 'https://models.test/codex',
-      defaultModel: 'gpt-current-1',
+      model: 'gpt-current-1',
       streamSupport: true,
       routes: { models: '/models', chatCompletion: '/responses' },
     }

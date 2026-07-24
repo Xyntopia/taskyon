@@ -31,7 +31,6 @@ import {
   tyCore,
   type ClientTool,
   type InternalTool,
-  type llmSettings,
   type partialTaskDraft,
   type TaskNode,
   type Taskyon,
@@ -84,13 +83,19 @@ import { createCliFooter } from './cli/ui'
 import {
   applyCodexAccountHeader,
   canReachLocalApi,
-  createCliLlmSettings,
+  createCliLlmState,
   fetchProviderModels,
   getAllowedTaskyonModels,
+  getProviderSettings,
+  getSelectedProviderSettings,
+  getSelectedToolchainConfig,
   modelOptionsForProvider,
+  setProviderModel,
+  setSelectedProvider,
+  type CliLlmState,
 } from './cli/models'
 import { hasInterruptibleWorkerActivity } from './cli/interruptState'
-import { syncProviderRuntimeConfig } from './cli/runtime'
+import { applyCliRuntimeConfig, syncProviderRuntimeConfig } from './cli/runtime'
 import { runBashCommand } from './cli/bash'
 import {
   renderHtmlPreviewText,
@@ -1556,18 +1561,12 @@ async function selectModelInteractive(
   return selected === null ? null : (options[selected]?.value ?? null)
 }
 
-async function setSelectedApi(ty: Taskyon, llmState: llmSettings, nextApi: string) {
+async function setSelectedApi(ty: Taskyon, llmState: CliLlmState, nextApi: string) {
   await persistConfigPatch({ selectedApi: nextApi })
   const stored = await loadStoredConfig()
   const configuredModel = resolveStoredModel(stored, nextApi)
-  const currentApi = llmState.llmApis[nextApi]
-  if (currentApi) {
-    llmState.llmApis[nextApi] = {
-      ...currentApi,
-      ...(configuredModel ? { selectedModel: configuredModel } : {}),
-      ...(!configuredModel && currentApi.selectedModel ? { selectedModel: undefined } : {}),
-    }
-  }
+  setSelectedProvider(llmState, nextApi)
+  if (configuredModel) setProviderModel(llmState, nextApi, configuredModel)
   await syncProviderRuntimeConfig(ty, llmState, nextApi)
   const key =
     (await ty.getSecret(API_KEY_STORE_NAME, nextApi, false, false)) ??
@@ -1577,11 +1576,11 @@ async function setSelectedApi(ty: Taskyon, llmState: llmSettings, nextApi: strin
 
 async function loginProvider(
   ty: Taskyon,
-  llmState: llmSettings,
+  llmState: CliLlmState,
   selectedApi: string,
   forceLogin: boolean,
 ) {
-  const api = llmState.llmApis[selectedApi]
+  const api = getProviderSettings(llmState, selectedApi)
   if (!api) throw new Error(`Unknown provider: ${selectedApi}`)
   if (!getProviderOauthConfig(api)) {
     throw new Error(`Provider '${selectedApi}' does not define OAuth settings.`)
@@ -1597,6 +1596,7 @@ async function loginProvider(
   await ty.setSecret(API_KEY_STORE_NAME, selectedApi, accessToken)
   await ty.updateChatCompletionApiKey(selectedApi, accessToken)
   if (selectedApi === 'chatgpt-codex') applyCodexAccountHeader(llmState, accountId)
+  await applyCliRuntimeConfig(ty, llmState)
 }
 
 async function hasStoredOauthLogin(ty: Taskyon, providerId: string): Promise<boolean> {
@@ -1607,17 +1607,17 @@ async function hasStoredOauthLogin(ty: Taskyon, providerId: string): Promise<boo
 
 async function getProviderStatusTags(
   ty: Taskyon,
-  llmState: llmSettings,
+  llmState: CliLlmState,
   providerId: string,
 ): Promise<string[]> {
-  const api = llmState.llmApis[providerId]
+  const api = getProviderSettings(llmState, providerId)
   const configuredSecret = await ty.getSecret(API_KEY_STORE_NAME, providerId, false, false)
   const envKey = resolveKeyForProvider(providerId)
   const oauthEnabled = api ? !!getProviderOauthConfig(api) : false
   const oauthLoggedIn = oauthEnabled ? await hasStoredOauthLogin(ty, providerId) : false
 
   return [
-    llmState.selectedApi === providerId ? 'selected' : '',
+    llmState.selectedToolchainProfile === providerId ? 'selected' : '',
     configuredSecret ? 'saved-key' : '',
     !configuredSecret && envKey ? 'env-key' : '',
     oauthEnabled ? 'oauth' : '',
@@ -1917,7 +1917,7 @@ async function promptForMainInput(
 async function handleKeysCommand(
   rl: ReturnType<typeof createInterface>,
   ty: Taskyon,
-  llmState: llmSettings,
+  llmState: CliLlmState,
 ) {
   const providers = [...SUPPORTED_PROVIDERS]
   while (true) {
@@ -1943,7 +1943,6 @@ async function handleKeysCommand(
       }
       await ty.setSecret(API_KEY_STORE_NAME, provider, key)
       await ty.updateChatCompletionApiKey(provider, key)
-      llmState.selectedApi = provider
       await setSelectedApi(ty, llmState, provider)
       writeNotice('success', `Saved key for ${provider}.`)
       writeNotice('info', `Selected provider: ${provider}`)
@@ -1960,14 +1959,11 @@ async function handleKeysCommand(
 async function handleModelCommand(
   rl: ReturnType<typeof createInterface>,
   ty: Taskyon,
-  llmState: llmSettings,
+  llmState: CliLlmState,
 ) {
-  const apis = llmState.llmApis
-  const selectedApi = String(llmState.selectedApi ?? 'local')
-  writeNote('Current Model', [
-    `Provider: ${selectedApi}`,
-    `Model: ${apis[selectedApi]?.selectedModel ?? apis[selectedApi]?.defaultModel ?? 'unknown'}`,
-  ])
+  const selectedApi = llmState.selectedToolchainProfile
+  const selectedSettings = getSelectedProviderSettings(llmState)
+  writeNote('Current Model', [`Provider: ${selectedApi}`, `Model: ${selectedSettings.model}`])
   const action = await selectFromList(rl, '\nModel menu', [
     'select model for current provider',
     'set model id manually',
@@ -1976,8 +1972,8 @@ async function handleModelCommand(
   if (action === null || action === 2) return
 
   if (action === 0) {
-    const selectedApi = String(llmState.selectedApi ?? 'local')
-    const api = llmState.llmApis[selectedApi]
+    const selectedApi = llmState.selectedToolchainProfile
+    const api = getProviderSettings(llmState, selectedApi)
     if (!api) {
       writeError(`No API definition for '${selectedApi}'.`)
       return
@@ -2029,9 +2025,7 @@ async function handleModelCommand(
       writeNotice('warn', 'Model selection cancelled.')
       return
     }
-    const currentApi = apis[selectedApi]
-    if (!currentApi) throw new Error(`Provider config missing: ${selectedApi}`)
-    apis[selectedApi] = { ...currentApi, selectedModel: model }
+    setProviderModel(llmState, selectedApi, model)
     await persistProviderModel(selectedApi, model)
     writeNotice('success', `Selected model for ${selectedApi}: ${model}`)
     return
@@ -2045,9 +2039,7 @@ async function handleModelCommand(
       writeNotice('error', 'Model id cannot be empty.')
       return
     }
-    const currentApi = apis[selectedApi]
-    if (!currentApi) throw new Error(`Provider config missing: ${selectedApi}`)
-    apis[selectedApi] = { ...currentApi, selectedModel: model }
+    setProviderModel(llmState, selectedApi, model)
     await persistProviderModel(selectedApi, model)
     writeNotice('success', `Selected model for ${selectedApi}: ${model}`)
   }
@@ -2056,9 +2048,11 @@ async function handleModelCommand(
 async function handleProviderCommand(
   rl: ReturnType<typeof createInterface>,
   ty: Taskyon,
-  llmState: llmSettings,
+  llmState: CliLlmState,
 ) {
-  const providerIds = [...SUPPORTED_PROVIDERS].filter((providerId) => llmState.llmApis[providerId])
+  const providerIds = [...SUPPORTED_PROVIDERS].filter((providerId) =>
+    getProviderSettings(llmState, providerId),
+  )
   if (providerIds.length === 0) {
     writeError('No configured providers are available in llm settings.')
     return
@@ -2075,7 +2069,7 @@ async function handleProviderCommand(
   const nextApi = providerIds[idx]
   if (!nextApi) return
 
-  const api = llmState.llmApis[nextApi]
+  const api = getProviderSettings(llmState, nextApi)
   if (!api) {
     writeError(`No API definition for '${nextApi}'.`)
     return
@@ -2086,14 +2080,15 @@ async function handleProviderCommand(
     resolveKeyForProvider(nextApi)
   const hasOauth = !!getProviderOauthConfig(api)
   const actionOptions = [
-    llmState.selectedApi === nextApi ? 'use provider (already selected)' : 'use provider',
+    llmState.selectedToolchainProfile === nextApi
+      ? 'use provider (already selected)'
+      : 'use provider',
     ...(hasOauth ? [configuredKey ? 're-login with OAuth' : 'login with OAuth'] : []),
     'back',
   ]
   const action = await selectFromList(rl, `\nProvider: ${nextApi}`, actionOptions)
   if (action === null) return
   if (action === 0) {
-    llmState.selectedApi = nextApi
     await setSelectedApi(ty, llmState, nextApi)
     writeNotice('success', `Selected provider: ${nextApi}`)
     return
@@ -2273,7 +2268,7 @@ async function handleSlashCommand(
   ty: Taskyon,
   taskyonClient: TaskyonClientInvoker,
   taskPort: Parameters<typeof waitForTaskResult>[0],
-  llmState: llmSettings,
+  llmState: CliLlmState,
   uiSettings: { showRoleTag: boolean; showFullFunctionResults: boolean },
   toolRenderOptions: Record<string, { hideChat?: boolean }>,
   currentLeafId: string | undefined,
@@ -2441,7 +2436,7 @@ async function main() {
   const explorationContextFiles: Record<string, string> = {}
   const explorationTool = createExplorationTool(explorationContextFiles)
 
-  let llmState = createCliLlmSettings(config)
+  const llmState = createCliLlmState(config)
   const uiSettings = {
     showRoleTag: stored.cliUi?.showRoleTag ?? true,
     showFullFunctionResults: false,
@@ -2470,9 +2465,26 @@ async function main() {
     name: ENTRY_NODE_TOOL_NAME,
     arguments: {},
   })
-  llmState = {
-    ...llmState,
+  llmState.settings = {
+    ...llmState.settings,
     entryFunction: ENTRY_NODE_TOOL_NAME,
+  }
+  llmState.toolchainProfiles.base = {
+    entryNode: {
+      providerToolCalling: true,
+      use_baseprompt: true,
+      use_multimodal: true,
+      max_error_retries: 3,
+      ...(chatCompletionTrace
+        ? {
+            trace: {
+              enabled: true,
+              ...(chatCompletionTrace.label ? { label: chatCompletionTrace.label } : {}),
+            },
+          }
+        : {}),
+      prompt_templates: DEFAULT_PROMPT_TEMPLATES,
+    },
   }
   const { x: taskStorageClientPort, y: taskStorageServicePort } =
     createProtocolPort(taskyonStorageProtocol)
@@ -2485,25 +2497,9 @@ async function main() {
     },
   })
   const taskyon = await tyCore(
-    () => llmState,
+    () => llmState.settings,
     () => cliEntryTask,
-    () => ({
-      entryNode: {
-        providerToolCalling: true,
-        use_baseprompt: true,
-        use_multimodal: true,
-        max_error_retries: 3,
-        ...(chatCompletionTrace
-          ? {
-              trace: {
-                enabled: true,
-                ...(chatCompletionTrace.label ? { label: chatCompletionTrace.label } : {}),
-              },
-            }
-          : {}),
-        prompt_templates: DEFAULT_PROMPT_TEMPLATES,
-      },
-    }),
+    getSelectedToolchainConfig(llmState),
     cryptoSession,
     {
       toolSetup: createDefaultTaskyonToolSetup({
@@ -2547,9 +2543,9 @@ async function main() {
     await taskyon.updateChatCompletionApiKey(selectedApi, bootstrapKey)
   }
 
-  if (llmState.selectedApi === 'local' && taskyonClientCommand === null) {
-    const localApi = llmState.llmApis.local
-    if (!localApi) throw new Error("Local provider config 'llmApis.local' is missing")
+  if (llmState.selectedToolchainProfile === 'local' && taskyonClientCommand === null) {
+    const localApi = getProviderSettings(llmState, 'local')
+    if (!localApi) throw new Error('Local provider profile is missing')
     const isReachable = await canReachLocalApi(localApi.baseURL)
     if (!isReachable) {
       writeLine(
@@ -2806,13 +2802,11 @@ async function main() {
   }
 
   const currentProviderModel = () => {
-    const provider = String(llmState.selectedApi ?? 'local')
-    const api = (
-      llmState.llmApis as Record<string, { selectedModel?: string; defaultModel?: string }>
-    )[provider]
+    const provider = llmState.selectedToolchainProfile
+    const settings = getSelectedProviderSettings(llmState)
     return {
       provider,
-      model: api?.selectedModel ?? api?.defaultModel ?? 'unknown',
+      model: settings.model,
     }
   }
 
@@ -3390,12 +3384,10 @@ async function main() {
       `Previous tycli log: ${previousSession.logPath}`,
     ])
   }
-  const activeApi = (
-    llmState.llmApis as Record<string, { selectedModel?: string; defaultModel?: string }>
-  )[String(llmState.selectedApi ?? 'local')]
+  const activeApi = getSelectedProviderSettings(llmState)
   writeNotice(
     'info',
-    `tycli ready. provider=${String(llmState.selectedApi ?? 'local')} model=${activeApi?.selectedModel ?? activeApi?.defaultModel ?? 'unknown'}`,
+    `tycli ready. provider=${llmState.selectedToolchainProfile} model=${activeApi.model}`,
   )
   writeNotice(
     'info',
@@ -3548,7 +3540,7 @@ async function main() {
         continue
       }
 
-      const currentProvider = String(llmState.selectedApi ?? 'local')
+      const currentProvider = llmState.selectedToolchainProfile
       if (!(await taskyon.getSecret(API_KEY_STORE_NAME, currentProvider, false, false))) {
         writeError(`No key configured for '${currentProvider}'. Run /keys first.`)
         continue

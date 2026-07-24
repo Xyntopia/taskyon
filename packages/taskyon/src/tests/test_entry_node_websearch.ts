@@ -6,11 +6,13 @@ import { tyCore } from '../core/init'
 import { createTaskyonClient } from '../api'
 import { createStandardEntryNodeTool } from '../tools/entryNode'
 import { createDefaultTaskyonToolSetup } from '../tools'
-import { buildLinkedTaskChain } from '../testSupport/onlineProviderSupport'
+import {
+  buildLinkedTaskChain,
+  resolveDiagnosticsRuntimeConfig,
+} from '../testSupport/onlineProviderSupport'
 import { createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
 import { toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
-import { llmSettings } from '../types/profiles'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -42,15 +44,14 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
       reason: 'No configured provider key/session was available from the diagnostics harness.',
     }
   }
-  const parsedLlmSettings = llmSettings.safeParse(context.llmSettings)
-  if (!parsedLlmSettings.success) {
+  const runtimeConfig = resolveDiagnosticsRuntimeConfig(context)
+  if (!runtimeConfig) {
     return {
       skipped: true,
       reason: 'No runtime llmSettings were provided by the diagnostics harness.',
     }
   }
 
-  const llmState = parsedLlmSettings.data
   const dataDir = join(tmpdir(), `taskyon-websearch-test-${Date.now()}`)
   await mkdir(dataDir, { recursive: true })
 
@@ -62,17 +63,18 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
   })
 
   const ty = await tyCore(
-    () => llmState,
+    () => runtimeConfig.settings,
     () =>
       toolCall({
         name: 'entryNode',
         arguments: {},
       }),
-    () => ({
+    {
+      chatCompletion: runtimeConfig.providerSettings,
       entryNode: {
         providerToolCalling: true,
       },
-    }),
+    },
     undefined,
     { toolSetup: createDefaultTaskyonToolSetup(), nodePgLiteDataDir: dataDir },
   )
@@ -88,9 +90,8 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
       }),
   })
 
-  const selectedApi = llmState.selectedApi ?? 'taskyon'
+  const selectedApi = runtimeConfig.providerSettings.provider
   const providerKey = context.providerKey
-  await ty.setSecret('chatCompletionApiKeys', selectedApi, providerKey)
   await ty.updateChatCompletionApiKey(selectedApi, providerKey)
 
   const observed: TaskNode[] = []
@@ -169,7 +170,7 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
   return {
     success: true,
     model: context.model,
-    selectedApi: llmState.selectedApi,
+    selectedApi,
     assistantMessage:
       finish.assistant.content.type === 'message' ? finish.assistant.content.data : '',
   }

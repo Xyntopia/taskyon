@@ -1,12 +1,16 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { createProtocolPort, createUnavailableIframeMux } from '@taskyon/common/modules/frpBus'
+import {
+  createPortClient,
+  createProtocolPort,
+  createUnavailableIframeMux,
+} from '@taskyon/common/modules/frpBus'
+import { taskyonRuntimeProtocol } from '@taskyon/taskyon/api'
 import { tyCore } from '../../../taskyon/src/core/init'
 import type { Taskyon } from '../../../taskyon/src/core/init'
 import { connectTaskManagerStorageFromProtocol } from '../../../taskyon/src/core/taskManager'
 import { taskyonStorageProtocol } from '../../../taskyon/src/api/storageProtocol'
 import { createDefaultTaskyonToolSetup } from '../../../taskyon/src/tools'
-import type { llmSettings } from '../../../taskyon/src/types/profiles'
 import { toolCall } from '../../../taskyon/src/types/toolApi'
 import {
   API_KEY_STORE_NAME,
@@ -24,7 +28,14 @@ import {
   resolveStoredModel,
 } from './config'
 import { createCliFileStorageService } from './fileStorage'
-import { applyCodexAccountHeader, createCliLlmSettings } from './models'
+import {
+  applyCodexAccountHeader,
+  createCliLlmState,
+  getProviderSettings,
+  getSelectedProviderSettings,
+  getSelectedToolchainConfig,
+  type CliLlmState,
+} from './models'
 import { readProviderOauthAccountId, resolveCachedProviderOauthSession } from '../oauthLogin'
 
 const DIAGNOSTICS_ENTRY_NODE_NAME = 'entryNode'
@@ -47,25 +58,38 @@ const runtimeDirectoryName = () => {
 
 export async function syncProviderRuntimeConfig(
   ty: Taskyon,
-  llmState: llmSettings,
+  llmState: CliLlmState,
   providerId: string,
 ): Promise<null | { accessToken: string; accountId?: string }> {
-  if (providerId !== 'chatgpt-codex') return null
-  const api = llmState.llmApis[providerId]
-  if (!api) return null
+  let cachedSession: null | { accessToken: string; accountId?: string } = null
 
-  const cachedSession = await resolveCachedProviderOauthSession({
-    providerName: providerId,
-    api,
-    taskyon: ty,
-  })
-  const accountId = cachedSession?.accountId ?? (await readProviderOauthAccountId(ty, providerId))
-  applyCodexAccountHeader(llmState, accountId)
-  if (cachedSession?.accessToken) {
-    await ty.setSecret(API_KEY_STORE_NAME, providerId, cachedSession.accessToken)
-    await ty.updateChatCompletionApiKey(providerId, cachedSession.accessToken)
+  if (providerId === 'chatgpt-codex') {
+    const api = getProviderSettings(llmState, providerId)
+    if (api) {
+      cachedSession = await resolveCachedProviderOauthSession({
+        providerName: providerId,
+        api,
+        taskyon: ty,
+      })
+      const accountId =
+        cachedSession?.accountId ?? (await readProviderOauthAccountId(ty, providerId))
+      applyCodexAccountHeader(llmState, accountId)
+      if (cachedSession?.accessToken) {
+        await ty.setSecret(API_KEY_STORE_NAME, providerId, cachedSession.accessToken)
+        await ty.updateChatCompletionApiKey(providerId, cachedSession.accessToken)
+      }
+    }
   }
+
+  await applyCliRuntimeConfig(ty, llmState)
   return cachedSession
+}
+
+export async function applyCliRuntimeConfig(ty: Taskyon, llmState: CliLlmState) {
+  const result = await createPortClient(ty.hostPort, taskyonRuntimeProtocol).runtime.configure({
+    toolchainConfig: getSelectedToolchainConfig(llmState),
+  })
+  if (!result.ok) throw new Error(`Could not configure Taskyon runtime: ${result.error}`)
 }
 
 export async function bootstrapCliTaskyon(args?: {
@@ -74,7 +98,7 @@ export async function bootstrapCliTaskyon(args?: {
   model?: string
 }): Promise<{
   taskyon: Taskyon
-  llmState: llmSettings
+  llmState: CliLlmState
   configDir: string
   selectedApi: string
   model?: string
@@ -105,18 +129,18 @@ export async function bootstrapCliTaskyon(args?: {
     ...(envProviderKey ? { key: envProviderKey } : {}),
   }
 
-  const llmState = createCliLlmSettings(config)
+  const llmState = createCliLlmState(config)
   const { x: taskStorageClientPort, y: taskStorageServicePort } =
     createProtocolPort(taskyonStorageProtocol)
   createCliFileStorageService(taskStorageServicePort, join(dataDir, 'storage'))
   const taskyon = await tyCore(
-    () => llmState,
+    () => llmState.settings,
     () =>
       toolCall({
         name: DIAGNOSTICS_ENTRY_NODE_NAME,
         arguments: {},
       }),
-    () => ({}),
+    getSelectedToolchainConfig(llmState),
     cryptoSession,
     {
       toolSetup: createDefaultTaskyonToolSetup(),

@@ -2,10 +2,10 @@ import { constants } from 'node:fs'
 import { access, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
-import { createCryptoSession, type CryptoSession, type Taskyon } from '@taskyon/taskyon'
+import { createCryptoSession, type CryptoSession } from '@taskyon/taskyon'
 import { type CrudWrapper, withSecretStore } from '../../../taskyon/src/utils/crudWrapper'
 import { EncryptedDataRow } from '../../../taskyon/src/utils/encrypt'
-import { API_KEY_STORE_NAME, type StoredConfig } from './types'
+import type { StoredConfig } from './types'
 
 const PREFERRED_CONFIG_DIR = join(homedir(), '.config', 'tycli')
 const PREFERRED_CONFIG_FILE = join(PREFERRED_CONFIG_DIR, 'config.json')
@@ -340,12 +340,4 @@ export function resolveKeyForProvider(provider: string): string | undefined {
   if (provider === 'taskyon') return process.env.TASKYON_API_KEY
   if (provider === 'local') return process.env.TASKYON_LOCAL_API_KEY ?? 'local'
   return undefined
-}
-
-export async function setSelectedApi(ty: Taskyon, nextApi: string) {
-  await persistConfigPatch({ selectedApi: nextApi })
-  const key =
-    (await ty.getSecret(API_KEY_STORE_NAME, nextApi, false, false)) ??
-    resolveKeyForProvider(nextApi)
-  await ty.updateChatCompletionApiKey(nextApi, key ?? undefined)
 }

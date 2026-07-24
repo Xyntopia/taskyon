@@ -17,7 +17,7 @@ import {
 } from '../tools/documentationProviderTool'
 import { createTaskyonDocumentationTool } from '../tools/documentationTool'
 import { taskyonDocumentationManifest } from '../documentationManifest'
-import { llmSettings } from '../types/profiles'
+import { resolveDiagnosticsRuntimeConfig } from '../testSupport/onlineProviderSupport'
 import type { TaskNode } from '../types/taskNode'
 import { toolCall } from '../types/toolApi'
 
@@ -83,8 +83,8 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
     }
   }
 
-  const parsedLlmSettings = llmSettings.safeParse(context?.llmSettings)
-  if (!parsedLlmSettings.success) {
+  const runtimeConfig = resolveDiagnosticsRuntimeConfig(context)
+  if (!runtimeConfig) {
     return {
       skipped: true,
       reason:
@@ -92,7 +92,6 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
     }
   }
 
-  const llmState = parsedLlmSettings.data
   const dataDir = join(tmpdir(), `taskyon-docs-conversation-${Date.now()}`)
   await mkdir(dataDir, { recursive: true })
 
@@ -107,16 +106,17 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
   })
 
   const ty = await tyCore(
-    () => llmState,
+    () => runtimeConfig.settings,
     () => toolCall({ name: entryNodeToolName, arguments: {} }),
-    () => ({
+    {
+      chatCompletion: runtimeConfig.providerSettings,
       entryNode: {
         providerToolCalling: true,
         use_baseprompt: true,
         use_multimodal: true,
         max_error_retries: 3,
       },
-    }),
+    },
     undefined,
     {
       toolSetup: createDefaultTaskyonToolSetup(),
@@ -125,8 +125,7 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
     },
   )
   taskyonRef.current = ty
-  const selectedApi = llmState.selectedApi ?? 'taskyon'
-  await ty.setSecret('chatCompletionApiKeys', selectedApi, providerKey)
+  const selectedApi = runtimeConfig.providerSettings.provider
   await ty.updateChatCompletionApiKey(selectedApi, providerKey)
 
   const manifests = new Map<string, DocumentationManifest>()
@@ -243,7 +242,7 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
 
     return {
       success: true,
-      selectedApi: llmState.selectedApi,
+      selectedApi,
       model: context?.model,
       question: selected.question,
       answer: answerTask && answerTask.content.type === 'message' ? answerTask.content.data : '',
