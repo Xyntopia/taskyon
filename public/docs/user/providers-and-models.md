@@ -7,6 +7,11 @@ Open **Settings > AI Service Provider** to choose a provider, authenticate, refr
 and select a model. Provider-specific keys are stored through Taskyon's secret store rather than in
 the profile JSON.
 
+Providers are named toolchain profiles. Each profile remembers its own endpoint and selected model,
+so switching back to a provider restores the model last chosen for that profile. Expert users can
+add an OpenAI-compatible provider by adding a named profile with a complete `chatCompletion`
+configuration under **Edit provider profiles**.
+
 Taskyon is provider-flexible, not capability-identical. The `chatCompletion` gateway normalizes
 provider access, while tool calling, structured output, web search, vision, token accounting, and
 reasoning options remain model-specific.

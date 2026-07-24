@@ -41,12 +41,13 @@
     <script>
       // Configuration
       const configuration = {
-        llmSettings: {
-          selectedApi: 'taskyon',
-          enableToolChooser: true,
-          llmApis: {
+        selectedToolchainProfile: 'taskyon',
+        toolchainProfiles: {
+          profiles: {
             taskyon: {
-              selectedModel: 'google/gemini-flash-1.5',
+              chatCompletion: {
+                model: 'google/gemini-flash-1.5',
+              },
             },
           },
         },

@@ -4,10 +4,12 @@ The persisted `TyProfile` has these top-level concerns:
 
 - `version` invalidates profiles whose schema is no longer compatible.
 - `appConfiguration` controls host presentation and application behavior.
-- `llmSettings` selects providers, models, endpoints, and model-facing defaults.
+- `llmSettings` stores host-wide runtime settings such as the entry function and worker concurrency.
 - `toolchainProfiles` stores a common `base` configuration and optional named overrides whose
-  schemas are owned by runtime tool definitions.
-- `selectedToolchainProfile` selects an optional named override for execution.
+  schemas are owned by runtime tool definitions. Provider endpoint and model settings live under
+  each provider profile's `chatCompletion` entry.
+- `selectedToolchainProfile` selects an optional named override for execution and therefore selects
+  the active provider profile.
 
 An optional `signatureOrKey` supports host-provisioned Taskyon access. Provider credentials and
 OAuth tokens do not belong in the profile; they are stored through the secret boundary.
@@ -28,10 +30,30 @@ Named profiles recursively override `base`. Arrays are replaced, and an explicit
 override. With no selected profile, execution uses an independent copy of `base`; selecting an
 unknown profile is a configuration error.
 
+Profile selection and composition belong to the browser, CLI, or embedding host. Taskyon core
+receives only the resolved flat configuration. Browser and CLI hosts apply that value through
+`runtime.configure({ toolchainConfig })` on core's capability-scoped runtime port; the command is
+not part of the public peer protocol. It updates tool defaults and recreates tools whose immutable
+construction settings depend on the configuration.
+
 The AI Configuration page selects the runtime profile independently from the profile editors.
 Opening a named profile does not activate it. Quick Settings displays effective values and writes
 each changed tool setting back to its current owner. A selected named profile owns a setting only
 when that exact path exists in the profile; otherwise the setting is written to `base`.
+
+## Provider profiles
+
+Each provider profile owns its `chatCompletion` provider configuration: the stable
+`provider` secret ID, display `name`, selected `model`, `baseURL`, streaming support, routes,
+optional static non-secret headers, and optional OAuth metadata. Service-specific attribution
+headers such as `HTTP-Referer` and `X-Title` belong in the profiles for providers that use them.
+Switching profiles restores that profile's selected model. There is no separate `defaultModel`
+fallback.
+
+Endpoint settings are resolved from the active profile by the chat-completion tool. They are not
+taken from task-call arguments, so a task cannot redirect a provider credential to another server.
+The browser derives provider selection, model discovery, OAuth, and API-key lookup from the same
+profiles.
 
 ## Entry-node settings
 
@@ -63,5 +85,7 @@ register a different capability set while retaining the same workflow contract.
 
 `initializeTaskyon(...)` sends a partial profile configuration over the iframe protocol. The host
 may also choose a profile name, persistence policy, binding key, registered tools, and missing-key
-policy. Host configuration must remain explicit; avoid module-level defaults that silently bind a
-particular application dependency.
+policy. The Taskyon UI resolves that profile configuration and forwards the resulting flat
+configuration to core through the same runtime protocol used by tycli. Host configuration must
+remain explicit; avoid module-level defaults that silently bind a particular application
+dependency.

@@ -99,12 +99,13 @@
 
       // Configuration and Tool Definitions remain unchanged
       const configuration = {
-        llmSettings: {
-          selectedApi: 'taskyon',
-          enableToolChooser: true,
-          llmApis: {
+        selectedToolchainProfile: 'taskyon',
+        toolchainProfiles: {
+          profiles: {
             taskyon: {
-              selectedModel: 'meta-llama/llama-3.1-8b-instruct',
+              chatCompletion: {
+                model: 'meta-llama/llama-3.1-8b-instruct',
+              },
             },
           },
         },
