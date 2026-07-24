@@ -1866,16 +1866,23 @@ const configuration = computed<partialTyConfiguration | null>(() => {
   const taskyonKey = props.taskyonSignatureOrKey
   if (taskyonKey == null) return null
   const customAppConfiguration = props.taskyonConfiguration?.appConfiguration ?? {}
-  const customToolchainConfig = props.taskyonConfiguration?.toolchainConfig ?? {}
+  const customToolchainProfiles = props.taskyonConfiguration?.toolchainProfiles
+  const customBaseToolchainConfig = customToolchainProfiles?.base ?? {}
   return {
-    toolchainConfig: {
-      ...customToolchainConfig,
-      taskyonFlow: {
-        ...(customToolchainConfig.taskyonFlow ?? {}),
-        enableToolChooser: true,
-        entryNode: toolCall({ name: 'modelicaDocumentAssistant', arguments: {} }),
+    toolchainProfiles: {
+      base: {
+        ...customBaseToolchainConfig,
+        taskyonFlow: {
+          ...(customBaseToolchainConfig.taskyonFlow ?? {}),
+          use_tool_chooser: true,
+          entryNode: toolCall({ name: 'modelicaDocumentAssistant', arguments: {} }),
+        },
       },
+      profiles: customToolchainProfiles?.profiles ?? {},
     },
+    ...(props.taskyonConfiguration?.selectedToolchainProfile
+      ? { selectedToolchainProfile: props.taskyonConfiguration.selectedToolchainProfile }
+      : {}),
     appConfiguration: {
       guiMode: 'minChat',
       expertMode: true,
