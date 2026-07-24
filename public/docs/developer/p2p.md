@@ -11,6 +11,5 @@ The browser exposes P2P chat and monitoring routes for development and diagnosti
 secrets are converted to discovery tokens so peers can match without publishing the original
 secret.
 
-This subsystem is experimental. The [protocol and storage proposals](proposals.md) describe
-direction, not guaranteed current behavior. Use package exports rather than importing private
-source paths.
+This subsystem is experimental. Workspace-level protocol and storage proposals describe direction,
+not guaranteed current behavior. Use package exports rather than importing private source paths.

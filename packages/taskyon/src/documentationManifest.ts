@@ -62,7 +62,6 @@ export const taskyonDocumentationManifest: DocumentationManifest = {
         {
           CLI: ['/docs/developer/tycli.md', '/docs/developer/tycli-e2e.md'],
         },
-        '/docs/developer/proposals.md',
         { API: ['/resources/peers/local/api'] },
       ],
     },

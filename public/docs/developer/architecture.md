@@ -27,8 +27,7 @@ flowchart LR
 ```
 
 The supported integration boundary is `@taskyon/taskyon/api`, not the broad internal root export.
-Active architectural proposals are listed in the [proposal index](proposals.md). Their
-contents are published for review but are not part of the default documentation index.
+Architectural design proposals are maintained outside the frontend repository.
 
 ## Protocol services
 
@@ -57,6 +56,6 @@ the message schema, and tool RPC correlates calls, responses, timeouts, cancella
 context. Host applications should register explicit client tools instead of exposing the parent
 window or a generic event bus.
 
-The long-term direction is documented in the
-[sandboxed-core proposal](/md/proposals/sandboxed-core-protocol). Current code is still migrating
-direct `tyCore()` methods to protocol services one operation at a time.
+The long-term direction is tracked in the workspace-level
+`proposals/sandboxed-core-protocol.md` design document. Current code is still migrating direct
+`tyCore()` methods to protocol services one operation at a time.
