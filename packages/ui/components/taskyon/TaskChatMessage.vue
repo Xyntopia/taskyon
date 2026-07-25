@@ -45,6 +45,8 @@ const roleLabel = computed(() => {
       return 'System'
     case 'function':
       return 'Tool'
+    default:
+      return 'Task'
   }
 })
 
@@ -65,6 +67,8 @@ const contentLabel = computed(() => {
     case 'error':
       return 'Error'
     case 'message':
+      return ''
+    default:
       return ''
   }
 })
@@ -96,6 +100,8 @@ const messageIcon = computed(() => {
       return mdiCogOutline
     case 'function':
       return mdiTools
+    default:
+      return mdiMessageTextOutline
   }
 })
 </script>

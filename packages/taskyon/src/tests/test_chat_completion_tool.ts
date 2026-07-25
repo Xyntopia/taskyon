@@ -56,7 +56,7 @@ export const testChatCompletionConnectionIsAnImmutableCreationSnapshot = () => {
   )
   assert(!('model' in connection), 'Model must remain a materialized tool parameter')
 
-  const unavailable = async () => {
+  const unavailable = () => {
     throw new Error('Not used by this schema-boundary test.')
   }
   const { chatCompletion } = createChatCompletionTool(connection, {
@@ -636,12 +636,14 @@ export const testChatCompletionCodexRequestMovesLeadingSystemPromptToInstruction
 export const testTaskyonCostLookupOnlyForwardsAttributionHeaders = async () => {
   const originalFetch = globalThis.fetch
   let requestHeaders: Headers | undefined
-  globalThis.fetch = async (_input, init) => {
+  globalThis.fetch = (_input, init) => {
     requestHeaders = new Headers(init?.headers)
-    return new Response(JSON.stringify([{ used_credits: 0.25 }]), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    })
+    return Promise.resolve(
+      new Response(JSON.stringify([{ used_credits: 0.25 }]), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    )
   }
 
   try {
@@ -675,11 +677,13 @@ testTaskyonCostLookupOnlyForwardsAttributionHeaders.description =
 export const testProviderRequestsApplyProfileHeaders = async () => {
   const originalFetch = globalThis.fetch
   const requests: Headers[] = []
-  globalThis.fetch = async (_input, init) => {
+  globalThis.fetch = (_input, init) => {
     requests.push(new Headers(init?.headers))
-    return new Response(
-      'data: {"id":"test","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
-      { status: 200, headers: { 'content-type': 'text/event-stream' } },
+    return Promise.resolve(
+      new Response(
+        'data: {"id":"test","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      ),
     )
   }
 

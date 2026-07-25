@@ -623,9 +623,8 @@ const useApiManagement = (
     console.log('Update model list!')
     const provider = selectedProviderProfile.value
     llmModelsInternal.value = provider
-      ? await updateLlmModels(
-          provider,
-          async (name) => (availableKeys.value[name] as KeyString | undefined) ?? null,
+      ? await updateLlmModels(provider, (name) =>
+          Promise.resolve((availableKeys.value[name] as KeyString | undefined) ?? null),
         )
       : {}
   })
@@ -715,8 +714,9 @@ const useApiManagement = (
     if (value) {
       availableKeys.value = { ...availableKeys.value, [name]: value }
     } else {
-      const { [name]: _removed, ...remainingKeys } = availableKeys.value
-      availableKeys.value = remainingKeys
+      availableKeys.value = Object.fromEntries(
+        Object.entries(availableKeys.value).filter(([provider]) => provider !== name),
+      )
     }
   })
 

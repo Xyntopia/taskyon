@@ -32,7 +32,6 @@ import {
   applyCodexAccountHeader,
   createCliLlmState,
   getProviderSettings,
-  getSelectedProviderSettings,
   getSelectedToolchainConfig,
   type CliLlmState,
 } from './models'
