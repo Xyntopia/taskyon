@@ -6,7 +6,7 @@
     <q-card>
       <q-card-section>
         <div class="text-h6">
-          Joulios File Browser
+          Taskyon File Browser
           <InfoDialog
             info-text="This browser shows all files that taskyon saved in its [OPFS](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system) file system and can interact with!"
           />

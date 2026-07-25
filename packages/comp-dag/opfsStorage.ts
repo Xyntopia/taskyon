@@ -11,7 +11,7 @@ const nodeOpfsRoot = (): string => {
     process?: { cwd?: () => string; env?: Record<string, string | undefined> }
   }
   const cwd = proc.process?.cwd?.() ?? '.'
-  return proc.process?.env?.TASKYON_NODE_OPFS_ROOT ?? `${cwd}/.joulios/opfs`
+  return proc.process?.env?.TASKYON_NODE_OPFS_ROOT ?? `${cwd}/.taskyon/opfs`
 }
 
 const safeNodePath = async (path: string): Promise<string> => {

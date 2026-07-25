@@ -54,24 +54,6 @@ const layout = ref<DockNode>({
   ],
 })
 
-const migrateLegacyLayout = (node: DockNode): DockNode => {
-  if (node.type === 'container') {
-    return {
-      ...node,
-      children: (node.children ?? []).map(migrateLegacyLayout),
-    }
-  }
-  const views = (node.views ?? []).map((view) => (view === 'joulios-chat' ? 'chat' : view))
-  const keepAliveViews = (node.keepAliveViews ?? []).map((view) =>
-    view === 'joulios-chat' ? 'chat' : view,
-  )
-  return {
-    ...node,
-    views,
-    keepAliveViews,
-  }
-}
-
 if (props.persist) {
   syncRefsWithLocalStorage(
     `${props.storageKeyPrefix}:${props.name}`,
@@ -81,8 +63,6 @@ if (props.persist) {
     { debounceMs: 250 },
   )
 }
-
-layout.value = migrateLegacyLayout(layout.value)
 </script>
 
 <style scoped lang="sass">

@@ -148,14 +148,20 @@ export const buildRunManifestRows = (args: {
       ...(typeof source.status === 'string' ? { status: source.status } : {}),
       ...(typeof source.comboIndex === 'number' ? { comboIndex: source.comboIndex } : {}),
       ...(typeof source.comboRowIndex === 'number' ? { comboRowIndex: source.comboRowIndex } : {}),
-      runPath: args.runArchivePathForIndex(args.projectId, args.problemId, args.startedAtMs, runIndex),
+      runPath: args.runArchivePathForIndex(
+        args.projectId,
+        args.problemId,
+        args.startedAtMs,
+        runIndex,
+      ),
     })
   }
   return out
 }
 
 export const clone = <T>(value: T): T => {
-  const sc = (globalThis as unknown as { structuredClone?: (v: unknown) => unknown }).structuredClone
+  const sc = (globalThis as unknown as { structuredClone?: (v: unknown) => unknown })
+    .structuredClone
   if (typeof sc === 'function') {
     try {
       return sc(value) as T
@@ -262,7 +268,7 @@ export const createResultPersistenceService = (deps: ResultPersistenceDeps) => {
     const safeProject = deps.sanitizePathSegment(projectId)
     const safeProblem = deps.sanitizePathSegment(problemId)
     const runId = startedAtMs != null ? String(startedAtMs) : String(now())
-    return `joulios_project/run_rows/${safeProject}/${safeProblem}/${runId}`
+    return `comp_dag/run_rows/${safeProject}/${safeProblem}/${runId}`
   }
 
   const runArchivePathForIndex = (
@@ -279,7 +285,7 @@ export const createResultPersistenceService = (deps: ResultPersistenceDeps) => {
   const optimizationResultsSnapshotPathFor = (projectId: string, problemId: string): string => {
     const safeProject = deps.sanitizePathSegment(projectId)
     const safeProblem = deps.sanitizePathSegment(problemId)
-    return `joulios_project/run_results/${safeProject}/${safeProblem}/latest.json`
+    return `comp_dag/run_results/${safeProject}/${safeProblem}/latest.json`
   }
 
   const runManifestPathFor = (
@@ -354,7 +360,9 @@ export const createResultPersistenceService = (deps: ResultPersistenceDeps) => {
     if (!results) {
       optimizationResultsPersistStateByProblem.delete(problemKey)
       optimizationRunRowsPersistStateByProblem.delete(problemKey)
-      optimizationResultsSnapshotCache.delete(optimizationResultsSnapshotPathFor(projectId, problemId))
+      optimizationResultsSnapshotCache.delete(
+        optimizationResultsSnapshotPathFor(projectId, problemId),
+      )
       return null
     }
 
@@ -464,9 +472,13 @@ export const createResultPersistenceService = (deps: ResultPersistenceDeps) => {
     const loaded = await deps.readJson<unknown>(refPath)
 
     if (isPersistedOptimizationSnapshotV1(loaded)) {
-      const runs = buildLazyRunsFromSnapshot(projectId, problemId, loaded.startedAtMs, loaded.runsCount)
-      const loadedMeta =
-        loaded.meta && typeof loaded.meta === 'object' ? loaded.meta : null
+      const runs = buildLazyRunsFromSnapshot(
+        projectId,
+        problemId,
+        loaded.startedAtMs,
+        loaded.runsCount,
+      )
+      const loadedMeta = loaded.meta && typeof loaded.meta === 'object' ? loaded.meta : null
       return {
         nodeKey: loaded.nodeKey,
         nodeName: loaded.nodeName,

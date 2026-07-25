@@ -64,7 +64,7 @@ export class OptimizationWorkerPool {
 
     while (this.slots.length < target) {
       const worker = this.createWorker()
-      console.info('[JOULIOS][optimizationWorkerPool] spawned ETA worker', {
+      console.info('[COMP-DAG][optimizationWorkerPool] spawned ETA worker', {
         workerUrl: this.workerDebugLabel,
         slotIndex: this.slots.length,
       })
@@ -93,7 +93,7 @@ export class OptimizationWorkerPool {
         this.pump()
       }
       worker.onerror = (event) => {
-        console.error('[JOULIOS][optimizationWorkerPool] ETA worker error', {
+        console.error('[COMP-DAG][optimizationWorkerPool] ETA worker error', {
           workerUrl: this.workerDebugLabel,
           slotActiveTaskId: slot.activeTaskId,
           message: event.message,
@@ -130,7 +130,7 @@ export class OptimizationWorkerPool {
       slot.activeTaskId = null
       slot.busy = false
       slot.worker.terminate()
-      console.info('[JOULIOS][optimizationWorkerPool] terminated ETA worker', {
+      console.info('[COMP-DAG][optimizationWorkerPool] terminated ETA worker', {
         workerUrl: this.workerDebugLabel,
       })
     }

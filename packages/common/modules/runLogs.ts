@@ -24,7 +24,7 @@ const emitToBrowserConsole = (
   data: unknown,
   level: LogLevel,
 ): void => {
-  const prefix = '[JOULIOS]'
+  const prefix = '[TASKYON]'
   const tag = `[${source}]`
   if (level === 'error') {
     console.error(prefix, tag, message, data ?? '')

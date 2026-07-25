@@ -13,7 +13,7 @@ flowchart LR
   Core --> StorageClient
   StorageClient --> StorageService[Host storage service]
   StorageService --> PgLite[Taskyon UI PgLite]
-  StorageService --> OPFS[Joulios OPFS]
+  StorageService --> OPFS[Host OPFS]
 ```
 
 ## Runtime Modes
