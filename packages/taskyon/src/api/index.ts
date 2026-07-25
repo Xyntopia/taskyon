@@ -182,9 +182,7 @@ type TaskyonClientOptions = {
 
 const isTaskCreatedMessage = (
   message: unknown,
-): message is Extract<TaskyonMessageType, { type: 'taskCreated' }> & {
-  task: TaskNodeWithParent
-} => {
+): message is Extract<TaskyonMessageType, { type: 'taskCreated' }> & { task: TaskNode } => {
   return (
     typeof message === 'object' &&
     message !== null &&
@@ -194,11 +192,18 @@ const isTaskCreatedMessage = (
     !!message.task &&
     typeof message.task === 'object' &&
     'id' in message.task &&
-    'parentID' in message.task &&
-    typeof message.task.id === 'string' &&
-    typeof message.task.parentID === 'string'
+    typeof message.task.id === 'string'
   )
 }
+
+const isChildTaskCreatedMessage = (
+  message: unknown,
+): message is Extract<TaskyonMessageType, { type: 'taskCreated' }> & {
+  task: TaskNodeWithParent
+} =>
+  isTaskCreatedMessage(message) &&
+  'parentID' in message.task &&
+  typeof message.task.parentID === 'string'
 
 const isTaskyonReadyMessage = (
   message: unknown,
@@ -238,7 +243,7 @@ const createSubTaskStream = <T extends { type: string }>(
   }
 
   receive((message) => {
-    if (!isTaskCreatedMessage(message)) return
+    if (!isChildTaskCreatedMessage(message)) return
     if (trackedIds.has(message.task.parentID)) {
       emitTaskAndFlush(message.task)
       return
@@ -443,6 +448,10 @@ export const createTaskyonClient = <Tx extends { type: string }, Rx extends { ty
   }
   const taskClient = {
     ...protocolClient.task,
+    onCreated: (handler: (task: TaskNode) => void) =>
+      tyPort.receive((message) => {
+        if (isTaskCreatedMessage(message)) handler(message.task)
+      }),
     get: async (args: Parameters<typeof protocolClient.task.get>[0]) => {
       const cachedTask = taskCache?.get(args.id)
       if (cachedTask) return cachedTask

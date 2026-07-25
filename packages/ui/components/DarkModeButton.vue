@@ -1,6 +1,6 @@
 <template>
   <q-btn
-    :icon-right="$q.dark.mode === 'auto' ? matContrast : $q.dark.mode ? matDarkMode : matLightMode"
+    :icon="$q.dark.mode === 'auto' ? matContrast : $q.dark.mode ? matDarkMode : matLightMode"
     v-bind="$attrs"
     @click="toggleTheme"
   >

@@ -33,6 +33,7 @@ export {
   type StorageRecordCrud,
   type TaskyonStorageMessage,
   type TaskyonMessage as TaskyonMessageType,
+  type TaskyonClient,
   type TyP2P,
 } from './api/index'
 export { createTaskNode, ensureValidTaskId, forgeTaskChain } from './core/createTasks'

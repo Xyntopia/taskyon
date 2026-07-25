@@ -24,7 +24,8 @@ test.describe('iframe integration', () => {
               }
 
               const request = indexedDB.deleteDatabase(db.name)
-              request.onerror = () => reject(request.error)
+              request.onerror = () =>
+                reject(request.error ?? new Error(`Could not delete IndexedDB database ${db.name}`))
               request.onsuccess = () => resolve()
               request.onblocked = () => resolve()
             }),
@@ -51,6 +52,6 @@ test.describe('iframe integration', () => {
 
     const taskResultText =
       (await dataCy(page, 'task-result').textContent({ timeout: 60_000 })) ?? ''
-    await expectTaskResultMessage(taskResultText)
+    expectTaskResultMessage(taskResultText)
   })
 })

@@ -12,12 +12,10 @@
       @update:message-debug="onUpdateMessageDebug"
     >
       <div class="row items-center">
-        <FileBrowser
-          v-if="getFile"
+        <TaskContentView
+          :task="task"
           :file-mappings="fileMappings"
           :expert-mode="state.appConfiguration.expertMode"
-          preview
-          :preview-size="100"
           :get-file="getFile"
         />
         <q-btn
@@ -41,7 +39,7 @@
       :raw-conversation-text="rawConversationText"
       @update:message-debug="onUpdateMessageDebug"
     >
-      {{ task.content.data }}
+      <TaskContentView :task="task" />
     </TaskField>
     <TaskField
       v-else-if="task.content.type === 'functioncall'"
@@ -79,18 +77,11 @@
           </div>
         </div>
       </template>
-      <div class="text-bold">arguments (yaml):</div>
-      <div caption>
-        <pre class="scroll-area task-arguments-yaml"><template
-          v-for="(segment, index) in functionArgumentSegments"
-          :key="`${segment.type}-${index}`"
-          ><span v-if="segment.type === 'text'">{{ segment.value }}</span
-          ><span v-else class="task-variable-ref"
-            >{{ segment.value
-            }}<TaskVariableHint :task-id="segment.taskId" @open-variable="openVariableInspectorDialog" /></span
-          ></template
-        ></pre>
-      </div>
+      <TaskContentView
+        :task="task"
+        show-variable-actions
+        @open-variable="openVariableInspectorDialog"
+      />
     </TaskField>
     <TaskField
       v-else-if="task.content.type === 'toolresult'"
@@ -104,11 +95,7 @@
       <template #header>
         Result: {{ summarizeTaskData(task.content.data).split(' ').slice(0, 10).join(' ') }}...
       </template>
-      <div caption class="relative-position">
-        <div class="scroll-area">
-          {{ summarizeTaskData(task.content.data) }}
-        </div>
-      </div>
+      <TaskContentView :task="task" />
     </TaskField>
     <TaskField
       v-else-if="task.content.type === 'structured'"
@@ -122,9 +109,7 @@
       @update:message-debug="onUpdateMessageDebug"
     >
       <template #header> Analyze... </template>
-      <p style="white-space: pre-wrap">
-        {{ safeYamlDump(task.content.data) }}
-      </p>
+      <TaskContentView :task="task" />
     </TaskField>
     <TaskField
       v-else-if="task.content.type === 'tooldefinition'"
@@ -137,9 +122,7 @@
       @update:message-debug="onUpdateMessageDebug"
     >
       <template #header> function: {{ task.content.data.name }} </template>
-      <p style="white-space: pre-wrap">
-        {{ task.content.data }}
-      </p>
+      <TaskContentView :task="task" />
     </TaskField>
     <TaskField
       v-else-if="task.content.type === 'message'"
@@ -154,21 +137,14 @@
     >
       <template #header> {{ task.content.data.split(' ').slice(0, 10).join(' ') }}... </template>
       <template #default="{ showTaskMenu }">
-        <tyMarkdown
-          v-if="state.taskWidgetState[task.id]?.markdownEnabled != false"
-          no-line-numbers
-          :src="resolvedMessageContent"
-          :use-iframe="true"
-          :extensions="taskMarkdownExtensions"
+        <TaskContentView
+          :task="task"
+          :markdown-enabled="state.taskWidgetState[task.id]?.markdownEnabled != false"
+          use-markdown-iframe
           @iframe-ready="(el: HTMLIFrameElement) => onIframeMessage(el, task.id)"
           @if-longpress="showTaskMenu(true)"
           @if-click="showTaskMenu(false)"
-          @inline-action="onInlineMarkdownAction"
         />
-        <div v-else class="raw-markdown q-mb-md">
-          {{ resolvedMessageContent }}
-        </div>
-        <SourcesList :sources="task.content.ann ?? []" />
       </template>
     </TaskField>
     <TaskField
@@ -200,18 +176,13 @@
         </div>
       </template>
       <template #default="{ showTaskMenu }">
-        <div class="text-negative">
-          <tyMarkdown
-            :src="humanizeError(task.content.data)"
-            no-line-numbers
-            use-iframe
-            @if-longpress="showTaskMenu(true)"
-            @if-click="showTaskMenu(false)"
-          />
-          <div v-if="sourceTaskId" class="text-caption source-task-hint">
-            Debug details are attached to the originating task.
-          </div>
-        </div>
+        <TaskContentView
+          :task="task"
+          use-markdown-iframe
+          :show-source-task-hint="sourceTaskId !== undefined"
+          @if-longpress="showTaskMenu(true)"
+          @if-click="showTaskMenu(false)"
+        />
       </template>
     </TaskField>
     <q-dialog v-model="showSourceTaskDialog" maximized>
@@ -255,29 +226,18 @@ import {
   mdiHeadCog,
   mdiTools,
 } from '@quasar/extras/mdi-v6'
-import tyMarkdown from '@taskyon/ui/components/tyMarkdown.vue'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
-import {
-  humanizeError,
-  safeYamlDump,
-  taskRefToTaskId,
-  type FileMapping,
-  type TaskNode,
-} from '@taskyon/taskyon'
-import { dump } from 'js-yaml'
-import { createTaskMarkdownExtension } from 'src/modules/taskyon/taskMarkdownExtension'
+import TaskContentView from '@taskyon/ui/components/taskyon/TaskContentView.vue'
+import { humanizeError, type FileMapping, type TaskNode } from '@taskyon/taskyon'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, ref, toRefs } from 'vue'
-import FileBrowser from './FileBrowser.vue'
-import SourcesList from './SourcesList.vue'
 import TaskField from './TaskField.vue'
 import {
   formatRawConversationDebug,
   getRawConversationDebug,
   hasRawConversationDebug,
 } from './taskDebugConversation'
-import TaskVariableHint from './TaskVariableHint.vue'
 import VariableInspectorDialog from './VariableInspectorDialog.vue'
 
 const props = defineProps<{
@@ -308,39 +268,6 @@ const sourceTaskId = computed(() =>
 const loadTaskById = async (taskId: string) =>
   (await tystate.taskyonClient.task.get({ id: taskId })) ?? undefined
 const taskMeta = tystate.getTaskMetaRef(task.value.id)
-const resolvedMessageContent = ref(
-  task.value.content.type === 'message' ? task.value.content.data : '',
-)
-const taskMarkdownExtensions = computed(() => [createTaskMarkdownExtension(loadTaskById)])
-const functionArgumentsYaml = computed(() =>
-  task.value.content.type === 'functioncall' ? dump(task.value.content.data.arguments) : '',
-)
-const functionArgumentSegments = computed(() => {
-  const input = functionArgumentsYaml.value
-  const regex = /_t:[A-Za-z0-9_-]+/g
-  const segments: Array<
-    { type: 'text'; value: string } | { type: 'variable'; value: string; taskId: string }
-  > = []
-  let lastIndex = 0
-
-  for (const match of input.matchAll(regex)) {
-    const value = match[0]
-    const start = match.index ?? 0
-    const taskId = taskRefToTaskId(value)
-    if (start > lastIndex) {
-      segments.push({ type: 'text', value: input.slice(lastIndex, start) })
-    }
-    if (taskId) segments.push({ type: 'variable', value, taskId })
-    else segments.push({ type: 'text', value })
-    lastIndex = start + value.length
-  }
-
-  if (lastIndex < input.length) {
-    segments.push({ type: 'text', value: input.slice(lastIndex) })
-  }
-
-  return segments
-})
 const rawConversationText = computed(() => {
   const debug = getRawConversationDebug(taskMeta.value)
   return hasRawConversationDebug(debug) ? formatRawConversationDebug(debug) : undefined
@@ -372,19 +299,6 @@ async function openVariableInspectorDialog(taskId: string) {
   showVariableInspectorDialog.value = true
 }
 
-function onInlineMarkdownAction(event: { action: string; payload: unknown }) {
-  const payload =
-    event.payload && typeof event.payload === 'object'
-      ? (event.payload as { taskId?: string })
-      : undefined
-  const taskId = payload?.taskId
-  if (!taskId) return
-
-  if (event.action === 'taskyon-variable-open') {
-    void openVariableInspectorDialog(taskId)
-  }
-}
-
 const fileMappings = ref<FileMapping[]>([])
 async function getFile(id: string) {
   console.log('load image', id)
@@ -394,14 +308,6 @@ async function getFile(id: string) {
 const onIframeMessage = (el: HTMLIFrameElement, id: string) => {
   void tystate.connectMessageIframe(id, el)
 }
-
-const resolveTaskWidgetVariables = () => {
-  if (task.value.content.type === 'message') {
-    resolvedMessageContent.value = task.value.content.data
-  }
-}
-
-void resolveTaskWidgetVariables()
 
 if (task.value.content.type === 'files') {
   console.log('get uploaded files')
@@ -416,18 +322,3 @@ if (task.value.content.type === 'files') {
   })(task.value.content.data)
 }
 </script>
-
-<style scoped>
-.task-arguments-yaml {
-  white-space: pre-wrap;
-  word-break: break-word;
-  margin: 0;
-}
-
-.task-variable-ref {
-  color: var(--q-secondary);
-  cursor: pointer;
-  text-decoration: underline;
-  text-decoration-style: dotted;
-}
-</style>

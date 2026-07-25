@@ -165,7 +165,7 @@ import {
 } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
-import { isTaskVisibleInChat } from 'src/modules/taskyon/taskChatVisibility'
+import { isTaskVisibleInChat } from '@taskyon/ui/components/taskyon/taskChatVisibility'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'

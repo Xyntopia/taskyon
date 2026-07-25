@@ -11,7 +11,7 @@
         hide-number-of-search-results
         :show-filter-button="false"
         color="secondary"
-        @search="(q, k) => (searchText = q)"
+        @search="updateSearchText"
       />
 
       <q-btn
@@ -279,6 +279,10 @@ const schemaRef = toRef(() => schema)
 
 const searchText = ref(search ?? '')
 const effectiveLazy = computed(() => lazyRender && searchText.value.length === 0)
+
+const updateSearchText = (query: string) => {
+  searchText.value = query
+}
 
 const optionsRef = computed(() => ({
   missingMode: missingMode.value,

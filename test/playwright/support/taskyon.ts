@@ -90,21 +90,28 @@ export const waitForTaskyonSession = async (page: Page) => {
 const modelField = (page: Page): Locator =>
   dataCy(page, 'model-selection').locator('.q-field').filter({ hasText: modelSelectLabel })
 
+const selectLlmProvider = async (page: Page, modelSelection: Locator, provider: string) => {
+  const popup = page.locator('.provider-select-popup:visible')
+  const option = popup.locator(`[data-cy="provider-option"][data-provider="${provider}"]`).first()
+  const providerSelect = dataCy(modelSelection, 'provider-select')
+
+  await expect(async () => {
+    if (await popup.isVisible()) await page.keyboard.press('Escape')
+    await providerSelect.click()
+    await expect(option).toBeVisible({ timeout: 1000 })
+  }).toPass({ timeout: 30_000 })
+
+  await option.click()
+  await expect(providerSelect).toContainText(provider)
+}
+
 export const selectLlmModel = async (page: Page, provider?: string, modelId = '') => {
+  const modelSelection = dataCy(page, 'model-selection')
   await dataCy(page, 'model-id').click()
-  await expect(dataCy(page, 'model-selection')).toBeVisible()
+  await expect(modelSelection).toBeVisible()
 
   if (provider) {
-    await dataCy(page, 'model-selection')
-      .locator('.q-field')
-      .filter({ hasText: 'Provider' })
-      .click()
-    await page
-      .locator('.provider-select-popup:visible')
-      .locator(`[data-cy="provider-option"][data-provider="${provider}"]`)
-      .first()
-      .click()
-    await expect(dataCy(page, 'provider-select')).toContainText(provider)
+    await selectLlmProvider(page, modelSelection, provider)
   }
 
   if (modelId) {
@@ -187,7 +194,7 @@ export const addAiServices = async (page: Page, env: OnlineEnv) => {
   await page.keyboard.press('Escape')
 }
 
-export const expectTaskResultMessage = async (text: string, expectedText?: string) => {
+export const expectTaskResultMessage = (text: string, expectedText?: string) => {
   const jsonStart = text.indexOf('{')
   expect(jsonStart).toBeGreaterThanOrEqual(0)
 

@@ -1,21 +1,17 @@
 <template>
-  <DockView v-model:node="layout" class="col" hide-tab-add hide-tab-close>
-    <template #app>
-      <slot name="default" />
-    </template>
+  <SplitTaskyonLayout :name="name" :persist="persist" class="col">
+    <slot />
     <template #chat>
       <TaskyonIframe v-bind="taskyonIframeProps" />
     </template>
-  </DockView>
+  </SplitTaskyonLayout>
 </template>
 
 <script setup lang="ts">
-import type { DockNode } from './DockView.vue'
-import DockView from './DockView.vue'
-import { syncRefsWithLocalStorage } from '@taskyon/common/modules/saveState'
 import type { partialTyConfiguration } from '@taskyon/tyclient'
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { type ClientTool } from '@taskyon/tyclient'
+import SplitTaskyonLayout from './SplitTaskyonLayout.vue'
 import TaskyonIframe from './TaskyonIframe.vue'
 
 const props = withDefaults(
@@ -64,58 +60,4 @@ const taskyonIframeProps = computed(() => {
   }
   return nextProps
 })
-
-const layout = ref<DockNode>({
-  id: 'root',
-  type: 'container',
-  direction: 'row',
-  children: [
-    {
-      id: 'before',
-      type: 'leaf',
-      showTabs: 'never',
-      views: ['app'],
-      size: 30,
-      activeViewIndex: 0,
-    },
-    {
-      id: 'chat',
-      type: 'leaf',
-      showTabs: 'never',
-      views: ['chat'],
-      keepAliveViews: ['chat'],
-      size: 30,
-      activeViewIndex: 0,
-      collapsed: true,
-    },
-  ],
-})
-
-const migrateLegacyLayout = (node: DockNode): DockNode => {
-  if (node.type === 'container') {
-    return {
-      ...node,
-      children: (node.children ?? []).map(migrateLegacyLayout),
-    }
-  }
-  const views = (node.views ?? []).map((view) => (view === 'joulios-chat' ? 'chat' : view))
-  const keepAliveViews = (node.keepAliveViews ?? []).map((view) =>
-    view === 'joulios-chat' ? 'chat' : view,
-  )
-  return {
-    ...node,
-    views,
-    keepAliveViews,
-  }
-}
-
-syncRefsWithLocalStorage(
-  `SplitTaskyonView:${props.name}`,
-  {
-    layout,
-  },
-  { debounceMs: 250 },
-)
-
-layout.value = migrateLegacyLayout(layout.value)
 </script>

@@ -1,27 +1,31 @@
 <template>
-  <template v-for="(task, idx) in selectedThread" :key="task.id">
-    <q-expansion-item v-if="reasoning?.get(task.id)" label="reasoning" dense class="text-caption">
-      <tyMarkdown :src="reasoning?.get(task.id)!" />
-    </q-expansion-item>
-    <Task
-      v-if="!hiddenTaskIds?.has(task.id) && (showAllTasks || showTask(task))"
-      :id="task.id"
-      :class="[task.role, task.content.type]"
-      :task="task"
-      :message-debug="!!state.messageDebug[task.id]"
-      :next-task="selectedThread[idx + 1]"
-      :is-working="isProcessing(task.id)"
-      :show-meta="!!showIds"
-      @update:message-debug="(value) => (state.messageDebug[task.id] = value)"
-    />
-  </template>
+  <TaskChatThread
+    :tasks="selectedThread"
+    :tools="tystate.allTools"
+    :reasoning="reasoning"
+    :hidden-task-ids="hiddenTaskIds"
+    :show-all-tasks="showAllTasks"
+    :expert-mode="expertMode"
+  >
+    <template #task="{ task, nextTask }">
+      <Task
+        :id="task.id"
+        :class="[task.role, task.content.type]"
+        :task="task"
+        :message-debug="!!state.messageDebug[task.id]"
+        :next-task="nextTask"
+        :is-working="isProcessing(task.id)"
+        :show-meta="!!showIds"
+        @update:message-debug="(value) => (state.messageDebug[task.id] = value)"
+      />
+    </template>
+  </TaskChatThread>
 </template>
 
 <script setup lang="ts">
-import tyMarkdown from '@taskyon/ui/components/tyMarkdown.vue'
+import TaskChatThread from '@taskyon/ui/components/taskyon/TaskChatThread.vue'
 import { type TaskNode } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
-import { isTaskVisibleInChat } from 'src/modules/taskyon/taskChatVisibility'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 
@@ -41,8 +45,4 @@ const {
   expertMode?: boolean
   hiddenTaskIds?: ReadonlySet<string>
 }>()
-
-function showTask(t: TaskNode) {
-  return isTaskVisibleInChat(t, tystate.allTools, expertMode ?? false)
-}
 </script>

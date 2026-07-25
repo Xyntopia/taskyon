@@ -33,7 +33,7 @@ import type { FileMapping } from '@taskyon/taskyon'
 
 // Store the props in a variable for easy access
 const props = defineProps<{
-  fileMappings: FileMapping[]
+  fileMappings: readonly FileMapping[]
   expertMode: boolean
   preview: boolean
   previewSize: number // New prop for configurable preview size
