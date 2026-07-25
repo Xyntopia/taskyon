@@ -9,6 +9,7 @@ import {
   selectLlmModel,
   setSettingsToggle,
   waitForTaskyonSession,
+  writeMessage,
 } from '../support/taskyon'
 
 const onlineEnv = readOnlineEnv(process.cwd())
@@ -54,16 +55,6 @@ test.describe('Taskyon API', () => {
 
   test('can configure providers, upload an image, and get a vision response', async ({ page }) => {
     if (!onlineEnv) throw new Error('online env missing')
-    const browserErrors: string[] = []
-    page.on('pageerror', (error) => browserErrors.push(error.message))
-    page.on('console', (message) => {
-      if (message.type() === 'error') browserErrors.push(message.text())
-    })
-    page.on('requestfailed', (request) => {
-      browserErrors.push(
-        `Request failed: ${request.url()} (${request.failure()?.errorText ?? 'unknown error'})`,
-      )
-    })
 
     await page.goto('/')
     await expect(page.getByText('Start with a guided design question')).toBeVisible()
@@ -87,14 +78,7 @@ test.describe('Taskyon API', () => {
       .locator('[data-cy="file-input"]')
       .setInputFiles(join(process.cwd(), 'public/taskyon_social_preview.png'))
 
-    const messageInput = page.locator('.create-tasks textarea')
-    await messageInput.fill('Whats in the picture?')
-    await messageInput.press('Enter')
-    try {
-      await expect(messageInput).toHaveValue('', { timeout: 30_000 })
-    } catch {
-      throw new Error(`Image prompt was not submitted. ${browserErrors.join('\n')}`)
-    }
+    await writeMessage(page, 'Whats in the picture?')
 
     await checkLastMessage(page, 'taskyon.space')
     await checkLastMessage(page, 'logo')

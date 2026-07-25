@@ -53,7 +53,7 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
   testNodeDiscoveryThroughLocalRelay: {
     requiresNetwork: true,
   },
-  testEntryNodeRecoversFromMalformedPythonToolCall: {
+  testEntryNodeRecoversFromMalformedToolArguments: {
     requiresNetwork: true,
   },
   testEntryNodeWebsearchProducesHostedSearchUsage: {

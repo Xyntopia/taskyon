@@ -3504,7 +3504,8 @@ async function main() {
         )
         inMenuInteraction = false
         if (!keepRunning) {
-          requestImmediateShutdown('Slash command exit', 0)
+          stopMainLoop = true
+          requestedExitCode = 0
           break
         }
         continue

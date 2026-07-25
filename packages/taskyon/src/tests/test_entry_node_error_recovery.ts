@@ -5,7 +5,7 @@ import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnostics
 import { tyCore } from '../core/init'
 import { createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
 import { createTaskyonClient } from '../api'
-import { createSubtasksResult, toolCall } from '../types/toolApi'
+import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
 import { createStandardEntryNodeTool, normalizeEntryNodeSettings } from '../tools/entryNode'
 import { createDefaultTaskyonToolSetup } from '../tools'
@@ -13,6 +13,7 @@ import { CLARIFICATION_TOOL_NAME } from '../tools/clarificationTool'
 import { buildLinkedTaskChain } from '../testSupport/onlineProviderSupport'
 import { resolveDiagnosticsRuntimeConfig } from '../testSupport/onlineProviderSupport'
 import { FunctionCall } from '../types/tools'
+import { humanizeError } from '../utils/error'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -662,7 +663,7 @@ export const testEntryNodeDoesNotAskClarificationDuringErrorRecovery = async () 
   return { success: true }
 }
 
-export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
+export const testEntryNodeRecoversFromMalformedToolArguments = async (
   context?: DiagnosticsTestContext,
 ) => {
   if (!context?.providerKey) {
@@ -687,6 +688,23 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
     defaultAllowedTools: ['executePythonScript'],
     toolChooser: { enabled: true, useTools: true },
   })
+  const executePythonScriptTool = createTool({
+    name: 'executePythonScript',
+    description: 'Execute Python code in the diagnostics runtime.',
+    parameters: {
+      type: 'object',
+      properties: {
+        code: { type: 'string' },
+      },
+      required: ['code'],
+      additionalProperties: false,
+    },
+    function: ({ code }) => ({
+      ok: true,
+      stdout: code,
+    }),
+  })
+  const defaultToolSetup = createDefaultTaskyonToolSetup()
 
   const ty = await tyCore(
     () => runtimeConfig.settings,
@@ -702,11 +720,19 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
       },
     },
     undefined,
-    { toolSetup: createDefaultTaskyonToolSetup(), nodePgLiteDataDir: dataDir },
+    {
+      toolSetup: {
+        ...defaultToolSetup,
+        baseTools: defaultToolSetup.baseTools.filter(
+          (tool) => tool.name !== executePythonScriptTool.name,
+        ),
+      },
+      nodePgLiteDataDir: dataDir,
+    },
   )
   const toolRpcExecutor = await registerToolRpcTools({
     port: ty.port,
-    tools: [entryNodeTool],
+    tools: [entryNodeTool, executePythonScriptTool],
     createContext: (call, stopSignal) =>
       createExternalToolContext(stopSignal, {
         getExecutionTaskChain: () => {
@@ -783,17 +809,13 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
     )
   })
   const errorTasks = finish.tasks.filter((task) => task.content.type === 'error')
-  const pythonErrorTasks = errorTasks.filter((task) => {
-    const parent = task.parentID ? byId.get(task.parentID) : undefined
+  const invalidArgumentsError = errorTasks.find((task) => {
+    const message = humanizeError(task.content.data)
     return (
-      parent?.content.type === 'functioncall' && parent.content.data.name === 'executePythonScript'
+      message.includes('Invalid arguments for tool "executePythonScript"') &&
+      message.includes("required property 'code'")
     )
   })
-
-  const firstPythonCall = pythonCalls[0]
-  const firstArgs =
-    firstPythonCall?.content.type === 'functioncall' ? firstPythonCall.content.data.arguments : {}
-  const usedWrongArgs = firstArgs && typeof firstArgs === 'object' && 'script' in firstArgs
   const successfulPythonResult = pythonToolResults.find((task) => {
     const data = task.content.data as { ok?: unknown; stdout?: unknown }
     return (
@@ -802,23 +824,17 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
   })
 
   assert(
-    pythonCalls.length >= 2,
-    'Expected at least two executePythonScript calls (broken + recovered)',
+    Boolean(invalidArgumentsError),
+    'Expected malformed executePythonScript arguments to be rejected before task creation',
   )
-  assert(
-    Boolean(usedWrongArgs),
-    'Expected first executePythonScript call to use malformed "script" argument',
-  )
-  assert(
-    pythonErrorTasks.length >= 1,
-    'Expected at least one error task attached to executePythonScript call',
-  )
+  assert(pythonCalls.length === 1, 'Expected one corrected executePythonScript task call')
   assert(
     Boolean(successfulPythonResult),
     'Expected successful executePythonScript toolresult with "recovered-ok"',
   )
 
   toolRpcExecutor.destroy()
+  ty.workerStop('entry-node recovery diagnostic complete')
 
   return {
     success: true,
@@ -830,14 +846,14 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
       observedTasks: finish.tasks.length,
       pythonCalls: pythonCalls.length,
       pythonToolResults: pythonToolResults.length,
-      pythonErrorTasks: pythonErrorTasks.length,
+      invalidArgumentErrors: invalidArgumentsError ? 1 : 0,
     },
   }
 }
 
-testEntryNodeRecoversFromMalformedPythonToolCall.description =
+testEntryNodeRecoversFromMalformedToolArguments.description =
   'EntryNode should recover from malformed executePythonScript parameters by retrying with corrected arguments.'
-testEntryNodeRecoversFromMalformedPythonToolCall.timeoutMs = 210_000
+testEntryNodeRecoversFromMalformedToolArguments.timeoutMs = 210_000
 
 testEntryNodeDoesNotAskClarificationDuringErrorRecovery.description =
   'EntryNode should not ask human clarification questions while recovering from a tool error.'

@@ -94,6 +94,7 @@ export const buildChatProviderRequest = async (input: {
   const recordingFetch = input.providerRequest
     ? createChatCompletionRecordingFetch(input.providerRequest, fetch)
     : undefined
+  const requestHeaders = input.api.provider === 'taskyon' ? undefined : input.api.defaultHeaders
 
   switch (input.api.provider) {
     case 'openai':
@@ -101,7 +102,7 @@ export const buildChatProviderRequest = async (input: {
       const { createOpenAI } = await import('@ai-sdk/openai')
       const openai = createOpenAI({
         apiKey: input.apiKey,
-        ...(input.api.defaultHeaders ? { headers: input.api.defaultHeaders } : {}),
+        ...(requestHeaders ? { headers: requestHeaders } : {}),
         ...(recordingFetch ? { fetch: recordingFetch } : {}),
         ...(input.api.provider === 'chatgpt-codex' ? { baseURL: input.api.baseURL } : {}),
       })
@@ -158,7 +159,7 @@ export const buildChatProviderRequest = async (input: {
       }
       const openrouter = createOpenRouter({
         apiKey: input.apiKey,
-        ...(input.api.defaultHeaders ? { headers: input.api.defaultHeaders } : {}),
+        ...(requestHeaders ? { headers: requestHeaders } : {}),
         ...(input.api.provider === 'taskyon'
           ? { baseURL: input.api.baseURL + input.api.routes.chatCompletion }
           : {}),
@@ -205,7 +206,7 @@ export const buildChatProviderRequest = async (input: {
         apiKey: input.apiKey,
         baseURL: input.api.baseURL + input.api.routes.chatCompletion,
         name: input.api.name,
-        ...(input.api.defaultHeaders ? { headers: input.api.defaultHeaders } : {}),
+        ...(requestHeaders ? { headers: requestHeaders } : {}),
         ...(recordingFetch ? { fetch: recordingFetch } : {}),
       })
       model = openai(input.selectedModel)

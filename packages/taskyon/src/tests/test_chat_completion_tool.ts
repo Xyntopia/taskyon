@@ -684,7 +684,7 @@ export const testProviderRequestsApplyProfileHeaders = async () => {
   }
 
   try {
-    for (const provider of ['openrouter.ai', 'local'] as const) {
+    for (const provider of ['openrouter.ai', 'taskyon', 'local'] as const) {
       const request = await buildChatProviderRequest({
         messages: [{ role: 'user', content: 'Hello.' }],
         tools: {},
@@ -733,11 +733,15 @@ export const testProviderRequestsApplyProfileHeaders = async () => {
     'Expected OpenRouter to send profile headers',
   )
   assert(
-    requests[1]?.get('X-Profile-Header') === 'local',
+    !requests[1]?.has('X-Profile-Header'),
+    'Expected the Taskyon proxy request to omit provider profile headers',
+  )
+  assert(
+    requests[2]?.get('X-Profile-Header') === 'local',
     'Expected the generic compatible adapter to send profile headers',
   )
   assert(
-    !requests[2]?.has('X-Profile-Header'),
+    !requests[3]?.has('X-Profile-Header'),
     'Expected providers without configured headers not to receive attribution',
   )
 

@@ -567,7 +567,14 @@ async function main() {
   )
   console.log('TYCLI_DIAGNOSTICS_SUMMARY_END')
 
-  if (!summary.ok) process.exit(1)
+  runtime.taskyon.workerStop('tycli diagnostics complete')
+  await new Promise<void>((resolve, reject) => {
+    process.stdout.write('', (error) => {
+      if (error) reject(error)
+      else resolve()
+    })
+  })
+  process.exit(summary.ok ? 0 : 1)
 }
 
 await main()

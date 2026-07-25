@@ -45,6 +45,10 @@ export const testCliHelloWorldProducesAssistantResponse = async () => {
           'getExecutionTaskChain is not implemented',
           'getExecutionTaskChain is not available for this external tool client',
         ],
+        input: '',
+      },
+      {
+        waitFor: '| finished]',
         input: '/exit\n',
       },
     ],

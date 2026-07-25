@@ -1,6 +1,3 @@
-import { mkdir } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { createStream } from '@taskyon/common/modules/frpBus'
 import {
   createPortClient,
@@ -13,6 +10,7 @@ import type { ChatCompletionStreamEvent } from '../types/chatCompletion'
 import { createTool, toolCall } from '../types/toolApi'
 import type { TyToolchainConfig } from '../types/profiles'
 import { createCryptoSession } from '../utils/cryptoSession'
+import { getInMemoryDatabase } from '../utils/pglite.api'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -47,8 +45,6 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
     }).success,
     'Expected runtime configuration to remain outside the public peer protocol',
   )
-  const dataDir = join(tmpdir(), `taskyon-runtime-configuration-${Date.now()}`)
-  await mkdir(dataDir, { recursive: true })
   const streamEmitters = new Map<string, (event: ChatCompletionStreamEvent) => void>()
   const createConfiguredSessionTools = (toolchainConfig: TyToolchainConfig) => {
     const value = configuredValue(toolchainConfig)
@@ -83,7 +79,7 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
     undefined,
     {
       indexTaskVectors: false,
-      nodePgLiteDataDir: dataDir,
+      databaseFactory: getInMemoryDatabase,
       toolSetup,
     },
   )

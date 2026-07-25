@@ -52,8 +52,9 @@ export async function fetchModelsForProvider(
   }
 
   const key = await resolveModelApiKey(api, getApiKey, options)
+  const headers = modelsUrl.startsWith(TOKEN_SERVICE_BASE_URL) ? {} : (api.defaultHeaders ?? {})
   try {
-    return await availableModels(modelsUrl, key, api.defaultHeaders ?? {})
+    return await availableModels(modelsUrl, key, headers)
   } catch {
     console.log("couldn't download models from", modelsUrl)
     return {}
