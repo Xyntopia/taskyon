@@ -1,4 +1,4 @@
-import { createTaskyonDocumentationTool } from '../tools/documentationTool'
+import { taskyonDocumentationTool } from '../tools/documentationTool'
 import {
   createDocumentationIndexClientTool,
   loadDocumentationDocumentsFromManifest,
@@ -127,7 +127,7 @@ export const testDocumentationManifestMaterializesEachSourceOnce = async () => {
 }
 
 export const testTaskyonDocumentationLoadsDocumentsWithoutIndexConsent = async () => {
-  const tool = createTaskyonDocumentationTool()
+  const tool = taskyonDocumentationTool
   const result = await tool.function?.({ query: 'How do Taskyon tools work?' }, createTestContext())
 
   assert(result && typeof result === 'object', 'Expected task result object')

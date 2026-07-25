@@ -12,8 +12,6 @@ import { inspect } from 'node:util'
 import type { createDuplexChannel } from '@taskyon/common/modules/frpBus'
 import { createUnavailableIframeMux } from '@taskyon/common/modules/frpBus'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
-import { createStorageDagBackend } from '@taskyon/comp-dag/storageDagBackend'
-import { createDocumentationBaseStore } from '@taskyon/common/modules/documentationBases'
 import { taskyonDocumentationManifest } from '@taskyon/taskyon/documentationManifest'
 import {
   connectTaskManagerStorageFromProtocol,
@@ -59,9 +57,9 @@ import { setChatCompletionTraceWriter } from '@taskyon/taskyon/tools/chatComplet
 import { createNodeResourceFilesLoader } from '@taskyon/taskyon/tools/nodeTaskyonDocumentationProvider'
 import {
   createDocumentationIndexClientTool,
-  loadDocumentationDocumentsFromManifest,
+  createProtocolDocumentationBaseStore,
 } from '@taskyon/taskyon/tools/documentationProviderTool'
-import { createTaskyonDocumentationTool } from '@taskyon/taskyon/tools/documentationTool'
+import { taskyonDocumentationTool } from '@taskyon/taskyon/tools/documentationTool'
 import { mapSearchTool } from '@taskyon/ui/gis/mapSearchTool'
 import { overpassMapTool } from '@taskyon/ui/gis/overpassMapTool'
 import { InternalTool as InternalToolSchema } from '../../taskyon/src/types/toolApi'
@@ -2490,12 +2488,6 @@ async function main() {
     createProtocolPort(taskyonStorageProtocol)
   createCliFileStorageService(taskStorageServicePort, join(dataDir, 'storage'))
   const storageClient = createStorageClient(taskStorageClientPort)
-  const dagStorageBackend = createStorageDagBackend({
-    get: async (namespace, id) => (await storageClient.get({ namespace, id })).value,
-    set: async (namespace, id, value) => {
-      await storageClient.set({ namespace, id, value })
-    },
-  })
   const taskyon = await tyCore(
     () => llmState.settings,
     () => cliEntryTask,
@@ -2564,35 +2556,13 @@ async function main() {
   )
 
   writeLine('Registering CLI tools...')
-  const documentationStorage = {
-    get: async (id: string) =>
-      (await storageClient.get({ namespace: 'documentation/manifests', id })).value,
-    set: async (id: string, value: typeof taskyonDocumentationManifest) => {
-      await storageClient.set({ namespace: 'documentation/manifests', id, value })
-    },
-    delete: async (id: string) => {
-      await storageClient.delete({ namespace: 'documentation/manifests', id })
-    },
-    list: async () =>
-      (await storageClient.list({ namespace: 'documentation/manifests' })).rows.map((row) => ({
-        id: String(row.id),
-        data: row.data,
-      })),
-  }
   const documentationLoader = createNodeResourceFilesLoader(
     fileURLToPath(new URL('../../../public/docs', import.meta.url)),
     () => taskyonApi.discovery.describe({}),
   )
-  const documentationBases = createDocumentationBaseStore(documentationStorage, async (manifest) =>
-    (
-      await loadDocumentationDocumentsFromManifest(manifest, documentationLoader, {
-        storageBackend: dagStorageBackend,
-      })
-    ).documents.map((document) => ({
-      ...document,
-      title: document.title ?? document.path,
-      url: document.url ?? document.path,
-    })),
+  const documentationBases = createProtocolDocumentationBaseStore(
+    storageClient,
+    documentationLoader,
   )
   await documentationBases.register(taskyonDocumentationManifest, 'taskyon')
   const interactiveReadlineRef: { current?: ReturnType<typeof createInterface> } = {}
@@ -2608,7 +2578,7 @@ async function main() {
     gitlabTool,
     cliBashTool,
     createDocumentationIndexClientTool(documentationBases),
-    createTaskyonDocumentationTool(),
+    taskyonDocumentationTool,
   ].map((tool) => InternalToolSchema.parse(tool))
   const cliToolRpcExecutor = await registerToolRpcTools({
     port: clientPort,

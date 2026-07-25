@@ -15,7 +15,7 @@ import {
   createDocumentationIndexClientTool,
   loadDocumentationDocumentsFromManifest,
 } from '../tools/documentationProviderTool'
-import { createTaskyonDocumentationTool } from '../tools/documentationTool'
+import { taskyonDocumentationTool } from '../tools/documentationTool'
 import { taskyonDocumentationManifest } from '../documentationManifest'
 import { resolveDiagnosticsRuntimeConfig } from '../testSupport/onlineProviderSupport'
 import type { TaskNode } from '../types/taskNode'
@@ -166,7 +166,7 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
     tools: [
       entryNodeTool,
       createDocumentationIndexClientTool(documentationBases),
-      createTaskyonDocumentationTool(),
+      taskyonDocumentationTool,
     ],
     createContext: (call, stopSignal) =>
       createExternalToolContext(stopSignal, {

@@ -17,14 +17,12 @@ import type {
 } from '@taskyon/taskyon'
 import {
   base64ToPublixX25519,
-  connectTaskManagerStorageFromProtocol,
   createClientTool,
   createPortClient,
   createPgLiteTaskManagerStorageService,
   createSubtasksResult,
   createPortServer,
   createProtocolPort,
-  createStorageClient,
   createStream,
   createTypeFilteredPort,
   cryptoKeyToBase64,
@@ -42,8 +40,6 @@ import {
   registerToolRpcTools,
   sha256UrlSafeHashFromFile,
   TaskNode,
-  tyCore,
-  taskyonStorageProtocol,
   taskyonRuntimeProtocol,
 } from '@taskyon/taskyon'
 import type { ChatCompletionStreamEvent } from '@taskyon/taskyon'
@@ -56,17 +52,16 @@ import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
 import { createDefaultTaskyonToolSetup, resolveAgentToolCatalog } from '@taskyon/taskyon/tools'
 import {
   createDocumentationIndexClientTool,
-  loadDocumentationDocumentsFromManifest,
+  createProtocolDocumentationBaseStore,
 } from '@taskyon/taskyon/tools/documentationProviderTool'
-import { createTaskyonDocumentationTool } from '@taskyon/taskyon/tools/documentationTool'
-import { createStorageDagBackend } from '@taskyon/comp-dag/storageDagBackend'
+import { taskyonDocumentationTool } from '@taskyon/taskyon/tools/documentationTool'
 import { taskyonDocumentationManifest } from '@taskyon/taskyon/documentationManifest'
+import { createTaskyonBrowserCoreRuntime } from '@taskyon/runtime-browser'
 import { createTaskyonClient, taskyonGuiProtocol, taskyonProtocol } from '@taskyon/tyclient'
 import type { TaskyonGuiMessage } from '@taskyon/tyclient'
 import { createStandardEntryNodeTool } from '@taskyon/taskyon/tools/entryNode'
-import { createTaskyonResourceFilesLoader } from 'src/modules/taskyonResourceFiles'
-import { createDocumentationBaseStore } from '@taskyon/common/modules/documentationBases'
 import { createOpfsRecordStorageBackend } from 'src/modules/opfsRecordStorage'
+import { createTaskyonResourceFilesLoader } from 'src/modules/taskyonResourceFiles'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { defineStore } from 'pinia'
@@ -404,7 +399,7 @@ function defineTyGuiTools(
   stateRefs: ReturnType<typeof useAppStateStore>,
   ty: Taskyon,
   taskyonClient: ReturnType<typeof createTaskyonClient>,
-  documentationBases: ReturnType<typeof createDocumentationBaseStore>,
+  documentationBases: ReturnType<typeof createProtocolDocumentationBaseStore>,
 ): InternalTool[] {
   const taskyonProfileSectionSchema = z.enum(taskyonProfileSections)
   const profilePatchSchema = z
@@ -454,7 +449,7 @@ function defineTyGuiTools(
     ...guiTools,
     createOAuthTool(ty.setSecret),
     createDocumentationIndexClientTool(documentationBases),
-    createTaskyonDocumentationTool(),
+    taskyonDocumentationTool,
     createClientTool({
       function: async (rawArgs, ctx) => {
         const args = manageTaskyonProfileArgs.parse(rawArgs)
@@ -1214,22 +1209,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         },
       },
     }) as partialTaskDraft
-  const { x: taskStorageClientPort, y: taskStorageServicePort } =
-    createProtocolPort(taskyonStorageProtocol)
-  const unsubscribeTaskStorageService = createPgLiteTaskManagerStorageService(
-    taskStorageServicePort,
-    getDatabase,
-    (namespace) => {
-      if (!namespace.startsWith('dag/') && !namespace.startsWith('documentation/')) {
-        throw new Error(`No browser storage backend is configured for namespace "${namespace}".`)
-      }
-      return createOpfsRecordStorageBackend(namespace)
-    },
-  )
-  onScopeDispose(unsubscribeTaskStorageService)
   // this means previously, we have loaded a session with a binding key.
   // so we would like to wait a little bit, if we will get that same binding key...
-  const taskyon = (async () => {
+  const initialCryptoSession = (async () => {
     if (stateRefs.initWBindingKey) {
       console.log('waiting for session binding key to be set...')
       const bindingKey = await until(() => stateRefs.bindingKey).toBeTruthy({ timeout: 5000 })
@@ -1246,26 +1228,36 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       const initCs = initCryptoSessionFromBrowser(undefined, true)
       return initCs
     }
-  })().then(async (cs) => {
-    return await tyCore(
-      () => ({
-        ...stateRefs.llmSettings,
-        entryNode: buildEntryNodeDraft(),
-      }),
-      buildEntryNodeDraft,
-      stateRefs.effectiveToolchainConfig,
-      cs,
-      {
-        toolSetup: createDefaultTaskyonToolSetup({
-          unavailableToolNames: getBrowserUnavailableToolNames(),
+  })()
+  const runtime = createTaskyonBrowserCoreRuntime({
+    llmSettings: () => ({
+      ...stateRefs.llmSettings,
+      entryNode: buildEntryNodeDraft(),
+    }),
+    entryNode: buildEntryNodeDraft,
+    toolchainConfig: stateRefs.effectiveToolchainConfig,
+    cryptoSession: initialCryptoSession,
+    toolSetup: createDefaultTaskyonToolSetup({
+      unavailableToolNames: getBrowserUnavailableToolNames(),
+    }),
+    storage: {
+      kind: 'service',
+      createService: (port) =>
+        createPgLiteTaskManagerStorageService(port, getDatabase, (namespace) => {
+          if (!namespace.startsWith('dag/') && !namespace.startsWith('documentation/')) {
+            throw new Error(
+              `No browser storage backend is configured for namespace "${namespace}".`,
+            )
+          }
+          return createOpfsRecordStorageBackend(namespace)
         }),
-        taskManagerStorageFactory: ({ sessionId }) =>
-          connectTaskManagerStorageFromProtocol(taskStorageClientPort, sessionId),
-      },
-    )
+    },
   })
-  const { x: taskyonClientPort, y: taskyonCorePort } = createProtocolPort(taskyonProtocol)
-  const taskyonClient = createTaskyonClient(taskyonClientPort, { taskCacheSize: 0 })
+  onScopeDispose(() => {
+    void runtime.stop('disposing Taskyon UI runtime')
+  })
+  const taskyon = runtime.taskyon
+  const taskyonClient = runtime.client
   const taskyonRuntimeClient = taskyon.then((ty) =>
     createPortClient(ty.hostPort, taskyonRuntimeProtocol),
   )
@@ -1277,48 +1269,15 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     },
     { deep: true },
   )
-  const storageClient = createStorageClient(taskStorageClientPort)
-  const dagStorageBackend = createStorageDagBackend({
-    get: async (namespace, id) => (await storageClient.get({ namespace, id })).value,
-    set: async (namespace, id, value) => {
-      await storageClient.set({ namespace, id, value })
-    },
-  })
-  const documentationManifestStorage = {
-    get: async (id: string) =>
-      (await storageClient.get({ namespace: 'documentation/manifests', id })).value,
-    set: async (id: string, value: typeof taskyonDocumentationManifest) => {
-      await storageClient.set({ namespace: 'documentation/manifests', id, value })
-    },
-    delete: async (id: string) => {
-      await storageClient.delete({ namespace: 'documentation/manifests', id })
-    },
-    list: async () =>
-      (await storageClient.list({ namespace: 'documentation/manifests' })).rows.map((row) => ({
-        id: String(row.id),
-        data: row.data,
-      })),
-  }
+  const storageClient = runtime.storageClient
   const resourceFilesLoader = createTaskyonResourceFilesLoader(() =>
     taskyonClient.discovery.describe({}),
   )
-  const documentationBases = createDocumentationBaseStore(
-    documentationManifestStorage,
-    async (manifest) =>
-      (
-        await loadDocumentationDocumentsFromManifest(manifest, resourceFilesLoader, {
-          storageBackend: dagStorageBackend,
-        })
-      ).documents.map((document) => ({
-        ...document,
-        title: document.title ?? document.path,
-        url: document.url ?? document.path,
-      })),
+  const documentationBases = createProtocolDocumentationBaseStore(
+    storageClient,
+    resourceFilesLoader,
   )
   const documentationReady = documentationBases.register(taskyonDocumentationManifest, 'taskyon')
-  void taskyon.then((ty) => {
-    taskyonCorePort.connect(ty.port)
-  })
   const allTools = reactiveTools(taskyon, taskyonClient)
 
   const entryNodeTool = createStandardEntryNodeTool({
@@ -1531,6 +1490,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // we are already intercepting incoming messages with the API above
     // TODO: we have to change this! we would like to
     ty.port.receive(uiApiInside.send)
+    uiApiInside.send({ type: 'taskyonReady' })
 
     console.log('checking if we are in an iframe!')
 

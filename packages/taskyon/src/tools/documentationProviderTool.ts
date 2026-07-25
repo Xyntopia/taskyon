@@ -14,12 +14,14 @@ import {
   createDocumentationDocument,
   titleFromDocumentationPath,
 } from '@taskyon/common/modules/documentation'
-import type { createDocumentationBaseStore } from '@taskyon/common/modules/documentationBases'
+import { createDocumentationBaseStore } from '@taskyon/common/modules/documentationBases'
 import { parseDocumentationManifest } from '@taskyon/common/modules/resourceFiles'
 import { convertFileToText } from '../utils/loadFiles'
 import { sha256HashBytes } from '@taskyon/common/modules/canonicalHash'
 import { createResourceFetchNode } from '@taskyon/comp-dag/resourceFetchNode'
+import { createStorageDagBackend } from '@taskyon/comp-dag/storageDagBackend'
 import type { EngineConfig } from '@taskyon/comp-dag'
+import type { createStorageClient } from '../api/storageProtocol'
 
 export const documentationIndexToolName = 'documentationIndex'
 
@@ -185,6 +187,46 @@ export const loadDocumentationDocumentsFromManifest = async (
     documents,
     ...(loaded.errors.length > 0 ? { errors: loaded.errors } : {}),
   }
+}
+
+export const createProtocolDocumentationBaseStore = (
+  storageClient: ReturnType<typeof createStorageClient>,
+  loadFiles: ResourceFilesLoader,
+) => {
+  const storageBackend = createStorageDagBackend({
+    get: async (namespace, id) => (await storageClient.get({ namespace, id })).value,
+    set: async (namespace, id, value) => {
+      await storageClient.set({ namespace, id, value })
+    },
+  })
+
+  return createDocumentationBaseStore(
+    {
+      get: async (id) =>
+        (await storageClient.get({ namespace: 'documentation/manifests', id })).value,
+      set: async (id, value) => {
+        await storageClient.set({ namespace: 'documentation/manifests', id, value })
+      },
+      delete: async (id) => {
+        await storageClient.delete({ namespace: 'documentation/manifests', id })
+      },
+      list: async () =>
+        (await storageClient.list({ namespace: 'documentation/manifests' })).rows.map((row) => ({
+          id: String(row.id),
+          data: row.data,
+        })),
+    },
+    async (manifest) =>
+      (
+        await loadDocumentationDocumentsFromManifest(manifest, loadFiles, {
+          storageBackend,
+        })
+      ).documents.map((document) => ({
+        ...document,
+        title: document.title ?? document.path,
+        url: document.url ?? document.path,
+      })),
+  )
 }
 
 export const createDocumentationIndexClientTool = (

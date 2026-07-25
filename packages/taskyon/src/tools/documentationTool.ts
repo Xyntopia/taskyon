@@ -7,7 +7,7 @@ import type { FunctionArguments } from '../types/tools'
 export const taskyonDocsCorpusId = 'taskyon'
 export const documentationIndexToolName = 'documentationIndex'
 
-const TaskyonDocumentationArgs = z.object({
+const DocumentationSearchArgs = z.object({
   query: z.string().min(1),
   k: z.number().int().positive().max(12).default(5),
   phase: z.literal('searchResult').optional(),
@@ -55,19 +55,29 @@ ${hit.content}`,
     ),
   ].join('\n\n---\n\n')
 
-export const createTaskyonDocumentationTool = () =>
+export type DocumentationSearchToolOptions = {
+  name: string
+  baseId: string
+  productName: string
+}
+
+export const createDocumentationSearchTool = (options: DocumentationSearchToolOptions) =>
   createTool({
-    name: 'taskyonDocumentation',
-    description: 'Search and answer questions from the Taskyon documentation.',
+    name: options.name,
+    description: `Search and answer questions from the ${options.productName} documentation.`,
     longDescription:
-      'Thin wrapper around the generic documentationIndex tool for the Taskyon documentation base. It retrieves plain-text matches and answers with links to the corresponding documentation pages.',
+      `Thin wrapper around the generic documentationIndex tool for the ${options.productName} documentation base. ` +
+      'It retrieves plain-text matches and answers with links to the corresponding documentation pages.',
     renderOptions: { hideChat: false, hideLlm: false, hideVector: true },
     parameters: {
       type: 'object',
       required: ['query'],
       additionalProperties: false,
       properties: {
-        query: { type: 'string', description: 'Question to answer from Taskyon documentation.' },
+        query: {
+          type: 'string',
+          description: `Question to answer from ${options.productName} documentation.`,
+        },
         k: { type: 'number', description: 'Maximum matching sections.', default: 5 },
         phase: {
           type: 'string',
@@ -77,26 +87,29 @@ export const createTaskyonDocumentationTool = () =>
       },
     } as const satisfies JSONSchema7,
     function: async (rawArgs: FunctionArguments, ctx) => {
-      const args = TaskyonDocumentationArgs.parse(rawArgs)
+      const args = DocumentationSearchArgs.parse(rawArgs)
       if (!args.phase) {
         return ctx.createSubtasksResult([
           [
             {
               role: 'assistant',
-              content: { type: 'message', data: 'Searching Taskyon documentation...' },
+              content: {
+                type: 'message',
+                data: `Searching ${options.productName} documentation...`,
+              },
             },
             toolCall({
               name: documentationIndexToolName,
               arguments: {
                 action: 'search',
-                baseId: taskyonDocsCorpusId,
+                baseId: options.baseId,
                 query: args.query,
                 mode: 'literal',
                 limit: args.k,
               },
             }),
             toolCall({
-              name: 'taskyonDocumentation',
+              name: options.name,
               arguments: { query: args.query, k: args.k, phase: 'searchResult' },
             }),
           ],
@@ -112,7 +125,7 @@ export const createTaskyonDocumentationTool = () =>
               role: 'assistant',
               content: {
                 type: 'message',
-                data: `I did not find matching Taskyon documentation for "${args.query}".`,
+                data: `I did not find matching ${options.productName} documentation for "${args.query}".`,
               },
             },
           ],
@@ -129,7 +142,7 @@ export const createTaskyonDocumentationTool = () =>
             name: 'chatCompletion',
             arguments: {
               appendSystemPrompts: [
-                `Answer the user's Taskyon documentation question using only the documentation search results above. Cite the documentation URL for every important claim. Question: ${args.query}`,
+                `Answer the user's ${options.productName} documentation question using only the documentation search results above. Cite the documentation URL for every important claim. Question: ${args.query}`,
               ],
             },
           }),
@@ -137,3 +150,9 @@ export const createTaskyonDocumentationTool = () =>
       ])
     },
   })
+
+export const taskyonDocumentationTool = createDocumentationSearchTool({
+  name: 'taskyonDocumentation',
+  baseId: taskyonDocsCorpusId,
+  productName: 'Taskyon',
+})
