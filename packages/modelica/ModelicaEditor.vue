@@ -1366,8 +1366,8 @@ const daeAnalysis = computed<ModelicaDaeAnalysis>(() => {
           : 'Underdetermined solve slice (likely partitioning issue).'
   const hasDummyState = Boolean(
     modelShape.hasOnlyDummyState ||
-      (nx === 1 &&
-        Object.prototype.hasOwnProperty.call((dae.x ?? {}) as object, '_rumoca_dummy_state')),
+    (nx === 1 &&
+      Object.prototype.hasOwnProperty.call((dae.x ?? {}) as object, '_rumoca_dummy_state')),
   )
   const executionMode =
     typeof resultMeta.executionMode === 'string'

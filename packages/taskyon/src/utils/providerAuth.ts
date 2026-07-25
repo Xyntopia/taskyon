@@ -14,6 +14,7 @@ export type ProviderOauthConfig = {
   }
 }
 
+export const AI_PROVIDER_KEY_STORE_NAME = 'AiProviderKey'
 export const OAUTH_CREDENTIALS_SECRET_PREFIX = 'oauth:credentials:'
 
 const readConfigValue = (

@@ -72,7 +72,7 @@ const configuration: partialTyConfiguration = {
   selectedToolchainProfile: 'taskyon',
   toolchainProfiles: {
     base: {
-      entryNode: {
+      taskyonFlow: {
         use_tool_chooser: true,
       },
     },

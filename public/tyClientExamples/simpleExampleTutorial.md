@@ -162,12 +162,16 @@ We will now create the JavaScript file step-by-step, explaining each part in det
 #### Initial Setup and Configuration
 
 ```javascript
-// Define the configuration object for Taskyon LLM settings
+// Define the configuration object for Taskyon tool settings
 const configuration = {
-  llmSettings: {
-    selectedApi: 'taskyon',
-    // make sure, our app can choose from all available tools!
-    enableToolChooser: true,
+  selectedToolchainProfile: 'taskyon',
+  toolchainProfiles: {
+    base: {
+      taskyonFlow: {
+        // make sure, our app can choose from all available tools!
+        use_tool_chooser: true,
+      },
+    },
   },
   signatureOrKey: '2o8zbackwughbck73tqbc3r', // Replace with your actual key
 }

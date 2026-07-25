@@ -787,10 +787,13 @@ const configuration = computed<partialTyConfiguration | null>(() => {
     llmSettings: {
       entryFunction: 'documentAssistant',
     },
-    toolchainConfig: {
-      documentAssistant: {
-        showAllFiles: false,
+    toolchainProfiles: {
+      base: {
+        documentAssistant: {
+          showAllFiles: false,
+        },
       },
+      profiles: {},
     },
     appConfiguration: {
       guiMode: 'minChat',

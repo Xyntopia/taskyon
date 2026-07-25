@@ -17,6 +17,7 @@ export { createExternalToolContext, registerToolRpcTools } from './core/toolRpc'
 export { isTaskyonKey } from './core/tyCrypto'
 export { TOKEN_SERVICE_BASE_URL } from './taskyon.space/tokenservice.types'
 export { createStandardEntryNodeTool } from './tools/entryNode'
+export { AI_PROVIDER_KEY_STORE_NAME } from './utils/providerAuth'
 export { TaskyonMessage } from './api/index'
 export {
   chatCompletionProviderSettings,
