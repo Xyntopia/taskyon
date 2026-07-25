@@ -246,7 +246,8 @@ between browser sessions but are private to this application.`,
         // Iterate through all entries in the directory
         for await (const [name, handle] of dirHandle.entries()) {
           if (handle.kind === 'file') {
-            const file = await handle.getFile()
+            const fileHandle = await dirHandle.getFileHandle(name)
+            const file = await fileHandle.getFile()
             files.push({
               name,
               size: file.size,
