@@ -1,4 +1,4 @@
-import { createClientTool, toolCall } from '@taskyon/tyclient'
+import { createClientTool, toolCall, type toolContext } from '@taskyon/tyclient'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import type { JSONSchema7 } from 'json-schema'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
@@ -82,22 +82,18 @@ const formatCommandApprovalMessage = (command: string, approvalToken: string) =>
 </div>`
 
 const waitForBashDecision = async (
-  messagePort: MessagePort | undefined,
+  waitForInteraction: NonNullable<toolContext['waitForInteraction']>,
   approvalToken: string,
 ): Promise<'yes' | 'no'> => {
-  if (!messagePort) {
-    throw new Error('No message port is available for command approval.')
+  const payload = await waitForInteraction({ tool: 'tauriBashTool', token: approvalToken })
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new Error('Command approval returned an invalid response.')
   }
-
-  return await new Promise<'yes' | 'no'>((resolve) => {
-    messagePort.onmessage = (event) => {
-      const payload = event.data?.payload ?? event.data
-      if (!payload || payload.tool !== 'tauriBashTool' || payload.token !== approvalToken) return
-      if (payload.decision === 'yes' || payload.decision === 'no') {
-        resolve(payload.decision)
-      }
-    }
-  })
+  const decision = (payload as { decision?: unknown }).decision
+  if (decision !== 'yes' && decision !== 'no') {
+    throw new Error('Command approval returned an invalid decision.')
+  }
+  return decision
 }
 
 const tauriExplorationTool = createClientTool({
@@ -237,7 +233,8 @@ const tauriBashTool = createClientTool({
       ])
     }
 
-    const decision = await waitForBashDecision(ctx.messagePort, approvalToken || '')
+    if (!ctx.waitForInteraction) throw new Error('Command approval interaction is unavailable.')
+    const decision = await waitForBashDecision(ctx.waitForInteraction, approvalToken || '')
     if (decision === 'no') {
       return {
         cancelled: true,

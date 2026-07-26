@@ -7,12 +7,8 @@ import {
   createTaskyonClient,
   taskyonGuiProtocol,
 } from '@taskyon/taskyon/api'
-import {
-  // from frp bux with only very few dependencies
-  MessageChannelBridge, // utils/frpbus
-  type ClientTool,
-  registerToolRpcTools,
-} from '@taskyon/taskyon/api'
+import { type ClientTool, registerToolRpcTools } from '@taskyon/taskyon/api'
+import { MessageChannelBridge } from '@taskyon/common/modules/frpBusWeb'
 import type {
   FunctionArguments,
   partialTyConfiguration,
@@ -46,10 +42,10 @@ export {
   createPortClient,
   createProtocolPort,
   createTaskyonClient,
-  MessageChannelBridge,
   taskyonGuiProtocol,
   taskyonProtocol,
 } from '@taskyon/taskyon/api'
+export { MessageChannelBridge }
 
 /**
  * Calls a registered Taskyon tool through the connected tool RPC port.

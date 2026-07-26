@@ -5,7 +5,7 @@ import {
   type ResolvedProxyWebReaderArgs,
 } from '@taskyon/common/modules/webFetching'
 import { buildTaskPlannerTaskChains } from './TaskPlannerTool'
-import { createTool, toolCall } from '../types/toolApi'
+import { createTool, toolCall, type toolContext } from '../types/toolApi'
 import type { partialTaskDraft } from '../types/taskNode'
 import {
   parsePoliteHttpPolicy,
@@ -89,20 +89,18 @@ const createProxyOnboardingButton = ({
 `
 
 const waitForProxyOnboardingContinue = async (
-  messagePort: MessagePort | undefined,
+  waitForInteraction: NonNullable<toolContext['waitForInteraction']>,
   onboardingToken: string,
 ): Promise<void> => {
-  if (!messagePort) {
-    throw new Error('No message port is available for proxy onboarding.')
+  const payload = await waitForInteraction({ tool: 'proxyWebReader', token: onboardingToken })
+  if (
+    typeof payload !== 'object' ||
+    payload === null ||
+    Array.isArray(payload) ||
+    (payload as { decision?: unknown }).decision !== 'continue'
+  ) {
+    throw new Error('Proxy onboarding returned an invalid decision.')
   }
-
-  await new Promise<void>((resolve) => {
-    messagePort.onmessage = (event) => {
-      const payload = event.data?.payload ?? event.data
-      if (!payload || payload.tool !== 'proxyWebReader' || payload.token !== onboardingToken) return
-      if (payload.decision === 'continue') resolve()
-    }
-  })
 }
 
 const createContinueButtonMessage = ({
@@ -131,21 +129,19 @@ const createContinueButtonMessage = ({
 `
 
 const waitForContinueDecision = async (
-  messagePort: MessagePort | undefined,
+  waitForInteraction: NonNullable<toolContext['waitForInteraction']>,
   toolName: string,
   onboardingToken: string,
 ): Promise<void> => {
-  if (!messagePort) {
-    throw new Error(`No message port is available for ${toolName} onboarding.`)
+  const payload = await waitForInteraction({ tool: toolName, token: onboardingToken })
+  if (
+    typeof payload !== 'object' ||
+    payload === null ||
+    Array.isArray(payload) ||
+    (payload as { decision?: unknown }).decision !== 'continue'
+  ) {
+    throw new Error(`${toolName} onboarding returned an invalid decision.`)
   }
-
-  await new Promise<void>((resolve) => {
-    messagePort.onmessage = (event) => {
-      const payload = event.data?.payload ?? event.data
-      if (!payload || payload.tool !== toolName || payload.token !== onboardingToken) return
-      if (payload.decision === 'continue') resolve()
-    }
-  })
 }
 
 const ensureNonEmptyString = (value: string | undefined, fieldName: string) => {
@@ -606,7 +602,14 @@ This tool checks whether the configured browser MCP server is reachable. If it i
       return ctx.createSubtasksResult([[...buildEnsureBrowserMcpImportRetryChain(args)]])
     } catch {
       if (isOnboardingReentry) {
-        await waitForContinueDecision(ctx.messagePort, 'ensureBrowserMcpTools', onboardingToken)
+        if (!ctx.waitForInteraction) {
+          throw new Error('Browser MCP onboarding interaction is unavailable.')
+        }
+        await waitForContinueDecision(
+          ctx.waitForInteraction,
+          'ensureBrowserMcpTools',
+          onboardingToken,
+        )
         await checkBrowserMcpEndpoint(serverUrl)
         return ctx.createSubtasksResult([[...buildEnsureBrowserMcpImportRetryChain(args)]])
       }
@@ -920,7 +923,10 @@ This tool includes a built-in provider catalog with 40 public vendors so a user 
     }
 
     if (!apiKey && isOnboardingReentry) {
-      await waitForProxyOnboardingContinue(ctx.messagePort, onboardingToken)
+      if (!ctx.waitForInteraction) {
+        throw new Error('Proxy onboarding interaction is unavailable.')
+      }
+      await waitForProxyOnboardingContinue(ctx.waitForInteraction, onboardingToken)
       apiKey = await ctx.getSecret(
         secretName,
         `Please enter the API key for ${providerLabel}.${docsUrl ? ` Documentation: ${docsUrl}` : ''}`,

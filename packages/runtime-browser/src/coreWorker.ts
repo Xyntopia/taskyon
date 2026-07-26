@@ -1,12 +1,12 @@
 import {
   createProtocolPort,
   getInMemoryDatabase,
-  MessageChannelBridge,
   taskyonStorageProtocol,
   toolCall,
   type llmSettings,
   type partialTaskDraft,
 } from '@taskyon/taskyon'
+import { MessageChannelBridge } from '@taskyon/common/modules/frpBusWeb'
 import { createTaskyonBrowserCoreRuntime } from './core'
 import type { TaskyonBrowserWorkerInitMessage, TaskyonBrowserWorkerMessage } from './workerProtocol'
 

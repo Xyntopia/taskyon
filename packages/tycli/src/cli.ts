@@ -10,7 +10,7 @@ import process from 'node:process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { inspect } from 'node:util'
 import type { createDuplexChannel } from '@taskyon/common/modules/frpBus'
-import { createUnavailableIframeMux } from '@taskyon/common/modules/frpBus'
+import { createUnavailableIframeMux } from '@taskyon/common/modules/frpBusWeb'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import { taskyonDocumentationManifest } from '@taskyon/taskyon/documentationManifest'
 import {

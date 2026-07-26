@@ -12,6 +12,7 @@
     }
   },
   "dependencies": {
+    "@taskyon/common": "workspace:*",
     "@taskyon/taskyon": "workspace:*"
   }
 }

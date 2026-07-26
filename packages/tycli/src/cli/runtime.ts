@@ -1,10 +1,7 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import {
-  createPortClient,
-  createProtocolPort,
-  createUnavailableIframeMux,
-} from '@taskyon/common/modules/frpBus'
+import { createPortClient, createProtocolPort } from '@taskyon/common/modules/frpBus'
+import { createUnavailableIframeMux } from '@taskyon/common/modules/frpBusWeb'
 import { taskyonRuntimeProtocol } from '@taskyon/taskyon/api'
 import { tyCore } from '../../../taskyon/src/core/init'
 import type { Taskyon } from '../../../taskyon/src/core/init'

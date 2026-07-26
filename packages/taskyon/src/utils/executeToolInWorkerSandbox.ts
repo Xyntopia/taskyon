@@ -1,23 +1,19 @@
-import type {
-  ExecuteInWorkerSandboxOptions,
-  WorkerSandboxRpcHandlers,
-} from '@taskyon/common/modules/sandbox/workerSandbox'
-import { executeInWorkerSandbox } from '@taskyon/common/modules/sandbox/workerSandbox'
+import { createExecutableSandbox } from '@taskyon/common/modules/sandbox/workerSandbox'
+import {
+  createSandboxProtocolClient,
+  serveFrpSandboxCapability,
+} from '@taskyon/common/modules/sandbox/frpSandbox'
+import type { ProtocolServerHandlers } from '@taskyon/common/modules/frpBus'
 import { partialTaskDraft } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
+import { toolContextProtocol } from '../core/toolContextProtocol.ts'
 
 function buildToolSandboxCode(userCode: string): string {
+  const createProtocolClientSource = createSandboxProtocolClient.toString()
   return `
     (function () {
       const userFn = ${userCode};
-
-      const callRpc = (rpcType, ...args) => {
-        const rpc = globalThis.__workerSandboxRpc;
-        if (typeof rpc !== 'function') {
-          throw new Error('Worker sandbox RPC bridge is not available');
-        }
-        return rpc(rpcType, ...args);
-      };
+      const createProtocolClient = ${createProtocolClientSource};
 
       function toolCall(f) {
         return {
@@ -43,15 +39,30 @@ function buildToolSandboxCode(userCode: string): string {
         };
       }
 
-      return async function (params, baseContext) {
+      return async function (params, baseContext, sandboxApi) {
+        if (!sandboxApi.port) {
+          throw new Error('Tool context protocol port is unavailable');
+        }
+        const protocol = createProtocolClient(
+          sandboxApi.port,
+          'toolContext',
+          sandboxApi.signal,
+        );
+        const call = (command, payload = {}) => protocol.call(command, payload);
         const ctx = {
           ...(baseContext || {}),
-          getSecret: (...args) => callRpc('getSecret', ...args),
-          setSecret: (...args) => callRpc('setSecret', ...args),
-          getExecutionTaskChain: () => callRpc('getExecutionTaskChain'),
-          messagePort: globalThis.__workerSandboxMessagePort ?? null,
+          stopSignal: sandboxApi.signal,
+          getSecret: (name, askNew, saveNew) =>
+            call('getSecret', {
+              name,
+              askNew,
+              ...(saveNew === undefined ? {} : { saveNew }),
+            }),
+          setSecret: (name, value) => call('setSecret', { name, value }),
+          getExecutionTaskChain: () => call('getExecutionTaskChain'),
+          waitForInteraction: (request) => call('waitForInteraction', request || {}),
           toolCall,
-          createSubtasksResult: (tasks) => callRpc('createSubtasksResult', tasks),
+          createSubtasksResult: (tasks) => call('createSubtasksResult', { tasks }),
           createChatCompletionTask,
         };
         return userFn(params, ctx);
@@ -72,18 +83,26 @@ function parseCreateSubtasksResultInput(
   return partialTaskDraft.array().array().parse(value)
 }
 
-function buildRpcHandlers(context: toolContext): WorkerSandboxRpcHandlers {
+function buildContextHandlers(
+  context: toolContext,
+): ProtocolServerHandlers<typeof toolContextProtocol> {
   return {
-    getSecret: (name, askNew, saveNew) =>
-      context.getSecret(
-        String(name),
-        typeof askNew === 'string' || typeof askNew === 'boolean' ? askNew : false,
-        typeof saveNew === 'boolean' ? saveNew : undefined,
-      ),
-    setSecret: (name, value) => context.setSecret(String(name), String(value)),
-    getExecutionTaskChain: () => context.getExecutionTaskChain(),
-    createSubtasksResult: (tasks) =>
-      context.createSubtasksResult(parseCreateSubtasksResultInput(tasks)),
+    toolContext: {
+      getSecret: ({ name, askNew, saveNew }) => context.getSecret(name, askNew, saveNew),
+      setSecret: ({ name, value }) => context.setSecret(name, value),
+      getExecutionTaskChain: () => context.getExecutionTaskChain(),
+      createSubtasksResult: ({ tasks }) =>
+        context.createSubtasksResult(parseCreateSubtasksResultInput(tasks)),
+      waitForInteraction: ({ tool, token }) => {
+        if (!context.waitForInteraction) {
+          throw new Error('Tool interaction capability is unavailable.')
+        }
+        return context.waitForInteraction({
+          ...(tool === undefined ? {} : { tool }),
+          ...(token === undefined ? {} : { token }),
+        })
+      },
+    },
   }
 }
 
@@ -108,23 +127,33 @@ const executeToolInMainThread = async (
   return await Reflect.apply(toolFunction, undefined, [args.params, args.context])
 }
 
-export function executeToolInWorkerSandbox(
+export async function executeToolInWorkerSandbox(
   code: string,
   args: { params: unknown; context: toolContext },
   sourceURL = 'worker-sandbox-tool.js',
   stopSignal: AbortSignal,
 ): Promise<unknown> {
-  if (shouldExecuteToolInMainThread()) return executeToolInMainThread(code, args, sourceURL)
+  if (shouldExecuteToolInMainThread()) return await executeToolInMainThread(code, args, sourceURL)
 
-  const { toolId, messagePort } = args.context
-  const options: ExecuteInWorkerSandboxOptions = {
+  const { toolId } = args.context
+  const sandbox = await createExecutableSandbox({
     id: toolId,
-    code: buildToolSandboxCode(code),
-    sourceURL,
-    stopSignal,
-    rpcHandlers: buildRpcHandlers(args.context),
-    messagePort,
+    reuse: { mode: 'immutable', contentId: toolId },
+  })
+  await sandbox.installModule(toolId, buildToolSandboxCode(code), sourceURL)
+  const capability = await serveFrpSandboxCapability({
+    sandbox,
+    protocol: toolContextProtocol,
+    handlers: buildContextHandlers(args.context),
+    signal: stopSignal,
+  })
+  try {
+    return await sandbox.executeModule(toolId, [args.params, { toolId }], {
+      signal: stopSignal,
+      sourceURL,
+      channel: capability.channel,
+    })
+  } finally {
+    capability.destroy()
   }
-
-  return executeInWorkerSandbox(options, args.params, { toolId })
 }

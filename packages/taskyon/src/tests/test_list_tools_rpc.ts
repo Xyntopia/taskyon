@@ -483,6 +483,39 @@ export const testListToolsRpcTimesOut = async () => {
 testListToolsRpcTimesOut.description =
   'Rejects listTools when no matching tools.listResponse arrives before timeout.'
 
+export const testPortServerReturnsHandlerErrors = async () => {
+  const { x: clientPort, y: taskyonPort } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()
+  const reported: unknown[] = []
+  const unsubscribe = createPortServer(
+    taskyonPort,
+    taskyonProtocol,
+    {
+      tools: {
+        list: () => {
+          throw new Error('Tool catalog unavailable')
+        },
+      },
+    },
+    { onError: (error) => reported.push(error) },
+  )
+
+  try {
+    await createPortClient(clientPort, taskyonProtocol).tools.list({ timeoutMs: 1_000 })
+  } catch (error) {
+    assert(error instanceof Error, 'Expected the remote handler error to reject the client call')
+    assert(error.message === 'Tool catalog unavailable', 'Expected the remote error message')
+    assert(reported.length === 1, 'Expected the server diagnostic callback to receive the error')
+    unsubscribe()
+    return
+  }
+
+  unsubscribe()
+  throw new Error('Expected a rejected server handler to return an error response')
+}
+
+testPortServerReturnsHandlerErrors.description =
+  'Returns rejected FRP server handlers as explicit client errors instead of timeouts.'
+
 export const testPortServerReportsOnlyUnhandledCommands = async () => {
   {
     const { x: clientPort, y: taskyonPort } = createDuplexChannel<TestMessage, TestMessage>()

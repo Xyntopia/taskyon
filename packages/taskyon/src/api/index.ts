@@ -52,7 +52,6 @@ export {
   createPortClient,
   createProtocolPort,
   createPortServer,
-  MessageChannelBridge,
 } from '@taskyon/common/modules/frpBus'
 export type {
   PortRpcClientOptions,

@@ -2,7 +2,6 @@ import {
   createProtocolPort,
   createStorageClient,
   createTaskyonClient,
-  MessageChannelBridge,
   taskyonProtocol,
   taskyonStorageProtocol,
   type FunctionArguments,
@@ -12,6 +11,7 @@ import {
   type llmSettings,
   type partialTaskDraft,
 } from '@taskyon/taskyon/api'
+import { MessageChannelBridge } from '@taskyon/common/modules/frpBusWeb'
 import {
   createExternalToolContext,
   registerToolRpcTools,

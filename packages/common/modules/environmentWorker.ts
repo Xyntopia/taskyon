@@ -1,6 +1,9 @@
 export {}
 
-import { executeInWorkerSandbox } from './sandbox/workerSandbox'
+import { defineFrpServiceProtocol } from './frpBus.ts'
+import { createSandboxProtocolClient, serveFrpSandboxCapability } from './sandbox/frpSandbox.ts'
+import { createExecutableSandbox } from './sandbox/workerSandbox'
+import { z } from 'zod'
 
 export type EnvironmentWorkerLike<Request, Response> = {
   onmessage: ((event: MessageEvent<Response>) => void) | null
@@ -36,12 +39,30 @@ const makeErrorEvent = (error: unknown): ErrorEvent => {
 }
 
 const buildSandboxBridgeCode = (): string => {
+  const createProtocolClientSource = createSandboxProtocolClient.toString()
   return `
 async (request) => {
-  return await globalThis.__workerSandboxRpc('environmentWorker:handleRequest', request);
+  if (!sandboxApi.port) throw new Error('Environment worker protocol port is unavailable');
+  const client = (${createProtocolClientSource})(
+    sandboxApi.port,
+    'environmentWorker',
+    sandboxApi.signal,
+  );
+  return await client.call('handleRequest', { request });
 }
 `.trim()
 }
+
+const environmentWorkerProtocol = defineFrpServiceProtocol({
+  service: 'environmentWorker',
+  version: '1',
+  commands: {
+    handleRequest: {
+      request: z.object({ request: z.unknown() }),
+      response: z.array(z.unknown()),
+    },
+  },
+})
 
 export const createEnvironmentWorker = <Request, Response>(
   options: EnvironmentWorkerOptions<Request, Response>,
@@ -53,6 +74,10 @@ export const createEnvironmentWorker = <Request, Response>(
   let terminated = false
   const activeRuns = new Set<AbortController>()
   const workerId = options.id ?? `environment-worker-${Date.now()}-${environmentWorkerRunCounter++}`
+  const sandbox = createExecutableSandbox({
+    id: workerId,
+    ...(options.browserRuntime === undefined ? {} : { browserRuntime: options.browserRuntime }),
+  })
 
   const local: EnvironmentWorkerLike<Request, Response> = {
     onmessage: null,
@@ -64,27 +89,34 @@ export const createEnvironmentWorker = <Request, Response>(
         const controller = new AbortController()
         activeRuns.add(controller)
 
-        void executeInWorkerSandbox<Response[]>(
-          {
-            id: `${workerId}-${environmentWorkerRunCounter++}`,
-            code: buildSandboxBridgeCode(),
-            sourceURL: `${workerId}.environment-worker.js`,
-            stopSignal: controller.signal,
-            ...(options.browserRuntime !== undefined
-              ? { browserRuntime: options.browserRuntime }
-              : {}),
-            rpcHandlers: {
-              'environmentWorker:handleRequest': async (sandboxRequest) => {
-                const responses: Response[] = []
-                await options.handleRequest(sandboxRequest as Request, (response) => {
-                  responses.push(response)
-                })
-                return responses
+        void sandbox
+          .then(async (executable) => {
+            const capability = await serveFrpSandboxCapability({
+              sandbox: executable,
+              protocol: environmentWorkerProtocol,
+              signal: controller.signal,
+              handlers: {
+                environmentWorker: {
+                  handleRequest: async ({ request: sandboxRequest }) => {
+                    const responses: Response[] = []
+                    await options.handleRequest(sandboxRequest as Request, (response) => {
+                      responses.push(response)
+                    })
+                    return responses
+                  },
+                },
               },
-            },
-          },
-          request,
-        )
+            })
+            try {
+              return await executable.execute<Response[]>(buildSandboxBridgeCode(), [request], {
+                signal: controller.signal,
+                sourceURL: `${workerId}.environment-worker.js`,
+                channel: capability.channel,
+              })
+            } finally {
+              capability.destroy()
+            }
+          })
           .then((responses) => {
             if (terminated) return
             for (const response of responses) {
@@ -105,6 +137,7 @@ export const createEnvironmentWorker = <Request, Response>(
         controller.abort('Environment worker terminated')
       }
       activeRuns.clear()
+      void sandbox.then((executable) => executable.terminate('Environment worker terminated'))
     },
   }
   return local

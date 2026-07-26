@@ -14,6 +14,11 @@ export const ToolProgress = z.object({
 })
 export type ToolProgress = z.infer<typeof ToolProgress>
 
+export type ToolInteractionRequest = {
+  tool?: string | undefined
+  token?: string | undefined
+}
+
 /**
  * Represents the context passed to tools within the Taskyon system.
  *
@@ -39,7 +44,7 @@ export type toolContext = {
   stopSignal: AbortSignal
   toolId: string
   reportProgress?: (progress: ToolProgress) => Promise<void>
-  messagePort?: MessagePort // optional message port for communication
+  waitForInteraction?: (request?: ToolInteractionRequest) => Promise<unknown>
 }
 
 export type ClientToolContext = Omit<toolContext, 'getSecret' | 'setSecret' | 'toolId'>

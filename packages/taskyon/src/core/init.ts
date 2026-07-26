@@ -1,7 +1,7 @@
 import type { ChatCompletionStreamEvent } from '../types/chatCompletion'
 import { TyToolchainConfig, type llmSettings } from '../types/profiles'
 import { createSubtasksResult, type InternalTool } from '../types/toolApi'
-import type { FunctionArguments } from '../types/tools'
+import { FunctionArguments } from '../types/tools'
 import type { ToolBase } from '../types/tools'
 import { partialTaskDraft } from '../types/taskNode'
 import {
@@ -15,22 +15,19 @@ import type { CryptoSession } from '../utils/cryptoSession'
 import { createCryptoSession } from '../utils/cryptoSession'
 import type { EncryptedDataRow } from '../utils/encrypt'
 import { encryptCompressObject } from '../utils/fileUtils'
-import type {
-  IframeMultiPlexer,
-  Port,
-  ProtocolMessage,
-  Stream,
-} from '@taskyon/common/modules/frpBus'
+import type { Port, ProtocolMessage, Stream } from '@taskyon/common/modules/frpBus'
 import {
-  createIframeMux,
-  createMessagePortAdapter,
   createPortClient,
   createProtocolPort,
   createPortServer,
   createStream,
   createTypeFilteredPort,
-  createUnavailableIframeMux,
 } from '@taskyon/common/modules/frpBus'
+import {
+  createIframeMux,
+  createUnavailableIframeMux,
+  type IframeMultiPlexer,
+} from '@taskyon/common/modules/frpBusWeb'
 import { createProxyApi, createProxyFunction } from '../utils/objHelpers'
 import { configureNodePgLiteDataDir, getDatabase } from '../utils/pglite.api'
 import type { TyPGDB } from '../utils/pglite.api'
@@ -189,6 +186,19 @@ const createRuntimeIframeMux = (): IframeMultiPlexer => {
   if (typeof window !== 'undefined') return createIframeMux(5)
   return createUnavailableIframeMux(
     'Iframe message bridging is only available in browser runtimes.',
+  )
+}
+
+const matchesToolInteraction = (
+  payload: unknown,
+  request: { tool?: string | undefined; token?: string | undefined },
+) => {
+  if (!request.tool && !request.token) return true
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const interaction = payload as { tool?: unknown; token?: unknown }
+  return (
+    (!request.tool || interaction.tool === request.tool) &&
+    (!request.token || interaction.token === request.token)
   )
 }
 
@@ -351,13 +361,11 @@ const dynamicContext =
         if (!tool) throw new Error(`Tool not found: ${call.functionName}`)
         const toolId = await generateSecretId(def?.id, tool)
         const executionTask = call.taskId ? await taskManagerInstance.getTask(call.taskId) : null
-        const messagePortAdapter = executionTask
-          ? createMessagePortAdapter(
-              iframeMultiPlexer.all$.filter((msg) => {
-                return msg.id === executionTask.parentID || msg.id === executionTask.priorID
-              }),
-            )
-          : undefined
+        const interactionIds = new Set(
+          [executionTask?.parentID, executionTask?.priorID].filter(
+            (id): id is string => typeof id === 'string',
+          ),
+        )
         return {
           context: {
             getExecutionTaskChain: () => {
@@ -380,13 +388,21 @@ const dynamicContext =
             },
             stopSignal,
             toolId,
-            ...(messagePortAdapter
-              ? {
-                  messagePort: messagePortAdapter.port,
-                }
-              : {}),
+            waitForInteraction: async (request = {}) => {
+              if (!executionTask) {
+                throw new Error('UI interaction is unavailable without an execution task.')
+              }
+              return await iframeMultiPlexer.all$
+                .filter(
+                  (message) =>
+                    interactionIds.has(message.id) &&
+                    matchesToolInteraction(message.payload, request),
+                )
+                .map((message) => message.payload)
+                .wait({ signal: stopSignal })
+            },
           },
-          cleanup: () => messagePortAdapter?.destroy(),
+          cleanup: () => undefined,
         }
       },
     })
@@ -405,12 +421,12 @@ const dynamicContext =
       })
       return {
         name: call.functionName,
-        arguments: {
+        arguments: FunctionArguments.parse({
           ...createWithDefaults(tool.parameters),
           ...(funcSettings || {}),
           ...rawArguments,
           ...materializedArguments,
-        },
+        }),
       }
     }
     const continuationTask = partialTaskDraft.parse(entryNode())

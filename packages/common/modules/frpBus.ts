@@ -1,5 +1,7 @@
 // frpBus.ts
 import { z } from 'zod'
+import { hydrateRemoteError, serializeRemoteError } from './remoteError.ts'
+import { awaitRequestResponse } from './requestLifecycle.ts'
 
 /**
  * Functional Reactive Programming (FRP) Bus
@@ -169,19 +171,6 @@ export type PortClientFromMessages<Tx, Rx> = {
     args: RequestPayload<Extract<Tx, { type: `${TName}Request`; requestId: string }>> &
       PortRpcClientOptions,
   ) => Promise<ResponseResult<ResponseForName<Rx, TName>>>
-}
-
-export function MessageChannelBridge<Tx, Rx = Tx>(dport: Port<Tx, Rx>, mport: MessagePort) {
-  const unsub = dport.receive((msg) => mport.postMessage(msg))
-  mport.onmessage = (msg) => dport.send(msg.data)
-  mport.start()
-
-  const destroy = () => {
-    unsub()
-    mport.close()
-  }
-
-  return { destroy }
 }
 
 /* TODO: adapt this by createing a port which
@@ -427,6 +416,7 @@ export type UnaryPortRpcDefinition<
   response: TResponseSchema
   createRequest: (args: TArgs, requestId: string) => TRequest
   createResponse: (request: { requestId: string }, result: TResult) => TResponse
+  createErrorResponse: (request: { requestId: string }, error: unknown) => TResponse
   isResponseForRequest: (response: { requestId: string }, requestId: string) => boolean
   readResponse: (response: TResponse) => RpcResponseResult<TResult>
   createCancelRequest?: (request: TRequest, reason: string) => TRequest
@@ -463,10 +453,19 @@ type CommandResultFromConfig<TConfig extends FrpCommandConfig> = TConfig extends
   ? z.output<TConfig['response']>
   : void
 
+const rpcErrorSchema = z.object({
+  message: z.string(),
+  name: z.string().optional(),
+  stack: z.string().optional(),
+})
+
 type CommandResponseShapeFromConfig<TName extends string, TConfig extends FrpCommandConfig> = {
   type: z.ZodLiteral<`${TName}Response`>
   requestId: z.ZodString
-} & (TConfig extends { response: z.ZodType } ? { result: TConfig['response'] } : EmptyObject)
+  error: z.ZodOptional<typeof rpcErrorSchema>
+} & (TConfig extends { response: z.ZodType }
+  ? { result: z.ZodOptional<TConfig['response']> }
+  : EmptyObject)
 
 type CommandResponseSchemaFromConfig<
   TName extends string,
@@ -624,22 +623,29 @@ const createUnaryCommandDefinition = <
     TConfig
   >['request']
 
-  const responseShape = hasCommandResponse(config)
+  const responseSchema = hasCommandResponse(config) ? config.response : undefined
+  const responseShape = responseSchema
     ? {
         type: z.literal(responseType),
         requestId: z.string(),
-        result: config.response,
+        result: responseSchema.optional(),
+        error: rpcErrorSchema.optional(),
       }
     : {
         type: z.literal(responseType),
         requestId: z.string(),
+        error: rpcErrorSchema.optional(),
       }
-  const response = z
-    .object(responseShape)
-    .describe(config.response?.description ?? '') as CommandDefinitionFromConfig<
-    TName,
-    TConfig
-  >['response']
+  const responseObject = z.object(responseShape)
+  const responseSchemaWithResult = responseSchema
+    ? responseObject.refine(
+        (value) => 'result' in value !== (value.error !== undefined),
+        'Command response must contain exactly one result or error.',
+      )
+    : responseObject
+  const response = responseSchemaWithResult.describe(
+    config.response?.description ?? '',
+  ) as CommandDefinitionFromConfig<TName, TConfig>['response']
 
   return {
     name,
@@ -665,13 +671,27 @@ const createUnaryCommandDefinition = <
           }
       return response.parse(responsePayload) as CommandResponseFromConfig<TName, TConfig>
     },
+    createErrorResponse: (receivedRequest, error) =>
+      response.parse({
+        type: responseType,
+        requestId: receivedRequest.requestId,
+        error: serializeRemoteError(error),
+      }) as CommandResponseFromConfig<TName, TConfig>,
     isResponseForRequest: (receivedResponse, requestId) => receivedResponse.requestId === requestId,
-    readResponse: (receivedResponse) => ({
-      ok: true,
-      value: (hasCommandResponse(config) && 'result' in receivedResponse
-        ? receivedResponse.result
-        : undefined) as CommandResultFromConfig<TConfig>,
-    }),
+    readResponse: (receivedResponse) => {
+      if ('error' in receivedResponse && receivedResponse.error) {
+        return {
+          ok: false,
+          error: hydrateRemoteError(rpcErrorSchema.parse(receivedResponse.error)),
+        }
+      }
+      return {
+        ok: true,
+        value: (hasCommandResponse(config) && 'result' in receivedResponse
+          ? receivedResponse.result
+          : undefined) as CommandResultFromConfig<TConfig>,
+      }
+    },
   }
 }
 
@@ -871,6 +891,16 @@ export type ProtocolMessage<TProtocol> = ProtocolEnvelope<TProtocol> &
     | ProtocolStreamMessages<TProtocol>
   )
 
+export function parseProtocolMessage<
+  TProtocol extends FrpProtocolDefinition<
+    Record<string, unknown>,
+    Record<string, unknown>,
+    z.ZodType | undefined
+  >,
+>(protocol: TProtocol, value: unknown): ProtocolMessage<TProtocol> {
+  return protocol.message.parse(value) as ProtocolMessage<TProtocol>
+}
+
 export type ProtocolClient<TProtocol> = TProtocol extends {
   commands: infer TCommands
 }
@@ -1060,6 +1090,7 @@ type RuntimeRpcDefinition = {
   response: { safeParse: (value: unknown) => { success: boolean; data?: { requestId: string } } }
   createRequest: (args: Record<string, unknown>, requestId: string) => { requestId: string }
   createResponse: (request: { requestId: string }, result: unknown) => { requestId: string }
+  createErrorResponse: (request: { requestId: string }, error: unknown) => { requestId: string }
   isResponseForRequest: (response: { requestId: string }, requestId: string) => boolean
   readResponse: (response: { requestId: string }) => RpcResponseResult<unknown>
   createCancelRequest?: (request: { requestId: string }, reason: string) => { requestId: string }
@@ -1244,13 +1275,15 @@ export function createPortServer<
         return
       }
 
-      void Promise.resolve(handler(request))
+      void Promise.resolve()
+        .then(() => handler(request))
         .then((result) => {
           port.send(definition.createResponse(request, result) as Tx)
         })
         .catch((error) => {
           if (options.onError) options.onError(error)
-          else console.error('an error occured during handling of the protocol command', error)
+          else console.error('An error occurred while handling a protocol command.', error)
+          port.send(definition.createErrorResponse(request, error) as Tx)
         })
       return
     }
@@ -1279,308 +1312,19 @@ export function createStreamRpcRequest<
   readResponse: (response: TResponse) => RpcResponseResult<TResult>
 }): Promise<TResult> {
   if (options.scope !== undefined) options.scopeStore?.set(options.requestId, options.scope)
-
-  const responsePromise = new Promise<TResult>((resolve, reject) => {
-    let settled = false
-    let unsubscribe: Unsubscribe = () => {}
-
-    const cleanup = () => {
-      clearTimeout(timeout)
-      options.signal?.removeEventListener('abort', abort)
-      options.scopeStore?.delete(options.requestId)
-      unsubscribe()
-    }
-
-    const finish = (result: RpcResponseResult<TResult>) => {
-      if (settled) return
-      settled = true
-      cleanup()
-      if (result.ok) resolve(result.value)
-      else reject(result.error)
-    }
-
-    const cancel = (reason: string) => {
-      if (options.createCancelRequest) options.port.send(options.createCancelRequest(reason))
-    }
-
-    const abort = () => {
-      const reason =
-        options.signal?.reason instanceof Error
-          ? options.signal.reason.message
-          : String(options.signal?.reason ?? 'RPC request aborted')
-      cancel(reason)
-      finish({ ok: false, error: new Error(reason) })
-    }
-
-    const timeout = setTimeout(() => {
-      const message = `RPC request ${options.requestId} timed out after ${options.timeoutMs}ms`
-      cancel(message)
-      finish({ ok: false, error: new Error(message) })
-    }, options.timeoutMs)
-
-    if (options.signal?.aborted) {
-      abort()
-      return
-    }
-
-    options.signal?.addEventListener('abort', abort, { once: true })
-    unsubscribe = options.port.receive((message) => {
+  const createCancelRequest = options.createCancelRequest
+  return awaitRequestResponse({
+    subscribe: options.port.receive,
+    sendRequest: () => options.port.send(options.request),
+    timeoutMs: options.timeoutMs,
+    signal: options.signal,
+    sendCancel: createCancelRequest
+      ? (reason) => options.port.send(createCancelRequest(reason))
+      : undefined,
+    readResponse: (message) => {
       const response = options.parseResponse(message)
-      if (!response || !options.isResponseForRequest(response, options.requestId)) return
-      finish(options.readResponse(response))
-    })
-  })
-
-  options.port.send(options.request)
-  return responsePromise
-}
-
-// ---- MessagePort <-> FRP bridge ------------------------------------------
-
-export interface PortBridge<T> {
-  /** Stream that mirrors everything coming from the external port */
-  stream: Stream<T>
-  /** Post into the bus (will also be forwarded to the external port) */
-  emit: (value: T) => void
-  /** Give this to the iframe (or whatever) */
-  port: MessagePort
-  /** Cleanup listener, subscription & ports */
-  destroy: () => void
-}
-
-/**
- * Creates a MessageChannel and wires one side into a new FRP stream.
- * - Anything the iframe posts arrives on `stream`
- * - Anything you `emit` (or any subscriber emits back into this stream) is posted out to the iframe
- */
-export function createMessagePortBridge<T>(): PortBridge<T> {
-  const { stream, emit } = createStream<T>()
-  const { port1, port2 } = new MessageChannel()
-
-  // Internal (hidden) side
-  port2.start()
-  const onMsg = (e: MessageEvent<T>) => emit(e.data)
-  port2.addEventListener('message', onMsg)
-
-  // Forward stream values out to the external side
-  const unsub: Unsubscribe | Promise<Unsubscribe> = stream((v) => {
-    // Structured clone is required; assume T is cloneable.
-    port2.postMessage(v)
-  })
-
-  const destroy = () => {
-    unsub()
-    port2.removeEventListener('message', onMsg)
-    port1.close()
-    port2.close()
-  }
-
-  return { stream, emit, port: port1, destroy }
-}
-
-export function createMessagePortAdapter<T>(stream: Stream<T>) {
-  const { port1, port2 } = new MessageChannel()
-
-  // Internal (hidden) side
-  port2.start()
-  // Forward stream values out to the external side
-  const unsub: Unsubscribe = stream((v) => {
-    // Structured clone is required; assume T is cloneable.
-    port2.postMessage(v)
-  })
-
-  const destroy = () => {
-    unsub()
-    port1.close()
-    port2.close()
-  }
-
-  return { port: port1, destroy }
-}
-
-// ---- Simple IFrame <-> FRP adapter ---------------------------------------
-
-export function iframeBridge(
-  iframe: HTMLIFrameElement,
-  origin: string | null = null, // pass null to skip origin check
-) {
-  const win = iframe.contentWindow
-  if (!win) throw new Error('iframe has no contentWindow')
-
-  const inferred = iframe.src ? new URL(iframe.src, window.location.href).origin : 'null' // about:srcdoc
-  const expectedOrigin = origin === undefined ? inferred : origin
-  const checkOrigin = expectedOrigin !== null
-
-  const { stream, emit } = createStream<unknown>()
-
-  const onMessage = (ev: MessageEvent<unknown>) => {
-    if (ev.source !== win) return
-    if (checkOrigin && ev.origin !== expectedOrigin) return
-    emit(ev.data)
-  }
-  window.addEventListener('message', onMessage)
-
-  const post = (msg: unknown) => {
-    // If iframe navigated, silently drop
-    if (iframe.contentWindow === win) {
-      win.postMessage(msg, expectedOrigin ?? '*')
-    }
-  }
-
-  const destroy = () => window.removeEventListener('message', onMessage)
-
-  return { stream, emit: post, destroy }
-}
-
-// ---- IFrame Multiplexer --------------------------------------------------
-
-export type BusMsg<I extends string | number | symbol = string> = { id: I; payload: unknown }
-
-export type TaskMessageStream = Stream<BusMsg>
-
-interface Entry {
-  ref: WeakRef<HTMLIFrameElement>
-  post: (m: unknown) => void
-}
-
-// TODO: add a "bus" to the iframe...
-/**
- * Create a multiplexer for bidirectional messaging between the host window
- * and multiple managed iframes. Each iframe is registered under an identifier,
- * and incoming `postMessage` events are routed to a typed stream keyed by id.
- *
- * Features:
- * - `attachIframe(id, iframe, origin?)`: register an iframe with a unique id.
- *   - Tracks the iframe with a `WeakRef`, cleaned up automatically if removed.
- *   - Determines expected origin from the iframe's `src` unless overridden.
- * - `send(id, msg)`: post a message to the iframe associated with `id`.
- *   - Messages are dropped if the iframe is disconnected or garbage collected.
- * - `all$`: a reactive stream of all incoming messages of the form `{ id, payload }`.
- * - Automatic garbage collection:
- *   - Uses `WeakRef` + `WeakMap` to avoid leaks.
- *   - Periodically sweeps stale entries after `sweepEvery` attaches.
- *   - Falls back to manual `gc()` to force a sweep.
- * - `detachId(id)`: manually detach an iframe by id.
- * - `destroy()`: stop listening to window `message` events and clear state.
- *
- * Notes:
- * - `winToId` is a `WeakMap` → iframe window references do not prevent GC.
- * - Origins:
- *   - If the iframe has `srcdoc` or `about:srcdoc`, origin is `"null"` and messages
- *     are sent with target `"*"`.
- *   - Otherwise the origin is inferred from the iframe `src` or overridden via `origin`.
- *
- * @param sweepEvery number of iframe attaches before scheduling a GC sweep (default: 5).
- * @returns API object: `{ all$, send, attachIframe, detachId, gc, destroy }`.
- */
-export function createIframeMux<I extends string | number | symbol = string>(sweepEvery = 5) {
-  const { stream: all$, emit } = createStream<BusMsg<I>>()
-
-  const winToId = new WeakMap<Window, I>()
-  const idToEntry = new Map<I, Entry>()
-  let attachCountSinceSweep = 0
-
-  const onMessage = (ev: MessageEvent) => {
-    const id = winToId.get(ev.source as Window)
-    if (!id) return
-    emit({ id, payload: ev.data })
-  }
-  window.addEventListener('message', onMessage)
-
-  const attachIframe = (id: I, iframe: HTMLIFrameElement, origin?: string) => {
-    const win = iframe.contentWindow
-    if (!win) throw new Error('iframe has no contentWindow')
-
-    winToId.set(win, id)
-
-    // Infer origin unless caller overrides. srcdoc/about:srcdoc => "null"
-    const inferred =
-      iframe.src && iframe.src !== 'about:srcdoc'
-        ? new URL(iframe.src, window.location.href).origin
-        : 'null'
-
-    const expected = origin ?? inferred
-    const postTarget = expected === 'null' ? '*' : expected
-
-    const entry: Entry = {
-      ref: new WeakRef(iframe),
-      post: (msg: unknown) => {
-        const el = entry.ref.deref()
-        if (!el || el.contentWindow !== win) return // silently drop
-        win.postMessage(msg, postTarget)
-      },
-    }
-
-    idToEntry.set(id, entry)
-
-    if (++attachCountSinceSweep >= sweepEvery) {
-      attachCountSinceSweep = 0
-      scheduleSweep()
-    }
-  }
-
-  const send = (id: I, msg: unknown) => {
-    const e = idToEntry.get(id)
-    if (!e) return
-    const el = e.ref.deref()
-    if (!el || !el.isConnected) {
-      detachId(id)
-      return
-    }
-    e.post(msg)
-  }
-
-  const detachId = (id: I) => {
-    idToEntry.delete(id)
-    // winToId is a WeakMap → GC will clean it up
-  }
-
-  const sweep = () => {
-    for (const [id, e] of idToEntry) {
-      const el = e.ref.deref()
-      if (!el || !el.isConnected) detachId(id)
-    }
-  }
-
-  const scheduleSweep = () => {
-    if ('requestIdleCallback' in window) {
-      window.requestIdleCallback(sweep, { timeout: 200 })
-    } else {
-      setTimeout(sweep, 0)
-    }
-  }
-
-  const gc = sweep
-
-  const destroy = () => {
-    window.removeEventListener('message', onMessage)
-    idToEntry.clear()
-    // WeakMaps auto-GC
-  }
-
-  return { all$, send, attachIframe, detachId, gc, destroy }
-}
-
-export type IframeMultiPlexer<I extends string | number | symbol = string> = ReturnType<
-  typeof createIframeMux<I>
->
-
-export function createUnavailableIframeMux<I extends string | number | symbol = string>(
-  reason = 'Iframe message bridging is not available in this runtime.',
-): IframeMultiPlexer<I> {
-  const { stream: all$ } = createStream<BusMsg<I>>()
-  const fail = () => {
-    throw new Error(reason)
-  }
-
-  return {
-    all$,
-    send: fail,
-    attachIframe: fail,
-    detachId: () => {},
-    gc: () => {},
-    destroy: () => {
-      all$.unsubscribeAll()
+      if (!response || !options.isResponseForRequest(response, options.requestId)) return undefined
+      return options.readResponse(response)
     },
-  }
+  }).finally(() => options.scopeStore?.delete(options.requestId))
 }

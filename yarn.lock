@@ -5201,6 +5201,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@taskyon/runtime-browser@workspace:packages/runtime-browser"
   dependencies:
+    "@taskyon/common": "workspace:*"
     "@taskyon/taskyon": "workspace:*"
   languageName: unknown
   linkType: soft

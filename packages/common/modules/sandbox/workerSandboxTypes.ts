@@ -1,79 +1,106 @@
-export type WorkerSandboxRpcHandler = (...args: unknown[]) => unknown
+import type { SerializedRemoteError } from '../remoteError.ts'
 
-export type WorkerSandboxRpcHandlers = Record<string, WorkerSandboxRpcHandler>
+export type SandboxSerializedError = SerializedRemoteError
 
 export interface ExecuteInWorkerSandboxOptions {
   id: string
   code: string
   sourceURL?: string
   stopSignal: AbortSignal
-  rpcHandlers?: WorkerSandboxRpcHandlers
-  messagePort?: MessagePort | undefined
   browserRuntime?: 'iframe' | 'worker'
 }
 
-export type WorkerSandboxExecuteRequest = {
+export type SandboxExecuteRequest = {
   kind: 'execute'
+  requestId: string
+  code?: string | undefined
+  moduleId?: string | undefined
+  args: unknown[]
+  sourceURL: string
+  channelId?: string | undefined
+}
+
+export type SandboxInstallRequest = {
+  kind: 'install'
+  requestId: string
+  moduleId: string
   code: string
+  sourceURL: string
+}
+
+export type SandboxOpenChannelRequest = {
+  kind: 'open-channel'
+  requestId: string
+  channelId: string
+  installerCode: string
   args: unknown[]
   sourceURL: string
 }
 
-export type WorkerSandboxRpcRequest = {
-  kind: 'rpc-request'
-  requestId: string
-  rpcType: string
-  args: unknown[]
+export type SandboxChannelMessage = {
+  kind: 'channel-message'
+  channelId: string
+  payload: unknown
 }
 
-export type WorkerSandboxRpcResult = {
-  kind: 'rpc-result'
-  requestId: string
-  value: unknown
+export type SandboxChannelClose = {
+  kind: 'channel-close'
+  channelId: string
 }
 
-export type WorkerSandboxRpcError = {
-  kind: 'rpc-error'
+export type SandboxCancelRequest = {
+  kind: 'cancel'
   requestId: string
-  error: {
-    message: string
-    name?: string | undefined
-    stack?: string | undefined
-  }
+  reason: string
 }
 
-export type WorkerSandboxResult = {
+export type SandboxExecutionResult = {
   kind: 'result'
+  requestId: string
   result: unknown
 }
 
-export type WorkerSandboxError = {
+export type SandboxExecutionError = {
   kind: 'error'
-  error: {
-    message: string
-    name?: string | undefined
-    stack?: string | undefined
-  }
+  requestId: string
+  error: SandboxSerializedError
 }
 
-export type WorkerSandboxHostToWorkerMessage =
-  | WorkerSandboxExecuteRequest
-  | WorkerSandboxRpcResult
-  | WorkerSandboxRpcError
-
-export type WorkerSandboxWorkerToHostMessage =
-  | WorkerSandboxRpcRequest
-  | WorkerSandboxResult
-  | WorkerSandboxError
-
-export type WorkerSandboxExecuteRequestEnvelope = {
-  request: WorkerSandboxExecuteRequest
-  messagePort?: MessagePort | undefined
+export type SandboxExecutionCancelled = {
+  kind: 'cancelled'
+  requestId: string
+  reason: string
 }
 
-export interface WorkerSandboxRuntime {
-  execute<R = unknown>(
-    request: WorkerSandboxExecuteRequestEnvelope,
-    options: ExecuteInWorkerSandboxOptions,
-  ): Promise<R>
+export type SandboxRuntimeFailure = {
+  kind: 'runtime-error'
+  error: SandboxSerializedError
 }
+
+export type SandboxHostToRuntimeMessage =
+  | SandboxExecuteRequest
+  | SandboxInstallRequest
+  | SandboxOpenChannelRequest
+  | SandboxChannelMessage
+  | SandboxChannelClose
+  | SandboxCancelRequest
+
+export type SandboxRuntimeToHostMessage =
+  | SandboxExecutionResult
+  | SandboxExecutionError
+  | SandboxExecutionCancelled
+  | SandboxRuntimeFailure
+  | SandboxChannelMessage
+  | SandboxChannelClose
+
+export type SandboxChannelCapability = {
+  readonly channelId: string
+}
+
+export type SandboxExecuteOptions = {
+  signal?: AbortSignal | undefined
+  sourceURL?: string | undefined
+  channel?: SandboxChannelCapability | undefined
+}
+
+export type SandboxRuntimeKind = 'iframe' | 'worker' | 'node'

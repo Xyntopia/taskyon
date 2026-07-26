@@ -1,57 +1,104 @@
-import type {
-  ExecuteInWorkerSandboxOptions,
-  WorkerSandboxExecuteRequestEnvelope,
-  WorkerSandboxRuntime,
-} from './workerSandboxTypes'
+import {
+  createExecutableSandboxClient,
+  type ExecutableSandbox,
+  type SandboxTransport,
+} from './executableSandbox.ts'
+import type { ExecuteInWorkerSandboxOptions, SandboxRuntimeKind } from './workerSandboxTypes.ts'
 
-export type { ExecuteInWorkerSandboxOptions, WorkerSandboxRpcHandlers } from './workerSandboxTypes'
+export type { ExecuteInWorkerSandboxOptions, SandboxExecuteOptions } from './workerSandboxTypes.ts'
+export type { ExecutableSandbox, SandboxTransport } from './executableSandbox.ts'
 
-const isBrowserRuntime = (): boolean =>
-  typeof window !== 'undefined' && typeof document !== 'undefined'
+const retainedSandboxes = new Map<string, Promise<ExecutableSandbox>>()
 
-const cloneArgs = <T>(value: T): T =>
-  typeof structuredClone === 'function'
-    ? structuredClone(value)
-    : (JSON.parse(JSON.stringify(value)) as T)
+export type SandboxReusePolicy =
+  | { mode: 'disposable' }
+  | { mode: 'affinity'; key: string }
+  | { mode: 'immutable'; contentId: string }
 
-async function loadWorkerSandboxRuntime(
-  options: ExecuteInWorkerSandboxOptions,
-): Promise<WorkerSandboxRuntime> {
-  if (isBrowserRuntime()) {
-    if (options.browserRuntime === 'worker') {
-      const { BrowserNativeWorkerSandboxRuntime } =
-        await import('./browserNativeWorkerSandboxRuntime')
-      return new BrowserNativeWorkerSandboxRuntime()
-    }
-    const { BrowserWorkerSandboxRuntime } = await import('./browserWorkerSandboxRuntime')
-    return new BrowserWorkerSandboxRuntime()
-  }
-  const nodeRuntimeModule = './nodeWorkerSandboxRuntime.ts'
-  const { NodeWorkerSandboxRuntime } = (await import(/* @vite-ignore */ nodeRuntimeModule)) as {
-    NodeWorkerSandboxRuntime: new () => WorkerSandboxRuntime
-  }
-  return new NodeWorkerSandboxRuntime()
+function retainedSandboxKey(
+  kind: SandboxRuntimeKind,
+  id: string,
+  reuse: Exclude<SandboxReusePolicy, { mode: 'disposable' }>,
+): string {
+  const identity = reuse.mode === 'immutable' ? reuse.contentId : reuse.key
+  if (!identity) throw new Error(`Sandbox ${reuse.mode} identity is required for ${id}`)
+  return `${kind}:${reuse.mode}:${identity}`
 }
 
-function buildWorkerSandboxRequest(
-  options: ExecuteInWorkerSandboxOptions,
-  args: unknown[],
-): WorkerSandboxExecuteRequestEnvelope {
-  return {
-    request: {
-      kind: 'execute',
-      code: options.code,
-      args: cloneArgs(args),
-      sourceURL: options.sourceURL ?? 'worker-sandbox.js',
-    },
-    messagePort: options.messagePort,
+const isBrowserRuntime = () => typeof window !== 'undefined' && typeof document !== 'undefined'
+
+function runtimeKind(options: {
+  browserRuntime?: ExecuteInWorkerSandboxOptions['browserRuntime'] | undefined
+}): SandboxRuntimeKind {
+  if (!isBrowserRuntime()) return 'node'
+  return options.browserRuntime === 'worker' ? 'worker' : 'iframe'
+}
+
+async function createTransport(kind: SandboxRuntimeKind, id: string): Promise<SandboxTransport> {
+  if (kind === 'iframe') {
+    const { createBrowserIframeSandboxTransport } = await import('./browserWorkerSandboxRuntime.ts')
+    return await createBrowserIframeSandboxTransport(id)
   }
+  if (kind === 'worker') {
+    const { createBrowserWorkerSandboxTransport } =
+      await import('./browserNativeWorkerSandboxRuntime.ts')
+    return createBrowserWorkerSandboxTransport()
+  }
+  const nodeRuntimeModule = './nodeWorkerSandboxRuntime.ts'
+  const { createNodeSandboxTransport } = (await import(/* @vite-ignore */ nodeRuntimeModule)) as {
+    createNodeSandboxTransport: () => SandboxTransport | Promise<SandboxTransport>
+  }
+  return await createNodeSandboxTransport()
+}
+
+export async function createExecutableSandbox(options: {
+  id: string
+  browserRuntime?: 'iframe' | 'worker'
+  reuse?: SandboxReusePolicy
+}): Promise<ExecutableSandbox> {
+  const kind = runtimeKind(options)
+  const reuse = options.reuse ?? { mode: 'affinity', key: options.id }
+  const key = reuse.mode === 'disposable' ? undefined : retainedSandboxKey(kind, options.id, reuse)
+  const create = async () => {
+    const transport = await createTransport(kind, options.id)
+    return createExecutableSandboxClient(transport, {
+      onTerminate: () => {
+        if (key) retainedSandboxes.delete(key)
+      },
+    })
+  }
+  if (reuse.mode === 'disposable') return await create()
+  if (!key) throw new Error('Retained sandbox identity was not created')
+
+  const existing = retainedSandboxes.get(key)
+  if (existing) return await existing
+  const sandbox = create().catch((error) => {
+    retainedSandboxes.delete(key)
+    throw error
+  })
+  retainedSandboxes.set(key, sandbox)
+  return await sandbox
+}
+
+export async function terminateExecutableSandbox(options: {
+  id: string
+  browserRuntime?: 'iframe' | 'worker'
+  reuse?: Exclude<SandboxReusePolicy, { mode: 'disposable' }>
+}): Promise<void> {
+  const reuse = options.reuse ?? { mode: 'affinity', key: options.id }
+  const key = retainedSandboxKey(runtimeKind(options), options.id, reuse)
+  const sandbox = retainedSandboxes.get(key)
+  if (!sandbox) return
+  ;(await sandbox).terminate()
 }
 
 export async function executeInWorkerSandbox<R = unknown>(
   options: ExecuteInWorkerSandboxOptions,
   ...args: unknown[]
 ): Promise<R> {
-  const runtime = await loadWorkerSandboxRuntime(options)
-  return await runtime.execute<R>(buildWorkerSandboxRequest(options, args), options)
+  const sandbox = await createExecutableSandbox(options)
+  return await sandbox.execute<R>(options.code, args, {
+    signal: options.stopSignal,
+    sourceURL: options.sourceURL,
+  })
 }

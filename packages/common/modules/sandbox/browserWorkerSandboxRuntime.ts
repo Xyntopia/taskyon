@@ -1,179 +1,51 @@
-import * as rawSandboxSource from './browserWorkerSandboxSource?raw'
+import { executableSandboxRuntimeSource } from './executableSandboxRuntime.js'
 import { createBrowserSandboxFrame } from './browserSandboxDomHost'
-import type {
-  ExecuteInWorkerSandboxOptions,
-  WorkerSandboxExecuteRequestEnvelope,
-  WorkerSandboxHostToWorkerMessage,
-  WorkerSandboxRuntime,
-  WorkerSandboxWorkerToHostMessage,
-} from './workerSandboxTypes'
+import type { SandboxTransport } from './executableSandbox'
+import type { SandboxRuntimeToHostMessage } from './workerSandboxTypes'
 
-const browserWorkerSandboxSource = rawSandboxSource.default ?? rawSandboxSource
+const READY_TIMEOUT_MS = 10_000
 
-type BrowserSandboxEntry = {
-  iframe: HTMLIFrameElement
-  port: MessagePort
-}
-
-const browserSandboxFrames = new Map<string, BrowserSandboxEntry>()
-const BROWSER_SANDBOX_READY_TIMEOUT_MS = 10_000
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
-
-function serializeError(error: unknown): { message: string; name?: string; stack?: string } {
-  if (error instanceof Error) {
-    return {
-      message: error.message || 'Unknown error',
-      name: error.name || 'Error',
-      stack: typeof error.stack === 'string' ? error.stack : '',
-    }
-  }
-  return {
-    message: String(error),
-    name: 'Error',
-  }
-}
-
-async function createBrowserSandbox(
-  id: string,
-): Promise<{ iframe: HTMLIFrameElement; port: MessagePort }> {
+export async function createBrowserIframeSandboxTransport(id: string): Promise<SandboxTransport> {
   const iframe = createBrowserSandboxFrame({
     id,
     sandboxTokens: ['allow-scripts', 'allow-popups', 'allow-popups-to-escape-sandbox'],
   })
-
-  iframe.srcdoc = `<script>\nwindow.id = "${id}";\n${browserWorkerSandboxSource}\n//# sourceURL=BWS_${id}\n</script>`
-
-  const ready = await new Promise<{ iframe: HTMLIFrameElement; port: MessagePort }>(
-    (resolve, reject) => {
-      const onReady = (event: MessageEvent) => {
-        if (!event.data?.ready || event.source !== iframe.contentWindow) return
-        const [port] = event.ports || []
-        if (!port) return
-        clearTimeout(timeout)
-        window.removeEventListener('message', onReady)
-        port.start()
-        browserSandboxFrames.set(id, { iframe, port })
-        resolve({ iframe, port })
-      }
-      const timeout = window.setTimeout(() => {
-        window.removeEventListener('message', onReady)
-        iframe.remove()
-        reject(
-          new Error(
-            `Browser tool sandbox did not become ready within ${BROWSER_SANDBOX_READY_TIMEOUT_MS}ms`,
-          ),
-        )
-      }, BROWSER_SANDBOX_READY_TIMEOUT_MS)
-      window.addEventListener('message', onReady)
-    },
-  )
-
-  await sleep(100)
-  return ready
-}
-
-function destroyBrowserSandbox(id: string): void {
-  const entry = browserSandboxFrames.get(id)
-  if (!entry) return
-  try {
-    entry.port.close()
-  } catch {
-    // ignore
-  }
-  document.body.removeChild(entry.iframe)
-  browserSandboxFrames.delete(id)
-}
-
-export class BrowserWorkerSandboxRuntime implements WorkerSandboxRuntime {
-  async execute<R = unknown>(
-    request: WorkerSandboxExecuteRequestEnvelope,
-    options: ExecuteInWorkerSandboxOptions,
-  ): Promise<R> {
-    let entry = browserSandboxFrames.get(options.id)
-    if (!entry) {
-      entry = await createBrowserSandbox(options.id)
+  const sourceId = id.replace(/[^A-Za-z0-9_.:-]/g, '_')
+  const portPromise = new Promise<MessagePort>((resolve, reject) => {
+    const onReady = (event: MessageEvent) => {
+      if (!event.data?.ready || event.source !== iframe.contentWindow) return
+      const [readyPort] = event.ports || []
+      if (!readyPort) return
+      clearTimeout(timeout)
+      window.removeEventListener('message', onReady)
+      resolve(readyPort)
     }
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener('message', onReady)
+      iframe.remove()
+      reject(new Error(`Browser sandbox did not become ready within ${READY_TIMEOUT_MS}ms`))
+    }, READY_TIMEOUT_MS)
+    window.addEventListener('message', onReady)
+  })
+  iframe.srcdoc = `<script>\n${executableSandboxRuntimeSource}\n//# sourceURL=BWS_${sourceId}\n</script>`
+  const port = await portPromise
 
-    const { port } = entry
-    return await new Promise<R>((resolve, reject) => {
-      let settled = false
+  const listeners = new Set<(message: SandboxRuntimeToHostMessage) => void>()
+  port.onmessage = (event: MessageEvent<SandboxRuntimeToHostMessage>) => {
+    listeners.forEach((listener) => listener(event.data))
+  }
+  port.start()
 
-      const cleanup = () => {
-        port.onmessage = null
-        options.stopSignal.removeEventListener('abort', onAbort)
-      }
-
-      const settle = (fn: () => void) => {
-        if (settled) return
-        settled = true
-        cleanup()
-        fn()
-      }
-
-      const onAbort = () => {
-        destroyBrowserSandbox(options.id)
-        settle(() =>
-          reject(new Error('Execution interrupted', { cause: options.stopSignal.reason })),
-        )
-      }
-
-      const respond = (message: WorkerSandboxHostToWorkerMessage) => {
-        port.postMessage(message)
-      }
-
-      port.onmessage = (event: MessageEvent<WorkerSandboxWorkerToHostMessage>) => {
-        const message = event.data
-        if (!message) return
-        if (message.kind === 'result') {
-          settle(() => resolve(message.result as R))
-          return
-        }
-        if (message.kind === 'error') {
-          settle(() => reject(new Error(message.error.message || 'Worker sandbox failed')))
-          return
-        }
-        if (message.kind !== 'rpc-request') return
-
-        const handler = options.rpcHandlers?.[message.rpcType]
-        if (typeof handler !== 'function') {
-          respond({
-            kind: 'rpc-error',
-            requestId: message.requestId,
-            error: {
-              message: `Worker sandbox RPC "${message.rpcType}" not found`,
-              name: 'Error',
-            },
-          })
-          return
-        }
-
-        void Promise.resolve(handler(...message.args))
-          .then((value) => {
-            respond({
-              kind: 'rpc-result',
-              requestId: message.requestId,
-              value,
-            })
-          })
-          .catch((error: unknown) => {
-            respond({
-              kind: 'rpc-error',
-              requestId: message.requestId,
-              error: serializeError(error),
-            })
-          })
-      }
-
-      if (options.stopSignal.aborted) {
-        onAbort()
-        return
-      }
-
-      options.stopSignal.addEventListener('abort', onAbort, { once: true })
-      const transfer = request.messagePort ? [request.messagePort] : []
-      port.start()
-      port.postMessage(request.request, transfer)
-    })
+  return {
+    send: (message) => port.postMessage(message),
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    terminate: () => {
+      listeners.clear()
+      port.close()
+      iframe.remove()
+    },
   }
 }

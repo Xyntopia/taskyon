@@ -3,6 +3,37 @@ import { createTool, toolCall } from '../types/toolApi'
 import type { OAuthCredentials } from '../utils/oauth'
 import { OAUTH_PROVIDERS, useRefreshTokenIfExpired } from '../utils/oauth'
 
+type IssueSelectionInteraction = {
+  projectId: string
+  projectName: string
+  issues: string[]
+}
+
+function parseIssueSelectionInteraction(payload: unknown): IssueSelectionInteraction | 'cancelled' {
+  if (payload === 'cancelled') return payload
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new Error('Issue selection returned an invalid interaction payload.')
+  }
+  const selection = payload as {
+    selectedProjectId?: unknown
+    selectedProjectName?: unknown
+    selectedIssues?: unknown
+  }
+  if (
+    typeof selection.selectedProjectId !== 'string' ||
+    typeof selection.selectedProjectName !== 'string' ||
+    !Array.isArray(selection.selectedIssues) ||
+    !selection.selectedIssues.every((issue) => typeof issue === 'string')
+  ) {
+    throw new Error('Issue selection returned invalid project or issue values.')
+  }
+  return {
+    projectId: selection.selectedProjectId,
+    projectName: selection.selectedProjectName,
+    issues: selection.selectedIssues,
+  }
+}
+
 const getGitlabInfo = createTool({
   name: 'getGitlabInfo',
   description: 'Fetch selected parts of your GitLab data (profile, projects, groups).',
@@ -201,27 +232,11 @@ The tool never stores content server-side; everything runs client-side in the Ta
       prev?.content.data.arguments.issuelist.length === issuelist.length &&
       thisMsg?.parentID === prev.id
     ) {
-      const res = await new Promise<
-        | {
-            projectId: string
-            projectName: string
-            issues: string[]
-          }
-        | 'cancelled'
-      >((resolve) => {
-        ;(ctx.messagePort as MessagePort).onmessage = (ev) => {
-          if (ev.data.payload === 'cancelled') {
-            resolve('cancelled')
-          }
-          if (ev.data.payload?.selectedIssues) {
-            resolve({
-              projectId: ev.data.payload.selectedProjectId,
-              projectName: ev.data.payload.selectedProjectName,
-              issues: ev.data.payload.selectedIssues,
-            })
-          }
-        }
-      })
+      if (!ctx.waitForInteraction) {
+        throw new Error('Issue selection interaction is unavailable.')
+      }
+      const payload = await ctx.waitForInteraction()
+      const res = parseIssueSelectionInteraction(payload)
 
       if (res === 'cancelled')
         return ctx.createSubtasksResult([

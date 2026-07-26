@@ -51,10 +51,13 @@ ordinary public protocol merely because direct core methods still exist.
 
 ## Message-port boundary
 
-Iframe and host integrations transfer dedicated `MessagePort` endpoints. Protocol servers validate
-the message schema, and tool RPC correlates calls, responses, timeouts, cancellation, and task
-context. Host applications should register explicit client tools instead of exposing the parent
-window or a generic event bus.
+Iframe and Worker integrations transfer a `MessagePort` once to establish a private sandbox
+transport. A lightweight shared kernel owns request correlation, results, errors, cancellation, and
+termination. Generic callers use the executable-sandbox API; FRP services add validated typed
+protocol clients on top. Neither normally exposes the native channel to application code.
+
+Tool/UI interaction is an explicit host capability. Sandboxed tools do not receive a raw
+`MessagePort`, parent window, or generic event bus.
 
 The long-term direction is maintained in workspace-level architectural proposals. Current code is
 still migrating direct `tyCore()` methods to protocol services one operation at a time.

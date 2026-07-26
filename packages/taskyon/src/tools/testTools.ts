@@ -74,7 +74,7 @@ export const postMessageTester = createTool({
     const previousCall = taskChain.at(-3)
     const thisMessage = taskChain.at(-1)
     // ────────────────────────────────────────────────────────────────────────────
-    // SECOND CALL ─ the MessagePort is available in ctx.port
+    // SECOND CALL ─ wait for the matching UI interaction
     // ────────────────────────────────────────────────────────────────────────────
     if (
       previousCall?.content.type === 'functioncall' &&
@@ -82,13 +82,11 @@ export const postMessageTester = createTool({
       thisMessage?.parentID === previousCall.id
     ) {
       console.log('waiting for message from UI...')
-      const msg = await new Promise((resolve) => {
-        const port = ctx.messagePort
-        port.onmessage = (ev) => {
-          if (ev.data.payload.text === 'Button pressed!') resolve(JSON.stringify(ev.data))
-          else console.log('Received message, still waiting for button press...:', ev.data)
-        }
-      })
+      const payload = await ctx.waitForInteraction()
+      if (payload?.text !== 'Button pressed!') {
+        throw new Error('Post-message tester received an unexpected interaction payload.')
+      }
+      const msg = JSON.stringify(payload)
       return ctx.createSubtasksResult([
         [
           {
