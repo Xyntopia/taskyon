@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "kind": "taskyon-design-repository",
+  "projectId": "backpack",
+  "title": "Backpack Packing",
+  "defaultRef": "main"
+}

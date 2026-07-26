@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "kind": "taskyon-design-repository",
+  "projectId": "satellite",
+  "title": "Mission Satellite",
+  "defaultRef": "main"
+}

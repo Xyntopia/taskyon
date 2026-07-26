@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "kind": "taskyon-design-repository",
+  "projectId": "mars-rover",
+  "title": "Autonomous Mars Rover",
+  "defaultRef": "main"
+}

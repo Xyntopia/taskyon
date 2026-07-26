@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 2,
+  "inputs": {
+    "candidate": {
+      "role": "design",
+      "label": "Workstation configuration",
+      "description": "A structural alternative from the revision-owned candidate catalog.",
+      "domain": {
+        "kind": "structural",
+        "inputAlias": "candidate"
+      }
+    },
+    "requirements.budgetUsd": {
+      "role": "requirement",
+      "label": "Maximum budget",
+      "unit": "USD",
+      "domain": {
+        "kind": "continuous",
+        "min": 500,
+        "max": 20000,
+        "step": 100
+      }
+    },
+    "requirements.minimumSystemRamGb": {
+      "role": "requirement",
+      "label": "Minimum system memory",
+      "unit": "GB",
+      "domain": {
+        "kind": "integer",
+        "min": 16,
+        "max": 512,
+        "step": 16
+      }
+    },
+    "requirements.powerLimitW": {
+      "role": "requirement",
+      "label": "Power limit",
+      "unit": "W",
+      "domain": {
+        "kind": "continuous",
+        "min": 250,
+        "max": 2500,
+        "step": 50
+      }
+    },
+    "requirements.model": {
+      "role": "scenario",
+      "label": "Target model",
+      "domain": {
+        "kind": "categorical",
+        "values": ["llama-3.1-8b", "qwen2.5-32b", "llama-3.3-70b"]
+      }
+    },
+    "requirements.quantization": {
+      "role": "scenario",
+      "label": "Weight quantization",
+      "domain": {
+        "kind": "categorical",
+        "values": ["q4", "q8", "fp16"]
+      }
+    },
+    "requirements.contextTokens": {
+      "role": "scenario",
+      "label": "Context length",
+      "unit": "tokens",
+      "domain": {
+        "kind": "integer",
+        "min": 2048,
+        "max": 262144,
+        "step": 2048
+      }
+    },
+    "requirements.concurrency": {
+      "role": "scenario",
+      "label": "Concurrent requests",
+      "domain": {
+        "kind": "integer",
+        "min": 1,
+        "max": 16,
+        "step": 1
+      }
+    },
+    "requirements.runtime": {
+      "role": "scenario",
+      "label": "Runtime",
+      "domain": {
+        "kind": "categorical",
+        "values": ["any", "cuda", "metal"]
+      }
+    },
+    "requirements.noisePreference": {
+      "role": "preference",
+      "label": "Acoustic preference",
+      "domain": {
+        "kind": "categorical",
+        "values": ["any", "quiet"]
+      }
+    },
+    "requirements.region": {
+      "role": "fixed",
+      "label": "Pricing region",
+      "domain": {
+        "kind": "fixed"
+      }
+    }
+  },
+  "objectives": [
+    {
+      "id": "value-score",
+      "label": "Feasible value score",
+      "path": "recommendation.score",
+      "direction": "max"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "budget",
+      "label": "Complete system budget",
+      "path": "recommendation.estimatedPriceUsd",
+      "operator": "<=",
+      "limit": 5500,
+      "unit": "USD"
+    },
+    {
+      "id": "power",
+      "label": "Sustained system power",
+      "path": "recommendation.estimatedSystemPowerW",
+      "operator": "<=",
+      "limit": 1200,
+      "unit": "W"
+    },
+    {
+      "id": "memory-fit",
+      "label": "Usable accelerator memory",
+      "path": "recommendation.usableVramGb",
+      "operator": ">=",
+      "limit": 0,
+      "unit": "GB"
+    }
+  ],
+  "allowedAlternatives": {
+    "candidate": [
+      "rtx-3090-value",
+      "rtx-5090-creator",
+      "dual-rtx-3090-lab",
+      "rtx-6000-ada-pro",
+      "rtx-pro-6000-blackwell",
+      "mac-studio-m3-ultra"
+    ]
+  },
+  "id": "sha256:a7e9b669d4901acd5500bf5428a92e468b4235db7f5c42cf4a00575b30736e83"
+}

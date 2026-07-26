@@ -1,10 +1,10 @@
 import type { Hash } from './caching.ts'
 import { defineDagNodeRecord, type DagNodeRecord } from './dagNodeRecord.ts'
+import { loadDesignRepositorySnapshot } from './designRepositorySnapshot.ts'
 import {
   canReadStoredGraphNodeDirectory,
   compileDagNodeRecordGraph,
   loadDagNodeRecordGraph,
-  readStoredGraphNodeDirectory,
   savedStoredNodesToRecordGraph,
 } from './dagNodeGraph.ts'
 import { createDagGraphPatchTool } from './dagGraphTool.ts'
@@ -13,14 +13,6 @@ import { createStoredDagGraph, getStoredDagGraphLocalNameIndex } from './storedD
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
-}
-
-const hashFromFilePath = (file: StoredGraphNodeFile): Hash => {
-  const filename = file.path.split('/').at(-1) ?? file.path
-  const match = /(?:^|\.)(sha256_[A-Za-z0-9_-]+)\.ts$/.exec(filename)
-  const filePart = match?.[1]
-  assert(filePart, `Expected hash in node filename ${file.path}`)
-  return `sha256:${filePart.slice('sha256_'.length)}`
 }
 
 const staticSummaryRunSource = `async ({ use }) => {
@@ -143,21 +135,19 @@ const patchBackpackMaxWeight = async (
   }
 }
 
-const loadBackpackNodeFiles = async (): Promise<StoredGraphNodeFile[]> => {
-  const nodesUrl = new URL('./examples/backpack/nodes/', import.meta.url)
-  return await readStoredGraphNodeDirectory(nodesUrl)
-}
-
-const findBackpackRootHash = (files: readonly StoredGraphNodeFile[]): Hash => {
-  const rootHashes = files
-    .filter((file) => file.path.includes('packing_recommendation.'))
-    .map(hashFromFilePath)
-    .sort()
-  assert(
-    rootHashes.length === 1,
-    `Expected one initial recommendation root, got ${rootHashes.length}`,
-  )
-  return rootHashes[0]!
+const loadBackpackRepository = async (): Promise<{
+  files: StoredGraphNodeFile[]
+  rootHash: Hash
+}> => {
+  const { readFile } = await import('node:fs/promises')
+  const repositoryUrl = new URL('../../public/design-repositories/backpack/', import.meta.url)
+  const snapshot = await loadDesignRepositorySnapshot({
+    readText: async (path) => await readFile(new URL(path, repositoryUrl), 'utf8'),
+    checkout: { kind: 'ref', name: 'main' },
+  })
+  const root = snapshot.revision.roots.main
+  assert(root, 'Expected Backpack repository main ref to select a root')
+  return { files: snapshot.files, rootHash: root.nodeId }
 }
 
 const createIdentityTool = <T>(tool: T): T => tool
@@ -392,8 +382,7 @@ export const testBackpackProjectGraphPatchUpdatesSelectedRoot = async () => {
     return { skipped: true, reason: 'Backpack project graph patch diagnostic requires Node.' }
   }
 
-  const files = await loadBackpackNodeFiles()
-  const initialRootHash = findBackpackRootHash(files)
+  const { files, rootHash: initialRootHash } = await loadBackpackRepository()
   const storedGraph = await createStoredDagGraph({
     files,
     roots: { main: initialRootHash },
@@ -496,8 +485,7 @@ export const testBackpackGraphLoadsImmutableTypeScriptNodeDirectory = async () =
     return { skipped: true, reason: 'Backpack graph file-directory diagnostic requires Node.' }
   }
 
-  const files = await loadBackpackNodeFiles()
-  const rootHash = findBackpackRootHash(files)
+  const { files, rootHash } = await loadBackpackRepository()
 
   const initial = await runBackpackRoot(files, rootHash)
   const patched = await patchBackpackMaxWeight(files, rootHash, 5)

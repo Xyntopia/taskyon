@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "kind": "taskyon-design-repository",
+  "projectId": "home-battery",
+  "title": "Home Battery System",
+  "defaultRef": "main"
+}

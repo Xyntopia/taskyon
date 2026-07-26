@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "kind": "taskyon-design-repository",
+  "projectId": "ai-workstation",
+  "title": "AI Workstation",
+  "defaultRef": "main"
+}

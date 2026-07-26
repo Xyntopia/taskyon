@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "parents": [],
+  "roots": {
+    "main": {
+      "nodeId": "sha256:ZS47WA2w3T-O_r1dwR4NvuSvNLcLlPcZozHNQRxfxgM",
+      "output": "$"
+    }
+  },
+  "designSpaceId": "sha256:a7e9b669d4901acd5500bf5428a92e468b4235db7f5c42cf4a00575b30736e83",
+  "id": "sha256:eb51f0ca4f8e87a32eb7dba9fb5ac8be0996fcc1aa65030f06c6fd7808aeff24"
+}
