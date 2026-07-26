@@ -1,5 +1,11 @@
 <template>
-  <SplitTaskyonLayout :name="name" :persist="persist" class="col">
+  <SplitTaskyonLayout
+    :name="name"
+    :persist="persist"
+    :chat-size="chatSize"
+    :chat-initially-collapsed="!initialChatOpen"
+    class="col"
+  >
     <slot />
     <template #chat>
       <TaskyonIframe v-bind="taskyonIframeProps" />
@@ -24,6 +30,8 @@ const props = withDefaults(
     profileName?: string | undefined
     bindingKey?: CryptoKey | string | null
     missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
+    initialChatOpen?: boolean
+    chatSize?: number
   }>(),
   {
     tools: () => [],
@@ -33,6 +41,8 @@ const props = withDefaults(
     profileName: undefined,
     bindingKey: null,
     missingBindingKeyPolicy: 'deriveFromProfile',
+    initialChatOpen: false,
+    chatSize: 50,
   },
 )
 

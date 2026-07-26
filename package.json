@@ -186,6 +186,7 @@
   },
   "productName": "Taskyon App",
   "resolutions": {
+    "@codemirror/language": "6.11.3",
     "@types/express": "4.17.23",
     "@types/express-serve-static-core": "4.19.6",
     "axios": "^1.15.0"

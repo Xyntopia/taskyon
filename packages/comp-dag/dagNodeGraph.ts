@@ -1,7 +1,12 @@
 import type { Hash } from './caching.ts'
 import type { DagNode } from './dagCore.ts'
-import { getDagNodeRecordInputHashes, type DagNodeRecord } from './dagNodeRecord.ts'
+import {
+  getDagNodeRecordInputHashes,
+  recordInputsToRuntimeInputs,
+  type DagNodeRecord,
+} from './dagNodeRecord.ts'
 import { compileDagNodeRecord } from './dagNodeRecordCompiler.ts'
+import { objectSchema, oneOfSchema, type DagJsonSchema } from './dagSchema.ts'
 import {
   loadStoredGraphNodeFiles,
   type SavedStoredGraphNode,
@@ -83,6 +88,47 @@ export const getDagNodeRecordClosure = (graph: DagNodeRecordGraph, rootHash: Has
 
   visit(rootHash)
   return out
+}
+
+export const getDagNodeRecordRelations = (
+  graph: DagNodeRecordGraph,
+  nodeHash: Hash,
+): { upstream: Hash[]; downstream: Hash[] } => {
+  const node = graph[nodeHash]
+  if (!node) throw new Error(`Missing DAG node record ${nodeHash}`)
+  const upstream = [...new Set(getDagNodeRecordInputHashes(node))]
+  const downstream = (Object.entries(graph) as [Hash, DagNodeRecord][])
+    .filter(([, candidate]) => getDagNodeRecordInputHashes(candidate).includes(nodeHash))
+    .map(([hash]) => hash)
+  return { upstream, downstream }
+}
+
+export const getDagNodeRecordInputSchema = (
+  graph: DagNodeRecordGraph,
+  nodeHash: Hash,
+): DagJsonSchema => {
+  const node = graph[nodeHash]
+  if (!node) throw new Error(`Missing DAG node record ${nodeHash}`)
+  const properties: Record<string, DagJsonSchema> = {
+    params: node.localParamsSchema,
+  }
+  const runtimeInputs = recordInputsToRuntimeInputs(node)
+  const inputs = { ...runtimeInputs.hiddenInputs, ...runtimeInputs.exposedInputs }
+  for (const [alias, input] of Object.entries(inputs)) {
+    const nodeIds = 'kind' in input ? input.nodeIds : [input.nodeId]
+    properties[alias] = oneOfSchema(
+      nodeIds.map((hash) => {
+        const provider = graph[hash]
+        if (!provider) throw new Error(`Missing DAG node record ${hash} for input "${alias}"`)
+        return provider.outputSchema
+      }),
+    )
+  }
+  return objectSchema({
+    properties,
+    required: Object.keys(properties),
+    title: `${node.label} inputs`,
+  })
 }
 
 export const compileDagNodeRecordGraph = (args: {

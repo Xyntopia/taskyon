@@ -67,6 +67,10 @@ const onCopyPng = async () => {
   }
 }
 
+const fit = () => controller?.fit()
+
+defineExpose({ fit })
+
 watch(
   () => props.graph,
   (next) => controller?.setGraph(next),

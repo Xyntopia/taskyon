@@ -1,4 +1,12 @@
-import { layoutGraph, routeLayoutEdges } from './layout'
+import { computeLayoutBounds, layoutGraph, routeLayoutEdges, routeOrganicEdges } from './layout'
+import {
+  applyOrganicLayout,
+  createOrganicLayoutState,
+  moveOrganicNode,
+  releaseOrganicNode,
+  stepOrganicLayout,
+  type OrganicLayoutState,
+} from './organicLayout'
 import { svgStringToPngUint8 } from '../svgUtils'
 import {
   applyWheelZoom,
@@ -135,6 +143,9 @@ export const createGraphController = <N = unknown, E = unknown>(
   let lastClickForDoubleClick: { nodeId: string; time: number } | null = null
   let lastPointerDownForDoubleClick: { nodeId: string; time: number } | null = null
   let lastDoubleClickDispatch: { nodeId: string; time: number } | null = null
+  let organicState: OrganicLayoutState | null = null
+  let organicFrame: number | null = null
+  let organicIdleFrames = 0
 
   container.style.position = 'relative'
   container.style.overflow = 'hidden'
@@ -402,12 +413,10 @@ export const createGraphController = <N = unknown, E = unknown>(
           draggedNodeId = node.id
           draggedNodeMoved = false
           nodeDragStart = { x: evt.clientX, y: evt.clientY, nodeX: node.x, nodeY: node.y }
-          svg.setPointerCapture(evt.pointerId)
           group.style.cursor = 'grabbing'
         }
         group.style.cursor = 'grab'
         group.addEventListener('pointerdown', startNodeDrag)
-        hitRect.addEventListener('pointerdown', startNodeDrag)
         group.addEventListener('pointerup', () => {
           if (draggedNodeId !== node.id) group.style.cursor = 'grab'
         })
@@ -607,14 +616,60 @@ export const createGraphController = <N = unknown, E = unknown>(
     URL.revokeObjectURL(svgUrl)
   }
 
+  const stopOrganicLayout = () => {
+    organicState = null
+    organicIdleFrames = 0
+    if (organicFrame !== null) cancelAnimationFrame(organicFrame)
+    organicFrame = null
+  }
+
+  const syncOrganicLayout = () => {
+    if (!organicState) return
+    applyOrganicLayout(organicState, layout.nodes)
+    const edges = routeOrganicEdges<N, E>(layout.nodes, graph.edges)
+    layout = {
+      ...layout,
+      edges,
+      bounds: computeLayoutBounds(layout.nodes, edges),
+    }
+  }
+
+  const scheduleOrganicLayout = () => {
+    if (!organicState || organicFrame !== null) return
+    organicFrame = requestAnimationFrame(() => {
+      organicFrame = null
+      if (!organicState) return
+      const speed = stepOrganicLayout(organicState, 2)
+      syncOrganicLayout()
+      render()
+      organicIdleFrames = speed < 0.08 && !draggedNodeId ? organicIdleFrames + 1 : 0
+      if (organicIdleFrames < 12 || draggedNodeId) scheduleOrganicLayout()
+    })
+  }
+
+  const startOrganicLayout = () => {
+    organicState = createOrganicLayoutState(layout.nodes, graph.edges)
+    stepOrganicLayout(organicState, 90)
+    syncOrganicLayout()
+    organicIdleFrames = 0
+    scheduleOrganicLayout()
+  }
+
   const relayout = () => {
+    stopOrganicLayout()
     layout = layoutGraph(graph, options)
+    if (options.layoutMode === 'organic') startOrganicLayout()
   }
 
   const reroute = () => {
+    const edges =
+      options.layoutMode === 'organic'
+        ? routeOrganicEdges<N, E>(layout.nodes, graph.edges)
+        : routeLayoutEdges(layout.nodes, layout.edges, options)
     layout = {
       ...layout,
-      edges: routeLayoutEdges(layout.nodes, layout.edges, options),
+      edges,
+      bounds: computeLayoutBounds(layout.nodes, edges),
     }
   }
 
@@ -649,16 +704,29 @@ export const createGraphController = <N = unknown, E = unknown>(
     if (draggedNodeId) {
       const node = layout.nodes.find((n) => n.id === draggedNodeId)
       if (!node) return
-      if (
-        !draggedNodeMoved &&
-        (Math.abs(evt.clientX - nodeDragStart.x) > 3 || Math.abs(evt.clientY - nodeDragStart.y) > 3)
-      ) {
+      if (!draggedNodeMoved) {
+        const movedPastThreshold =
+          Math.abs(evt.clientX - nodeDragStart.x) > 3 || Math.abs(evt.clientY - nodeDragStart.y) > 3
+        if (!movedPastThreshold) return
         draggedNodeMoved = true
+        svg.setPointerCapture(evt.pointerId)
       }
       const dx = (evt.clientX - nodeDragStart.x) / viewport.scale
       const dy = (evt.clientY - nodeDragStart.y) / viewport.scale
       node.x = nodeDragStart.nodeX + dx
       node.y = nodeDragStart.nodeY + dy
+      if (organicState) {
+        moveOrganicNode(organicState, node.id, {
+          x: node.x + node.width / 2,
+          y: node.y + node.height / 2,
+        })
+        stepOrganicLayout(organicState, 3)
+        syncOrganicLayout()
+        render()
+        organicIdleFrames = 0
+        scheduleOrganicLayout()
+        return
+      }
       reroute()
       render()
       return
@@ -674,12 +742,18 @@ export const createGraphController = <N = unknown, E = unknown>(
 
   const onPointerUp = (evt: PointerEvent) => {
     if (draggedNodeId) {
+      const releasedNodeId = draggedNodeId
       if (draggedNodeMoved) {
         suppressClickForNodeId = draggedNodeId
       }
       draggedNodeId = null
       draggedNodeMoved = false
-      svg.releasePointerCapture(evt.pointerId)
+      if (organicState) {
+        releaseOrganicNode(organicState, releasedNodeId)
+        organicIdleFrames = 0
+        scheduleOrganicLayout()
+      }
+      if (svg.hasPointerCapture(evt.pointerId)) svg.releasePointerCapture(evt.pointerId)
       const groups = nodeLayer.querySelectorAll('g')
       groups.forEach((group) => {
         group.style.cursor = options.enableNodeDrag !== false ? 'grab' : 'default'
@@ -724,6 +798,7 @@ export const createGraphController = <N = unknown, E = unknown>(
     exportSvgString,
     downloadSvg,
     destroy: () => {
+      stopOrganicLayout()
       svg.removeEventListener('pointerdown', onPointerDown)
       svg.removeEventListener('pointermove', onPointerMove)
       svg.removeEventListener('pointerup', onPointerUp)

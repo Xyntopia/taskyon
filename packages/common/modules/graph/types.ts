@@ -1,4 +1,5 @@
 export type GraphDirection = 'TB' | 'LR'
+export type GraphLayoutMode = 'hierarchical' | 'organic'
 
 export type GraphNode<T = unknown> = {
   id: string
@@ -81,6 +82,7 @@ export type GraphTheme = {
 }
 
 export type LayoutOptions = {
+  layoutMode?: GraphLayoutMode
   direction?: GraphDirection
   layerGap?: number
   nodeGap?: number

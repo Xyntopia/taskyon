@@ -28,22 +28,22 @@
 
       <div class="col-12 col-md-9">
         <q-card flat bordered>
-          <q-card-section class="row items-center q-gutter-sm">
-            <div>
-              <div class="text-subtitle1">{{ selectedLabel }}</div>
-              <div class="text-caption text-grey-7">{{ selectedPath ?? directory }}</div>
-            </div>
-            <q-space />
-            <q-chip v-if="normalizedHash" dense square color="primary" text-color="white">
-              {{ normalizedHash }}
-            </q-chip>
-          </q-card-section>
-
-          <q-separator />
-
           <q-card-section class="column q-gutter-md">
             <q-input v-model="directory" dense outlined label="Record node directory" />
-            <CodeEditor v-model="source" language="typescript" class="code-editor" />
+            <DagNodeViewer
+              v-model="source"
+              :label="selectedLabel"
+              :path="selectedPath ?? directory"
+              :hash="normalizedHash ?? undefined"
+              :read-only="false"
+              :input-schema="viewerInputSchema"
+              :output-schema="validatedNode?.outputSchema"
+              :upstream-nodes="upstreamNodes"
+              :downstream-nodes="downstreamNodes"
+              show-navigation
+              class="node-viewer"
+              @select-node="selectLoadedNode"
+            />
           </q-card-section>
 
           <q-separator />
@@ -75,13 +75,22 @@
 <script setup lang="ts">
 import { deleteFile, listFiles, openFile, writeFile } from '@taskyon/comp-dag/opfsStorage'
 import {
+  loadStoredGraphNodeFile,
   normalizeStoredGraphNodeSource,
   saveStoredGraphNodeSource,
+  type SavedStoredGraphNode,
+  type StoredDagNodeDefinition,
 } from '@taskyon/comp-dag/dagNodeLoader'
+import {
+  getDagNodeRecordInputSchema,
+  getDagNodeRecordRelations,
+  savedStoredNodesToRecordGraph,
+} from '@taskyon/comp-dag/dagNodeGraph'
 import { SELF_HASH_PLACEHOLDER } from '@taskyon/comp-dag/dagNodeIdentity'
 import type { Hash } from '@taskyon/comp-dag/caching'
+import { objectSchema, type DagJsonSchema } from '@taskyon/comp-dag/dagSchema'
 import { computed, onMounted, ref } from 'vue'
-import CodeEditor from '../components/CodeEditor.vue'
+import DagNodeViewer from '../components/DagNodeViewer.vue'
 
 type RecordNodeFile = {
   path: string
@@ -89,6 +98,7 @@ type RecordNodeFile = {
 }
 
 const defaultSource = `export default {
+  formatVersion: 2,
   id: '${SELF_HASH_PLACEHOLDER}',
   localName: 'example_record_node',
   label: 'Example Record Node',
@@ -110,7 +120,7 @@ const defaultSource = `export default {
     properties: {},
   },
   inputs: {},
-  run: ({ params }: { params: Record<string, unknown>; inputs: Record<string, unknown> }) => ({
+  run: ({ params }: { params: Record<string, unknown> }) => ({
     value: params.input ?? {},
   }),
 }
@@ -122,6 +132,8 @@ const selectedPath = ref<string | null>(null)
 const source = ref(defaultSource)
 const status = ref<string | null>(null)
 const normalizedHash = ref<Hash | null>(null)
+const validatedNode = ref<StoredDagNodeDefinition | null>(null)
+const storedNodes = ref<Record<Hash, SavedStoredGraphNode>>({})
 
 const selectedLabel = computed(() => {
   if (!selectedPath.value) return 'New record node'
@@ -136,6 +148,26 @@ const setStatus = (message: string, data?: unknown) => {
   status.value = data === undefined ? message : `${message}\n${JSON.stringify(data, null, 2)}`
 }
 
+const loadListedNodes = async () => {
+  const loaded = await Promise.all(
+    files.value.map(async (file) => {
+      try {
+        return await loadStoredGraphNodeFile({
+          path: file.path,
+          source: await (await openFile(file.path)).text(),
+        })
+      } catch {
+        return null
+      }
+    }),
+  )
+  const nodes: Record<Hash, SavedStoredGraphNode> = {}
+  for (const item of loaded) {
+    if (item) nodes[item.hash] = item
+  }
+  storedNodes.value = nodes
+}
+
 const refreshFiles = async () => {
   try {
     const names = await listFiles(directory.value)
@@ -143,9 +175,11 @@ const refreshFiles = async () => {
       .filter((name) => name.endsWith('.ts'))
       .sort((a, b) => a.localeCompare(b))
       .map((name) => ({ path: nodePath(name), label: fileLabel(name) }))
+    await loadListedNodes()
     setStatus(`Loaded ${files.value.length} record node file(s).`)
   } catch (error) {
     files.value = []
+    storedNodes.value = {}
     setStatus(error instanceof Error ? error.message : String(error))
   }
 }
@@ -154,6 +188,7 @@ const createDraft = () => {
   selectedPath.value = null
   source.value = defaultSource
   normalizedHash.value = null
+  validatedNode.value = null
   status.value = null
 }
 
@@ -171,6 +206,7 @@ const selectFile = async (path: string) => {
 const validateSource = async () => {
   try {
     const normalized = await normalizeStoredGraphNodeSource(source.value)
+    validatedNode.value = normalized.node
     normalizedHash.value = normalized.node.id === SELF_HASH_PLACEHOLDER ? null : normalized.node.id
     setStatus('Record node source is valid.', {
       id: normalized.node.id,
@@ -179,9 +215,48 @@ const validateSource = async () => {
       version: normalized.node.version,
     })
   } catch (error) {
+    validatedNode.value = null
     normalizedHash.value = null
     setStatus(error instanceof Error ? error.message : String(error))
   }
+}
+
+const storedGraph = computed(() => savedStoredNodesToRecordGraph(storedNodes.value))
+const fallbackInputSchema = computed<DagJsonSchema | undefined>(() => {
+  const current = validatedNode.value
+  if (!current) return undefined
+  const properties: Record<string, DagJsonSchema> = { params: current.localParamsSchema }
+  for (const alias of Object.keys(current.inputs ?? {})) properties[alias] = {}
+  return objectSchema({ properties, required: Object.keys(properties) })
+})
+const viewerInputSchema = computed(() => {
+  const hash = normalizedHash.value
+  return hash && storedGraph.value[hash]
+    ? getDagNodeRecordInputSchema(storedGraph.value, hash)
+    : fallbackInputSchema.value
+})
+const navigationItems = computed(() => {
+  const hash = normalizedHash.value
+  if (!hash || !storedGraph.value[hash]) return { upstream: [], downstream: [] }
+  const relations = getDagNodeRecordRelations(storedGraph.value, hash)
+  const item = (relatedHash: Hash) => {
+    const related = storedNodes.value[relatedHash]
+    return {
+      id: relatedHash,
+      label: related?.node.label ?? relatedHash,
+      ...(related ? { caption: related.node.localName } : {}),
+    }
+  }
+  return {
+    upstream: relations.upstream.map(item),
+    downstream: relations.downstream.map(item),
+  }
+})
+const upstreamNodes = computed(() => navigationItems.value.upstream)
+const downstreamNodes = computed(() => navigationItems.value.downstream)
+const selectLoadedNode = (hash: string) => {
+  const selected = Object.entries(storedNodes.value).find(([candidate]) => candidate === hash)?.[1]
+  if (selected) void selectFile(selected.file.path)
 }
 
 const saveSource = async () => {
@@ -229,7 +304,7 @@ onMounted(refreshFiles)
   min-height: 0;
 }
 
-.code-editor {
+.node-viewer {
   min-height: 460px;
   border: 1px solid rgba(127, 127, 127, 0.35);
 }

@@ -19,6 +19,7 @@
       <component
         :is="customComponent"
         v-if="customComponent"
+        v-bind="customComponentProps"
         :node="node"
         :value="node.value"
         :read-only="readOnly"
@@ -298,6 +299,7 @@ import ListChart from '../ListChart.vue'
 export type CustomRenderer = {
   match: (node: VariableNode) => boolean
   component: unknown
+  props?: (node: VariableNode) => Record<string, unknown>
 }
 
 const props = defineProps<{
@@ -352,10 +354,9 @@ const fieldItem = computed(() => ({
 
 const emitUpdate = (value: unknown) => emit('update', value)
 
-const customComponent = computed(() => {
-  const match = renderers.find((r) => r.match(props.node))
-  return match?.component ?? null
-})
+const customRenderer = computed(() => renderers.find((renderer) => renderer.match(props.node)))
+const customComponent = computed(() => customRenderer.value?.component ?? null)
+const customComponentProps = computed(() => customRenderer.value?.props?.(props.node) ?? {})
 
 const isLarge = (val: unknown) => {
   if (Array.isArray(val) && val.length > listSummary) return true

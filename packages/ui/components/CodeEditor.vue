@@ -13,13 +13,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect } from 'vue'
+import { ref, shallowRef, computed, watchEffect } from 'vue'
 import { useQuasar } from 'quasar'
 import { basicSetup } from 'codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
-import type { LanguageSupport, StreamParser } from '@codemirror/language'
-import { StreamLanguage } from '@codemirror/language'
+import { StreamLanguage, type LanguageSupport, type StreamParser } from '@codemirror/language'
 import { EditorState, type Extension } from '@codemirror/state'
+import { EditorView } from '@codemirror/view'
 import { Codemirror } from 'vue-codemirror'
 
 const content = defineModel<string>({
@@ -31,15 +31,17 @@ const props = withDefaults(
   defineProps<{
     language?: string
     extraExtensions?: Extension[]
+    readOnly?: boolean
   }>(),
   {
     language: '',
     extraExtensions: () => [],
+    readOnly: false,
   },
 )
 
 const $q = useQuasar()
-const langExtension = ref<Extension | null>()
+const langExtension = shallowRef<Extension | null>()
 const languageKey = ref('')
 
 // ---------------------------
@@ -90,6 +92,8 @@ async function loadLegacyMode(lang: string) {
 // ---------------------------
 const modernLanguageLoaders: Record<string, () => Promise<LanguageSupport>> = {
   javascript: async () => (await import('@codemirror/lang-javascript')).javascript(),
+  typescript: async () =>
+    (await import('@codemirror/lang-javascript')).javascript({ typescript: true }),
   python: async () => (await import('@codemirror/lang-python')).python(),
   cpp: async () => (await import('@codemirror/lang-cpp')).cpp(),
   json: async () => (await import('@codemirror/lang-json')).json(),
@@ -184,8 +188,13 @@ watchEffect(
 // ---------------------------
 const extensions = computed(() => {
   const extras = Array.isArray(props.extraExtensions) ? props.extraExtensions : []
-  return $q.dark.isActive
-    ? [basicSetup, ...(langExtension.value ? [langExtension.value] : []), ...extras, oneDark]
-    : [basicSetup, ...(langExtension.value ? [langExtension.value] : []), ...extras]
+  const editorExtensions = [
+    basicSetup,
+    EditorState.readOnly.of(props.readOnly),
+    EditorView.editable.of(!props.readOnly),
+    ...(langExtension.value ? [langExtension.value] : []),
+    ...extras,
+  ]
+  return $q.dark.isActive ? [...editorExtensions, oneDark] : editorExtensions
 })
 </script>

@@ -1,4 +1,11 @@
-import { adjacencyFromEdges, byId, clamp, computeInDegree, normalizeGraph, toArray } from './graphUtils'
+import {
+  adjacencyFromEdges,
+  byId,
+  clamp,
+  computeInDegree,
+  normalizeGraph,
+  toArray,
+} from './graphUtils'
 import { roundedPolylinePath } from './pathUtils'
 import type {
   GraphData,
@@ -64,7 +71,7 @@ const resolveSize = (
   node: GraphNode,
   value: number | ((node: GraphNode) => number) | undefined,
   fallback: number,
-): number => (typeof value === 'function' ? value(node) : value ?? fallback)
+): number => (typeof value === 'function' ? value(node) : (value ?? fallback))
 
 const estimateContentNodeSize = (
   node: GraphNode,
@@ -78,10 +85,7 @@ const estimateContentNodeSize = (
   const paddingY = 18
   const lineHeight = Math.round(fontSize * 1.35)
   const width = Math.max(120, Math.min(520, Math.round(maxChars * (fontSize * 0.62) + paddingX)))
-  const height = Math.max(
-    56,
-    Math.min(260, Math.round(lines.length * lineHeight + paddingY)),
-  )
+  const height = Math.max(56, Math.min(260, Math.round(lines.length * lineHeight + paddingY)))
   return { width, height }
 }
 
@@ -180,9 +184,7 @@ const assignLayers = (nodes: GraphNode[], edges: Array<{ source: string; target:
   const layerByNode = new Map<string, number>()
   for (const id of order) {
     const preds = incoming.get(id) ?? []
-    const layer = preds.length
-      ? Math.max(...preds.map((p) => layerByNode.get(p) ?? 0)) + 1
-      : 0
+    const layer = preds.length ? Math.max(...preds.map((p) => layerByNode.get(p) ?? 0)) + 1 : 0
     layerByNode.set(id, layer)
   }
   return layerByNode
@@ -313,16 +315,16 @@ const orderWithinLayers = (
   const barycenterSort = (layer: number, mode: 'incoming' | 'outgoing') => {
     const ids = [...(layerNodes.get(layer) ?? [])]
     ids.sort((a, b) => {
-      const refsA = mode === 'incoming' ? incoming.get(a) ?? [] : outgoing.get(a) ?? []
-      const refsB = mode === 'incoming' ? incoming.get(b) ?? [] : outgoing.get(b) ?? []
+      const refsA = mode === 'incoming' ? (incoming.get(a) ?? []) : (outgoing.get(a) ?? [])
+      const refsB = mode === 'incoming' ? (incoming.get(b) ?? []) : (outgoing.get(b) ?? [])
       const avgA =
         refsA.length > 0
           ? refsA.reduce((acc, id) => acc + (position.get(id) ?? 0), 0) / refsA.length
-          : position.get(a) ?? 0
+          : (position.get(a) ?? 0)
       const avgB =
         refsB.length > 0
           ? refsB.reduce((acc, id) => acc + (position.get(id) ?? 0), 0) / refsB.length
-          : position.get(b) ?? 0
+          : (position.get(b) ?? 0)
       return avgA - avgB
     })
     layerNodes.set(layer, ids)
@@ -379,13 +381,13 @@ const layoutNodes = <N = unknown, E = unknown>(
   const separationFactor = 1 + clamp(objectiveWeights.nodeDistance * 0.06, 0, 0.35)
   const overlapFactor = 1 + clamp(objectiveWeights.nodeOverlap * 0.04, 0, 0.35)
   const layerGap = Math.round((opts.layerGap ?? 120) * compactFactor * separationFactor)
-  const nodeGap = Math.round((opts.nodeGap ?? 36) * compactFactor * separationFactor * overlapFactor)
+  const nodeGap = Math.round(
+    (opts.nodeGap ?? 36) * compactFactor * separationFactor * overlapFactor,
+  )
   const margin = opts.margin ?? 24
   const nodeSize = graph.nodes.map((n) => {
     const contentSize = estimateContentNodeSize(n, opts)
-    const width = opts.adaptNodeToContent
-      ? contentSize.width
-      : resolveSize(n, opts.nodeWidth, 220)
+    const width = opts.adaptNodeToContent ? contentSize.width : resolveSize(n, opts.nodeWidth, 220)
     const height = opts.adaptNodeToContent
       ? contentSize.height
       : resolveSize(n, opts.nodeHeight, 84)
@@ -533,8 +535,10 @@ const layoutNodes = <N = unknown, E = unknown>(
       }
       for (const other of nodesById.values()) {
         if (other.id === node.id) continue
-        const overlapX = Math.min(node.x + node.width, other.x + other.width) - Math.max(node.x, other.x)
-        const overlapY = Math.min(node.y + node.height, other.y + other.height) - Math.max(node.y, other.y)
+        const overlapX =
+          Math.min(node.x + node.width, other.x + other.width) - Math.max(node.x, other.x)
+        const overlapY =
+          Math.min(node.y + node.height, other.y + other.height) - Math.max(node.y, other.y)
         if (overlapX <= -repulsionGap || overlapY <= -repulsionGap) continue
         const ox = centerX - (other.x + other.width / 2)
         const oy = centerY - (other.y + other.height / 2)
@@ -560,10 +564,7 @@ const edgeAnchorPoints = <E = unknown>(
   const source = nodesById.get(edge.source)!
   const target = nodesById.get(edge.target)!
   const edgeData = (edge as { data?: { fromPort?: unknown; toPort?: unknown } }).data
-  const findPortAnchor = (
-    node: LayoutNode,
-    portNameRaw: unknown,
-  ): Point | null => {
+  const findPortAnchor = (node: LayoutNode, portNameRaw: unknown): Point | null => {
     const portName = typeof portNameRaw === 'string' ? portNameRaw.trim() : ''
     if (!portName) return null
     const nodeData = node.data as
@@ -586,7 +587,7 @@ const edgeAnchorPoints = <E = unknown>(
       y: node.y + node.height * rawYRatio,
     }
     const center = { x: node.x + node.width / 2, y: node.y + node.height / 2 }
-    const angle = ((-(nodeData?.instanceRotation ?? 0)) * Math.PI) / 180
+    const angle = (-(nodeData?.instanceRotation ?? 0) * Math.PI) / 180
     const cos = Math.cos(angle)
     const sin = Math.sin(angle)
     const dx = unrotated.x - center.x
@@ -684,7 +685,11 @@ const routeEdgeCandidates = (
       (r) => r.x <= corridorMaxX && r.x + r.width >= corridorMinX,
     )
     const topTrack =
-      Math.min(start.y, end.y, ...(corridorObstacles.length > 0 ? corridorObstacles.map((r) => r.y) : [])) -
+      Math.min(
+        start.y,
+        end.y,
+        ...(corridorObstacles.length > 0 ? corridorObstacles.map((r) => r.y) : []),
+      ) -
       28 -
       laneBias
     const bottomTrack =
@@ -715,7 +720,9 @@ const routeEdgeCandidates = (
       { x: bendOutX, y: end.y },
       end,
     ]
-    return [straight, elbow, simple, lateSplit, topPath, bottomPath].filter((p): p is Point[] => p !== null)
+    return [straight, elbow, simple, lateSplit, topPath, bottomPath].filter(
+      (p): p is Point[] => p !== null,
+    )
   }
 
   const midY = sy((start.y + end.y) / 2 + laneOffset)
@@ -731,7 +738,11 @@ const routeEdgeCandidates = (
     (r) => r.y <= corridorMaxY && r.y + r.height >= corridorMinY,
   )
   const leftTrack =
-    Math.min(start.x, end.x, ...(corridorObstacles.length > 0 ? corridorObstacles.map((r) => r.x) : [])) -
+    Math.min(
+      start.x,
+      end.x,
+      ...(corridorObstacles.length > 0 ? corridorObstacles.map((r) => r.x) : []),
+    ) -
     28 -
     laneBias
   const rightTrack =
@@ -762,7 +773,9 @@ const routeEdgeCandidates = (
     { x: end.x, y: bendOutY },
     end,
   ]
-  return [straight, elbow, simple, lateSplit, leftPath, rightPath].filter((p): p is Point[] => p !== null)
+  return [straight, elbow, simple, lateSplit, leftPath, rightPath].filter(
+    (p): p is Point[] => p !== null,
+  )
 }
 
 const emergencyDetourCandidates = (
@@ -778,7 +791,11 @@ const emergencyDetourCandidates = (
     const topTrack =
       Math.min(start.y, end.y, ...(obstacles.length > 0 ? obstacles.map((r) => r.y) : [])) - 42
     const bottomTrack =
-      Math.max(start.y, end.y, ...(obstacles.length > 0 ? obstacles.map((r) => r.y + r.height) : [])) + 42
+      Math.max(
+        start.y,
+        end.y,
+        ...(obstacles.length > 0 ? obstacles.map((r) => r.y + r.height) : []),
+      ) + 42
     const inX = sx(start.x + 18)
     const outX = sx(end.x - 18)
     const topTrackSnapped = sy(topTrack)
@@ -806,13 +823,21 @@ const emergencyDetourCandidates = (
   const leftTrack =
     Math.min(start.x, end.x, ...(obstacles.length > 0 ? obstacles.map((r) => r.x) : [])) - 42
   const rightTrack =
-    Math.max(start.x, end.x, ...(obstacles.length > 0 ? obstacles.map((r) => r.x + r.width) : [])) + 42
+    Math.max(start.x, end.x, ...(obstacles.length > 0 ? obstacles.map((r) => r.x + r.width) : [])) +
+    42
   const inY = sy(start.y + 18)
   const outY = sy(end.y - 18)
   const leftTrackSnapped = sx(leftTrack)
   const rightTrackSnapped = sx(rightTrack)
   return [
-    [start, { x: start.x, y: inY }, { x: leftTrackSnapped, y: inY }, { x: leftTrackSnapped, y: outY }, { x: end.x, y: outY }, end],
+    [
+      start,
+      { x: start.x, y: inY },
+      { x: leftTrackSnapped, y: inY },
+      { x: leftTrackSnapped, y: outY },
+      { x: end.x, y: outY },
+      end,
+    ],
     [
       start,
       { x: start.x, y: inY },
@@ -874,9 +899,10 @@ const portConsistencyPenalty = (
   end: Point,
   preferredLaneOffset: number,
 ): number => {
-  const preferred = direction === 'TB'
-    ? (start.y + end.y) / 2 + preferredLaneOffset
-    : (start.x + end.x) / 2 + preferredLaneOffset
+  const preferred =
+    direction === 'TB'
+      ? (start.y + end.y) / 2 + preferredLaneOffset
+      : (start.x + end.x) / 2 + preferredLaneOffset
   let closest = Number.POSITIVE_INFINITY
   for (let i = 0; i < points.length - 1; i += 1) {
     const a = points[i]!
@@ -895,18 +921,13 @@ const portConsistencyPenalty = (
   return closest
 }
 
-const earlyFanoutPenalty = (
-  points: Point[],
-  direction: 'TB' | 'LR',
-): number => {
+const earlyFanoutPenalty = (points: Point[], direction: 'TB' | 'LR'): number => {
   if (points.length < 2) return 0
   const start = points[0]!
   const end = points[points.length - 1]!
   const epsilon = 0.0001
 
-  const primaryDistance = direction === 'TB'
-    ? Math.abs(end.y - start.y)
-    : Math.abs(end.x - start.x)
+  const primaryDistance = direction === 'TB' ? Math.abs(end.y - start.y) : Math.abs(end.x - start.x)
   if (primaryDistance <= epsilon) return 0
 
   let splitDistance = primaryDistance
@@ -1100,7 +1121,9 @@ export const routeLayoutEdges = <N = unknown, E = unknown>(
         ? routedLengths.reduce((acc, item) => acc + item, 0) / routedLengths.length
         : length
     const bendsMean =
-      routedBends.length > 0 ? routedBends.reduce((acc, item) => acc + item, 0) / routedBends.length : bends
+      routedBends.length > 0
+        ? routedBends.reduce((acc, item) => acc + item, 0) / routedBends.length
+        : bends
 
     const edgeNodeOverlapPenalty = polylineHitsAnyRect(points, obstacles) ? 1 : 0
     let edgeEdgeOverlapPenalty = 0
@@ -1120,7 +1143,8 @@ export const routeLayoutEdges = <N = unknown, E = unknown>(
         const priorVertical = Math.abs(prior.segment.a.x - prior.segment.b.x) < 0.0001
         const priorHorizontal = Math.abs(prior.segment.a.y - prior.segment.b.y) < 0.0001
         if (segVertical && priorVertical) {
-          if (!rangesOverlap(segment.a.y, segment.b.y, prior.segment.a.y, prior.segment.b.y)) continue
+          if (!rangesOverlap(segment.a.y, segment.b.y, prior.segment.a.y, prior.segment.b.y))
+            continue
           const gap = Math.abs(segment.a.x - prior.segment.a.x)
           if (prior.type === (edge.type ?? '__default__')) {
             sameTypeCorridorBonus += Math.max(0, 1 - gap / 18)
@@ -1190,13 +1214,13 @@ export const routeLayoutEdges = <N = unknown, E = unknown>(
       points[points.length - 1]!,
       laneOffset,
     )
-    const manhattanFloor = Math.abs(points[points.length - 1]!.x - points[0]!.x) +
+    const manhattanFloor =
+      Math.abs(points[points.length - 1]!.x - points[0]!.x) +
       Math.abs(points[points.length - 1]!.y - points[0]!.y)
     const unnecessaryDetourPenalty = Math.max(0, length - manhattanFloor)
     const sourceFanout = outgoingCountBySource.get(edge.source) ?? 0
-    const fanoutPenalty = sourceFanout > 1
-      ? earlyFanoutPenalty(points, direction) * (sourceFanout - 1)
-      : 0
+    const fanoutPenalty =
+      sourceFanout > 1 ? earlyFanoutPenalty(points, direction) * (sourceFanout - 1) : 0
     const trunkScore = sharedTrunkScore(points, edge)
 
     return (
@@ -1224,13 +1248,16 @@ export const routeLayoutEdges = <N = unknown, E = unknown>(
   return edges.map((edge) => {
     const { start, end } = edgeAnchorPoints(edge, nodesById, direction)
     const edgeData = edge.data as { lockPreferredPath?: boolean } | undefined
-    const lockedPreferred = preferredEdgePoints(edge, start, end, edgeData?.lockPreferredPath === true)
+    const lockedPreferred = preferredEdgePoints(
+      edge,
+      start,
+      end,
+      edgeData?.lockPreferredPath === true,
+    )
     const edgeType = edge.type ?? '__default__'
     const laneOffset = laneOffsetByEdgeId.get(edge.id) ?? 0
     const sourceFanout = outgoingCountBySource.get(edge.source) ?? 1
-    const splitBias = sourceFanout > 1
-      ? clamp(0.56 + (sourceFanout - 2) * 0.05, 0.56, 0.78)
-      : 0.44
+    const splitBias = sourceFanout > 1 ? clamp(0.56 + (sourceFanout - 2) * 0.05, 0.56, 0.78) : 0.44
     const typeDelta = (edgeTypeOrder.get(edgeType) ?? 0) - typeCenter
     const gridOffsets = {
       enabled: routeOnGrid,
@@ -1248,7 +1275,15 @@ export const routeLayoutEdges = <N = unknown, E = unknown>(
       points = lockedPreferred
     } else {
       const preferredPoints = preferredEdgePoints(edge, start, end, false)
-      const candidates = routeEdgeCandidates(start, end, direction, laneOffset, obstacles, splitBias, gridOffsets)
+      const candidates = routeEdgeCandidates(
+        start,
+        end,
+        direction,
+        laneOffset,
+        obstacles,
+        splitBias,
+        gridOffsets,
+      )
       const emergency = emergencyDetourCandidates(start, end, direction, obstacles, gridOffsets)
       const allCandidates = [
         ...(preferredPoints ? [preferredPoints] : []),
@@ -1301,7 +1336,7 @@ export const routeLayoutEdges = <N = unknown, E = unknown>(
   })
 }
 
-const computeBounds = (nodes: LayoutNode[], edges: LayoutEdge[]) => {
+export const computeLayoutBounds = (nodes: LayoutNode[], edges: LayoutEdge[]) => {
   if (nodes.length === 0 && edges.length === 0) return { x: 0, y: 0, width: 1, height: 1 }
   const nodeLeft = nodes.length > 0 ? Math.min(...nodes.map((n) => n.x)) : Number.POSITIVE_INFINITY
   const nodeTop = nodes.length > 0 ? Math.min(...nodes.map((n) => n.y)) : Number.POSITIVE_INFINITY
@@ -1311,9 +1346,13 @@ const computeBounds = (nodes: LayoutNode[], edges: LayoutEdge[]) => {
     nodes.length > 0 ? Math.max(...nodes.map((n) => n.y + n.height)) : Number.NEGATIVE_INFINITY
   const edgePoints = edges.flatMap((edge) => edge.points)
   const edgeLeft =
-    edgePoints.length > 0 ? Math.min(...edgePoints.map((point) => point.x)) : Number.POSITIVE_INFINITY
+    edgePoints.length > 0
+      ? Math.min(...edgePoints.map((point) => point.x))
+      : Number.POSITIVE_INFINITY
   const edgeTop =
-    edgePoints.length > 0 ? Math.min(...edgePoints.map((point) => point.y)) : Number.POSITIVE_INFINITY
+    edgePoints.length > 0
+      ? Math.min(...edgePoints.map((point) => point.y))
+      : Number.POSITIVE_INFINITY
   const edgeRight =
     edgePoints.length > 0
       ? Math.max(...edgePoints.map((point) => point.x))
@@ -1335,10 +1374,60 @@ export const layoutGraph = <N = unknown, E = unknown>(
 ): LayoutGraph<N, E> => {
   const normalized = normalizeGraph(graph)
   const nodes = layoutNodes(normalized, options)
-  const edges = routeLayoutEdges<N, E>(nodes, normalized.edges, options)
+  const edges =
+    options.layoutMode === 'organic'
+      ? routeOrganicEdges<N, E>(nodes, normalized.edges)
+      : routeLayoutEdges<N, E>(nodes, normalized.edges, options)
   return {
     nodes,
     edges,
-    bounds: computeBounds(nodes, edges),
+    bounds: computeLayoutBounds(nodes, edges),
   }
+}
+
+const organicEdgeAnchor = (node: LayoutNode, toward: Point): Point => {
+  const center = { x: node.x + node.width / 2, y: node.y + node.height / 2 }
+  const dx = toward.x - center.x
+  const dy = toward.y - center.y
+  if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
+    return { x: node.x + node.width, y: center.y }
+  }
+  const scale =
+    1 /
+    Math.max(
+      Math.abs(dx) / Math.max(1, node.width / 2),
+      Math.abs(dy) / Math.max(1, node.height / 2),
+    )
+  return { x: center.x + dx * scale, y: center.y + dy * scale }
+}
+
+export const routeOrganicEdges = <N = unknown, E = unknown>(
+  nodes: LayoutNode<N>[],
+  edges: GraphData<N, E>['edges'],
+): LayoutEdge<E>[] => {
+  const nodesById = byId(nodes)
+  return edges.flatMap((edge) => {
+    const source = nodesById.get(edge.source)
+    const target = nodesById.get(edge.target)
+    if (!source || !target) return []
+    const sourceCenter = {
+      x: source.x + source.width / 2,
+      y: source.y + source.height / 2,
+    }
+    const targetCenter = {
+      x: target.x + target.width / 2,
+      y: target.y + target.height / 2,
+    }
+    const points = [
+      organicEdgeAnchor(source, targetCenter),
+      organicEdgeAnchor(target, sourceCenter),
+    ]
+    return [
+      {
+        ...edge,
+        points,
+        path: roundedPolylinePath(points, 0),
+      },
+    ]
+  })
 }

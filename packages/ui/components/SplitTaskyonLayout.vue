@@ -20,11 +20,13 @@ const props = withDefaults(
     persist?: boolean
     storageKeyPrefix?: string
     chatInitiallyCollapsed?: boolean
+    chatSize?: number
   }>(),
   {
     persist: false,
     storageKeyPrefix: 'SplitTaskyonView',
     chatInitiallyCollapsed: true,
+    chatSize: 30,
   },
 )
 
@@ -38,7 +40,7 @@ const layout = ref<DockNode>({
       type: 'leaf',
       showTabs: 'never',
       views: ['app'],
-      size: 70,
+      size: 100 - props.chatSize,
       activeViewIndex: 0,
     },
     {
@@ -47,7 +49,7 @@ const layout = ref<DockNode>({
       showTabs: 'never',
       views: ['chat'],
       keepAliveViews: ['chat'],
-      size: 30,
+      size: props.chatSize,
       activeViewIndex: 0,
       collapsed: props.chatInitiallyCollapsed,
     },

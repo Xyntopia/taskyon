@@ -52,7 +52,7 @@
         >
 
         <button
-          v-if="!hideTabClose && !isCollapsed"
+          v-if="!hideTabClose && !isCollapsed && !pinnedViews.includes(viewId)"
           class="dock-tab-close"
           type="button"
           :class="tabButtonClass"
@@ -82,6 +82,7 @@
           :parent-direction="node.direction"
           :hide-tab-add="hideTabAdd"
           :hide-tab-close="hideTabClose"
+          :pinned-views="pinnedViews"
           :tab-class="tabClass"
           :active-tab-class="activeTabClass"
           :tab-button-class="tabButtonClass"
@@ -249,6 +250,7 @@ const {
 
   hideTabClose = false,
   hideTabAdd = false,
+  pinnedViews = [],
 
   // these can be whatever you like – empty string / undefined / {}
   tabClass = '',
@@ -266,6 +268,8 @@ const {
   hideTabClose?: boolean
   /** Show the "+" add-tab button (default: true) */
   hideTabAdd?: boolean
+  /** View ids that remain present when other tabs are closable. */
+  pinnedViews?: string[]
 
   /** Extra CSS classes for easier styling from parent */
   tabClass?: string
@@ -722,7 +726,8 @@ const getSplitterSideToggleLabel = (splitterIndex: number, side: 'left' | 'right
 const getSplitterSideTitle = (splitterIndex: number, side: 'left' | 'right'): string => {
   const current = node.value
   if (current.type !== 'container' || !current.children || !current.direction) return ''
-  const target = side === 'left' ? current.children[splitterIndex] : current.children[splitterIndex + 1]
+  const target =
+    side === 'left' ? current.children[splitterIndex] : current.children[splitterIndex + 1]
   if (!target) return ''
   const collapsed = isNodeCollapsed(target)
   const axis =
@@ -746,9 +751,13 @@ const getSplitterSnapHintLabel = (splitterIndex: number): string => {
   const current = node.value
   if (current.type !== 'container' || !current.direction) return ''
   if (current.direction === 'row') {
-    return snapSide.value === 'left' ? 'Release to collapse left pane' : 'Release to collapse right pane'
+    return snapSide.value === 'left'
+      ? 'Release to collapse left pane'
+      : 'Release to collapse right pane'
   }
-  return snapSide.value === 'left' ? 'Release to collapse top pane' : 'Release to collapse bottom pane'
+  return snapSide.value === 'left'
+    ? 'Release to collapse top pane'
+    : 'Release to collapse bottom pane'
 }
 
 onUnmounted(() => {
