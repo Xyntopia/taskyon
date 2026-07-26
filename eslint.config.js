@@ -30,6 +30,7 @@ export default defineConfigWithVueTs(
       'packages/yatra',
       'packages/**/dist/**',
       'packages/**/pkg/**',
+      '**/.tmp/**',
       'packages/taskyon-vscode/media/webview.bundle.js',
       'packages/tycli/bin/*.cjs',
     ],

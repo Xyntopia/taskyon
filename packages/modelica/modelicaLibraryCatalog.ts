@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import bundledManifestJson from './modelica_libraries.json' with { type: 'json' }
 
 type ModelicaLibraryPreset = {
   id: string
@@ -97,11 +98,7 @@ const parseModelicaLibraryManifest = (raw: unknown): ModelicaLibraryManifest => 
   return { mirror_manifest_url: source.mirror_manifest_url, libraries }
 }
 
-const manifestModules = import.meta.glob<ModelicaLibraryManifest>('./modelica_libraries.json', {
-  eager: true,
-  import: 'default',
-})
-const bundledManifest = Object.values(manifestModules)[0] ?? { libraries: [] }
+const bundledManifest = parseModelicaLibraryManifest(bundledManifestJson)
 const activeManifest = ref<ModelicaLibraryManifest>(bundledManifest)
 const manifestLibraries = computed(() =>
   (activeManifest.value.libraries ?? []).filter((entry) => typeof entry?.name === 'string'),

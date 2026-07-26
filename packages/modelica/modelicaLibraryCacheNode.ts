@@ -34,6 +34,11 @@ const BUNDLED_MANIFEST_URL = new URL('./modelica_libraries.json', import.meta.ur
 const CACHE_DIR_NAME = 'modelica-libraries'
 const DEFAULT_LIBRARY_ID_PREFIX = 'ModelicaStandardLibrary-'
 
+export const resolveBundledRumocaWasmPath = (): string => {
+  const packageDir = dirname(fileURLToPath(import.meta.resolve('rumoca-full-web')))
+  return join(packageDir, 'rumoca_bind_wasm_bg.wasm')
+}
+
 const readOptionalString = (source: Record<string, unknown>, key: string): string => {
   const value = source[key]
   return typeof value === 'string' ? value.trim() : ''

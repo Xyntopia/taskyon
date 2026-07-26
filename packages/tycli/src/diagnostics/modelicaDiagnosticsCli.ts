@@ -1,12 +1,13 @@
 import * as ModelicaDiagnostics from '@taskyon/modelica/modelicaDiagnostics'
 import { runDiagnosticsTests, type TestRecord } from '@taskyon/common/modules/diagnosticsRunner'
-import { resolveCachedModelicaLibraryZipPath } from '@taskyon/modelica/modelicaLibraryCacheNode'
-import { createRequire } from 'node:module'
+import {
+  resolveBundledRumocaWasmPath,
+  resolveCachedModelicaLibraryZipPath,
+} from '@taskyon/modelica/modelicaLibraryCacheNode'
 import { readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 
-const sharedRequire = createRequire(new URL('../../../shared/package.json', import.meta.url))
-const rumocaWasmPath = sharedRequire.resolve('rumoca-full-web/rumoca_bind_wasm_bg.wasm')
+const rumocaWasmPath = resolveBundledRumocaWasmPath()
 const rumocaWasmUrl = pathToFileURL(rumocaWasmPath).href
 const mslReleaseZipUrl =
   'https://github.com/modelica/ModelicaStandardLibrary/archive/refs/tags/v4.1.0.zip'

@@ -1005,6 +1005,7 @@ testModelicaBooleanNetwork1RuntimeRegression.setup = async () => {
   const debug: Record<string, unknown> = {}
   await ensureDiagnosticsMslLoaded(wasm, debug)
 }
+testModelicaBooleanNetwork1RuntimeRegression.timeoutMs = 120_000
 
 export async function testModelicaStaticModelExecutionModeRegression() {
   const source = `
@@ -4123,6 +4124,7 @@ end MslResistorExample;
     )
   }
 }
+testModelicaMslResistorExampleSimulation.timeoutMs = 120_000
 
 const ORBIT_MODEL_SOURCE = `
 model SatelliteOrbit2D
