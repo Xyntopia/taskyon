@@ -106,9 +106,7 @@ export const workstationVisualizationHtml = `<!doctype html>
           </div>
         </section>\`
     }
-    window.addEventListener('message', event => {
-      if (event.data?.type === 'taskyon.design-result.v1') render(event.data.value)
-    })
+    connectDesignRenderer(render)
   </script>
 </body>
 </html>`

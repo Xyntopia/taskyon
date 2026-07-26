@@ -57,6 +57,7 @@ import {
 import { taskyonDocumentationTool } from '@taskyon/taskyon/tools/documentationTool'
 import { taskyonDocumentationManifest } from '@taskyon/taskyon/documentationManifest'
 import { createTaskyonBrowserCoreRuntime } from '@taskyon/runtime-browser'
+import { createStorageDagBackend } from '@taskyon/comp-dag/storageDagBackend'
 import { createTaskyonClient, taskyonGuiProtocol, taskyonProtocol } from '@taskyon/tyclient'
 import type { TaskyonGuiMessage } from '@taskyon/tyclient'
 import { createStandardEntryNodeTool } from '@taskyon/taskyon/tools/entryNode'
@@ -87,6 +88,7 @@ import {
   type TaskyonProfileSettingsInput,
 } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
+import { createDesignProjectStorage } from './designProjectStorage'
 import z from 'zod'
 
 /**
@@ -1244,7 +1246,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       kind: 'service',
       createService: (port) =>
         createPgLiteTaskManagerStorageService(port, getDatabase, (namespace) => {
-          if (!namespace.startsWith('dag/') && !namespace.startsWith('documentation/')) {
+          if (
+            !namespace.startsWith('dag/') &&
+            !namespace.startsWith('design-graphs/') &&
+            !namespace.startsWith('design-projects/') &&
+            !namespace.startsWith('documentation/')
+          ) {
             throw new Error(
               `No browser storage backend is configured for namespace "${namespace}".`,
             )
@@ -1270,6 +1277,14 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     { deep: true },
   )
   const storageClient = runtime.storageClient
+  const dagStorageBackend = createStorageDagBackend({
+    get: async (namespace, id) => (await storageClient.get({ namespace, id })).value,
+    set: async (namespace, id, value) => {
+      await storageClient.set({ namespace, id, value })
+    },
+  })
+  const { designProjectStore, registerDesignProject, listDesignProjects } =
+    createDesignProjectStorage(storageClient)
   const resourceFilesLoader = createTaskyonResourceFilesLoader(() =>
     taskyonClient.discovery.describe({}),
   )
@@ -1733,6 +1748,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     taskyonClient,
     documentationBases,
     documentationReady,
+    dagStorageBackend,
+    designProjectStore,
+    registerDesignProject,
+    listDesignProjects,
     setNewContentDraft,
     setContentDraftFromTask,
     allTools: computed(() => allTools.value),

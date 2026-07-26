@@ -166,6 +166,46 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         },
       },
       {
+        path: '/design',
+        redirect: '/design/ai-workstation/main',
+      },
+      {
+        path: '/design/:projectId/revision/:revisionId/:rootName/node/:nodeHash',
+        name: 'design-node-revision',
+        component: () => import('pages/taskyon/DesignNodePage.vue'),
+        meta: {
+          title: 'Design Graph Node',
+          description: 'Inspect one immutable node from an exact design revision.',
+        },
+      },
+      {
+        path: '/design/:projectId/:refName/:rootName/node/:nodeHash',
+        name: 'design-node',
+        component: () => import('pages/taskyon/DesignNodePage.vue'),
+        meta: {
+          title: 'Design Graph Node',
+          description: 'Inspect one immutable design-graph node.',
+        },
+      },
+      {
+        path: '/design/:projectId/revision/:revisionId',
+        name: 'design-workspace-revision',
+        component: () => import('pages/taskyon/DesignWorkspacePage.vue'),
+        meta: {
+          title: 'Design Workspace',
+          description: 'Evaluate an exact reproducible Taskyon design revision.',
+        },
+      },
+      {
+        path: '/design/:projectId/:refName?',
+        name: 'design-workspace',
+        component: () => import('pages/taskyon/DesignWorkspacePage.vue'),
+        meta: {
+          title: 'Design Workspace',
+          description: 'Evaluate and evolve a reproducible Taskyon design graph.',
+        },
+      },
+      {
         path: '/sql',
         component: () => import('pages/taskyon/SqlQueryPage.vue'),
         meta: {
@@ -217,7 +257,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
       },
       {
         path: '/dag-nodes',
-        component: () => import('@taskyon/shared/pages/DagNodeEditorPage.vue'),
+        component: () => import('@taskyon/ui/pages/DagNodeEditorPage.vue'),
         meta: {
           title: 'DAG Node Editor',
           description: 'Edit stored TypeScript DAG graph nodes.',

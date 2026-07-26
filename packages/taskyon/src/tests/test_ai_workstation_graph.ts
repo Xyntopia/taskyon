@@ -63,11 +63,13 @@ export const testAiWorkstationGraphEvaluatesStructuralConfigurations = async () 
     `Expected a feasible workstation, received ${JSON.stringify(best.recommendation)}`,
   )
   assert(
-    example.designSpace.inputs['requirements.budgetUsd']?.role === 'requirement',
+    example.designSpace.schemaVersion === 2 &&
+      example.designSpace.inputs['requirements.budgetUsd']?.role === 'requirement',
     'Expected budget to remain a requirement rather than an optimization variable',
   )
   assert(
-    example.designSpace.inputs.candidate?.domain.kind === 'structural',
+    example.designSpace.schemaVersion === 2 &&
+      example.designSpace.inputs.candidate?.domain.kind === 'structural',
     'Expected the candidate to own the structural design dimension',
   )
 

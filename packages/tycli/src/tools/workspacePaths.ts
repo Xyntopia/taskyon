@@ -3,8 +3,8 @@ import process from 'node:process'
 
 const normalizeRelativeDirectory = (value: string) => value.replace(/\\/g, '/').replace(/\/+$/, '')
 
-export const resolveWorkspacePath = (filePath: string) => {
-  const root = process.cwd()
+export const resolveWorkspacePath = (filePath: string, workspaceRoot = process.cwd()) => {
+  const root = resolve(workspaceRoot)
   const fullPath = resolve(root, filePath)
   const relativePath = relative(root, fullPath)
   if (relativePath.startsWith('..') || relativePath === '' || filePath.startsWith('/')) {

@@ -135,6 +135,16 @@
               </q-item-section>
             </q-item>
 
+            <q-item clickable to="/design" @click="close">
+              <q-item-section avatar>
+                <q-icon :name="matTune" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>Design App</q-item-label>
+                <q-item-label caption>Explore reproducible design graphs</q-item-label>
+              </q-item-section>
+            </q-item>
+
             <q-item clickable to="/modelica" @click="close">
               <q-item-section avatar>
                 <q-icon :name="matAccountTree" />
@@ -179,6 +189,7 @@ import {
   matHelpOutline,
   matMenu,
   matSearch,
+  matTune,
 } from '@quasar/extras/material-icons'
 import { mdiForum, mdiForumPlus } from '@quasar/extras/mdi-v6'
 import ResponsiveMenuDialogBtn from '@taskyon/ui/components/ResponsiveMenuDialogBtn.vue'

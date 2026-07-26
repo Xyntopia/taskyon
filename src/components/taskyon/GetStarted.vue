@@ -185,7 +185,7 @@
     <div class="frontpage-examples column items-center">
       <div class="frontpage-example-separator row items-center no-wrap">
         <span />
-        <p>Start with a guided design question</p>
+        <p>Start from a prepared design graph</p>
         <span />
       </div>
       <div class="frontpage-example-buttons row justify-center">
@@ -197,7 +197,9 @@
           unelevated
           :icon="example.icon"
           :label="example.label"
-          @click="startExample(example.prompt)"
+          :loading="startingProjectId === example.workspace.projectId"
+          :disable="startingProjectId !== null"
+          @click="startExample(example.workspace)"
         />
       </div>
     </div>
@@ -214,12 +216,17 @@ import {
   matSmartToy,
 } from '@quasar/extras/material-icons'
 import { useAppStateStore } from 'src/stores/appState'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import { prepareBundledDesignRevision } from 'src/modules/designWorkspaceRuntime'
 import CreateTaskButton from './CreateTaskButton.vue'
 import logoSvg from 'src/assets/taskyon_logo_complex_animated.svg?raw'
 import logoSvgStatic from 'src/assets/taskyon_logo_complex_static.svg?raw'
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 const state = useAppStateStore()
+const tystate = useTaskyonStore()
+const router = useRouter()
 const isTauriApp = process.env.CLIENT ? isTauri() : false
 const customSuggestions = computed(() => state.appConfiguration.chatSuggestions ?? [])
 
@@ -251,43 +258,53 @@ const examples = [
   {
     label: 'Local AI workstation',
     icon: matComputer,
-    prompt:
-      'I want to design a local AI workstation. Please start by asking me the most important questions about my budget, target models, power limits, noise constraints, and what I want to run locally.',
+    workspace: { projectId: 'ai-workstation' },
   },
   {
     label: 'Mission drone',
     icon: matRocketLaunch,
-    prompt:
-      'I want to design a mission drone. Please start by asking me the key questions about payload, flight time, range, environment, safety margins, and budget before proposing any components.',
+    workspace: { projectId: 'mission-drone' },
   },
   {
     label: 'Home battery system',
     icon: matBatteryChargingFull,
-    prompt:
-      'I want to plan a home battery or small energy system. Please start by asking me about my electricity usage, tariffs, solar, EV charging, backup needs, budget, and optimization goals.',
+    workspace: { projectId: 'home-battery' },
   },
   {
     label: 'Satellite',
     icon: matSatelliteAlt,
-    prompt:
-      'I want to design a satellite. Please start by asking me about the mission objective, target orbit, payload, mass and power budget, communications link, lifetime, launch vehicle constraints, and overall budget before proposing any subsystems.',
+    workspace: { projectId: 'satellite' },
   },
   {
     label: 'Autonomous Mars rover',
     icon: matSmartToy,
-    prompt:
-      'I want to design an autonomous Mars rover. Please start by asking me about the science goals, landing site and terrain, mission duration, mobility and autonomy requirements, instruments, power source, thermal and dust constraints, communications, and mass and budget limits before proposing any subsystems.',
+    workspace: { projectId: 'mars-rover' },
   },
 ] as const
 
 const activeStage = ref<(typeof stages)[number]['title'] | null>(null)
+const startingProjectId = ref<string | null>(null)
 
 function toggleStage(stage: (typeof stages)[number]['title']) {
   activeStage.value = activeStage.value === stage ? null : stage
 }
 
-function startExample(prompt: string) {
-  state.messageDraft = prompt
+async function startExample(workspace: { projectId: string }) {
+  startingProjectId.value = workspace.projectId
+  try {
+    const store = tystate.designProjectStore(workspace.projectId)
+    const revision = await prepareBundledDesignRevision({
+      projectId: workspace.projectId,
+      store: store.objects,
+      repository: store.repository,
+    })
+    await router.push({
+      name: 'design-workspace-revision',
+      params: { projectId: workspace.projectId, revisionId: revision.id },
+    })
+  } finally {
+    startingProjectId.value = null
+  }
 }
 </script>
 

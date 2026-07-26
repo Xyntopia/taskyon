@@ -40,14 +40,42 @@ function getTool(tools: Record<string, ToolBase | InternalTool>, name: string) {
  */
 export function createWithDefaults(schema: JSONSchema7Type | JSONSchema7) {
   const ajv = new Ajv({ useDefaults: true })
-
-  // Compile (or reuse) a validator that applies defaults
   const validate = ajv.compile(schema as object)
-
-  // Start from an empty object; AJV will inject defaults into it
-  const result = {}
+  const result = requiredObjectDefaults(schema)
   validate(result)
   return result
+}
+
+const cloneSchemaDefault = (value: JSONSchema7Type): JSONSchema7Type => {
+  if (Array.isArray(value)) return value.map(cloneSchemaDefault)
+  if (typeof value !== 'object' || value === null) return value
+  return Object.fromEntries(
+    Object.entries(value).map(([name, nestedValue]) => [name, cloneSchemaDefault(nestedValue)]),
+  )
+}
+
+function requiredObjectDefaults(schema: JSONSchema7Type | JSONSchema7): JSONSchema7Object {
+  if (typeof schema !== 'object' || schema === null || Array.isArray(schema)) return {}
+  const required = new Set(
+    Array.isArray(schema.required)
+      ? schema.required.filter((name): name is string => typeof name === 'string')
+      : [],
+  )
+  return Object.fromEntries(
+    Object.entries(schema.properties ?? {}).flatMap(([name, propertySchema]) => {
+      if (typeof propertySchema !== 'object' || propertySchema === null) return []
+      if (propertySchema.default !== undefined) {
+        return [[name, cloneSchemaDefault(propertySchema.default)]]
+      }
+      if (
+        required.has(name) &&
+        (propertySchema.type === 'object' || propertySchema.properties !== undefined)
+      ) {
+        return [[name, requiredObjectDefaults(propertySchema)]]
+      }
+      return []
+    }),
+  )
 }
 
 /*function generateToolSummary() {
