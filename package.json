@@ -76,6 +76,7 @@
     "tycli:prod": "yarn tycli:build && node packages/tycli/dist/cli.cjs",
     "tycli": "yarn workspace @taskyon/tycli dev",
     "test:e2e": "playwright test",
+    "test:e2e:online": "PLAYWRIGHT_REQUIRE_ONLINE=1 playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:discover": "playwright test --list",
     "test:e2e:ui": "yarn test:e2e:discover && playwright test --ui"

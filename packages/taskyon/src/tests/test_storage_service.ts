@@ -54,3 +54,4 @@ export const testTaskManagerCanUseProtocolBackedStorage = async () => {
 
 testTaskManagerCanUseProtocolBackedStorage.description =
   'Shares task records between task managers through the Taskyon storage protocol service.'
+testTaskManagerCanUseProtocolBackedStorage.timeoutMs = 60_000

@@ -1,7 +1,4 @@
 import { createDuplexChannel } from '@taskyon/common/modules/frpBus'
-import { mkdir } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { createTaskyonClient, processTasksDetailed } from '../api'
 import { tyCore } from '../core/init'
 import { callToolOverRpc, createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
@@ -10,6 +7,7 @@ import type { TaskyonMessage } from '../api/taskyonProtocol'
 import type { TaskNode } from '../types/taskNode'
 import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 import { createCryptoSession } from '../utils/cryptoSession'
+import { createPortableTestStorage } from '../testSupport/portableTestStorage'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -57,8 +55,7 @@ testRemoteFunctionBridgeHonorsToolTimeoutMs.description =
 testRemoteFunctionBridgeHonorsToolTimeoutMs.timeoutMs = 35_000
 
 export const testTyCoreStableTaskStreamSurvivesSessionSwitch = async () => {
-  const dataDir = join(tmpdir(), `taskyon-session-stream-${Date.now()}`)
-  await mkdir(dataDir, { recursive: true })
+  const storage = createPortableTestStorage()
   const ty = await tyCore(
     () => ({
       entryFunction: 'entryNode',
@@ -70,7 +67,10 @@ export const testTyCoreStableTaskStreamSurvivesSessionSwitch = async () => {
       }),
     {},
     undefined,
-    { indexTaskVectors: false, nodePgLiteDataDir: dataDir },
+    {
+      indexTaskVectors: false,
+      taskManagerStorageFactory: storage.taskManagerStorageFactory,
+    },
   )
 
   const waitForMessage = (message: string) =>
@@ -104,6 +104,7 @@ export const testTyCoreStableTaskStreamSurvivesSessionSwitch = async () => {
     await afterSwitch
   } finally {
     ty.workerStop('stable task stream diagnostic complete')
+    storage.destroy()
   }
 }
 
@@ -409,8 +410,7 @@ testRemoteFunctionBridgeAllowsExplicitExternalSecretContext.description =
   'Allows trusted external tool registrations to provide an explicit local secret context while keeping the default fail-closed.'
 
 export const testRemoteFunctionBridgeRegistersAndExecutesCodeTool = async () => {
-  const dataDir = join(tmpdir(), `taskyon-remote-code-tool-${Date.now()}`)
-  await mkdir(dataDir, { recursive: true })
+  const storage = createPortableTestStorage()
   const ty = await tyCore(
     () => ({
       entryFunction: 'entryNode',
@@ -422,7 +422,10 @@ export const testRemoteFunctionBridgeRegistersAndExecutesCodeTool = async () => 
       }),
     {},
     undefined,
-    { nodePgLiteDataDir: dataDir },
+    {
+      indexTaskVectors: false,
+      taskManagerStorageFactory: storage.taskManagerStorageFactory,
+    },
   )
   const codeTool = createTool({
     name: 'remoteCodeSecretEcho',
@@ -467,6 +470,8 @@ export const testRemoteFunctionBridgeRegistersAndExecutesCodeTool = async () => 
   )
 
   registration.destroy()
+  ty.workerStop('remote code tool diagnostic complete')
+  storage.destroy()
   const response =
     result.status === 'matched' && result.result.content.type === 'toolresult'
       ? result.result.content.data

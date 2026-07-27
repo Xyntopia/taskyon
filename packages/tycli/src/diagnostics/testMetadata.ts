@@ -2,6 +2,7 @@ export type DiagnosticsTestMetadata = {
   requiresAuth?: boolean
   requiresNetwork?: boolean
   requiresLargeTokens?: boolean
+  modelBased?: boolean
 }
 
 export type UnsupportedModuleFallback = {
@@ -15,6 +16,7 @@ export type UnsupportedModuleFallback = {
 export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = {
   testTimeQuestionConversationUsesClockTool: {
     requiresNetwork: true,
+    modelBased: true,
   },
   testTokenMinting: {
     requiresAuth: true,
@@ -53,30 +55,37 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
   testNodeDiscoveryThroughLocalRelay: {
     requiresNetwork: true,
   },
-  testEntryNodeRecoversFromMalformedToolArguments: {
+  testEntryNodeRecoversFromMalformedPythonToolCall: {
     requiresNetwork: true,
+    modelBased: true,
   },
   testEntryNodeWebsearchProducesHostedSearchUsage: {
     requiresNetwork: true,
+    modelBased: true,
   },
   testCliHelloWorldProducesAssistantResponse: {
     requiresNetwork: true,
+    modelBased: true,
   },
   testCliListsAndUsesAvailableTools: {
     requiresNetwork: true,
     requiresLargeTokens: true,
+    modelBased: true,
   },
   testCliDocumentationQuestionCompletesWithoutFatal: {
     requiresNetwork: true,
     requiresLargeTokens: true,
+    modelBased: true,
   },
   testCliTaskPlannerUsesContractedSequentialHandoffs: {
     requiresNetwork: true,
     requiresLargeTokens: true,
+    modelBased: true,
   },
   testCliAiWorkstationCreatesAndOptimizesDagGraph: {
     requiresNetwork: true,
     requiresLargeTokens: true,
+    modelBased: true,
   },
   testWebResearchPlannerEnablesBrowserSetupAndWebSearchByDefault: {
     requiresLargeTokens: true,
@@ -84,23 +93,8 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
   testTaskyonCliConversationUsesDocumentationTool: {
     requiresNetwork: true,
     requiresLargeTokens: true,
+    modelBased: true,
   },
 }
 
-export const unsupportedModuleFallbacks: Record<string, UnsupportedModuleFallback> = {
-  'test_taskyon.space_api.ts': {
-    reason:
-      'Skipped in the Node diagnostics harness: this module currently depends on TypeScript syntax/runtime paths that are not portable through Node strip-types alone.',
-    tests: [
-      { exportName: 'testTokenMinting' },
-      { exportName: 'testTokenMintClaims' },
-      { exportName: 'testTokenMintSecurity' },
-      { exportName: 'testTokenReturnAfterJwtExpButBeforeOms', experimental: true },
-      { exportName: 'testTokenReturnAfterOms', experimental: true },
-      { exportName: 'testSecureFetch', experimental: true },
-      { exportName: 'testTyProxy' },
-      { exportName: 'testTauriHttpPluginHttpsFetch' },
-      { exportName: 'testWasmHttpsTunne' },
-    ],
-  },
-}
+export const unsupportedModuleFallbacks: Record<string, UnsupportedModuleFallback> = {}

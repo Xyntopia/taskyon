@@ -1,6 +1,11 @@
 import { secureFetch } from '@taskyon/secure-tunnel'
 import { humanizeError } from '../utils/error'
-import { getTyJwtPublicKey, mintToken, returnToken, verifyServiceToken } from '../taskyon.space/taskyon.space_api'
+import {
+  getTyJwtPublicKey,
+  mintToken,
+  returnToken,
+  verifyServiceToken,
+} from '../taskyon.space/taskyon.space_api'
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
 import { sleep } from '../utils/asyncUtils'
 import { canUseTauriHttpPlugin, tauriHttpGetText } from '../utils/tauriHttpPlugin'
@@ -394,10 +399,7 @@ export const testTyProxy = async (ctx: { tyauth: string; isCypress?: boolean }) 
   let cypressNote: string | undefined
 
   try {
-    const err1 = await expectThrows(
-      async () => await fetch(testApiUrl2),
-      'No CORS error received!',
-    )
+    const err1 = await expectThrows(async () => await fetch(testApiUrl2), 'No CORS error received!')
     expectedCorsError =
       "Success: Error while downloading 'normal' browser based fetch, but expected" +
       humanizeError(err1)
@@ -559,5 +561,14 @@ export const testWasmHttpsTunne = async () => {
 
   return {
     success: true,
-  }
+}
+
 }*/
+
+testTokenMinting.requiresAuth = true
+testTokenMintClaims.requiresAuth = true
+testTokenMintSecurity.requiresAuth = true
+testTokenReturnAfterJwtExpButBeforeOms.requiresAuth = true
+testTokenReturnAfterOms.requiresAuth = true
+testSecureFetch.requiresAuth = true
+testTyProxy.requiresAuth = true

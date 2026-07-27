@@ -13,7 +13,7 @@ const toolWorkflowTimeoutMs = 450_000
 const onlineEnv = readOnlineEnv(process.cwd())
 
 test.describe('diagnostics page', () => {
-  test.skip(!onlineEnv, 'requires playwright.env.json with OpenAI and OpenRouter API keys')
+  test.skip(!onlineEnv, 'requires playwright.env.json with Taskyon, OpenAI, and OpenRouter keys')
   test.setTimeout(diagnosticsTimeoutMs + 30_000)
 
   test('runs browser diagnostics through the UI', async ({ page }) => {
@@ -48,8 +48,8 @@ test.describe('diagnostics page', () => {
 
     const okCount = diagnosticsText.match(/ok/gi)?.length ?? 0
     expect(okCount).toBeGreaterThan(10)
+    expect(diagnosticsText).toMatch(/failed tests: 0\/\d+/i)
     expect(diagnosticsText).not.toContain('status: ERROR')
-    expect(diagnosticsText).toMatch(/failed tests: 0\/\d+/)
   })
 
   test('plans separate tool tasks and opens the animated clock popup', async ({
@@ -99,7 +99,7 @@ test.describe('diagnostics page', () => {
     })
     const diagnosticsResult = dataCy(page, 'diagnostics-result')
     await expect(diagnosticsResult).toContainText('Test Taskyon Ui Lists And Uses Available Tools')
-    await expect(diagnosticsResult).toContainText('status: OK')
+    await expect(diagnosticsResult).toContainText('status: MODEL PASS')
     await expect(diagnosticsResult).toContainText('finished all tests!')
   })
 })

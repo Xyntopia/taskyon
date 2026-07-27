@@ -41,6 +41,11 @@ type Summary = {
   passed: number
   failed: number
   skipped: number
+  modelCapability: {
+    passed: number
+    missed: number
+    score: number | null
+  }
   durationMs: number
   options: {
     filter: string
@@ -55,6 +60,7 @@ type Summary = {
     name: string
     ok: boolean
     skipped: boolean
+    modelBased: boolean
     details?: unknown
     error?: unknown
   }>
@@ -172,7 +178,9 @@ function testDisplayName(name: string): string {
 }
 
 function exportedTestNames(source: string): string[] {
-  const matches = source.matchAll(/\bexport\s+const\s+(test[A-Za-z0-9_]+)/g)
+  const matches = source.matchAll(
+    /\bexport\s+(?:const|(?:async\s+)?function)\s+(test[A-Za-z0-9_]+)/g,
+  )
   return Array.from(matches, (match) => match[1]).filter((name): name is string => Boolean(name))
 }
 
@@ -349,6 +357,8 @@ function wrapTests(tests: TestRecord, opts: CliOptions): TestRecord {
       if (fn.description !== undefined) wrapped.description = fn.description
       if (fn.setup !== undefined) wrapped.setup = fn.setup
       if (fn.timeoutMs !== undefined) wrapped.timeoutMs = fn.timeoutMs
+      const modelBased = fn.modelBased ?? diagnosticsTestMetadata[testIdentifier(name)]?.modelBased
+      if (modelBased !== undefined) wrapped.modelBased = modelBased
       return [name, wrapped]
     }),
   )
@@ -363,6 +373,7 @@ function listTests(tests: TestRecord, experimentalTests: TestRecord) {
       metadata?.requiresNetwork ? 'network' : '',
       metadata?.requiresAuth ? 'auth' : '',
       metadata?.requiresLargeTokens ? 'large-tokens' : '',
+      metadata?.modelBased ? 'model-based' : '',
     ].filter(Boolean)
     const tagText = tags.length ? ` [${tags.join(', ')}]` : ''
     console.log(`${name}${tagText}`)
@@ -393,14 +404,14 @@ function formatResultLine(result: DiagnosticsRunResult): string {
       const details = result.details as WrappedSkippedResult
       return `[SKIP] ${result.name} - ${details.reason}`
     }
-    return `[PASS] ${result.name}`
+    return `[${result.modelBased ? 'MODEL PASS' : 'PASS'}] ${result.name}`
   }
   const error = result.error
   const errorText =
     typeof error === 'object' && error && 'message' in error
       ? toErrorMessage(error.message)
       : toErrorMessage(error)
-  return `[FAIL] ${result.name} - ${errorText}`
+  return `[${result.modelBased ? 'MODEL MISS' : 'FAIL'}] ${result.name} - ${errorText}`
 }
 
 function buildSummary(
@@ -412,8 +423,13 @@ function buildSummary(
   selectedModel?: string,
 ): Summary {
   const skipped = results.filter(isSkippedResult).length
-  const failed = results.filter((result) => !result.ok).length
-  const passed = results.filter((result) => result.ok && !isSkippedResult(result)).length
+  const modelResults = results.filter((result) => result.modelBased && !isSkippedResult(result))
+  const modelPassed = modelResults.filter((result) => result.ok).length
+  const modelMissed = modelResults.length - modelPassed
+  const failed = results.filter((result) => !result.ok && !result.modelBased).length
+  const passed = results.filter(
+    (result) => result.ok && !result.modelBased && !isSkippedResult(result),
+  ).length
 
   return {
     ok: failed === 0,
@@ -422,6 +438,11 @@ function buildSummary(
     passed,
     failed,
     skipped,
+    modelCapability: {
+      passed: modelPassed,
+      missed: modelMissed,
+      score: modelResults.length > 0 ? modelPassed / modelResults.length : null,
+    },
     durationMs,
     options: {
       filter: opts.filter,
@@ -436,6 +457,7 @@ function buildSummary(
       name: result.name,
       ok: result.ok,
       skipped: isSkippedResult(result),
+      modelBased: result.modelBased,
       details: result.details,
       error: result.error,
     })),
@@ -478,7 +500,10 @@ async function main() {
 
   if (opts.listOnly) {
     const defaultTests = filterTests(
-      filterLargeTokenTests(registry.tests, opts.includeLargeTokens),
+      filterLargeTokenTests(
+        { ...registry.tests, ...registry.modelBasedTests },
+        opts.includeLargeTokens,
+      ),
       opts.filter,
     )
     const experimentalTests = filterTests(registry.experimentalTests, opts.filter)
@@ -490,8 +515,8 @@ async function main() {
   }
 
   const selectedSource = opts.includeExperimental
-    ? { ...registry.tests, ...registry.experimentalTests }
-    : registry.tests
+    ? { ...registry.tests, ...registry.modelBasedTests, ...registry.experimentalTests }
+    : { ...registry.tests, ...registry.modelBasedTests }
   const filtered = filterTests(
     filterLargeTokenTests(selectedSource, opts.includeLargeTokens),
     opts.filter,
@@ -559,7 +584,7 @@ async function main() {
 
   console.log('')
   console.log(
-    `[tycli-diagnostics] completed in ${durationMs}ms: ${summary.passed} passed, ${summary.failed} failed, ${summary.skipped} skipped`,
+    `[tycli-diagnostics] completed in ${durationMs}ms: ${summary.passed} passed, ${summary.failed} failed, ${summary.skipped} skipped, model score ${summary.modelCapability.passed}/${summary.modelCapability.passed + summary.modelCapability.missed}`,
   )
   console.log('TYCLI_DIAGNOSTICS_SUMMARY_START')
   console.log(

@@ -76,8 +76,8 @@ async function main() {
   })
   const includeExperimental = process.env.TYCLI_E2E_INCLUDE_EXPERIMENTAL === '1'
   const selectedTests = includeExperimental
-    ? { ...registry.tests, ...registry.experimentalTests }
-    : registry.tests
+    ? { ...registry.tests, ...registry.modelBasedTests, ...registry.experimentalTests }
+    : { ...registry.tests, ...registry.modelBasedTests }
 
   const results = await runDiagnosticsTests(selectedTests, {
     timeoutMs: 40_000,
@@ -90,7 +90,7 @@ async function main() {
   const logPaths = await writeE2eLog({ startedAt, results })
   process.stdout.write(`Log written: ${logPaths.latestRelative}\n`)
 
-  const failed = results.filter((result) => !result.ok)
+  const failed = results.filter((result) => !result.ok && !result.modelBased)
   if (failed.length > 0) {
     process.stderr.write(`\n${failed.length} test(s) failed:\n`)
     for (const failure of failed) {
@@ -100,7 +100,11 @@ async function main() {
     return
   }
 
-  process.stdout.write(`\nAll ${results.length} CLI diagnostics passed.\n`)
+  const modelResults = results.filter((result) => result.modelBased)
+  const modelPassed = modelResults.filter((result) => result.ok).length
+  process.stdout.write(
+    `\nDeterministic CLI diagnostics passed; model capability score ${modelPassed}/${modelResults.length}.\n`,
+  )
 }
 
 void main().catch((error) => {

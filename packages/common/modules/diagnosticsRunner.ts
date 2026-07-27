@@ -18,6 +18,8 @@ export interface TaskyonTestFn {
   gui?: boolean
   experimental?: boolean
   requiresLargeTokens?: boolean
+  requiresAuth?: boolean
+  modelBased?: boolean
   helper?: boolean
   timeoutMs?: number
 }
@@ -28,6 +30,7 @@ export type DiagnosticsRegistry = {
   tests: TestRecord
   guiTests: TestRecord
   experimentalTests: TestRecord
+  modelBasedTests: TestRecord
   testsByFolder: Record<string, TestRecord>
   testsByFile: Record<string, TestRecord>
 }
@@ -46,6 +49,7 @@ export type DiagnosticsBuiltinTest = {
 export type DiagnosticsRunResult = {
   name: string
   ok: boolean
+  modelBased: boolean
   details?: unknown
   error?: unknown
 }
@@ -87,14 +91,24 @@ export function buildDiagnosticsRegistry(args: {
   const tests: TestRecord = {}
   const guiTests: TestRecord = {}
   const experimentalTests: TestRecord = {}
+  const modelBasedTests: TestRecord = {}
   const testsByFolder: Record<string, TestRecord> = {}
   const testsByFile: Record<string, TestRecord> = {}
+  const registeredSources = new Map<string, string>()
 
   const registerTest = (testName: string, func: TaskyonTestFn, sourcePath: string) => {
     const name = camelToNormal(String(testName))
     if ('helper' in func) return
+    const existingSource = registeredSources.get(name)
+    if (existingSource) {
+      throw new Error(
+        `Duplicate diagnostic name "${name}" from "${existingSource}" and "${sourcePath}"`,
+      )
+    }
+    registeredSources.set(name, sourcePath)
     if ('gui' in func) guiTests[name] = func
     else if ('experimental' in func) experimentalTests[name] = func
+    else if (func.modelBased) modelBasedTests[name] = func
     else tests[name] = func
 
     addToGroup(testsByFile, name, func, sourcePath)
@@ -117,6 +131,7 @@ export function buildDiagnosticsRegistry(args: {
     tests,
     guiTests,
     experimentalTests,
+    modelBasedTests,
     testsByFolder,
     testsByFile,
   }
@@ -177,16 +192,29 @@ export async function runDiagnosticsTests(
             }
           : undefined
       const testOpts: DiagnosticsTestContext | undefined = opts?.context ?? fallbackContext
-      if (typeof testFn.setup === 'function') {
+      const unavailable =
+        testFn.requiresAuth && !testOpts?.tyauth
+          ? {
+              skipped: true,
+              reason: 'Requires an authenticated Taskyon user session.',
+            }
+          : undefined
+      if (!unavailable && typeof testFn.setup === 'function') {
         await Promise.resolve(testFn.setup(testOpts))
       }
       const timeoutMs = testFn.timeoutMs ?? defaultTimeoutMs
       const run = () => Promise.resolve(testFn(testOpts))
-      const result = await withTimeout(name, timeoutMs, run)
+      const result = unavailable ?? (await withTimeout(name, timeoutMs, run))
+      const skipped =
+        typeof result === 'object' &&
+        result !== null &&
+        'skipped' in result &&
+        result.skipped === true
       out.push({
         name,
         ok: true,
-        details: details ? result : undefined,
+        modelBased: testFn.modelBased === true,
+        details: details || skipped ? result : undefined,
       })
       opts?.onResult?.(out[out.length - 1]!)
       opts?.onProgress?.({ phase: 'finish', test: name, ok: true })
@@ -198,6 +226,7 @@ export async function runDiagnosticsTests(
       out.push({
         name,
         ok: false,
+        modelBased: testFn.modelBased === true,
         error: normalizedError,
       })
       opts?.onResult?.(out[out.length - 1]!)

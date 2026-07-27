@@ -1,6 +1,3 @@
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { mkdir } from 'node:fs/promises'
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
 import { tyCore } from '../core/init'
 import { createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
@@ -10,8 +7,11 @@ import type { TaskNode } from '../types/taskNode'
 import { createStandardEntryNodeTool, normalizeEntryNodeSettings } from '../tools/entryNode'
 import { createDefaultTaskyonToolSetup } from '../tools'
 import { CLARIFICATION_TOOL_NAME } from '../tools/clarificationTool'
-import { buildLinkedTaskChain } from '../testSupport/onlineProviderSupport'
-import { resolveDiagnosticsRuntimeConfig } from '../testSupport/onlineProviderSupport'
+import { createPortableTestStorage } from '../testSupport/portableTestStorage'
+import {
+  buildLinkedTaskChain,
+  resolveDiagnosticsRuntimeConfig,
+} from '../testSupport/onlineProviderSupport'
 import { FunctionCall } from '../types/tools'
 import { humanizeError } from '../utils/error'
 
@@ -663,7 +663,7 @@ export const testEntryNodeDoesNotAskClarificationDuringErrorRecovery = async () 
   return { success: true }
 }
 
-export const testEntryNodeRecoversFromMalformedToolArguments = async (
+export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
   context?: DiagnosticsTestContext,
 ) => {
   if (!context?.providerKey) {
@@ -680,8 +680,7 @@ export const testEntryNodeRecoversFromMalformedToolArguments = async (
     }
   }
 
-  const dataDir = join(tmpdir(), `taskyon-entrynode-test-${Date.now()}`)
-  await mkdir(dataDir, { recursive: true })
+  const storage = createPortableTestStorage()
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
@@ -705,6 +704,12 @@ export const testEntryNodeRecoversFromMalformedToolArguments = async (
     }),
   })
   const defaultToolSetup = createDefaultTaskyonToolSetup()
+  const toolSetup = {
+    ...defaultToolSetup,
+    baseTools: defaultToolSetup.baseTools.filter(
+      (tool) => tool.name !== executePythonScriptTool.name,
+    ),
+  }
 
   const ty = await tyCore(
     () => runtimeConfig.settings,
@@ -721,13 +726,8 @@ export const testEntryNodeRecoversFromMalformedToolArguments = async (
     },
     undefined,
     {
-      toolSetup: {
-        ...defaultToolSetup,
-        baseTools: defaultToolSetup.baseTools.filter(
-          (tool) => tool.name !== executePythonScriptTool.name,
-        ),
-      },
-      nodePgLiteDataDir: dataDir,
+      toolSetup,
+      taskManagerStorageFactory: storage.taskManagerStorageFactory,
     },
   )
   const toolRpcExecutor = await registerToolRpcTools({
@@ -742,118 +742,123 @@ export const testEntryNodeRecoversFromMalformedToolArguments = async (
       }),
   })
 
-  const selectedApi = runtimeConfig.providerSettings.provider
-  const providerKey = context.providerKey
-  await ty.updateChatCompletionApiKey(selectedApi, providerKey)
+  try {
+    const selectedApi = runtimeConfig.providerSettings.provider
+    const providerKey = context.providerKey
+    await ty.updateChatCompletionApiKey(selectedApi, providerKey)
 
-  const observed: TaskNode[] = []
-  const byId = new Map<string, TaskNode>()
-  const finish = await new Promise<{ assistant: TaskNode; tasks: TaskNode[] }>(
-    (resolve, reject) => {
-      const timeout = setTimeout(() => {
-        unsubscribe()
-        reject(new Error('Timed out waiting for entry-node recovery flow'))
-      }, 180_000)
-      const unsubscribe = ty.port.receive((msg) => {
-        if (msg.type !== 'taskCreated' || !msg.task) return
-        const task = msg.task
-        observed.push(task)
-        byId.set(task.id, task)
-        if (task.role === 'assistant' && task.content.type === 'message') {
-          const text = String(task.content.data ?? '')
-          if (text.length > 0) {
-            clearTimeout(timeout)
-            unsubscribe()
-            resolve({ assistant: task, tasks: observed })
+    const observed: TaskNode[] = []
+    const byId = new Map<string, TaskNode>()
+    const finish = await new Promise<{ assistant: TaskNode; tasks: TaskNode[] }>(
+      (resolve, reject) => {
+        const timeout = setTimeout(() => {
+          unsubscribe()
+          reject(new Error('Timed out waiting for entry-node recovery flow'))
+        }, 180_000)
+        const unsubscribe = ty.port.receive((msg) => {
+          if (msg.type !== 'taskCreated' || !msg.task) return
+          const task = msg.task
+          observed.push(task)
+          byId.set(task.id, task)
+          if (task.role === 'assistant' && task.content.type === 'message') {
+            const text = String(task.content.data ?? '')
+            if (text.length > 0) {
+              clearTimeout(timeout)
+              unsubscribe()
+              resolve({ assistant: task, tasks: observed })
+            }
           }
-        }
-      })
-      void buildLinkedTaskChain([
-        {
-          role: 'user',
-          content: {
-            type: 'message',
-            data: [
-              'Use executePythonScript and do exactly this sequence:',
-              '1) First call it with wrong parameters: {"script":"print(\\"broken\\")"} so it fails.',
-              '2) Then recover from the error and call it correctly with {"code":"print(\\"recovered-ok\\")"}.',
-              '3) After successful execution, respond with a short assistant message.',
-            ].join('\n'),
+        })
+        void buildLinkedTaskChain([
+          {
+            role: 'user',
+            content: {
+              type: 'message',
+              data: [
+                'Use executePythonScript and do exactly this sequence:',
+                '1) First call it with wrong parameters: {"script":"print(\\"broken\\")"} so it fails.',
+                '2) Then recover and call it correctly with {"code":"print(\\"recovered-ok\\")"}.',
+                '3) After successful execution, respond with a short assistant message.',
+              ].join('\n'),
+            },
           },
-        },
-        toolCall({
-          name: 'entryNode',
-          arguments: {},
-        }),
-      ])
-        .then((tasks) =>
-          createTaskyonClient(ty.port).task.createChain({
-            execute: true,
-            show: false,
-            tasks,
+          toolCall({
+            name: 'entryNode',
+            arguments: {},
           }),
-        )
-        .catch(reject)
-    },
-  )
-
-  const pythonCalls = finish.tasks.filter(
-    (task) =>
-      task.content.type === 'functioncall' && task.content.data.name === 'executePythonScript',
-  )
-  const pythonToolResults = finish.tasks.filter((task) => {
-    if (task.content.type !== 'toolresult' || !task.parentID) return false
-    const parent = byId.get(task.parentID)
-    return (
-      parent?.content.type === 'functioncall' && parent.content.data.name === 'executePythonScript'
+        ])
+          .then((tasks) =>
+            createTaskyonClient(ty.port).task.createChain({
+              execute: true,
+              show: false,
+              tasks,
+            }),
+          )
+          .catch(reject)
+      },
     )
-  })
-  const errorTasks = finish.tasks.filter((task) => task.content.type === 'error')
-  const invalidArgumentsError = errorTasks.find((task) => {
-    const message = humanizeError(task.content.data)
-    return (
-      message.includes('Invalid arguments for tool "executePythonScript"') &&
-      message.includes("required property 'code'")
+
+    const pythonCalls = finish.tasks.filter(
+      (task) =>
+        task.content.type === 'functioncall' && task.content.data.name === 'executePythonScript',
     )
-  })
-  const successfulPythonResult = pythonToolResults.find((task) => {
-    const data = task.content.data as { ok?: unknown; stdout?: unknown }
-    return (
-      data?.ok === true && typeof data.stdout === 'string' && data.stdout.includes('recovered-ok')
+    const pythonToolResults = finish.tasks.filter((task) => {
+      if (task.content.type !== 'toolresult' || !task.parentID) return false
+      const parent = byId.get(task.parentID)
+      return (
+        parent?.content.type === 'functioncall' &&
+        parent.content.data.name === 'executePythonScript'
+      )
+    })
+    const errorTasks = finish.tasks.filter((task) => task.content.type === 'error')
+    const invalidArgumentsError = errorTasks.find((task) => {
+      const message = humanizeError(task.content.data)
+      return (
+        message.includes('Invalid arguments for tool "executePythonScript"') &&
+        message.includes("required property 'code'")
+      )
+    })
+    const successfulPythonResult = pythonToolResults.find((task) => {
+      const data = task.content.data as { ok?: unknown; stdout?: unknown }
+      return (
+        data.ok === true && typeof data.stdout === 'string' && data.stdout.includes('recovered-ok')
+      )
+    })
+
+    assert(
+      Boolean(invalidArgumentsError),
+      'Expected malformed executePythonScript arguments to be rejected before task creation',
     )
-  })
+    assert(pythonCalls.length === 1, 'Expected one corrected executePythonScript task call')
+    assert(
+      Boolean(successfulPythonResult),
+      'Expected successful executePythonScript toolresult with "recovered-ok"',
+    )
 
-  assert(
-    Boolean(invalidArgumentsError),
-    'Expected malformed executePythonScript arguments to be rejected before task creation',
-  )
-  assert(pythonCalls.length === 1, 'Expected one corrected executePythonScript task call')
-  assert(
-    Boolean(successfulPythonResult),
-    'Expected successful executePythonScript toolresult with "recovered-ok"',
-  )
-
-  toolRpcExecutor.destroy()
-  ty.workerStop('entry-node recovery diagnostic complete')
-
-  return {
-    success: true,
-    model: context.model,
-    selectedApi,
-    assistantMessage:
-      finish.assistant.content.type === 'message' ? finish.assistant.content.data : '',
-    counts: {
-      observedTasks: finish.tasks.length,
-      pythonCalls: pythonCalls.length,
-      pythonToolResults: pythonToolResults.length,
-      invalidArgumentErrors: invalidArgumentsError ? 1 : 0,
-    },
+    return {
+      success: true,
+      model: context.model,
+      selectedApi,
+      assistantMessage:
+        finish.assistant.content.type === 'message' ? finish.assistant.content.data : '',
+      counts: {
+        observedTasks: finish.tasks.length,
+        pythonCalls: pythonCalls.length,
+        pythonToolResults: pythonToolResults.length,
+        invalidArgumentErrors: invalidArgumentsError ? 1 : 0,
+      },
+    }
+  } finally {
+    toolRpcExecutor.destroy()
+    ty.workerStop('entry-node malformed Python recovery diagnostic complete')
+    storage.destroy()
   }
 }
 
-testEntryNodeRecoversFromMalformedToolArguments.description =
+testEntryNodeRecoversFromMalformedPythonToolCall.description =
   'EntryNode should recover from malformed executePythonScript parameters by retrying with corrected arguments.'
-testEntryNodeRecoversFromMalformedToolArguments.timeoutMs = 210_000
+testEntryNodeRecoversFromMalformedPythonToolCall.modelBased = true
+testEntryNodeRecoversFromMalformedPythonToolCall.timeoutMs = 210_000
 
 testEntryNodeDoesNotAskClarificationDuringErrorRecovery.description =
   'EntryNode should not ask human clarification questions while recovering from a tool error.'

@@ -609,4 +609,5 @@ export const testTimeQuestionConversationUsesClockTool = async (
 }
 testTimeQuestionConversationUsesClockTool.description =
   'Runs the exact UI-style initial Taskyon chain for a time question with the entry-node tool chooser forced on, then verifies the shortlist entryNode call, narrowed clock execution, and final assistant response without intermediate error returns.'
+testTimeQuestionConversationUsesClockTool.modelBased = true
 testTimeQuestionConversationUsesClockTool.timeoutMs = 30_000

@@ -7,6 +7,7 @@ import type { KeyString } from '@taskyon/taskyon'
 export const testModelId = 'google/gemini-2.5-flash-lite'
 
 const modelSelectLabel = 'Select LLM Model for answering/solving the task.'
+const onlineEnvFileName = 'playwright.env.json'
 const onlineEnvKeys = ['taskyon_key', 'openai_api_key', 'openrouter_api_key'] as const
 
 type OnlineEnv = Record<(typeof onlineEnvKeys)[number], KeyString>
@@ -35,12 +36,27 @@ export const dataCy = (page: Page | Locator, value: string): Locator =>
 export const dataCyMenu = (page: Page | Locator, value: string): Locator =>
   page.locator(`[data-cy="${value}"], [data-cy-menu="${value}"]`)
 
+export const expectTaskyonReady = async (page: Page) => {
+  await expect(page.locator('.create-tasks textarea')).toBeVisible()
+}
+
 export const readOnlineEnv = (projectRoot: string): OnlineEnv | undefined => {
-  const envFilePath = join(projectRoot, 'playwright.env.json')
-  if (!existsSync(envFilePath)) return undefined
+  const envFilePath = join(projectRoot, onlineEnvFileName)
+  if (!existsSync(envFilePath)) {
+    if (process.env.PLAYWRIGHT_REQUIRE_ONLINE === '1') {
+      throw new Error(`${onlineEnvFileName} is required for online Playwright tests.`)
+    }
+    return undefined
+  }
 
   const parsed = JSON.parse(readFileSync(envFilePath, 'utf8')) as unknown
-  return parseOnlineEnv(parsed)
+  const onlineEnv = parseOnlineEnv(parsed)
+  if (!onlineEnv) {
+    throw new Error(
+      `${onlineEnvFileName} must contain non-empty values for: ${onlineEnvKeys.join(', ')}.`,
+    )
+  }
+  return onlineEnv
 }
 
 const isToggleOn = async (toggle: Locator): Promise<boolean> => {

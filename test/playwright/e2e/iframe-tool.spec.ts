@@ -25,7 +25,11 @@ test.describe('iframe integration', () => {
 
               const request = indexedDB.deleteDatabase(db.name)
               request.onerror = () =>
-                reject(request.error ?? new Error(`Could not delete IndexedDB database ${db.name}`))
+                reject(
+                  request.error instanceof Error
+                    ? request.error
+                    : new Error(`Could not delete IndexedDB database ${db.name}.`),
+                )
               request.onsuccess = () => resolve()
               request.onblocked = () => resolve()
             }),

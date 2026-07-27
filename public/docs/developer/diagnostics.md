@@ -4,6 +4,7 @@ Use focused checks for the boundary being changed.
 
 ```bash
 yarn test:e2e
+yarn test:e2e:online
 yarn tycli:typecheck
 yarn tycli:diagnostics:list
 yarn tycli:diagnostics --filter documentation --details
@@ -37,7 +38,15 @@ Quasar server, and the `xvfb` variants support Linux environments without a desk
 
 Playwright writes reports to `playwright-report/` and run artifacts to `test-results/`. Use
 `yarn test:e2e:ui` for an interactive runner and `yarn test:e2e:headed` when a visible browser is
-enough.
+enough. External-service tests read `playwright.env.json`. Use `yarn test:e2e:online` when those
+tests are required: the command fails instead of skipping them when the credential file is absent
+or incomplete.
+
+Diagnostics distinguish deterministic checks from model-based capability evaluations. A
+model-based evaluation keeps its full assertions, but a miss is reported as `MODEL MISS` and
+contributes to the selected model's capability score rather than failing the diagnostics process.
+Mark these exported test functions with `testFunction.modelBased = true`; do not use this marker
+for deterministic runtime, protocol, storage, or integration failures.
 
 For `tycli`, list and filter diagnostics before running broad sets:
 

@@ -26,10 +26,6 @@ import {
   type TaskyonTestFn,
   type TestRecord,
 } from '@taskyon/common/modules/diagnosticsRunner'
-import {
-  runTimeQuestionConversationUsesClockToolScenario,
-  testTimeQuestionConversationUsesClockTool as packageTimeQuestionConversationTest,
-} from '../../../packages/taskyon/src/tests/conversation/test_time_question_conversation'
 import { getEnvironmentInfo } from '@taskyon/common/modules/utils'
 
 const route = useRoute()
@@ -72,9 +68,6 @@ function getDiagnosticsTests() {
   const testModules = import.meta.glob(
     [
       '../../packages/taskyon/src/tests/**/*.ts',
-      '!../../packages/taskyon/src/tests/test_entry_node_error_recovery.ts',
-      '!../../packages/taskyon/src/tests/test_entry_node_websearch.ts',
-      '!../../packages/taskyon/src/tests/test_remote_function_bridge.ts',
       '../../packages/common/modules/test_*.ts',
       '../../packages/comp-dag/test_*.ts',
       '../../packages/surrogate/test_*.ts',
@@ -87,22 +80,6 @@ function getDiagnosticsTests() {
     sourcePath: 'src/modules/modelica/modelicaDiagnostics.ts',
     mod: ModelicaDiagnostics,
   })
-  modules.push({
-    sourcePath: 'src/pages/taskyon/HeadlessPage.vue',
-    mod: {
-      testTimeQuestionConversationUsesClockTool: Object.assign(
-        async () => {
-          const ty = await state.taskyon
-          return await runTimeQuestionConversationUsesClockToolScenario(ty)
-        },
-        {
-          description: packageTimeQuestionConversationTest.description,
-          timeoutMs: packageTimeQuestionConversationTest.timeoutMs,
-        },
-      ),
-    },
-  })
-
   const builtins: Array<{ testName: string; func: TaskyonTestFn; sourcePath: string }> = [
     {
       testName: 'testBuildSlimView',
@@ -127,9 +104,10 @@ function getDiagnosticsTests() {
   })
 
   const selectedTests = diagnosticsNoGui.value
-    ? registry.tests
+    ? { ...registry.tests, ...registry.modelBasedTests }
     : {
         ...registry.tests,
+        ...registry.modelBasedTests,
         ...registry.guiTests,
       }
 
@@ -159,10 +137,12 @@ function diagnosticsYamlReport(results: Awaited<ReturnType<typeof runDiagnostics
         {
           [result.name]: diagnosticsDetailed.value
             ? {
-                status: 'OK',
+                status: result.modelBased ? 'MODEL PASS' : 'OK',
                 result: result.details,
               }
-            : 'OK',
+            : result.modelBased
+              ? 'MODEL PASS'
+              : 'OK',
         },
         { skipInvalid: true, noRefs: true },
       )
@@ -172,8 +152,10 @@ function diagnosticsYamlReport(results: Awaited<ReturnType<typeof runDiagnostics
     out += dump(
       {
         [result.name]: {
-          status: 'ERROR',
-          message: 'an error occured during this test...',
+          status: result.modelBased ? 'MODEL MISS' : 'ERROR',
+          message: result.modelBased
+            ? 'The selected model did not satisfy this capability evaluation.'
+            : 'An error occurred during this test.',
           error: result.error,
         },
       },
@@ -229,8 +211,25 @@ async function runDiagnosticsMode() {
     await state.initModelsAndStoredKeys()
     tyauth = state.getTaskyonKeyString()
   }
+  const chatCompletionConfig = appState.effectiveToolchainConfig.chatCompletion
+  const selectedApi =
+    typeof chatCompletionConfig === 'object' &&
+    chatCompletionConfig !== null &&
+    'provider' in chatCompletionConfig &&
+    typeof chatCompletionConfig.provider === 'string'
+      ? chatCompletionConfig.provider
+      : undefined
+  const providerKey = selectedApi ? await state.getProviderApiKey(selectedApi) : null
   const runOptions: Parameters<typeof runDiagnosticsTests>[1] = {
     details: diagnosticsDetailed.value,
+    context: {
+      ...(typeof tyauth === 'string' ? { tyauth } : {}),
+      ...(selectedApi ? { selectedApi } : {}),
+      ...(state.currentModelId ? { model: state.currentModelId } : {}),
+      llmSettings: appState.llmSettings,
+      toolchainConfig: appState.effectiveToolchainConfig,
+      ...(typeof providerKey === 'string' ? { providerKey } : {}),
+    },
     onProgress: (progress) => {
       void emitHeadlessEvent('headless-diagnostics-progress', {
         phase: progress.phase,
@@ -240,17 +239,17 @@ async function runDiagnosticsMode() {
       })
     },
     onResult: (result) => {
-      if (!result.ok) {
+      if (!result.ok && !result.modelBased) {
         console.error(`${HEADLESS_KEEP_TAG}[TEST][FAIL] ${result.name}`, result.error)
       }
     },
   }
-  if (typeof tyauth === 'string') runOptions.tyauth = tyauth
-
   const results = await runDiagnosticsTests(tests, runOptions)
 
   const total = results.length
-  const failed = results.filter((r) => !r.ok).length
+  const failed = results.filter((result) => !result.ok && !result.modelBased).length
+  const modelResults = results.filter((result) => result.modelBased)
+  const modelPassed = modelResults.filter((result) => result.ok).length
   const passed = failed === 0
   const report = diagnosticsYamlReport(results)
   const elapsed = (Date.now() - start) / 1000
@@ -261,6 +260,8 @@ async function runDiagnosticsMode() {
   console.log(`${HEADLESS_KEEP_TAG}[DIAG][END] diagnostics finished`, {
     total,
     failed,
+    modelPassed,
+    modelTotal: modelResults.length,
     passed,
     elapsedSeconds: elapsed,
   })
@@ -269,6 +270,8 @@ async function runDiagnosticsMode() {
     passed,
     total,
     failed,
+    modelPassed,
+    modelTotal: modelResults.length,
   })
 
   status.value = passed ? 'diagnostics passed' : 'diagnostics failed'

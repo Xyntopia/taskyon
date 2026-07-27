@@ -1,25 +1,20 @@
-import type { KeyString, OpenAIMessage, partialTaskDraft, TaskNode } from '@taskyon/taskyon'
+import type { KeyString, partialTaskDraft } from '@taskyon/taskyon'
 import {
   base64ToPublixX25519,
   chat2Md,
   convertTaskNodesToOpenAIChat,
   craeteToolJsonSchema,
   createCryptoSession,
-  createDeepTransformer,
   createTaskNode,
   cryptoKeyToBase64,
   cryptoKeyToUint8,
   decompressEncryptedObject,
-  deepCloneWJson,
   encryptCompressObject,
   generateAssymetricKeyDeriver,
   generateRandomEncryptionKey,
   generateSeedPhrase,
   getTextFile,
-  jsonSchemaToYamlString,
-  normalizeFalsyValues,
   OAUTH_PROVIDERS,
-  removeKeys,
   safeYamlDump,
   sleep,
   summarizeTools,
@@ -40,10 +35,8 @@ import {
 import { authenticateWithPopup } from '@taskyon/taskyon/browser'
 import { getDatabase } from '@taskyon/taskyon/db'
 import { buildPmtilesUrlCandidates } from '@taskyon/common/modules/pmtilesUtils'
-import { reconcileWithDefaults } from '@taskyon/common/modules/utils'
 import { parseTaskyonMapWidgetState } from '@taskyon/ui/gis/taskyonMapWidget'
 import { until } from '@vueuse/core'
-import type { JSONSchema7 } from 'json-schema'
 import {
   buildTaskyonProfileSectionResetPatch,
   validateTaskyonProfileSettingsPatch,
@@ -234,192 +227,6 @@ export function testTaskyonProfileSettingsHelpers() {
 }
 testTaskyonProfileSettingsHelpers.description =
   'Validates Taskyon profile patch/reset helpers for appConfiguration, llmSettings, and toolchainProfiles.'
-
-function structurallyEqual(left: unknown, right: unknown): boolean {
-  if (Object.is(left, right)) return true
-  if (Array.isArray(left) || Array.isArray(right)) {
-    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false
-    return left.every((value, index) => structurallyEqual(value, right[index]))
-  }
-  if (
-    !left ||
-    !right ||
-    typeof left !== 'object' ||
-    typeof right !== 'object' ||
-    Object.getPrototypeOf(left) !== Object.prototype ||
-    Object.getPrototypeOf(right) !== Object.prototype
-  ) {
-    return false
-  }
-
-  const leftRecord = left as Record<string, unknown>
-  const rightRecord = right as Record<string, unknown>
-  const leftKeys = Object.keys(leftRecord)
-  const rightKeys = Object.keys(rightRecord)
-  if (leftKeys.length !== rightKeys.length) return false
-  return leftKeys.every(
-    (key) =>
-      Object.hasOwn(rightRecord, key) && structurallyEqual(leftRecord[key], rightRecord[key]),
-  )
-}
-
-export function testReconcileWithDefaults() {
-  const diagnostics: Array<{
-    name: string
-    status: 'PASS' | 'FAIL'
-    expected?: unknown
-    actual?: unknown
-  }> = []
-  const summary = { total: 0, passed: 0, failed: 0 }
-
-  const runTest = (
-    name: string,
-    stored: unknown,
-    defaults: unknown,
-    expected: unknown,
-    options?: Parameters<typeof reconcileWithDefaults>[2],
-  ) => {
-    summary.total += 1
-    const actual = reconcileWithDefaults(stored, defaults, options)
-    const passed = structurallyEqual(actual, expected)
-
-    if (passed) {
-      summary.passed += 1
-      diagnostics.push({ name, status: 'PASS' })
-    } else {
-      summary.failed += 1
-      diagnostics.push({ name, status: 'FAIL', expected, actual })
-    }
-
-    assert(
-      passed,
-      `FAIL: ${name} | Expected: ${JSON.stringify(expected)} | Got: ${JSON.stringify(actual)}`,
-    )
-  }
-
-  const defaultSettings = {
-    theme: 'dark',
-    fontSize: 14,
-    features: {
-      beta: false,
-      notifications: true,
-    },
-    tags: ['default-tag'],
-    user: null,
-  }
-
-  runTest(
-    'Should keep stored values when types match',
-    { theme: 'light', features: { beta: true, notifications: true } },
-    defaultSettings,
-    {
-      theme: 'light',
-      fontSize: 14,
-      features: { beta: true, notifications: true },
-      tags: ['default-tag'],
-      user: null,
-    },
-  )
-
-  runTest('Should use default value on type mismatch', { fontSize: '16' }, defaultSettings, {
-    theme: 'dark',
-    fontSize: 14,
-    features: { beta: false, notifications: true },
-    tags: ['default-tag'],
-    user: null,
-  })
-
-  runTest(
-    'Should correctly handle null type mismatch',
-    { user: { name: 'test' } },
-    defaultSettings,
-    {
-      theme: 'dark',
-      fontSize: 14,
-      features: { beta: false, notifications: true },
-      tags: ['default-tag'],
-      user: null,
-    },
-  )
-
-  runTest(
-    'Should drop unknown keys by default',
-    { theme: 'light', unknownKey: 'drop' },
-    defaultSettings,
-    {
-      theme: 'light',
-      fontSize: 14,
-      features: { beta: false, notifications: true },
-      tags: ['default-tag'],
-      user: null,
-    },
-  )
-
-  runTest(
-    'Should preserve unknown keys when requested',
-    {
-      theme: 'light',
-      unknownKey: 'keep',
-      features: { beta: true, extraFeature: 'also-kept' },
-    },
-    defaultSettings,
-    {
-      theme: 'light',
-      fontSize: 14,
-      features: { beta: true, notifications: true, extraFeature: 'also-kept' },
-      tags: ['default-tag'],
-      user: null,
-      unknownKey: 'keep',
-    },
-    { preserveUnknownKeys: true },
-  )
-
-  runTest(
-    'Should reconcile array elements based on default template',
-    { tags: ['user-tag', 123, 'another-tag'] },
-    { tags: ['string-template'] },
-    { tags: ['user-tag', 'string-template', 'another-tag'] },
-  )
-
-  runTest(
-    'Should accept stored array if default array is empty',
-    { list: [1, 2, 'a'] },
-    { list: [] },
-    {
-      list: [1, 2, 'a'],
-    },
-  )
-
-  runTest(
-    'Should keep value when it passes validation',
-    { theme: 'light' },
-    defaultSettings,
-    {
-      theme: 'light',
-      fontSize: 14,
-      features: { beta: false, notifications: true },
-      tags: ['default-tag'],
-      user: null,
-    },
-    { validators: { theme: (value) => value === 'light' || value === 'dark' } },
-  )
-
-  runTest(
-    'Should use default value when validation fails',
-    { theme: 'blue' },
-    defaultSettings,
-    {
-      theme: 'dark',
-      fontSize: 14,
-      features: { beta: false, notifications: true },
-      tags: ['default-tag'],
-      user: null,
-    },
-    { validators: { theme: (value) => value === 'light' || value === 'dark' } },
-  )
-
-  return { summary, diagnostics }
-}
 
 // Define types for the stored crypto key data
 type StoredCryptoKeyPair =
@@ -1569,63 +1376,6 @@ export async function testGdriveUpload() {
 }
 testGdriveUpload.gui = true
 
-export function testCreateDeepTansformer() {
-  const errors: unknown[] = []
-  function assert(cond: unknown, msg: string) {
-    if (!cond) errors.push(msg)
-  }
-
-  // Test 1: key-normalization
-  const robustKeys = createDeepTransformer({
-    keyFn: (k) =>
-      String(k)
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, ''),
-  })
-  const input1 = {
-    'Foo-Bar': 1,
-    Nested_Key: { 'Inner Map': 2 },
-    arr: [{ 'X-Y': 3 }],
-  }
-  const expected1 = {
-    foobar: 1,
-    nestedkey: { innermap: 2 },
-    arr: [{ xy: 3 }],
-  }
-  const output1 = robustKeys(input1)
-  assert(
-    JSON.stringify(output1) === JSON.stringify(expected1),
-    `robustKeys failed:\n  expected ${JSON.stringify(expected1)}\n  got      ${JSON.stringify(output1)}`,
-  )
-
-  // Test 2: falsy-value normalization
-  const normalize = normalizeFalsyValues()
-  const input2 = {
-    a: 'no',
-    b: 'yes',
-    c: 0,
-    d: 'OK',
-    nested: ['n/a', 'Y'],
-  }
-  const expected2 = {
-    a: false,
-    b: 'yes',
-    c: false,
-    d: 'OK',
-    nested: [false, 'Y'],
-  }
-  const output2 = normalize(input2)
-  assert(
-    JSON.stringify(output2) === JSON.stringify(expected2),
-    `normalizeFalsyValues failed:\n  expected ${JSON.stringify(expected2)}\n  got      ${JSON.stringify(output2)}`,
-  )
-
-  return {
-    success: errors.length === 0,
-    errors,
-  }
-}
-
 export const testChatCompletionWebSearch = async () => {
   console.log('do a websearch using chatCompletion')
 
@@ -1642,7 +1392,10 @@ export const testChatCompletionWebSearch = async () => {
     ],
   ]
 
-  const result = await runTasks(tystate.api)(taskList, 'message', { timeoutMs: 50000 })
+  const result = await runTasks(tystate.api)(taskList, 'message', {
+    timeoutMs: 50000,
+    display: 'background',
+  })
 
   const webSearchResponse = result.content.data
 
@@ -1653,6 +1406,7 @@ export const testChatCompletionWebSearch = async () => {
   }
 }
 testChatCompletionWebSearch.description = 'test taskyon chatCompletion websearch'
+testChatCompletionWebSearch.modelBased = true
 
 export const testChatCompletion = async () => {
   const taskResult = await runTasks(tystate.api)(
@@ -1706,6 +1460,7 @@ export const testChatCompletion = async () => {
     structuredResponse: taskResult.content.data,
   }
 }
+testChatCompletion.modelBased = true
 
 export const testChatCompletionTaskyonProxyMint = async () => {
   const prevSelectedProfile = state.selectedToolchainProfile
@@ -1773,6 +1528,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
 
     const result = await runTasks(tystate.api)(taskList, ['message', 'return'], {
       timeoutMs: 50000,
+      display: 'background',
     })
     assert(
       result.content.type === 'message',
@@ -1810,6 +1566,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
     state.setSelectedToolchainProfile(prevSelectedProfile ?? 'taskyon')
   }
 }
+testChatCompletionTaskyonProxyMint.modelBased = true
 testChatCompletionTaskyonProxyMint.description =
   'test chatCompletion via delegated taskyon SSR proxy backend'
 
@@ -1891,6 +1648,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
 
     const result = await runTasks(tystate.api)(taskList, ['message', 'return'], {
       timeoutMs: 50000,
+      display: 'background',
     })
     assert(
       result.content.type === 'message',
@@ -1958,6 +1716,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
 }
 testChatCompletionTaskyonProxyMintSupabaseCosts.description =
   'test delegated proxy chatCompletion and verify completion costs are attached as task metadata'
+testChatCompletionTaskyonProxyMintSupabaseCosts.modelBased = true
 
 export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: string }) => {
   const ty = await tystate.taskyon
@@ -1991,6 +1750,7 @@ export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: st
 
     const result = await runTasks(tystate.api)(taskList, ['message', 'return'], {
       timeoutMs: 50000,
+      display: 'background',
     })
     assert(
       result.content.type === 'message',
@@ -2040,6 +1800,7 @@ export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: st
 }
 testChatCompletionTaskyonProxyMetadata.description =
   'test delegated proxy chatCompletion and verify metadata exists on the resulting task using provided tyauth'
+testChatCompletionTaskyonProxyMetadata.modelBased = true
 
 export const testFileUpload = async () => {
   const testPdf = await urlToFile('/tests/product_specs_long.pdf')
@@ -2077,7 +1838,10 @@ export const testFileUpload = async () => {
     console.log('upload file test received message', msg)
   })
 
-  const taskResult = await runTasks(tystate.api)([tasks], 'structured', { timeoutMs: 50000 })
+  const taskResult = await runTasks(tystate.api)([tasks], 'structured', {
+    timeoutMs: 50000,
+    display: 'background',
+  })
 
   const res = taskResult.content.data as { weight?: string; price?: string }
 
@@ -2091,6 +1855,7 @@ export const testFileUpload = async () => {
     res,
   }
 }
+testFileUpload.modelBased = true
 
 export const testMetaDb = async () => {
   const ty = await tystate.taskyon
@@ -2164,47 +1929,6 @@ testLibp2pBrowserMessageExchange.experimental = true
 testLibp2pBrowserMessageExchange.description =
   'Starts a browser libp2p node and validates two-way browser message exchange via pubsub.'
 
-const mockTask: TaskNode = {
-  role: 'assistant',
-  id: 'test',
-  content: { type: 'message', data: 'Sample content for task node' },
-}
-
-const mockChatMessages: OpenAIMessage[] = [
-  { role: 'user', content: 'Hello, how are you?' },
-  { role: 'assistant', content: "I'm good, thank you!" },
-]
-
-const mockTools: Record<string, ToolBase> = {
-  tool1: {
-    name: 'tool1',
-    description: 'Tool 1 description',
-    parameters: {
-      type: 'object',
-      properties: {
-        param1: {
-          type: 'string',
-          description: 'some parameter1.',
-        },
-      },
-      required: ['param1'],
-    },
-  },
-  tool2: {
-    name: 'tool2',
-    description: 'Tool 2 description',
-    parameters: {
-      type: 'object',
-      properties: {
-        param2: {
-          type: 'string',
-          description: 'some parameter2.',
-        },
-      },
-    },
-  },
-}
-
 export async function testTransformersPipeline() {
   try {
     const { pipeline } = await import('@huggingface/transformers')
@@ -2252,109 +1976,6 @@ export async function testVectorizeText() {
   }
 }
 
-export async function testEstimateChatTokens() {
-  const nlpWorker = useNlpWorker()
-
-  const tokens = await nlpWorker.estimateChatTokens(
-    mockTask.content,
-    mockChatMessages,
-    mockTools,
-    Object.values(mockTools).map((tool) => tool.name),
-  )
-  console.log('Estimate Chat Tokens Result:', tokens)
-  return tokens
-}
-
-function shuffleKeys<T>(obj: T): T {
-  const sobj = deepCloneWJson(obj)
-  if (Array.isArray(sobj) || sobj === null || typeof sobj !== 'object') {
-    return sobj
-  }
-
-  const entries = Object.entries(sobj)
-  for (let i = entries.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    const tmp = entries[j]!
-    entries[j] = entries[i]!
-    entries[i] = tmp
-  }
-
-  const shuffled = Object.fromEntries(entries.map(([k, v]) => [k, shuffleKeys(v)]))
-
-  return shuffled as T
-}
-
-async function shouldProduceError(func: (...args: unknown[]) => unknown) {
-  let error: Error | undefined = undefined
-  try {
-    await func()
-  } catch (err) {
-    console.log('correctly produces error:', err)
-    error = err as Error
-  }
-  if (error) return error
-  else throw new Error(`Operation ${func.name} should produce an error!`)
-}
-
-export async function testTaskIdHashing() {
-  const testTask: partialTaskDraft = {
-    role: 'user',
-    name: 'test',
-    content: {
-      type: 'message',
-      data: 'test',
-    },
-    parentID: undefined, // should be stripped away
-  }
-
-  const fullTask = await createTaskNode(testTask, { createMeta: 'missing' })
-
-  const cloneTask = deepCloneWJson(testTask)
-  delete cloneTask.parentID
-  cloneTask.created_at = fullTask.created_at
-  const strippedTask = await createTaskNode(cloneTask, { createMeta: 'missing' })
-  assert(strippedTask.id === fullTask.id, 'strippedTask should be the same as "fullTask" !!!')
-
-  const noIdTask = removeKeys(fullTask, ['id'])
-  await sleep(10) // sleeping for ms to make sure we have different creation times
-  const ft2 = await createTaskNode(noIdTask, { createMeta: 'missing' })
-  await sleep(10) // sleeping for ms to make sure we have different creation times
-  const ft3 = await createTaskNode(noIdTask)
-  await sleep(10) // sleeping for ms to make sure we have different creation times
-  // we remove the keys in the next example in order to be able to overwrite metadata
-  const updatedTask = await createTaskNode(noIdTask, { createMeta: 'overwrite' })
-  const err1 = await shouldProduceError(() =>
-    createTaskNode({ ...updatedTask, id: fullTask.id }, { createMeta: 'overwrite' }),
-  )
-  await sleep(10) // sleeping for ms to make sure we have different creation times
-  const ft4 = await createTaskNode(testTask, { createMeta: 'missing' })
-
-  assert(fullTask.id === ft2.id, 'ft2 should match fullTask')
-  assert(fullTask.id === ft3.id, 'ft3 should match fullTask')
-  assert(fullTask.id !== ft4.id, 'ft4 should not match fullTask')
-
-  // ---- Now shuffle key order ----
-  const shuffledTask = removeKeys(shuffleKeys(fullTask), ['id'])
-  await sleep(10) // sleeping for ms to make sure we have different creation times
-  const sft2 = await createTaskNode(shuffledTask, { createMeta: 'missing' })
-  await sleep(10) // sleeping for ms to make sure we have different creation times
-  const sft3 = await createTaskNode(shuffledTask)
-  await sleep(10) // sleeping for ms to make sure we have different creation times
-  const err3 = await shouldProduceError(() =>
-    createTaskNode({ ...shuffledTask, id: ft4.id }, { createMeta: 'overwrite' }),
-  )
-
-  assert(fullTask.id === sft2.id, 'shuffled ft2 should match')
-  assert(fullTask.id === sft3.id, 'shuffled ft3 should match')
-
-  return {
-    expectedErrors: { err1: err1.message, err3: err3.message },
-    testTask,
-    fullTask,
-    shuffledTask,
-  }
-}
-
 export async function markdownGeneration() {
   const ty = await tystate.taskyon
   // first load the chat as markdown
@@ -2371,59 +1992,6 @@ export async function markdownGeneration() {
     }
   }
   throw new Error('could not find the task we just loaded!!')
-}
-
-export function testJsonSchemaToYaml() {
-  const schema: JSONSchema7 = {
-    type: 'object',
-    required: ['id'],
-    properties: {
-      id: { type: 'string', description: 'identifier' },
-      count: { type: 'number', default: 0, description: 'counter' },
-      tags: { type: 'array', items: { type: 'string' }, description: 'labels' },
-      meta: {
-        type: 'object',
-        properties: {
-          flag: { type: 'boolean' },
-          tier: { enum: ['free', 'pro', 'enterprise'], description: 'user tier' },
-        },
-        description: 'metadata',
-      },
-    },
-  }
-  const postfix = ' (optional)'
-  const out = jsonSchemaToYamlString(schema, postfix)
-
-  const expected = `\
-# identifier
-id: string
-# counter${postfix}
-count: number
-# labels${postfix}
-tags:
-  type: array
-  items: string
-# metadata${postfix}
-meta:
-  flag: boolean
-  # user tier${postfix}
-  tier: free|pro|enterprise
-`
-
-  if (out.trim() !== expected.trim()) {
-    throw new Error(`
-YAML output doesn’t match expected snapshot!
-
-— expected —
-${expected}
-
-— received —
-${out}
-    `)
-  }
-
-  console.log('✅ test passed')
-  return { out }
 }
 
 export async function getTestMetaData() {

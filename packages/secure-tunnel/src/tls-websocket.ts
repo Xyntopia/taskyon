@@ -1,6 +1,6 @@
 import { makeTLSClient, setCryptoImplementation } from '@reclaimprotocol/tls'
 import { pureJsCrypto } from '@reclaimprotocol/tls/purejs-crypto'
-import { WsProxyCloseCode, WsProxyCloseError } from '@taskyon/taskyon'
+import { WsProxyCloseCode, WsProxyCloseError } from '@taskyon/common/modules/wsProxyClose'
 
 // Set up pure JavaScript crypto implementation for browser compatibility
 try {

@@ -6,6 +6,7 @@ import axios from 'axios'
 import { importSPKI, jwtVerify } from 'jose'
 import type { JsonObject } from 'type-fest'
 import { sleep } from '../utils/asyncUtils'
+export { WsProxyCloseCode, WsProxyCloseError } from '@taskyon/common/modules/wsProxyClose'
 import {
   ServiceTokenPayloadSchema,
   TOKEN_SERVICE_BASE_URL,
@@ -177,50 +178,4 @@ export const getTyJwtPublicKey = async () => {
   const publicKeyPromise = await importSPKI(PROXY_JWT_PUBLIC_KEY, 'EdDSA')
 
   return publicKeyPromise
-}
-
-/**
- * Close codes shared between server and client.
- *
- * NOTE: Keep this constant map in sync with the client-side version.
- */
-export const WsProxyCloseCode = {
-  // 40xx – protocol / auth / validation issues
-  MissingSecWebSocketProtocol: 4000,
-  MissingBearerToken: 4001,
-  InvalidSubprotocol: 4002,
-  AuthFailed: 4003,
-
-  MissingHost: 4100,
-  InvalidPort: 4101,
-
-  ServiceNotAllowed: 4200,
-  PortNotAllowed: 4201,
-
-  InvalidHostFormat: 4300,
-  PrivateIpForbidden: 4301,
-  DnsResolutionFailed: 4302,
-
-  // 45xx – runtime / network issues after connection
-  TcpConnectionFailed: 4500,
-
-  // 48xx – generic server-side issues
-  InternalError: 4800,
-} as const
-export type WsProxyCloseCode = (typeof WsProxyCloseCode)[keyof typeof WsProxyCloseCode]
-
-export class WsProxyCloseError extends Error {
-  readonly code: number
-  readonly reason: string
-
-  constructor(code: number, reason: string) {
-    super(`WebSocket tunnel closed: code=${code} reason=${reason || 'no reason provided'}`)
-    this.name = 'WsProxyCloseError'
-    this.code = code
-    this.reason = reason
-  }
-
-  isKnownProxyCode(): this is { code: WsProxyCloseCode } {
-    return Object.values(WsProxyCloseCode).includes(this.code as WsProxyCloseCode)
-  }
 }

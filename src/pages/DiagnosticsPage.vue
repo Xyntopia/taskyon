@@ -168,10 +168,6 @@ import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import {
-  runTimeQuestionConversationUsesClockToolScenario,
-  testTimeQuestionConversationUsesClockTool as packageTimeQuestionConversationTest,
-} from '../../packages/taskyon/src/tests/conversation/test_time_question_conversation'
-import {
   buildDiagnosticsRegistry,
   type DiagnosticsTestContext,
   runDiagnosticsTests,
@@ -185,12 +181,7 @@ const testModules = import.meta.glob(
   [
     '../../packages/runtime-browser/src/tests/**/*.ts',
     '../../packages/taskyon/src/tests/**/*.ts',
-    '!../../packages/taskyon/src/tests/test_entry_node_error_recovery.ts',
-    '!../../packages/taskyon/src/tests/test_entry_node_websearch.ts',
-    '!../../packages/taskyon/src/tests/test_remote_function_bridge.ts',
-    '!../../packages/taskyon/src/tests/test_taskyon.space_api.ts',
     '!../../packages/taskyon/src/tests/test_taskyon_documentation_conversation.ts',
-    '!../../packages/taskyon/src/tests/test_task_worker_settlement.ts',
     '../../packages/common/modules/test_*.ts',
     '../../packages/comp-dag/test_*.ts',
     '../../packages/surrogate/test_*.ts',
@@ -232,7 +223,10 @@ onMounted(async () => {
 
 const withDiagnosticsFlags = (
   mod: unknown,
-  flagsByName: Record<string, Partial<Pick<TaskyonTestFn, 'experimental' | 'gui' | 'timeoutMs'>>>,
+  flagsByName: Record<
+    string,
+    Partial<Pick<TaskyonTestFn, 'experimental' | 'gui' | 'modelBased' | 'timeoutMs'>>
+  >,
 ) =>
   Object.fromEntries(
     Object.entries((mod ?? {}) as Record<string, unknown>).map(([name, value]) => {
@@ -259,7 +253,10 @@ modules.push({
   mod: withDiagnosticsFlags(TaskyonUiInteractionTests, {
     testTaskyonUiSimpleChatInteraction: { gui: true },
     testTaskyonUiToolInteraction: { gui: true },
-    testTaskyonUiListsAndUsesAvailableTools: { gui: true, timeoutMs: 420_000 },
+    testTaskyonUiListsAndUsesAvailableTools: {
+      gui: true,
+      timeoutMs: 420_000,
+    },
     testTaskyonUiWebSearchInteraction: { gui: true },
   }),
 })
@@ -272,23 +269,6 @@ modules.push({
     ),
   ),
 })
-modules.push({
-  sourcePath: 'src/pages/DiagnosticsPage.vue',
-  mod: {
-    testTimeQuestionConversationUsesClockTool: Object.assign(
-      async () => {
-        const ty = await tystate.taskyon
-        return await runTimeQuestionConversationUsesClockToolScenario(ty)
-      },
-      {
-        description: packageTimeQuestionConversationTest.description,
-        experimental: true,
-        timeoutMs: packageTimeQuestionConversationTest.timeoutMs,
-      },
-    ),
-  },
-})
-
 const registry = buildDiagnosticsRegistry({
   modules,
   builtins: [
@@ -313,9 +293,10 @@ const registry = buildDiagnosticsRegistry({
 const guiTests = registry.guiTests
 const tests = registry.tests
 const experimentalTests = registry.experimentalTests
+const modelBasedTests = registry.modelBasedTests
 const testsByFolder = registry.testsByFolder
 const testsByFile = registry.testsByFile
-const testLists = { tests, experimentalTests, guiTests }
+const testLists = { tests, modelBasedTests, experimentalTests, guiTests }
 const testListKeys = Object.keys(testLists) as Array<keyof typeof testLists>
 
 type GroupedSection = {
@@ -458,6 +439,20 @@ function appendDiagnosticsLog(nextText: string) {
   void scrollDiagnosticsToBottom()
 }
 
+function getDiagnosticsSkipReason(details: unknown): string | undefined {
+  if (
+    typeof details !== 'object' ||
+    details === null ||
+    !('skipped' in details) ||
+    details.skipped !== true
+  ) {
+    return undefined
+  }
+  return 'reason' in details && typeof details.reason === 'string'
+    ? details.reason
+    : 'Required runtime capability is unavailable.'
+}
+
 async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
   if (isRunning.value) return
   isRunning.value = true
@@ -469,13 +464,33 @@ async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
   appendDiagnosticsLog(`report_date: ${new Date().toISOString()}\n`)
   let total = 0
   let failed = 0
+  let modelPassed = 0
+  let modelFailed = 0
   let aborted = false
 
   const tyauth = tystate.getTaskyonKeyString()
+  const chatCompletionConfig = state.effectiveToolchainConfig.chatCompletion
+  const selectedApi =
+    typeof chatCompletionConfig === 'object' &&
+    chatCompletionConfig !== null &&
+    'provider' in chatCompletionConfig &&
+    typeof chatCompletionConfig.provider === 'string'
+      ? chatCompletionConfig.provider
+      : undefined
+  const providerKey = selectedApi ? await tystate.getProviderApiKey(selectedApi) : null
   const isCypress = typeof window !== 'undefined' && 'Cypress' in window
   const runOptions: Parameters<typeof runDiagnosticsTests>[1] = {
     details,
     isCypress,
+    context: {
+      ...(typeof tyauth === 'string' ? { tyauth } : {}),
+      ...(selectedApi ? { selectedApi } : {}),
+      ...(tystate.currentModelId ? { model: tystate.currentModelId } : {}),
+      llmSettings: state.llmSettings,
+      toolchainConfig: state.effectiveToolchainConfig,
+      ...(typeof providerKey === 'string' ? { providerKey } : {}),
+      isCypress,
+    },
     shouldAbort: () => abortRequested.value,
     onAbort: (nextTest) => {
       aborted = true
@@ -486,17 +501,42 @@ async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
     },
     onResult: (result) => {
       total += 1
-      if (!result.ok) failed += 1
+      const skippedReason = getDiagnosticsSkipReason(result.details)
+      const skipped = skippedReason !== undefined
+      if (result.modelBased && !skipped) {
+        if (result.ok) modelPassed += 1
+        else modelFailed += 1
+      } else if (!result.ok) failed += 1
       if (result.ok) {
         appendDiagnosticsLog(
           dump(
             {
-              [result.name]: details
+              [result.name]: skipped
                 ? {
-                    status: 'OK',
-                    result: result.details,
+                    status: 'SKIPPED',
+                    reason: skippedReason,
                   }
-                : 'OK',
+                : details
+                  ? {
+                      status: result.modelBased ? 'MODEL PASS' : 'OK',
+                      result: result.details,
+                    }
+                  : result.modelBased
+                    ? 'MODEL PASS'
+                    : 'OK',
+            },
+            { skipInvalid: true, noRefs: true },
+          ),
+        )
+      } else if (result.modelBased) {
+        appendDiagnosticsLog(
+          dump(
+            {
+              [result.name]: {
+                status: 'MODEL MISS',
+                message: 'The selected model did not satisfy this capability evaluation.',
+                error: result.error,
+              },
             },
             { skipInvalid: true, noRefs: true },
           ),
@@ -517,13 +557,17 @@ async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
       }
     },
   }
-  if (typeof tyauth === 'string') runOptions.tyauth = tyauth
-
   try {
     await runDiagnosticsTests(tests, runOptions)
 
     appendDiagnosticsLog(`\n\ntime to run tests: ${(Date.now() - startTime) / 1000}s`)
     appendDiagnosticsLog(`\nfailed tests: ${failed}/${total}`)
+    const modelTotal = modelPassed + modelFailed
+    if (modelTotal > 0) {
+      appendDiagnosticsLog(
+        `\nmodel capability score: ${modelPassed}/${modelTotal} (${Math.round((100 * modelPassed) / modelTotal)}%)`,
+      )
+    }
     appendDiagnosticsLog(
       aborted ? '\naborted before all tests were finished' : '\nfinished all tests!',
     )
@@ -538,8 +582,8 @@ async function generateReport(details = false, noGui = true) {
   console.log('generating diagnostics report')
 
   // we run this test at the end, because sometimes it just keeps blocking?
-  if (noGui) await runTests(tests, details)
-  else await runTests({ ...tests, ...guiTests }, details)
+  if (noGui) await runTests({ ...tests, ...modelBasedTests }, details)
+  else await runTests({ ...tests, ...modelBasedTests, ...guiTests }, details)
 }
 
 function downloadReport() {

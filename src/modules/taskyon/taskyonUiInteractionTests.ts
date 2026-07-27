@@ -87,6 +87,7 @@ export const testTaskyonUiSimpleChatInteraction = async () => {
 }
 testTaskyonUiSimpleChatInteraction.description =
   'Runs the same initial Taskyon UI chat chain builder as CreateNewTask and expects a plain message result.'
+testTaskyonUiSimpleChatInteraction.modelBased = true
 
 export const testTaskyonUiWebSearchInteraction = async () => {
   const taskChain = buildCreateNewTaskChain({
@@ -122,6 +123,7 @@ export const testTaskyonUiWebSearchInteraction = async () => {
 }
 testTaskyonUiWebSearchInteraction.description =
   'Builds the UI-style websearch chain, verifies the entry-node websearch flag, and expects a non-empty message result.'
+testTaskyonUiWebSearchInteraction.modelBased = true
 
 export const testTaskyonUiToolInteraction = async () => {
   const taskChain = buildCreateNewTaskChain({
@@ -260,6 +262,7 @@ export const testTaskyonUiListsAndUsesAvailableTools = async () => {
 }
 testTaskyonUiListsAndUsesAvailableTools.description =
   'Runs the browser Taskyon entry flow, plans separate tool-list, weather, and animated-clock tasks, and verifies each delegated entry node chooses its relevant tool.'
+testTaskyonUiListsAndUsesAvailableTools.modelBased = true
 
 export const testTaskyonUiProfileManagementToolRegistration = async () => {
   await tystate.taskyon

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 
 import {
   addAiServices,
+  expectTaskyonReady,
   lastAssistantMessage,
   readOnlineEnv,
   writeMessage,
@@ -10,13 +11,13 @@ import {
 const onlineEnv = readOnlineEnv(process.cwd())
 
 test.describe('sharing functionality', () => {
-  test.skip(!onlineEnv, 'requires playwright.env.json with OpenAI and OpenRouter API keys')
+  test.skip(!onlineEnv, 'requires playwright.env.json with Taskyon, OpenAI, and OpenRouter keys')
 
   test('can open sharing for an assistant message', async ({ page }) => {
     if (!onlineEnv) throw new Error('online env missing')
 
     await page.goto('/')
-    await expect(page.getByText('Start with a guided design question')).toBeVisible()
+    await expectTaskyonReady(page)
     await addAiServices(page, onlineEnv)
 
     await page.goto('/')
