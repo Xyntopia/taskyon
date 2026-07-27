@@ -46,9 +46,9 @@ async function createTransport(kind: SandboxRuntimeKind, id: string): Promise<Sa
   }
   const nodeRuntimeModule = './nodeWorkerSandboxRuntime.ts'
   const { createNodeSandboxTransport } = (await import(/* @vite-ignore */ nodeRuntimeModule)) as {
-    createNodeSandboxTransport: () => SandboxTransport | Promise<SandboxTransport>
+    createNodeSandboxTransport: () => SandboxTransport
   }
-  return await createNodeSandboxTransport()
+  return createNodeSandboxTransport()
 }
 
 export async function createExecutableSandbox(options: {
