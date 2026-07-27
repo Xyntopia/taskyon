@@ -16,7 +16,7 @@ import {
 } from './designRevision'
 
 export type DesignProjectObjectStore = {
-  read: (path: string) => Promise<unknown | null>
+  read: (path: string) => Promise<unknown>
   write: (path: string, value: unknown) => Promise<void>
   list: (directory: string) => Promise<string[]>
 }

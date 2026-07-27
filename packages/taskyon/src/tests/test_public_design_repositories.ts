@@ -18,7 +18,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const repositoryReader = (projectId: string): DesignRepositoryTextReader => {
-  if (typeof process === 'undefined') {
+  if (typeof window !== 'undefined') {
     return createUrlDesignRepositoryReader({
       baseUrl: new URL(`/design-repositories/${projectId}/`, location.origin),
       fetch,

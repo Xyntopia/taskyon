@@ -51,7 +51,9 @@ const createStaticSummaryRecord = async (recommendationHash: Hash): Promise<DagN
     },
     runSource: staticSummaryRunSource,
     run: async ({ use }) => {
-      const recommendation = (await use.recommendation!()) as {
+      const loadRecommendation = use.recommendation
+      assert(loadRecommendation, 'Expected recommendation input capability')
+      const recommendation = (await loadRecommendation()) as {
         itemNames: string[]
         totalWeightKg: number
       }

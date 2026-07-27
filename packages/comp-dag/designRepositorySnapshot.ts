@@ -106,11 +106,12 @@ export const createUrlDesignRepositoryReader = (args: {
   baseUrl: URL
   fetch: typeof globalThis.fetch
 }): DesignRepositoryTextReader => {
+  const fetchUrl = args.fetch.bind(globalThis)
   const baseUrl = new URL(
     args.baseUrl.href.endsWith('/') ? args.baseUrl.href : `${args.baseUrl.href}/`,
   )
   return async (path) => {
-    const response = await args.fetch(new URL(path, baseUrl))
+    const response = await fetchUrl(new URL(path, baseUrl))
     if (!response.ok) {
       throw new Error(`Failed to read design repository object ${path}: HTTP ${response.status}`)
     }

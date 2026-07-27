@@ -30,7 +30,7 @@ const nodeRepositoryReader = async (path: string): Promise<string> => {
 
 export const testAiWorkstationGraphEvaluatesStructuralConfigurations = async () => {
   const example = await createAiWorkstationExample(
-    typeof process === 'undefined' ? undefined : { readText: nodeRepositoryReader },
+    typeof window === 'undefined' ? { readText: nodeRepositoryReader } : undefined,
   )
   const graph = savedStoredNodesToRecordGraph(
     Object.fromEntries(example.nodes.map((node) => [node.hash, node])),
@@ -62,6 +62,7 @@ export const testAiWorkstationGraphEvaluatesStructuralConfigurations = async () 
     best.recommendation.viable,
     `Expected a feasible workstation, received ${JSON.stringify(best.recommendation)}`,
   )
+  assert(example.designSpace.schemaVersion === 2, 'Expected the typed workstation design space')
   assert(
     example.designSpace.schemaVersion === 2 &&
       example.designSpace.inputs['requirements.budgetUsd']?.role === 'requirement',
