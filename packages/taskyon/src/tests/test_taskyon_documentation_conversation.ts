@@ -250,7 +250,7 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
     }
   } finally {
     toolRpcExecutor.destroy()
-    ty.workerStop('documentation conversation diagnostic complete')
+    await ty.dispose('documentation conversation diagnostic complete')
   }
 }
 

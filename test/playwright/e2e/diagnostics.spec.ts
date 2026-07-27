@@ -20,7 +20,7 @@ test.describe('diagnostics page', () => {
     if (!onlineEnv) throw new Error('online env missing')
 
     await page.goto('/')
-    await expect(page.getByText('Start with a guided design question')).toBeVisible()
+    await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
     await waitForTaskyonSession(page)
 
     await addAiServices(page, onlineEnv)
@@ -56,11 +56,15 @@ test.describe('diagnostics page', () => {
     page,
     context,
   }) => {
+    test.info().annotations.push({
+      type: 'model-based',
+      description: 'Scores whether the selected model completes a multi-tool workflow.',
+    })
     test.setTimeout(toolWorkflowTimeoutMs + 30_000)
     if (!onlineEnv) throw new Error('online env missing')
 
     await page.goto('/')
-    await expect(page.getByText('Start with a guided design question')).toBeVisible()
+    await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
     await waitForTaskyonSession(page)
 
     await addAiServices(page, onlineEnv)
@@ -76,18 +80,25 @@ test.describe('diagnostics page', () => {
       .first()
     await expect(diagnosticButton).toBeVisible()
 
-    const clockPopupPromise = context.waitForEvent('page', { timeout: toolWorkflowTimeoutMs })
+    const clockPopupPromise = context
+      .waitForEvent('page', { timeout: toolWorkflowTimeoutMs })
+      .then((clockPopup) => ({ type: 'popup' as const, clockPopup }))
     await diagnosticButton.click()
     const diagnosticFinishedPromise = dataCy(page, 'test-finished')
       .waitFor({ state: 'visible', timeout: toolWorkflowTimeoutMs })
       .then(async () => {
         const diagnosticsText = (await dataCy(page, 'diagnostics-result').textContent()) ?? ''
-        if (diagnosticsText.includes('status: ERROR')) {
-          throw new Error(`Diagnostic failed before opening the clock popup:\n${diagnosticsText}`)
-        }
-        return clockPopupPromise
+        return { type: 'diagnostic' as const, diagnosticsText }
       })
-    const clockPopup = await Promise.race([clockPopupPromise, diagnosticFinishedPromise])
+    const outcome = await Promise.race([clockPopupPromise, diagnosticFinishedPromise])
+    if (outcome.type === 'diagnostic') {
+      test.skip(
+        outcome.diagnosticsText.includes('status: MODEL MISS'),
+        'The selected model did not satisfy this capability evaluation.',
+      )
+      throw new Error(`Diagnostic failed before opening the clock popup:\n${outcome.diagnosticsText}`)
+    }
+    const { clockPopup } = outcome
 
     await expect(clockPopup).toHaveTitle('Animated Clock')
     await expect(clockPopup.locator('#time')).toHaveText(/^\d{2}:\d{2}$/)

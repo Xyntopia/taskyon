@@ -1605,7 +1605,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const stopWorker = async (reason: string) => {
     console.log('stopping worker with reason:', reason)
     const instance = await taskyon
-    instance.workerStop(reason)
+    instance.cancelCurrentRun(reason)
   }
 
   const { stream: chatCompletionStream, emit: chatCompletionConnector } =

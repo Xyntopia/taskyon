@@ -182,7 +182,7 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
     }
   } finally {
     toolRpcExecutor.destroy()
-    ty.workerStop('entry-node hosted web-search diagnostic complete')
+    await ty.dispose('entry-node hosted web-search diagnostic complete')
     storage.destroy()
   }
 }

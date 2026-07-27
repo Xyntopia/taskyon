@@ -492,7 +492,7 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
         timeoutMs: 10_000,
         throwOnError: false,
         interruptOnSettle: (reason) => {
-          ty.workerStop(reason)
+          ty.cancelCurrentRun(reason)
         },
       },
     )
@@ -546,6 +546,7 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
     )
   } finally {
     toolRpcExecutor.destroy()
+    await ty.dispose('web research planner diagnostic complete')
   }
 
   return { success: true }

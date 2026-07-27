@@ -431,7 +431,7 @@ const dynamicContext =
     }
     const continuationTask = partialTaskDraft.parse(entryNode())
     const taskWorkerConfig = llmSettings().taskWorker
-    const { workerStream, toolRpcPort, workerStop, queueTask } = runTaskWorker(
+    const { workerStream, toolRpcPort, cancelCurrentRun, workerSettled, queueTask } = runTaskWorker(
       taskManagerInstance,
       continuationTask,
       continuationTask,
@@ -487,23 +487,24 @@ const dynamicContext =
     return {
       callTool: (name: string, args: FunctionArguments) => toolExecutionClient.callTool(name, args),
       runtimeConfiguration,
-      workerStop: (message: string) => {
+      cancelCurrentRun: (message: string) => {
         console.log('tycore stopping all tasks:', message)
-        workerStop(message)
+        cancelCurrentRun(message)
         workerToolBroker.stop(message)
         coreToolExecutor.stop(message)
       },
-      dispose: (message: string) => {
+      dispose: async (message: string) => {
         if (disposed) return
         disposed = true
         console.log('tycore disposing session context:', message)
         unsubscribeChatCompletion()
         unsubscribeSessionStreams.forEach((unsubscribe) => unsubscribe())
-        workerStop(message)
-        workerToolBroker.stop(message)
-        coreToolExecutor.stop(message)
         unsubscribeApiServer()
         unsubscribeHostApiServer()
+        cancelCurrentRun(message)
+        workerToolBroker.stop(message)
+        coreToolExecutor.stop(message)
+        await workerSettled()
         unsubscribeTaskStreamBridge()
         workerToolBroker.destroy()
         coreToolExecutor.destroy()
@@ -586,7 +587,7 @@ export async function tyCore(
 
   const replaceSessionContext = async (newCs: CryptoSession) => {
     const currentToolchainConfig = ctx.runtimeConfiguration.toolchainConfig
-    ctx.dispose('switching crypto session')
+    await ctx.dispose('switching crypto session')
     cs = newCs
     // we need to re-initialize our entire context in order to have access to key store, decrypted data
     // etc with the new session...
@@ -608,7 +609,7 @@ export async function tyCore(
     chatCompletionStream: chatCompletionStream.stream,
     workerStream: workerStream.stream,
     taskStream: taskStream.stream,
-    workerStop: (message: string) => ctx.workerStop(message),
+    cancelCurrentRun: (message: string) => ctx.cancelCurrentRun(message),
     dispose: (message: string) => ctx.dispose(message),
     updateChatCompletionApiKey: async (key: string, value?: string) => {
       const { tool, def } = await ctx.taskManagerInstance.getToolDefinition(

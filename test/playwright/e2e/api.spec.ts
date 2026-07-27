@@ -57,7 +57,7 @@ test.describe('Taskyon API', () => {
     if (!onlineEnv) throw new Error('online env missing')
 
     await page.goto('/')
-    await expect(page.getByText('Start with a guided design question')).toBeVisible()
+    await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
     await waitForTaskyonSession(page)
 
     await addAiServices(page, onlineEnv)
@@ -88,7 +88,7 @@ test.describe('Taskyon API', () => {
     if (!onlineEnv) throw new Error('online env missing')
 
     await page.goto('/')
-    await expect(page.getByText('Start with a guided design question')).toBeVisible()
+    await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
     await waitForTaskyonSession(page)
 
     await addAiServices(page, onlineEnv)

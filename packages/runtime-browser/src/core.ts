@@ -79,13 +79,16 @@ export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRunti
     stop?.()
   }
 
-  const disposeCore = (core: Awaited<ReturnType<typeof tyCore>>, reason: string) => {
+  const disposeCore = async (core: Awaited<ReturnType<typeof tyCore>>, reason: string) => {
     if (disposed) return
     disposed = true
     disconnectCore?.()
     disconnectCore = undefined
-    core.dispose(reason)
-    stopStorageService()
+    try {
+      await core.dispose(reason)
+    } finally {
+      stopStorageService()
+    }
   }
 
   const taskyon = (async () => {
@@ -122,7 +125,7 @@ export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRunti
       disconnectCore = corePort.connect(core.port)
       corePort.send({ type: 'taskyonReady' })
       options.onStage?.('ready')
-      if (stopReason) disposeCore(core, stopReason)
+      if (stopReason) await disposeCore(core, stopReason)
       return core
     } catch (error) {
       stopStorageService()
@@ -139,7 +142,7 @@ export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRunti
       if (stopReason) return
       stopReason = reason
       const core = await taskyon
-      disposeCore(core, reason)
+      await disposeCore(core, reason)
     },
   }
 }

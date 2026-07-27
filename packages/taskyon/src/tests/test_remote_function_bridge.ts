@@ -103,7 +103,7 @@ export const testTyCoreStableTaskStreamSurvivesSessionSwitch = async () => {
     })
     await afterSwitch
   } finally {
-    ty.workerStop('stable task stream diagnostic complete')
+    await ty.dispose('stable task stream diagnostic complete')
     storage.destroy()
   }
 }
@@ -465,12 +465,12 @@ export const testRemoteFunctionBridgeRegistersAndExecutesCodeTool = async () => 
     'toolresult',
     {
       timeoutMs: 10_000,
-      interruptOnSettle: (reason) => ty.workerStop(reason),
+      interruptOnSettle: (reason) => ty.cancelCurrentRun(reason),
     },
   )
 
   registration.destroy()
-  ty.workerStop('remote code tool diagnostic complete')
+  await ty.dispose('remote code tool diagnostic complete')
   storage.destroy()
   const response =
     result.status === 'matched' && result.result.content.type === 'toolresult'

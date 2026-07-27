@@ -529,6 +529,8 @@ const setupRun = (
   const readyQueue = createAsyncQueue<string>()
   const pendingByPrior = new Map<string, Set<string>>()
   const activeTaskIds = new Set<string>()
+  const routingTasks = new Set<Promise<void>>()
+  const reconciliationTasks = new Set<Promise<void>>()
   const taskTracker = createTaskTracker(taskManager)
   let routingTaskCount = 0
   let didEmitAllProcessed = false
@@ -570,7 +572,7 @@ const setupRun = (
 
     didEmitAllProcessed = false
     routingTaskCount += 1
-    void (async () => {
+    const routingTask = (async () => {
       let wasRouted = false
       try {
         const task = await taskManager.getTask(id)
@@ -588,6 +590,11 @@ const setupRun = (
         if (!wasRouted) emitAllProcessedIfIdle()
       }
     })()
+    routingTasks.add(routingTask)
+    void routingTask.then(
+      () => routingTasks.delete(routingTask),
+      () => routingTasks.delete(routingTask),
+    )
   }
   const { taskisInLoop, taskOutOfLoop, getTasksInProgress, clearTasksInProgress } =
     workerLoggingHelper(streamEmit)
@@ -667,7 +674,12 @@ const setupRun = (
       if (getTasksInProgress() <= 0 && readyQueue.count() === 0 && pendingByPrior.size > 0) {
         streamEmit({ stage: 'waiting' })
       }
-      void reconcilePendingTasks().finally(() => emitAllProcessedIfIdle())
+      const reconciliationTask = reconcilePendingTasks().finally(() => emitAllProcessedIfIdle())
+      reconciliationTasks.add(reconciliationTask)
+      void reconciliationTask.then(
+        () => reconciliationTasks.delete(reconciliationTask),
+        () => reconciliationTasks.delete(reconciliationTask),
+      )
     }, 1000)
 
     try {
@@ -679,6 +691,7 @@ const setupRun = (
     } finally {
       clearInterval(reconciliationInterval)
     }
+    await Promise.allSettled([...routingTasks, ...reconciliationTasks])
     readyQueue.clear()
     pendingByPrior.clear()
     activeTaskIds.clear()
@@ -728,8 +741,9 @@ export function runTaskWorker(
   >()
   let currentTaskCtrl: AbortController | undefined = new AbortController()
   let queueTask: ((id: string) => void) | undefined = undefined
+  const activeRuns = new Set<Promise<void>>()
 
-  const workerStop = (message: string) => {
+  const cancelCurrentRun = (message: string) => {
     currentTaskCtrl?.abort(message)
     // in case of any errors, especially if its an interrupt event we simply want to cancel everything :P
     // empty our task queue :)
@@ -739,7 +753,7 @@ export function runTaskWorker(
   }
 
   // we have put all our dependencies in restartable workers.
-  // if anyone calls the "workerStop" the function wil simply re-start the worker
+  // If the current run is cancelled, the worker starts a new run when another task is queued.
   // as soon as a new task was added....
   const externalQueueTask = (id: string) => {
     if (currentTaskCtrl?.signal.aborted || !queueTask) {
@@ -751,14 +765,25 @@ export function runTaskWorker(
       currentTaskCtrl = newTaskCtrl
       queueTask = newQueueTask
 
-      void run(defaultTask, errorTask)
+      const workerRun = run(defaultTask, errorTask)
+      activeRuns.add(workerRun)
+      void workerRun.then(
+        () => activeRuns.delete(workerRun),
+        (error) => {
+          activeRuns.delete(workerRun)
+          taskProcessingStream.emit({ stage: 'error', info: humanizeError(error) })
+        },
+      )
     }
     queueTask(id)
   }
   return {
     workerStream: taskProcessingStream.stream,
     toolRpcPort,
-    workerStop,
+    cancelCurrentRun,
+    workerSettled: async () => {
+      await Promise.allSettled(activeRuns)
+    },
     queueTask: externalQueueTask,
   }
 }

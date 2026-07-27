@@ -850,7 +850,7 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
     }
   } finally {
     toolRpcExecutor.destroy()
-    ty.workerStop('entry-node malformed Python recovery diagnostic complete')
+    await ty.dispose('entry-node malformed Python recovery diagnostic complete')
     storage.destroy()
   }
 }

@@ -177,7 +177,7 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
     )
   } finally {
     unsubscribeChatCompletion()
-    ty.workerStop('runtime configuration diagnostic complete')
+    await ty.dispose('runtime configuration diagnostic complete')
   }
 
   return { success: true }

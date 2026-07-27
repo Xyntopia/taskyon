@@ -18,6 +18,7 @@ export interface TaskyonTestFn {
   gui?: boolean
   experimental?: boolean
   requiresLargeTokens?: boolean
+  requiresLongRun?: boolean
   requiresAuth?: boolean
   modelBased?: boolean
   helper?: boolean

@@ -14,6 +14,18 @@ import { getSelectedProviderSettings } from '../cli/models'
 import { bootstrapCliTaskyon } from '../cli/runtime'
 import { diagnosticsTestMetadata, unsupportedModuleFallbacks } from './testMetadata'
 
+const diagnosticsCategories = [
+  'standard',
+  'experimental',
+  'network',
+  'authenticated',
+  'large-tokens',
+  'long-running',
+  'model-based',
+] as const
+
+type DiagnosticsCategory = (typeof diagnosticsCategories)[number]
+
 type CliOptions = {
   listOnly: boolean
   details: boolean
@@ -24,6 +36,7 @@ type CliOptions = {
   allowLongRun: boolean
   filter: string
   tyauth: string | undefined
+  category?: DiagnosticsCategory
   provider?: string
   model?: string
 }
@@ -53,6 +66,7 @@ type Summary = {
     includeLargeTokens?: boolean
     online: boolean
     details: boolean
+    category?: DiagnosticsCategory
     provider?: string
     model?: string
   }
@@ -76,6 +90,15 @@ function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   if (typeof error === 'string') return error
   return Object.prototype.toString.call(error)
+}
+
+const parseCategory = (value: string | undefined): DiagnosticsCategory => {
+  if (diagnosticsCategories.includes(value as DiagnosticsCategory)) {
+    return value as DiagnosticsCategory
+  }
+  throw new Error(
+    `Unknown diagnostics category "${value ?? ''}". Expected one of: ${diagnosticsCategories.join(', ')}.`,
+  )
 }
 
 function parseArgs(args: string[]): CliOptions {
@@ -105,7 +128,10 @@ function parseArgs(args: string[]): CliOptions {
     else if (arg === '--online') opts.online = true
     else if (arg === '--json') opts.json = true
     else if (arg === '--allow-long-run') opts.allowLongRun = true
-    else if (arg === '--filter') opts.filter = args[++i] ?? ''
+    else if (arg === '--category') opts.category = parseCategory(args[++i])
+    else if (arg.startsWith('--category=')) {
+      opts.category = parseCategory(arg.slice('--category='.length))
+    } else if (arg === '--filter') opts.filter = args[++i] ?? ''
     else if (arg.startsWith('--filter=')) opts.filter = arg.slice('--filter='.length)
     else if (arg === '--tyauth') opts.tyauth = args[++i] ?? undefined
     else if (arg.startsWith('--tyauth=')) opts.tyauth = arg.slice('--tyauth='.length)
@@ -308,6 +334,25 @@ function filterLargeTokenTests(tests: TestRecord, includeLargeTokens: boolean): 
   )
 }
 
+function filterTestsByCategory(
+  tests: TestRecord,
+  category: DiagnosticsCategory | undefined,
+): TestRecord {
+  if (!category) return tests
+  return Object.fromEntries(
+    Object.entries(tests).filter(([name, fn]) => {
+      const metadata = diagnosticsTestMetadata[testIdentifier(name)]
+      if (category === 'standard') return !fn.experimental && !fn.modelBased
+      if (category === 'experimental') return fn.experimental === true
+      if (category === 'network') return metadata?.requiresNetwork === true
+      if (category === 'authenticated') return metadata?.requiresAuth === true
+      if (category === 'large-tokens') return metadata?.requiresLargeTokens === true
+      if (category === 'long-running') return metadata?.requiresLongRun === true
+      return fn.modelBased === true || metadata?.modelBased === true
+    }),
+  )
+}
+
 function shouldSkipTest(name: string, opts: CliOptions): WrappedSkippedResult | null {
   const id = testIdentifier(name)
   const metadata = diagnosticsTestMetadata[id]
@@ -373,6 +418,7 @@ function listTests(tests: TestRecord, experimentalTests: TestRecord) {
       metadata?.requiresNetwork ? 'network' : '',
       metadata?.requiresAuth ? 'auth' : '',
       metadata?.requiresLargeTokens ? 'large-tokens' : '',
+      metadata?.requiresLongRun ? 'long-running' : '',
       metadata?.modelBased ? 'model-based' : '',
     ].filter(Boolean)
     const tagText = tags.length ? ` [${tags.join(', ')}]` : ''
@@ -450,6 +496,7 @@ function buildSummary(
       includeLargeTokens: opts.includeLargeTokens,
       online: opts.online,
       details: opts.details,
+      ...(opts.category ? { category: opts.category } : {}),
       ...(selectedProvider ? { provider: selectedProvider } : {}),
       ...(selectedModel ? { model: selectedModel } : {}),
     },
@@ -500,13 +547,19 @@ async function main() {
 
   if (opts.listOnly) {
     const defaultTests = filterTests(
-      filterLargeTokenTests(
-        { ...registry.tests, ...registry.modelBasedTests },
-        opts.includeLargeTokens,
+      filterTestsByCategory(
+        filterLargeTokenTests(
+          { ...registry.tests, ...registry.modelBasedTests },
+          opts.includeLargeTokens,
+        ),
+        opts.category,
       ),
       opts.filter,
     )
-    const experimentalTests = filterTests(registry.experimentalTests, opts.filter)
+    const experimentalTests = filterTests(
+      filterTestsByCategory(registry.experimentalTests, opts.category),
+      opts.filter,
+    )
     console.log(`Discovered files: ${discoveredFiles.length}`)
     for (const file of discoveredFiles) console.log(`- ${file}`)
     console.log('')
@@ -518,7 +571,10 @@ async function main() {
     ? { ...registry.tests, ...registry.modelBasedTests, ...registry.experimentalTests }
     : { ...registry.tests, ...registry.modelBasedTests }
   const filtered = filterTests(
-    filterLargeTokenTests(selectedSource, opts.includeLargeTokens),
+    filterTestsByCategory(
+      filterLargeTokenTests(selectedSource, opts.includeLargeTokens),
+      opts.category,
+    ),
     opts.filter,
   )
   const wrapped = wrapTests(filtered, opts)
@@ -527,7 +583,8 @@ async function main() {
   console.log(`[tycli-diagnostics] discovered ${discoveredFiles.length} test files`)
   console.log(
     `[tycli-diagnostics] selected ${selectedNames.length} tests` +
-      (opts.filter ? ` (filter="${opts.filter}")` : ''),
+      (opts.filter ? ` (filter="${opts.filter}")` : '') +
+      (opts.category ? ` (category="${opts.category}")` : ''),
   )
 
   if (selectedNames.length === 0) {
@@ -592,7 +649,7 @@ async function main() {
   )
   console.log('TYCLI_DIAGNOSTICS_SUMMARY_END')
 
-  runtime.taskyon.workerStop('tycli diagnostics complete')
+  runtime.taskyon.cancelCurrentRun('tycli diagnostics complete')
   await new Promise<void>((resolve, reject) => {
     process.stdout.write('', (error) => {
       if (error) reject(error)

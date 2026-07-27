@@ -85,11 +85,13 @@ export const testRequestLifecycleTimesOutAndCleansUp = async () => {
     awaitRequestResponse({
       subscribe: harness.subscribe,
       sendRequest: () => undefined,
+      requestLabel: 'example.request-1',
       timeoutMs: 1,
       readResponse: () => undefined,
     }),
   )
   assert(error.name === 'TimeoutError', 'Expected an explicit timeout error.')
+  assert(error.message.includes('example.request-1'), 'Expected the request label in the error.')
   assert(harness.unsubscribeCount() === 1, 'Expected cleanup after a timeout.')
   return { success: true }
 }

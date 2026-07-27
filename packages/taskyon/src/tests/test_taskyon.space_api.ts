@@ -37,7 +37,7 @@ export const testTokenMinting = async (ctx: { tyauth: string }) => {
     test_name: 'testTokenMinting',
   })
 
-  return { token, svcTokenData, returnres }
+  return { tokenMinted: token.length > 0, svcTokenData, returnres }
 }
 
 export const testTokenMintClaims = async (ctx: { tyauth: string }) => {
@@ -242,6 +242,7 @@ export const testTokenReturnAfterJwtExpButBeforeOms = async (ctx: { tyauth: stri
   }
 }
 testTokenReturnAfterJwtExpButBeforeOms.experimental = true
+testTokenReturnAfterJwtExpButBeforeOms.timeoutMs = 180_000
 
 export const testTokenReturnAfterOms = async (
   ctx: { tyauth: string; allowLongRun?: boolean } = { tyauth: '' },
@@ -301,12 +302,12 @@ export const testTokenReturnAfterOms = async (
   }
 }
 testTokenReturnAfterOms.experimental = true
+testTokenReturnAfterOms.timeoutMs = 3_700_000
 
 export const testSecureFetch = async (ctx: { tyauth: string }) => {
   const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
 
   const token = await mintToken(baseUrl, ctx.tyauth)
-  console.log('Minted token:', token)
 
   const tunnelUrl = 'wss://share.taskyon.space/ws-proxy/'
 
@@ -358,7 +359,6 @@ export const testTyProxy = async (ctx: { tyauth: string; isCypress?: boolean }) 
   const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
 
   const token = await mintToken(baseUrl, ctx.tyauth)
-  console.log('Minted token:', token)
 
   const tunnelUrl = 'https://share.taskyon.space/proxy'
 
@@ -398,19 +398,26 @@ export const testTyProxy = async (ctx: { tyauth: string; isCypress?: boolean }) 
   let expectedCorsError: string
   let cypressNote: string | undefined
 
-  try {
-    const err1 = await expectThrows(async () => await fetch(testApiUrl2), 'No CORS error received!')
-    expectedCorsError =
-      "Success: Error while downloading 'normal' browser based fetch, but expected" +
-      humanizeError(err1)
-  } catch (err) {
-    if (ctx.isCypress && err instanceof Error && err.message === 'No CORS error received!') {
+  if (typeof window === 'undefined') {
+    expectedCorsError = 'CORS enforcement check is not applicable outside a browser runtime.'
+  } else {
+    try {
+      const err1 = await expectThrows(
+        async () => await fetch(testApiUrl2),
+        'No CORS error received!',
+      )
       expectedCorsError =
-        'CORS browser-enforcement check skipped because Cypress may proxy or relax cross-origin requests.'
-      cypressNote =
-        'Plain browser fetch to example.com did not trigger a CORS failure under Cypress. This is acceptable in the Cypress environment.'
-    } else {
-      throw err
+        "Success: Error while downloading 'normal' browser based fetch, but expected" +
+        humanizeError(err1)
+    } catch (err) {
+      if (ctx.isCypress && err instanceof Error && err.message === 'No CORS error received!') {
+        expectedCorsError =
+          'CORS browser-enforcement check skipped because Cypress may proxy or relax cross-origin requests.'
+        cypressNote =
+          'Plain browser fetch to example.com did not trigger a CORS failure under Cypress. This is acceptable in the Cypress environment.'
+      } else {
+        throw err
+      }
     }
   }
 

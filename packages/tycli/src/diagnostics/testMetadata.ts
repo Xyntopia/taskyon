@@ -2,6 +2,7 @@ export type DiagnosticsTestMetadata = {
   requiresAuth?: boolean
   requiresNetwork?: boolean
   requiresLargeTokens?: boolean
+  requiresLongRun?: boolean
   modelBased?: boolean
 }
 
@@ -37,6 +38,7 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
   testTokenReturnAfterOms: {
     requiresAuth: true,
     requiresNetwork: true,
+    requiresLongRun: true,
   },
   testSecureFetch: {
     requiresAuth: true,

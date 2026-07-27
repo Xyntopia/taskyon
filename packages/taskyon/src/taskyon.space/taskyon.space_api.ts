@@ -52,8 +52,7 @@ export async function returnToken(
 ) {
   const url = `${baseUrl}/return`
 
-  console.log('[returnToken] Returning token with data:', {
-    token,
+  console.log('[returnToken] Returning token usage data:', {
     credits_spent_increase,
     reference_data,
   })

@@ -2619,7 +2619,7 @@ async function main() {
       cliToolRpcExecutor.destroy()
       unsubscribeBridgeToTaskyon()
       unsubscribeTaskyonToBridge()
-      taskyon.workerStop('tycli client command complete')
+      taskyon.cancelCurrentRun('tycli client command complete')
       setChatCompletionTraceWriter(undefined)
       restoreConsoleLogging?.()
       await runtimeLog?.flush().catch(() => {})
@@ -3156,7 +3156,7 @@ async function main() {
     writeSessionLocations('Session Locations', currentSessionLocations())
     restoreTerminalInput()
     try {
-      taskyon.workerStop(reason)
+      taskyon.cancelCurrentRun(reason)
     } catch {
       // best effort
     }
@@ -3174,7 +3174,7 @@ async function main() {
     noteInterruptPhase('Stopping current worker task...')
     suppressInterruptedWorkerTasks()
     try {
-      taskyon.workerStop(`Interrupted by ${source}`)
+      taskyon.cancelCurrentRun(`Interrupted by ${source}`)
       noteInterruptPhase('Worker stop requested. Waiting for task cleanup...')
     } catch (error) {
       writeError(
@@ -3624,7 +3624,7 @@ async function main() {
     stopWorkerStatusLine()
     clearTransientStatusLine = undefined
     await flushConversationPersist().catch(() => {})
-    taskyon.workerStop('tycli exit')
+    taskyon.cancelCurrentRun('tycli exit')
     setChatCompletionTraceWriter(undefined)
     writeOutro(`Conversation saved: ${conversationPersistence.filePath}`)
     writeOutro(`tycli log: ${runtimeLog?.filePath ?? 'unavailable'}`)

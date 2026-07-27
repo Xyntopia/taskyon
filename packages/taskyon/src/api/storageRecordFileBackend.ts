@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
 import { deepMerge } from '../utils/objHelpers'
 import type { StorageRecordBackend } from './storageProtocol'
 
@@ -71,11 +72,19 @@ const mergeStorageRecord = (
 export const storageRecordNamespacePath = (namespace: string) =>
   ['records', ...namespace.split('/').map(encodeURIComponent)].join('/')
 
+const MAX_READABLE_ID_LENGTH = 160
+
+const storageRecordFileName = (id: string | number) => {
+  const type = typeof id
+  const encodedId = encodeURIComponent(String(id))
+  if (encodedId.length <= MAX_READABLE_ID_LENGTH) return `${type}-${encodedId}.json`
+
+  const digest = canonicalHash({ type, value: id }).slice('sha256:'.length)
+  return `${type}-sha256-${digest}.json`
+}
+
 export const storageRecordFilePath = (namespace: string, id: string | number) =>
-  [
-    storageRecordNamespacePath(namespace),
-    `${typeof id}-${encodeURIComponent(String(id))}.json`,
-  ].join('/')
+  [storageRecordNamespacePath(namespace), storageRecordFileName(id)].join('/')
 
 export const createStorageRecordFileBackend = (
   adapter: StorageRecordFileAdapter,

@@ -37,10 +37,22 @@ export const testCliFileStoragePersistsTaskRecordsAndFindsRelations = async () =
     role: 'assistant',
     content: { type: 'message', data: 'sibling' },
   }
+  const longTaskId = JSON.stringify({
+    cacheFormatVersion: 2,
+    nodeId: 'resourceFetch',
+    nodeCodeHash: `sha256:${'a'.repeat(64)}`,
+    paramsHash: `sha256:${'b'.repeat(64)}`,
+  })
+  const longIdTask: TaskNode = {
+    id: longTaskId,
+    role: 'user',
+    content: { type: 'message', data: 'record with a filesystem-safe hashed filename' },
+  }
 
   await firstStorage.tasks.set('parent-task', parentTask)
   await firstStorage.tasks.set('child-task', childTask)
   await firstStorage.tasks.set('sibling-task', siblingTask)
+  await firstStorage.tasks.set(longTaskId, longIdTask)
   await firstStorage.meta.upsert(
     'child-task',
     {
@@ -71,6 +83,7 @@ export const testCliFileStoragePersistsTaskRecordsAndFindsRelations = async () =
 
   try {
     const loadedChild = await secondStorage.tasks.get('child-task')
+    const loadedLongIdTask = await secondStorage.tasks.get(longTaskId)
     const childMeta = await secondStorage.meta.get('child-task')
     const children = await secondStorage.tasks.find({ parentID: 'parent-task' })
     const nextSiblings = await secondStorage.tasks.find({ priorID: 'child-task' })
@@ -78,6 +91,10 @@ export const testCliFileStoragePersistsTaskRecordsAndFindsRelations = async () =
     assert(
       loadedChild?.id === 'child-task',
       'Expected child task to persist across service restart',
+    )
+    assert(
+      loadedLongIdTask?.id === longTaskId,
+      'Expected a long record ID to persist through a filesystem-safe filename',
     )
     assert(children['child-task']?.id === 'child-task', 'Expected parentID find to include child')
     assert(

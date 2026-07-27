@@ -131,7 +131,7 @@ export const testTaskWorkerEmitsProcessedBeforeFinishedForMessageSubtask = async
   } finally {
     unsubscribeWorkerStream()
     registration.destroy()
-    ty.workerStop('task worker message subtask diagnostic complete')
+    await ty.dispose('task worker message subtask diagnostic complete')
     storage.destroy()
   }
 }
@@ -226,7 +226,7 @@ export const testTaskWorkerSettlesAfterPriorFunctionCreatesSubtasks = async () =
   } finally {
     unsubscribeWorkerStream()
     registration.destroy()
-    ty.workerStop('task worker settlement diagnostic complete')
+    await ty.dispose('task worker settlement diagnostic complete')
     storage.destroy()
   }
 }
@@ -325,7 +325,7 @@ export const testTaskWorkerWaitsForParallelSubtreeBeforeSequentialReducer = asyn
   } finally {
     unsubscribeWorkerStream()
     registration.destroy()
-    ty.workerStop('parallel subtree reducer diagnostic complete')
+    await ty.dispose('parallel subtree reducer diagnostic complete')
     storage.destroy()
   }
 }

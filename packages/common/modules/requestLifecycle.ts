@@ -22,6 +22,7 @@ export function awaitRequestResponse<TReceive, TResult>(options: {
   subscribe(receive: (message: TReceive) => void): RequestUnsubscribe
   sendRequest(): void
   sendCancel?: ((reason: string) => void) | undefined
+  requestLabel?: string | undefined
   timeoutMs?: number | undefined
   signal?: AbortSignal | undefined
   readResponse(message: TReceive): RequestResult<TResult> | undefined
@@ -83,13 +84,12 @@ export function awaitRequestResponse<TReceive, TResult>(options: {
       })
       options.signal?.addEventListener('abort', abort, { once: true })
       if (options.timeoutMs !== undefined) {
-        timeout = setTimeout(
-          () =>
-            cancel(
-              interruptionError('TimeoutError', `Request timed out after ${options.timeoutMs}ms`),
-            ),
-          options.timeoutMs,
+        const requestContext = options.requestLabel ? ` (${options.requestLabel})` : ''
+        const timeoutError = interruptionError(
+          'TimeoutError',
+          `Request timed out after ${options.timeoutMs}ms${requestContext}`,
         )
+        timeout = setTimeout(() => cancel(timeoutError), options.timeoutMs)
       }
       options.sendRequest()
     } catch (error) {

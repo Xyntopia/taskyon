@@ -1316,6 +1316,7 @@ export function createStreamRpcRequest<
   return awaitRequestResponse({
     subscribe: options.port.receive,
     sendRequest: () => options.port.send(options.request),
+    requestLabel: options.requestId,
     timeoutMs: options.timeoutMs,
     signal: options.signal,
     sendCancel: createCancelRequest
