@@ -9,14 +9,14 @@ export type McpCapableWebProvider = {
   docsUrl?: string
   integrationStyle: 'http-api' | 'browser-api' | 'hybrid-api'
   notes: string
-  recommendedForTaskyonDefault: boolean
+  recommendedForDefault: boolean
 }
 
 const createMcpCapableWebProvider = (
   providerId: string,
   integrationStyle: McpCapableWebProvider['integrationStyle'],
   notes: string,
-  recommendedForTaskyonDefault = false,
+  recommendedForDefault = false,
 ): McpCapableWebProvider => {
   const provider = proxyWebReaderProviders[providerId as keyof typeof proxyWebReaderProviders]
   if (!provider) {
@@ -35,7 +35,7 @@ const createMcpCapableWebProvider = (
     docsUrl: provider.docsUrl,
     integrationStyle,
     notes,
-    recommendedForTaskyonDefault,
+    recommendedForDefault,
   }
 }
 
@@ -43,7 +43,7 @@ export const mcpCapableWebProviders = [
   createMcpCapableWebProvider(
     'scraperapi',
     'http-api',
-    'Simple HTTP scraping API with direct URL fetch semantics. Good first default for Taskyon onboarding.',
+    'Simple HTTP scraping API with direct URL fetch semantics. Good first default for app onboarding.',
     true,
   ),
   createMcpCapableWebProvider(
@@ -113,5 +113,5 @@ export const mcpCapableWebProviderIds = mcpCapableWebProviders.map(
 )
 
 export const defaultMcpCapableWebProvider =
-  mcpCapableWebProviders.find((provider) => provider.recommendedForTaskyonDefault) ??
+  mcpCapableWebProviders.find((provider) => provider.recommendedForDefault) ??
   mcpCapableWebProviders[0]

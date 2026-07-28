@@ -3,15 +3,26 @@
 
 export {}
 
+let configuredNodeOpfsRoot: string | null = null
+
 const hasBrowserOpfs = (): boolean =>
   typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function'
+
+export const configureNodeOpfsRoot = (root: string | null): void => {
+  configuredNodeOpfsRoot = root?.trim() || null
+}
 
 const nodeOpfsRoot = (): string => {
   const proc = globalThis as unknown as {
     process?: { cwd?: () => string; env?: Record<string, string | undefined> }
   }
   const cwd = proc.process?.cwd?.() ?? '.'
-  return proc.process?.env?.TASKYON_NODE_OPFS_ROOT ?? `${cwd}/.taskyon/opfs`
+  return (
+    configuredNodeOpfsRoot ??
+    proc.process?.env?.TASKYON_NODE_OPFS_ROOT ??
+    proc.process?.env?.APP_NODE_OPFS_ROOT ??
+    `${cwd}/.taskyon/opfs`
+  )
 }
 
 const safeNodePath = async (path: string): Promise<string> => {

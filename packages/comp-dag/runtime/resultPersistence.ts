@@ -69,6 +69,7 @@ export type ResultPersistenceDeps = {
   writeJson: (path: string, value: unknown) => Promise<void>
   readJson: <T>(path: string) => Promise<T>
   sanitizePathSegment: (value: string) => string
+  storageRootPrefix?: string
   now?: () => number
 }
 
@@ -255,6 +256,7 @@ export const isPersistedOptimizationSnapshotV1 = (
 
 export const createResultPersistenceService = (deps: ResultPersistenceDeps) => {
   const now = deps.now ?? (() => Date.now())
+  const storageRootPrefix = deps.sanitizePathSegment(deps.storageRootPrefix ?? 'comp_dag')
 
   const optimizationResultsSnapshotCache = new Map<string, OptimizationResults | null>()
   const optimizationResultsPersistStateByProblem = new Map<string, ResultsSnapshotPersistState>()
@@ -268,7 +270,7 @@ export const createResultPersistenceService = (deps: ResultPersistenceDeps) => {
     const safeProject = deps.sanitizePathSegment(projectId)
     const safeProblem = deps.sanitizePathSegment(problemId)
     const runId = startedAtMs != null ? String(startedAtMs) : String(now())
-    return `comp_dag/run_rows/${safeProject}/${safeProblem}/${runId}`
+    return `${storageRootPrefix}/run_rows/${safeProject}/${safeProblem}/${runId}`
   }
 
   const runArchivePathForIndex = (
@@ -285,7 +287,7 @@ export const createResultPersistenceService = (deps: ResultPersistenceDeps) => {
   const optimizationResultsSnapshotPathFor = (projectId: string, problemId: string): string => {
     const safeProject = deps.sanitizePathSegment(projectId)
     const safeProblem = deps.sanitizePathSegment(problemId)
-    return `comp_dag/run_results/${safeProject}/${safeProblem}/latest.json`
+    return `${storageRootPrefix}/run_results/${safeProject}/${safeProblem}/latest.json`
   }
 
   const runManifestPathFor = (

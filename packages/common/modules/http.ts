@@ -37,6 +37,7 @@ export interface HttpRequestOptions<TBody = unknown> {
    */
   pluginId?: string
   userId?: string
+  proxyBaseUrl?: string
 }
 
 export interface HttpResponse<T = unknown> {
@@ -91,9 +92,13 @@ async function browserViaProxy<TResp = unknown, TBody = unknown>(
 ): Promise<HttpResponse<TResp>> {
   const { method, url, headers = {}, query, body, e2eEncrypted, pluginId, userId } = options
 
-  // Change this to your actual proxy endpoint
-  const PROXY_BASE_URL = 'https://share.taskyon.space/proxy'
-  const proxyUrl = buildUrlWithQuery(PROXY_BASE_URL, query)
+  const proxyBaseUrl =
+    options.proxyBaseUrl ??
+    (typeof import.meta !== 'undefined'
+      ? import.meta.env?.VITE_SHARED_HTTP_PROXY_BASE_URL
+      : undefined) ??
+    '/proxy'
+  const proxyUrl = buildUrlWithQuery(proxyBaseUrl, query)
 
   // This payload shape should match your proxy server's expectations.
   const payload = {

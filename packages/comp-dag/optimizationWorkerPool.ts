@@ -43,6 +43,7 @@ export class OptimizationWorkerPool {
     EstimateDurationResult | WorkerErrorResult
   >
   private readonly workerDebugLabel: string
+  private readonly logPrefix: string
   private slots: WorkerSlot[] = []
   private queue: PendingTask[] = []
   private pendingById = new Map<number, PendingTask>()
@@ -54,9 +55,11 @@ export class OptimizationWorkerPool {
       EstimateDurationResult | WorkerErrorResult
     >
     workerDebugLabel?: string
+    logPrefix?: string
   }) {
     this.createWorker = args.createWorker
     this.workerDebugLabel = args.workerDebugLabel ?? '(custom-worker-factory)'
+    this.logPrefix = args.logPrefix ?? '[COMP-DAG][optimizationWorkerPool]'
   }
 
   ensureSize(count: number) {
@@ -64,7 +67,7 @@ export class OptimizationWorkerPool {
 
     while (this.slots.length < target) {
       const worker = this.createWorker()
-      console.info('[COMP-DAG][optimizationWorkerPool] spawned ETA worker', {
+      console.info(`${this.logPrefix} spawned ETA worker`, {
         workerUrl: this.workerDebugLabel,
         slotIndex: this.slots.length,
       })
@@ -93,7 +96,7 @@ export class OptimizationWorkerPool {
         this.pump()
       }
       worker.onerror = (event) => {
-        console.error('[COMP-DAG][optimizationWorkerPool] ETA worker error', {
+        console.error(`${this.logPrefix} ETA worker error`, {
           workerUrl: this.workerDebugLabel,
           slotActiveTaskId: slot.activeTaskId,
           message: event.message,
@@ -130,7 +133,7 @@ export class OptimizationWorkerPool {
       slot.activeTaskId = null
       slot.busy = false
       slot.worker.terminate()
-      console.info('[COMP-DAG][optimizationWorkerPool] terminated ETA worker', {
+      console.info(`${this.logPrefix} terminated ETA worker`, {
         workerUrl: this.workerDebugLabel,
       })
     }

@@ -17,6 +17,11 @@ export type UnifiedLogEntry = LogEntry & {
 const modelRunLogs = ref<LogEntry[]>([])
 const unifiedRunLogs = ref<UnifiedLogEntry[]>([])
 let unifiedLogSeq = 0
+let consolePrefix = '[TASKYON]'
+
+export const configureRunLogConsolePrefix = (prefix: string): void => {
+  consolePrefix = prefix.trim() || '[TASKYON]'
+}
 
 const emitToBrowserConsole = (
   source: string,
@@ -24,17 +29,16 @@ const emitToBrowserConsole = (
   data: unknown,
   level: LogLevel,
 ): void => {
-  const prefix = '[TASKYON]'
   const tag = `[${source}]`
   if (level === 'error') {
-    console.error(prefix, tag, message, data ?? '')
+    console.error(consolePrefix, tag, message, data ?? '')
     return
   }
   if (level === 'warn') {
-    console.warn(prefix, tag, message, data ?? '')
+    console.warn(consolePrefix, tag, message, data ?? '')
     return
   }
-  console.info(prefix, tag, message, data ?? '')
+  console.info(consolePrefix, tag, message, data ?? '')
 }
 
 const appendLog = (source: string, message: string, data?: unknown, level: LogLevel = 'info') => {
