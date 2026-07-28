@@ -497,7 +497,7 @@ import {
   designRendererBootstrapSource,
   type DesignRendererHostConnection,
 } from 'src/modules/designRendererProtocol'
-import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
 import type { JSONSchema7 } from 'json-schema'
@@ -515,7 +515,7 @@ const selectedRoot = ref('')
 const refOptions = ref<string[]>([])
 const project = ref<DesignWorkspaceProject | null>(null)
 const params = ref<Record<string, unknown>>({})
-const result = ref<unknown>(null)
+const result = shallowRef<unknown>(null)
 const evaluation = ref<Awaited<ReturnType<typeof evaluateDesign>>['evaluation'] | null>(null)
 const visualizationHtml = ref('')
 const visualizationFrame = ref<HTMLIFrameElement | null>(null)

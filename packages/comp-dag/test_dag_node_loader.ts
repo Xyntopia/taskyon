@@ -47,3 +47,33 @@ export default ${nodeBody} satisfies StoredDagNodeModule
 
 testStoredDagNodeNormalizationEmitsStandaloneSource.description =
   'Normalizes stored design-graph nodes into standalone source without application imports.'
+
+export const testStoredDagNodeNormalizationRunsWithoutBrowserProcess = async () => {
+  if (typeof window === 'undefined') {
+    return {
+      skipped: true,
+      reason: 'The missing process global is a browser runtime boundary.',
+    }
+  }
+
+  const processDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'process')
+  const removed = Reflect.deleteProperty(globalThis, 'process')
+  assert(
+    removed || processDescriptor === undefined,
+    'Expected the browser process shim to be removable',
+  )
+
+  try {
+    const normalized = await normalizeStoredGraphNodeSource(`export default ${nodeBody}\n`)
+    assert(
+      normalized.source.startsWith('export default {'),
+      'Expected stored-node normalization to work without a browser process global',
+    )
+    return { source: normalized.source }
+  } finally {
+    if (processDescriptor) Object.defineProperty(globalThis, 'process', processDescriptor)
+  }
+}
+
+testStoredDagNodeNormalizationRunsWithoutBrowserProcess.description =
+  'Normalizes a stored design-graph node when the browser has no Node process global.'

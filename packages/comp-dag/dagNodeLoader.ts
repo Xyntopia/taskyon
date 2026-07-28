@@ -68,15 +68,7 @@ export const parseStoredGraphNodeHashFromPath = (path: string): Hash | null => {
   return match?.[1] ? hashFromFilePart(match[1]) : null
 }
 
-const loadTypescript = async (): Promise<typeof ts> => {
-  const browserProcess = (
-    globalThis as unknown as {
-      process?: { versions?: Record<string, string | undefined> }
-    }
-  ).process
-  if (browserProcess && !browserProcess.versions) browserProcess.versions = {}
-  return await import('typescript')
-}
+const loadTypescript = async (): Promise<typeof ts> => await import('typescript')
 
 const formatTypeScript = async (source: string): Promise<string> => {
   const prettier = (await import('prettier/standalone')) as PrettierStandaloneModule
@@ -336,6 +328,7 @@ const transpileRunSource = (tsModule: typeof ts, runSource: string): string => {
       target: tsModule.ScriptTarget.ES2022,
       module: tsModule.ModuleKind.ESNext,
       removeComments: false,
+      typeRoots: [],
     },
     fileName: 'stored-graph-node-run.ts',
   })
