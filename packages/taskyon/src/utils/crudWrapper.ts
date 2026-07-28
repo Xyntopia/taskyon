@@ -5,10 +5,17 @@ import type { EncryptedDataRow } from './encrypt'
 import { decryptDataFile, encryptDataFile } from './encrypt'
 import type { Stream } from '@taskyon/common/modules/frpBus'
 import { createStream, streamProcedureCall } from '@taskyon/common/modules/frpBus'
+import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
 import { deepMerge } from './objHelpers'
 import type { PgLiteOptions } from './pglite.api'
 import { createVecPgLiteTable, type TyPGDB } from './pglite.api'
 import { useNlpWorker } from './webWorkerApi'
+import {
+  rankSearchDocuments,
+  searchIndexSignature,
+  type SearchVectorizerPreset,
+} from './searchEngine'
+import { DEFAULT_STATIC_EMBEDDING_MODEL } from './staticEmbedding'
 
 type Row<T> = {
   [key: string]: unknown
@@ -387,22 +394,77 @@ export const createPgLiteCrudWrapper = async <T>(
 export const createVectorStore = async <T>(
   db: TyPGDB,
   name: string,
-  additionalColumns?: string[],
+  additionalColumnsOrOptions?:
+    | string[]
+    | {
+        additionalColumns?: string[]
+        vectorizer?: SearchVectorizerPreset
+        modelName?: string
+        dimensions?: number
+      },
 ) => {
-  const numDimensions = 384
+  const options = Array.isArray(additionalColumnsOrOptions)
+    ? { additionalColumns: additionalColumnsOrOptions }
+    : (additionalColumnsOrOptions ?? {})
+  const vectorizer = options.vectorizer ?? 'static-multilingual'
+  const numDimensions = options.dimensions ?? (vectorizer === 'static-multilingual' ? 256 : 384)
   const maxStrLength = 10000 // only vectorize approx. the first page.
   const dataColumn = 'data'
   const idColumn = 'id'
+  const modelName =
+    options.modelName ??
+    (vectorizer === 'static-multilingual'
+      ? DEFAULT_STATIC_EMBEDDING_MODEL
+      : 'xyntopia/all-MiniLM-L6-v2')
+  const signature = searchIndexSignature({
+    vectorizer,
+    model: modelName,
+    dimensions: numDimensions,
+  })
+  const tableName = `${name}_${canonicalHash(signature).slice('sha256:'.length, 12)}`
   const crudTable = await createPgLiteCrudWrapper<T>(db, {
-    tableName: name,
+    tableName,
     idColumn,
     dataColumn,
-    additionalColumns: additionalColumns ?? [],
+    additionalColumns: [...(options.additionalColumns ?? []), 'search_text TEXT'],
     pgvector: true,
     vectorDims: numDimensions,
   })
 
-  const modelName = 'xyntopia/all-MiniLM-L6-v2'
+  let semanticFailure: unknown
+  let semanticFailureReported = false
+
+  const vectorize = async (text: string) => {
+    if (semanticFailure) throw semanticFailure
+    const worker = useNlpWorker()
+    try {
+      if (vectorizer === 'transformer-minilm') return await worker.vectorizeText(text, modelName)
+      const embedding = worker.vectorizeStaticText(text, modelName)
+      let timeout: ReturnType<typeof setTimeout> | undefined
+      try {
+        return await Promise.race([
+          embedding,
+          new Promise<never>((_resolve, reject) => {
+            timeout = setTimeout(
+              () => reject(new Error('Static embedding model load timed out after 8 seconds.')),
+              8_000,
+            )
+          }),
+        ])
+      } finally {
+        if (timeout) clearTimeout(timeout)
+      }
+    } catch (error) {
+      semanticFailure = error
+      throw error
+    }
+  }
+
+  const reportSemanticFailure = (message: string, error: unknown) => {
+    if (semanticFailureReported) return
+    semanticFailureReported = true
+    console.warn(message, error)
+  }
 
   /**
    * Searches the vector store for entries most similar to the given search text.
@@ -427,17 +489,14 @@ export const createVectorStore = async <T>(
     allowedIDs?: string[],
     filters?: PartialDeep<T>,
   ) => {
-    const { vectorizeText } = useNlpWorker()
-    console.log(`Searching for ${searchText.slice(0, maxStrLength)}`)
-    const searchVector = await vectorizeText(searchText.slice(0, maxStrLength), modelName)
-    const formattedVector = `[${searchVector.join(',')}]` // Format the array as a string for pgvector
-    let sql = `
-      SELECT
-      id,
-      vec <-> $1 AS distance
-      FROM ${name}
-    `
-    const params: (string | number | string[])[] = [formattedVector, k]
+    let queryVector: number[] | undefined
+    try {
+      queryVector = await vectorize(searchText.slice(0, maxStrLength))
+    } catch (error) {
+      reportSemanticFailure('Semantic search unavailable; using lexical search.', error)
+    }
+    let sql = `SELECT id, data, search_text, vec::text AS vector FROM ${tableName}`
+    const params: (string | number | string[])[] = []
     const whereClauses: string[] = []
 
     if (allowedIDs && allowedIDs.length > 0) {
@@ -456,34 +515,127 @@ export const createVectorStore = async <T>(
       sql += `WHERE ${whereClauses.join(' AND ')}\n`
     }
 
-    sql += `ORDER BY distance LIMIT $2;`
-
-    const results = await db.query<Row<string>>(sql, params)
-
-    return results.rows as unknown as {
+    const results = await db.query<{
       id: string
-      distance: number
-    }[]
+      data: T
+      search_text: string | null
+      vector: string | null
+    }>(`${sql};`, params)
+    const parseVector = (value: string | null) =>
+      value ? value.slice(1, -1).split(',').map(Number) : undefined
+    return rankSearchDocuments({
+      query: searchText,
+      ...(queryVector ? { queryVector } : {}),
+      documents: results.rows.map((row) => {
+        const vector = parseVector(row.vector)
+        return {
+          id: row.id,
+          text: row.search_text ?? JSON.stringify(row.data),
+          ...(vector ? { vector } : {}),
+        }
+      }),
+      limit: k,
+    }).map(({ id, score }) => ({ id, distance: score > 0 ? 1 / score - 0.01 : 1_000_000 }))
   }
 
-  const upsert = async (id: string, text: string, saveData?: unknown) => {
-    const { vectorizeText } = useNlpWorker()
-    const vector = await vectorizeText(text.slice(0, maxStrLength), modelName)
-    const formattedVector = `[${vector.join(',')}]` // Format the array as a string for pgvector
+  const upsertVector = async (
+    id: string,
+    text: string,
+    vector: readonly number[],
+    saveData?: unknown,
+  ) => {
+    if (vector.length !== numDimensions) {
+      throw new Error(`Expected ${numDimensions} vector dimensions, received ${vector.length}.`)
+    }
+    const formattedVector = `[${vector.join(',')}]`
     await db.query(
       `
-      INSERT INTO ${name} (id, data, vec)
-      VALUES ($1, $2, $3)
+      INSERT INTO ${tableName} (id, data, vec, search_text)
+      VALUES ($1, $2, $3, $4)
       ON CONFLICT (id) DO UPDATE SET
-      ${saveData ? 'data = EXCLUDED.data,' : ''}
-      vec = EXCLUDED.vec;
+      data = EXCLUDED.data,
+      vec = EXCLUDED.vec,
+      search_text = EXCLUDED.search_text;
     `,
-      [id, saveData || '', formattedVector],
+      [id, saveData ?? '', formattedVector, text.slice(0, maxStrLength)],
     )
   }
 
+  const upsert = async (id: string, text: string, saveData?: unknown) => {
+    let vector: number[]
+    try {
+      vector = await vectorize(text.slice(0, maxStrLength))
+    } catch (error) {
+      reportSemanticFailure('Vectorization failed; storing lexical-only search records.', error)
+      vector = Array.from({ length: numDimensions }, () => 0)
+    }
+    await upsertVector(id, text, vector, saveData)
+  }
+
+  const upsertManyDocuments = async (
+    documents: readonly {
+      id: string
+      text: string
+      vector?: readonly number[]
+      data?: unknown
+    }[],
+  ) => {
+    if (documents.length === 0) return
+    const rows = []
+    for (const document of documents) {
+      let vector = document.vector
+      if (!vector) {
+        try {
+          vector = await vectorize(document.text.slice(0, maxStrLength))
+        } catch (error) {
+          reportSemanticFailure('Vectorization failed; storing lexical-only search records.', error)
+          vector = Array.from({ length: numDimensions }, () => 0)
+        }
+      }
+      if (vector.length !== numDimensions) {
+        throw new Error(`Expected ${numDimensions} vector dimensions, received ${vector.length}.`)
+      }
+      rows.push({
+        id: document.id,
+        data: document.data ?? '',
+        search_text: document.text.slice(0, maxStrLength),
+        vector: `[${vector.join(',')}]`,
+      })
+    }
+    await db.query(
+      `WITH src AS (
+        SELECT * FROM jsonb_to_recordset($1::jsonb)
+          AS t(id VARCHAR(64), data JSONB, search_text TEXT, vector TEXT)
+      )
+      INSERT INTO ${tableName} (id, data, search_text, vec)
+      SELECT id, data, search_text, vector::vector FROM src
+      ON CONFLICT (id) DO UPDATE SET
+        data = EXCLUDED.data,
+        search_text = EXCLUDED.search_text,
+        vec = EXCLUDED.vec;`,
+      [JSON.stringify(rows)],
+    )
+  }
+
+  const listSearchDocuments = async () => {
+    const result = await db.query<{
+      id: string
+      data: T
+      search_text: string | null
+      vector: string | null
+    }>(`SELECT id, data, search_text, vec::text AS vector FROM ${tableName};`)
+    const parseVector = (value: string | null) =>
+      value ? value.slice(1, -1).split(',').map(Number) : undefined
+    return result.rows.map((row) => ({
+      id: row.id,
+      data: row.data,
+      text: row.search_text ?? JSON.stringify(row.data),
+      vector: parseVector(row.vector),
+    }))
+  }
+
   const count = async (): Promise<number> => {
-    const result = await db.query<{ count: number }>(`SELECT COUNT(*) AS count FROM ${name};`)
+    const result = await db.query<{ count: number }>(`SELECT COUNT(*) AS count FROM ${tableName};`)
     return result.rows[0]!.count
   }
 
@@ -492,8 +644,11 @@ export const createVectorStore = async <T>(
     ...crudTable,
     search,
     upsert,
+    upsertVector,
+    upsertManyDocuments,
+    listSearchDocuments,
     count,
-    ...createFind<T>(db, dataColumn, idColumn, name),
+    ...createFind<T>(db, dataColumn, idColumn, tableName),
   }
 }
 

@@ -4,6 +4,7 @@ import type { TaskNodeMeta } from '../types/chatCompletion'
 import type { TaskNode } from '../types/taskNode'
 import type { ToolBase } from '../types/tools'
 import { getVector, loadModel, loadTokenizer } from './nlp'
+import { getStaticEmbedding } from './staticEmbedding'
 
 //import { getEncoding } from 'js-tiktoken';
 async function loadTikTokenEncoder() {
@@ -62,6 +63,10 @@ export function createNlpWorkerApi() {
     // TODO: make sure, we don't reload models & tokenizers all the time!!
     vectorizeText: async (text: string, modelName: string) => {
       return await getVector(text, modelName)
+    },
+
+    vectorizeStaticText: async (text: string, modelName?: string) => {
+      return await getStaticEmbedding(text, modelName)
     },
 
     loadVecTokenizer: async (modelName: string) => {
