@@ -36,8 +36,26 @@ export async function sha256UrlSafeHash(obj: unknown) {
   return uint8ArrayToBase64UrlSafe(hashBuffer)
 }
 
-export async function sha256UrlSafeHashFromFile(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer()
-  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
-  return uint8ArrayToBase64UrlSafe(hashBuffer)
+export async function sha256HashesFromFile(file: File) {
+  const hash = createSha256Hasher()
+  const reader = file.stream().getReader()
+  try {
+    while (true) {
+      const chunk = await reader.read()
+      if (chunk.done) {
+        return {
+          id: uint8ArrayToBase64UrlSafe(hash.digestBytes()),
+          sha256: hash.digest(),
+        }
+      }
+      hash.update(chunk.value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
 }
+
+export async function sha256UrlSafeHashFromFile(file: File): Promise<string> {
+  return (await sha256HashesFromFile(file)).id
+}
+import { createSha256Hasher } from '@taskyon/common/modules/canonicalHash'

@@ -40,6 +40,7 @@ import {
 import { createTaskyonApiDescription } from '../api/taskyonOpenApi'
 import type { TaskManagerStorage, TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
+import type { ArtifactStore } from './artifactStore'
 import { generateSecretId } from './taskFunctionExecutor'
 import { runTaskWorker, type TyTaskStreamData } from './taskWorker'
 import { summarizeProtocolMessageForLog } from './protocolLogging'
@@ -71,6 +72,7 @@ type TaskManagerStorageFactory = (args: {
   sessionId: string
   db: Awaited<ReturnType<typeof getDatabase>>
 }) => Promise<TaskManagerStorage> | TaskManagerStorage
+type ArtifactStoreFactory = (args: { sessionId: string }) => Promise<ArtifactStore> | ArtifactStore
 type TaskyonDatabaseFactory = (name: string) => Promise<TyPGDB>
 
 export type TyCoreToolSetup = {
@@ -79,6 +81,7 @@ export type TyCoreToolSetup = {
   createSessionTools: (deps: {
     db: TyPGDB
     taskManager: TyTaskManager
+    artifactStore?: ArtifactStore
     toolchainConfig: TyToolchainConfig
   }) => {
     tools: InternalTool[]
@@ -93,6 +96,7 @@ export type TyCoreToolSetup = {
 function createApi(
   insidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
   taskManagerInstance: TyTaskManager,
+  artifactStore: ArtifactStore | undefined,
   queueTask: (id: string) => void,
 ) {
   const unsubscribeApiServer = createPortServer(
@@ -164,9 +168,9 @@ function createApi(
           await taskManagerInstance.updateToolDefinitions(request.includeHidden),
       },
       files: {
-        add: async (msg) => {
-          const id = await taskManagerInstance.addFiles([msg.file], msg.store ?? 'memory')
-          console.log('received file...', id, msg)
+        add: async ({ file }) => {
+          if (!artifactStore) throw new Error('Artifact storage is not available in this runtime.')
+          return await artifactStore.put(file)
         },
       },
     },
@@ -250,6 +254,7 @@ const dynamicContext =
       sendEncryptedTasks?: Thunk<boolean>
       streamObservers: SessionStreamObservers
       taskManagerStorageFactory?: TaskManagerStorageFactory
+      artifactStoreFactory?: ArtifactStoreFactory
     },
   ) =>
   async (cs: CryptoSession, initialToolchainConfig: TyToolchainConfig) => {
@@ -260,6 +265,9 @@ const dynamicContext =
     console.log('tycore starting new session with id:', sessionKeyId)
     const storage = options.taskManagerStorageFactory
       ? await options.taskManagerStorageFactory({ sessionId: sessionKeyId, db })
+      : undefined
+    const artifactStore = options.artifactStoreFactory
+      ? await options.artifactStoreFactory({ sessionId: sessionKeyId })
       : undefined
     const taskManagerInstance = await useTyTaskManager(db, {
       indexTaskVectors: options.indexTaskVectors,
@@ -288,6 +296,7 @@ const dynamicContext =
     const sessionTools = toolSetup.createSessionTools({
       db,
       taskManager: taskManagerInstance,
+      ...(artifactStore ? { artifactStore } : {}),
       toolchainConfig: runtimeConfiguration.toolchainConfig,
     })
     const sessionToolList = [...toolSetup.baseTools, ...sessionTools.tools]
@@ -451,8 +460,11 @@ const dynamicContext =
     })
     const toolExecutionClient = createToolExecutionClient(workerport)
     const taskyonApi = createPortClient(insidePort, taskyonProtocol)
-    const unsubscribeApiServer = createApi(insidePort, taskManagerInstance, (id: string) =>
-      queueTask(id),
+    const unsubscribeApiServer = createApi(
+      insidePort,
+      taskManagerInstance,
+      artifactStore,
+      (id: string) => queueTask(id),
     )
     let disposed = false
     const unsubscribeTaskStreamBridge = taskManagerInstance.taskStream(
@@ -519,6 +531,7 @@ const dynamicContext =
       },
       queueTask,
       taskManagerInstance,
+      artifactStore,
       secretStore,
     }
   }
@@ -538,6 +551,7 @@ export async function tyCore(
     nodePgLiteDataDir?: string
     secretStore?: SecretStore
     taskManagerStorageFactory?: TaskManagerStorageFactory
+    artifactStoreFactory?: ArtifactStoreFactory
   },
 ) {
   configureNodePgLiteDataDir(
@@ -584,6 +598,9 @@ export async function tyCore(
       ...(options?.taskManagerStorageFactory
         ? { taskManagerStorageFactory: options.taskManagerStorageFactory }
         : {}),
+      ...(options?.artifactStoreFactory
+        ? { artifactStoreFactory: options.artifactStoreFactory }
+        : {}),
     },
   )
 
@@ -617,6 +634,8 @@ export async function tyCore(
     taskStream: taskStream.stream,
     cancelCurrentRun: (message: string) => ctx.cancelCurrentRun(message),
     dispose: (message: string) => ctx.dispose(message),
+    getArtifact: async (attachment: Parameters<ArtifactStore['get']>[0]) =>
+      await ctx.artifactStore?.get(attachment),
     updateChatCompletionApiKey: async (key: string, value?: string) => {
       const { tool, def } = await ctx.taskManagerInstance.getToolDefinition(
         toolSetup.chatCompletionToolName,
@@ -649,8 +668,6 @@ export async function tyCore(
         'findSiblingLeafTasks',
         'deleteTaskThread',
         'deleteTask',
-        'getUploadedFile',
-        'getFileMappingByUuid',
         // TODO: also the following functionsnot sure, maybe we can generalize backup a bit more?
         'getJsonTaskBackup',
         'addTaskBackup',

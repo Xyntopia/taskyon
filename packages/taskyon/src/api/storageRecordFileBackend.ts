@@ -114,9 +114,23 @@ export const createStorageRecordFileBackend = (
 
   return {
     get: async (id) => (await readRecord(id))?.data ?? null,
+    getMany: async (ids) => {
+      const records = await Promise.all(ids.map(readRecord))
+      return records
+        .filter((record): record is StorageRecordFile => record !== null)
+        .map((record) => ({ id: record.id, data: record.data }))
+    },
     set: async (id, value) =>
       await withLock(async () => {
         await adapter.write(storageRecordFilePath(namespace, id), { id, data: value })
+      }),
+    setMany: async (rows) =>
+      await withLock(async () => {
+        await Promise.all(
+          rows.map(async ({ id, data }) =>
+            adapter.write(storageRecordFilePath(namespace, id), { id, data }),
+          ),
+        )
       }),
     upsert: async (id, value, strategy) =>
       await withLock(async () => {

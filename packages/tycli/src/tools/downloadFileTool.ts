@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, open, rename, rm } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { createTool } from '@taskyon/taskyon/api'
 import { assertPathInsideArtifactRoot, resolveWorkspacePath } from './workspacePaths'
@@ -99,30 +99,67 @@ export const downloadFileTool = createTool({
         }
 
         const contentType = response.headers.get('content-type') ?? 'application/octet-stream'
-        const bytes = new Uint8Array(await response.arrayBuffer())
-        if (bytes.length === 0) throw new Error('Download returned an empty response.')
-        if (args.maxBytes !== undefined && bytes.length > args.maxBytes) {
-          throw new Error(
-            `Download returned ${bytes.length} bytes, exceeding maxBytes ${args.maxBytes}.`,
-          )
-        }
-        if (shouldValidatePdf(args) && !looksLikePdf(bytes)) {
-          throw new Error(
-            `Download did not return PDF bytes. Content-Type was ${contentType}; first bytes were ${Array.from(
-              bytes.slice(0, 12),
-            )
-              .map((byte) => byte.toString(16).padStart(2, '0'))
-              .join(' ')}.`,
-          )
-        }
-
+        if (!response.body) throw new Error('Download response did not contain a readable body.')
         await mkdir(dirname(fullPath), { recursive: true })
-        await writeFile(fullPath, bytes)
+        const temporaryPath = `${fullPath}.partial-${process.pid}-${Date.now()}`
+        const handle = await open(temporaryPath, 'w')
+        let size = 0
+        let firstBytes = new Uint8Array()
+        try {
+          const reader = response.body.getReader()
+          try {
+            while (true) {
+              const chunk = await reader.read()
+              if (chunk.done) break
+              size += chunk.value.byteLength
+              if (args.maxBytes !== undefined && size > args.maxBytes) {
+                throw new Error(
+                  `Download returned ${size} bytes, exceeding maxBytes ${args.maxBytes}.`,
+                )
+              }
+              if (firstBytes.byteLength < 12) {
+                const prefix = chunk.value.slice(0, 12 - firstBytes.byteLength)
+                const combined = new Uint8Array(firstBytes.byteLength + prefix.byteLength)
+                combined.set(firstBytes)
+                combined.set(prefix, firstBytes.byteLength)
+                firstBytes = combined
+              }
+              let written = 0
+              while (written < chunk.value.byteLength) {
+                const result = await handle.write(
+                  chunk.value,
+                  written,
+                  chunk.value.byteLength - written,
+                )
+                if (result.bytesWritten === 0) throw new Error('Download write made no progress.')
+                written += result.bytesWritten
+              }
+            }
+          } finally {
+            reader.releaseLock()
+          }
+          if (size === 0) throw new Error('Download returned an empty response.')
+          if (shouldValidatePdf(args) && !looksLikePdf(firstBytes)) {
+            throw new Error(
+              `Download did not return PDF bytes. Content-Type was ${contentType}; first bytes were ${Array.from(
+                firstBytes,
+              )
+                .map((byte) => byte.toString(16).padStart(2, '0'))
+                .join(' ')}.`,
+            )
+          }
+        } catch (error) {
+          await handle.close()
+          await rm(temporaryPath, { force: true })
+          throw error
+        }
+        await handle.close()
+        await rename(temporaryPath, fullPath)
 
         return {
           ok: true,
           filePath,
-          size: bytes.length,
+          size,
           contentType,
         }
       } catch (error) {

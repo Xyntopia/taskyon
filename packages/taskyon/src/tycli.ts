@@ -1,4 +1,5 @@
 export { createTaskNode } from './core/createTasks'
+export { createArtifactStore, type ArtifactStore } from './core/artifactStore'
 export { tyCore } from './core/init'
 export type { Taskyon } from './core/init'
 export { chat2Md } from './core/markdownTaskIO'

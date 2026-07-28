@@ -38,7 +38,6 @@ import {
   OAUTH_PROVIDERS,
   randomString,
   registerToolRpcTools,
-  sha256UrlSafeHashFromFile,
   TaskNode,
   taskyonRuntimeProtocol,
 } from '@taskyon/taskyon'
@@ -61,11 +60,14 @@ import {
 import { taskyonDocumentationTool } from '@taskyon/taskyon/tools/documentationTool'
 import { taskyonDocumentationManifest } from '@taskyon/taskyon/documentationManifest'
 import { createTaskyonBrowserCoreRuntime } from '@taskyon/runtime-browser'
+import {
+  createOpfsBlobStorageBackend,
+  createOpfsStorageBackendResolver,
+} from '@taskyon/runtime-browser/storage'
 import { createStorageDagBackend } from '@taskyon/comp-dag/storageDagBackend'
 import { createTaskyonClient, taskyonGuiProtocol, taskyonProtocol } from '@taskyon/tyclient'
 import type { TaskyonGuiMessage } from '@taskyon/tyclient'
 import { createStandardEntryNodeTool } from '@taskyon/taskyon/tools/entryNode'
-import { createOpfsRecordStorageBackend } from 'src/modules/opfsRecordStorage'
 import { createTaskyonResourceFilesLoader } from 'src/modules/taskyonResourceFiles'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
@@ -1235,6 +1237,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       return initCs
     }
   })()
+  const opfsStorageBackend = createOpfsStorageBackendResolver()
   const runtime = createTaskyonBrowserCoreRuntime({
     llmSettings: () => ({
       ...stateRefs.llmSettings,
@@ -1249,19 +1252,24 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     storage: {
       kind: 'service',
       createService: (port) =>
-        createPgLiteTaskManagerStorageService(port, getDatabase, (namespace) => {
-          if (
-            !namespace.startsWith('dag/') &&
-            !namespace.startsWith('design-graphs/') &&
-            !namespace.startsWith('design-projects/') &&
-            !namespace.startsWith('documentation/')
-          ) {
-            throw new Error(
-              `No browser storage backend is configured for namespace "${namespace}".`,
-            )
-          }
-          return createOpfsRecordStorageBackend(namespace)
-        }),
+        createPgLiteTaskManagerStorageService(
+          port,
+          getDatabase,
+          (namespace) => {
+            if (
+              !namespace.startsWith('dag/') &&
+              !namespace.startsWith('design-graphs/') &&
+              !namespace.startsWith('design-projects/') &&
+              !namespace.startsWith('documentation/')
+            ) {
+              throw new Error(
+                `No browser storage backend is configured for namespace "${namespace}".`,
+              )
+            }
+            return opfsStorageBackend(namespace)
+          },
+          async (namespace) => await createOpfsBlobStorageBackend(namespace),
+        ),
     },
   })
   onScopeDispose(() => {
@@ -1741,17 +1749,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   return {
     tyready: computed(() => tyready),
-    addFile: async (file: File) => {
-      const id = await sha256UrlSafeHashFromFile(file)
-      await uiTaskyonClient.files.add({
-        id,
-        name: file.name,
-        mime: file.type,
-        size: file.size,
-        file,
-      })
-      return id
-    },
+    addFile: async (file: File) => await uiTaskyonClient.files.add({ file }),
     setNewSession,
     newSessionFromGdrive,
     uploadSessionKey,

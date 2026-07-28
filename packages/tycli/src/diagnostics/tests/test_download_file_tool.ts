@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { downloadFileTool } from '../../tools/downloadFileTool'
@@ -151,6 +151,43 @@ export const testDownloadFileReturnsRecoverableFailureForMaxBytes = async () =>
       ),
   )
 
+export const testDownloadFileStreamsResponseChunksToWorkspace = async () =>
+  await withTempCwd(
+    'tycli-download-file-stream',
+    async (dir) =>
+      await withMockFetch(
+        () =>
+          Promise.resolve(
+            new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(new TextEncoder().encode('%PDF-'))
+                  controller.enqueue(new TextEncoder().encode('streamed body'))
+                  controller.close()
+                },
+              }),
+              { headers: { 'content-type': 'application/pdf' } },
+            ),
+          ),
+        async () => {
+          const result = await downloadFileTool.function?.({
+            url: 'https://example.test/streamed.pdf',
+            filePath: 'downloads/streamed.pdf',
+            expectedFileType: 'pdf',
+          })
+
+          assert(
+            result && typeof result === 'object' && 'ok' in result && result.ok === true,
+            `Expected streamed download success, got ${JSON.stringify(result)}`,
+          )
+          assert(
+            (await readFile(join(dir, 'downloads/streamed.pdf'), 'utf8')) === '%PDF-streamed body',
+            'Expected every response chunk to be written in order',
+          )
+        },
+      ),
+  )
+
 testDownloadFileReturnsRecoverableFailureForHttpErrors.description =
   'downloadFile returns ok=false instead of throwing for HTTP download failures.'
 testDownloadFileReturnsRecoverableFailureForNonPdfBytes.description =
@@ -159,3 +196,5 @@ testDownloadFileRejectsPathsOutsideArtifactRoot.description =
   'downloadFile rejects research downloads that try to write outside the selected artifact root.'
 testDownloadFileReturnsRecoverableFailureForMaxBytes.description =
   'downloadFile returns ok=false when a raw download exceeds the requested maxBytes limit.'
+testDownloadFileStreamsResponseChunksToWorkspace.description =
+  'downloadFile streams response chunks directly into the workspace file.'

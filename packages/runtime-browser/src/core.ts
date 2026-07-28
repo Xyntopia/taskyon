@@ -1,11 +1,13 @@
 import {
   connectTaskManagerStorageFromProtocol,
+  createArtifactStore,
   createCryptoSession,
   tyCore,
   type CryptoSession,
 } from '@taskyon/taskyon'
 import {
   createProtocolPort,
+  createProtocolStorageBlobBackend,
   createStorageClient,
   createTaskyonClient,
   taskyonProtocol,
@@ -113,6 +115,13 @@ export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRunti
             connectTaskManagerStorageFromProtocol(
               storage.port,
               options.storageSessionId ?? sessionId,
+            ),
+          artifactStoreFactory: ({ sessionId }) =>
+            createArtifactStore(
+              createProtocolStorageBlobBackend(
+                storage.port,
+                `${options.storageSessionId ?? sessionId}/artifacts`,
+              ),
             ),
         },
       )

@@ -2011,7 +2011,6 @@ export async function getTestMetaData() {
         const res = await convertTaskNodesToOpenAIChat(
           taskChain,
           // we are not testing files right now...
-          () => Promise.resolve(null),
           () => Promise.resolve(undefined),
           !!state.effectiveToolchainConfig.entryNode?.use_multimodal,
           !!state.effectiveToolchainConfig.entryNode?.providerToolCalling,

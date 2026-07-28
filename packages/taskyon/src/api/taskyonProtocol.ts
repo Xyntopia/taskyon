@@ -6,7 +6,7 @@ import {
 import { TaskyonOpenApiDocumentSchema } from '@taskyon/common/modules/openApi'
 import type { Sha256Hash } from '@taskyon/common/modules/canonicalHash'
 import { z } from 'zod'
-import { partialTaskDraft, TaskNode } from '../types/taskNode'
+import { FileAttachment, partialTaskDraft, TaskNode } from '../types/taskNode'
 import { ToolProgress } from '../types/toolApi'
 import { FunctionArguments, ToolBase } from '../types/tools'
 import { TyToolchainConfig } from '../types/profiles'
@@ -120,14 +120,9 @@ const browserFile = z.custom<File>(
 
 const file = z
   .object({
-    id: z.string().describe('Content-derived file id.'),
-    name: z.string().describe('Original file name.'),
-    mime: z.string().describe('File media type.'),
-    size: z.number().describe('File size in bytes.'),
-    store: z.enum(['memory', 'opfs']).optional().describe('Requested local file storage backend.'),
     file: browserFile.describe('Browser File payload transferred over MessageChannel.'),
   })
-  .describe('Register a file with the local Taskyon peer.')
+  .describe('Store a content-addressed file with the local Taskyon peer.')
 
 const remoteFunctionBase = z.object({
   functionName: z.string().meta({
@@ -365,11 +360,12 @@ export const taskyonTaskProtocol = defineFrpServiceProtocol({
 
 export const taskyonFilesProtocol = defineFrpServiceProtocol({
   service: 'files',
-  version: '1',
+  version: '2',
   envelope: baseMessage,
   commands: {
     add: {
       request: file,
+      response: FileAttachment,
     },
   },
 })

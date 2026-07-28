@@ -336,7 +336,7 @@ const currentNewTask = computed(() => {
 })
 
 const addNewTask = async (mode: MessageExecutionMode) => {
-  const fileIds = await props.client.sendFiles(fileAttachments.value)
+  const storedAttachments = await props.client.sendFiles(fileAttachments.value)
   const previousTaskId = props.selectedTaskId
   const { createdTasks } = await createNewTaskChain({
     currentTask: props.currentTask,
@@ -344,7 +344,7 @@ const addNewTask = async (mode: MessageExecutionMode) => {
     entryNode: props.entryNode
       ? partialTaskDraft.parse(structuredClone(toRaw(props.entryNode)))
       : undefined,
-    fileIds,
+    fileAttachments: storedAttachments,
     mode,
     priorTaskId: previousTaskId,
   })

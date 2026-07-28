@@ -5,6 +5,7 @@ import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
 import type { ReadonlyDeep } from 'type-fest'
 import type { TyTaskManager } from '../core/taskManager'
+import type { ArtifactStore } from '../core/artifactStore'
 import { sanitizeTaskyonVariableCommentsOutsideCode } from '../core/taskVariables'
 import { isTaskyonKey } from '../core/tyCrypto'
 import type { PromptInjection } from '../llm/promptMessages'
@@ -68,8 +69,7 @@ export function createChatCompletionTool(
   capabilities: {
     getTaskChain: TyTaskManager['getTaskChain']
     getTask: TyTaskManager['getTask']
-    getFileMappingByUuid: TyTaskManager['getFileMappingByUuid']
-    getUploadedFile: TyTaskManager['getUploadedFile']
+    getArtifact?: ArtifactStore['get']
     updateToolDefinitions: TyTaskManager['updateToolDefinitions']
     metaUpsert: TyTaskManager['metaUpsert']
   },
@@ -336,8 +336,7 @@ export function createChatCompletionTool(
         appendSystemPrompts: effectiveAppendSystemPrompts,
         prependSystemPrompts: normalizedPrependSystemPrompts,
         useVisionModels: use_multimodal,
-        getFileMapping: capabilities.getFileMappingByUuid,
-        getUploadedFile: capabilities.getUploadedFile,
+        ...(capabilities.getArtifact ? { getArtifact: capabilities.getArtifact } : {}),
         getTaskById: capabilities.getTask,
       })
 

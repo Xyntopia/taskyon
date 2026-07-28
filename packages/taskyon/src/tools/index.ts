@@ -51,13 +51,12 @@ export const createDefaultTaskyonToolSetup = (options?: {
     toolCreationWizard,
   ],
   chatCompletionToolName,
-  createSessionTools: ({ db, taskManager, toolchainConfig }) => {
+  createSessionTools: ({ db, taskManager, artifactStore, toolchainConfig }) => {
     const createChatCompletion = (config: typeof toolchainConfig) =>
       createChatCompletionTool(resolveChatCompletionConnection(config.chatCompletion), {
         getTaskChain: taskManager.getTaskChain,
         getTask: taskManager.getTask,
-        getFileMappingByUuid: taskManager.getFileMappingByUuid,
-        getUploadedFile: taskManager.getUploadedFile,
+        ...(artifactStore ? { getArtifact: artifactStore.get } : {}),
         updateToolDefinitions: taskManager.updateToolDefinitions,
         metaUpsert: taskManager.metaUpsert,
       })

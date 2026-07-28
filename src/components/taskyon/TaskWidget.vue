@@ -14,19 +14,9 @@
       <div class="row items-center">
         <TaskContentView
           :task="task"
-          :file-mappings="fileMappings"
           :expert-mode="state.appConfiguration.expertMode"
           :get-file="getFile"
         />
-        <q-btn
-          v-if="state.appConfiguration.expertMode && fileMappings[0]?.opfs"
-          flat
-          size="sm"
-          :icon="mdiFolder"
-          :to="`/fm/${fileMappings[0].opfs}`"
-        >
-          <q-tooltip> Open File Manager </q-tooltip>
-        </q-btn>
       </div>
     </TaskField>
     <TaskField
@@ -219,16 +209,10 @@ import {
   matPause,
   matWarning,
 } from '@quasar/extras/material-icons'
-import {
-  mdiDesktopTower,
-  mdiFileDocument,
-  mdiFolder,
-  mdiHeadCog,
-  mdiTools,
-} from '@quasar/extras/mdi-v6'
+import { mdiDesktopTower, mdiFileDocument, mdiHeadCog, mdiTools } from '@quasar/extras/mdi-v6'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import TaskContentView from '@taskyon/ui/components/taskyon/TaskContentView.vue'
-import { humanizeError, type FileMapping, type TaskNode } from '@taskyon/taskyon'
+import { humanizeError, type FileAttachment, type TaskNode } from '@taskyon/taskyon'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, ref, toRefs } from 'vue'
@@ -299,26 +283,11 @@ async function openVariableInspectorDialog(taskId: string) {
   showVariableInspectorDialog.value = true
 }
 
-const fileMappings = ref<FileMapping[]>([])
-async function getFile(id: string) {
-  console.log('load image', id)
-  return (await tystate.taskyon).getUploadedFile(id)
+async function getFile(attachment: FileAttachment | string) {
+  return await (await tystate.taskyon).getArtifact(attachment)
 }
 
 const onIframeMessage = (el: HTMLIFrameElement, id: string) => {
   void tystate.connectMessageIframe(id, el)
-}
-
-if (task.value.content.type === 'files') {
-  console.log('get uploaded files')
-  void (async (fileUuids: string[]) => {
-    const ty = await tystate.taskyon
-    const fm = await Promise.all(fileUuids.map((uuid) => ty.getFileMappingByUuid(uuid)))
-    fileMappings.value = fm.filter((x) => x != null)
-    /*fileMappings.value = fm.map((x) => {
-      const newfm = { ...x, xinfo: { uuid: x?.uuid } };
-      return newfm;
-    });*/
-  })(task.value.content.data)
 }
 </script>

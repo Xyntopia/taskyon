@@ -120,7 +120,6 @@ export const testTaskVariableRenderingInOpenAiChat = async () => {
 
   const messages = await convertTaskNodesToOpenAIChat(
     [functionTask],
-    () => Promise.resolve(null),
     () => Promise.resolve(undefined),
     false,
     true,

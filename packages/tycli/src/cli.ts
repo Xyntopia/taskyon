@@ -15,6 +15,7 @@ import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import { taskyonDocumentationManifest } from '@taskyon/taskyon/documentationManifest'
 import {
   connectTaskManagerStorageFromProtocol,
+  createArtifactStore,
   createClientTool,
   createExternalToolContext,
   createTaskNode,
@@ -45,12 +46,16 @@ import {
   type ClarificationResult,
 } from '@taskyon/taskyon/tools/clarificationTool'
 import {
+  createLoggingClient,
+  createLoggingProtocolServer,
   createProtocolPort,
+  createProtocolStorageBlobBackend,
   createStorageClient,
   createTaskChainFromMarkdown,
   createTaskyonClient,
   taskyonProtocol,
   taskyonStorageProtocol,
+  taskyonLoggingProtocol,
 } from '@taskyon/taskyon/api'
 import {
   createDefaultTaskyonToolSetup,
@@ -511,6 +516,36 @@ async function createRuntimeLog(): Promise<RuntimeLog> {
     },
     flush: async () => {
       await queue
+    },
+  }
+}
+
+function routeRuntimeLogThroughProtocol(
+  directLog: RuntimeLog,
+  client: ReturnType<typeof createLoggingClient>,
+  streamId: string,
+): RuntimeLog {
+  let queue = Promise.resolve()
+  return {
+    filePath: directLog.filePath,
+    append: (source, text) => {
+      queue = queue
+        .then(async () => {
+          await client.write({
+            timestamp: new Date().toISOString(),
+            level: source.includes('error') || source === 'stderr' ? 'error' : 'info',
+            source,
+            message: text,
+            streamId,
+          })
+        })
+        .catch(() => {
+          // Runtime logging must never crash the CLI.
+        })
+    },
+    flush: async () => {
+      await queue
+      await client.flush({})
     },
   }
 }
@@ -2511,8 +2546,28 @@ async function main() {
   }
   const { x: taskStorageClientPort, y: taskStorageServicePort } =
     createProtocolPort(taskyonStorageProtocol)
-  createCliFileStorageService(taskStorageServicePort, join(dataDir, 'storage'))
+  const storageRoot = join(dataDir, 'storage')
+  createCliFileStorageService(taskStorageServicePort, storageRoot)
   const storageClient = createStorageClient(taskStorageClientPort)
+  const { x: loggingClientPort, y: loggingServicePort } = createProtocolPort(taskyonLoggingProtocol)
+  const directRuntimeLog = runtimeLog
+  const stopLoggingService = directRuntimeLog
+    ? createLoggingProtocolServer(loggingServicePort, {
+        write: ({ level, source, message }) => {
+          directRuntimeLog.append(`${level}:${source}`, message)
+        },
+        flush: directRuntimeLog.flush,
+      })
+    : () => undefined
+  if (directRuntimeLog) {
+    runtimeLog = routeRuntimeLogThroughProtocol(
+      directRuntimeLog,
+      createLoggingClient(loggingClientPort),
+      `tycli-${sessionStartedAt.toISOString()}-${process.pid}`,
+    )
+    restoreConsoleLogging?.()
+    restoreConsoleLogging = installRuntimeConsoleLogging(runtimeLog)
+  }
   const taskyon = await tyCore(
     () => llmState.settings,
     () => cliEntryTask,
@@ -2529,6 +2584,10 @@ async function main() {
       secretStore: cliSecretStore,
       taskManagerStorageFactory: ({ sessionId }) =>
         connectTaskManagerStorageFromProtocol(taskStorageClientPort, sessionId),
+      artifactStoreFactory: ({ sessionId }) =>
+        createArtifactStore(
+          createProtocolStorageBlobBackend(taskStorageClientPort, `${sessionId}/artifacts`),
+        ),
     },
   )
   taskyonRef.current = taskyon
@@ -3661,6 +3720,7 @@ async function main() {
     }).catch(() => {})
     restoreConsoleLogging?.()
     await runtimeLog?.flush().catch(() => {})
+    stopLoggingService()
     if (shutdownForceTimer !== null) {
       clearTimeout(shutdownForceTimer)
       shutdownForceTimer = null

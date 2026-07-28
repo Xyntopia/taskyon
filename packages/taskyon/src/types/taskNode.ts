@@ -40,9 +40,22 @@ const ToolCallContent = z.object({
   type: z.literal('functioncall').describe('Identifies a requested tool call.'),
   data: FunctionCall.describe('Tool name and arguments to invoke.'),
 })
+export const FileAttachment = z.object({
+  hash: z
+    .string()
+    .regex(/^sha256:[a-f0-9]{64}$/)
+    .describe('SHA-256 content hash identifying the stored bytes.'),
+  name: z.string().describe('File name used for this attachment.'),
+  mediaType: z.string().describe('Media type used for this attachment.'),
+  size: z.number().int().nonnegative().describe('File size in bytes.'),
+})
+export type FileAttachment = z.infer<typeof FileAttachment>
+
 const UploadedFilesContent = z.object({
   type: z.literal('files').describe('Identifies file-reference content.'),
-  data: z.array(z.string()).describe('Identifiers of files attached to the task.'),
+  data: z
+    .array(z.union([FileAttachment, z.string()]))
+    .describe('Content-addressed files attached to the task; strings are legacy references.'),
 })
 const ToolResultContent = z.object({
   type: z.literal('toolresult').describe('Identifies the result of a tool call.'),
@@ -189,19 +202,6 @@ type ToolResultNode = TaskNodeType<"toolresult">
 */
 
 export type TaskGetter = (input: string) => Promise<TaskNode | null>
-
-export type FileMapping = {
-  id: string
-  name?: string
-  size?: number
-  // filename in opfs
-  opfs?: string
-  openAIFileId?: string
-  // TODO: we're not sure if we need a file path?
-  type: string
-  // sometimes, for very small files, it might make sense to attach the data here directly?
-  data?: string
-}
 
 export interface TaskTreeNode {
   task: TaskNode

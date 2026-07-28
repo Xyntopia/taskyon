@@ -119,8 +119,6 @@ export const testChatCompletionConnectionIsAnImmutableCreationSnapshot = () => {
   const { chatCompletion } = createChatCompletionTool(connection, {
     getTaskChain: unavailable,
     getTask: unavailable,
-    getFileMappingByUuid: unavailable,
-    getUploadedFile: unavailable,
     updateToolDefinitions: unavailable,
     metaUpsert: unavailable,
   })
@@ -401,7 +399,6 @@ export const testOrphanedToolResultRendersAsSystemContext = async () => {
 
   const messages = await convertTaskNodesToOpenAIChat(
     [toolResult],
-    () => Promise.resolve(null),
     () => Promise.resolve(undefined),
     false,
     true,
@@ -445,7 +442,6 @@ export const testHiddenToolCallResultRendersAsSystemContext = async () => {
 
   const messages = await convertTaskNodesToOpenAIChat(
     [hiddenToolCall, toolResult],
-    () => Promise.resolve(null),
     () => Promise.resolve(undefined),
     false,
     true,
@@ -501,7 +497,6 @@ export const testToolResultRenderingUsesBoundedSerializationForLlm = async () =>
 
   const messages = await convertTaskNodesToOpenAIChat(
     [toolResult],
-    () => Promise.resolve(null),
     () => Promise.resolve(undefined),
     false,
     false,
@@ -547,8 +542,6 @@ export const testChatCompletionContextVariableNamesAreInvocationScoped = async (
       appendSystemPrompts: [],
       prependSystemPrompts: [],
       useVisionModels: false,
-      getFileMapping: () => Promise.resolve(null),
-      getUploadedFile: () => Promise.resolve(undefined),
       getTaskById: () => Promise.resolve(null),
     })
 
@@ -853,7 +846,6 @@ export const testTaskContractMessagesRenderOnceWithoutHiddenEntryNodeArguments =
   ]
   const messages = await convertTaskNodesToOpenAIChat(
     tasks,
-    () => Promise.resolve(null),
     () => Promise.resolve(undefined),
     false,
     true,
@@ -902,19 +894,23 @@ export const testChatCompletionRendersUploadedTextFile = async () => {
     id: 'uploaded-files',
     role: 'user',
     created_at: 1,
-    content: { type: 'files', data: ['file-1'] },
+    content: {
+      type: 'files',
+      data: [
+        {
+          hash: `sha256:${'a'.repeat(64)}`,
+          name: 'notes.txt',
+          mediaType: 'text/plain',
+          size: 19,
+        },
+      ],
+    },
   })
   const uploadedFile = new File(['hello from the file'], 'notes.txt', {
     type: 'text/plain',
   })
   const messages = await convertTaskNodesToOpenAIChat(
     [fileTask],
-    () =>
-      Promise.resolve({
-        id: 'file-1',
-        name: 'notes.txt',
-        type: 'text/plain',
-      }),
     () => Promise.resolve(uploadedFile),
     false,
     false,
@@ -937,6 +933,36 @@ export const testChatCompletionRendersUploadedTextFile = async () => {
 
   return { success: true }
 }
+
+export const testChatCompletionReportsUnavailableLegacyAttachment = async () => {
+  const fileTask = task({
+    id: 'legacy-uploaded-file',
+    role: 'user',
+    created_at: 1,
+    content: { type: 'files', data: ['legacy-content-id'] },
+  })
+  let attemptedReference: string | undefined
+  const messages = await convertTaskNodesToOpenAIChat(
+    [fileTask],
+    (attachment) => {
+      attemptedReference = typeof attachment === 'string' ? attachment : attachment.hash
+      return Promise.resolve(undefined)
+    },
+    false,
+    false,
+    {},
+  )
+
+  assert(attemptedReference === 'legacy-content-id', 'Expected legacy attachment lookup attempt')
+  assert(
+    messages[0]?.role === 'system' &&
+      messages[0].content.includes('Unknown uploaded file (attachment unavailable)'),
+    'Expected missing legacy attachment to remain visible in model context',
+  )
+}
+
+testChatCompletionReportsUnavailableLegacyAttachment.description =
+  'Keeps legacy file tasks in model context and marks attachments whose bytes cannot be loaded.'
 
 export const testChatCompletionAnswerCompilesPresentationVariable = () => {
   const sourceTask = task({

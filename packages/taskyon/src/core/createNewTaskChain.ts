@@ -1,5 +1,5 @@
 import { forgeTaskChain } from './createTasks'
-import type { partialTaskDraft, TaskNode } from '../types/taskNode'
+import type { FileAttachment, partialTaskDraft, TaskNode } from '../types/taskNode'
 import { textRankTaskName } from './taskNaming'
 
 export type MessageExecutionMode = 'message' | 'websearch'
@@ -8,7 +8,7 @@ type BuildCreateNewTaskChainArgs = {
   currentTask: TaskNode | null | undefined
   draftTask: partialTaskDraft
   entryNode?: partialTaskDraft | undefined
-  fileIds?: readonly string[] | undefined
+  fileAttachments?: readonly (FileAttachment | string)[] | undefined
   keyword?: string | null | undefined
   mode: MessageExecutionMode
 }
@@ -48,14 +48,14 @@ const withKeyword = (
 }
 
 export const createFileTaskDraft = (
-  fileIds: readonly string[] | undefined,
+  attachments: readonly (FileAttachment | string)[] | undefined,
 ): partialTaskDraft | undefined => {
-  if (!fileIds?.length) return undefined
+  if (!attachments?.length) return undefined
   return {
     role: 'system',
     content: {
       type: 'files',
-      data: [...fileIds],
+      data: [...attachments],
     },
   }
 }
@@ -99,12 +99,12 @@ export const buildCreateNewTaskChain = ({
   currentTask,
   draftTask,
   entryNode,
-  fileIds,
+  fileAttachments,
   keyword,
   mode,
 }: BuildCreateNewTaskChainArgs): partialTaskDraft[] => {
   const newTaskChain: partialTaskDraft[] = []
-  const fileTask = createFileTaskDraft(fileIds)
+  const fileTask = createFileTaskDraft(fileAttachments)
   const generatedKeyword = keyword ?? createTaskKeyword(draftTask)
 
   if (fileTask) {

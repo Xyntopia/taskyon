@@ -4,7 +4,7 @@ import { forgeTaskChain } from '../core/createTasks'
 import { createMarkdownTaskChain } from '../core/markdownTaskIO'
 import { createToolExecutionClient, type ToolRpcCallerPort } from '../core/toolRpc'
 import type { ChatCompletionArgs } from '../tools/chatCompletionTool'
-import type { TaskContentType, TaskNode } from '../types/taskNode'
+import type { FileAttachment, TaskContentType, TaskNode } from '../types/taskNode'
 import { partialTaskDraft } from '../types/taskNode'
 import {
   createClientTool,
@@ -13,7 +13,6 @@ import {
   taskResult,
   toolCall,
 } from '../types/toolApi'
-import { sha256UrlSafeHashFromFile } from '../utils/encoding'
 import { createPortClient, createStream, type Port } from '@taskyon/common/modules/frpBus'
 import { createLruCache } from '@taskyon/common/modules/lruCache'
 import type { RpcMessagePort } from '@taskyon/common/modules/frpBus'
@@ -77,10 +76,13 @@ export { taskyonHostProtocol, taskyonProtocol, taskyonRuntimeProtocol }
 export { createTaskyonApiDescription, type TaskyonApiDescription } from './taskyonOpenApi'
 export {
   createProtocolStorageCrudWrapper,
+  createProtocolStorageBlobBackend,
   createStorageClient,
   createStorageProtocolServer,
   createStorageRecordBackend,
   taskyonStorageProtocol,
+  type StorageBlobBackend,
+  type StorageBlobMetadata,
   type StorageRecordBackend,
   type StorageRecordCrud,
   type TaskyonStorageMessage,
@@ -92,6 +94,14 @@ export {
   storageRecordNamespacePath,
   type StorageRecordFileAdapter,
 } from './storageRecordFileBackend'
+export {
+  createLoggingClient,
+  createLoggingProtocolServer,
+  taskyonLoggingProtocol,
+  type TaskyonLogEntry,
+  type TaskyonLoggingMessage,
+  type TaskyonLogSink,
+} from './loggingProtocol'
 export {
   callToolOverRpc,
   createToolExecutionClient,
@@ -259,26 +269,8 @@ export const createChatCompletionTask = (args: ChatCompletionArgs) =>
 const READY_EVENT_GRACE_MS = 250
 const READY_PING_ATTEMPT_MS = 250
 
-const uploadFile = async (
-  addFile: (args: {
-    id: string
-    name: string
-    mime: string
-    size: number
-    file: File
-  }) => Promise<unknown>,
-  file: File,
-) => {
-  const id = await sha256UrlSafeHashFromFile(file)
-  await addFile({
-    id,
-    name: file.name,
-    mime: file.type,
-    size: file.size,
-    file,
-  })
-  return id
-}
+const uploadFile = async (addFile: (args: { file: File }) => Promise<FileAttachment>, file: File) =>
+  await addFile({ file })
 
 const pingUntilReady = async (
   ping: (args: { timeoutMs?: number; signal?: AbortSignal }) => Promise<unknown>,

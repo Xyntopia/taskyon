@@ -7,7 +7,9 @@ Taskyon separates execution from the environments that host it.
   ports.
 - **Hosts** provide browser UI, CLI, iframe, desktop, storage, secrets, and external tools.
 - **Task trees** record execution using immutable nodes connected by `priorID` and `parentID`.
-- **Storage services** keep persistence behind explicit record/file interfaces.
+- **Storage services** keep persistence behind explicit record and blob interfaces.
+- **Logging services** route structured application events to host-selected sinks; task updates
+  remain a separate domain stream.
 
 The browser application and `tycli` should use the same core contracts. Runtime-specific
 capabilities must be optional or registered by the host; shared core code must not import Node-only
@@ -24,6 +26,7 @@ flowchart LR
   Core --> Tools[Tool execution]
   Core --> Models[Model providers]
   Core --> Storage[Storage services]
+  Core --> Logs[Logging services]
   Core --> ComputeHash[Computation hash]
   ComputeHash --> Cache[Cache record]
   Cache --> ArtifactHash[Artifact content hash]
@@ -53,9 +56,10 @@ privileged host operations, and individual tool executors should remain separate
 Secret, profile, session-key, destructive storage, and index-reset operations do not belong in the
 ordinary public protocol merely because direct core methods still exist.
 
-`taskyonStorageProtocol` transports record namespaces, keys, and values without interpreting their
-identity or prescribing physical paths. Domain owners provide canonical hashes when identity comes
-from immutable content or a computation. Filesystem backends store records under fixed-length,
+`taskyonStorageProtocol` keeps small queryable records and potentially large byte blobs as separate
+capabilities. It transports namespaces, keys, and values without interpreting their identity or
+prescribing physical paths. Domain owners provide canonical hashes when identity comes from
+immutable content or a computation. Filesystem record backends store records under fixed-length,
 Git-style hash paths while databases, object stores, and peers preserve the same protocol contract.
 
 A DAG cache record maps a computation hash to an artifact content hash. The computation hash is
@@ -63,6 +67,18 @@ derived from the node identity and parameters and answers whether work was alrea
 artifact hash is derived from the exact serialized result and independently verifies bytes loaded
 locally or received from a peer. These hashes cannot be collapsed while computations may observe
 external state or otherwise produce different outputs.
+
+Blob backends support bounded range reads, ordered append, and staged streaming writes that become
+visible on commit. Stream chunks are temporary transfer pieces rather than persistent addressed
+objects; immutable artifacts are published as whole blobs under their final content hash.
+`taskyonLoggingProtocol` is sink-neutral: hosts can write structured entries to a file, stdout, or a
+remote observer without treating task lifecycle events as logs.
+
+Task attachments are content-addressed artifacts rather than TaskManager records. A file task stores
+its canonical SHA-256 hash together with the attachment-local name, media type, and size. The
+artifact store deduplicates bytes through the blob capability and verifies the hash when reading;
+the TaskManager owns only tasks and task metadata. Browser OPFS and CLI filesystem details remain
+host-side blob backends and are never part of a task reference.
 
 ## Message-port boundary
 

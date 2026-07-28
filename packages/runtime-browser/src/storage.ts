@@ -4,8 +4,11 @@ import {
   parseStorageRecordFile,
   type Port,
   type StorageRecordFileAdapter,
+  type StorageBlobBackend,
+  type StorageBlobMetadata,
   type TaskyonStorageMessage,
 } from '@taskyon/taskyon/api'
+import { createSha256Hasher } from '@taskyon/common/modules/canonicalHash'
 
 export type OpfsStorageOptions = {
   rootDirectory?: string
@@ -146,6 +149,177 @@ const clearDirectory = async (root: FileSystemDirectoryHandle, directory: string
   }
 }
 
+const blobDirectory = (namespace: string) =>
+  ['blobs', ...namespace.split('/').map(encodeURIComponent)].join('/')
+const blobPath = (namespace: string, id: string) =>
+  `${blobDirectory(namespace)}/${encodeURIComponent(id)}`
+const stagedBlobPath = (namespace: string, writeId: string) =>
+  `${blobDirectory(namespace)}/.staging/${encodeURIComponent(writeId)}`
+
+const getFile = async (root: FileSystemDirectoryHandle, path: string, create = false) => {
+  const parts = normalizeRelativePath(path)
+  const name = parts.at(-1)
+  if (!name) throw new Error('Blob path must include a filename.')
+  const directory = await getDirectory(root, parts.slice(0, -1), create)
+  return await directory.getFileHandle(name, { create })
+}
+
+const blobMetadata = async (
+  handle: FileSystemFileHandle,
+  id: string,
+  contentType?: string,
+  sha256?: string,
+): Promise<StorageBlobMetadata> => {
+  const file = await handle.getFile()
+  return {
+    id,
+    size: file.size,
+    modifiedAt: new Date(file.lastModified).toISOString(),
+    ...(contentType ? { contentType } : {}),
+    ...(sha256 ? { sha256 } : {}),
+  }
+}
+
+const hashFile = async (file: File) => {
+  const hash = createSha256Hasher()
+  const reader = file.stream().getReader()
+  try {
+    while (true) {
+      const chunk = await reader.read()
+      if (chunk.done) return hash.digest()
+      hash.update(chunk.value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+const missingBlobAsNull = async <T>(operation: () => Promise<T>) => {
+  try {
+    return await operation()
+  } catch (error) {
+    if (error instanceof Error && error.name === 'NotFoundError') return null
+    throw error
+  }
+}
+
+export const createOpfsBlobStorageBackend = async (
+  namespace: string,
+  options: OpfsStorageOptions = {},
+): Promise<StorageBlobBackend> => {
+  const root = await getRootDirectory(options)
+  const lockPrefix = options.lockNamePrefix ?? 'taskyon-opfs-storage'
+  const locked = <T>(operation: () => Promise<T>) =>
+    withBrowserLock(`${lockPrefix}:blobs:${namespace}`, operation)
+  const target = (id: string) => blobPath(namespace, id)
+  const staged = (writeId: string) => stagedBlobPath(namespace, writeId)
+
+  return {
+    get: async (id) =>
+      await missingBlobAsNull(async () => {
+        const handle = await getFile(root, target(id))
+        const file = await handle.getFile()
+        return {
+          data: new Uint8Array(await file.arrayBuffer()),
+          metadata: await blobMetadata(handle, id),
+        }
+      }),
+    set: async (id, data, contentType) =>
+      await locked(async () => {
+        const handle = await getFile(root, target(id), true)
+        const writable = await handle.createWritable()
+        await writable.write(data)
+        await writable.close()
+        return await blobMetadata(handle, id, contentType, await hashFile(await handle.getFile()))
+      }),
+    stat: async (id) =>
+      await missingBlobAsNull(async () => await blobMetadata(await getFile(root, target(id)), id)),
+    list: async () => {
+      try {
+        const directory = await getDirectory(
+          root,
+          normalizeRelativePath(blobDirectory(namespace)),
+          false,
+        )
+        const values: StorageBlobMetadata[] = []
+        for await (const [name, handle] of directory.entries()) {
+          if (handle.kind !== 'file') continue
+          values.push(await blobMetadata(handle, decodeURIComponent(name)))
+        }
+        return values
+      } catch (error) {
+        if (error instanceof Error && error.name === 'NotFoundError') return []
+        throw error
+      }
+    },
+    readRange: async (id, offset, length) => {
+      const file = await (await getFile(root, target(id))).getFile()
+      const data = new Uint8Array(await file.slice(offset, offset + length).arrayBuffer())
+      const nextOffset = offset + data.byteLength
+      return { data, nextOffset, eof: nextOffset >= file.size }
+    },
+    append: async (id, data, expectedSize, contentType) =>
+      await locked(async () => {
+        const handle = await getFile(root, target(id), true)
+        const current = await handle.getFile()
+        if (current.size !== expectedSize) {
+          throw new Error(
+            `Blob append offset mismatch for "${id}": expected ${expectedSize}, found ${current.size}.`,
+          )
+        }
+        const writable = await handle.createWritable({ keepExistingData: true })
+        await writable.seek(current.size)
+        await writable.write(data)
+        await writable.close()
+        return await blobMetadata(handle, id, contentType)
+      }),
+    beginWrite: async () => {
+      const writeId = crypto.randomUUID()
+      const writable = await (await getFile(root, staged(writeId), true)).createWritable()
+      await writable.close()
+      return { writeId }
+    },
+    writeChunk: async (_id, writeId, offset, data) =>
+      await locked(async () => {
+        const handle = await getFile(root, staged(writeId))
+        const current = await handle.getFile()
+        if (offset > current.size)
+          throw new Error(`Blob write offset ${offset} exceeds size ${current.size}.`)
+        const writable = await handle.createWritable({ keepExistingData: true })
+        await writable.seek(offset)
+        await writable.write(data)
+        await writable.close()
+        return { nextOffset: Math.max(current.size, offset + data.byteLength) }
+      }),
+    writeStatus: async (_id, writeId) => ({
+      size: (await (await getFile(root, staged(writeId))).getFile()).size,
+    }),
+    commitWrite: async (id, writeId, expectedSize, expectedSha256) =>
+      await locked(async () => {
+        const stagedHandle = await getFile(root, staged(writeId))
+        const file = await stagedHandle.getFile()
+        if (file.size !== expectedSize) {
+          throw new Error(
+            `Blob size mismatch for "${id}": expected ${expectedSize}, found ${file.size}.`,
+          )
+        }
+        const sha256 = await hashFile(file)
+        if (expectedSha256 && sha256 !== expectedSha256) {
+          throw new Error(`Blob checksum mismatch for "${id}".`)
+        }
+        const targetHandle = await getFile(root, target(id), true)
+        const writable = await targetHandle.createWritable()
+        await writable.write(file)
+        await writable.close()
+        await removeFile(root, staged(writeId))
+        return await blobMetadata(targetHandle, id, file.type || undefined, sha256)
+      }),
+    abortWrite: async (_id, writeId) => await removeFile(root, staged(writeId)),
+    delete: async (id) => await removeFile(root, target(id)),
+    clear: async () => await clearDirectory(root, blobDirectory(namespace)),
+  }
+}
+
 const withBrowserLock = async <T>(lockName: string, operation: () => Promise<T>): Promise<T> => {
   const locks = (navigator as NavigatorWithLocks).locks
   if (!locks) return await operation()
@@ -176,7 +350,12 @@ export const createOpfsStorageBackendResolver = (options: OpfsStorageOptions = {
 export const createOpfsStorageService = (
   port: Port<TaskyonStorageMessage, TaskyonStorageMessage>,
   options: OpfsStorageOptions = {},
-) => createStorageProtocolServer(port, createOpfsStorageBackendResolver(options))
+) =>
+  createStorageProtocolServer(
+    port,
+    createOpfsStorageBackendResolver(options),
+    async (namespace) => await createOpfsBlobStorageBackend(namespace, options),
+  )
 
 export const startBrowserStorageService = async (
   port: Port<TaskyonStorageMessage, TaskyonStorageMessage>,

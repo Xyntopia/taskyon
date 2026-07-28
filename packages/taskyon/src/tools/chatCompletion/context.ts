@@ -21,7 +21,7 @@ import {
 } from '../../core/taskVariables'
 import { mapFunctionNames } from '../../core/tools'
 import { toPromptMessages, type PromptInjection } from '../../llm/promptMessages'
-import type { FileMapping, TaskGetter, TaskNode } from '../../types/taskNode'
+import type { FileAttachment, TaskGetter, TaskNode } from '../../types/taskNode'
 import type { ToolBase } from '../../types/tools'
 import { charHash } from '../../utils/crypto'
 import { humanizeError } from '../../utils/error'
@@ -74,15 +74,13 @@ export const prepareChatCompletionContext = async (input: {
   appendSystemPrompts: string[]
   prependSystemPrompts: PromptInjection[]
   useVisionModels: boolean
-  getFileMapping: (uuid: string) => Promise<FileMapping | null>
-  getUploadedFile: (uuid: string) => Promise<File | undefined>
+  getArtifact?: (attachment: FileAttachment | string) => Promise<File | undefined>
   getTaskById: TaskGetter
 }) => {
   const variableService = createTaskVariablePresentationService()
   const taskMessages = await convertTaskNodesToOpenAIChat(
     input.taskChain,
-    input.getFileMapping,
-    input.getUploadedFile,
+    input.getArtifact,
     input.useVisionModels,
     input.allowedTools.length > 0,
     input.toolDefinitions,
@@ -152,8 +150,7 @@ const ensureToolResponses = (messages: ModelMessage[]) => {
 
 export async function convertTaskNodesToOpenAIChat(
   taskChain: TaskNode[],
-  getFileMapping: (uuid: string) => Promise<FileMapping | null>,
-  getUploadedFile: (uuid: string) => Promise<File | undefined>,
+  getArtifact: ((attachment: FileAttachment | string) => Promise<File | undefined>) | undefined,
   tryUsingVisionModels: boolean,
   useNativeTools: boolean,
   toolDefinitions: Record<string, ToolBase>,
@@ -186,8 +183,7 @@ export async function convertTaskNodesToOpenAIChat(
       task,
       tasksById,
       tryUsingVisionModels,
-      getFileMapping,
-      getUploadedFile,
+      getArtifact,
       useNativeTools,
       toolDefinitions,
       variableService,
@@ -252,8 +248,7 @@ const convertTaskNodeToOpenAIMessage = async (
   task: TaskNode,
   tasksById: Map<string, TaskNode>,
   useVisionModels: boolean,
-  getFileMapping: (uuid: string) => Promise<FileMapping | null>,
-  getUploadedFile: (uuid: string) => Promise<File | undefined>,
+  getArtifact: ((attachment: FileAttachment | string) => Promise<File | undefined>) | undefined,
   useNativeTools: boolean,
   toolCollection: Record<string, ToolBase>,
   variableService: ReturnType<typeof createTaskVariablePresentationService>,
@@ -400,15 +395,19 @@ const convertTaskNodeToOpenAIMessage = async (
   }
 
   if (task.content.type === 'files') {
-    const fileMappings = await Promise.all(task.content.data.map((uuid) => getFileMapping(uuid)))
-    const fileNames = fileMappings
-      .map((mapping) => `- ${mapping?.opfs || mapping?.name || 'unknown'}`)
+    const attachments = await resolveFileAttachments(task.content.data, getArtifact)
+    const fileNames = attachments
+      .map(({ reference, file }) => {
+        const name =
+          typeof reference === 'string' ? (file?.name ?? 'Unknown uploaded file') : reference.name
+        return `- ${name}${file ? '' : ' (attachment unavailable)'}`
+      })
       .join('\n')
     const systemMessage: SystemModelMessage = {
       role: 'system',
       content: `User uploaded files:\n${fileNames}`,
     }
-    const fileContent = await makeFilesAiReadable(fileMappings, getUploadedFile, useVisionModels)
+    const fileContent = await makeFilesAiReadable(attachments, useVisionModels)
 
     return fileContent.length > 0
       ? [systemMessage, { role: 'user', content: fileContent } satisfies UserModelMessage]
@@ -433,18 +432,31 @@ const fileToBase64 = async (file: File) => {
   return base64
 }
 
+type ResolvedFileAttachment = {
+  reference: FileAttachment | string
+  file: File | undefined
+}
+
+const resolveFileAttachments = async (
+  attachments: readonly (FileAttachment | string)[],
+  getFile: ((attachment: FileAttachment | string) => Promise<File | undefined>) | undefined,
+): Promise<ResolvedFileAttachment[]> =>
+  await Promise.all(
+    attachments.map(async (reference) => ({
+      reference,
+      file: getFile ? await getFile(reference).catch(() => undefined) : undefined,
+    })),
+  )
+
 const makeFilesAiReadable = async (
-  fileMappings: (FileMapping | null)[],
-  getFile: (uuid: string) => Promise<File | undefined>,
+  attachments: readonly ResolvedFileAttachment[],
   nativeModelProcessing: boolean,
 ) => {
   const fileContent: (FilePart | ImagePart)[] = []
-  for (const mapping of fileMappings) {
-    if (!mapping) continue
-    const name = mapping.name || mapping.opfs || 'unknown'
-    const lowerName = name.toLowerCase()
-    const file = await getFile(mapping.id)
+  for (const { reference, file } of attachments) {
     if (!file) continue
+    const name = typeof reference === 'string' ? file.name : reference.name
+    const lowerName = name.toLowerCase()
 
     if (/\.(png|jpe?g|gif|webp)$/i.test(lowerName) && nativeModelProcessing) {
       const base64 = await fileToBase64(file)

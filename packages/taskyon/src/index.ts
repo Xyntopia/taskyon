@@ -19,24 +19,34 @@ export {
   processTasksDetailed,
   createTaskyonClient,
   createProtocolStorageCrudWrapper,
+  createProtocolStorageBlobBackend,
   createStorageClient,
   createStorageProtocolServer,
   createStorageRecordBackend,
+  createLoggingClient,
+  createLoggingProtocolServer,
   runTasks,
   taskyonGuiProtocol,
   taskyonHostProtocol,
   taskyonProtocol,
   taskyonRuntimeProtocol,
   taskyonStorageProtocol,
+  taskyonLoggingProtocol,
   TaskyonMessage,
+  type StorageBlobBackend,
+  type StorageBlobMetadata,
   type StorageRecordBackend,
   type StorageRecordCrud,
   type TaskyonStorageMessage,
+  type TaskyonLogEntry,
+  type TaskyonLoggingMessage,
+  type TaskyonLogSink,
   type TaskyonMessage as TaskyonMessageType,
   type TaskyonClient,
   type TyP2P,
 } from './api/index'
 export { createTaskNode, ensureValidTaskId, forgeTaskChain } from './core/createTasks'
+export { createArtifactStore, type ArtifactStore } from './core/artifactStore'
 export * from './core/createNewTaskChain'
 export { tyCore } from './core/init'
 export type { Taskyon } from './core/init'
@@ -64,7 +74,7 @@ export * from './types/chatCompletion'
 export * from './types/chatCompletionService'
 export * from './types/taskContract'
 export type * from './types/taskNode'
-export { partialTaskDraft, TaskContent, TaskNode } from './types/taskNode'
+export { FileAttachment, partialTaskDraft, TaskContent, TaskNode } from './types/taskNode'
 export * from './utils/oauth'
 export type {
   ClientToolContext,

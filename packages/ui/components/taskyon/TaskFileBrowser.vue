@@ -1,24 +1,24 @@
 <template>
   <q-list>
-    <q-item v-for="file in fileMappings" :key="file.id">
+    <q-item v-for="attachment in attachments" :key="attachmentHash(attachment)">
       <!-- Image preview, loaded asynchronously -->
-      <q-item-section v-if="preview && previews[file.id] !== '__fallback__'">
+      <q-item-section v-if="preview && previews[attachmentHash(attachment)] !== '__fallback__'">
         <q-img
-          v-if="previews[file.id]"
-          :src="previews[file.id]"
+          v-if="previews[attachmentHash(attachment)]"
+          :src="previews[attachmentHash(attachment)]"
           :style="{ width: previewSize + 'px', height: previewSize + 'px' }"
         />
         <q-skeleton v-else :width="previewSize + 'px'" :height="previewSize + 'px'" />
       </q-item-section>
 
       <q-item-section class="ellipsis">
-        {{ file.name || file.opfs }}
+        {{ attachmentName(attachment) }}
       </q-item-section>
 
       <q-tooltip v-if="expertMode" :delay="500">
         <p class="text-bold">uploaded file:</p>
         <p style="white-space: pre-wrap">
-          {{ dump({ uuid: file.id, name: file.name }) }}
+          {{ dump({ hash: attachmentHash(attachment), name: attachmentName(attachment) }) }}
         </p>
       </q-tooltip>
     </q-item>
@@ -29,16 +29,21 @@
 import { ref } from 'vue'
 import { dump } from 'js-yaml'
 import { watch } from 'vue'
-import type { FileMapping } from '@taskyon/taskyon'
+import type { FileAttachment } from '@taskyon/taskyon'
 
 // Store the props in a variable for easy access
 const props = defineProps<{
-  fileMappings: readonly FileMapping[]
+  attachments: readonly (FileAttachment | string)[]
   expertMode: boolean
   preview: boolean
   previewSize: number // New prop for configurable preview size
-  getFile: (uuid: string) => Promise<File | undefined>
+  getFile: (attachment: FileAttachment | string) => Promise<File | undefined>
 }>()
+
+const attachmentHash = (attachment: FileAttachment | string) =>
+  typeof attachment === 'string' ? attachment : attachment.hash
+const attachmentName = (attachment: FileAttachment | string) =>
+  typeof attachment === 'string' ? attachment : attachment.name
 
 const previews = ref<Record<string, string>>({}) // Store object URLs as strings
 
@@ -70,16 +75,17 @@ const createScaledImage = async (file: File, maxSize = props.previewSize) => {
 }
 
 const loadAllPreviews = async () => {
-  const previewPromises = props.fileMappings.map(async (file) => {
-    if (file?.id) {
-      const previewFile = await props.getFile(file.id)
+  const previewPromises = props.attachments.map(async (attachment) => {
+    const hash = attachmentHash(attachment)
+    if (hash) {
+      const previewFile = await props.getFile(attachment)
       if (previewFile) {
         // If the file isn’t an image, mark as fallback
         if (!previewFile.type.startsWith('image/')) {
-          previews.value[file.id] = '__fallback__'
+          previews.value[hash] = '__fallback__'
         } else {
           const scaledPreview = await createScaledImage(previewFile)
-          previews.value[file.id] = scaledPreview
+          previews.value[hash] = scaledPreview
         }
       }
     }
@@ -88,7 +94,7 @@ const loadAllPreviews = async () => {
 }
 
 watch(
-  () => props.fileMappings,
+  () => props.attachments,
   () => {
     void loadAllPreviews()
   },

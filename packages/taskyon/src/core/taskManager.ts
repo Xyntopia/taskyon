@@ -2,7 +2,7 @@ import { load } from 'js-yaml'
 import type { PartialDeep } from 'type-fest'
 import z from 'zod'
 import { TaskNodeMeta } from '../types/chatCompletion'
-import type { FileMapping, TaskNodeType, TaskTreeNode } from '../types/taskNode'
+import type { TaskNodeType, TaskTreeNode } from '../types/taskNode'
 import { TaskNode, partialTaskDraft } from '../types/taskNode'
 import type { InternalTool } from '../types/toolApi'
 import { ToolBase } from '../types/tools'
@@ -25,42 +25,17 @@ import {
   withKeyLockings,
   withLiveStreams,
 } from '../utils/crudWrapper'
-import { sha256UrlSafeHashFromFile } from '../utils/encoding'
-import { openUserUploadedFile, saveUserUploadedFileToOpfs } from '../utils/OPFS'
 import type { TyPGDB } from '../utils/pglite.api'
 import { createTaskNode } from './createTasks'
 import { addMarkdownTaskChain } from './markdownTaskIO'
 import { selectTaskChainIds, type TaskChainSelection } from './taskChainSelection'
 
-export const FileMappingSchema: z.ZodType<FileMapping> = z
-  .object({
-    id: z.string(),
-    name: z.string().optional(),
-    size: z.number().optional(),
-    opfs: z.string().optional(),
-    openAIFileId: z.string().optional(),
-    type: z.string(),
-    data: z.string().optional(),
-  })
-  .transform(
-    (value): FileMapping => ({
-      id: value.id,
-      type: value.type,
-      ...(value.name !== undefined ? { name: value.name } : {}),
-      ...(value.size !== undefined ? { size: value.size } : {}),
-      ...(value.opfs !== undefined ? { opfs: value.opfs } : {}),
-      ...(value.openAIFileId !== undefined ? { openAIFileId: value.openAIFileId } : {}),
-      ...(value.data !== undefined ? { data: value.data } : {}),
-    }),
-  )
-
 export type TaskManagerStorage = {
   tasks: StorageRecordCrud<TaskNode>
   meta: StorageRecordCrud<TaskNodeMeta>
-  files: StorageRecordCrud<FileMapping>
 }
 
-const taskStorageTables = ['taskyonNodes', 'metaDb', 'filemapping'] as const
+const taskStorageTables = ['taskyonNodes', 'metaDb'] as const
 type TaskStorageTable = (typeof taskStorageTables)[number]
 
 const isTaskStorageTable = (value: string): value is TaskStorageTable =>
@@ -84,43 +59,54 @@ const parseTaskManagerStorageNamespace = (namespace: string) => {
 
 export const createPgLiteTaskManagerStorage = async (
   taskyonDb: TyPGDB,
-): Promise<TaskManagerStorage> => ({
-  tasks: await createPgLiteCrudWrapper<TaskNode>(taskyonDb, {
-    tableName: 'taskyonNodes',
-  }),
-  meta: await createPgLiteCrudWrapper<TaskNodeMeta>(taskyonDb, {
-    tableName: 'metaDb',
-  }),
-  files: await createPgLiteCrudWrapper<FileMapping>(taskyonDb, {
-    tableName: 'filemapping',
-  }),
-})
+): Promise<TaskManagerStorage> => {
+  const withBatches = <T>(crud: Awaited<ReturnType<typeof createPgLiteCrudWrapper<T>>>) => ({
+    ...crud,
+    getMany: async (ids: readonly (string | number)[]) => {
+      const rows: { id: string | number; data: T }[] = []
+      for (const id of ids) {
+        const data = await crud.get(id)
+        if (data !== null) rows.push({ id, data })
+      }
+      return rows
+    },
+    setMany: async (rows: readonly { id: string | number; data: T }[]) => {
+      await crud.batchInsert([...rows], 'overwrite')
+    },
+  })
+  return {
+    tasks: withBatches(
+      await createPgLiteCrudWrapper<TaskNode>(taskyonDb, { tableName: 'taskyonNodes' }),
+    ),
+    meta: withBatches(
+      await createPgLiteCrudWrapper<TaskNodeMeta>(taskyonDb, { tableName: 'metaDb' }),
+    ),
+  }
+}
 
 export const connectTaskManagerStorageFromProtocol = (
   port: Port<TaskyonStorageMessage, TaskyonStorageMessage>,
   sessionId: string,
-): TaskManagerStorage => ({
-  tasks: createProtocolStorageCrudWrapper(
-    port,
-    taskManagerStorageNamespace(sessionId, 'taskyonNodes'),
-    TaskNode,
-  ),
-  meta: createProtocolStorageCrudWrapper(
-    port,
-    taskManagerStorageNamespace(sessionId, 'metaDb'),
-    TaskNodeMeta,
-  ),
-  files: createProtocolStorageCrudWrapper(
-    port,
-    taskManagerStorageNamespace(sessionId, 'filemapping'),
-    FileMappingSchema,
-  ),
-})
+): TaskManagerStorage => {
+  return {
+    tasks: createProtocolStorageCrudWrapper(
+      port,
+      taskManagerStorageNamespace(sessionId, 'taskyonNodes'),
+      TaskNode,
+    ),
+    meta: createProtocolStorageCrudWrapper(
+      port,
+      taskManagerStorageNamespace(sessionId, 'metaDb'),
+      TaskNodeMeta,
+    ),
+  }
+}
 
 export const createPgLiteTaskManagerStorageService = (
   port: Port<TaskyonStorageMessage, TaskyonStorageMessage>,
   getDb: (sessionId: string) => Promise<TyPGDB>,
   resolveFallback?: (namespace: string) => Promise<StorageRecordBackend> | StorageRecordBackend,
+  resolveBlobBackend?: Parameters<typeof createStorageProtocolServer>[2],
 ) => {
   const sessionStorage = new Map<string, Promise<TaskManagerStorage>>()
   const backendCache = new Map<string, Promise<StorageRecordBackend>>()
@@ -151,8 +137,6 @@ export const createPgLiteTaskManagerStorageService = (
             return createStorageRecordBackend(storage.tasks, TaskNode)
           case 'metaDb':
             return createStorageRecordBackend(storage.meta, TaskNodeMeta)
-          case 'filemapping':
-            return createStorageRecordBackend(storage.files, FileMappingSchema)
         }
       },
     )
@@ -160,7 +144,7 @@ export const createPgLiteTaskManagerStorageService = (
     return created
   }
 
-  return createStorageProtocolServer(port, resolveBackend)
+  return createStorageProtocolServer(port, resolveBackend, resolveBlobBackend)
 }
 
 /**
@@ -185,101 +169,6 @@ export async function findRootTask(taskId: string, getTask: TyTaskManager['getTa
   }
 
   return currentTaskID // Return null if the loop exits without finding a root task
-}
-
-function useFileManager(fileTable: StorageRecordCrud<FileMapping>) {
-  const fileMemory = new Map<string, File>()
-
-  async function addFiles(newFiles: File[], storage: 'memory' | 'opfs') {
-    console.log('add files to our chat!')
-
-    // Collect UUIDs from added files
-    const ids = []
-    for (const file of newFiles) {
-      const id = await sha256UrlSafeHashFromFile(file)
-      //first, upload file into our OPFS file system:
-      const opfsPath = storage === 'opfs' ? await saveUserUploadedFileToOpfs(file) : undefined
-      if (storage === 'memory') fileMemory.set(id, file)
-      await fileTable.set(id, {
-        id,
-        ...(opfsPath ? { opfs: opfsPath } : {}),
-        name: file.name,
-        type: file.type,
-        size: file.size,
-      })
-      ids.push(id)
-    }
-    return ids
-  }
-
-  async function getFileMappingByUuid(uuid: string): Promise<FileMapping | null> {
-    // Find the document with the matching UUID
-    const fileMappingDoc = await fileTable.get(uuid)
-
-    // Check if the document exists
-    if (!fileMappingDoc) console.log(`No file mapping found for UUID: ${uuid}`)
-
-    // Return the found document
-    return fileMappingDoc
-  }
-
-  // we can search tasks here using a mongo-db query object
-  // find out more here:  https://rxdb.info/rx-query.html
-  const searchFiles = fileTable.find
-
-  async function getUploadedFile(id: string): Promise<File | undefined> {
-    const memoryFile = fileMemory.get(id)
-    if (memoryFile) return memoryFile
-
-    const fileMap = await getFileMappingByUuid(id)
-    if (fileMap?.opfs) {
-      const file = openUserUploadedFile(fileMap.opfs)
-      return file
-    }
-  }
-
-  // TODO: this function needs to be changes to search for names, instead of UUIDs
-  async function getFileByName(name: string): Promise<File> {
-    const fileMaps = await searchFiles({ name })
-    if (fileMaps) {
-      // TODO: what do we do if we have multiple files with the same name?
-      // TODO: try to load files form other sources as well :)
-      const firstFile = Object.values(fileMaps)[0]
-      const fileName = firstFile?.opfs
-      if (fileName) {
-        const file = await openUserUploadedFile(fileName)
-        if (file) {
-          if (file.type.length == 0) {
-            // we do this, because for some files, opfs doesn't recognize the file type
-            // for some reason...
-            const newfile = new File(
-              [file],
-              file.name,
-              firstFile.type
-                ? {
-                    type: firstFile.type,
-                  }
-                : {},
-            )
-            return newfile
-          }
-          return file
-        }
-      }
-      throw new Error(
-        `We could not find the file locally:  ${name}. Was it uploaded somewhere else?`,
-      )
-    }
-    throw new Error(`File not found: ${name}`)
-  }
-
-  return {
-    addFiles,
-    searchFiles,
-    getFileMappingByUuid,
-    getUploadedFile,
-    getFileByName,
-  }
 }
 
 async function useTaskVectors(
@@ -1010,8 +899,6 @@ export async function useTyTaskManager(
     }
   }
 
-  const fm = useFileManager(storage.files)
-
   // add a task to the db. Adding some default information such as timestamps etc...
   // whats important here is that the TaskNode can only have one type of content
   // so when calling the function, we need to pre-select which type of task
@@ -1126,7 +1013,6 @@ export async function useTyTaskManager(
   return {
     ...defaultMode,
     ...(taskVectors ?? {}),
-    ...fm,
     getTaskIdChain,
     getTaskChain,
     convertTaskIDs,

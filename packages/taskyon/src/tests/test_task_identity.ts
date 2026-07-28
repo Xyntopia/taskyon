@@ -1,5 +1,5 @@
 import { createTaskNode } from '../core/createTasks'
-import type { partialTaskDraft } from '../types/taskNode'
+import { TaskNode, type partialTaskDraft } from '../types/taskNode'
 import { deepCloneWJson, removeKeys } from '@taskyon/common/modules/objHelpers'
 import { sleep } from '@taskyon/common/modules/utils'
 
@@ -84,3 +84,36 @@ export async function testTaskIdHashing() {
     shuffledTask,
   }
 }
+
+export const testFileTasksStoreSelfDescribingAttachmentReferences = () => {
+  const attachment = {
+    hash: `sha256:${'a'.repeat(64)}`,
+    name: 'results.csv',
+    mediaType: 'text/csv',
+    size: 42,
+  }
+  const current = TaskNode.parse({
+    id: 'current-file-task',
+    role: 'system',
+    content: { type: 'files', data: [attachment] },
+  })
+  const legacy = TaskNode.parse({
+    id: 'legacy-file-task',
+    role: 'system',
+    content: { type: 'files', data: ['legacy-content-id'] },
+  })
+
+  assert(
+    current.content.type === 'files' &&
+      typeof current.content.data[0] !== 'string' &&
+      current.content.data[0]?.name === 'results.csv',
+    'Expected new file tasks to retain attachment-local metadata',
+  )
+  assert(
+    legacy.content.type === 'files' && legacy.content.data[0] === 'legacy-content-id',
+    'Expected persisted string-only attachment references to remain readable',
+  )
+}
+
+testFileTasksStoreSelfDescribingAttachmentReferences.description =
+  'Stores attachment metadata in new file tasks while preserving legacy hash-only task parsing.'

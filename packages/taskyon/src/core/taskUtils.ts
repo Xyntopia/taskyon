@@ -7,7 +7,7 @@ export function findAllFilesInTasks(taskList: TaskNode[]): string[] {
   const fileSet = new Set<string>()
   taskList.forEach((task) => {
     if (task.content.type === 'files') {
-      task.content.data.forEach((file) => fileSet.add(file))
+      task.content.data.forEach((file) => fileSet.add(typeof file === 'string' ? file : file.hash))
     }
   })
   return Array.from(fileSet)

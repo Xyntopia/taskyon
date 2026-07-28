@@ -25,3 +25,20 @@ export const canonicalHash = (value: unknown): Sha256Hash =>
 
 export const sha256HashBytes = (value: Uint8Array): Sha256Hash =>
   `sha256:${bytesToHex(sha256(value))}`
+
+export const createSha256Hasher = () => {
+  const hash = sha256.create()
+  let result: Uint8Array | undefined
+  const finish = () => {
+    result ??= hash.digest()
+    return result
+  }
+  return {
+    update: (value: Uint8Array) => {
+      if (result) throw new Error('Cannot update a finalized SHA-256 hash.')
+      hash.update(value)
+    },
+    digestBytes: () => new Uint8Array(finish()),
+    digest: (): Sha256Hash => `sha256:${bytesToHex(finish())}`,
+  }
+}

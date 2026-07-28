@@ -32,16 +32,21 @@
 
     <template v-else-if="task.content.type === 'files'">
       <TaskFileBrowser
-        v-if="fileMappings.length > 0 && getFile"
-        :file-mappings="fileMappings"
+        v-if="getFile"
+        :attachments="task.content.data"
         :expert-mode="expertMode"
         preview
         :preview-size="100"
         :get-file="getFile"
       />
       <q-list v-else dense>
-        <q-item v-for="fileId in task.content.data" :key="fileId">
-          <q-item-section>{{ fileId }}</q-item-section>
+        <q-item
+          v-for="attachment in task.content.data"
+          :key="typeof attachment === 'string' ? attachment : attachment.hash"
+        >
+          <q-item-section>{{
+            typeof attachment === 'string' ? attachment : attachment.name
+          }}</q-item-section>
         </q-item>
       </q-list>
     </template>
@@ -75,7 +80,7 @@
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import { humanizeError } from '@taskyon/common/modules/utils/error'
 import { safeYamlDump } from '@taskyon/common/modules/yamlUtils'
-import { taskRefToTaskId, type FileMapping, type TaskNode } from '@taskyon/taskyon'
+import { taskRefToTaskId, type FileAttachment, type TaskNode } from '@taskyon/taskyon'
 import { computed } from 'vue'
 import TaskFileBrowser from './TaskFileBrowser.vue'
 import TaskSourcesList from './TaskSourcesList.vue'
@@ -85,8 +90,7 @@ import TyMarkdown from '../tyMarkdown.vue'
 const props = withDefaults(
   defineProps<{
     task: TaskNode
-    fileMappings?: readonly FileMapping[]
-    getFile?: ((uuid: string) => Promise<File | undefined>) | undefined
+    getFile?: ((attachment: FileAttachment | string) => Promise<File | undefined>) | undefined
     expertMode?: boolean
     markdownEnabled?: boolean
     useMarkdownIframe?: boolean
@@ -94,7 +98,6 @@ const props = withDefaults(
     showVariableActions?: boolean
   }>(),
   {
-    fileMappings: () => [],
     getFile: undefined,
     expertMode: false,
     markdownEnabled: true,

@@ -6,7 +6,11 @@ import { taskyonRuntimeProtocol } from '@taskyon/taskyon/api'
 import { tyCore } from '../../../taskyon/src/core/init'
 import type { Taskyon } from '../../../taskyon/src/core/init'
 import { connectTaskManagerStorageFromProtocol } from '../../../taskyon/src/core/taskManager'
-import { taskyonStorageProtocol } from '../../../taskyon/src/api/storageProtocol'
+import { createArtifactStore } from '../../../taskyon/src/core/artifactStore'
+import {
+  createProtocolStorageBlobBackend,
+  taskyonStorageProtocol,
+} from '../../../taskyon/src/api/storageProtocol'
 import { createDefaultTaskyonToolSetup } from '../../../taskyon/src/tools'
 import { toolCall } from '../../../taskyon/src/types/toolApi'
 import {
@@ -146,6 +150,10 @@ export async function bootstrapCliTaskyon(args?: {
       secretStore: cliSecretStore,
       taskManagerStorageFactory: ({ sessionId }) =>
         connectTaskManagerStorageFromProtocol(taskStorageClientPort, sessionId),
+      artifactStoreFactory: ({ sessionId }) =>
+        createArtifactStore(
+          createProtocolStorageBlobBackend(taskStorageClientPort, `${sessionId}/artifacts`),
+        ),
     },
   )
 
