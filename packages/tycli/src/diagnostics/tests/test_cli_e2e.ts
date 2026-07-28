@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import {
-  runTycSession,
+  runCliE2eSession,
   testTaskRendererDoesNotPrintTransientWorkerProgress as runTaskRendererDoesNotPrintTransientWorkerProgress,
   testTaskRendererHidesHiddenWorkerProgress as runTaskRendererHidesHiddenWorkerProgress,
   testTaskRendererSummarizesHiddenFunctionCallsBeforeVisibleTask as runTaskRendererSummarizesHiddenFunctionCallsBeforeVisibleTask,
@@ -17,7 +17,7 @@ import {
   testBracketedPastePreservesMultilinePrompt as runBracketedPastePreservesMultilinePrompt,
 } from '../../tests/cliE2eDiagnostics'
 
-const assert = (condition: unknown, message: string) => {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
@@ -36,7 +36,7 @@ testCliBracketedPastePreservesMultilinePrompt.timeoutMs =
   runBracketedPastePreservesMultilinePrompt.timeoutMs
 
 export const testCliHelloWorldProducesAssistantResponse = async () => {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testCliHelloWorldProducesAssistantResponse',
     steps: [
       { waitFor: 'tycli ready.', input: 'hello world\n' },
@@ -94,7 +94,7 @@ export const testCliListsAndUsesAvailableTools = async () => {
     'First, list every tool currently available to you using its exact tool name, with one name per line between AVAILABLE_TOOLS_BEGIN and AVAILABLE_TOOLS_END.',
     'Second, get the current weather for latitude 32.7157 and longitude -117.1611 and begin that result with WEATHER_TASK_COMPLETE.',
   ].join('\n\n')
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testCliListsAndUsesAvailableTools',
     steps: [
       {
@@ -173,7 +173,7 @@ testCliListsAndUsesAvailableTools.description =
 testCliListsAndUsesAvailableTools.timeoutMs = 320_000
 
 export const testCliToolsListsDocumentationTools = async () => {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testCliToolsListsDocumentationTools',
     steps: [
       { waitFor: 'tycli ready.', input: '/tools\n' },
@@ -210,7 +210,7 @@ testCliToolsListsDocumentationTools.description =
 testCliToolsListsDocumentationTools.timeoutMs = 70_000
 
 export const testCliDocumentationQuestionCompletesWithoutFatal = async () => {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testCliDocumentationQuestionCompletesWithoutFatal',
     steps: [
       {
@@ -262,7 +262,7 @@ testCliDocumentationQuestionCompletesWithoutFatal.description =
 testCliDocumentationQuestionCompletesWithoutFatal.timeoutMs = 200_000
 
 export const testCliTaskPlannerUsesContractedSequentialHandoffs = async () => {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testCliTaskPlannerUsesContractedSequentialHandoffs',
     steps: [
       {
@@ -331,7 +331,7 @@ testCliTaskPlannerUsesContractedSequentialHandoffs.description =
 testCliTaskPlannerUsesContractedSequentialHandoffs.timeoutMs = 320_000
 
 export const testCliAiWorkstationCreatesAndOptimizesDagGraph = async () => {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testCliAiWorkstationCreatesAndOptimizesDagGraph',
     steps: [
       {

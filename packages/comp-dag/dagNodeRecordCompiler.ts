@@ -5,12 +5,12 @@ import {
   type DagNodeRecord,
   type DagNodeRunFunction,
 } from './dagNodeRecord.ts'
-import { defineFrpServiceProtocol } from '@taskyon/common/modules/frpBus.ts'
+import { defineFrpServiceProtocol } from '@taskyon/common/modules/frpBus'
 import {
   createSandboxProtocolClient,
   serveFrpSandboxCapability,
-} from '@taskyon/common/modules/sandbox/frpSandbox.ts'
-import { createExecutableSandbox } from '@taskyon/common/modules/sandbox/workerSandbox.ts'
+} from '@taskyon/common/modules/sandbox/frpSandbox'
+import { createExecutableSandbox } from '@taskyon/common/modules/sandbox/workerSandbox'
 import { z } from 'zod'
 
 const dagNodeUseProtocol = defineFrpServiceProtocol({

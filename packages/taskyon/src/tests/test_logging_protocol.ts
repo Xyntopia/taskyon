@@ -14,10 +14,10 @@ export const testLoggingProtocolRoutesStructuredEntriesToConfiguredSink = async 
   const port = createProtocolPort(taskyonLoggingProtocol)
   const received: TaskyonLogEntry[] = []
   const stop = createLoggingProtocolServer(port.y, {
-    write: async (entry) => {
+    write: (entry) => {
       received.push(entry)
     },
-    flush: async () => undefined,
+    flush: () => undefined,
   })
   const client = createLoggingClient(port.x)
 

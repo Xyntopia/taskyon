@@ -7,11 +7,12 @@ import {
 } from '@taskyon/taskyon'
 import {
   createStorageProtocolServer,
+  scopeStorageBackendProvider,
   type StorageBackendProvider,
   type TaskyonStorageMessage,
 } from '@taskyon/taskyon/api'
+import type { CliConfigStore } from './config'
 import type { StoredConfig } from './types'
-import { persistConfigPatch } from './config'
 import { createCliFileBlobStorageBackend, createCliFileStorageBackend } from './fileStorage'
 import { createCliSqliteStorageProvider } from './sqliteStorage'
 
@@ -22,14 +23,18 @@ export const resolveCliStorageSelection = (stored: StoredConfig) => ({
   blobs: stored.storage?.blobs ?? 'files',
 })
 
-export const persistCliStorageSelection = async (selection: {
-  records: CliStorageBackendKind
-  blobs: CliStorageBackendKind
-}) => await persistConfigPatch({ storage: selection })
+export const persistCliStorageSelection = async (
+  configStore: CliConfigStore,
+  selection: {
+    records: CliStorageBackendKind
+    blobs: CliStorageBackendKind
+  },
+) => await configStore.persistConfigPatch({ storage: selection })
 
 export const createCliSelectedStorageService = async (options: {
   port: Port<TaskyonStorageMessage, TaskyonStorageMessage>
   dataDirectory: string
+  namespacePrefix?: string
   selection: { records: CliStorageBackendKind; blobs: CliStorageBackendKind }
 }) => {
   const fileRoot = join(options.dataDirectory, 'storage')
@@ -62,7 +67,10 @@ export const createCliSelectedStorageService = async (options: {
         return createPgLiteStorageBlobBackend(pglite!, namespace)
     }
   }
-  const provider: StorageBackendProvider = { records, blobs }
+  const selectedProvider: StorageBackendProvider = { records, blobs }
+  const provider = options.namespacePrefix
+    ? scopeStorageBackendProvider(selectedProvider, options.namespacePrefix)
+    : selectedProvider
   const stop = createStorageProtocolServer(options.port, provider, { mode: 'trusted-local' })
   return () => {
     stop()

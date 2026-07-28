@@ -82,7 +82,7 @@ async function onResetTaskyon() {
   if (props.mode !== 'settings') {
     const ty = await tystate.taskyon
     await ty.deleteAllTasks()
-    state.chatHistory = []
+    await tystate.conversationHistory.clear()
   }
   if (props.mode !== 'tasks') state.$reset()
 

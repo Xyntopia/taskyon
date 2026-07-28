@@ -28,8 +28,8 @@ export {
 } from './types/chatCompletion'
 export { resolveToolchainConfig, type llmSettings, type ToolchainProfiles } from './types/profiles'
 export { partialTaskDraft, TaskNode } from './types/taskNode'
-export type { ClientTool, InternalTool } from './types/toolApi'
-export { createClientTool, toolCall } from './types/toolApi'
+export type { ClientTool } from './types/toolApi'
+export { createClientTool, InternalTool, toolCall } from './types/toolApi'
 export { createCryptoSession } from './utils/cryptoSession'
 export { createPgLiteDatabase, getDatabase } from './utils/pglite.api'
 export {

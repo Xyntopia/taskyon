@@ -1,4 +1,4 @@
-import type { GraphData } from '@taskyon/common/modules/graph/types.ts'
+import type { GraphData } from '@taskyon/common/modules/graph/types'
 import { describeExploreInputs } from './dagCore.ts'
 
 type RuntimeDagNode = {

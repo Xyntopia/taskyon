@@ -10,6 +10,7 @@ import {
   createClientTool,
   createSubtasksResult,
   createTool,
+  InternalTool,
   taskResult,
   toolCall,
 } from '../types/toolApi'
@@ -41,7 +42,7 @@ export {
   ToolchainProfiles,
   TyToolchainConfig,
 } from '../types/profiles'
-export type { ClientTool, ClientToolContext, InternalTool, toolContext } from '../types/toolApi'
+export type { ClientTool, ClientToolContext, toolContext } from '../types/toolApi'
 export { FunctionArguments } from '../types/tools'
 export type { FunctionCall, ToolBase } from '../types/tools'
 export { sha256UrlSafeHashFromFile } from '../utils/encoding'
@@ -67,6 +68,7 @@ export {
   createClientTool,
   createSubtasksResult,
   createTool,
+  InternalTool,
   partialTaskDraft,
   taskResult,
   toolCall,
@@ -80,6 +82,7 @@ export {
   createStorageClient,
   createStorageProtocolServer,
   createStorageRecordBackend,
+  scopeStorageBackendProvider,
   taskyonStorageProtocol,
   type StorageBlobBackend,
   type StorageBlobMetadata,

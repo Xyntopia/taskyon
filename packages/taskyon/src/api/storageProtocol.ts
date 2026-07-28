@@ -457,6 +457,27 @@ export type StorageBackendProvider = {
   blobs?: (namespace: string) => Promise<StorageBlobBackend> | StorageBlobBackend
 }
 
+const storageNamespacePrefix = z
+  .string()
+  .regex(
+    /^[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*$/,
+    'Storage namespace prefixes must contain non-empty filesystem-safe segments.',
+  )
+
+export const scopeStorageBackendProvider = (
+  backends: StorageBackendProvider,
+  prefix: string,
+): StorageBackendProvider => {
+  const parsedPrefix = storageNamespacePrefix.parse(prefix)
+  const scopedNamespace = (namespace: string) => `${parsedPrefix}/${namespace}`
+  const records = backends.records
+  const blobs = backends.blobs
+  return {
+    ...(records ? { records: (namespace: string) => records(scopedNamespace(namespace)) } : {}),
+    ...(blobs ? { blobs: (namespace: string) => blobs(scopedNamespace(namespace)) } : {}),
+  }
+}
+
 export const createStorageRecordBackend = <T>(
   crud: StorageRecordCrud<T>,
   schema: z.ZodType<T>,

@@ -2,6 +2,19 @@
 
 Node-first Taskyon CLI for interactive chat and Node diagnostics.
 
+The interactive engine is also available through `@taskyon/tycli/interactive`. A host supplies its
+command and product identity, storage paths, entry-node name, prompt context, provider metadata,
+documentation corpus, and additional tools. `tycli` itself is one host configuration; consumers do
+not need to fork the terminal runtime or reuse Taskyon's persisted CLI state.
+
+Use `@taskyon/tycli/storagePaths` to resolve XDG-based storage for another host. The returned paths
+are explicit inputs to the runner, so a desktop shell can provide platform app-data paths later
+without changing configuration, OAuth, conversation, or task-storage code.
+
+Hosts that share a physical Taskyon storage backend can set `storageNamespace`. The storage service
+then prefixes every record and blob namespace at the backend boundary, so a host such as Joulios can
+reuse the complete Taskyon storage system without sharing Taskyon's logical records.
+
 The CLI registers host capabilities alongside Taskyon's shared model and workflow tools:
 
 - workspace exploration and file reads;

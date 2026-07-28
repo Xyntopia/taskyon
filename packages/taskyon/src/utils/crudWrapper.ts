@@ -431,7 +431,7 @@ export const createVectorStore = async <T>(
     vectorDims: numDimensions,
   })
 
-  let semanticFailure: unknown
+  let semanticFailure: Error | undefined
   let semanticFailureReported = false
 
   const vectorize = async (text: string) => {
@@ -455,8 +455,12 @@ export const createVectorStore = async <T>(
         if (timeout) clearTimeout(timeout)
       }
     } catch (error) {
-      semanticFailure = error
-      throw error
+      const failure =
+        error instanceof Error
+          ? error
+          : new Error('Semantic vectorization failed.', { cause: error })
+      semanticFailure = failure
+      throw failure
     }
   }
 

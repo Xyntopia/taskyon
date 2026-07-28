@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { createExplorationTool } from '../../tools/explorationTool'
 
-const assert = (condition: unknown, message: string) => {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
@@ -37,8 +37,16 @@ export const testExplorationScopesDiscoveryToRequestedPath = async () => {
       'Expected search to apply its query only below the requested path',
     )
     assert(
+      'matches' in grepped && Array.isArray(grepped.matches),
+      'Expected grep to return matches',
+    )
+    assert(
       grepped.count === 1 && grepped.matches[0]?.path === 'inside/target.ts',
       'Expected grep matches to remain scoped and workspace-relative',
+    )
+    assert(
+      'matches' in greppedFile && Array.isArray(greppedFile.matches),
+      'Expected single-file grep to return matches',
     )
     assert(
       greppedFile.count === 1 && greppedFile.matches[0]?.path === 'inside/target.ts',

@@ -74,7 +74,7 @@ const isSchemaPropertyMap = (value: unknown): value is Record<string, JSONSchema
       (property !== null && typeof property === 'object' && !Array.isArray(property)),
   )
 
-const normalizeStructuredResultSchema = (value: unknown): JSONSchema7 => {
+const normalizeStructuredResultSchema = (value: unknown): JSONSchema7 & Record<string, unknown> => {
   if (isStructuredResultSchema(value)) return value
   if (isSchemaPropertyMap(value)) {
     return {

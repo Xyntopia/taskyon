@@ -11,7 +11,7 @@ import {
   selectTaskQueueBranches,
 } from '../core/taskQueueSelection'
 
-const assert = (condition: unknown, message: string) => {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
@@ -249,7 +249,9 @@ export const testTaskPlannerNormalizesTaskInputs = () => {
       },
     },
   })
-  const shorthandSchema = shorthandSchemaTask.taskContract.result?.schema
+  const shorthandResult = shorthandSchemaTask.taskContract.result
+  assert(shorthandResult.mode === 'structured', 'Expected a structured shorthand task result')
+  const shorthandSchema = shorthandResult.schema
   assert(
     shorthandSchema !== undefined &&
       typeof shorthandSchema !== 'boolean' &&

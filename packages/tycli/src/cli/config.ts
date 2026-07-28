@@ -1,191 +1,18 @@
 import { constants } from 'node:fs'
 import { access, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { homedir } from 'node:os'
 import { createCryptoSession, type CryptoSession } from '@taskyon/taskyon'
 import { type CrudWrapper, withSecretStore } from '../../../taskyon/src/utils/crudWrapper'
 import { EncryptedDataRow } from '../../../taskyon/src/utils/encrypt'
+import type { CliStoragePaths } from './storagePaths'
+import { resolveTaskyonCliStoragePaths } from './storagePaths'
 import type { StoredConfig } from './types'
 
-const PREFERRED_CONFIG_DIR = join(homedir(), '.config', 'tycli')
-const PREFERRED_CONFIG_FILE = join(PREFERRED_CONFIG_DIR, 'config.json')
-const FALLBACK_CONFIG_DIR = join('/tmp', 'tycli')
 const CONFIG_LOCK_STALE_MS = 30_000
 const CONFIG_LOCK_TIMEOUT_MS = 10_000
 const CONFIG_LOCK_RETRY_MS = 50
-const PREFERRED_DATA_DIR = join(
-  process.env.XDG_DATA_HOME?.trim() || join(homedir(), '.local', 'share'),
-  'tycli',
-)
-const FALLBACK_DATA_DIR = join('/tmp', 'tycli', 'data')
-let cachedConfigFile: string | null = null
-let cachedDataDir: string | null = null
-let configWriteQueue = Promise.resolve()
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-async function useFallbackConfigFile() {
-  await mkdir(FALLBACK_CONFIG_DIR, { recursive: true })
-  cachedConfigFile = join(FALLBACK_CONFIG_DIR, 'config.json')
-  return cachedConfigFile
-}
-
-export async function resolveConfigFilePath() {
-  if (cachedConfigFile) return cachedConfigFile
-  try {
-    await mkdir(PREFERRED_CONFIG_DIR, { recursive: true })
-    await access(PREFERRED_CONFIG_DIR, constants.W_OK)
-    cachedConfigFile = PREFERRED_CONFIG_FILE
-    return cachedConfigFile
-  } catch {
-    return await useFallbackConfigFile()
-  }
-}
-
-async function resolveReadableConfigFilePath() {
-  if (cachedConfigFile) return cachedConfigFile
-  try {
-    await access(PREFERRED_CONFIG_FILE, constants.R_OK)
-    cachedConfigFile = PREFERRED_CONFIG_FILE
-    return cachedConfigFile
-  } catch {
-    return await resolveConfigFilePath()
-  }
-}
-
-export async function resolveConfigDirectoryPath() {
-  const configFile = await resolveConfigFilePath()
-  return dirname(configFile)
-}
-
-export async function resolveDataDirectoryPath() {
-  if (cachedDataDir) return cachedDataDir
-  try {
-    await mkdir(PREFERRED_DATA_DIR, { recursive: true })
-    await access(PREFERRED_DATA_DIR, constants.W_OK)
-    cachedDataDir = PREFERRED_DATA_DIR
-    return cachedDataDir
-  } catch {
-    await mkdir(FALLBACK_DATA_DIR, { recursive: true })
-    cachedDataDir = FALLBACK_DATA_DIR
-    return cachedDataDir
-  }
-}
-
-export async function loadStoredConfig(): Promise<StoredConfig> {
-  try {
-    const configFile = await resolveReadableConfigFilePath()
-    const raw = await readFile(configFile, 'utf8')
-    const parsed = JSON.parse(raw) as StoredConfig
-    return parsed ?? {}
-  } catch {
-    return {}
-  }
-}
-
-async function saveStoredConfig(next: StoredConfig) {
-  const configFile = await resolveConfigFilePath()
-  const body = `${JSON.stringify(next, null, 2)}\n`
-  const writeAtomically = async (filePath: string) => {
-    const tmpFile = `${filePath}.${process.pid}.${Date.now()}.tmp`
-    await writeFile(tmpFile, body, 'utf8')
-    await rename(tmpFile, filePath)
-  }
-
-  try {
-    await mkdir(dirname(configFile), { recursive: true })
-    await writeAtomically(configFile)
-  } catch (error) {
-    if (configFile.includes(FALLBACK_CONFIG_DIR)) throw error
-    const fallbackFile = await useFallbackConfigFile()
-    await writeAtomically(fallbackFile)
-  }
-}
-
-async function removeStaleConfigLock(lockDir: string) {
-  try {
-    const info = await stat(lockDir)
-    if (Date.now() - info.mtimeMs > CONFIG_LOCK_STALE_MS) {
-      await rm(lockDir, { recursive: true, force: true })
-    }
-  } catch {
-    // Missing or unreadable lock state is handled by the next mkdir attempt.
-  }
-}
-
-async function acquireConfigFileLock(lockDir: string) {
-  const startedAt = Date.now()
-  for (;;) {
-    try {
-      await mkdir(lockDir)
-      return
-    } catch (error) {
-      const code = error && typeof error === 'object' ? Reflect.get(error, 'code') : undefined
-      if (code !== 'EEXIST') throw error
-      await removeStaleConfigLock(lockDir)
-      if (Date.now() - startedAt > CONFIG_LOCK_TIMEOUT_MS) {
-        throw new Error(`Timed out waiting for tycli config lock: ${lockDir}`)
-      }
-      await sleep(CONFIG_LOCK_RETRY_MS)
-    }
-  }
-}
-
-async function withConfigFileLock<T>(run: () => Promise<T>): Promise<T> {
-  const configFile = await resolveConfigFilePath()
-  const lockDir = join(dirname(configFile), 'config.lock')
-  await acquireConfigFileLock(lockDir)
-  try {
-    return await run()
-  } finally {
-    await rm(lockDir, { recursive: true, force: true })
-  }
-}
-
-async function updateStoredConfig(
-  update: (current: StoredConfig) => StoredConfig | Promise<StoredConfig>,
-) {
-  await withConfigFileLock(async () => {
-    const current = await loadStoredConfig()
-    await saveStoredConfig(await update(current))
-  })
-}
-
-export async function persistConfigPatch(patch: Partial<StoredConfig>) {
-  const write = configWriteQueue
-    .catch(() => {})
-    .then(async () => updateStoredConfig((current) => ({ ...current, ...patch })))
-  configWriteQueue = write.catch(() => {})
-  await write
-}
-
-export async function flushConfigWrites() {
-  await configWriteQueue
-}
-
-export function resolveStoredModel(stored: StoredConfig, provider: string): string | undefined {
-  const providerModel = stored.providerModels?.[provider]?.trim()
-  if (providerModel) return providerModel
-  if (stored.selectedApi === provider) {
-    const legacyModel = stored.taskyonModel?.trim()
-    if (legacyModel) return legacyModel
-  }
-  return undefined
-}
-
-export async function persistProviderModel(provider: string, model: string) {
-  await updateStoredConfig((current) => {
-    const providerModels = {
-      ...(current.providerModels ?? {}),
-      [provider]: model,
-    }
-    return {
-      ...current,
-      providerModels,
-      ...(current.selectedApi === provider ? { taskyonModel: model } : {}),
-    }
-  })
-}
 
 async function importDeviceKeyPair(
   jwk: NonNullable<StoredConfig['deviceKeyPairJwk']>,
@@ -223,125 +50,310 @@ async function createPersistableDeviceKeyPair(): Promise<CryptoKeyPair> {
   ])) as CryptoKeyPair
 }
 
-export async function initPersistentCryptoSession() {
-  return await withConfigFileLock(async () => {
-    const stored = await loadStoredConfig()
-    const persistedDevice = stored.deviceKeyPairJwk
-      ? await importDeviceKeyPair(stored.deviceKeyPairJwk)
-      : await createPersistableDeviceKeyPair()
+export function createCliConfigStore(paths: CliStoragePaths) {
+  let cachedConfigFile: string | null = null
+  let cachedDataDir: string | null = null
+  let configWriteQueue = Promise.resolve()
 
-    const cs = await createCryptoSession({
-      deviceKeyPair: persistedDevice,
-      wrappedSK: stored.wrappedSessionKey,
-    })
+  const useFallbackConfigFile = async () => {
+    await mkdir(paths.fallbackConfigDir, { recursive: true })
+    cachedConfigFile = join(paths.fallbackConfigDir, 'config.json')
+    return cachedConfigFile
+  }
 
-    let exported: Awaited<ReturnType<typeof exportDeviceKeyPair>>
+  const resolveConfigFilePath = async () => {
+    if (cachedConfigFile) return cachedConfigFile
     try {
-      exported = await exportDeviceKeyPair(cs.getDeviceKey())
+      await mkdir(paths.configDir, { recursive: true })
+      await access(paths.configDir, constants.W_OK)
+      cachedConfigFile = join(paths.configDir, 'config.json')
+      return cachedConfigFile
     } catch {
-      const freshPair = await createPersistableDeviceKeyPair()
-      const refreshed = await createCryptoSession({
-        deviceKeyPair: freshPair,
+      return await useFallbackConfigFile()
+    }
+  }
+
+  const resolveReadableConfigFilePath = async () => {
+    if (cachedConfigFile) return cachedConfigFile
+    const preferredConfigFile = join(paths.configDir, 'config.json')
+    try {
+      await access(preferredConfigFile, constants.R_OK)
+      cachedConfigFile = preferredConfigFile
+      return cachedConfigFile
+    } catch {
+      return await resolveConfigFilePath()
+    }
+  }
+
+  const resolveConfigDirectoryPath = async () => dirname(await resolveConfigFilePath())
+
+  const resolveDataDirectoryPath = async () => {
+    if (cachedDataDir) return cachedDataDir
+    try {
+      await mkdir(paths.dataDir, { recursive: true })
+      await access(paths.dataDir, constants.W_OK)
+      cachedDataDir = paths.dataDir
+      return cachedDataDir
+    } catch {
+      await mkdir(paths.fallbackDataDir, { recursive: true })
+      cachedDataDir = paths.fallbackDataDir
+      return cachedDataDir
+    }
+  }
+
+  const loadStoredConfig = async (): Promise<StoredConfig> => {
+    try {
+      const raw = await readFile(await resolveReadableConfigFilePath(), 'utf8')
+      const parsed = JSON.parse(raw) as StoredConfig
+      return parsed ?? {}
+    } catch {
+      return {}
+    }
+  }
+
+  const saveStoredConfig = async (next: StoredConfig) => {
+    const configFile = await resolveConfigFilePath()
+    const body = `${JSON.stringify(next, null, 2)}\n`
+    const writeAtomically = async (filePath: string) => {
+      const temporaryFile = `${filePath}.${process.pid}.${Date.now()}.tmp`
+      await writeFile(temporaryFile, body, 'utf8')
+      await rename(temporaryFile, filePath)
+    }
+
+    try {
+      await mkdir(dirname(configFile), { recursive: true })
+      await writeAtomically(configFile)
+    } catch (error) {
+      if (configFile.startsWith(paths.fallbackConfigDir)) throw error
+      await writeAtomically(await useFallbackConfigFile())
+    }
+  }
+
+  const removeStaleConfigLock = async (lockDir: string) => {
+    try {
+      const info = await stat(lockDir)
+      if (Date.now() - info.mtimeMs > CONFIG_LOCK_STALE_MS) {
+        await rm(lockDir, { recursive: true, force: true })
+      }
+    } catch {
+      // Missing or unreadable lock state is handled by the next mkdir attempt.
+    }
+  }
+
+  const acquireConfigFileLock = async (lockDir: string) => {
+    const startedAt = Date.now()
+    for (;;) {
+      try {
+        await mkdir(lockDir)
+        return
+      } catch (error) {
+        const code = error && typeof error === 'object' ? Reflect.get(error, 'code') : undefined
+        if (code !== 'EEXIST') throw error
+        await removeStaleConfigLock(lockDir)
+        if (Date.now() - startedAt > CONFIG_LOCK_TIMEOUT_MS) {
+          throw new Error(`Timed out waiting for CLI config lock: ${lockDir}`)
+        }
+        await sleep(CONFIG_LOCK_RETRY_MS)
+      }
+    }
+  }
+
+  const withConfigFileLock = async <T>(run: () => Promise<T>): Promise<T> => {
+    const configFile = await resolveConfigFilePath()
+    const lockDir = join(dirname(configFile), 'config.lock')
+    await acquireConfigFileLock(lockDir)
+    try {
+      return await run()
+    } finally {
+      await rm(lockDir, { recursive: true, force: true })
+    }
+  }
+
+  const updateStoredConfig = async (
+    update: (current: StoredConfig) => StoredConfig | Promise<StoredConfig>,
+  ) => {
+    await withConfigFileLock(async () => {
+      const current = await loadStoredConfig()
+      await saveStoredConfig(await update(current))
+    })
+  }
+
+  const persistConfigPatch = async (patch: Partial<StoredConfig>) => {
+    const write = configWriteQueue
+      .catch(() => {})
+      .then(async () => updateStoredConfig((current) => ({ ...current, ...patch })))
+    configWriteQueue = write.catch(() => {})
+    await write
+  }
+
+  const flushConfigWrites = async () => await configWriteQueue
+
+  const persistProviderModel = async (provider: string, model: string) => {
+    await updateStoredConfig((current) => ({
+      ...current,
+      providerModels: { ...(current.providerModels ?? {}), [provider]: model },
+      ...(current.selectedApi === provider ? { taskyonModel: model } : {}),
+    }))
+  }
+
+  const initPersistentCryptoSession = async () =>
+    await withConfigFileLock(async () => {
+      const stored = await loadStoredConfig()
+      const persistedDevice = stored.deviceKeyPairJwk
+        ? await importDeviceKeyPair(stored.deviceKeyPairJwk)
+        : await createPersistableDeviceKeyPair()
+      const cryptoSession = await createCryptoSession({
+        deviceKeyPair: persistedDevice,
         wrappedSK: stored.wrappedSessionKey,
       })
-      exported = await exportDeviceKeyPair(refreshed.getDeviceKey())
-      const wrappedSessionKey = await refreshed.exportSessionKey()
-      await saveStoredConfig({
-        ...stored,
-        deviceKeyPairJwk: exported,
-        wrappedSessionKey,
+
+      try {
+        const deviceKeyPairJwk = await exportDeviceKeyPair(cryptoSession.getDeviceKey())
+        await saveStoredConfig({
+          ...stored,
+          deviceKeyPairJwk,
+          wrappedSessionKey: await cryptoSession.exportSessionKey(),
+        })
+        return { cryptoSession, stored }
+      } catch {
+        const refreshed = await createCryptoSession({
+          deviceKeyPair: await createPersistableDeviceKeyPair(),
+          wrappedSK: stored.wrappedSessionKey,
+        })
+        await saveStoredConfig({
+          ...stored,
+          deviceKeyPairJwk: await exportDeviceKeyPair(refreshed.getDeviceKey()),
+          wrappedSessionKey: await refreshed.exportSessionKey(),
+        })
+        return { cryptoSession: refreshed, stored }
+      }
+    })
+
+  const createConfigSecretCrud = (): CrudWrapper<EncryptedDataRow> => {
+    const readSecrets = async () => (await loadStoredConfig()).cliSecrets ?? {}
+    const readRows = async () =>
+      Object.entries(await readSecrets()).flatMap(([id, data]) => {
+        const parsed = EncryptedDataRow.safeParse(data)
+        return parsed.success ? [{ id, data: parsed.data }] : []
       })
-      return { cryptoSession: refreshed, stored }
+
+    return {
+      async set(id, data) {
+        await updateStoredConfig((current) => ({
+          ...current,
+          cliSecrets: { ...(current.cliSecrets ?? {}), [String(id)]: data },
+        }))
+      },
+      async get(id) {
+        const row = (await readSecrets())[String(id)]
+        const parsed = row ? EncryptedDataRow.safeParse(row) : null
+        return parsed?.success ? parsed.data : null
+      },
+      async delete(id) {
+        await updateStoredConfig((current) => {
+          const cliSecrets = { ...(current.cliSecrets ?? {}) }
+          delete cliSecrets[String(id)]
+          return { ...current, cliSecrets }
+        })
+      },
+      async listIds() {
+        return (await readRows()).map((row) => row.id)
+      },
+      async list() {
+        return await readRows()
+      },
+      async listAll() {
+        return await readRows()
+      },
+      async clear() {
+        await updateStoredConfig((current) => ({ ...current, cliSecrets: {} }))
+      },
+      async upsert(id, data) {
+        await updateStoredConfig((current) => ({
+          ...current,
+          cliSecrets: { ...(current.cliSecrets ?? {}), [String(id)]: data },
+        }))
+        return data
+      },
     }
-    const wrappedSessionKey = await cs.exportSessionKey()
-    await saveStoredConfig({
-      ...stored,
-      deviceKeyPairJwk: exported,
-      wrappedSessionKey,
-    })
+  }
 
-    return { cryptoSession: cs, stored }
-  })
-}
-
-const createConfigSecretCrud = (): CrudWrapper<EncryptedDataRow> => {
-  const readSecrets = async () => (await loadStoredConfig()).cliSecrets ?? {}
-  const readRows = async () =>
-    Object.entries(await readSecrets()).flatMap(([id, data]) => {
-      const parsed = EncryptedDataRow.safeParse(data)
-      return parsed.success ? [{ id, data: parsed.data }] : []
-    })
+  const createCliSecretStore = (cryptoSession: CryptoSession) =>
+    withSecretStore(
+      createConfigSecretCrud(),
+      () => cryptoSession.getUserPublicKey().publicKey,
+      () => cryptoSession.getSessionKey(),
+    )
 
   return {
-    async set(id, data) {
-      await updateStoredConfig((current) => ({
-        ...current,
-        cliSecrets: { ...(current.cliSecrets ?? {}), [String(id)]: data },
-      }))
-    },
-    async get(id) {
-      const row = (await readSecrets())[String(id)]
-      const parsed = row ? EncryptedDataRow.safeParse(row) : null
-      return parsed?.success ? parsed.data : null
-    },
-    async delete(id) {
-      await updateStoredConfig((current) => {
-        const cliSecrets = { ...(current.cliSecrets ?? {}) }
-        delete cliSecrets[String(id)]
-        return { ...current, cliSecrets }
-      })
-    },
-    async listIds() {
-      return (await readRows()).map((row) => row.id)
-    },
-    async list() {
-      return await readRows()
-    },
-    async listAll() {
-      return await readRows()
-    },
-    async clear() {
-      await updateStoredConfig((current) => ({ ...current, cliSecrets: {} }))
-    },
-    async upsert(id, data) {
-      await updateStoredConfig((current) => ({
-        ...current,
-        cliSecrets: { ...(current.cliSecrets ?? {}), [String(id)]: data },
-      }))
-      return data
-    },
+    paths,
+    createCliSecretStore,
+    initPersistentCryptoSession,
+    loadStoredConfig,
+    flushConfigWrites,
+    persistConfigPatch,
+    persistProviderModel,
+    resolveConfigDirectoryPath,
+    resolveDataDirectoryPath,
   }
 }
 
-export function createCliSecretStore(cryptoSession: CryptoSession) {
-  return withSecretStore(
-    createConfigSecretCrud(),
-    () => cryptoSession.getUserPublicKey().publicKey,
-    () => cryptoSession.getSessionKey(),
-  )
+export type CliConfigStore = ReturnType<typeof createCliConfigStore>
+
+export function resolveStoredModel(stored: StoredConfig, provider: string): string | undefined {
+  const providerModel = stored.providerModels?.[provider]?.trim()
+  if (providerModel) return providerModel
+  if (stored.selectedApi === provider) return stored.taskyonModel?.trim() || undefined
+  return undefined
 }
 
-export function resolveProviderSelection(stored: StoredConfig): string {
-  const explicitApi = process.env.TASKYON_SELECTED_API
+export function resolveProviderSelection(
+  stored: StoredConfig,
+  environmentPrefix = 'TASKYON',
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  const prefixed = (name: string) => environment[`${environmentPrefix}_${name}`]
+  const explicitApi = prefixed('SELECTED_API')
   if (explicitApi) return explicitApi
   if (stored.selectedApi) return stored.selectedApi
-  if (process.env.OPENAI_API_KEY) return 'openai'
-  if (process.env.TASKYON_CHATGPT_CODEX_API_KEY || process.env.CHATGPT_CODEX_API_KEY)
+  if (prefixed('OPENAI_API_KEY') || environment.OPENAI_API_KEY) return 'openai'
+  if (
+    prefixed('CHATGPT_CODEX_API_KEY') ||
+    environment.TASKYON_CHATGPT_CODEX_API_KEY ||
+    environment.CHATGPT_CODEX_API_KEY
+  ) {
     return 'chatgpt-codex'
-  if (process.env.OPENROUTER_API_KEY) return 'openrouter.ai'
-  if (process.env.TASKYON_API_KEY) return 'taskyon'
+  }
+  if (prefixed('OPENROUTER_API_KEY') || environment.OPENROUTER_API_KEY) return 'openrouter.ai'
+  if (prefixed('API_KEY') || environment.TASKYON_API_KEY) return 'taskyon'
   return 'local'
 }
 
-export function resolveKeyForProvider(provider: string): string | undefined {
-  if (provider === 'openai') return process.env.TASKYON_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY
+export function resolveKeyForProvider(
+  provider: string,
+  environmentPrefix = 'TASKYON',
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): string | undefined {
+  const prefixedKey = (name: string) => environment[`${environmentPrefix}_${name}`]
+  if (provider === 'openai') return prefixedKey('OPENAI_API_KEY') ?? environment.OPENAI_API_KEY
   if (provider === 'chatgpt-codex') {
-    return process.env.TASKYON_CHATGPT_CODEX_API_KEY ?? process.env.CHATGPT_CODEX_API_KEY
+    return prefixedKey('CHATGPT_CODEX_API_KEY') ?? environment.CHATGPT_CODEX_API_KEY
   }
   if (provider === 'openrouter.ai') {
-    return process.env.TASKYON_OPENROUTER_API_KEY ?? process.env.OPENROUTER_API_KEY
+    return prefixedKey('OPENROUTER_API_KEY') ?? environment.OPENROUTER_API_KEY
   }
-  if (provider === 'taskyon') return process.env.TASKYON_API_KEY
-  if (provider === 'local') return process.env.TASKYON_LOCAL_API_KEY ?? 'local'
+  if (provider === 'taskyon') return prefixedKey('API_KEY') ?? environment.TASKYON_API_KEY
+  if (provider === 'local') return prefixedKey('LOCAL_API_KEY') ?? 'local'
   return undefined
 }
+
+const taskyonConfigStore = createCliConfigStore(resolveTaskyonCliStoragePaths())
+
+export const createCliSecretStore = taskyonConfigStore.createCliSecretStore
+export const flushConfigWrites = taskyonConfigStore.flushConfigWrites
+export const initPersistentCryptoSession = taskyonConfigStore.initPersistentCryptoSession
+export const loadStoredConfig = taskyonConfigStore.loadStoredConfig
+export const persistConfigPatch = taskyonConfigStore.persistConfigPatch
+export const persistProviderModel = taskyonConfigStore.persistProviderModel
+export const resolveConfigDirectoryPath = taskyonConfigStore.resolveConfigDirectoryPath
+export const resolveDataDirectoryPath = taskyonConfigStore.resolveDataDirectoryPath

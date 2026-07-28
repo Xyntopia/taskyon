@@ -1,5 +1,5 @@
 import { chat2Md, type Taskyon } from '@taskyon/taskyon'
-import { createStorageClient, createTaskyonClient } from '@taskyon/taskyon/api'
+import { createTaskyonClient, type createStorageClient } from '@taskyon/taskyon/api'
 import { resolveCliBlobStoragePath } from './fileStorage'
 
 export const TYCLI_CONVERSATION_TRANSCRIPT_NAMESPACE = 'tycli/conversations'
@@ -67,26 +67,27 @@ const createSessionFileName = (startedAt: Date) => {
   return `conversation-${y}${m}${d}-${h}${min}${s}-${process.pid}.md`
 }
 
-export const createConversationPersistence = async (args: {
+export const createConversationPersistence = (args: {
   taskyon: Taskyon
-  storageRoot: string
+  storageRoot?: string
+  storageNamespace?: string
   storageClient: ReturnType<typeof createStorageClient>
   startedAt?: Date
 }): Promise<ConversationPersistence> => {
   const startedAt = args.startedAt ?? new Date()
   const transcriptId = createSessionFileName(startedAt)
-  const filePath = resolveCliBlobStoragePath(
-    args.storageRoot,
-    TYCLI_CONVERSATION_TRANSCRIPT_NAMESPACE,
-    transcriptId,
-  )
+  const storedNamespace = args.storageNamespace
+    ? `${args.storageNamespace}/${TYCLI_CONVERSATION_TRANSCRIPT_NAMESPACE}`
+    : TYCLI_CONVERSATION_TRANSCRIPT_NAMESPACE
+  const filePath = args.storageRoot
+    ? resolveCliBlobStoragePath(args.storageRoot, storedNamespace, transcriptId)
+    : `storage://${storedNamespace}/${transcriptId}`
   let hasPersistedConversation = false
   let persistedTaskIds: string[] = []
   let persistedTaskSnapshots: string[] = []
   let persistedSize = 0
 
-  const encodeMarkdown = (markdown: string) =>
-    new TextEncoder().encode(markdown) as Uint8Array<ArrayBuffer>
+  const encodeMarkdown = (markdown: string) => new TextEncoder().encode(markdown)
 
   const persist = async (leafId: string | undefined) => {
     if (!leafId) return
@@ -126,10 +127,10 @@ export const createConversationPersistence = async (args: {
     hasPersistedConversation = true
   }
 
-  return {
+  return Promise.resolve({
     filePath,
     transcriptId,
     persist,
     hasPersistedConversation: () => hasPersistedConversation,
-  }
+  })
 }

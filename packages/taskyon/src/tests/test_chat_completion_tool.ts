@@ -45,17 +45,23 @@ export const testNativeStructuredOutputSchemaAddsClosedObjectBoundaries = () => 
 
   const normalized = normalizeNativeStructuredOutputSchema(schema)
   assert(normalized?.additionalProperties === false, 'Expected the root object to be closed')
-  const findings = normalized.properties?.findings
+  const properties = normalized.properties
+  assert(
+    typeof properties === 'object' && properties !== null && !Array.isArray(properties),
+    'Expected normalized schema properties',
+  )
+  const findings = 'findings' in properties ? properties.findings : undefined
   assert(
     typeof findings === 'object' && findings !== null && !Array.isArray(findings),
     'Expected the findings schema',
   )
+  assert('items' in findings, 'Expected findings schema items')
   const item = Array.isArray(findings.items) ? findings.items[0] : findings.items
   assert(
     typeof item === 'object' && item !== null && item.additionalProperties === false,
     'Expected nested object items to be closed',
   )
-  assert(schema.additionalProperties === undefined, 'Expected normalization not to mutate input')
+  assert(!('additionalProperties' in schema), 'Expected normalization not to mutate input')
 }
 
 export const testNativeStructuredOutputSchemaRejectsPermissiveOrOptionalObjects = () => {

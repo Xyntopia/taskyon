@@ -5,8 +5,14 @@
   "type": "module",
   "description": "Node-based Taskyon CLI for chat and diagnostics",
   "bin": "./bin/tycli.cjs",
+  "exports": {
+    "./interactive": "./src/cli.ts",
+    "./register": "./src/register.ts",
+    "./storagePaths": "./src/cli/storagePaths.ts",
+    "./testing/cliE2e": "./src/tests/cliE2eDiagnostics.ts"
+  },
   "scripts": {
-    "dev": "yarn node --import ./src/register.ts --experimental-strip-types ./src/cli.ts",
+    "dev": "yarn node --import ./src/register.ts --experimental-strip-types ./src/taskyonCli.ts",
     "build": "tsup && chmod +x ./dist/cli.cjs",
     "cli-diagnostics": "node --import ./src/register.ts --experimental-strip-types ./src/diagnostics/runDiagnostics.ts",
     "cli-diagnostics:list": "node --import ./src/register.ts --experimental-strip-types ./src/diagnostics/runDiagnostics.ts --list",
@@ -20,7 +26,7 @@
     "test:e2e": "yarn node --import ./src/register.ts --experimental-strip-types ./src/tests/runCliDiagnostics.ts",
     "test:e2e:all": "TYCLI_E2E_INCLUDE_EXPERIMENTAL=1 yarn node --import ./src/register.ts --experimental-strip-types ./src/tests/runCliDiagnostics.ts",
     "test": "yarn test:e2e",
-    "run": "yarn node --import ./src/register.ts --experimental-strip-types ./src/cli.ts",
+    "run": "yarn node --import ./src/register.ts --experimental-strip-types ./src/taskyonCli.ts",
     "start": "node ./dist/cli.cjs"
   },
   "dependencies": {

@@ -2,7 +2,7 @@ import { defineConfig } from 'tsup'
 
 export default defineConfig({
   entry: {
-    cli: 'src/cli.ts',
+    cli: 'src/taskyonCli.ts',
     'nlp.worker': '../taskyon/src/utils/nlp.worker.ts',
     'pyodide.worker': '../taskyon/src/utils/pyodide.worker.ts',
   },

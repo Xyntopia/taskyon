@@ -138,9 +138,11 @@ async function waitForText(
   throw new Error(`Timed out waiting for output "${needle}".\nOutput:\n${readOutput()}`)
 }
 
-export async function runTycSession(args: {
+export async function runCliE2eSession(args: {
   testName: string
   steps: SessionStep[]
+  runCommand?: string
+  cwd?: string
   acceptOutputAsExit?: string
   homeKey?: string
   timeoutMs?: number
@@ -152,6 +154,8 @@ export async function runTycSession(args: {
   const {
     testName,
     steps,
+    runCommand = TYCLI_RUN_COMMAND,
+    cwd,
     acceptOutputAsExit,
     homeKey,
     timeoutMs = 20_000,
@@ -171,7 +175,7 @@ export async function runTycSession(args: {
               command: scriptPath,
               args: [
                 '-qfec',
-                [TYCLI_RUN_COMMAND, ...cliArgs.map((arg) => JSON.stringify(arg))].join(' '),
+                [runCommand, ...cliArgs.map((arg) => JSON.stringify(arg))].join(' '),
                 '/dev/null',
               ],
             },
@@ -181,26 +185,37 @@ export async function runTycSession(args: {
               args: [
                 '-lc',
                 `exec "${scriptPath}" -qfec ${JSON.stringify(
-                  [TYCLI_RUN_COMMAND, ...cliArgs.map((arg) => JSON.stringify(arg))].join(' '),
+                  [runCommand, ...cliArgs.map((arg) => JSON.stringify(arg))].join(' '),
                 )} /dev/null`,
               ],
             },
           ]
         })()
-      : [
-          {
-            label: 'direct node',
-            command: (await findExecutableInPath('node')) || 'node',
-            args: [
-              '--import',
-              './src/register.ts',
-              '--experimental-strip-types',
-              './src/cli.ts',
-              ...cliArgs,
-            ],
-            cwd: TYCLI_PACKAGE_CWD,
-          },
-        ]
+      : runCommand === TYCLI_RUN_COMMAND
+        ? [
+            {
+              label: 'direct node',
+              command: (await findExecutableInPath('node')) || 'node',
+              args: [
+                '--import',
+                './src/register.ts',
+                '--experimental-strip-types',
+                './src/taskyonCli.ts',
+                ...cliArgs,
+              ],
+              cwd: TYCLI_PACKAGE_CWD,
+            },
+          ]
+        : [
+            {
+              label: 'direct command',
+              command: await resolveShellBinary(),
+              args: [
+                '-lc',
+                `exec ${runCommand} ${cliArgs.map((arg) => JSON.stringify(arg)).join(' ')}`.trim(),
+              ],
+            },
+          ]
 
   let lastLaunchError: unknown
   for (const attempt of launchAttempts) {
@@ -213,6 +228,7 @@ export async function runTycSession(args: {
         ...(homeKey ? { homeKey } : {}),
         timeoutMs,
         isolateHome,
+        ...(cwd ? { cwd } : {}),
         ...(env ? { env } : {}),
       })
     } catch (error) {
@@ -226,7 +242,7 @@ export async function runTycSession(args: {
   throw lastLaunchError instanceof Error ? lastLaunchError : new Error(String(lastLaunchError))
 }
 
-runTycSession.helper = true
+runCliE2eSession.helper = true
 
 async function withMockOverpassServer<T>(run: (url: string) => Promise<T>): Promise<T> {
   const server = createServer((req, res) => {
@@ -276,14 +292,24 @@ async function runSpawnedSession(args: {
   homeKey?: string
   timeoutMs: number
   isolateHome: boolean
+  cwd?: string
   env?: Record<string, string>
 }): Promise<SessionResult> {
-  const { attempt, testName, steps, acceptOutputAsExit, homeKey, timeoutMs, isolateHome, env } =
-    args
+  const {
+    attempt,
+    testName,
+    steps,
+    acceptOutputAsExit,
+    homeKey,
+    timeoutMs,
+    isolateHome,
+    cwd,
+    env,
+  } = args
   const testHome = join(TEST_HOME, (homeKey ?? testName).replace(/[^a-zA-Z0-9._-]/g, '_'))
   return await new Promise((resolve, reject) => {
     const child = spawn(attempt.command, attempt.args, {
-      cwd: attempt.cwd ?? DEFAULT_E2E_CWD,
+      cwd: cwd ?? attempt.cwd ?? DEFAULT_E2E_CWD,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...process.env,
@@ -437,7 +463,7 @@ function assertNotContains(output: string, pattern: string) {
 }
 
 export async function testCliStartupShowsVersionCommitAndBuildDate() {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testCliStartupShowsVersionCommitAndBuildDate',
     steps: [{ waitFor: 'Slash commands:', input: '/exit\n' }],
     env: { TYCLI_HOTKEY_MENUS: '0' },
@@ -451,7 +477,7 @@ export async function testCliStartupShowsVersionCommitAndBuildDate() {
 }
 
 export async function testTerminalKitFooterOptInStartsAndExits() {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testTerminalKitFooterOptInStartsAndExits',
     steps: [{ waitFor: 'Slash commands:', input: '/exit\n' }],
     env: { TYCLI_HOTKEY_MENUS: '0', TYCLI_TERMINAL_UI: 'terminal-kit' },
@@ -549,7 +575,7 @@ export async function testTaskRendererWritesHtmlPreviewForAssistantHtml() {
 
 export async function testCliOverpassMapToolPrintsHtmlPreviewLink() {
   await withMockOverpassServer(async (overpassUrl) => {
-    const result = await runTycSession({
+    const result = await runCliE2eSession({
       testName: 'testCliOverpassMapToolPrintsHtmlPreviewLink',
       cliArgs: [
         'client',
@@ -612,7 +638,7 @@ export async function testCliClarificationToolAcceptsTypedAnswers() {
       },
     ],
   }
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testCliClarificationToolAcceptsTypedAnswers',
     steps: [
       {
@@ -875,7 +901,7 @@ export function testWorkerStatusTextHidesHiddenTools() {
 
 export async function testCliConcurrentSessionsStartWithSharedHome() {
   const runSession = (label: string) =>
-    runTycSession({
+    runCliE2eSession({
       testName: `testCliConcurrentSessionsStartWithSharedHome-${label}`,
       homeKey: 'testCliConcurrentSessionsStartWithSharedHome',
       steps: [{ waitFor: 'tycli ready.', failOn: ['Fatal error'], input: '/exit\n' }],
@@ -895,7 +921,7 @@ export async function testCliConcurrentSessionsStartWithSharedHome() {
 }
 
 export async function testEmptyCliSessionDoesNotCreateConversationFile() {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testEmptyCliSessionDoesNotCreateConversationFile',
     steps: [{ waitFor: 'Slash commands:', input: '/exit\n' }],
     env: { TYCLI_HOTKEY_MENUS: '0' },
@@ -926,7 +952,7 @@ export async function testEmptyCliSessionDoesNotCreateConversationFile() {
 }
 
 export async function testSlashMenuOpensOnSingleSlash() {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testSlashMenuOpensOnSingleSlash',
     steps: [
       { waitFor: 'Slash commands:', input: '/' },
@@ -940,7 +966,7 @@ export async function testSlashMenuOpensOnSingleSlash() {
 }
 
 export async function testAtFileCommandAddsContextForDirectPath() {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testAtFileCommandAddsContextForDirectPath',
     steps: [
       { waitFor: 'Slash commands:', input: '@package.json\n' },
@@ -954,7 +980,7 @@ export async function testAtFileCommandAddsContextForDirectPath() {
 }
 
 export async function testAtMenuOpensOnSingleAt() {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testAtMenuOpensOnSingleAt',
     steps: [
       { waitFor: 'Slash commands:', input: '@\n' },
@@ -969,7 +995,7 @@ export async function testAtMenuOpensOnSingleAt() {
 }
 
 export async function testIdleCtrlCShowsQuitPromptAndCanBeCancelled() {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testIdleCtrlCShowsQuitPromptAndCanBeCancelled',
     steps: [
       { waitFor: 'Slash commands:', input: '', signal: 'SIGINT' },
@@ -987,7 +1013,7 @@ export async function testIdleCtrlCShowsQuitPromptAndCanBeCancelled() {
 }
 
 export async function testIdleCtrlDReportsPathsAndExits() {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testIdleCtrlDReportsPathsAndExits',
     steps: [{ waitFor: 'Slash commands:', input: '\u0004' }],
     env: { TYCLI_HOTKEY_MENUS: '1' },
@@ -1003,7 +1029,7 @@ export async function testIdleCtrlDReportsPathsAndExits() {
 export async function testQuitPromptCtrlCCancelsAndCtrlDExits() {
   const cases: Array<{
     name: string
-    steps: Parameters<typeof runTycSession>[0]['steps']
+    steps: Parameters<typeof runCliE2eSession>[0]['steps']
     expected: string[]
   }> = [
     {
@@ -1031,7 +1057,7 @@ export async function testQuitPromptCtrlCCancelsAndCtrlDExits() {
   ]
 
   for (const testCase of cases) {
-    const result = await runTycSession({
+    const result = await runCliE2eSession({
       testName: `testQuitPromptCtrlCCancelsAndCtrlDExits:${testCase.name}`,
       steps: testCase.steps,
       env: { TYCLI_HOTKEY_MENUS: '1' },
@@ -1051,7 +1077,7 @@ export async function testQuitPromptCtrlCCancelsAndCtrlDExits() {
 }
 
 export async function testCtrlCCancelsModelMenuAndKeepsPromptUsable() {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testCtrlCCancelsModelMenuAndKeepsPromptUsable',
     steps: [
       { waitFor: 'Slash commands:', input: '/model\n' },
@@ -1070,7 +1096,7 @@ export async function testCtrlCCancelsModelMenuAndKeepsPromptUsable() {
 
 export async function testPromptHistoryCyclesPreviousInputWithArrowKeys() {
   for (const hotkeyMenus of ['0', '1']) {
-    const initialResult = await runTycSession({
+    const initialResult = await runCliE2eSession({
       testName: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}:initial`,
       homeKey: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}`,
       steps: [
@@ -1086,7 +1112,7 @@ export async function testPromptHistoryCyclesPreviousInputWithArrowKeys() {
       )
     }
 
-    const replayResult = await runTycSession({
+    const replayResult = await runCliE2eSession({
       testName: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}:replay`,
       homeKey: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}`,
       steps: [
@@ -1119,7 +1145,7 @@ export async function testResumeConversationReportsStorageAndLogs() {
     'Fixture user message\n\n---\n\n<!--taskyon\nrole: assistant\n-->\n\nFixture assistant response\n',
     'utf8',
   )
-  const resumeResult = await runTycSession({
+  const resumeResult = await runCliE2eSession({
     testName: 'testResumeConversationReportsStorageAndLogs',
     homeKey: 'testResumeConversationReportsStorageAndLogs',
     steps: [
@@ -1137,7 +1163,7 @@ export async function testResumeConversationReportsStorageAndLogs() {
 }
 
 export async function testTaskInterruptReportsStatusAndPersistsConversation() {
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testTaskInterruptReportsStatusAndPersistsConversation',
     steps: [
       { waitFor: 'Slash commands:', input: 'hello\n' },
@@ -1167,7 +1193,7 @@ export async function testBracketedPastePreservesMultilinePrompt() {
   const secondLine = 'First, list every available tool.'
   const thirdLine = 'Second, get the current weather.'
   const textTypedAfterPaste = 'AFTER_PASTE_BEFORE_ENTER'
-  const result = await runTycSession({
+  const result = await runCliE2eSession({
     testName: 'testBracketedPastePreservesMultilinePrompt',
     steps: [
       {

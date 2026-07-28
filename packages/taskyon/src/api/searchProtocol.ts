@@ -132,11 +132,12 @@ export const createPgLiteSearchIndexBackend = (
     return store
   }
   return {
-    configure: async (options) => {
+    configure: (options) => {
       if (options.vectorizer !== selected.vectorizer || options.modelName !== selected.modelName) {
         selected = options
         store = undefined
       }
+      return Promise.resolve()
     },
     upsertMany: async (documents) => {
       const index = await getStore()
@@ -164,7 +165,7 @@ export const createPgLiteSearchIndexBackend = (
     },
     count: async () => await (await getStore()).count(),
     clear: async () => await (await getStore()).clear(),
-    status: async () => ({ state: 'ready' }),
+    status: () => Promise.resolve({ state: 'ready' }),
     snapshot: async () =>
       (await (await getStore()).listSearchDocuments()).map(({ id, text, vector, data }) => ({
         ...data,

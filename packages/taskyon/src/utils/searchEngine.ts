@@ -103,7 +103,13 @@ export const rankSearchDocuments = (args: {
         left.id.localeCompare(right.id),
     )
     .slice(0, Math.max(0, args.limit))
-    .map(({ createdAt: _createdAt, ...result }) => result)
+    .map(({ id, score, semanticScore, lexicalScore, keywordScore }) => ({
+      id,
+      score,
+      semanticScore,
+      lexicalScore,
+      keywordScore,
+    }))
 }
 
 export const searchIndexSignature = (args: {

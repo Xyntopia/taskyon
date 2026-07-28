@@ -7,12 +7,12 @@ import { createHash } from 'node:crypto'
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import process from 'node:process'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { pathToFileURL } from 'node:url'
 import { inspect } from 'node:util'
 import type { createDuplexChannel } from '@taskyon/common/modules/frpBus'
 import { createUnavailableIframeMux } from '@taskyon/common/modules/frpBusWeb'
+import type { DocumentationManifest } from '@taskyon/common/modules/resourceFiles'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
-import { taskyonDocumentationManifest } from '@taskyon/taskyon/documentationManifest'
 import {
   connectTaskManagerStorageFromProtocol,
   createArtifactStore,
@@ -79,22 +79,15 @@ import {
   createDocumentationIndexClientTool,
   createProtocolDocumentationBaseStore,
 } from '@taskyon/taskyon/tools/documentationProviderTool'
-import { taskyonDocumentationTool } from '@taskyon/taskyon/tools/documentationTool'
 import { mapSearchTool } from '@taskyon/ui/gis/mapSearchTool'
 import { overpassMapTool } from '@taskyon/ui/gis/overpassMapTool'
 import { InternalTool as InternalToolSchema } from '../../taskyon/src/types/toolApi'
 import {
-  flushConfigWrites,
-  initPersistentCryptoSession,
-  loadStoredConfig,
-  persistProviderModel,
-  persistConfigPatch,
+  createCliConfigStore,
   resolveKeyForProvider,
   resolveProviderSelection,
   resolveStoredModel,
-  resolveConfigDirectoryPath,
-  resolveDataDirectoryPath,
-  createCliSecretStore,
+  type CliConfigStore,
 } from './cli/config'
 import {
   createConversationPersistence,
@@ -102,6 +95,7 @@ import {
   TYCLI_CONVERSATION_TRANSCRIPT_NAMESPACE,
 } from './cli/conversationPersistence'
 import { createCliSelectedStorageService, resolveCliStorageSelection } from './cli/storageService'
+import type { CliStoragePaths } from './cli/storagePaths'
 import { createStaticEmbeddingAssetReader } from './cli/staticEmbeddingCache'
 import { loadTaskSearchSidecars, saveTaskSearchSidecars } from './cli/searchIndexPersistence'
 import { createCliFooter } from './cli/ui'
@@ -118,6 +112,7 @@ import {
   setProviderModel,
   setSelectedProvider,
   type CliLlmState,
+  type CliProviderIdentity,
 } from './cli/models'
 import { hasInterruptibleWorkerActivity } from './cli/interruptState'
 import { applyCliRuntimeConfig, syncProviderRuntimeConfig } from './cli/runtime'
@@ -145,6 +140,7 @@ import { downloadFileTool } from './tools/downloadFileTool'
 import { githubIssuesTool } from './tools/githubIssuesTool'
 import { gitlabTool } from './tools/gitlabTool'
 import { dagGraphProjectTool } from './tools/dagGraphProjectTool'
+import type { CliOauthStorage } from './oauthLogin'
 
 type BashToolArgs = {
   command?: string
@@ -195,8 +191,7 @@ const DEFAULT_PROMPT_TEMPLATES = {
     'Output must strictly match {format} and this schema:\\n\\n{schema}\\n\\nDo not add extra text.',
   tools: 'Available tools:\\n\\n${tools}',
 }
-const ENTRY_NODE_TOOL_NAME = 'entryNode'
-let debugLogsEnabled = process.env.TYCLI_DEBUG === '1'
+let debugLogsEnabled = false
 const FILE_PICKER_MAX_DEPTH = 3
 const FILE_PICKER_MAX_ENTRIES = 5000
 const FILE_PICKER_MAX_OPTIONS = 30
@@ -221,6 +216,38 @@ let fatalErrorHandled = false
 const RUNTIME_LOG_MAX_BYTES = 100 * 1024 * 1024
 let clearTransientStatusLine: (() => void) | undefined
 let activeCliMenuDepth = 0
+
+export type InteractiveCliDocumentation = {
+  baseId: string
+  manifest: DocumentationManifest
+  docsRoot: string
+  apiSource: string
+  tool: InternalTool
+}
+
+export type InteractiveCliHost = {
+  commandName: string
+  productName: string
+  environmentPrefix: string
+  entryNodeName: string
+  oauthSecretId: string
+  providerIdentity: CliProviderIdentity
+  storagePaths: CliStoragePaths
+  storageNamespace?: string
+  versionFileUrl: URL
+  buildStableContext: (projectInstructions: string) => string
+  promptTemplates?: typeof DEFAULT_PROMPT_TEMPLATES
+  defaultAllowedTools?: string[]
+  unavailableToolNames?: ReadonlySet<string>
+  additionalTools?: readonly InternalTool[]
+  documentation?: InteractiveCliDocumentation
+}
+
+type CliPersistence = {
+  configStore: CliConfigStore
+  oauthStorage: CliOauthStorage
+  environmentPrefix: string
+}
 
 function absolutizeRelativeExecArgvImports(cwd: string) {
   process.execArgv = process.execArgv.flatMap((arg, index, args) => {
@@ -284,13 +311,15 @@ function absolutizeImportSpecifier(cwd: string, specifier: string) {
   return pathToFileURL(resolve(cwd, specifier)).href
 }
 
-function adoptInvocationWorkingDirectory() {
+function adoptInvocationWorkingDirectory(environmentPrefix: string) {
   const originalCwd = process.cwd()
   process.env.TYCLI_EXEC_ARGV_CWD = originalCwd
   absolutizeRelativeExecArgvImports(originalCwd)
   absolutizeRelativeNodeOptionsImports(originalCwd)
   const cwd =
-    process.env.TYCLI_CWD?.trim() || process.env.PROJECT_CWD?.trim() || process.env.INIT_CWD?.trim()
+    process.env[`${environmentPrefix}_CWD`]?.trim() ||
+    process.env.PROJECT_CWD?.trim() ||
+    process.env.INIT_CWD?.trim()
   if (!cwd || cwd === process.cwd()) return
   process.chdir(cwd)
 }
@@ -314,9 +343,6 @@ type SessionLocationInfo = {
 }
 
 let runtimeLog: RuntimeLog | undefined
-
-const CHAT_COMPLETION_TRACE_DIR_ENV = 'TYCLI_CHAT_COMPLETION_TRACE_DIR'
-const CHAT_COMPLETION_TRACE_LABEL_ENV = 'TYCLI_CHAT_COMPLETION_TRACE_LABEL'
 
 const sanitizeTraceFilePart = (value: string) =>
   value
@@ -369,12 +395,12 @@ function createCliChatCompletionTraceWriter(traceDir: string) {
   }
 }
 
-const resolveCliChatCompletionTrace = () => {
-  const traceDir = process.env[CHAT_COMPLETION_TRACE_DIR_ENV]?.trim()
+const resolveCliChatCompletionTrace = (environmentPrefix: string) => {
+  const traceDir = process.env[`${environmentPrefix}_CHAT_COMPLETION_TRACE_DIR`]?.trim()
   if (!traceDir) return undefined
   return {
     dir: traceDir,
-    label: process.env[CHAT_COMPLETION_TRACE_LABEL_ENV]?.trim() || undefined,
+    label: process.env[`${environmentPrefix}_CHAT_COMPLETION_TRACE_LABEL`]?.trim() || undefined,
   }
 }
 
@@ -415,15 +441,15 @@ function writeStartupNote(title: string, lines: string[]) {
 
 const writeNote = writeStartupNote
 
-function formatSessionLocationLines(info: SessionLocationInfo): string[] {
+function formatSessionLocationLines(info: SessionLocationInfo, commandName: string): string[] {
   return [
     `Conversation storage: ${info.conversationPath}`,
-    `tycli log: ${info.logPath ?? 'unavailable'}`,
+    `${commandName} log: ${info.logPath ?? 'unavailable'}`,
   ]
 }
 
-function writeSessionLocations(title: string, info: SessionLocationInfo) {
-  writeNote(title, formatSessionLocationLines(info))
+function writeSessionLocations(title: string, info: SessionLocationInfo, commandName: string) {
+  writeNote(title, formatSessionLocationLines(info, commandName))
 }
 
 function writeIntro(title: string) {
@@ -481,10 +507,10 @@ const formatRuntimeConsoleArgs = (args: readonly unknown[]) =>
     )
     .join(' ')
 
-async function createRuntimeLog(): Promise<RuntimeLog> {
-  const logDir = process.env.TYCLI_LOG_DIR?.trim() || join('/tmp', 'tycli')
+async function createRuntimeLog(host: InteractiveCliHost): Promise<RuntimeLog> {
+  const logDir = host.storagePaths.logDir
   await mkdir(logDir, { recursive: true })
-  const filePath = join(logDir, `tycli_${errorTimestamp()}_${process.pid}.log`)
+  const filePath = join(logDir, `${host.commandName}_${errorTimestamp()}_${process.pid}.log`)
   const initialText = [
     `timestamp=${new Date().toISOString()}`,
     `cwd=${process.cwd()}`,
@@ -605,8 +631,10 @@ function installRuntimeConsoleLogging(log: RuntimeLog) {
   }
 }
 
-async function writeFatalErrorLog(error: unknown) {
-  const configDir = await resolveConfigDirectoryPath().catch(() => '/tmp/tycli')
+async function writeFatalErrorLog(error: unknown, host: InteractiveCliHost) {
+  const configDir = await createCliConfigStore(host.storagePaths)
+    .resolveConfigDirectoryPath()
+    .catch(() => host.storagePaths.fallbackConfigDir)
   const errorDir = join(configDir, 'errors')
   await mkdir(errorDir, { recursive: true })
   const filePath = join(errorDir, `error_${errorTimestamp()}_${process.pid}.log`)
@@ -622,11 +650,11 @@ async function writeFatalErrorLog(error: unknown) {
   return filePath
 }
 
-async function reportFatalError(error: unknown) {
+async function reportFatalError(error: unknown, host: InteractiveCliHost) {
   if (fatalErrorHandled) return
   fatalErrorHandled = true
   try {
-    const filePath = await writeFatalErrorLog(error)
+    const filePath = await writeFatalErrorLog(error, host)
     restoreTerminalInput()
     writeError(`Fatal error. Details written to ${filePath}`)
   } catch (logError) {
@@ -659,8 +687,6 @@ async function withCliMenuInteraction<T>(run: () => Promise<T>): Promise<T> {
     activeCliMenuDepth = Math.max(0, activeCliMenuDepth - 1)
   }
 }
-
-process.title = 'tycli'
 
 function maskKey(key: string | undefined): string {
   if (!key) return 'missing'
@@ -697,15 +723,15 @@ async function runGit(args: string[]): Promise<string | null> {
   })
 }
 
-async function loadStartupMeta(): Promise<CliStartupMeta> {
-  const envVersion = process.env.TYCLI_VERSION?.trim()
-  const envCommit = process.env.TYCLI_COMMIT?.trim()
-  const envBuildDate = process.env.TYCLI_BUILD_DATE?.trim()
+async function loadStartupMeta(host: InteractiveCliHost): Promise<CliStartupMeta> {
+  const envVersion = process.env[`${host.environmentPrefix}_VERSION`]?.trim()
+  const envCommit = process.env[`${host.environmentPrefix}_COMMIT`]?.trim()
+  const envBuildDate = process.env[`${host.environmentPrefix}_BUILD_DATE`]?.trim()
 
   let version = envVersion || 'unknown'
   if (!envVersion) {
     try {
-      const raw = await readFile(new URL('../package.json', import.meta.url), 'utf8')
+      const raw = await readFile(host.versionFileUrl, 'utf8')
       const parsed = JSON.parse(raw) as { version?: string }
       version = parsed.version?.trim() || version
     } catch {
@@ -1118,9 +1144,7 @@ function createCliClarificationTool(
       return await withCliMenuInteraction(async () => {
         const rl = getReadline()
         if (!rl) {
-          throw new Error(
-            'Clarification questions are only available in interactive tycli sessions.',
-          )
+          throw new Error('Clarification questions are only available in interactive CLI sessions.')
         }
         const args = ClarificationRequest.parse(rawArgs)
         if (args.intro?.trim()) writeLine(args.intro.trim())
@@ -1150,7 +1174,7 @@ function createCliClarificationTool(
     },
   })
 }
-const CLI_UNAVAILABLE_TOOL_NAMES = new Set([
+export const DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES = new Set([
   'animatedClock',
   'getGitlabInfo',
   'issueListGenerator',
@@ -1166,12 +1190,15 @@ const CLI_UNAVAILABLE_TOOL_NAMES = new Set([
 
 const INTERACTIVE_PROMPT_TOOL_NAMES = new Set<string>([CLARIFICATION_TOOL_NAME])
 
-function buildCliStableContext(projectInstructions: string) {
+export function buildDeveloperCliStableContext(
+  productContext: string,
+  projectInstructions: string,
+) {
   const shell = process.env.SHELL ?? process.env.ComSpec ?? 'unknown'
   return [
     projectInstructions,
     [
-      'You are the Taskyon CLI assistant.',
+      productContext,
       'This is a terminal-focused environment. Be concise, actionable, and explicit.',
       '',
       '## Stable Runtime Context',
@@ -1633,16 +1660,21 @@ async function selectModelInteractive(
   return selected === null ? null : (options[selected]?.value ?? null)
 }
 
-async function setSelectedApi(ty: Taskyon, llmState: CliLlmState, nextApi: string) {
-  await persistConfigPatch({ selectedApi: nextApi })
-  const stored = await loadStoredConfig()
+async function setSelectedApi(
+  ty: Taskyon,
+  llmState: CliLlmState,
+  nextApi: string,
+  persistence: CliPersistence,
+) {
+  await persistence.configStore.persistConfigPatch({ selectedApi: nextApi })
+  const stored = await persistence.configStore.loadStoredConfig()
   const configuredModel = resolveStoredModel(stored, nextApi)
   setSelectedProvider(llmState, nextApi)
   if (configuredModel) setProviderModel(llmState, nextApi, configuredModel)
-  await syncProviderRuntimeConfig(ty, llmState, nextApi)
+  await syncProviderRuntimeConfig(ty, llmState, nextApi, persistence.oauthStorage)
   const key =
     (await ty.getSecret(API_KEY_STORE_NAME, nextApi, false, false)) ??
-    resolveKeyForProvider(nextApi)
+    resolveKeyForProvider(nextApi, persistence.environmentPrefix)
   await ty.updateChatCompletionApiKey(nextApi, key ?? undefined)
 }
 
@@ -1651,6 +1683,7 @@ async function loginProvider(
   llmState: CliLlmState,
   selectedApi: string,
   forceLogin: boolean,
+  oauthStorage: CliOauthStorage,
 ) {
   const api = getProviderSettings(llmState, selectedApi)
   if (!api) throw new Error(`Unknown provider: ${selectedApi}`)
@@ -1663,6 +1696,7 @@ async function loginProvider(
     providerName: selectedApi,
     api,
     taskyon: ty,
+    storage: oauthStorage,
     forceReauth: forceLogin,
   })
   await ty.setSecret(API_KEY_STORE_NAME, selectedApi, accessToken)
@@ -1671,9 +1705,13 @@ async function loginProvider(
   await applyCliRuntimeConfig(ty, llmState)
 }
 
-async function hasStoredOauthLogin(ty: Taskyon, providerId: string): Promise<boolean> {
+async function hasStoredOauthLogin(
+  ty: Taskyon,
+  providerId: string,
+  oauthSecretId: string,
+): Promise<boolean> {
   const oauthSecretName = getProviderOauthCredentialsSecretName(providerId)
-  const cachedOauth = await ty.getSecret('taskyon-cli:oauth', oauthSecretName, false, false)
+  const cachedOauth = await ty.getSecret(oauthSecretId, oauthSecretName, false, false)
   return Boolean(cachedOauth?.trim())
 }
 
@@ -1681,12 +1719,16 @@ async function getProviderStatusTags(
   ty: Taskyon,
   llmState: CliLlmState,
   providerId: string,
+  oauthSecretId: string,
+  environmentPrefix: string,
 ): Promise<string[]> {
   const api = getProviderSettings(llmState, providerId)
   const configuredSecret = await ty.getSecret(API_KEY_STORE_NAME, providerId, false, false)
-  const envKey = resolveKeyForProvider(providerId)
+  const envKey = resolveKeyForProvider(providerId, environmentPrefix)
   const oauthEnabled = api ? !!getProviderOauthConfig(api) : false
-  const oauthLoggedIn = oauthEnabled ? await hasStoredOauthLogin(ty, providerId) : false
+  const oauthLoggedIn = oauthEnabled
+    ? await hasStoredOauthLogin(ty, providerId, oauthSecretId)
+    : false
 
   return [
     llmState.selectedToolchainProfile === providerId ? 'selected' : '',
@@ -1860,6 +1902,7 @@ async function promptForMainInput(
   onCtrlCRequested?: () => void,
   onCtrlDRequested?: () => void,
   onReady?: () => void,
+  environmentPrefix = 'TYCLI',
 ): Promise<string | null> {
   const stdin = process.stdin
   if (!stdin.isTTY) {
@@ -1867,7 +1910,7 @@ async function promptForMainInput(
     onReady?.()
     return await answer
   }
-  const hotkeyMenusEnabled = process.env.TYCLI_HOTKEY_MENUS !== '0'
+  const hotkeyMenusEnabled = process.env[`${environmentPrefix}_HOTKEY_MENUS`] !== '0'
 
   process.stdout.write(ENABLE_BRACKETED_PASTE)
   emitKeypressEvents(stdin, rl)
@@ -1996,6 +2039,7 @@ async function handleKeysCommand(
   rl: ReturnType<typeof createInterface>,
   ty: Taskyon,
   llmState: CliLlmState,
+  persistence: CliPersistence,
 ) {
   const providers = [...SUPPORTED_PROVIDERS]
   while (true) {
@@ -2021,7 +2065,7 @@ async function handleKeysCommand(
       }
       await ty.setSecret(API_KEY_STORE_NAME, provider, key)
       await ty.updateChatCompletionApiKey(provider, key)
-      await setSelectedApi(ty, llmState, provider)
+      await setSelectedApi(ty, llmState, provider, persistence)
       writeNotice('success', `Saved key for ${provider}.`)
       writeNotice('info', `Selected provider: ${provider}`)
     }
@@ -2038,6 +2082,7 @@ async function handleModelCommand(
   rl: ReturnType<typeof createInterface>,
   ty: Taskyon,
   llmState: CliLlmState,
+  persistence: CliPersistence,
 ) {
   const selectedApi = llmState.selectedToolchainProfile
   const selectedSettings = getSelectedProviderSettings(llmState)
@@ -2058,7 +2103,7 @@ async function handleModelCommand(
     }
     const key =
       (await ty.getSecret(API_KEY_STORE_NAME, selectedApi, false, false)) ??
-      resolveKeyForProvider(selectedApi)
+      resolveKeyForProvider(selectedApi, persistence.environmentPrefix)
     if (!key) {
       writeError(`No key configured for '${selectedApi}'. Run /keys first.`)
       return
@@ -2104,7 +2149,7 @@ async function handleModelCommand(
       return
     }
     setProviderModel(llmState, selectedApi, model)
-    await persistProviderModel(selectedApi, model)
+    await persistence.configStore.persistProviderModel(selectedApi, model)
     writeNotice('success', `Selected model for ${selectedApi}: ${model}`)
     return
   }
@@ -2118,7 +2163,7 @@ async function handleModelCommand(
       return
     }
     setProviderModel(llmState, selectedApi, model)
-    await persistProviderModel(selectedApi, model)
+    await persistence.configStore.persistProviderModel(selectedApi, model)
     writeNotice('success', `Selected model for ${selectedApi}: ${model}`)
   }
 }
@@ -2127,6 +2172,7 @@ async function handleProviderCommand(
   rl: ReturnType<typeof createInterface>,
   ty: Taskyon,
   llmState: CliLlmState,
+  persistence: CliPersistence,
 ) {
   const providerIds = [...SUPPORTED_PROVIDERS].filter((providerId) =>
     getProviderSettings(llmState, providerId),
@@ -2137,7 +2183,13 @@ async function handleProviderCommand(
   }
   const providerOptions = await Promise.all(
     providerIds.map(async (providerId) => {
-      const status = await getProviderStatusTags(ty, llmState, providerId)
+      const status = await getProviderStatusTags(
+        ty,
+        llmState,
+        providerId,
+        persistence.oauthStorage.secretId,
+        persistence.environmentPrefix,
+      )
       return `${providerId}${status.length > 0 ? ` [${status.join(', ')}]` : ''}`
     }),
   )
@@ -2155,7 +2207,7 @@ async function handleProviderCommand(
 
   const configuredKey =
     (await ty.getSecret(API_KEY_STORE_NAME, nextApi, false, false)) ??
-    resolveKeyForProvider(nextApi)
+    resolveKeyForProvider(nextApi, persistence.environmentPrefix)
   const hasOauth = !!getProviderOauthConfig(api)
   const actionOptions = [
     llmState.selectedToolchainProfile === nextApi
@@ -2167,13 +2219,13 @@ async function handleProviderCommand(
   const action = await selectFromList(rl, `\nProvider: ${nextApi}`, actionOptions)
   if (action === null) return
   if (action === 0) {
-    await setSelectedApi(ty, llmState, nextApi)
+    await setSelectedApi(ty, llmState, nextApi, persistence)
     writeNotice('success', `Selected provider: ${nextApi}`)
     return
   }
   if (hasOauth && action === 1) {
     try {
-      await loginProvider(ty, llmState, nextApi, configuredKey != null)
+      await loginProvider(ty, llmState, nextApi, configuredKey != null, persistence.oauthStorage)
       writeNotice('success', `OAuth login complete for provider '${nextApi}'.`)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -2182,10 +2234,17 @@ async function handleProviderCommand(
   }
 }
 
-async function handleToolsCommand(ty: Taskyon, target?: Record<string, { hideChat?: boolean }>) {
+async function handleToolsCommand(
+  ty: Taskyon,
+  entryNodeName: string,
+  unavailableToolNames: ReadonlySet<string>,
+  target?: Record<string, { hideChat?: boolean }>,
+) {
   const all = await createCliTaskyonClient(ty.port).tools.list({ includeHidden: true })
   const agentToolNames = new Set(
-    resolveAgentToolCatalog(all, CLI_UNAVAILABLE_TOOL_NAMES).map((tool) => tool.name),
+    resolveAgentToolCatalog(all, unavailableToolNames)
+      .filter((tool) => tool.name !== entryNodeName)
+      .map((tool) => tool.name),
   )
   if (target) {
     for (const key of Object.keys(target)) delete target[key]
@@ -2198,11 +2257,12 @@ async function handleToolsCommand(ty: Taskyon, target?: Record<string, { hideCha
   const allToolNames = Object.keys(all).sort()
   writeLine('\nActive tool definitions:')
   allToolNames.forEach((toolName, idx) => {
-    const kind = agentToolNames.has(toolName)
-      ? 'llm-allowed'
-      : toolName === ENTRY_NODE_TOOL_NAME
+    const kind =
+      toolName === entryNodeName
         ? 'entry-node'
-        : 'internal'
+        : agentToolNames.has(toolName)
+          ? 'llm-allowed'
+          : 'internal'
     writeLine(`${idx + 1}. ${toolName} (${kind})`)
   })
 }
@@ -2249,6 +2309,7 @@ async function handleSettingsCommand(
     searchOpenMode: 'conversation' | 'lineage'
     vectorizer: 'static-multilingual' | 'transformer-minilm'
   },
+  configStore: CliConfigStore,
 ) {
   const choice = await selectFromList(rl, '\nSettings', [
     `toggle role/type tags ([user|message]): ${uiSettings.showRoleTag ? 'ON' : 'OFF'}`,
@@ -2259,7 +2320,7 @@ async function handleSettingsCommand(
   if (choice === null || choice === 3) return
   if (choice === 0) {
     uiSettings.showRoleTag = !uiSettings.showRoleTag
-    await persistConfigPatch({
+    await configStore.persistConfigPatch({
       cliUi: {
         showRoleTag: uiSettings.showRoleTag,
       },
@@ -2270,7 +2331,7 @@ async function handleSettingsCommand(
   if (choice === 2) {
     uiSettings.vectorizer =
       uiSettings.vectorizer === 'static-multilingual' ? 'transformer-minilm' : 'static-multilingual'
-    await persistConfigPatch({
+    await configStore.persistConfigPatch({
       cliUi: {
         showRoleTag: uiSettings.showRoleTag,
         searchOpenMode: uiSettings.searchOpenMode,
@@ -2301,6 +2362,7 @@ async function handleSearchCommand(args: {
   searchIndex: string
   searchDataDirectory: string
   searchState: { loadedVectorizer?: 'static-multilingual' | 'transformer-minilm'; ids: Set<string> }
+  configStore: CliConfigStore
   uiSettings: {
     showRoleTag: boolean
     showFullFunctionResults: boolean
@@ -2382,7 +2444,7 @@ async function handleSearchCommand(args: {
     },
     toggleHelp: () => `Tab: open ${args.uiSettings.searchOpenMode}`,
   })
-  await persistConfigPatch({
+  await args.configStore.persistConfigPatch({
     cliUi: {
       showRoleTag: args.uiSettings.showRoleTag,
       searchOpenMode: args.uiSettings.searchOpenMode,
@@ -2520,8 +2582,6 @@ async function handleResumeCommand(args: {
   rl: ReturnType<typeof createInterface>
   ty: Taskyon
   configDir: string
-  currentConversationPath: string
-  currentLogPath: string | undefined
   sessions: readonly TycliSessionRecord[]
   storageClient: ReturnType<typeof createStorageClient>
   commandArgs: string
@@ -2564,24 +2624,27 @@ async function handleSlashCommand(
   },
   toolRenderOptions: Record<string, { hideChat?: boolean }>,
   currentLeafId: string | undefined,
+  persistence: CliPersistence,
+  entryNodeName: string,
+  unavailableToolNames: ReadonlySet<string>,
 ): Promise<boolean> {
   if (parsed.name === 'keys') {
-    await handleKeysCommand(rl, ty, llmState)
+    await handleKeysCommand(rl, ty, llmState, persistence)
     return true
   }
 
   if (parsed.name === 'model') {
-    await handleModelCommand(rl, ty, llmState)
+    await handleModelCommand(rl, ty, llmState, persistence)
     return true
   }
 
   if (parsed.name === 'provider') {
-    await handleProviderCommand(rl, ty, llmState)
+    await handleProviderCommand(rl, ty, llmState, persistence)
     return true
   }
 
   if (parsed.name === 'tools') {
-    await handleToolsCommand(ty, toolRenderOptions)
+    await handleToolsCommand(ty, entryNodeName, unavailableToolNames, toolRenderOptions)
     return true
   }
 
@@ -2591,7 +2654,7 @@ async function handleSlashCommand(
   }
 
   if (parsed.name === 'settings') {
-    await handleSettingsCommand(rl, uiSettings)
+    await handleSettingsCommand(rl, uiSettings, persistence.configStore)
     return true
   }
 
@@ -2619,8 +2682,11 @@ async function handleSlashCommand(
   return true
 }
 
-async function loadProjectInstructions(cwd: string): Promise<string> {
-  const root = await resolveProjectInstructionRoot(cwd, process.env.TYCLI_CWD?.trim())
+async function loadProjectInstructions(cwd: string, environmentPrefix: string): Promise<string> {
+  const root = await resolveProjectInstructionRoot(
+    cwd,
+    process.env[`${environmentPrefix}_CWD`]?.trim(),
+  )
   const parts: string[] = []
   let current = resolve(cwd)
   for (;;) {
@@ -2680,25 +2746,36 @@ async function findNearestAncestorWithAnyFile(
   }
 }
 
-async function main() {
-  adoptInvocationWorkingDirectory()
+async function main(host: InteractiveCliHost) {
+  process.title = host.commandName
+  debugLogsEnabled = process.env[`${host.environmentPrefix}_DEBUG`] === '1'
+  adoptInvocationWorkingDirectory(host.environmentPrefix)
   const taskyonClientCommand = parseTaskyonClientCliArgs(process.argv.slice(2))
 
   let restoreConsoleLogging: (() => void) | undefined
   const sessionStartedAt = new Date()
-  writeLine('Starting tycli...')
+  writeLine(`Starting ${host.commandName}...`)
   try {
     writeLine('Initializing runtime log...')
-    runtimeLog = await createRuntimeLog()
+    runtimeLog = await createRuntimeLog(host)
     restoreConsoleLogging = installRuntimeConsoleLogging(runtimeLog)
   } catch (error) {
     writeError(`Runtime log unavailable: ${error instanceof Error ? error.message : String(error)}`)
   }
   writeLine('Loading CLI configuration...')
-  const startupMeta = await loadStartupMeta()
-  const { cryptoSession, stored } = await initPersistentCryptoSession()
-  const configDir = await resolveConfigDirectoryPath()
-  const dataDir = await resolveDataDirectoryPath()
+  const startupMeta = await loadStartupMeta(host)
+  const configStore = createCliConfigStore(host.storagePaths)
+  const { cryptoSession, stored } = await configStore.initPersistentCryptoSession()
+  const configDir = await configStore.resolveConfigDirectoryPath()
+  const dataDir = await configStore.resolveDataDirectoryPath()
+  const persistence: CliPersistence = {
+    configStore,
+    oauthStorage: {
+      authDir: host.storagePaths.authDir,
+      secretId: host.oauthSecretId,
+    },
+    environmentPrefix: host.environmentPrefix,
+  }
   configureStaticEmbeddingAssetReader(
     createStaticEmbeddingAssetReader(join(dataDir, 'models', 'static-embeddings')),
   )
@@ -2706,8 +2783,8 @@ async function main() {
   const previousSession = previousSessions[0]
   const pgliteNodeDir = join(configDir, 'runtime', `${errorTimestamp()}-${process.pid}`, 'pglite')
   await mkdir(pgliteNodeDir, { recursive: true })
-  const cliSecretStore = createCliSecretStore(cryptoSession)
-  const selectedApi = resolveProviderSelection(stored)
+  const cliSecretStore = configStore.createCliSecretStore(cryptoSession)
+  const selectedApi = resolveProviderSelection(stored, host.environmentPrefix)
 
   if (!SUPPORTED_PROVIDERS.includes(selectedApi as (typeof SUPPORTED_PROVIDERS)[number])) {
     throw new Error(
@@ -2716,13 +2793,13 @@ async function main() {
   }
 
   const model = resolveStoredModel(stored, selectedApi)
-  const providerKey = resolveKeyForProvider(selectedApi)
+  const providerKey = resolveKeyForProvider(selectedApi, host.environmentPrefix)
   const config = {
     selectedApi,
     ...(model ? { model } : {}),
     ...(providerKey ? { key: providerKey } : {}),
   } as CliApiConfig
-  const chatCompletionTrace = resolveCliChatCompletionTrace()
+  const chatCompletionTrace = resolveCliChatCompletionTrace(host.environmentPrefix)
   if (chatCompletionTrace) {
     setChatCompletionTraceWriter(createCliChatCompletionTraceWriter(chatCompletionTrace.dir))
   } else {
@@ -2731,7 +2808,7 @@ async function main() {
   const explorationContextFiles: Record<string, string> = {}
   const explorationTool = createExplorationTool(explorationContextFiles)
 
-  const llmState = createCliLlmState(config)
+  const llmState = createCliLlmState(config, host.providerIdentity)
   const uiSettings = {
     showRoleTag: stored.cliUi?.showRoleTag ?? true,
     showFullFunctionResults: false,
@@ -2739,11 +2816,13 @@ async function main() {
     vectorizer: stored.cliUi?.vectorizer ?? 'static-multilingual',
   }
   const toolRenderOptions: Record<string, { hideChat?: boolean }> = {}
-  const projectInstructions = await loadProjectInstructions(process.cwd())
+  const projectInstructions = await loadProjectInstructions(process.cwd(), host.environmentPrefix)
   const taskyonRef: { current?: Taskyon } = {}
-  writeLine(`Initializing Taskyon runtime for provider '${selectedApi}'...`)
+  writeLine(`Initializing ${host.productName} runtime for provider '${selectedApi}'...`)
+  const unavailableToolNames = host.unavailableToolNames ?? DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES
+  const agentUnavailableToolNames = new Set([...unavailableToolNames, host.entryNodeName])
   const cliEntryNodeTool = createStandardEntryNodeTool({
-    name: ENTRY_NODE_TOOL_NAME,
+    name: host.entryNodeName,
     renderOptions: { hideLlm: true, hideChat: true },
     toolChooser: { enabled: true, useTools: true },
     getToolCatalog: async ({ taskChain, allowedTools }) => {
@@ -2755,7 +2834,7 @@ async function main() {
       return resolveInitialAgentToolCatalog(
         allTools,
         taskChain,
-        CLI_UNAVAILABLE_TOOL_NAMES,
+        agentUnavailableToolNames,
         allowedTools,
       )
     },
@@ -2765,19 +2844,20 @@ async function main() {
       const allTools = await createCliTaskyonClient(ty.port).tools.list({
         includeHidden: true,
       })
-      return searchAgentToolCatalog(allTools, query, limit, CLI_UNAVAILABLE_TOOL_NAMES)
+      return searchAgentToolCatalog(allTools, query, limit, agentUnavailableToolNames)
     },
-    stableContext: () => buildCliStableContext(projectInstructions),
+    stableContext: () => host.buildStableContext(projectInstructions),
     extraContext: () => buildCliVolatileContext(),
     includeRoutinePrompt: false,
+    ...(host.defaultAllowedTools ? { defaultAllowedTools: host.defaultAllowedTools } : {}),
   })
   const cliEntryTask = toolCall({
-    name: ENTRY_NODE_TOOL_NAME,
+    name: host.entryNodeName,
     arguments: {},
   })
   llmState.settings = {
     ...llmState.settings,
-    entryFunction: ENTRY_NODE_TOOL_NAME,
+    entryFunction: host.entryNodeName,
   }
   llmState.toolchainProfiles.base = {
     entryNode: {
@@ -2793,16 +2873,18 @@ async function main() {
             },
           }
         : {}),
-      prompt_templates: DEFAULT_PROMPT_TEMPLATES,
+      prompt_templates: host.promptTemplates ?? DEFAULT_PROMPT_TEMPLATES,
     },
   }
   const { x: taskStorageClientPort, y: taskStorageServicePort } =
     createProtocolPort(taskyonStorageProtocol)
   const storageRoot = join(dataDir, 'storage')
-  await createCliSelectedStorageService({
+  const storageSelection = resolveCliStorageSelection(stored)
+  const stopTaskStorageService = await createCliSelectedStorageService({
     port: taskStorageServicePort,
     dataDirectory: dataDir,
-    selection: resolveCliStorageSelection(stored),
+    ...(host.storageNamespace ? { namespacePrefix: host.storageNamespace } : {}),
+    selection: storageSelection,
   })
   const storageClient = createStorageClient(taskStorageClientPort)
   const { x: loggingClientPort, y: loggingServicePort } = createProtocolPort(taskyonLoggingProtocol)
@@ -2831,11 +2913,11 @@ async function main() {
     cryptoSession,
     {
       toolSetup: createDefaultTaskyonToolSetup({
-        unavailableToolNames: CLI_UNAVAILABLE_TOOL_NAMES,
+        unavailableToolNames,
         storageClient,
       }),
       createIframeMultiPlexer: () =>
-        createUnavailableIframeMux('Iframe message bridging is not available in tycli.'),
+        createUnavailableIframeMux('Iframe message bridging is not available in this CLI.'),
       indexTaskVectors: false,
       nodePgLiteDataDir: pgliteNodeDir,
       secretStore: cliSecretStore,
@@ -2866,11 +2948,12 @@ async function main() {
   } = { ids: new Set() }
   const taskStorageNamespace = `${await cryptoSession.getSessionId()}/taskyonNodes`
   writeLine('Synchronizing provider credentials...')
-  await syncProviderRuntimeConfig(taskyon, llmState, selectedApi)
+  await syncProviderRuntimeConfig(taskyon, llmState, selectedApi, persistence.oauthStorage)
   writeLine('Preparing conversation storage...')
   const conversationPersistence = await createConversationPersistence({
     taskyon,
-    storageRoot,
+    ...(storageSelection.blobs === 'files' ? { storageRoot } : {}),
+    ...(host.storageNamespace ? { storageNamespace: host.storageNamespace } : {}),
     storageClient,
     startedAt: sessionStartedAt,
   })
@@ -2887,10 +2970,10 @@ async function main() {
   const recordCurrentSession = async (endedAt?: string) => {
     if (!conversationPersistence.hasPersistedConversation()) return
     if (currentSessionRecorded && !endedAt) return
-    await persistConfigPatch({
+    await configStore.persistConfigPatch({
       sessions: normalizeSessionRecords([
         { ...currentSession, ...(endedAt ? { endedAt } : {}) },
-        ...normalizeSessionRecords((await loadStoredConfig()).sessions).filter(
+        ...normalizeSessionRecords((await configStore.loadStoredConfig()).sessions).filter(
           (session) => session.conversationPath !== currentSession.conversationPath,
         ),
       ]),
@@ -2926,15 +3009,23 @@ async function main() {
   )
 
   writeLine('Registering CLI tools...')
-  const documentationLoader = createNodeResourceFilesLoader(
-    fileURLToPath(new URL('../../../public/docs', import.meta.url)),
-    () => taskyonApi.discovery.describe({}),
-  )
-  const documentationBases = createProtocolDocumentationBaseStore(
-    storageClient,
-    documentationLoader,
-  )
-  await documentationBases.register(taskyonDocumentationManifest, 'taskyon')
+  const documentation = host.documentation
+  const documentationBases = documentation
+    ? createProtocolDocumentationBaseStore(
+        storageClient,
+        createNodeResourceFilesLoader(
+          documentation.docsRoot,
+          () => taskyonApi.discovery.describe({}),
+          {
+            apiSource: documentation.apiSource,
+            apiFileName: `${documentation.baseId}.openapi.json`,
+          },
+        ),
+      )
+    : undefined
+  if (documentationBases && documentation) {
+    await documentationBases.register(documentation.manifest, documentation.baseId)
+  }
   const interactiveReadlineRef: { current?: ReturnType<typeof createInterface> } = {}
   const cliTools: InternalTool[] = [
     cliEntryNodeTool,
@@ -2948,8 +3039,9 @@ async function main() {
     gitlabTool,
     dagGraphProjectTool,
     cliBashTool,
-    createDocumentationIndexClientTool(documentationBases),
-    taskyonDocumentationTool,
+    ...(documentationBases ? [createDocumentationIndexClientTool(documentationBases)] : []),
+    ...(documentation ? [documentation.tool] : []),
+    ...(host.additionalTools ?? []),
   ].map((tool) => InternalToolSchema.parse(tool))
   const cliToolRpcExecutor = await registerToolRpcTools({
     port: clientPort,
@@ -2980,7 +3072,7 @@ async function main() {
       cliToolRpcExecutor.destroy()
       unsubscribeBridgeToTaskyon()
       unsubscribeTaskyonToBridge()
-      taskyon.cancelCurrentRun('tycli client command complete')
+      taskyon.cancelCurrentRun(`${host.commandName} client command complete`)
       setChatCompletionTraceWriter(undefined)
       restoreConsoleLogging?.()
       await runtimeLog?.flush().catch(() => {})
@@ -3000,7 +3092,7 @@ async function main() {
   rl.on('history', (history) => {
     const normalized = normalizeInputHistory(history)
     history.splice(0, history.length, ...normalized)
-    persistConfigPatch({ inputHistory: normalized }).catch((error: unknown) => {
+    configStore.persistConfigPatch({ inputHistory: normalized }).catch((error: unknown) => {
       writeDebug(
         `Failed to persist input history: ${error instanceof Error ? error.message : String(error)}`,
       )
@@ -3037,7 +3129,7 @@ async function main() {
   const taskSnapshotById = new Map<string, string>()
   const taskById = new Map<string, TaskNode>()
   const workerTaskStateById = new Map<string, TyTaskStreamData['stage']>()
-  const footer = await createCliFooter()
+  const footer = await createCliFooter(host.environmentPrefix)
   const workerSpinnerFrames = ['-', '\\', '|', '/']
   let workerStatusTimer: ReturnType<typeof setInterval> | null = null
   let workerStatusFrameIndex = 0
@@ -3268,13 +3360,15 @@ async function main() {
 
   const mainPrompt = () =>
     process.stdout.isTTY &&
-    (process.env.TYCLI_TERMINAL_UI ?? '').trim().toLowerCase() === 'terminal-kit'
+    (process.env[`${host.environmentPrefix}_TERMINAL_UI`] ?? '').trim().toLowerCase() ===
+      'terminal-kit'
       ? '\x1b[36m>\x1b[0m '
       : '> '
 
   const restorePromptIfIdle = () => {
     if (waitingForTask || inMenuInteraction || requestQuitOnNextPrompt || shuttingDown) return
-    if (!process.stdin.isTTY || process.env.TYCLI_HOTKEY_MENUS === '0') return
+    if (!process.stdin.isTTY || process.env[`${host.environmentPrefix}_HOTKEY_MENUS`] === '0')
+      return
     if (isReadlineClosed(rl)) return
     updateFooter()
     footer.beforePrompt()
@@ -3435,7 +3529,7 @@ async function main() {
     clearWorkerCleanupNoticeTimer()
     workerCleanupNoticeTimer = setTimeout(() => {
       writeLine('Worker cleanup still pending...')
-      writeSessionLocations('Session Locations', currentSessionLocations())
+      writeSessionLocations('Session Locations', currentSessionLocations(), host.commandName)
     }, 1500)
     workerCleanupNoticeTimer.unref()
   }
@@ -3448,7 +3542,7 @@ async function main() {
     if (interruptNoticePrinted) return
     interruptNoticePrinted = true
     writeLine('Task interrupted.')
-    writeSessionLocations('Session Locations', currentSessionLocations())
+    writeSessionLocations('Session Locations', currentSessionLocations(), host.commandName)
   }
 
   const trackWorkerProgress = (event: WorkerEvent) => {
@@ -3539,7 +3633,7 @@ async function main() {
     clearThinkingPanel()
     stopWorkerStatusLine()
     footer.restore()
-    writeSessionLocations('Session Locations', currentSessionLocations())
+    writeSessionLocations('Session Locations', currentSessionLocations(), host.commandName)
     restoreTerminalInput()
     try {
       taskyon.cancelCurrentRun(reason)
@@ -3577,7 +3671,7 @@ async function main() {
   const onSigint = () => {
     if (shuttingDown) {
       noteInterruptPhase('Ctrl-C received during shutdown.')
-      writeSessionLocations('Session Locations', currentSessionLocations())
+      writeSessionLocations('Session Locations', currentSessionLocations(), host.commandName)
       if (shutdownForceTimer !== null) {
         writeLine('\nForce exiting...')
         process.exit(requestedExitCode === 0 ? 1 : requestedExitCode)
@@ -3602,13 +3696,13 @@ async function main() {
       return
     }
     requestQuitOnNextPrompt = true
-    writeLine('\nQuit tycli? (y/N)')
-    writeSessionLocations('Session Locations', currentSessionLocations())
+    writeLine(`\nQuit ${host.commandName}? (y/N)`)
+    writeSessionLocations('Session Locations', currentSessionLocations(), host.commandName)
   }
   const onCtrld = () => {
     if (shuttingDown) {
       noteInterruptPhase('Ctrl-D received during shutdown.')
-      writeSessionLocations('Session Locations', currentSessionLocations())
+      writeSessionLocations('Session Locations', currentSessionLocations(), host.commandName)
       return
     }
     if (hasActiveWorkerTask()) {
@@ -3707,7 +3801,6 @@ async function main() {
   })
   const unsubscribeWorkerProgress = taskyon.workerStream((event: unknown) => {
     const workerEvent = event as WorkerEvent
-    const taskId = workerEvent.task?.id ?? workerEvent.taskId ?? null
     const suppressed = isSuppressedWorkerEvent(workerEvent)
     trackWorkerProgress(workerEvent)
     updateWorkerStatusLine(workerEvent, suppressed)
@@ -3729,31 +3822,33 @@ async function main() {
     restorePromptIfIdle()
   })
 
-  writeIntro(`tycli ${startupMeta.version}`)
+  writeIntro(`${host.commandName} ${startupMeta.version}`)
   writeStartupNote(
     'Session',
     [
       `Build: ${startupMeta.commit}, ${startupMeta.buildDate}`,
-      runtimeLog ? `tycli log: ${runtimeLog.filePath} (max 100 MB)` : null,
+      runtimeLog ? `${host.commandName} log: ${runtimeLog.filePath} (max 100 MB)` : null,
       `Conversation storage: ${conversationPersistence.filePath}`,
     ].filter(isNonEmptyString),
   )
   if (previousSession) {
     writeStartupNote('Previous Session', [
       `Previous conversation: ${previousSession.conversationPath}`,
-      `Previous tycli log: ${previousSession.logPath}`,
+      `Previous ${host.commandName} log: ${previousSession.logPath}`,
     ])
   }
   const activeApi = getSelectedProviderSettings(llmState)
   writeNotice(
     'info',
-    `tycli ready. provider=${llmState.selectedToolchainProfile} model=${activeApi.model}`,
+    `${host.commandName} ready. provider=${llmState.selectedToolchainProfile} model=${activeApi.model}`,
   )
   writeNotice(
     'info',
     'Slash commands: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /search, /tree, /exit, /quit',
   )
-  if (debugLogsEnabled) writeNotice('warn', 'Debug logs enabled (TYCLI_DEBUG=1).')
+  if (debugLogsEnabled) {
+    writeNotice('warn', `Debug logs enabled (${host.environmentPrefix}_DEBUG=1).`)
+  }
   updateFooter()
 
   try {
@@ -3813,6 +3908,7 @@ async function main() {
           if (!interruptedCurrentTask || interruptNoticePrinted) return
           setImmediate(writeTaskInterruptedNotice)
         },
+        host.environmentPrefix,
       )
       if (inputRaw === null) {
         if (eofRequested || isReadlineClosed(rl)) {
@@ -3868,9 +3964,7 @@ async function main() {
               rl,
               ty: taskyon,
               configDir,
-              currentConversationPath: conversationPersistence.filePath,
-              currentLogPath: runtimeLog?.filePath,
-              sessions: normalizeSessionRecords((await loadStoredConfig()).sessions),
+              sessions: normalizeSessionRecords((await configStore.loadStoredConfig()).sessions),
               storageClient,
               commandArgs: parsed.args,
             })
@@ -3896,6 +3990,7 @@ async function main() {
               searchClient: taskSearchClient,
               searchIndex: taskSearchIndex,
               searchDataDirectory: join(dataDir, 'search', 'tasks'),
+              configStore,
               searchState: taskSearchState,
               uiSettings,
             })
@@ -3918,6 +4013,9 @@ async function main() {
           uiSettings,
           toolRenderOptions,
           currentLeafId,
+          persistence,
+          host.entryNodeName,
+          unavailableToolNames,
         )
         inMenuInteraction = false
         if (!keepRunning) {
@@ -3947,7 +4045,7 @@ async function main() {
             },
           },
           toolCall({
-            name: ENTRY_NODE_TOOL_NAME,
+            name: host.entryNodeName,
             arguments: {},
           }),
         ],
@@ -4040,7 +4138,7 @@ async function main() {
     stopWorkerStatusLine()
     clearTransientStatusLine = undefined
     await flushConversationPersist().catch(() => {})
-    taskyon.cancelCurrentRun('tycli exit')
+    taskyon.cancelCurrentRun(`${host.commandName} exit`)
     setChatCompletionTraceWriter(undefined)
     if (conversationPersistence.hasPersistedConversation()) {
       writeOutro(`Conversation saved: ${conversationPersistence.filePath}`)
@@ -4048,15 +4146,16 @@ async function main() {
     } else {
       writeOutro('No conversation saved: no messages.')
     }
-    await flushConfigWrites().catch((error: unknown) => {
+    await configStore.flushConfigWrites().catch((error: unknown) => {
       writeDebug(
         `Failed to flush CLI configuration: ${error instanceof Error ? error.message : String(error)}`,
       )
     })
-    writeOutro(`tycli log: ${runtimeLog?.filePath ?? 'unavailable'}`)
+    writeOutro(`${host.commandName} log: ${runtimeLog?.filePath ?? 'unavailable'}`)
     restoreConsoleLogging?.()
     await runtimeLog?.flush().catch(() => {})
     stopLoggingService()
+    stopTaskStorageService()
     if (shutdownForceTimer !== null) {
       clearTimeout(shutdownForceTimer)
       shutdownForceTimer = null
@@ -4066,20 +4165,21 @@ async function main() {
   }
 }
 
-process.on('uncaughtException', (error) => {
-  void reportFatalError(error).finally(() => {
-    exitAfterFatalError(1)
-  })
-})
+export async function runInteractiveCli(host: InteractiveCliHost): Promise<void> {
+  fatalErrorHandled = false
+  const onUncaughtException = (error: Error) => {
+    void reportFatalError(error, host).finally(() => exitAfterFatalError(1))
+  }
+  const onUnhandledRejection = (reason: unknown) => {
+    void reportFatalError(reason, host).finally(() => exitAfterFatalError(1))
+  }
+  process.on('uncaughtException', onUncaughtException)
+  process.on('unhandledRejection', onUnhandledRejection)
 
-process.on('unhandledRejection', (reason) => {
-  void reportFatalError(reason).finally(() => {
-    exitAfterFatalError(1)
-  })
-})
-
-void main().catch((error) => {
-  void reportFatalError(error).finally(() => {
+  try {
+    await main(host)
+  } catch (error) {
+    await reportFatalError(error, host)
     process.exitCode = 1
-  })
-})
+  }
+}

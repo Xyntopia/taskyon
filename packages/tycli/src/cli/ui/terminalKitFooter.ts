@@ -2,10 +2,10 @@ import { basename } from 'node:path'
 import type * as TerminalKitModule from 'terminal-kit'
 import { noopCliFooter, type CliFooter, type CliFooterStatus } from './types'
 
-const isSupportedTerminal = () =>
+const isSupportedTerminal = (environmentPrefix: string) =>
   process.stdin.isTTY &&
   process.stdout.isTTY &&
-  (process.env.TYCLI_TERMINAL_UI ?? '').trim().toLowerCase() === 'terminal-kit' &&
+  (process.env[`${environmentPrefix}_TERMINAL_UI`] ?? '').trim().toLowerCase() === 'terminal-kit' &&
   typeof process.stdout.rows === 'number' &&
   process.stdout.rows >= 5
 
@@ -42,8 +42,8 @@ const writeFooterText = (text: string) => {
   process.stdout.write(`\x1b[48;5;24m\x1b[38;5;231m ${text} \x1b[0m`)
 }
 
-export async function createTerminalKitFooter(): Promise<CliFooter> {
-  if (!isSupportedTerminal()) return noopCliFooter()
+export async function createTerminalKitFooter(environmentPrefix: string): Promise<CliFooter> {
+  if (!isSupportedTerminal(environmentPrefix)) return noopCliFooter()
 
   let terminalKit: typeof TerminalKitModule
   try {
@@ -57,7 +57,7 @@ export async function createTerminalKitFooter(): Promise<CliFooter> {
   let active = false
 
   const render = () => {
-    if (!lastStatus || !isSupportedTerminal()) return
+    if (!lastStatus || !isSupportedTerminal(environmentPrefix)) return
     const rows = process.stdout.rows
     const cols = process.stdout.columns ?? term.width
     if (!rows || rows < 5) return

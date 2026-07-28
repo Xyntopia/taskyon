@@ -6,6 +6,7 @@ import {
   MAX_AUTONOMOUS_RECOVERY_ATTEMPTS_PER_SIGNATURE,
 } from '../core/taskWorkerErrors'
 import type { TaskNode } from '../types/taskNode'
+import type { FunctionArguments } from '../types/tools'
 
 const assert = (condition: boolean, message: string) => {
   if (!condition) throw new Error(message)
@@ -59,11 +60,7 @@ export const testAutonomousErrorAttemptCounterCapsEquivalentToolFailures = () =>
   assert(attempts.size === 1, `Expected one normalized error counter, got ${attempts.size}`)
 }
 
-const createFunctionCallTask = (
-  id: string,
-  name: string,
-  args: Record<string, unknown>,
-): TaskNode => ({
+const createFunctionCallTask = (id: string, name: string, args: FunctionArguments): TaskNode => ({
   id,
   role: 'function',
   content: { type: 'functioncall', data: { name, arguments: args } },

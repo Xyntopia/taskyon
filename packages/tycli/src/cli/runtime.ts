@@ -21,23 +21,24 @@ import {
   SUPPORTED_PROVIDERS,
 } from './types'
 import {
-  initPersistentCryptoSession,
-  createCliSecretStore,
-  resolveDataDirectoryPath,
-  resolveConfigDirectoryPath,
+  createCliConfigStore,
   resolveKeyForProvider,
   resolveProviderSelection,
   resolveStoredModel,
 } from './config'
 import { createCliSelectedStorageService, resolveCliStorageSelection } from './storageService'
+import type { CliStoragePaths } from './storagePaths'
+import { resolveTaskyonCliStoragePaths } from './storagePaths'
 import {
   applyCodexAccountHeader,
   createCliLlmState,
   getProviderSettings,
   getSelectedToolchainConfig,
   type CliLlmState,
+  type CliProviderIdentity,
 } from './models'
 import { readProviderOauthAccountId, resolveCachedProviderOauthSession } from '../oauthLogin'
+import type { CliOauthStorage } from '../oauthLogin'
 
 const DIAGNOSTICS_ENTRY_NODE_NAME = 'entryNode'
 
@@ -61,6 +62,7 @@ export async function syncProviderRuntimeConfig(
   ty: Taskyon,
   llmState: CliLlmState,
   providerId: string,
+  oauthStorage: CliOauthStorage,
 ): Promise<null | { accessToken: string; accountId?: string }> {
   let cachedSession: null | { accessToken: string; accountId?: string } = null
 
@@ -71,9 +73,10 @@ export async function syncProviderRuntimeConfig(
         providerName: providerId,
         api,
         taskyon: ty,
+        storage: oauthStorage,
       })
       const accountId =
-        cachedSession?.accountId ?? (await readProviderOauthAccountId(ty, providerId))
+        cachedSession?.accountId ?? (await readProviderOauthAccountId(ty, providerId, oauthStorage))
       applyCodexAccountHeader(llmState, accountId)
       if (cachedSession?.accessToken) {
         await ty.setSecret(API_KEY_STORE_NAME, providerId, cachedSession.accessToken)
@@ -97,6 +100,11 @@ export async function bootstrapCliTaskyon(args?: {
   nodePgLiteDataDir?: string
   selectedApi?: string
   model?: string
+  storagePaths?: CliStoragePaths
+  providerIdentity?: CliProviderIdentity
+  oauthSecretId?: string
+  environmentPrefix?: string
+  storageNamespace?: string
 }): Promise<{
   taskyon: Taskyon
   llmState: CliLlmState
@@ -107,15 +115,21 @@ export async function bootstrapCliTaskyon(args?: {
   providerKey?: string
   oauthSession?: { accessToken: string; accountId?: string } | null
 }> {
-  const { cryptoSession, stored } = await initPersistentCryptoSession()
-  const configDir = await resolveConfigDirectoryPath()
-  const dataDir = await resolveDataDirectoryPath()
+  const configStore = createCliConfigStore(args?.storagePaths ?? resolveTaskyonCliStoragePaths())
+  const { cryptoSession, stored } = await configStore.initPersistentCryptoSession()
+  const configDir = await configStore.resolveConfigDirectoryPath()
+  const dataDir = await configStore.resolveDataDirectoryPath()
   const pgliteNodeDir =
     args?.nodePgLiteDataDir ?? join(configDir, 'runtime', runtimeDirectoryName(), 'pglite')
   await mkdir(pgliteNodeDir, { recursive: true })
-  const cliSecretStore = createCliSecretStore(cryptoSession)
+  const cliSecretStore = configStore.createCliSecretStore(cryptoSession)
+  const oauthStorage = {
+    authDir: configStore.paths.authDir,
+    secretId: args?.oauthSecretId ?? 'taskyon-cli:oauth',
+  }
 
-  const selectedApi = args?.selectedApi ?? resolveProviderSelection(stored)
+  const environmentPrefix = args?.environmentPrefix ?? 'TASKYON'
+  const selectedApi = args?.selectedApi ?? resolveProviderSelection(stored, environmentPrefix)
   if (!SUPPORTED_PROVIDERS.includes(selectedApi as (typeof SUPPORTED_PROVIDERS)[number])) {
     throw new Error(
       `Unsupported provider '${selectedApi}'. Choose one of: ${SUPPORTED_PROVIDERS.join(', ')}`,
@@ -123,19 +137,20 @@ export async function bootstrapCliTaskyon(args?: {
   }
 
   const model = args?.model ?? resolveStoredModel(stored, selectedApi)
-  const envProviderKey = resolveKeyForProvider(selectedApi)
+  const envProviderKey = resolveKeyForProvider(selectedApi, environmentPrefix)
   const config: CliApiConfig = {
     selectedApi,
     ...(model ? { model } : {}),
     ...(envProviderKey ? { key: envProviderKey } : {}),
   }
 
-  const llmState = createCliLlmState(config)
+  const llmState = createCliLlmState(config, args?.providerIdentity)
   const { x: taskStorageClientPort, y: taskStorageServicePort } =
     createProtocolPort(taskyonStorageProtocol)
   await createCliSelectedStorageService({
     port: taskStorageServicePort,
     dataDirectory: dataDir,
+    ...(args?.storageNamespace ? { namespacePrefix: args.storageNamespace } : {}),
     selection: resolveCliStorageSelection(stored),
   })
   const storageClient = createStorageClient(taskStorageClientPort)
@@ -170,7 +185,7 @@ export async function bootstrapCliTaskyon(args?: {
     await taskyon.updateChatCompletionApiKey(selectedApi, bootstrapKey)
   }
 
-  const oauthSession = await syncProviderRuntimeConfig(taskyon, llmState, selectedApi)
+  const oauthSession = await syncProviderRuntimeConfig(taskyon, llmState, selectedApi, oauthStorage)
   const providerKey = oauthSession?.accessToken ?? bootstrapKey
 
   return {

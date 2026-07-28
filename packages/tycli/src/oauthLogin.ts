@@ -3,7 +3,6 @@ import { randomBytes, createHash } from 'node:crypto'
 import { createInterface } from 'node:readline/promises'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import process from 'node:process'
 import type { Taskyon } from '../../taskyon/src/core/init'
 import type { ProviderEndpointConfig } from '../../taskyon/src/types/chatCompletion'
@@ -19,8 +18,10 @@ import {
   useRefreshTokenIfExpired,
 } from '../../taskyon/src/utils/oauth'
 
-const CLI_OAUTH_SECRET_ID = 'taskyon-cli:oauth'
-const CLI_AUTH_DIR = join(homedir(), '.taskyon-cli', 'auth')
+export type CliOauthStorage = {
+  authDir: string
+  secretId: string
+}
 const CODEX_LOOPBACK_PORT = 1455
 const CODEX_LOOPBACK_REDIRECT_URI = `http://localhost:${CODEX_LOOPBACK_PORT}/auth/callback`
 const CODEX_DEFAULT_ORIGINATOR = 'codex_cli'
@@ -91,14 +92,17 @@ type PersistedAuthState = {
 const workspacePreferenceSecretName = (providerName: string) =>
   `oauth:workspace:preference:${providerName}`
 const accountIdSecretName = (providerName: string) => `oauth:account-id:${providerName}`
-const providerAuthFilePath = (providerName: string): string => {
+const providerAuthFilePath = (storage: CliOauthStorage, providerName: string): string => {
   const safeProviderName = providerName.replace(/[^a-zA-Z0-9._-]/g, '_')
-  return join(CLI_AUTH_DIR, `${safeProviderName}.json`)
+  return join(storage.authDir, `${safeProviderName}.json`)
 }
 
-const readPersistedAuthState = async (providerName: string): Promise<PersistedAuthState> => {
+const readPersistedAuthState = async (
+  storage: CliOauthStorage,
+  providerName: string,
+): Promise<PersistedAuthState> => {
   try {
-    const raw = await readFile(providerAuthFilePath(providerName), 'utf8')
+    const raw = await readFile(providerAuthFilePath(storage, providerName), 'utf8')
     const parsed = JSON.parse(raw) as PersistedAuthState
     return parsed && typeof parsed === 'object' ? parsed : {}
   } catch {
@@ -107,17 +111,22 @@ const readPersistedAuthState = async (providerName: string): Promise<PersistedAu
 }
 
 const writePersistedAuthState = async (
+  storage: CliOauthStorage,
   providerName: string,
   patch: Partial<PersistedAuthState>,
 ) => {
-  const currentState = await readPersistedAuthState(providerName)
+  const currentState = await readPersistedAuthState(storage, providerName)
   const nextState: PersistedAuthState = { ...currentState, ...patch }
   try {
-    await mkdir(CLI_AUTH_DIR, { recursive: true })
-    await writeFile(providerAuthFilePath(providerName), JSON.stringify(nextState, null, 2), {
-      encoding: 'utf8',
-      mode: 0o600,
-    })
+    await mkdir(storage.authDir, { recursive: true })
+    await writeFile(
+      providerAuthFilePath(storage, providerName),
+      JSON.stringify(nextState, null, 2),
+      {
+        encoding: 'utf8',
+        mode: 0o600,
+      },
+    )
   } catch {
     // The Taskyon secret store is the real runtime source of truth. The sidecar
     // file cache is only a convenience layer and should never block CLI flows.
@@ -152,10 +161,11 @@ const isIdTokenExpired = (
 
 const readPreferredWorkspaceId = async (
   taskyon: Taskyon,
+  storage: CliOauthStorage,
   providerName: string,
 ): Promise<string | undefined> => {
   const raw = await taskyon.getSecret(
-    CLI_OAUTH_SECRET_ID,
+    storage.secretId,
     workspacePreferenceSecretName(providerName),
     false,
     false,
@@ -163,22 +173,23 @@ const readPreferredWorkspaceId = async (
   const secretValue = raw?.trim()
   if (secretValue) return secretValue
 
-  const persistedState = await readPersistedAuthState(providerName)
+  const persistedState = await readPersistedAuthState(storage, providerName)
   const fileValue = persistedState.preferredWorkspaceId?.trim()
   return fileValue || undefined
 }
 
 const writePreferredWorkspaceId = async (
   taskyon: Taskyon,
+  storage: CliOauthStorage,
   providerName: string,
   workspaceId: string,
 ) => {
   await taskyon.setSecret(
-    CLI_OAUTH_SECRET_ID,
+    storage.secretId,
     workspacePreferenceSecretName(providerName),
     workspaceId,
   )
-  await writePersistedAuthState(providerName, { preferredWorkspaceId: workspaceId })
+  await writePersistedAuthState(storage, providerName, { preferredWorkspaceId: workspaceId })
 }
 
 const asNonEmptyString = (value: unknown): string | undefined =>
@@ -230,9 +241,10 @@ const getOpenAiAccountIdFromCredentials = (
 export const readProviderOauthAccountId = async (
   taskyon: Taskyon,
   providerName: string,
+  storage: CliOauthStorage,
 ): Promise<string | undefined> => {
   const raw = await taskyon.getSecret(
-    CLI_OAUTH_SECRET_ID,
+    storage.secretId,
     accountIdSecretName(providerName),
     false,
     false,
@@ -240,18 +252,19 @@ export const readProviderOauthAccountId = async (
   const secretValue = raw?.trim()
   if (secretValue) return secretValue
 
-  const persistedState = await readPersistedAuthState(providerName)
+  const persistedState = await readPersistedAuthState(storage, providerName)
   const fileValue = persistedState.accountId?.trim()
   return fileValue || undefined
 }
 
 const writeProviderOauthAccountId = async (
   taskyon: Taskyon,
+  storage: CliOauthStorage,
   providerName: string,
   accountId: string,
 ) => {
-  await taskyon.setSecret(CLI_OAUTH_SECRET_ID, accountIdSecretName(providerName), accountId)
-  await writePersistedAuthState(providerName, { accountId })
+  await taskyon.setSecret(storage.secretId, accountIdSecretName(providerName), accountId)
+  await writePersistedAuthState(storage, providerName, { accountId })
 }
 
 const getWorkspaceCandidatesFromClaims = (
@@ -480,10 +493,11 @@ const exchangeCodeForCredentials = async ({
 
 const getCachedCredentials = async (
   taskyon: Taskyon,
+  storage: CliOauthStorage,
   providerName: string,
 ): Promise<null | ReturnType<typeof OAuthCredentials.parse>> => {
   const secretName = getProviderOauthCredentialsSecretName(providerName)
-  const raw = await taskyon.getSecret(CLI_OAUTH_SECRET_ID, secretName, false, false)
+  const raw = await taskyon.getSecret(storage.secretId, secretName, false, false)
   if (raw) {
     try {
       return OAuthCredentials.parse(JSON.parse(raw))
@@ -492,7 +506,7 @@ const getCachedCredentials = async (
     }
   }
 
-  const persistedState = await readPersistedAuthState(providerName)
+  const persistedState = await readPersistedAuthState(storage, providerName)
   if (!persistedState.credentials) return null
   try {
     return OAuthCredentials.parse(persistedState.credentials)
@@ -503,27 +517,30 @@ const getCachedCredentials = async (
 
 const setCachedCredentials = async (
   taskyon: Taskyon,
+  storage: CliOauthStorage,
   providerName: string,
   credentials: ReturnType<typeof OAuthCredentials.parse>,
 ) => {
   const secretName = getProviderOauthCredentialsSecretName(providerName)
-  await taskyon.setSecret(CLI_OAUTH_SECRET_ID, secretName, JSON.stringify(credentials))
-  await writePersistedAuthState(providerName, { credentials })
+  await taskyon.setSecret(storage.secretId, secretName, JSON.stringify(credentials))
+  await writePersistedAuthState(storage, providerName, { credentials })
 }
 
 export async function resolveCachedProviderOauthSession({
   providerName,
   api,
   taskyon,
+  storage,
 }: {
   providerName: string
   api: ProviderEndpointConfig
   taskyon: Taskyon
+  storage: CliOauthStorage
 }): Promise<null | { accessToken: string; accountId?: string }> {
   const oauth = getProviderOauthConfig(api)
   if (!oauth?.tokenUrl) return null
 
-  const cached = await getCachedCredentials(taskyon, providerName)
+  const cached = await getCachedCredentials(taskyon, storage, providerName)
   if (!cached) return null
 
   let validCredentials = cached
@@ -536,7 +553,7 @@ export async function resolveCachedProviderOauthSession({
         oauth.clientId,
       )
       validCredentials = refreshedForIdToken
-      await setCachedCredentials(taskyon, providerName, refreshedForIdToken)
+      await setCachedCredentials(taskyon, storage, providerName, refreshedForIdToken)
     } catch {
       return null
     }
@@ -547,13 +564,13 @@ export async function resolveCachedProviderOauthSession({
     clientId: oauth.clientId,
   })
   validCredentials = refreshed ?? validCredentials
-  if (refreshed) await setCachedCredentials(taskyon, providerName, refreshed)
+  if (refreshed) await setCachedCredentials(taskyon, storage, providerName, refreshed)
 
   if (providerName === 'chatgpt-codex') {
     const accountId =
       getOpenAiAccountIdFromCredentials(validCredentials) ??
-      (await readProviderOauthAccountId(taskyon, providerName))
-    if (accountId) await writeProviderOauthAccountId(taskyon, providerName, accountId)
+      (await readProviderOauthAccountId(taskyon, providerName, storage))
+    if (accountId) await writeProviderOauthAccountId(taskyon, storage, providerName, accountId)
     return { accessToken: validCredentials.access_token, ...(accountId ? { accountId } : {}) }
   }
 
@@ -625,12 +642,14 @@ export async function loginWithProviderOauthCli({
   providerName,
   api,
   taskyon,
+  storage,
   forceReauth = false,
   timeoutMs = 5 * 60 * 1000,
 }: {
   providerName: string
   api: ProviderEndpointConfig
   taskyon: Taskyon
+  storage: CliOauthStorage
   forceReauth?: boolean
   timeoutMs?: number
 }): Promise<{ accessToken: string; accountId?: string }> {
@@ -645,7 +664,7 @@ export async function loginWithProviderOauthCli({
   }
   const isChatgptCodex = providerName === 'chatgpt-codex'
   const envWorkspaceId = process.env.TASKYON_CHATGPT_WORKSPACE_ID
-  const preferredWorkspaceId = await readPreferredWorkspaceId(taskyon, providerName)
+  const preferredWorkspaceId = await readPreferredWorkspaceId(taskyon, storage, providerName)
   const initialWorkspaceId = envWorkspaceId || preferredWorkspaceId
 
   if (!forceReauth) {
@@ -653,6 +672,7 @@ export async function loginWithProviderOauthCli({
       providerName,
       api,
       taskyon,
+      storage,
     })
     if (cachedSession) return cachedSession
   }
@@ -662,9 +682,9 @@ export async function loginWithProviderOauthCli({
       oauth,
       timeoutMs,
     })
-    await setCachedCredentials(taskyon, providerName, credentials)
+    await setCachedCredentials(taskyon, storage, providerName, credentials)
     const accountId = getOpenAiAccountIdFromCredentials(credentials)
-    if (accountId) await writeProviderOauthAccountId(taskyon, providerName, accountId)
+    if (accountId) await writeProviderOauthAccountId(taskyon, storage, providerName, accountId)
     return { accessToken: credentials.access_token, ...(accountId ? { accountId } : {}) }
   }
 
@@ -685,21 +705,26 @@ export async function loginWithProviderOauthCli({
   )
   // Persist intermediate credentials immediately so subsequent attempts can reuse
   // the freshly acquired token even if workspace selection/retry is interrupted.
-  await setCachedCredentials(taskyon, providerName, credentials)
+  await setCachedCredentials(taskyon, storage, providerName, credentials)
   const claims = getOpenAiAuthClaims(credentials.id_token ?? '')
 
   if (typeof claims['chatgpt_account_id'] === 'string' && claims['chatgpt_account_id'].trim()) {
-    await writePreferredWorkspaceId(taskyon, providerName, claims['chatgpt_account_id'].trim())
+    await writePreferredWorkspaceId(
+      taskyon,
+      storage,
+      providerName,
+      claims['chatgpt_account_id'].trim(),
+    )
   }
   if (!hasOrganizationIdClaim(claims) && !initialWorkspaceId) {
     const workspaceCandidates = getWorkspaceCandidatesFromClaims(claims)
     const selectedWorkspace = await chooseWorkspaceInteractive(workspaceCandidates)
     if (selectedWorkspace) {
-      await writePreferredWorkspaceId(taskyon, providerName, selectedWorkspace)
+      await writePreferredWorkspaceId(taskyon, storage, providerName, selectedWorkspace)
       process.stdout.write(`Saved workspace preference: ${selectedWorkspace}\n`)
     }
   }
-  await setCachedCredentials(taskyon, providerName, credentials)
+  await setCachedCredentials(taskyon, storage, providerName, credentials)
   try {
     const accessToken = await resolveProviderAccessToken(credentials, api)
     return { accessToken }

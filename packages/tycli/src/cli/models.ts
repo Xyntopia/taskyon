@@ -34,8 +34,6 @@ export const baseProviderProfiles: Record<string, ChatCompletionProviderSettings
     streamSupport: true,
     defaultHeaders: {
       apiKey: 'sb_publishable_WrQ1aIRvl9BrMtpMQ9TocQ_JN7I9kJm',
-      'HTTP-Referer': 'https://tycli.local',
-      'X-Title': 'tycli',
     },
     routes: {
       chatCompletion: '/chatCompletion/api/v1/',
@@ -83,10 +81,6 @@ export const baseProviderProfiles: Record<string, ChatCompletionProviderSettings
     baseURL: 'https://openrouter.ai',
     model: 'google/gemini-2.5-flash-lite',
     streamSupport: true,
-    defaultHeaders: {
-      'HTTP-Referer': 'https://tycli.local',
-      'X-Title': 'tycli',
-    },
     routes: {
       chatCompletion: '/api/v1/',
       models: '/api/v1/models',
@@ -111,7 +105,20 @@ export type CliLlmState = {
   selectedToolchainProfile: string
 }
 
-export function createCliLlmState(config: CliApiConfig): CliLlmState {
+export type CliProviderIdentity = {
+  referer: string
+  title: string
+}
+
+const TASKYON_CLI_PROVIDER_IDENTITY: CliProviderIdentity = {
+  referer: 'https://tycli.local',
+  title: 'tycli',
+}
+
+export function createCliLlmState(
+  config: CliApiConfig,
+  providerIdentity: CliProviderIdentity = TASKYON_CLI_PROVIDER_IDENTITY,
+): CliLlmState {
   const selectedProviderSettings = baseProviderProfiles[config.selectedApi]
   if (!selectedProviderSettings) {
     throw new Error(`Unsupported provider: ${config.selectedApi}`)
@@ -128,6 +135,15 @@ export function createCliLlmState(config: CliApiConfig): CliLlmState {
           {
             chatCompletion: {
               ...settings,
+              ...(['taskyon', 'openrouter.ai'].includes(provider)
+                ? {
+                    defaultHeaders: {
+                      ...(settings.defaultHeaders ?? {}),
+                      'HTTP-Referer': providerIdentity.referer,
+                      'X-Title': providerIdentity.title,
+                    },
+                  }
+                : {}),
               ...(provider === config.selectedApi && config.model ? { model: config.model } : {}),
             },
           },
