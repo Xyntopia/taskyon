@@ -44,3 +44,25 @@ export const testNodeDocumentationLoaderLoadsManifestSources = async () => {
 
 testNodeDocumentationLoaderLoadsManifestSources.description =
   'Loads authored files and runtime OpenAPI from the Taskyon documentation manifest.'
+
+export const testNodeDocumentationLoaderAcceptsHostApiOptions = async () => {
+  const loadFiles = createNodeResourceFilesLoader(
+    '/unused',
+    () => Promise.resolve(createTaskyonApiDescription(taskyonProtocol, {})),
+    {
+      apiSource: '/resources/peers/local/host-api',
+      apiFileName: 'host.openapi.json',
+    },
+  )
+  const files: File[] = []
+  for await (const loaded of loadFiles('/resources/peers/local/host-api')) {
+    files.push(loaded.file)
+  }
+
+  assert(files.length === 1, 'Expected one host API document.')
+  assert(files[0]?.name === 'host.openapi.json', 'Expected the configured OpenAPI filename.')
+  return { success: true }
+}
+
+testNodeDocumentationLoaderAcceptsHostApiOptions.description =
+  'Loads a host API from a configured source using the host-specific OpenAPI filename.'

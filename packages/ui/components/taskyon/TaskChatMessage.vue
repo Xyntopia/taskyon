@@ -24,23 +24,34 @@ import {
   mdiCogOutline,
   mdiFileDocumentOutline,
   mdiMessageTextOutline,
-  mdiRobotOutline,
   mdiTools,
 } from '@quasar/extras/mdi-v6'
 import type { TaskNode } from '@taskyon/taskyon'
+import {
+  resolveTaskChatPresentation,
+  type TaskChatPresentation,
+} from '@taskyon/ui/modules/taskChatPresentation'
 import { computed } from 'vue'
 import TaskContentView from './TaskContentView.vue'
 
-const props = defineProps<{
-  task: TaskNode
-}>()
+const props = withDefaults(
+  defineProps<{
+    task: TaskNode
+    presentation?: Partial<TaskChatPresentation>
+  }>(),
+  {
+    presentation: () => ({}),
+  },
+)
+
+const resolvedPresentation = computed(() => resolveTaskChatPresentation(props.presentation))
 
 const roleLabel = computed(() => {
   switch (props.task.role) {
     case 'user':
       return 'You'
     case 'assistant':
-      return 'Taskyon'
+      return resolvedPresentation.value.assistantLabel
     case 'system':
       return 'System'
     case 'function':
@@ -95,7 +106,7 @@ const messageIcon = computed(() => {
     case 'user':
       return mdiAccount
     case 'assistant':
-      return mdiRobotOutline
+      return resolvedPresentation.value.assistantIcon
     case 'system':
       return mdiCogOutline
     case 'function':

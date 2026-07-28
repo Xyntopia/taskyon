@@ -1,15 +1,10 @@
 <template>
   <template v-if="buttons">
-    <q-btn
-      class="gt-xs"
-      v-bind="$attrs"
-      :icon="matCopyAll"
-      @click="onExportChatMD(selectedTaskList, true)"
-    >
+    <CopyTaskChatButton class="gt-xs" v-bind="$attrs" :tasks="selectedTaskList">
       <slot name="tt-cp-btn">
         <q-tooltip>Copy entire chat as markdown</q-tooltip>
       </slot>
-    </q-btn>
+    </CopyTaskChatButton>
     <q-btn v-bind="$attrs" :icon="matShare" aria-label="share content" @click="showDialog = true">
       <slot name="tt-share-btn">
         <q-tooltip>Share Content</q-tooltip>
@@ -127,14 +122,12 @@ No one else can access or remove your files without your permission.`"
             </q-slide-transition>
           </template>
           <!--we only show this on small screens, because the copy button will disappear here-->
-          <q-btn
+          <CopyTaskChatButton
             class="lt-sm"
             outline
-            :icon="matCopyAll"
             label="Copy to clipboard"
-            @click="onExportChatMD(selectedTaskList, true)"
-          >
-          </q-btn>
+            :tasks="selectedTaskList"
+          />
           <template v-if="download">
             <q-btn
               outline
@@ -162,7 +155,6 @@ No one else can access or remove your files without your permission.`"
 import {
   matClose,
   matContentCopy,
-  matCopyAll,
   matLink,
   matShare,
   matWarning,
@@ -175,6 +167,7 @@ import {
 } from '@quasar/extras/material-symbols-outlined'
 import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
 import QrCode from '@taskyon/ui/components/QrCode.vue'
+import CopyTaskChatButton from '@taskyon/ui/components/taskyon/CopyTaskChatButton.vue'
 import { copyToClipboard } from '@taskyon/common/modules/utils'
 import { chat2Md, chatToYaml, type TaskNode } from '@taskyon/taskyon'
 import { exportFile, useQuasar } from 'quasar'
@@ -313,7 +306,7 @@ function onExportIpfs(taskId: string) {
   console.log('export to ipfs', taskId)
 }
 
-function onExportChatMD(taskList: TaskNode[], clipBoard = false) {
+function onExportChatMD(taskList: TaskNode[]) {
   if (taskList.length > 0) {
     const taskThreadMd = chat2Md(taskList)
     const task = taskList.at(-1)!
@@ -321,12 +314,7 @@ function onExportChatMD(taskList: TaskNode[], clipBoard = false) {
       const fileName = `tyn-${task.name || ''}.md`
       const mimeType = 'text/markdown; charset=UTF-8'
 
-      if (clipBoard) {
-        void copyToClipboard(taskThreadMd)
-      } else {
-        // Use Quasar's exportFile function for download
-        exportFile(fileName, taskThreadMd, mimeType)
-      }
+      exportFile(fileName, taskThreadMd, mimeType)
     }
   }
 }

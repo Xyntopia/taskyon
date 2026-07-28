@@ -65,6 +65,7 @@ import {
   createOpfsStorageBackendResolver,
 } from '@taskyon/runtime-browser/storage'
 import { createStorageDagBackend } from '@taskyon/comp-dag/storageDagBackend'
+import { useConversationHistory } from '@taskyon/ui/modules/useConversationHistory'
 import { createTaskyonClient, taskyonGuiProtocol, taskyonProtocol } from '@taskyon/tyclient'
 import type { TaskyonGuiMessage } from '@taskyon/tyclient'
 import { createStandardEntryNodeTool } from '@taskyon/taskyon/tools/entryNode'
@@ -873,6 +874,16 @@ function taskUiUpdates(
   const followedTaskId = ref<string>()
   const pendingFollowTaskIds = new Set<string>()
   const currentTaskResolutionStatus = ref<'idle' | 'loading' | 'resolved' | 'missing'>('idle')
+  const conversationHistory = useConversationHistory({
+    history: computed({
+      get: () => stateRefs.chatHistory,
+      set: (history) => {
+        stateRefs.chatHistory = history
+      },
+    }),
+    getClient: () => taskyonClient.task,
+    onError: (error) => console.warn('Could not update conversation history.', error),
+  })
 
   function markTasksPendingCreation(taskIds: readonly string[]) {
     const nextPending = new Set(pendingCreatedTaskIds.value)
@@ -884,72 +895,10 @@ function taskUiUpdates(
   }
 
   void taskyon.then((ty) => {
-    const add2ChatHistory = async (
-      task: TaskNode | null,
-      id: string,
-      msg: 'existing' | 'update' | 'delete' | 'deleteAll',
-    ) => {
-      console.log('update task history!!', id, msg)
-      if (id === stateRefs.chatHistory[0]) {
-        return
-      }
-
-      if (msg === 'update') {
-        // we need to make sure, that our task is not already
-        // the "parent" of another task in that case we only want the leaf task which is already present...
-        for (const taskId of stateRefs.chatHistory) {
-          const otherTask = await taskyonClient.task.get({ id: taskId })
-          if (otherTask?.priorID === id || otherTask?.parentID === id) return
-        }
-      } else if (msg === 'delete') {
-        // Filter out the deleted task ID
-        stateRefs.chatHistory = stateRefs.chatHistory.filter((t) => t !== id)
-        return
-      } else if (msg === 'deleteAll') {
-        // Clear history
-        stateRefs.chatHistory = []
-        return
-      }
-
-      // Check if the task already exists in the history
-      if (!stateRefs.chatHistory.includes(id)) {
-        // Add the task to the front of the list if it doesn't exist
-        stateRefs.chatHistory.unshift(id)
-      }
-
-      // Remove task.id if it exists, then unshift to front (avoids duplication)
-      // we do this every time something gets added to the history
-      // we are not doin this anymore, because it gets too confusing for poeple ;)
-      /*stateRefs.chatHistory = [
-      task.id,
-      ...stateRefs.chatHistory.filter((t) => t !== task.id),
-    ];*/
-
-      if (!task) return
-
-      // Remove any entries which are a parent of the current task (keeping only leaf IDs)
-      const currentTaskChain = (
-        await taskyonClient.task.getIdChain({ id: task.id, maxFollow: 50 })
-      ).slice(0, -1)
-      stateRefs.chatHistory = stateRefs.chatHistory.filter(
-        (t) => t !== task.priorID && t !== task.parentID && !currentTaskChain.includes(t),
-        //(t) => t !== task.priorID && t !== task.parentID,
-      )
-
-      // Enforce a maximum size of 50
-      if (stateRefs.chatHistory.length > 50) {
-        stateRefs.chatHistory.length = 50 // Trims excess elements from the end
-      }
-
-      // and sort all tasks according to their timestamp :)
-      // TODO: we can't do this right now, because the task timestamp is optional
-      //       and we want to make sure to really include all tasks in the chathistory...
-    }
-
     ty.taskStream(({ id, data: task }) => {
       taskTreeRevision.value += 1
       if (!task) {
-        void add2ChatHistory(task, id.toString(), 'delete')
+        void conversationHistory.remove(id.toString())
         return
       }
       if (pendingCreatedTaskIds.value.has(id.toString())) {
@@ -1031,7 +980,7 @@ function taskUiUpdates(
     watch(
       currentTask,
       (newValue) => {
-        if (newValue) void add2ChatHistory(newValue, newValue.id, 'update')
+        if (newValue) void conversationHistory.record(newValue)
       },
       { once: true },
     )
@@ -1049,7 +998,7 @@ function taskUiUpdates(
         }
         if (selectedTask && sessionStatus === 'ready') {
           const taskNode = await taskyonClient.task.get({ id: selectedTask })
-          if (taskNode) void add2ChatHistory(taskNode, taskNode.id, 'existing')
+          if (taskNode) void conversationHistory.record(taskNode)
         }
       },
       { immediate: true },
@@ -1085,6 +1034,7 @@ function taskUiUpdates(
     currentTask: computed(() => currentTask),
     currentTaskResolutionStatus: computed(() => currentTaskResolutionStatus.value),
     markTasksPendingCreation,
+    conversationHistory,
   }
 }
 
@@ -1383,6 +1333,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   )
 
   const {
+    conversationHistory,
     currentTask,
     currentTaskResolutionStatus,
     markTasksPendingCreation,
@@ -1776,6 +1727,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     currentTask,
     currentTaskResolutionStatus,
     markTasksPendingCreation,
+    conversationHistory,
     ...apiKeyManagement,
     stopWorker,
     taskWorkerWaiting,

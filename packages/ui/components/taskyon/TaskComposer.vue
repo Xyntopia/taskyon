@@ -24,7 +24,7 @@
         :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="useEnterToSend"
         :show-web-search="showWebSearch"
-        :placeholder="heroMode ? 'Describe what you want to build' : 'Type your message...'"
+        :placeholder="heroMode ? 'Describe what you want to build' : placeholder"
         @execute-task="addNewTask('message')"
         @execute-web-search="addNewTask('websearch')"
       >
@@ -245,6 +245,7 @@ const props = withDefaults(
     heroMode?: boolean
     useEnterToSend?: UseEnterToSendMode
     showWebSearch?: boolean
+    placeholder?: string
     navigateToTask?: ((taskId: string | undefined) => void) | undefined
     markTasksPendingCreation?: ((taskIds: readonly string[]) => void) | undefined
   }>(),
@@ -258,6 +259,7 @@ const props = withDefaults(
     heroMode: false,
     useEnterToSend: 'auto',
     showWebSearch: false,
+    placeholder: 'Type your message...',
     navigateToTask: undefined,
     markTasksPendingCreation: undefined,
   },

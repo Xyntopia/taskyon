@@ -87,3 +87,5 @@ export const createDocumentationBaseStore = (
     },
   }
 }
+
+export type DocumentationBaseStore = ReturnType<typeof createDocumentationBaseStore>

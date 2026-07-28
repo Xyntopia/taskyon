@@ -22,15 +22,20 @@ const listFilesIteratively = async (root: string): Promise<string[]> => {
 export const createNodeResourceFilesLoader = (
   docsRoot: string,
   describeApi: () => Promise<TaskyonApiDescription>,
+  options: { apiSource?: string; apiFileName?: string } = {},
 ): ResourceFilesLoader =>
   async function* (source) {
-    if (source === '/resources/peers/local/api') {
+    if (source === (options.apiSource ?? '/resources/peers/local/api')) {
       const description = await describeApi()
       yield {
         url: source,
-        file: new File([JSON.stringify(description.document)], 'taskyon.openapi.json', {
-          type: 'application/vnd.oai.openapi+json',
-        }),
+        file: new File(
+          [JSON.stringify(description.document)],
+          options.apiFileName ?? 'taskyon.openapi.json',
+          {
+            type: 'application/vnd.oai.openapi+json',
+          },
+        ),
       }
       return
     }

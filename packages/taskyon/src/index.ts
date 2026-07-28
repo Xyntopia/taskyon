@@ -56,6 +56,7 @@ export {
 export { createTaskNode, ensureValidTaskId, forgeTaskChain } from './core/createTasks'
 export { createArtifactStore, type ArtifactStore } from './core/artifactStore'
 export * from './core/createNewTaskChain'
+export * from './core/conversationHistory'
 export { tyCore } from './core/init'
 export type { Taskyon } from './core/init'
 export * from './core/markdownTaskIO'

@@ -1,73 +1,24 @@
 <!-- Sidebar -->
 <template>
   <q-list dense class="chat-sidebar q-pa-xs">
-    <!-- Conversation Area -->
     <div class="chat-sidebar__section">
-      <!--div class="col-auto">
-        <q-expansion-item dense :icon="matToc" label="Chat Content">
-          <table-of-chat-content />
-        </q-expansion-item>
-      </div-->
       <div v-if="localDev" class="chat-sidebar__dev text-caption q-px-sm q-pb-xs">
         profile: {{ state.activeProfileName }} | session:
         {{ state.sessionId?.slice(0, 10) || 'N/A' }}
       </div>
-      <div class="chat-sidebar__header q-pa-xs text-caption row justify-center items-center">
-        <q-icon
-          v-if="state.minimalGui === 'default'"
-          name="svguse:/taskyon_mono_opt.svg#taskyon"
-          size="sm"
-        />
-        <div>Conversations</div>
-      </div>
-      <q-separator v-if="state.minimalGui === 'default'" class="chat-sidebar__separator" spaced />
-      <div class="chat-sidebar__content column items-stretch">
-        <q-list dense class="chat-sidebar__conversation-list">
-          <q-item
-            v-for="conversationId in conversationIDs"
-            :key="conversationId"
-            :class="[
-              'chat-sidebar__conversation',
-              { 'chat-sidebar__conversation--active': state.selectedTaskId === conversationId },
-            ]"
-            clickable
-            :to="{
-              path: $route.path === '/detailed' ? '/detailed' : '/chat',
-              query: { t: conversationId },
-            }"
-          >
-            <!-- clickable   q-item-section avatar>
-              <q-icon name="matChatBubble" size="xs" />
-            </!q-item-section-->
-            <q-item-section
-              lines
-              :class="[
-                'chat-sidebar__conversation-title',
-                {
-                  'chat-sidebar__conversation-title--active':
-                    state.selectedTaskId === conversationId,
-                },
-              ]"
-              ><template v-if="nameMap[conversationId]">
-                {{ nameMap[conversationId] }}
-              </template>
-              <div v-else class="chat-sidebar__pending-name row no-wrap items-center">
-                <q-icon :name="matAutorenew" class="q-mr-sm" />
-                {{ `chat.${conversationId.slice(0, 3)}` }}
-              </div>
-              <q-tooltip>
-                <div>Select Conversation ( id: {{ conversationId.slice(0, 5) }} ...)</div>
-                <div v-if="!nameMap[conversationId]" class="q-mt-sm">
-                  ... Conversation doesn't have a name, searching for keywords in conversation...
-                </div>
-              </q-tooltip>
-            </q-item-section>
-            <q-item-section side class="chat-sidebar__conversation-menu">
-              <TaskChainMenu :conversation-id="conversationId" />
-            </q-item-section>
-          </q-item>
-        </q-list>
-        <div class="chat-sidebar__actions row justify-around items-center">
+      <TaskConversationBrowser
+        :client="tystate.taskyonClient"
+        :conversation-ids="state.chatHistory"
+        :selected-task-id="state.selectedTaskId"
+        :titles="nameMap"
+        :resolve-title="updateName"
+        @select="selectConversation"
+        @new="navigateToTask(undefined, { path: '/' })"
+      >
+        <template #item-actions="{ conversationId }">
+          <TaskChainMenu :conversation-id="conversationId" />
+        </template>
+        <template #actions-before>
           <FileDropzone
             accept="text/markdown,application/x-yaml,text/yaml,.md,.markdown,.yaml,.yml"
             disable-dropzone-border
@@ -80,20 +31,13 @@
               </q-tooltip>
             </q-btn>
           </FileDropzone>
-          <q-btn
-            dense
-            flat
-            :icon="mdiForumPlus"
-            class="chat-sidebar__action-button"
-            @click="navigateToTask(undefined, { path: '/' })"
-          >
-            <q-tooltip> Create a new conversation </q-tooltip>
-          </q-btn>
+        </template>
+        <template #actions-after>
           <q-btn dense flat :icon="matSearch" to="/TaskManager" class="chat-sidebar__action-button"
             ><q-tooltip>Search for more conversations</q-tooltip></q-btn
           >
-        </div>
-      </div>
+        </template>
+      </TaskConversationBrowser>
     </div>
     <q-separator v-if="state.minimalGui === 'default'" class="chat-sidebar__separator" spaced />
     <!-- Settings Area -->
@@ -116,12 +60,12 @@
 </template>
 
 <script setup lang="ts">
-import { matAutorenew, matFileUpload, matSearch } from '@quasar/extras/material-icons'
-import { mdiForumPlus, mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
+import { matFileUpload, matSearch } from '@quasar/extras/material-icons'
+import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import FileDropzone from '@taskyon/ui/components/FileDropzone.vue'
+import TaskConversationBrowser from '@taskyon/ui/components/taskyon/TaskConversationBrowser.vue'
 import { generateTaskKeyWords, type TaskNode } from '@taskyon/taskyon'
 import { createTaskChainFromMarkdown } from '@taskyon/tyclient'
-import { watchThrottled } from '@vueuse/core'
 import { useQuasar } from 'quasar'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useAppStateStore } from 'src/stores/appState'
@@ -136,7 +80,6 @@ const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const { navigateToTask } = useTaskNavigation()
 
-const conversationIDs = ref<string[]>([])
 const nameMap = ref<Record<string, string>>({})
 const namingInProgress = new Set<string>()
 
@@ -196,17 +139,17 @@ const updateNameWithTextRank = async (id: string) => {
 }
 
 // TODO: this is probably a good idea to move this into "taskyon core"
-async function updateName(id: string) {
+async function updateName(id: string): Promise<string | undefined> {
   console.log('update name...', id)
   const task = await tystate.taskyonClient.task.get({ id })
-  if (!task) return
+  if (!task) return undefined
 
   const ty = await tystate.taskyon
   const taskMeta = await ty.getMeta(id)
   const cachedName = taskMeta?.name?.trim()
   if (cachedName) {
     nameMap.value[id] = cachedName
-    return
+    return cachedName
   }
 
   const taskChain = await tystate.taskyonClient.task.getChain({ id })
@@ -219,23 +162,14 @@ async function updateName(id: string) {
     nameMap.value[id] = displayName.trim()
   }
   void updateNameWithTextRank(id)
+  return displayName?.trim()
 }
 
-watchThrottled(
-  [() => state.selectedTaskId, () => state.chatHistory],
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  ([_, newChatHistory]) => {
-    console.log('updating sidebar chat list')
-    conversationIDs.value = newChatHistory.slice(0, 10)
-    for (const cid of conversationIDs.value) {
-      void updateName(cid)
-    }
-  },
-  {
-    immediate: true,
-    throttle: 1000,
-  },
-)
+const selectConversation = (taskId: string) => {
+  navigateToTask(taskId, {
+    path: $route.path === '/detailed' ? '/detailed' : '/chat',
+  })
+}
 
 const q = useQuasar()
 

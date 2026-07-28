@@ -26,11 +26,9 @@ import { matDelete, matDownloadForOffline, matMoreHoriz } from '@quasar/extras/m
 import { chatToYaml } from '@taskyon/taskyon'
 import { exportFile } from 'quasar'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
-import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 
 const tystate = useTaskyonStore()
-const state = useAppStateStore()
 const { navigateToTask } = useTaskNavigation()
 
 defineProps<{
@@ -42,7 +40,7 @@ async function onDeleteThread(conversationId: string) {
   const ty = await tystate.taskyon
   navigateToTask(undefined, { path: '/' })
   await ty.deleteTaskThread(conversationId)
-  state.chatHistory = state.chatHistory.filter((id) => id != conversationId)
+  await tystate.conversationHistory.remove(conversationId)
 }
 
 async function onDownloadChat(conversationId: string) {

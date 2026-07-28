@@ -6,6 +6,14 @@ test.describe('app smoke', () => {
     await expect(page).toHaveTitle(/Taskyon/)
   })
 
+  test('shows the shared conversation browser', async ({ page }) => {
+    await page.goto('/')
+    await page.getByLabel('Open Sidebar').click()
+    const conversationBrowser = page.locator('.task-conversation-browser')
+    await expect(conversationBrowser).toBeVisible()
+    await expect(conversationBrowser.getByLabel('start new chat')).toBeVisible()
+  })
+
   test('shows an unavailable state for a nonexistent chat', async ({ page }) => {
     const browserErrors: string[] = []
     page.on('pageerror', (error) => browserErrors.push(error.message))

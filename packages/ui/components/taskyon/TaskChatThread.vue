@@ -5,7 +5,7 @@
         <TyMarkdown :src="reasoning.get(task.id) ?? ''" />
       </q-expansion-item>
       <slot name="task" :task="task" :index="index" :next-task="nextTask">
-        <TaskChatMessage :task="task" />
+        <TaskChatMessage :task="task" :presentation="presentation" />
       </slot>
     </template>
   </div>
@@ -13,6 +13,7 @@
 
 <script setup lang="ts">
 import type { TaskNode, ToolBase } from '@taskyon/taskyon'
+import type { TaskChatPresentation } from '@taskyon/ui/modules/taskChatPresentation'
 import { computed } from 'vue'
 import TyMarkdown from '../tyMarkdown.vue'
 import TaskChatMessage from './TaskChatMessage.vue'
@@ -26,6 +27,7 @@ const props = withDefaults(
     hiddenTaskIds?: ReadonlySet<string>
     showAllTasks?: boolean
     expertMode?: boolean
+    presentation?: Partial<TaskChatPresentation>
   }>(),
   {
     tools: () => ({}),
@@ -33,6 +35,7 @@ const props = withDefaults(
     hiddenTaskIds: () => new Set<string>(),
     showAllTasks: false,
     expertMode: false,
+    presentation: () => ({}),
   },
 )
 

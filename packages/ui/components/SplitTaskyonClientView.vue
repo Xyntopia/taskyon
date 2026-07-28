@@ -10,6 +10,7 @@
     <template #chat>
       <TaskChatWindow
         v-model:selected-task-id="selectedTaskId"
+        v-model:recent-task-ids="recentTaskIds"
         :client="client"
         :status="status"
         :error-message="errorMessage"
@@ -19,6 +20,7 @@
         :min-mode="minMode"
         :expert-mode="expertMode"
         :show-web-search="showWebSearch"
+        :presentation="presentation"
         :data-cy="chatDataCy"
         :data-runtime-status="status"
       />
@@ -28,6 +30,7 @@
 
 <script setup lang="ts">
 import type { partialTaskDraft, TaskyonClient, ToolBase } from '@taskyon/taskyon'
+import type { TaskChatPresentation } from '@taskyon/ui/modules/taskChatPresentation'
 import TaskChatWindow from './taskyon/TaskChatWindow.vue'
 import SplitTaskyonLayout from './SplitTaskyonLayout.vue'
 
@@ -45,6 +48,7 @@ withDefaults(
     showWebSearch?: boolean
     persist?: boolean
     chatDataCy?: string | undefined
+    presentation?: Partial<TaskChatPresentation>
   }>(),
   {
     status: 'starting',
@@ -56,10 +60,12 @@ withDefaults(
     showWebSearch: false,
     persist: false,
     chatDataCy: undefined,
+    presentation: () => ({}),
   },
 )
 
 const selectedTaskId = defineModel<string | undefined>('selectedTaskId', {
   default: undefined,
 })
+const recentTaskIds = defineModel<string[]>('recentTaskIds', { default: () => [] })
 </script>

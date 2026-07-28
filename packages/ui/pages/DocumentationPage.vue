@@ -32,7 +32,10 @@
         </q-input>
       </div>
 
-      <div ref="sidebarScrollContainer" class="col overflow-auto">
+      <div
+        ref="sidebarScrollContainer"
+        class="documentation-page__sidebar-scroll col overflow-auto"
+      >
         <q-list dense padding>
           <q-item
             v-for="node in visibleTreeNodes"
@@ -70,7 +73,7 @@
         { 'documentation-page__content--openapi': currentOpenApiDocument },
       ]"
     >
-      <div class="col overflow-auto">
+      <div class="documentation-page__document-scroll col overflow-auto">
         <div
           :class="[
             'documentation-page__markdown',
@@ -445,12 +448,16 @@ watch([selectedDocumentId, filterText], () => void scrollSelectedDocumentIntoVie
 
 <style scoped lang="sass">
 .documentation-page
+  height: 100%
   min-height: 0
+  overflow: hidden
 
 .documentation-page__sidebar
   width: 300px
   min-width: 240px
+  min-height: 0
   max-width: 34vw
+  overflow: hidden
 
 .documentation-page__sidebar-header
   padding: 16px
@@ -458,7 +465,14 @@ watch([selectedDocumentId, filterText], () => void scrollSelectedDocumentIntoVie
 .documentation-page__content
   flex: 1
   min-width: 0
+  min-height: 0
+  overflow: hidden
   background-color: var(--background-color, white)
+
+.documentation-page__sidebar-scroll,
+.documentation-page__document-scroll
+  min-height: 0
+  overscroll-behavior: contain
 
 .documentation-page__markdown
   position: relative
