@@ -109,6 +109,13 @@ export const testUpdateFilesSchemaDeclaresExclusiveEditModes = () => {
       itemSchema.oneOf.length === 3,
     'Expected updateFiles schema to declare exactly one edit mode per update',
   )
+  assert(
+    itemSchema &&
+      typeof itemSchema === 'object' &&
+      'properties' in itemSchema &&
+      itemSchema.properties.filePath.description.includes('repeat that directory prefix'),
+    'Expected filePath schema guidance to explain artifactRoot-prefixed paths',
+  )
 
   return { success: true }
 }

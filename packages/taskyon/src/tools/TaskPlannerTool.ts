@@ -1,4 +1,4 @@
-import type { JSONSchema7 } from 'json-schema'
+import type { JSONSchema7, JSONSchema7Definition } from 'json-schema'
 import type { TyTaskManager } from '../core/taskManager'
 import type { partialTaskDraft } from '../types/taskNode'
 import { taskTypeOptions } from '../types/taskNode'
@@ -56,8 +56,37 @@ const plannerTaskItemSchema = {
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === 'string')
 
-const isJsonSchema = (value: unknown): value is JSONSchema7 & Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value)
+const isStructuredResultSchema = (value: unknown): value is JSONSchema7 & Record<string, unknown> =>
+  value !== null &&
+  typeof value === 'object' &&
+  !Array.isArray(value) &&
+  'type' in value &&
+  value.type === 'object'
+
+const isSchemaPropertyMap = (value: unknown): value is Record<string, JSONSchema7Definition> =>
+  value !== null &&
+  typeof value === 'object' &&
+  !Array.isArray(value) &&
+  Object.keys(value).length > 0 &&
+  Object.values(value).every(
+    (property) =>
+      typeof property === 'boolean' ||
+      (property !== null && typeof property === 'object' && !Array.isArray(property)),
+  )
+
+const normalizeStructuredResultSchema = (value: unknown): JSONSchema7 => {
+  if (isStructuredResultSchema(value)) return value
+  if (isSchemaPropertyMap(value)) {
+    return {
+      type: 'object',
+      properties: value,
+      required: Object.keys(value),
+    }
+  }
+  throw new Error(
+    'Planner structured results require a valid JSON Schema with top-level type "object" or a map of field names to JSON Schema property definitions.',
+  )
+}
 
 const normalizeTaskResult = (value: unknown): TaskContractResult => {
   if (value === undefined || value === null || value === 'message') return { mode: 'message' }
@@ -70,10 +99,10 @@ const normalizeTaskResult = (value: unknown): TaskContractResult => {
   if (candidate.mode !== 'structured') {
     throw new Error('Planner task result mode must be "message" or "structured".')
   }
-  if (!isJsonSchema(candidate.schema)) {
+  if (candidate.schema === undefined) {
     throw new Error(`Planner task result mode "${candidate.mode}" requires a JSON schema.`)
   }
-  return { mode: candidate.mode, schema: candidate.schema }
+  return { mode: candidate.mode, schema: normalizeStructuredResultSchema(candidate.schema) }
 }
 
 export const normalizePlannedTaskInput = (value: unknown): PlannedTaskConfig => {
@@ -271,6 +300,8 @@ export const taskPlanner = createTool({
 
 The "tasks" parameter is a list of groups. By default, Taskyon flattens all groups into one sequential workflow because most project work has dependencies between exploration, implementation, documentation, and verification. Set "parallel" to true only when the outer groups are genuinely independent and can safely edit or gather results without racing each other.
 
+"parallel" is only a top-level taskPlanner argument beside "tasks". Never place it inside a task item or an inner task group; omit it for sequential work.
+
 For artifact-building tasks, use the default sequential mode. Do not split implementation, README writing, and verification into parallel groups; verification must run after implementation exists, and documentation should match the final artifact.
 
 Choose the packet size dynamically:
@@ -291,6 +322,8 @@ Each task item may be a short plain string when a normal message result is suffi
 
 Optionally, a task item may instead be:
 { task: string, agentInstructions?: string, doneWhen?: string[], result?: { mode: "message" } | { mode: "structured", schema: JSONSchema } }
+
+Prefer full structured-result JSON Schema objects with top-level { type: "object", properties: {...}, required: [...] }. A map of field names to JSON Schema property definitions is also accepted and normalized to a required object schema. Scalar shorthand such as { summary: "string" } is invalid.
 
 Each delegated entryNode runs the normal dynamic tool chooser for its own objective. Do not select execution tools on behalf of delegated tasks.
 
@@ -313,7 +346,7 @@ Taskyon renders each contract once as task-chain messages and launches entryNode
       parallel: {
         type: 'boolean',
         description:
-          'Set true only when each outer tasks group is independent and safe to run in parallel. Omit this parameter for normal sequential work.',
+          'Top-level taskPlanner option beside tasks. Set true only when each outer tasks group is independent and safe to run in parallel. Never put parallel inside a task item; omit it for normal sequential work.',
       },
     },
     required: ['tasks'],

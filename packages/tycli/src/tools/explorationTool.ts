@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { constants as fsConstants } from 'node:fs'
-import { access, readdir, readFile } from 'node:fs/promises'
-import { dirname, join, relative, resolve } from 'node:path'
+import { access, readdir, readFile, stat } from 'node:fs/promises'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { createTool } from '@taskyon/taskyon/api'
 
@@ -27,7 +27,16 @@ type GrepMatch = {
   text: string
 }
 
-const EXCLUDED_DIRS = ['.git', 'node_modules', 'dist', 'build', '.next', '.turbo', '.yarn', '.direnv']
+const EXCLUDED_DIRS = [
+  '.git',
+  'node_modules',
+  'dist',
+  'build',
+  '.next',
+  '.turbo',
+  '.yarn',
+  '.direnv',
+]
 const MAX_READ_CHARS = 200_000
 const MAX_COMMAND_OUTPUT = 2_000_000
 
@@ -84,6 +93,15 @@ function resolveWorkspacePath(root: string, path: string) {
   }
   return { full, rel: rel.replace(/\\/g, '/') }
 }
+
+function resolveWorkspaceScope(root: string, path?: string) {
+  const full = resolve(root, path?.trim() || '.')
+  const rel = relative(root, full).replace(/\\/g, '/')
+  if (rel === '..' || rel.startsWith('../')) throw new Error(`Path escapes workspace: ${path}`)
+  return { full, rel }
+}
+
+const toWorkspaceRelativePath = (scope: string, path: string) => (scope ? `${scope}/${path}` : path)
 
 async function listFilesRec(root: string, limit: number, query?: string) {
   const out: string[] = []
@@ -185,6 +203,34 @@ async function grepWorkspace(root: string, query: string, limit: number): Promis
   return await grepFilesFallback(root, query, effectiveLimit)
 }
 
+async function grepFile(path: string, query: string, limit: number): Promise<GrepMatch[]> {
+  const effectiveLimit = clampLimit(limit)
+  if (!query.trim()) throw new Error('query is required for grep action')
+  if (await commandExists('rg')) {
+    try {
+      const result = await runCommand(
+        'rg',
+        ['--json', '--line-number', query, basename(path)],
+        dirname(path),
+      )
+      return parseRgJsonMatches(result.stdout, effectiveLimit)
+    } catch {
+      // Fall back below when rg exists but is not runnable in this environment.
+    }
+  }
+
+  const content = await readFile(path, 'utf8')
+  const lowerQuery = query.toLowerCase()
+  return content
+    .split('\n')
+    .flatMap((text, index) =>
+      text.toLowerCase().includes(lowerQuery)
+        ? [{ path: basename(path), line: index + 1, text }]
+        : [],
+    )
+    .slice(0, effectiveLimit)
+}
+
 async function readFileChunk(root: string, path: string, startLine?: number, endLine?: number) {
   const { full, rel } = resolveWorkspacePath(root, path)
   const content = await readFile(full, 'utf8')
@@ -259,13 +305,36 @@ export function createExplorationTool(contextFiles: ExplorationContext) {
         if (!path) throw new Error('path is required for add action')
         const chunk = await readFileChunk(cwd, path, startLine, endLine)
         contextFiles[chunk.path] = chunk.content
-        return { added: chunk.path, chars: chunk.content.length, startLine: chunk.startLine, endLine: chunk.endLine }
+        return {
+          added: chunk.path,
+          chars: chunk.content.length,
+          startLine: chunk.startLine,
+          endLine: chunk.endLine,
+        }
       }
       if (action === 'grep') {
-        const matches = await grepWorkspace(cwd, query ?? '', limit)
+        const scope = resolveWorkspaceScope(cwd, path)
+        const scopeStat = await stat(scope.full)
+        if (scopeStat.isFile()) {
+          const matches = (await grepFile(scope.full, query ?? '', limit)).map((match) => ({
+            ...match,
+            path: scope.rel,
+          }))
+          return { matches, count: matches.length }
+        }
+        if (!scopeStat.isDirectory()) {
+          throw new Error(`grep path is not a file or directory: ${path ?? '.'}`)
+        }
+        const matches = (await grepWorkspace(scope.full, query ?? '', limit)).map((match) => ({
+          ...match,
+          path: toWorkspaceRelativePath(scope.rel, match.path),
+        }))
         return { matches, count: matches.length }
       }
-      const files = await listWorkspaceFiles(cwd, limit, action === 'search' ? query : undefined)
+      const scope = resolveWorkspaceScope(cwd, path)
+      const files = (
+        await listWorkspaceFiles(scope.full, limit, action === 'search' ? query : undefined)
+      ).map((file) => toWorkspaceRelativePath(scope.rel, file))
       return { files, count: files.length }
     },
   })

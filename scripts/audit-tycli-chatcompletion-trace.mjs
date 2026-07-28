@@ -23,9 +23,9 @@ const unique = (values) => [...new Set(values)]
 const sum = (values) => values.reduce((total, value) => total + value, 0)
 const numberOrZero = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
 
-const fileEntries = readdirSync(traceDir)
+const traceFileNames = readdirSync(traceDir).sort()
+const fileEntries = traceFileNames
   .filter((name) => /_(input|output)\.json$/.test(name))
-  .sort()
   .map((name) => {
     const sequence = Number(name.match(/^(\d+)_/)?.[1] ?? 0)
     const side = name.endsWith('_input.json') ? 'input' : 'output'
@@ -36,17 +36,37 @@ const fileEntries = readdirSync(traceDir)
 const inputEntries = fileEntries.filter((entry) => entry.side === 'input')
 const outputEntries = fileEntries.filter((entry) => entry.side === 'output')
 const outputsBySequence = new Map(outputEntries.map((entry) => [entry.sequence, entry]))
+const recordEntries = traceFileNames
+  .filter((name) => /_record\.json$/.test(name))
+  .map((name) => {
+    const path = join(traceDir, name)
+    const data = readJson(path)
+    return {
+      name,
+      path,
+      sequence: numberOrZero(data?.sequence) || Number(name.match(/^(\d+)_/)?.[1] ?? 0),
+      data,
+      bytes: byteSize(path),
+    }
+  })
+const useRecordFormat = recordEntries.length > 0
 
 const extractRequest = (entry) => entry.data?.input?.request ?? {}
 const extractMessages = (request) => (Array.isArray(request.messages) ? request.messages : [])
 const extractInstructions = (request) =>
-  typeof request.providerOptions?.openai?.instructions === 'string'
-    ? request.providerOptions.openai.instructions
-    : ''
+  typeof request.instructions === 'string'
+    ? request.instructions
+    : typeof request.providerOptions?.openai?.instructions === 'string'
+      ? request.providerOptions.openai.instructions
+      : ''
 const extractRequestPromptCacheKey = (request) =>
-  typeof request.providerOptions?.openai?.promptCacheKey === 'string'
-    ? request.providerOptions.openai.promptCacheKey
-    : ''
+  typeof request.prompt_cache_key === 'string'
+    ? request.prompt_cache_key
+    : typeof request.providerOptions?.openai?.promptCacheKey === 'string'
+      ? request.providerOptions.openai.promptCacheKey
+      : ''
+const extractRequestItems = (request) =>
+  Array.isArray(request.input) ? request.input : extractMessages(request)
 const extractUsage = (entry) => entry?.data?.output?.usage ?? {}
 const extractRawOutput = (entry) =>
   typeof entry?.data?.output?.rawOutput === 'string' ? entry.data.output.rawOutput : ''
@@ -76,10 +96,10 @@ const commonPrefixLength = (previous, current) => {
   return index
 }
 
-const requests = inputEntries.map((inputEntry) => {
+const legacyRequests = inputEntries.map((inputEntry) => {
   const outputEntry = outputsBySequence.get(inputEntry.sequence)
   const request = extractRequest(inputEntry)
-  const messages = extractMessages(request)
+  const messages = extractRequestItems(request)
   const instructions = extractInstructions(request)
   const requestPromptCacheKey = extractRequestPromptCacheKey(request)
   const usage = extractUsage(outputEntry)
@@ -94,6 +114,11 @@ const requests = inputEntries.map((inputEntry) => {
     inputFile: inputEntry.name,
     outputFile: outputEntry?.name,
     paired: Boolean(outputEntry),
+    completed: Boolean(outputEntry),
+    attemptCount: 1,
+    provider: '',
+    model: '',
+    responseStatus: undefined,
     inputPayloadChars: jsonChars(inputEntry.data.input),
     outputPayloadChars: jsonChars(outputEntry?.data?.output),
     inputFileBytes: inputEntry.bytes,
@@ -118,23 +143,65 @@ const requests = inputEntries.map((inputEntry) => {
     totalTokens: numberOrZero(usage.totalTokens),
     cacheReadTokens,
     noCacheTokens,
+    _messages: messages,
   }
 })
 
+const recordRequests = recordEntries.map((entry) => {
+  const providerRequest = entry.data?.providerRequest ?? {}
+  const attempts = Array.isArray(providerRequest.attempts) ? providerRequest.attempts : []
+  const attempt = attempts.at(-1) ?? {}
+  const request = attempt.requestBody ?? {}
+  const messages = extractRequestItems(request)
+  const instructions = extractInstructions(request)
+  const responseMetadata = attempt.response ?? attempt.error
+
+  return {
+    sequence: entry.sequence,
+    inputFile: entry.name,
+    outputFile: undefined,
+    paired: Boolean(responseMetadata),
+    completed: Boolean(responseMetadata),
+    attemptCount: attempts.length,
+    provider: typeof providerRequest.provider === 'string' ? providerRequest.provider : '',
+    model: typeof providerRequest.model === 'string' ? providerRequest.model : '',
+    responseStatus: numberOrZero(attempt.response?.status) || undefined,
+    inputPayloadChars: jsonChars(request),
+    outputPayloadChars: jsonChars(responseMetadata),
+    inputFileBytes: entry.bytes,
+    outputFileBytes: 0,
+    messageCount: messages.length,
+    lastMessageRole: messages.at(-1)?.role ?? messages.at(-1)?.type ?? '',
+    firstMessageHash: sha(JSON.stringify(messages[0] ?? null)),
+    firstTwoMessagesHash: sha(JSON.stringify(messages.slice(0, 2))),
+    instructionsChars: instructions.length,
+    instructionsHash: sha(instructions),
+    requestPromptCacheKey: extractRequestPromptCacheKey(request),
+    hasParentWorkspaceInstructions: instructions.includes('# ../../../../AGENTS.md'),
+    rawOutputChars: 0,
+    rawOutputShare: 0,
+    promptCacheKeys: [],
+    promptCacheRetention: [],
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    cacheReadTokens: 0,
+    noCacheTokens: 0,
+    _messages: messages,
+  }
+})
+
+const requests = useRecordFormat ? recordRequests : legacyRequests
+
 const requestsWithPrefixStats = requests.map((request, index) => {
-  const previousInputEntry = index > 0 ? inputEntries[index - 1] : undefined
-  const currentInputEntry = inputEntries[index]
-  const previousMessages = previousInputEntry
-    ? extractMessages(extractRequest(previousInputEntry))
-    : []
-  const currentMessages = currentInputEntry
-    ? extractMessages(extractRequest(currentInputEntry))
-    : []
+  const previousMessages = index > 0 ? requests[index - 1]._messages : []
+  const currentMessages = request._messages
   const commonMessagesWithPrevious =
     index > 0 ? commonPrefixLength(previousMessages, currentMessages) : 0
 
+  const { _messages, ...publicRequest } = request
   return {
-    ...request,
+    ...publicRequest,
     commonMessagesWithPrevious,
     commonMessagePrefixChars:
       commonMessagesWithPrevious > 0
@@ -145,6 +212,7 @@ const requestsWithPrefixStats = requests.map((request, index) => {
 
 const totals = {
   chatCompletions: requestsWithPrefixStats.length,
+  completedChatCompletions: requestsWithPrefixStats.filter((request) => request.completed).length,
   pairedChatCompletions: requestsWithPrefixStats.filter((request) => request.paired).length,
   inputPayloadChars: sum(requestsWithPrefixStats.map((request) => request.inputPayloadChars)),
   outputPayloadChars: sum(requestsWithPrefixStats.map((request) => request.outputPayloadChars)),
@@ -182,8 +250,9 @@ const commonMessagePrefixChars = requestsWithPrefixStats.map(
 )
 
 const warnings = [
-  requestsWithPrefixStats.some((request) => !request.paired)
-    ? 'Some input trace files do not have a matching output trace file.'
+  requestsWithPrefixStats.length === 0 ? 'No supported trace files were found.' : undefined,
+  requestsWithPrefixStats.some((request) => !request.completed)
+    ? 'Some traced requests have no recorded response or transport error.'
     : undefined,
   firstMessageHashes.length > 1 ? 'The first message is not stable across requests.' : undefined,
   firstTwoMessagesHashes.length > 1
@@ -208,6 +277,7 @@ const warnings = [
 
 const report = {
   traceDir,
+  traceFormat: useRecordFormat ? 'provider-request-record' : 'legacy-input-output',
   totals,
   stability: {
     firstMessageStable: firstMessageHashes.length <= 1,
@@ -239,7 +309,7 @@ const renderMarkdown = () => {
     '## Totals',
     '',
     `- chatCompletion calls: ${formatNumber(totals.chatCompletions)}`,
-    `- paired input/output calls: ${formatNumber(totals.pairedChatCompletions)}`,
+    `- completed calls: ${formatNumber(totals.completedChatCompletions)}`,
     `- input payload chars: ${formatNumber(totals.inputPayloadChars)}`,
     `- output payload chars: ${formatNumber(totals.outputPayloadChars)}`,
     `- input file bytes: ${formatNumber(totals.inputFileBytes)}`,

@@ -234,6 +234,62 @@ export const testTaskWorkerSettlesAfterPriorFunctionCreatesSubtasks = async () =
 testTaskWorkerSettlesAfterPriorFunctionCreatesSubtasks.description =
   'Ensures dependency waiters settle after a prior function creates subtasks late in execution.'
 
+export const testTaskWorkerReleasesFunctionAfterDependentMessage = async () => {
+  const { ty, storage } = await createTaskWorkerTestRuntime()
+  const priorTool = createTool({
+    name: 'priorWithMessageDependency',
+    description: 'Create a terminal result before a dependent message.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    } as const,
+    function: () => createSubtasksResult([]),
+  })
+  const reducerTool = createTool({
+    name: 'reducerAfterMessageDependency',
+    description: 'Run after the dependent message becomes finished.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    } as const,
+    function: () =>
+      createSubtasksResult({
+        role: 'system',
+        content: { type: 'return', data: 'message dependency reduced' },
+      }),
+  })
+  const registration = await registerToolRpcTools({
+    port: ty.port,
+    tools: [priorTool, reducerTool],
+  })
+
+  try {
+    const result = await processTasksDetailed(ty.port)(
+      [
+        [
+          toolCall({ name: 'priorWithMessageDependency', arguments: {} }),
+          { role: 'user', content: { type: 'message', data: 'Reducer objective.' } },
+          toolCall({ name: 'reducerAfterMessageDependency', arguments: {} }),
+        ],
+      ],
+      (task) =>
+        task.content.type === 'return' && task.content.data === 'message dependency reduced',
+      { timeoutMs: 5_000 },
+    )
+
+    assert(result.status === 'matched', `Expected matched result, got ${result.status}`)
+  } finally {
+    registration.destroy()
+    ty.workerStop('message dependency settlement diagnostic complete')
+    storage.destroy()
+  }
+}
+
+testTaskWorkerReleasesFunctionAfterDependentMessage.description =
+  'Runs a sequential function after an intervening message whose prior function completed with an empty explicit task result.'
+
 export const testTaskWorkerWaitsForParallelSubtreeBeforeSequentialReducer = async () => {
   const { ty, storage } = await createTaskWorkerTestRuntime()
   const events: TyTaskStreamData[] = []

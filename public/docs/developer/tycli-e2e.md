@@ -99,22 +99,20 @@ returns, and re-entry chains are represented in the Taskyon tree as expected.
 
 ## LLM Request Tracing
 
-`tycli` can log each chatCompletion request and response into separate files. Set:
+`tycli` can log each chatCompletion provider request and its response metadata. Set:
 
 - `TYCLI_CHAT_COMPLETION_TRACE_DIR`: directory for trace files.
 - `TYCLI_CHAT_COMPLETION_TRACE_LABEL`: optional task label included in file names.
-- `TYCLI_CHAT_COMPLETION_TRACE_RAW=1`: optional debug mode that keeps full raw provider stream
-  payloads. Leave it unset for normal experiments so output traces store compact summaries and
-  token usage instead of duplicating large raw provider dumps.
 
 The chatCompletion tool also has a `trace` parameter with `enabled` and optional `label` fields.
-When entryNode tracing is enabled, every LLM request gets paired files like:
+When entryNode tracing is enabled, every LLM request gets one redacted record like:
 
-- `0001_task-08_<task-id>_input.json`
-- `0001_task-08_<task-id>_output.json`
+- `0001_task-08_<task-id>_record.json`
 
-The trace directory can be counted later to approximate per-task character volume and compare task
-costs.
+Each record contains the provider, model, redacted request body, attempt metadata, HTTP response
+status and safe headers, or the transport error. It does not duplicate the streamed assistant
+response body. The trace directory can be audited later to measure request volume and compare task
+costs; token totals are reported only when the trace format contains provider usage.
 
 ## Post-Experiment Trace Audit
 
@@ -122,9 +120,10 @@ After every finished experiment, audit the trace directory before calling the ru
 
 - Run `node scripts/audit-tycli-chatcompletion-trace.mjs <trace-dir>` and include the totals,
   cache-prefix warnings, and any follow-up fixes in the experiment report.
-- Count chatCompletion calls by paired `*_input.json` and `*_output.json` files.
-- Report total input characters, output characters, file bytes, and provider token usage when the
-  trace includes it.
+- Count chatCompletion calls by `*_record.json` files. The auditor remains compatible with legacy
+  paired `*_input.json` and `*_output.json` traces.
+- Report total request characters, response-metadata characters, file bytes, and provider token
+  usage when the trace includes it.
 - Report cached input tokens when the provider exposes them. If cached tokens are zero or missing,
   inspect whether the first messages are stable enough for prompt caching.
 - Check whether the first one or two messages are identical across requests. Stable leading

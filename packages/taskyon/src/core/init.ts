@@ -42,6 +42,7 @@ import type { TaskManagerStorage, TyTaskManager } from './taskManager'
 import { useTyTaskManager } from './taskManager'
 import { generateSecretId } from './taskFunctionExecutor'
 import { runTaskWorker, type TyTaskStreamData } from './taskWorker'
+import { summarizeProtocolMessageForLog } from './protocolLogging'
 import {
   createToolExecutionClient,
   registerToolRpcBroker,
@@ -218,10 +219,10 @@ const staticContext = (createIframeMultiPlexer: CreateIframeMultiPlexer) => {
 
   // logging
   outsidePort.receive((msg) => {
-    console.log('taskyon sending a message:', msg)
+    console.log('taskyon sending a message:', summarizeProtocolMessageForLog(msg))
   })
   insidePort.receive((msg) => {
-    console.log('taskyon receiving a message:', msg)
+    console.log('taskyon receiving a message:', summarizeProtocolMessageForLog(msg))
   })
 
   return {
@@ -430,12 +431,17 @@ const dynamicContext =
       }
     }
     const continuationTask = partialTaskDraft.parse(entryNode())
+    const entryNodeToolName =
+      continuationTask.content.type === 'functioncall'
+        ? continuationTask.content.data.name
+        : 'entryNode'
     const taskWorkerConfig = llmSettings().taskWorker
     const { workerStream, toolRpcPort, cancelCurrentRun, workerSettled, queueTask } = runTaskWorker(
       taskManagerInstance,
       continuationTask,
       continuationTask,
       taskWorkerConfig?.maxConcurrency ?? 4,
+      new Set([toolSetup.chatCompletionToolName, entryNodeToolName]),
     )
     const workerToolBroker = registerToolRpcBroker({
       workerPort: toolRpcPort,

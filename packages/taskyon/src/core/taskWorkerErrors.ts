@@ -1,6 +1,46 @@
+import { canonicalJson } from '@taskyon/common/modules/canonicalHash'
 import type { TaskNode } from '../types/taskNode'
 
 export const MAX_AUTONOMOUS_RECOVERY_ATTEMPTS_PER_SIGNATURE = 5
+export const MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS = 3
+
+const DEFAULT_REPEATED_CALL_DETECTION_IGNORED_TOOL_NAMES = new Set(['chatCompletion', 'entryNode'])
+
+const toolCallSignature = (task: TaskNode) =>
+  task.content.type === 'functioncall'
+    ? canonicalJson({
+        name: task.content.data.name,
+        arguments: task.content.data.arguments,
+      })
+    : undefined
+
+export const detectRepeatedToolCall = (
+  taskChain: TaskNode[],
+  repeatedCallDetectionIgnoredToolNames: ReadonlySet<string> = DEFAULT_REPEATED_CALL_DETECTION_IGNORED_TOOL_NAMES,
+) => {
+  const currentTask = taskChain.at(-1)
+  if (
+    !currentTask ||
+    currentTask.content.type !== 'functioncall' ||
+    repeatedCallDetectionIgnoredToolNames.has(currentTask.content.data.name)
+  ) {
+    return undefined
+  }
+  const latestSignature = toolCallSignature(currentTask)
+  let count = 0
+  for (let index = taskChain.length - 1; index >= 0; index -= 1) {
+    const task = taskChain[index]!
+    if (task.role === 'user' && task.content.type === 'message') break
+    if (task.content.type !== 'functioncall') continue
+    if (repeatedCallDetectionIgnoredToolNames.has(task.content.data.name)) continue
+    if (toolCallSignature(task) !== latestSignature) break
+    count += 1
+  }
+
+  return count >= MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS
+    ? { count, toolName: currentTask.content.data.name }
+    : undefined
+}
 
 const toAutonomousErrorText = (value: unknown): string => {
   if (typeof value === 'string') return value

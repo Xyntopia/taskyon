@@ -59,7 +59,11 @@ export const updateFilesTool = createTool({
             },
           ],
           properties: {
-            filePath: { type: 'string' },
+            filePath: {
+              type: 'string',
+              description:
+                'Workspace-relative path. When artifactRoot is provided, repeat that directory prefix in filePath; for example artifactRoot research/topic/ requires filePath research/topic/sources.md, not sources.md.',
+            },
             newContent: {
               type: 'string',
               description:

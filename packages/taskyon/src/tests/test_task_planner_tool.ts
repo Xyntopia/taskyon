@@ -239,6 +239,25 @@ export const testTaskPlannerNormalizesTaskInputs = () => {
     'Expected object task to preserve allowedTools',
   )
 
+  const shorthandSchemaTask = normalizePlannedTaskInput({
+    task: 'Return structured findings',
+    result: {
+      mode: 'structured',
+      schema: {
+        summary: { type: 'string' },
+        evidence: { type: 'array', items: { type: 'string' } },
+      },
+    },
+  })
+  const shorthandSchema = shorthandSchemaTask.taskContract.result?.schema
+  assert(
+    shorthandSchema !== undefined &&
+      typeof shorthandSchema !== 'boolean' &&
+      shorthandSchema.type === 'object' &&
+      shorthandSchema.required?.join(',') === 'summary,evidence',
+    'Expected a property-schema map to normalize into a complete top-level object schema',
+  )
+
   let errorMessage = ''
   try {
     normalizePlannedTaskInput({ task: '', allowedTools: [1] })
@@ -262,6 +281,23 @@ export const testTaskPlannerNormalizesTaskInputs = () => {
   assert(
     errorMessage.includes('requires a JSON schema'),
     `Expected structured planner results without a schema to be rejected, got ${errorMessage}`,
+  )
+
+  errorMessage = ''
+  try {
+    normalizePlannedTaskInput({
+      task: 'Return structured findings',
+      result: {
+        mode: 'structured',
+        schema: { summary: 'string', evidence: ['string'] },
+      },
+    })
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : String(error)
+  }
+  assert(
+    errorMessage.includes('valid JSON Schema'),
+    `Expected shorthand object shapes to be rejected before provider execution, got ${errorMessage}`,
   )
 
   return { success: true }
@@ -308,6 +344,16 @@ export const testTaskPlannerReturnsOnlyDelegatedBranches = async () => {
   assert(
     !('default' in taskPlanner.parameters.properties.parallel),
     'Expected the optional parallel flag not to advertise a redundant false default',
+  )
+  assert(
+    taskPlanner.longDescription.includes('only a top-level taskPlanner argument') &&
+      taskPlanner.longDescription.includes(
+        'map of field names to JSON Schema property definitions is also accepted',
+      ) &&
+      taskPlanner.parameters.properties.parallel.description.includes(
+        'Never put parallel inside a task item',
+      ),
+    'Expected provider guidance to keep parallel at the planner top level',
   )
   const providerTaskProperties =
     taskPlanner.parameters.properties.tasks.items.items.anyOf[1].properties

@@ -13,6 +13,7 @@ import { createLruCache } from '@taskyon/common/modules/lruCache'
 import {
   countAutonomousErrorAttempt,
   createAutonomousErrorSignature,
+  detectRepeatedToolCall,
   MAX_AUTONOMOUS_RECOVERY_ATTEMPTS_PER_SIGNATURE,
 } from './taskWorkerErrors'
 
@@ -243,6 +244,7 @@ const isUnrecoverableAutonomousError = (error: unknown) => {
     'forbidden',
     'authentication failed',
     'invalid api key',
+    'autonomous tool-call loop detected',
   ].some((pattern) => signature.includes(pattern))
 }
 
@@ -385,6 +387,8 @@ const createTaskProcessor = (
   taskisInLoop: (taskId: string) => void,
   taskOutOfLoop: (taskId: string, toolName?: string) => void,
   toolExecutionClient: ToolExecutionClient,
+  repeatedCallDetectionIgnoredToolNames: ReadonlySet<string>,
+  markTaskFinished: (taskId: string) => void,
 ) => {
   // this is uses to track how long a list of tasks has been processing
   const handleError = createHandleError(taskManager, currentTaskCtrl, queueTask)
@@ -416,6 +420,20 @@ const createTaskProcessor = (
 
       let newTasks: TaskNode[][] = []
       try {
+        const executionTaskChain = await taskManager.getTaskChain(task.id, 1e9, {
+          method: 'lineage',
+          includeSubtaskResults: 'none',
+        })
+        const repeatedCall = detectRepeatedToolCall(
+          executionTaskChain,
+          repeatedCallDetectionIgnoredToolNames,
+        )
+        if (repeatedCall) {
+          throw new Error(
+            `Autonomous tool-call loop detected: ${repeatedCall.toolName} was requested ${repeatedCall.count} consecutive times with identical arguments.`,
+          )
+        }
+
         // TODO: define a maximum size of the taskChain e.g. last 100 tasks or something like that...
         const funcR = await safeExecuteTask(
           task,
@@ -484,6 +502,9 @@ const createTaskProcessor = (
         }
 
         newTasks.flat().forEach((createdTask) => queueTask(createdTask.id))
+        if (newTasks.every((taskChain) => taskChain.length === 0)) {
+          markTaskFinished(task.id)
+        }
       } catch (error) {
         if (currentTaskCtrl.signal.aborted) {
           streamEmit({
@@ -522,6 +543,7 @@ const setupRun = (
   taskManager: TyTaskManager,
   rpcPort: FunctionRpcWorkerPort,
   maxConcurrency: number,
+  repeatedCallDetectionIgnoredToolNames: ReadonlySet<string>,
 ) => {
   const currentTaskCtrl: AbortController = new AbortController()
   const toolExecutionClient = createToolExecutionClient(rpcPort)
@@ -607,6 +629,8 @@ const setupRun = (
     taskisInLoop,
     taskOutOfLoop,
     toolExecutionClient,
+    repeatedCallDetectionIgnoredToolNames,
+    taskTracker.setTaskFinished,
   )
 
   const releaseTasksWaitingFor = (taskId: string) => {
@@ -732,6 +756,10 @@ export function runTaskWorker(
   defaultTask: partialTaskDraft,
   errorTask: partialTaskDraft,
   maxConcurrency = 4,
+  repeatedCallDetectionIgnoredToolNames: ReadonlySet<string> = new Set([
+    'chatCompletion',
+    'entryNode',
+  ]),
 ) {
   // create all variables that we want to access from outside
   const taskProcessingStream = createStream<TyTaskStreamData>()
@@ -761,7 +789,13 @@ export function runTaskWorker(
         run,
         queueTask: newQueueTask,
         currentTaskCtrl: newTaskCtrl,
-      } = setupRun(taskProcessingStream.emit, taskManager, workerRpcPort, maxConcurrency)
+      } = setupRun(
+        taskProcessingStream.emit,
+        taskManager,
+        workerRpcPort,
+        maxConcurrency,
+        repeatedCallDetectionIgnoredToolNames,
+      )
       currentTaskCtrl = newTaskCtrl
       queueTask = newQueueTask
 

@@ -8,7 +8,10 @@ import { createChatCompletionRecordingFetch } from '../tools/chatCompletionTrace
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import { selectTaskChainIds } from '../core/taskChainSelection'
 import { createTaskVariablePresentationService } from '../core/taskVariables'
-import { buildChatProviderRequest } from '../tools/chatCompletion/providerRequest'
+import {
+  buildChatProviderRequest,
+  normalizeNativeStructuredOutputSchema,
+} from '../tools/chatCompletion/providerRequest'
 import { interpretAssistantMessage } from '../tools/chatCompletion/response'
 import { classifyStreamingFailure } from '../tools/chatCompletion/streamResult'
 import { resolveChatCompletionConnection, type ProviderRequestTrace } from '../types/chatCompletion'
@@ -19,6 +22,60 @@ import type { ToolBase } from '../types/tools'
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(message)
+}
+
+export const testNativeStructuredOutputSchemaAddsClosedObjectBoundaries = () => {
+  const schema = {
+    type: 'object',
+    properties: {
+      findings: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+            finding: { type: 'string' },
+          },
+          required: ['path', 'finding'],
+        },
+      },
+    },
+    required: ['findings'],
+  }
+
+  const normalized = normalizeNativeStructuredOutputSchema(schema)
+  assert(normalized?.additionalProperties === false, 'Expected the root object to be closed')
+  const findings = normalized.properties?.findings
+  assert(
+    typeof findings === 'object' && findings !== null && !Array.isArray(findings),
+    'Expected the findings schema',
+  )
+  const item = Array.isArray(findings.items) ? findings.items[0] : findings.items
+  assert(
+    typeof item === 'object' && item !== null && item.additionalProperties === false,
+    'Expected nested object items to be closed',
+  )
+  assert(schema.additionalProperties === undefined, 'Expected normalization not to mutate input')
+}
+
+export const testNativeStructuredOutputSchemaRejectsPermissiveOrOptionalObjects = () => {
+  assert(
+    normalizeNativeStructuredOutputSchema({
+      type: 'object',
+      additionalProperties: true,
+      properties: { value: { type: 'string' } },
+      required: ['value'],
+    }) === undefined,
+    'Expected explicit additional properties to use prompted structured output instead',
+  )
+  assert(
+    normalizeNativeStructuredOutputSchema({
+      type: 'object',
+      properties: { requiredValue: { type: 'string' }, optionalValue: { type: 'string' } },
+      required: ['requiredValue'],
+    }) === undefined,
+    'Expected optional object fields to use prompted structured output instead',
+  )
 }
 
 const task = (node: TaskNode) => node
@@ -927,6 +984,10 @@ testChatCompletionRendersUploadedTextFile.description =
   'chatCompletion renders an uploaded text file into model-readable context.'
 testChatCompletionAnswerCompilesPresentationVariable.description =
   'Assistant answers compile request-scoped presentation variables back to durable task references.'
+testNativeStructuredOutputSchemaAddsClosedObjectBoundaries.description =
+  'Provider-native structured output closes every compatible object boundary without mutating the task contract.'
+testNativeStructuredOutputSchemaRejectsPermissiveOrOptionalObjects.description =
+  'Permissive maps and optional object fields fall back to prompt-enforced structured output instead of narrowing their contract.'
 
 export const testChatCompletionWireTraceRecordsRedactedProviderAttempts = async () => {
   const providerRequest: ProviderRequestTrace = {

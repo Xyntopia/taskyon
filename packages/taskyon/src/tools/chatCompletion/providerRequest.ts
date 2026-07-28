@@ -66,6 +66,78 @@ const buildPromptCacheKey = (messages: ModelMessage[], selectedModel: string) =>
 const hasNonSystemMessages = (messages: ModelMessage[]) =>
   messages.some((message) => message.role !== 'system')
 
+type JsonSchemaObject = Record<string, unknown>
+
+const isJsonSchemaObject = (value: unknown): value is JsonSchemaObject =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const normalizeSchemaMap = (value: unknown): JsonSchemaObject | undefined => {
+  if (!isJsonSchemaObject(value)) return undefined
+  const entries = Object.entries(value).map(([name, schema]) => {
+    const normalized = normalizeNativeStructuredOutputSchema(schema)
+    return normalized ? ([name, normalized] as const) : undefined
+  })
+  if (entries.some((entry) => entry === undefined)) return undefined
+  return Object.fromEntries(entries.filter((entry) => entry !== undefined))
+}
+
+const normalizeSchemaList = (value: unknown): JsonSchemaObject[] | undefined => {
+  if (!Array.isArray(value)) return undefined
+  const schemas = value.map(normalizeNativeStructuredOutputSchema)
+  return schemas.every((schema): schema is JsonSchemaObject => schema !== undefined)
+    ? schemas
+    : undefined
+}
+
+/**
+ * Closes compatible object schemas for providers that enforce strict structured output.
+ * Schemas with maps or optional object properties remain prompt-enforced so their contract is
+ * not silently narrowed at the provider boundary.
+ */
+export const normalizeNativeStructuredOutputSchema = (
+  value: unknown,
+): JsonSchemaObject | undefined => {
+  if (!isJsonSchemaObject(value)) return undefined
+  const normalized: JsonSchemaObject = { ...value }
+  const properties =
+    value.properties === undefined ? undefined : normalizeSchemaMap(value.properties)
+  if (value.properties !== undefined && !properties) return undefined
+  if (properties) normalized.properties = properties
+
+  const objectBoundary = value.type === 'object' || properties !== undefined
+  if (objectBoundary) {
+    if (value.additionalProperties !== undefined && value.additionalProperties !== false) {
+      return undefined
+    }
+    const propertyNames = Object.keys(properties ?? {})
+    const required = Array.isArray(value.required)
+      ? value.required.filter((name): name is string => typeof name === 'string')
+      : []
+    if (propertyNames.some((name) => !required.includes(name))) return undefined
+    normalized.additionalProperties = false
+  }
+
+  for (const keyword of ['items', 'contains', 'not', 'if', 'then', 'else'] as const) {
+    if (value[keyword] === undefined) continue
+    const child = normalizeNativeStructuredOutputSchema(value[keyword])
+    if (!child) return undefined
+    normalized[keyword] = child
+  }
+  for (const keyword of ['allOf', 'anyOf', 'oneOf', 'prefixItems'] as const) {
+    if (value[keyword] === undefined) continue
+    const children = normalizeSchemaList(value[keyword])
+    if (!children) return undefined
+    normalized[keyword] = children
+  }
+  for (const keyword of ['$defs', 'definitions', 'patternProperties'] as const) {
+    if (value[keyword] === undefined) continue
+    const children = normalizeSchemaMap(value[keyword])
+    if (!children) return undefined
+    normalized[keyword] = children
+  }
+  return normalized
+}
+
 export const buildChatProviderRequest = async (input: {
   messages: ModelMessage[]
   tools: ToolSet

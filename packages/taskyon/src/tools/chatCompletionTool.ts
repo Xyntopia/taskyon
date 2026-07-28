@@ -27,7 +27,10 @@ import { createTool } from '../types/toolApi'
 import { humanizeError, serializeError } from '../utils/error'
 import { createDotPathTransformer } from '../utils/objHelpers'
 import { prepareChatCompletionContext } from './chatCompletion/context'
-import { buildChatProviderRequest } from './chatCompletion/providerRequest'
+import {
+  buildChatProviderRequest,
+  normalizeNativeStructuredOutputSchema,
+} from './chatCompletion/providerRequest'
 import {
   interpretAssistantMessage,
   normalizeAssistantMessageForToolCall,
@@ -213,7 +216,7 @@ export function createChatCompletionTool(
         trace: {
           type: 'object',
           description:
-            'Optional request tracing. When enabled and the runtime installed a trace writer, Taskyon records the exact LLM input and output separately.',
+            'Optional request tracing. When enabled and the runtime installed a trace writer, Taskyon records the redacted provider request and response metadata.',
           additionalProperties: false,
           properties: {
             enabled: {
@@ -251,6 +254,16 @@ export function createChatCompletionTool(
       const { verbosity, artificial_streaming } = options || {}
       const normalizedPrependSystemPrompts = normalizePromptInjections(prependSystemPrompts)
       const normalizedAppendSystemPrompts = appendSystemPrompts ?? []
+      const nativeStructuredSchema = schema
+        ? normalizeNativeStructuredOutputSchema(schema)
+        : undefined
+      const effectiveAppendSystemPrompts =
+        schema && !nativeStructuredSchema
+          ? [
+              ...normalizedAppendSystemPrompts,
+              `Return only JSON matching this schema exactly:\n${JSON.stringify(schema, null, 2)}`,
+            ]
+          : normalizedAppendSystemPrompts
 
       const timeout = {
         totalMs: timeouts?.totalMs ?? 10 * 60 * 1000,
@@ -320,7 +333,7 @@ export function createChatCompletionTool(
         taskChain,
         allowedTools: tools,
         toolDefinitions: toolDefs,
-        appendSystemPrompts: normalizedAppendSystemPrompts,
+        appendSystemPrompts: effectiveAppendSystemPrompts,
         prependSystemPrompts: normalizedPrependSystemPrompts,
         useVisionModels: use_multimodal,
         getFileMapping: capabilities.getFileMappingByUuid,
@@ -342,7 +355,7 @@ export function createChatCompletionTool(
         selectedModel,
         api: { ...providerConnection, model: selectedModel },
         apiKey: requestApiKey,
-        ...(schema ? { schema } : {}),
+        ...(nativeStructuredSchema ? { schema: nativeStructuredSchema } : {}),
         ...(websearch?.enabled === true
           ? {
               webSearch: {

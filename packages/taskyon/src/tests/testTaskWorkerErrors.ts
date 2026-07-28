@@ -1,6 +1,8 @@
 import {
   countAutonomousErrorAttempt,
   createAutonomousErrorSignature,
+  detectRepeatedToolCall,
+  MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS,
   MAX_AUTONOMOUS_RECOVERY_ATTEMPTS_PER_SIGNATURE,
 } from '../core/taskWorkerErrors'
 import type { TaskNode } from '../types/taskNode'
@@ -55,4 +57,103 @@ export const testAutonomousErrorAttemptCounterCapsEquivalentToolFailures = () =>
     `Expected attempt cap count to be reached, got ${String(counts.at(-1))}`,
   )
   assert(attempts.size === 1, `Expected one normalized error counter, got ${attempts.size}`)
+}
+
+const createFunctionCallTask = (
+  id: string,
+  name: string,
+  args: Record<string, unknown>,
+): TaskNode => ({
+  id,
+  role: 'function',
+  content: { type: 'functioncall', data: { name, arguments: args } },
+})
+
+export const testRepeatedToolCallDetectionIgnoresConfiguredToolNames = () => {
+  const repeatedCall = { action: 'view', path: 'AGENTS.md', startLine: 1, endLine: 40 }
+  const taskChain = [
+    createFunctionCallTask('exploration-1', 'exploration', repeatedCall),
+    createFunctionCallTask('entry-1', 'entryNode', {}),
+    createFunctionCallTask('completion-1', 'chatCompletion', {}),
+    createFunctionCallTask('exploration-2', 'exploration', repeatedCall),
+    createFunctionCallTask('entry-2', 'entryNode', {}),
+    createFunctionCallTask('completion-2', 'chatCompletion', {}),
+    createFunctionCallTask('exploration-3', 'exploration', {
+      endLine: 40,
+      path: 'AGENTS.md',
+      action: 'view',
+      startLine: 1,
+    }),
+  ]
+
+  const detected = detectRepeatedToolCall(taskChain)
+  assert(detected !== undefined, 'Expected the third identical tool call to be detected')
+  assert(
+    detected?.count === MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS,
+    `Expected ${MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS} repeated calls, got ${String(detected?.count)}`,
+  )
+  assert(detected?.toolName === 'exploration', 'Expected the repeated exploration call')
+}
+
+export const testRepeatedToolCallDetectionResetsAfterMeaningfulProgress = () => {
+  const repeatedCall = { action: 'view', path: 'AGENTS.md', startLine: 1, endLine: 40 }
+  const taskChain = [
+    createFunctionCallTask('exploration-1', 'exploration', repeatedCall),
+    createFunctionCallTask('entry-1', 'entryNode', {}),
+    createFunctionCallTask('exploration-2', 'exploration', repeatedCall),
+    createFunctionCallTask('search', 'exploration', { action: 'search', query: 'WebGPU' }),
+    createFunctionCallTask('exploration-3', 'exploration', repeatedCall),
+  ]
+
+  assert(
+    detectRepeatedToolCall(taskChain) === undefined,
+    'A different domain tool call should reset repeated-call detection',
+  )
+}
+
+export const testRepeatedToolCallDetectionDoesNotBlockLaterIgnoredTool = () => {
+  const repeatedCall = { action: 'view', path: 'AGENTS.md', startLine: 1, endLine: 40 }
+  const taskChain = [
+    createFunctionCallTask('exploration-1', 'exploration', repeatedCall),
+    createFunctionCallTask('exploration-2', 'exploration', repeatedCall),
+    createFunctionCallTask('exploration-3', 'exploration', repeatedCall),
+    createFunctionCallTask('new-entry', 'entryNode', {}),
+  ]
+
+  assert(
+    detectRepeatedToolCall(taskChain) === undefined,
+    'A later user turn must not be blocked by repeated calls from the prior turn',
+  )
+}
+
+export const testRepeatedToolCallDetectionUsesConfiguredIgnoredNames = () => {
+  const taskChain = [
+    createFunctionCallTask('completion-1', 'configuredCompletion', {}),
+    createFunctionCallTask('completion-2', 'configuredCompletion', {}),
+    createFunctionCallTask('completion-3', 'configuredCompletion', {}),
+  ]
+
+  assert(
+    detectRepeatedToolCall(taskChain, new Set(['configuredCompletion'])) === undefined,
+    'Configured chat completion tools must remain ignored by repeated-call detection',
+  )
+}
+
+export const testRepeatedToolCallDetectionResetsAtANewUserTurn = () => {
+  const repeatedCall = { action: 'view', path: 'AGENTS.md', startLine: 1, endLine: 40 }
+  const taskChain = [
+    createFunctionCallTask('exploration-1', 'exploration', repeatedCall),
+    createFunctionCallTask('exploration-2', 'exploration', repeatedCall),
+    {
+      id: 'new-user-turn',
+      role: 'user' as const,
+      content: { type: 'message' as const, data: 'Try that read again in a new turn.' },
+    },
+    createFunctionCallTask('exploration-3', 'exploration', repeatedCall),
+  ]
+
+  assert(
+    detectRepeatedToolCall(taskChain) === undefined,
+    'A new user turn should reset repeated-call detection',
+  )
 }
