@@ -19,7 +19,14 @@ type EntryNodeConfig = {
   name?: string
   renderOptions?: { hideChat?: boolean; hideLlm?: boolean; hideVector?: boolean }
   defaultAllowedTools?: string[]
-  getToolCatalog?: () => Promise<Array<{ name: string; description: string }>>
+  getToolCatalog?: (args: {
+    taskChain: readonly TaskNode[]
+    allowedTools: readonly string[] | undefined
+  }) => Promise<Array<{ name: string; description: string }>>
+  searchToolCatalog?: (
+    query: string,
+    limit: number,
+  ) => Promise<Array<{ name: string; description: string }>>
   toolChooser?:
     | {
         enabled: true
@@ -54,6 +61,7 @@ export type EntryNodePromptTemplates = {
 export type EntryNodeArgs = {
   toolResultSection?: string
   allowedTools?: string[]
+  toolSearch?: { query: string; limit?: number }
   taskContract?: TaskContract
   use_baseprompt?: boolean
   providerToolCalling?: boolean
@@ -312,6 +320,8 @@ type EntryNodeRuntimeState = {
   promptContext: EntryNodePromptContext
   routingContext: EntryNodeRoutingContext
   toolResultSection?: string
+  toolSearch?: { query: string; limit?: number }
+  taskChain: TaskNode[]
 }
 
 const buildToolShortlistPrompt = (
@@ -377,9 +387,11 @@ ${taskPlannerGuidance}
 ${clarificationGuidance}
 ${toolSearcherGuidance}
 
-If you are sure that none of the tools are relevant, call ${entryNodeName} with an empty allowedTools list.
+If the needed capability is missing, call ${entryNodeName} with only toolSearch and a concise
+catalog query. Otherwise call it with only allowedTools. Never provide both arguments.
+If no tool is needed, call ${entryNodeName} with an empty allowedTools list.
 
-Call ${entryNodeName} with only the allowedTools argument. Do not set any other arguments and do not answer the user yet.`
+Do not answer the user yet.`
 }
 
 const createEntryNodeSelectionTask = (
@@ -474,8 +486,9 @@ const resolveEntryNodePromptAugmentations = (
 const resolveAvailableToolsForMessage = async (
   config: EntryNodeConfig,
   allowedTools: readonly string[] | undefined,
+  taskChain: readonly TaskNode[],
 ): Promise<AvailableToolsResult> => {
-  const configuredToolCatalog = await config.getToolCatalog?.()
+  const configuredToolCatalog = await config.getToolCatalog?.({ taskChain, allowedTools })
   const availableToolCatalog =
     configuredToolCatalog && configuredToolCatalog.length > 0
       ? configuredToolCatalog
@@ -510,13 +523,15 @@ const inheritEntryNodeArguments = (
 ) => {
   const latestUserTaskIndex = taskChain.findLastIndex((task) => task.role === 'user')
   const currentTaskChain = taskChain.slice(latestUserTaskIndex + 1)
-  const inherited = currentTaskChain.reduce<EntryNodeArgs>(
-    (inherited, task) =>
-      task.content.type === 'functioncall' && task.content.data.name === entryNodeName
-        ? mergeEntryNodeArguments(inherited, task.content.data.arguments as EntryNodeArgs)
-        : inherited,
-    {},
-  )
+  const inherited = currentTaskChain.reduce<EntryNodeArgs>((inherited, task) => {
+    if (task.content.type !== 'functioncall' || task.content.data.name !== entryNodeName) {
+      return inherited
+    }
+    const { toolSearch: transientSearch, ...persistentArgs } = task.content.data
+      .arguments as EntryNodeArgs
+    void transientSearch
+    return mergeEntryNodeArguments(inherited, persistentArgs)
+  }, {})
   return mergeEntryNodeArguments(inherited, args)
 }
 
@@ -528,7 +543,12 @@ const createEntryNodeRuntimeState = async (
   const taskChain = await context.getExecutionTaskChain()
   const entryNodeName = config.name ?? 'entryNode'
   const inheritedArgs = inheritEntryNodeArguments(taskChain, entryNodeName, args)
-  const { toolResultSection, allowedTools: allowedToolsOverride, ...settings } = inheritedArgs
+  const {
+    toolResultSection,
+    allowedTools: allowedToolsOverride,
+    toolSearch,
+    ...settings
+  } = inheritedArgs
   const previousTask = taskChain.at(-2)
   const mode = resolveMode(previousTask)
   const promptArgsBase = {
@@ -574,7 +594,9 @@ const createEntryNodeRuntimeState = async (
         : false,
       chooserWebSearch: config.toolChooser?.enabled ? config.toolChooser.webSearch : undefined,
     },
+    taskChain,
     ...(toolResultSection !== undefined ? { toolResultSection } : {}),
+    ...(toolSearch ? { toolSearch } : {}),
   }
 }
 
@@ -595,7 +617,14 @@ type StandardEntryNodeOptions = {
   name: string
   renderOptions: { hideChat?: boolean; hideLlm?: boolean }
   defaultAllowedTools?: string[]
-  getToolCatalog?: () => Promise<Array<{ name: string; description: string }>>
+  getToolCatalog?: (args: {
+    taskChain: readonly TaskNode[]
+    allowedTools: readonly string[] | undefined
+  }) => Promise<Array<{ name: string; description: string }>>
+  searchToolCatalog?: (
+    query: string,
+    limit: number,
+  ) => Promise<Array<{ name: string; description: string }>>
   toolChooser:
     | {
         enabled: true
@@ -653,6 +682,7 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
   const config: EntryNodeConfig = {
     ...options,
     ...(options.getToolCatalog ? { getToolCatalog: options.getToolCatalog } : {}),
+    ...(options.searchToolCatalog ? { searchToolCatalog: options.searchToolCatalog } : {}),
     ...(options.toolChooser ? { toolChooser: options.toolChooser } : {}),
     buildPrompt: ({ mode, previousTask, taskChain, toolResultSection }) => {
       const extraContextArgsBase = { mode, previousTask, taskChain }
@@ -708,6 +738,17 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
           items: {
             type: 'string',
           },
+        },
+        toolSearch: {
+          type: 'object',
+          additionalProperties: false,
+          description:
+            'Transient chooser request to search the tool catalog instead of selecting tools.',
+          properties: {
+            query: { type: 'string', minLength: 1 },
+            limit: { type: 'integer', minimum: 1, maximum: 50, default: 10 },
+          },
+          required: ['query'],
         },
         taskContract: entryNodeTaskContractSchema,
         use_baseprompt: {
@@ -820,6 +861,27 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
       const runtime = await createEntryNodeRuntimeState(config, args, context)
       const promptAugmentations = resolveEntryNodePromptAugmentations(runtime.promptContext)
 
+      if (runtime.toolSearch) {
+        if (!config.searchToolCatalog) {
+          throw new Error('Entry-node tool search is unavailable in this runtime.')
+        }
+        const limit = Math.max(1, Math.min(runtime.toolSearch.limit ?? 10, 50))
+        const searched = await config.searchToolCatalog(runtime.toolSearch.query, limit)
+        const restriction = runtime.toolRestriction ? new Set(runtime.toolRestriction) : undefined
+        const matches = searched.filter((tool) => restriction?.has(tool.name) ?? true)
+        return context.createSubtasksResult([
+          createEntryNodeSelectionTask(
+            runtime.entryNodeName,
+            buildToolShortlistPrompt(matches, runtime.entryNodeName),
+            {
+              reasoning_effort: 'low',
+              trace: runtime.normalizedSettings.trace,
+              use_multimodal: runtime.normalizedSettings.use_multimodal,
+            },
+          ),
+        ])
+      }
+
       const giveUpAfterError = shouldGiveUpAfterError(
         await context.getExecutionTaskChain(),
         runtime.previousTask,
@@ -888,6 +950,7 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
             const { toolCatalog, availableTools } = await resolveAvailableToolsForMessage(
               config,
               runtime.toolRestriction,
+              runtime.taskChain,
             )
             const messagePromptAugmentations = resolveEntryNodePromptAugmentations(
               runtime.promptContext,
@@ -958,6 +1021,7 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
           const { availableTools } = await resolveAvailableToolsForMessage(
             config,
             runtime.toolRestriction,
+            runtime.taskChain,
           )
           const messagePromptAugmentations = resolveEntryNodePromptAugmentations(
             runtime.promptContext,

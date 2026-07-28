@@ -4,11 +4,16 @@ import { type TyTaskManager } from '../core/taskManager'
 import { craeteToolJsonSchema } from '../core/tools'
 import { createTool, toolCall } from '../types/toolApi'
 import { ToolBase } from '../types/tools'
+import type { TaskNode } from '../types/taskNode'
 import { createChatCompletionTask } from '../api'
 
 const INTERNAL_AGENT_TOOL_NAMES = new Set(['chatCompletion', 'entryNode', 'taskyonFlow'])
 
-export type AgentToolCatalogEntry = { name: string; description: string }
+export type AgentToolCatalogEntry = {
+  name: string
+  description: string
+  kind: 'tool' | 'dag-node'
+}
 
 export const resolveAgentToolCatalog = (
   tools: Readonly<Record<string, ToolBase>>,
@@ -18,7 +23,75 @@ export const resolveAgentToolCatalog = (
     .filter(
       (tool) => !INTERNAL_AGENT_TOOL_NAMES.has(tool.name) && !unavailableToolNames.has(tool.name),
     )
-    .map(({ name, description }) => ({ name, description }))
+    .map(({ name, description, source }) => ({
+      name,
+      description,
+      kind: source?.kind ?? 'tool',
+    }))
+
+export const resolveInitialAgentToolCatalog = (
+  tools: Readonly<Record<string, ToolBase>>,
+  taskChain: readonly TaskNode[],
+  unavailableToolNames: ReadonlySet<string> = new Set(),
+  allowedToolNames: readonly string[] = [],
+  recentDagLimit = 5,
+): AgentToolCatalogEntry[] => {
+  const catalog = resolveAgentToolCatalog(tools, unavailableToolNames)
+  const byName = new Map(catalog.map((tool) => [tool.name, tool]))
+  const ordinary = catalog.filter((tool) => tool.kind === 'tool')
+  const recentDag: AgentToolCatalogEntry[] = []
+  const seen = new Set<string>()
+
+  for (const name of allowedToolNames) {
+    const tool = byName.get(name)
+    if (!tool || tool.kind !== 'dag-node' || seen.has(name)) continue
+    seen.add(name)
+    recentDag.push(tool)
+  }
+
+  for (const task of [...taskChain].reverse()) {
+    if (recentDag.length >= recentDagLimit || task.content.type !== 'functioncall') continue
+    const name = task.content.data.name
+    const tool = byName.get(name)
+    if (!tool || tool.kind !== 'dag-node' || seen.has(name)) continue
+    seen.add(name)
+    recentDag.push(tool)
+  }
+
+  return [...ordinary, ...recentDag]
+}
+
+const searchCatalogEntries = (
+  catalog: readonly AgentToolCatalogEntry[],
+  query: string,
+  limit: number,
+): AgentToolCatalogEntry[] => {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (terms.length === 0) return catalog.slice(0, limit)
+
+  return catalog
+    .map((tool) => {
+      const name = tool.name.toLowerCase()
+      const haystack = `${name} ${tool.description.toLowerCase()}`
+      const matches = terms.filter((term) => haystack.includes(term)).length
+      const score = matches * 10 + (terms.some((term) => name.includes(term)) ? 5 : 0)
+      return { tool, score }
+    })
+    .filter(({ score }) => score > 0)
+    .sort(
+      (left, right) => right.score - left.score || left.tool.name.localeCompare(right.tool.name),
+    )
+    .slice(0, Math.max(1, limit))
+    .map(({ tool }) => tool)
+}
+
+export const searchAgentToolCatalog = (
+  tools: Readonly<Record<string, ToolBase>>,
+  query: string,
+  limit = 10,
+  unavailableToolNames: ReadonlySet<string> = new Set(),
+): AgentToolCatalogEntry[] =>
+  searchCatalogEntries(resolveAgentToolCatalog(tools, unavailableToolNames), query, limit)
 
 export const createToolSearcher = (
   taskManager: TyTaskManager,
@@ -29,9 +102,11 @@ export const createToolSearcher = (
   createTool({
     name: 'toolSearcher',
     description: `You can use this tool to do the following:
+- Search tool names and concise descriptions.
 - Get a list of all tool names.
 - Get the definition of a single tool including source code, if available. (not case sensitive)`,
     longDescription: `You can use this tool to do the following:
+- Search tool names and concise descriptions, including projected DAG nodes.
 - Get a list of all tool names.
 - Get the definition of a single tool including source code, if available. (not case sensitive)
 
@@ -41,6 +116,17 @@ is now unreadable.
     parameters: {
       type: 'object',
       properties: {
+        query: {
+          type: 'string',
+          description: 'Search tool names and concise descriptions across the available catalog.',
+        },
+        limit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 50,
+          default: 10,
+          description: 'Maximum number of concise search matches to return.',
+        },
         toolName: {
           type: 'string',
           default: undefined,
@@ -60,7 +146,7 @@ is now unreadable.
       },
       required: [],
     } as const satisfies JSONSchema7,
-    function: async ({ toolName, withCode, analyze }, ctx) => {
+    function: async ({ query, limit, toolName, withCode, analyze }, ctx) => {
       const allTools = await taskManager.updateToolDefinitions(true)
       const searchableTools = withCode
         ? Object.fromEntries(Object.entries(allTools).filter(([, tool]) => !!tool.code))
@@ -80,6 +166,10 @@ is now unreadable.
       if (toolName && normalizedTools[toolName.toLowerCase()]) {
         result = {
           'Here is the requested tool definition': normalizedTools[toolName.toLowerCase()],
+        }
+      } else if (query) {
+        result = {
+          'Here are the matching tools': searchCatalogEntries(toolList, query, limit ?? 10),
         }
       } else if (toolName) {
         result = {

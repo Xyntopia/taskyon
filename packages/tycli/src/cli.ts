@@ -52,7 +52,12 @@ import {
   taskyonProtocol,
   taskyonStorageProtocol,
 } from '@taskyon/taskyon/api'
-import { createDefaultTaskyonToolSetup, resolveAgentToolCatalog } from '@taskyon/taskyon/tools'
+import {
+  createDefaultTaskyonToolSetup,
+  resolveAgentToolCatalog,
+  resolveInitialAgentToolCatalog,
+  searchAgentToolCatalog,
+} from '@taskyon/taskyon/tools'
 import { setChatCompletionTraceWriter } from '@taskyon/taskyon/tools/chatCompletionTrace'
 import { createNodeResourceFilesLoader } from '@taskyon/taskyon/tools/nodeTaskyonDocumentationProvider'
 import {
@@ -931,6 +936,11 @@ async function invokeTaskyonToolTask(
     return await runtime.client.callTool(invocation.toolName, invocation.arguments)
   }
 
+  const toolDefinitions = await runtime.client.tools.list({ includeHidden: true })
+  const isDagNode = toolDefinitions[invocation.toolName]?.source?.kind === 'dag-node'
+  const returnsRawToolResult =
+    isDagNode || (invocation.toolName === 'toolSearcher' && invocation.arguments.analyze === false)
+
   const taskChain = await createPreparedTaskChain([
     toolCall({
       name: invocation.toolName,
@@ -945,7 +955,7 @@ async function invokeTaskyonToolTask(
   const result = await waitForTaskResult(
     runtime.taskPort,
     taskChain.map((task) => task.id),
-    ['message', 'return', 'error'],
+    returnsRawToolResult ? ['toolresult', 'return', 'error'] : ['message', 'return', 'error'],
     10 * 60 * 1000,
     undefined,
     undefined,
@@ -2449,13 +2459,26 @@ async function main() {
     name: ENTRY_NODE_TOOL_NAME,
     renderOptions: { hideLlm: true, hideChat: true },
     toolChooser: { enabled: true, useTools: true },
-    getToolCatalog: async () => {
+    getToolCatalog: async ({ taskChain, allowedTools }) => {
       const ty = taskyonRef.current
       if (!ty) return []
       const allTools = await createCliTaskyonClient(ty.port).tools.list({
         includeHidden: true,
       })
-      return resolveAgentToolCatalog(allTools, CLI_UNAVAILABLE_TOOL_NAMES)
+      return resolveInitialAgentToolCatalog(
+        allTools,
+        taskChain,
+        CLI_UNAVAILABLE_TOOL_NAMES,
+        allowedTools,
+      )
+    },
+    searchToolCatalog: async (query, limit) => {
+      const ty = taskyonRef.current
+      if (!ty) return []
+      const allTools = await createCliTaskyonClient(ty.port).tools.list({
+        includeHidden: true,
+      })
+      return searchAgentToolCatalog(allTools, query, limit, CLI_UNAVAILABLE_TOOL_NAMES)
     },
     stableContext: () => buildCliStableContext(projectInstructions),
     extraContext: () => buildCliVolatileContext(),

@@ -45,6 +45,15 @@ export const ToolBase = z.object({
   name: FunctionName.meta({
     description: 'Name of the tool. Has to fulfill: /^[a-zA-Z0-9_-]+$/',
   }),
+  source: z
+    .object({
+      kind: z.literal('dag-node'),
+      nodeName: z.string(),
+      version: z.number().int().nonnegative(),
+      contentHash: z.string().optional(),
+    })
+    .optional()
+    .describe('Optional capability origin used to route and rank projected DAG-node tools.'),
   renderOptions: z
     .object({
       hideChat: z

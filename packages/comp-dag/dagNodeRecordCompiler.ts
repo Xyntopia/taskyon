@@ -199,6 +199,7 @@ export const compileDagNodeRecord = (args: {
   >({
     name: args.record.id,
     localName: args.record.localName,
+    description: args.record.label,
     contentHash: args.record.id,
     version: args.record.version,
     localParams: args.record.localParamsSchema,

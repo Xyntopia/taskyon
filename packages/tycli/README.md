@@ -100,6 +100,19 @@ tycli-dev
 Type `exit` or `quit` to leave the chat.
 Press Shift+Enter to insert a newline without submitting the prompt.
 
+Mounted DAG nodes are available through the existing JSON client interface. Search the combined
+tool and DAG catalogue without invoking a model:
+
+```bash
+yarn workspace @taskyon/tycli \
+  dev client call-tool \
+  toolSearcher \
+  '{"query":"geometry","analyze":false}'
+```
+
+Call a returned DAG-node name with its JSON parameters. DAG calls stop at the raw tool result, so
+direct client evaluation does not require a configured model provider.
+
 ## Planner task contracts
 
 `taskPlanner` can describe delegated work with a compact task contract:

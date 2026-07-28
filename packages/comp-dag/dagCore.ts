@@ -210,6 +210,7 @@ export interface DagNode<
 > {
   name: string
   localName?: string | undefined
+  description?: string | undefined
   contentHash?: Hash | undefined
   version: number
 
@@ -1007,6 +1008,7 @@ export function createNode<
 >(args: {
   name: string
   localName?: string
+  description?: string
   contentHash?: Hash
   version: number
 
@@ -1036,6 +1038,7 @@ export function createNode<
   const {
     name,
     localName,
+    description,
     contentHash,
     version,
     exposedInputs,
@@ -1064,6 +1067,7 @@ export function createNode<
   const nodeImpl: DagNode<P, O> = {
     name,
     ...(localName ? { localName } : {}),
+    ...(description ? { description } : {}),
     ...(contentHash ? { contentHash } : {}),
     version,
     paramsSchema,

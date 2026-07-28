@@ -49,7 +49,11 @@ import {
 } from '@taskyon/taskyon/browser'
 import type { AuthenticationOptions, TokenGetter } from '@taskyon/taskyon/browser'
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
-import { createDefaultTaskyonToolSetup, resolveAgentToolCatalog } from '@taskyon/taskyon/tools'
+import {
+  createDefaultTaskyonToolSetup,
+  resolveInitialAgentToolCatalog,
+  searchAgentToolCatalog,
+} from '@taskyon/taskyon/tools'
 import {
   createDocumentationIndexClientTool,
   createProtocolDocumentationBaseStore,
@@ -1299,11 +1303,22 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     name: getEntryNodeToolName(buildEntryNodeDraft()),
     renderOptions: { hideChat: true, hideLlm: true },
     toolChooser: { enabled: true, useTools: true },
-    getToolCatalog: async () => {
+    getToolCatalog: async ({ taskChain, allowedTools }) => {
       const currentTools: Record<string, ToolBase> = await taskyonClient.tools.list({
         includeHidden: true,
       })
-      return resolveAgentToolCatalog(currentTools, getBrowserUnavailableToolNames())
+      return resolveInitialAgentToolCatalog(
+        currentTools,
+        taskChain,
+        getBrowserUnavailableToolNames(),
+        allowedTools,
+      )
+    },
+    searchToolCatalog: async (query, limit) => {
+      const currentTools: Record<string, ToolBase> = await taskyonClient.tools.list({
+        includeHidden: true,
+      })
+      return searchAgentToolCatalog(currentTools, query, limit, getBrowserUnavailableToolNames())
     },
   })
 

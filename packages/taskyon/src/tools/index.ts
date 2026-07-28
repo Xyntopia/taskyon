@@ -24,7 +24,11 @@ import { appDevTools } from './webAppDev'
 import { webResearchTools } from './webResearchTool'
 import { wfcGenerator } from './wavefunctioncollapse'
 
-export { resolveAgentToolCatalog } from './toolTools'
+export {
+  resolveAgentToolCatalog,
+  resolveInitialAgentToolCatalog,
+  searchAgentToolCatalog,
+} from './toolTools'
 
 export const createDefaultTaskyonToolSetup = (options?: {
   unavailableToolNames?: ReadonlySet<string>

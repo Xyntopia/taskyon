@@ -13,11 +13,175 @@ import {
   resolveDiagnosticsRuntimeConfig,
 } from '../testSupport/onlineProviderSupport'
 import { FunctionCall } from '../types/tools'
+import type { ToolBase } from '../types/tools'
 import { humanizeError } from '../utils/error'
+import { resolveInitialAgentToolCatalog, searchAgentToolCatalog } from '../tools/toolTools'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
 }
+
+export const testInitialCatalogIncludesOrdinaryAndRecentDagTools = () => {
+  const tools: Record<string, ToolBase> = {
+    ordinary: {
+      name: 'ordinary',
+      description: 'An ordinary tool.',
+      parameters: { type: 'object', properties: {} },
+    },
+    recentDag: {
+      name: 'recentDag',
+      description: 'A recently used DAG node.',
+      parameters: { type: 'object', properties: {} },
+      source: { kind: 'dag-node' as const, nodeName: 'recentDag', version: 1 },
+    },
+    unusedDag: {
+      name: 'unusedDag',
+      description: 'An unused DAG node.',
+      parameters: { type: 'object', properties: {} },
+      source: { kind: 'dag-node' as const, nodeName: 'unusedDag', version: 1 },
+    },
+  }
+  const taskChain: TaskNode[] = [
+    {
+      id: 'recent-dag-call',
+      role: 'function',
+      content: { type: 'functioncall', data: { name: 'recentDag', arguments: {} } },
+    },
+  ]
+
+  const catalog = resolveInitialAgentToolCatalog(tools, taskChain)
+  assert(
+    catalog.some((tool) => tool.name === 'ordinary'),
+    'Expected ordinary tool in initial list',
+  )
+  assert(
+    catalog.some((tool) => tool.name === 'recentDag'),
+    'Expected recent DAG in initial list',
+  )
+  assert(!catalog.some((tool) => tool.name === 'unusedDag'), 'Expected unused DAG to stay hidden')
+  const restrictedCatalog = resolveInitialAgentToolCatalog(tools, taskChain, new Set(), [
+    'unusedDag',
+  ])
+  assert(
+    restrictedCatalog.some((tool) => tool.name === 'unusedDag'),
+    'Expected an explicitly allowed DAG even when it is not recent',
+  )
+  return {
+    tools: catalog.map((tool) => tool.name),
+    restrictedTools: restrictedCatalog.map((tool) => tool.name),
+  }
+}
+
+testInitialCatalogIncludesOrdinaryAndRecentDagTools.description =
+  'Builds the concise entry-node catalog from all ordinary tools and conversation-recent DAG nodes.'
+
+export const testAgentToolCatalogSearchIncludesDagNodes = () => {
+  const results = searchAgentToolCatalog(
+    {
+      clock: {
+        name: 'clock',
+        description: 'Shows the current time.',
+        parameters: { type: 'object', properties: {} },
+      },
+      constructionDecking: {
+        name: 'constructionDecking',
+        description: 'Calculates deck-board geometry for a framed construction.',
+        parameters: { type: 'object', properties: {} },
+        source: {
+          kind: 'dag-node' as const,
+          nodeName: 'constructionDecking',
+          version: 1,
+        },
+      },
+    },
+    'deck geometry',
+    10,
+  )
+
+  assert(results[0]?.name === 'constructionDecking', 'Expected DAG node in search results')
+  return { results }
+}
+
+testAgentToolCatalogSearchIncludesDagNodes.description =
+  'Searches ordinary tools and DAG-node tools through one concise catalog.'
+
+export const testEntryNodeToolSearchRerunsConciseChooser = async () => {
+  let searchCount = 0
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+    toolChooser: { enabled: true, useTools: true },
+    searchToolCatalog: (query, limit) => {
+      searchCount += 1
+      assert(query === 'deck geometry', 'Expected chooser search query')
+      assert(limit === 10, 'Expected default search limit')
+      return Promise.resolve([
+        {
+          name: 'constructionDecking',
+          description: 'Calculates deck-board geometry.',
+        },
+      ])
+    },
+  })
+  const taskChain: TaskNode[] = [
+    { id: 'user', role: 'user', content: { type: 'message', data: 'Calculate a deck.' } },
+    {
+      id: 'entry-search',
+      role: 'function',
+      priorID: 'user',
+      content: {
+        type: 'functioncall',
+        data: { name: 'entryNode', arguments: { toolSearch: { query: 'deck geometry' } } },
+      },
+    },
+  ]
+  const result = await entryNodeTool.function?.(
+    { toolSearch: { query: 'deck geometry' } },
+    {
+      getExecutionTaskChain: () => Promise.resolve(taskChain),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-search-test',
+    },
+  )
+  assert(result && typeof result === 'object' && 'taskChainList' in result, 'Expected chooser task')
+  const call = getFunctionCall(result.taskChainList[0]?.[0])
+  const prompts = call?.arguments.appendSystemPrompts
+  assert(searchCount === 1, 'Expected one catalog search')
+  assert(
+    Array.isArray(prompts) &&
+      prompts.some((prompt) => String(prompt).includes('constructionDecking')),
+    'Expected search matches in the second concise chooser prompt',
+  )
+
+  await entryNodeTool.function?.(
+    {},
+    {
+      getExecutionTaskChain: () =>
+        Promise.resolve([
+          ...taskChain,
+          {
+            id: 'entry-after-search',
+            role: 'function',
+            priorID: 'entry-search',
+            content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+          },
+        ]),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-after-search-test',
+    },
+  )
+  assert(searchCount === 1, 'Expected toolSearch not to be inherited by later entry-node calls')
+  return { searchCount }
+}
+
+testEntryNodeToolSearchRerunsConciseChooser.description =
+  'Consumes one entry-node tool search and reruns the concise choose-three stage over its matches.'
 
 export const testEntryNodeDefaultsNullTaskContractResultToMessage = () => {
   const normalized = normalizeEntryNodeSettings({
