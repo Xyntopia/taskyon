@@ -103,6 +103,15 @@ export {
   type TaskyonLogSink,
 } from './loggingProtocol'
 export {
+  createPgLiteSearchIndexBackend,
+  createSearchClient,
+  createSearchProtocolServer,
+  SearchIndexDocument,
+  taskyonSearchProtocol,
+  type SearchIndexBackend,
+  type TaskyonSearchMessage,
+} from './searchProtocol'
+export {
   callToolOverRpc,
   createToolExecutionClient,
   createExternalToolContext,

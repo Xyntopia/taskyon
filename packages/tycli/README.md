@@ -21,7 +21,9 @@ The CLI supports slash commands:
 - `/tools`: inspect registered tools.
 - `/debug` and `/settings`: change CLI diagnostics and display behavior.
 - `/client`: invoke the connected Taskyon client API.
-- `/resume` and `/tree`: restore or inspect task history.
+- `/resume`: select a saved Markdown conversation by date and keywords, or import a path.
+- `/search <words>`: hybrid-search individual tasks and continue from a selected result.
+- `/tree`: inspect or export the active task history.
 - `/exit` and `/quit`: end the session.
 
 ## Usage
@@ -113,6 +115,36 @@ yarn workspace @taskyon/tycli \
 Call a returned DAG-node name with its JSON parameters. DAG calls stop at the raw tool result, so
 direct client evaluation does not require a configured model provider.
 
+## Conversation history
+
+`tycli` creates a Markdown conversation snapshot only after the first user message is submitted.
+Starting and exiting an idle session does not create a conversation file or history entry. Tasks
+remain the authoritative immutable records in Taskyon storage. The CLI projects their active chain
+into a human-readable Markdown blob, appending newly created tasks instead of rewriting the whole
+file. `/resume` derives its date and keywords from those transcripts; it does not maintain a
+separate conversation manifest. Older Markdown files can still be imported by path.
+
+## Task search
+
+`/search <words>` loads persisted vector sidecars into an in-memory PGlite index, indexes only new
+tasks, and combines semantic similarity with lexical and TextRank keyword features. Press `Tab` in
+the result selector to switch between continuing the entire conversation and continuing from only
+the selected task lineage. The choice persists in CLI settings.
+
+The default vectorizer is the compact multilingual static model. `/settings` can switch to the
+existing MiniLM transformer. If model assets are unavailable, search degrades to lexical and
+keyword ranking rather than failing. Static model bundles can be reproduced with:
+
+```bash
+MODEL='sentence-transformers/'\
+'static-similarity-mrl-multilingual-v1'
+node scripts/build-static-embedding-model.mjs \
+  --source-model "$MODEL" \
+  --dimensions 256 \
+  --max-bytes 31000000 \
+  --output /tmp/static-multilingual-d256-int8
+```
+
 ## Planner task contracts
 
 `taskPlanner` can describe delegated work with a compact task contract:
@@ -165,7 +197,9 @@ message or structured result; `taskPlanner` does not insert implicit review task
 
 While work is running, `tycli` shows pending first-level sibling tasks above the thinking output.
 The browser chat shows the same pending work in a compact expandable queue, grouped by parallel
-branch.
+branch. Hidden function calls appear as compact `>toolName` lines without arguments. When a
+delegated entry-node subtask finishes, tycli also reports how many executable tool calls ran in
+that subtask.
 
 ## HTML previews
 

@@ -22,6 +22,8 @@ export type RendererState = {
   showRoleTag: () => boolean
   showFullFunctionResults: () => boolean
   isFunctionHiddenInChat: (name: string) => boolean
+  noteHiddenNode?: (toolName: string) => void
+  flushHiddenNodeMarkers?: () => void
   clearThinkingPanel: () => void
   renderThinkingPanel: () => void
   writeLine: RendererWrite
@@ -134,6 +136,39 @@ export const summarizeWorkerEvent = (event: WorkerEvent): string => {
   return `stage=${event.stage ?? 'unknown'} task=${taskId}${tool}${info}`
 }
 
+export const countDelegatedSubtaskToolCalls = (
+  rootTaskId: string,
+  tasks: Iterable<TaskNode>,
+): number | null => {
+  const taskList = [...tasks]
+  const rootTask = taskList.find((task) => task.id === rootTaskId)
+  if (
+    rootTask?.content.type !== 'functioncall' ||
+    !Object.hasOwn(rootTask.content.data.arguments, 'taskContract')
+  )
+    return null
+
+  const childrenByParentId = new Map<string, TaskNode[]>()
+  for (const task of taskList) {
+    if (!task.parentID) continue
+    const children = childrenByParentId.get(task.parentID) ?? []
+    children.push(task)
+    childrenByParentId.set(task.parentID, children)
+  }
+
+  let toolCallCount = 0
+  const pending = [rootTask]
+  const visited = new Set<string>()
+  while (pending.length > 0) {
+    const task = pending.pop()
+    if (!task || visited.has(task.id)) continue
+    visited.add(task.id)
+    if (task.content.type === 'functioncall') toolCallCount += 1
+    pending.push(...(childrenByParentId.get(task.id) ?? []))
+  }
+  return toolCallCount
+}
+
 export const resolveWorkerStatusText = (
   event: WorkerEvent,
   isFunctionHiddenInChat: (name: string) => boolean,
@@ -225,8 +260,10 @@ export const renderTaskProgress = (
     task.content.type === 'functioncall' &&
     toolName &&
     state.isFunctionHiddenInChat(toolName)
-  )
+  ) {
+    if (!previousSnapshotExists) state.noteHiddenNode?.(toolName)
     return
+  }
   if (
     !debugEnabled &&
     task.content.type === 'toolresult' &&
@@ -236,6 +273,7 @@ export const renderTaskProgress = (
     return
   if (!shouldRenderTask(task, debugEnabled)) return
   state.clearThinkingPanel()
+  state.flushHiddenNodeMarkers?.()
   state.writeLine('')
   const prefix = debugEnabled ? (previousSnapshotExists ? '[task updated] ' : '[task] ') : ''
   const summary = renderTaskSummary(task, state.showRoleTag())

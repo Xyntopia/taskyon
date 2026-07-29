@@ -14,6 +14,8 @@ export type StoredConfig = {
   wrappedSessionKey?: string
   cliUi?: {
     showRoleTag?: boolean
+    searchOpenMode?: 'conversation' | 'lineage'
+    vectorizer?: 'static-multilingual' | 'transformer-minilm'
   }
 }
 
@@ -72,6 +74,7 @@ export const SLASH_COMMANDS = [
   'settings',
   'client',
   'resume',
+  'search',
   'tree',
   'exit',
   'quit',

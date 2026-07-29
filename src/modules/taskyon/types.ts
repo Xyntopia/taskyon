@@ -108,6 +108,14 @@ export const appConfiguration = z.object({
     description: 'Enable web search button in message editor.',
     title: 'Web Search Button',
   }),
+  taskSearchVectorizer: z
+    .enum(['static-multilingual', 'transformer-minilm'])
+    .default('static-multilingual')
+    .meta({
+      title: 'Task Search Vectorizer',
+      description:
+        'Use the fast multilingual static model or the larger MiniLM transformer for task search.',
+    }),
   pmtilesCacheMaxSizeMb: z.number().int().min(64).max(10240).default(1024).meta({
     title: 'PMTiles Cache Size',
     description: 'Max OPFS cache size per PMTiles archive in megabytes.',
@@ -130,7 +138,7 @@ export const appConfiguration = z.object({
 export type appConfiguration = z.infer<typeof appConfiguration>
 
 export const TyProfile = z.object({
-  version: z.literal(31).meta({
+  version: z.literal(32).meta({
     description:
       'whenever the schema of the settings change, this number will get changed as well...',
   }),

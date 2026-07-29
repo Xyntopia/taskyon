@@ -28,7 +28,11 @@ import {
 import type { TyPGDB } from '../utils/pglite.api'
 import { createTaskNode } from './createTasks'
 import { addMarkdownTaskChain } from './markdownTaskIO'
-import { selectTaskChainIds, type TaskChainSelection } from './taskChainSelection'
+import {
+  findContinuationLeafTaskIds,
+  selectTaskChainIds,
+  type TaskChainSelection,
+} from './taskChainSelection'
 
 export type TaskManagerStorage = {
   tasks: StorageRecordCrud<TaskNode>
@@ -176,8 +180,9 @@ async function useTaskVectors(
   getAllTaskIds: () => Promise<(string | number)[]>,
   getTask: (taskId: string) => Promise<TaskNode | null>,
   getToolDefinition: (name: string) => Promise<{ tool?: InternalTool }>,
+  vectorizer: 'static-multilingual' | 'transformer-minilm',
 ) {
-  const vecDb = await createVectorStore<TaskNode>(db, 'tyTaskVectors')
+  const vecDb = await createVectorStore<TaskNode>(db, 'tyTaskVectors', { vectorizer })
 
   async function shouldSkipVectorIndex(task: TaskNode) {
     if (task.content.type === 'return') {
@@ -382,7 +387,11 @@ const withLock =
 */
 export async function useTyTaskManager(
   taskyonDb: TyPGDB,
-  options: { indexTaskVectors: boolean; storage?: TaskManagerStorage } = {
+  options: {
+    indexTaskVectors: boolean
+    storage?: TaskManagerStorage
+    taskSearchVectorizer?: 'static-multilingual' | 'transformer-minilm'
+  } = {
     indexTaskVectors: true,
   },
 ) {
@@ -461,7 +470,13 @@ export async function useTyTaskManager(
     createToolIndex(tyCrud.get)
 
   // TODO: unify our tyCrudVec and useTaskVectors in one db...
-  const taskVectors = await useTaskVectors(taskyonDb, getAllTaskIds, tyCrud.get, getToolDefinition)
+  const taskVectors = await useTaskVectors(
+    taskyonDb,
+    getAllTaskIds,
+    tyCrud.get,
+    getToolDefinition,
+    options.taskSearchVectorizer ?? 'static-multilingual',
+  )
 
   // taskLocks
   const { lockItem, clearLocks } = lockMap('TaskLocks')
@@ -842,36 +857,8 @@ export async function useTyTaskManager(
     )
   }
 
-  /**
-   * Finds the leaf tasks of a given task tree node using a depth-first search (DFS) iterative approach.
-   *
-   * @param {string} taskId - The ID of the task.
-   * @param {Function} getTask - Function to retrieve a task by its ID.
-   * @returns {Promise<string[]>} - An array of IDs of the leaf tasks.
-   *
-   */
-  async function findSiblingLeafTasks(taskId: string): Promise<string[]> {
-    const stack: string[] = [taskId]
-    const leafTasks: string[] = []
-
-    while (stack.length > 0) {
-      const currentTaskId = stack.pop() || ''
-      const currentTask = await taskDb.get(currentTaskId)
-      if (!currentTask) continue
-
-      const children = await searchNextSibling(currentTaskId)
-
-      // If no children are found, it's a leaf
-      if (children.size === 0) {
-        leafTasks.push(currentTaskId)
-      } else {
-        // Push all children onto the stack for further traversal
-        stack.push(...Array.from(children))
-      }
-    }
-
-    return leafTasks
-  }
+  const findSiblingLeafTasks = async (taskId: string) =>
+    await findContinuationLeafTaskIds(taskId, taskDb.get, searchNextSibling)
 
   async function getJsonTaskBackup() {
     // TODO: give this a callback so that we can save it in "chunks"

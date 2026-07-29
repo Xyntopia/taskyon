@@ -1,9 +1,14 @@
+import { readFile } from 'node:fs/promises'
 import {
   runTycSession,
   testTaskRendererDoesNotPrintTransientWorkerProgress as runTaskRendererDoesNotPrintTransientWorkerProgress,
   testTaskRendererHidesHiddenWorkerProgress as runTaskRendererHidesHiddenWorkerProgress,
+  testTaskRendererSummarizesHiddenFunctionCallsBeforeVisibleTask as runTaskRendererSummarizesHiddenFunctionCallsBeforeVisibleTask,
+  testDelegatedSubtaskCountsOnlyItsExecutableFunctionCalls as runDelegatedSubtaskCountsOnlyItsExecutableFunctionCalls,
   testWorkerStatusTextHidesHiddenTools as runWorkerStatusTextHidesHiddenTools,
   testCliConcurrentSessionsStartWithSharedHome as runCliConcurrentSessionsStartWithSharedHome,
+  testEmptyCliSessionDoesNotCreateConversationFile as runEmptyCliSessionDoesNotCreateConversationFile,
+  testResumeConversationReportsStorageAndLogs as runResumeConversationReportsStorageAndLogs,
   testPromptHistoryCyclesPreviousInputWithArrowKeys as runPromptHistoryCyclesPreviousInputWithArrowKeys,
   testQuitPromptCtrlCCancelsAndCtrlDExits as runQuitPromptCtrlCCancelsAndCtrlDExits,
   testCliOverpassMapToolPrintsHtmlPreviewLink as runCliOverpassMapToolPrintsHtmlPreviewLink,
@@ -68,6 +73,13 @@ export const testCliHelloWorldProducesAssistantResponse = async () => {
       `Unexpected CLI regression output "${forbidden}".\n${result.output}`,
     )
   }
+  const saveMatch = result.output.match(/Conversation saved: (.+\.md)/)
+  assert(saveMatch?.[1], `Expected a saved conversation path.\n${result.output}`)
+  const markdown = await readFile(saveMatch[1].trim(), 'utf8')
+  assert(
+    markdown.includes('role: assistant'),
+    `Expected the saved conversation to contain the displayed assistant response.\n${markdown}`,
+  )
 
   return { success: true }
 }
@@ -447,6 +459,18 @@ export const testCliTaskRendererHidesHiddenWorkerProgress = () =>
 testCliTaskRendererHidesHiddenWorkerProgress.description =
   'Verifies tycli suppresses worker progress for tools hidden from chat.'
 
+export const testCliTaskRendererSummarizesHiddenFunctionCallsBeforeVisibleTask = () =>
+  runTaskRendererSummarizesHiddenFunctionCallsBeforeVisibleTask()
+
+testCliTaskRendererSummarizesHiddenFunctionCallsBeforeVisibleTask.description =
+  'Verifies tycli prints one compact marker per hidden function-call node before the next visible task.'
+
+export const testCliDelegatedSubtaskCountsOnlyItsExecutableFunctionCalls = () =>
+  runDelegatedSubtaskCountsOnlyItsExecutableFunctionCalls()
+
+testCliDelegatedSubtaskCountsOnlyItsExecutableFunctionCalls.description =
+  'Verifies a delegated subtask summary counts its entry node and descendant function calls without counting messages or unrelated branches.'
+
 export const testCliWorkerStatusTextHidesHiddenTools = () => runWorkerStatusTextHidesHiddenTools()
 
 testCliWorkerStatusTextHidesHiddenTools.description =
@@ -458,3 +482,17 @@ export const testCliConcurrentSessionsStartWithSharedHome = async () =>
 testCliConcurrentSessionsStartWithSharedHome.description =
   'Starts two tycli processes with one shared CLI home and verifies both reach the prompt without PGlite storage contention.'
 testCliConcurrentSessionsStartWithSharedHome.timeoutMs = 100_000
+
+export const testCliEmptySessionDoesNotCreateConversationFile = async () =>
+  await runEmptyCliSessionDoesNotCreateConversationFile()
+
+testCliEmptySessionDoesNotCreateConversationFile.description =
+  'Starts and exits tycli without a message and verifies no Markdown conversation file is created.'
+testCliEmptySessionDoesNotCreateConversationFile.timeoutMs = 60_000
+
+export const testCliResumeConversationReportsStorageAndLogs = async () =>
+  await runResumeConversationReportsStorageAndLogs()
+
+testCliResumeConversationReportsStorageAndLogs.description =
+  'Imports a saved Markdown conversation and reports both the source and current session locations.'
+testCliResumeConversationReportsStorageAndLogs.timeoutMs = 60_000

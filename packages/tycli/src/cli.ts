@@ -16,8 +16,13 @@ import { taskyonDocumentationManifest } from '@taskyon/taskyon/documentationMani
 import {
   connectTaskManagerStorageFromProtocol,
   createArtifactStore,
+  configureStaticEmbeddingAssetReader,
   createClientTool,
   createExternalToolContext,
+  findContinuationLeafTaskIds,
+  firstWordsTaskName,
+  processMarkdown,
+  textRankTaskName,
   createTaskNode,
   createStandardEntryNodeTool,
   getTaskQueueLabel,
@@ -31,7 +36,7 @@ import {
   type ClientTool,
   type InternalTool,
   type partialTaskDraft,
-  type TaskNode,
+  TaskNode,
   type Taskyon,
   type TaskyonMessage,
   type TyTaskStreamData,
@@ -46,6 +51,8 @@ import {
   type ClarificationResult,
 } from '@taskyon/taskyon/tools/clarificationTool'
 import {
+  createSearchClient,
+  createSearchProtocolServer,
   createLoggingClient,
   createLoggingProtocolServer,
   createProtocolPort,
@@ -55,8 +62,11 @@ import {
   createTaskyonClient,
   taskyonProtocol,
   taskyonStorageProtocol,
+  taskyonSearchProtocol,
   taskyonLoggingProtocol,
+  createPgLiteSearchIndexBackend,
 } from '@taskyon/taskyon/api'
+import { getInMemoryDatabase } from '@taskyon/taskyon/db'
 import {
   createDefaultTaskyonToolSetup,
   resolveAgentToolCatalog,
@@ -85,8 +95,14 @@ import {
   resolveDataDirectoryPath,
   createCliSecretStore,
 } from './cli/config'
-import { createConversationPersistence } from './cli/conversationPersistence'
+import {
+  createConversationPersistence,
+  createConversationPersistQueue,
+  TYCLI_CONVERSATION_TRANSCRIPT_NAMESPACE,
+} from './cli/conversationPersistence'
 import { createCliFileStorageService } from './cli/fileStorage'
+import { createStaticEmbeddingAssetReader } from './cli/staticEmbeddingCache'
+import { loadTaskSearchSidecars, saveTaskSearchSidecars } from './cli/searchIndexPersistence'
 import { createCliFooter } from './cli/ui'
 import {
   applyCodexAccountHeader,
@@ -106,6 +122,7 @@ import { hasInterruptibleWorkerActivity } from './cli/interruptState'
 import { applyCliRuntimeConfig, syncProviderRuntimeConfig } from './cli/runtime'
 import { runBashCommand } from './cli/bash'
 import {
+  countDelegatedSubtaskToolCalls,
   renderHtmlPreviewText,
   renderTaskProgress,
   renderWorkerProgress,
@@ -1347,6 +1364,8 @@ async function selectFromListRaw(
     initialQuery?: string
     maxVisible?: number
     optionsForQuery?: (query: string) => string[]
+    onToggle?: () => void
+    toggleHelp?: () => string
   },
 ) {
   const filterable = config?.filterable ?? false
@@ -1392,8 +1411,9 @@ async function selectFromListRaw(
     const help = filterable
       ? 'Use ↑/↓, type to filter, Enter (Esc/Ctrl+C to cancel)'
       : 'Use ↑/↓ and Enter (Esc/Ctrl+C to cancel)'
+    const toggleHelp = config?.toggleHelp?.()
     const queryLine = filterable ? `filter: ${query}` : null
-    const lines = [title, help, queryLine, ...rows]
+    const lines = [title, [help, toggleHelp].filter(Boolean).join(' · '), queryLine, ...rows]
       .filter(Boolean)
       .map((line) => fitLine(String(line)))
     stdout.write(`${lines.join('\n')}\n`)
@@ -1432,6 +1452,11 @@ async function selectFromListRaw(
         return
       }
       if (key.name === 'escape') return finish(null)
+      if (key.name === 'tab' && config?.onToggle) {
+        config.onToggle()
+        render()
+        return
+      }
       if (key.name === 'return' || key.name === 'enter') {
         const list = filteredOptions()
         return finish(list[selectedIdx]?.index ?? null)
@@ -1482,6 +1507,8 @@ async function selectFromList(
     initialQuery?: string
     maxVisible?: number
     optionsForQuery?: (query: string) => string[]
+    onToggle?: () => void
+    toggleHelp?: () => string
   },
 ) {
   return await withCliMenuInteraction(async () => {
@@ -1832,21 +1859,18 @@ async function promptForMainInput(
   onFileRequested: () => Promise<string | null>,
   onCtrlCRequested?: () => void,
   onCtrlDRequested?: () => void,
+  onReady?: () => void,
 ): Promise<string | null> {
   const stdin = process.stdin
-  if (!stdin.isTTY) return askQuestion(rl, promptText)
+  if (!stdin.isTTY) {
+    const answer = askQuestion(rl, promptText)
+    onReady?.()
+    return await answer
+  }
   const hotkeyMenusEnabled = process.env.TYCLI_HOTKEY_MENUS !== '0'
 
   process.stdout.write(ENABLE_BRACKETED_PASTE)
   emitKeypressEvents(stdin, rl)
-  rl.setPrompt(promptText)
-  rl.prompt()
-  try {
-    stdin.setRawMode(true)
-    stdin.resume()
-  } catch {
-    // Readline still works without raw mode, but hotkeys and history may be terminal-dependent.
-  }
 
   return await new Promise<string | null>((resolve) => {
     let settled = false
@@ -1956,6 +1980,15 @@ async function promptForMainInput(
     stdin.on('keypress', onKeypress)
     rl.on('line', onLine)
     rl.on('close', onClose)
+    rl.setPrompt(promptText)
+    rl.prompt()
+    try {
+      stdin.setRawMode(true)
+      stdin.resume()
+    } catch {
+      // Readline still works without raw mode, but hotkeys and history may be terminal-dependent.
+    }
+    onReady?.()
   })
 }
 
@@ -2210,14 +2243,20 @@ async function handleDebugCommand(rl: ReturnType<typeof createInterface>, parsed
 
 async function handleSettingsCommand(
   rl: ReturnType<typeof createInterface>,
-  uiSettings: { showRoleTag: boolean; showFullFunctionResults: boolean },
+  uiSettings: {
+    showRoleTag: boolean
+    showFullFunctionResults: boolean
+    searchOpenMode: 'conversation' | 'lineage'
+    vectorizer: 'static-multilingual' | 'transformer-minilm'
+  },
 ) {
   const choice = await selectFromList(rl, '\nSettings', [
     `toggle role/type tags ([user|message]): ${uiSettings.showRoleTag ? 'ON' : 'OFF'}`,
     `toggle full function results (session): ${uiSettings.showFullFunctionResults ? 'ON' : 'OFF'}`,
+    `task search vectorizer: ${uiSettings.vectorizer}`,
     'back',
   ])
-  if (choice === null || choice === 2) return
+  if (choice === null || choice === 3) return
   if (choice === 0) {
     uiSettings.showRoleTag = !uiSettings.showRoleTag
     await persistConfigPatch({
@@ -2228,11 +2267,146 @@ async function handleSettingsCommand(
     writeNotice('success', `Role/type tags: ${uiSettings.showRoleTag ? 'ON' : 'OFF'}`)
     return
   }
+  if (choice === 2) {
+    uiSettings.vectorizer =
+      uiSettings.vectorizer === 'static-multilingual' ? 'transformer-minilm' : 'static-multilingual'
+    await persistConfigPatch({
+      cliUi: {
+        showRoleTag: uiSettings.showRoleTag,
+        searchOpenMode: uiSettings.searchOpenMode,
+        vectorizer: uiSettings.vectorizer,
+      },
+    })
+    writeNotice('success', `Task search vectorizer: ${uiSettings.vectorizer}`)
+    return
+  }
   uiSettings.showFullFunctionResults = !uiSettings.showFullFunctionResults
   writeNotice(
     'success',
     `Full function results (session): ${uiSettings.showFullFunctionResults ? 'ON' : 'OFF'}`,
   )
+}
+
+const taskSearchText = (task: TaskNode) =>
+  task.content.type === 'message' && typeof task.content.data === 'string'
+    ? task.content.data
+    : JSON.stringify(task.content.data)
+
+async function handleSearchCommand(args: {
+  rl: ReturnType<typeof createInterface>
+  storageClient: ReturnType<typeof createStorageClient>
+  taskStorageNamespace: string
+  query: string
+  searchClient: ReturnType<typeof createSearchClient>
+  searchIndex: string
+  searchDataDirectory: string
+  searchState: { loadedVectorizer?: 'static-multilingual' | 'transformer-minilm'; ids: Set<string> }
+  uiSettings: {
+    showRoleTag: boolean
+    showFullFunctionResults: boolean
+    searchOpenMode: 'conversation' | 'lineage'
+    vectorizer: 'static-multilingual' | 'transformer-minilm'
+  }
+}) {
+  const query = args.query.trim()
+  if (!query) {
+    writeLine('Usage: /search <words>')
+    return undefined
+  }
+  writeLine(`Searching tasks for: ${query}`)
+  await args.searchClient.configure({
+    index: args.searchIndex,
+    vectorizer: args.uiSettings.vectorizer,
+  })
+  const vectorizerDirectory = join(args.searchDataDirectory, args.uiSettings.vectorizer)
+  if (args.searchState.loadedVectorizer !== args.uiSettings.vectorizer) {
+    args.searchState.ids.clear()
+    const persisted = await loadTaskSearchSidecars(vectorizerDirectory)
+    await args.searchClient.upsertMany({ index: args.searchIndex, documents: persisted })
+    persisted.forEach(({ id }) => args.searchState.ids.add(id))
+    args.searchState.loadedVectorizer = args.uiSettings.vectorizer
+  }
+  const { ids } = await args.storageClient.listIds({ namespace: args.taskStorageNamespace })
+  writeDebug(`task search discovered ${ids.length} task ids`)
+  const { rows } = await args.storageClient.getMany({
+    namespace: args.taskStorageNamespace,
+    ids,
+  })
+  writeDebug(`task search loaded ${rows.length} task records`)
+  const tasks = rows.map(({ data }) => TaskNode.parse(data))
+  const missingDocuments = tasks
+    .filter((task) => !args.searchState.ids.has(task.id))
+    .map((task) => {
+      const text = taskSearchText(task)
+      return {
+        id: task.id,
+        text,
+        createdAt: new Date(task.created_at ?? 0).toISOString(),
+        metadata: {
+          type: task.content.type,
+          role: task.role,
+          textLength: text.length,
+          hasCode: /```|\b(function|class|const|def)\b/.test(text),
+        },
+      }
+    })
+  if (missingDocuments.length > 0) {
+    writeLine(`Updating task search index: ${missingDocuments.length} new tasks`)
+    await args.searchClient.upsertMany({
+      index: args.searchIndex,
+      documents: missingDocuments,
+    })
+    missingDocuments.forEach(({ id }) => args.searchState.ids.add(id))
+    const { documents } = await args.searchClient.snapshot({ index: args.searchIndex })
+    await saveTaskSearchSidecars(vectorizerDirectory, documents)
+  }
+  const { results } = await args.searchClient.query({
+    index: args.searchIndex,
+    text: query,
+    limit: 20,
+  })
+  if (results.length === 0) {
+    writeLine('No matching tasks found.')
+    return undefined
+  }
+  const taskById = new Map(tasks.map((task) => [task.id, task]))
+  const labels = results.map((result) => {
+    const task = taskById.get(result.id)
+    const snippet = task ? taskSearchText(task).replace(/\s+/g, ' ').slice(0, 90) : result.id
+    return `${result.score.toFixed(3)} · ${task?.content.type ?? 'task'} · ${snippet}`
+  })
+  const selected = await selectFromList(args.rl, '\nTask search results', labels, {
+    onToggle: () => {
+      args.uiSettings.searchOpenMode =
+        args.uiSettings.searchOpenMode === 'conversation' ? 'lineage' : 'conversation'
+    },
+    toggleHelp: () => `Tab: open ${args.uiSettings.searchOpenMode}`,
+  })
+  await persistConfigPatch({
+    cliUi: {
+      showRoleTag: args.uiSettings.showRoleTag,
+      searchOpenMode: args.uiSettings.searchOpenMode,
+      vectorizer: args.uiSettings.vectorizer,
+    },
+  })
+  if (selected === null) return undefined
+  const taskId = results[selected]?.id
+  if (!taskId) return undefined
+  if (args.uiSettings.searchOpenMode === 'lineage') return taskId
+
+  const continuationIdsByPriorId = new Map<string, Set<string>>()
+  for (const task of tasks) {
+    if (!task.priorID) continue
+    const ids = continuationIdsByPriorId.get(task.priorID) ?? new Set<string>()
+    ids.add(task.id)
+    continuationIdsByPriorId.set(task.priorID, ids)
+  }
+  const leafIds = await findContinuationLeafTaskIds(
+    taskId,
+    (id) => Promise.resolve(taskById.get(id) ?? null),
+    (id) => Promise.resolve(continuationIdsByPriorId.get(id) ?? new Set()),
+  )
+  return leafIds[0] ?? taskId
 }
 
 async function handleClientCommand(runtime: TaskyonClientCommandRuntime, parsedArgs: string) {
@@ -2264,9 +2438,63 @@ async function resolveConversationToResume(
   rl: ReturnType<typeof createInterface>,
   configDir: string,
   arg: string,
+  storageClient: ReturnType<typeof createStorageClient>,
 ) {
   const explicitPath = arg.trim()
-  if (explicitPath) return resolve(explicitPath)
+  if (explicitPath) {
+    const resolvedPath = resolve(explicitPath)
+    try {
+      await stat(resolvedPath)
+      return { kind: 'markdown' as const, path: resolvedPath }
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error
+    }
+    const transcript = await storageClient.getBlob({
+      namespace: TYCLI_CONVERSATION_TRANSCRIPT_NAMESPACE,
+      id: explicitPath,
+    })
+    if (transcript) return { kind: 'blob' as const, id: explicitPath, transcript }
+    return { kind: 'markdown' as const, path: resolvedPath }
+  }
+
+  const transcripts = (
+    await storageClient.listBlobs({ namespace: TYCLI_CONVERSATION_TRANSCRIPT_NAMESPACE })
+  ).blobs.sort((left, right) => right.modifiedAt.localeCompare(left.modifiedAt))
+  if (transcripts.length > 0) {
+    const options = transcripts.slice(0, CLI_SESSION_HISTORY_LIMIT)
+    const loaded = await Promise.all(
+      options.map(async (metadata) => {
+        const transcript = await storageClient.getBlob({
+          namespace: TYCLI_CONVERSATION_TRANSCRIPT_NAMESPACE,
+          id: metadata.id,
+        })
+        const markdown = transcript ? new TextDecoder().decode(transcript.data) : ''
+        const firstMessage = processMarkdown(markdown).find(
+          (task) => task.role === 'user' && task.content.type === 'message',
+        )
+        const sourceText =
+          firstMessage?.content.type === 'message' ? firstMessage.content.data : markdown
+        const title =
+          textRankTaskName(sourceText, { maxWords: 5, maxChars: 72 }) ??
+          firstWordsTaskName(sourceText, { maxWords: 7, maxChars: 72 }) ??
+          'Saved conversation'
+        return { metadata, transcript, title }
+      }),
+    )
+    const labels = loaded.map(
+      ({ metadata, title }) => `${new Date(metadata.modifiedAt).toLocaleString()} — ${title}`,
+    )
+    const selected = await selectFromList(rl, '\nSaved conversations', labels)
+    if (selected === null) return null
+    const selectedTranscript = loaded[selected]
+    return selectedTranscript?.transcript
+      ? {
+          kind: 'blob' as const,
+          id: selectedTranscript.metadata.id,
+          transcript: selectedTranscript.transcript,
+        }
+      : null
+  }
 
   const files = await listConversationFiles(configDir)
   if (files.length <= 0) {
@@ -2274,9 +2502,18 @@ async function resolveConversationToResume(
     return null
   }
   const options = files.slice(0, CLI_SESSION_HISTORY_LIMIT)
-  const selected = await selectFromList(rl, '\nSaved conversations', options)
+  const labels = await Promise.all(
+    options.map(async (path) => {
+      const fileStat = await stat(path)
+      const markdown = await readFile(path, 'utf8')
+      const title = firstWordsTaskName(markdown, { maxWords: 7, maxChars: 72 }) ?? 'Legacy chat'
+      return `${new Date(fileStat.mtimeMs).toLocaleString()} — ${title}`
+    }),
+  )
+  const selected = await selectFromList(rl, '\nSaved conversations', labels)
   if (selected === null) return null
-  return options[selected] ?? null
+  const path = options[selected]
+  return path ? { kind: 'markdown' as const, path } : null
 }
 
 async function handleResumeCommand(args: {
@@ -2286,23 +2523,28 @@ async function handleResumeCommand(args: {
   currentConversationPath: string
   currentLogPath: string | undefined
   sessions: readonly TycliSessionRecord[]
+  storageClient: ReturnType<typeof createStorageClient>
   commandArgs: string
 }) {
-  const conversationPath = await resolveConversationToResume(
+  const source = await resolveConversationToResume(
     args.rl,
     args.configDir,
     args.commandArgs,
+    args.storageClient,
   )
-  if (!conversationPath) return undefined
-  const markdown = await readFile(conversationPath, 'utf8')
+  if (!source) return undefined
+  const markdown =
+    source.kind === 'blob'
+      ? new TextDecoder().decode(source.transcript.data)
+      : await readFile(source.path, 'utf8')
   const leafId = await createTaskChainFromMarkdown(createCliTaskyonClient(args.ty.port), markdown)
-  const sourceSession = findSessionForConversation(args.sessions, conversationPath)
+  const sourceSession =
+    source.kind === 'markdown' ? findSessionForConversation(args.sessions, source.path) : undefined
 
   writeNote('Conversation Resumed', [
-    `Resumed conversation: ${conversationPath}`,
-    `Loaded conversation log: ${sourceSession?.logPath ?? 'unknown'}`,
-    `Current conversation storage: ${args.currentConversationPath}`,
-    `Current tycli log: ${args.currentLogPath ?? 'unavailable'}`,
+    source.kind === 'blob'
+      ? `Imported conversation from ${new Date(source.transcript.metadata.modifiedAt).toLocaleString()}.`
+      : `Imported legacy conversation from ${new Date(sourceSession?.startedAt ?? 0).toLocaleString()}.`,
   ])
   return leafId
 }
@@ -2314,7 +2556,12 @@ async function handleSlashCommand(
   taskyonClient: TaskyonClientInvoker,
   taskPort: Parameters<typeof waitForTaskResult>[0],
   llmState: CliLlmState,
-  uiSettings: { showRoleTag: boolean; showFullFunctionResults: boolean },
+  uiSettings: {
+    showRoleTag: boolean
+    showFullFunctionResults: boolean
+    searchOpenMode: 'conversation' | 'lineage'
+    vectorizer: 'static-multilingual' | 'transformer-minilm'
+  },
   toolRenderOptions: Record<string, { hideChat?: boolean }>,
   currentLeafId: string | undefined,
 ): Promise<boolean> {
@@ -2367,7 +2614,7 @@ async function handleSlashCommand(
   }
 
   writeError(
-    `Unknown command '/${parsed.name}'. Supported: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /tree, /exit, /quit`,
+    `Unknown command '/${parsed.name}'. Supported: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /search, /tree, /exit, /quit`,
   )
   return true
 }
@@ -2452,6 +2699,9 @@ async function main() {
   const { cryptoSession, stored } = await initPersistentCryptoSession()
   const configDir = await resolveConfigDirectoryPath()
   const dataDir = await resolveDataDirectoryPath()
+  configureStaticEmbeddingAssetReader(
+    createStaticEmbeddingAssetReader(join(dataDir, 'models', 'static-embeddings')),
+  )
   const previousSessions = normalizeSessionRecords(stored.sessions)
   const previousSession = previousSessions[0]
   const pgliteNodeDir = join(configDir, 'runtime', `${errorTimestamp()}-${process.pid}`, 'pglite')
@@ -2485,6 +2735,8 @@ async function main() {
   const uiSettings = {
     showRoleTag: stored.cliUi?.showRoleTag ?? true,
     showFullFunctionResults: false,
+    searchOpenMode: stored.cliUi?.searchOpenMode ?? 'conversation',
+    vectorizer: stored.cliUi?.vectorizer ?? 'static-multilingual',
   }
   const toolRenderOptions: Record<string, { hideChat?: boolean }> = {}
   const projectInstructions = await loadProjectInstructions(process.cwd())
@@ -2591,12 +2843,30 @@ async function main() {
     },
   )
   taskyonRef.current = taskyon
+  const taskSearchIndex = 'tasks'
+  const taskSearchBackend = createPgLiteSearchIndexBackend(
+    await getInMemoryDatabase(`tycli-task-search-${process.pid}`),
+    'tycliTaskSearch',
+  )
+  const { x: taskSearchClientPort, y: taskSearchServicePort } =
+    createProtocolPort(taskyonSearchProtocol)
+  const stopTaskSearchService = createSearchProtocolServer(taskSearchServicePort, (index) => {
+    if (index !== taskSearchIndex) throw new Error(`Unknown CLI search index: ${index}`)
+    return taskSearchBackend
+  })
+  const taskSearchClient = createSearchClient(taskSearchClientPort)
+  const taskSearchState: {
+    loadedVectorizer?: 'static-multilingual' | 'transformer-minilm'
+    ids: Set<string>
+  } = { ids: new Set() }
+  const taskStorageNamespace = `${await cryptoSession.getSessionId()}/taskyonNodes`
   writeLine('Synchronizing provider credentials...')
   await syncProviderRuntimeConfig(taskyon, llmState, selectedApi)
   writeLine('Preparing conversation storage...')
   const conversationPersistence = await createConversationPersistence({
     taskyon,
-    configDir,
+    storageRoot,
+    storageClient,
     startedAt: sessionStartedAt,
   })
   const currentSession: TycliSessionRecord = {
@@ -2608,9 +2878,20 @@ async function main() {
     conversationPath: conversationPersistence.filePath,
     ...(runtimeLog?.filePath ? { logPath: runtimeLog.filePath } : {}),
   })
-  await persistConfigPatch({
-    sessions: normalizeSessionRecords([currentSession, ...previousSessions]),
-  })
+  let currentSessionRecorded = false
+  const recordCurrentSession = async (endedAt?: string) => {
+    if (!conversationPersistence.hasPersistedConversation()) return
+    if (currentSessionRecorded && !endedAt) return
+    await persistConfigPatch({
+      sessions: normalizeSessionRecords([
+        { ...currentSession, ...(endedAt ? { endedAt } : {}) },
+        ...normalizeSessionRecords((await loadStoredConfig()).sessions).filter(
+          (session) => session.conversationPath !== currentSession.conversationPath,
+        ),
+      ]),
+    })
+    currentSessionRecorded = true
+  }
 
   const persistedKey = await taskyon.getSecret(API_KEY_STORE_NAME, selectedApi, false, false)
   const bootstrapKey = persistedKey ?? config.key
@@ -2689,14 +2970,7 @@ async function main() {
         { client: taskyonApi, taskPort: clientPort as Parameters<typeof waitForTaskResult>[0] },
         taskyonClientCommand,
       )
-      await persistConfigPatch({
-        sessions: normalizeSessionRecords([
-          { ...currentSession, endedAt: new Date().toISOString() },
-          ...normalizeSessionRecords((await loadStoredConfig()).sessions).filter(
-            (session) => session.conversationPath !== currentSession.conversationPath,
-          ),
-        ]),
-      }).catch(() => {})
+      await recordCurrentSession(new Date().toISOString()).catch(() => {})
     } finally {
       cliToolRpcExecutor.destroy()
       unsubscribeBridgeToTaskyon()
@@ -2728,8 +3002,6 @@ async function main() {
     })
   })
   let currentLeafId: string | undefined
-  let latestPersistLeafId: string | undefined
-  let persistQueue = Promise.resolve()
   let waitingForTask = false
   let interruptedCurrentTask = false
   let interruptNoticePrinted = false
@@ -2750,9 +3022,11 @@ async function main() {
   let thinkingPanelHeight = 0
   let thinkingRenderTimer: ReturnType<typeof setTimeout> | null = null
   let renderedThinkingPanelText = ''
+  const pendingHiddenNodeMarkers: string[] = []
   let workerIdleSettleTimer: ReturnType<typeof setTimeout> | null = null
   const activeWorkerTasks = new Set<string>()
   const suppressedTaskIds = new Set<string>()
+  const completedSubtaskSummaryIds = new Set<string>()
   let hasWorkerProcessing = false
   let taskProcessingStatus: 'idle' | 'processing' | 'finished' = 'idle'
   const taskSnapshotById = new Map<string, string>()
@@ -2835,25 +3109,25 @@ async function main() {
     } else stopWorkerStatusLine()
   }
 
+  const conversationPersistQueue = createConversationPersistQueue(
+    async (leafId) => {
+      await conversationPersistence.persist(leafId)
+      await recordCurrentSession()
+    },
+    (error) => {
+      writeDebug(
+        `Failed to persist conversation: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    },
+  )
+
   const queueConversationPersist = (leafId: string | undefined = currentLeafId) => {
-    if (!leafId) return
-    latestPersistLeafId = leafId
-    persistQueue = persistQueue
-      .then(async () => {
-        const leafToPersist = latestPersistLeafId
-        if (!leafToPersist) return
-        await conversationPersistence.persist(leafToPersist)
-      })
-      .catch((error: unknown) => {
-        writeDebug(
-          `Failed to persist conversation: ${error instanceof Error ? error.message : String(error)}`,
-        )
-      })
+    conversationPersistQueue.request(leafId)
   }
 
   const flushConversationPersist = async () => {
     queueConversationPersist(currentLeafId)
-    await persistQueue
+    await conversationPersistQueue.flush()
   }
 
   const currentProviderModel = () => {
@@ -2962,6 +3236,29 @@ async function main() {
     clearThinkingRenderTimer()
     eraseThinkingPanel()
     renderedThinkingPanelText = ''
+  }
+
+  const noteHiddenNode = (toolName: string) => {
+    pendingHiddenNodeMarkers.push(toolName)
+  }
+
+  const flushHiddenNodeMarkers = () => {
+    if (pendingHiddenNodeMarkers.length <= 0) return
+    writeLine(pendingHiddenNodeMarkers.map((toolName) => `>${toolName}`).join('\n'))
+    pendingHiddenNodeMarkers.length = 0
+  }
+
+  const renderCompletedSubtaskSummary = (event: WorkerEvent) => {
+    const taskId = event.task?.id ?? event.taskId
+    if (event.stage !== 'finished' || !taskId || completedSubtaskSummaryIds.has(taskId)) return
+    const toolCallCount = countDelegatedSubtaskToolCalls(taskId, taskById.values())
+    if (toolCallCount === null) return
+    completedSubtaskSummaryIds.add(taskId)
+    clearThinkingPanel()
+    flushHiddenNodeMarkers()
+    writeLine(
+      `>subtask completed: ${String(toolCallCount)} ${toolCallCount === 1 ? 'tool call' : 'tool calls'}`,
+    )
   }
 
   const mainPrompt = () =>
@@ -3188,6 +3485,8 @@ async function main() {
       taskProcessingStatus = 'finished'
       clearWorkerCleanupNoticeTimer()
       stopWorkerStatusLine()
+      clearThinkingPanel()
+      flushHiddenNodeMarkers()
     }
     if (stage === 'waiting' && activeTaskCount() > 0 && workerIdleSettleTimer === null) {
       workerIdleSettleTimer = setTimeout(() => {
@@ -3268,7 +3567,6 @@ async function main() {
     scheduleWorkerCleanupNotice()
     resetThinking()
     updateFooter()
-    writeTaskInterruptedNotice()
   }
 
   const onSigint = () => {
@@ -3325,8 +3623,9 @@ async function main() {
   const startTaskInterruptKeys = () => {
     const stdin = process.stdin
     if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') return undefined
-    emitKeypressEvents(stdin, rl)
+    emitKeypressEvents(stdin)
     let cleanedUp = false
+    const preserveReadlineOnSigint = () => undefined
     const onKeypress = (_str: string, key: { ctrl?: boolean; name?: string }) => {
       if (key.ctrl && key.name === 'c') {
         onSigint()
@@ -3340,6 +3639,7 @@ async function main() {
       stdin.setRawMode(true)
       stdin.resume()
       stdin.on('keypress', onKeypress)
+      rl.on('SIGINT', preserveReadlineOnSigint)
     } catch {
       return undefined
     }
@@ -3347,6 +3647,7 @@ async function main() {
       if (cleanedUp) return
       cleanedUp = true
       stdin.off('keypress', onKeypress)
+      rl.off('SIGINT', preserveReadlineOnSigint)
       restoreTerminalInput()
       rl.resume()
     }
@@ -3388,6 +3689,8 @@ async function main() {
         showRoleTag: () => uiSettings.showRoleTag,
         showFullFunctionResults: () => uiSettings.showFullFunctionResults,
         isFunctionHiddenInChat: (name: string) => Boolean(toolRenderOptions[name]?.hideChat),
+        noteHiddenNode,
+        flushHiddenNodeMarkers,
         clearThinkingPanel,
         renderThinkingPanel,
         writeLine,
@@ -3401,13 +3704,10 @@ async function main() {
     const workerEvent = event as WorkerEvent
     const taskId = workerEvent.task?.id ?? workerEvent.taskId ?? null
     const suppressed = isSuppressedWorkerEvent(workerEvent)
-    if (taskId) {
-      currentLeafId = taskId
-      queueConversationPersist(taskId)
-    }
     trackWorkerProgress(workerEvent)
     updateWorkerStatusLine(workerEvent, suppressed)
     if (suppressed) return
+    renderCompletedSubtaskSummary(workerEvent)
     renderWorkerProgress(
       {
         debugEnabled: () => debugLogsEnabled,
@@ -3446,7 +3746,7 @@ async function main() {
   )
   writeNotice(
     'info',
-    'Slash commands: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /tree, /exit, /quit',
+    'Slash commands: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /search, /tree, /exit, /quit',
   )
   if (debugLogsEnabled) writeNotice('warn', 'Debug logs enabled (TYCLI_DEBUG=1).')
   updateFooter()
@@ -3504,6 +3804,10 @@ async function main() {
         },
         onSigint,
         onCtrld,
+        () => {
+          if (!interruptedCurrentTask || interruptNoticePrinted) return
+          setImmediate(writeTaskInterruptedNotice)
+        },
       )
       if (inputRaw === null) {
         if (eofRequested || isReadlineClosed(rl)) {
@@ -3562,12 +3866,35 @@ async function main() {
               currentConversationPath: conversationPersistence.filePath,
               currentLogPath: runtimeLog?.filePath,
               sessions: normalizeSessionRecords((await loadStoredConfig()).sessions),
+              storageClient,
               commandArgs: parsed.args,
             })
             if (resumedLeafId) {
               currentLeafId = resumedLeafId
               await flushConversationPersist()
             }
+          } catch (error) {
+            writeError(error instanceof Error ? error.message : String(error))
+          } finally {
+            inMenuInteraction = false
+          }
+          continue
+        }
+        if (parsed.name === 'search') {
+          inMenuInteraction = true
+          try {
+            const selectedLeafId = await handleSearchCommand({
+              rl,
+              storageClient,
+              taskStorageNamespace,
+              query: parsed.args,
+              searchClient: taskSearchClient,
+              searchIndex: taskSearchIndex,
+              searchDataDirectory: join(dataDir, 'search', 'tasks'),
+              searchState: taskSearchState,
+              uiSettings,
+            })
+            if (selectedLeafId) currentLeafId = selectedLeafId
           } catch (error) {
             writeError(error instanceof Error ? error.message : String(error))
           } finally {
@@ -3601,6 +3928,9 @@ async function main() {
         writeError(`No key configured for '${currentProvider}'. Run /keys first.`)
         continue
       }
+
+      pendingHiddenNodeMarkers.length = 0
+      completedSubtaskSummaryIds.clear()
 
       const taskChain = await createPreparedTaskChain(
         [
@@ -3660,7 +3990,6 @@ async function main() {
         stopWorkerStatusLine()
         if (interruptedCurrentTask) {
           await flushConversationPersist()
-          writeTaskInterruptedNotice()
           restorePromptIfIdle()
           continue
         }
@@ -3676,7 +4005,6 @@ async function main() {
         stopWorkerStatusLine()
         if (interruptedCurrentTask) {
           await flushConversationPersist()
-          writeTaskInterruptedNotice()
           restorePromptIfIdle()
           continue
         }
@@ -3697,6 +4025,7 @@ async function main() {
     unsubscribeWorkerProgress()
     if (!isReadlineClosed(rl)) rl.close()
     cliToolRpcExecutor.destroy()
+    stopTaskSearchService()
     unsubscribeBridgeToTaskyon()
     unsubscribeTaskyonToBridge()
     activeTaskWaitController = undefined
@@ -3708,16 +4037,13 @@ async function main() {
     await flushConversationPersist().catch(() => {})
     taskyon.cancelCurrentRun('tycli exit')
     setChatCompletionTraceWriter(undefined)
-    writeOutro(`Conversation saved: ${conversationPersistence.filePath}`)
+    if (conversationPersistence.hasPersistedConversation()) {
+      writeOutro(`Conversation saved: ${conversationPersistence.filePath}`)
+      await recordCurrentSession(new Date().toISOString()).catch(() => {})
+    } else {
+      writeOutro('No conversation saved: no messages.')
+    }
     writeOutro(`tycli log: ${runtimeLog?.filePath ?? 'unavailable'}`)
-    await persistConfigPatch({
-      sessions: normalizeSessionRecords([
-        { ...currentSession, endedAt: new Date().toISOString() },
-        ...normalizeSessionRecords((await loadStoredConfig()).sessions).filter(
-          (session) => session.conversationPath !== currentSession.conversationPath,
-        ),
-      ]),
-    }).catch(() => {})
     restoreConsoleLogging?.()
     await runtimeLog?.flush().catch(() => {})
     stopLoggingService()

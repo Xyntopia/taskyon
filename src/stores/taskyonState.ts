@@ -1245,6 +1245,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     }),
     entryNode: buildEntryNodeDraft,
     toolchainConfig: stateRefs.effectiveToolchainConfig,
+    taskSearchVectorizer: stateRefs.appConfiguration.taskSearchVectorizer,
     cryptoSession: initialCryptoSession,
     toolSetup: createDefaultTaskyonToolSetup({
       unavailableToolNames: getBrowserUnavailableToolNames(),

@@ -13,7 +13,9 @@ using private browsing can remove locally stored information, so export importan
 
 CLI configuration is stored under `~/.config/tycli` when writable. Durable task records use
 `$XDG_DATA_HOME/tycli` or `~/.local/share/tycli`; `/tmp/tycli` is the fallback when a persistent
-home directory is unavailable.
+home directory is unavailable. After the first submitted conversation message, the CLI also keeps
+a readable Markdown transcript in its blob storage. Tasks remain authoritative; the transcript is
+an optional CLI-owned projection used for inspection and recovery.
 
 ## Secrets
 

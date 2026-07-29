@@ -6,7 +6,7 @@ import {
 } from '../tools/chatCompletionTool'
 import { createChatCompletionRecordingFetch } from '../tools/chatCompletionTrace'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
-import { selectTaskChainIds } from '../core/taskChainSelection'
+import { findContinuationLeafTaskIds, selectTaskChainIds } from '../core/taskChainSelection'
 import { createTaskVariablePresentationService } from '../core/taskVariables'
 import {
   buildChatProviderRequest,
@@ -137,7 +137,7 @@ export const testChatCompletionConnectionIsAnImmutableCreationSnapshot = () => {
 const createTaskAccess = (tasks: TaskNode[]) => {
   const tasksById = new Map(tasks.map((node) => [node.id, node]))
   const directChildrenByParent = new Map<string, string[]>()
-  const nextSiblingByPrior = new Map<string, string[]>()
+  const nextSiblingByPrior = new Map<string, Set<string>>()
 
   for (const node of tasks) {
     if (node.parentID && !node.priorID) {
@@ -146,30 +146,20 @@ const createTaskAccess = (tasks: TaskNode[]) => {
       directChildrenByParent.set(node.parentID, children)
     }
     if (node.priorID) {
-      const siblings = nextSiblingByPrior.get(node.priorID) ?? []
-      siblings.push(node.id)
+      const siblings = nextSiblingByPrior.get(node.priorID) ?? new Set<string>()
+      siblings.add(node.id)
       nextSiblingByPrior.set(node.priorID, siblings)
     }
   }
 
-  const findSiblingLeafTasks = (taskId: string) => {
-    const leafTasks: string[] = []
-    const pending = [taskId]
-    while (pending.length > 0) {
-      const current = pending.pop()
-      if (!current) continue
-      const next = nextSiblingByPrior.get(current) ?? []
-      if (next.length === 0) {
-        leafTasks.push(current)
-      } else {
-        pending.push(...next)
-      }
-    }
-    return Promise.resolve(leafTasks)
-  }
+  const getTask = (taskId: string) => Promise.resolve(tasksById.get(taskId) ?? null)
+  const findSiblingLeafTasks = (taskId: string) =>
+    findContinuationLeafTaskIds(taskId, getTask, (id) =>
+      Promise.resolve(nextSiblingByPrior.get(id) ?? new Set()),
+    )
 
   return {
-    getTask: (taskId: string) => Promise.resolve(tasksById.get(taskId) ?? null),
+    getTask,
     getFlattenedChain: () => {
       throw new Error('Flattened task-chain selection is not used by these tests.')
     },

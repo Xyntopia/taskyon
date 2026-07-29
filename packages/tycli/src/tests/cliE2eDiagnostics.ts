@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
-import { access, readFile } from 'node:fs/promises'
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import process from 'node:process'
 import { constants as fsConstants } from 'node:fs'
 import { join } from 'node:path'
@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import type { TaskNode } from '../../../taskyon/src/types/taskNode'
 import type { AddressInfo } from 'node:net'
 import {
+  countDelegatedSubtaskToolCalls,
   renderTaskProgress,
   renderWorkerProgress,
   resolveWorkerStatusText,
@@ -458,7 +459,7 @@ export async function testTerminalKitFooterOptInStartsAndExits() {
   })
   if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
   assertContains(result.output, 'tycli ready.')
-  assertContains(result.output, 'Conversation saved:')
+  assertContains(result.output, 'No conversation saved: no messages.')
   assertNotContains(result.output, 'Fatal error')
 }
 
@@ -712,6 +713,112 @@ export function testTaskRendererHidesHiddenWorkerProgress() {
   assertNotContains(lines.join('\n'), 'hiddenTool')
 }
 
+export function testTaskRendererSummarizesHiddenFunctionCallsBeforeVisibleTask() {
+  const lines: string[] = []
+  const pendingHiddenNodes: string[] = []
+  const state = {
+    debugEnabled: () => false,
+    showRoleTag: () => true,
+    showFullFunctionResults: () => false,
+    isFunctionHiddenInChat: (name: string) => name === 'hiddenTool',
+    noteHiddenNode: (toolName: string) => {
+      pendingHiddenNodes.push(toolName)
+    },
+    flushHiddenNodeMarkers: () => {
+      if (pendingHiddenNodes.length <= 0) return
+      lines.push(pendingHiddenNodes.map((toolName) => `>${toolName}`).join('\n'))
+      pendingHiddenNodes.length = 0
+    },
+    clearThinkingPanel: () => {},
+    renderThinkingPanel: () => {},
+    writeLine: (text: string) => {
+      lines.push(text)
+    },
+  }
+  const hiddenTask = (id: string): TaskNode => ({
+    id,
+    role: 'function',
+    content: {
+      type: 'functioncall',
+      data: { name: 'hiddenTool', arguments: {} },
+    },
+  })
+  const visibleTask: TaskNode = {
+    id: 'visible-tool-task',
+    role: 'function',
+    content: {
+      type: 'functioncall',
+      data: { name: 'visibleTool', arguments: {} },
+    },
+  }
+
+  for (let index = 0; index < 4; index += 1) {
+    renderTaskProgress(state, hiddenTask(`hidden-${String(index)}`), false)
+  }
+  renderTaskProgress(state, hiddenTask('hidden-0'), true)
+  renderTaskProgress(state, visibleTask, false)
+
+  const output = lines.join('\n')
+  assertContains(
+    output,
+    '>hiddenTool\n>hiddenTool\n>hiddenTool\n>hiddenTool\n\n[function|functioncall]',
+  )
+  assertNotContains(output, 'name: hiddenTool')
+  if (output.split('>hiddenTool').length - 1 !== 4) {
+    throw new Error(`Expected exactly four hidden tool markers. Output:\n${output}`)
+  }
+}
+
+export function testDelegatedSubtaskCountsOnlyItsExecutableFunctionCalls() {
+  const tasks: TaskNode[] = [
+    {
+      id: 'delegated-entry',
+      role: 'function',
+      content: {
+        type: 'functioncall',
+        data: {
+          name: 'entryNode',
+          arguments: { taskContract: { objective: 'Inspect the repository' } },
+        },
+      },
+    },
+    {
+      id: 'subtask-message',
+      parentID: 'delegated-entry',
+      role: 'assistant',
+      content: { type: 'message', data: 'Working on it' },
+    },
+    {
+      id: 'subtask-tool',
+      parentID: 'delegated-entry',
+      priorID: 'subtask-message',
+      role: 'function',
+      content: { type: 'functioncall', data: { name: 'bash', arguments: {} } },
+    },
+    {
+      id: 'nested-tool',
+      parentID: 'subtask-tool',
+      role: 'function',
+      content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+    },
+    {
+      id: 'unrelated-tool',
+      role: 'function',
+      content: { type: 'functioncall', data: { name: 'clock', arguments: {} } },
+    },
+  ]
+
+  const count = countDelegatedSubtaskToolCalls('delegated-entry', tasks)
+  if (count !== 3) {
+    throw new Error(
+      `Expected three executable calls in the delegated subtask, got ${String(count)}`,
+    )
+  }
+  if (countDelegatedSubtaskToolCalls('unrelated-tool', tasks) !== null) {
+    throw new Error('Expected a normal function call not to be classified as a delegated subtask')
+  }
+}
+
 export function testWorkerStatusTextHidesHiddenTools() {
   const visibleTask: TaskNode = {
     id: 'visible-tool-task',
@@ -787,6 +894,37 @@ export async function testCliConcurrentSessionsStartWithSharedHome() {
   }
 }
 
+export async function testEmptyCliSessionDoesNotCreateConversationFile() {
+  const result = await runTycSession({
+    testName: 'testEmptyCliSessionDoesNotCreateConversationFile',
+    steps: [{ waitFor: 'Slash commands:', input: '/exit\n' }],
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    runner: 'pty',
+  })
+  if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
+  const storageMatch = result.output.match(/Conversation storage: (.+\.md)/)
+  if (!storageMatch?.[1]) {
+    throw new Error(`Expected the planned conversation path in startup output.\n${result.output}`)
+  }
+  try {
+    await access(storageMatch[1].trim(), fsConstants.F_OK)
+    throw new Error(`Empty session created a conversation file: ${storageMatch[1].trim()}`)
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Empty session created')) throw error
+  }
+  const configPath = join(
+    TEST_HOME,
+    'testEmptyCliSessionDoesNotCreateConversationFile',
+    '.config',
+    'tycli',
+    'config.json',
+  )
+  const storedConfig = await readFile(configPath, 'utf8')
+  assertNotContains(storedConfig, storageMatch[1].trim())
+  assertContains(result.output, 'No conversation saved: no messages.')
+  assertNotContains(result.output, 'Conversation saved:')
+}
+
 export async function testSlashMenuOpensOnSingleSlash() {
   const result = await runTycSession({
     testName: 'testSlashMenuOpensOnSingleSlash',
@@ -857,7 +995,7 @@ export async function testIdleCtrlDReportsPathsAndExits() {
   })
   if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
   assertContains(result.output, 'Ctrl-D received.')
-  assertContains(result.output, 'Conversation saved:')
+  assertContains(result.output, 'No conversation saved: no messages.')
   assertContains(result.output, 'Conversation storage:')
   assertContains(result.output, 'tycli log:')
 }
@@ -871,7 +1009,7 @@ export async function testQuitPromptCtrlCCancelsAndCtrlDExits() {
     {
       name: 'ctrl-d-from-main-prompt',
       steps: [{ waitFor: 'Slash commands:', input: '\u0004' }],
-      expected: ['Ctrl-D', 'Conversation saved:'],
+      expected: ['Ctrl-D', 'No conversation saved: no messages.'],
     },
     {
       name: 'ctrl-c-ctrl-d',
@@ -879,7 +1017,7 @@ export async function testQuitPromptCtrlCCancelsAndCtrlDExits() {
         { waitFor: 'Slash commands:', input: '\u0003' },
         { waitFor: 'Quit tycli? (y/N)', input: '\u0004' },
       ],
-      expected: ['Quit tycli? (y/N)', 'Conversation saved:'],
+      expected: ['Quit tycli? (y/N)', 'No conversation saved: no messages.'],
     },
     {
       name: 'ctrl-c-n-ctrl-d',
@@ -888,7 +1026,7 @@ export async function testQuitPromptCtrlCCancelsAndCtrlDExits() {
         { waitFor: 'Quit tycli? (y/N)', input: 'n\n' },
         { delayMs: 500, input: '\u0004' },
       ],
-      expected: ['Quit tycli? (y/N)', 'Ctrl-D', 'Conversation saved:'],
+      expected: ['Quit tycli? (y/N)', 'Ctrl-D', 'No conversation saved: no messages.'],
     },
   ]
 
@@ -898,7 +1036,7 @@ export async function testQuitPromptCtrlCCancelsAndCtrlDExits() {
       steps: testCase.steps,
       env: { TYCLI_HOTKEY_MENUS: '1' },
       runner: 'pty',
-      acceptOutputAsExit: 'Conversation saved:',
+      acceptOutputAsExit: 'No conversation saved: no messages.',
       timeoutMs: 30_000,
     })
     if (result.code !== 0) {
@@ -926,7 +1064,7 @@ export async function testCtrlCCancelsModelMenuAndKeepsPromptUsable() {
   if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
   assertContains(result.output, 'Ctrl-C received.')
   assertContains(result.output, 'Menu cancelled.')
-  assertContains(result.output, 'Conversation saved:')
+  assertContains(result.output, 'No conversation saved: no messages.')
   assertNotContains(result.output, 'Fatal error')
 }
 
@@ -973,31 +1111,20 @@ export async function testPromptHistoryCyclesPreviousInputWithArrowKeys() {
 }
 
 export async function testResumeConversationReportsStorageAndLogs() {
-  const initialResult = await runTycSession({
-    testName: 'testResumeConversationReportsStorageAndLogs',
-    homeKey: 'testResumeConversationReportsStorageAndLogs',
-    steps: [
-      { waitFor: 'Slash commands:', input: '/tools\n' },
-      { waitFor: 'Active tool definitions:', input: '/exit\n' },
-    ],
-    env: { TYCLI_HOTKEY_MENUS: '0' },
-    runner: 'pty',
-  })
-  if (initialResult.code !== 0) {
-    throw new Error(`Expected initial exit code 0, got ${String(initialResult.code)}`)
-  }
-  const saveMatch = initialResult.output.match(/Conversation saved: (.+\.md)/)
-  if (!saveMatch?.[1]) {
-    throw new Error(`Could not find conversation save path.\n${initialResult.output}`)
-  }
-
-  const conversationPath = saveMatch[1].trim()
+  const testHome = join(TEST_HOME, 'testResumeConversationReportsStorageAndLogs')
+  const conversationPath = join(testHome, 'fixture-conversation.md')
+  await mkdir(testHome, { recursive: true })
+  await writeFile(
+    conversationPath,
+    'Fixture user message\n\n---\n\n<!--taskyon\nrole: assistant\n-->\n\nFixture assistant response\n',
+    'utf8',
+  )
   const resumeResult = await runTycSession({
     testName: 'testResumeConversationReportsStorageAndLogs',
     homeKey: 'testResumeConversationReportsStorageAndLogs',
     steps: [
       { waitFor: 'Slash commands:', input: `/resume ${conversationPath}\n` },
-      { waitFor: 'Current conversation storage:', input: '/exit\n' },
+      { waitFor: 'Imported legacy conversation', input: '/exit\n' },
     ],
     env: { TYCLI_HOTKEY_MENUS: '0' },
     runner: 'pty',
@@ -1005,9 +1132,8 @@ export async function testResumeConversationReportsStorageAndLogs() {
   if (resumeResult.code !== 0) {
     throw new Error(`Expected resume exit code 0, got ${String(resumeResult.code)}`)
   }
-  assertContains(resumeResult.output, `Resumed conversation: ${conversationPath}`)
-  assertContains(resumeResult.output, 'Loaded conversation log:')
-  assertContains(resumeResult.output, 'Current tycli log:')
+  assertContains(resumeResult.output, 'Imported legacy conversation')
+  assertNotContains(resumeResult.output, 'Current conversation storage:')
 }
 
 export async function testTaskInterruptReportsStatusAndPersistsConversation() {

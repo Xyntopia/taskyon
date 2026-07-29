@@ -2,7 +2,9 @@ export { createTaskNode } from './core/createTasks'
 export { createArtifactStore, type ArtifactStore } from './core/artifactStore'
 export { tyCore } from './core/init'
 export type { Taskyon } from './core/init'
-export { chat2Md } from './core/markdownTaskIO'
+export { chat2Md, processMarkdown } from './core/markdownTaskIO'
+export { findContinuationLeafTaskIds } from './core/taskChainSelection'
+export { firstWordsTaskName, textRankTaskName } from './core/taskNaming'
 export {
   getTaskQueueLabel,
   selectChildTaskChains,
@@ -30,5 +32,6 @@ export type { ClientTool, InternalTool } from './types/toolApi'
 export { createClientTool, toolCall } from './types/toolApi'
 export { createCryptoSession } from './utils/cryptoSession'
 export { getDatabase } from './utils/pglite.api'
+export { configureStaticEmbeddingAssetReader } from './utils/staticEmbedding'
 export { getProviderOauthConfig, getProviderOauthCredentialsSecretName } from './utils/providerAuth'
 export { createAiWorkstationExample } from './examples/aiWorkstationExample'

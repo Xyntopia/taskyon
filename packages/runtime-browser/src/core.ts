@@ -32,6 +32,7 @@ export type TaskyonBrowserCoreRuntimeOptions = {
   cryptoSession?: CryptoSession | Promise<CryptoSession>
   databaseFactory?: NonNullable<Parameters<typeof tyCore>[4]>['databaseFactory']
   indexTaskVectors?: NonNullable<Parameters<typeof tyCore>[4]>['indexTaskVectors']
+  taskSearchVectorizer?: NonNullable<Parameters<typeof tyCore>[4]>['taskSearchVectorizer']
   initialProviderKeys?: Readonly<Record<string, string | undefined>>
   onStage?: (stage: TaskyonCoreRuntimeStage) => void
   storageSessionId?: string
@@ -110,6 +111,9 @@ export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRunti
           ...(options.databaseFactory ? { databaseFactory: options.databaseFactory } : {}),
           ...(options.indexTaskVectors !== undefined
             ? { indexTaskVectors: options.indexTaskVectors }
+            : {}),
+          ...(options.taskSearchVectorizer
+            ? { taskSearchVectorizer: options.taskSearchVectorizer }
             : {}),
           taskManagerStorageFactory: ({ sessionId }) =>
             connectTaskManagerStorageFromProtocol(

@@ -424,6 +424,20 @@ const useSessionKey = () => {
 const getIframeProfileBindingKeyStorageKey = (profileName: string) =>
   `iframe_profile_binding_key:${profileName}`
 
+const migrateStoredProfile = (
+  profile: Partial<initialState> | undefined,
+): Partial<initialState> | undefined => {
+  if (!profile || Number(profile.version) !== 31) return profile
+  return {
+    ...profile,
+    version: 32,
+    appConfiguration: {
+      ...profile.appConfiguration,
+      taskSearchVectorizer: 'static-multilingual',
+    },
+  } as Partial<initialState>
+}
+
 async function getOrCreateIframeProfileBindingKey(profileName: string): Promise<CryptoKey> {
   const keyStorage = getIframeProfileBindingKeyStorageKey(profileName)
   const existingB64 = LocalStorage.getItem(keyStorage)
@@ -438,9 +452,9 @@ async function getOrCreateIframeProfileBindingKey(profileName: string): Promise<
 
 const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null>) => {
   const initialProfileName = pname()
-  const initialStoredStateObjTyped = getTaskyonUiProfile(initialProfileName) as
-    | Partial<initialState>
-    | undefined
+  const initialStoredStateObjTyped = migrateStoredProfile(
+    getTaskyonUiProfile(initialProfileName) as Partial<initialState> | undefined,
+  )
   console.log('[PERSIST] boot profile resolution', {
     initialProfileName,
     currentProfilePointer: getCurrentActiveProfileName(),
@@ -639,7 +653,9 @@ export const useAppStateStore = defineStore('ui-state', () => {
     () => activeProfileNameRef.value,
   )
   const applyStoredProfile = (profileName: string) => {
-    const storedProfile = getTaskyonUiProfile(profileName) as Partial<initialState> | undefined
+    const storedProfile = migrateStoredProfile(
+      getTaskyonUiProfile(profileName) as Partial<initialState> | undefined,
+    )
     if (!storedProfile) return
     if (storedProfile.version !== initialState.version) {
       console.warn(

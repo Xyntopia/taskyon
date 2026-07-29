@@ -23,6 +23,29 @@ export type TaskChainSelectionAccess = {
   findSiblingLeafTasks: (taskId: string) => Promise<string[]>
 }
 
+export const findContinuationLeafTaskIds = async (
+  taskId: string,
+  getTask: TaskGetter,
+  findNextTaskIds: (taskId: string) => Promise<ReadonlySet<string>>,
+): Promise<string[]> => {
+  const pending = [taskId]
+  const visited = new Set<string>()
+  const leafIds: string[] = []
+
+  while (pending.length > 0) {
+    const currentId = pending.pop()
+    if (!currentId || visited.has(currentId)) continue
+    visited.add(currentId)
+    if (!(await getTask(currentId))) continue
+
+    const nextIds = await findNextTaskIds(currentId)
+    if (nextIds.size === 0) leafIds.push(currentId)
+    else pending.push(...nextIds)
+  }
+
+  return leafIds
+}
+
 const visibleTerminalContentTypes = new Set<TaskNode['content']['type']>([
   'message',
   'structured',

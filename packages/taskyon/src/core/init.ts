@@ -249,6 +249,7 @@ const dynamicContext =
     iframeMultiPlexer: IframeMultiPlexer,
     options: {
       indexTaskVectors: boolean
+      taskSearchVectorizer: 'static-multilingual' | 'transformer-minilm'
       databaseFactory: TaskyonDatabaseFactory
       secretStore?: SecretStore
       sendEncryptedTasks?: Thunk<boolean>
@@ -271,6 +272,7 @@ const dynamicContext =
       : undefined
     const taskManagerInstance = await useTyTaskManager(db, {
       indexTaskVectors: options.indexTaskVectors,
+      taskSearchVectorizer: options.taskSearchVectorizer,
       ...(storage ? { storage } : {}),
     })
     console.log('tycore finished taskManager initialization')
@@ -547,6 +549,7 @@ export async function tyCore(
     toolSetup?: TyCoreToolSetup
     createIframeMultiPlexer?: CreateIframeMultiPlexer
     indexTaskVectors?: boolean
+    taskSearchVectorizer?: 'static-multilingual' | 'transformer-minilm'
     databaseFactory?: TaskyonDatabaseFactory
     nodePgLiteDataDir?: string
     secretStore?: SecretStore
@@ -588,6 +591,7 @@ export async function tyCore(
     iframeMultiPlexer,
     {
       indexTaskVectors: options?.indexTaskVectors !== false,
+      taskSearchVectorizer: options?.taskSearchVectorizer ?? 'static-multilingual',
       databaseFactory: options?.databaseFactory ?? getDatabase,
       ...(options?.secretStore ? { secretStore: options.secretStore } : {}),
       streamObservers: {
