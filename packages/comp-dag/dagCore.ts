@@ -252,15 +252,8 @@ function getNodeCodeHash(node: DagNode): Hash {
   return canonicalHash(`${node.name}@${node.version}`)
 }
 
-function makeNodeKey(node: DagNode, paramsHash: Hash, nodeCodeHash: Hash): string {
-  return JSON.stringify({
-    cacheFormatVersion: 2,
-    nodeId: node.name,
-    nodeVersion: node.version,
-    nodeCodeHash,
-    paramsHash,
-  })
-}
+const makeNodeKey = (paramsHash: Hash, nodeCodeHash: Hash): Hash =>
+  canonicalHash({ node: nodeCodeHash, params: paramsHash })
 
 // -----------------------------
 // Node registry & createNode
@@ -1119,7 +1112,7 @@ export function createNode<
             actualEngineConfig,
           )
           const nodeCodeHash = getNodeCodeHash(node)
-          const key = makeNodeKey(node, paramsHash, nodeCodeHash)
+          const key = makeNodeKey(paramsHash, nodeCodeHash)
           const policy = actualEngineConfig.nodePolicies?.[node.name] ?? node.defaultPolicy
 
           if (policy.cache === 'ReadOnly' || policy.cache === 'ReadWrite') {
@@ -1585,7 +1578,7 @@ export async function executeNode(
   const validatedParams = parseSchema<Record<string, unknown>>(node.paramsSchema, paramsValue)
   const paramsHash = executionParamsHash(validatedParams, engineConfig)
   const nodeCodeHash = getNodeCodeHash(node)
-  const key = makeNodeKey(node, paramsHash, nodeCodeHash)
+  const key = makeNodeKey(paramsHash, nodeCodeHash)
 
   const policy = engineConfig.nodePolicies?.[node.name] ?? node.defaultPolicy
 

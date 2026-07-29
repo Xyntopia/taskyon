@@ -30,6 +30,9 @@ already exists.
   regenerated hashes, and focused diagnostics rather than permissive legacy adapters.
 - Keep creation task IDs, timestamps, and conversational provenance outside computation identity
   unless they affect behavior.
+- Represent a cache lookup as one canonical computation hash derived from the node content hash and
+  behavior-affecting parameters. Do not persist serialized node names, versions, or parameter
+  descriptions as cache keys.
 - Treat edge lists, local-name indexes, diagrams, and other graph views as derived data when
   immutable node input references are authoritative.
 - Keep design revisions, task-tree provenance, and run records distinct: revisions select the
@@ -68,8 +71,12 @@ already exists.
 - Do not expose ambient filesystem, network, UI, storage, or secret access to node code.
 - Treat content hashes as byte or computation identity, not proof of correctness, authorization,
   safety, or confidentiality.
+- Keep computation and artifact identity distinct: cache records map a computation hash to the
+  content hash of the exact serialized result.
 - Keep large or domain-specific values in content-addressed artifacts and include their hashes in
   computation identity when they affect behavior.
+- Stream large values through bounded temporary chunks and publish one whole artifact under its
+  final content hash. Do not create a second persistent chunk-addressing layer or chunk manifest.
 - Represent conversions between artifact formats as explicit, inspectable graph nodes.
 
 ## Diagnostics

@@ -69,22 +69,26 @@ const mergeStorageRecord = (
   return { ...currentObject, ...nextObject }
 }
 
-export const storageRecordNamespacePath = (namespace: string) =>
-  ['records', ...namespace.split('/').map(encodeURIComponent)].join('/')
+const MAX_PATH_COMPONENT_LENGTH = 255
 
-const MAX_READABLE_ID_LENGTH = 160
-
-const storageRecordFileName = (id: string | number) => {
-  const type = typeof id
-  const encodedId = encodeURIComponent(String(id))
-  if (encodedId.length <= MAX_READABLE_ID_LENGTH) return `${type}-${encodedId}.json`
-
-  const digest = canonicalHash({ type, value: id }).slice('sha256:'.length)
-  return `${type}-sha256-${digest}.json`
+const boundedPathComponent = (value: string) => {
+  const encoded = encodeURIComponent(value)
+  return encoded.length <= MAX_PATH_COMPONENT_LENGTH
+    ? encoded
+    : `sha256_${canonicalHash(value).slice('sha256:'.length)}`
 }
 
-export const storageRecordFilePath = (namespace: string, id: string | number) =>
-  [storageRecordNamespacePath(namespace), storageRecordFileName(id)].join('/')
+export const storageRecordNamespacePath = (namespace: string) =>
+  ['records', ...namespace.split('/').map(boundedPathComponent)].join('/')
+
+export const storageRecordFilePath = (namespace: string, id: string | number) => {
+  const hash = canonicalHash({ type: typeof id, value: id }).slice('sha256:'.length)
+  return [
+    storageRecordNamespacePath(namespace),
+    hash.slice(0, 2),
+    hash.slice(2),
+  ].join('/')
+}
 
 export const createStorageRecordFileBackend = (
   adapter: StorageRecordFileAdapter,
@@ -94,15 +98,22 @@ export const createStorageRecordFileBackend = (
   const withLock = <T>(operation: () => Promise<T>) =>
     adapter.withNamespaceLock ? adapter.withNamespaceLock(directory, operation) : operation()
 
-  const readRecord = adapter.read
+  const readRecordFile = adapter.read
+  const readRecord = async (id: string | number) => {
+    const record = await readRecordFile(storageRecordFilePath(namespace, id))
+    if (record && !Object.is(record.id, id)) {
+      throw new Error(`Storage record id mismatch for namespace "${namespace}".`)
+    }
+    return record
+  }
   const listRecords = async () => {
     const files = await adapter.list(directory)
-    const records = await Promise.all(files.map(readRecord))
+    const records = await Promise.all(files.map(readRecordFile))
     return records.filter((record): record is StorageRecordFile => record !== null)
   }
 
   return {
-    get: async (id) => (await readRecord(storageRecordFilePath(namespace, id)))?.data ?? null,
+    get: async (id) => (await readRecord(id))?.data ?? null,
     set: async (id, value) =>
       await withLock(async () => {
         await adapter.write(storageRecordFilePath(namespace, id), { id, data: value })
@@ -110,7 +121,7 @@ export const createStorageRecordFileBackend = (
     upsert: async (id, value, strategy) =>
       await withLock(async () => {
         const path = storageRecordFilePath(namespace, id)
-        const current = await readRecord(path)
+        const current = await readRecord(id)
         const next = mergeStorageRecord(current?.data, value, strategy)
         await adapter.write(path, { id, data: next })
         return next

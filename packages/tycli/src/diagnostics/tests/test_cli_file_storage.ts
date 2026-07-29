@@ -1,8 +1,13 @@
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
 import { createProtocolPort } from '@taskyon/common/modules/frpBus'
-import { taskyonStorageProtocol } from '../../../../taskyon/src/api/storageProtocol'
+import {
+  createStorageClient,
+  taskyonStorageProtocol,
+} from '../../../../taskyon/src/api/storageProtocol'
+import { storageRecordFilePath } from '../../../../taskyon/src/api/storageRecordFileBackend'
 import { connectTaskManagerStorageFromProtocol } from '../../../../taskyon/src/core/taskManager'
 import type { TaskNode } from '../../../../taskyon/src/types/taskNode'
 import { createCliFileStorageService } from '../../cli/fileStorage'
@@ -37,22 +42,9 @@ export const testCliFileStoragePersistsTaskRecordsAndFindsRelations = async () =
     role: 'assistant',
     content: { type: 'message', data: 'sibling' },
   }
-  const longTaskId = JSON.stringify({
-    cacheFormatVersion: 2,
-    nodeId: 'resourceFetch',
-    nodeCodeHash: `sha256:${'a'.repeat(64)}`,
-    paramsHash: `sha256:${'b'.repeat(64)}`,
-  })
-  const longIdTask: TaskNode = {
-    id: longTaskId,
-    role: 'user',
-    content: { type: 'message', data: 'record with a filesystem-safe hashed filename' },
-  }
-
   await firstStorage.tasks.set('parent-task', parentTask)
   await firstStorage.tasks.set('child-task', childTask)
   await firstStorage.tasks.set('sibling-task', siblingTask)
-  await firstStorage.tasks.set(longTaskId, longIdTask)
   await firstStorage.meta.upsert(
     'child-task',
     {
@@ -83,7 +75,6 @@ export const testCliFileStoragePersistsTaskRecordsAndFindsRelations = async () =
 
   try {
     const loadedChild = await secondStorage.tasks.get('child-task')
-    const loadedLongIdTask = await secondStorage.tasks.get(longTaskId)
     const childMeta = await secondStorage.meta.get('child-task')
     const children = await secondStorage.tasks.find({ parentID: 'parent-task' })
     const nextSiblings = await secondStorage.tasks.find({ priorID: 'child-task' })
@@ -91,10 +82,6 @@ export const testCliFileStoragePersistsTaskRecordsAndFindsRelations = async () =
     assert(
       loadedChild?.id === 'child-task',
       'Expected child task to persist across service restart',
-    )
-    assert(
-      loadedLongIdTask?.id === longTaskId,
-      'Expected a long record ID to persist through a filesystem-safe filename',
     )
     assert(children['child-task']?.id === 'child-task', 'Expected parentID find to include child')
     assert(
@@ -124,3 +111,39 @@ export const testCliFileStoragePersistsTaskRecordsAndFindsRelations = async () =
 
 testCliFileStoragePersistsTaskRecordsAndFindsRelations.description =
   'Verifies the tycli file-backed storage service persists task records and supports relation queries through the storage protocol.'
+
+export const testCliFileStorageUsesHashOnlyRecordPaths = async () => {
+  const storageRoot = await mkdtemp(join(tmpdir(), 'tycli-hashed-record-path-diagnostic-'))
+  const port = createProtocolPort(taskyonStorageProtocol)
+  const stopService = createCliFileStorageService(port.y, storageRoot)
+  const storage = createStorageClient(port.x)
+  const id = canonicalHash({
+    node: `sha256:${'a'.repeat(64)}`,
+    params: `sha256:${'b'.repeat(64)}`,
+  })
+  const physicalHash = canonicalHash({ type: typeof id, value: id }).slice('sha256:'.length)
+  const expectedPath = `records/dag/cache/${physicalHash.slice(0, 2)}/${physicalHash.slice(2)}`
+
+  try {
+    await storage.set({ namespace: 'dag/cache', id, value: { artifactHash: 'sha256:result' } })
+    const loaded = await storage.get({ namespace: 'dag/cache', id })
+    const listed = await storage.list({ namespace: 'dag/cache' })
+    assert(
+      loaded.value &&
+        typeof loaded.value === 'object' &&
+        'artifactHash' in loaded.value &&
+        loaded.value.artifactHash === 'sha256:result',
+      'Expected a hashed DAG cache id to roundtrip through file storage',
+    )
+    assert(
+      listed.rows.some((row) => row.id === id),
+      'Expected listing hash-only record paths to preserve the original logical id',
+    )
+    assert(storageRecordFilePath('dag/cache', id) === expectedPath, 'Expected a Git-style path.')
+  } finally {
+    stopService()
+  }
+}
+
+testCliFileStorageUsesHashOnlyRecordPaths.description =
+  'Persists computation hashes through Git-style record paths without exposing logical ids.'

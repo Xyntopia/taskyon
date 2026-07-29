@@ -61,12 +61,21 @@ const writeJsonFile = async (filePath: string, value: unknown) => {
   }
 }
 
-const listRecordFileNames = async (dir: string): Promise<string[]> => {
+const storageRecordFileName = /^[a-f0-9]{62}$/
+
+const listRecordFileNames = async (dir: string, root = dir): Promise<string[]> => {
   try {
     const entries = await readdir(dir, { withFileTypes: true })
-    return entries
-      .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
-      .map((entry) => entry.name)
+    const nested = await Promise.all(
+      entries.map(async (entry) => {
+        const path = join(dir, entry.name)
+        if (entry.isDirectory()) return await listRecordFileNames(path, root)
+        return entry.isFile() && storageRecordFileName.test(entry.name)
+          ? [path.slice(root.length + 1)]
+          : []
+      }),
+    )
+    return nested.flat()
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return []
     throw error

@@ -114,14 +114,25 @@ const removeFile = async (root: FileSystemDirectoryHandle, path: string) => {
   }
 }
 
-const listJsonFiles = async (root: FileSystemDirectoryHandle, directory: string) => {
+const storageRecordFileName = /^[a-f0-9]{62}$/
+
+const listRecordFiles = async (
+  root: FileSystemDirectoryHandle,
+  directory: string,
+  currentDirectory = directory,
+): Promise<string[]> => {
   try {
-    const dir = await getDirectory(root, normalizeRelativePath(directory), false)
-    const paths: string[] = []
+    const dir = await getDirectory(root, normalizeRelativePath(currentDirectory), false)
+    const paths: string[][] = []
     for await (const [name, handle] of dir.entries()) {
-      if (handle.kind === 'file' && name.endsWith('.json')) paths.push(`${directory}/${name}`)
+      const path = `${currentDirectory}/${name}`
+      if (handle.kind === 'directory') {
+        paths.push(await listRecordFiles(root, directory, path))
+      } else if (storageRecordFileName.test(name)) {
+        paths.push([path])
+      }
     }
-    return paths
+    return paths.flat()
   } catch (error) {
     if (error instanceof Error && error.name === 'NotFoundError') return []
     throw error
@@ -150,7 +161,7 @@ export const createOpfsStorageRecordFileAdapter = async (
     read: async (path) => await readJsonFile(root, path),
     write: async (path, value) => await writeJsonFile(root, path, value),
     remove: async (path) => await removeFile(root, path),
-    list: async (directory) => await listJsonFiles(root, directory),
+    list: async (directory) => await listRecordFiles(root, directory),
     clearDirectory: async (directory) => await clearDirectory(root, directory),
     withNamespaceLock: async (namespaceDirectory, operation) =>
       await withBrowserLock(`${lockPrefix}:${namespaceDirectory}`, operation),

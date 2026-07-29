@@ -1,4 +1,5 @@
 import { canonicalHash } from './caching'
+import { createNode } from './dagCore'
 import { createStorageDagBackend } from './storageDagBackend'
 import { createResourceFetchNode } from './resourceFetchNode'
 
@@ -87,9 +88,59 @@ export const testStorageDagBackendPersistsArtifactsAndCacheEntries = async () =>
   return { success: true }
 }
 
+export const testDagCacheUsesHashedComputationKeys = async () => {
+  const namespaces = new Map<string, Map<string, unknown>>()
+  const records = (namespace: string) => {
+    const existing = namespaces.get(namespace)
+    if (existing) return existing
+    const created = new Map<string, unknown>()
+    namespaces.set(namespace, created)
+    return created
+  }
+  const backend = createStorageDagBackend({
+    get: (namespace, id) => Promise.resolve(records(namespace).get(id) ?? null),
+    set: (namespace, id, value) => {
+      records(namespace).set(id, value)
+      return Promise.resolve()
+    },
+  })
+  const node = createNode({
+    name: 'hashed-computation-key-diagnostic',
+    contentHash: canonicalHash('hashed-computation-key-diagnostic'),
+    version: 1,
+    localParams: {
+      type: 'object',
+      properties: { value: { type: 'number' } },
+      required: ['value'],
+      additionalProperties: false,
+    } as const,
+    outputSchema: { type: 'number' } as const,
+    run: ({ value }) => value * 2,
+  })
+
+  await node.call({ value: 2 }).run(undefined, {
+    storageBackend: backend,
+    execution: { mode: 'local' },
+  })
+  await node.call({ value: 3 }).run(undefined, {
+    storageBackend: backend,
+    execution: { mode: 'local' },
+  })
+
+  const keys = [...records('dag/cache').keys()]
+  assert(keys.length === 2, 'Expected different parameters to produce different cache keys.')
+  assert(
+    keys.every((key) => /^sha256:[a-f0-9]{64}$/.test(key)),
+    'Expected every DAG cache key to be a fixed SHA-256 computation hash.',
+  )
+  return { success: true, keys }
+}
+
 testCanonicalHashUsesStableSha256.description =
   'Uses a real SHA-256 digest over canonical JSON values.'
 testResourceFetchNodeInlinesOnlyEligibleInternalFiles.description =
   'Materializes small internal files while keeping external resources reference-only.'
 testStorageDagBackendPersistsArtifactsAndCacheEntries.description =
   'Persists DAG artifacts and cache entries through content-agnostic storage records.'
+testDagCacheUsesHashedComputationKeys.description =
+  'Stores fixed computation hashes rather than serialized DAG descriptors as cache keys.'

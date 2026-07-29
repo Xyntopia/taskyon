@@ -20,8 +20,12 @@ sharing, and persistence.
   namespace.
 - Keep authoritative records, large blobs, derived indexes, configuration, and secrets distinct
   even when one backend stores several of them.
-- Treat manifests as acceleration and discovery structures, not the only recoverable source of
-  truth where object scanning is possible.
+- Use canonical hashes as logical keys when identity comes from immutable content or a computation.
+  Keep the generic storage protocol independent of key semantics and physical layout.
+- Store filesystem records under fixed-length hash-only paths. Backends may shard hashes into
+  prefix directories but must not expose serialized keys or domain names as final filenames.
+- Persist large immutable artifacts as whole content-addressed blobs. Streaming chunks are bounded
+  transfer units, not separate stored objects requiring a chunk manifest.
 
 ## Security By Default
 
@@ -40,6 +44,8 @@ sharing, and persistence.
 - Content addressing proves byte identity, not correctness, authorization, or confidentiality.
 - Treat cache-key-to-artifact claims separately from artifact transfer and require an explicit
   trust policy.
+- Verify peer-provided immutable records and blobs against their expected content hash before local
+  import. The local physical layout must not be part of the peer contract.
 - Any peer may provide bytes once the expected content hash is known; reject invalid bytes before
   local import.
 - Avoid equality, access-pattern, path, and size leakage where the threat model requires

@@ -24,6 +24,10 @@ flowchart LR
   Core --> Tools[Tool execution]
   Core --> Models[Model providers]
   Core --> Storage[Storage services]
+  Core --> ComputeHash[Computation hash]
+  ComputeHash --> Cache[Cache record]
+  Cache --> ArtifactHash[Artifact content hash]
+  ArtifactHash --> Storage
 ```
 
 The supported integration boundary is `@taskyon/taskyon/api`, not the broad internal root export.
@@ -48,6 +52,17 @@ should not manually repeat the service prefix.
 privileged host operations, and individual tool executors should remain separate capabilities.
 Secret, profile, session-key, destructive storage, and index-reset operations do not belong in the
 ordinary public protocol merely because direct core methods still exist.
+
+`taskyonStorageProtocol` transports record namespaces, keys, and values without interpreting their
+identity or prescribing physical paths. Domain owners provide canonical hashes when identity comes
+from immutable content or a computation. Filesystem backends store records under fixed-length,
+Git-style hash paths while databases, object stores, and peers preserve the same protocol contract.
+
+A DAG cache record maps a computation hash to an artifact content hash. The computation hash is
+derived from the node identity and parameters and answers whether work was already performed. The
+artifact hash is derived from the exact serialized result and independently verifies bytes loaded
+locally or received from a peer. These hashes cannot be collapsed while computations may observe
+external state or otherwise produce different outputs.
 
 ## Message-port boundary
 

@@ -23,6 +23,16 @@ client APIs, P2P services, and remote tool execution.
 - Keep routing and firewall decisions explicit when a protocol crosses local, remote, trusted, or
   untrusted boundaries.
 
+## Storage Key Ownership
+
+- Storage protocols transport namespaces, keys, records, and blobs without interpreting domain
+  identity or exposing filesystem paths.
+- The owning service calculates canonical task, node, computation, or content hashes when those
+  hashes define identity. Storage backends only map supplied keys to local database, object-store,
+  filesystem, or peer operations.
+- Keep backend sharding and temporary streaming paths private. Peers exchange logical hashes and
+  verified bytes, never host-specific paths.
+
 ## Runtime Portability
 
 - Shared core code must remain usable in browser and Node runtimes.
