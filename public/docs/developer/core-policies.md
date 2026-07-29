@@ -6,7 +6,11 @@ descending order of importance. When principles conflict, the earlier principle 
 - **Local first.** Normal workflows work locally; remote services extend them.
 - **Everything meaningful is a tool.** Agent-facing capabilities are composable tools; internal
   implementation details remain typed functions.
-- **Ports are power.** Runtime and trust boundaries use typed, capability-scoped protocols.
+- **Ports are power.** Runtime, service, and ownership boundaries use typed, capability-scoped
+  protocols even when both sides are local; clients remain independent of where a service runs.
+- **Protocols are scarce.** Every protocol capability may cross a future peer boundary. Keep wire
+  contracts focused on intentional remote capabilities and canonical data; derive navigation,
+  search, aggregation, and acceleration locally from cached or indexed state.
 - **P2P, not lock-in.** Peers provide Taskyon services through shared contracts that are independent
   of transport.
 - **Secure by default.** Use Taskyon's owned encryption, identity, secret, and permission

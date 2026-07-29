@@ -15,6 +15,28 @@ When project principles compete, use the order in the core policy document. Corr
 user's requested scope take precedence over implementation preferences. State any material
 tradeoff.
 
+## Protocol Discipline
+
+- Treat every protocol command as a capability that could be exposed across a future P2P boundary.
+- Use typed protocols at real runtime, service, storage, and ownership boundaries even when the
+  current provider is local or in-process. Consumers must not depend on whether the implementation
+  runs locally, in a worker, on another process, or on a peer.
+- Keep client behavior and protocol semantics location-transparent. Select and connect an adapter
+  at the composition boundary instead of branching throughout consumers on local versus remote
+  placement.
+- Keep protocols focused on intentional remote capabilities and canonical data exchange. Do not
+  add graph traversal, filtering, ranking, aggregation, or other convenience queries merely to
+  simplify a local consumer.
+- Before extending a protocol, prove that the behavior cannot be derived cleanly from locally
+  available canonical records using a cache or rebuildable index.
+- When local data is incomplete, prefer synchronizing or fetching the smallest canonical records
+  needed and derive views locally instead of adding a specialized remote query.
+- Expose derived computation through a protocol only when performing that computation remotely is
+  itself the intended, capability-scoped service, with explicit trust and authorization semantics.
+- Do not turn ordinary calls within one cohesive implementation into protocol traffic. Keep local
+  implementation details as direct typed functions and introduce a protocol where it removes a
+  genuine ownership, lifecycle, runtime, trust, or replaceability coupling.
+
 ## Root Cause And Evidence
 
 - Trace requests and failures to the highest owning source before editing consumers.

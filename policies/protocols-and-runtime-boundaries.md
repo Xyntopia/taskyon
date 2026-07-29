@@ -7,10 +7,40 @@ client APIs, P2P services, and remote tool execution.
 
 - Cross process, iframe, UI/core, client/host, worker, and peer boundaries through typed
   MessagePort/FRP protocols.
+- Also use protocols at meaningful service and ownership boundaries when both sides currently run
+  in-process. Local placement does not justify coupling a consumer to a concrete implementation.
 - Do not expose a generic event bus, parent-window access, raw internal object, or broad RPC bridge
   when a capability-scoped protocol can express the contract.
 - Keep protocol schemas as the wire source of truth and validate dynamic messages at that boundary.
 - Pass dependencies explicitly into protocol handlers instead of capturing hidden module state.
+
+## Location Transparency And Decoupling
+
+- A protocol client must use the same capability contract whether its provider is local, in a
+  worker, in another process, or available through a peer transport.
+- Choose the provider, transport, and adapter at an explicit composition boundary. Do not spread
+  local-versus-remote branches, backend checks, or transport knowledge through consumers.
+- Use protocols to separate meaningful ownership, lifecycle, runtime, trust, and replaceability
+  boundaries. This keeps clients small and allows implementations to move without rewriting them.
+- Do not replace direct function composition inside one cohesive implementation with protocol
+  calls. Protocols structure boundaries; they are not a default abstraction for every function.
+
+## Keep The Wire Surface Small
+
+- Treat every protocol command as potentially reachable through a future peer transport, even when
+  its first consumer uses an in-process or local MessagePort.
+- Protocol scarcity applies to the command surface, not to the number of local or remote adapters
+  implementing the same contract.
+- Put canonical data exchange and deliberately remote capabilities on protocols. Keep derived
+  graph navigation, filtering, ranking, aggregation, and acceleration in local functions, caches,
+  or rebuildable indexes.
+- Do not add a remote convenience query when a consumer can derive the answer from canonical
+  records it already holds.
+- When records are missing, prefer fetching or synchronizing the smallest canonical records needed
+  for local derivation instead of widening the protocol with each new query shape.
+- A derived operation belongs on a protocol only when remote execution is the intended service,
+  not merely an implementation shortcut. Document its trust, authorization, and data-exposure
+  boundary.
 
 ## Service Ownership
 

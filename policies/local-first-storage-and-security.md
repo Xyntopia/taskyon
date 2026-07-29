@@ -10,11 +10,15 @@ sharing, and persistence.
   over a useful local path.
 - Read through the selected local store or index first. Verify and import remote data locally
   before normal consumption.
+- Derive graph navigation, filtering, ranking, and other disposable views locally from canonical
+  records. Use smart caches and indexes rather than specialized remote convenience queries.
 - Keep local indexes and derived caches rebuildable from durable records or artifacts.
 
 ## Storage Ownership
 
 - Access storage through the owning typed storage client or repository boundary.
+- Keep storage consumers independent of backend placement. Select local, worker, remote, or peer
+  adapters at the composition boundary while preserving the same client contract and semantics.
 - Do not expose raw global OPFS, filesystem, database, or object-store access to core code or tools.
 - Scope storage by project, workspace, conversation, tool, artifact, or another explicit domain
   namespace.
