@@ -454,6 +454,7 @@
                 <div class="flex flex-center">
                   <div class="spaceship-live__ship-wrap">
                     <ProceduralSpaceship
+                      :storage-client="props.storageClient"
                       :seed-text="state.preview.seedText"
                       :library="libraryMetadata"
                       :size="320"
@@ -586,6 +587,7 @@
                   @click="state.preview.seedText = entry.seedText"
                 >
                   <ProceduralSpaceship
+                    :storage-client="props.storageClient"
                     :seed-text="entry.seedText"
                     :library="libraryMetadata"
                     :size="118"
@@ -655,7 +657,8 @@ import {
   type SvgTransformConfig,
 } from './spaceshipSchemas'
 import { clearSpaceshipImageCache, getSpaceshipImage } from './spaceshipIdenticonCache'
-import { syncStateWithOPFSFolder } from '@taskyon/common/modules/saveState'
+import { syncStateWithStorageClient } from '@taskyon/ui/modules/storageState'
+import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
 import SanitizedMarkup from '@taskyon/ui/components/SanitizedMarkup.vue'
 import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
 import ToggleButton from '@taskyon/ui/components/ToggleButton.vue'
@@ -666,6 +669,8 @@ type GalleryEntry = {
   id: string
   seedText: string
 }
+
+const props = defineProps<{ storageClient: TaskyonStorageClient }>()
 
 const DEFAULT_SVG_VARIANT_NAME = 'primary'
 const moduleDefinitionJsonSchema = z.toJSONSchema(spaceshipModuleDefinitionSchema, {
@@ -722,7 +727,11 @@ const proofRun = reactive({
   timestamp: 0,
 })
 
-void syncStateWithOPFSFolder('procedural-spaceship-lab', state)
+void syncStateWithStorageClient(
+  props.storageClient,
+  { namespace: 'spaceships/lab', id: 'procedural-spaceship-lab' },
+  state,
+)
 
 if (!state.moduleCatalog.length)
   state.moduleCatalog.splice(0, 0, ...cloneModuleLibrary(DEFAULT_MODULE_LIBRARY))
@@ -1830,7 +1839,7 @@ async function copyPrimaryPreviewPng() {
     return
   }
   try {
-    const result = await getSpaceshipImage(state.preview.seedText, {
+    const result = await getSpaceshipImage(props.storageClient, state.preview.seedText, {
       size: 320,
       renderMode: 'png-first',
       disableCache: state.preview.disableCache,
@@ -1863,7 +1872,7 @@ async function copyPrimaryPreviewPng() {
 
 async function resetPreviewCache() {
   try {
-    await clearSpaceshipImageCache()
+    await clearSpaceshipImageCache(props.storageClient)
     resetPreviewGallery()
     touchCatalog('resetPreviewCache')
     window.alert('Spaceship preview cache cleared.')

@@ -17,7 +17,6 @@
     "fflate": "^0.8.2",
     "js-yaml": "^4.1.0",
     "mathjs": "^11.8.2",
-    "pmtiles": "^4.4.1",
     "qrcode": "^1.5.4"
   },
   "peerDependencies": {

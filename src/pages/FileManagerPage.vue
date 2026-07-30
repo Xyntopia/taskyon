@@ -1,364 +1,241 @@
-<!-- FileManagerPage.vue – DEBUG INSTRUMENTED -->
 <template>
-  <q-page padding>
-    <FileDropzone class="q-mb-md" enable-paste @add-files="addFiles" />
-
+  <q-page padding class="column q-gutter-md">
     <q-card>
-      <q-card-section>
-        <div class="text-h6">
-          Taskyon File Browser
-          <InfoDialog
-            info-text="This browser shows all files that taskyon saved in its [OPFS](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system) file system and can interact with!"
-          />
-        </div>
-      </q-card-section>
+      <q-tabs v-model="viewMode" dense align="left">
+        <q-tab name="logical" label="Logical storage" />
+        <q-tab name="physical" label="Physical OPFS" />
+      </q-tabs>
       <q-separator />
 
-      <q-card-section>
-        <q-tree
-          v-model:expanded="expandedNodeIds"
-          :nodes="treeData"
-          node-key="id"
-          accordion
-          dense
-          selected-color="secondary"
-          @lazy-load="handleLazyLoad"
-        >
-          <template #default-header="{ node }">
-            <div
-              class="row items-center no-wrap cursor-pointer"
-              :class="{ 'highlighted-leaf': node.id === selectedNodeId }"
-              @click="onNodeClick(node)"
-            >
-              <q-icon :name="node.icon" class="q-mr-sm" />
-              <div class="ellipsis">{{ node.label }}</div>
-              <q-space />
-              <q-btn
-                v-if="node.kind === 'file'"
-                dense
-                flat
-                round
-                :icon="matDownload"
-                @click.stop="downloadFile(node)"
-              />
-              <q-btn
-                v-if="node.kind === 'file'"
-                dense
-                flat
-                round
-                :icon="matContentCopy"
-                @click.stop="copyPath(node)"
-              />
-              <q-btn
-                v-if="node.kind === 'file' || node.kind === 'directory'"
-                dense
-                flat
-                round
-                color="negative"
-                :icon="matDelete"
-                @click.stop="deleteEntry(node)"
-              />
-            </div>
-          </template>
-        </q-tree>
-      </q-card-section>
+      <q-tab-panels v-model="viewMode" animated>
+        <q-tab-panel name="logical" class="column q-gutter-md">
+          <q-banner rounded class="bg-blue-1 text-blue-10">
+            Browse Taskyon objects through StorageClient. Namespace slashes are logical prefixes,
+            not physical directories.
+          </q-banner>
+          <div class="row q-col-gutter-sm items-center">
+            <q-input v-model="namespace" class="col" dense outlined label="Namespace" />
+            <q-select
+              v-model="objectKind"
+              class="col-auto"
+              dense
+              outlined
+              emit-value
+              map-options
+              :options="kindOptions"
+            />
+            <q-btn label="Refresh" :icon="matRefresh" @click="refreshLogical" />
+            <q-btn
+              v-if="objectKind === 'blob'"
+              label="Upload"
+              :icon="matUpload"
+              @click="fileInput?.click()"
+            />
+            <input ref="fileInput" type="file" hidden multiple @change="uploadFiles" />
+          </div>
+          <q-list bordered separator>
+            <q-item v-for="entry in logicalEntries" :key="entry.id">
+              <q-item-section>
+                <q-item-label>{{ entry.id }}</q-item-label>
+                <q-item-label caption>{{ entry.caption }}</q-item-label>
+              </q-item-section>
+              <q-item-section side class="row no-wrap">
+                <q-btn
+                  v-if="objectKind === 'blob'"
+                  flat
+                  round
+                  :icon="matDownload"
+                  @click="downloadLogicalBlob(entry.id)"
+                />
+                <q-btn
+                  flat
+                  round
+                  color="negative"
+                  :icon="matDelete"
+                  @click="deleteLogical(entry.id)"
+                />
+              </q-item-section>
+            </q-item>
+            <q-item v-if="logicalEntries.length === 0">
+              <q-item-section
+                ><q-item-label caption>No stored objects.</q-item-label></q-item-section
+              >
+            </q-item>
+          </q-list>
+        </q-tab-panel>
+
+        <q-tab-panel name="physical" class="column q-gutter-md">
+          <q-banner rounded class="bg-orange-1 text-orange-10">
+            Read-only backend diagnostics. Physical paths are private implementation details and
+            cannot be modified from this view.
+          </q-banner>
+          <div>
+            <q-btn label="Refresh OPFS" :icon="matRefresh" @click="refreshPhysical" />
+          </div>
+          <q-tree :nodes="physicalNodes" node-key="path" default-expand-all>
+            <template #default-header="{ node }">
+              <div class="row items-center full-width">
+                <q-icon :name="node.kind === 'directory' ? matFolder : matDescription" />
+                <span class="q-ml-sm">{{ node.label }}</span>
+                <q-space />
+                <span v-if="node.size != null" class="text-caption text-grey-7">
+                  {{ formatSize(node.size) }}
+                </span>
+                <q-btn
+                  v-if="node.kind === 'file'"
+                  flat
+                  round
+                  :icon="matDownload"
+                  @click.stop="downloadPhysical(node)"
+                />
+              </div>
+            </template>
+          </q-tree>
+        </q-tab-panel>
+      </q-tab-panels>
     </q-card>
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { matContentCopy, matDelete, matDownload, matFolder } from '@quasar/extras/material-icons'
-import { mdiFile } from '@quasar/extras/mdi-v6'
-import FileDropzone from '@taskyon/ui/components/FileDropzone.vue'
-import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
-import type { QTreeNode } from 'quasar'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import {
+  matDelete,
+  matDescription,
+  matDownload,
+  matFolder,
+  matRefresh,
+  matUpload,
+} from '@quasar/extras/material-icons'
+import { useTaskyonStore } from 'src/stores/taskyonState'
+import { onMounted, ref } from 'vue'
 
-const props = defineProps<{
-  initialPath?: string | string[]
-}>()
-
-const normalizedPath = computed(() => {
-  if (!props.initialPath) return ''
-  return Array.isArray(props.initialPath)
-    ? props.initialPath.filter(Boolean).join('/')
-    : props.initialPath
-})
-
-/* ---------- state ---------- */
-
-const treeData = ref<TreeNode[]>([])
-const selectedNodeId = ref<string | null>(null)
-const expandedNodeIds = ref<string[]>([])
-
-watch(normalizedPath, async (path) => {
-  if (path && treeData.value.length > 0) {
-    await openPath(path)
-  }
-})
-
-onMounted(async () => {
-  await buildRoot()
-  if (normalizedPath.value) {
-    await openPath(normalizedPath.value)
-  }
-})
-
-async function openPath(path: string) {
-  const segments = path.split('/').filter(Boolean)
-  let currentNodes = treeData.value
-  let current: TreeNode | undefined
-
-  console.log(
-    '[openPath] path=',
-    path,
-    'segments=',
-    segments,
-    'root IDs=',
-    treeData.value.map((n) => n.id),
-  )
-
-  for (let i = 0; i < segments.length; i++) {
-    const segPath = segments.slice(0, i + 1).join('/')
-    current = currentNodes.find((n) => n.id === segPath)
-
-    if (!current) {
-      console.warn('[openPath] segment not found:', segPath)
-      return
-    }
-
-    if (current.kind === 'directory') {
-      if (current.lazy) {
-        const children = await dirHandleToNodes(current.handle as DirHandle, current.path)
-        current.children = children
-        current.lazy = false
-      }
-      if (!expandedNodeIds.value.includes(current.id)) {
-        expandedNodeIds.value.push(current.id)
-      }
-      currentNodes = (current.children ?? []) as TreeNode[]
-    } else {
-      if (i === segments.length - 1) {
-        console.log('[openPath] normalizedPath', path, '→ selecting', current?.id)
-        selectedNodeId.value = current.id
-        console.log('[openPath] selected leaf', current.id)
-      }
-    }
-  }
-}
-
-/* ---------- helpers ---------- */
-
-/** Pretty-print file sizes for the UI */
-function formatSize(size?: number) {
-  if (size == null) return ''
-  if (size >= 1_048_576) return `${(size / 1_048_576).toFixed(2)} MB`
-  if (size >= 1_024) return `${(size / 1_024).toFixed(2)} KB`
-  return `${size} B`
-}
-
-/** OPFS directory handle with typed .entries() (just for TS) */
-type DirHandle = FileSystemDirectoryHandle & {
-  entries(): AsyncIterableIterator<[string, FileSystemHandle]>
-}
-
-/** Our node extends Quasar’s, keeps TypeScript happy */
-interface TreeNode extends QTreeNode {
-  handle: FileSystemHandle
+type LogicalEntry = { id: string; caption: string }
+type PhysicalNode = {
+  label: string
+  path: string
   kind: 'file' | 'directory'
   size?: number
-  path: string
+  file?: File
+  children?: PhysicalNode[]
 }
 
-/* ---------- directory → nodes ---------- */
+defineProps<{ initialPath?: string | string[] }>()
 
-async function dirHandleToNodes(dir: DirHandle, parentPath = ''): Promise<TreeNode[]> {
-  console.log('[dirHandleToNodes] Reading directory', dir)
-  const out: TreeNode[] = []
+const taskyon = useTaskyonStore()
+const viewMode = ref<'logical' | 'physical'>('logical')
+const namespace = ref('modelica/projects')
+const objectKind = ref<'record' | 'blob'>('record')
+const kindOptions = [
+  { label: 'Records', value: 'record' },
+  { label: 'Blobs', value: 'blob' },
+]
+const logicalEntries = ref<LogicalEntry[]>([])
+const physicalNodes = ref<PhysicalNode[]>([])
+const fileInput = ref<HTMLInputElement | null>(null)
 
-  for await (const [name, handle] of dir.entries()) {
-    console.log('  ├─ found', name, 'kind=', handle.kind)
-    const fullPath = parentPath ? `${parentPath}/${name}` : name
+const formatSize = (size: number) =>
+  size >= 1_048_576
+    ? `${(size / 1_048_576).toFixed(2)} MB`
+    : size >= 1024
+      ? `${(size / 1024).toFixed(2)} KB`
+      : `${size} B`
 
-    if (handle.kind === 'file') {
-      const fileHandle = handle
-      const file = await fileHandle.getFile()
-      out.push({
-        id: fullPath,
-        label: `${name} · ${formatSize(file.size)}`,
-        icon: mdiFile,
-        kind: 'file',
-        size: file.size,
-        handle,
-        path: fullPath,
-      })
-    } else {
-      out.push({
-        id: fullPath,
-        label: name,
-        icon: matFolder,
-        kind: 'directory',
-        handle,
-        lazy: true,
-        path: fullPath,
-      })
-    }
-  }
-
-  const sorted = out.sort((a, b) =>
-    a.kind === b.kind
-      ? (a.label ?? '').localeCompare(b.label ?? '')
-      : a.kind === 'directory'
-        ? -1
-        : 1,
-  )
-
-  console.log('[dirHandleToNodes] → returning', sorted.length, 'nodes')
-  return sorted
+const refreshLogical = async () => {
+  const selectedNamespace = namespace.value.trim()
+  if (!selectedNamespace) return
+  logicalEntries.value =
+    objectKind.value === 'record'
+      ? (await taskyon.storageClient.list({ namespace: selectedNamespace })).rows.map((row) => ({
+          id: String(row.id),
+          caption: JSON.stringify(row.data).slice(0, 180),
+        }))
+      : (await taskyon.storageClient.listBlobs({ namespace: selectedNamespace })).blobs.map(
+          (blob) => ({
+            id: blob.id,
+            caption: `${formatSize(blob.size)} · ${blob.contentType ?? 'application/octet-stream'}`,
+          }),
+        )
 }
 
-/* ---------- initial root ---------- */
-
-async function buildRoot() {
-  console.log('[buildRoot] Fetching OPFS root')
-  const root = (await navigator.storage.getDirectory()) as DirHandle
-  treeData.value = await dirHandleToNodes(root, '')
-  await nextTick()
-  console.log('[buildRoot] Root built; nodes =', treeData.value.length)
-}
-
-/* ---------- lazy loader ---------- */
-
-async function handleLazyLoad({
-  node,
-  done,
-}: {
-  node: TreeNode
-  key: string
-  done: (c?: QTreeNode[]) => void
-}) {
-  // 1️⃣  use node.lazy as the decisive flag
-  if (node.kind === 'directory' && node.lazy) {
-    try {
-      const children = await dirHandleToNodes(node.handle as DirHandle, node.path)
-
-      // update the node so later clicks can find the files
-      node.children = children
-      node.lazy = false // Quasar will also flip this, but safe to do
-
-      done(children as QTreeNode[])
-    } catch (err) {
-      console.error('[handleLazyLoad] failed:', err)
-      done() // prevent spinner from hanging
-    }
+const deleteLogical = async (id: string) => {
+  if (!window.confirm(`Delete ${namespace.value}/${id}?`)) return
+  if (objectKind.value === 'record') {
+    await taskyon.storageClient.delete({ namespace: namespace.value, id })
   } else {
-    done((node.children ?? []) as QTreeNode[])
+    await taskyon.storageClient.deleteBlob({ namespace: namespace.value, id })
   }
+  await refreshLogical()
 }
 
-/* ---------- click selection ---------- */
-
-async function onNodeClick(node: TreeNode) {
-  if (node.kind === 'directory') return // let expand/collapse happen
-  await downloadFile(node)
-}
-
-async function downloadFile(node: TreeNode) {
-  const file = await (node.handle as FileSystemFileHandle).getFile()
+const download = (file: File) => {
   const url = URL.createObjectURL(file)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = file.name
-  a.click()
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = file.name
+  anchor.click()
   URL.revokeObjectURL(url)
 }
 
-async function copyPath(node: TreeNode) {
-  try {
-    await navigator.clipboard.writeText(node.path)
-    console.log('[copyPath] copied', node.path)
-  } catch (err) {
-    console.error('[copyPath] failed:', err)
-  }
-}
-
-async function deleteEntry(node: TreeNode) {
-  const confirmed = window.confirm(
-    node.kind === 'directory'
-      ? `Delete directory "${node.path}" and ALL its contents?`
-      : `Delete file "${node.path}"?`,
+const downloadLogicalBlob = async (id: string) => {
+  const stored = await taskyon.storageClient.getBlob({ namespace: namespace.value, id })
+  if (!stored) return
+  download(
+    new File([stored.data], id, {
+      type: stored.metadata.contentType ?? 'application/octet-stream',
+    }),
   )
-  if (!confirmed) return
+}
 
-  try {
-    const segments = node.path.split('/')
-    const name = segments.pop()
-    const parentPath = segments.join('/')
-
-    let parent: FileSystemDirectoryHandle = await navigator.storage.getDirectory()
-    if (parentPath) {
-      for (const p of parentPath.split('/')) {
-        parent = await parent.getDirectoryHandle(p)
-      }
-    }
-
-    if (!name) return
-
-    await parent.removeEntry(name, {
-      recursive: node.kind === 'directory',
+const uploadFiles = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  for (const file of Array.from(input.files ?? [])) {
+    const id = file.name.replace(/[^A-Za-z0-9._~-]/g, '_').slice(0, 180)
+    await taskyon.storageClient.setBlob({
+      namespace: namespace.value,
+      id,
+      data: new Uint8Array(await file.arrayBuffer()),
+      contentType: file.type || 'application/octet-stream',
     })
-
-    // 🔪 surgically remove from UI tree
-    removeNodeById(treeData.value, node.id)
-
-    // clean expansion state
-    expandedNodeIds.value = expandedNodeIds.value.filter((id) => !id.startsWith(node.id))
-
-    if (selectedNodeId.value === node.id) {
-      selectedNodeId.value = null
-    }
-
-    console.log('[deleteEntry] removed', node.path)
-  } catch (err) {
-    console.error('[deleteEntry] failed:', err)
   }
+  input.value = ''
+  await refreshLogical()
 }
 
-/* ---------- uploads ---------- */
-
-async function addFiles(files: File[]) {
-  const root: FileSystemDirectoryHandle = await navigator.storage.getDirectory()
-  console.log('[addFiles] Adding', files.length, 'file(s) to root')
-  for (const f of files) {
-    const h = await root.getFileHandle(f.name, { create: true })
-    const w = await h.createWritable()
-    await f.stream().pipeTo(w)
-    console.log('  └─ Added', f.name)
-  }
-  await buildRoot()
-}
-
-function removeNodeById(nodes: TreeNode[], id: string): boolean {
-  const idx = nodes.findIndex((n) => n.id === id)
-  if (idx !== -1) {
-    nodes.splice(idx, 1)
-    return true
-  }
-
-  for (const n of nodes) {
-    if (n.children && removeNodeById(n.children as TreeNode[], id)) {
-      return true
+const readPhysicalDirectory = async (
+  directory: FileSystemDirectoryHandle,
+  parent = '',
+): Promise<PhysicalNode[]> => {
+  const nodes: PhysicalNode[] = []
+  for await (const [name, handle] of directory.entries()) {
+    const path = parent ? `${parent}/${name}` : name
+    if (handle.kind === 'directory') {
+      nodes.push({
+        label: name,
+        path,
+        kind: 'directory',
+        children: await readPhysicalDirectory(handle, path),
+      })
+    } else {
+      const file = await handle.getFile()
+      nodes.push({ label: name, path, kind: 'file', size: file.size, file })
     }
   }
-
-  return false
+  return nodes.sort((left, right) =>
+    left.kind === right.kind
+      ? left.label.localeCompare(right.label)
+      : left.kind === 'directory'
+        ? -1
+        : 1,
+  )
 }
+
+const refreshPhysical = async () => {
+  physicalNodes.value = await readPhysicalDirectory(await navigator.storage.getDirectory())
+}
+
+const downloadPhysical = (node: PhysicalNode) => {
+  if (node.file) download(node.file)
+}
+
+onMounted(refreshLogical)
 </script>
-
-<style scoped>
-.highlighted-leaf {
-  background: var(--q-secondary);
-  color: white;
-  border-radius: 4px;
-}
-</style>

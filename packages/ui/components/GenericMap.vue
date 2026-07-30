@@ -38,6 +38,7 @@ import {
   type TaskyonPmtilesVectorLayerSpec,
 } from '../gis/maplibrePmtiles'
 import { onBeforeUnmount, onMounted, ref, useSlots } from 'vue'
+import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
 
 const PARCELS_PM_URL =
   'https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:parcels-temp/parcels.pmtiles'
@@ -45,6 +46,7 @@ const PARCELS_PM_URL =
 let resizeObserver: ResizeObserver | null = null
 
 interface GenericMapProps {
+  storageClient?: TaskyonStorageClient
   initialCenter?: [number, number]
   initialZoom?: number
   useDefaultTileLayer?: boolean
@@ -61,6 +63,7 @@ interface GenericMapProps {
 }
 
 const props = withDefaults(defineProps<GenericMapProps>(), {
+  storageClient: undefined,
   initialCenter: () => [0, 0],
   initialZoom: 10,
   useDefaultTileLayer: true,
@@ -222,7 +225,7 @@ const addConfiguredPmtilesLayers = async () => {
   if (!m) return
   const layers = [...getDefaultPmtilesLayers(), ...props.pmtilesVectorLayers]
   for (const layer of layers) {
-    await addPmtilesVectorLayer(m, layer)
+    await addPmtilesVectorLayer(m, layer, props.storageClient)
   }
 }
 

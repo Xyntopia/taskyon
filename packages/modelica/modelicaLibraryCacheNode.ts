@@ -1,9 +1,8 @@
 import { createHash } from 'node:crypto'
-import { constants } from 'node:fs'
-import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { homedir, tmpdir } from 'node:os'
+import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
 
 type ModelicaLibraryManifestEntry = {
   id: string
@@ -20,18 +19,9 @@ type ModelicaLibraryManifest = {
   libraries: ModelicaLibraryManifestEntry[]
 }
 
-type CacheOptions = {
-  libraryIdPrefix?: string
-  envOverridePath?: string
-}
-
-type DownloadSource = {
-  label: string
-  url: string
-}
-
 const BUNDLED_MANIFEST_URL = new URL('./modelica_libraries.json', import.meta.url)
-const CACHE_DIR_NAME = 'modelica-libraries'
+const ARCHIVE_NAMESPACE = 'modelica/library-archives'
+const INDEX_NAMESPACE = 'modelica/library-cache-index'
 const DEFAULT_LIBRARY_ID_PREFIX = 'ModelicaStandardLibrary-'
 
 export const resolveBundledRumocaWasmPath = (): string => {
@@ -39,85 +29,57 @@ export const resolveBundledRumocaWasmPath = (): string => {
   return join(packageDir, 'rumoca_bind_wasm_bg.wasm')
 }
 
-const readOptionalString = (source: Record<string, unknown>, key: string): string => {
+const stringField = (source: Record<string, unknown>, key: string) => {
   const value = source[key]
   return typeof value === 'string' ? value.trim() : ''
-}
-
-const readOptionalNumber = (source: Record<string, unknown>, key: string): number | undefined => {
-  const value = source[key]
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
-}
-
-const sanitizeFileStem = (value: string): string => {
-  const stem = value
-    .trim()
-    .replaceAll(/[^a-zA-Z0-9._-]/g, '-')
-    .replaceAll(/-+/g, '-')
-    .replaceAll(/^-|-$/g, '')
-  return stem || 'modelica-library'
 }
 
 const parseManifestEntry = (raw: unknown): ModelicaLibraryManifestEntry | null => {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const source = raw as Record<string, unknown>
-  const name = readOptionalString(source, 'name')
-  const id = readOptionalString(source, 'id') || sanitizeFileStem(name)
-  const fileName = readOptionalString(source, 'file_name') || `${id}.zip`
-  const downloadUrl = readOptionalString(source, 'download_url')
-  const mirrorUrl = readOptionalString(source, 'mirror_url')
+  const name = stringField(source, 'name')
+  const id = stringField(source, 'id') || name
+  const downloadUrl = stringField(source, 'download_url')
+  const mirrorUrl = stringField(source, 'mirror_url')
   if (!id || (!downloadUrl && !mirrorUrl)) return null
   const entry: ModelicaLibraryManifestEntry = {
     id,
     name: name || id,
-    fileName,
+    fileName: stringField(source, 'file_name') || `${id}.zip`,
     downloadUrl,
     mirrorUrl,
   }
-  const sizeBytes = readOptionalNumber(source, 'size_bytes')
-  const sha256 = readOptionalString(source, 'sha256')
-  if (sizeBytes !== undefined) entry.sizeBytes = sizeBytes
+  const sizeBytes = source.size_bytes
+  if (typeof sizeBytes === 'number' && Number.isFinite(sizeBytes)) entry.sizeBytes = sizeBytes
+  const sha256 = stringField(source, 'sha256')
   if (sha256) entry.sha256 = sha256
   return entry
 }
-
-const isManifestEntry = (
-  entry: ModelicaLibraryManifestEntry | null,
-): entry is ModelicaLibraryManifestEntry => entry !== null
 
 const parseManifest = (raw: unknown): ModelicaLibraryManifest => {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new Error('Modelica library manifest is not an object')
   }
   const source = raw as Record<string, unknown>
-  const rawLibraries = source.libraries
-  if (!Array.isArray(rawLibraries)) {
+  if (!Array.isArray(source.libraries)) {
     throw new Error('Modelica library manifest does not contain a libraries array')
   }
   return {
-    mirrorManifestUrl: readOptionalString(source, 'mirror_manifest_url'),
-    libraries: rawLibraries.map(parseManifestEntry).filter(isManifestEntry),
+    mirrorManifestUrl: stringField(source, 'mirror_manifest_url'),
+    libraries: source.libraries.map(parseManifestEntry).filter((entry) => entry !== null),
   }
 }
 
-async function readBundledManifest(): Promise<ModelicaLibraryManifest> {
-  const raw = await readFile(BUNDLED_MANIFEST_URL, 'utf8')
-  return parseManifest(JSON.parse(raw))
-}
+const readBundledManifest = async () =>
+  parseManifest(JSON.parse(await readFile(BUNDLED_MANIFEST_URL, 'utf8')))
 
-async function readRemoteManifest(url: string): Promise<ModelicaLibraryManifest> {
-  const response = await fetch(url, { cache: 'no-cache' })
-  if (!response.ok) {
-    throw new Error(`Failed to refresh Modelica library manifest: HTTP ${response.status}`)
-  }
-  return parseManifest(await response.json())
-}
-
-async function loadModelicaLibraryManifest(): Promise<ModelicaLibraryManifest> {
+const loadManifest = async () => {
   const bundled = await readBundledManifest()
   if (!bundled.mirrorManifestUrl) return bundled
   try {
-    return await readRemoteManifest(bundled.mirrorManifestUrl)
+    const response = await fetch(bundled.mirrorManifestUrl, { cache: 'no-cache' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    return parseManifest(await response.json())
   } catch (error) {
     console.warn(
       `[modelica-library-cache] using bundled manifest after remote refresh failed: ${
@@ -128,128 +90,77 @@ async function loadModelicaLibraryManifest(): Promise<ModelicaLibraryManifest> {
   }
 }
 
-async function firstWritableDirectory(candidates: string[]): Promise<string> {
-  for (const candidate of candidates) {
-    try {
-      await mkdir(candidate, { recursive: true })
-      await access(candidate, constants.W_OK)
-      return candidate
-    } catch {
-      continue
-    }
-  }
-  throw new Error(`No writable Modelica library cache directory found: ${candidates.join(', ')}`)
-}
-
-async function resolveModelicaLibraryCacheDir(): Promise<string> {
-  const home = homedir()
-  const xdgCacheHome = process.env.XDG_CACHE_HOME?.trim()
-  const explicit = process.env.TASKYON_MODELICA_LIBRARY_CACHE_DIR?.trim()
-  const candidates = [
-    explicit || '',
-    xdgCacheHome ? join(xdgCacheHome, 'taskyon', CACHE_DIR_NAME) : '',
-    home ? join(home, '.cache', 'taskyon', CACHE_DIR_NAME) : '',
-    join(tmpdir(), 'taskyon', CACHE_DIR_NAME),
-  ].filter(Boolean)
-  return await firstWritableDirectory(candidates)
-}
-
-async function sha256File(path: string): Promise<string> {
-  const bytes = await readFile(path)
-  return createHash('sha256').update(bytes).digest('hex')
-}
-
-async function cachedFileMatches(
-  path: string,
-  library: ModelicaLibraryManifestEntry,
-): Promise<boolean> {
-  try {
-    const details = await stat(path)
-    if (library.sizeBytes !== undefined && details.size !== library.sizeBytes) return false
-    if (library.sha256 && (await sha256File(path)) !== library.sha256) return false
-    return details.size > 1024
-  } catch {
-    return false
-  }
-}
-
-function buildCacheFileName(library: ModelicaLibraryManifestEntry): string {
-  const stem = sanitizeFileStem(library.id || library.name)
-  if (library.sha256) return `${stem}-${library.sha256}.zip`
-  return library.fileName || `${stem}.zip`
-}
-
-function buildDownloadSources(library: ModelicaLibraryManifestEntry): DownloadSource[] {
-  const sources = [
-    { label: 'mirror', url: library.mirrorUrl },
-    { label: 'upstream', url: library.downloadUrl },
-  ].filter((source) => source.url)
-  return sources.filter(
-    (source, index) => sources.findIndex((candidate) => candidate.url === source.url) === index,
+const findLibrary = (manifest: ModelicaLibraryManifest, prefix: string) => {
+  const library = manifest.libraries.find(
+    (entry) => entry.id.startsWith(prefix) || entry.name.startsWith(prefix),
   )
+  if (!library) throw new Error(`No Modelica library found for prefix ${prefix}`)
+  return library
 }
 
-async function downloadToFile(sources: DownloadSource[], targetPath: string): Promise<string> {
-  let lastError = ''
-  for (const source of sources) {
+const sha256 = (data: Uint8Array) => createHash('sha256').update(data).digest('hex')
+
+const validArchive = (data: Uint8Array, library: ModelicaLibraryManifestEntry) =>
+  data.byteLength > 1024 &&
+  (library.sizeBytes === undefined || data.byteLength === library.sizeBytes) &&
+  (!library.sha256 || sha256(data) === library.sha256)
+
+const readCachedArchive = async (
+  storageClient: TaskyonStorageClient,
+  library: ModelicaLibraryManifestEntry,
+) => {
+  const indexed = await storageClient.get({ namespace: INDEX_NAMESPACE, id: library.id })
+  if (typeof indexed.value !== 'string') return null
+  const stored = await storageClient.getBlob({ namespace: ARCHIVE_NAMESPACE, id: indexed.value })
+  return stored && validArchive(stored.data, library)
+    ? { id: indexed.value, data: stored.data }
+    : null
+}
+
+const downloadArchive = async (library: ModelicaLibraryManifestEntry) => {
+  let lastError = 'no URL worked'
+  const sources = [library.mirrorUrl, library.downloadUrl].filter(
+    (url, index, urls) => url && urls.indexOf(url) === index,
+  )
+  for (const url of sources) {
     try {
-      console.log(`[modelica-library-cache] downloading ${source.label}: ${source.url}`)
-      const response = await fetch(source.url)
+      const response = await fetch(url)
       if (!response.ok) {
         lastError = `HTTP ${response.status}`
         continue
       }
-      const bytes = new Uint8Array(await response.arrayBuffer())
-      if (bytes.byteLength <= 1024) {
-        lastError = 'response is unexpectedly small'
+      const data = new Uint8Array(await response.arrayBuffer())
+      if (!validArchive(data, library)) {
+        lastError = 'downloaded bytes failed size or hash validation'
         continue
       }
-      await mkdir(dirname(targetPath), { recursive: true })
-      await writeFile(targetPath, bytes)
-      return source.url
+      return data
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error)
     }
   }
-  throw new Error(`Failed to download Modelica library archive: ${lastError || 'no URL worked'}`)
+  throw new Error(`Failed to download Modelica library archive: ${lastError}`)
 }
 
-function findLibrary(
-  manifest: ModelicaLibraryManifest,
-  libraryIdPrefix: string,
-): ModelicaLibraryManifestEntry {
-  const library = manifest.libraries.find(
-    (entry) => entry.id.startsWith(libraryIdPrefix) || entry.name.startsWith(libraryIdPrefix),
-  )
-  if (!library) throw new Error(`No Modelica library found for prefix ${libraryIdPrefix}`)
-  return library
-}
-
-async function assertOverridePath(path: string): Promise<string> {
-  await access(path)
-  return path
-}
-
-export async function resolveCachedModelicaLibraryZipPath(
-  options: CacheOptions = {},
-): Promise<string> {
-  const overridePath =
-    options.envOverridePath?.trim() || process.env.MODELICA_DIAG_MSL_ZIP_PATH?.trim()
-  if (overridePath) return await assertOverridePath(overridePath)
-
-  const manifest = await loadModelicaLibraryManifest()
+export const resolveCachedModelicaLibraryZip = async (
+  storageClient: TaskyonStorageClient,
+  options: { libraryIdPrefix?: string } = {},
+) => {
+  const manifest = await loadManifest()
   const library = findLibrary(manifest, options.libraryIdPrefix || DEFAULT_LIBRARY_ID_PREFIX)
-  const cacheDir = await resolveModelicaLibraryCacheDir()
-  const targetPath = join(cacheDir, buildCacheFileName(library))
-  if (await cachedFileMatches(targetPath, library)) return targetPath
+  const cached = await readCachedArchive(storageClient, library)
+  if (cached) return cached
 
-  const usedUrl = await downloadToFile(buildDownloadSources(library), targetPath)
-  if (!(await cachedFileMatches(targetPath, library))) {
-    throw new Error(`Downloaded Modelica library failed cache validation: ${usedUrl}`)
-  }
-  return targetPath
+  const data = await downloadArchive(library)
+  const id = sha256(data)
+  await storageClient.setBlob({
+    namespace: ARCHIVE_NAMESPACE,
+    id,
+    data,
+    contentType: 'application/zip',
+  })
+  await storageClient.set({ namespace: INDEX_NAMESPACE, id: library.id, value: id })
+  return { id, data }
 }
 
-export function modelicaLibraryManifestFilePath(): string {
-  return fileURLToPath(BUNDLED_MANIFEST_URL)
-}
+export const modelicaLibraryManifestFilePath = () => fileURLToPath(BUNDLED_MANIFEST_URL)

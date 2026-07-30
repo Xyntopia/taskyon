@@ -99,6 +99,7 @@
             </div>
             <ProceduralSpaceshipIdenticon
               v-if="snapshot.nodeId"
+              :storage-client="taskyon.storageClient"
               :seed-text="snapshot.nodeId"
               class="col-auto"
             />
@@ -112,7 +113,10 @@
             <q-list separator>
               <q-item v-for="message in currentMessages" :key="message.id">
                 <q-item-section avatar>
-                  <ProceduralSpaceshipIdenticon :seed-text="message.senderPeerId" />
+                  <ProceduralSpaceshipIdenticon
+                    :storage-client="taskyon.storageClient"
+                    :seed-text="message.senderPeerId"
+                  />
                 </q-item-section>
                 <q-item-section>
                   <q-item-label>{{ message.body }}</q-item-label>
@@ -170,9 +174,11 @@ import ProceduralSpaceshipIdenticon from '@taskyon/spaceships/ProceduralSpaceshi
 import { copyToClipboard } from 'quasar'
 import Libp2pStatus from 'src/components/taskyon/Libp2pStatus.vue'
 import NetworkManager from 'src/components/taskyon/NetworkManager.vue'
+import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 
 const p2pBus = createP2pBus()
+const taskyon = useTaskyonStore()
 const snapshot = shallowRef<P2pManagerSnapshot>(p2pBus.manager.getSnapshot())
 const chatMessages = ref<P2pChatMessage[]>([])
 const draftMessage = ref('')

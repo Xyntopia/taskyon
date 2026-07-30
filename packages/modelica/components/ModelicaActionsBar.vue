@@ -246,7 +246,7 @@ const props = defineProps<{
   mslDownloading: boolean
   mslArchiveName: string
   mslFileCount: number
-  mslCachedZipPath: string
+  mslCachedZipId: string
   wasmLoaded: boolean
   currentVersionIndex: number
   documentVersionsLength: number

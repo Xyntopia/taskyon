@@ -3,13 +3,16 @@ import {
   type ResourceFilesLoader,
 } from '@taskyon/common/modules/resourceFiles'
 import type { TaskyonApiDescription } from '@taskyon/taskyon/api'
-import { loadOpfsResourceFiles } from './opfsResources'
+import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
+import { createStorageResourceFilesLoader } from './storageResources'
 import { loadTaskyonAuthoredResourceFiles } from './taskyonDocumentation'
 
 export const createTaskyonResourceFilesLoader = (
   describeApi: () => Promise<TaskyonApiDescription>,
-): ResourceFilesLoader =>
-  async function* (source) {
+  storageClient: TaskyonStorageClient,
+): ResourceFilesLoader => {
+  const loadStorageResourceFiles = createStorageResourceFilesLoader(storageClient)
+  return async function* (source) {
     if (/^https?:\/\//.test(source)) {
       yield* loadHttpResourceFiles(source)
       return
@@ -28,10 +31,11 @@ export const createTaskyonResourceFilesLoader = (
       yield* loadTaskyonAuthoredResourceFiles(source)
       return
     }
-    if (source === '/resources/opfs' || source.startsWith('/resources/opfs/')) {
-      yield* loadOpfsResourceFiles(source)
+    if (source === '/resources/storage' || source.startsWith('/resources/storage?')) {
+      yield* loadStorageResourceFiles(source)
       return
     }
 
     throw new Error(`Taskyon resource source not found: ${source}`)
   }
+}

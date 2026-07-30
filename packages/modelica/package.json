@@ -11,6 +11,7 @@
     "@codemirror/autocomplete": "^6.18.6",
     "@codemirror/state": "^6.5.0",
     "@taskyon/common": "workspace:*",
+    "@taskyon/taskyon": "workspace:*",
     "@taskyon/ui": "workspace:*",
     "@vueuse/core": "^14.2.1",
     "rumoca-full-web": "npm:@cognipilot/rumoca@^0.9.8"

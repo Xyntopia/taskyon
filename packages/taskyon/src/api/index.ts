@@ -89,6 +89,7 @@ export {
   type StorageRecordBackend,
   type StorageRecordCrud,
   type TaskyonStorageMessage,
+  type TaskyonStorageClient,
 } from './storageProtocol'
 export { mergeStorageRecord, storageQueryMatches } from './storageRecordOperations'
 export {

@@ -41,6 +41,7 @@ export {
   type StorageRecordBackend,
   type StorageRecordCrud,
   type TaskyonStorageMessage,
+  type TaskyonStorageClient,
   type TaskyonLogEntry,
   type TaskyonLoggingMessage,
   type TaskyonLogSink,

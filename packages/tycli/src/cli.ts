@@ -1157,7 +1157,6 @@ const CLI_UNAVAILABLE_TOOL_NAMES = new Set([
   'location',
   'newWindowOpener',
   'notification',
-  'opfsStorage',
   'proceduralTreeGenerator',
   'tauriHttpWebReader',
   'waitForPostMessage',
@@ -2833,6 +2832,7 @@ async function main() {
     {
       toolSetup: createDefaultTaskyonToolSetup({
         unavailableToolNames: CLI_UNAVAILABLE_TOOL_NAMES,
+        storageClient,
       }),
       createIframeMultiPlexer: () =>
         createUnavailableIframeMux('Iframe message bridging is not available in tycli.'),

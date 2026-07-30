@@ -244,23 +244,15 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         props: (route) => ({ initialPath: route.params.pathMatch }),
         meta: {
           title: 'File Manager',
-          description: 'Manage files saved in Taskyon OPFS.',
+          description: 'Manage logical Taskyon storage and inspect the browser backend.',
         },
       },
       {
-        path: '/opfs',
+        path: '/storage',
         component: () => import('pages/FileManagerPage.vue'),
         meta: {
-          title: 'Taskyon File Manager',
-          description: 'Manage files saved in Taskyon OPFS.',
-        },
-      },
-      {
-        path: '/dag-nodes',
-        component: () => import('@taskyon/ui/pages/DagNodeEditorPage.vue'),
-        meta: {
-          title: 'DAG Node Editor',
-          description: 'Edit stored TypeScript DAG graph nodes.',
+          title: 'Taskyon Storage Manager',
+          description: 'Manage logical Taskyon storage and inspect the browser backend.',
         },
       },
       {
@@ -364,7 +356,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
   },
   {
     path: '/spaceships',
-    component: () => import('@taskyon/spaceships/ProceduralSpaceshipLabPage.vue'),
+    component: () => import('pages/taskyon/ProceduralSpaceshipLabPage.vue'),
     meta: {
       title: 'Procedural Spaceship Lab',
       description: 'Inspect deterministic procedural spaceships generated from seed strings.',

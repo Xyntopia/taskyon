@@ -17,6 +17,8 @@ sharing, and persistence.
 ## Storage Ownership
 
 - Access storage through the owning typed storage client or repository boundary.
+- Persist application projects, settings, uploaded resources, and derived caches through that same
+  boundary. Do not let a feature create its own OPFS or filesystem backend.
 - Keep storage consumers independent of backend placement. Select local, worker, remote, or peer
   adapters at the composition boundary while preserving the same client contract and semantics.
 - Do not expose raw global OPFS, filesystem, database, or object-store access to core code or tools.
@@ -30,6 +32,8 @@ sharing, and persistence.
   prefix directories but must not expose serialized keys or domain names as final filenames.
 - Persist large immutable artifacts as whole content-addressed blobs. Streaming chunks are bounded
   transfer units, not separate stored objects requiring a chunk manifest.
+- Raw backend inspection belongs only in explicit host-administration diagnostics and should be
+  read-only by default. Normal tools and feature UIs operate on logical namespaces and object IDs.
 
 ## Security By Default
 

@@ -2,10 +2,19 @@ import * as ModelicaDiagnostics from '@taskyon/modelica/modelicaDiagnostics'
 import { runDiagnosticsTests, type TestRecord } from '@taskyon/common/modules/diagnosticsRunner'
 import {
   resolveBundledRumocaWasmPath,
-  resolveCachedModelicaLibraryZipPath,
+  resolveCachedModelicaLibraryZip,
 } from '@taskyon/modelica/modelicaLibraryCacheNode'
 import { readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
+import { join } from 'node:path'
+import {
+  createProtocolPort,
+  createStorageClient,
+  taskyonStorageProtocol,
+  type TaskyonStorageClient,
+} from '@taskyon/taskyon/api'
+import { resolveDataDirectoryPath } from '../cli/config'
+import { createCliFileStorageService } from '../cli/fileStorage'
 
 const rumocaWasmPath = resolveBundledRumocaWasmPath()
 const rumocaWasmUrl = pathToFileURL(rumocaWasmPath).href
@@ -18,10 +27,10 @@ const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
   return copy.buffer
 }
 
-const installNodeFetchWasmFallback = async () => {
+const installNodeFetchWasmFallback = async (storageClient: TaskyonStorageClient) => {
   const nativeFetch = globalThis.fetch?.bind(globalThis)
   if (!nativeFetch) return
-  const resolvedMslZipPath = await resolveCachedModelicaLibraryZipPath()
+  const cachedMsl = await resolveCachedModelicaLibraryZip(storageClient)
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     if (
@@ -35,8 +44,7 @@ const installNodeFetchWasmFallback = async () => {
       })
     }
     if (typeof url === 'string' && url === mslReleaseZipUrl) {
-      const bytes = await readFile(resolvedMslZipPath)
-      return new Response(toArrayBuffer(bytes), {
+      return new Response(toArrayBuffer(cachedMsl.data), {
         status: 200,
         headers: { 'content-type': 'application/zip' },
       })
@@ -73,12 +81,15 @@ const camelToNormal = (input: string): string => {
   return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1)
 }
 
-const collectModelicaTests = (): TestRecord => {
+const collectModelicaTests = (storageClient: TaskyonStorageClient): TestRecord => {
   const tests: TestRecord = {}
   for (const [name, value] of Object.entries(ModelicaDiagnostics as Record<string, unknown>)) {
     if (!name.startsWith('testModelica')) continue
     if (typeof value !== 'function') continue
-    tests[camelToNormal(name)] = value as TestRecord[string]
+    tests[camelToNormal(name)] =
+      name === 'testModelicaMslFirstOrderRumocaSimulation'
+        ? () => (value as (client: TaskyonStorageClient) => unknown)(storageClient)
+        : (value as TestRecord[string])
   }
   return tests
 }
@@ -92,54 +103,65 @@ const filterTests = (tests: TestRecord, filter: string): TestRecord => {
 }
 
 const main = async (): Promise<void> => {
-  await installNodeFetchWasmFallback()
-  if (!process.env.MODELICA_DIAG_RUNTIME_TIMEOUT_MS) {
-    process.env.MODELICA_DIAG_RUNTIME_TIMEOUT_MS = '60000'
-  }
-  const opts = parseArgs(process.argv.slice(2))
-  const all = collectModelicaTests()
-  const selected = filterTests(all, opts.filter)
-  const names = Object.keys(selected)
-  console.log(`[modelica-node] discovered ${Object.keys(all).length} tests`)
-  console.log(
-    `[modelica-node] selected ${names.length} tests${opts.filter ? ` (filter="${opts.filter}")` : ''}`,
+  const storagePort = createProtocolPort(taskyonStorageProtocol)
+  const stopStorage = createCliFileStorageService(
+    storagePort.y,
+    join(await resolveDataDirectoryPath(), 'storage'),
   )
-  if (names.length === 0) {
-    console.error('[modelica-node] no tests selected')
-    process.exit(1)
-  }
+  const storageClient = createStorageClient(storagePort.x)
+  try {
+    await installNodeFetchWasmFallback(storageClient)
+    if (!process.env.MODELICA_DIAG_RUNTIME_TIMEOUT_MS) {
+      process.env.MODELICA_DIAG_RUNTIME_TIMEOUT_MS = '60000'
+    }
+    const opts = parseArgs(process.argv.slice(2))
+    const all = collectModelicaTests(storageClient)
+    const selected = filterTests(all, opts.filter)
+    const names = Object.keys(selected)
+    console.log(`[modelica-node] discovered ${Object.keys(all).length} tests`)
+    console.log(
+      `[modelica-node] selected ${names.length} tests${opts.filter ? ` (filter="${opts.filter}")` : ''}`,
+    )
+    if (names.length === 0) {
+      console.error('[modelica-node] no tests selected')
+      process.exitCode = 1
+      return
+    }
 
-  const startedAt = Date.now()
-  const results = await runDiagnosticsTests(selected, {
-    details: opts.details,
-    onProgress: ({ phase, test, ok }) => {
-      if (phase === 'start') console.log(`[RUN ] ${test}`)
-      else console.log(`[${ok ? 'PASS' : 'FAIL'}] ${test}`)
-    },
-  })
-
-  const passed = results.filter((r) => r.ok).length
-  const failed = results.length - passed
-  console.log(
-    `[modelica-node] completed in ${Date.now() - startedAt}ms: ${passed} passed, ${failed} failed`,
-  )
-  console.log('MODELICA_NODE_SUMMARY_START')
-  console.log(
-    JSON.stringify(
-      {
-        ok: failed === 0,
-        discovered: Object.keys(all).length,
-        selected: results.length,
-        passed,
-        failed,
-        results,
+    const startedAt = Date.now()
+    const results = await runDiagnosticsTests(selected, {
+      details: opts.details,
+      onProgress: ({ phase, test, ok }) => {
+        if (phase === 'start') console.log(`[RUN ] ${test}`)
+        else console.log(`[${ok ? 'PASS' : 'FAIL'}] ${test}`)
       },
-      null,
-      2,
-    ),
-  )
-  console.log('MODELICA_NODE_SUMMARY_END')
-  if (failed > 0) process.exit(1)
+    })
+
+    const passed = results.filter((result) => result.ok).length
+    const failed = results.length - passed
+    console.log(
+      `[modelica-node] completed in ${Date.now() - startedAt}ms: ${passed} passed, ${failed} failed`,
+    )
+    console.log('MODELICA_NODE_SUMMARY_START')
+    console.log(
+      JSON.stringify(
+        {
+          ok: failed === 0,
+          discovered: Object.keys(all).length,
+          selected: results.length,
+          passed,
+          failed,
+          results,
+        },
+        null,
+        2,
+      ),
+    )
+    console.log('MODELICA_NODE_SUMMARY_END')
+    if (failed > 0) process.exitCode = 1
+  } finally {
+    stopStorage()
+  }
 }
 
 await main()

@@ -1,4 +1,6 @@
 import { SPACESHIP_IDENTICON_VERSION } from './proceduralSpaceshipVersion.js'
+import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
+import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
 import type {
   GridSizeConfig,
   RewindPolicy,
@@ -32,33 +34,27 @@ export type SpaceshipImageResult =
   | { kind: 'png'; blob: Blob; cacheHit: boolean }
   | { kind: 'svg'; svg: string; cacheHit: false }
 
-const CACHE_ROOT = 'spaceship-identicons'
+const CACHE_NAMESPACE = `spaceship-identicons/${SPACESHIP_IDENTICON_VERSION}`
 
-export async function clearSpaceshipImageCache() {
-  const root = await getOpfsRoot()
-  if (!root) return
-  try {
-    const imageDir = await root.getDirectoryHandle(CACHE_ROOT)
-    await imageDir.removeEntry(SPACESHIP_IDENTICON_VERSION, { recursive: true })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (/notfound|no such file|does not exist/i.test(message)) return
-    console.warn('Failed to clear spaceship identicon cache directory.', error)
-  }
-}
+export const clearSpaceshipImageCache = async (storageClient: TaskyonStorageClient) =>
+  await storageClient.clearBlobs({ namespace: CACHE_NAMESPACE })
 
 export function normalizeSpaceshipSeed(seedText: string) {
   return seedText.trim() || 'untitled'
 }
 
-export async function getSpaceshipImage(seedText: string, options: SpaceshipImageOptions): Promise<SpaceshipImageResult> {
+export async function getSpaceshipImage(
+  storageClient: TaskyonStorageClient,
+  seedText: string,
+  options: SpaceshipImageOptions,
+): Promise<SpaceshipImageResult> {
   const normalizedSeed = normalizeSpaceshipSeed(seedText)
   const shouldUseCache = options.renderMode !== 'svg-only' && !options.disableCache
 
   if (shouldUseCache) {
-    if (options.clearCache) await removeCachedPngBlob(normalizedSeed, options)
+    if (options.clearCache) await removeCachedPngBlob(storageClient, normalizedSeed, options)
     else {
-      const cachedBlob = await readCachedPngBlob(normalizedSeed, options)
+      const cachedBlob = await readCachedPngBlob(storageClient, normalizedSeed, options)
       if (cachedBlob) return { kind: 'png', blob: cachedBlob, cacheHit: true }
     }
   }
@@ -71,7 +67,7 @@ export async function getSpaceshipImage(seedText: string, options: SpaceshipImag
   try {
     const png = await renderSvgToSquarePngUint8(svg, options.size)
     const blob = new Blob([new Uint8Array(png).slice().buffer], { type: 'image/png' })
-    if (shouldUseCache) await writeCachedPngBlob(normalizedSeed, options, blob)
+    if (shouldUseCache) await writeCachedPngBlob(storageClient, normalizedSeed, options, blob)
     return { kind: 'png', blob, cacheHit: false }
   } catch (error) {
     console.warn('Failed to render spaceship identicon PNG, falling back to SVG.', error)
@@ -115,87 +111,48 @@ async function renderSvgToSquarePngUint8(svg: string, size: number): Promise<Uin
   return new Uint8Array(await pngBlob.arrayBuffer())
 }
 
-async function readCachedPngBlob(seedText: string, options: SpaceshipImageOptions): Promise<Blob | null> {
-  const fileHandle = await getCacheFileHandle(seedText, options, false)
-  if (!fileHandle) return null
-  try {
-    const file = await fileHandle.getFile()
-    if (file.size === 0) return null
-    return file
-  } catch (error) {
-    console.warn('Failed to read cached spaceship identicon PNG.', error)
-    return null
-  }
+async function readCachedPngBlob(
+  storageClient: TaskyonStorageClient,
+  seedText: string,
+  options: SpaceshipImageOptions,
+): Promise<Blob | null> {
+  const stored = await storageClient.getBlob({
+    namespace: CACHE_NAMESPACE,
+    id: getCacheId(seedText, options),
+  })
+  return stored
+    ? new Blob([stored.data], { type: stored.metadata.contentType ?? 'image/png' })
+    : null
 }
 
-async function removeCachedPngBlob(seedText: string, options: SpaceshipImageOptions) {
-  const root = await getOpfsRoot()
-  if (!root) return
-  try {
-    const imageDir = await root.getDirectoryHandle(CACHE_ROOT)
-    const versionDir = await imageDir.getDirectoryHandle(SPACESHIP_IDENTICON_VERSION)
-    await versionDir.removeEntry(getCacheFileName(seedText, options))
-  } catch (error) {
-    // Missing cache entries are expected in normal operation.
-    const message = error instanceof Error ? error.message : String(error)
-    if (/notfound|no such file|does not exist/i.test(message)) return
-    console.warn('Failed to clear cached spaceship identicon PNG.', error)
-  }
-}
+const removeCachedPngBlob = async (
+  storageClient: TaskyonStorageClient,
+  seedText: string,
+  options: SpaceshipImageOptions,
+) =>
+  await storageClient.deleteBlob({
+    namespace: CACHE_NAMESPACE,
+    id: getCacheId(seedText, options),
+  })
 
-async function writeCachedPngBlob(seedText: string, options: SpaceshipImageOptions, blob: Blob) {
-  const fileHandle = await getCacheFileHandle(seedText, options, true)
-  if (!fileHandle) return
-  try {
-    const writable = await fileHandle.createWritable()
-    await writable.write(blob)
-    await writable.close()
-  } catch (error) {
-    console.warn('Failed to write cached spaceship identicon PNG.', error)
-  }
-}
+const writeCachedPngBlob = async (
+  storageClient: TaskyonStorageClient,
+  seedText: string,
+  options: SpaceshipImageOptions,
+  blob: Blob,
+) =>
+  await storageClient.setBlob({
+    namespace: CACHE_NAMESPACE,
+    id: getCacheId(seedText, options),
+    data: new Uint8Array(await blob.arrayBuffer()),
+    contentType: 'image/png',
+  })
 
-async function getCacheFileHandle(seedText: string, options: SpaceshipImageOptions, create: boolean): Promise<FileSystemFileHandle | null> {
-  const root = await getOpfsRoot()
-  if (!root) return null
-  try {
-    const imageDir = await root.getDirectoryHandle(CACHE_ROOT, { create })
-    const versionDir = await imageDir.getDirectoryHandle(SPACESHIP_IDENTICON_VERSION, { create })
-    return await versionDir.getFileHandle(getCacheFileName(seedText, options), { create })
-  } catch (error) {
-    console.warn('Failed to access spaceship identicon cache directory.', error)
-    return null
-  }
-}
-
-function getCacheFileName(seedText: string, options: SpaceshipImageOptions) {
-  return `${createCacheKey(seedText, options)}.png`
-}
-
-async function getOpfsRoot(): Promise<FileSystemDirectoryHandle | null> {
-  const storage = navigator.storage
-  if (!storage?.getDirectory) return null
-  try {
-    return await storage.getDirectory()
-  } catch (error) {
-    console.warn('Failed to access OPFS root for spaceship identicons.', error)
-    return null
-  }
-}
+const getCacheId = (seedText: string, options: SpaceshipImageOptions) =>
+  createCacheKey(seedText, options).slice('sha256:'.length)
 
 function createCacheKey(seedText: string, options: SpaceshipImageOptions) {
   const stableOptions = { ...options }
   delete stableOptions.clearCache
-  return hashString(
-    JSON.stringify({ seedText, options: stableOptions, version: SPACESHIP_IDENTICON_VERSION }),
-  ).toString(16)
-}
-
-function hashString(value: string) {
-  let hash = 2166136261
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-  return hash >>> 0
+  return canonicalHash({ seedText, options: stableOptions, version: SPACESHIP_IDENTICON_VERSION })
 }

@@ -1,5 +1,6 @@
 import { buildPmtilesUrlCandidates } from '@taskyon/common/modules/pmtilesUtils'
-import { createPmtilesOpfsSource } from '@taskyon/common/modules/pmtilesOpfsCache'
+import { createPmtilesStorageSource } from './pmtilesStorageCache'
+import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import maplibregl from 'maplibre-gl'
 import mapLibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-csp-worker.js?url'
@@ -104,10 +105,11 @@ export const addRasterFallbackBaseLayer = (map: MapLibreMap): void => {
 export const addPmtilesVectorLayer = async (
   map: MapLibreMap,
   spec: TaskyonPmtilesVectorLayerSpec,
+  storageClient?: TaskyonStorageClient,
 ): Promise<void> => {
   if (map.getSource(spec.id)) return
 
-  const loaded = await loadPmtilesSource(spec)
+  const loaded = await loadPmtilesSource(spec, storageClient)
   const sourceLayers = parsePmtilesVectorLayerNames(loaded.metadata)
   const bounds = parsePmtilesBounds(loaded.metadata, loaded.header)
 
@@ -181,13 +183,14 @@ const parseBoundsFromHeader = (header: unknown): [number, number, number, number
 
 const loadPmtilesSource = async (
   spec: TaskyonPmtilesVectorLayerSpec,
+  storageClient?: TaskyonStorageClient,
 ): Promise<LoadedPmtilesSource> => {
   let lastError: unknown = null
   const candidateOptions = spec.suffixes ? { suffixes: spec.suffixes } : {}
 
   for (const candidate of buildPmtilesUrlCandidates(spec.url, candidateOptions)) {
     try {
-      const pmtiles = new PMTiles(createPmtilesOpfsSource(candidate))
+      const pmtiles = new PMTiles(createPmtilesStorageSource(storageClient, candidate))
       protocol.add(pmtiles)
       const header = await pmtiles.getHeader()
       const metadata = await pmtiles.getMetadata()

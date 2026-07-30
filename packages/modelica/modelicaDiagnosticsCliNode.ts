@@ -3,7 +3,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
-import { resolveCachedModelicaLibraryZipPath } from './modelicaLibraryCacheNode'
+import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
+import { resolveCachedModelicaLibraryZip } from './modelicaLibraryCacheNode'
 
 const MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS = {
   format: 'json' as const,
@@ -56,14 +57,17 @@ function extractTrailingJsonObject(stdout: string): string {
   throw new Error(`CLI stdout did not contain a trailing JSON payload:\n${text.slice(-800)}`)
 }
 
-export async function runModelicaCliMslFirstOrderRumocaSimulation() {
-  const resolvedMslZipPath = await resolveCachedModelicaLibraryZipPath()
+export async function runModelicaCliMslFirstOrderRumocaSimulation(
+  storageClient: TaskyonStorageClient,
+) {
+  const cachedMsl = await resolveCachedModelicaLibraryZip(storageClient)
   const debug: Record<string, unknown> = {
     phase: 'init',
-    mslZipPath: resolvedMslZipPath,
+    mslZipId: cachedMsl.id,
   }
   const tempDir = await mkdtemp(join(tmpdir(), 'taskyon-modelica-cli-'))
   const sourcePath = join(tempDir, 'MslFirstOrderCliSmoke.mo')
+  const mslZipPath = join(tempDir, `${cachedMsl.id}.zip`)
 
   try {
     const source = `
@@ -75,6 +79,7 @@ equation
 end MslFirstOrderCliSmoke;
 `.trim()
     await writeFile(sourcePath, `${source}\n`, 'utf8')
+    await writeFile(mslZipPath, cachedMsl.data)
     debug.sourcePath = sourcePath
     debug.phase = 'exec-cli'
 
@@ -83,7 +88,7 @@ end MslFirstOrderCliSmoke;
       cliUrl.pathname,
       'simulate-model',
       '--msl-zip',
-      resolvedMslZipPath,
+      mslZipPath,
       '--model',
       'MslFirstOrderCliSmoke',
       '--source-file',

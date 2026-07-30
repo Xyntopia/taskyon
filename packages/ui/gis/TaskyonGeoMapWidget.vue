@@ -4,6 +4,7 @@
       ref="mapRef"
       v-model:sidebar-open="sidebarOpen"
       class="taskyon-geo-map-widget__map"
+      :storage-client="storageClient"
       :initial-center="initialCenter"
       :initial-zoom="initialZoom"
       :show-parcels-layer="false"
@@ -36,6 +37,7 @@ import type { MapSearchLocation, TaskyonMapWidgetState } from './taskyonMapWidge
 import maplibregl from 'maplibre-gl'
 import type { FilterSpecification } from 'maplibre-gl'
 import { computed, onBeforeUnmount, ref } from 'vue'
+import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
 
 interface GenericMapExpose {
   setView: (lat: number, lng: number, zoom?: number) => void
@@ -48,6 +50,7 @@ const GEOJSON_POINT_LAYER_ID = 'taskyon_geojson_point'
 
 const props = defineProps<{
   state: TaskyonMapWidgetState
+  storageClient: TaskyonStorageClient
 }>()
 
 const mapRef = ref<GenericMapExpose | null>(null)

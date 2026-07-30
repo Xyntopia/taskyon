@@ -8,7 +8,9 @@ import { DEFAULT_POLITE_HTTP_MIN_DELAY_MS } from '../utils/politeHttp'
 import { processTasksDetailed } from '../api'
 import { tyCore } from '../core/init'
 import { createDefaultTaskyonToolSetup } from '../tools'
-import { opfsStorageTool } from '../tools/fileTools'
+import { createStorageTool } from '../tools/fileTools'
+import { createProtocolPort } from '@taskyon/common/modules/frpBus'
+import { createStorageClient, taskyonStorageProtocol } from '../api/storageProtocol'
 import {
   buildBrowserMcpImportChain,
   buildEnsureBrowserMcpImportRetryChain,
@@ -24,6 +26,9 @@ import { FunctionCall } from '../types/tools'
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
 }
+
+const storagePort = createProtocolPort(taskyonStorageProtocol)
+const storageTool = createStorageTool(createStorageClient(storagePort.x))
 
 const getFunctionCall = (task: unknown): FunctionCall | undefined => {
   if (!task || typeof task !== 'object' || !('content' in task)) return undefined
@@ -45,9 +50,9 @@ const updateFilesStub = createTool({
   function: () => ({ ok: true }),
 })
 
-const opfsStorageStub = createTool({
-  name: 'opfsStorage',
-  description: 'Test stub for browser OPFS file storage.',
+const storageStub = createTool({
+  name: 'storage',
+  description: 'Test stub for browser storage file storage.',
   parameters: {
     type: 'object',
     additionalProperties: true,
@@ -134,8 +139,8 @@ export const testWebResearchBuildsParallelQueryGroups = () => {
     'Expected websearch-first research branches to keep updateFiles available for save requests',
   )
   assert(
-    !groups[0]?.[0]?.allowedTools?.includes('opfsStorage'),
-    'Expected generic websearch-first research branches to keep browser-only OPFS storage opt-in',
+    !groups[0]?.[0]?.allowedTools?.includes('storage'),
+    'Expected generic websearch-first research branches to keep browser-only storage storage opt-in',
   )
   assert(
     groups[0]?.[0]?.allowedTools?.includes('downloadFile'),
@@ -158,11 +163,11 @@ export const testWebResearchBuildsParallelQueryGroups = () => {
     'Expected the second delegated task to require saved research artifacts',
   )
   assert(
-    groups[0]?.[1]?.task.includes('updateFiles or opfsStorage'),
+    groups[0]?.[1]?.task.includes('updateFiles or storage'),
     'Expected validation tasks to save requested deliverables when a file-writing tool is available',
   )
   assert(
-    groups[0]?.[1]?.task.includes('local path or OPFS path'),
+    groups[0]?.[1]?.task.includes('local path or storage path'),
     'Expected validation tasks to choose a task-specific directory structure for multi-file saves',
   )
   assert(
@@ -170,12 +175,12 @@ export const testWebResearchBuildsParallelQueryGroups = () => {
     'Expected validation tasks to reject competing branch-specific directories',
   )
   assert(
-    groups[0]?.[1]?.task.includes('opfsStorage download with expectedFileType set to pdf'),
-    'Expected validation tasks to describe browser OPFS PDF URL validation',
+    groups[0]?.[1]?.task.includes('storage download with expectedFileType set to pdf'),
+    'Expected validation tasks to describe browser storage PDF URL validation',
   )
   assert(
-    groups[0]?.[1]?.task.includes('For OPFS saves, base64-encode file content'),
-    'Expected validation tasks to describe browser OPFS artifact saves',
+    groups[0]?.[1]?.task.includes('For storage saves, base64-encode file content'),
+    'Expected validation tasks to describe browser storage artifact saves',
   )
   assert(
     groups[0]?.[1]?.task.includes('use it to validate candidate pages'),
@@ -203,9 +208,9 @@ export const testWebResearchBuildsParallelQueryGroups = () => {
   )
   assert(
     groups[0]?.[1]?.task.includes(
-      'When using opfsStorage, pass artifactRoot: research/collect-solar-cell-spec-sheets/',
+      'When using storage, pass artifactRoot: research/collect-solar-cell-spec-sheets/',
     ),
-    'Expected delegated tasks to pass the artifact root into browser OPFS writes',
+    'Expected delegated tasks to pass the artifact root into browser storage writes',
   )
 
   return { success: true }
@@ -461,7 +466,7 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
   )
   const toolRpcExecutor = await registerToolRpcTools({
     port: ty.port,
-    tools: [updateFilesStub, opfsStorageStub, downloadFileStub, bashStub, jinaMarkdownReaderStub],
+    tools: [updateFilesStub, storageStub, downloadFileStub, bashStub, jinaMarkdownReaderStub],
   })
 
   try {
@@ -608,11 +613,11 @@ export const testWebResearchPlannerWebSearchOnlyExcludesBrowserTools = () => {
   return { success: true }
 }
 
-export const testOpfsStorageSupportsBrowserDownloads = () => {
-  const parameters = opfsStorageTool.parameters
+export const testStorageToolSupportsBrowserDownloads = () => {
+  const parameters = storageTool.parameters
   assert(
     parameters.type === 'object' && parameters.properties,
-    'Expected opfsStorage to expose object parameters',
+    'Expected storage to expose object parameters',
   )
 
   const actionSchema = parameters.properties.action
@@ -623,29 +628,29 @@ export const testOpfsStorageSupportsBrowserDownloads = () => {
       'enum' in actionSchema &&
       Array.isArray(actionSchema.enum) &&
       actionSchema.enum.includes('download'),
-    'Expected opfsStorage action enum to include download',
+    'Expected storage action enum to include download',
   )
   assert(
     'url' in parameters.properties,
-    'Expected opfsStorage download action to expose a url parameter',
+    'Expected storage download action to expose a url parameter',
   )
   assert(
     'expectedFileType' in parameters.properties,
-    'Expected opfsStorage download action to support expected PDF validation',
+    'Expected storage download action to support expected PDF validation',
   )
   assert(
     'artifactRoot' in parameters.properties,
-    'Expected opfsStorage to expose an artifact root guard for browser research writes',
+    'Expected storage to expose an artifact root guard for browser research writes',
   )
 
   return { success: true }
 }
 
 export const testLocalBrowsingToolsExposePoliteHttpPolicy = () => {
-  const opfsProperties = opfsStorageTool.parameters.properties
+  const storageProperties = storageTool.parameters.properties
   assert(
-    'httpPolicy' in opfsProperties,
-    'Expected opfsStorage to expose polite HTTP controls for browser downloads',
+    'httpPolicy' in storageProperties,
+    'Expected storage to expose polite HTTP controls for browser downloads',
   )
 
   const proxyProperties = proxyWebReader.parameters.properties
@@ -696,8 +701,8 @@ testWebResearchPlannerBrowserMcpFirstEnsuresBrowserSetup.description =
   'Ensures browser MCP setup runs before research when researchMode is browser-mcp-first.'
 testWebResearchPlannerWebSearchOnlyExcludesBrowserTools.description =
   'Excludes browser MCP tools from delegated branches when researchMode is websearch-only.'
-testOpfsStorageSupportsBrowserDownloads.description =
-  'Exposes a browser OPFS download action so research can save accessible URLs without local filesystem access.'
+testStorageToolSupportsBrowserDownloads.description =
+  'Exposes a browser storage download action so research can save accessible URLs without local filesystem access.'
 testLocalBrowsingToolsExposePoliteHttpPolicy.description =
   'Exposes a default polite HTTP policy on low-level local browsing tools.'
 testWebResearchPlannerUsesWebSearchFirstByDefault.requiresLargeTokens = true

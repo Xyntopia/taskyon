@@ -9,6 +9,7 @@ import { connectTaskManagerStorageFromProtocol } from '../../../taskyon/src/core
 import { createArtifactStore } from '../../../taskyon/src/core/artifactStore'
 import {
   createProtocolStorageBlobBackend,
+  createStorageClient,
   taskyonStorageProtocol,
 } from '../../../taskyon/src/api/storageProtocol'
 import { createDefaultTaskyonToolSetup } from '../../../taskyon/src/tools'
@@ -137,6 +138,7 @@ export async function bootstrapCliTaskyon(args?: {
     dataDirectory: dataDir,
     selection: resolveCliStorageSelection(stored),
   })
+  const storageClient = createStorageClient(taskStorageClientPort)
   const taskyon = await tyCore(
     () => llmState.settings,
     () =>
@@ -147,7 +149,7 @@ export async function bootstrapCliTaskyon(args?: {
     getSelectedToolchainConfig(llmState),
     cryptoSession,
     {
-      toolSetup: createDefaultTaskyonToolSetup(),
+      toolSetup: createDefaultTaskyonToolSetup({ storageClient }),
       createIframeMultiPlexer: () =>
         createUnavailableIframeMux('Iframe message bridging is not available in tycli.'),
       nodePgLiteDataDir: pgliteNodeDir,

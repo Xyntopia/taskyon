@@ -266,16 +266,16 @@ const buildValidationTask = (
     'Deduplicate products before returning results; do not count the same product or document twice.',
     'Keep raw source downloads budgeted. For HTML, article pages, or documentation pages, save extracted notes, citations, and a manifest instead of a full raw page unless the user explicitly requested a raw archive. If downloadFile is used for raw text or HTML, set a reasonable maxBytes limit.',
     mustDownload
-      ? 'The requested deliverable includes saved research artifacts, not just links. Use whichever storage or download tool is available in this runtime. In tycli or other local runtimes, prefer downloadFile for accessible URL downloads because it validates file bytes, then use bash only as a fallback when downloadFile is unavailable or clearly unsuitable. If bash is used to download a requested PDF, verify the saved file starts with the %PDF- magic bytes before counting it; delete, rename, or mark any HTML/access-denied/error response as blocked instead of leaving it with a .pdf filename. Use updateFiles for text artifacts such as Markdown, JSON, CSV, or manifests. In browser runtimes, use opfsStorage download with expectedFileType set to pdf for accessible PDF URLs, or opfsStorage save for generated artifacts and file bytes that browser tooling exposes as base64. Verify each saved artifact exists and is non-empty when the tool supports verification. For PDF requests, count a saved artifact only when it is confirmed to be real PDF content, not an HTML error page or URL-only entry. If a requested artifact cannot be saved, record it as a blocked download with the reason; do not treat URL-only entries as completed downloads.'
+      ? 'The requested deliverable includes saved research artifacts, not just links. Use whichever storage or download tool is available in this runtime. In tycli or other local runtimes, prefer downloadFile for accessible URL downloads because it validates file bytes, then use bash only as a fallback when downloadFile is unavailable or clearly unsuitable. If bash is used to download a requested PDF, verify the saved file starts with the %PDF- magic bytes before counting it; delete, rename, or mark any HTML/access-denied/error response as blocked instead of leaving it with a .pdf filename. Use updateFiles for text artifacts such as Markdown, JSON, CSV, or manifests. In browser runtimes, use storage download with expectedFileType set to pdf for accessible PDF URLs, or storage save for generated artifacts and file bytes that browser tooling exposes as base64. Verify each saved artifact exists and is non-empty when the tool supports verification. For PDF requests, count a saved artifact only when it is confirmed to be real PDF content, not an HTML error page or URL-only entry. If a requested artifact cannot be saved, record it as a blocked download with the reason; do not treat URL-only entries as completed downloads.'
       : 'Capture the strongest direct source URLs exactly.',
     [
       'If the original user asked to save the results, save them without asking for extra confirmation.',
       mustDownload
-        ? `Use this single shared task-specific layout for the whole user request: files live below ${artifactRoot}; multiple artifacts should include ${artifactRoot}index.md or a manifest with every local path or OPFS path. Do not create competing branch-specific directories.`
+        ? `Use this single shared task-specific layout for the whole user request: files live below ${artifactRoot}; multiple artifacts should include ${artifactRoot}index.md or a manifest with every local path or storage path. Do not create competing branch-specific directories.`
         : `Use this single task-specific layout: files live below ${artifactRoot}. For a small single-file result, save one clear Markdown file under ${artifactRoot}; for multiple files, put the files plus an index.md there.`,
-      `Use stable descriptive filenames under ${artifactRoot} and record each local path or OPFS path next to the source URL. When using updateFiles or downloadFile, pass artifactRoot: ${artifactRoot} and make filePath start with ${artifactRoot}. When using opfsStorage, pass artifactRoot: ${artifactRoot} and make directory start with ${artifactRoot}.`,
-      'For OPFS saves, base64-encode file content, set the best matching MIME type, and keep text formats such as Markdown, JSON, CSV, and HTML readable when loaded back.',
-      'If a page reader such as jinaMarkdownReader is available, use it to validate candidate pages and find direct artifact URLs before falling back to shell-only guesses. If a file-writing tool such as updateFiles or opfsStorage is available, create or update the index or manifest with the validated results and saved artifact paths.',
+      `Use stable descriptive filenames under ${artifactRoot} and record each local path or storage object next to the source URL. When using updateFiles or downloadFile, pass artifactRoot: ${artifactRoot} and make filePath start with ${artifactRoot}. When using storage, use ${artifactRoot.replace(/\/+$/, '')} as both artifactRoot and namespace, and use the filename as the object id.`,
+      'For storage saves, base64-encode file content, set the best matching MIME type, and keep text formats such as Markdown, JSON, CSV, and HTML readable when loaded back.',
+      'If a page reader such as jinaMarkdownReader is available, use it to validate candidate pages and find direct artifact URLs before falling back to shell-only guesses. If a file-writing tool such as updateFiles or storage is available, create or update the index or manifest with the validated results and saved artifact paths.',
     ].join(' '),
     joinHints('Preferred file types', fileTypeHints),
     deliverable ? `Keep the final material aligned with: ${deliverable}.` : '',
@@ -653,7 +653,7 @@ Each search query becomes its own parallel research branch. Inside each branch, 
 
 This tool is useful for research tasks that need saved outputs such as reports, spec sheets, datasets, images, PDFs, JSON, CSV, Markdown, or other task-specific files.
 
-Taskyon first uses chatCompletion web search for discovery when enabled. In browser-mcp-first mode it ensures browser MCP tools before branching; websearch-first can opt into browser MCP by setting ensureBrowserMcp; websearch-only avoids browser MCP entirely. updateFiles supports local text artifacts in tycli, downloadFile supports verified local URL downloads in tycli, bash is a local fallback for unusual downloads, jinaMarkdownReader supports page validation, opfsStorage supports browser OPFS artifacts when explicitly enabled, and proxy/browser readers stay opt-in for blocked pages or direct fetches.`,
+Taskyon first uses chatCompletion web search for discovery when enabled. In browser-mcp-first mode it ensures browser MCP tools before branching; websearch-first can opt into browser MCP by setting ensureBrowserMcp; websearch-only avoids browser MCP entirely. updateFiles supports local text artifacts in tycli, downloadFile supports verified local URL downloads in tycli, bash is a local fallback for unusual downloads, jinaMarkdownReader supports page validation, storage supports browser storage artifacts when explicitly enabled, and proxy/browser readers stay opt-in for blocked pages or direct fetches.`,
   parameters: {
     type: 'object',
     additionalProperties: false,
@@ -691,7 +691,7 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
         type: 'array',
         items: { type: 'string' },
         description:
-          'Additional explicit helper tools for each delegated branch. Defaults to updateFiles, downloadFile, bash, and jinaMarkdownReader so local save requests, verified local downloads, shell fallback, and page validation work in tycli/local runtimes; browser OPFS and browser/proxy fetchers stay opt-in.',
+          'Additional explicit helper tools for each delegated branch. Defaults to updateFiles, downloadFile, bash, and jinaMarkdownReader so local save requests, verified local downloads, shell fallback, and page validation work in tycli/local runtimes; browser storage and browser/proxy fetchers stay opt-in.',
       },
       enableWebSearch: {
         type: 'boolean',
@@ -721,7 +721,7 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
         type: 'boolean',
         default: true,
         description:
-          'When true, delegated tasks should save requested source files or artifacts to the local filesystem or browser OPFS when tooling supports it, otherwise record the blocker next to the direct URL.',
+          'When true, delegated tasks should save requested source files or artifacts to the local filesystem or browser storage when tooling supports it, otherwise record the blocker next to the direct URL.',
       },
       fileTypeHints: {
         type: 'array',

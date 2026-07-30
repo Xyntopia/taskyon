@@ -29,7 +29,7 @@
         :msl-downloading="mslDownloading"
         :msl-archive-name="mslArchiveName"
         :msl-file-count="mslFileCount"
-        :msl-cached-zip-path="mslCachedZipPath"
+        :msl-cached-zip-id="mslCachedZipId"
         :wasm-loaded="wasmLoaded"
         :current-version-index="currentVersionIndex"
         :document-versions-length="documentVersions.length"
@@ -64,8 +64,8 @@
         @export-project="exportProjectJson"
         @import-project-file="onImportProjectFile"
         @import-msl-file="handleImportMslZip"
-        @download-msl="downloadMslZipToOpfs"
-        @load-cached-msl="handleLoadCachedMslZipFromOpfs"
+        @download-msl="downloadMslZipToStorage"
+        @load-cached-msl="handleLoadCachedMslZipFromStorage"
         @clear-msl="handleClearModelicaLibraries"
         @clear-all="clearAll"
         @reset-view="resetDockLayout"
@@ -282,7 +282,7 @@
         :msl-loading="mslLoading"
         :msl-downloading="mslDownloading"
         :active-library-loads="activeLibraryLoads"
-        :msl-cached-zip-path="mslCachedZipPath"
+        :msl-cached-zip-id="mslCachedZipId"
         :library-menu-options="libraryMenuOptions"
         :library-menu-schema="libraryMenuSchema"
         :nodes="libraryTreeNodes"
@@ -292,8 +292,8 @@
         @refresh="refreshLibraryTree"
         @open-model="openModelFromLibraryTree"
         @import-library-file="handleImportMslZip"
-        @load-cached-msl="handleLoadCachedMslZipFromOpfs"
-        @download-msl="downloadMslZipToOpfs"
+        @load-cached-msl="handleLoadCachedMslZipFromStorage"
+        @download-msl="downloadMslZipToStorage"
         @clear-msl="handleClearModelicaLibraries"
         @load-library-preset="handleLoadLibraryPreset"
         @update:show-root-metadata="libraryTreeShowRootMetadata = $event"
@@ -748,7 +748,8 @@ import { copyToClipboard } from '@taskyon/common/modules/utils'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useAttrs, watch } from 'vue'
 import { EditorState, type Extension } from '@codemirror/state'
 import { safeYamlDump } from '@taskyon/common/modules/yamlUtils'
-import { syncStateWithOPFSFolder } from '@taskyon/common/modules/saveState'
+import { syncStateWithStorageClient } from '@taskyon/ui/modules/storageState'
+import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
 import ModelicaActionsBar from './components/ModelicaActionsBar.vue'
 import ModelicaDaeAnalysisPane, {
   type ModelicaDaeAnalysis,
@@ -794,6 +795,7 @@ const attrs = useAttrs()
 
 const props = withDefaults(
   defineProps<{
+    storageClient: TaskyonStorageClient
     taskyonSignatureOrKey?: string | null
     taskyonUrl?: string
     bindingKey?: CryptoKey | string | null
@@ -806,6 +808,7 @@ const props = withDefaults(
     taskyonConfiguration: null,
   },
 )
+const stateSyncStops: Array<() => void> = []
 
 const modelicaSource = ref('')
 type WorkerLiveLogEntry = {
@@ -1031,21 +1034,22 @@ const {
   activeLibraryLoads,
   mslArchiveName,
   mslFileCount,
-  mslCachedZipPath,
-  standardMslCachedZipPath,
+  mslCachedZipId,
+  standardMslCachedZipId,
   mslDownloadUrl,
   standardMslLoaded,
-  loadedLibraryCachePaths,
+  loadedLibraryCacheIds,
   latestLazyLibraryClassTree,
-  downloadMslZipToOpfs,
-  loadCachedMslZipFromOpfs,
-  loadStandardMslZipFromOpfs,
-  loadLibraryArchivesFromOpfs,
+  downloadMslZipToStorage,
+  loadCachedMslZipFromStorage,
+  loadStandardMslZipFromStorage,
+  loadLibraryArchivesFromStorage,
   onImportMslZip,
   clearModelicaLibraries,
 } = useModelicaLibraries({
   worker: modelicaWorker,
   cacheVersionMarker: rumocaLibraryCacheVersionMarker,
+  storageClient: props.storageClient,
 })
 
 const libraryBusyLabel = computed(() => {
@@ -1115,7 +1119,7 @@ const fileNameFromPath = (path: string): string => {
 const libraryRootMetadata = computed<Record<string, string>>(() => {
   const byRoot: Record<string, string> = {}
   const roots = libraryTreeNodes.value.filter((node) => !node.qualifiedName.includes('.'))
-  const archiveNames = loadedLibraryCachePaths.value.map((path) => fileNameFromPath(path))
+  const archiveNames = loadedLibraryCacheIds.value.map((path) => fileNameFromPath(path))
   roots.forEach((rootNode) => {
     const root = rootNode.qualifiedName
     const rootLower = root.toLowerCase()
@@ -1860,6 +1864,7 @@ onBeforeUnmount(() => {
   unsubscribeWorkerActivity = null
   modelicaWorker.value?.terminate()
   modelicaWorker.value = null
+  stateSyncStops.splice(0).forEach((stop) => stop())
 })
 
 const configuration = computed<partialTyConfiguration | null>(() => {
@@ -2380,14 +2385,14 @@ function applyProjectFile(pf: TyModelicaProjectFileV1) {
   requiredLibraries.value = Array.isArray(state.requiredLibraries) ? state.requiredLibraries : []
   const requiredPreset = requiredLibraries.value.find((entry) => entry.startsWith('preset:'))
   const requiredZip = requiredLibraries.value.find((entry) => entry.startsWith('zip:'))
-  const requiredOpfsPaths = normalizeRequiredLibraries(
+  const requiredStorageIds = normalizeRequiredLibraries(
     requiredLibraries.value
-      .filter((entry) => entry.startsWith('opfs:'))
-      .map((entry) => entry.slice('opfs:'.length)),
+      .filter((entry) => entry.startsWith('storage:'))
+      .map((entry) => entry.slice('storage:'.length)),
   )
-  loadedLibraryCachePaths.value = requiredOpfsPaths
+  loadedLibraryCacheIds.value = requiredStorageIds
   const hasRequiredLibrarySettings = Boolean(
-    requiredPreset || requiredZip || requiredOpfsPaths.length > 0,
+    requiredPreset || requiredZip || requiredStorageIds.length > 0,
   )
   if (requiredPreset) {
     const presetId = requiredPreset.slice('preset:'.length).trim()
@@ -2443,9 +2448,9 @@ const deriveManagedRequiredLibraries = (): string[] => {
   }
   const archiveName = String(mslArchiveName.value || '').trim()
   if (archiveName) managed.push(`archive:${archiveName}`)
-  for (const path of loadedLibraryCachePaths.value) {
+  for (const path of loadedLibraryCacheIds.value) {
     const normalizedPath = String(path || '').trim()
-    if (normalizedPath) managed.push(`opfs:${normalizedPath}`)
+    if (normalizedPath) managed.push(`storage:${normalizedPath}`)
   }
   return normalizeRequiredLibraries(managed)
 }
@@ -2459,10 +2464,12 @@ const {
   onProjectSelected,
   exportProjectJson,
   onImportProjectFile,
+  hydrateCurrentProjectId,
 } = useProjectFileStore<TyModelicaProjectFileV1>({
   packProjectFile,
   applyProjectFile,
   validateProjectFile: validateModelicaProjectFileV1,
+  storageClient: props.storageClient,
 })
 
 async function refreshBuiltinTemplateIfSelected() {
@@ -2710,7 +2717,7 @@ watch(
     selectedLibraryPreset,
     mslDownloadUrl,
     mslArchiveName,
-    loadedLibraryCachePaths,
+    loadedLibraryCacheIds,
   ],
   () => {
     const unmanaged = requiredLibraries.value.filter(
@@ -2718,7 +2725,7 @@ watch(
         !entry.startsWith('preset:') &&
         !entry.startsWith('zip:') &&
         !entry.startsWith('archive:') &&
-        !entry.startsWith('opfs:'),
+        !entry.startsWith('storage:'),
     )
     requiredLibraries.value = normalizeRequiredLibraries([
       ...unmanaged,
@@ -2834,7 +2841,7 @@ async function ensureStandardMslLoadedForSource(sourceText: string): Promise<voi
     /\bModelica\./.test(sourceText) && Boolean(modelicaWorker.value) && !standardMslLoaded.value
   if (!shouldAutoLoadStandardMsl) return
   useModelicaStandardLibrary.value = true
-  await loadStandardMslZipFromOpfs('auto-detect: source references Modelica.*')
+  await loadStandardMslZipFromStorage('auto-detect: source references Modelica.*')
   await refreshLibraryTree()
 }
 
@@ -3380,8 +3387,8 @@ async function handleImportMslZip(e: Event) {
   await refreshLibraryTree()
 }
 
-async function handleLoadCachedMslZipFromOpfs() {
-  await loadStandardMslZipFromOpfs('user action: load standard MSL')
+async function handleLoadCachedMslZipFromStorage() {
+  await loadStandardMslZipFromStorage('user action: load standard MSL')
   useModelicaStandardLibrary.value = true
   await refreshLibraryTree()
 }
@@ -3404,8 +3411,8 @@ async function handleLoadLibraryPreset(url: string) {
     mslZipUrl: nextUrl,
   }
 
-  await downloadMslZipToOpfs(nextUrl)
-  await loadCachedMslZipFromOpfs('user action: load selected library preset')
+  await downloadMslZipToStorage(nextUrl)
+  await loadCachedMslZipFromStorage('user action: load selected library preset')
   await refreshLibraryTree()
 }
 
@@ -3804,28 +3811,33 @@ onMounted(async () => {
     phase: 'general',
     message: 'Modelica editor startup: begin state hydration',
   })
+  await hydrateCurrentProjectId()
   // 1) Global state (not bound to a specific model)
   //    - layout
   //    - template editor state
   //    - global solver library
   //    - current project id
-  await syncStateWithOPFSFolder('modelicaEditPage_global', {
-    initialLayout,
-    workspaceTab,
-    selectedTemplateKey,
-    templateSource,
-    customTemplates,
-    verbose,
-    usePreparedDae,
-    useModelicaStandardLibrary,
-    mslDownloadUrl,
-    mslCachedZipPath,
-    standardMslCachedZipPath,
-    templatesTab,
-    resultsTab,
-    showAllInPrompt,
-    currentProjectId,
-  })
+  const globalStateSync = await syncStateWithStorageClient(
+    props.storageClient,
+    { namespace: 'modelica/editor', id: 'global' },
+    {
+      initialLayout,
+      workspaceTab,
+      selectedTemplateKey,
+      templateSource,
+      customTemplates,
+      verbose,
+      usePreparedDae,
+      useModelicaStandardLibrary,
+      mslDownloadUrl,
+      mslCachedZipId,
+      standardMslCachedZipId,
+      templatesTab,
+      resultsTab,
+      showAllInPrompt,
+    },
+  )
+  stateSyncStops.push(globalStateSync.stop)
   appendModelicaLog({
     level: 'info',
     phase: 'general',
@@ -3833,8 +3845,8 @@ onMounted(async () => {
     details: {
       useModelicaStandardLibrary: useModelicaStandardLibrary.value,
       requiredLibraryCount: requiredLibraries.value.length,
-      mslCachedZipPath: mslCachedZipPath.value,
-      standardMslCachedZipPath: standardMslCachedZipPath.value,
+      mslCachedZipId: mslCachedZipId.value,
+      standardMslCachedZipId: standardMslCachedZipId.value,
     },
   })
   if (layoutContainsLegacyWorkbenchViews(initialLayout.value)) {
@@ -3843,11 +3855,12 @@ onMounted(async () => {
   ensureValidTemplateSelection()
   ensureLibraryTreeLayoutDefaults(initialLayout.value)
 
-  // 2) Project file (model-specific). One JSON object, synced via OPFS.
-  //    Folder name depends on the selected project.
-  await syncStateWithOPFSFolder(`modelicaProject_${currentProjectId.value}`, {
-    projectFile,
-  })
+  const projectStateSync = await syncStateWithStorageClient(
+    props.storageClient,
+    { namespace: 'modelica/projects', id: currentProjectId.value },
+    { projectFile },
+  )
+  stateSyncStops.push(projectStateSync.stop)
   appendModelicaLog({
     level: 'info',
     phase: 'general',
@@ -3924,7 +3937,7 @@ onMounted(async () => {
       requiredLibraries: requiredLibraries.value,
     },
   })
-  // Keep projectFile updated when the editor changes (OPFS will persist it)
+  // Keep projectFile updated when the editor changes (StorageClient will persist it)
   watchDebounced(
     [
       modelicaSource,
@@ -4042,7 +4055,7 @@ onMounted(async () => {
         documentCount,
         useModelicaStandardLibrary: useModelicaStandardLibrary.value,
         requiredLibraries: requiredLibraries.value,
-        mslCachedZipPath: mslCachedZipPath.value,
+        mslCachedZipId: mslCachedZipId.value,
       },
     })
     if (documentCount > 0 && persistedLibraryLoadRequested) {
@@ -4055,19 +4068,19 @@ onMounted(async () => {
         message: `Using already-loaded source-root libraries from worker cache (reason: persisted project settings, documents=${documentCount})`,
       })
     } else if (useModelicaStandardLibrary.value) {
-      const requiredOpfsPaths = normalizeRequiredLibraries(
+      const requiredStorageIds = normalizeRequiredLibraries(
         requiredLibraries.value
-          .filter((entry) => entry.startsWith('opfs:'))
-          .map((entry) => entry.slice('opfs:'.length)),
+          .filter((entry) => entry.startsWith('storage:'))
+          .map((entry) => entry.slice('storage:'.length)),
       )
-      if (requiredOpfsPaths.length > 0) {
-        await loadLibraryArchivesFromOpfs(
-          requiredOpfsPaths,
-          'project settings: persisted OPFS archives',
+      if (requiredStorageIds.length > 0) {
+        await loadLibraryArchivesFromStorage(
+          requiredStorageIds,
+          'project settings: persisted storage archives',
         )
         await refreshLibraryTree()
-      } else if (String(mslCachedZipPath.value || '').trim()) {
-        await loadCachedMslZipFromOpfs('project settings: useMSL with cached zip path')
+      } else if (String(mslCachedZipId.value || '').trim()) {
+        await loadCachedMslZipFromStorage('project settings: useMSL with cached zip id')
         await refreshLibraryTree()
       }
     } else if (documentCount > 0) {

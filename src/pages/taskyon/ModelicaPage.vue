@@ -11,6 +11,7 @@
       <FixedHeightPage class="column">
         <ModelicaEditor
           class="col"
+          :storage-client="tystate.storageClient"
           :taskyon-signature-or-key="taskyonSignatureOrKey"
           :binding-key="appState.bindingKey"
           :taskyon-configuration="taskyonConfiguration"

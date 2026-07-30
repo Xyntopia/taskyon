@@ -15,6 +15,7 @@ import { executeInWorkerSandbox } from '@taskyon/common/modules/sandbox/workerSa
 import { validateJavaScriptInSandbox } from '@taskyon/common/modules/sandbox/checkJsSyntax'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import { createGraphController } from '@taskyon/common/modules/graph'
+import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
 import baseDaeTemplate from './base_dae.jinja?raw'
 import javascriptTemplate from './javascript.jinja?raw'
 import {
@@ -3209,7 +3210,9 @@ end MslFirstOrderRuntimeSmoke;
   }
 }
 
-export async function testModelicaMslFirstOrderRumocaSimulation() {
+export async function testModelicaMslFirstOrderRumocaSimulation(
+  storageClient?: TaskyonStorageClient,
+) {
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     return runModelicaMslFirstOrderRumocaSimulationInBrowser()
   }
@@ -3217,11 +3220,12 @@ export async function testModelicaMslFirstOrderRumocaSimulation() {
   const { runModelicaCliMslFirstOrderRumocaSimulation } = (await import(
     /* @vite-ignore */ nodeDiagnosticsModule
   )) as {
-    runModelicaCliMslFirstOrderRumocaSimulation: () => ReturnType<
-      typeof runModelicaMslFirstOrderRumocaSimulationInBrowser
-    >
+    runModelicaCliMslFirstOrderRumocaSimulation: (
+      storageClient: TaskyonStorageClient,
+    ) => ReturnType<typeof runModelicaMslFirstOrderRumocaSimulationInBrowser>
   }
-  return runModelicaCliMslFirstOrderRumocaSimulation()
+  if (!storageClient) throw new Error('Node Modelica diagnostics require a StorageClient.')
+  return runModelicaCliMslFirstOrderRumocaSimulation(storageClient)
 }
 testModelicaMslFirstOrderRumocaSimulation.timeoutMs = 120_000
 

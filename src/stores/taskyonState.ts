@@ -69,6 +69,7 @@ import { createTaskyonClient, taskyonGuiProtocol, taskyonProtocol } from '@tasky
 import type { TaskyonGuiMessage } from '@taskyon/tyclient'
 import { createStandardEntryNodeTool } from '@taskyon/taskyon/tools/entryNode'
 import { createTaskyonResourceFilesLoader } from 'src/modules/taskyonResourceFiles'
+import { isBrowserRecordNamespace } from 'src/modules/taskyonStorageNamespaces'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { defineStore } from 'pinia'
@@ -1247,9 +1248,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     toolchainConfig: stateRefs.effectiveToolchainConfig,
     taskSearchVectorizer: stateRefs.appConfiguration.taskSearchVectorizer,
     cryptoSession: initialCryptoSession,
-    toolSetup: createDefaultTaskyonToolSetup({
-      unavailableToolNames: getBrowserUnavailableToolNames(),
-    }),
+    toolSetup: (storageClient) =>
+      createDefaultTaskyonToolSetup({
+        unavailableToolNames: getBrowserUnavailableToolNames(),
+        storageClient,
+      }),
     storage: {
       kind: 'service',
       createService: (port) =>
@@ -1257,12 +1260,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           port,
           getDatabase,
           (namespace) => {
-            if (
-              !namespace.startsWith('dag/') &&
-              !namespace.startsWith('design-graphs/') &&
-              !namespace.startsWith('design-projects/') &&
-              !namespace.startsWith('documentation/')
-            ) {
+            if (!isBrowserRecordNamespace(namespace)) {
               throw new Error(
                 `No browser storage backend is configured for namespace "${namespace}".`,
               )
@@ -1298,8 +1296,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   })
   const { designProjectStore, registerDesignProject, listDesignProjects } =
     createDesignProjectStorage(storageClient)
-  const resourceFilesLoader = createTaskyonResourceFilesLoader(() =>
-    taskyonClient.discovery.describe({}),
+  const resourceFilesLoader = createTaskyonResourceFilesLoader(
+    () => taskyonClient.discovery.describe({}),
+    storageClient,
   )
   const documentationBases = createProtocolDocumentationBaseStore(
     storageClient,
@@ -1762,6 +1761,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     taskyonClient,
     documentationBases,
     documentationReady,
+    storageClient,
     dagStorageBackend,
     designProjectStore,
     registerDesignProject,

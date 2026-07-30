@@ -118,7 +118,7 @@ export const appConfiguration = z.object({
     }),
   pmtilesCacheMaxSizeMb: z.number().int().min(64).max(10240).default(1024).meta({
     title: 'PMTiles Cache Size',
-    description: 'Max OPFS cache size per PMTiles archive in megabytes.',
+    description: 'Maximum persisted range-cache size per PMTiles archive in megabytes.',
   }),
   guiMode: z.enum(['auto', 'iframe', 'default', 'minChat']).default('auto').meta({
     description: 'Sets whether we want to have a minimalist chat or the full app',

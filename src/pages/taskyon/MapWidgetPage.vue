@@ -1,6 +1,6 @@
 <template>
   <q-page class="taskyon-map-widget-page">
-    <TaskyonGeoMapWidget v-if="state" :state="state" />
+    <TaskyonGeoMapWidget v-if="state" :state="state" :storage-client="taskyon.storageClient" />
     <div v-else class="taskyon-map-widget-page__error">Invalid map widget payload.</div>
   </q-page>
 </template>
@@ -14,8 +14,10 @@ import {
 } from '@taskyon/ui/gis/taskyonMapWidget'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { useTaskyonStore } from 'src/stores/taskyonState'
 
 const route = useRoute()
+const taskyon = useTaskyonStore()
 
 const postedState = ref<TaskyonMapWidgetState | null>(null)
 const queryState = computed(() =>

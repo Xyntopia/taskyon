@@ -70,12 +70,14 @@ This is the preferred way to generate a JS model from a Modelica class + templat
 
 Node diagnostics do not read MSL from `packages/rumoca/target/msl`. They resolve the same
 `modelica_libraries.json` manifest as the browser UI, prefer the configured mirror URL, fall back to
-the original upstream URL, and cache the archive under `XDG_CACHE_HOME/taskyon/modelica-libraries` or
-`~/.cache/taskyon/modelica-libraries`. Set `MODELICA_DIAG_MSL_ZIP_PATH` only when you need to force a
-specific local archive.
+the original upstream URL, and cache the content-addressed archive through Taskyon's StorageClient.
+The CLI storage composition chooses the physical data directory; Modelica code does not use a
+separate cache path or cache environment variable. Temporary filesystem copies are created only
+when an external CLI requires a path and are not durable application storage.
 
 The browser UI should treat the MSL ZIP as source material, not as a bundled parsed database. The
-first load path builds Taskyon's lightweight class index from the archive, lists classes from that
+archive, lightweight class index, and rebuildable parsed cache are stored in separate StorageClient
+namespaces. The first load path builds the class index from the archive, lists classes from that
 index, and asks Rumoca to parse only the source-root files needed for the class being inspected,
 compiled, or simulated. The `testModelicaTaskyonLazyMslIndexLoadsUnderTwoSeconds` diagnostic guards
 that local ZIP expansion plus index build stays under 2 seconds.

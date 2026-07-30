@@ -298,7 +298,7 @@ const props = defineProps<{
   mslLoading: boolean
   mslDownloading: boolean
   activeLibraryLoads: string[]
-  mslCachedZipPath: string
+  mslCachedZipId: string
   libraryMenuOptions: Record<string, unknown>
   libraryMenuSchema: JSONSchema7
   nodes: ModelicaLibraryTreeNode[]

@@ -1,12 +1,16 @@
 import { Dialog, Notify } from 'quasar'
 import { ref, shallowRef, type Ref, type ShallowRef } from 'vue'
+import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
+
+const MODEL_PROJECT_NAMESPACE = 'modelica/projects'
+const MODEL_SETTINGS_NAMESPACE = 'modelica/settings'
+const MODEL_PROJECT_ID_KEY = 'taskyon.modelica.projectId'
 
 type UseProjectFileStoreParams<TProjectFile> = {
   packProjectFile: () => TProjectFile
   applyProjectFile: (projectFile: TProjectFile) => void
   validateProjectFile: (value: unknown) => TProjectFile
-  storageKey?: string
-  projectFolderPrefix?: string
+  storageClient: TaskyonStorageClient
 }
 
 function downloadTextFile(opts: { fileName: string; content: string; mime?: string }) {
@@ -83,13 +87,10 @@ export function useProjectFileStore<TProjectFile>(
   triggerImportProject: () => void
   onImportProjectFile: (e: Event) => Promise<void>
   loadProjectById: (projectId: string) => void
+  hydrateCurrentProjectId: () => Promise<void>
 } {
-  const storageKey = params.storageKey ?? 'taskyon.modelica.projectId'
-  const projectFolderPrefix = params.projectFolderPrefix ?? 'modelicaProject_'
-  const initialProjectId = String(localStorage.getItem(storageKey) || 'default').trim() || 'default'
-
   const projectImportEl = ref<HTMLInputElement | null>(null)
-  const currentProjectId = ref<string>(initialProjectId)
+  const currentProjectId = ref<string>('default')
   const availableProjectIds = ref<string[]>([])
   const projectFile = shallowRef<TProjectFile | null>(null)
 
@@ -99,30 +100,25 @@ export function useProjectFileStore<TProjectFile>(
     return fallback
   }
 
+  async function hydrateCurrentProjectId() {
+    const stored = await params.storageClient.get({
+      namespace: MODEL_SETTINGS_NAMESPACE,
+      id: MODEL_PROJECT_ID_KEY,
+    })
+    currentProjectId.value = coerceProjectId(stored.value, 'default')
+  }
+
   async function refreshAvailableProjects() {
     try {
-      const navAny = navigator as unknown as {
-        storage?: { getDirectory?: () => Promise<FileSystemDirectoryHandle> }
-      }
-      if (!navAny.storage?.getDirectory) {
-        Notify.create({ type: 'warning', message: 'OPFS directory listing not supported.' })
-        return
-      }
-      const root = await navAny.storage.getDirectory()
-      const ids: string[] = []
-      for await (const [name, handle] of root.entries()) {
-        if (
-          handle?.kind === 'directory' &&
-          typeof name === 'string' &&
-          name.startsWith(projectFolderPrefix)
-        ) {
-          ids.push(name.slice(projectFolderPrefix.length))
-        }
-      }
-      ids.sort()
-      availableProjectIds.value = ids
+      availableProjectIds.value = (
+        await params.storageClient.listIds({
+          namespace: MODEL_PROJECT_NAMESPACE,
+        })
+      ).ids
+        .map(String)
+        .sort()
     } catch (e) {
-      console.warn('Failed to list OPFS projects:', e)
+      console.warn('Failed to list Modelica projects:', e)
       Notify.create({
         type: 'warning',
         message: `Failed to detect saved projects: ${(e as Error).message}`,
@@ -133,9 +129,12 @@ export function useProjectFileStore<TProjectFile>(
   function loadProjectById(projectId: string) {
     const id = String(projectId || '').trim()
     if (!id) return
-    localStorage.setItem(storageKey, id)
-    currentProjectId.value = id
-    setTimeout(() => window.location.reload(), 50)
+    void params.storageClient
+      .set({ namespace: MODEL_SETTINGS_NAMESPACE, id: MODEL_PROJECT_ID_KEY, value: id })
+      .then(() => {
+        currentProjectId.value = id
+        setTimeout(() => window.location.reload(), 50)
+      })
   }
 
   async function deleteCurrentProject() {
@@ -150,30 +149,14 @@ export function useProjectFileStore<TProjectFile>(
     })
     if (!confirmed) return
 
-    const dirName = `${projectFolderPrefix}${id}`
     try {
-      const navAny = navigator as unknown as {
-        storage?: { getDirectory?: () => Promise<FileSystemDirectoryHandle> }
-      }
-      if (!navAny.storage?.getDirectory) {
-        Notify.create({ type: 'warning', message: 'OPFS not supported in this browser.' })
-        return
-      }
-      const root = await navAny.storage.getDirectory()
-      const rootWithRemoveEntry = root as unknown as {
-        removeEntry?: (name: string, opts?: { recursive?: boolean }) => Promise<void>
-      }
-      if (typeof rootWithRemoveEntry.removeEntry !== 'function') {
-        Notify.create({ type: 'warning', message: 'OPFS delete is not supported in this browser.' })
-        return
-      }
-      await rootWithRemoveEntry.removeEntry(dirName, { recursive: true })
+      await params.storageClient.delete({ namespace: MODEL_PROJECT_NAMESPACE, id })
       Notify.create({ type: 'positive', message: `Deleted project '${id}'` })
       await refreshAvailableProjects()
       const next = availableProjectIds.value.find((x) => x !== id) ?? 'default'
       loadProjectById(next)
     } catch (e) {
-      console.warn('Failed to delete OPFS project:', e)
+      console.warn('Failed to delete Modelica project:', e)
       Notify.create({
         type: 'negative',
         message: `Failed to delete project: ${(e as Error).message}`,
@@ -191,7 +174,10 @@ export function useProjectFileStore<TProjectFile>(
     })
     if (!id) return
     if (availableProjectIds.value.includes(id)) {
-      Notify.create({ type: 'warning', message: `Project '${id}' already exists. Switching to it.` })
+      Notify.create({
+        type: 'warning',
+        message: `Project '${id}' already exists. Switching to it.`,
+      })
       loadProjectById(id)
       return
     }
@@ -228,12 +214,28 @@ export function useProjectFileStore<TProjectFile>(
     const txt = await f.text()
     try {
       const pf = params.validateProjectFile(JSON.parse(txt))
-      currentProjectId.value = coerceProjectId((pf as { projectId?: unknown })?.projectId, 'default')
+      currentProjectId.value = coerceProjectId(
+        (pf as { projectId?: unknown })?.projectId,
+        'default',
+      )
       projectFile.value = pf
       params.applyProjectFile(pf)
+      await params.storageClient.set({
+        namespace: MODEL_PROJECT_NAMESPACE,
+        id: currentProjectId.value,
+        value: { projectFile: pf },
+      })
+      await params.storageClient.set({
+        namespace: MODEL_SETTINGS_NAMESPACE,
+        id: MODEL_PROJECT_ID_KEY,
+        value: currentProjectId.value,
+      })
       Notify.create({ type: 'positive', message: `Project imported: ${currentProjectId.value}` })
     } catch (err) {
-      Notify.create({ type: 'negative', message: `Project import failed: ${(err as Error).message}` })
+      Notify.create({
+        type: 'negative',
+        message: `Project import failed: ${(err as Error).message}`,
+      })
     } finally {
       el.value = ''
     }
@@ -252,5 +254,6 @@ export function useProjectFileStore<TProjectFile>(
     triggerImportProject,
     onImportProjectFile,
     loadProjectById,
+    hydrateCurrentProjectId,
   }
 }

@@ -300,6 +300,8 @@ export const createStorageClient = (port: Port<TaskyonStorageMessage, TaskyonSto
   }
 }
 
+export type TaskyonStorageClient = ReturnType<typeof createStorageClient>
+
 export const createProtocolStorageBlobBackend = (
   port: Port<TaskyonStorageMessage, TaskyonStorageMessage>,
   namespace: string,

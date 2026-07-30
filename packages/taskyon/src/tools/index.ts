@@ -6,7 +6,8 @@ import { chatCompletionToolName, createChatCompletionTool } from './chatCompleti
 import { devTools } from './devTools'
 import { executeJavaScript } from './executeJavaScript'
 import { executePythonScript } from './executePython'
-import { fileTools } from './fileTools'
+import { createStorageTool } from './fileTools'
+import type { TaskyonStorageClient } from '../api/storageProtocol'
 import { smallHelperTools } from './helperCollection'
 import { localVectorStore } from './localVectorStore'
 import { proceduralTools } from './proceduralGraphics'
@@ -32,6 +33,7 @@ export {
 
 export const createDefaultTaskyonToolSetup = (options?: {
   unavailableToolNames?: ReadonlySet<string>
+  storageClient?: TaskyonStorageClient
 }): TyCoreToolSetup => ({
   baseTools: [
     ...smallHelperTools,
@@ -39,7 +41,7 @@ export const createDefaultTaskyonToolSetup = (options?: {
     ...useFullSmallTools,
     ...devTools,
     ...testingTools,
-    ...fileTools,
+    ...(options?.storageClient ? [createStorageTool(options.storageClient)] : []),
     ...taskOrganizationTools,
     ...webResearchTools,
     ...proceduralTools,

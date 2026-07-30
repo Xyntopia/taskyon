@@ -18,6 +18,8 @@ import {
 import { createDefaultTaskyonToolSetup } from '@taskyon/taskyon/tools'
 import { startBrowserStorageService, type BrowserRuntimeStorageService } from './storage'
 
+type TyCoreToolSetup = NonNullable<NonNullable<Parameters<typeof tyCore>[4]>['toolSetup']>
+
 export type TaskyonCoreStorage =
   | BrowserRuntimeStorageService
   | {
@@ -37,7 +39,9 @@ export type TaskyonBrowserCoreRuntimeOptions = {
   onStage?: (stage: TaskyonCoreRuntimeStage) => void
   storageSessionId?: string
   storage: TaskyonCoreStorage
-  toolSetup?: NonNullable<Parameters<typeof tyCore>[4]>['toolSetup']
+  toolSetup?:
+    | TyCoreToolSetup
+    | ((storageClient: ReturnType<typeof createStorageClient>) => TyCoreToolSetup)
 }
 
 export type TaskyonCoreRuntimeStage =
@@ -107,7 +111,10 @@ export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRunti
         options.toolchainConfig,
         cryptoSession,
         {
-          toolSetup: options.toolSetup ?? createDefaultTaskyonToolSetup(),
+          toolSetup:
+            typeof options.toolSetup === 'function'
+              ? options.toolSetup(storageClient)
+              : (options.toolSetup ?? createDefaultTaskyonToolSetup({ storageClient })),
           ...(options.databaseFactory ? { databaseFactory: options.databaseFactory } : {}),
           ...(options.indexTaskVectors !== undefined
             ? { indexTaskVectors: options.indexTaskVectors }

@@ -6,7 +6,7 @@ import { defineStore } from 'pinia'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
 import defaultSettings from 'src/assets/taskyon_settings.json?raw'
 import { TyProfile } from 'src/modules/taskyon/types'
-import { setPmtilesOpfsCacheGlobalConfig } from '@taskyon/common/modules/pmtilesOpfsCache'
+import { setPmtilesStorageCacheGlobalConfig } from '@taskyon/ui/gis/pmtilesStorageCache'
 import type { MergeOptions } from '@taskyon/common/modules/utils'
 import {
   clearBrowserCaches,
@@ -711,7 +711,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
     () => stateRefs.appConfiguration.pmtilesCacheMaxSizeMb,
     (value) => {
       const maxMb = Number.isFinite(value) ? value : 1024
-      setPmtilesOpfsCacheGlobalConfig({
+      setPmtilesStorageCacheGlobalConfig({
         maxBytesPerArchive: Math.max(64, Math.floor(maxMb)) * 1024 * 1024,
       })
     },

@@ -33,10 +33,12 @@ import { getSpaceshipImage, normalizeSpaceshipSeed } from './spaceshipIdenticonC
 import SanitizedMarkup from '@taskyon/ui/components/SanitizedMarkup.vue'
 import { sanitizeSvgMarkup } from '@taskyon/common/modules/sanitizeMarkup'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
 const DEBUG_SPACESHIP_IDENTICON = false
 
 const props = withDefaults(
   defineProps<{
+    storageClient: TaskyonStorageClient
     seedText: string
     library?: SpaceshipLibraryFile | undefined
     size?: number | undefined
@@ -186,7 +188,7 @@ async function refreshImage(reason = 'unspecified') {
     ...(props.focusedModuleId !== undefined ? { focusedModuleId: props.focusedModuleId } : {}),
   }
 
-  const result = await getSpaceshipImage(normalizedSeed.value, options)
+  const result = await getSpaceshipImage(props.storageClient, normalizedSeed.value, options)
   if (token !== requestToken) {
     identiconDebug('refreshImage stale result dropped', { token, activeToken: requestToken })
     return

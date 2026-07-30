@@ -187,8 +187,8 @@
           <q-separator size="xl" spaced class="self-stretch" />
           <div class="row items-center justify-between fit" style="max-width: 900px">
             <div>
-              <div class="text-subtitle2">PMTiles OPFS Cache Info</div>
-              <div class="text-caption">Single-file cache diagnostics and current limits.</div>
+              <div class="text-subtitle2">PMTiles storage cache</div>
+              <div class="text-caption">Logical range-cache diagnostics and current limits.</div>
             </div>
             <q-btn flat dense label="Refresh" @click="refreshPmtilesCacheInfo" />
           </div>
@@ -207,7 +207,7 @@
 <script setup lang="ts">
 import FadeAwayScrollPage from '@taskyon/ui/components/FadeAwayScrollPage.vue'
 import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
-import { getPmtilesOpfsCacheDebugSnapshot } from '@taskyon/common/modules/pmtilesOpfsCache'
+import { getPmtilesStorageCacheDebugSnapshot } from '@taskyon/ui/gis/pmtilesStorageCache'
 import {
   convertZodToJsonSchemaCached,
   FunctionArguments as FunctionArgumentsSchema,
@@ -312,7 +312,7 @@ const refreshPmtilesCacheInfo = async () => {
     loading: true,
   }
   try {
-    pmtilesCacheInfoModel.value = await getPmtilesOpfsCacheDebugSnapshot()
+    pmtilesCacheInfoModel.value = await getPmtilesStorageCacheDebugSnapshot(tystate.storageClient)
   } catch (error) {
     pmtilesCacheInfoModel.value = {
       loading: false,
