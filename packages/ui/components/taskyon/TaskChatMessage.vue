@@ -10,7 +10,7 @@
         {{ contentLabel }}
       </span>
     </header>
-    <div class="task-chat-message__content">
+    <div v-if="task.content.type !== 'functioncall'" class="task-chat-message__content">
       <TaskContentView :task="task" />
     </div>
   </article>
@@ -126,6 +126,11 @@ const messageIcon = computed(() => {
     align-self: flex-end
     max-width: min(85%, 40rem)
 
+  &.functioncall
+    width: fit-content
+    max-width: 100%
+    padding: 0.3rem 0.55rem
+
 .task-chat-message__header
   display: flex
   align-items: center
@@ -141,4 +146,7 @@ const messageIcon = computed(() => {
 
 .task-chat-message__content
   min-width: 0
+
+.task-chat-message.functioncall .task-chat-message__header
+  margin-bottom: 0
 </style>

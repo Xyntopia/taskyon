@@ -618,7 +618,8 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { z } from 'zod'
 import ProceduralSpaceship from './ProceduralSpaceshipIdenticon.vue'
-import DockView, { type DockNode } from '@taskyon/ui/components/DockView.vue'
+import type { DockNode } from '@taskyon/ui/components/dockLayout'
+import DockView from '@taskyon/ui/components/DockView.vue'
 import {
   COCKPIT,
   DEFAULT_LIBRARY_ALGORITHM,

@@ -178,7 +178,7 @@ import {
   mdiMagicStaff,
   mdiToolbox,
 } from '@quasar/extras/mdi-v6'
-import type { DockNode } from '@taskyon/ui/components/DockView.vue'
+import type { DockNode } from '@taskyon/ui/components/dockLayout'
 import DockView from '@taskyon/ui/components/DockView.vue'
 import FadeAwayScrollPage from '@taskyon/ui/components/FadeAwayScrollPage.vue'
 import JsonInput from '@taskyon/ui/components/varViews/JsonInput.vue'

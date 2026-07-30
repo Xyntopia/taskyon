@@ -1,10 +1,6 @@
 <template>
   <div class="row no-wrap">
-    <q-scroll-area
-      ref="scrollRef"
-      :style="{ height: scrollHeight }"
-      class="col rounded-borders log-surface"
-    >
+    <q-scroll-area ref="scrollRef" :style="{ height }" class="col rounded-borders log-surface">
       <q-list dense separator>
         <q-item v-for="entry in logs" :key="entry.id">
           <q-item-section>
@@ -24,7 +20,14 @@
       <q-btn dense flat icon="content_copy" color="primary" @click="copyAllLogs">
         <q-tooltip>Copy all logs</q-tooltip>
       </q-btn>
-      <q-btn dense flat icon="delete_sweep" color="negative" @click="clearAllLogs">
+      <q-btn
+        dense
+        flat
+        icon="delete_sweep"
+        color="negative"
+        class="run-log-clear"
+        @click="clearAllLogs"
+      >
         <q-tooltip>Clear logs</q-tooltip>
       </q-btn>
     </div>
@@ -37,7 +40,9 @@ import { useSharedRunLogs, type UnifiedLogEntry } from '@taskyon/common/modules/
 import { useQuasar } from 'quasar'
 import { computed, nextTick, ref, watch } from 'vue'
 
-const props = defineProps<{ logs: UnifiedLogEntry[] }>()
+const props = withDefaults(defineProps<{ logs: UnifiedLogEntry[]; height?: string }>(), {
+  height: '220px',
+})
 const { clearLogs } = useSharedRunLogs()
 const $q = useQuasar()
 const scrollRef = ref<{
@@ -49,7 +54,7 @@ const scrollRef = ref<{
 } | null>(null)
 
 const logs = computed(() => props.logs)
-const scrollHeight = computed(() => '220px')
+const height = computed(() => props.height)
 
 const formatTimestamp = (atMs: number): string =>
   new Date(atMs).toISOString().replace('T', ' ').slice(0, 19)

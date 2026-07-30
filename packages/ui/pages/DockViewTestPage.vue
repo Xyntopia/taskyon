@@ -27,7 +27,16 @@
     <template v-else>
       <!-- v-model:node -->
       <q-card flat class="col column bg-transparent text-secondary">
-        <DockView v-model:node="layout" class="col" @add-view="handleAddView">
+        <DockView
+          v-model:node="layout"
+          class="col"
+          :tab-icons="tabIcons"
+          enable-tab-docking
+          :can-dock-view="canDockView"
+          :add-view-options="getAddViewOptions"
+          @add-view="handleAddView"
+          @view-activated="handleViewActivated"
+        >
           <!-- Explorer View -->
           <template #ExplorerWithAVeryLongName>
             <q-card class="fit">
@@ -118,21 +127,35 @@ export default defineComponent({
             </div>
           </template>
         </DockView>
+        <div data-cy="dockview-last-activated" class="q-px-sm q-pb-xs text-caption">
+          {{ lastActivatedView }}
+        </div>
       </q-card>
     </template>
   </q-page>
 </template>
 
 <script setup lang="ts">
-import type { AddViewContext, AddViewDone, DockNode } from '@taskyon/ui/components/DockView.vue'
+import type {
+  AddViewContext,
+  AddViewDone,
+  DockViewAddOption,
+  ViewActivatedContext,
+} from '@taskyon/ui/components/DockView.vue'
+import type { DockNode, DockViewDropContext } from '@taskyon/ui/components/dockLayout'
 import DockView from '@taskyon/ui/components/DockView.vue'
 import { defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
 
-import { matAutoAwesomeMosaic } from '@quasar/extras/material-icons'
+import { matAutoAwesomeMosaic, matFolder, matSearch } from '@quasar/extras/material-icons'
 
 /* ---------- Initial layout ---------- */
 
 const showLeaf = ref(false)
+const lastActivatedView = ref('none')
+const tabIcons = {
+  ExplorerWithAVeryLongName: matFolder,
+  Search: matSearch,
+}
 
 const KeepAliveProbe = defineComponent({
   name: 'KeepAliveProbe',
@@ -184,6 +207,7 @@ const createInitialLayout = (): DockNode => ({
           size: 30,
           views: ['Terminal', 'Output', 'KeepAliveTicker'],
           keepAliveViews: ['KeepAliveTicker'],
+          retainWhenEmpty: true,
           activeViewIndex: 0,
         },
       ],
@@ -194,6 +218,10 @@ const createInitialLayout = (): DockNode => ({
       size: 20,
       views: ['ExplorerWithAVeryLongName', 'Search'],
       activeViewIndex: 0,
+      tabPosition: 'left',
+      tabRailCollapsible: true,
+      tabRailAutoCompact: true,
+      tabRailMode: 'expanded',
     },
   ],
 })
@@ -212,6 +240,37 @@ const nextId = ref(1)
 const getNewFileSlotName = (n: number) => `New_File_${n}`
 const getProcessSlotName = (n: number) => `Process_${n}`
 
+const getAddViewOptions = ({ leafId }: AddViewContext): readonly DockViewAddOption[] => {
+  if (leafId === 'editors') {
+    return [
+      { id: 'App.vue', label: 'App.vue', viewId: 'App.vue' },
+      { id: 'main.ts', label: 'main.ts', viewId: 'main.ts' },
+      { id: 'styles.css', label: 'styles.css', viewId: 'styles.css' },
+      { id: 'Nested', label: 'Nested DockView', viewId: 'Nested' },
+      { id: 'new-file', label: 'New file' },
+    ]
+  }
+  if (leafId === 'panel') {
+    return [
+      { id: 'Terminal', label: 'Terminal', viewId: 'Terminal' },
+      { id: 'Output', label: 'Output', viewId: 'Output' },
+      { id: 'KeepAliveTicker', label: 'Keep-alive ticker', viewId: 'KeepAliveTicker' },
+      { id: 'new-process', label: 'New process' },
+    ]
+  }
+  return [
+    {
+      id: 'ExplorerWithAVeryLongName',
+      label: 'Explorer',
+      viewId: 'ExplorerWithAVeryLongName',
+    },
+    { id: 'Search', label: 'Search', viewId: 'Search' },
+  ]
+}
+
+const canDockView = ({ viewId, targetLeafId }: DockViewDropContext): boolean =>
+  viewId !== 'Nested' || targetLeafId !== 'panel'
+
 /* ---------- Handle add-view from DockView ---------- */
 
 /**
@@ -222,11 +281,14 @@ const getProcessSlotName = (n: number) => `Process_${n}`
  *  - in others    → do nothing
  */
 const handleAddView = (ctx: AddViewContext, done: AddViewDone) => {
-  if (ctx.leafId === 'editors') {
+  if (ctx.selectedOptionId === 'new-file' || (!ctx.selectedOptionId && ctx.leafId === 'editors')) {
     const id = nextId.value++
     const viewId = getNewFileSlotName(id)
     done({ viewId, makeActive: true })
-  } else if (ctx.leafId === 'panel') {
+  } else if (
+    ctx.selectedOptionId === 'new-process' ||
+    (!ctx.selectedOptionId && ctx.leafId === 'panel')
+  ) {
     const id = nextId.value++
     const viewId = getProcessSlotName(id)
     done({ viewId, makeActive: true })
@@ -234,5 +296,9 @@ const handleAddView = (ctx: AddViewContext, done: AddViewDone) => {
     // For now, do nothing for sidebar or unknown leaves
     done(null)
   }
+}
+
+const handleViewActivated = ({ leafId, viewId }: ViewActivatedContext) => {
+  lastActivatedView.value = `${leafId}:${viewId}`
 }
 </script>

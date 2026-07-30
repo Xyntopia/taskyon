@@ -17,7 +17,7 @@ import type { TaskChatPresentation } from '@taskyon/ui/modules/taskChatPresentat
 import { computed } from 'vue'
 import TyMarkdown from '../tyMarkdown.vue'
 import TaskChatMessage from './TaskChatMessage.vue'
-import { isTaskVisibleInChat } from './taskChatVisibility'
+import { selectTasksVisibleInChat } from './taskChatVisibility'
 
 const props = withDefaults(
   defineProps<{
@@ -39,24 +39,17 @@ const props = withDefaults(
   },
 )
 
-const shouldShowTask = (task: TaskNode) => {
-  if (props.hiddenTaskIds.has(task.id)) return false
-  if (props.showAllTasks) return true
-  return isTaskVisibleInChat(task, props.tools, props.expertMode)
-}
+const displayedTasks = computed(() => {
+  const tasks = props.tasks.filter((task) => !props.hiddenTaskIds.has(task.id))
+  return props.showAllTasks ? tasks : selectTasksVisibleInChat(tasks, props.tools, props.expertMode)
+})
 
 const visibleTasks = computed(() =>
-  props.tasks.flatMap((task, index) =>
-    shouldShowTask(task)
-      ? [
-          {
-            task,
-            index,
-            nextTask: props.tasks[index + 1],
-          },
-        ]
-      : [],
-  ),
+  displayedTasks.value.map((task, index) => ({
+    task,
+    index,
+    nextTask: displayedTasks.value[index + 1],
+  })),
 )
 </script>
 

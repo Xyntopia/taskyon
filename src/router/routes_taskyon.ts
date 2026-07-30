@@ -58,6 +58,34 @@ export const universalTyRoutes: RouteRecordRaw[] = [
 
 export const taskyonRoutes: RouteRecordRaw[] = [
   {
+    path: '/task-chat-presentation-test',
+    component: () => import('layouts/EmptyLayout2.vue'),
+    children: [
+      {
+        path: '',
+        component: () => import('pages/TaskChatPresentationTest.vue'),
+        meta: {
+          title: 'Task chat presentation test',
+          description: 'Testing reusable task chat presentation',
+        },
+      },
+    ],
+  },
+  {
+    path: '/dockview',
+    component: () => import('layouts/EmptyLayout2.vue'),
+    children: [
+      {
+        path: '',
+        component: () => import('@taskyon/ui/pages/DockViewTestPage.vue'),
+        meta: {
+          title: 'dockview test',
+          description: 'testing dockview integration',
+        },
+      },
+    ],
+  },
+  {
     path: '/',
     component: () => import('layouts/TaskyonLayout.vue'),
     children: [
@@ -308,14 +336,6 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         meta: {
           title: 'Map widget',
           description: 'Embedded task message map widget',
-        },
-      },
-      {
-        path: '/dockview',
-        component: () => import('pages/DockViewTest.vue'),
-        meta: {
-          title: 'dockview test',
-          description: 'testing dockview integration',
         },
       },
     ],

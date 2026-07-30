@@ -8,41 +8,109 @@
       'dock-col': node.type === 'container' && node.direction === 'column',
       'dock-resizing': isResizing,
       'dock-node--tabs-left': isLeftTabsLayout,
+      'dock-node--animated': node.animateTransitions === true,
+      'dock-dragging': isDocking,
     }"
+    :data-dock-node-id="node.id"
     :style="nodeStyle"
   >
+    <button
+      v-if="node.type === 'leaf' && (showTabs || isCollapsed)"
+      class="dock-pane-toggle"
+      :data-cy="`dock-minimize-${node.id}`"
+      type="button"
+      :class="tabButtonClass"
+      :title="isCollapsed ? 'Restore pane' : 'Minimize pane'"
+      :aria-label="isCollapsed ? 'Restore pane' : 'Minimize pane'"
+      @click.stop="toggleCollapse"
+    >
+      <q-icon :name="isCollapsed ? matOpenInFull : matCloseFullscreen" />
+    </button>
+
     <!-- Tabs header: always shown if showTabs, even when collapsed -->
     <div
       v-if="showTabs || isCollapsed"
       class="dock-tabs-header"
+      :data-cy="`dock-tabs-header-${node.id}`"
+      role="tablist"
       :class="{
         'dock-tabs-header--vertical': isCollapsed && parentDirection === 'row',
         'dock-tabs-header--collapsed': isCollapsed,
         'dock-tabs-header--left': isLeftTabsLayout,
+        'dock-tabs-header--compact': isCompactTabRail,
+        'dock-tabs-header--drop-empty': isTabHeaderDropTarget && (node.views?.length ?? 0) === 0,
       }"
+      @dragover="onTabHeaderDragOver"
+      @drop="onTabHeaderDrop"
     >
+      <button
+        v-if="isTabRailCollapsible"
+        class="dock-tab-rail-toggle"
+        :data-cy="`dock-tab-rail-toggle-${node.id}`"
+        type="button"
+        :class="tabButtonClass"
+        :title="isCompactTabRail ? 'Expand tab navigation' : 'Compact tab navigation'"
+        :aria-label="isCompactTabRail ? 'Expand tab navigation' : 'Compact tab navigation'"
+        @click.stop="toggleTabRail"
+      >
+        <q-icon :name="isCompactTabRail ? mdiChevronDoubleRight : mdiChevronDoubleLeft" />
+      </button>
+
       <!-- Plus button still available when not collapsed -->
       <button
         v-if="!hideTabAdd && !isCollapsed"
         class="dock-tab-add"
+        :data-cy="`dock-add-${node.id}`"
         type="button"
         :class="addButtonClass"
         @click.stop="onAddTabClick"
       >
         +
       </button>
+      <q-menu v-if="resolvedAddViewOptions.length > 0" v-model="showAddViewMenu">
+        <q-list dense class="dock-add-menu">
+          <q-item
+            v-for="option in resolvedAddViewOptions"
+            :key="option.id"
+            v-close-popup
+            clickable
+            :data-cy="`dock-add-option-${node.id}-${option.id}`"
+            @click="onAddViewOptionClick(option)"
+          >
+            <q-item-section v-if="option.icon" avatar>
+              <q-icon :name="option.icon" />
+            </q-item-section>
+            <q-item-section>{{ option.label }}</q-item-section>
+          </q-item>
+        </q-list>
+      </q-menu>
 
       <div
         v-for="(viewId, index) in node.views || []"
         :key="viewId"
         class="dock-tab"
         :data-cy="`dock-tab-${node.id}-${viewId}`"
+        :data-leaf-id="node.id"
+        :data-tab-index="index"
+        :data-view-id="viewId"
+        :draggable="canDragView(viewId)"
         :class="[
           tabClass,
           { active: index === (node.activeViewIndex ?? 0) },
           index === (node.activeViewIndex ?? 0) && activeTabClass,
+          getTabDropClass(index),
         ]"
+        role="tab"
+        tabindex="0"
+        :aria-label="tabTitles?.[viewId] || viewId"
+        :aria-selected="index === (node.activeViewIndex ?? 0)"
         @click="isCollapsed ? onCollapsedTabClick(index) : onTabClick(index)"
+        @keydown.enter.prevent="isCollapsed ? onCollapsedTabClick(index) : onTabClick(index)"
+        @keydown.space.prevent="isCollapsed ? onCollapsedTabClick(index) : onTabClick(index)"
+        @dragstart="onTabDragStart($event, viewId, index)"
+        @dragover="onTabDragOver($event, index)"
+        @drop="onTabDrop($event, index)"
+        @dragend="stopTabDrag"
       >
         <q-icon v-if="tabIcons?.[viewId]" class="dock-tab-icon" :name="tabIcons[viewId]" />
         <span
@@ -51,9 +119,15 @@
           >{{ tabTitles?.[viewId] || viewId }}</span
         >
 
+        <div class="dock-tab-drag-image" aria-hidden="true">
+          <q-icon v-if="tabIcons?.[viewId]" class="dock-tab-icon" :name="tabIcons[viewId]" />
+          <span>{{ tabTitles?.[viewId] || viewId }}</span>
+        </div>
+
         <button
           v-if="!hideTabClose && !isCollapsed && !pinnedViews.includes(viewId)"
           class="dock-tab-close"
+          :data-cy="`dock-close-${node.id}-${viewId}`"
           type="button"
           :class="tabButtonClass"
           @click.stop="onTabClose(viewId)"
@@ -61,17 +135,6 @@
           ×
         </button>
       </div>
-
-      <!-- Minimize / restore button -->
-      <button
-        class="dock-tab-minimize"
-        :data-cy="`dock-minimize-${node.id}`"
-        type="button"
-        :class="tabButtonClass"
-        @click.stop="toggleCollapse"
-      >
-        {{ isCollapsed ? '▢' : '▁' }}
-      </button>
     </div>
 
     <!-- Container Node -->
@@ -90,10 +153,20 @@
           :tab-icons="tabIcons"
           :tab-titles="tabTitles"
           :tab-title-tooltips="tabTitleTooltips"
+          :tab-position="tabPosition"
+          :enable-tab-docking="enableTabDocking"
+          :can-dock-view="canDockView"
+          :add-view-options="addViewOptions"
+          :dock-root-controller="dockRoot"
           @add-view="onChildAddView"
+          @view-activated="onChildViewActivated"
         >
           <!-- Forward all slots -->
-          <template v-for="(_, slotName) in $slots" :key="slotName" #[slotName]="slotProps">
+          <template
+            v-for="(_, slotName) in enableTabDocking ? {} : $slots"
+            :key="slotName"
+            #[slotName]="slotProps"
+          >
             <slot :name="slotName" v-bind="slotProps" />
           </template>
         </DockView>
@@ -141,16 +214,31 @@
     <template v-else-if="node.type === 'leaf'">
       <template v-if="shouldRenderLeafContent">
         <!-- Content-sized leaves -->
-        <div v-if="isContentSizedLeaf" class="dock-content dock-content--content">
+        <div
+          v-if="isContentSizedLeaf"
+          class="dock-content dock-content--content"
+          :data-cy="`dock-content-${node.id}`"
+          @dragover="onContentDragOver"
+          @drop="onContentDrop"
+        >
+          <div
+            v-if="contentDropPosition"
+            class="dock-drop-preview"
+            :class="`dock-drop-preview--${contentDropPosition}`"
+            :data-cy="`dock-drop-preview-${node.id}`"
+            :data-dock-position="contentDropPosition"
+          />
           <template v-if="node.views && node.views.length > 0">
             <template v-for="(viewId, index) in node.views" :key="viewId">
               <div
                 v-if="shouldMountView(viewId, index)"
                 v-show="isViewVisible(index)"
+                :id="getViewHostId(node.id, viewId)"
+                :ref="(element) => registerViewHost(viewId, element)"
                 class="dock-view-host"
                 :data-cy="`dock-view-${node.id}-${viewId}`"
               >
-                <slot :name="viewId" />
+                <slot v-if="!enableTabDocking" :name="viewId" />
               </div>
             </template>
           </template>
@@ -158,17 +246,32 @@
         </div>
 
         <!-- Weight-based leaves -->
-        <div v-else class="dock-content dock-content--weight">
+        <div
+          v-else
+          class="dock-content dock-content--weight"
+          :data-cy="`dock-content-${node.id}`"
+          @dragover="onContentDragOver"
+          @drop="onContentDrop"
+        >
+          <div
+            v-if="contentDropPosition"
+            class="dock-drop-preview"
+            :class="`dock-drop-preview--${contentDropPosition}`"
+            :data-cy="`dock-drop-preview-${node.id}`"
+            :data-dock-position="contentDropPosition"
+          />
           <div class="dock-content-inner">
             <template v-if="node.views && node.views.length > 0">
               <template v-for="(viewId, index) in node.views" :key="viewId">
                 <div
                   v-if="shouldMountView(viewId, index)"
                   v-show="isViewVisible(index)"
+                  :id="getViewHostId(node.id, viewId)"
+                  :ref="(element) => registerViewHost(viewId, element)"
                   class="dock-view-host"
                   :data-cy="`dock-view-${node.id}-${viewId}`"
                 >
-                  <slot :name="viewId" />
+                  <slot v-if="!enableTabDocking" :name="viewId" />
                 </div>
               </template>
             </template>
@@ -177,71 +280,86 @@
         </div>
       </template>
     </template>
+
+    <template v-if="isDockRoot && enableTabDocking">
+      <Teleport
+        v-for="target in mountedViewTargets"
+        :key="target.viewId"
+        defer
+        :to="target.element"
+      >
+        <slot :name="target.viewId" />
+      </Teleport>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onUnmounted, useSlots, computed } from 'vue'
+import { matCloseFullscreen, matOpenInFull } from '@quasar/extras/material-icons'
+import { mdiChevronDoubleLeft, mdiChevronDoubleRight } from '@quasar/extras/mdi-v6'
+import { computed, onUnmounted, ref, shallowRef, useId, useSlots, type Ref } from 'vue'
+import {
+  addViewToLeaf,
+  applyDockDrop,
+  clamp,
+  findLeaf,
+  getLeafRestoreSize,
+  MIN_RESTORE_WEIGHT,
+  updateLeaf,
+  viewIds,
+  type DockNode,
+  type DockPosition,
+  type DockViewDropContext,
+} from './dockLayout'
 
-/* ---------- Types ---------- */
-
-export type DockDirection = 'row' | 'column'
-
-export interface DockNode {
+export interface DockViewAddOption {
   id: string
-  type: 'container' | 'leaf'
-
-  // container
-  direction?: DockDirection
-  children?: DockNode[]
-
-  // leaf
-  views?: string[]
-  activeViewIndex?: number
-  /**
-   * Controls whether the tab header is shown.
-   * - "always": header is always visible (default)
-   * - "auto": hide when 0 or 1 tab
-   * - "never": never show tabs (e.g. menu bars, static views)
-   */
-  showTabs?: 'always' | 'auto' | 'never'
-
-  // layout
-  size?: number // flex "weight"
-  /**
-   * 'weight' (default): flex-grow with given size
-   * 'content': shrink/grow to min content size (e.g. menu bar region)
-   */
-  sizeMode?: 'weight' | 'content'
-
-  /** whether this pane is collapsed (minimized) */
-  collapsed?: boolean
-  /** remembered flex weight when last non-collapsed */
-  lastSize?: number
-  /** view ids that must stay mounted even when not active/collapsed */
-  keepAliveViews?: string[]
+  label: string
+  icon?: string
+  viewId?: string
 }
 
-/* ---------- Add-view event types ---------- */
-
 export interface AddViewContext {
-  /** id of the leaf where "+" was clicked (e.g. "editors", "panel", "sidebar") */
   leafId: string
-  /** current view ids (slot names) in that leaf */
   currentViews: string[]
-  /** all slot names available on this DockView instance */
   availableViewTypes: string[]
+  selectedOptionId?: string
 }
 
 export interface AddViewResult {
-  /** name of the slot to add as a new tab (e.g. "New_File_3", "Process_2") */
   viewId: string
-  /** whether the new tab should become active (default: true) */
   makeActive?: boolean
 }
 
-/** Callback that the parent calls once it knows what to add */
+export interface ViewActivatedContext {
+  leafId: string
+  viewId: string
+  index: number
+}
+
 export type AddViewDone = (result: AddViewResult | null | undefined) => void
+
+interface DockDragState {
+  viewId: string
+  sourceLeafId: string
+  sourceIndex: number
+}
+
+interface DockDropPreview {
+  targetLeafId: string
+  targetIndex?: number
+  position: DockPosition
+}
+
+interface DockRootController {
+  id: string
+  node: Ref<DockNode>
+  drag: Ref<DockDragState | null>
+  preview: Ref<DockDropPreview | null>
+  viewHosts: Ref<ReadonlyMap<string, HTMLElement>>
+  availableViewTypes: string[]
+  emitDocked: (context: DockViewDropContext) => void
+}
 
 /* ---------- Props ---------- */
 
@@ -261,8 +379,12 @@ const {
   tabTitles = {},
   tabTitleTooltips = {},
   tabPosition = 'top',
+  enableTabDocking = false,
+  canDockView = undefined,
+  addViewOptions = undefined,
+  dockRootController = undefined,
 } = defineProps<{
-  parentDirection?: DockDirection | undefined
+  parentDirection?: 'row' | 'column' | undefined
 
   /** Show the "x" close button on each tab (default: true) */
   hideTabClose?: boolean
@@ -285,6 +407,17 @@ const {
   tabTitleTooltips?: Record<string, string>
   /** position of tab header in leaf nodes */
   tabPosition?: 'top' | 'left'
+  /** Enable mouse-driven tab reordering and pane docking. */
+  enableTabDocking?: boolean
+  /** Host policy for accepting a proposed tab drop. */
+  canDockView?: ((context: DockViewDropContext) => boolean) | undefined
+  /** Optional built-in add-tab menu entries. */
+  addViewOptions?:
+    | readonly DockViewAddOption[]
+    | ((context: AddViewContext) => readonly DockViewAddOption[])
+    | undefined
+  /** Internal controller passed only to recursive DockView instances. */
+  dockRootController?: DockRootController | undefined
 }>()
 
 /* ---------- v-model ---------- */
@@ -301,7 +434,21 @@ const slots = useSlots()
 
 const emit = defineEmits<{
   (e: 'add-view', ctx: AddViewContext, done: AddViewDone): void
+  (e: 'view-activated', ctx: ViewActivatedContext): void
+  (e: 'view-docked', ctx: DockViewDropContext): void
 }>()
+
+const localDockRootId = useId().replaceAll(':', '-')
+const dockRoot: DockRootController = dockRootController ?? {
+  id: localDockRootId,
+  node: nodeModel,
+  drag: ref(null),
+  preview: ref(null),
+  viewHosts: shallowRef(new Map()),
+  availableViewTypes: Object.keys(slots),
+  emitDocked: (context) => emit('view-docked', context),
+}
+const isDockRoot = dockRootController === undefined
 
 /* ---------- Pure helpers ---------- */
 
@@ -317,8 +464,8 @@ const isSplitterResizable = (splitterIndex: number): boolean => {
   return left.sizeMode !== 'content' && right.sizeMode !== 'content'
 }
 
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, value))
+const toDomToken = (value: string): string =>
+  Array.from(new TextEncoder().encode(value), (byte) => byte.toString(16).padStart(2, '0')).join('')
 
 const isNodeCollapsed = (n: DockNode): boolean => n.collapsed === true || (n.size ?? 0) <= 0
 
@@ -421,14 +568,6 @@ const resizeChildren = (
   return { ...n, children: updated }
 }
 
-/** Add a view id to a leaf node (used when "+" is confirmed by parent) */
-const addViewToLeaf = (n: DockNode, viewId: string, makeActive = true): DockNode => {
-  if (n.type !== 'leaf') return n
-  const views = [...(n.views ?? []), viewId]
-  const activeViewIndex = makeActive ? views.length - 1 : (n.activeViewIndex ?? 0)
-  return { ...n, views, activeViewIndex }
-}
-
 /* ---------- Collapse-related helpers ---------- */
 
 /**
@@ -440,10 +579,248 @@ const addViewToLeaf = (n: DockNode, viewId: string, makeActive = true): DockNode
  */
 const COLLAPSED_THICKNESS_PX = 32
 const MIN_RESTORE_THICKNESS_PX = 220
-const MIN_RESTORE_WEIGHT = 20
 
-const getLeafRestoreSize = (n: DockNode): number =>
-  Math.max(n.lastSize ?? MIN_RESTORE_WEIGHT, MIN_RESTORE_WEIGHT)
+const getViewHostId = (leafId: string, viewId: string): string =>
+  `dock-host-${dockRoot.id}-${toDomToken(leafId)}-${toDomToken(viewId)}`
+
+const registerViewHost = (viewId: string, element: unknown) => {
+  if (!(element instanceof HTMLElement) || dockRoot.viewHosts.value.get(viewId) === element) return
+  dockRoot.viewHosts.value = new Map(dockRoot.viewHosts.value).set(viewId, element)
+}
+
+const mountedViewTargets = computed(() => {
+  const targets: Array<{ viewId: string; element: HTMLElement }> = []
+  const visit = (current: DockNode) => {
+    if (current.type === 'container') {
+      for (const child of current.children ?? []) visit(child)
+      return
+    }
+
+    const activeIndex = current.activeViewIndex ?? 0
+    const collapsed = current.collapsed === true || current.size === 0
+    for (const [index, viewId] of (current.views ?? []).entries()) {
+      if (
+        (collapsed || index !== activeIndex) &&
+        !(current.keepAliveViews ?? []).includes(viewId)
+      ) {
+        continue
+      }
+      const element = dockRoot.viewHosts.value.get(viewId)
+      if (element) targets.push({ viewId, element })
+    }
+  }
+  visit(dockRoot.node.value)
+  return targets
+})
+
+const isDocking = computed(() => enableTabDocking && dockRoot.drag.value !== null)
+const contentDropPosition = computed(() => {
+  const preview = dockRoot.preview.value
+  if (preview?.targetLeafId !== node.value.id || preview.targetIndex !== undefined) return undefined
+  return preview.position === 'tab' ? 'center' : preview.position
+})
+
+const hasUniqueViewIds = (): boolean => {
+  const ids = viewIds(dockRoot.node.value)
+  return new Set(ids).size === ids.length
+}
+
+const canDragView = (viewId: string): boolean =>
+  enableTabDocking &&
+  !isCollapsed.value &&
+  hasUniqueViewIds() &&
+  viewIds(dockRoot.node.value).includes(viewId)
+
+const stopTabDrag = () => {
+  dockRoot.drag.value = null
+  dockRoot.preview.value = null
+}
+
+const onTabDragStart = (event: DragEvent, viewId: string, sourceIndex: number) => {
+  if (!canDragView(viewId) || node.value.type !== 'leaf') {
+    event.preventDefault()
+    return
+  }
+  dockRoot.drag.value = { viewId, sourceLeafId: node.value.id, sourceIndex }
+  event.dataTransfer?.setData('text/x-taskyon-dock-view', dockRoot.id)
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    const dragImage = (event.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>(
+      '.dock-tab-drag-image',
+    )
+    if (dragImage) event.dataTransfer.setDragImage(dragImage, 12, 12)
+  }
+}
+
+const dropContext = (preview: DockDropPreview): DockViewDropContext | undefined => {
+  const drag = dockRoot.drag.value
+  if (!drag) return undefined
+  return { ...drag, ...preview }
+}
+
+const acceptsDrop = (preview: DockDropPreview): boolean => {
+  const context = dropContext(preview)
+  if (!context) return false
+  const sourceLeaf = findLeaf(dockRoot.node.value, context.sourceLeafId)
+  if (
+    context.position !== 'tab' &&
+    context.sourceLeafId === context.targetLeafId &&
+    (sourceLeaf?.views?.length ?? 0) <= 1
+  ) {
+    return false
+  }
+  return canDockView?.(context) ?? true
+}
+
+const setDropPreview = (event: DragEvent, preview: DockDropPreview) => {
+  if (!acceptsDrop(preview)) {
+    dockRoot.preview.value = null
+    return
+  }
+  event.preventDefault()
+  event.stopPropagation()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  dockRoot.preview.value = preview
+}
+
+const edgeDropPosition = (event: DragEvent): Exclude<DockPosition, 'tab'> | 'tab' => {
+  const element = event.currentTarget
+  if (!(element instanceof HTMLElement)) return 'tab'
+  const rect = element.getBoundingClientRect()
+  const x = event.clientX - rect.left
+  const y = event.clientY - rect.top
+  const edgeX = rect.width * 0.25
+  const edgeY = rect.height * 0.25
+  const candidates = [
+    { position: 'left' as const, distance: x / edgeX },
+    { position: 'right' as const, distance: (rect.width - x) / edgeX },
+    { position: 'top' as const, distance: y / edgeY },
+    { position: 'bottom' as const, distance: (rect.height - y) / edgeY },
+  ].filter(({ distance }) => distance <= 1)
+  return candidates.sort((left, right) => left.distance - right.distance)[0]?.position ?? 'tab'
+}
+
+const onContentDragOver = (event: DragEvent) => {
+  if (!dockRoot.drag.value || node.value.type !== 'leaf') return
+  const position = isCollapsed.value ? 'tab' : edgeDropPosition(event)
+  setDropPreview(event, { targetLeafId: node.value.id, position })
+}
+
+const tabInsertIndex = (event: DragEvent, index: number): number => {
+  const element = event.currentTarget
+  if (!(element instanceof HTMLElement)) return index
+  const rect = element.getBoundingClientRect()
+  const vertical = resolvedTabPosition.value === 'left'
+  const pointer = vertical ? event.clientY - rect.top : event.clientX - rect.left
+  const length = vertical ? rect.height : rect.width
+  return pointer < length / 2 ? index : index + 1
+}
+
+const onTabDragOver = (event: DragEvent, index: number) => {
+  if (!dockRoot.drag.value || node.value.type !== 'leaf') return
+  setDropPreview(event, {
+    targetLeafId: node.value.id,
+    targetIndex: tabInsertIndex(event, index),
+    position: 'tab',
+  })
+}
+
+const onTabHeaderDragOver = (event: DragEvent) => {
+  if (!dockRoot.drag.value || node.value.type !== 'leaf') return
+  setDropPreview(event, {
+    targetLeafId: node.value.id,
+    targetIndex: node.value.views?.length ?? 0,
+    position: 'tab',
+  })
+}
+
+const commitDrop = (event: DragEvent, fallback?: DockDropPreview) => {
+  event.preventDefault()
+  event.stopPropagation()
+  const preview = dockRoot.preview.value ?? fallback
+  if (!preview || !acceptsDrop(preview)) {
+    stopTabDrag()
+    return
+  }
+  const context = dropContext(preview)
+  if (!context) return
+  dockRoot.node.value = applyDockDrop(dockRoot.node.value, context)
+  dockRoot.emitDocked(context)
+  stopTabDrag()
+}
+
+const onContentDrop = (event: DragEvent) => commitDrop(event)
+
+const onTabDrop = (event: DragEvent, index: number) =>
+  commitDrop(event, {
+    targetLeafId: node.value.id,
+    targetIndex: tabInsertIndex(event, index),
+    position: 'tab',
+  })
+
+const onTabHeaderDrop = (event: DragEvent) =>
+  commitDrop(event, {
+    targetLeafId: node.value.id,
+    targetIndex: node.value.views?.length ?? 0,
+    position: 'tab',
+  })
+
+const isTabHeaderDropTarget = computed(() => {
+  const preview = dockRoot.preview.value
+  return (
+    preview?.targetLeafId === node.value.id &&
+    preview.position === 'tab' &&
+    preview.targetIndex === (node.value.views?.length ?? 0)
+  )
+})
+
+const getTabDropClass = (index: number): string => {
+  const preview = dockRoot.preview.value
+  if (preview?.targetLeafId !== node.value.id || preview.position !== 'tab') return ''
+  if (preview.targetIndex === index) return 'dock-tab--drop-before'
+  if (
+    preview.targetIndex === (node.value.views?.length ?? 0) &&
+    index === preview.targetIndex - 1
+  ) {
+    return 'dock-tab--drop-after'
+  }
+  return ''
+}
+
+const addViewContext = (selectedOptionId?: string): AddViewContext => ({
+  leafId: node.value.id,
+  currentViews: node.value.views ?? [],
+  availableViewTypes: dockRoot.availableViewTypes,
+  ...(selectedOptionId ? { selectedOptionId } : {}),
+})
+
+const resolvedAddViewOptions = computed(() => {
+  if (node.value.type !== 'leaf' || !addViewOptions) return []
+  const options =
+    typeof addViewOptions === 'function' ? addViewOptions(addViewContext()) : addViewOptions
+  const present = new Set(viewIds(dockRoot.node.value))
+  return options.filter((option) => !option.viewId || !present.has(option.viewId))
+})
+
+const showAddViewMenu = ref(false)
+
+const addViewToRootLeaf = (leafId: string, result: AddViewResult) => {
+  if (viewIds(dockRoot.node.value).includes(result.viewId)) return
+  dockRoot.node.value = updateLeaf(dockRoot.node.value, leafId, (leaf) =>
+    addViewToLeaf(leaf, result.viewId, result.makeActive ?? true),
+  )
+}
+
+const onAddViewOptionClick = (option: DockViewAddOption) => {
+  if (node.value.type !== 'leaf') return
+  if (option.viewId) {
+    addViewToRootLeaf(node.value.id, { viewId: option.viewId, makeActive: true })
+    return
+  }
+  emit('add-view', addViewContext(option.id), (result) => {
+    if (result?.viewId) addViewToRootLeaf(node.value.id, result)
+  })
+}
 
 const isCollapsed = computed(() => {
   const n = node.value
@@ -451,9 +828,34 @@ const isCollapsed = computed(() => {
   return n.collapsed === true || n.size === 0
 })
 
+const resolvedTabPosition = computed(() => node.value.tabPosition ?? tabPosition)
+
 const isLeftTabsLayout = computed(
-  () => node.value.type === 'leaf' && tabPosition === 'left' && !isCollapsed.value,
+  () => node.value.type === 'leaf' && resolvedTabPosition.value === 'left' && !isCollapsed.value,
 )
+
+const isCompactTabRail = computed(
+  () => isLeftTabsLayout.value && !isCollapsed.value && node.value.tabRailMode === 'compact',
+)
+
+const isTabRailCollapsible = computed(
+  () => isLeftTabsLayout.value && !isCollapsed.value && node.value.tabRailCollapsible === true,
+)
+
+const toggleTabRail = () => {
+  const n = node.value
+  if (n.type !== 'leaf' || !isTabRailCollapsible.value) return
+  node.value = {
+    ...n,
+    tabRailMode: isCompactTabRail.value ? 'expanded' : 'compact',
+  }
+}
+
+const activateLeafView = (n: DockNode, index: number): DockNode => {
+  const activated = setActiveView(n, index)
+  if (n.tabRailAutoCompact !== true || resolvedTabPosition.value !== 'left') return activated
+  return { ...activated, tabRailMode: 'compact' }
+}
 
 const toggleCollapse = () => {
   const n = node.value
@@ -479,16 +881,19 @@ const toggleCollapse = () => {
 const onCollapsedTabClick = (index: number) => {
   const n = node.value
   if (n.type !== 'leaf') return
+  const viewId = n.views?.[index]
+  if (!viewId) return
 
   // first expand
   if (isCollapsed.value) {
     const restored = getLeafRestoreSize(n)
     node.value = {
-      ...setActiveView({ ...n, collapsed: false, size: restored }, index),
+      ...activateLeafView({ ...n, collapsed: false, size: restored }, index),
     }
   } else {
-    node.value = setActiveView(n, index)
+    node.value = activateLeafView(n, index)
   }
+  emit('view-activated', { leafId: n.id, viewId, index })
 }
 
 /* ---------- Layout-related computed ---------- */
@@ -767,7 +1172,12 @@ onUnmounted(() => {
 /* ---------- Tab handlers ---------- */
 
 const onTabClick = (index: number) => {
-  node.value = setActiveView(node.value, index)
+  const n = node.value
+  if (n.type !== 'leaf') return
+  const viewId = n.views?.[index]
+  if (!viewId) return
+  node.value = activateLeafView(n, index)
+  emit('view-activated', { leafId: n.id, viewId, index })
 }
 
 const onTabClose = (viewId: string) => {
@@ -779,15 +1189,15 @@ const onTabClose = (viewId: string) => {
 const onAddTabClick = () => {
   if (node.value.type !== 'leaf') return
 
-  const ctx: AddViewContext = {
-    leafId: node.value.id,
-    currentViews: node.value.views ?? [],
-    availableViewTypes: Object.keys(slots),
+  if (resolvedAddViewOptions.value.length > 0) {
+    showAddViewMenu.value = true
+    return
   }
 
+  const ctx = addViewContext()
+
   const done: AddViewDone = (result) => {
-    if (!result || !result.viewId) return
-    node.value = addViewToLeaf(node.value, result.viewId, result.makeActive ?? true)
+    if (result?.viewId) addViewToRootLeaf(node.value.id, result)
   }
 
   emit('add-view', ctx, done)
@@ -796,6 +1206,10 @@ const onAddTabClick = () => {
 /** Forward add-view events from children up the tree. */
 const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   emit('add-view', ctx, done)
+}
+
+const onChildViewActivated = (ctx: ViewActivatedContext) => {
+  emit('view-activated', ctx)
 }
 </script>
 
@@ -809,7 +1223,8 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   flex-direction: column;
 
   /*we do this to not loose the mouse grab when dragging an iframe split view*/
-  &.dock-resizing :deep(iframe) {
+  &.dock-resizing :deep(iframe),
+  &.dock-dragging :deep(iframe) {
     pointer-events: none !important;
   }
 
@@ -819,6 +1234,30 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 
   &.dock-node--tabs-left {
     flex-direction: row;
+  }
+}
+
+.dock-node--animated {
+  transition:
+    flex-basis 180ms ease,
+    flex-grow 180ms ease,
+    flex-shrink 180ms ease;
+}
+
+.dock-node--animated > .dock-tabs-header {
+  transition:
+    width 180ms ease,
+    min-width 180ms ease;
+}
+
+.dock-resizing .dock-node--animated {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-node--animated,
+  .dock-node--animated > .dock-tabs-header {
+    transition: none;
   }
 }
 
@@ -1001,13 +1440,21 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
     border-right: 1px solid color-mix(in srgb, currentColor 12%, transparent);
     overflow-x: visible;
     overflow-y: auto;
-    min-width: 132px;
+    width: var(--dock-tab-rail-width, 132px);
+    min-width: var(--dock-tab-rail-width, 132px);
     padding-block: 0.25rem;
+  }
+
+  &.dock-tabs-header--compact {
+    width: var(--dock-tab-rail-compact-width, 44px);
+    min-width: var(--dock-tab-rail-compact-width, 44px);
+    overflow: visible;
   }
 }
 
 /* Individual tab */
 .dock-tab {
+  position: relative;
   display: flex;
   align-items: center;
   padding: 0.25rem 0.75rem;
@@ -1050,10 +1497,84 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   }
 }
 
+.dock-tab-drag-image {
+  position: fixed;
+  top: -10000px;
+  left: -10000px;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 240px;
+  padding: 0.4rem 0.65rem;
+  overflow: hidden;
+  color: var(--dock-drag-image-color, currentColor);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: var(--dock-drag-image-background, Canvas);
+  border: 1px solid var(--dock-drag-image-border, currentColor);
+  border-radius: var(--dock-drag-image-radius, 4px);
+  box-shadow: var(--dock-drag-image-shadow, 0 4px 12px rgb(0 0 0 / 18%));
+}
+
+.dock-tab--drop-before::before,
+.dock-tab--drop-after::after {
+  content: '';
+  position: absolute;
+  z-index: 8;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--dock-drop-indicator, currentColor);
+}
+
+.dock-tab--drop-before::before {
+  left: -1px;
+}
+
+.dock-tab--drop-after::after {
+  right: -1px;
+}
+
+.dock-tabs-header--left .dock-tab--drop-before::before,
+.dock-tabs-header--left .dock-tab--drop-after::after {
+  right: 3px;
+  left: 3px;
+  width: auto;
+  height: 3px;
+}
+
+.dock-tabs-header--left .dock-tab--drop-before::before {
+  top: -1px;
+  bottom: auto;
+}
+
+.dock-tabs-header--left .dock-tab--drop-after::after {
+  top: auto;
+  bottom: -1px;
+}
+
+.dock-tabs-header--drop-empty::after {
+  content: '';
+  align-self: stretch;
+  width: 3px;
+  min-height: 24px;
+  margin: 3px;
+  border-radius: 2px;
+  background: var(--dock-drop-indicator, currentColor);
+}
+
+.dock-tabs-header--left.dock-tabs-header--drop-empty::after {
+  width: auto;
+  height: 3px;
+  min-height: 3px;
+}
+
 /* Tabs within the vertical strip:
    - make tab contents (icon, title, close) vertical as well */
 .dock-tabs-header--vertical .dock-tab {
-  padding: 0.75rem 0.25rem;
+  padding: 0.35rem 0.2rem;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -1081,11 +1602,12 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
     text-orientation: mixed; /* latin reads sideways, not stacked upright */
 
     /* Use logical sizing instead of max-height (axes swap in vertical writing) */
-    max-inline-size: 6rem; /* limits “length” of the vertical label (physical height) */
+    max-inline-size: 8rem; /* limits “length” of unusually long vertical labels */
     overflow: hidden;
+    font-size: 0.8rem;
 
     /* optional spacing similar to horizontal tab */
-    margin-top: 0.25rem;
+    margin-top: 0.125rem;
   }
 
   .dock-tab-close {
@@ -1095,9 +1617,44 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 }
 
 .dock-tabs-header--left .dock-tab {
+  position: relative;
   border-bottom: none;
   border-right: 2px solid transparent;
   padding: 0.35rem 0.6rem;
+}
+
+.dock-tabs-header--compact .dock-tab {
+  justify-content: center;
+  min-height: 40px;
+  padding-inline: 0.35rem;
+}
+
+.dock-tabs-header--compact .dock-tab-icon {
+  margin-right: 0;
+}
+
+.dock-tabs-header--compact .dock-tab-title {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 6px);
+  z-index: 5;
+  width: max-content;
+  max-width: min(18rem, 60vw);
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--dock-tab-flyout-border, currentColor);
+  border-radius: var(--dock-tab-flyout-radius, 4px);
+  color: var(--dock-tab-flyout-color, CanvasText);
+  background: var(--dock-tab-flyout-background, Canvas);
+  box-shadow: var(--dock-tab-flyout-shadow, 0 2px 6px rgb(0 0 0 / 18%));
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 0.12s ease;
+}
+
+.dock-tabs-header--compact .dock-tab:hover .dock-tab-title,
+.dock-tabs-header--compact .dock-tab:focus-visible .dock-tab-title {
+  opacity: 1;
 }
 
 .dock-tabs-header--left .dock-tab.active {
@@ -1109,10 +1666,18 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
 }
 
 .dock-tabs-header--left .dock-tab-add,
-.dock-tabs-header--left .dock-tab-minimize {
+.dock-tabs-header--left .dock-tab-rail-toggle {
   margin-left: 0;
   margin-top: 0.25rem;
   align-self: center;
+}
+
+.dock-tabs-header--left .dock-tab-rail-toggle {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  margin-top: 0;
+  margin-bottom: 0.25rem;
 }
 
 /* Close and Add buttons inside tabs/header */
@@ -1128,28 +1693,60 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   color: inherit;
 }
 
+.dock-add-menu {
+  min-width: 160px;
+}
+
 .dock-tabs-header--vertical .dock-tab-add,
-.dock-tabs-header--vertical .dock-tab-minimize {
+.dock-tabs-header--vertical .dock-tab-rail-toggle {
   margin-left: 0;
   margin-top: 0.25rem;
   align-self: center;
 }
 
-/* Minimize button styling */
-.dock-tab-minimize {
-  margin-left: auto; /* pushes it to the far right in horizontal layout */
+/* Pane minimize / restore control */
+.dock-pane-toggle {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 6;
   border: none;
   background: none;
   cursor: pointer;
-  padding: 0 0.25rem;
+  padding: 0;
   flex-shrink: 0;
-  font-size: 0.9rem;
+  min-width: 24px;
+  min-height: 24px;
+  font-size: 0.75rem;
   color: inherit;
+}
+
+.dock-node:not(.dock-node--tabs-left) > .dock-tabs-header {
+  padding-right: 28px;
+}
+
+.dock-node:not(.dock-node--tabs-left) > .dock-tabs-header--vertical {
+  padding-top: 30px;
+  padding-right: 0;
+}
+
+.dock-tab-rail-toggle {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 /* Content */
 /* Base: shared bits */
 .dock-content {
+  position: relative;
   min-width: 0;
   min-height: 0;
 
@@ -1170,6 +1767,35 @@ const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
       justify-content: center;
     }
   }
+}
+
+.dock-drop-preview {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  border: 2px solid var(--dock-drop-preview-border, currentColor);
+  border-radius: var(--dock-drop-preview-radius, 4px);
+  background: var(--dock-drop-preview-background, color-mix(in srgb, currentColor 14%, Canvas));
+}
+
+.dock-drop-preview--center {
+  inset: 6px;
+}
+
+.dock-drop-preview--left {
+  inset: 0 50% 0 0;
+}
+
+.dock-drop-preview--right {
+  inset: 0 0 0 50%;
+}
+
+.dock-drop-preview--top {
+  inset: 0 0 50% 0;
+}
+
+.dock-drop-preview--bottom {
+  inset: 50% 0 0;
 }
 
 /* For sizeMode: 'content' leaves (e.g. 'actions') */

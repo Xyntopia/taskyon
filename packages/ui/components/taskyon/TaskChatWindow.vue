@@ -7,11 +7,11 @@
       </div>
       <q-space />
       <CopyTaskChatButton
-        v-if="selectedThread.length > 0"
+        v-if="copyableThread.length > 0"
         flat
         round
         dense
-        :tasks="selectedThread"
+        :tasks="copyableThread"
       />
       <q-btn
         flat
@@ -106,6 +106,7 @@ import CopyTaskChatButton from './CopyTaskChatButton.vue'
 import TaskConversationBrowser from './TaskConversationBrowser.vue'
 import TaskChatThread from './TaskChatThread.vue'
 import TaskComposer from './TaskComposer.vue'
+import { selectTasksForChatCopy } from './taskChatVisibility'
 
 const props = withDefaults(
   defineProps<{
@@ -139,6 +140,9 @@ const recentTaskIds = defineModel<string[]>('recentTaskIds', { default: () => []
 const selectedThread = ref<TaskNode[]>([])
 const threadContainer = ref<HTMLElement>()
 const currentTask = computed(() => selectedThread.value.at(-1) ?? null)
+const copyableThread = computed(() =>
+  selectTasksForChatCopy(selectedThread.value, props.allTools, props.expertMode),
+)
 let unsubscribeTaskCreated: (() => void) | undefined
 let refreshVersion = 0
 let locallySelectedTaskId: string | undefined

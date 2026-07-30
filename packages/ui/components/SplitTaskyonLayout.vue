@@ -12,7 +12,8 @@
 <script setup lang="ts">
 import { syncRefsWithLocalStorage } from '@taskyon/common/modules/saveState'
 import { ref } from 'vue'
-import DockView, { type DockNode } from './DockView.vue'
+import type { DockNode } from './dockLayout'
+import DockView from './DockView.vue'
 
 const props = withDefaults(
   defineProps<{

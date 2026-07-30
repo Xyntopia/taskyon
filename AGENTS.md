@@ -64,6 +64,20 @@ tradeoff.
   contract.
 - Keep types close to their use. Name them when they carry domain meaning, are reused, form a
   public boundary, or are genuinely complex.
+- Do not create thin TypeScript files whose only purpose is to relocate types from their owning
+  component or module. Keep public contracts in their owner unless a separate type module has
+  substantial domain ownership and is explicitly justified.
+- Prefer inference for local variables, callback parameters, and implementation return types.
+  Declare named types when they define a public boundary, are recursive or reused, or materially
+  improve readability; do not annotate code merely because a type can be written down.
+- Keep Vue component props, emits, slots, and other component-specific contracts in the owning
+  `.vue` file. When a plain TypeScript consumer cannot resolve an SFC type through typed ESLint, do
+  not duplicate the contract or disable the rule. Extract a TypeScript module only when it owns a
+  meaningful non-visual model or behavior shared across the boundary; otherwise keep the consumer
+  at the Vue boundary.
+- Do not add declaration-generation infrastructure solely to work around one SFC import. Use
+  generated declarations when the owning package already has, or genuinely needs, a compiled
+  public API boundary.
 - Keep small local unions and implementation options inline or in one nearby options type.
 - Require an explicit `mode` or `method` when callers must choose among strategies.
 - Keep unrelated controls separate instead of combining them into one options object.
