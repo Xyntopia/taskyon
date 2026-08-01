@@ -28,7 +28,7 @@ import {
   resolveProviderSelection,
   resolveStoredModel,
 } from './config'
-import { createCliFileStorageService } from './fileStorage'
+import { createCliSelectedStorageService, resolveCliStorageSelection } from './storageService'
 import {
   applyCodexAccountHeader,
   createCliLlmState,
@@ -132,7 +132,11 @@ export async function bootstrapCliTaskyon(args?: {
   const llmState = createCliLlmState(config)
   const { x: taskStorageClientPort, y: taskStorageServicePort } =
     createProtocolPort(taskyonStorageProtocol)
-  createCliFileStorageService(taskStorageServicePort, join(dataDir, 'storage'))
+  await createCliSelectedStorageService({
+    port: taskStorageServicePort,
+    dataDirectory: dataDir,
+    selection: resolveCliStorageSelection(stored),
+  })
   const taskyon = await tyCore(
     () => llmState.settings,
     () =>

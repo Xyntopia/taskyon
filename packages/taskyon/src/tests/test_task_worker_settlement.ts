@@ -282,7 +282,7 @@ export const testTaskWorkerReleasesFunctionAfterDependentMessage = async () => {
     assert(result.status === 'matched', `Expected matched result, got ${result.status}`)
   } finally {
     registration.destroy()
-    ty.workerStop('message dependency settlement diagnostic complete')
+    await ty.dispose('message dependency settlement diagnostic complete')
     storage.destroy()
   }
 }

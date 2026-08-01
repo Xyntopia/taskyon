@@ -156,7 +156,7 @@
     "@types/json-schema": "^7.0.15",
     "@types/leaflet": "^1.9.21",
     "@types/markdown-it": "^14.1.2",
-    "@types/node": "^20.5.9",
+    "@types/node": "^22.13.0",
     "@types/prismjs": "^1.26.5",
     "@types/qrcode": "^1.5.5",
     "@types/stopword": "^2.0.3",
@@ -189,7 +189,7 @@
     "vue-tsc": "^3.0.7"
   },
   "engines": {
-    "node": "^28 || ^26 || ^24 || ^22 || ^20",
+    "node": "^28 || ^26 || ^24 || >=22.13 <23",
     "npm": ">= 6.13.4",
     "yarn": ">= 1.21.1"
   },

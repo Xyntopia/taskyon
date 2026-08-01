@@ -5197,6 +5197,7 @@ __metadata:
   resolution: "@taskyon/secure-tunnel@workspace:packages/secure-tunnel"
   dependencies:
     "@reclaimprotocol/tls": "npm:^0.1.2"
+    "@taskyon/common": "workspace:*"
   languageName: unknown
   linkType: soft
 
@@ -6065,12 +6066,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:^20.5.9":
-  version: 20.19.7
-  resolution: "@types/node@npm:20.19.7"
+"@types/node@npm:^22.13.0":
+  version: 22.20.1
+  resolution: "@types/node@npm:22.20.1"
   dependencies:
     undici-types: "npm:~6.21.0"
-  checksum: 10c0/bd97ed8db9eaab0f66ff066944923bae3baf51c98b603be9f30ea53f2ceeb6ae6fb4bc5bda3d3cd54c90c2ddc146f2117287f42e64fdcac493790c28dd759763
+  checksum: 10c0/f2ba54d3d1fb92e1c57c78d32c3a17655b1e87363b707136f55c422b4838d4054901ce5d27f75bb0e5ecb7ebfee3804e0987822d22b473473008091857a09353
   languageName: node
   linkType: hard
 
@@ -20084,7 +20085,7 @@ __metadata:
     "@types/json-schema": "npm:^7.0.15"
     "@types/leaflet": "npm:^1.9.21"
     "@types/markdown-it": "npm:^14.1.2"
-    "@types/node": "npm:^20.5.9"
+    "@types/node": "npm:^22.13.0"
     "@types/prismjs": "npm:^1.26.5"
     "@types/qrcode": "npm:^1.5.5"
     "@types/stopword": "npm:^2.0.3"

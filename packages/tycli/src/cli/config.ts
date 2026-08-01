@@ -159,6 +159,10 @@ export async function persistConfigPatch(patch: Partial<StoredConfig>) {
   await write
 }
 
+export async function flushConfigWrites() {
+  await configWriteQueue
+}
+
 export function resolveStoredModel(stored: StoredConfig, provider: string): string | undefined {
   const providerModel = stored.providerModels?.[provider]?.trim()
   if (providerModel) return providerModel

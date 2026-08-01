@@ -84,6 +84,7 @@ import { mapSearchTool } from '@taskyon/ui/gis/mapSearchTool'
 import { overpassMapTool } from '@taskyon/ui/gis/overpassMapTool'
 import { InternalTool as InternalToolSchema } from '../../taskyon/src/types/toolApi'
 import {
+  flushConfigWrites,
   initPersistentCryptoSession,
   loadStoredConfig,
   persistProviderModel,
@@ -100,7 +101,7 @@ import {
   createConversationPersistQueue,
   TYCLI_CONVERSATION_TRANSCRIPT_NAMESPACE,
 } from './cli/conversationPersistence'
-import { createCliFileStorageService } from './cli/fileStorage'
+import { createCliSelectedStorageService, resolveCliStorageSelection } from './cli/storageService'
 import { createStaticEmbeddingAssetReader } from './cli/staticEmbeddingCache'
 import { loadTaskSearchSidecars, saveTaskSearchSidecars } from './cli/searchIndexPersistence'
 import { createCliFooter } from './cli/ui'
@@ -2799,7 +2800,11 @@ async function main() {
   const { x: taskStorageClientPort, y: taskStorageServicePort } =
     createProtocolPort(taskyonStorageProtocol)
   const storageRoot = join(dataDir, 'storage')
-  createCliFileStorageService(taskStorageServicePort, storageRoot)
+  await createCliSelectedStorageService({
+    port: taskStorageServicePort,
+    dataDirectory: dataDir,
+    selection: resolveCliStorageSelection(stored),
+  })
   const storageClient = createStorageClient(taskStorageClientPort)
   const { x: loggingClientPort, y: loggingServicePort } = createProtocolPort(taskyonLoggingProtocol)
   const directRuntimeLog = runtimeLog
@@ -4043,6 +4048,11 @@ async function main() {
     } else {
       writeOutro('No conversation saved: no messages.')
     }
+    await flushConfigWrites().catch((error: unknown) => {
+      writeDebug(
+        `Failed to flush CLI configuration: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    })
     writeOutro(`tycli log: ${runtimeLog?.filePath ?? 'unavailable'}`)
     restoreConsoleLogging?.()
     await runtimeLog?.flush().catch(() => {})

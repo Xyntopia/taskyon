@@ -1,6 +1,10 @@
 import type { EncryptedDataRow } from '../../../taskyon/src/utils/encrypt'
 
 export type StoredConfig = {
+  storage?: {
+    records?: 'files' | 'sqlite' | 'pglite'
+    blobs?: 'files' | 'sqlite' | 'pglite'
+  }
   cliSecrets?: Record<string, EncryptedDataRow>
   deviceKeyPairJwk?: {
     privateJwk: JsonWebKey

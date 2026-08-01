@@ -62,6 +62,16 @@ prescribing physical paths. Domain owners provide canonical hashes when identity
 immutable content or a computation. Filesystem record backends store records under fixed-length,
 Git-style hash paths while databases, object stores, and peers preserve the same protocol contract.
 
+Hosts compose record and blob providers independently. Browser providers are OPFS, IndexedDB, and
+PGlite; Node/CLI providers are files, SQLite, and PGlite. Each provider implements the complete
+record and blob contracts, so mixed configurations remain transparent to consumers. Browser
+selection is remembered separately for records and blobs and never silently changes after data
+has been written.
+
+Every storage service explicitly runs as trusted-local or delegates each normalized access request
+to an authorizer before resolving a backend. This is the storage boundary for future peer and
+subnetwork policy; physical backends do not interpret identities or ACLs.
+
 A DAG cache record maps a computation hash to an artifact content hash. The computation hash is
 derived from the node identity and parameters and answers whether work was already performed. The
 artifact hash is derived from the exact serialized result and independently verifies bytes loaded
