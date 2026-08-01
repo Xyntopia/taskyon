@@ -173,6 +173,7 @@ export {
   createOpfsStorageRecordFileAdapter,
   createOpfsStorageService,
 } from './storage'
+export { createBrowserDagGitRepository } from './dagGitRepository'
 export {
   createIndexedDbBlobBackend,
   createIndexedDbRecordBackend,

@@ -1244,7 +1244,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       await storageClient.set({ namespace, id, value })
     },
   })
-  const { designProjectStore, registerDesignProject, listDesignProjects } =
+  const { dagObjects, designProjectStore, registerDesignProject, listDesignProjects } =
     createDesignProjectStorage(storageClient)
   const resourceFilesLoader = createTaskyonResourceFilesLoader(
     () => taskyonClient.discovery.describe({}),
@@ -1715,6 +1715,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     storageClient,
     dagStorageBackend,
     designProjectStore,
+    dagObjects,
     registerDesignProject,
     listDesignProjects,
     setNewContentDraft,

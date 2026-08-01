@@ -2,6 +2,7 @@ import {
   createDesignProjectRepository,
   type DesignProjectObjectStore,
 } from '@taskyon/comp-dag/designProjectRepository'
+import { createDagObjectRepository } from '@taskyon/comp-dag/dagObjectRepository'
 import type { createStorageClient } from '@taskyon/taskyon'
 
 type TaskyonStorageClient = ReturnType<typeof createStorageClient>
@@ -58,6 +59,7 @@ const createProjectObjectStore = (
 }
 
 export const createDesignProjectStorage = (storageClient: TaskyonStorageClient) => ({
+  dagObjects: createDagObjectRepository(storageClient),
   designProjectStore: (projectId: string) => {
     const objects = createProjectObjectStore(storageClient, projectId)
     return { objects, repository: createDesignProjectRepository(objects) }

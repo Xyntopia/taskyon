@@ -12,7 +12,11 @@
     }
   },
   "dependencies": {
+    "@isomorphic-git/lightning-fs": "^4.6.3",
     "@taskyon/common": "workspace:*",
-    "@taskyon/taskyon": "workspace:*"
+    "@taskyon/comp-dag": "workspace:*",
+    "@taskyon/taskyon": "workspace:*",
+    "buffer": "^6.0.3",
+    "isomorphic-git": "^1.38.6"
   }
 }
