@@ -75,19 +75,26 @@ test.describe('documentation page', () => {
 
     await page.goto('/docs/taskyon/openapi/taskyon-peer-api')
     await page.getByText('files.add', { exact: true }).first().click()
+    const detail = page.locator('.openapi-view__detail')
     await expect(
-      page.getByText('Register a file with the local Taskyon peer.', { exact: true }).last(),
+      detail.getByText('Store a content-addressed file with the local Taskyon peer.', {
+        exact: true,
+      }),
     ).toBeVisible()
 
-    const detail = page.locator('.openapi-view__detail')
-    const tree = detail.locator('.q-tree')
+    const panels = detail.locator('.openapi-view__schema-panel')
+    const requestPanel = panels.filter({ has: page.getByText('Request', { exact: true }) })
+    const responsePanel = panels.filter({ has: page.getByText('200', { exact: true }) })
     await expect(detail.getByText('POST', { exact: true })).toBeVisible()
     await expect(detail.getByText('/frp/files.add', { exact: true })).toBeVisible()
-    await expect(detail.getByText('Request', { exact: true })).toBeVisible()
-    await expect(detail.getByText('204', { exact: true })).toBeVisible()
-    await expect(tree).toContainText('id:')
-    await expect(tree).toContainText('name:')
-    await expect(tree).toContainText('store?:')
+    await expect(requestPanel).toContainText('file:')
+    await expect(requestPanel).toContainText(
+      'Browser File payload transferred over MessageChannel.',
+    )
+    await expect(responsePanel).toContainText('hash:')
+    await expect(responsePanel).toContainText('name:')
+    await expect(responsePanel).toContainText('mediaType:')
+    await expect(responsePanel).toContainText('size:')
     await expect(detail.getByText('requestBody:', { exact: true })).toHaveCount(0)
     await expect(detail.getByText('definition:', { exact: true })).toHaveCount(0)
     await expect(detail.getByRole('button', { name: 'Copy entire object as JSON' })).toHaveCount(0)

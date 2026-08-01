@@ -75,7 +75,8 @@ export const testCliHelloWorldProducesAssistantResponse = async () => {
   }
   const saveMatch = result.output.match(/Conversation saved: (.+\.md)/)
   assert(saveMatch?.[1], `Expected a saved conversation path.\n${result.output}`)
-  const markdown = await readFile(saveMatch[1].trim(), 'utf8')
+  const savedConversationPath = saveMatch[1]
+  const markdown = await readFile(savedConversationPath.trim(), 'utf8')
   assert(
     markdown.includes('role: assistant'),
     `Expected the saved conversation to contain the displayed assistant response.\n${markdown}`,

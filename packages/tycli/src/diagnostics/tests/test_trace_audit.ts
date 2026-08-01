@@ -60,7 +60,7 @@ export const testTraceAuditReadsProviderRequestRecordFiles = async () => {
     stability?: { requestPromptCacheKeys?: string[] }
   }
   assert(report.totals?.chatCompletions === 1, 'Expected the record file to count as one call')
-  assert(report.totals.completedChatCompletions === 1, 'Expected the HTTP response to be counted')
+  assert(report.totals?.completedChatCompletions === 1, 'Expected the HTTP response to be counted')
   assert(
     report.stability?.requestPromptCacheKeys?.[0] === 'stable-key',
     'Expected the wire-format prompt cache key to be audited',

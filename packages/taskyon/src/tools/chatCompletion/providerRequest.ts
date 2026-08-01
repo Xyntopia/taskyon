@@ -1,6 +1,7 @@
 import type { ModelMessage, streamText, SystemModelMessage, ToolChoice, ToolSet } from 'ai'
 import { jsonSchema, Output } from 'ai'
 import type OpenAI from 'openai'
+import type { JSONSchema7, JSONSchema7Definition } from 'json-schema'
 import type {
   ChatCompletionProviderSettings,
   ProviderRequestTrace,
@@ -66,12 +67,13 @@ const buildPromptCacheKey = (messages: ModelMessage[], selectedModel: string) =>
 const hasNonSystemMessages = (messages: ModelMessage[]) =>
   messages.some((message) => message.role !== 'system')
 
-type JsonSchemaObject = Record<string, unknown>
+type JsonSchemaObject = JSONSchema7 & Record<string, unknown>
+type JsonSchemaMap = Record<string, JSONSchema7Definition>
 
 const isJsonSchemaObject = (value: unknown): value is JsonSchemaObject =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-const normalizeSchemaMap = (value: unknown): JsonSchemaObject | undefined => {
+const normalizeSchemaMap = (value: unknown): JsonSchemaMap | undefined => {
   if (!isJsonSchemaObject(value)) return undefined
   const entries = Object.entries(value).map(([name, schema]) => {
     const normalized = normalizeNativeStructuredOutputSchema(schema)

@@ -70,6 +70,8 @@ const transaction = <T>(database: DatabaseSync, operation: () => T) => {
   }
 }
 
+const runAsync = <T>(operation: () => T): Promise<T> => Promise.resolve().then(operation)
+
 const idParts = (id: string | number) => ({ idType: typeof id, idText: String(id) })
 const rowId = (row: RecordRow) => (row.id_type === 'number' ? Number(row.id_text) : row.id_text)
 const bytes = (value: Uint8Array) => new Uint8Array(value)
@@ -120,42 +122,52 @@ export const createSqliteStorageRecordBackend = (
   }
 
   return {
-    get: async (id) => get(id),
-    getMany: async (ids) =>
-      ids.flatMap((id) => {
-        const data = get(id)
-        return data === null ? [] : [{ id, data }]
-      }),
-    set: async (id, data) => set(id, data),
-    setMany: async (rows) =>
-      transaction(database, () => rows.forEach(({ id, data }) => set(id, data))),
-    upsert: async (id, data, strategy) =>
-      transaction(database, () => {
-        const next = mergeStorageRecord(get(id), data, strategy)
-        set(id, next)
-        return next
-      }),
-    delete: async (id) => {
-      const { idType, idText } = idParts(id)
-      database
-        .prepare(
-          'DELETE FROM taskyon_storage_records WHERE namespace = ? AND id_type = ? AND id_text = ?',
-        )
-        .run(namespace, idType, idText)
-    },
-    list: async () =>
-      list().map((row) => ({ id: rowId(row), data: JSON.parse(row.data) as unknown })),
-    listIds: async () => list().map(rowId),
-    find: async (query) =>
-      Object.fromEntries(
-        list()
-          .map((row) => ({ id: rowId(row), data: JSON.parse(row.data) as unknown }))
-          .filter(({ data }) => storageQueryMatches(data, query))
-          .map(({ id, data }) => [String(id), data]),
+    get: (id) => runAsync(() => get(id)),
+    getMany: (ids) =>
+      runAsync(() =>
+        ids.flatMap((id) => {
+          const data = get(id)
+          return data === null ? [] : [{ id, data }]
+        }),
       ),
-    clear: async () => {
-      database.prepare('DELETE FROM taskyon_storage_records WHERE namespace = ?').run(namespace)
-    },
+    set: (id, data) => runAsync(() => set(id, data)),
+    setMany: (rows) =>
+      runAsync(() => transaction(database, () => rows.forEach(({ id, data }) => set(id, data)))),
+    upsert: (id, data, strategy) =>
+      runAsync(() =>
+        transaction(database, () => {
+          const next = mergeStorageRecord(get(id), data, strategy)
+          set(id, next)
+          return next
+        }),
+      ),
+    delete: (id) =>
+      runAsync(() => {
+        const { idType, idText } = idParts(id)
+        database
+          .prepare(
+            'DELETE FROM taskyon_storage_records WHERE namespace = ? AND id_type = ? AND id_text = ?',
+          )
+          .run(namespace, idType, idText)
+      }),
+    list: () =>
+      runAsync(() =>
+        list().map((row) => ({ id: rowId(row), data: JSON.parse(row.data) as unknown })),
+      ),
+    listIds: () => runAsync(() => list().map(rowId)),
+    find: (query) =>
+      runAsync(() =>
+        Object.fromEntries(
+          list()
+            .map((row) => ({ id: rowId(row), data: JSON.parse(row.data) as unknown }))
+            .filter(({ data }) => storageQueryMatches(data, query))
+            .map(({ id, data }) => [String(id), data]),
+        ),
+      ),
+    clear: () =>
+      runAsync(() => {
+        database.prepare('DELETE FROM taskyon_storage_records WHERE namespace = ?').run(namespace)
+      }),
   }
 }
 
@@ -200,107 +212,126 @@ export const createSqliteStorageBlobBackend = (
       )
 
   return {
-    get: async (id) => {
-      const row = getRow(id)
-      return row ? { data: bytes(row.data), metadata: metadata(row) } : null
-    },
-    set: async (id, data, contentType) => put(id, data, contentType, hash(data)),
-    stat: async (id) => {
-      const row = getRow(id)
-      return row ? metadata(row) : null
-    },
-    list: async () =>
-      z
-        .array(blobRowSchema)
-        .parse(
-          database
-            .prepare(
-              `
+    get: (id) =>
+      runAsync(() => {
+        const row = getRow(id)
+        return row ? { data: bytes(row.data), metadata: metadata(row) } : null
+      }),
+    set: (id, data, contentType) => runAsync(() => put(id, data, contentType, hash(data))),
+    stat: (id) =>
+      runAsync(() => {
+        const row = getRow(id)
+        return row ? metadata(row) : null
+      }),
+    list: () =>
+      runAsync(() =>
+        z
+          .array(blobRowSchema)
+          .parse(
+            database
+              .prepare(
+                `
         SELECT id, data, size, content_type, modified_at, sha256
         FROM taskyon_storage_blobs WHERE namespace = ?
       `,
-            )
-            .all(namespace),
-        )
-        .map(metadata),
-    readRange: async (id, offset, length) => {
-      const row = getRow(id)
-      if (!row) throw new Error(`Blob not found: ${id}`)
-      const data = bytes(row.data).slice(offset, offset + length)
-      const nextOffset = offset + data.byteLength
-      return { data, nextOffset, eof: nextOffset >= row.size }
-    },
-    append: async (id, data, expectedSize, contentType) =>
-      transaction(database, () => {
-        const row = getRow(id)
-        const current = row ? bytes(row.data) : new Uint8Array()
-        if (current.byteLength !== expectedSize) {
-          throw new Error(
-            `Blob append offset mismatch for "${id}": expected ${expectedSize}, found ${current.byteLength}.`,
+              )
+              .all(namespace),
           )
-        }
-        return put(id, concatenate(current, data), contentType ?? row?.content_type ?? undefined)
+          .map(metadata),
+      ),
+    readRange: (id, offset, length) =>
+      runAsync(() => {
+        const row = getRow(id)
+        if (!row) throw new Error(`Blob not found: ${id}`)
+        const data = bytes(row.data).slice(offset, offset + length)
+        const nextOffset = offset + data.byteLength
+        return { data, nextOffset, eof: nextOffset >= row.size }
       }),
-    beginWrite: async (id, contentType) => {
-      const writeId = randomUUID()
-      database
-        .prepare(
-          `
+    append: (id, data, expectedSize, contentType) =>
+      runAsync(() =>
+        transaction(database, () => {
+          const row = getRow(id)
+          const current = row ? bytes(row.data) : new Uint8Array()
+          if (current.byteLength !== expectedSize) {
+            throw new Error(
+              `Blob append offset mismatch for "${id}": expected ${expectedSize}, found ${current.byteLength}.`,
+            )
+          }
+          return put(id, concatenate(current, data), contentType ?? row?.content_type ?? undefined)
+        }),
+      ),
+    beginWrite: (id, contentType) =>
+      runAsync(() => {
+        const writeId = randomUUID()
+        database
+          .prepare(
+            `
         INSERT INTO taskyon_storage_blob_writes (write_id, namespace, id, data, content_type)
         VALUES (?, ?, ?, ?, ?)
       `,
-        )
-        .run(writeId, namespace, id, new Uint8Array(), contentType ?? null)
-      return { writeId }
-    },
-    writeChunk: async (id, writeId, offset, data) =>
-      transaction(database, () => {
+          )
+          .run(writeId, namespace, id, new Uint8Array(), contentType ?? null)
+        return { writeId }
+      }),
+    writeChunk: (id, writeId, offset, data) =>
+      runAsync(() =>
+        transaction(database, () => {
+          const row = getWrite(writeId)
+          if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
+          const current = bytes(row.data)
+          if (offset > current.byteLength)
+            throw new Error(`Blob write offset ${offset} exceeds size ${current.byteLength}.`)
+          const next = concatenate(current, data, offset)
+          database
+            .prepare('UPDATE taskyon_storage_blob_writes SET data = ? WHERE write_id = ?')
+            .run(next, writeId)
+          return { nextOffset: next.byteLength }
+        }),
+      ),
+    writeStatus: (id, writeId) =>
+      runAsync(() => {
         const row = getWrite(writeId)
         if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
-        const current = bytes(row.data)
-        if (offset > current.byteLength)
-          throw new Error(`Blob write offset ${offset} exceeds size ${current.byteLength}.`)
-        const next = concatenate(current, data, offset)
+        return { size: row.data.byteLength }
+      }),
+    commitWrite: (id, writeId, expectedSize, expectedSha256) =>
+      runAsync(() =>
+        transaction(database, () => {
+          const row = getWrite(writeId)
+          if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
+          const data = bytes(row.data)
+          if (data.byteLength !== expectedSize) throw new Error(`Blob size mismatch for "${id}".`)
+          const sha256 = hash(data)
+          if (expectedSha256 && sha256 !== expectedSha256)
+            throw new Error(`Blob checksum mismatch for "${id}".`)
+          const result = put(id, data, row.content_type ?? undefined, sha256)
+          database
+            .prepare('DELETE FROM taskyon_storage_blob_writes WHERE write_id = ?')
+            .run(writeId)
+          return result
+        }),
+      ),
+    abortWrite: (_id, writeId) =>
+      runAsync(() => {
         database
-          .prepare('UPDATE taskyon_storage_blob_writes SET data = ? WHERE write_id = ?')
-          .run(next, writeId)
-        return { nextOffset: next.byteLength }
+          .prepare('DELETE FROM taskyon_storage_blob_writes WHERE write_id = ? AND namespace = ?')
+          .run(writeId, namespace)
       }),
-    writeStatus: async (id, writeId) => {
-      const row = getWrite(writeId)
-      if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
-      return { size: row.data.byteLength }
-    },
-    commitWrite: async (id, writeId, expectedSize, expectedSha256) =>
-      transaction(database, () => {
-        const row = getWrite(writeId)
-        if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
-        const data = bytes(row.data)
-        if (data.byteLength !== expectedSize) throw new Error(`Blob size mismatch for "${id}".`)
-        const sha256 = hash(data)
-        if (expectedSha256 && sha256 !== expectedSha256)
-          throw new Error(`Blob checksum mismatch for "${id}".`)
-        const result = put(id, data, row.content_type ?? undefined, sha256)
-        database.prepare('DELETE FROM taskyon_storage_blob_writes WHERE write_id = ?').run(writeId)
-        return result
-      }),
-    abortWrite: async (_id, writeId) => {
-      database
-        .prepare('DELETE FROM taskyon_storage_blob_writes WHERE write_id = ? AND namespace = ?')
-        .run(writeId, namespace)
-    },
-    delete: async (id) => {
-      database
-        .prepare('DELETE FROM taskyon_storage_blobs WHERE namespace = ? AND id = ?')
-        .run(namespace, id)
-    },
-    clear: async () =>
-      transaction(database, () => {
-        database.prepare('DELETE FROM taskyon_storage_blobs WHERE namespace = ?').run(namespace)
+    delete: (id) =>
+      runAsync(() => {
         database
-          .prepare('DELETE FROM taskyon_storage_blob_writes WHERE namespace = ?')
-          .run(namespace)
+          .prepare('DELETE FROM taskyon_storage_blobs WHERE namespace = ? AND id = ?')
+          .run(namespace, id)
       }),
+    clear: () =>
+      runAsync(() =>
+        transaction(database, () => {
+          database.prepare('DELETE FROM taskyon_storage_blobs WHERE namespace = ?').run(namespace)
+          database
+            .prepare('DELETE FROM taskyon_storage_blob_writes WHERE namespace = ?')
+            .run(namespace)
+        }),
+      ),
   }
 }
 

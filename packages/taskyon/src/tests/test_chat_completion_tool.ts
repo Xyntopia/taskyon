@@ -17,6 +17,7 @@ import { classifyStreamingFailure } from '../tools/chatCompletion/streamResult'
 import { resolveChatCompletionConnection, type ProviderRequestTrace } from '../types/chatCompletion'
 import { getTaskyonCosts } from '../taskyon.space/taskyon.space_api'
 import { streamText } from 'ai'
+import type { JSONSchema7 } from 'json-schema'
 import type { TaskNode } from '../types/taskNode'
 import type { ToolBase } from '../types/tools'
 
@@ -25,7 +26,7 @@ function assert(condition: boolean, message: string): asserts condition {
 }
 
 export const testNativeStructuredOutputSchemaAddsClosedObjectBoundaries = () => {
-  const schema = {
+  const schema: JSONSchema7 = {
     type: 'object',
     properties: {
       findings: {

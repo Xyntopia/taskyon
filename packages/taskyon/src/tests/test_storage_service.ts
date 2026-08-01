@@ -65,16 +65,16 @@ export const testStorageAuthorizationDeniesBeforeBackendAccess = async () => {
   const { x: clientPort, y: servicePort } = createProtocolPort(taskyonStorageProtocol)
   let backendResolved = false
   const backend: StorageRecordBackend = {
-    get: async () => null,
-    getMany: async () => [],
-    set: async () => undefined,
-    setMany: async () => undefined,
-    upsert: async (_id, value) => value,
-    delete: async () => undefined,
-    list: async () => [],
-    listIds: async () => [],
-    find: async () => ({}),
-    clear: async () => undefined,
+    get: () => Promise.resolve(null),
+    getMany: () => Promise.resolve([]),
+    set: () => Promise.resolve(),
+    setMany: () => Promise.resolve(),
+    upsert: (_id, value) => Promise.resolve(value),
+    delete: () => Promise.resolve(),
+    list: () => Promise.resolve([]),
+    listIds: () => Promise.resolve([]),
+    find: () => Promise.resolve({}),
+    clear: () => Promise.resolve(),
   }
   const stop = createStorageProtocolServer(
     servicePort,

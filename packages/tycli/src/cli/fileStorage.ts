@@ -459,7 +459,7 @@ export const createCliFileStorageService = (
         backends.set(namespace, backend)
         return backend
       },
-      blobs: async (namespace) => {
+      blobs: (namespace) => {
         const existing = blobBackends.get(namespace)
         if (existing) return existing
         const backend = createCliFileBlobStorageBackend(storageRoot, namespace)
