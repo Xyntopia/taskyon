@@ -49,6 +49,7 @@ export interface EngineConfig {
   storageBackend?: DagStorageBackend
   execution?: DagExecutionConfig
   parameterBindings?: Record<string, Record<string, unknown>>
+  sliceExecution?: DagSliceExecutionPolicy
 }
 
 export type DagExecutionMode = 'worker' | 'local'
@@ -201,6 +202,108 @@ export type StudyResult<O> = {
   stoppedReason: 'maxRows' | 'maxEvals' | 'timeMs' | null
 }
 
+export type DagSliceDomain =
+  | { values: readonly unknown[] }
+  | { range: readonly [number, number]; step?: number }
+
+export type DagSliceParams<P = Record<string, unknown>> = {
+  [K in keyof P]?: P[K] | DagSliceDomain
+} & Record<string, unknown>
+
+export type DagSliceExecutionPolicy = {
+  resolveContinuousDomain?: (args: {
+    node: DagNode
+    path: string
+    range: readonly [number, number]
+  }) => StudyVariableSpec
+}
+
+export type DagQueryExecutionOptions = {
+  budget?: StudyBudget
+  capture?: StudyCaptureSpec[]
+  inputs?: Record<string, StudyInputOption>
+  onRow?: (event: StudyRowEvent) => void | Promise<void>
+  rngSeed?: number
+}
+
+export type DagQuerySelection<O> = {
+  index: number
+  objectiveValue: number
+  row: O
+  rowKey: Record<string, string | number>
+}
+
+export type DagQueryBinding =
+  | { source: 'row'; path?: string }
+  | { source: 'rowKey'; path?: string }
+  | { source: 'rows' }
+  | { source: 'value'; value: unknown }
+
+export interface DagSliceQuery<O> {
+  collect(
+    options?: DagQueryExecutionOptions,
+    ctx?: NodeContext,
+    engineConfig?: EngineConfig,
+  ): Promise<StudyResult<O>>
+  min(
+    path: string,
+    options?: DagQueryExecutionOptions,
+    ctx?: NodeContext,
+    engineConfig?: EngineConfig,
+  ): Promise<number | null>
+  max(
+    path: string,
+    options?: DagQueryExecutionOptions,
+    ctx?: NodeContext,
+    engineConfig?: EngineConfig,
+  ): Promise<number | null>
+  argmin(
+    path: string,
+    options?: DagQueryExecutionOptions,
+    ctx?: NodeContext,
+    engineConfig?: EngineConfig,
+  ): Promise<DagQuerySelection<O> | null>
+  argmax(
+    path: string,
+    options?: DagQueryExecutionOptions,
+    ctx?: NodeContext,
+    engineConfig?: EngineConfig,
+  ): Promise<DagQuerySelection<O> | null>
+  mean(
+    path: string,
+    options?: DagQueryExecutionOptions,
+    ctx?: NodeContext,
+    engineConfig?: EngineConfig,
+  ): Promise<number | null>
+  sum(
+    path: string,
+    options?: DagQueryExecutionOptions,
+    ctx?: NodeContext,
+    engineConfig?: EngineConfig,
+  ): Promise<number>
+  map<P, R>(
+    target: DagInputAccessor<P, R>,
+    bindings: Record<string, DagQueryBinding>,
+    options?: DagQueryExecutionOptions,
+    ctx?: NodeContext,
+    engineConfig?: EngineConfig,
+  ): Promise<StudyResult<R>>
+  apply<P, R>(
+    target: DagInputAccessor<P, R>,
+    bindings: Record<string, DagQueryBinding>,
+    options?: DagQueryExecutionOptions,
+    ctx?: NodeContext,
+    engineConfig?: EngineConfig,
+  ): Promise<R>
+}
+
+export interface DagInputAccessor<P = Record<string, unknown>, O = unknown> {
+  (params: P, opts?: { ctx?: NodeContext }): Promise<O>
+  (params?: undefined, opts?: { ctx?: NodeContext }): Promise<O>
+  readonly alias: string
+  slice(params: DagSliceParams<P>): DagSliceQuery<O>
+}
+
 // High-level node (no hashes visible here)
 export interface DagNode<
   P = unknown,
@@ -237,6 +340,7 @@ export interface DagNode<
       ctx?: NodeContext,
       engineConfig?: EngineConfig,
     ) => Promise<{ value: O; artifactHash: Hash }>
+    slice(params: DagSliceParams<P>): DagSliceQuery<O>
     study: (
       opts?: StudyOptions,
       ctx?: NodeContext,
@@ -912,6 +1016,286 @@ const setPathValue = (target: Record<string, unknown>, path: string, value: unkn
   }
 }
 
+const deletePathValue = (target: Record<string, unknown>, path: string) => {
+  const parts = path.split('.')
+  let current: Record<string, unknown> = target
+  for (let index = 0; index < parts.length - 1; index++) {
+    const next = current[parts[index]!]
+    if (typeof next !== 'object' || next === null || Array.isArray(next)) return
+    current = next as Record<string, unknown>
+  }
+  delete current[parts[parts.length - 1]!]
+}
+
+const isValuesDomain = (value: unknown): value is { values: readonly unknown[] } => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  if (!('values' in value)) return false
+  const keys = Object.keys(value)
+  return keys.length === 1 && keys[0] === 'values' && Array.isArray(value.values)
+}
+
+const isRangeDomain = (
+  value: unknown,
+): value is { range: readonly [number, number]; step?: number } => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  if (!('range' in value)) return false
+  const keys = Object.keys(value)
+  if (keys.some((key) => key !== 'range' && key !== 'step')) return false
+  if (!Array.isArray(value.range) || value.range.length !== 2) return false
+  return value.range.every((entry) => typeof entry === 'number' && Number.isFinite(entry))
+}
+
+const compileSliceParams = (
+  node: DagNode,
+  baseParams: Record<string, unknown>,
+  sliceParams: Record<string, unknown>,
+  engineConfig: EngineConfig,
+): { params: Record<string, unknown>; variables: Record<string, StudyVariableSpec> } => {
+  const params = cloneValue(baseParams)
+  const variables: Record<string, StudyVariableSpec> = {}
+
+  const visit = (value: unknown, path: string) => {
+    if (isValuesDomain(value)) {
+      if (value.values.length === 0) throw new Error(`Node ${node.name}: empty slice at ${path}.`)
+      deletePathValue(params, path)
+      variables[path] = { kind: 'list', values: [...value.values] }
+      return
+    }
+    if (isRangeDomain(value)) {
+      deletePathValue(params, path)
+      const [start, end] = value.range
+      if (value.step !== undefined) {
+        variables[path] = { kind: 'sweep', start, end, step: value.step }
+        return
+      }
+      const resolved = engineConfig.sliceExecution?.resolveContinuousDomain?.({
+        node,
+        path,
+        range: value.range,
+      })
+      if (!resolved) {
+        throw new Error(
+          `Node ${node.name}: continuous slice ${path} requires an injected slice execution policy.`,
+        )
+      }
+      variables[path] = resolved
+      return
+    }
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      for (const [key, nested] of Object.entries(value)) {
+        visit(nested, path ? `${path}.${key}` : key)
+      }
+      return
+    }
+    setPathValue(params, path, value)
+  }
+
+  for (const [key, value] of Object.entries(sliceParams)) visit(value, key)
+  return { params, variables }
+}
+
+const queryNumberValues = <O>(result: StudyResult<O>, path: string): number[] =>
+  result.rows.map((row, index) => {
+    const value = getObjectPathValue(row, path)
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new Error(`Query path "${path}" is not a finite number in row ${index}.`)
+    }
+    return value
+  })
+
+const querySelection = <O>(
+  result: StudyResult<O>,
+  path: string,
+  direction: 'min' | 'max',
+): DagQuerySelection<O> | null => {
+  const values = queryNumberValues(result, path)
+  if (values.length === 0) return null
+  let selectedIndex = 0
+  for (let index = 1; index < values.length; index++) {
+    const candidate = values[index]!
+    const selected = values[selectedIndex]!
+    if (direction === 'min' ? candidate < selected : candidate > selected) {
+      selectedIndex = index
+    }
+  }
+  return {
+    index: selectedIndex,
+    objectiveValue: values[selectedIndex]!,
+    row: result.rows[selectedIndex]!,
+    rowKey: result.rowKeys[selectedIndex]!,
+  }
+}
+
+const resolveQueryBinding = (
+  binding: DagQueryBinding,
+  values: {
+    row?: unknown
+    rowKey?: Record<string, string | number>
+    rows: unknown[]
+  },
+): unknown => {
+  switch (binding.source) {
+    case 'row':
+      return binding.path ? getObjectPathValue(values.row, binding.path) : values.row
+    case 'rowKey':
+      return binding.path ? getObjectPathValue(values.rowKey, binding.path) : values.rowKey
+    case 'rows':
+      return values.rows
+    case 'value':
+      return binding.value
+  }
+}
+
+const resolveQueryBindings = (
+  bindings: Record<string, DagQueryBinding>,
+  values: {
+    row?: unknown
+    rowKey?: Record<string, string | number>
+    rows: unknown[]
+  },
+): Record<string, unknown> => {
+  const params: Record<string, unknown> = {}
+  for (const [path, binding] of Object.entries(bindings)) {
+    setPathValue(params, path, resolveQueryBinding(binding, values))
+  }
+  return params
+}
+
+const createDagSliceQuery = <P, O>(args: {
+  node: DagNode<P, O>
+  baseParams: Record<string, unknown>
+  sliceParams: Record<string, unknown>
+  defaultCtx?: NodeContext
+  defaultEngineConfig?: EngineConfig
+}): DagSliceQuery<O> => {
+  const collect = async (
+    options?: DagQueryExecutionOptions,
+    ctx?: NodeContext,
+    engineConfig?: EngineConfig,
+    objective?: StudyObjective,
+  ) => {
+    const actualEngineConfig = engineConfig ?? args.defaultEngineConfig ?? {}
+    const compiled = compileSliceParams(
+      args.node,
+      args.baseParams,
+      args.sliceParams,
+      actualEngineConfig,
+    )
+    const studyOptions: StudyOptions = {
+      ...(options ?? {}),
+      variables: compiled.variables,
+      ...(objective ? { mode: 'optimize', objective } : {}),
+    }
+    return await args.node
+      .call(compiled.params as P)
+      .study(studyOptions, ctx ?? args.defaultCtx, actualEngineConfig)
+  }
+
+  const aggregate = async (
+    path: string,
+    operation: 'min' | 'max' | 'mean' | 'sum',
+    options?: DagQueryExecutionOptions,
+    ctx?: NodeContext,
+    engineConfig?: EngineConfig,
+  ) => {
+    const objective =
+      operation === 'min' || operation === 'max' ? { direction: operation, path } : undefined
+    const result = await collect(options, ctx, engineConfig, objective)
+    const values = queryNumberValues(result, path)
+    if (operation === 'sum') return values.reduce((sum, value) => sum + value, 0)
+    if (values.length === 0) return null
+    if (operation === 'mean') {
+      return values.reduce((sum, value) => sum + value, 0) / values.length
+    }
+    return operation === 'min' ? Math.min(...values) : Math.max(...values)
+  }
+
+  const select = async (
+    path: string,
+    direction: 'min' | 'max',
+    options?: DagQueryExecutionOptions,
+    ctx?: NodeContext,
+    engineConfig?: EngineConfig,
+  ) => {
+    const result = await collect(options, ctx, engineConfig, { direction, path })
+    return querySelection(result, path, direction)
+  }
+
+  return {
+    collect,
+    min: async (path, options, ctx, engineConfig) =>
+      await aggregate(path, 'min', options, ctx, engineConfig),
+    max: async (path, options, ctx, engineConfig) =>
+      await aggregate(path, 'max', options, ctx, engineConfig),
+    argmin: async (path, options, ctx, engineConfig) =>
+      await select(path, 'min', options, ctx, engineConfig),
+    argmax: async (path, options, ctx, engineConfig) =>
+      await select(path, 'max', options, ctx, engineConfig),
+    mean: async (path, options, ctx, engineConfig) =>
+      await aggregate(path, 'mean', options, ctx, engineConfig),
+    sum: async (path, options, ctx, engineConfig) =>
+      (await aggregate(path, 'sum', options, ctx, engineConfig)) ?? 0,
+    map: async <TargetParams, TargetOutput>(
+      target: DagInputAccessor<TargetParams, TargetOutput>,
+      bindings: Record<string, DagQueryBinding>,
+      options?: DagQueryExecutionOptions,
+      ctx?: NodeContext,
+      engineConfig?: EngineConfig,
+    ) => {
+      const source = await collect(options, ctx, engineConfig)
+      const rows = await Promise.all(
+        source.rows.map(async (row, index) => {
+          const params = resolveQueryBindings(bindings, {
+            row,
+            rows: source.rows,
+            ...(source.rowKeys[index] === undefined ? {} : { rowKey: source.rowKeys[index] }),
+          })
+          return await target(params as TargetParams, ctx ? { ctx } : undefined)
+        }),
+      )
+      return {
+        ...source,
+        rows,
+        best: source.bestIndex === null ? null : rows[source.bestIndex]!,
+      }
+    },
+    apply: async <TargetParams, TargetOutput>(
+      target: DagInputAccessor<TargetParams, TargetOutput>,
+      bindings: Record<string, DagQueryBinding>,
+      options?: DagQueryExecutionOptions,
+      ctx?: NodeContext,
+      engineConfig?: EngineConfig,
+    ) => {
+      const source = await collect(options, ctx, engineConfig)
+      const params = resolveQueryBindings(bindings, { rows: source.rows })
+      return await target(params as TargetParams, ctx ? { ctx } : undefined)
+    },
+  }
+}
+
+export const createDagNodeAccessor = <P, O>(
+  node: DagNode<P, O>,
+  ctx?: NodeContext,
+  engineConfig?: EngineConfig,
+): DagInputAccessor<P, O> => {
+  const run = async (params?: P, opts?: { ctx?: NodeContext }) =>
+    (await node.call((params ?? {}) as P).run(opts?.ctx ?? ctx, engineConfig)).value
+  const accessor = run as DagInputAccessor<P, O>
+  Object.defineProperty(accessor, 'alias', {
+    enumerable: true,
+    value: node.localName ?? node.name,
+  })
+  accessor.slice = (sliceParams) =>
+    createDagSliceQuery({
+      node,
+      baseParams: {},
+      sliceParams,
+      ...(ctx ? { defaultCtx: ctx } : {}),
+      ...(engineConfig ? { defaultEngineConfig: engineConfig } : {}),
+    })
+  return accessor
+}
+
 const createRandom = (seed?: number): (() => number) => {
   if (!Number.isFinite(seed)) return Math.random
   let state = (seed as number) >>> 0
@@ -1015,15 +1399,15 @@ export function createNode<
   run: (
     params: P,
     helpers: {
-      [K in keyof ExposedInputs]: (
-        maybeParams?: ParamsOfInput<ExposedInputs[K]>,
-        opts?: { ctx?: NodeContext },
-      ) => Promise<OutputOfInput<ExposedInputs[K]>>
+      [K in keyof ExposedInputs]: DagInputAccessor<
+        ParamsOfInput<ExposedInputs[K]>,
+        OutputOfInput<ExposedInputs[K]>
+      >
     } & {
-      [K in keyof HiddenInputs]: (
-        maybeParams?: ParamsOf<HiddenInputs[K]>,
-        opts?: { ctx?: NodeContext },
-      ) => Promise<OutputOf<HiddenInputs[K]>>
+      [K in keyof HiddenInputs]: DagInputAccessor<
+        ParamsOf<HiddenInputs[K]>,
+        OutputOf<HiddenInputs[K]>
+      >
     },
     ctx?: NodeContext,
   ) => Promise<O> | O
@@ -1073,15 +1457,15 @@ export function createNode<
       run(
         params as P,
         helpers as {
-          [K in keyof ExposedInputs]: (
-            maybeParams?: ParamsOfInput<ExposedInputs[K]>,
-            opts?: { ctx?: NodeContext },
-          ) => Promise<OutputOfInput<ExposedInputs[K]>>
+          [K in keyof ExposedInputs]: DagInputAccessor<
+            ParamsOfInput<ExposedInputs[K]>,
+            OutputOfInput<ExposedInputs[K]>
+          >
         } & {
-          [K in keyof HiddenInputs]: (
-            maybeParams?: ParamsOf<HiddenInputs[K]>,
-            opts?: { ctx?: NodeContext },
-          ) => Promise<OutputOf<HiddenInputs[K]>>
+          [K in keyof HiddenInputs]: DagInputAccessor<
+            ParamsOf<HiddenInputs[K]>,
+            OutputOf<HiddenInputs[K]>
+          >
         },
         ctx,
       ),
@@ -1089,6 +1473,12 @@ export function createNode<
     call: (paramsValue: P) => ({
       node,
       params: paramsValue,
+      slice: (sliceParams) =>
+        createDagSliceQuery({
+          baseParams: paramsValue as Record<string, unknown>,
+          node,
+          sliceParams,
+        }),
       run: async (ctx?: NodeContext, engineConfig?: EngineConfig) => {
         if (!ctx) {
           ctx = {
@@ -1595,7 +1985,7 @@ export async function executeNode(
     inputs: Record<string, DagNode> | Record<string, ExposedInputDef> | undefined,
     expose: boolean,
   ) => {
-    const use = {} as Record<string, unknown>
+    const use: Record<string, DagInputAccessor> = {}
     if (!inputs) return
     for (const alias in inputs) {
       const inputDef = inputs[alias] as ExposedInputDef
@@ -1627,73 +2017,112 @@ export async function executeNode(
   return { value, artifactHash }
 }
 
-const createExecutionWithChecks =
-  (
-    expose: boolean,
-    node: DagNode,
-    alias: string,
-    validatedParams: Record<string, unknown>,
-    inputDef: ExposedInputDef,
-    ctx: NodeContext,
-    engineConfig: EngineConfig,
-  ) =>
-  async (maybeParams?: Record<string, unknown>, opts?: { ctx?: NodeContext }) => {
-    const providerRaw = maybeParams?.__provider ?? validatedParams?.[`${alias}__provider`]
-    const providerOverride =
-      typeof providerRaw === 'string' || typeof providerRaw === 'number' ? providerRaw : undefined
+const resolveInputExecution = (args: {
+  expose: boolean
+  node: DagNode
+  alias: string
+  validatedParams: Record<string, unknown>
+  inputDef: ExposedInputDef
+  maybeParams?: Record<string, unknown>
+  allowPartial?: boolean
+  engineConfig: EngineConfig
+}): { childNode: DagNode; childParams: Record<string, unknown> } => {
+  const providerRaw =
+    args.maybeParams?.__provider ?? args.validatedParams?.[`${args.alias}__provider`]
+  const providerOverride =
+    typeof providerRaw === 'string' || typeof providerRaw === 'number' ? providerRaw : undefined
+  const parentAliasRaw = args.validatedParams[args.alias]
+  const parentAliasParams =
+    typeof parentAliasRaw === 'object' && parentAliasRaw !== null
+      ? (parentAliasRaw as Record<string, unknown>)
+      : {}
 
-    const parentAliasRaw = validatedParams[alias]
-    const parentAliasParams =
-      typeof parentAliasRaw === 'object' && parentAliasRaw !== null
-        ? (parentAliasRaw as Record<string, unknown>)
-        : {}
-
-    let childParams: Record<string, unknown>
-
-    if (maybeParams !== undefined) {
-      // For exposed inputs, preserve alias params inferred by the parent call
-      // (for example study-injected explode itemIndex), then apply explicit overrides.
-      childParams = expose ? { ...parentAliasParams, ...maybeParams } : { ...maybeParams }
-      delete childParams.__provider
-    } else {
-      if (!expose) {
-        throw new Error(
-          `Node ${node.name}: use.${alias}() called without params, but this input is internal and does not expose parent params. Please provide params explicitly when calling use.${alias}().`,
-        )
-      }
-      // Default mapping: take from parent's validated params
-      const pAny = validatedParams
-      if (!(alias in pAny)) {
-        childParams = {}
-      } else {
-        const candidate = pAny[alias]
-        childParams =
-          typeof candidate === 'object' && candidate !== null
-            ? (candidate as Record<string, unknown>)
-            : {}
-      }
+  let childParams: Record<string, unknown>
+  if (args.maybeParams !== undefined) {
+    childParams = args.expose
+      ? { ...parentAliasParams, ...args.maybeParams }
+      : { ...args.maybeParams }
+    delete childParams.__provider
+  } else if (!args.expose) {
+    if (!args.allowPartial) {
+      throw new Error(
+        `Node ${args.node.name}: use.${args.alias}() called without params, but this input is internal and does not expose parent params. Please provide params explicitly when calling use.${args.alias}().`,
+      )
     }
+    childParams = {}
+  } else {
+    childParams = { ...parentAliasParams }
+  }
 
-    const childNode = selectInputNodeByParams(inputDef, providerOverride, [
-      childParams,
-      parentAliasParams,
-      validatedParams,
-      {},
-    ])
-    if (!childNode) {
-      throw new Error(`Node ${node.name}: no provider resolved for input alias "${alias}".`)
-    }
+  const childNode = selectInputNodeByParams(args.inputDef, providerOverride, [
+    childParams,
+    parentAliasParams,
+    args.validatedParams,
+    {},
+  ])
+  if (!childNode) {
+    throw new Error(`Node ${args.node.name}: no provider resolved for input alias "${args.alias}".`)
+  }
 
-    childParams = {
-      ...(engineConfig.parameterBindings?.[childNode.name] ?? {}),
+  return {
+    childNode,
+    childParams: {
+      ...(args.engineConfig.parameterBindings?.[childNode.name] ?? {}),
       ...childParams,
-    }
+    },
+  }
+}
 
-    // recursivly call child node
-    const { value } = await executeNode(childNode, childParams, opts?.ctx ?? ctx, engineConfig)
-
+const createExecutionWithChecks = (
+  expose: boolean,
+  node: DagNode,
+  alias: string,
+  validatedParams: Record<string, unknown>,
+  inputDef: ExposedInputDef,
+  ctx: NodeContext,
+  engineConfig: EngineConfig,
+): DagInputAccessor => {
+  const run = async (maybeParams?: Record<string, unknown>, opts?: { ctx?: NodeContext }) => {
+    const resolved = resolveInputExecution({
+      expose,
+      node,
+      alias,
+      validatedParams,
+      inputDef,
+      ...(maybeParams === undefined ? {} : { maybeParams }),
+      engineConfig,
+    })
+    const { value } = await executeNode(
+      resolved.childNode,
+      resolved.childParams,
+      opts?.ctx ?? ctx,
+      engineConfig,
+    )
     return value
   }
+
+  const accessor = run as DagInputAccessor
+  Object.defineProperty(accessor, 'alias', { enumerable: true, value: alias })
+  accessor.slice = (sliceParams) => {
+    const resolved = resolveInputExecution({
+      expose,
+      node,
+      alias,
+      validatedParams,
+      inputDef,
+      allowPartial: true,
+      engineConfig,
+    })
+    return createDagSliceQuery({
+      node: resolved.childNode,
+      baseParams: resolved.childParams,
+      sliceParams,
+      defaultCtx: ctx,
+      defaultEngineConfig: engineConfig,
+    })
+  }
+  return accessor
+}
 
 const bindExposedInputParams = (
   node: DagNode,

@@ -1,4 +1,12 @@
-import { createNode, explode, oneOf, type DagExposedInputDef, type DagNode } from './dagCore.ts'
+import {
+  createNode,
+  explode,
+  oneOf,
+  type DagExposedInputDef,
+  type DagInputAccessor,
+  type DagNode,
+  type DagQueryBinding,
+} from './dagCore.ts'
 import type { DagJsonSchema } from './dagSchema.ts'
 import {
   recordInputsToRuntimeInputs,
@@ -24,6 +32,37 @@ const dagNodeUseProtocol = defineFrpServiceProtocol({
       }),
       response: z.unknown(),
     },
+    query: {
+      request: z.object({
+        alias: z.string(),
+        bindings: z
+          .record(
+            z.string(),
+            z.union([
+              z.object({ source: z.literal('row'), path: z.string().optional() }),
+              z.object({ source: z.literal('rowKey'), path: z.string().optional() }),
+              z.object({ source: z.literal('rows') }),
+              z.object({ source: z.literal('value'), value: z.unknown() }),
+            ]),
+          )
+          .optional(),
+        operation: z.enum([
+          'collect',
+          'min',
+          'max',
+          'argmin',
+          'argmax',
+          'mean',
+          'sum',
+          'map',
+          'apply',
+        ]),
+        path: z.string().optional(),
+        slice: z.record(z.string(), z.unknown()),
+        targetAlias: z.string().optional(),
+      }),
+      response: z.unknown(),
+    },
   },
 })
 
@@ -40,15 +79,35 @@ const buildSandboxRunModule = (runCode: string): string => {
           'dagNodeUse',
           sandboxApi.signal,
         );
-        const use = Object.fromEntries(
-          aliases.map((alias) => [
-            alias,
-            (inputParams) => client.call('resolve', {
+        const use = Object.fromEntries(aliases.map((alias) => {
+          const input = (inputParams) => client.call('resolve', {
               alias,
               ...(inputParams === undefined ? {} : { params: inputParams }),
-            }),
-          ]),
-        );
+            });
+          Object.defineProperty(input, 'alias', { value: alias });
+          input.slice = (slice) => {
+            const query = (operation, extras) => client.call('query', {
+              alias,
+              operation,
+              slice,
+              ...(extras || {}),
+            });
+            return {
+              collect: () => query('collect'),
+              min: (path) => query('min', { path }),
+              max: (path) => query('max', { path }),
+              argmin: (path) => query('argmin', { path }),
+              argmax: (path) => query('argmax', { path }),
+              mean: (path) => query('mean', { path }),
+              sum: (path) => query('sum', { path }),
+              map: (target, bindings) =>
+                query('map', { bindings, targetAlias: target.alias }),
+              apply: (target, bindings) =>
+                query('apply', { bindings, targetAlias: target.alias }),
+            };
+          };
+          return [alias, input];
+        }));
         return await run({ params, use });
       };
     })()
@@ -72,7 +131,7 @@ export const executeDagNodeRun = async (args: {
   runCode?: string
   run: DagNodeRunFunction | undefined
   params: Record<string, unknown>
-  use: Record<string, (params?: Record<string, unknown>) => Promise<unknown>>
+  use: Record<string, DagInputAccessor>
 }) => {
   const timeoutMs = Math.max(100, Math.min(args.timeoutMs ?? 5_000, 60_000))
   const timeout = createTimeoutSignal(args.id, timeoutMs)
@@ -104,7 +163,38 @@ export const executeDagNodeRun = async (args: {
           resolve: async ({ alias, params }) => {
             const resolveInput = args.use[alias]
             if (!resolveInput) throw new Error(`DAG node ${args.id}: unknown input alias ${alias}`)
-            return await resolveInput(params)
+            return params === undefined ? await resolveInput() : await resolveInput(params)
+          },
+          query: async ({ alias, bindings, operation, path, slice, targetAlias }) => {
+            const resolveInput = args.use[alias]
+            if (!resolveInput) throw new Error(`DAG node ${args.id}: unknown input alias ${alias}`)
+            const query = resolveInput.slice(slice)
+            if (operation === 'collect') return await query.collect()
+            if (
+              operation === 'min' ||
+              operation === 'max' ||
+              operation === 'argmin' ||
+              operation === 'argmax' ||
+              operation === 'mean' ||
+              operation === 'sum'
+            ) {
+              if (!path) {
+                throw new Error(`DAG node ${args.id}: query operation ${operation} requires a path`)
+              }
+              return await query[operation](path)
+            }
+            if (!targetAlias || !bindings) {
+              throw new Error(
+                `DAG node ${args.id}: query operation ${operation} requires a target and bindings`,
+              )
+            }
+            const target = args.use[targetAlias]
+            if (!target) {
+              throw new Error(`DAG node ${args.id}: unknown query target alias ${targetAlias}`)
+            }
+            return operation === 'map'
+              ? await query.map(target, bindings as Record<string, DagQueryBinding>)
+              : await query.apply(target, bindings as Record<string, DagQueryBinding>)
           },
         },
       },
@@ -125,15 +215,20 @@ export const executeDagNodeRun = async (args: {
 
 export const createLazyDagUse = (
   runtimeInputs: ReturnType<typeof recordInputsToRuntimeInputs>,
-  use: Record<string, (params?: Record<string, unknown>) => Promise<unknown>>,
-): Record<string, (params?: Record<string, unknown>) => Promise<unknown>> => {
+  use: Record<string, DagInputAccessor>,
+): Record<string, DagInputAccessor> => {
   const exposedAliases = new Set(Object.keys(runtimeInputs.exposedInputs))
   return Object.fromEntries(
-    Object.entries(use).map(([alias, runner]) => [
-      alias,
-      async (inputParams?: Record<string, unknown>) =>
-        await runner(inputParams ?? (exposedAliases.has(alias) ? undefined : {})),
-    ]),
+    Object.entries(use).map(([alias, runner]) => {
+      const run = async (inputParams?: Record<string, unknown>) =>
+        inputParams === undefined && exposedAliases.has(alias)
+          ? await runner()
+          : await runner(inputParams ?? {})
+      const accessor = run as DagInputAccessor
+      Object.defineProperty(accessor, 'alias', { enumerable: true, value: alias })
+      accessor.slice = (slice) => runner.slice(slice)
+      return [alias, accessor]
+    }),
   )
 }
 

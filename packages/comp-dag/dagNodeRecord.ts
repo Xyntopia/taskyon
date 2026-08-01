@@ -1,4 +1,5 @@
 import type { Hash } from './caching.ts'
+import type { DagInputAccessor } from './dagCore.ts'
 import { hashCanonicalDagNodeSource } from './dagNodeIdentity.ts'
 import type { DagJsonSchema } from './dagSchema.ts'
 
@@ -19,7 +20,7 @@ export type DagNodeRecordInputRef = DagNodeRecordInputRefSingle | DagNodeRecordI
 
 export type DagNodeRunContext = {
   params: Record<string, unknown>
-  use: Record<string, (params?: Record<string, unknown>) => Promise<unknown>>
+  use: Record<string, DagInputAccessor>
 }
 
 export type DagNodeRunFunction = (ctx: DagNodeRunContext) => unknown
