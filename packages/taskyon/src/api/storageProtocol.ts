@@ -406,6 +406,55 @@ export type StorageBlobBackend = {
   clear: () => Promise<void>
 }
 
+export type StorageAccessRequest =
+  | {
+      service: 'storage.records'
+      operation:
+        | 'get'
+        | 'getMany'
+        | 'set'
+        | 'setMany'
+        | 'upsert'
+        | 'delete'
+        | 'list'
+        | 'listIds'
+        | 'find'
+        | 'clear'
+      namespace: string
+      id?: string | number
+    }
+  | {
+      service: 'storage.blobs'
+      operation:
+        | 'get'
+        | 'set'
+        | 'stat'
+        | 'list'
+        | 'readRange'
+        | 'append'
+        | 'beginWrite'
+        | 'writeChunk'
+        | 'writeStatus'
+        | 'commitWrite'
+        | 'abortWrite'
+        | 'delete'
+        | 'clear'
+      namespace: string
+      id?: string
+    }
+
+export type StorageAccessMode =
+  | { mode: 'trusted-local' }
+  | {
+      mode: 'authorize'
+      authorize: (request: StorageAccessRequest) => Promise<boolean> | boolean
+    }
+
+export type StorageBackendProvider = {
+  records?: (namespace: string) => Promise<StorageRecordBackend> | StorageRecordBackend
+  blobs?: (namespace: string) => Promise<StorageBlobBackend> | StorageBlobBackend
+}
+
 export const createStorageRecordBackend = <T>(
   crud: StorageRecordCrud<T>,
   schema: z.ZodType<T>,
@@ -428,96 +477,122 @@ export const createStorageRecordBackend = <T>(
 
 export const createStorageProtocolServer = (
   port: Port<TaskyonStorageMessage, TaskyonStorageMessage>,
-  resolveBackend: (namespace: string) => Promise<StorageRecordBackend> | StorageRecordBackend,
-  resolveBlobBackend?: (namespace: string) => Promise<StorageBlobBackend> | StorageBlobBackend,
-) =>
-  createPortServer(port, taskyonStorageProtocol, {
+  backends: StorageBackendProvider,
+  access: StorageAccessMode,
+) => {
+  const authorize = async (request: StorageAccessRequest) => {
+    if (access.mode === 'trusted-local') return
+    if (!(await access.authorize(request))) {
+      throw new Error(
+        `Storage access denied for ${request.operation} on namespace "${request.namespace}".`,
+      )
+    }
+  }
+  const recordBackend = async (
+    operation: Extract<StorageAccessRequest, { service: 'storage.records' }>['operation'],
+    namespace: string,
+    id?: string | number,
+  ) => {
+    await authorize({
+      service: 'storage.records',
+      operation,
+      namespace,
+      ...(id !== undefined ? { id } : {}),
+    })
+    if (!backends.records) {
+      throw new Error(`Record storage is unavailable for namespace "${namespace}".`)
+    }
+    return await backends.records(namespace)
+  }
+  const blobBackend = async (
+    operation: Extract<StorageAccessRequest, { service: 'storage.blobs' }>['operation'],
+    namespace: string,
+    id?: string,
+  ) => {
+    await authorize({
+      service: 'storage.blobs',
+      operation,
+      namespace,
+      ...(id !== undefined ? { id } : {}),
+    })
+    if (!backends.blobs)
+      throw new Error(`Blob storage is unavailable for namespace "${namespace}".`)
+    return await backends.blobs(namespace)
+  }
+
+  return createPortServer(port, taskyonStorageProtocol, {
     storage: {
       records: {
         get: async ({ namespace, id }) => ({
-          value: (await (await resolveBackend(namespace)).get(id)) ?? null,
+          value: (await (await recordBackend('get', namespace, id)).get(id)) ?? null,
         }),
         getMany: async ({ namespace, ids }) => ({
-          rows: await (await resolveBackend(namespace)).getMany(ids),
+          rows: await (await recordBackend('getMany', namespace)).getMany(ids),
         }),
         set: async ({ namespace, id, value }) => {
-          await (await resolveBackend(namespace)).set(id, value)
+          await (await recordBackend('set', namespace, id)).set(id, value)
         },
         setMany: async ({ namespace, rows }) => {
-          await (await resolveBackend(namespace)).setMany(rows)
+          await (await recordBackend('setMany', namespace)).setMany(rows)
         },
         upsert: async ({ namespace, id, value, strategy }) => ({
-          value: await (await resolveBackend(namespace)).upsert(id, value, strategy),
+          value: await (await recordBackend('upsert', namespace, id)).upsert(id, value, strategy),
         }),
         delete: async ({ namespace, id }) => {
-          await (await resolveBackend(namespace)).delete(id)
+          await (await recordBackend('delete', namespace, id)).delete(id)
         },
         list: async ({ namespace }) => ({
-          rows: await (await resolveBackend(namespace)).list(),
+          rows: await (await recordBackend('list', namespace)).list(),
         }),
         listIds: async ({ namespace }) => ({
-          ids: await (await resolveBackend(namespace)).listIds(),
+          ids: await (await recordBackend('listIds', namespace)).listIds(),
         }),
         find: async ({ namespace, query }) => ({
-          values: await (await resolveBackend(namespace)).find(query),
+          values: await (await recordBackend('find', namespace)).find(query),
         }),
         clear: async ({ namespace }) => {
-          await (await resolveBackend(namespace)).clear()
+          await (await recordBackend('clear', namespace)).clear()
         },
       },
       blobs: {
-        get: async ({ namespace, id }) =>
-          await (await requireBlobBackend(resolveBlobBackend, namespace)).get(id),
+        get: async ({ namespace, id }) => await (await blobBackend('get', namespace, id)).get(id),
         set: async ({ namespace, id, data, contentType }) =>
-          await (
-            await requireBlobBackend(resolveBlobBackend, namespace)
-          ).set(id, data, contentType),
+          await (await blobBackend('set', namespace, id)).set(id, data, contentType),
         stat: async ({ namespace, id }) =>
-          await (await requireBlobBackend(resolveBlobBackend, namespace)).stat(id),
+          await (await blobBackend('stat', namespace, id)).stat(id),
         list: async ({ namespace }) => ({
-          blobs: await (await requireBlobBackend(resolveBlobBackend, namespace)).list(),
+          blobs: await (await blobBackend('list', namespace)).list(),
         }),
         readRange: async ({ namespace, id, offset, length }) =>
-          await (
-            await requireBlobBackend(resolveBlobBackend, namespace)
-          ).readRange(id, offset, length),
+          await (await blobBackend('readRange', namespace, id)).readRange(id, offset, length),
         append: async ({ namespace, id, data, expectedSize, contentType }) =>
           await (
-            await requireBlobBackend(resolveBlobBackend, namespace)
+            await blobBackend('append', namespace, id)
           ).append(id, data, expectedSize, contentType),
         beginWrite: async ({ namespace, id, contentType }) =>
-          await (
-            await requireBlobBackend(resolveBlobBackend, namespace)
-          ).beginWrite(id, contentType),
+          await (await blobBackend('beginWrite', namespace, id)).beginWrite(id, contentType),
         writeChunk: async ({ namespace, id, writeId, offset, data }) =>
           await (
-            await requireBlobBackend(resolveBlobBackend, namespace)
+            await blobBackend('writeChunk', namespace, id)
           ).writeChunk(id, writeId, offset, data),
         writeStatus: async ({ namespace, id, writeId }) =>
-          await (await requireBlobBackend(resolveBlobBackend, namespace)).writeStatus(id, writeId),
+          await (await blobBackend('writeStatus', namespace, id)).writeStatus(id, writeId),
         commitWrite: async ({ namespace, id, writeId, expectedSize, expectedSha256 }) =>
           await (
-            await requireBlobBackend(resolveBlobBackend, namespace)
+            await blobBackend('commitWrite', namespace, id)
           ).commitWrite(id, writeId, expectedSize, expectedSha256),
         abortWrite: async ({ namespace, id, writeId }) => {
-          await (await requireBlobBackend(resolveBlobBackend, namespace)).abortWrite(id, writeId)
+          await (await blobBackend('abortWrite', namespace, id)).abortWrite(id, writeId)
         },
         delete: async ({ namespace, id }) => {
-          await (await requireBlobBackend(resolveBlobBackend, namespace)).delete(id)
+          await (await blobBackend('delete', namespace, id)).delete(id)
         },
         clear: async ({ namespace }) => {
-          await (await requireBlobBackend(resolveBlobBackend, namespace)).clear()
+          await (await blobBackend('clear', namespace)).clear()
         },
       },
     },
   })
-
-const requireBlobBackend = async (
-  resolver: ((namespace: string) => Promise<StorageBlobBackend> | StorageBlobBackend) | undefined,
-  namespace: string,
-) => {
-  if (!resolver) throw new Error(`Blob storage is unavailable for namespace "${namespace}".`)
-  return await resolver(namespace)
 }
 
 export const createProtocolStorageCrudWrapper = <T>(

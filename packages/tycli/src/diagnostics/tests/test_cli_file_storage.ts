@@ -13,10 +13,23 @@ import { createArtifactStore } from '../../../../taskyon/src/core/artifactStore'
 import { connectTaskManagerStorageFromProtocol } from '../../../../taskyon/src/core/taskManager'
 import type { TaskNode } from '../../../../taskyon/src/types/taskNode'
 import { createCliFileStorageService } from '../../cli/fileStorage'
+import { runStorageBackendContract } from '@taskyon/taskyon/test-support'
+import { createCliFileBlobStorageBackend, createCliFileStorageBackend } from '../../cli/fileStorage'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
 }
+
+export const testCliFilesImplementStorageBackendContract = async () => {
+  const storageRoot = await mkdtemp(join(tmpdir(), 'tycli-file-contract-'))
+  await runStorageBackendContract({
+    records: (namespace) => createCliFileStorageBackend(storageRoot, namespace),
+    blobs: (namespace) => createCliFileBlobStorageBackend(storageRoot, namespace),
+  })
+}
+
+testCliFilesImplementStorageBackendContract.description =
+  'Runs the shared record and blob StorageClient contract against CLI files.'
 
 export const testCliFileStoragePersistsTaskRecordsAndFindsRelations = async () => {
   const storageRoot = await mkdtemp(join(tmpdir(), 'tycli-file-storage-diagnostic-'))

@@ -9,6 +9,10 @@ import {
   type TaskyonStorageMessage,
 } from '@taskyon/taskyon/api'
 import { createSha256Hasher } from '@taskyon/common/modules/canonicalHash'
+import type {
+  BrowserStorageBackendKind,
+  BrowserStoragePreferenceStore,
+} from './browserStorageSelection'
 
 export type OpfsStorageOptions = {
   rootDirectory?: string
@@ -17,8 +21,11 @@ export type OpfsStorageOptions = {
 
 export type BrowserRuntimeStorageService =
   | {
-      kind: 'opfs'
-      rootDirectory?: string
+      kind: 'browser'
+      databaseName?: string
+      records?: readonly BrowserStorageBackendKind[]
+      blobs?: readonly BrowserStorageBackendKind[]
+      preferences?: BrowserStoragePreferenceStore
     }
   | {
       kind: 'service'
@@ -153,8 +160,12 @@ const blobDirectory = (namespace: string) =>
   ['blobs', ...namespace.split('/').map(encodeURIComponent)].join('/')
 const blobPath = (namespace: string, id: string) =>
   `${blobDirectory(namespace)}/${encodeURIComponent(id)}`
+const blobMetadataPath = (namespace: string, id: string) =>
+  `${blobDirectory(namespace)}/.metadata/${encodeURIComponent(id)}.json`
 const stagedBlobPath = (namespace: string, writeId: string) =>
   `${blobDirectory(namespace)}/.staging/${encodeURIComponent(writeId)}`
+const stagedBlobMetadataPath = (namespace: string, writeId: string) =>
+  `${blobDirectory(namespace)}/.staging/${encodeURIComponent(writeId)}.json`
 
 const getFile = async (root: FileSystemDirectoryHandle, path: string, create = false) => {
   const parts = normalizeRelativePath(path)
@@ -167,17 +178,32 @@ const getFile = async (root: FileSystemDirectoryHandle, path: string, create = f
 const blobMetadata = async (
   handle: FileSystemFileHandle,
   id: string,
-  contentType?: string,
-  sha256?: string,
+  details?: { contentType?: string; sha256?: string },
 ): Promise<StorageBlobMetadata> => {
   const file = await handle.getFile()
   return {
     id,
     size: file.size,
     modifiedAt: new Date(file.lastModified).toISOString(),
-    ...(contentType ? { contentType } : {}),
-    ...(sha256 ? { sha256 } : {}),
+    ...(details?.contentType ? { contentType: details.contentType } : {}),
+    ...(details?.sha256 ? { sha256: details.sha256 } : {}),
   }
+}
+
+const readBlobDetails = async (root: FileSystemDirectoryHandle, path: string) =>
+  await missingBlobAsNull(async () => {
+    const file = await (await getFile(root, path)).getFile()
+    return JSON.parse(await file.text()) as { contentType?: string; sha256?: string }
+  })
+
+const writeBlobDetails = async (
+  root: FileSystemDirectoryHandle,
+  path: string,
+  details: { contentType?: string; sha256?: string },
+) => {
+  const writable = await (await getFile(root, path, true)).createWritable()
+  await writable.write(JSON.stringify(details))
+  await writable.close()
 }
 
 const hashFile = async (file: File) => {
@@ -213,6 +239,8 @@ export const createOpfsBlobStorageBackend = async (
     withBrowserLock(`${lockPrefix}:blobs:${namespace}`, operation)
   const target = (id: string) => blobPath(namespace, id)
   const staged = (writeId: string) => stagedBlobPath(namespace, writeId)
+  const details = (id: string) => blobMetadataPath(namespace, id)
+  const stagedDetails = (writeId: string) => stagedBlobMetadataPath(namespace, writeId)
 
   return {
     get: async (id) =>
@@ -221,7 +249,11 @@ export const createOpfsBlobStorageBackend = async (
         const file = await handle.getFile()
         return {
           data: new Uint8Array(await file.arrayBuffer()),
-          metadata: await blobMetadata(handle, id),
+          metadata: await blobMetadata(
+            handle,
+            id,
+            (await readBlobDetails(root, details(id))) ?? {},
+          ),
         }
       }),
     set: async (id, data, contentType) =>
@@ -230,10 +262,22 @@ export const createOpfsBlobStorageBackend = async (
         const writable = await handle.createWritable()
         await writable.write(data)
         await writable.close()
-        return await blobMetadata(handle, id, contentType, await hashFile(await handle.getFile()))
+        const metadataDetails = {
+          ...(contentType ? { contentType } : {}),
+          sha256: await hashFile(await handle.getFile()),
+        }
+        await writeBlobDetails(root, details(id), metadataDetails)
+        return await blobMetadata(handle, id, metadataDetails)
       }),
     stat: async (id) =>
-      await missingBlobAsNull(async () => await blobMetadata(await getFile(root, target(id)), id)),
+      await missingBlobAsNull(
+        async () =>
+          await blobMetadata(
+            await getFile(root, target(id)),
+            id,
+            (await readBlobDetails(root, details(id))) ?? {},
+          ),
+      ),
     list: async () => {
       try {
         const directory = await getDirectory(
@@ -244,7 +288,10 @@ export const createOpfsBlobStorageBackend = async (
         const values: StorageBlobMetadata[] = []
         for await (const [name, handle] of directory.entries()) {
           if (handle.kind !== 'file') continue
-          values.push(await blobMetadata(handle, decodeURIComponent(name)))
+          const id = decodeURIComponent(name)
+          values.push(
+            await blobMetadata(handle, id, (await readBlobDetails(root, details(id))) ?? {}),
+          )
         }
         return values
       } catch (error) {
@@ -271,12 +318,20 @@ export const createOpfsBlobStorageBackend = async (
         await writable.seek(current.size)
         await writable.write(data)
         await writable.close()
-        return await blobMetadata(handle, id, contentType)
+        const existing = (await readBlobDetails(root, details(id))) ?? {}
+        const metadataDetails = {
+          ...((contentType ?? existing.contentType)
+            ? { contentType: contentType ?? existing.contentType }
+            : {}),
+        }
+        await writeBlobDetails(root, details(id), metadataDetails)
+        return await blobMetadata(handle, id, metadataDetails)
       }),
-    beginWrite: async () => {
+    beginWrite: async (_id, contentType) => {
       const writeId = crypto.randomUUID()
       const writable = await (await getFile(root, staged(writeId), true)).createWritable()
       await writable.close()
+      await writeBlobDetails(root, stagedDetails(writeId), contentType ? { contentType } : {})
       return { writeId }
     },
     writeChunk: async (_id, writeId, offset, data) =>
@@ -311,11 +366,24 @@ export const createOpfsBlobStorageBackend = async (
         const writable = await targetHandle.createWritable()
         await writable.write(file)
         await writable.close()
+        const metadataDetails = {
+          ...((await readBlobDetails(root, stagedDetails(writeId))) ?? {}),
+          sha256,
+        }
+        await writeBlobDetails(root, details(id), metadataDetails)
         await removeFile(root, staged(writeId))
-        return await blobMetadata(targetHandle, id, file.type || undefined, sha256)
+        await removeFile(root, stagedDetails(writeId))
+        return await blobMetadata(targetHandle, id, metadataDetails)
       }),
-    abortWrite: async (_id, writeId) => await removeFile(root, staged(writeId)),
-    delete: async (id) => await removeFile(root, target(id)),
+    abortWrite: async (_id, writeId) => {
+      await Promise.all([
+        removeFile(root, staged(writeId)),
+        removeFile(root, stagedDetails(writeId)),
+      ])
+    },
+    delete: async (id) => {
+      await Promise.all([removeFile(root, target(id)), removeFile(root, details(id))])
+    },
     clear: async () => await clearDirectory(root, blobDirectory(namespace)),
   }
 }
@@ -353,18 +421,26 @@ export const createOpfsStorageService = (
 ) =>
   createStorageProtocolServer(
     port,
-    createOpfsStorageBackendResolver(options),
-    async (namespace) => await createOpfsBlobStorageBackend(namespace, options),
+    {
+      records: createOpfsStorageBackendResolver(options),
+      blobs: async (namespace) => await createOpfsBlobStorageBackend(namespace, options),
+    },
+    { mode: 'trusted-local' },
   )
 
 export const startBrowserStorageService = async (
   port: Port<TaskyonStorageMessage, TaskyonStorageMessage>,
   storage: BrowserRuntimeStorageService,
 ) => {
-  if (storage.kind === 'opfs') {
-    return createOpfsStorageService(port, {
-      ...(storage.rootDirectory ? { rootDirectory: storage.rootDirectory } : {}),
+  if (storage.kind === 'browser') {
+    const { selectBrowserStorageProvider } = await import('./browserStorageSelection')
+    const { provider } = await selectBrowserStorageProvider({
+      ...(storage.databaseName ? { databaseName: storage.databaseName } : {}),
+      ...(storage.records ? { records: storage.records } : {}),
+      ...(storage.blobs ? { blobs: storage.blobs } : {}),
+      ...(storage.preferences ? { preferences: storage.preferences } : {}),
     })
+    return createStorageProtocolServer(port, provider, { mode: 'trusted-local' })
   }
   return await storage.createService(port)
 }

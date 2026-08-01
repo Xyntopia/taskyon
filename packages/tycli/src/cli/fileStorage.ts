@@ -99,11 +99,15 @@ const blobDirectory = (namespace: string) =>
   ['blobs', ...namespace.split('/').map(safePathPart)].join('/')
 const blobPath = (namespace: string, id: string) =>
   `${blobDirectory(namespace)}/${safePathPart(id)}`
+const blobMetadataPath = (namespace: string, id: string) =>
+  `${blobDirectory(namespace)}/.metadata/${safePathPart(id)}.json`
 
 export const resolveCliBlobStoragePath = (storageRoot: string, namespace: string, id: string) =>
   toStoragePath(storageRoot, blobPath(namespace, id))
 const stagedBlobPath = (namespace: string, writeId: string) =>
   `${blobDirectory(namespace)}/.staging/${safePathPart(writeId)}`
+const stagedBlobMetadataPath = (namespace: string, writeId: string) =>
+  `${blobDirectory(namespace)}/.staging/${safePathPart(writeId)}.json`
 
 const fileSha256 = async (path: string) => {
   const hash = createHash('sha256')
@@ -114,16 +118,15 @@ const fileSha256 = async (path: string) => {
 const fileMetadata = async (
   path: string,
   id: string,
-  contentType?: string,
-  sha256?: string,
+  details?: { contentType?: string; sha256?: string },
 ): Promise<StorageBlobMetadata> => {
   const value = await stat(path)
   return {
     id,
     size: value.size,
     modifiedAt: value.mtime.toISOString(),
-    ...(contentType ? { contentType } : {}),
-    ...(sha256 ? { sha256 } : {}),
+    ...(details?.contentType ? { contentType: details.contentType } : {}),
+    ...(details?.sha256 ? { sha256: details.sha256 } : {}),
   }
 }
 
@@ -172,6 +175,19 @@ export const createCliFileBlobStorageBackend = (
   const targetPath = (id: string) => toStoragePath(storageRoot, blobPath(namespace, id))
   const stagingPath = (writeId: string) =>
     toStoragePath(storageRoot, stagedBlobPath(namespace, writeId))
+  const detailsPath = (id: string) => toStoragePath(storageRoot, blobMetadataPath(namespace, id))
+  const stagingDetailsPath = (writeId: string) =>
+    toStoragePath(storageRoot, stagedBlobMetadataPath(namespace, writeId))
+  const readDetails = async (path: string) =>
+    (await missingAsNull(
+      async () =>
+        JSON.parse(await readFile(path, 'utf8')) as {
+          contentType?: string
+          sha256?: string
+        },
+    )) ?? {}
+  const writeDetails = async (path: string, details: { contentType?: string; sha256?: string }) =>
+    await writeJsonFile(path, details)
   const locked = <T>(operation: () => Promise<T>) => withDirectoryLock(lockDirectory, operation)
 
   return {
@@ -179,7 +195,7 @@ export const createCliFileBlobStorageBackend = (
       await missingAsNull(async () => {
         const path = targetPath(id)
         const data = new Uint8Array(await readFile(path))
-        return { data, metadata: await fileMetadata(path, id) }
+        return { data, metadata: await fileMetadata(path, id, await readDetails(detailsPath(id))) }
       }),
     set: async (id, data, contentType) =>
       await locked(async () => {
@@ -188,14 +204,17 @@ export const createCliFileBlobStorageBackend = (
         const temporary = `${path}.tmp-${randomUUID()}`
         await writeFile(temporary, data)
         await rename(temporary, path)
-        return await fileMetadata(
-          path,
-          id,
-          contentType,
-          `sha256:${createHash('sha256').update(data).digest('hex')}`,
-        )
+        const details = {
+          ...(contentType ? { contentType } : {}),
+          sha256: `sha256:${createHash('sha256').update(data).digest('hex')}`,
+        }
+        await writeDetails(detailsPath(id), details)
+        return await fileMetadata(path, id, details)
       }),
-    stat: async (id) => await missingAsNull(async () => await fileMetadata(targetPath(id), id)),
+    stat: async (id) =>
+      await missingAsNull(
+        async () => await fileMetadata(targetPath(id), id, await readDetails(detailsPath(id))),
+      ),
     list: async () => {
       try {
         const entries = await readdir(directory, { withFileTypes: true })
@@ -204,7 +223,11 @@ export const createCliFileBlobStorageBackend = (
             .filter((entry) => entry.isFile())
             .map(async (entry) => {
               const id = decodeURIComponent(entry.name)
-              return await fileMetadata(join(directory, entry.name), id)
+              return await fileMetadata(
+                join(directory, entry.name),
+                id,
+                await readDetails(detailsPath(id)),
+              )
             }),
         )
       } catch (error) {
@@ -236,13 +259,21 @@ export const createCliFileBlobStorageBackend = (
           )
         }
         await appendFile(path, data)
-        return await fileMetadata(path, id, contentType)
+        const existing = await readDetails(detailsPath(id))
+        const details = {
+          ...((contentType ?? existing.contentType)
+            ? { contentType: contentType ?? existing.contentType }
+            : {}),
+        }
+        await writeDetails(detailsPath(id), details)
+        return await fileMetadata(path, id, details)
       }),
-    beginWrite: async () => {
+    beginWrite: async (_id, contentType) => {
       const writeId = randomUUID()
       const path = stagingPath(writeId)
       await mkdir(dirname(path), { recursive: true })
       await writeFile(path, new Uint8Array())
+      await writeDetails(stagingDetailsPath(writeId), contentType ? { contentType } : {})
       return { writeId }
     },
     writeChunk: async (_id, writeId, offset, data) =>
@@ -274,12 +305,22 @@ export const createCliFileBlobStorageBackend = (
           throw new Error(`Blob checksum mismatch for "${id}".`)
         }
         const target = targetPath(id)
+        const details = { ...(await readDetails(stagingDetailsPath(writeId))), sha256 }
         await mkdir(dirname(target), { recursive: true })
         await rename(staged, target)
-        return await fileMetadata(target, id, undefined, sha256)
+        await writeDetails(detailsPath(id), details)
+        await rm(stagingDetailsPath(writeId), { force: true })
+        return await fileMetadata(target, id, details)
       }),
-    abortWrite: async (_id, writeId) => await rm(stagingPath(writeId), { force: true }),
-    delete: async (id) => await rm(targetPath(id), { force: true }),
+    abortWrite: async (_id, writeId) => {
+      await Promise.all([
+        rm(stagingPath(writeId), { force: true }),
+        rm(stagingDetailsPath(writeId), { force: true }),
+      ])
+    },
+    delete: async (id) => {
+      await Promise.all([rm(targetPath(id), { force: true }), rm(detailsPath(id), { force: true })])
+    },
     clear: async () => await rm(directory, { recursive: true, force: true }),
   }
 }
@@ -408,21 +449,24 @@ export const createCliFileStorageService = (
   const blobBackends = new Map<string, StorageBlobBackend>()
   return createStorageProtocolServer(
     port,
-    async (namespace) => {
-      await mkdir(storageRoot, { recursive: true })
-      await access(storageRoot, constants.W_OK)
-      const existing = backends.get(namespace)
-      if (existing) return existing
-      const backend = createCliFileStorageBackend(storageRoot, namespace)
-      backends.set(namespace, backend)
-      return backend
+    {
+      records: async (namespace) => {
+        await mkdir(storageRoot, { recursive: true })
+        await access(storageRoot, constants.W_OK)
+        const existing = backends.get(namespace)
+        if (existing) return existing
+        const backend = createCliFileStorageBackend(storageRoot, namespace)
+        backends.set(namespace, backend)
+        return backend
+      },
+      blobs: async (namespace) => {
+        const existing = blobBackends.get(namespace)
+        if (existing) return existing
+        const backend = createCliFileBlobStorageBackend(storageRoot, namespace)
+        blobBackends.set(namespace, backend)
+        return backend
+      },
     },
-    async (namespace) => {
-      const existing = blobBackends.get(namespace)
-      if (existing) return existing
-      const backend = createCliFileBlobStorageBackend(storageRoot, namespace)
-      blobBackends.set(namespace, backend)
-      return backend
-    },
+    { mode: 'trusted-local' },
   )
 }

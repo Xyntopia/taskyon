@@ -35,6 +35,9 @@ export {
   TaskyonMessage,
   type StorageBlobBackend,
   type StorageBlobMetadata,
+  type StorageAccessMode,
+  type StorageAccessRequest,
+  type StorageBackendProvider,
   type StorageRecordBackend,
   type StorageRecordCrud,
   type TaskyonStorageMessage,
@@ -45,6 +48,10 @@ export {
   type TaskyonClient,
   type TyP2P,
 } from './api/index'
+export {
+  createPgLiteStorageBlobBackend,
+  createPgLiteStorageRecordBackend,
+} from './api/pgliteStorageBackend'
 export { createTaskNode, ensureValidTaskId, forgeTaskChain } from './core/createTasks'
 export { createArtifactStore, type ArtifactStore } from './core/artifactStore'
 export * from './core/createNewTaskChain'
@@ -105,7 +112,7 @@ export * from './utils/fileUtils'
 export * from '@taskyon/common/modules/frpBus'
 export * from './utils/httpUtils'
 export * from './utils/objHelpers'
-export { getDatabase, getInMemoryDatabase } from './utils/pglite.api'
+export { createPgLiteDatabase, getDatabase, getInMemoryDatabase } from './utils/pglite.api'
 export * from './utils/providerAuth'
 export * from './utils/schema'
 export { configureStaticEmbeddingAssetReader } from './utils/staticEmbedding'

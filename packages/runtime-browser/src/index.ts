@@ -63,7 +63,7 @@ export const createTaskyonBrowserRuntime = async (
   const storageClient = createStorageClient(storagePort.x)
   const storageStop = await startBrowserStorageService(
     storagePort.y,
-    options.storage ?? { kind: 'opfs' },
+    options.storage ?? { kind: 'browser' },
   )
   const coreChannel = new MessageChannel()
   const storageChannel = new MessageChannel()
@@ -168,10 +168,23 @@ export const createTaskyonBrowserRuntime = async (
 }
 
 export {
+  createOpfsBlobStorageBackend,
   createOpfsStorageBackendResolver,
   createOpfsStorageRecordFileAdapter,
   createOpfsStorageService,
 } from './storage'
+export {
+  createIndexedDbBlobBackend,
+  createIndexedDbRecordBackend,
+  openTaskyonIndexedDb,
+} from './indexedDbStorage'
+export {
+  createBrowserStoragePreferenceStore,
+  selectBrowserStorageProvider,
+  type BrowserStorageBackendKind,
+  type BrowserStorageCapability,
+  type BrowserStoragePreferenceStore,
+} from './browserStorageSelection'
 export {
   createTaskyonBrowserCoreRuntime,
   type TaskyonBrowserCoreRuntime,

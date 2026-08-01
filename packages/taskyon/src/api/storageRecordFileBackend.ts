@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
-import { deepMerge } from '../utils/objHelpers'
 import type { StorageRecordBackend } from './storageProtocol'
+import { mergeStorageRecord, storageQueryMatches } from './storageRecordOperations'
 
 const storageIdSchema = z.union([z.string(), z.number()])
 const storageRecordFileSchema = z.object({
@@ -23,52 +23,6 @@ export type StorageRecordFileAdapter = {
 export const parseStorageRecordFile = (value: unknown): StorageRecordFile =>
   storageRecordFileSchema.parse(value)
 
-const storageObjectEntries = (value: unknown): [string, unknown][] | null => {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
-  return Object.entries(value)
-}
-
-const storageQueryMatches = (value: unknown, query: unknown): boolean => {
-  if (query === undefined) return true
-  if (Object.is(value, query)) return true
-  if (query === null || value === null) return query === value
-
-  if (Array.isArray(query)) {
-    if (!Array.isArray(value)) return false
-    return query.every((queryItem) =>
-      value.some((valueItem) => storageQueryMatches(valueItem, queryItem)),
-    )
-  }
-
-  const queryEntries = storageObjectEntries(query)
-  if (queryEntries) {
-    const valueEntries = storageObjectEntries(value)
-    if (!valueEntries) return false
-    const valueMap = new Map(valueEntries)
-    return queryEntries.every(
-      ([key, queryValue]) =>
-        valueMap.has(key) && storageQueryMatches(valueMap.get(key), queryValue),
-    )
-  }
-
-  return value === query
-}
-
-const mergeStorageRecord = (
-  current: unknown,
-  next: unknown,
-  strategy: 'shallow_merge' | 'replace' | 'deepmerge' | 'native_shallow' = 'replace',
-) => {
-  if (strategy === 'replace') return next
-  const currentEntries = storageObjectEntries(current)
-  const nextEntries = storageObjectEntries(next)
-  if (!currentEntries || !nextEntries) return next
-  const currentObject = Object.fromEntries(currentEntries)
-  const nextObject = Object.fromEntries(nextEntries)
-  if (strategy === 'deepmerge') return deepMerge(currentObject, nextObject, 'overwrite')
-  return { ...currentObject, ...nextObject }
-}
-
 const MAX_PATH_COMPONENT_LENGTH = 255
 
 const boundedPathComponent = (value: string) => {
@@ -83,11 +37,7 @@ export const storageRecordNamespacePath = (namespace: string) =>
 
 export const storageRecordFilePath = (namespace: string, id: string | number) => {
   const hash = canonicalHash({ type: typeof id, value: id }).slice('sha256:'.length)
-  return [
-    storageRecordNamespacePath(namespace),
-    hash.slice(0, 2),
-    hash.slice(2),
-  ].join('/')
+  return [storageRecordNamespacePath(namespace), hash.slice(0, 2), hash.slice(2)].join('/')
 }
 
 export const createStorageRecordFileBackend = (

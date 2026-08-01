@@ -10,6 +10,7 @@ import {
   createProtocolStorageCrudWrapper,
   createStorageProtocolServer,
   createStorageRecordBackend,
+  type StorageBlobBackend,
   type StorageRecordBackend,
   type StorageRecordCrud,
   type TaskyonStorageMessage,
@@ -110,7 +111,7 @@ export const createPgLiteTaskManagerStorageService = (
   port: Port<TaskyonStorageMessage, TaskyonStorageMessage>,
   getDb: (sessionId: string) => Promise<TyPGDB>,
   resolveFallback?: (namespace: string) => Promise<StorageRecordBackend> | StorageRecordBackend,
-  resolveBlobBackend?: Parameters<typeof createStorageProtocolServer>[2],
+  resolveBlobBackend?: (namespace: string) => Promise<StorageBlobBackend> | StorageBlobBackend,
 ) => {
   const sessionStorage = new Map<string, Promise<TaskManagerStorage>>()
   const backendCache = new Map<string, Promise<StorageRecordBackend>>()
@@ -148,7 +149,11 @@ export const createPgLiteTaskManagerStorageService = (
     return created
   }
 
-  return createStorageProtocolServer(port, resolveBackend, resolveBlobBackend)
+  return createStorageProtocolServer(
+    port,
+    { records: resolveBackend, ...(resolveBlobBackend ? { blobs: resolveBlobBackend } : {}) },
+    { mode: 'trusted-local' },
+  )
 }
 
 /**

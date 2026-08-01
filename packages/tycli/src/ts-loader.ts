@@ -81,6 +81,12 @@ async function tryResolveWorkspaceAlias(specifier: string): Promise<string | nul
     return pathToFileURL(resolvePath(repoRoot, 'packages/taskyon/src/api/index.ts')).href
   }
 
+  if (specifier === '@taskyon/taskyon/test-support') {
+    return pathToFileURL(
+      resolvePath(repoRoot, 'packages/taskyon/src/testSupport/storageBackendContract.ts'),
+    ).href
+  }
+
   if (specifier === '@taskyon/tyclient') {
     return pathToFileURL(resolvePath(repoRoot, 'packages/taskyon/src/api/index.ts')).href
   }

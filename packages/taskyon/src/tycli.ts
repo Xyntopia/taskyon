@@ -31,7 +31,11 @@ export { partialTaskDraft, TaskNode } from './types/taskNode'
 export type { ClientTool, InternalTool } from './types/toolApi'
 export { createClientTool, toolCall } from './types/toolApi'
 export { createCryptoSession } from './utils/cryptoSession'
-export { getDatabase } from './utils/pglite.api'
+export { createPgLiteDatabase, getDatabase } from './utils/pglite.api'
+export {
+  createPgLiteStorageBlobBackend,
+  createPgLiteStorageRecordBackend,
+} from './api/pgliteStorageBackend'
 export { configureStaticEmbeddingAssetReader } from './utils/staticEmbedding'
 export { getProviderOauthConfig, getProviderOauthCredentialsSecretName } from './utils/providerAuth'
 export { createAiWorkstationExample } from './examples/aiWorkstationExample'

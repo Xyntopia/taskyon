@@ -83,10 +83,18 @@ export {
   taskyonStorageProtocol,
   type StorageBlobBackend,
   type StorageBlobMetadata,
+  type StorageAccessMode,
+  type StorageAccessRequest,
+  type StorageBackendProvider,
   type StorageRecordBackend,
   type StorageRecordCrud,
   type TaskyonStorageMessage,
 } from './storageProtocol'
+export { mergeStorageRecord, storageQueryMatches } from './storageRecordOperations'
+export {
+  createPgLiteStorageBlobBackend,
+  createPgLiteStorageRecordBackend,
+} from './pgliteStorageBackend'
 export {
   createStorageRecordFileBackend,
   parseStorageRecordFile,

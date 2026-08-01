@@ -23,6 +23,9 @@
     "./api": {
       "import": "./src/api/index.ts"
     },
+    "./test-support": {
+      "import": "./src/testSupport/storageBackendContract.ts"
+    },
     "./documentationManifest": {
       "import": "./src/documentationManifest.ts"
     },

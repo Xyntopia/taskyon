@@ -1,5 +1,10 @@
 import { createProtocolPort } from '@taskyon/common/modules/frpBus'
-import { taskyonStorageProtocol } from '../api/storageProtocol'
+import {
+  createStorageClient,
+  createStorageProtocolServer,
+  taskyonStorageProtocol,
+  type StorageRecordBackend,
+} from '../api/storageProtocol'
 import {
   connectTaskManagerStorageFromProtocol,
   createPgLiteTaskManagerStorageService,
@@ -55,3 +60,50 @@ export const testTaskManagerCanUseProtocolBackedStorage = async () => {
 testTaskManagerCanUseProtocolBackedStorage.description =
   'Shares task records between task managers through the Taskyon storage protocol service.'
 testTaskManagerCanUseProtocolBackedStorage.timeoutMs = 60_000
+
+export const testStorageAuthorizationDeniesBeforeBackendAccess = async () => {
+  const { x: clientPort, y: servicePort } = createProtocolPort(taskyonStorageProtocol)
+  let backendResolved = false
+  const backend: StorageRecordBackend = {
+    get: async () => null,
+    getMany: async () => [],
+    set: async () => undefined,
+    setMany: async () => undefined,
+    upsert: async (_id, value) => value,
+    delete: async () => undefined,
+    list: async () => [],
+    listIds: async () => [],
+    find: async () => ({}),
+    clear: async () => undefined,
+  }
+  const stop = createStorageProtocolServer(
+    servicePort,
+    {
+      records: () => {
+        backendResolved = true
+        return backend
+      },
+    },
+    {
+      mode: 'authorize',
+      authorize: ({ namespace }) => namespace === 'allowed',
+    },
+  )
+  const storage = createStorageClient(clientPort)
+
+  try {
+    let denied = false
+    try {
+      await storage.get({ namespace: 'denied', id: 'record' })
+    } catch (error) {
+      denied = error instanceof Error && error.message.includes('denied')
+    }
+    assert(denied, 'Expected the storage policy to deny the request')
+    assert(!backendResolved, 'Expected denial before resolving the physical backend')
+  } finally {
+    stop()
+  }
+}
+
+testStorageAuthorizationDeniesBeforeBackendAccess.description =
+  'Denies storage protocol operations before resolving or touching a physical backend.'

@@ -76,6 +76,9 @@ export const getInMemoryDatabase = async (name: string): Promise<TyPGDB> => {
   return database
 }
 
+export const createPgLiteDatabase = async (dataDir: string): Promise<TyPGDB> =>
+  await PGlite.create({ dataDir })
+
 export interface PgLiteOptions {
   tableName: string
   idColumn?: string
