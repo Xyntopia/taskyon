@@ -19,8 +19,8 @@
     "dev": "vite build --watch"
   },
   "dependencies": {
-    "@taskyon/common": "workspace:*",
-    "@reclaimprotocol/tls": "^0.1.2"
+    "@reclaimprotocol/tls": "^0.1.2",
+    "@taskyon/common": "workspace:*"
   },
   "keywords": [
     "tls",
