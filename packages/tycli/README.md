@@ -91,6 +91,8 @@ Optional environment variables:
 Diagnostics defaults:
 
 - `cli-diagnostics` reuses the same persisted `tycli` provider, model, API key, and OAuth login state by default.
+- Normal runs print only per-test status, the final summary, failed test names, and the live log path.
+- `--verbose` restores full live runtime and test output; `TYCLI_LOG_DIR` selects the log directory.
 - `TYAUTH` / `--tyauth` is only needed for Taskyon auth-token tests such as token minting/proxy coverage.
 - `--provider` and `--model` override the stored `tycli` selection for a diagnostics run.
 

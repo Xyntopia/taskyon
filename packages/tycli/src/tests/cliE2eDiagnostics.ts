@@ -5,6 +5,7 @@ import process from 'node:process'
 import { constants as fsConstants } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { stripVTControlCharacters } from 'node:util'
 import type { TaskNode } from '../../../taskyon/src/types/taskNode'
 import type { AddressInfo } from 'node:net'
 import {
@@ -531,7 +532,7 @@ export function testTaskRendererDoesNotEchoUserPromptInput() {
   renderTaskProgress(state, functionTask, false)
   renderTaskProgress(state, assistantTask, false)
 
-  const output = lines.join('\n')
+  const output = stripVTControlCharacters(lines.join('\n'))
   assertNotContains(output, 'already echoed by readline')
   assertContains(output, 'assistant response')
   assertContains(output, '[chatgpt-codex | gpt-5.4 | processing:1]\n\n[function|functioncall]')
@@ -561,7 +562,7 @@ export async function testTaskRendererWritesHtmlPreviewForAssistantHtml() {
 
   renderTaskProgress(state, assistantTask, false)
 
-  const output = lines.join('\n')
+  const output = stripVTControlCharacters(lines.join('\n'))
   assertContains(output, 'HTML preview: file://')
   assertNotContains(output, '<iframe src="https://example.test/map"></iframe>')
   const previewUrl = /HTML preview: (file:\/\/\S+)/.exec(output)?.[1]
@@ -784,7 +785,7 @@ export function testTaskRendererSummarizesHiddenFunctionCallsBeforeVisibleTask()
   renderTaskProgress(state, hiddenTask('hidden-0'), true)
   renderTaskProgress(state, visibleTask, false)
 
-  const output = lines.join('\n')
+  const output = stripVTControlCharacters(lines.join('\n'))
   assertContains(
     output,
     '>hiddenTool\n>hiddenTool\n>hiddenTool\n>hiddenTool\n\n[function|functioncall]',

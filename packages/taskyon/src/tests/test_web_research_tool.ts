@@ -208,7 +208,7 @@ export const testWebResearchBuildsParallelQueryGroups = () => {
   )
   assert(
     groups[0]?.[1]?.task.includes(
-      'When using storage, pass artifactRoot: research/collect-solar-cell-spec-sheets/',
+      'When using storage, use research/collect-solar-cell-spec-sheets as both artifactRoot and namespace',
     ),
     'Expected delegated tasks to pass the artifact root into browser storage writes',
   )

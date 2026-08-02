@@ -55,6 +55,16 @@ yarn tycli:diagnostics:list
 yarn tycli:diagnostics --filter '<test name>' --details
 ```
 
+Normal CLI diagnostics output is concise: it prints one `PASS`, `FAIL`, `SKIP`, `MODEL PASS`, or
+`MODEL MISS` line per selected test, followed by the summary, every failed deterministic test by
+name, and the diagnostics log path. Runtime and test output is appended synchronously to that log
+while the run is active, so completed output remains available when a later test or the runner
+fails. Logs use `TYCLI_LOG_DIR` when configured and otherwise go to `/tmp/tycli`.
+
+Pass `--verbose` to restore the full live console output, including runtime messages, test start
+lines, and the structured summary. `--details` includes failure details and full results without
+enabling all live runtime output.
+
 Online diagnostics are opt-in. They reuse the selected CLI provider/model unless the command
 explicitly overrides them.
 

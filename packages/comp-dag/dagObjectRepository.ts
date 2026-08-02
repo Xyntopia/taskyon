@@ -11,7 +11,7 @@ import { getDagNodeRecordInputHashes } from './dagNodeRecord.ts'
 export type DagObjectRefTarget = { nodeId: Hash } | { invocationId: Hash }
 
 export type DagObjectStorage = {
-  get: (request: { namespace: string; id: string }) => Promise<{ value: unknown | null }>
+  get: (request: { namespace: string; id: string }) => Promise<{ value: unknown }>
   set: (request: { namespace: string; id: string; value: unknown }) => Promise<unknown>
   list: (request: {
     namespace: string

@@ -177,18 +177,19 @@ export const testDagObjectRepositorySharesInvocationsAcrossFriendlyRefs = async 
   const rows = new Map<string, Map<string, unknown>>()
   const writes = new Map<string, number>()
   const storage = {
-    get: async ({ namespace, id }: { namespace: string; id: string }) => ({
-      value: rows.get(namespace)?.get(id) ?? null,
-    }),
-    set: async ({ namespace, id, value }: { namespace: string; id: string; value: unknown }) => {
+    get: ({ namespace, id }: { namespace: string; id: string }) =>
+      Promise.resolve({ value: rows.get(namespace)?.get(id) ?? null }),
+    set: ({ namespace, id, value }: { namespace: string; id: string; value: unknown }) => {
       const namespaceRows = rows.get(namespace) ?? new Map<string, unknown>()
       namespaceRows.set(id, value)
       rows.set(namespace, namespaceRows)
       writes.set(`${namespace}/${id}`, (writes.get(`${namespace}/${id}`) ?? 0) + 1)
+      return Promise.resolve()
     },
-    list: async ({ namespace }: { namespace: string }) => ({
-      rows: [...(rows.get(namespace)?.entries() ?? [])].map(([id, data]) => ({ id, data })),
-    }),
+    list: ({ namespace }: { namespace: string }) =>
+      Promise.resolve({
+        rows: [...(rows.get(namespace)?.entries() ?? [])].map(([id, data]) => ({ id, data })),
+      }),
   }
   const repository = createDagObjectRepository(storage)
   const invocation = defineDagInvocation({

@@ -10,8 +10,8 @@ import { mkdtemp, readFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import process from 'node:process'
-import { getSelectedProviderSettings } from '../cli/models'
-import { bootstrapCliTaskyon } from '../cli/runtime'
+import { resolveTaskyonCliStoragePaths } from '../cli/storagePaths'
+import { createDiagnosticsOutput, formatFailedDiagnostics } from './diagnosticsOutput'
 import { diagnosticsTestMetadata, unsupportedModuleFallbacks } from './testMetadata'
 
 const diagnosticsCategories = [
@@ -33,6 +33,7 @@ type CliOptions = {
   includeLargeTokens: boolean
   online: boolean
   json: boolean
+  verbose: boolean
   allowLongRun: boolean
   filter: string
   tyauth: string | undefined
@@ -66,6 +67,7 @@ type Summary = {
     includeLargeTokens?: boolean
     online: boolean
     details: boolean
+    verbose: boolean
     category?: DiagnosticsCategory
     provider?: string
     model?: string
@@ -109,6 +111,7 @@ function parseArgs(args: string[]): CliOptions {
     includeLargeTokens: false,
     online: false,
     json: false,
+    verbose: false,
     allowLongRun: false,
     filter: '',
     tyauth: process.env.TYAUTH ?? process.env.TASKYON_TYAUTH ?? undefined,
@@ -127,6 +130,7 @@ function parseArgs(args: string[]): CliOptions {
     else if (arg === '--large-tokens') opts.includeLargeTokens = true
     else if (arg === '--online') opts.online = true
     else if (arg === '--json') opts.json = true
+    else if (arg === '--verbose') opts.verbose = true
     else if (arg === '--allow-long-run') opts.allowLongRun = true
     else if (arg === '--category') opts.category = parseCategory(args[++i])
     else if (arg.startsWith('--category=')) {
@@ -444,11 +448,11 @@ function isSkippedResult(result: DiagnosticsRunResult): boolean {
   )
 }
 
-function formatResultLine(result: DiagnosticsRunResult): string {
+function formatResultLine(result: DiagnosticsRunResult, verbose: boolean): string {
   if (result.ok) {
     if (isSkippedResult(result)) {
       const details = result.details as WrappedSkippedResult
-      return `[SKIP] ${result.name} - ${details.reason}`
+      return `[SKIP] ${result.name}${verbose ? ` - ${details.reason}` : ''}`
     }
     return `[${result.modelBased ? 'MODEL PASS' : 'PASS'}] ${result.name}`
   }
@@ -457,7 +461,7 @@ function formatResultLine(result: DiagnosticsRunResult): string {
     typeof error === 'object' && error && 'message' in error
       ? toErrorMessage(error.message)
       : toErrorMessage(error)
-  return `[${result.modelBased ? 'MODEL MISS' : 'FAIL'}] ${result.name} - ${errorText}`
+  return `[${result.modelBased ? 'MODEL MISS' : 'FAIL'}] ${result.name}${verbose ? ` - ${errorText}` : ''}`
 }
 
 function buildSummary(
@@ -496,6 +500,7 @@ function buildSummary(
       includeLargeTokens: opts.includeLargeTokens,
       online: opts.online,
       details: opts.details,
+      verbose: opts.verbose,
       ...(opts.category ? { category: opts.category } : {}),
       ...(selectedProvider ? { provider: selectedProvider } : {}),
       ...(selectedModel ? { model: selectedModel } : {}),
@@ -542,10 +547,10 @@ function applyDiagnosticsEnvironment(context: DiagnosticsTestContext) {
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2))
-  const { modules, discoveredFiles } = await loadTestModules(opts.filter)
-  const registry = buildDiagnosticsRegistry({ modules })
 
   if (opts.listOnly) {
+    const { modules, discoveredFiles } = await loadTestModules(opts.filter)
+    const registry = buildDiagnosticsRegistry({ modules })
     const defaultTests = filterTests(
       filterTestsByCategory(
         filterLargeTokenTests(
@@ -567,96 +572,156 @@ async function main() {
     return
   }
 
-  const selectedSource = opts.includeExperimental
-    ? { ...registry.tests, ...registry.modelBasedTests, ...registry.experimentalTests }
-    : { ...registry.tests, ...registry.modelBasedTests }
-  const filtered = filterTests(
-    filterTestsByCategory(
-      filterLargeTokenTests(selectedSource, opts.includeLargeTokens),
-      opts.category,
-    ),
-    opts.filter,
-  )
-  const wrapped = wrapTests(filtered, opts)
-  const selectedNames = Object.keys(wrapped)
-
-  console.log(`[tycli-diagnostics] discovered ${discoveredFiles.length} test files`)
-  console.log(
-    `[tycli-diagnostics] selected ${selectedNames.length} tests` +
-      (opts.filter ? ` (filter="${opts.filter}")` : '') +
-      (opts.category ? ` (category="${opts.category}")` : ''),
-  )
-
-  if (selectedNames.length === 0) {
-    console.error('[tycli-diagnostics] no tests matched the current selection')
-    process.exit(1)
-  }
-
-  const diagnosticsDataDir = await mkdtemp(join(tmpdir(), 'tycli-diagnostics-pglite-'))
-  const runtime = await bootstrapCliTaskyon({
-    nodePgLiteDataDir: diagnosticsDataDir,
-    ...(opts.provider ? { selectedApi: opts.provider } : {}),
-    ...(opts.model ? { model: opts.model } : {}),
+  if (opts.verbose) process.env.TASKYON_CLI_VERBOSE = '1'
+  const output = createDiagnosticsOutput({
+    logDir: resolveTaskyonCliStoragePaths().logDir,
+    verbose: opts.verbose,
   })
-  const context: DiagnosticsTestContext = {
-    ...(opts.tyauth ? { tyauth: opts.tyauth } : {}),
-    allowLongRun: opts.allowLongRun,
-    selectedApi: runtime.selectedApi,
-    llmSettings: runtime.llmState.settings,
-    toolchainConfig: {
-      chatCompletion: getSelectedProviderSettings(runtime.llmState),
-    },
-    ...(runtime.model ? { model: runtime.model } : {}),
-    ...(runtime.providerKey ? { providerKey: runtime.providerKey } : {}),
-    ...(runtime.oauthSession?.accessToken
-      ? { providerAccessToken: runtime.oauthSession.accessToken }
-      : {}),
-    ...(runtime.oauthSession?.accountId ? { accountId: runtime.oauthSession.accountId } : {}),
+  const restoreOutput = output.capture()
+  let fatalExitStarted = false
+  const exitAfterFatalError = (kind: string, error: unknown) => {
+    if (fatalExitStarted) return
+    fatalExitStarted = true
+    const message = error instanceof Error ? (error.stack ?? error.message) : String(error)
+    output.log(kind, `${message}\n`)
+    output.status(`[tycli-diagnostics] ${kind}: ${toErrorMessage(error)}`, 'stderr')
+    output.status(`[tycli-diagnostics] log file: ${output.logFile}`, 'stderr')
+    restoreOutput()
+    process.stderr.write('', () => process.exit(1))
   }
-  applyDiagnosticsEnvironment(context)
+  const handleUncaughtException = (error: Error) => exitAfterFatalError('uncaught exception', error)
+  const handleUnhandledRejection = (error: unknown) =>
+    exitAfterFatalError('unhandled rejection', error)
+  process.once('uncaughtException', handleUncaughtException)
+  process.once('unhandledRejection', handleUnhandledRejection)
 
-  const startedAt = Date.now()
-  const results = await runDiagnosticsTests(wrapped, {
-    details: true,
-    context,
-    onProgress: (progress) => {
-      if (progress.phase === 'start') console.log(`[RUN ] ${progress.test}`)
-    },
-    onResult: (result) => {
-      console.log(formatResultLine(result))
-      if (!result.ok && opts.details) {
-        console.log(JSON.stringify(result.error, null, 2))
-      }
-    },
-  })
-  const durationMs = Date.now() - startedAt
-  const summary = buildSummary(
-    results,
-    opts,
-    durationMs,
-    discoveredFiles.length,
-    runtime.selectedApi,
-    runtime.model,
-  )
+  try {
+    const [{ getSelectedProviderSettings }, { bootstrapCliTaskyon }] = await Promise.all([
+      import('../cli/models'),
+      import('../cli/runtime'),
+    ])
+    const { modules, discoveredFiles } = await loadTestModules(opts.filter)
+    const registry = buildDiagnosticsRegistry({ modules })
 
-  console.log('')
-  console.log(
-    `[tycli-diagnostics] completed in ${durationMs}ms: ${summary.passed} passed, ${summary.failed} failed, ${summary.skipped} skipped, model score ${summary.modelCapability.passed}/${summary.modelCapability.passed + summary.modelCapability.missed}`,
-  )
-  console.log('TYCLI_DIAGNOSTICS_SUMMARY_START')
-  console.log(
-    JSON.stringify(opts.details || opts.json ? summary : { ...summary, results: [] }, null, 2),
-  )
-  console.log('TYCLI_DIAGNOSTICS_SUMMARY_END')
+    const selectedSource = opts.includeExperimental
+      ? { ...registry.tests, ...registry.modelBasedTests, ...registry.experimentalTests }
+      : { ...registry.tests, ...registry.modelBasedTests }
+    const filtered = filterTests(
+      filterTestsByCategory(
+        filterLargeTokenTests(selectedSource, opts.includeLargeTokens),
+        opts.category,
+      ),
+      opts.filter,
+    )
+    const wrapped = wrapTests(filtered, opts)
+    const selectedNames = Object.keys(wrapped)
 
-  runtime.taskyon.cancelCurrentRun('tycli diagnostics complete')
-  await new Promise<void>((resolve, reject) => {
-    process.stdout.write('', (error) => {
-      if (error) reject(error)
-      else resolve()
+    console.log(`[tycli-diagnostics] discovered ${discoveredFiles.length} test files`)
+    console.log(
+      `[tycli-diagnostics] selected ${selectedNames.length} tests` +
+        (opts.filter ? ` (filter="${opts.filter}")` : '') +
+        (opts.category ? ` (category="${opts.category}")` : ''),
+    )
+
+    if (selectedNames.length === 0) {
+      output.status('[tycli-diagnostics] no tests matched the current selection', 'stderr')
+      output.status(`[tycli-diagnostics] log file: ${output.logFile}`, 'stderr')
+      process.exitCode = 1
+      return
+    }
+
+    const diagnosticsDataDir = await mkdtemp(join(tmpdir(), 'tycli-diagnostics-pglite-'))
+    const runtime = await bootstrapCliTaskyon({
+      nodePgLiteDataDir: diagnosticsDataDir,
+      ...(opts.provider ? { selectedApi: opts.provider } : {}),
+      ...(opts.model ? { model: opts.model } : {}),
     })
-  })
-  process.exit(summary.ok ? 0 : 1)
+    const context: DiagnosticsTestContext = {
+      ...(opts.tyauth ? { tyauth: opts.tyauth } : {}),
+      allowLongRun: opts.allowLongRun,
+      selectedApi: runtime.selectedApi,
+      llmSettings: runtime.llmState.settings,
+      toolchainConfig: {
+        chatCompletion: getSelectedProviderSettings(runtime.llmState),
+      },
+      ...(runtime.model ? { model: runtime.model } : {}),
+      ...(runtime.providerKey ? { providerKey: runtime.providerKey } : {}),
+      ...(runtime.oauthSession?.accessToken
+        ? { providerAccessToken: runtime.oauthSession.accessToken }
+        : {}),
+      ...(runtime.oauthSession?.accountId ? { accountId: runtime.oauthSession.accountId } : {}),
+    }
+    applyDiagnosticsEnvironment(context)
+
+    const startedAt = Date.now()
+    const results = await runDiagnosticsTests(wrapped, {
+      details: true,
+      context,
+      onProgress: (progress) => {
+        if (progress.phase === 'start') console.log(`[RUN ] ${progress.test}`)
+      },
+      onResult: (result) => {
+        output.status(formatResultLine(result, opts.verbose), result.ok ? 'stdout' : 'stderr')
+        output.log('result', `${JSON.stringify(result, null, 2)}\n`)
+        if (!result.ok && opts.details) {
+          output.status(JSON.stringify(result.error, null, 2), 'stderr')
+        }
+      },
+    })
+    const durationMs = Date.now() - startedAt
+    const summary = buildSummary(
+      results,
+      opts,
+      durationMs,
+      discoveredFiles.length,
+      runtime.selectedApi,
+      runtime.model,
+    )
+    const summaryJson = JSON.stringify(
+      opts.details || opts.json ? summary : { ...summary, results: [] },
+      null,
+      2,
+    )
+
+    runtime.taskyon.cancelCurrentRun('tycli diagnostics complete')
+    output.status('')
+    output.status(
+      `[tycli-diagnostics] completed in ${durationMs}ms: ${summary.passed} passed, ${summary.failed} failed, ${summary.skipped} skipped, model score ${summary.modelCapability.passed}/${summary.modelCapability.passed + summary.modelCapability.missed}`,
+    )
+    if (summary.failed > 0) output.status(formatFailedDiagnostics(results), 'stderr')
+    const modelMisses = results.filter((result) => !result.ok && result.modelBased)
+    if (modelMisses.length > 0) {
+      output.status(`Model misses:\n${modelMisses.map((result) => `- ${result.name}`).join('\n')}`)
+    }
+    output.log('summary', `${summaryJson}\n`)
+    if (opts.verbose || opts.details || opts.json) {
+      output.status('TYCLI_DIAGNOSTICS_SUMMARY_START')
+      output.status(summaryJson)
+      output.status('TYCLI_DIAGNOSTICS_SUMMARY_END')
+    }
+    output.status(`[tycli-diagnostics] log file: ${output.logFile}`)
+
+    process.exitCode = summary.ok ? 0 : 1
+  } catch (error) {
+    const message = error instanceof Error ? (error.stack ?? error.message) : String(error)
+    output.log('fatal', `${message}\n`)
+    output.status(`[tycli-diagnostics] fatal: ${toErrorMessage(error)}`, 'stderr')
+    output.status(`[tycli-diagnostics] log file: ${output.logFile}`, 'stderr')
+    process.exitCode = 1
+  } finally {
+    process.removeListener('uncaughtException', handleUncaughtException)
+    process.removeListener('unhandledRejection', handleUnhandledRejection)
+    restoreOutput()
+  }
 }
 
 await main()
+await Promise.all(
+  [process.stdout, process.stderr].map(
+    (stream) =>
+      new Promise<void>((resolve) => {
+        stream.write('', () => resolve())
+      }),
+  ),
+)
+process.exit(process.exitCode ?? 0)

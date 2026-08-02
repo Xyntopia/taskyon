@@ -46,14 +46,18 @@ const PARCELS_PM_URL =
 let resizeObserver: ResizeObserver | null = null
 
 interface GenericMapProps {
+  // eslint-disable-next-line vue/require-default-prop
   storageClient?: TaskyonStorageClient
   initialCenter?: [number, number]
   initialZoom?: number
   useDefaultTileLayer?: boolean
   mapStyle?: string | StyleSpecification
-  tileLayerUrl?: string | undefined
-  tileLayerOptions?: Record<string, unknown> | undefined
-  placeName?: string | undefined
+  // eslint-disable-next-line vue/require-default-prop
+  tileLayerUrl?: string
+  // eslint-disable-next-line vue/require-default-prop
+  tileLayerOptions?: Record<string, unknown>
+  // eslint-disable-next-line vue/require-default-prop
+  placeName?: string
   worldPmtilesUrl?: string
   parcelsPmtilesUrl?: string
   showParcelsLayer?: boolean
@@ -63,14 +67,10 @@ interface GenericMapProps {
 }
 
 const props = withDefaults(defineProps<GenericMapProps>(), {
-  storageClient: undefined,
   initialCenter: () => [0, 0],
   initialZoom: 10,
   useDefaultTileLayer: true,
   mapStyle: 'minimal',
-  tileLayerUrl: undefined,
-  tileLayerOptions: undefined,
-  placeName: undefined,
   worldPmtilesUrl: defaultWorldPmtilesUrl,
   parcelsPmtilesUrl: PARCELS_PM_URL,
   showParcelsLayer: false,

@@ -14,8 +14,8 @@
   "scripts": {
     "dev": "yarn node --import ./src/register.ts --experimental-strip-types ./src/taskyonCli.ts",
     "build": "tsup && chmod +x ./dist/cli.cjs",
-    "cli-diagnostics": "node --import ./src/register.ts --experimental-strip-types ./src/diagnostics/runDiagnostics.ts",
-    "cli-diagnostics:list": "node --import ./src/register.ts --experimental-strip-types ./src/diagnostics/runDiagnostics.ts --list",
+    "cli-diagnostics": "node --disable-warning=ExperimentalWarning --import ./src/register.ts --experimental-strip-types ./src/diagnostics/runDiagnostics.ts",
+    "cli-diagnostics:list": "node --disable-warning=ExperimentalWarning --import ./src/register.ts --experimental-strip-types ./src/diagnostics/runDiagnostics.ts --list",
     "cli-diagnostics:modelica": "node --import ./src/register.ts --experimental-strip-types ./src/diagnostics/modelicaDiagnosticsCli.ts",
     "discovery-fixture": "node --import ./src/register.ts --experimental-strip-types ./src/diagnostics/discoveryFixture.ts",
     "diagnostics": "yarn cli-diagnostics",
