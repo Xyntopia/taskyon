@@ -34,7 +34,11 @@ function runtimeKind(options: {
   return options.browserRuntime === 'worker' ? 'worker' : 'iframe'
 }
 
-async function createTransport(kind: SandboxRuntimeKind, id: string): Promise<SandboxTransport> {
+async function createTransport(
+  kind: SandboxRuntimeKind,
+  id: string,
+  options: { maxOldSpaceSizeMb?: number | undefined },
+): Promise<SandboxTransport> {
   if (kind === 'iframe') {
     const { createBrowserIframeSandboxTransport } = await import('./browserWorkerSandboxRuntime.ts')
     return await createBrowserIframeSandboxTransport(id)
@@ -46,21 +50,24 @@ async function createTransport(kind: SandboxRuntimeKind, id: string): Promise<Sa
   }
   const nodeRuntimeModule = './nodeWorkerSandboxRuntime.ts'
   const { createNodeSandboxTransport } = (await import(/* @vite-ignore */ nodeRuntimeModule)) as {
-    createNodeSandboxTransport: () => SandboxTransport
+    createNodeSandboxTransport: (options: {
+      maxOldSpaceSizeMb?: number | undefined
+    }) => SandboxTransport
   }
-  return createNodeSandboxTransport()
+  return createNodeSandboxTransport(options)
 }
 
 export async function createExecutableSandbox(options: {
   id: string
   browserRuntime?: 'iframe' | 'worker'
+  maxOldSpaceSizeMb?: number
   reuse?: SandboxReusePolicy
 }): Promise<ExecutableSandbox> {
   const kind = runtimeKind(options)
   const reuse = options.reuse ?? { mode: 'affinity', key: options.id }
   const key = reuse.mode === 'disposable' ? undefined : retainedSandboxKey(kind, options.id, reuse)
   const create = async () => {
-    const transport = await createTransport(kind, options.id)
+    const transport = await createTransport(kind, options.id, options)
     return createExecutableSandboxClient(transport, {
       onTerminate: () => {
         if (key) retainedSandboxes.delete(key)
@@ -100,5 +107,7 @@ export async function executeInWorkerSandbox<R = unknown>(
   return await sandbox.execute<R>(options.code, args, {
     signal: options.stopSignal,
     sourceURL: options.sourceURL,
+    maxExecutionMs: options.maxExecutionMs,
+    maxOutputBytes: options.maxOutputBytes,
   })
 }

@@ -16,22 +16,29 @@ const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
 }
 
-function createTestTransport(): SandboxTransport & {
+type TestSandboxTransport = SandboxTransport & {
   receive(message: SandboxRuntimeToHostMessage): void
   sent: SandboxHostToRuntimeMessage[]
-} {
+  terminationCount: number
+}
+
+function createTestTransport(): TestSandboxTransport {
   const listeners = new Set<(message: SandboxRuntimeToHostMessage) => void>()
   const sent: SandboxHostToRuntimeMessage[] = []
-  return {
+  const transport: TestSandboxTransport = {
     sent,
+    terminationCount: 0,
     send: (message) => sent.push(message),
     subscribe: (listener) => {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
     receive: (message) => listeners.forEach((listener) => listener(message)),
-    terminate: () => undefined,
+    terminate: () => {
+      transport.terminationCount += 1
+    },
   }
+  return transport
 }
 
 export const testExecutableSandboxCorrelatesConcurrentResults = async () => {
@@ -82,6 +89,57 @@ testExecutableSandboxCorrelatesConcurrentResults.description =
 testExecutableSandboxSurfacesRuntimeErrors.description =
   'Preserves errors returned across the executable-sandbox boundary.'
 
+export const testExecutableSandboxTerminatesAfterExecutionTimeout = async () => {
+  const transport = createTestTransport()
+  const sandbox = createExecutableSandboxClient(transport)
+  let caught: unknown
+  try {
+    await sandbox.execute('async () => new Promise(() => undefined)', [], {
+      maxExecutionMs: 10,
+    })
+  } catch (error) {
+    caught = error
+  }
+
+  assert(
+    caught instanceof Error && caught.message.includes('timed out'),
+    'Expected a sandbox timeout error.',
+  )
+  assert(transport.terminationCount === 1, 'Expected timeout to invalidate the sandbox runtime.')
+  return { success: true }
+}
+
+testExecutableSandboxTerminatesAfterExecutionTimeout.description =
+  'Terminates a retained sandbox after an execution timeout makes its state untrustworthy.'
+
+export const testExecutableSandboxRejectsOversizedOutput = async () => {
+  const transport = createTestTransport()
+  const sandbox = createExecutableSandboxClient(transport)
+  const result = sandbox.execute('() => "oversized"', [], { maxOutputBytes: 4 })
+  const request = transport.sent[0]
+  if (request?.kind !== 'execute') throw new Error('Expected one execution request.')
+  transport.receive({ kind: 'result', requestId: request.requestId, result: 'oversized' })
+
+  let caught: unknown
+  try {
+    await result
+  } catch (error) {
+    caught = error
+  }
+  assert(
+    caught instanceof Error && caught.message.includes('output'),
+    'Expected an oversized-output error.',
+  )
+  assert(
+    transport.terminationCount === 1,
+    'Expected oversized output to invalidate the sandbox runtime.',
+  )
+  return { success: true }
+}
+
+testExecutableSandboxRejectsOversizedOutput.description =
+  'Rejects oversized results and terminates the sandbox that produced them.'
+
 export const testInstalledSandboxModuleSharesOnlyItsOwnState = async () => {
   const suffix = `${Date.now()}-${Math.random()}`
   const first = await createExecutableSandbox({
@@ -121,6 +179,26 @@ export const testInstalledSandboxModuleSharesOnlyItsOwnState = async () => {
 
 testInstalledSandboxModuleSharesOnlyItsOwnState.description =
   'Retains installed module globals within one sandbox while isolating different sandboxes.'
+
+export const testNodeSandboxClonesInputsIntoItsVmContext = async () => {
+  const sandbox = await createExecutableSandbox({
+    id: `vm-input-${Date.now()}-${Math.random()}`,
+    reuse: { mode: 'disposable' },
+  })
+  try {
+    const processType = await sandbox.execute<string>(
+      '(value) => value.constructor.constructor("return typeof process")()',
+      [{}],
+    )
+    assert(processType === 'undefined', 'Expected sandbox inputs to use VM-owned prototypes.')
+    return { success: true }
+  } finally {
+    sandbox.terminate()
+  }
+}
+
+testNodeSandboxClonesInputsIntoItsVmContext.description =
+  'Clones host inputs before Node sandbox code can inspect their prototypes.'
 
 export const testExecutableSandboxCancelsOnlyOneConcurrentCall = async () => {
   const transport = createTestTransport()

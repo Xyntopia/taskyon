@@ -50,7 +50,8 @@ export type ExecutableSandbox = {
 type PendingExecution = {
   resolve(value: unknown): void
   reject(error: Error): void
-  removeAbortListener(): void
+  cleanup(): void
+  maxOutputBytes: number
 }
 
 let sandboxRequestCounter = 0
@@ -58,6 +59,8 @@ let sandboxChannelCounter = 0
 
 const nextRequestId = () => `sandbox-${Date.now()}-${sandboxRequestCounter++}`
 const safeSourceURL = (value: string) => value.replace(/[\\`\r\n]/g, '_')
+const outputByteLength = (value: unknown) =>
+  new TextEncoder().encode(JSON.stringify(value) ?? '').byteLength
 
 export function createExecutableSandboxClient(
   transport: SandboxTransport,
@@ -79,7 +82,7 @@ export function createExecutableSandboxClient(
       return
     }
     pending.delete(requestId)
-    entry.removeAbortListener()
+    entry.cleanup()
     if ('error' in result) entry.reject(result.error)
     else entry.resolve(result.value)
   }
@@ -99,8 +102,33 @@ export function createExecutableSandboxClient(
       terminate(error.message)
       return
     }
-    if (message.kind === 'result') finish(message.requestId, { value: message.result })
-    else if (message.kind === 'error') {
+    if (message.kind === 'result') {
+      const entry = pending.get(message.requestId)
+      if (!entry) {
+        diagnostic('Ignoring a late or unknown sandbox response.', {
+          requestId: message.requestId,
+        })
+        return
+      }
+      let outputSize: number
+      try {
+        outputSize = outputByteLength(message.result)
+      } catch (error) {
+        const serializationError = new Error('Sandbox output could not be measured safely', {
+          cause: error,
+        })
+        finish(message.requestId, { error: serializationError })
+        terminate(serializationError.message)
+        return
+      }
+      if (outputSize > entry.maxOutputBytes) {
+        const outputError = new Error('Sandbox output exceeds the configured limit')
+        finish(message.requestId, { error: outputError })
+        terminate(outputError.message)
+        return
+      }
+      finish(message.requestId, { value: message.result })
+    } else if (message.kind === 'error') {
       finish(message.requestId, { error: hydrateRemoteError(message.error) })
     } else {
       const error = new Error(message.reason || 'Sandbox execution cancelled')
@@ -128,10 +156,19 @@ export function createExecutableSandboxClient(
         }
         finish(requestId, { error })
       }
+      const timer = setTimeout(() => {
+        const error = new Error('Sandbox execution timed out')
+        finish(requestId, { error })
+        terminate(error.message)
+      }, executeOptions.maxExecutionMs ?? 60_000)
       pending.set(requestId, {
         resolve: (value) => resolve(value as R),
         reject,
-        removeAbortListener: () => executeOptions.signal?.removeEventListener('abort', abort),
+        cleanup: () => {
+          clearTimeout(timer)
+          executeOptions.signal?.removeEventListener('abort', abort)
+        },
+        maxOutputBytes: executeOptions.maxOutputBytes ?? 2 * 1024 * 1024,
       })
       if (executeOptions.signal?.aborted) {
         abort()

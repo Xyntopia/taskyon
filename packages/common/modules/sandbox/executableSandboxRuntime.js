@@ -4,6 +4,25 @@ export function installExecutableSandboxRuntime() {
   const channels = new Map()
   let controlPort = null
 
+  for (const name of [
+    'EventSource',
+    'SharedWorker',
+    'WebSocket',
+    'Worker',
+    'XMLHttpRequest',
+    'fetch',
+    'importScripts',
+  ]) {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, name)
+    if (!descriptor || descriptor.configurable) {
+      Object.defineProperty(globalThis, name, {
+        configurable: false,
+        value: undefined,
+        writable: false,
+      })
+    }
+  }
+
   function serializeError(error) {
     const normalized = error instanceof Error ? error : new Error(String(error))
     return {
