@@ -1,7 +1,7 @@
 <template>
   <section class="task-chat-window column no-wrap">
     <header class="task-chat-window__header row items-center no-wrap q-px-sm">
-      <div class="task-chat-window__identity row items-center no-wrap">
+      <div v-if="showAssistantIdentity" class="task-chat-window__identity row items-center no-wrap">
         <q-icon :name="resolvedPresentation.assistantIcon" size="1.2rem" />
         <span class="text-subtitle2">{{ resolvedPresentation.assistantLabel }}</span>
       </div>
@@ -119,6 +119,7 @@ const props = withDefaults(
     minMode?: boolean
     expertMode?: boolean
     showWebSearch?: boolean
+    showAssistantIdentity?: boolean
     presentation?: Partial<TaskChatPresentation>
   }>(),
   {
@@ -129,6 +130,7 @@ const props = withDefaults(
     minMode: false,
     expertMode: false,
     showWebSearch: false,
+    showAssistantIdentity: true,
     presentation: () => ({}),
   },
 )
@@ -166,6 +168,15 @@ const refreshThread = async () => {
   const version = ++refreshVersion
   if (!client || !taskId) {
     selectedThread.value = []
+    return
+  }
+
+  const accessibleTask = await client.task.get({ id: taskId })
+  if (version !== refreshVersion) return
+  if (!accessibleTask) {
+    selectedThread.value = []
+    recentTaskIds.value = recentTaskIds.value.filter((id) => id !== taskId)
+    if (selectedTaskId.value === taskId) selectedTaskId.value = undefined
     return
   }
 

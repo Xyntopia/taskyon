@@ -6,6 +6,7 @@ export interface DockNode {
   views?: string[]
   activeViewIndex?: number
   showTabs?: 'always' | 'auto' | 'never'
+  tabLayout?: 'scroll' | 'smart'
   tabPosition?: 'top' | 'left'
   tabRailMode?: 'expanded' | 'compact'
   tabRailCollapsible?: boolean
@@ -30,6 +31,13 @@ export interface DockViewDropContext {
   position: DockPosition
 }
 
+export interface DockViewSplitContext {
+  viewId: string
+  targetLeafId: string
+  position: Exclude<DockPosition, 'tab'>
+  keepAlive?: boolean
+}
+
 export const MIN_RESTORE_WEIGHT = 20
 
 export const clamp = (value: number, min: number, max: number): number =>
@@ -44,6 +52,15 @@ export const findLeaf = (root: DockNode, leafId: string): DockNode | undefined =
   if (root.type === 'leaf') return root.id === leafId ? root : undefined
   for (const child of root.children ?? []) {
     const match = findLeaf(child, leafId)
+    if (match) return match
+  }
+  return undefined
+}
+
+export const findLeafByViewId = (root: DockNode, viewId: string): DockNode | undefined => {
+  if (root.type === 'leaf') return root.views?.includes(viewId) ? root : undefined
+  for (const child of root.children ?? []) {
+    const match = findLeafByViewId(child, viewId)
     if (match) return match
   }
   return undefined
@@ -169,6 +186,25 @@ const createDockNodeId = (kind: 'leaf' | 'container'): string => {
   return `dock-${kind}-${id}`
 }
 
+const createSplitLeaf = (target: DockNode, viewId: string, keepAlive: boolean): DockNode => ({
+  id: createDockNodeId('leaf'),
+  type: 'leaf',
+  views: [viewId],
+  activeViewIndex: 0,
+  ...(target.showTabs ? { showTabs: target.showTabs } : {}),
+  ...(target.tabLayout ? { tabLayout: target.tabLayout } : {}),
+  ...(target.tabPosition ? { tabPosition: target.tabPosition } : {}),
+  ...(target.tabRailMode ? { tabRailMode: target.tabRailMode } : {}),
+  ...(target.tabRailCollapsible === undefined
+    ? {}
+    : { tabRailCollapsible: target.tabRailCollapsible }),
+  ...(target.tabRailAutoCompact === undefined
+    ? {}
+    : { tabRailAutoCompact: target.tabRailAutoCompact }),
+  ...(keepAlive ? { keepAliveViews: [viewId] } : {}),
+  size: 1,
+})
+
 const insertEdgeSplit = (
   root: DockNode,
   targetLeafId: string,
@@ -179,14 +215,7 @@ const insertEdgeSplit = (
   if (root.type === 'leaf') {
     if (root.id !== targetLeafId) return root
     const direction = position === 'left' || position === 'right' ? 'row' : 'column'
-    const newLeaf: DockNode = {
-      id: createDockNodeId('leaf'),
-      type: 'leaf',
-      views: [viewId],
-      activeViewIndex: 0,
-      ...(keepAlive ? { keepAliveViews: [viewId] } : {}),
-      size: 1,
-    }
+    const newLeaf = createSplitLeaf(root, viewId, keepAlive)
     const target = { ...root, collapsed: false, size: 1 }
     const before = position === 'left' || position === 'top'
     return {
@@ -204,14 +233,7 @@ const insertEdgeSplit = (
   if (root.direction === direction && targetIndex >= 0) {
     const target = children[targetIndex]!
     const targetSize = target.size ?? 1
-    const newLeaf: DockNode = {
-      id: createDockNodeId('leaf'),
-      type: 'leaf',
-      views: [viewId],
-      activeViewIndex: 0,
-      ...(keepAlive ? { keepAliveViews: [viewId] } : {}),
-      size: targetSize / 2,
-    }
+    const newLeaf = { ...createSplitLeaf(target, viewId, keepAlive), size: targetSize / 2 }
     const resizedTarget = { ...target, collapsed: false, size: targetSize / 2 }
     const next = [...children]
     const before = position === 'left' || position === 'top'
@@ -226,6 +248,15 @@ const insertEdgeSplit = (
     ? root
     : { ...root, children: next }
 }
+
+export const splitDockView = (root: DockNode, context: DockViewSplitContext): DockNode =>
+  insertEdgeSplit(
+    root,
+    context.targetLeafId,
+    context.viewId,
+    context.position,
+    context.keepAlive ?? false,
+  )
 
 export const applyDockDrop = (root: DockNode, context: DockViewDropContext): DockNode => {
   if (context.position === 'tab' && context.sourceLeafId === context.targetLeafId) {
@@ -243,11 +274,26 @@ export const applyDockDrop = (root: DockNode, context: DockViewDropContext): Doc
       insertView(leaf, context.viewId, context.targetIndex, removed.keepAlive),
     )
   }
-  return insertEdgeSplit(
-    removed.node,
-    context.targetLeafId,
-    context.viewId,
-    context.position,
-    removed.keepAlive,
-  )
+  return splitDockView(removed.node, {
+    targetLeafId: context.targetLeafId,
+    viewId: context.viewId,
+    position: context.position,
+    keepAlive: removed.keepAlive,
+  })
+}
+
+export const closeDockView = (root: DockNode, leafId: string, viewId: string): DockNode => {
+  const leaf = findLeaf(root, leafId)
+  const sourceIndex = leaf?.views?.indexOf(viewId) ?? -1
+  if (!leaf || sourceIndex < 0) return root
+
+  const removed = removeDockedView(root, leafId, sourceIndex)
+  if (removed.node) return removed.node
+
+  return {
+    ...leaf,
+    views: [],
+    activeViewIndex: 0,
+    keepAliveViews: (leaf.keepAliveViews ?? []).filter((id) => id !== viewId),
+  }
 }

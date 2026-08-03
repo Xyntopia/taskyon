@@ -1,4 +1,10 @@
-import { createNode, oneOf, type DagExposedInputDef, type DagNode } from './dagCore.ts'
+import {
+  createNode,
+  oneOf,
+  type DagExposedInputDef,
+  type DagNode,
+  type DagNodeEffect,
+} from './dagCore.ts'
 import type { Hash } from './caching.ts'
 import type { DagJsonSchema } from './dagSchema.ts'
 import { recordInputsToRuntimeInputs } from './dagNodeRecord.ts'
@@ -23,6 +29,7 @@ export type DynamicDagNodeDefinition = {
   contentHash?: Hash
   label: string
   version: number
+  effect?: DagNodeEffect
   timeoutMs?: number
   runCode?: string
   runSource?: string
@@ -41,6 +48,7 @@ type DynamicExecutableDagNodeDefinition = {
   contentHash?: Hash
   label: string
   version: number
+  effect?: DagNodeEffect
   timeoutMs?: number
   runCode?: string
   run?: DagNodeRunFunction
@@ -164,6 +172,7 @@ export const compileDynamicDagNode = (args: {
   >[0] = {
     name: definition.id,
     version: definition.version,
+    effect: definition.effect ?? 'pure',
     localParams: definition.localParamsSchema,
     outputSchema: definition.outputSchema,
     hiddenInputs: hiddenInputs as Record<string, DagNode>,

@@ -30,7 +30,7 @@ export const createStorageDagBackend = (
     return value as O
   },
   async writeArtifact(value: unknown): Promise<Hash> {
-    const hash = canonicalHash(JSON.stringify(value))
+    const hash = canonicalHash(value)
     await storage.set(`${namespace}/artifacts`, hash, value)
     return hash
   },

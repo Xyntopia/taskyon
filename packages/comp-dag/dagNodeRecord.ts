@@ -1,7 +1,8 @@
 import type { Hash } from './caching.ts'
-import type { DagInputAccessor } from './dagCore.ts'
+import type { DagInputAccessor, DagNodeEffect } from './dagCore.ts'
 import { hashCanonicalDagNodeSource } from './dagNodeIdentity.ts'
 import type { DagJsonSchema } from './dagSchema.ts'
+import { assertDagNodeEffectSource } from './dagNodeEffectCheck.ts'
 
 export type DagNodeInputRefSingle = { nodeId: Hash }
 export type DagNodeInputRefOneOf = {
@@ -42,6 +43,7 @@ export type DagNodeRecord = {
   localName: string
   label: string
   version: number
+  effect?: DagNodeEffect
   timeoutMs?: number
   structure?: DagNodeRecordStructure
   localParamsSchema: DagJsonSchema
@@ -125,6 +127,7 @@ export const normalizeDagNodeRecordHashSource = (
       localName: record.localName,
       formatVersion: record.formatVersion,
       version: record.version,
+      ...(record.effect === 'source' ? { effect: 'source' } : {}),
       timeoutMs: record.timeoutMs ?? null,
       structure: record.structure ?? null,
       localParamsSchema: record.localParamsSchema,
@@ -150,6 +153,7 @@ export const hashDagNodeRecordInput = async (
 export const defineDagNodeRecord = async (
   input: Omit<DagNodeRecord, 'id'>,
 ): Promise<DagNodeRecord> => {
+  assertDagNodeEffectSource(input.effect ?? 'pure', input.runSource)
   const hashSource = normalizeDagNodeRecordHashSource(input)
   const id = await hashCanonicalDagNodeSource(
     JSON.stringify({

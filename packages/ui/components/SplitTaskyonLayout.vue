@@ -11,14 +11,17 @@
 
 <script setup lang="ts">
 import { syncRefsWithLocalStorage } from '@taskyon/common/modules/saveState'
+import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
 import { ref } from 'vue'
 import type { DockNode } from './dockLayout'
 import DockView from './DockView.vue'
+import { syncStateWithStorageClient } from '../modules/storageState'
 
 const props = withDefaults(
   defineProps<{
     name: string
     persist?: boolean
+    storageClient?: TaskyonStorageClient
     storageKeyPrefix?: string
     chatInitiallyCollapsed?: boolean
     chatSize?: number
@@ -58,13 +61,19 @@ const layout = ref<DockNode>({
 })
 
 if (props.persist) {
-  syncRefsWithLocalStorage(
-    `${props.storageKeyPrefix}:${props.name}`,
-    {
-      layout,
-    },
-    { debounceMs: 250 },
-  )
+  if (props.storageClient) {
+    void syncStateWithStorageClient(
+      props.storageClient,
+      { namespace: 'ui/split-layouts/v1', id: `${props.storageKeyPrefix}:${props.name}` },
+      { layout },
+    )
+  } else {
+    syncRefsWithLocalStorage(
+      `${props.storageKeyPrefix}:${props.name}`,
+      { layout },
+      { debounceMs: 250 },
+    )
+  }
 }
 </script>
 

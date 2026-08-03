@@ -88,6 +88,31 @@ export const testStorageDagBackendPersistsArtifactsAndCacheEntries = async () =>
   return { success: true }
 }
 
+export const testArtifactHashesUseCanonicalValues = async () => {
+  const namespaces = new Map<string, Map<string, unknown>>()
+  const records = (namespace: string) => {
+    const existing = namespaces.get(namespace)
+    if (existing) return existing
+    const created = new Map<string, unknown>()
+    namespaces.set(namespace, created)
+    return created
+  }
+  const backend = createStorageDagBackend({
+    get: (namespace, id) => Promise.resolve(records(namespace).get(id) ?? null),
+    set: (namespace, id, value) => {
+      records(namespace).set(id, value)
+      return Promise.resolve()
+    },
+  })
+
+  const left = await backend.writeArtifact({ beta: 2, alpha: 1 })
+  const right = await backend.writeArtifact({ alpha: 1, beta: 2 })
+
+  assert(left === right, 'Expected equivalent object values to share one artifact hash.')
+  assert(records('dag/artifacts').size === 1, 'Expected canonical artifacts to deduplicate.')
+  return { success: true, artifactHash: left }
+}
+
 export const testDagCacheUsesHashedComputationKeys = async () => {
   const namespaces = new Map<string, Map<string, unknown>>()
   const records = (namespace: string) => {
@@ -142,5 +167,7 @@ testResourceFetchNodeInlinesOnlyEligibleInternalFiles.description =
   'Materializes small internal files while keeping external resources reference-only.'
 testStorageDagBackendPersistsArtifactsAndCacheEntries.description =
   'Persists DAG artifacts and cache entries through content-agnostic storage records.'
+testArtifactHashesUseCanonicalValues.description =
+  'Hashes canonical artifact values independently of object key insertion order.'
 testDagCacheUsesHashedComputationKeys.description =
   'Stores fixed computation hashes rather than serialized DAG descriptors as cache keys.'

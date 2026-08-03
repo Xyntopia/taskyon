@@ -46,6 +46,9 @@ const assertBrowserOpfs = () => {
   }
 }
 
+const isFileHandle = (handle: FileSystemHandle): handle is FileSystemFileHandle =>
+  handle.kind === 'file' && 'getFile' in handle
+
 const normalizeRelativePath = (path: string) => {
   const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '')
   const segments = normalized.split('/').filter((segment) => segment.length > 0)
@@ -287,7 +290,7 @@ export const createOpfsBlobStorageBackend = async (
         )
         const values: StorageBlobMetadata[] = []
         for await (const [name, handle] of directory.entries()) {
-          if (handle.kind !== 'file') continue
+          if (!isFileHandle(handle)) continue
           const id = decodeURIComponent(name)
           values.push(
             await blobMetadata(handle, id, (await readBlobDetails(root, details(id))) ?? {}),

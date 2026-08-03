@@ -10,6 +10,7 @@ import type {
 } from './dagNodeRecord.ts'
 import { hashDagNodeRecordInput } from './dagNodeRecord.ts'
 import type { DagJsonSchema } from './dagSchema.ts'
+import type { DagNodeEffect } from './dagCore.ts'
 
 export type StoredDagNodeDefinition = Omit<DagNodeRecord, 'id' | 'run'> & {
   id: Hash | typeof SELF_HASH_PLACEHOLDER
@@ -33,6 +34,7 @@ type ParsedNodeFields = {
   localName: string
   label: string
   version: number
+  effect?: DagNodeEffect
   timeoutMs?: number
   structure?: unknown
   localParamsSchema: DagJsonSchema
@@ -168,6 +170,19 @@ const parseOptionalNumberField = (
   const parsed = parseLiteralValue(tsModule, value)
   if (typeof parsed !== 'number')
     throw new Error(`Stored graph node field "${name}" must be number`)
+  return parsed
+}
+
+const parseOptionalNodeEffect = (
+  tsModule: typeof ts,
+  fields: Map<string, ts.Expression>,
+): DagNodeEffect | undefined => {
+  const value = fields.get('effect')
+  if (!value) return undefined
+  const parsed = parseLiteralValue(tsModule, value)
+  if (parsed !== 'pure' && parsed !== 'source') {
+    throw new Error('Stored graph node field "effect" must be pure or source')
+  }
   return parsed
 }
 
@@ -371,6 +386,7 @@ const parseSourceFields = async (source: string): Promise<ParsedNodeFields> => {
   if (!run) throw new Error('Stored graph node is missing required field "run"')
 
   const timeoutMs = parseOptionalNumberField(tsModule, fields, 'timeoutMs')
+  const effect = parseOptionalNodeEffect(tsModule, fields)
   const formatVersion = parseNumberField(tsModule, fields, 'formatVersion')
   if (formatVersion !== 2) {
     throw new Error(`Stored graph node formatVersion must be 2, received ${formatVersion}`)
@@ -381,6 +397,7 @@ const parseSourceFields = async (source: string): Promise<ParsedNodeFields> => {
     localName: parseStringField(tsModule, fields, 'localName'),
     label: parseStringField(tsModule, fields, 'label'),
     version: parseNumberField(tsModule, fields, 'version'),
+    ...(effect ? { effect } : {}),
     ...(typeof timeoutMs === 'number' ? { timeoutMs } : {}),
     structure: parseOptionalLiteralField(tsModule, fields, 'structure'),
     localParamsSchema: parseDagJsonSchema(
@@ -422,6 +439,7 @@ const emitStoredGraphNodeSource = (node: StoredDagNodeDefinition): string => {
   source += emitField('localName', node.localName)
   source += emitField('label', node.label)
   source += emitField('version', node.version)
+  if (node.effect === 'source') source += emitField('effect', node.effect)
   if (typeof node.timeoutMs === 'number') source += emitField('timeoutMs', node.timeoutMs)
   if (node.structure) source += emitField('structure', node.structure)
   source += emitField('localParamsSchema', node.localParamsSchema)
@@ -445,6 +463,7 @@ const toStoredGraphNodeDefinition = (fields: ParsedNodeFields): StoredDagNodeDef
     localName: fields.localName,
     label: fields.label,
     version: fields.version,
+    ...(fields.effect === 'source' ? { effect: fields.effect } : {}),
     ...(typeof fields.timeoutMs === 'number' ? { timeoutMs: fields.timeoutMs } : {}),
     ...(structure ? { structure } : {}),
     localParamsSchema: fields.localParamsSchema,
@@ -466,6 +485,7 @@ const hashStoredGraphNodeDefinition = async (node: StoredDagNodeDefinition): Pro
     localName: node.localName,
     label: node.label,
     version: node.version,
+    ...(node.effect === 'source' ? { effect: node.effect } : {}),
     ...(typeof node.timeoutMs === 'number' ? { timeoutMs: node.timeoutMs } : {}),
     ...(node.structure ? { structure: node.structure } : {}),
     localParamsSchema: node.localParamsSchema,

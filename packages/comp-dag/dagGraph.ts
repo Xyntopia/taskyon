@@ -1,12 +1,5 @@
 import type { GraphData } from '@taskyon/common/modules/graph/types'
-import { describeExploreInputs } from './dagCore.ts'
-
-type RuntimeDagNode = {
-  name: string
-  outputSchema?: unknown
-  hiddenInputs?: Record<string, RuntimeDagNode>
-  exposedInputs?: Record<string, RuntimeDagNode | { kind: 'oneOf'; options: RuntimeDagNode[] }>
-}
+import { describeExploreInputs, type DagExposedInputDef, type DagNode } from './dagCore.ts'
 
 export type DagNodeGraphNodeData = {
   isOutput: boolean
@@ -24,11 +17,11 @@ export type DagNodeGraphEdgeData = {
 export type DagNodeGraph = GraphData<DagNodeGraphNodeData, DagNodeGraphEdgeData>
 
 const isOneOf = (
-  value: RuntimeDagNode | { kind: 'oneOf'; options: RuntimeDagNode[] },
-): value is { kind: 'oneOf'; options: RuntimeDagNode[] } =>
+  value: DagExposedInputDef,
+): value is Extract<DagExposedInputDef, { kind: 'oneOf' }> =>
   typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'oneOf'
 
-const isExplodedNode = (node: RuntimeDagNode): boolean => node.name.includes('__explode__')
+const isExplodedNode = (node: DagNode): boolean => node.name.includes('__explode__')
 
 const toTitleCaseToken = (token: string): string => {
   if (!token) return token
@@ -134,7 +127,7 @@ const edgeType = (
 }
 
 export const buildDagNodeGraphFromOutputNodes = (
-  outputNodes: Record<string, RuntimeDagNode>,
+  outputNodes: Record<string, DagNode>,
 ): DagNodeGraph => {
   const nodes = new Map<
     string,
@@ -157,7 +150,7 @@ export const buildDagNodeGraphFromOutputNodes = (
   >()
   const visited = new Set<string>()
 
-  const addNode = (node: RuntimeDagNode) => {
+  const addNode = (node: DagNode) => {
     const existing = nodes.get(node.name)
     if (existing) return
     const exploded = isExplodedNode(node)
@@ -174,8 +167,8 @@ export const buildDagNodeGraphFromOutputNodes = (
   }
 
   const addEdge = (
-    source: RuntimeDagNode,
-    target: RuntimeDagNode,
+    source: DagNode,
+    target: DagNode,
     alias: string,
     visibility: 'hidden' | 'exposed',
     sourcePath?: string,
@@ -199,7 +192,7 @@ export const buildDagNodeGraphFromOutputNodes = (
     })
   }
 
-  const walk = (node: RuntimeDagNode) => {
+  const walk = (node: DagNode) => {
     addNode(node)
     if (visited.has(node.name)) return
     visited.add(node.name)

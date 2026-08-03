@@ -7,7 +7,9 @@
       'dock-row': node.type === 'container' && node.direction === 'row',
       'dock-col': node.type === 'container' && node.direction === 'column',
       'dock-resizing': isResizing,
-      'dock-node--tabs-left': isLeftTabsLayout,
+      'dock-node--tabs-left': isLeftTabsLayout && !controlsOnly,
+      'dock-node--container': node.type === 'container',
+      'dock-node--leaf': node.type === 'leaf',
       'dock-node--animated': node.animateTransitions === true,
       'dock-dragging': isDocking,
     }"
@@ -15,7 +17,7 @@
     :style="nodeStyle"
   >
     <button
-      v-if="node.type === 'leaf' && (showTabs || isCollapsed)"
+      v-if="node.type === 'leaf' && (showPaneControls || isCollapsed) && !managedAutoHiddenViewId"
       class="dock-pane-toggle"
       :data-cy="`dock-minimize-${node.id}`"
       type="button"
@@ -27,17 +29,18 @@
       <q-icon :name="isCollapsed ? matOpenInFull : matCloseFullscreen" />
     </button>
 
-    <!-- Tabs header: always shown if showTabs, even when collapsed -->
     <div
-      v-if="showTabs || isCollapsed"
+      v-if="showTabHeader || isCollapsed"
       class="dock-tabs-header"
       :data-cy="`dock-tabs-header-${node.id}`"
       role="tablist"
       :class="{
         'dock-tabs-header--vertical': isCollapsed && parentDirection === 'row',
         'dock-tabs-header--collapsed': isCollapsed,
-        'dock-tabs-header--left': isLeftTabsLayout,
+        'dock-tabs-header--left': isLeftTabsLayout && !controlsOnly,
         'dock-tabs-header--compact': isCompactTabRail,
+        'dock-tabs-header--smart': smartTabsEnabled,
+        'dock-tabs-header--controls-only': controlsOnly,
         'dock-tabs-header--drop-empty': isTabHeaderDropTarget && (node.views?.length ?? 0) === 0,
       }"
       @dragover="onTabHeaderDragOver"
@@ -67,8 +70,39 @@
       >
         +
       </button>
-      <q-menu v-if="resolvedAddViewOptions.length > 0" v-model="showAddViewMenu">
+      <q-menu v-if="addViewOptions !== undefined" v-model="showAddViewMenu" no-parent-event>
         <q-list dense class="dock-add-menu">
+          <q-item tag="label">
+            <q-item-section>Hide tab when alone</q-item-section>
+            <q-item-section side>
+              <q-toggle
+                :model-value="node.type === 'leaf' && node.showTabs === 'auto'"
+                aria-label="Hide tab when alone"
+                @update:model-value="setAutoHideSingleTab"
+              />
+            </q-item-section>
+          </q-item>
+          <q-item tag="label">
+            <q-item-section>Smart tabs</q-item-section>
+            <q-item-section side>
+              <q-toggle
+                :model-value="node.type === 'leaf' && node.tabLayout === 'smart'"
+                aria-label="Wrap tabs into up to three rows"
+                @update:model-value="setSmartTabs"
+              />
+            </q-item-section>
+          </q-item>
+          <q-item tag="label">
+            <q-item-section>Vertical tab bar</q-item-section>
+            <q-item-section side>
+              <q-toggle
+                :model-value="resolvedTabPosition === 'left'"
+                aria-label="Place tabs vertically on the left"
+                @update:model-value="setVerticalTabs"
+              />
+            </q-item-section>
+          </q-item>
+          <q-separator />
           <q-item
             v-for="option in resolvedAddViewOptions"
             :key="option.id"
@@ -81,60 +115,89 @@
               <q-icon :name="option.icon" />
             </q-item-section>
             <q-item-section>{{ option.label }}</q-item-section>
+            <q-item-section side>
+              <q-btn
+                flat
+                round
+                dense
+                icon="splitscreen"
+                :aria-label="`Split ${option.label}`"
+                @click.stop
+              >
+                <q-menu anchor="top end" self="top start">
+                  <q-list dense role="menu">
+                    <q-item
+                      v-for="placement in splitPlacements"
+                      :key="placement.position"
+                      v-close-popup="2"
+                      clickable
+                      role="menuitem"
+                      @click.stop="onAddViewOptionClick(option, placement.position)"
+                    >
+                      <q-item-section avatar>
+                        <q-icon :name="placement.icon" />
+                      </q-item-section>
+                      <q-item-section>{{ placement.label }}</q-item-section>
+                    </q-item>
+                  </q-list>
+                </q-menu>
+              </q-btn>
+            </q-item-section>
           </q-item>
         </q-list>
       </q-menu>
 
-      <div
-        v-for="(viewId, index) in node.views || []"
-        :key="viewId"
-        class="dock-tab"
-        :data-cy="`dock-tab-${node.id}-${viewId}`"
-        :data-leaf-id="node.id"
-        :data-tab-index="index"
-        :data-view-id="viewId"
-        :draggable="canDragView(viewId)"
-        :class="[
-          tabClass,
-          { active: index === (node.activeViewIndex ?? 0) },
-          index === (node.activeViewIndex ?? 0) && activeTabClass,
-          getTabDropClass(index),
-        ]"
-        role="tab"
-        tabindex="0"
-        :aria-label="tabTitles?.[viewId] || viewId"
-        :aria-selected="index === (node.activeViewIndex ?? 0)"
-        @click="isCollapsed ? onCollapsedTabClick(index) : onTabClick(index)"
-        @keydown.enter.prevent="isCollapsed ? onCollapsedTabClick(index) : onTabClick(index)"
-        @keydown.space.prevent="isCollapsed ? onCollapsedTabClick(index) : onTabClick(index)"
-        @dragstart="onTabDragStart($event, viewId, index)"
-        @dragover="onTabDragOver($event, index)"
-        @drop="onTabDrop($event, index)"
-        @dragend="stopTabDrag"
-      >
-        <q-icon v-if="tabIcons?.[viewId]" class="dock-tab-icon" :name="tabIcons[viewId]" />
-        <span
-          class="dock-tab-title"
-          :title="tabTitleTooltips?.[viewId] || tabTitles?.[viewId] || viewId"
-          >{{ tabTitles?.[viewId] || viewId }}</span
+      <template v-for="(viewId, index) in node.views || []" :key="viewId">
+        <div
+          v-if="showTabItems || isCollapsed"
+          class="dock-tab"
+          :data-cy="`dock-tab-${node.id}-${viewId}`"
+          :data-leaf-id="node.id"
+          :data-tab-index="index"
+          :data-view-id="viewId"
+          :draggable="canDragView(viewId)"
+          :class="[
+            tabClass,
+            { active: index === (node.activeViewIndex ?? 0) },
+            index === (node.activeViewIndex ?? 0) && activeTabClass,
+            getTabDropClass(index),
+          ]"
+          role="tab"
+          tabindex="0"
+          :aria-label="tabTitles?.[viewId] || viewId"
+          :aria-selected="index === (node.activeViewIndex ?? 0)"
+          @click="isCollapsed ? onCollapsedTabClick(index) : onTabClick(index)"
+          @keydown.enter.prevent="isCollapsed ? onCollapsedTabClick(index) : onTabClick(index)"
+          @keydown.space.prevent="isCollapsed ? onCollapsedTabClick(index) : onTabClick(index)"
+          @dragstart="onTabDragStart($event, viewId, index)"
+          @dragover="onTabDragOver($event, index)"
+          @drop="onTabDrop($event, index)"
+          @dragend="stopTabDrag"
         >
-
-        <div class="dock-tab-drag-image" aria-hidden="true">
           <q-icon v-if="tabIcons?.[viewId]" class="dock-tab-icon" :name="tabIcons[viewId]" />
-          <span>{{ tabTitles?.[viewId] || viewId }}</span>
-        </div>
+          <span
+            class="dock-tab-title"
+            :title="tabTitleTooltips?.[viewId] || tabTitles?.[viewId] || viewId"
+            >{{ tabTitles?.[viewId] || viewId }}</span
+          >
 
-        <button
-          v-if="!hideTabClose && !isCollapsed && !pinnedViews.includes(viewId)"
-          class="dock-tab-close"
-          :data-cy="`dock-close-${node.id}-${viewId}`"
-          type="button"
-          :class="tabButtonClass"
-          @click.stop="onTabClose(viewId)"
-        >
-          ×
-        </button>
-      </div>
+          <div class="dock-tab-drag-image" aria-hidden="true">
+            <q-icon v-if="tabIcons?.[viewId]" class="dock-tab-icon" :name="tabIcons[viewId]" />
+            <span>{{ tabTitles?.[viewId] || viewId }}</span>
+          </div>
+
+          <button
+            v-if="!hideTabClose && !isCollapsed && !pinnedViews.includes(viewId)"
+            class="dock-tab-close"
+            :data-cy="`dock-close-${node.id}-${viewId}`"
+            type="button"
+            :class="tabButtonClass"
+            @click.stop="onTabClose(viewId)"
+          >
+            ×
+          </button>
+        </div>
+      </template>
     </div>
 
     <!-- Container Node -->
@@ -155,6 +218,7 @@
           :tab-title-tooltips="tabTitleTooltips"
           :tab-position="tabPosition"
           :enable-tab-docking="enableTabDocking"
+          :reveal-auto-hidden-tab="revealAutoHiddenTab"
           :can-dock-view="canDockView"
           :add-view-options="addViewOptions"
           :dock-root-controller="dockRoot"
@@ -181,24 +245,56 @@
           @dblclick.stop="onSplitterDoubleClick(index)"
         >
           <div class="dock-splitter-controls" @mousedown.stop>
-            <button
-              class="dock-splitter-toggle"
-              type="button"
-              :title="getSplitterSideTitle(index, 'left')"
-              :data-cy="`dock-splitter-toggle-left-${node.id}-${index}`"
-              @click.stop="toggleChildCollapsedFromSplitter(index, 'left')"
-            >
-              {{ getSplitterSideToggleLabel(index, 'left') }}
-            </button>
-            <button
-              class="dock-splitter-toggle"
-              type="button"
-              :title="getSplitterSideTitle(index, 'right')"
-              :data-cy="`dock-splitter-toggle-right-${node.id}-${index}`"
-              @click.stop="toggleChildCollapsedFromSplitter(index, 'right')"
-            >
-              {{ getSplitterSideToggleLabel(index, 'right') }}
-            </button>
+            <template v-for="side in splitterSides" :key="side">
+              <button
+                class="dock-splitter-toggle"
+                type="button"
+                :title="getSplitterSideTitle(index, side)"
+                :data-cy="`dock-splitter-toggle-${side}-${node.id}-${index}`"
+                @click.stop="toggleChildCollapsedFromSplitter(index, side)"
+              >
+                {{ getSplitterSideToggleLabel(index, side) }}
+              </button>
+              <div v-if="getSplitterHiddenTab(index, side)" class="dock-splitter-tab-menu">
+                <button
+                  class="dock-splitter-tab-menu-trigger"
+                  type="button"
+                  draggable="true"
+                  :title="`Actions for ${getSplitterHiddenTabTitle(index, side)}; drag to move`"
+                  :aria-label="`Actions for hidden tab ${getSplitterHiddenTabTitle(index, side)}; drag to move`"
+                  @dragstart="onSplitterTabDragStart($event, index, side)"
+                  @dragend="stopTabDrag"
+                >
+                  <q-icon name="more_horiz" />
+                  <span class="dock-tab-drag-image" aria-hidden="true">
+                    {{ getSplitterHiddenTabTitle(index, side) }}
+                  </span>
+                </button>
+                <q-menu>
+                  <q-list dense class="dock-hidden-tab-menu">
+                    <q-item-label header>
+                      {{ getSplitterHiddenTabTitle(index, side) }}
+                    </q-item-label>
+                    <q-item v-close-popup clickable @click="showSplitterHiddenTab(index, side)">
+                      <q-item-section avatar><q-icon name="tab" /></q-item-section>
+                      <q-item-section>Show tab bar</q-item-section>
+                    </q-item>
+                    <template v-if="canCloseSplitterHiddenTab(index, side)">
+                      <q-separator />
+                      <q-item
+                        v-close-popup
+                        clickable
+                        class="text-negative"
+                        @click="closeSplitterHiddenTab(index, side)"
+                      >
+                        <q-item-section avatar><q-icon name="close" /></q-item-section>
+                        <q-item-section>Close tab</q-item-section>
+                      </q-item>
+                    </template>
+                  </q-list>
+                </q-menu>
+              </div>
+            </template>
           </div>
           <div
             v-if="isResizing && activeSplitterIndex === index && getSplitterSnapHintLabel(index)"
@@ -302,9 +398,11 @@ import {
   addViewToLeaf,
   applyDockDrop,
   clamp,
+  closeDockView,
   findLeaf,
   getLeafRestoreSize,
   MIN_RESTORE_WEIGHT,
+  splitDockView,
   updateLeaf,
   viewIds,
   type DockNode,
@@ -321,6 +419,7 @@ export interface DockViewAddOption {
 
 export interface AddViewContext {
   leafId: string
+  position: DockPosition
   currentViews: string[]
   availableViewTypes: string[]
   selectedOptionId?: string
@@ -380,6 +479,7 @@ const {
   tabTitleTooltips = {},
   tabPosition = 'top',
   enableTabDocking = false,
+  revealAutoHiddenTab = false,
   canDockView = undefined,
   addViewOptions = undefined,
   dockRootController = undefined,
@@ -409,6 +509,8 @@ const {
   tabPosition?: 'top' | 'left'
   /** Enable mouse-driven tab reordering and pane docking. */
   enableTabDocking?: boolean
+  /** Show a border menu for managing an auto-hidden single tab. */
+  revealAutoHiddenTab?: boolean
   /** Host policy for accepting a proposed tab drop. */
   canDockView?: ((context: DockViewDropContext) => boolean) | undefined
   /** Optional built-in add-tab menu entries. */
@@ -480,26 +582,6 @@ const setActiveView = (n: DockNode, index: number): DockNode => {
   const clamped = clamp(index, 0, n.views.length - 1)
   if (clamped === (n.activeViewIndex ?? 0)) return n
   return { ...n, activeViewIndex: clamped }
-}
-
-const closeView = (n: DockNode, viewId: string): DockNode => {
-  if (n.type !== 'leaf' || !n.views) return n
-
-  const idx = n.views.indexOf(viewId)
-  if (idx === -1) return n
-
-  const views = n.views.filter((_, i) => i !== idx)
-  let active = n.activeViewIndex ?? 0
-
-  if (views.length === 0) {
-    active = 0
-  } else if (active >= views.length) {
-    active = views.length - 1
-  } else if (idx <= active && active > 0) {
-    active = active - 1
-  }
-
-  return { ...n, views, activeViewIndex: active }
 }
 
 /**
@@ -625,23 +707,32 @@ const hasUniqueViewIds = (): boolean => {
   return new Set(ids).size === ids.length
 }
 
+const canDragLeafView = (leafId: string, viewId: string): boolean => {
+  const leaf = findLeaf(dockRoot.node.value, leafId)
+  return (
+    enableTabDocking &&
+    leaf !== undefined &&
+    leaf.collapsed !== true &&
+    leaf.size !== 0 &&
+    hasUniqueViewIds() &&
+    (leaf.views ?? []).includes(viewId)
+  )
+}
+
 const canDragView = (viewId: string): boolean =>
-  enableTabDocking &&
-  !isCollapsed.value &&
-  hasUniqueViewIds() &&
-  viewIds(dockRoot.node.value).includes(viewId)
+  node.value.type === 'leaf' && canDragLeafView(node.value.id, viewId)
 
 const stopTabDrag = () => {
   dockRoot.drag.value = null
   dockRoot.preview.value = null
 }
 
-const onTabDragStart = (event: DragEvent, viewId: string, sourceIndex: number) => {
-  if (!canDragView(viewId) || node.value.type !== 'leaf') {
+const startTabDrag = (event: DragEvent, leafId: string, viewId: string, sourceIndex: number) => {
+  if (!canDragLeafView(leafId, viewId)) {
     event.preventDefault()
     return
   }
-  dockRoot.drag.value = { viewId, sourceLeafId: node.value.id, sourceIndex }
+  dockRoot.drag.value = { viewId, sourceLeafId: leafId, sourceIndex }
   event.dataTransfer?.setData('text/x-taskyon-dock-view', dockRoot.id)
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
@@ -650,6 +741,14 @@ const onTabDragStart = (event: DragEvent, viewId: string, sourceIndex: number) =
     )
     if (dragImage) event.dataTransfer.setDragImage(dragImage, 12, 12)
   }
+}
+
+const onTabDragStart = (event: DragEvent, viewId: string, sourceIndex: number) => {
+  if (node.value.type !== 'leaf') {
+    event.preventDefault()
+    return
+  }
+  startTabDrag(event, node.value.id, viewId, sourceIndex)
 }
 
 const dropContext = (preview: DockDropPreview): DockViewDropContext | undefined => {
@@ -787,8 +886,12 @@ const getTabDropClass = (index: number): string => {
   return ''
 }
 
-const addViewContext = (selectedOptionId?: string): AddViewContext => ({
+const addViewContext = (
+  selectedOptionId?: string,
+  position: DockPosition = 'tab',
+): AddViewContext => ({
   leafId: node.value.id,
+  position,
   currentViews: node.value.views ?? [],
   availableViewTypes: dockRoot.availableViewTypes,
   ...(selectedOptionId ? { selectedOptionId } : {}),
@@ -803,22 +906,56 @@ const resolvedAddViewOptions = computed(() => {
 })
 
 const showAddViewMenu = ref(false)
+const splitterSides = ['left', 'right'] as const
+const splitPlacements = [
+  { position: 'left', label: 'Split left', icon: 'west' },
+  { position: 'right', label: 'Split right', icon: 'east' },
+  { position: 'top', label: 'Split above', icon: 'north' },
+  { position: 'bottom', label: 'Split below', icon: 'south' },
+] as const
 
-const addViewToRootLeaf = (leafId: string, result: AddViewResult) => {
+const setAutoHideSingleTab = (enabled: boolean) => {
+  if (node.value.type !== 'leaf') return
+  node.value = { ...node.value, showTabs: enabled ? 'auto' : 'always' }
+}
+
+const setSmartTabs = (enabled: boolean) => {
+  if (node.value.type !== 'leaf') return
+  node.value = { ...node.value, tabLayout: enabled ? 'smart' : 'scroll' }
+}
+
+const setVerticalTabs = (enabled: boolean) => {
+  if (node.value.type !== 'leaf') return
+  node.value = { ...node.value, tabPosition: enabled ? 'left' : 'top' }
+}
+
+const addViewToRootLeaf = (
+  leafId: string,
+  result: AddViewResult,
+  position: DockPosition = 'tab',
+) => {
   if (viewIds(dockRoot.node.value).includes(result.viewId)) return
+  if (position !== 'tab') {
+    dockRoot.node.value = splitDockView(dockRoot.node.value, {
+      targetLeafId: leafId,
+      viewId: result.viewId,
+      position,
+    })
+    return
+  }
   dockRoot.node.value = updateLeaf(dockRoot.node.value, leafId, (leaf) =>
     addViewToLeaf(leaf, result.viewId, result.makeActive ?? true),
   )
 }
 
-const onAddViewOptionClick = (option: DockViewAddOption) => {
+const onAddViewOptionClick = (option: DockViewAddOption, position: DockPosition = 'tab') => {
   if (node.value.type !== 'leaf') return
   if (option.viewId) {
-    addViewToRootLeaf(node.value.id, { viewId: option.viewId, makeActive: true })
+    addViewToRootLeaf(node.value.id, { viewId: option.viewId, makeActive: true }, position)
     return
   }
-  emit('add-view', addViewContext(option.id), (result) => {
-    if (result?.viewId) addViewToRootLeaf(node.value.id, result)
+  emit('add-view', addViewContext(option.id, position), (result) => {
+    if (result?.viewId) addViewToRootLeaf(node.value.id, result, position)
   })
 }
 
@@ -832,6 +969,14 @@ const resolvedTabPosition = computed(() => node.value.tabPosition ?? tabPosition
 
 const isLeftTabsLayout = computed(
   () => node.value.type === 'leaf' && resolvedTabPosition.value === 'left' && !isCollapsed.value,
+)
+
+const smartTabsEnabled = computed(
+  () =>
+    node.value.type === 'leaf' &&
+    node.value.tabLayout === 'smart' &&
+    !isCollapsed.value &&
+    !isLeftTabsLayout.value,
 )
 
 const isCompactTabRail = computed(
@@ -898,16 +1043,29 @@ const onCollapsedTabClick = (index: number) => {
 
 /* ---------- Layout-related computed ---------- */
 
-/** Whether to show the tab header for this leaf node */
-const showTabs = computed(() => {
+const tabDisplayMode = computed(() =>
+  node.value.type === 'leaf' ? (node.value.showTabs ?? 'always') : 'never',
+)
+const showTabItems = computed(() => {
   if (node.value.type === 'container') return false
-  const mode = node.value.showTabs ?? 'always'
+  const mode = tabDisplayMode.value
   if (mode === 'never') return false
   if (mode === 'always') return true
-  // 'auto'
-  const count = node.value.views?.length ?? 0
-  return count > 1
+  if (revealAutoHiddenTab && isDockRoot) return true
+  return (node.value.views?.length ?? 0) > 1
 })
+const showPaneControls = computed(() => tabDisplayMode.value !== 'never')
+const controlsOnly = computed(
+  () => showPaneControls.value && !showTabItems.value && !isCollapsed.value,
+)
+const managedAutoHiddenViewId = computed(() => {
+  if (!revealAutoHiddenTab || !controlsOnly.value || node.value.type !== 'leaf') return undefined
+  const views = node.value.views ?? []
+  return views.length === 1 ? views[0] : undefined
+})
+const showTabHeader = computed(
+  () => showTabItems.value || (controlsOnly.value && !hideTabAdd && !managedAutoHiddenViewId.value),
+)
 
 /** Flex style respecting size / sizeMode */
 const nodeStyle = computed(() => {
@@ -1146,6 +1304,65 @@ const getSplitterSideTitle = (splitterIndex: number, side: 'left' | 'right'): st
   return collapsed ? `Restore ${axis} pane` : `Minimize ${axis} pane`
 }
 
+const getSplitterHiddenTab = (splitterIndex: number, side: 'left' | 'right') => {
+  const current = node.value
+  if (!revealAutoHiddenTab || current.type !== 'container' || !current.children) return undefined
+  const childIndex = side === 'left' ? splitterIndex : splitterIndex + 1
+
+  // A middle pane belongs to the splitter after it; the final pane belongs to the one before it.
+  if (side === 'right' && childIndex !== current.children.length - 1) return undefined
+
+  const child = current.children[childIndex]
+  if (
+    child?.type !== 'leaf' ||
+    child.showTabs !== 'auto' ||
+    child.collapsed === true ||
+    child.size === 0 ||
+    child.views?.length !== 1
+  ) {
+    return undefined
+  }
+  return { leafId: child.id, viewId: child.views[0]! }
+}
+
+const getSplitterHiddenTabTitle = (splitterIndex: number, side: 'left' | 'right'): string => {
+  const hiddenTab = getSplitterHiddenTab(splitterIndex, side)
+  return hiddenTab ? (tabTitles[hiddenTab.viewId] ?? hiddenTab.viewId) : ''
+}
+
+const showSplitterHiddenTab = (splitterIndex: number, side: 'left' | 'right') => {
+  const hiddenTab = getSplitterHiddenTab(splitterIndex, side)
+  if (!hiddenTab) return
+  dockRoot.node.value = updateLeaf(dockRoot.node.value, hiddenTab.leafId, (leaf) => ({
+    ...leaf,
+    showTabs: 'always',
+  }))
+}
+
+const canCloseSplitterHiddenTab = (splitterIndex: number, side: 'left' | 'right'): boolean => {
+  const hiddenTab = getSplitterHiddenTab(splitterIndex, side)
+  return Boolean(hiddenTab && !hideTabClose && !pinnedViews.includes(hiddenTab.viewId))
+}
+
+const closeSplitterHiddenTab = (splitterIndex: number, side: 'left' | 'right') => {
+  const hiddenTab = getSplitterHiddenTab(splitterIndex, side)
+  if (!hiddenTab || !canCloseSplitterHiddenTab(splitterIndex, side)) return
+  dockRoot.node.value = closeDockView(dockRoot.node.value, hiddenTab.leafId, hiddenTab.viewId)
+}
+
+const onSplitterTabDragStart = (
+  event: DragEvent,
+  splitterIndex: number,
+  side: 'left' | 'right',
+) => {
+  const hiddenTab = getSplitterHiddenTab(splitterIndex, side)
+  if (!hiddenTab) {
+    event.preventDefault()
+    return
+  }
+  startTabDrag(event, hiddenTab.leafId, hiddenTab.viewId, 0)
+}
+
 const getSplitterSnapClass = (splitterIndex: number): string => {
   if (!isResizing.value || activeSplitterIndex.value !== splitterIndex || !snapSide.value) return ''
   return snapSide.value === 'left' ? 'dock-splitter--snap-left' : 'dock-splitter--snap-right'
@@ -1181,7 +1398,7 @@ const onTabClick = (index: number) => {
 }
 
 const onTabClose = (viewId: string) => {
-  node.value = closeView(node.value, viewId)
+  dockRoot.node.value = closeDockView(dockRoot.node.value, node.value.id, viewId)
 }
 
 /* ---------- Add tab ("+") handlers ---------- */
@@ -1189,7 +1406,7 @@ const onTabClose = (viewId: string) => {
 const onAddTabClick = () => {
   if (node.value.type !== 'leaf') return
 
-  if (resolvedAddViewOptions.value.length > 0) {
+  if (addViewOptions !== undefined) {
     showAddViewMenu.value = true
     return
   }
@@ -1291,7 +1508,7 @@ const onChildViewActivated = (ctx: ViewActivatedContext) => {
 
   /* Horizontal split (vertical splitter line) */
   &.row {
-    width: 8px;
+    width: var(--dock-splitter-size, 8px);
     cursor: col-resize;
     &:hover::before {
       width: 4px;
@@ -1307,7 +1524,7 @@ const onChildViewActivated = (ctx: ViewActivatedContext) => {
 
   /* Vertical split (horizontal splitter line) */
   &.column {
-    height: 8px;
+    height: var(--dock-splitter-size, 8px);
     cursor: row-resize;
     &:hover::before {
       height: 4px;
@@ -1330,15 +1547,22 @@ const onChildViewActivated = (ctx: ViewActivatedContext) => {
 
 .dock-splitter-controls {
   position: absolute;
-  top: 38.2%;
+  top: 50%;
   left: 50%;
   z-index: 2;
   transform: translate(-50%, -50%);
   display: flex;
-  flex-direction: column;
   gap: 2px;
   opacity: 0;
   transition: opacity 0.16s ease;
+}
+
+.dock-splitter.row .dock-splitter-controls {
+  flex-direction: column;
+}
+
+.dock-splitter.column .dock-splitter-controls {
+  flex-direction: row;
 }
 
 .dock-splitter:hover .dock-splitter-controls,
@@ -1347,7 +1571,12 @@ const onChildViewActivated = (ctx: ViewActivatedContext) => {
   opacity: 1;
 }
 
-.dock-splitter-toggle {
+.dock-splitter-tab-menu {
+  display: flex;
+}
+
+.dock-splitter-toggle,
+.dock-splitter-tab-menu-trigger {
   width: 14px;
   height: 14px;
   z-index: 2;
@@ -1371,12 +1600,22 @@ const onChildViewActivated = (ctx: ViewActivatedContext) => {
     filter 0.16s ease;
 }
 
-.dock-splitter-toggle:hover {
+.dock-splitter-toggle:hover,
+.dock-splitter-tab-menu-trigger:hover,
+.dock-splitter-tab-menu-trigger:focus-visible {
   opacity: 1;
   filter: brightness(1.12);
   background: rgba(30, 30, 30, 0.75);
   border-color: rgba(255, 255, 255, 0.85);
   color: white;
+}
+
+.dock-splitter-tab-menu-trigger {
+  cursor: grab;
+}
+
+.dock-splitter-tab-menu-trigger:active {
+  cursor: grabbing;
 }
 
 .dock-splitter-hint {
@@ -1450,6 +1689,40 @@ const onChildViewActivated = (ctx: ViewActivatedContext) => {
     min-width: var(--dock-tab-rail-compact-width, 44px);
     overflow: visible;
   }
+}
+
+.dock-tabs-header--controls-only {
+  position: absolute;
+  top: 2px;
+  right: 28px;
+  z-index: 5;
+  width: auto;
+  min-width: 24px;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+}
+
+.dock-tabs-header--smart:not(.dock-tabs-header--controls-only) {
+  --dock-smart-tab-row-height: 32px;
+
+  flex-wrap: wrap;
+  align-content: flex-start;
+  max-height: calc(var(--dock-smart-tab-row-height) * 3);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.dock-tabs-header--smart:not(.dock-tabs-header--controls-only) .dock-tab {
+  box-sizing: border-box;
+  flex: 1 1 0;
+  min-width: var(--dock-smart-tab-min-width, 88px);
+  max-width: var(--dock-smart-tab-max-width, 180px);
+  height: var(--dock-smart-tab-row-height);
+}
+
+.dock-hidden-tab-menu {
+  min-width: 220px;
 }
 
 /* Individual tab */
@@ -1711,7 +1984,7 @@ const onChildViewActivated = (ctx: ViewActivatedContext) => {
   right: 2px;
   z-index: 6;
   border: none;
-  background: none;
+  background: var(--dock-pane-toggle-background, Canvas);
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;

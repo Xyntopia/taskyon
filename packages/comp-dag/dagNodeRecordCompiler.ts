@@ -297,6 +297,7 @@ export const compileDagNodeRecord = (args: {
     description: args.record.label,
     contentHash: args.record.id,
     version: args.record.version,
+    effect: args.record.effect ?? 'pure',
     localParams: args.record.localParamsSchema,
     outputSchema: args.record.outputSchema,
     hiddenInputs,

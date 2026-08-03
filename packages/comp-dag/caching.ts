@@ -43,7 +43,7 @@ const inMemoryBackend: DagStorageBackend = {
 
   writeArtifact(value: unknown) {
     const json = JSON.stringify(value)
-    const hash = canonicalHash(json)
+    const hash = canonicalHash(value)
     artifactStore.set(hash, json)
     return hash
   },

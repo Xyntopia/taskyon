@@ -11,6 +11,7 @@
     :min-mode="minMode"
     :expert-mode="expertMode"
     :show-web-search="showWebSearch"
+    :show-assistant-identity="showAssistantIdentity"
     :presentation="presentation"
     :data-cy="chatDataCy"
     :data-runtime-status="status"
@@ -32,6 +33,7 @@ const {
   minMode = false,
   expertMode = false,
   showWebSearch = false,
+  showAssistantIdentity = true,
   chatDataCy = undefined,
   presentation = {},
 } = defineProps<{
@@ -44,6 +46,7 @@ const {
   minMode?: boolean | undefined
   expertMode?: boolean | undefined
   showWebSearch?: boolean | undefined
+  showAssistantIdentity?: boolean | undefined
   chatDataCy?: string | undefined
   presentation?: Partial<TaskChatPresentation> | undefined
 }>()

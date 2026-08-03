@@ -109,10 +109,10 @@ onBeforeUnmount(() => {
   top: 10px;
   right: 10px;
   z-index: 4;
-  border: 1px solid rgba(186, 230, 253, 0.4);
+  border: 1px solid var(--graph-control-border, rgba(186, 230, 253, 0.4));
   border-radius: 8px;
-  background: rgba(8, 47, 73, 0.8);
-  color: rgba(224, 242, 254, 0.98);
+  background: var(--graph-control-background, rgba(8, 47, 73, 0.8));
+  color: var(--graph-control-color, rgba(224, 242, 254, 0.98));
   font-size: 12px;
   font-weight: 600;
   padding: 6px 10px;

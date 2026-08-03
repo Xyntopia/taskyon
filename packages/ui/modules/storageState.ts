@@ -1,5 +1,18 @@
 import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
-import { computed, isReactive, isRef, toRaw, watch } from 'vue'
+import { isReactive, isRef, watch } from 'vue'
+
+const snapshotStorageValue = (value: unknown): unknown => {
+  const resolved = isRef(value) ? value.value : value
+  if (Array.isArray(resolved)) return resolved.map(snapshotStorageValue)
+  if (resolved instanceof Date) return new Date(resolved)
+  if (resolved instanceof Uint8Array) return new Uint8Array(resolved)
+  if (resolved && typeof resolved === 'object') {
+    return Object.fromEntries(
+      Object.entries(resolved).map(([key, entry]) => [key, snapshotStorageValue(entry)]),
+    )
+  }
+  return resolved
+}
 
 const applyStoredState = (state: Record<string, unknown>, stored: Record<string, unknown>) => {
   for (const [key, value] of Object.entries(stored)) {
@@ -21,23 +34,20 @@ export const syncStateWithStorageClient = async (
     applyStoredState(state, stored.value as Record<string, unknown>)
   }
 
-  const snapshot = computed(() => {
-    const values: Record<string, unknown> = {}
-    for (const [key, value] of Object.entries(toRaw(state))) {
-      values[key] = toRaw(isRef(value) ? value.value : value)
-    }
-    return values
-  })
   let write = Promise.resolve()
   const stop = watch(
-    snapshot,
+    () =>
+      Object.fromEntries(
+        Object.entries(state).map(([key, value]) => [key, isRef(value) ? value.value : value]),
+      ),
     (value) => {
+      const snapshot = snapshotStorageValue(value)
       write = write
         .catch((error) => console.error('Failed to persist state through StorageClient', error))
-        .then(async () => storageClient.set({ ...location, value }))
+        .then(async () => storageClient.set({ ...location, value: snapshot }))
         .then(() => undefined)
     },
-    { deep: true },
+    { deep: true, flush: 'sync' },
   )
   return { stop, flush: async () => await write }
 }

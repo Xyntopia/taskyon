@@ -14,6 +14,13 @@
 import type { DagStorageBackend } from './caching.ts'
 import { canonicalHash, getDefaultInMemoryBackend, type Hash } from './caching.ts'
 import {
+  createSourceLockManifest,
+  shouldRefreshSource,
+  type SourceManifestRepository,
+  type SourceUpdatePolicy,
+} from './sourceManifest.ts'
+import { assertDagNodeEffectSource } from './dagNodeEffectCheck.ts'
+import {
   combineObjectSchemas,
   emptyObjectSchema,
   objectSchema,
@@ -38,6 +45,7 @@ export interface NodeContext {
 
 type CacheRule = 'NoCache' | 'ReadOnly' | 'WriteOnly' | 'ReadWrite'
 type ArtifactScope = 'Environment' | 'ModelState' | 'Debug'
+export type DagNodeEffect = 'pure' | 'source'
 
 interface NodePolicy {
   cache: CacheRule
@@ -50,6 +58,14 @@ export interface EngineConfig {
   execution?: DagExecutionConfig
   parameterBindings?: Record<string, Record<string, unknown>>
   sliceExecution?: DagSliceExecutionPolicy
+  sourceExecution?: {
+    repository: SourceManifestRepository
+    projectId?: string
+    defaultPolicy: SourceUpdatePolicy
+    nodePolicies?: Record<string, SourceUpdatePolicy>
+    refreshedAcquisitionKeys: Set<Hash>
+    forceNodeNames?: ReadonlySet<string>
+  }
 }
 
 export type DagExecutionMode = 'worker' | 'local'
@@ -316,6 +332,7 @@ export interface DagNode<
   description?: string | undefined
   contentHash?: Hash | undefined
   version: number
+  effect: DagNodeEffect
 
   paramsSchema: PSchema
   outputSchema: OSchema
@@ -355,6 +372,19 @@ function getNodeCodeHash(node: DagNode): Hash {
   // Legacy fallback for code-defined nodes that do not yet provide content identity.
   return canonicalHash(`${node.name}@${node.version}`)
 }
+
+const dagExecutionLogData = (
+  node: DagNode,
+  status: 'running' | 'cached' | 'completed' | 'failed',
+  error?: string,
+) => ({
+  taskyonDag: {
+    nodeId: getNodeCodeHash(node),
+    nodeName: node.name,
+    status,
+    ...(error ? { error } : {}),
+  },
+})
 
 const makeNodeKey = (paramsHash: Hash, nodeCodeHash: Hash): Hash =>
   canonicalHash({ node: nodeCodeHash, params: paramsHash })
@@ -1388,6 +1418,7 @@ export function createNode<
   description?: string
   contentHash?: Hash
   version: number
+  effect?: DagNodeEffect
 
   hiddenInputs?: HiddenInputs
   exposedInputs?: ExposedInputs
@@ -1418,6 +1449,7 @@ export function createNode<
     description,
     contentHash,
     version,
+    effect = 'pure',
     exposedInputs,
     hiddenInputs,
     localParams,
@@ -1426,6 +1458,8 @@ export function createNode<
     run,
   } = args
 
+  assertDagNodeEffectSource(effect, run.toString())
+
   const paramsSchema = combinedParams(
     localParams ?? emptyObjectSchema,
     exposedInputs ? schemaFromInputs(exposedInputs) : emptyObjectSchema,
@@ -1433,7 +1467,7 @@ export function createNode<
 
   const defaultPolicy: NodePolicy = policy ?? {
     cache: 'ReadWrite',
-    scope: 'Debug',
+    scope: effect === 'source' ? 'Environment' : 'Debug',
   }
 
   defaultPolicyRegistry[name] = defaultPolicy
@@ -1447,6 +1481,7 @@ export function createNode<
     ...(description ? { description } : {}),
     ...(contentHash ? { contentHash } : {}),
     version,
+    effect,
     paramsSchema,
     outputSchema,
     defaultPolicy,
@@ -1971,11 +2006,42 @@ export async function executeNode(
   const key = makeNodeKey(paramsHash, nodeCodeHash)
 
   const policy = engineConfig.nodePolicies?.[node.name] ?? node.defaultPolicy
+  const sourceExecution = node.effect === 'source' ? engineConfig.sourceExecution : undefined
+  const acquisitionKey = sourceExecution
+    ? canonicalHash({ kind: 'taskyon.sourceAcquisition.v1', nodeHash: nodeCodeHash, paramsHash })
+    : undefined
 
-  if (policy.cache === 'ReadOnly' || policy.cache === 'ReadWrite') {
+  if (sourceExecution && acquisitionKey) {
+    const pinnedId = sourceExecution.projectId
+      ? await sourceExecution.repository.getProjectPin(
+          sourceExecution.projectId,
+          node.name,
+          acquisitionKey,
+        )
+      : null
+    const manifestId = pinnedId ?? (await sourceExecution.repository.getCurrent(acquisitionKey))
+    const manifest = manifestId ? await sourceExecution.repository.getManifest(manifestId) : null
+    const refresh = shouldRefreshSource({
+      policy: sourceExecution.nodePolicies?.[node.name] ?? sourceExecution.defaultPolicy,
+      manifest,
+      nowMs: ctx.nowUtcMs,
+      force:
+        sourceExecution.forceNodeNames?.has(node.name) === true &&
+        !sourceExecution.refreshedAcquisitionKeys.has(acquisitionKey),
+      refreshedInRun: sourceExecution.refreshedAcquisitionKeys.has(acquisitionKey),
+    })
+    if (!refresh && manifest) {
+      const value = await backend.readArtifact(manifest.artifactHash)
+      ctx.log('DAG source loaded from manifest', dagExecutionLogData(node, 'cached'))
+      return { value, artifactHash: manifest.artifactHash }
+    }
+  }
+
+  if (!sourceExecution && (policy.cache === 'ReadOnly' || policy.cache === 'ReadWrite')) {
     const cached = await backend.getCacheEntry(key)
     if (cached) {
       const value = await backend.readArtifact(cached.artifact)
+      ctx.log('DAG node loaded from cache', dagExecutionLogData(node, 'cached'))
       return { value, artifactHash: cached.artifact }
     }
   }
@@ -2006,13 +2072,45 @@ export async function executeNode(
     ...addInputs(node.exposedInputs, true),
   }
 
-  const rawValue = await Promise.resolve(node._runImpl(validatedParams, use, ctx))
-  const value = parseSchema(node.outputSchema, rawValue)
-  const artifactHash = await backend.writeArtifact(value)
+  ctx.log('DAG node started', dagExecutionLogData(node, 'running'))
+  let value: unknown
+  let artifactHash: Hash
+  try {
+    const rawValue = await Promise.resolve(node._runImpl(validatedParams, use, ctx))
+    value = parseSchema(node.outputSchema, rawValue)
+    artifactHash = await backend.writeArtifact(value)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    ctx.log('DAG node failed', dagExecutionLogData(node, 'failed', message))
+    throw error
+  }
 
   if (policy.cache === 'WriteOnly' || policy.cache === 'ReadWrite') {
     await backend.setCacheEntry(key, { artifact: artifactHash })
   }
+
+  if (sourceExecution && acquisitionKey) {
+    const manifest = createSourceLockManifest({
+      nodeHash: nodeCodeHash,
+      acquisitionKey,
+      paramsHash,
+      artifactHash,
+      createdAtMs: ctx.nowUtcMs,
+    })
+    await sourceExecution.repository.putManifest(manifest)
+    await sourceExecution.repository.setCurrent(acquisitionKey, manifest.id)
+    if (sourceExecution.projectId) {
+      await sourceExecution.repository.setProjectPin(
+        sourceExecution.projectId,
+        node.name,
+        acquisitionKey,
+        manifest.id,
+      )
+    }
+    sourceExecution.refreshedAcquisitionKeys.add(acquisitionKey)
+  }
+
+  ctx.log('DAG node completed', dagExecutionLogData(node, 'completed'))
 
   return { value, artifactHash }
 }
