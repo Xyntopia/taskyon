@@ -14,7 +14,7 @@
     "@taskyon/taskyon": "workspace:*",
     "@taskyon/ui": "workspace:*",
     "@vueuse/core": "^14.2.1",
-    "rumoca-full-web": "npm:@cognipilot/rumoca@^0.9.8"
+    "rumoca-full-web": "npm:@cognipilot/rumoca@^0.9.20"
   },
   "peerDependencies": {
     "quasar": "^2.16.0",

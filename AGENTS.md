@@ -158,7 +158,7 @@ Read every additional policy matching the work:
 | Vue, UI state, routes, styling, or user interaction                                                     | `policies/frontend.md`                         |
 | `tycli` implementation, debugging, or autonomous evaluation                                             | `policies/tycli-development.md`                |
 | Modelica compiler, generated code, templates, runtime, libraries, or simulation                         | `policies/modelica-development.md`             |
-| Rumoca source, semantics, tests, packaging, or pinned revision                                          | `policies/rumoca-development.md`               |
+| Any Rumoca work, including integration upgrades and comparison runs                                     | `policies/rumoca-development.md`               |
 
 Read multiple policies when a change crosses multiple boundaries. A P2P DAG cache, for example,
 requires the protocol, storage/security, dependency, and testing policies.

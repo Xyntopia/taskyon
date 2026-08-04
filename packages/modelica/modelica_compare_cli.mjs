@@ -12,7 +12,7 @@ import { strFromU8, unzipSync } from 'fflate'
 
 const SCRIPT_PATH = new URL(import.meta.url).pathname
 const SCRIPT_DIR = dirname(SCRIPT_PATH)
-const PROJECT_ROOT = resolve(SCRIPT_DIR, '../../..')
+const PROJECT_ROOT = resolve(SCRIPT_DIR, '../..')
 const TMP_ROOT = join(PROJECT_ROOT, '.tmp')
 const OMC_CACHE_DIR = join(TMP_ROOT, 'modelica-omc-cache')
 const RUN_CACHE_DIR = join(TMP_ROOT, 'modelica-compare')

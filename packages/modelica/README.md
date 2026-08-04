@@ -349,17 +349,21 @@ Build the Rumoca npm dev artifact first, then install dependencies:
 ```bash
 set -euo pipefail
 
-cd packages/rumoca/packaging/npm
-npm run build:dev
-cd /workspace
+cd packages/rumoca/packages/rumoca
+npm run build:dev:full-web
+cd ../../../..
 yarn install
 ```
 
 Notes:
 
-- `npm run build:dev` produces the local package under `packages/rumoca/pkg/dev-core`.
+- `npm run build:dev:full-web` produces the browser compiler plus Rumoca's native simulation
+  surface under `packages/rumoca/packages/rumoca/dist/dev-full-web`.
+- Use the narrower `build:dev:core` variant only when native simulation is deliberately out of
+  scope.
 - For normal usage we install the production Rumoca package from npm.
-- For this testing phase we are temporarily pointing to the local `pkg` output directory; this temporary local linkage should be reverted after testing/validation.
+- For local compiler testing, temporarily point `rumoca-full-web` at
+  `file:../rumoca/packages/rumoca/dist/dev-full-web`; revert that linkage after validation.
 
 3. If solving/runtime fails, isolate via generated JS.
 

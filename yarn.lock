@@ -4154,7 +4154,7 @@ __metadata:
     "@taskyon/taskyon": "workspace:*"
     "@taskyon/ui": "workspace:*"
     "@vueuse/core": "npm:^14.2.1"
-    rumoca-full-web: "npm:@cognipilot/rumoca@^0.9.8"
+    rumoca-full-web: "npm:@cognipilot/rumoca@^0.9.20"
   peerDependencies:
     quasar: ^2.16.0
     vue: ^3.4.0
@@ -15036,10 +15036,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rumoca-full-web@npm:@cognipilot/rumoca@^0.9.8":
-  version: 0.9.8
-  resolution: "@cognipilot/rumoca@npm:0.9.8"
-  checksum: 10c0/41999b3af58833c59b5baf554605afe0923ee63e767bb2196d01217ca78a258a4ce1558a1af2eb0bbcd9b6a0b62e0156ca13f10f90013542864291d8e78a8d49
+"rumoca-full-web@npm:@cognipilot/rumoca@^0.9.20":
+  version: 0.9.20
+  resolution: "@cognipilot/rumoca@npm:0.9.20"
+  checksum: 10c0/795489e73fb92ec32ac6956d3d59d139ad87d9c451cc2c5bbd4e780428346300c0216eec24dbb922fde1b8eb591d6ad97271ffb2e673cf4f058f1a62c8b01192
   languageName: node
   linkType: hard
 
