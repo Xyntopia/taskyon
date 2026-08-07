@@ -34,15 +34,20 @@ function parseIssueSelectionInteraction(payload: unknown): IssueSelectionInterac
   }
 }
 
-const getGitlabInfo = createTool({
+export const getGitlabInfo = createTool({
   name: 'getGitlabInfo',
-  description: 'Fetch selected parts of your GitLab data (profile, projects, groups).',
+  description: 'Read GitLab profile, projects, groups, or recent issues from a specific project.',
   longDescription: `Use boolean flags to choose which pieces to retrieve. If none are set, only your profile is returned.
 
   Flags:
   - includeProfile (default: true)
   - includeProjects (default: false)
   - includeGroups (default: false)
+  - includeIssues (default: false; requires projectPath)
+
+  For recent project issues, set includeProfile to false, includeIssues to true, and pass a
+  namespace/project path such as "xyntopia/taskyon". issueLimit defaults to 10 and issueState
+  defaults to "all".
 
   You can still pass { forceLogin: true } to drop the old token and re-authenticate.`,
   parameters: {
@@ -67,75 +72,137 @@ const getGitlabInfo = createTool({
         description: 'Whether to fetch your groups',
         default: false,
       },
+      includeIssues: {
+        type: 'boolean',
+        description: 'Whether to fetch recent issues for projectPath',
+        default: false,
+      },
+      projectPath: {
+        type: 'string',
+        description: 'GitLab namespace/project path used when includeIssues is true',
+      },
+      issueLimit: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 100,
+        description: 'Maximum number of recent issues to return',
+        default: 10,
+      },
+      issueState: {
+        type: 'string',
+        enum: ['opened', 'closed', 'all'],
+        description: 'Issue state to return',
+        default: 'all',
+      },
     },
     additionalProperties: false,
-  },
-  function: async (
-    { forceLogin = false, includeProfile = true, includeProjects = false, includeGroups = false },
-    ctx,
-  ) => {
-    // 1) handle auth
-    const GITLAB_BASE = 'https://gitlab.com/api/v4'
+  } as const satisfies JSONSchema7,
+  code: `async ({
+    forceLogin = false,
+    includeProfile = true,
+    includeProjects = false,
+    includeGroups = false,
+    includeIssues = false,
+    projectPath,
+    issueLimit = 10,
+    issueState = 'all',
+  }, ctx) => {
+    const gitlabBase = 'https://gitlab.com/api/v4'
     const credsString = await ctx.getSecret('oauth-creds', false)
-    let TOKEN = null
-    if (credsString) {
-      const oldCreds = JSON.parse(credsString) as OAuthCredentials
-      const refreshedCreds = await useRefreshTokenIfExpired(oldCreds, {
-        clientId: OAUTH_PROVIDERS.gitlab.clientId,
-        tokenUrl: OAUTH_PROVIDERS.gitlab.TokenUrl,
-      })
-      TOKEN = refreshedCreds?.access_token
+    const credentials = credsString ? JSON.parse(credsString) : null
+    const token = typeof credentials?.access_token === 'string' ? credentials.access_token : null
+    const expiresAt =
+      Number.isFinite(credentials?.created_at) && Number.isFinite(credentials?.expires_in)
+        ? credentials.created_at + Math.max(0, credentials.expires_in - 300) * 1000
+        : null
+    const tokenExpired = expiresAt !== null && Date.now() >= expiresAt
+    const continuationArguments = {
+      forceLogin: false,
+      includeProfile,
+      includeProjects,
+      includeGroups,
+      includeIssues,
+      ...(projectPath ? { projectPath } : {}),
+      issueLimit,
+      issueState,
     }
-
-    if (!TOKEN || forceLogin) {
-      return ctx.createSubtasksResult([
-        [
-          toolCall({
-            name: 'ensureOauthLogin',
-            arguments: {
-              oauthURL: OAUTH_PROVIDERS.gitlab.authUrl,
-              clientId: OAUTH_PROVIDERS.gitlab.clientId,
-              tokenUrl: OAUTH_PROVIDERS.gitlab.TokenUrl,
-              scope: 'read_user read_api',
-              toolId: ctx.toolId,
-            },
-          }),
-          toolCall({ name: 'getGitlabInfo', arguments: {} }),
-        ],
-      ])
-    }
-
-    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` }
-    const data: Record<string, unknown> = {}
-
-    // 2) conditional fetches
-    if (includeProfile) {
-      const res = await fetch(`${GITLAB_BASE}/user`, { headers })
-      data.profile = await res.json()
-    }
-    if (includeProjects) {
-      const res = await fetch(`${GITLAB_BASE}/projects?membership=true&per_page=100`, { headers })
-      const projInfo = (await res.json()) as Record<string, unknown>[]
-      data.projects = projInfo.map((proj) =>
-        Object.fromEntries(
-          ['id', 'name', 'description', 'web_url', 'star_count'].map((k) => [k, proj[k]]),
-        ),
-      )
-    }
-    if (includeGroups) {
-      const res = await fetch(`${GITLAB_BASE}/groups?per_page=100`, { headers })
-      data.groups = await res.json()
-    }
-
-    return ctx.createSubtasksResult([
-      [
-        {
-          role: 'assistant',
-          content: { type: 'structured', data },
+    const loginContinuation = [[
+      toolCall({
+        name: 'ensureOauthLogin',
+        arguments: {
+          oauthURL: '${OAUTH_PROVIDERS.gitlab.authUrl}',
+          clientId: '${OAUTH_PROVIDERS.gitlab.clientId}',
+          tokenUrl: '${OAUTH_PROVIDERS.gitlab.TokenUrl}',
+          scope: 'read_user read_api',
         },
-      ],
-    ])
-  },
+      }),
+      toolCall({ name: 'getGitlabInfo', arguments: continuationArguments }),
+    ]]
+
+    if (!token || tokenExpired || forceLogin) {
+      return ctx.createSubtasksResult(loginContinuation)
+    }
+    if (includeIssues && !projectPath) {
+      throw new Error('projectPath is required when includeIssues is true')
+    }
+
+    const requests = []
+    if (includeProfile) requests.push({ key: 'profile', path: '/user' })
+    if (includeProjects) {
+      requests.push({ key: 'projects', path: '/projects?membership=true&per_page=100' })
+    }
+    if (includeGroups) requests.push({ key: 'groups', path: '/groups?per_page=100' })
+    if (includeIssues) {
+      const query =
+        'per_page=' + issueLimit + '&order_by=created_at&sort=desc&state=' + issueState
+      requests.push({
+        key: 'issues',
+        path: '/projects/' + encodeURIComponent(projectPath) + '/issues?' + query,
+      })
+    }
+
+    const headers = { Accept: 'application/json', Authorization: 'Bearer ' + token }
+    const data = {}
+    for (const request of requests) {
+      const response = await fetch(gitlabBase + request.path, { headers })
+      if (response.status === 401) {
+        return ctx.createSubtasksResult(loginContinuation)
+      }
+      if (!response.ok) {
+        const detail = (await response.text()).slice(0, 1000)
+        throw new Error(
+          'GitLab request failed (' + response.status + ' ' + response.statusText + ')' +
+            (detail ? ': ' + detail : ''),
+        )
+      }
+      const result = await response.json()
+      if (request.key === 'projects') {
+        data.projects = result.map((project) => ({
+          id: project.id,
+          name: project.name,
+          description: project.description,
+          web_url: project.web_url,
+          star_count: project.star_count,
+        }))
+      } else if (request.key === 'issues') {
+        data.issues = result.map((issue) => ({
+          iid: issue.iid,
+          title: issue.title,
+          state: issue.state,
+          web_url: issue.web_url,
+          created_at: issue.created_at,
+          updated_at: issue.updated_at,
+          author: issue.author
+            ? { username: issue.author.username, name: issue.author.name }
+            : null,
+        }))
+      } else {
+        data[request.key] = result
+      }
+    }
+
+    return data
+  }`,
 })
 
 /**
@@ -186,6 +253,7 @@ The tool never stores content server-side; everything runs client-side in the Ta
     additionalProperties: false,
   } as const satisfies JSONSchema7,
   function: async ({ issuelist, project }, ctx) => {
+    if (!ctx.fetch) throw new Error('GitLab access requires the mediated fetch capability.')
     const GITLAB_BASE = 'https://gitlab.com/api/v4'
     const credsString = await ctx.getSecret('oauth-creds', false)
     let TOKEN: string | undefined = undefined
@@ -194,6 +262,7 @@ The tool never stores content server-side; everything runs client-side in the Ta
       const refreshedCreds = await useRefreshTokenIfExpired(oldCreds, {
         clientId: OAUTH_PROVIDERS.gitlab.clientId,
         tokenUrl: OAUTH_PROVIDERS.gitlab.TokenUrl,
+        fetch: ctx.fetch,
       })
       TOKEN = refreshedCreds?.access_token
     }
@@ -211,7 +280,6 @@ The tool never stores content server-side; everything runs client-side in the Ta
               clientId: OAUTH_PROVIDERS.gitlab.clientId,
               tokenUrl: OAUTH_PROVIDERS.gitlab.TokenUrl,
               scope: 'api',
-              toolId: ctx.toolId,
             },
           }),
           toolCall({ name: 'issueListGenerator', arguments: { issuelist, project } }),
@@ -265,7 +333,7 @@ The tool never stores content server-side; everything runs client-side in the Ta
         for (const title of issues) {
           if (!issuelist.includes(title)) continue
           try {
-            const res = await fetch(base, {
+            const res = await ctx.fetch(base, {
               method: 'POST',
               headers,
               body: JSON.stringify({ title, description: 'Auto‑generated from Taskyon' }),
@@ -308,7 +376,9 @@ The tool never stores content server-side; everything runs client-side in the Ta
       PHASE 1b — fetch projects & render UI
     ───────────────────────────────────────────────────────────*/
     const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` }
-    const projRes = await fetch(`${GITLAB_BASE}/projects?membership=true&per_page=100`, { headers })
+    const projRes = await ctx.fetch(`${GITLAB_BASE}/projects?membership=true&per_page=100`, {
+      headers,
+    })
     type GitlabProject = { id: number; path_with_namespace: string }
     const projects = ((await projRes.json()) as GitlabProject[])
       .map((p) => ({

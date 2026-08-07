@@ -153,6 +153,24 @@ html.no-ptr
   .object-tree-view
     color: inherit
 
+  .taskyon-capability-dialog
+    border-top: 4px solid var(--taskyon-capability-color)
+    background: linear-gradient(145deg, color-mix(in oklch, var(--taskyon-capability-color) 9%, var(--background-color)), var(--background-color) 42%)
+    box-shadow: 0 18px 52px color-mix(in oklch, var(--taskyon-capability-color) 22%, transparent)
+
+    .q-dialog__title
+      color: var(--taskyon-capability-color)
+      font-weight: 700
+
+    .q-dialog__message
+      line-height: 1.5
+
+  .taskyon-capability-dialog--network-access
+    --taskyon-capability-color: var(--q-info)
+
+  .taskyon-capability-dialog--popup-access
+    --taskyon-capability-color: var(--q-secondary)
+
   .raw-markdown
     white-space: pre-wrap // This will display newlines and wrap text
 
@@ -256,7 +274,6 @@ html.no-ptr
     &.functioncall,
     &.toolresult,
     &.structured,
-    &.tooldefinition,
     &.files,
     &.error
       --task-message-specular: var(--chat-tool-specular)

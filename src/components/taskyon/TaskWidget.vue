@@ -14,6 +14,7 @@
       <div class="row items-center">
         <TaskContentView
           :task="task"
+          :markdown-extensions="taskMarkdownExtensions"
           :expert-mode="state.appConfiguration.expertMode"
           :get-file="getFile"
         />
@@ -216,6 +217,7 @@ import { humanizeError, type FileAttachment, type TaskNode } from '@taskyon/task
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, ref, toRefs } from 'vue'
+import { createTaskMarkdownExtension } from 'src/modules/taskyon/taskMarkdownExtension'
 import TaskField from './TaskField.vue'
 import {
   formatRawConversationDebug,
@@ -251,6 +253,9 @@ const sourceTaskId = computed(() =>
 )
 const loadTaskById = async (taskId: string) =>
   (await tystate.taskyonClient.task.get({ id: taskId })) ?? undefined
+const taskMarkdownExtensions = computed(() => [
+  createTaskMarkdownExtension(loadTaskById, tystate.taskTemplateRenderer.render),
+])
 const taskMeta = tystate.getTaskMetaRef(task.value.id)
 const rawConversationText = computed(() => {
   const debug = getRawConversationDebug(taskMeta.value)

@@ -11,6 +11,8 @@ import type {
   TaskyonMessageType,
   ToolRpcCreateContext,
   ToolBase,
+  ToolIdentity,
+  CapabilityScope,
   Thunk,
   tyPublicApiKeyObject,
   TyTaskStreamData,
@@ -18,6 +20,9 @@ import type {
 import {
   base64ToPublixX25519,
   createClientTool,
+  createCapabilityPolicy,
+  createPersistentTaskTemplateCache,
+  createTaskTemplateRenderer,
   createPortClient,
   createPgLiteTaskManagerStorageService,
   createSubtasksResult,
@@ -32,9 +37,11 @@ import {
   getToolchainProviderProfiles,
   getDatabase,
   getDefaultParametersForTool,
+  generateSecretId,
   isTaskyonKey,
   latestOnly,
   fetchModelsForProvider,
+  findCallingToolReference,
   OAUTH_PROVIDERS,
   randomString,
   registerToolRpcTools,
@@ -74,7 +81,7 @@ import { isBrowserRecordNamespace } from 'src/modules/taskyonStorageNamespaces'
 import { until } from '@vueuse/core'
 import type { JSONSchema7 } from 'json-schema'
 import { defineStore } from 'pinia'
-import { useQuasar } from 'quasar' // load dynamically! :)
+import { Dialog, useQuasar } from 'quasar' // load dynamically! :)
 import { isTauri } from '@tauri-apps/api/core'
 import { freeKey } from 'src/assets/taskyon_free_key'
 import { setColors } from 'src/boot/brand-colors'
@@ -564,8 +571,17 @@ function createTrustedUiToolContext(
   ty: Taskyon,
   taskyonClient: TaskyonClient,
 ): ToolRpcCreateContext {
-  return (call, stopSignal) => {
-    const toolSecretId = call.functionName
+  return async (call, stopSignal) => {
+    const resolved = await taskyonClient.tools.resolve({
+      name: call.functionName,
+      ...(call.toolRevision ? { revision: call.toolRevision } : {}),
+    })
+    if (!resolved) throw new Error(`Registered UI tool not found: ${call.functionName}`)
+    const toolSecretId = await generateSecretId(resolved.identity.revision, resolved.tool)
+    const taskChain = call.taskId ? await taskyonClient.task.getChain({ id: call.taskId }) : []
+    const caller = findCallingToolReference(taskChain, call.functionName)
+    const resolvedCaller = caller ? await taskyonClient.tools.resolve(caller) : null
+    const capabilityOwner = resolvedCaller?.identity ?? resolved.identity
     return {
       getExecutionTaskChain: () => {
         if (!call.taskId) {
@@ -575,6 +591,10 @@ function createTrustedUiToolContext(
         }
         return taskyonClient.task.getChain({ id: call.taskId })
       },
+      getCallingToolId: async () =>
+        resolvedCaller
+          ? await generateSecretId(resolvedCaller.identity.revision, resolvedCaller.tool)
+          : null,
       createSubtasksResult,
       getSecret: async (name, askNew, saveNew = true) =>
         (await ty.getSecret(toolSecretId, name, askNew, saveNew)) ?? null,
@@ -583,9 +603,107 @@ function createTrustedUiToolContext(
       },
       stopSignal,
       toolId: toolSecretId,
+      requestPopup: ({ target }) => authorizeBrowserPopup({ tool: capabilityOwner, target }),
     }
   }
 }
+
+let browserCapabilityPolicy: ReturnType<typeof createCapabilityPolicy> | null = null
+
+function getBrowserCapabilityPolicy() {
+  browserCapabilityPolicy ??= createCapabilityPolicy({
+    storage: {
+      get: (key) => {
+        const decision = localStorage.getItem(key)
+        return Promise.resolve(decision === 'allow' || decision === 'deny' ? decision : null)
+      },
+      set: (key, decision) => {
+        localStorage.setItem(key, decision)
+        return Promise.resolve()
+      },
+      delete: (key) => {
+        localStorage.removeItem(key)
+        return Promise.resolve()
+      },
+      clear: (prefix) => {
+        const matchingKeys = Array.from({ length: localStorage.length }, (_, index) =>
+          localStorage.key(index),
+        ).filter((key): key is string => key?.startsWith(prefix) === true)
+        for (const key of matchingKeys) localStorage.removeItem(key)
+        return Promise.resolve()
+      },
+    },
+    prompt: (request) => {
+      const presentation =
+        request.capability.action === 'fetch'
+          ? {
+              cardClass: 'taskyon-capability-dialog taskyon-capability-dialog--network-access',
+              color: 'info' as const,
+              title: '🌐 Network access request',
+              message: `${request.tool.name} wants to ${request.capability.access} data from ${request.capability.origin}. This permission does not allow the tool to open a browser window.`,
+              onceLabel: 'Allow this network access once',
+              sessionLabel: 'Allow network access this session',
+              permanentLabel: 'Always allow this network access',
+              allowLabel: 'Allow network',
+            }
+          : {
+              cardClass: 'taskyon-capability-dialog taskyon-capability-dialog--popup-access',
+              color: 'secondary' as const,
+              title: '↗ Popup window request',
+              message: `${request.tool.name} wants to open ${request.capability.target.replace(/^origin:/, '')} in a separate browser window. This permission does not grant network access to sandboxed code.`,
+              onceLabel: 'Allow this popup once',
+              sessionLabel: 'Allow popups this session',
+              permanentLabel: 'Always allow this popup',
+              allowLabel: 'Open popup',
+            }
+      return new Promise((resolve) => {
+        let settled = false
+        const finish = (decision: 'allow' | 'deny', scope: CapabilityScope) => {
+          if (settled) return
+          settled = true
+          resolve({ decision, scope })
+        }
+        Dialog.create({
+          class: presentation.cardClass,
+          color: presentation.color,
+          title: presentation.title,
+          message: presentation.message,
+          options: {
+            type: 'radio',
+            model: 'once',
+            items: [
+              { label: presentation.onceLabel, value: 'once' },
+              { label: presentation.sessionLabel, value: 'session' },
+              { label: presentation.permanentLabel, value: 'permanent' },
+            ],
+          },
+          ok: { label: presentation.allowLabel, color: presentation.color },
+          cancel: { label: 'Deny', color: 'negative', flat: true },
+        })
+          .onOk((scope: CapabilityScope) => finish('allow', scope))
+          .onDismiss(() => finish('deny', 'session'))
+      })
+    },
+  })
+  return browserCapabilityPolicy
+}
+
+const authorizeBrowserSandboxFetch = ({
+  tool,
+  capability,
+}: {
+  tool: ToolIdentity
+  capability: { origin: string; access: 'read' | 'write' }
+}) =>
+  getBrowserCapabilityPolicy().authorize({ tool, capability: { action: 'fetch', ...capability } })
+
+const authorizeBrowserPopup = ({
+  tool,
+  target,
+}: {
+  tool: ToolIdentity
+  target: 'custom-html' | `origin:${string}`
+}) => getBrowserCapabilityPolicy().authorize({ tool, capability: { action: 'popup', target } })
 
 function resolveTaskyonKey(args: {
   authToken?: KeyString | undefined
@@ -1203,6 +1321,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         unavailableToolNames: getBrowserUnavailableToolNames(),
         storageClient,
       }),
+    authorizeSandboxFetch: authorizeBrowserSandboxFetch,
+    authorizePopup: authorizeBrowserPopup,
     storage: {
       kind: 'service',
       createService: (port) =>
@@ -1238,6 +1358,39 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     { deep: true },
   )
   const storageClient = runtime.storageClient
+  const templateCacheNamespace = 'taskyon/local/task-template-render/v1'
+  const taskTemplateRenderer = createTaskTemplateRenderer({
+    getTaskById: async (taskId) => await taskyonClient.task.get({ id: taskId }),
+    cache: createPersistentTaskTemplateCache({
+      storage: {
+        get: async (id) => {
+          const value = (await storageClient.get({ namespace: templateCacheNamespace, id })).value
+          if (!value || typeof value !== 'object') return null
+          const accessedAt = Reflect.get(value, 'accessedAt')
+          const cachedValue = Reflect.get(value, 'value')
+          return typeof accessedAt === 'number' && typeof cachedValue === 'string'
+            ? { accessedAt, value: cachedValue }
+            : null
+        },
+        set: async (id, value) => {
+          await storageClient.set({ namespace: templateCacheNamespace, id, value })
+        },
+        delete: async (id) => {
+          await storageClient.delete({ namespace: templateCacheNamespace, id })
+        },
+        list: async () =>
+          (await storageClient.list({ namespace: templateCacheNamespace })).rows.flatMap((row) => {
+            const value = row.data
+            if (!value || typeof value !== 'object') return []
+            const accessedAt = Reflect.get(value, 'accessedAt')
+            const cachedValue = Reflect.get(value, 'value')
+            return typeof accessedAt === 'number' && typeof cachedValue === 'string'
+              ? [{ id: row.id, data: { accessedAt, value: cachedValue } }]
+              : []
+          }),
+      },
+    }),
+  })
   const dagStorageBackend = createStorageDagBackend({
     get: async (namespace, id) => (await storageClient.get({ namespace, id })).value,
     set: async (namespace, id, value) => {
@@ -1710,6 +1863,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     getDeviceId,
     taskyon,
     taskyonClient,
+    taskTemplateRenderer,
     documentationBases,
     documentationReady,
     storageClient,
@@ -1729,6 +1883,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     currentTaskResolutionStatus,
     markTasksPendingCreation,
     conversationHistory,
+    resetCapabilityDecisions: () => getBrowserCapabilityPolicy().reset(),
     ...apiKeyManagement,
     stopWorker,
     taskWorkerWaiting,

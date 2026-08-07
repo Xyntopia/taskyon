@@ -42,6 +42,12 @@ export interface CrudWrapper<T> {
   ) => Promise<T>
 }
 
+export type StreamData<T> = { id: string | number; data: T | null }
+type LiveCrudWrapper<T> = CrudWrapper<T> & {
+  readLive: (id: string | number) => Stream<StreamData<T>>
+  liveStream: Stream<StreamData<T>>
+}
+
 export type ImmutableOf<T, C extends CrudWrapper<T>> = Omit<C, 'set' | 'upsert'> & {
   add(data: T): Promise<number | string>
   // hard-ban these at the type level if someone widens:
@@ -137,59 +143,6 @@ export function withKeyLockings<T, B>(
   }
 
   return out as B & CrudWrapper<T>
-}
-
-/**
- * Enhances a CrudWrapper with live streaming capabilities for CRUD events.
- *
- * This wrapper emits live updates via streams whenever data is set, upserted, or deleted.
- *
- * Streaming data format:
- * - On `set` or `upsert`: emits `{ id, data }` where `data` is the new or updated value.
- * - On `delete`: emits `{ id, data: null }` to indicate removal.
- *
- * @template T - The type of data managed by the CRUD wrapper.
- * @param base - The base CrudWrapper to enhance.
- * @returns The enhanced CrudWrapper with:
- *   - `readLive(id, emitCurrent?)`: Subscribes to live updates for a specific item. Optionally emits the current value immediately.
- *   - `liveStream`: Subscribes to all live CRUD events as `{ id, data }` objects.
- */
-type StreamData<T> = { id: string | number; data: T | null }
-export const withLiveStreams = <T>(
-  base: CrudWrapper<T>,
-): CrudWrapper<T> & {
-  readLive: (id: string | number) => Stream<StreamData<T>>
-  liveStream: Stream<StreamData<T>>
-} => {
-  // Create a stream of events with a payload: { id, data }
-  const { stream: liveStream, emit } = createStream<StreamData<T>>()
-
-  return {
-    ...base,
-    async set(id, data) {
-      await base.set(id, data)
-      emit({ id, data })
-    },
-    async upsert(id, data, strategy = 'replace') {
-      const updatedData = await base.upsert(id, data, strategy)
-      emit({ id, data: updatedData })
-      return updatedData
-    },
-    async delete(id) {
-      await base.delete(id)
-      // Optionally, you might emit a deletion event if needed.
-      emit({ id, data: null })
-    },
-    async clear() {
-      await base.clear()
-      // Optionally, you could notify subscribers here if desired.
-    },
-    readLive: (id: string | number) => {
-      const stream = liveStream.filter((event) => event.id === id)
-      return stream
-    },
-    liveStream,
-  }
 }
 
 type JsonFindOptions<T> = {
@@ -709,67 +662,93 @@ export const createMapCrudWrapper = <T>(storage: Map<string | number, T>): CrudW
   }
 }
 
-export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): CrudWrapper<T> => ({
-  async set(id: string | number, data: T): Promise<void> {
-    await Promise.all(wrappers.map((w) => w.set(id, data)))
-  },
+/**
+ * Uses the first wrapper as the live working set and the remaining wrappers as replicas.
+ * Explicit mutations emit after the first wrapper changes; fallback reads hydrate it silently.
+ */
+export const createCombinedCrudWrapper = <T>(wrappers: CrudWrapper<T>[]): LiveCrudWrapper<T> => {
+  const primary = wrappers[0]!
+  const replicas = wrappers.slice(1)
+  const { stream: liveStream, emit } = createStream<StreamData<T>>()
 
-  async get(id: string | number): Promise<T | null> {
-    for (let i = 0; i < wrappers.length; i++) {
-      const data = await wrappers[i]!.get(id)
-      if (data !== null) {
-        // If the first wrapper doesn't have the data, update it with the found data
-        if (i > 0) {
-          await wrappers[0]!.set(id, data)
-        }
+  const restorePrimary = async (id: string | number, previous: T | null) => {
+    if (previous === null) await primary.delete(id)
+    else await primary.set(id, previous)
+    emit({ id, data: previous })
+  }
+
+  const persistOrRestore = async (
+    id: string | number,
+    previous: T | null,
+    persist: () => Promise<unknown>,
+  ) => {
+    try {
+      await persist()
+    } catch (error) {
+      await restorePrimary(id, previous)
+      throw error
+    }
+  }
+
+  const combined: CrudWrapper<T> = {
+    async set(id, data) {
+      const previous = await primary.get(id)
+      await primary.set(id, data)
+      emit({ id, data })
+      await persistOrRestore(id, previous, () => Promise.all(replicas.map((w) => w.set(id, data))))
+    },
+    async get(id) {
+      for (const [index, wrapper] of wrappers.entries()) {
+        const data = await wrapper.get(id)
+        if (data === null) continue
+        if (index > 0) await primary.set(id, data)
         return data
       }
-    }
-    return null
-  },
+      return null
+    },
+    async upsert(id, data, strategy) {
+      const previous = await primary.get(id)
+      const updatedData = await primary.upsert(id, data, strategy)
+      emit({ id, data: updatedData })
+      await persistOrRestore(id, previous, () =>
+        Promise.all(replicas.map((w) => w.set(id, updatedData))),
+      )
+      return updatedData
+    },
+    async delete(id) {
+      const previous = await primary.get(id)
+      await primary.delete(id)
+      emit({ id, data: null })
+      await persistOrRestore(id, previous, () => Promise.all(replicas.map((w) => w.delete(id))))
+    },
+    async list() {
+      for (const wrapper of wrappers) {
+        const list = await wrapper.list()
+        if (list.length > 0) return list
+      }
+      return []
+    },
+    async listAll() {
+      const allItems = await Promise.all(wrappers.map((w) => w.list()))
+      const uniqueItems = new Map<string | number, Row<T>>()
+      for (const item of allItems.flat()) uniqueItems.set(item.id, item)
+      return Array.from(uniqueItems.values())
+    },
+    async listIds() {
+      const allIdArrays = await Promise.all(wrappers.map((w) => w.listIds()))
+      return Array.from(new Set(allIdArrays.flat()))
+    },
+    async clear() {
+      await Promise.all(wrappers.map((w) => w.clear()))
+    },
+  }
 
-  async upsert(id, data, strategy) {
-    // we are using the first wrapper to upsert the data
-    // and then we are updating the other wrappers with the new data
-    // this is important, because otherwise we could end up with inconsistent data
-    const updatedData = await wrappers[0]!.upsert(id, data, strategy)
-    await Promise.all(wrappers.slice(1).map((w) => w.set(id, updatedData)))
-    return updatedData
-  },
-
-  async delete(id: string | number): Promise<void> {
-    await Promise.all(wrappers.map((w) => w.delete(id)))
-  },
-
-  async list(): Promise<Row<T>[]> {
-    // Get list from the first wrapper only
-    for (const wrapper of wrappers) {
-      const list = await wrapper.list()
-      if (list.length > 0) return list
-    }
-
-    return []
-  },
-  async listAll(): Promise<Row<T>[]> {
-    const allItems = await Promise.all(wrappers.map((w) => w.list()))
-    const uniqueItems = new Map<string | number, Row<T>>()
-
-    allItems.flat().forEach((item) => {
-      uniqueItems.set(item.id, item)
-    })
-
-    return Array.from(uniqueItems.values())
-  },
-  listIds: async (): Promise<(string | number)[]> => {
-    const allIdArrays = await Promise.all(wrappers.map((w) => w.listIds()))
-    const idSet = new Set<string | number>()
-    allIdArrays.flat().forEach((id) => idSet.add(id))
-    return Array.from(idSet)
-  },
-  async clear(): Promise<void> {
-    await Promise.all(wrappers.map((w) => w.clear()))
-  },
-})
+  return {
+    ...combined,
+    readLive: (id) => liveStream.filter((event) => event.id === id),
+    liveStream,
+  }
+}
 
 /**
  * Wraps a CRUD interface to transparently encrypt and decrypt data rows.

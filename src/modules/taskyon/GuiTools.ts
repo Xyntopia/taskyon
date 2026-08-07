@@ -1,5 +1,6 @@
 import type { QDialogInputPrompt, QDialogOptions, QDialogSelectionPrompt } from 'quasar'
 import { Dialog } from 'quasar'
+import { isTauri } from '@tauri-apps/api/core'
 import type { JSONSchema7 } from 'json-schema'
 import { createClientTool } from '@taskyon/tyclient'
 import {
@@ -207,5 +208,5 @@ export const guiTools = [
   makePageIOTool(),
   mapSearchTool,
   overpassMapTool,
-  ...tauriLocalTools,
+  ...(isTauri() ? tauriLocalTools : []),
 ]

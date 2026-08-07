@@ -23,7 +23,6 @@ import {
   createVectorStore,
   withImmutable,
   withKeyLockings,
-  withLiveStreams,
 } from '../utils/crudWrapper'
 import type { TyPGDB } from '../utils/pglite.api'
 import { createTaskNode } from './createTasks'
@@ -333,7 +332,7 @@ export async function useTyTaskManager(
   taskyonDb: TyPGDB,
   options: {
     indexTaskVectors: boolean
-    resolveTool: ToolManager['resolveTool']
+    resolveTool?: ToolManager['resolveTool']
     storage?: TaskManagerStorage
     taskSearchVectorizer?: 'static-multilingual' | 'transformer-minilm'
   } = {
@@ -400,9 +399,10 @@ export async function useTyTaskManager(
 
   // make sure that we remove the "upsert" function for tyCrud in order
   // to make sure the data inside stays immutable...
-  const mod = withLiveStreams(
-    createCombinedCrudWrapper([createMapCrudWrapper(new Map<string, TaskNode>()), storage.tasks]),
-  )
+  const mod = createCombinedCrudWrapper([
+    createMapCrudWrapper(new Map<string, TaskNode>()),
+    storage.tasks,
+  ])
   const tyCrud = withImmutable(mod, {
     hash: (data: TaskNode) => {
       return data.id
@@ -416,7 +416,7 @@ export async function useTyTaskManager(
     taskyonDb,
     getAllTaskIds,
     tyCrud.get,
-    options.resolveTool,
+    options.resolveTool ?? (async () => ({})),
     options.taskSearchVectorizer ?? 'static-multilingual',
   )
 
@@ -475,12 +475,10 @@ export async function useTyTaskManager(
 
   // we are using mapWrapper first, because it is the fastest
   const metaDb = withKeyLockings(
-    withLiveStreams(
-      createCombinedCrudWrapper([
-        createMapCrudWrapper<TaskNodeMeta>(new Map<string, TaskNodeMeta>()),
-        storage.meta,
-      ]),
-    ),
+    createCombinedCrudWrapper([
+      createMapCrudWrapper<TaskNodeMeta>(new Map<string, TaskNodeMeta>()),
+      storage.meta,
+    ]),
   )
 
   async function countTasks() {

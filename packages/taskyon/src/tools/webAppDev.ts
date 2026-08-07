@@ -2,7 +2,19 @@ import type { JSONSchema7 } from 'json-schema'
 import { createTool } from '../types/toolApi'
 
 // Global store for all opened windows
-export const openedWindows = new Map()
+export const openedWindows = new Map<
+  string,
+  { window: Window; blobUrl?: string; url?: string; createdAt: Date }
+>()
+
+function createPopupShell(html: string) {
+  const sandboxedHtml = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; img-src data: blob:; media-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline' 'unsafe-eval'; object-src 'none'; frame-src 'none'; form-action 'none'; navigate-to 'none'">${html}`
+  const escapedHtml = sandboxedHtml.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+  return `<!doctype html>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; frame-src 'self'; style-src 'unsafe-inline'">
+<style>html,body,iframe{width:100%;height:100%;margin:0;border:0}</style>
+<iframe sandbox="allow-scripts allow-forms allow-modals" srcdoc="${escapedHtml}"></iframe>`
+}
 
 export const createNewWindowTool = createTool({
   name: 'newWindowOpener',
@@ -16,6 +28,10 @@ Windows can be given IDs for later reference with the windowManager tool.`,
         type: 'string',
         description: 'The HTML code to be rendered in the new window.',
       },
+      url: {
+        type: 'string',
+        description: 'An HTTPS URL to open instead of custom HTML.',
+      },
       windowId: {
         type: 'string',
         description: 'Optional identifier for the window to reference later.',
@@ -25,32 +41,44 @@ Windows can be given IDs for later reference with the windowManager tool.`,
         description: 'Optional window features (e.g., "width=800,height=600").',
       },
     },
-    required: ['html'],
+    additionalProperties: false,
   } as const satisfies JSONSchema7,
-  function: ({ html, windowId = '', windowFeatures = '' }, ctx) => {
+  function: async ({ html, url: externalUrl, windowId = '', windowFeatures = '' }, ctx) => {
     try {
-      console.log('Opening new window with HTML content via blob URL.')
-      const blob = new Blob([html], { type: 'text/html' })
-      const url = URL.createObjectURL(blob)
+      if ((typeof html === 'string') === (typeof externalUrl === 'string')) {
+        throw new Error('Provide exactly one of html or url')
+      }
+      const target = externalUrl
+        ? (`origin:${new URL(externalUrl).origin}` as const)
+        : ('custom-html' as const)
+      if (!(await ctx.requestPopup?.({ target }))) {
+        throw new Error(`Popup capability was not authorized for ${target}`)
+      }
+      const blobUrl = html
+        ? URL.createObjectURL(new Blob([createPopupShell(html)], { type: 'text/html' }))
+        : undefined
+      const url = externalUrl ? new URL(externalUrl) : new URL(blobUrl!)
+      if (externalUrl && url.protocol !== 'https:') {
+        throw new Error('External popups only permit HTTPS URLs')
+      }
 
       // Open the window with the provided features
-      const newWindow = window.open(url, '_blank', windowFeatures)
+      const newWindow = window.open('', '_blank', windowFeatures)
 
       if (!newWindow) {
-        URL.revokeObjectURL(url)
+        if (blobUrl) URL.revokeObjectURL(blobUrl)
         throw new Error(
           'Failed to open a new window. It might have been blocked by a popup blocker.',
         )
       }
-
-      // Add a reference to the parent window
-      newWindow.opener = window
+      newWindow.opener = null
+      newWindow.location.replace(url.href)
 
       // Store the window reference if an ID is provided
       if (windowId) {
         // If reusing an existing ID, clean up the old reference first
         if (openedWindows.has(windowId)) {
-          const oldWindow = openedWindows.get(windowId)
+          const oldWindow = openedWindows.get(windowId)!
           if (oldWindow.blobUrl) {
             URL.revokeObjectURL(oldWindow.blobUrl)
           }
@@ -58,7 +86,7 @@ Windows can be given IDs for later reference with the windowManager tool.`,
 
         openedWindows.set(windowId, {
           window: newWindow,
-          blobUrl: url,
+          ...(blobUrl ? { blobUrl } : {}),
           createdAt: new Date(),
         })
       }
@@ -68,7 +96,7 @@ Windows can be given IDs for later reference with the windowManager tool.`,
         if (windowId) {
           openedWindows.delete(windowId)
         }
-        URL.revokeObjectURL(url)
+        if (blobUrl) URL.revokeObjectURL(blobUrl)
       })
 
       return ctx.createSubtasksResult([
@@ -132,7 +160,7 @@ export const windowManagerTool = createTool({
           ],
         ])
       }
-      case 'focus':
+      case 'focus': {
         if (!windowId || !openedWindows.has(windowId)) {
           return ctx.createSubtasksResult([
             [
@@ -144,8 +172,10 @@ export const windowManagerTool = createTool({
           ])
         }
 
+        const openedWindow = openedWindows.get(windowId)
+        if (!openedWindow) throw new Error(`Window '${windowId}' not found`)
         try {
-          openedWindows.get(windowId).window.focus()
+          openedWindow.window.focus()
           return ctx.createSubtasksResult([
             [
               {
@@ -168,8 +198,9 @@ export const windowManagerTool = createTool({
             ],
           ])
         }
+      }
 
-      case 'close':
+      case 'close': {
         if (!windowId || !openedWindows.has(windowId)) {
           return ctx.createSubtasksResult([
             [
@@ -181,8 +212,9 @@ export const windowManagerTool = createTool({
           ])
         }
 
+        const windowToClose = openedWindows.get(windowId)
+        if (!windowToClose) throw new Error(`Window '${windowId}' not found`)
         try {
-          const windowToClose = openedWindows.get(windowId)
           if (windowToClose.blobUrl) {
             URL.revokeObjectURL(windowToClose.blobUrl)
           }
@@ -211,11 +243,12 @@ export const windowManagerTool = createTool({
             ],
           ])
         }
+      }
 
       case 'closeAll': {
         let closedCount = 0
 
-        for (const [id, windowData] of openedWindows.entries()) {
+        for (const [id, windowData] of Array.from(openedWindows.entries())) {
           try {
             if (windowData.blobUrl) {
               URL.revokeObjectURL(windowData.blobUrl)
@@ -263,20 +296,29 @@ export const createWaitForMessageTool = createTool({
     type: 'object',
     properties: {
       messageId: { type: 'string', description: 'ID to listen for in event.data.messageId' },
+      windowId: { type: 'string', description: 'ID of the Taskyon-managed source window' },
     },
-    required: ['messageId'],
+    required: ['messageId', 'windowId'],
     additionalProperties: false,
   } as const satisfies JSONSchema7,
-  async function({ messageId }, ctx) {
+  async function({ messageId, windowId }, ctx) {
+    const sourceWindow = openedWindows.get(windowId)?.window
+    if (!sourceWindow) throw new Error(`Managed popup '${windowId}' was not found`)
     // pause here until the matching postMessage arrives
-    const data = await new Promise((resolve) => {
+    const data = await new Promise((resolve, reject) => {
       const listener = (event: MessageEvent) => {
-        if (event.data?.messageId === messageId) {
+        if (event.source === sourceWindow && event.data?.messageId === messageId) {
           window.removeEventListener('message', listener)
+          ctx.stopSignal.removeEventListener('abort', abort)
           resolve(event.data)
         }
       }
+      const abort = () => {
+        window.removeEventListener('message', listener)
+        reject(new Error('Message wait interrupted', { cause: ctx.stopSignal.reason }))
+      }
       window.addEventListener('message', listener)
+      ctx.stopSignal.addEventListener('abort', abort, { once: true })
     })
 
     // once we have it, return it as a TaskResult

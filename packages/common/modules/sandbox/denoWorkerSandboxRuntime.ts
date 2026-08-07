@@ -18,7 +18,6 @@ export function createDenoSandboxTransport(options: {
     ],
     {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { PATH: process.env.PATH ?? '' },
     },
   )
   const listeners = new Set<(message: SandboxRuntimeToHostMessage) => void>()

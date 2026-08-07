@@ -2,7 +2,7 @@ import type { ChatCompletionStreamEvent } from '../types/chatCompletion'
 import { TyToolchainConfig, type llmSettings } from '../types/profiles'
 import { createSubtasksResult, type InternalTool } from '../types/toolApi'
 import { FunctionArguments } from '../types/tools'
-import type { ToolBase, ToolIdentity } from '../types/tools'
+import { ToolBase, type ToolIdentity } from '../types/tools'
 import { partialTaskDraft } from '../types/taskNode'
 import {
   createCombinedCrudWrapper,
@@ -696,6 +696,11 @@ export async function tyCore(
     dispose: (message: string) => ctx.dispose(message),
     getArtifact: async (attachment: Parameters<ArtifactStore['get']>[0]) =>
       await ctx.artifactStore?.get(attachment),
+    installTool: async (tool: InternalTool) => {
+      const identity = await ctx.toolManager.installTool(tool, { approveReplacement: true })
+      insidePort.send({ type: 'status', data: { type: 'newtool', id: identity.name } })
+      return identity
+    },
     updateChatCompletionApiKey: async (key: string, value?: string) => {
       const { tool, identity } = await ctx.toolManager.resolveTool(toolSetup.chatCompletionToolName)
       if (tool) {

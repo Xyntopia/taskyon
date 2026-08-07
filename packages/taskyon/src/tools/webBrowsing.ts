@@ -24,7 +24,7 @@ Windows can be given IDs for later reference with the windowManager tool.`,
     },
     required: ['url'],
   } as const,
-  function: ({ url, windowId = '', windowFeatures = '' }, ctx) => {
+  function: async ({ url, windowId = '', windowFeatures = '' }, ctx) => {
     try {
       console.log(`Opening third-party URL: ${url}`)
 
@@ -33,11 +33,8 @@ Windows can be given IDs for later reference with the windowManager tool.`,
       try {
         targetUrl = new URL(url)
         // Ensure the URL has a protocol
-        if (
-          !targetUrl.protocol ||
-          (targetUrl.protocol !== 'http:' && targetUrl.protocol !== 'https:')
-        ) {
-          throw new Error('URL must have http:// or https:// protocol')
+        if (!targetUrl.protocol || targetUrl.protocol !== 'https:') {
+          throw new Error('URL must use the https:// protocol')
         }
       } catch (error) {
         if (error instanceof Error) {
@@ -47,8 +44,10 @@ Windows can be given IDs for later reference with the windowManager tool.`,
         }
       }
 
-      // Open the window with the provided features
-      const newWindow = window.open(url, '_blank', windowFeatures)
+      if (!(await ctx.requestPopup?.({ target: `origin:${targetUrl.origin}` }))) {
+        throw new Error(`Popup capability was not authorized for ${targetUrl.origin}`)
+      }
+      const newWindow = window.open('', '_blank', windowFeatures)
 
       if (!newWindow) {
         throw new Error(
@@ -56,14 +55,14 @@ Windows can be given IDs for later reference with the windowManager tool.`,
         )
       }
 
-      // Add a reference to the parent window
-      newWindow.opener = window
+      newWindow.opener = null
+      newWindow.location.replace(targetUrl.href)
 
       // Store the window reference if an ID is provided
       if (windowId) {
         // If reusing an existing ID, clean up the old reference first
-        if (openedWindows.has(windowId)) {
-          const oldWindow = openedWindows.get(windowId)
+        const oldWindow = openedWindows.get(windowId)
+        if (oldWindow) {
           if (oldWindow.window) {
             try {
               oldWindow.window.close()
@@ -75,8 +74,7 @@ Windows can be given IDs for later reference with the windowManager tool.`,
 
         openedWindows.set(windowId, {
           window: newWindow,
-          isThirdParty: true,
-          url: url,
+          url,
           createdAt: new Date(),
         })
       }

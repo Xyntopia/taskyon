@@ -68,6 +68,20 @@
 
       <div class="col-12 col-lg-5 column q-gutter-xl">
         <section>
+          <div class="text-subtitle1 q-mb-sm">Tool Permissions</div>
+          <div class="text-body2 text-grey-7 q-mb-sm">
+            Reset saved popup and network decisions. Taskyon will ask again the next time a tool
+            requests access.
+          </div>
+          <q-btn
+            outline
+            color="secondary"
+            label="Reset tool permissions"
+            @click="resetToolPermissions"
+          />
+        </section>
+
+        <section>
           <div class="row items-center justify-between q-mb-sm">
             <div class="text-subtitle1">Live Activity</div>
             <div class="text-caption text-grey-7">{{ connectionSummary }}</div>
@@ -151,9 +165,11 @@ import {
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, onMounted, ref } from 'vue'
+import { useQuasar } from 'quasar'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
+const $q = useQuasar()
 const taskyonClient = createTaskyonClient(tystate.api)
 
 const entryToolName = computed(() => state.llmSettings.entryFunction)
@@ -289,6 +305,11 @@ const formatActivityTime = (timestamp: number) =>
     dateStyle: 'medium',
     timeStyle: 'short',
   })
+
+const resetToolPermissions = async () => {
+  await tystate.resetCapabilityDecisions()
+  $q.notify({ type: 'positive', message: 'Tool permissions were reset.' })
+}
 
 const runBrowserMcpImport = async () => {
   const toolTask = toolCall({

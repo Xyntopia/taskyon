@@ -125,10 +125,15 @@ const replaceVariablesOutsideCode = async (
 
 export const createTaskMarkdownExtension = (
   getTaskById: (taskId: string) => Promise<TaskNode | null | undefined>,
+  renderTemplate?: (source: string) => Promise<string>,
 ): MarkdownExtension => ({
   name: 'taskyon-variables',
   preprocess: async (src) => {
-    const output = await replaceVariablesOutsideCode(src, getTaskById)
+    const renderedTemplate = renderTemplate ? await renderTemplate(src) : src
+    const output =
+      renderedTemplate === src
+        ? await replaceVariablesOutsideCode(src, getTaskById)
+        : renderedTemplate
     if (output === src) return src
 
     return { src: output, allowHtml: true }

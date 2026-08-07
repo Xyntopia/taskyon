@@ -19,13 +19,18 @@ export type OAuthCredentials = z.infer<typeof OAuthCredentials> /**
 
 export async function useRefreshTokenIfExpired(
   cached: OAuthCredentials,
-  params: { tokenUrl: string; clientId: string },
+  params: { tokenUrl: string; clientId: string; fetch?: typeof fetch },
 ): Promise<OAuthCredentials | null> {
   if (isTokenExpired(cached)) {
     if (cached.refresh_token) {
       try {
         console.log('Token expired, attempting refresh...')
-        const refreshed = await refreshAccessToken(cached, params.tokenUrl, params.clientId)
+        const refreshed = await refreshAccessToken(
+          cached,
+          params.tokenUrl,
+          params.clientId,
+          params.fetch,
+        )
         return refreshed
       } catch (error) {
         console.warn('Token refresh failed, will re-authenticate:', error)
@@ -71,6 +76,7 @@ export async function refreshAccessToken(
   credentials: OAuthCredentials,
   tokenUrl: string,
   clientId: string,
+  fetcher: typeof fetch = fetch,
 ): Promise<OAuthCredentials> {
   if (!credentials.refresh_token) {
     throw new OAuthError('No refresh token available', 'REFRESH_FAILED')
@@ -83,7 +89,7 @@ export async function refreshAccessToken(
   })
 
   try {
-    const res = await fetch(tokenUrl, {
+    const res = await fetcher(tokenUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),

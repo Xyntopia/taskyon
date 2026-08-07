@@ -22,7 +22,6 @@ import {
   uint8ArrayToBase64UrlSafe,
   urlToFile,
   useNlpWorker,
-  usePyodideWebworker,
   zodToYamlString,
 } from '@taskyon/taskyon'
 import {
@@ -1119,16 +1118,9 @@ export async function testArchiveUploadDownload() {
 testArchiveUploadDownload.gui = true
 
 export const testPyodide = async () => {
-  const python = usePyodideWebworker()
-
-  const result = await python.asyncRunPython('1 + 1')
-  assert(result !== undefined, 'Expected Python worker to return a result object')
-  assert(result.result === 2, `Expected Python worker to return 2, got ${safeYamlDump(result)}`)
-  assert(typeof result.stdout === 'string', `Expected Python worker stdout to be a string`)
-
-  return {
-    result,
-  }
+  const resolved = await tystate.taskyonClient.tools.resolve({ name: 'executePythonScript' })
+  assert(resolved?.tool.code !== undefined, 'Expected the browser Python tool to use sandbox code')
+  return { revision: resolved.identity.revision }
 }
 
 async function createTestKeys() {

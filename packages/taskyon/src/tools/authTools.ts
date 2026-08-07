@@ -8,21 +8,11 @@ declare global {
   }
 }
 
-export function createLoginButton({
-  oauthURL,
-  clientId,
-  scope,
-  toolId,
-}: {
-  oauthURL: string
-  clientId: string
-  scope: string
-  toolId: string
-}) {
+export function createLoginButton({ nonce }: { nonce: string }) {
   // return your existing tool, but swap out the iframe HTML:
   const html = `
 <div>
-  <button id="oauth-btn">Login with ${oauthURL}</button>
+  <button id="oauth-btn">Continue OAuth login</button>
 </div>
 <script>
   document.getElementById('oauth-btn')
@@ -30,10 +20,7 @@ export function createLoginButton({
       window.parent.postMessage(
         {
           type: 'oauth-init',
-          oauthURL: '${oauthURL}',
-          clientId: '${clientId}',
-          scope: '${scope}',
-          toolId: '${toolId}'
+          nonce: '${nonce}'
         },
         '*'
       )
@@ -91,18 +78,18 @@ not working:
           description: 'The OAuth scope requested',
           default: '',
         },
-        toolId: {
+        nonce: {
           type: 'string',
-          description: 'This is a unique ID that every tool has',
+          description: 'Taskyon-generated nonce used only while resuming the login UI.',
         },
       },
-      required: ['oauthURL', 'clientId', 'toolId', 'tokenUrl'],
+      required: ['oauthURL', 'clientId', 'tokenUrl'],
       additionalProperties: false,
     } as const satisfies JSONSchema7,
 
     function: async (
-      { oauthURL, clientId, scope = '', toolId, tokenUrl },
-      { createSubtasksResult, getExecutionTaskChain, stopSignal },
+      { oauthURL, clientId, scope = '', tokenUrl, nonce },
+      { createSubtasksResult, getExecutionTaskChain, getCallingToolId, requestPopup, stopSignal },
     ) => {
       // we need the 3rd last task, -1 is the current task and -2 is the button message UI
       const taskChain = await getExecutionTaskChain()
@@ -112,13 +99,14 @@ not working:
 
       if (!isReentry) {
         // FIRST CALL: render login button & requeue self
-        const html = createLoginButton({ oauthURL, clientId, scope, toolId })
+        const nonce = crypto.randomUUID()
+        const html = createLoginButton({ nonce })
         return createSubtasksResult([
           [
             { role: 'assistant', content: { type: 'message', data: html } },
             toolCall({
               name: 'ensureOauthLogin',
-              arguments: { oauthURL, clientId, scope, tokenUrl, toolId },
+              arguments: { oauthURL, clientId, scope, tokenUrl, nonce },
             }),
           ],
         ])
@@ -129,8 +117,8 @@ not working:
         stopSignal,
         new Promise<void>((resolve) => {
           function handleInit(event: MessageEvent) {
-            const { type, oauthURL, clientId, toolId: tid } = event.data || {}
-            if (type === 'oauth-init' && oauthURL && clientId && tid === toolId) {
+            const { type, nonce: returnedNonce } = event.data || {}
+            if (type === 'oauth-init' && returnedNonce === nonce) {
               window.removeEventListener('message', handleInit, { capture: true })
               resolve()
             }
@@ -140,10 +128,19 @@ not working:
       )
 
       // Now open the OAuth popup
+      const oauthOrigin = new URL(oauthURL)
+      if (oauthOrigin.protocol !== 'https:') {
+        throw new Error('OAuth authorization URLs must use HTTPS')
+      }
+      if (!(await requestPopup?.({ target: `origin:${oauthOrigin.origin}` }))) {
+        throw new Error(`OAuth popup was not authorized for ${oauthOrigin.origin}`)
+      }
       const creds = await authenticateWithPopup({ oauthURL, clientId, scope, tokenUrl }, stopSignal)
 
       // store secret and confirm
-      await setSecret(toolId, 'oauth-creds', JSON.stringify(creds))
+      const callingToolId = await getCallingToolId?.()
+      if (!callingToolId) throw new Error('OAuth login must be initiated by a registered tool')
+      await setSecret(callingToolId, 'oauth-creds', JSON.stringify(creds))
 
       return createSubtasksResult([
         [{ role: 'assistant', content: { type: 'return', data: '🎉 Logged in successfully.' } }],

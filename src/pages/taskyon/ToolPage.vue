@@ -33,25 +33,6 @@
     <q-separator class="q-my-md" />
     <div v-if="selectedTool || !name" class="col column q-gutter-sm">
       <div class="row">
-        <TaskChainPublishDialog
-          v-if="preliminaryTaskNode"
-          buttons
-          download
-          flat
-          share
-          single
-          :task-or-id="preliminaryTaskNode"
-        >
-          <template #tt-cp-btn> <div class="q-px-sm">Copy Tool as Markdown</div></template>
-          <template #tt-share-btn> <div class="q-px-sm">Share Tool Online</div></template>
-        </TaskChainPublishDialog>
-        <q-btn
-          flat
-          dense
-          :icon="matSearch"
-          label="Search for similar tools"
-          :to="`/taskmanager?k=10&ct=tooldefinition&q=${JSON.stringify(selectedTool)}`"
-        />
         <q-btn flat dense label="Secrets" :icon="mdiKeyChain" to="/settings/secrets" />
         <div class="row items-center">
           <q-btn
@@ -60,14 +41,10 @@
             :color="isValidTool ? 'positive' : 'negative'"
             :icon="matSave"
             label="save tool"
-            @click="
-              () => {
-                if (preliminaryTaskNode) addNewTask(preliminaryTaskNode)
-              }
-            "
+            @click="saveTool"
             ><q-tooltip>{{
               isValidTool
-                ? 'Save tool inside our tasktree.'
+                ? 'Install this immutable revision in the tool registry.'
                 : 'Only Valid tools can be saved, check the definition for errors!'
             }}</q-tooltip></q-btn
           >
@@ -162,13 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import {
-  matAdd,
-  matContentCopy,
-  matSave,
-  matSearch,
-  matSettings,
-} from '@quasar/extras/material-icons'
+import { matAdd, matContentCopy, matSave, matSettings } from '@quasar/extras/material-icons'
 import {
   mdiCodeJson,
   mdiFormTextbox,
@@ -184,10 +155,8 @@ import FadeAwayScrollPage from '@taskyon/ui/components/FadeAwayScrollPage.vue'
 import JsonInput from '@taskyon/ui/components/varViews/JsonInput.vue'
 import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
 import { copyToClipboard } from '@taskyon/common/modules/utils'
-import type { partialTaskDraft, TaskNode, ToolBase as ToolBaseType } from '@taskyon/taskyon'
-import { craeteToolJsonSchema, createTaskNode, ToolBase } from '@taskyon/taskyon'
-import { createTaskyonClient } from '@taskyon/tyclient'
-import TaskChainPublishDialog from 'src/components/taskyon/TaskChainPublishDialog.vue'
+import type { ToolBase as ToolBaseType } from '@taskyon/taskyon'
+import { craeteToolJsonSchema, ToolBase } from '@taskyon/taskyon'
 import UnderConstructionHint from '@taskyon/ui/components/UnderConstructionHint.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
@@ -279,9 +248,7 @@ function switchTool(toolName?: string) {
 }
 
 const allTools = asyncComputed<Record<string, ToolBaseType>>(async () => {
-  const ty = await tystate.taskyon
-  const tools = await createTaskyonClient(ty.port).tools.list({})
-  return tools
+  return await tystate.taskyonClient.tools.list({})
 }, {})
 
 const alphabeticalTools = computed(() => {
@@ -293,11 +260,8 @@ const alphabeticalTools = computed(() => {
 const selectedTool = asyncComputed<ToolBaseType | undefined>(
   async () => {
     if (name) {
-      const tool = allTools.value?.[name]
-      if (tool) return tool
-      // otherwise check if name is actually a task id...
-      const toolDefTask = await createTaskyonClient(tystate.api).task.get({ id: name })
-      if (toolDefTask?.content.type === 'tooldefinition') return toolDefTask.content.data
+      const resolved = await tystate.taskyonClient.tools.resolve({ name })
+      if (resolved) return resolved.tool
     }
     return undefined
   },
@@ -333,27 +297,10 @@ const toolParser = computed(() => {
 
 const isValidTool = computed(() => toolParser.value === true)
 
-const preliminaryTaskNode = asyncComputed<TaskNode | undefined>(async () => {
-  try {
-    return await createTaskNode({
-      role: 'user',
-      content: {
-        type: 'tooldefinition',
-        // we are doing this to 1. make sure its json parsable and 2. create a copy of the current tool...
-        data: JSON.parse(JSON.stringify(toolDraft.value)),
-      },
-    })
-  } catch (error) {
-    console.log('could not create tasknode:', error)
-  }
-}, undefined)
-
-async function addNewTask(task: partialTaskDraft) {
-  const taskyonClient = createTaskyonClient(tystate.api)
-  const newTask = await createTaskNode(task)
-  await taskyonClient.task.create({ task: newTask, execute: false, show: true })
-  void router.push({
-    params: { name: newTask.id },
-  })
+async function saveTool() {
+  if (!isValidTool.value) return
+  const tool = ToolBase.parse(JSON.parse(JSON.stringify(toolDraft.value)))
+  const identity = await (await tystate.taskyon).installTool(tool)
+  void router.push({ params: { name: identity.name } })
 }
 </script>

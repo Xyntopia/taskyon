@@ -2,6 +2,9 @@ import { defineConfig, devices } from '@playwright/test'
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 9000)
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `https://127.0.0.1:${port}`
+const browserName = process.env.PLAYWRIGHT_BROWSER === 'firefox' ? 'firefox' : 'chromium'
+const desktopDevice =
+  browserName === 'firefox' ? devices['Desktop Firefox'] : devices['Desktop Chrome']
 const startServer = process.env.PLAYWRIGHT_SKIP_WEB_SERVER !== '1'
 const webServer = startServer
   ? {
@@ -34,8 +37,8 @@ export default defineConfig({
   ...(webServer ? { webServer } : {}),
   projects: [
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      name: browserName,
+      use: { ...desktopDevice },
     },
   ],
 })

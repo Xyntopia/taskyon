@@ -91,9 +91,8 @@
 import { matContentCopy, matDeleteForever, matSave } from '@quasar/extras/material-icons'
 import { mdiTools } from '@quasar/extras/mdi-v6'
 import { Dialog } from 'quasar'
-import { generateSecretId } from '../../../packages/taskyon/src/core/taskFunctionExecutor'
 import { copyToClipboard } from '@taskyon/common/modules/utils'
-import type { ToolBase } from '@taskyon/taskyon'
+import { generateSecretId, type ToolBase } from '@taskyon/taskyon'
 import { createTaskyonClient } from '@taskyon/tyclient'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
@@ -183,9 +182,11 @@ const toolMap = asyncComputed(
     const tools: Record<string, string> = {}
     const rtools: Record<string, string> = {}
     for (const tool of Object.values(listedTools)) {
-      const id = await generateSecretId(undefined, tool)
-      tools[id] = tool.name
-      rtools[tool.name] = id
+      const resolved = await taskyonClient.tools.resolve({ name: tool.name })
+      if (!resolved) continue
+      const id = await generateSecretId(resolved.identity.revision, resolved.tool)
+      tools[id] = resolved.identity.revision
+      rtools[resolved.tool.name] = id
     }
     return { t: tools, r: rtools }
   },

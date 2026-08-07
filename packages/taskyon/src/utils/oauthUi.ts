@@ -33,23 +33,48 @@ export async function authenticateWithPopup(
   timeoutMs: number = OAUTH_TIMEOUT_MS,
   options: AuthenticationOptions = {},
 ): Promise<OAuthCredentials> {
-  const { oauthURL, clientId, scope, tokenUrl, authorizeQuery, redirectUri: customRedirectUri } = params
+  const {
+    oauthURL,
+    clientId,
+    scope,
+    tokenUrl,
+    authorizeQuery,
+    redirectUri: customRedirectUri,
+  } = params
   const { forceReauth = false, forceAccountSelection = false } = options
   const effectiveRedirectUri = customRedirectUri || redirectUri
+  const authorizationUrl = new URL(oauthURL)
+  if (authorizationUrl.protocol !== 'https:') {
+    throw new OAuthError('OAuth authorization URLs must use HTTPS', 'INVALID_RESPONSE')
+  }
+  if (tokenUrl && new URL(tokenUrl).protocol !== 'https:') {
+    throw new OAuthError('OAuth token URLs must use HTTPS', 'INVALID_RESPONSE')
+  }
 
   // Check if already aborted
   if (signal?.aborted) {
     throw new OAuthError('Operation was aborted', 'ABORTED')
   }
 
+  const popup = window.open(
+    '',
+    `oauth:${authorizationUrl.origin}`,
+    'width=500,height=700,scrollbars=yes,resizable=yes',
+  )
+  if (!popup) {
+    throw new OAuthError('Failed to open OAuth popup - popup may be blocked', 'POPUP_BLOCKED')
+  }
+
   try {
     // 1) Generate PKCE
     const { challenge, verifier } = await generatePKCE()
+    const state = crypto.randomUUID()
 
     const urlParams = new URLSearchParams({
       client_id: clientId,
       redirect_uri: effectiveRedirectUri,
       scope: scope,
+      state,
       ...(tokenUrl
         ? { code_challenge: challenge, code_challenge_method: 'S256', response_type: 'code' }
         : { response_type: 'token' }),
@@ -87,15 +112,7 @@ export async function authenticateWithPopup(
       }
     }
 
-    const popup = window.open(
-      `${oauthURL}?${urlParams.toString()}`,
-      `oauth:${oauthURL}`,
-      `width=500,height=700,scrollbars=yes,resizable=yes`,
-    )
-
-    if (!popup) {
-      throw new OAuthError('Failed to open OAuth popup - popup may be blocked', 'POPUP_BLOCKED')
-    }
+    popup.location.href = `${authorizationUrl.href}?${urlParams.toString()}`
 
     const msg = await waitForPopupReturn(popup, signal, timeoutMs)
     console.log('oauth: received return query', msg)
@@ -106,6 +123,13 @@ export async function authenticateWithPopup(
         `OAuth error: ${msg.error}${msg.error_description ? ` - ${msg.error_description}` : ''}`,
         'INVALID_RESPONSE',
       )
+    }
+
+    const returnedParams = new URLSearchParams(
+      msg.query ? msg.query.slice(1) : msg.hash ? msg.hash.slice(1) : '',
+    )
+    if (returnedParams.get('state') !== state) {
+      throw new OAuthError('OAuth state did not match the initiating request', 'INVALID_RESPONSE')
     }
 
     // check if msg contains an access_token
@@ -144,9 +168,9 @@ export async function authenticateWithPopup(
       tokenUrl,
       redirectUri: effectiveRedirectUri,
     })
-    console.log('received credentials', creds)
     return creds
   } catch (error) {
+    if (!popup.closed) popup.close()
     // Re-throw OAuthError as-is, wrap other errors
     if (error instanceof OAuthError) {
       throw error

@@ -19,11 +19,7 @@
         </q-tooltip>
       </q-btn>
       <q-btn
-        v-if="
-          task.content.type === 'message' ||
-          task.content.type === 'functioncall' ||
-          task.content.type === 'tooldefinition'
-        "
+        v-if="task.content.type === 'message' || task.content.type === 'functioncall'"
         class="col"
         :icon="matEdit"
         flat
@@ -31,13 +27,7 @@
       >
         <q-tooltip :delay="0">
           Edit
-          {{
-            task.content.type === 'message'
-              ? 'Message'
-              : task.content.type === 'functioncall'
-                ? 'Function Call'
-                : 'Tool Definition'
-          }}
+          {{ task.content.type === 'message' ? 'Message' : 'Function Call' }}
         </q-tooltip>
       </q-btn>
       <q-btn

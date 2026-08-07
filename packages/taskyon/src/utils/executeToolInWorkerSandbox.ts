@@ -191,7 +191,11 @@ function buildContextHandlers(
           }
         }
         if (!context.fetch) throw new Error('Sandbox fetch capability is unavailable')
-        const response = await context.fetch(input, init)
+        const response = await context.fetch(input, {
+          ...(init?.method ? { method: init.method } : {}),
+          ...(init?.headers ? { headers: init.headers } : {}),
+          ...(init?.body ? { body: init.body } : {}),
+        })
         const headers: [string, string][] = []
         response.headers.forEach((value, key) => headers.push([key, value]))
         return {

@@ -5,6 +5,7 @@
         v-if="markdownEnabled"
         no-line-numbers
         :src="task.content.data"
+        :extensions="markdownExtensions"
         :use-iframe="useMarkdownIframe"
         @iframe-ready="emit('iframe-ready', $event)"
         @if-longpress="emit('if-longpress', $event)"
@@ -65,6 +66,16 @@
       {{ task.content.data }}
     </div>
 
+    <ObjectView
+      v-else-if="structuredContent"
+      :model-value="structuredContent"
+      read-only
+      dense
+      lazy-render
+      missing-mode="hide"
+      :list-summary="5"
+    />
+
     <pre v-else class="task-content-view__code">{{ formattedContent }}</pre>
 
     <div
@@ -82,6 +93,8 @@ import { humanizeError } from '@taskyon/common/modules/utils/error'
 import { safeYamlDump } from '@taskyon/common/modules/yamlUtils'
 import { taskRefToTaskId, type FileAttachment, type TaskNode } from '@taskyon/taskyon'
 import { computed } from 'vue'
+import type { MarkdownExtension } from '@taskyon/common/modules/markdownUtils '
+import ObjectView from '../varViews/ObjectView.vue'
 import TaskFileBrowser from './TaskFileBrowser.vue'
 import TaskSourcesList from './TaskSourcesList.vue'
 import TaskVariableHint from './TaskVariableHint.vue'
@@ -96,6 +109,7 @@ const props = withDefaults(
     useMarkdownIframe?: boolean
     showSourceTaskHint?: boolean
     showVariableActions?: boolean
+    markdownExtensions?: MarkdownExtension[]
   }>(),
   {
     getFile: undefined,
@@ -104,6 +118,7 @@ const props = withDefaults(
     useMarkdownIframe: false,
     showSourceTaskHint: false,
     showVariableActions: false,
+    markdownExtensions: () => [],
   },
 )
 
@@ -135,6 +150,15 @@ const functionArgumentSegments = computed(() => {
 
   if (lastIndex < input.length) segments.push({ type: 'text', value: input.slice(lastIndex) })
   return segments
+})
+
+const structuredContent = computed<Record<string, unknown> | undefined>(() => {
+  if (props.task.content.type !== 'toolresult' && props.task.content.type !== 'structured') {
+    return undefined
+  }
+  const value = props.task.content.data
+  if (Array.isArray(value)) return { items: value }
+  return value && typeof value === 'object' ? Object.fromEntries(Object.entries(value)) : undefined
 })
 
 const formattedContent = computed(() =>

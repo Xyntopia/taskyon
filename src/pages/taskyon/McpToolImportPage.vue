@@ -80,7 +80,7 @@
 
     <div class="row items-center q-gutter-sm">
       <q-btn
-        :disable="!isValidTool || !preliminaryTaskNode"
+        :disable="!isValidTool"
         :color="isValidTool ? 'positive' : 'negative'"
         :icon="matSave"
         label="Save MCP Tool"
@@ -101,11 +101,9 @@ import type { DockNode } from '@taskyon/ui/components/dockLayout'
 import DockView from '@taskyon/ui/components/DockView.vue'
 import FadeAwayScrollPage from '@taskyon/ui/components/FadeAwayScrollPage.vue'
 import JsonInput from '@taskyon/ui/components/varViews/JsonInput.vue'
-import type { partialTaskDraft, TaskNode, ToolBase } from '@taskyon/taskyon'
-import { createTaskNode, ToolBase as ToolBaseSchema } from '@taskyon/taskyon'
-import { createTaskyonClient } from '@taskyon/tyclient'
+import type { ToolBase } from '@taskyon/taskyon'
+import { ToolBase as ToolBaseSchema } from '@taskyon/taskyon'
 import type { JSONSchema7 } from 'json-schema'
-import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -354,31 +352,11 @@ const toolParser = computed(() => {
 
 const isValidTool = computed(() => toolParser.value === true)
 
-const preliminaryTaskNode = asyncComputed<TaskNode | undefined>(async () => {
-  try {
-    return await createTaskNode({
-      role: 'user',
-      content: {
-        type: 'tooldefinition',
-        data: JSON.parse(JSON.stringify(toolDraft.value)),
-      },
-    })
-  } catch {
-    return undefined
-  }
-}, undefined)
-
-async function addNewTask(task: partialTaskDraft) {
-  const taskyonClient = createTaskyonClient(tystate.api)
-  const newTask = await createTaskNode(task)
-  await taskyonClient.task.create({ task: newTask, execute: false, show: true })
-  return newTask
-}
-
 async function saveTool() {
-  if (!preliminaryTaskNode.value || !isValidTool.value) return
-  const task = await addNewTask(preliminaryTaskNode.value)
-  void router.push(`/tool/${task.id}`)
+  if (!isValidTool.value) return
+  const tool = ToolBaseSchema.parse(JSON.parse(JSON.stringify(toolDraft.value)))
+  const identity = await (await tystate.taskyon).installTool(tool)
+  void router.push(`/tool/${identity.name}`)
 }
 
 async function mcpRpcRequest(url: string, id: number, method: string, params?: unknown) {

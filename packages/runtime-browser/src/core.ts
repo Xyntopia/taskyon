@@ -35,6 +35,8 @@ export type TaskyonBrowserCoreRuntimeOptions = {
   databaseFactory?: NonNullable<Parameters<typeof tyCore>[4]>['databaseFactory']
   indexTaskVectors?: NonNullable<Parameters<typeof tyCore>[4]>['indexTaskVectors']
   taskSearchVectorizer?: NonNullable<Parameters<typeof tyCore>[4]>['taskSearchVectorizer']
+  authorizeSandboxFetch?: NonNullable<Parameters<typeof tyCore>[4]>['authorizeSandboxFetch']
+  authorizePopup?: NonNullable<Parameters<typeof tyCore>[4]>['authorizePopup']
   initialProviderKeys?: Readonly<Record<string, string | undefined>>
   onStage?: (stage: TaskyonCoreRuntimeStage) => void
   storageSessionId?: string
@@ -122,6 +124,10 @@ export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRunti
           ...(options.taskSearchVectorizer
             ? { taskSearchVectorizer: options.taskSearchVectorizer }
             : {}),
+          ...(options.authorizeSandboxFetch
+            ? { authorizeSandboxFetch: options.authorizeSandboxFetch }
+            : {}),
+          ...(options.authorizePopup ? { authorizePopup: options.authorizePopup } : {}),
           taskManagerStorageFactory: ({ sessionId }) =>
             connectTaskManagerStorageFromProtocol(
               storage.port,

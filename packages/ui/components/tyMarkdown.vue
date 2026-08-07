@@ -34,6 +34,7 @@ import {
   generateIframeSrc,
   initPrismTheme,
   md2Html,
+  type MarkdownExtension,
   tyMdCssUrls,
 } from '@taskyon/common/modules/markdownUtils '
 import { asyncComputed } from '@taskyon/common/modules/vueUtils'
@@ -107,9 +108,14 @@ initPrismTheme($q.dark.isActive)
 const router = useRouter()
 const route = useRoute()
 
-const { src = undefined, useIframe = false } = defineProps<{
+const {
+  src = undefined,
+  useIframe = false,
+  extensions = [],
+} = defineProps<{
   src?: string
   useIframe?: boolean
+  extensions?: MarkdownExtension[]
 }>()
 
 const renderedHtml = asyncComputed(
@@ -117,10 +123,11 @@ const renderedHtml = asyncComputed(
     const raw = src ?? ''
     if (!useIframe) {
       // No iframe: render as markdown with HTML disabled (extra safety)
-      return { html: await md2Html(raw, $q.dark.isActive, false), iframe: false }
+      return { html: await md2Html(raw, $q.dark.isActive, false, extensions), iframe: false }
     }
     const hasHtmlTags = containsHtmlTags(raw)
-    if (!hasHtmlTags) return { html: await md2Html(raw, $q.dark.isActive, false), iframe: false }
+    if (!hasHtmlTags)
+      return { html: await md2Html(raw, $q.dark.isActive, false, extensions), iframe: false }
     const hasMdElements = hasMarkdownElements(raw)
     const isPureHtml = hasHtmlTags && !hasMdElements // 1) has real HTML (outside code)
     // useIframe = true:
@@ -128,7 +135,7 @@ const renderedHtml = asyncComputed(
     if (isPureHtml) return { html: raw, iframe: true }
 
     // possibly with HTML outside code => markdown-it with html enabled
-    return { html: await md2Html(raw, $q.dark.isActive, true), iframe: true }
+    return { html: await md2Html(raw, $q.dark.isActive, true, extensions), iframe: true }
   },
   { html: 'rendering ...', iframe: false },
 )
