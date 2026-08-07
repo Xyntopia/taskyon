@@ -61,6 +61,7 @@ async function safeExecuteTask(
     const func = task.content.data
     return await toolExecutionClient.callTool(func.name, func.arguments, {
       taskId: task.id,
+      toolRevision: func.toolRevision,
       signal: stopSignal,
       requestIdPrefix: `${func.name}-${task.id}`,
       defaultTimeoutMs: MAX_REMOTE_FUNCTION_TIMEOUT_MS,

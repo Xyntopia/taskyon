@@ -15,7 +15,7 @@ import {
   type toolContext,
 } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
-import type { FunctionArguments, FunctionCall } from '../types/tools'
+import type { ContentHash, FunctionArguments, FunctionCall } from '../types/tools'
 import { executeToolInWorkerSandbox } from '../utils/executeToolInWorkerSandbox'
 import { humanizeError, serializeError } from '../utils/error'
 import { bigIntToString } from '../utils/objHelpers'
@@ -37,6 +37,7 @@ export type ToolExecutionCallOptions = {
   signal?: AbortSignal
   stopSignal?: AbortSignal
   taskId?: string | undefined
+  toolRevision?: ContentHash | undefined
   requestIdPrefix?: string
   defaultTimeoutMs?: number
   onProgress?: (progress: ToolProgress) => Promise<void> | void
@@ -92,6 +93,7 @@ export async function callToolOverRpc(
     functionName: func.name,
     requestId,
     taskId: options?.taskId,
+    toolRevision: func.toolRevision ?? options?.toolRevision,
     arguments: func.arguments,
   })
   return await createStreamRpcRequest<
@@ -332,7 +334,10 @@ export async function registerToolRpcTools(options: {
 
 export function registerToolRpcExecutor(options: {
   port: ToolRpcResponderPort
-  getTool: (name: string) => Promise<InternalTool | undefined> | InternalTool | undefined
+  getTool: (
+    name: string,
+    call?: ToolRpcFunctionCallMessage,
+  ) => Promise<InternalTool | undefined> | InternalTool | undefined
   prepareFunctionCall?: (
     call: ToolRpcFunctionCallMessage,
     tool: InternalTool,
@@ -368,7 +373,7 @@ export function registerToolRpcExecutor(options: {
     const call = remoteFunctionProtocol.functionCall.safeParse(msg)
     if (!call.success) return
 
-    const tool = await options.getTool(call.data.functionName)
+    const tool = await options.getTool(call.data.functionName, call.data)
     if (!tool?.function && !tool?.code) return
 
     const abortController = new AbortController()

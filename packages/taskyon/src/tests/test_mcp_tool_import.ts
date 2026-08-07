@@ -1,5 +1,6 @@
-import { createTaskNode } from '../core/createTasks'
+import { createToolManager, type ToolStorageRecord } from '../core/toolManager'
 import { ToolBase } from '../types/tools'
+import { createMapCrudWrapper } from '../utils/crudWrapper'
 import type { JSONSchema7 } from '../utils/jsonSchema'
 
 type CelestialMcpTool = {
@@ -9,69 +10,47 @@ type CelestialMcpTool = {
 }
 
 const celestialNodeExample: CelestialMcpTool = {
-  // based on CelestialNode's MCP concept (space data lookups)
   name: 'search_asteroids',
   description: 'Search near-earth objects by date range and optional diameter filters.',
   inputSchema: {
     type: 'object',
     properties: {
-      start_date: {
-        type: 'string',
-        description: 'Start date (YYYY-MM-DD)',
-      },
-      end_date: {
-        type: 'string',
-        description: 'End date (YYYY-MM-DD)',
-      },
-      min_diameter_km: {
-        type: 'number',
-        description: 'Optional minimum diameter in kilometers.',
-      },
+      start_date: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
+      end_date: { type: 'string', description: 'End date (YYYY-MM-DD)' },
+      min_diameter_km: { type: 'number' },
     },
     required: ['start_date', 'end_date'],
     additionalProperties: false,
   },
 }
 
-function mapMcpToolToTaskyonTool(input: CelestialMcpTool) {
-  return ToolBase.strict().parse({
-    name: input.name,
-    description: input.description,
+export const testAddCelestialNodeMcpTool = async () => {
+  const mappedTool = ToolBase.strict().parse({
+    name: celestialNodeExample.name,
+    description: celestialNodeExample.description,
     longDescription:
       'Imported from an MCP-style tool definition (CelestialNode-like space data endpoint).',
-    parameters: input.inputSchema,
+    parameters: celestialNodeExample.inputSchema,
   })
-}
-
-function assertToolDefinitionTaskShape(task: Awaited<ReturnType<typeof createTaskNode>>) {
-  if (task.content.type !== 'tooldefinition') {
-    throw new Error(`Expected content.type=tooldefinition, got ${task.content.type}`)
-  }
-  if (task.content.data.name !== celestialNodeExample.name) {
-    throw new Error(`Expected tool name ${celestialNodeExample.name}, got ${task.content.data.name}`)
-  }
-}
-
-export const testAddCelestialNodeMcpTool = async () => {
-  const mappedTool = mapMcpToolToTaskyonTool(celestialNodeExample)
-  const task = await createTaskNode({
-    role: 'user',
-    content: {
-      type: 'tooldefinition',
-      data: mappedTool,
+  const toolManager = createToolManager(createMapCrudWrapper<ToolStorageRecord>(new Map()))
+  const ref = await toolManager.installManifest({
+    publisherId: 'celestial-node',
+    name: mappedTool.name,
+    description: mappedTool.description,
+    ...(mappedTool.longDescription ? { longDescription: mappedTool.longDescription } : {}),
+    parameters: mappedTool.parameters,
+    execution: {
+      kind: 'external-service',
+      serviceId: 'celestial-node',
+      implementationRevision: 'sha256:publisher-attested-example',
     },
   })
-  assertToolDefinitionTaskShape(task)
 
-  return {
-    importedFrom: 'CelestialNode MCP (schema-based example)',
-    toolName: mappedTool.name,
-    requiredParams: mappedTool.parameters.required,
-    taskId: task.id,
-    status: 'OK',
+  if ((await toolManager.resolveActiveRevision(mappedTool.name)) !== ref.revision) {
+    throw new Error('Imported MCP tool was not activated by ToolManager')
   }
+  return { toolName: mappedTool.name, revision: ref.revision, status: 'OK' }
 }
 
 testAddCelestialNodeMcpTool.description =
-  'Import a CelestialNode-style MCP tool definition and convert it into a Taskyon tooldefinition task.'
-
+  'Import a CelestialNode-style MCP definition into Taskyon ToolManager.'

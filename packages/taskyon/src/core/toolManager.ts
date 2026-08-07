@@ -1,34 +1,45 @@
 import type { InternalTool } from '../types/toolApi'
 import { ContentHash as ContentHashSchema, ToolBase } from '../types/tools'
-import type { ContentHash, ToolIdentity } from '../types/tools'
+import { ToolIdentity, type ContentHash } from '../types/tools'
 import type { CrudWrapper } from '../utils/crudWrapper'
 import { sha256UrlSafeHash, uint8ArrayToBase64UrlSafe } from '../utils/encoding'
-import type { JSONSchema7 } from '../utils/jsonSchema'
+import { JSONSchema7 } from '../utils/jsonSchema'
+import { z } from 'zod'
 
 export type { ContentHash } from '../types/tools'
 
-export type ToolExecution =
-  | { kind: 'trusted-native'; implementationRevision: ContentHash }
-  | { kind: 'sandboxed-code'; runtime: 'javascript'; source: string }
-  | { kind: 'external-service'; serviceId: string; implementationRevision: ContentHash }
+export const ToolExecution = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('trusted-native'), implementationRevision: ContentHashSchema }),
+  z.object({
+    kind: z.literal('sandboxed-code'),
+    runtime: z.literal('javascript'),
+    source: z.string(),
+  }),
+  z.object({
+    kind: z.literal('external-service'),
+    serviceId: z.string(),
+    implementationRevision: ContentHashSchema,
+  }),
+])
+export type ToolExecution = z.infer<typeof ToolExecution>
 
-export type ToolManifest = {
-  publisherId: string
-  name: string
-  description: string
-  longDescription?: string
-  parameters: JSONSchema7
-  renderOptions?: {
-    hideChat?: boolean
-    hideLlm?: boolean
-    hideVector?: boolean
-  }
-  execution: ToolExecution
-}
+export const ToolManifest = z.object({
+  publisherId: z.string(),
+  name: ToolIdentity.shape.name,
+  description: z.string(),
+  longDescription: z.string().optional(),
+  parameters: JSONSchema7,
+  renderOptions: ToolBase.shape.renderOptions,
+  source: ToolBase.shape.source,
+  execution: ToolExecution,
+})
+export type ToolManifest = z.infer<typeof ToolManifest>
 
-export type ToolStorageRecord =
-  | { type: 'manifest'; manifest: ToolManifest }
-  | { type: 'active-revision'; revision: ContentHash }
+export const ToolStorageRecord = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('manifest'), manifest: ToolManifest }),
+  z.object({ type: z.literal('active-revision'), revision: ContentHashSchema }),
+])
+export type ToolStorageRecord = z.infer<typeof ToolStorageRecord>
 
 const DEFINITION_PREFIX = 'd/'
 const ACTIVE_PREFIX = 'a/'
@@ -93,6 +104,7 @@ async function createManifest(tool: InternalTool): Promise<ToolManifest> {
     ...(toolBase.longDescription ? { longDescription: toolBase.longDescription } : {}),
     parameters: toolBase.parameters,
     ...(renderOptions ? { renderOptions } : {}),
+    ...(toolBase.source ? { source: toolBase.source } : {}),
     execution,
   }
 }
@@ -204,6 +216,7 @@ export function createToolManager(
       ...(manifest.longDescription ? { longDescription: manifest.longDescription } : {}),
       parameters: manifest.parameters,
       ...(manifest.renderOptions ? { renderOptions: manifest.renderOptions } : {}),
+      ...(manifest.source ? { source: manifest.source } : {}),
       ...(manifest.execution.kind === 'sandboxed-code' &&
       manifest.execution.runtime === 'javascript'
         ? { code: manifest.execution.source }

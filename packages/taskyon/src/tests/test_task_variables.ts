@@ -3,6 +3,7 @@ import { toPromptMessages } from '../llm/promptMessages'
 import {
   compileTaskyonFunctionArguments,
   compileTaskyonMessageString,
+  compileTaskyonTemplateString,
   createTaskVariablePresentationService,
   materializeTaskyonFunctionArguments,
   materializeTaskyonMessageString,
@@ -206,6 +207,33 @@ export const testTaskVariableCompilationInMessageStrings = () => {
   return { success: true }
 }
 
+export const testTaskVariableCompilationInJinjaBlocks = () => {
+  const sourceTask = createTask({
+    id: 'task-gitlab',
+    role: 'assistant',
+    content: { type: 'toolresult', data: { issues: [{ title: 'Issue title' }] } },
+  })
+  const tasksById = new Map([[sourceTask.id, sourceTask]])
+  const variableService = createTaskVariablePresentationService()
+  variableService.getOrAssignVariableName(sourceTask, tasksById)
+
+  const compiled = compileTaskyonTemplateString(
+    ['{% for issue in result1.issues %}', '- {{ issue.title }}', '{% endfor %}'].join('\n'),
+    variableService,
+  )
+
+  assert(
+    compiled.includes('tasks["_t:task-gitlab"].issues'),
+    `Expected the friendly root variable to compile to an immutable task reference, got ${compiled}`,
+  )
+  assert(
+    compiled.includes('{{ issue.title }}'),
+    'Expected local Jinja loop variables to remain unchanged',
+  )
+
+  return { success: true }
+}
+
 export const testTaskVariableCompilationPreservesUnknownAssistantPlaceholders = () => {
   const sourceTask = createTask({
     id: 'task-source',
@@ -305,6 +333,8 @@ testTaskVariableRenderingInMessageStrings.description =
   'Renders task-id placeholders only in human-visible message strings, not function arguments.'
 testTaskVariableCompilationInMessageStrings.description =
   'Compiles LLM-facing message template variables back to internal task-id placeholders.'
+testTaskVariableCompilationInJinjaBlocks.description =
+  'Compiles friendly task variables inside Jinja expressions without rewriting local variables.'
 testTaskyonVariableCommentSanitization.description =
   'Removes exact Taskyon variable HTML comments from assistant text before persistence.'
 testTaskyonVariableCommentSanitizationPreservesCode.description =

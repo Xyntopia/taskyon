@@ -6,6 +6,7 @@ import { safeYamlDump } from '../utils/yamlUtils'
 
 export const TASK_REF_PREFIX = '_t:'
 const PLACEHOLDER_REGEX = /{{\s*([^{}]+?)\s*}}/g
+const JINJA_BLOCK_REGEX = /({{|{%)([\s\S]*?)(}}|%})/g
 const TASKYON_VARIABLE_COMMENT_REGEX =
   /<!-- taskyon variable [A-Za-z][A-Za-z0-9]*[0-9] content (?:start|end) -->/g
 
@@ -281,6 +282,56 @@ export const compileTaskyonMessageString = (
 
     return `{{${toTaskRef(taskId)}}}`
   })
+
+const compileJinjaExpression = (
+  expression: string,
+  variableService: TaskVariablePresentationService,
+) => {
+  let output = ''
+  let cursor = 0
+
+  while (cursor < expression.length) {
+    const character = expression[cursor]!
+    if (character === '"' || character === "'") {
+      const quote = character
+      const start = cursor
+      cursor += 1
+      while (cursor < expression.length) {
+        if (expression[cursor] === '\\') {
+          cursor += 2
+          continue
+        }
+        cursor += 1
+        if (expression[cursor - 1] === quote) break
+      }
+      output += expression.slice(start, cursor)
+      continue
+    }
+
+    const identifier = expression.slice(cursor).match(/^[A-Za-z_][A-Za-z0-9_]*/)?.[0]
+    if (!identifier) {
+      output += character
+      cursor += 1
+      continue
+    }
+
+    const taskId = variableService.resolveVariableName(identifier)
+    output += taskId ? `tasks["${toTaskRef(taskId)}"]` : identifier
+    cursor += identifier.length
+  }
+
+  return output
+}
+
+export const compileTaskyonTemplateString = (
+  input: string,
+  variableService: TaskVariablePresentationService,
+) =>
+  input.replace(
+    JINJA_BLOCK_REGEX,
+    (_match, opening: string, expression: string, closing: string) =>
+      `${opening}${compileJinjaExpression(expression, variableService)}${closing}`,
+  )
 
 export const sanitizeTaskyonVariableCommentsOutsideCode = (
   input: string,

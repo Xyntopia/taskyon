@@ -2,10 +2,9 @@ import { load } from 'js-yaml'
 import type { PartialDeep } from 'type-fest'
 import z from 'zod'
 import { TaskNodeMeta } from '../types/chatCompletion'
-import type { TaskNodeType, TaskTreeNode } from '../types/taskNode'
+import type { TaskTreeNode } from '../types/taskNode'
 import { TaskNode, partialTaskDraft } from '../types/taskNode'
 import type { InternalTool } from '../types/toolApi'
-import { ToolBase } from '../types/tools'
 import {
   createProtocolStorageCrudWrapper,
   createStorageProtocolServer,
@@ -34,13 +33,17 @@ import {
   selectTaskChainIds,
   type TaskChainSelection,
 } from './taskChainSelection'
+import type { ToolStorageRecord } from './toolManager'
+import { ToolStorageRecord as ToolStorageRecordSchema } from './toolManager'
+import type { ToolManager } from './toolManager'
 
 export type TaskManagerStorage = {
   tasks: StorageRecordCrud<TaskNode>
   meta: StorageRecordCrud<TaskNodeMeta>
+  tools: StorageRecordCrud<ToolStorageRecord>
 }
 
-const taskStorageTables = ['taskyonNodes', 'metaDb'] as const
+const taskStorageTables = ['taskyonNodes', 'metaDb', 'toolRegistry'] as const
 type TaskStorageTable = (typeof taskStorageTables)[number]
 
 const isTaskStorageTable = (value: string): value is TaskStorageTable =>
@@ -86,6 +89,9 @@ export const createPgLiteTaskManagerStorage = async (
     meta: withBatches(
       await createPgLiteCrudWrapper<TaskNodeMeta>(taskyonDb, { tableName: 'metaDb' }),
     ),
+    tools: withBatches(
+      await createPgLiteCrudWrapper<ToolStorageRecord>(taskyonDb, { tableName: 'toolRegistry' }),
+    ),
   }
 }
 
@@ -103,6 +109,11 @@ export const connectTaskManagerStorageFromProtocol = (
       port,
       taskManagerStorageNamespace(sessionId, 'metaDb'),
       TaskNodeMeta,
+    ),
+    tools: createProtocolStorageCrudWrapper(
+      port,
+      taskManagerStorageNamespace(sessionId, 'toolRegistry'),
+      ToolStorageRecordSchema,
     ),
   }
 }
@@ -142,6 +153,8 @@ export const createPgLiteTaskManagerStorageService = (
             return createStorageRecordBackend(storage.tasks, TaskNode)
           case 'metaDb':
             return createStorageRecordBackend(storage.meta, TaskNodeMeta)
+          case 'toolRegistry':
+            return createStorageRecordBackend(storage.tools, ToolStorageRecordSchema)
         }
       },
     )
@@ -287,80 +300,6 @@ async function useTaskVectors(
   }
 }
 
-export function createToolIndex(getTask: (id: string | number) => Promise<TaskNode | null>) {
-  // we use this index to quickly look up tools from our database!
-  // We require that the toolIndex should contain only the latest version of a tool
-  const toolIndex = new Map<string, string>()
-  const defaultToolMap: Record<string, InternalTool> = {}
-  const addDefaultTools = (defaultTools: InternalTool[]) => {
-    for (const tool of defaultTools) {
-      const toolDef = ToolBase.safeParse(tool)
-      if (toolDef.success) {
-        defaultToolMap[toolDef.data.name] = tool
-      } else {
-        console.warn(`Tool ${tool.name} is not a valid ToolBase!`, toolDef.error)
-      }
-    }
-  }
-  // we simply assume, that all tools HAVE to be defined in the toolmap, no matter what.
-  // if they are not there, we are doing something wrong ;)
-  async function getToolDefinition(
-    name: string,
-  ): Promise<{ def?: TaskNodeType<'tooldefinition'> | undefined; tool?: InternalTool }> {
-    const toolTaskId = toolIndex.get(name)
-    if (toolTaskId) {
-      const toolTask = await getTask(toolTaskId)
-      if (toolTask?.content.type === 'tooldefinition') {
-        return {
-          def: toolTask as TaskNodeType<'tooldefinition'>,
-          tool: toolTask.content.data,
-        }
-      }
-    }
-    if (defaultToolMap[name])
-      return {
-        def: undefined,
-        tool: defaultToolMap[name],
-      }
-    return {}
-  }
-
-  async function updateToolIndex(task: TaskNode) {
-    let currentToolDef: ToolBase | undefined | null = undefined
-    if (task.content.type === 'tooldefinition') {
-      const toolDef = ToolBase.safeParse(task.content.data)
-      if (toolDef.success) {
-        const oldToolId = toolIndex.get(toolDef.data.name)
-        // of old tool already exists, we need to check which one is newer
-        // and only update if the new one is newer than the old one
-        if (oldToolId) {
-          const oldTool = await getTask(oldToolId)
-          if (
-            (oldTool?.created_at ?? 0) >= (task?.created_at ?? 0) &&
-            oldTool?.content.type === 'tooldefinition'
-          ) {
-            currentToolDef = oldTool?.content.data
-          }
-        }
-        if (!currentToolDef) {
-          toolIndex.set(task.content.data.name, task.id)
-          currentToolDef = toolDef.data
-        }
-      }
-    }
-    return {
-      current: currentToolDef,
-    }
-  }
-  return {
-    toolIndex,
-    defaultToolMap,
-    addDefaultTools,
-    getToolDefinition,
-    updateToolIndex,
-  }
-}
-
 // we use this in order to lock tasks!
 type LockItem = (id: string | number) => Promise<() => void>
 
@@ -394,10 +333,12 @@ export async function useTyTaskManager(
   taskyonDb: TyPGDB,
   options: {
     indexTaskVectors: boolean
+    resolveTool: ToolManager['resolveTool']
     storage?: TaskManagerStorage
     taskSearchVectorizer?: 'static-multilingual' | 'transformer-minilm'
   } = {
     indexTaskVectors: true,
+    resolveTool: async () => ({}),
   },
 ) {
   console.log('Initialize task manager with db:', taskyonDb.name)
@@ -470,16 +411,12 @@ export async function useTyTaskManager(
 
   const getAllTaskIds = tyCrud.listIds
 
-  // TODO: updateToolIndex should work through streams!
-  const { toolIndex, defaultToolMap, addDefaultTools, getToolDefinition, updateToolIndex } =
-    createToolIndex(tyCrud.get)
-
   // TODO: unify our tyCrudVec and useTaskVectors in one db...
   const taskVectors = await useTaskVectors(
     taskyonDb,
     getAllTaskIds,
     tyCrud.get,
-    getToolDefinition,
+    options.resolveTool,
     options.taskSearchVectorizer ?? 'static-multilingual',
   )
 
@@ -518,8 +455,6 @@ export async function useTyTaskManager(
         }
         // Update parent-child cache
         updateChildAndSiblingMap(completeTask)
-        // update our toolIndex with the new toolname :)
-        void updateToolIndex(completeTask)
       }, completeTask.id)
       return completeTask
     },
@@ -530,7 +465,6 @@ export async function useTyTaskManager(
         if (task) void deleteFromChildAndSiblings(task)
         void tyCrud.delete(id)
         void taskVectors.deleteTaskFromVectorStore(id.toString())
-        if (task?.content.type === 'tooldefinition') toolIndex.delete(task.content.data.name)
       }, id),
     clear: async () => {
       clearLocks()
@@ -809,59 +743,6 @@ export async function useTyTaskManager(
   const searchTasks: (where: PartialDeep<TaskNode>) => Promise<Record<string, TaskNode>> =
     storage.tasks.find
 
-  /**
-   * removeFunction will remove all "internal" functions from the returned tool list...
-   */
-  async function updateToolDefinitions<T extends boolean>(
-    removeFunctionProperty: T = false as T,
-  ): Promise<T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>> {
-    // first we simply search for all tool definitions in the db
-    const tasks = await searchTasks({ content: { type: 'tooldefinition' } })
-
-    // then update our tool index...
-    // and filter out non-valid tasks
-    // Update toolIndex and reduce tasks to a Record with tool names as keys
-    const toolTasks: Record<string, ToolBase> = Object.fromEntries(
-      (
-        await Promise.all(
-          Object.values(tasks).map(async (task) => {
-            if (task.content?.type === 'tooldefinition') {
-              // Update toolIndex with the latest tool definition
-              const { current: newTool } = await updateToolIndex(task)
-              // if newTool was returned, it means we got a tool definition which
-              // is valid and newer than the previous one
-              if (newTool) {
-                return [newTool.name, newTool]
-              }
-            }
-            return undefined
-          }),
-        )
-      ).filter((x) => x !== undefined),
-    )
-
-    // Merge parsed tool definitions with default tools
-    // and we also check if we should remove the function property
-    // from the list, because we don't need it in the UI
-    const allTools = { ...defaultToolMap, ...toolTasks }
-
-    return Object.values(allTools).reduce(
-      (pv, cv) => {
-        if (cv) {
-          if (removeFunctionProperty && 'function' in cv) {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { function: unused, ...toolBaseOnly } = cv
-            pv[toolBaseOnly.name] = toolBaseOnly
-          } else {
-            pv[cv.name] = cv
-          }
-        }
-        return pv
-      },
-      {} as T extends true ? Record<string, ToolBase> : Record<string, ToolBase | InternalTool>,
-    )
-  }
-
   const findSiblingLeafTasks = async (taskId: string) =>
     await findContinuationLeafTaskIds(taskId, taskDb.get, searchNextSibling)
 
@@ -947,13 +828,10 @@ export async function useTyTaskManager(
   }
 
   const defaultMode = {
-    addDefaultTools,
-    getToolDefinition,
     getTask: taskDb.get,
     deleteTask: taskDb.delete,
     searchTasks,
     taskStream: taskDb.liveStream,
-    updateToolDefinitions,
     getJsonTaskBackup,
     addTaskBackup,
     deleteAllTasks,

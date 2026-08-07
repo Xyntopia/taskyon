@@ -49,4 +49,6 @@ modified Taskyon runtime, or a tool that deliberately sends a secret after recei
 - Remote MCP and model services must be treated as data recipients.
 
 See [Files, Storage, and Secrets](../user/storage-and-security.md) for the user-facing trust model.
+See [Tool sandbox security](../tool_sandbox_security.md) for sandbox lifetime, immutable tool
+revisions, and mediated network and popup capabilities.
 The target public/admin split is maintained in workspace-level architectural proposals.

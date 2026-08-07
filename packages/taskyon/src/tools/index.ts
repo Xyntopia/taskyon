@@ -14,7 +14,7 @@ import { proceduralTools } from './proceduralGraphics'
 import { taskOrganizationTools, taskSearcher } from './TaskPlannerTool'
 import { testingTools } from './testTools'
 import {
-  addNewTool,
+  createAddNewTool,
   createMcpToolImporter,
   createToolSearcher,
   resolveAgentToolCatalog,
@@ -46,7 +46,6 @@ export const createDefaultTaskyonToolSetup = (options?: {
     ...taskOrganizationTools,
     ...webResearchTools,
     ...proceduralTools,
-    addNewTool,
     wfcGenerator,
     ...(options?.pythonTool === null ? [] : [options?.pythonTool ?? executePythonScript]),
     executeJavaScript,
@@ -54,13 +53,13 @@ export const createDefaultTaskyonToolSetup = (options?: {
     toolCreationWizard,
   ],
   chatCompletionToolName,
-  createSessionTools: ({ db, taskManager, artifactStore, toolchainConfig }) => {
+  createSessionTools: ({ db, taskManager, toolManager, artifactStore, toolchainConfig }) => {
     const createChatCompletion = (config: typeof toolchainConfig) =>
       createChatCompletionTool(resolveChatCompletionConnection(config.chatCompletion), {
         getTaskChain: taskManager.getTaskChain,
         getTask: taskManager.getTask,
         ...(artifactStore ? { getArtifact: artifactStore.get } : {}),
-        updateToolDefinitions: taskManager.updateToolDefinitions,
+        listToolDefinitions: () => toolManager.listToolDefinitions(true),
         metaUpsert: taskManager.metaUpsert,
       })
     const chatCompletion = createChatCompletion(toolchainConfig)
@@ -69,10 +68,11 @@ export const createDefaultTaskyonToolSetup = (options?: {
       tools: [
         localVectorStore(db),
         chatCompletion.chatCompletion,
-        createToolSearcher(taskManager, (tools) =>
+        createToolSearcher(toolManager, (tools) =>
           resolveAgentToolCatalog(tools, options?.unavailableToolNames),
         ),
-        createMcpToolImporter(taskManager),
+        createAddNewTool(toolManager),
+        createMcpToolImporter(toolManager),
         taskSearcher(taskManager),
       ],
       chatCompletionStream: chatCompletion.stream,

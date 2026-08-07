@@ -1,6 +1,6 @@
 import type { JSONSchema7 } from 'json-schema'
 import type { JSONSchema } from 'json-schema-to-ts'
-import { type TyTaskManager } from '../core/taskManager'
+import type { ToolManager } from '../core/toolManager'
 import { craeteToolJsonSchema } from '../core/tools'
 import { createTool, toolCall } from '../types/toolApi'
 import { ToolBase } from '../types/tools'
@@ -94,7 +94,7 @@ export const searchAgentToolCatalog = (
   searchCatalogEntries(resolveAgentToolCatalog(tools, unavailableToolNames), query, limit)
 
 export const createToolSearcher = (
-  taskManager: TyTaskManager,
+  toolManager: ToolManager,
   resolveToolCatalog: (
     tools: Readonly<Record<string, ToolBase>>,
   ) => AgentToolCatalogEntry[] = resolveAgentToolCatalog,
@@ -147,7 +147,7 @@ is now unreadable.
       required: [],
     } as const satisfies JSONSchema7,
     function: async ({ query, limit, toolName, withCode, analyze }, ctx) => {
-      const allTools = await taskManager.updateToolDefinitions(true)
+      const allTools = await toolManager.listToolDefinitions(true)
       const searchableTools = withCode
         ? Object.fromEntries(Object.entries(allTools).filter(([, tool]) => !!tool.code))
         : allTools
@@ -197,28 +197,22 @@ is now unreadable.
     },
   })
 
-export const addNewTool = createTool({
-  name: 'addNewTool',
-  description: 'Validates and registers a new tool with taskyon.',
-  longDescription: `This tool takes a tool definition, validates it and registers it with taskyon.
+export const createAddNewTool = (toolManager: ToolManager) =>
+  createTool({
+    name: 'addNewTool',
+    description: 'Validates and registers a new tool with taskyon.',
+    longDescription: `This tool takes a tool definition, validates it and registers it with taskyon.
 If you need examples of how to create tools, you can use the toolSearcher to retrieve
 existing tool definitions, including their source code when available. Additionally, you can use the toolCreationWizard
 to get some more general information how to create tools.`,
-  parameters: craeteToolJsonSchema() as JSONSchema7 &
-    Record<string, unknown> &
-    Readonly<JSONSchema>,
-  function: (toolDef: unknown, ctx) => {
-    const toolDefinition = ToolBase.parse(toolDef)
-    return ctx.createSubtasksResult([
-      [
-        {
-          role: 'assistant',
-          content: { type: 'tooldefinition', data: toolDefinition },
-        },
-      ],
-    ])
-  },
-})
+    parameters: craeteToolJsonSchema() as JSONSchema7 &
+      Record<string, unknown> &
+      Readonly<JSONSchema>,
+    function: async (toolDef: unknown) => {
+      const toolDefinition = ToolBase.parse(toolDef)
+      return await toolManager.installTool(toolDefinition)
+    },
+  })
 
 export const toolCreationWizard = createTool({
   parameters: {
@@ -361,8 +355,14 @@ function mapImportedMcpToolToTaskyonTool(input: McpInputTool, sourceName?: strin
   })
 }
 
-async function mcpRpcRequest(url: string, id: number, method: string, params?: unknown) {
-  const response = await fetch(url, {
+async function mcpRpcRequest(
+  fetcher: typeof fetch,
+  url: string,
+  id: number,
+  method: string,
+  params?: unknown,
+) {
+  const response = await fetcher(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -382,14 +382,14 @@ async function mcpRpcRequest(url: string, id: number, method: string, params?: u
   return body
 }
 
-export const createMcpToolImporter = (taskManager: TyTaskManager) =>
+export const createMcpToolImporter = (toolManager: ToolManager) =>
   createTool({
     name: 'importMcpTools',
     description:
       'Fetch tools from an MCP server and register them as Taskyon tools so they can be used in chat.',
     longDescription: `Use this tool when the user asks to add or install tools from an MCP server.
 It calls initialize + tools/list on the provided MCP endpoint, maps MCP tool schemas
-to Taskyon tooldefinitions, and stores them in the task tree.`,
+to Taskyon tool definitions, and installs immutable revisions in the tool registry.`,
     parameters: {
       type: 'object',
       properties: {
@@ -412,14 +412,14 @@ to Taskyon tooldefinitions, and stores them in the task tree.`,
       additionalProperties: false,
     } as const satisfies JSONSchema7,
     function: async ({ serverUrl, serverName, toolNames }, ctx) => {
-      await taskManager.updateToolDefinitions()
-      await mcpRpcRequest(serverUrl, 1, 'initialize', {
+      if (!ctx.fetch) throw new Error('MCP import requires the mediated fetch capability.')
+      await mcpRpcRequest(ctx.fetch, serverUrl, 1, 'initialize', {
         protocolVersion: '2024-11-05',
         clientInfo: { name: 'taskyon-tool-importer', version: '0.5.1' },
         capabilities: {},
       })
-      await mcpRpcRequest(serverUrl, 2, 'notifications/initialized')
-      const toolsResponse = await mcpRpcRequest(serverUrl, 3, 'tools/list')
+      await mcpRpcRequest(ctx.fetch, serverUrl, 2, 'notifications/initialized')
+      const toolsResponse = await mcpRpcRequest(ctx.fetch, serverUrl, 3, 'tools/list')
 
       const allTools = parseMcpToolsFromPayload(toolsResponse)
       const requestedNames = new Set((toolNames || []).map((n) => n.toLowerCase()))
@@ -432,26 +432,15 @@ to Taskyon tooldefinitions, and stores them in the task tree.`,
         mapImportedMcpToolToTaskyonTool(tool, serverName || serverUrl),
       )
 
-      return ctx.createSubtasksResult([
-        [
-          ...taskyonTools.map((toolDefinition) => ({
-            role: 'assistant' as const,
-            content: { type: 'tooldefinition' as const, data: toolDefinition },
-          })),
-          {
-            role: 'assistant',
-            content: {
-              type: 'structured',
-              data: {
-                serverUrl,
-                totalToolsOnServer: allTools.length,
-                importedToolsCount: taskyonTools.length,
-                importedToolNames: taskyonTools.map((t) => t.name),
-                requestedToolNames: toolNames || [],
-              },
-            },
-          },
-        ],
-      ])
+      const installedTools = await Promise.all(
+        taskyonTools.map((tool) => toolManager.installTool(tool)),
+      )
+      return {
+        serverUrl,
+        totalToolsOnServer: allTools.length,
+        importedToolsCount: installedTools.length,
+        importedTools: installedTools,
+        requestedToolNames: toolNames || [],
+      }
     },
   })

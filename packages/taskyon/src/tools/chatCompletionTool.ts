@@ -25,6 +25,7 @@ import {
 import type { Annotation, partialTaskDraft, TaskNode } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
 import { createTool } from '../types/toolApi'
+import type { ToolBase } from '../types/tools'
 import { humanizeError, serializeError } from '../utils/error'
 import { createDotPathTransformer } from '../utils/objHelpers'
 import { prepareChatCompletionContext } from './chatCompletion/context'
@@ -70,7 +71,7 @@ export function createChatCompletionTool(
     getTaskChain: TyTaskManager['getTaskChain']
     getTask: TyTaskManager['getTask']
     getArtifact?: ArtifactStore['get']
-    updateToolDefinitions: TyTaskManager['updateToolDefinitions']
+    listToolDefinitions: () => Promise<Record<string, ToolBase>>
     metaUpsert: TyTaskManager['metaUpsert']
   },
 ) {
@@ -314,7 +315,7 @@ export function createChatCompletionTool(
       const executionTaskChain = await context.getExecutionTaskChain()
       const currentTask = executionTaskChain.at(-1)
 
-      const toolDefs = await capabilities.updateToolDefinitions(true)
+      const toolDefs = await capabilities.listToolDefinitions()
 
       //////////// END INITIALIZATION
 

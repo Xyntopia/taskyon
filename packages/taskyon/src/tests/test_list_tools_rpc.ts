@@ -465,6 +465,36 @@ export const testListToolsRpcIgnoresUnrelatedResponses = async () => {
 testListToolsRpcIgnoresUnrelatedResponses.description =
   'Resolves listTools only from the tools.listResponse with the matching requestId.'
 
+export const testResolveToolRpcReturnsSerializableIdentity = async () => {
+  const { x: clientPort, y: taskyonPort } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()
+  const revision = `sha256:${'c'.repeat(43)}` as const
+  const unsubscribe = createPortServer(taskyonPort, taskyonProtocol, {
+    tools: {
+      resolve: ({ name }) =>
+        name === exampleTool.name
+          ? {
+              tool: exampleTool,
+              identity: { publisherId: 'test', name, revision },
+            }
+          : null,
+    },
+  })
+
+  try {
+    const resolved = await createPortClient(clientPort, taskyonProtocol).tools.resolve({
+      name: exampleTool.name,
+      revision,
+    })
+    assert(resolved?.tool.name === exampleTool.name, 'Expected the requested tool definition')
+    assert(resolved.identity.revision === revision, 'Expected the immutable tool identity')
+  } finally {
+    unsubscribe()
+  }
+}
+
+testResolveToolRpcReturnsSerializableIdentity.description =
+  'Resolves a tool definition and immutable identity through the Taskyon protocol.'
+
 export const testListToolsRpcTimesOut = async () => {
   const { x: clientPort } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()
 

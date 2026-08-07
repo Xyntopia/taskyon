@@ -2,7 +2,7 @@ import type { ChatCompletionStreamEvent } from '../types/chatCompletion'
 import { TyToolchainConfig, type llmSettings } from '../types/profiles'
 import { createSubtasksResult, type InternalTool } from '../types/toolApi'
 import { FunctionArguments } from '../types/tools'
-import type { ToolBase } from '../types/tools'
+import type { ToolBase, ToolIdentity } from '../types/tools'
 import { partialTaskDraft } from '../types/taskNode'
 import {
   createCombinedCrudWrapper,
@@ -39,9 +39,9 @@ import {
 } from '../api/taskyonProtocol'
 import { createTaskyonApiDescription } from '../api/taskyonOpenApi'
 import type { TaskManagerStorage, TyTaskManager } from './taskManager'
-import { useTyTaskManager } from './taskManager'
+import { createPgLiteTaskManagerStorage, useTyTaskManager } from './taskManager'
 import type { ArtifactStore } from './artifactStore'
-import { generateSecretId } from './taskFunctionExecutor'
+import { findCallingToolReference, generateSecretId } from './taskFunctionExecutor'
 import { runTaskWorker, type TyTaskStreamData } from './taskWorker'
 import { summarizeProtocolMessageForLog } from './protocolLogging'
 import {
@@ -51,6 +51,8 @@ import {
   type ToolRpcFunctionCallMessage,
 } from './toolRpc'
 import { materializeTaskyonFunctionArguments } from './taskVariables'
+import { createMediatedFetch, type FetchCapability } from '../security/mediatedFetch'
+import { createToolManager, type ToolManager } from './toolManager'
 import { createWithDefaults } from './tools'
 import type { ReadonlyDeep } from 'type-fest'
 
@@ -81,6 +83,7 @@ export type TyCoreToolSetup = {
   createSessionTools: (deps: {
     db: TyPGDB
     taskManager: TyTaskManager
+    toolManager: ToolManager
     artifactStore?: ArtifactStore
     toolchainConfig: TyToolchainConfig
   }) => {
@@ -96,6 +99,7 @@ export type TyCoreToolSetup = {
 function createApi(
   insidePort: Port<TaskyonProtocolMessage, TaskyonProtocolMessage>,
   taskManagerInstance: TyTaskManager,
+  toolManager: ToolManager,
   artifactStore: ArtifactStore | undefined,
   queueTask: (id: string) => void,
 ) {
@@ -114,10 +118,7 @@ function createApi(
       },
       discovery: {
         describe: async () =>
-          createTaskyonApiDescription(
-            taskyonProtocol,
-            await taskManagerInstance.updateToolDefinitions(true),
-          ),
+          createTaskyonApiDescription(taskyonProtocol, await toolManager.listToolDefinitions(true)),
       },
       task: {
         create: async (msg) => {
@@ -152,10 +153,10 @@ function createApi(
         getChildChains: async ({ id }) => await taskManagerInstance.getChildChains(id),
       },
       tools: {
-        register: (msg) => {
+        register: async (msg) => {
           const newFunc: ToolBase = msg
           console.log('registerTool was sent', newFunc)
-          void taskManagerInstance.addDefaultTools([newFunc])
+          await toolManager.installTool(newFunc, { approveReplacement: true })
           insidePort.send({
             type: 'status',
             data: {
@@ -164,8 +165,11 @@ function createApi(
             },
           })
         },
-        list: async (request) =>
-          await taskManagerInstance.updateToolDefinitions(request.includeHidden),
+        list: async (request) => await toolManager.listToolDefinitions(request.includeHidden),
+        resolve: async ({ name, revision }) => {
+          const { tool, identity } = await toolManager.resolveTool(name, revision)
+          return tool && identity ? { tool: ToolBase.parse(tool), identity } : null
+        },
       },
       files: {
         add: async ({ file }) => {
@@ -256,6 +260,14 @@ const dynamicContext =
       streamObservers: SessionStreamObservers
       taskManagerStorageFactory?: TaskManagerStorageFactory
       artifactStoreFactory?: ArtifactStoreFactory
+      authorizeSandboxFetch?: (args: {
+        tool: ToolIdentity
+        capability: FetchCapability
+      }) => Promise<boolean>
+      authorizePopup?: (args: {
+        tool: ToolIdentity
+        target: 'custom-html' | `origin:${string}`
+      }) => Promise<boolean>
     },
   ) =>
   async (cs: CryptoSession, initialToolchainConfig: TyToolchainConfig) => {
@@ -266,14 +278,16 @@ const dynamicContext =
     console.log('tycore starting new session with id:', sessionKeyId)
     const storage = options.taskManagerStorageFactory
       ? await options.taskManagerStorageFactory({ sessionId: sessionKeyId, db })
-      : undefined
+      : await createPgLiteTaskManagerStorage(db)
+    const toolManager = createToolManager(storage.tools)
     const artifactStore = options.artifactStoreFactory
       ? await options.artifactStoreFactory({ sessionId: sessionKeyId })
       : undefined
     const taskManagerInstance = await useTyTaskManager(db, {
       indexTaskVectors: options.indexTaskVectors,
       taskSearchVectorizer: options.taskSearchVectorizer,
-      ...(storage ? { storage } : {}),
+      storage,
+      resolveTool: toolManager.resolveTool,
     })
     console.log('tycore finished taskManager initialization')
     const secretStore =
@@ -298,12 +312,12 @@ const dynamicContext =
     const sessionTools = toolSetup.createSessionTools({
       db,
       taskManager: taskManagerInstance,
+      toolManager,
       ...(artifactStore ? { artifactStore } : {}),
       toolchainConfig: runtimeConfiguration.toolchainConfig,
     })
     const sessionToolList = [...toolSetup.baseTools, ...sessionTools.tools]
-    taskManagerInstance.addDefaultTools(sessionToolList)
-    await taskManagerInstance.updateToolDefinitions()
+    await toolManager.addDefaultTools(sessionToolList)
     let unsubscribeChatCompletion =
       sessionTools.chatCompletionStream?.(options.streamObservers.chatCompletion) ?? (() => {})
     let configureRuntimePromise = Promise.resolve()
@@ -316,8 +330,7 @@ const dynamicContext =
           const unsubscribeReplacementStream =
             refreshed?.chatCompletionStream?.(options.streamObservers.chatCompletion) ?? (() => {})
           try {
-            taskManagerInstance.addDefaultTools(refreshed?.tools ?? [])
-            await taskManagerInstance.updateToolDefinitions()
+            await toolManager.addDefaultTools(refreshed?.tools ?? [])
           } catch (error) {
             unsubscribeReplacementStream()
             throw error
@@ -363,15 +376,18 @@ const dynamicContext =
     const coreToolRpcPort = coreToolRpcPortFilter.port
     const coreToolExecutor = registerToolRpcExecutor({
       port: coreToolRpcPort,
-      getTool: async (name) => {
-        const { tool } = await taskManagerInstance.getToolDefinition(name)
+      getTool: async (name, call) => {
+        const { tool } = await toolManager.resolveTool(name, call?.toolRevision)
         if (tool?.function || tool?.code) return tool
         return undefined
       },
       createContext: async (call, stopSignal) => {
-        const { tool, def } = await taskManagerInstance.getToolDefinition(call.functionName)
+        const { tool, identity } = await toolManager.resolveTool(
+          call.functionName,
+          call.toolRevision,
+        )
         if (!tool) throw new Error(`Tool not found: ${call.functionName}`)
-        const toolId = await generateSecretId(def?.id, tool)
+        const toolId = await generateSecretId(identity?.revision, tool)
         const executionTask = call.taskId ? await taskManagerInstance.getTask(call.taskId) : null
         const interactionIds = new Set(
           [executionTask?.parentID, executionTask?.priorID].filter(
@@ -388,6 +404,19 @@ const dynamicContext =
               }
               return taskManagerInstance.getTaskChain(call.taskId)
             },
+            getCallingToolId: async () => {
+              if (!call.taskId) return null
+              const chain = await taskManagerInstance.getTaskChain(call.taskId)
+              const caller = findCallingToolReference(chain, call.functionName)
+              if (!caller) return null
+              const { tool: callerTool, identity: callerIdentity } = await toolManager.resolveTool(
+                caller.name,
+                caller.revision,
+              )
+              return callerTool
+                ? await generateSecretId(callerIdentity?.revision, callerTool)
+                : null
+            },
             createSubtasksResult,
             getSecret: async (name, askNew, saveNew = true) => {
               console.log('get secret name', name)
@@ -400,6 +429,18 @@ const dynamicContext =
             },
             stopSignal,
             toolId,
+            fetch: createMediatedFetch({
+              authorize: (capability) =>
+                identity
+                  ? (options.authorizeSandboxFetch?.({ tool: identity, capability }) ??
+                    Promise.resolve(false))
+                  : Promise.resolve(false),
+              signal: stopSignal,
+            }),
+            requestPopup: ({ target }) =>
+              identity
+                ? (options.authorizePopup?.({ tool: identity, target }) ?? Promise.resolve(false))
+                : Promise.resolve(false),
             waitForInteraction: async (request = {}) => {
               if (!executionTask) {
                 throw new Error('UI interaction is unavailable without an execution task.')
@@ -419,7 +460,7 @@ const dynamicContext =
       },
     })
     const prepareToolCall = async (call: ToolRpcFunctionCallMessage) => {
-      const { tool } = await taskManagerInstance.getToolDefinition(call.functionName)
+      const { tool, identity } = await toolManager.resolveTool(call.functionName, call.toolRevision)
       if (!tool) {
         throw new Error(
           `The function '${call.functionName}' is not available in tools. Please select a valid toolname.`,
@@ -433,6 +474,7 @@ const dynamicContext =
       })
       return {
         name: call.functionName,
+        ...(identity ? { toolRevision: identity.revision } : {}),
         arguments: FunctionArguments.parse({
           ...createWithDefaults(tool.parameters),
           ...(funcSettings || {}),
@@ -465,6 +507,7 @@ const dynamicContext =
     const unsubscribeApiServer = createApi(
       insidePort,
       taskManagerInstance,
+      toolManager,
       artifactStore,
       (id: string) => queueTask(id),
     )
@@ -533,6 +576,7 @@ const dynamicContext =
       },
       queueTask,
       taskManagerInstance,
+      toolManager,
       artifactStore,
       secretStore,
     }
@@ -555,6 +599,14 @@ export async function tyCore(
     secretStore?: SecretStore
     taskManagerStorageFactory?: TaskManagerStorageFactory
     artifactStoreFactory?: ArtifactStoreFactory
+    authorizeSandboxFetch?: (args: {
+      tool: ToolIdentity
+      capability: FetchCapability
+    }) => Promise<boolean>
+    authorizePopup?: (args: {
+      tool: ToolIdentity
+      target: 'custom-html' | `origin:${string}`
+    }) => Promise<boolean>
   },
 ) {
   configureNodePgLiteDataDir(
@@ -605,6 +657,10 @@ export async function tyCore(
       ...(options?.artifactStoreFactory
         ? { artifactStoreFactory: options.artifactStoreFactory }
         : {}),
+      ...(options?.authorizeSandboxFetch
+        ? { authorizeSandboxFetch: options.authorizeSandboxFetch }
+        : {}),
+      ...(options?.authorizePopup ? { authorizePopup: options.authorizePopup } : {}),
     },
   )
 
@@ -641,11 +697,9 @@ export async function tyCore(
     getArtifact: async (attachment: Parameters<ArtifactStore['get']>[0]) =>
       await ctx.artifactStore?.get(attachment),
     updateChatCompletionApiKey: async (key: string, value?: string) => {
-      const { tool, def } = await ctx.taskManagerInstance.getToolDefinition(
-        toolSetup.chatCompletionToolName,
-      )
+      const { tool, identity } = await ctx.toolManager.resolveTool(toolSetup.chatCompletionToolName)
       if (tool) {
-        const toolId = await generateSecretId(def?.id, tool)
+        const toolId = await generateSecretId(identity?.revision, tool)
         if (!value) await ctx.secretStore.deleteSecret(toolId, key)
         else await ctx.secretStore.setSecret(toolId, key, value)
       }

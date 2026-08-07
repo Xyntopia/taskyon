@@ -8,7 +8,7 @@ import type { Sha256Hash } from '@taskyon/common/modules/canonicalHash'
 import { z } from 'zod'
 import { FileAttachment, partialTaskDraft, TaskNode } from '../types/taskNode'
 import { ToolProgress } from '../types/toolApi'
-import { FunctionArguments, ToolBase } from '../types/tools'
+import { ContentHash, FunctionArguments, ToolBase, ToolIdentity } from '../types/tools'
 import { TyToolchainConfig } from '../types/profiles'
 
 export const REMOTE_FUNCTION_TIMEOUT_MS = 30_000
@@ -141,6 +141,9 @@ const functionCall = remoteFunctionBase
     arguments: FunctionArguments.optional().meta({
       description: 'the arguments for the function as a json object',
     }),
+    toolRevision: ContentHash.optional().meta({
+      description: 'Immutable tool revision selected for this execution.',
+    }),
   })
   .meta({
     description:
@@ -269,6 +272,17 @@ export const taskyonToolsProtocol = defineFrpServiceProtocol({
       response: z
         .record(z.string(), ToolBase)
         .describe('The currently registered Taskyon tool definitions keyed by tool name.'),
+      defaultTimeoutMs: 30_000,
+    },
+    resolve: {
+      request: z.object({
+        name: z.string(),
+        revision: ContentHash.optional(),
+      }),
+      response: z
+        .object({ tool: ToolBase, identity: ToolIdentity })
+        .nullable()
+        .describe('The exact immutable tool definition and identity, when available.'),
       defaultTimeoutMs: 30_000,
     },
     register: {

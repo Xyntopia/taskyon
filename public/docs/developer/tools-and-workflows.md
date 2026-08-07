@@ -59,9 +59,10 @@ The execution context can provide:
 - `getExecutionTaskChain()` to read the chain projected for the current task;
 - `createSubtasksResult(...)` to return visible sequential or parallel workflow branches;
 - `getSecret(...)` and `setSecret(...)` for the current tool's secret namespace;
+- `getCallingToolId()` when delegated work needs the resolved caller identity;
 - `stopSignal` for cancellation;
 - `toolId` for the generated tool identity;
-- an optional `messagePort` when the host explicitly supplies one.
+- optional typed `fetch(...)`, popup, progress, and interaction capabilities supplied by the host.
 
 External tool contexts intentionally make unavailable capabilities fail instead of silently
 granting core access. A direct RPC call may also lack a task ID, in which case

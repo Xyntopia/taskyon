@@ -126,7 +126,7 @@ export const testChatCompletionConnectionIsAnImmutableCreationSnapshot = () => {
   const { chatCompletion } = createChatCompletionTool(connection, {
     getTaskChain: unavailable,
     getTask: unavailable,
-    updateToolDefinitions: unavailable,
+    listToolDefinitions: unavailable,
     metaUpsert: unavailable,
   })
   const properties = chatCompletion.parameters.properties

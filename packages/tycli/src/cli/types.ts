@@ -80,6 +80,7 @@ export const SLASH_COMMANDS = [
   'resume',
   'search',
   'tree',
+  'stop',
   'exit',
   'quit',
 ] as const
