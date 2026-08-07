@@ -38,6 +38,7 @@ The CLI supports slash commands:
 - `/search <words>`: hybrid-search individual tasks and continue from a selected result.
 - `/tree`: inspect or export the active task history.
 - `/exit` and `/quit`: end the session.
+- `/stop`: cancel active tasks and destroy their retained tool sandboxes.
 
 ## Usage
 
@@ -87,6 +88,13 @@ Optional environment variables:
 - `TASKYON_CHATGPT_CODEX_API_KEY`
 - `CHATGPT_CODEX_API_KEY`
 - `TYAUTH`
+- `TASKYON_DENO_PATH` (optional Deno executable for explicitly selected Deno sandboxes)
+- `TASKYON_PYTHON_PATH` (optional native Python executable)
+
+Sandboxed CLI JavaScript uses the retained Node VM by default. Hosts may explicitly select Deno for
+tools that need it; Deno is available in the repository's Nix development shell. Native Python is
+a privileged host capability and is omitted when no configured or system interpreter is available.
+Stronger operating-system isolation for privileged CLI tools remains separate host-sandbox work.
 
 Diagnostics defaults:
 

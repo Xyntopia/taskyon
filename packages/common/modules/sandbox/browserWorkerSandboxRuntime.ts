@@ -1,7 +1,7 @@
 import { serializeRemoteError } from '../remoteError'
-import { executableSandboxRuntimeSource } from './executableSandboxRuntime.js'
 import { createBrowserSandboxFrame } from './browserSandboxDomHost'
 import type { SandboxTransport } from './executableSandbox'
+import { executableSandboxRuntimeSource } from './executableSandboxRuntime.js'
 import type { SandboxRuntimeToHostMessage } from './workerSandboxTypes'
 
 const READY_TIMEOUT_MS = 10_000
@@ -53,7 +53,7 @@ export async function createBrowserIframeSandboxTransport(id: string): Promise<S
     "object-src 'none'",
     "frame-src 'none'",
     'worker-src blob:',
-    "script-src 'unsafe-inline' 'unsafe-eval' blob:",
+    "script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:",
   ].join('; ')
   iframe.srcdoc = `<meta http-equiv="Content-Security-Policy" content="${csp}"><script>\n${iframeBootstrapSource(executableSandboxRuntimeSource)}\n//# sourceURL=BWS_${sourceId}\n</script>`
   const port = await portPromise

@@ -38,6 +38,7 @@ export type ToolInteractionRequest = {
  */
 export type toolContext = {
   getExecutionTaskChain: () => Promise<TaskNode[]>
+  getCallingToolId?: () => Promise<string | null>
   createSubtasksResult: typeof createSubtasksResult
   getSecret: (name: string, askNew: boolean | string, saveNew?: boolean) => Promise<string | null>
   setSecret: (name: string, value: string) => Promise<void>
@@ -45,6 +46,8 @@ export type toolContext = {
   toolId: string
   reportProgress?: (progress: ToolProgress) => Promise<void>
   waitForInteraction?: (request?: ToolInteractionRequest) => Promise<unknown>
+  fetch?: typeof fetch
+  requestPopup?: (request: { target: 'custom-html' | `origin:${string}` }) => Promise<boolean>
 }
 
 export type ClientToolContext = Omit<toolContext, 'getSecret' | 'setSecret' | 'toolId'>

@@ -8,6 +8,7 @@ export interface ExecuteInWorkerSandboxOptions {
   sourceURL?: string
   stopSignal: AbortSignal
   browserRuntime?: 'iframe' | 'worker'
+  nodeRuntime?: 'node' | 'deno'
   maxExecutionMs?: number
   maxOldSpaceSizeMb?: number
   maxOutputBytes?: number
@@ -108,4 +109,4 @@ export type SandboxExecuteOptions = {
   maxOutputBytes?: number | undefined
 }
 
-export type SandboxRuntimeKind = 'iframe' | 'worker' | 'node'
+export type SandboxRuntimeKind = 'iframe' | 'worker' | 'node' | 'deno'

@@ -4,7 +4,8 @@ export default defineConfig({
   entry: {
     cli: 'src/taskyonCli.ts',
     'nlp.worker': '../taskyon/src/utils/nlp.worker.ts',
-    'pyodide.worker': '../taskyon/src/utils/pyodide.worker.ts',
+    denoWorkerSandboxRuntime: '../common/modules/sandbox/denoWorkerSandboxRuntime.ts',
+    nodeWorkerSandboxRuntime: '../common/modules/sandbox/nodeWorkerSandboxRuntime.ts',
   },
   format: ['cjs'],
   platform: 'node',

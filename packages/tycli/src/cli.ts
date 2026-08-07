@@ -115,6 +115,7 @@ import {
   type CliProviderIdentity,
 } from './cli/models'
 import { hasInterruptibleWorkerActivity } from './cli/interruptState'
+import { createNativePythonTool, findNativePythonExecutable } from './cli/nativePythonTool'
 import { applyCliRuntimeConfig, syncProviderRuntimeConfig } from './cli/runtime'
 import { runBashCommand } from './cli/bash'
 import {
@@ -2819,7 +2820,11 @@ async function main(host: InteractiveCliHost) {
   const projectInstructions = await loadProjectInstructions(process.cwd(), host.environmentPrefix)
   const taskyonRef: { current?: Taskyon } = {}
   writeLine(`Initializing ${host.productName} runtime for provider '${selectedApi}'...`)
-  const unavailableToolNames = host.unavailableToolNames ?? DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES
+  const nativePythonExecutable = await findNativePythonExecutable()
+  const unavailableToolNames = new Set(
+    host.unavailableToolNames ?? DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES,
+  )
+  if (!nativePythonExecutable) unavailableToolNames.add('executePythonScript')
   const agentUnavailableToolNames = new Set([...unavailableToolNames, host.entryNodeName])
   const cliEntryNodeTool = createStandardEntryNodeTool({
     name: host.entryNodeName,
@@ -2914,6 +2919,7 @@ async function main(host: InteractiveCliHost) {
     {
       toolSetup: createDefaultTaskyonToolSetup({
         unavailableToolNames,
+        pythonTool: null,
         storageClient,
       }),
       createIframeMultiPlexer: () =>
@@ -3039,6 +3045,22 @@ async function main(host: InteractiveCliHost) {
     gitlabTool,
     dagGraphProjectTool,
     cliBashTool,
+    ...(nativePythonExecutable
+      ? [
+          createNativePythonTool({
+            executable: nativePythonExecutable,
+            authorize: async () => {
+              const readline = interactiveReadlineRef.current
+              if (!readline) throw new Error('Interactive approval is unavailable')
+              const answer = await askQuestion(
+                readline,
+                'Allow native Python full host filesystem and network access for this session? [y/N] ',
+              )
+              return answer?.trim().toLowerCase() === 'y' || answer?.trim().toLowerCase() === 'yes'
+            },
+          }),
+        ]
+      : []),
     ...(documentationBases ? [createDocumentationIndexClientTool(documentationBases)] : []),
     ...(documentation ? [documentation.tool] : []),
     ...(host.additionalTools ?? []),

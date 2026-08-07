@@ -29,8 +29,9 @@ const isBrowserRuntime = () => typeof window !== 'undefined' && typeof document 
 
 function runtimeKind(options: {
   browserRuntime?: ExecuteInWorkerSandboxOptions['browserRuntime'] | undefined
+  nodeRuntime?: ExecuteInWorkerSandboxOptions['nodeRuntime'] | undefined
 }): SandboxRuntimeKind {
-  if (!isBrowserRuntime()) return 'node'
+  if (!isBrowserRuntime()) return options.nodeRuntime ?? 'node'
   return options.browserRuntime === 'worker' ? 'worker' : 'iframe'
 }
 
@@ -48,6 +49,15 @@ async function createTransport(
       await import('./browserNativeWorkerSandboxRuntime.ts')
     return createBrowserWorkerSandboxTransport()
   }
+  if (kind === 'deno') {
+    const denoRuntimeModule = './denoWorkerSandboxRuntime.ts'
+    const { createDenoSandboxTransport } = (await import(/* @vite-ignore */ denoRuntimeModule)) as {
+      createDenoSandboxTransport: (options: {
+        maxOldSpaceSizeMb?: number | undefined
+      }) => SandboxTransport
+    }
+    return createDenoSandboxTransport(options)
+  }
   const nodeRuntimeModule = './nodeWorkerSandboxRuntime.ts'
   const { createNodeSandboxTransport } = (await import(/* @vite-ignore */ nodeRuntimeModule)) as {
     createNodeSandboxTransport: (options: {
@@ -60,6 +70,7 @@ async function createTransport(
 export async function createExecutableSandbox(options: {
   id: string
   browserRuntime?: 'iframe' | 'worker'
+  nodeRuntime?: 'node' | 'deno'
   maxOldSpaceSizeMb?: number
   reuse?: SandboxReusePolicy
 }): Promise<ExecutableSandbox> {
@@ -90,6 +101,7 @@ export async function createExecutableSandbox(options: {
 export async function terminateExecutableSandbox(options: {
   id: string
   browserRuntime?: 'iframe' | 'worker'
+  nodeRuntime?: 'node' | 'deno'
   reuse?: Exclude<SandboxReusePolicy, { mode: 'disposable' }>
 }): Promise<void> {
   const reuse = options.reuse ?? { mode: 'affinity', key: options.id }

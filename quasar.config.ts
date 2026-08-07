@@ -7,11 +7,12 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
+import { sandboxArtifacts } from './packages/taskyon/src/sandbox/sandboxArtifacts'
 
 // --- helper to copy pyodide runtime ---
-function viteStaticCopyPyodide() {
-  const pyodideDir = dirname(fileURLToPath(import.meta.resolve('pyodide')))
-  const pyodidePkg = JSON.parse(readFileSync(join(pyodideDir, 'package.json'), 'utf-8'))
+function viteStaticCopySandboxArtifacts() {
+  const pyodideEntryDir = dirname(fileURLToPath(import.meta.resolve('pyodide')))
+  const pyodidePkg = JSON.parse(readFileSync(join(pyodideEntryDir, 'package.json'), 'utf-8'))
   const pyodideVersion = pyodidePkg.version
   console.log('Detected Pyodide version:', pyodideVersion)
 
@@ -20,16 +21,13 @@ function viteStaticCopyPyodide() {
   )*/
 
   return viteStaticCopy({
-    targets: [
-      {
-        src: [join(pyodideDir, '*')],
-        dest: 'assets/pyodide',
-      },
-      /*{
-        src: [micropipDir],
-        dest: 'assets/pyodide',
-      },*/
-    ],
+    targets: sandboxArtifacts.flatMap((artifact) => {
+      const packageEntryDir = dirname(fileURLToPath(import.meta.resolve(artifact.package)))
+      return Object.keys(artifact.assets).map((fileName) => ({
+        src: join(packageEntryDir, fileName),
+        dest: `assets/sandbox/${artifact.id}`,
+      }))
+    }),
   })
 }
 
@@ -332,7 +330,7 @@ export default defineConfig((ctx) => {
 
         viteConf.plugins = [
           viteConf.plugins,
-          ...viteStaticCopyPyodide(),
+          ...viteStaticCopySandboxArtifacts(),
           viteStaticCopy({
             targets: [
               {

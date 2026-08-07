@@ -33,5 +33,24 @@ export const toolContextProtocol = defineFrpServiceProtocol({
       }),
       response: z.unknown(),
     },
+    fetch: {
+      request: z.object({
+        input: z.string(),
+        init: z
+          .object({
+            method: z.string().optional(),
+            headers: z.array(z.tuple([z.string(), z.string()])).optional(),
+            body: z.string().optional(),
+          })
+          .optional(),
+      }),
+      response: z.object({
+        status: z.number(),
+        statusText: z.string(),
+        headers: z.array(z.tuple([z.string(), z.string()])),
+        body: z.string().optional(),
+        bodyBase64: z.string().optional(),
+      }),
+    },
   },
 })

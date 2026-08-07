@@ -1,7 +1,7 @@
 import type { TyCoreToolSetup } from '../core/init'
 import { resolveChatCompletionConnection } from '../types/chatCompletion'
 import { createDagGraphPatchTool } from '@taskyon/comp-dag/dagGraphTool'
-import { createTool } from '../types/toolApi'
+import { createTool, type InternalTool } from '../types/toolApi'
 import { chatCompletionToolName, createChatCompletionTool } from './chatCompletionTool'
 import { devTools } from './devTools'
 import { executeJavaScript } from './executeJavaScript'
@@ -34,6 +34,7 @@ export {
 export const createDefaultTaskyonToolSetup = (options?: {
   unavailableToolNames?: ReadonlySet<string>
   storageClient?: TaskyonStorageClient
+  pythonTool?: InternalTool | null
 }): TyCoreToolSetup => ({
   baseTools: [
     ...smallHelperTools,
@@ -47,7 +48,7 @@ export const createDefaultTaskyonToolSetup = (options?: {
     ...proceduralTools,
     addNewTool,
     wfcGenerator,
-    executePythonScript,
+    ...(options?.pythonTool === null ? [] : [options?.pythonTool ?? executePythonScript]),
     executeJavaScript,
     createDagGraphPatchTool(createTool),
     toolCreationWizard,

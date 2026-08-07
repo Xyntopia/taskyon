@@ -164,7 +164,7 @@ export async function bootstrapCliTaskyon(args?: {
     getSelectedToolchainConfig(llmState),
     cryptoSession,
     {
-      toolSetup: createDefaultTaskyonToolSetup({ storageClient }),
+      toolSetup: createDefaultTaskyonToolSetup({ pythonTool: null, storageClient }),
       createIframeMultiPlexer: () =>
         createUnavailableIframeMux('Iframe message bridging is not available in tycli.'),
       nodePgLiteDataDir: pgliteNodeDir,

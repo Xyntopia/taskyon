@@ -1,6 +1,6 @@
-import { executableSandboxRuntimeSource } from './executableSandboxRuntime.js'
 import { serializeRemoteError } from '../remoteError'
 import type { SandboxTransport } from './executableSandbox'
+import { executableSandboxRuntimeSource } from './executableSandboxRuntime.js'
 import type { SandboxRuntimeToHostMessage } from './workerSandboxTypes'
 
 export function createBrowserWorkerSandboxTransport(): SandboxTransport {

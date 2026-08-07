@@ -10,7 +10,6 @@ export function installExecutableSandboxRuntime() {
     'WebSocket',
     'Worker',
     'XMLHttpRequest',
-    'fetch',
     'importScripts',
   ]) {
     const descriptor = Object.getOwnPropertyDescriptor(globalThis, name)
@@ -22,6 +21,11 @@ export function installExecutableSandboxRuntime() {
       })
     }
   }
+  Object.defineProperty(globalThis, 'fetch', {
+    configurable: true,
+    value: undefined,
+    writable: false,
+  })
 
   function serializeError(error) {
     const normalized = error instanceof Error ? error : new Error(String(error))

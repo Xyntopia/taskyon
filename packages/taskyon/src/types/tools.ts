@@ -3,12 +3,15 @@ import { JSONSchema7 } from '../utils/jsonSchema'
 
 export const taskMarker = '*TY_TASKRESULT*'
 
-const FunctionName = z.string().refine((val) => /^[a-zA-Z0-9_-]+$/.test(val), {
-  error: ({ input }) => {
-    const msg = typeof input === 'string' ? input : JSON.stringify(input)
-    return `The function/tool name ${msg} contains illegal characters. It has to fulfill '^[a-zA-Z0-9_-]+$'`
-  },
-})
+const FunctionName = z
+  .string()
+  .max(48)
+  .refine((val) => /^[a-zA-Z0-9_-]+$/.test(val), {
+    error: ({ input }) => {
+      const msg = typeof input === 'string' ? input : JSON.stringify(input)
+      return `The function/tool name ${msg} contains illegal characters. It has to fulfill '^[a-zA-Z0-9_-]+$'`
+    },
+  })
 type FunctionName = z.infer<typeof FunctionName>
 
 export const ParamType = z.union([
@@ -28,10 +31,24 @@ export const FunctionArguments = z.record(z.string(), ParamType).meta({
 })
 export type FunctionArguments = z.infer<typeof FunctionArguments>
 
+export type ContentHash = `sha256:${string}`
+export const ContentHash = z.custom<ContentHash>(
+  (value) => typeof value === 'string' && /^sha256:[A-Za-z0-9_-]{43}$/.test(value),
+  'Expected a SHA-256 content hash',
+)
+
+export const ToolIdentity = z.object({
+  publisherId: z.string(),
+  name: FunctionName,
+  revision: ContentHash,
+})
+export type ToolIdentity = z.infer<typeof ToolIdentity>
+
 /* here we are essentiall declaring the taskyon API */
 export const FunctionCall = z.object({
   name: FunctionName,
   arguments: FunctionArguments,
+  toolRevision: ContentHash.optional(),
 })
 export type FunctionCall = z.infer<typeof FunctionCall>
 
