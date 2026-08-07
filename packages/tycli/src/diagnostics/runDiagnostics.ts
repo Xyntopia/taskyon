@@ -6,6 +6,7 @@ import {
   type TaskyonTestFn,
   type TestRecord,
 } from '@taskyon/common/modules/diagnosticsRunner'
+import { closeDatabases } from '@taskyon/taskyon/db'
 import { mkdtemp, readFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
@@ -715,7 +716,11 @@ async function main() {
   }
 }
 
-await main()
+try {
+  await main()
+} finally {
+  await closeDatabases()
+}
 await Promise.all(
   [process.stdout, process.stderr].map(
     (stream) =>

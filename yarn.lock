@@ -715,10 +715,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@electric-sql/pglite@npm:0.3.14":
-  version: 0.3.14
-  resolution: "@electric-sql/pglite@npm:0.3.14"
-  checksum: 10c0/da61bece304e1ef0c094ae83d18c3cc73afcab750037195fc2342d39ebd1591e62a4e9041be297dd8f694b97a8d22a44cf9ad4389c56e9ee04eb166a83bca44f
+"@electric-sql/pglite@npm:0.4.5":
+  version: 0.4.5
+  resolution: "@electric-sql/pglite@npm:0.4.5"
+  checksum: 10c0/f1877f7f59fc27e4af9576f6c847a9c6ea4dd095d86e09142ca0a6fa99fcd32ec84d23172e3ef784533b51c5ff94bf0388814e5623bf47e4e9ec880468a30fc7
   languageName: node
   linkType: hard
 
@@ -16279,7 +16279,7 @@ __metadata:
   dependencies:
     "@ai-sdk/openai": "npm:^3.0.13"
     "@ai-sdk/openai-compatible": "npm:^2.0.16"
-    "@electric-sql/pglite": "npm:0.3.14"
+    "@electric-sql/pglite": "npm:0.4.5"
     "@eslint/js": "npm:^9.17.0"
     "@huggingface/transformers": "npm:^4.0.1"
     "@intlify/unplugin-vue-i18n": "npm:^11.0.3"

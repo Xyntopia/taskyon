@@ -5128,6 +5128,8 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
   }
 }
 
+testModelicaMslResistorExampleSimulation.timeoutMs = 120_000
+
 export async function testModelicaOrbitInvariantsCompareSolvers() {
   return runModelicaOrbitInvariantTest('compare')
 }

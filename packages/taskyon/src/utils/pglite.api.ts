@@ -1,6 +1,6 @@
 //pglite.api.ts
 import { PGlite } from '@electric-sql/pglite'
-import { PGliteWorker } from '@electric-sql/pglite/worker'
+import { LeaderChangedError, PGliteWorker } from '@electric-sql/pglite/worker'
 import type { LiveNamespace } from '@electric-sql/pglite/live'
 import { live } from '@electric-sql/pglite/live'
 import { vector } from '@electric-sql/pglite/vector'
@@ -12,6 +12,7 @@ export type TyPGDB =
 const pgInstances = new Map<string, TyPGDB>()
 const memoryPgInstances = new Map<string, TyPGDB>()
 let nodeDataDirResolver: ((name: string) => string) | null = null
+const TASKYON_DATABASE = 'template1'
 
 const useNodePgLite = () => typeof indexedDB === 'undefined'
 const getNodeDataDir = (name: string) =>
@@ -20,6 +21,47 @@ const getNodeDataDir = (name: string) =>
 export function configureNodePgLiteDataDir(resolver?: (name: string) => string) {
   nodeDataDirResolver = resolver ?? null
 }
+
+export async function closeDatabases(): Promise<void> {
+  const databases = [...pgInstances.values(), ...memoryPgInstances.values()]
+  pgInstances.clear()
+  memoryPgInstances.clear()
+  await Promise.all(databases.map(async (database) => await database.close()))
+}
+
+export async function initializePGliteWorker<T>(
+  createAttempt: () => { ready: Promise<T>; cleanup: () => void },
+  retryDelaysMs: readonly number[] = [25, 100, 250],
+): Promise<T> {
+  for (let attemptIndex = 0; ; attemptIndex += 1) {
+    const attempt = createAttempt()
+    try {
+      return await attempt.ready
+    } catch (error) {
+      attempt.cleanup()
+      const retryDelay = retryDelaysMs[attemptIndex]
+      if (!(error instanceof LeaderChangedError) || retryDelay === undefined) throw error
+      await new Promise<void>((resolve) => setTimeout(resolve, retryDelay))
+    }
+  }
+}
+
+const createBrowserPGlite = async (name: string): Promise<TyPGDB> =>
+  await initializePGliteWorker(() => {
+    const worker = new Worker(new URL('./pglite.worker.ts', import.meta.url), {
+      type: 'module',
+    })
+    return {
+      ready: PGliteWorker.create(worker, {
+        dataDir: `idb://${name}314`,
+        database: TASKYON_DATABASE,
+        extensions: {
+          live,
+        },
+      }),
+      cleanup: () => worker.terminate(),
+    }
+  })
 
 export const getDatabase: (name: string) => Promise<TyPGDB> = async (name) => {
   const existingDb = pgInstances.get(name)
@@ -31,31 +73,12 @@ export const getDatabase: (name: string) => Promise<TyPGDB> = async (name) => {
   const newInstance: TyPGDB = useNodePgLite()
     ? ((await PGlite.create({
         dataDir: getNodeDataDir(name),
+        database: TASKYON_DATABASE,
         extensions: {
           vector,
         },
       })) as TyPGDB)
-    : ((await PGliteWorker.create(
-        new Worker(new URL('./pglite.worker.ts', import.meta.url), {
-          type: 'module',
-        }),
-        {
-          //'memory://'  // if we want to use taskyon in memory-only (this might make sense on
-          // an ephemeral serve for example!)
-          // TODO: currently, we need to make sure, that we manually change the pglite version
-          // number and use it as the string for the database...
-          // it would be good to automatically adapt the name based on the version...
-          dataDir: `idb://${name}314`,
-          meta: {
-            // additional metadata passed to `init`
-          },
-          // we can do this here instead of inside the worker, because it only uses the PGlite plugin interface
-          // https://pglite.dev/docs/multi-tab-worker#extension-support
-          extensions: {
-            live,
-          },
-        },
-      )) as TyPGDB)
+    : await createBrowserPGlite(name)
   pgInstances.set(name, newInstance)
   newInstance.name = name
   return newInstance
