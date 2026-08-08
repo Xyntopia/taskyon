@@ -2,6 +2,11 @@ import type { SerializedRemoteError } from '../remoteError.ts'
 
 export type SandboxSerializedError = SerializedRemoteError
 
+export type SandboxReusePolicy =
+  | { mode: 'disposable' }
+  | { mode: 'affinity'; key: string }
+  | { mode: 'immutable'; contentId: string }
+
 export interface ExecuteInWorkerSandboxOptions {
   id: string
   code: string
@@ -12,6 +17,7 @@ export interface ExecuteInWorkerSandboxOptions {
   maxExecutionMs?: number
   maxOldSpaceSizeMb?: number
   maxOutputBytes?: number
+  reuse?: SandboxReusePolicy
 }
 
 export type SandboxExecuteRequest = {

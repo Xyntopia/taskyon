@@ -275,10 +275,12 @@ export const taskyonToolsProtocol = defineFrpServiceProtocol({
       defaultTimeoutMs: 30_000,
     },
     resolve: {
-      request: z.object({
-        name: z.string(),
-        revision: ContentHash.optional(),
-      }),
+      request: z
+        .object({
+          name: z.string(),
+          revision: ContentHash.optional(),
+        })
+        .describe('Resolve a tool by name and optional immutable revision.'),
       response: z
         .object({ tool: ToolBase, identity: ToolIdentity })
         .nullable()

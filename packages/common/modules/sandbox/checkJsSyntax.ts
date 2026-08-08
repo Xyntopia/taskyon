@@ -129,6 +129,7 @@ export async function validateJavaScriptInSandbox(code: string): Promise<JsValid
         code: buildSandboxValidationCode(),
         sourceURL: `${runId}.js`,
         stopSignal: abort.signal,
+        reuse: { mode: 'disposable' },
       },
       code,
     )

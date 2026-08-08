@@ -3,17 +3,17 @@ import {
   type ExecutableSandbox,
   type SandboxTransport,
 } from './executableSandbox.ts'
-import type { ExecuteInWorkerSandboxOptions, SandboxRuntimeKind } from './workerSandboxTypes.ts'
+import type {
+  ExecuteInWorkerSandboxOptions,
+  SandboxReusePolicy,
+  SandboxRuntimeKind,
+} from './workerSandboxTypes.ts'
 
 export type { ExecuteInWorkerSandboxOptions, SandboxExecuteOptions } from './workerSandboxTypes.ts'
 export type { ExecutableSandbox, SandboxTransport } from './executableSandbox.ts'
+export type { SandboxReusePolicy } from './workerSandboxTypes.ts'
 
 const retainedSandboxes = new Map<string, Promise<ExecutableSandbox>>()
-
-export type SandboxReusePolicy =
-  | { mode: 'disposable' }
-  | { mode: 'affinity'; key: string }
-  | { mode: 'immutable'; contentId: string }
 
 function retainedSandboxKey(
   kind: SandboxRuntimeKind,
@@ -116,10 +116,14 @@ export async function executeInWorkerSandbox<R = unknown>(
   ...args: unknown[]
 ): Promise<R> {
   const sandbox = await createExecutableSandbox(options)
-  return await sandbox.execute<R>(options.code, args, {
-    signal: options.stopSignal,
-    sourceURL: options.sourceURL,
-    maxExecutionMs: options.maxExecutionMs,
-    maxOutputBytes: options.maxOutputBytes,
-  })
+  try {
+    return await sandbox.execute<R>(options.code, args, {
+      signal: options.stopSignal,
+      sourceURL: options.sourceURL,
+      maxExecutionMs: options.maxExecutionMs,
+      maxOutputBytes: options.maxOutputBytes,
+    })
+  } finally {
+    if (options.reuse?.mode === 'disposable') sandbox.terminate()
+  }
 }

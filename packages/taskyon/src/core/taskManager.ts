@@ -337,7 +337,6 @@ export async function useTyTaskManager(
     taskSearchVectorizer?: 'static-multilingual' | 'transformer-minilm'
   } = {
     indexTaskVectors: true,
-    resolveTool: async () => ({}),
   },
 ) {
   console.log('Initialize task manager with db:', taskyonDb.name)
@@ -412,11 +411,12 @@ export async function useTyTaskManager(
   const getAllTaskIds = tyCrud.listIds
 
   // TODO: unify our tyCrudVec and useTaskVectors in one db...
+  const resolveTool = options.resolveTool ?? (() => Promise.resolve({}))
   const taskVectors = await useTaskVectors(
     taskyonDb,
     getAllTaskIds,
     tyCrud.get,
-    options.resolveTool ?? (async () => ({})),
+    resolveTool,
     options.taskSearchVectorizer ?? 'static-multilingual',
   )
 

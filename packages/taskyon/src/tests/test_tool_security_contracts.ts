@@ -1,6 +1,6 @@
 import { executeInWorkerSandbox } from '@taskyon/common/modules/sandbox/workerSandbox'
 import { createCapabilityPolicy, type CapabilityRequest } from '../security/capabilityPolicy'
-import { createMediatedFetch } from '../security/mediatedFetch'
+import { createMediatedFetch, validateSandboxFetchUrl } from '../security/mediatedFetch'
 import { executePythonScript } from '../tools/executePython'
 import { createSubtasksResult } from '../types/toolApi'
 import { executeToolInWorkerSandbox } from '../utils/executeToolInWorkerSandbox'
@@ -215,7 +215,8 @@ export async function tool_security_contractsSandboxUsesOnlyMediatedFetch() {
         setSecret: () => Promise.resolve(),
         stopSignal: stopController.signal,
         toolId: `security-fetch-${Date.now()}`,
-        fetch: (input) => Promise.resolve(new Response(`mediated:${String(input)}`)),
+        fetch: (input) =>
+          Promise.resolve(new Response(`mediated:${validateSandboxFetchUrl(input).href}`)),
       },
     },
     'security-fetch.js',

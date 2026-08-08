@@ -34,6 +34,9 @@ const canRunPython = (executable: string): Promise<boolean> =>
     child.once('exit', (code) => resolve(code === 0))
   })
 
+const normalizeError = (error: unknown) =>
+  error instanceof Error ? error : new Error(String(error))
+
 export async function findNativePythonExecutable(): Promise<string | null> {
   const candidates = [process.env.TASKYON_PYTHON_PATH, 'python3', 'python'].filter(
     (candidate): candidate is string => Boolean(candidate),
@@ -70,14 +73,14 @@ const executePython = (
       try {
         stdout = append(stdout, chunk)
       } catch (error) {
-        reject(error)
+        reject(normalizeError(error))
       }
     })
     child.stderr.on('data', (chunk: string) => {
       try {
         stderr = append(stderr, chunk)
       } catch (error) {
-        reject(error)
+        reject(normalizeError(error))
       }
     })
     child.once('error', reject)

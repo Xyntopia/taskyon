@@ -11,7 +11,10 @@ import {
 } from './modelica'
 import { hasRumocaTemplateRenderer, renderRumocaTemplate } from './rumocaTemplateRender'
 import { strFromU8, unzipSync } from 'fflate'
-import { executeInWorkerSandbox } from '@taskyon/common/modules/sandbox/workerSandbox'
+import {
+  executeInWorkerSandbox,
+  type ExecuteInWorkerSandboxOptions,
+} from '@taskyon/common/modules/sandbox/workerSandbox'
 import { validateJavaScriptInSandbox } from '@taskyon/common/modules/sandbox/checkJsSyntax'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import { createGraphController } from '@taskyon/common/modules/graph'
@@ -29,6 +32,11 @@ import {
   buildLazyModelicaLibraryByteArchive,
   normalizeModelicaLibraryEntryPath,
 } from './lazyModelicaLibraryIndex'
+
+const executeModelicaDiagnosticInSandbox = <R = unknown>(
+  options: ExecuteInWorkerSandboxOptions,
+  ...args: unknown[]
+) => executeInWorkerSandbox<R>({ ...options, reuse: { mode: 'disposable' } }, ...args)
 
 const templateChecks = [
   {
@@ -301,7 +309,7 @@ async function runTemplateCoverage(source: string, modelName: string) {
       const id = `modelica-template-abi-check-${check.name.replaceAll(/[^a-zA-Z0-9_-]/g, '_')}`
       const abort = new AbortController()
       try {
-        const rawAbiResult = await executeInWorkerSandbox(
+        const rawAbiResult = await executeModelicaDiagnosticInSandbox(
           {
             id,
             code,
@@ -601,7 +609,7 @@ export async function testModelicaBooleanNetworkShimRuntime() {
   const abort = new AbortController()
   try {
     const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
-    const result = await executeInWorkerSandbox<{
+    const result = await executeModelicaDiagnosticInSandbox<{
       meta?: { stopReason?: unknown; stopError?: unknown }
       data?: { t?: unknown[] }
     }>(
@@ -693,7 +701,7 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
   const abort = new AbortController()
   try {
     const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
-    const result = await executeInWorkerSandbox<{
+    const result = await executeModelicaDiagnosticInSandbox<{
       meta?: { stopReason?: unknown; stopError?: unknown }
       data?: { t?: unknown[]; y?: Record<string, unknown> }
     }>(
@@ -887,7 +895,7 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
   try {
     const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
     const result: BooleanNetworkRunResult = await withTimeout(
-      executeInWorkerSandbox<BooleanNetworkRunResult>(
+      executeModelicaDiagnosticInSandbox<BooleanNetworkRunResult>(
         {
           id: runId,
           code: runCode,
@@ -1033,7 +1041,7 @@ function Model() {
   const runId = 'modelica-static-model-execution-mode-regression'
   const abort = new AbortController()
   try {
-    const result = await executeInWorkerSandbox<{
+    const result = await executeModelicaDiagnosticInSandbox<{
       meta?: {
         executionMode?: unknown
         warnings?: unknown
@@ -1251,7 +1259,7 @@ model BouncingBall             "The bouncing ball model"
   }
   let runResult: SimResult | null = null
   try {
-    runResult = await executeInWorkerSandbox(
+    runResult = await executeModelicaDiagnosticInSandbox(
       {
         id: runId,
         code: runCode,
@@ -1518,7 +1526,7 @@ model BouncingBall             "The bouncing ball model"
   const runAbort = new AbortController()
   let runResult: DiagnosticsSimulationResult | null = null
   try {
-    runResult = await executeInWorkerSandbox(
+    runResult = await executeModelicaDiagnosticInSandbox(
       {
         id: runId,
         code: runCode,
@@ -1789,7 +1797,7 @@ end Test;
       const abort = new AbortController()
       abiSandboxExecuted = true
       try {
-        const rawAbiResult = await executeInWorkerSandbox(
+        const rawAbiResult = await executeModelicaDiagnosticInSandbox(
           {
             id,
             code,
@@ -2862,7 +2870,7 @@ end MslConstRamp;
     const modelProbeAbort = new AbortController()
     let modelProbeResult: unknown
     try {
-      modelProbeResult = await executeInWorkerSandbox(
+      modelProbeResult = await executeModelicaDiagnosticInSandbox(
         {
           id: modelProbeRunId,
           code: modelProbeCode,
@@ -2891,7 +2899,7 @@ end MslConstRamp;
     const abiRunId = 'modelica-msl-smoke-abi'
     const abiAbort = new AbortController()
     try {
-      const rawAbiResult = await executeInWorkerSandbox(
+      const rawAbiResult = await executeModelicaDiagnosticInSandbox(
         {
           id: abiRunId,
           code: abiCode,
@@ -2937,7 +2945,7 @@ end MslConstRamp;
     let runResult: SimResult
     let serializedRunResult = ''
     try {
-      runResult = await executeInWorkerSandbox(
+      runResult = await executeModelicaDiagnosticInSandbox(
         {
           id: runId,
           code: runCode,
@@ -3120,7 +3128,7 @@ end MslFirstOrderRuntimeSmoke;
     let runResult: SimResult
     try {
       debug.phase = 'execute-generated-js'
-      runResult = await executeInWorkerSandbox(
+      runResult = await executeModelicaDiagnosticInSandbox(
         {
           id: runId,
           code: runCode,
@@ -3820,7 +3828,7 @@ end MslResistorExample;
     let serializedRunResult = ''
     try {
       debug.phase = 'execute-generated-js'
-      runResult = await executeInWorkerSandbox(
+      runResult = await executeModelicaDiagnosticInSandbox(
         {
           id: runId,
           code: runCode,
@@ -4399,7 +4407,7 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
   ): Promise<OrbitSolverRun> => {
     const abort = new AbortController()
     try {
-      return await executeInWorkerSandbox(
+      return await executeModelicaDiagnosticInSandbox(
         {
           id: runId,
           code: runCode,
@@ -5230,6 +5238,7 @@ export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
     throw new Error([baseMessage, `MSL SineVoltage icon source debug:\n${debugDump}`].join('\n'))
   }
 }
+testModelicaMslResistorSineVoltageIconSourceResolution.timeoutMs = 120_000
 
 export async function testModelicaMslResistorSineVoltageClassInfoRoundtripStrict() {
   const debug: Record<string, unknown> = {
