@@ -1478,6 +1478,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
       if (newId === oldId) return
       console.log(`switch user session because of binding key change! ${oldId}->${newId}`)
+      await uiToolRpcHost
       await ty.setNewSession(cs)
       await registerUiToolsForCurrentSession()
       stateRefs.setSessionId(newId)
@@ -1862,6 +1863,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   return {
     tyready: computed(() => tyready),
+    switchTaskyonSessionForBindingKey,
     addFile: async (file: File) => await uiTaskyonClient.files.add({ file }),
     setNewSession,
     newSessionFromGdrive,

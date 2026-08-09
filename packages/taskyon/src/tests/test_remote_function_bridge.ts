@@ -111,6 +111,63 @@ export const testTyCoreStableTaskStreamSurvivesSessionSwitch = async () => {
 testTyCoreStableTaskStreamSurvivesSessionSwitch.description =
   'Keeps the public task stream connected across a crypto session switch without caller-side reconnects.'
 
+export const testRemoteFunctionRegistrationFollowsSessionSwitch = async () => {
+  const storage = createPortableTestStorage()
+  const ty = await tyCore(
+    () => ({ entryFunction: 'entryNode' }),
+    () => toolCall({ name: 'entryNode', arguments: {} }),
+    {},
+    undefined,
+    {
+      indexTaskVectors: false,
+      taskManagerStorageFactory: storage.taskManagerStorageFactory,
+    },
+  )
+  const sessionEcho = createTool({
+    name: 'sessionEcho',
+    description: 'Echo a value across Taskyon session changes.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['message'],
+      properties: { message: { type: 'string' } },
+    } as const,
+    function: ({ message }) => message,
+  })
+  const registration = await registerToolRpcTools({ port: ty.port, tools: [sessionEcho] })
+  const runEcho = async (message: string) => {
+    const result = await processTasksDetailed(ty.port)(
+      [[toolCall({ name: 'sessionEcho', arguments: { message } })]],
+      'toolresult',
+      { timeoutMs: 10_000 },
+    )
+    if (result.status !== 'matched' || result.result.content.type !== 'toolresult') {
+      throw new Error(`expected sessionEcho tool result, got ${result.status}`)
+    }
+    return result.result.content.data
+  }
+
+  try {
+    const before = await runEcho('before')
+    assert(before === 'before', 'expected registered tool result before session switch')
+
+    await ty.setNewSession(await createCryptoSession())
+    await registration.register()
+
+    const after = await runEcho('after')
+    assert(after === 'after', 'expected registered tool result after session switch')
+  } finally {
+    registration.destroy()
+    await ty.dispose('session tool registration diagnostic complete')
+    storage.destroy()
+  }
+
+  return { success: true }
+}
+
+testRemoteFunctionRegistrationFollowsSessionSwitch.description =
+  'Re-registers an external tool after the host explicitly enters another encrypted session.'
+
 export const testRemoteFunctionBridgeRegistersAndExecutesTool = async () => {
   const { x: clientPort, y: taskyonPort } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()
   let callCount = 0
