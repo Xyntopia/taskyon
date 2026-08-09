@@ -1,9 +1,30 @@
 import { expect, test } from '@playwright/test'
 
+import { waitForTaskyonSession } from '../support/taskyon'
+
 test.describe('app smoke', () => {
   test('loads Taskyon', async ({ page }) => {
     await page.goto('/')
     await expect(page).toHaveTitle(/Taskyon/)
+  })
+
+  test('clears the message composer immediately after submission', async ({ page }) => {
+    await page.goto('/')
+    await waitForTaskyonSession(page)
+
+    const composer = page.getByPlaceholder('Describe what you want to build')
+    await composer.fill('Clear this draft after submission')
+    const valueAfterSubmission = await composer.evaluate(async (element) => {
+      const sendButton = element
+        .closest('.create-tasks')
+        ?.querySelector<HTMLButtonElement>('.msg-edit__send-button')
+      if (!sendButton) throw new Error('Message send button not found')
+      sendButton.click()
+      await Promise.resolve()
+      return (element as HTMLTextAreaElement).value
+    })
+
+    expect(valueAfterSubmission).toBe('')
   })
 
   test('shows the shared conversation browser', async ({ page }) => {

@@ -339,11 +339,39 @@ const currentNewTask = computed(() => {
 })
 
 const addNewTask = async (mode: MessageExecutionMode) => {
-  const storedAttachments = await props.client.sendFiles(fileAttachments.value)
+  const submittedTask = currentNewTask.value
+  const submittedMessageDraft = messageDraft.value
+  const submittedAttachments = [...fileAttachments.value]
+  const clearDraft = submittedTask.role === 'user'
+  if (clearDraft) {
+    messageDraft.value = ''
+    fileAttachments.value = []
+  }
+
+  try {
+    await submitTask(submittedTask, submittedAttachments, mode)
+  } catch (error) {
+    if (clearDraft) {
+      if (messageDraft.value === '') messageDraft.value = submittedMessageDraft
+      fileAttachments.value = [
+        ...submittedAttachments,
+        ...fileAttachments.value.filter((file) => !submittedAttachments.includes(file)),
+      ]
+    }
+    throw error
+  }
+}
+
+const submitTask = async (
+  submittedTask: partialTaskDraft,
+  submittedAttachments: File[],
+  mode: MessageExecutionMode,
+) => {
+  const storedAttachments = await props.client.sendFiles(submittedAttachments)
   const previousTaskId = props.selectedTaskId
   const { createdTasks } = await createNewTaskChain({
     currentTask: props.currentTask,
-    draftTask: currentNewTask.value,
+    draftTask: submittedTask,
     entryNode: props.entryNode
       ? partialTaskDraft.parse(structuredClone(toRaw(props.entryNode)))
       : undefined,
@@ -366,11 +394,6 @@ const addNewTask = async (mode: MessageExecutionMode) => {
     newTaskId,
     createdTasks.map((task) => task.id),
   )
-
-  if (currentNewTask.value.role === 'user') {
-    messageDraft.value = ''
-    fileAttachments.value = []
-  }
 }
 
 const attachFileToDraft = (newFiles: File[]) => {
