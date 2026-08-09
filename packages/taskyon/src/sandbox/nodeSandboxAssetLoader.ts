@@ -7,7 +7,7 @@ export async function loadNodeSandboxAsset(
   packageName: string,
   fileName: string,
   expectedHash: string,
-): Promise<string> {
+): Promise<Uint8Array> {
   const packageEntry = fileURLToPath(import.meta.resolve(packageName))
   const path = join(dirname(packageEntry), fileName)
   const bytes = await readFile(path)
@@ -15,5 +15,5 @@ export async function loadNodeSandboxAsset(
   if (actualHash !== expectedHash) {
     throw new Error(`Sandbox asset integrity check failed: ${fileName}`)
   }
-  return bytes.toString('base64')
+  return Uint8Array.from(bytes)
 }

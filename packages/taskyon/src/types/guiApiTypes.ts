@@ -34,6 +34,12 @@ const configureTaskyon = z.object({
   profileName: z.string().optional().meta({
     description: 'Optional profile name provided by iframe host app.',
   }),
+  origin: z.string().optional().meta({
+    description: 'Origin of the iframe host application.',
+  }),
+  peerId: z.string().optional().meta({
+    description: 'Logical identifier of the iframe host application.',
+  }),
   bindingKey: z.any().optional().meta({
     description:
       'Optional binding key from iframe host app. Can be a base64 public key string or CryptoKey.',

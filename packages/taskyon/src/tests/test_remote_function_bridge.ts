@@ -130,9 +130,16 @@ export const testRemoteFunctionBridgeRegistersAndExecutesTool = async () => {
       return { echoed: message }
     },
   })
+  let toolSourceReads = 0
 
   const toolDescriptionPromise = taskyonPort.receive.wait({ timeoutMs: 1000 })
-  const registrationPromise = registerToolRpcTools({ port: clientPort, tools: [echoTool] })
+  const registrationPromise = registerToolRpcTools({
+    port: clientPort,
+    tools: () => {
+      toolSourceReads += 1
+      return [echoTool]
+    },
+  })
 
   const toolDescription = await toolDescriptionPromise
   if (toolDescription.type !== 'tools.registerRequest') {
@@ -145,6 +152,19 @@ export const testRemoteFunctionBridgeRegistersAndExecutesTool = async () => {
     requestId: toolDescription.requestId,
   })
   const registration = await registrationPromise
+
+  const repeatedDescriptionPromise = taskyonPort.receive.wait({ timeoutMs: 1000 })
+  const repeatedRegistrationPromise = registration.register()
+  const repeatedDescription = await repeatedDescriptionPromise
+  if (repeatedDescription.type !== 'tools.registerRequest') {
+    throw new Error('expected repeated tools.registerRequest message')
+  }
+  taskyonPort.send({
+    type: 'tools.registerResponse',
+    requestId: repeatedDescription.requestId,
+  })
+  await repeatedRegistrationPromise
+  assert(toolSourceReads === 2, 'expected each registration to read the current external tools')
 
   const responsePromise = taskyonPort.receive.wait({ timeoutMs: 1000 })
   taskyonPort.send({

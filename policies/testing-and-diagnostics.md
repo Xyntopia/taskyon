@@ -55,5 +55,8 @@ are added.
 - Run focused type checks, diagnostics, and tests for the changed ownership boundary.
 - Format every edited file with the repository formatter and only target edited files.
 - Do not automatically run broad lint or slow suites unless requested or justified by the change.
+- Never increase a test, diagnostic, or Playwright timeout or time budget without explicit user
+  approval, including temporary increases used during debugging. Diagnose the underlying delay or
+  hang first and present the evidence before asking.
 - Never weaken a test to accommodate broken behavior.
 - Report which checks ran, what did not run, and any residual environmental limitation.

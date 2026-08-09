@@ -3,6 +3,7 @@
 import type { Port } from '@taskyon/taskyon/api'
 import {
   FunctionArguments as FunctionArgumentsSchema,
+  createPortClient,
   createProtocolPort,
   createTaskyonClient,
   taskyonGuiProtocol,
@@ -56,14 +57,6 @@ export async function callTaskyonTool(
   args: Record<string, unknown>,
 ) {
   return await createTaskyonClient(client.port).callTool(name, FunctionArgumentsSchema.parse(args))
-}
-
-function safeClone<T>(data: T): T {
-  try {
-    return structuredClone(data)
-  } catch {
-    return JSON.parse(JSON.stringify(data))
-  }
 }
 
 const waitForApiChannel = (iframe: HTMLIFrameElement): Promise<MessagePort> => {
@@ -125,7 +118,7 @@ export interface TyClient {
     bindingKey?: CryptoKey | string
     profileName?: string
     missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
-  }) => void
+  }) => Promise<void>
 }
 
 /**
@@ -162,15 +155,10 @@ export async function initializeTaskyon(options: {
   // TODO: detect disconnect and reconnect!
   const iframeMessagePort = await waitForApiChannel(taskyon)
   MessageChannelBridge(towardsIframe, iframeMessagePort)
-  const send = (msg: TaskyonGuiMessage) => {
-    console.log('tyclient sending', msg)
-    clientSidePort.send(safeClone(msg))
-  }
 
+  const guiClient = createPortClient(clientSidePort, taskyonGuiProtocol)
   console.log('tyclient send our configuration!')
-  send({
-    type: 'configureTaskyonRequest',
-    requestId: `configureTaskyon-${Date.now()}`,
+  await guiClient.configureTaskyon({
     conf: options.configuration,
     persist: resolvedPersist,
     bindingKey: options.bindingKey,
@@ -182,18 +170,18 @@ export async function initializeTaskyon(options: {
 
   clientSidePort.receive((msg: TaskyonGuiMessage) => console.log('tyclient received message', msg))
   const taskyonClient = createTaskyonClient(clientSidePort)
-  const toolRpcExecutor = await registerToolRpcTools({
+  let currentTools: readonly ClientTool[] = options.tools
+  const toolRpcHost = await registerToolRpcTools({
     port: clientSidePort,
-    tools: options.tools,
+    tools: () => currentTools,
     ...(options.createToolContext ? { createContext: options.createToolContext } : {}),
   })
-  void toolRpcExecutor
 
   return {
     runTasks: taskyonClient.runTasks,
     port: clientSidePort,
     sendFiles: taskyonClient.sendFiles,
-    reconfigure: (options: {
+    reconfigure: async (options: {
       name?: string
       persist?: boolean
       tools: ClientTool[]
@@ -203,9 +191,7 @@ export async function initializeTaskyon(options: {
       missingBindingKeyPolicy?: 'deriveFromProfile' | 'noBindingKey'
     }) => {
       const nextName = options.name ?? resolvedName
-      send({
-        type: 'configureTaskyonRequest',
-        requestId: `configureTaskyon-${Date.now()}`,
+      await guiClient.configureTaskyon({
         conf: options.configuration,
         persist: options.persist ?? resolvedPersist,
         bindingKey: options.bindingKey,
@@ -214,6 +200,8 @@ export async function initializeTaskyon(options: {
         origin: window.location.origin,
         peerId: nextName,
       })
+      currentTools = options.tools
+      await toolRpcHost.register()
     },
   }
 }

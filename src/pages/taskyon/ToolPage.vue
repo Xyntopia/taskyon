@@ -247,15 +247,9 @@ function switchTool(toolName?: string) {
   void router.push({ path: '/tool' + (toolName ? `/${toolName}` : '') })
 }
 
-const allTools = asyncComputed<Record<string, ToolBaseType>>(async () => {
-  return await tystate.taskyonClient.tools.list({})
-}, {})
-
-const alphabeticalTools = computed(() => {
-  return allTools.value
-    ? Object.values(allTools.value).sort((a, b) => a.name.localeCompare(b.name))
-    : undefined
-})
+const alphabeticalTools = computed(() =>
+  Object.values(tystate.allTools).sort((a, b) => a.name.localeCompare(b.name)),
+)
 
 const selectedTool = asyncComputed<ToolBaseType | undefined>(
   async () => {

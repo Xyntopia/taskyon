@@ -1162,8 +1162,10 @@ function reactiveTools(taskyon: Promise<Taskyon>, taskyonClient: TaskyonClient) 
   const allTools = ref<Record<string, ToolBase>>({})
 
   void taskyon.then((ty) => {
+    const loadLatestTools = latestOnly(() => taskyonClient.tools.list({ includeHidden: true }))
     const updateTools = async () => {
-      allTools.value = await taskyonClient.tools.list({ includeHidden: true })
+      const tools = await loadLatestTools()
+      if (tools !== undefined) allTools.value = tools
     }
     void updateTools()
 
@@ -1205,6 +1207,7 @@ function reactiveTools(taskyon: Promise<Taskyon>, taskyonClient: TaskyonClient) 
 const useSwitchCryptoSession = (
   taskyon: Promise<Taskyon>,
   gdp: Promise<ReturnType<typeof connectGdriveSync>>,
+  registerSessionTools: () => Promise<void>,
 ) => {
   // TODO: somehow use a better id here?  maybe we could use the id from our taskyon login?
   const shareKeyId = 'taskyonShareKeyID'
@@ -1242,6 +1245,7 @@ const useSwitchCryptoSession = (
     console.log('switching to new crypto session...', await cs.getSessionId())
     const ty = await taskyon
     await ty.setNewSession(cs)
+    await registerSessionTools()
     if (persist) await persistSession(cs)
   }
 
@@ -1433,57 +1437,55 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     },
   })
 
-  void taskyon.then(async (ty) => {
-    const uiToolRpcExecutor = await registerToolRpcTools({
+  const uiToolRpcHost = taskyon.then(async (ty) => {
+    const host = await registerToolRpcTools({
       port: ty.port,
-      tools: [entryNodeTool, ...defineTyGuiTools(stateRefs, ty, taskyonClient, documentationBases)],
+      tools: () => [
+        entryNodeTool,
+        ...defineTyGuiTools(stateRefs, ty, taskyonClient, documentationBases),
+      ],
       createContext: createTrustedUiToolContext(ty, taskyonClient),
     })
-    onScopeDispose(() => uiToolRpcExecutor.destroy())
     await taskyonClient.tools.list({})
+    return host
   })
+  onScopeDispose(() => {
+    void uiToolRpcHost.then((host) => host.destroy())
+  })
+  const registerUiToolsForCurrentSession = async () => {
+    await (await uiToolRpcHost).register()
+  }
 
   const apiKeyManagement = useApiManagement(stateRefs, () => taskyon)
-  void apiKeyManagement.initModelsAndStoredKeys()
+  stateRefs.setTaskyonAuthLoading(true)
+  void apiKeyManagement
+    .initModelsAndStoredKeys()
+    .finally(() => stateRefs.setTaskyonAuthLoading(false))
 
-  // switch user session on key change!
-  watch(
-    () => stateRefs.bindingKey,
-    async (newkey) => {
-      console.log('new binding key', newkey)
-      stateRefs.setTaskyonSessionSwitching(true)
-
-      let cancelled = false
-      onWatcherCleanup(() => {
-        // This runs when the watcher re-triggers
-        cancelled = true
-      })
+  const switchTaskyonSessionForBindingKey = async (bindingKey: CryptoKey | null) => {
+    console.log('new binding key', bindingKey)
+    stateRefs.setTaskyonSessionSwitching(true)
+    try {
       const cs = await initCryptoSessionFromBrowser(
         {
-          bindingKey: newkey ?? undefined,
+          bindingKey: bindingKey ?? undefined,
         },
         true,
       )
-      try {
-        if (cancelled) return
-        const ty = await taskyon
-        const newId = await cs.getSessionId()
-        const oldId = await ty.getCryptoSession().getSessionId()
-        if (cancelled) return
+      const ty = await taskyon
+      const newId = await cs.getSessionId()
+      const oldId = await ty.getCryptoSession().getSessionId()
 
-        if (newId !== oldId) {
-          console.log(`switch user session because of binding key change! ${oldId}->${newId}`)
-          await ty.setNewSession(cs)
-          // after we are finished switching, we can officially chang ethe session id...
-          stateRefs.setSessionId(newId)
-          // and re-init our api key management with new session...
-          await apiKeyManagement.initModelsAndStoredKeys()
-        }
-      } finally {
-        if (!cancelled) stateRefs.setTaskyonSessionSwitching(false)
-      }
-    },
-  )
+      if (newId === oldId) return
+      console.log(`switch user session because of binding key change! ${oldId}->${newId}`)
+      await ty.setNewSession(cs)
+      await registerUiToolsForCurrentSession()
+      stateRefs.setSessionId(newId)
+      await apiKeyManagement.initModelsAndStoredKeys()
+    } finally {
+      stateRefs.setTaskyonSessionSwitching(false)
+    }
+  }
 
   const {
     conversationHistory,
@@ -1517,6 +1519,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       {
         configureTaskyon: async (msg) => {
           const newConfig = msg.conf
+          let sessionBindingKey: CryptoKey | null | undefined
           const appCfg = newConfig.appConfiguration as
             | Partial<TyProfile['appConfiguration']>
             | undefined
@@ -1526,14 +1529,17 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           const explicitNoBindingKey = msg.missingBindingKeyPolicy === 'noBindingKey'
           if (explicitNoBindingKey) {
             stateRefs.setBindingKey(null, 'unknown')
+            sessionBindingKey = null
           }
           if (msg.bindingKey !== undefined && msg.bindingKey !== null) {
             if (msg.bindingKey instanceof CryptoKey) {
               stateRefs.setBindingKey(msg.bindingKey, 'unknown')
+              sessionBindingKey = msg.bindingKey
             } else if (typeof msg.bindingKey === 'string' && msg.bindingKey.trim()) {
               try {
                 const importedBindingKey = await base64ToPublixX25519(msg.bindingKey, false)
                 stateRefs.setBindingKey(importedBindingKey, 'unknown')
+                sessionBindingKey = importedBindingKey
               } catch (error) {
                 console.warn('[IFRAME CONFIG] failed to import binding key from host', error)
               }
@@ -1557,6 +1563,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
             incomingSecondaryColor: appCfg?.secondaryColor,
           })
           stateRefs.overRideSettings(newConfig, !!msg.persist)
+          if (sessionBindingKey !== undefined) {
+            await switchTaskyonSessionForBindingKey(sessionBindingKey)
+          }
           console.log('[IFRAME CONFIG] effective colors after merge', {
             primaryColor: stateRefs.appConfiguration.primaryColor,
             secondaryColor: stateRefs.appConfiguration.secondaryColor,
@@ -1708,7 +1717,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   })
 
   const { setNewSession, getDeviceId, newSessionFromGdrive, uploadSessionKey } =
-    useSwitchCryptoSession(taskyon, gdp)
+    useSwitchCryptoSession(taskyon, gdp, registerUiToolsForCurrentSession)
 
   void taskyon.then(async (ty) => {
     stateRefs.setSessionId(await ty.getCryptoSession().getSessionId())

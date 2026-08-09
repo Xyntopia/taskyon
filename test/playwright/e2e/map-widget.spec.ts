@@ -1,7 +1,7 @@
 import { expect, type FrameLocator, type Locator, type Page, test } from '@playwright/test'
 import { join } from 'node:path'
 
-import { dataCy } from '../support/taskyon'
+import { dataCy, waitForTaskyonSession } from '../support/taskyon'
 
 const mapWidgetScreenshotPath = join(
   process.cwd(),
@@ -101,11 +101,6 @@ const enableExpertMode = async (page: Page) => {
     .toBe(true)
 }
 
-const waitForOverpassTool = async (page: Page) => {
-  await page.goto('/tool/missing-map-widget-test-tool')
-  await expect(page.getByRole('link', { name: 'overpassMapTool' })).toBeVisible()
-}
-
 const openToolSelector = async (page: Page) => {
   await dataCy(page, 'tool-btn').click()
   const menu = page.locator('.q-menu:visible, .q-dialog:visible').filter({
@@ -117,11 +112,10 @@ const openToolSelector = async (page: Page) => {
 
 const selectOverpassMapTool = async (page: Page) => {
   const menu = await openToolSelector(page)
-  const option = menu.locator('.q-item').filter({
-    hasText: 'overpassMapTool',
-  })
+  await menu.getByRole('combobox').fill('overpassMapTool')
+  const option = page.getByRole('option', { name: 'overpassMapTool', exact: true })
   await expect(option).toBeVisible()
-  await option.first().click()
+  await option.click()
   await expect(page.locator('.create-tasks__mode')).toContainText('overpassMapTool')
 }
 
@@ -147,9 +141,8 @@ const runOverpassToolFromVisibleForm = async (
   page: Page,
   args: { overpassQuery: string } | { query: string },
 ) => {
-  await waitForOverpassTool(page)
-  await enableExpertMode(page)
-  await page.goto('/')
+  await page.getByLabel('go to chat').click()
+  await waitForTaskyonSession(page)
   await expect(dataCy(page, 'tool-btn')).toBeVisible()
   await selectOverpassMapTool(page)
 
@@ -167,7 +160,17 @@ const expectMapWidgetInChat = async (page: Page, frame: FrameLocator) => {
     .locator('.assistant.message')
     .filter({ hasText: 'Found 2 overpass results' })
     .last()
-  await expect(summaryMessage).toBeVisible({ timeout: 100_000 })
+  const taskError = page.getByText(/^Error: Remote function/).last()
+  const outcome = await Promise.race([
+    summaryMessage.waitFor({ state: 'visible', timeout: 100_000 }).then(() => 'summary' as const),
+    taskError.waitFor({ state: 'visible', timeout: 100_000 }).then(() => 'error' as const),
+  ])
+  if (outcome === 'error') {
+    for (const error of await page.getByText(/^Error: Remote function/).all()) {
+      await error.click()
+    }
+    throw new Error(`Map workflow failed: ${await page.locator('main').innerText()}`)
+  }
   await expect(summaryMessage).toContainText('Cafe Alexanderplatz')
   await expect(summaryMessage).toContainText('Cafe Rosa Luxemburg')
   await expect(page.locator('.assistant.message iframe.markdown-iframe').last()).toBeVisible()

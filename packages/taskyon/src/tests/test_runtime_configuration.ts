@@ -168,12 +168,49 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
       'Expected concurrent configuration commands to be applied in arrival order',
     )
 
+    await client.tools.register({
+      name: 'runtimeClientTool',
+      description: 'Runtime client capability',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {},
+      },
+    })
+
+    const initialSession = ty.getCryptoSession()
     await ty.setNewSession(await createCryptoSession())
 
     const afterSessionSwitch = await client.tools.list({ includeHidden: true })
     assert(
       afterSessionSwitch.configuredTool?.description === 'Configured value: last queued update',
       'Expected a new session to use the latest runtime configuration',
+    )
+    assert(
+      afterSessionSwitch.runtimeClientTool === undefined,
+      'Expected a runtime-registered client tool to remain isolated to its session',
+    )
+
+    await client.tools.register({
+      name: 'runtimeClientTool',
+      description: 'Runtime client capability',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {},
+      },
+    })
+    const afterExplicitRegistration = await client.tools.list({ includeHidden: true })
+    assert(
+      afterExplicitRegistration.runtimeClientTool?.description === 'Runtime client capability',
+      'Expected an external tool to become available after explicit session registration',
+    )
+
+    await ty.setNewSession(initialSession)
+    const restoredInitialSession = await client.tools.list({ includeHidden: true })
+    assert(
+      restoredInitialSession.runtimeClientTool?.description === 'Runtime client capability',
+      'Expected the original session to restore its stored external tool definition',
     )
   } finally {
     unsubscribeChatCompletion()
@@ -184,4 +221,4 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
 }
 
 testRuntimeConfigurationRecreatesConfiguredTools.description =
-  'Applies flat toolchain configuration through the core protocol and preserves it across session replacement.'
+  'Applies runtime configuration across sessions while keeping external tool registrations session-scoped.'

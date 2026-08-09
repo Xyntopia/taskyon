@@ -4,12 +4,8 @@ import { dataCy, expectTaskResultMessage } from '../support/taskyon'
 
 test.describe('iframe integration', () => {
   test('creates and uses a client tool through the iframe', async ({ page }) => {
-    await page.goto('/clienttest')
-
-    const frame = page.frameLocator('iframe')
-    await frame.locator('body').waitFor()
-
-    await frame.locator('body').evaluate(async () => {
+    await page.goto('/')
+    await page.evaluate(async () => {
       localStorage.clear()
       sessionStorage.clear()
 
@@ -36,6 +32,10 @@ test.describe('iframe integration', () => {
         ),
       )
     })
+    await page.goto('/clienttest')
+
+    const frame = page.frameLocator('iframe')
+    await frame.locator('body').waitFor()
 
     await expect(dataCy(page, 'client-ready')).toContainText('client ready')
     await frame.getByRole('button', { name: 'Open Sidebar' }).click()

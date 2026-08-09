@@ -50,6 +50,7 @@ export const toolContextProtocol = defineFrpServiceProtocol({
         headers: z.array(z.tuple([z.string(), z.string()])),
         body: z.string().optional(),
         bodyBase64: z.string().optional(),
+        bodyBytes: z.custom<Uint8Array>((value) => value instanceof Uint8Array).optional(),
       }),
     },
   },

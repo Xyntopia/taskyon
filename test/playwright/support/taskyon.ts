@@ -99,6 +99,7 @@ export const waitForTaskyonSession = async (page: Page) => {
   const sessionStatus = page.locator('.chat-sidebar__dev')
   await expect(sessionStatus).toBeVisible()
   await expect(sessionStatus).not.toContainText('session: N/A')
+  await expect(sessionStatus).toContainText('status: ready')
   await page.locator('.q-drawer__backdrop').click()
   await expect(sessionStatus).toBeHidden()
 }

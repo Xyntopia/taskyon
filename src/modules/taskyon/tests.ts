@@ -1924,7 +1924,7 @@ testLibp2pBrowserMessageExchange.description =
 export async function testTransformersPipeline() {
   try {
     const { pipeline } = await import('@huggingface/transformers')
-    const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2')
+    const extractor = await pipeline('feature-extraction', 'Xenova/paraphrase-MiniLM-L3-v2')
     const output = await extractor('This is a simple test.', {
       pooling: 'mean',
       quantize: true,

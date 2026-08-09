@@ -5,7 +5,7 @@ import {
 import { createExecutableSandbox } from '@taskyon/common/modules/sandbox/workerSandbox'
 import type { ProtocolServerHandlers } from '@taskyon/common/modules/frpBus'
 import { toolContextProtocol } from '../core/toolContextProtocol.ts'
-import { loadSandboxAsset } from '../sandbox/sandboxAssets'
+import { loadSandboxAssetBytes } from '../sandbox/sandboxAssets'
 import type { toolContext } from '../types/toolApi'
 import { partialTaskDraft } from '../types/taskNode'
 
@@ -69,8 +69,15 @@ function buildToolSandboxCode(userCode: string): string {
           this.ok = this.status >= 200 && this.status < 300;
           this.bodyValue = response.body;
           this.bodyBase64 = response.bodyBase64;
+          this.bodyBytes = response.bodyBytes;
         }
         async arrayBuffer() {
+          if (this.bodyBytes) {
+            return this.bodyBytes.buffer.slice(
+              this.bodyBytes.byteOffset,
+              this.bodyBytes.byteOffset + this.bodyBytes.byteLength,
+            );
+          }
           if (this.bodyBase64) {
             const bytes = decodeBase64(this.bodyBase64);
             return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
@@ -78,10 +85,27 @@ function buildToolSandboxCode(userCode: string): string {
           return new TextEncoder().encode(this.bodyValue ?? '').buffer;
         }
         async text() {
+          if (this.bodyBytes) return new TextDecoder().decode(this.bodyBytes);
           if (!this.bodyBase64) return this.bodyValue ?? '';
           return new TextDecoder().decode(decodeBase64(this.bodyBase64));
         }
         async json() { return JSON.parse(await this.text()); }
+      }
+
+      function createSandboxResponse(response) {
+        const canCreateNativeResponse =
+          typeof Response === 'function' && response.status >= 200 && response.status <= 599;
+        if (!canCreateNativeResponse) return new SandboxResponse(response);
+        const bodyForbidden = [204, 205, 304].includes(response.status);
+        const body = bodyForbidden
+          ? null
+          : response.bodyBytes
+            ?? (response.bodyBase64 ? decodeBase64(response.bodyBase64) : response.body ?? '');
+        return new Response(body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        });
       }
 
       let activeFetch;
@@ -111,7 +135,7 @@ function buildToolSandboxCode(userCode: string): string {
               ...(init.headers === undefined ? {} : { headers: normalizeHeaders(init.headers) }),
               ...(init.body === undefined ? {} : { body: String(init.body) }),
             };
-            return new SandboxResponse(await call('fetch', { input: url, init: requestInit }));
+            return createSandboxResponse(await call('fetch', { input: url, init: requestInit }));
           };
           const ctx = {
             ...(baseContext || {}),
@@ -176,8 +200,8 @@ function buildContextHandlers(
         })
       },
       fetch: async ({ input, init }) => {
-        const assetBodyBase64 = await loadSandboxAsset(input)
-        if (assetBodyBase64 !== null) {
+        const assetBytes = await loadSandboxAssetBytes(input)
+        if (assetBytes !== null) {
           return {
             status: 200,
             statusText: 'OK',
@@ -187,7 +211,7 @@ function buildContextHandlers(
                 input.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream',
               ],
             ] as [string, string][],
-            bodyBase64: assetBodyBase64,
+            bodyBytes: assetBytes,
           }
         }
         if (!context.fetch) throw new Error('Sandbox fetch capability is unavailable')

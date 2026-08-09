@@ -138,7 +138,7 @@
                     input-debounce="0"
                     color="secondary"
                     :model-value="selectedTaskType"
-                    :options="filteredToolCollection"
+                    :options="visibleToolNames"
                     @filter="filterFn"
                     @update:model-value="
                       (val) => {
@@ -150,9 +150,7 @@
                 </q-item-section>
               </q-item>
               <q-item
-                v-for="toolName in filteredToolCollection.length
-                  ? filteredToolCollection
-                  : toolNames"
+                v-for="toolName in visibleToolNames"
                 :key="toolName"
                 clickable
                 @click="
@@ -279,8 +277,14 @@ const draftParameters = defineModel<Record<string, FunctionArguments>>('draftPar
 })
 
 const $q = useQuasar()
-const filteredToolCollection = ref<string[]>([])
+const toolFilter = ref('')
 const toolNames = computed(() => Object.keys(props.allTools))
+const visibleToolNames = computed(() => {
+  const needle = toolFilter.value.toLowerCase()
+  return needle
+    ? toolNames.value.filter((value) => value.toLowerCase().includes(needle))
+    : toolNames.value
+})
 const selectedTaskType = computed(() =>
   createTaskType.value.type === 'functioncall' ? createTaskType.value.name : undefined,
 )
@@ -290,10 +294,7 @@ const functionSchema = computed(() =>
 
 const filterFn = (inputValue: string, doneFn: (callbackFn: () => void) => void) => {
   doneFn(() => {
-    const needle = inputValue.toLowerCase()
-    filteredToolCollection.value = inputValue
-      ? toolNames.value.filter((value) => value.toLowerCase().includes(needle))
-      : toolNames.value
+    toolFilter.value = inputValue
   })
 }
 

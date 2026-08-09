@@ -29,7 +29,7 @@ const parseSandboxAssetUrl = (input: string) => {
   return { artifact, expectedHash, fileName }
 }
 
-export async function loadSandboxAsset(input: string): Promise<string | null> {
+export async function loadSandboxAssetBytes(input: string): Promise<Uint8Array | null> {
   const resolved = parseSandboxAssetUrl(input)
   if (!resolved) return null
   const manifestHash = await sha256(
@@ -58,7 +58,12 @@ export async function loadSandboxAsset(input: string): Promise<string | null> {
   if (actualHash !== resolved.expectedHash) {
     throw new Error(`Sandbox asset integrity check failed: ${resolved.fileName}`)
   }
-  return bytesToBase64(bytes)
+  return bytes
+}
+
+export async function loadSandboxAsset(input: string): Promise<string | null> {
+  const bytes = await loadSandboxAssetBytes(input)
+  return bytes ? bytesToBase64(bytes) : null
 }
 
 export const pyodideArtifactBaseUrl = `taskyon-artifact://${pyodideArtifact.id}/` as const

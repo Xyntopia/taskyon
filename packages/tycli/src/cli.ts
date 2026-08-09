@@ -3065,9 +3065,9 @@ async function main(host: InteractiveCliHost) {
     ...(documentation ? [documentation.tool] : []),
     ...(host.additionalTools ?? []),
   ].map((tool) => InternalToolSchema.parse(tool))
-  const cliToolRpcExecutor = await registerToolRpcTools({
+  const cliToolRpcHost = await registerToolRpcTools({
     port: clientPort,
-    tools: cliTools,
+    tools: () => cliTools,
     createContext: (call, stopSignal) =>
       createExternalToolContext(stopSignal, {
         getExecutionTaskChain: () => {
@@ -3091,7 +3091,7 @@ async function main(host: InteractiveCliHost) {
       )
       await recordCurrentSession(new Date().toISOString()).catch(() => {})
     } finally {
-      cliToolRpcExecutor.destroy()
+      cliToolRpcHost.destroy()
       unsubscribeBridgeToTaskyon()
       unsubscribeTaskyonToBridge()
       taskyon.cancelCurrentRun(`${host.commandName} client command complete`)
@@ -4149,7 +4149,7 @@ async function main(host: InteractiveCliHost) {
     unsubscribeTaskProgress()
     unsubscribeWorkerProgress()
     if (!isReadlineClosed(rl)) rl.close()
-    cliToolRpcExecutor.destroy()
+    cliToolRpcHost.destroy()
     stopTaskSearchService()
     unsubscribeBridgeToTaskyon()
     unsubscribeTaskyonToBridge()

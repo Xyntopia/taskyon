@@ -4,7 +4,7 @@
     <div class="chat-sidebar__section">
       <div v-if="localDev" class="chat-sidebar__dev text-caption q-px-sm q-pb-xs">
         profile: {{ state.activeProfileName }} | session:
-        {{ state.sessionId?.slice(0, 10) || 'N/A' }}
+        {{ state.sessionId?.slice(0, 10) || 'N/A' }} | status: {{ state.taskyonSessionStatus }}
       </div>
       <TaskConversationBrowser
         :client="tystate.taskyonClient"

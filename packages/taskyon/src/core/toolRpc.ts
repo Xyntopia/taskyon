@@ -311,25 +311,38 @@ const parseExternalRpcTool = (tool: unknown): InternalTool => {
 
 export async function registerToolRpcTools(options: {
   port: ToolRpcRegistrationPort
-  tools: unknown[]
+  tools: readonly unknown[] | (() => readonly unknown[])
   timeoutMs?: number
   createContext?: ToolRpcCreateContext
 }) {
-  const tools = options.tools.map(parseExternalRpcTool)
   const timeoutMs = options.timeoutMs ?? REMOTE_FUNCTION_TIMEOUT_MS
   const taskyonApi = createPortClient(options.port, taskyonProtocol)
-  await Promise.all(
-    tools.map(async (tool) => {
-      await taskyonApi.tools.register({ ...tool, timeoutMs })
-    }),
-  )
-  const toolMap = new Map(tools.filter((tool) => tool.function).map((tool) => [tool.name, tool]))
-  return registerToolRpcExecutor({
+  let toolMap = new Map<string, InternalTool>()
+  const executor = registerToolRpcExecutor({
     port: options.port,
     getTool: (name) => toolMap.get(name),
     createContext:
       options.createContext ?? ((_call, stopSignal) => createExternalToolContext(stopSignal)),
   })
+  const register = async () => {
+    const sourceTools = typeof options.tools === 'function' ? options.tools() : options.tools
+    const tools = sourceTools.map(parseExternalRpcTool)
+    toolMap = new Map(tools.filter((tool) => tool.function).map((tool) => [tool.name, tool]))
+    await Promise.all(
+      tools.map(async (tool) => {
+        await taskyonApi.tools.register({ ...tool, timeoutMs })
+      }),
+    )
+  }
+
+  try {
+    await register()
+  } catch (error) {
+    executor.destroy()
+    throw error
+  }
+
+  return { ...executor, register }
 }
 
 export function registerToolRpcExecutor(options: {
