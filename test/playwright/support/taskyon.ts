@@ -132,16 +132,19 @@ export const selectLlmModel = async (page: Page, provider?: string, modelId = ''
   }
 
   if (modelId) {
-    const field = modelField(page)
-    await field.click()
-    await field.locator('input').fill(modelId)
-    if ((await dataCy(page, 'model-select').inputValue()) !== modelId) {
-      await page
-        .locator(`.model-select-popup:visible [data-cy="model-option"][data-model-id="${modelId}"]`)
-        .first()
-        .click()
+    const modelSelect = dataCy(page, 'model-select')
+    const modelIds =
+      provider && !modelId.includes('/') ? [modelId, `${provider}/${modelId}`] : [modelId]
+    if (!modelIds.includes(await modelSelect.inputValue())) {
+      const field = modelField(page)
+      await field.click()
+      await field.locator('input').fill(modelId)
+      const modelIdSelectors = modelIds
+        .map((id) => `[data-cy="model-option"][data-model-id="${id}"]`)
+        .join(', ')
+      await page.locator('.model-select-popup:visible').locator(modelIdSelectors).first().click()
     }
-    await expect(dataCy(page, 'model-select')).toHaveValue(modelId)
+    await expect.poll(async () => modelIds.includes(await modelSelect.inputValue())).toBe(true)
   }
 
   await page.keyboard.press('Escape')

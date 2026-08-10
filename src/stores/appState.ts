@@ -39,8 +39,8 @@ import {
   switchCurrentActiveProfilePointer,
 } from 'src/modules/ui/initialState'
 import { buildTaskSelectionRoute } from 'src/modules/taskSelectionUrl'
+import { getTaskyonRouter } from 'src/router'
 import type { PartialDeep } from 'type-fest'
-import { useRoute, useRouter } from 'vue-router'
 import type { ZodError } from 'zod'
 
 interface TaskWidgetStateType {
@@ -48,6 +48,10 @@ interface TaskWidgetStateType {
 }
 
 export type TaskyonSessionStatus = 'checking-auth' | 'switching-session' | 'ready'
+export type EffectiveTaskyonCredential = {
+  value: KeyString
+  source: 'host'
+}
 
 const VSCODE_MESSAGE_SOURCE = 'taskyon-vscode'
 const installVscodeConsoleBridge = (() => {
@@ -421,6 +425,44 @@ const useSessionKey = () => {
   }
 }
 
+const useTaskyonSessionIntegration = (
+  bindingKey: ReturnType<typeof useSessionKey>['bindingKey'],
+  setBindingKey: ReturnType<typeof useSessionKey>['setBindingKey'],
+  setInitWithBindingKey: (enabled: boolean) => void,
+) => {
+  const authToken = ref<KeyString>()
+  const effectiveTaskyonCredential = computed<EffectiveTaskyonCredential | undefined>(() => {
+    if (authToken.value) return { value: authToken.value, source: 'host' }
+    return undefined
+  })
+  let sessionTransition: ((bindingKey: CryptoKey | null) => Promise<void>) | null = null
+
+  // Preserve a stored startup wait until authentication restores the binding key.
+  watch(bindingKey, () => setInitWithBindingKey(bindingKey.value !== null))
+
+  const registerTaskyonSessionTransition = (
+    transition: (bindingKey: CryptoKey | null) => Promise<void>,
+  ) => {
+    sessionTransition = transition
+    return () => {
+      if (sessionTransition === transition) sessionTransition = null
+    }
+  }
+
+  const transitionTaskyonSession = async (newBindingKey: CryptoKey | null) => {
+    setBindingKey(newBindingKey)
+    setInitWithBindingKey(newBindingKey !== null)
+    await sessionTransition?.(newBindingKey)
+  }
+
+  return {
+    authToken,
+    effectiveTaskyonCredential,
+    registerTaskyonSessionTransition,
+    transitionTaskyonSession,
+  }
+}
+
 const getIframeProfileBindingKeyStorageKey = (profileName: string) =>
   `iframe_profile_binding_key:${profileName}`
 
@@ -667,10 +709,12 @@ export const useAppStateStore = defineStore('ui-state', () => {
     }
     Object.assign(stateRefs, reconcileStoredTaskyonState(storedProfile, initialState))
   }
-  const route = useRoute()
-  const router = useRouter()
+  const router = getTaskyonRouter()
+  const route = router.currentRoute
   const selectedTaskId = computed(() =>
-    typeof route.query.t === 'string' && route.query.t.trim() ? route.query.t.trim() : undefined,
+    typeof route.value.query.t === 'string' && route.value.query.t.trim()
+      ? route.value.query.t.trim()
+      : undefined,
   )
   if (iframeProfileName && !urlConfig.noBindingKeyParam) {
     // Keep waiting behavior stable even if persisted state had `initWBindingKey: false`.
@@ -736,13 +780,14 @@ export const useAppStateStore = defineStore('ui-state', () => {
   })
   const draftPasteFiles = ref<File[]>([])
   let draftPasteHandler: ((files: File[]) => void) | null = null
-  watch(
-    bindingKey,
-    () => {
-      stateRefs.initWBindingKey = bindingKey.value !== null
-    },
-    { immediate: true },
-  )
+  const {
+    authToken,
+    effectiveTaskyonCredential,
+    registerTaskyonSessionTransition,
+    transitionTaskyonSession,
+  } = useTaskyonSessionIntegration(bindingKey, setBindingKey, (enabled) => {
+    stateRefs.initWBindingKey = enabled
+  })
 
   const setActiveProfile = (profileName: string) => {
     if (!profileName || profileName === activeProfileNameRef.value) return
@@ -845,7 +890,6 @@ export const useAppStateStore = defineStore('ui-state', () => {
     }
   }
 
-  const authToken = ref<KeyString>()
   const iframeApiKey = ref<KeyString>() // used to pass api keys if we are running this as  an iframe
 
   // We are using a setter function here, because we want to make sure, we can trace changes
@@ -903,7 +947,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
   ) => {
     if (!process.env.CLIENT) return
     const routeTarget = buildTaskSelectionRoute(window.location.href, taskId, options.path)
-    if (routeTarget === route.fullPath) return
+    if (routeTarget === route.value.fullPath) return
     if (options.replace) {
       void router.replace(routeTarget)
       return
@@ -933,10 +977,13 @@ export const useAppStateStore = defineStore('ui-state', () => {
   return {
     authToken,
     iframeApiKey,
+    effectiveTaskyonCredential,
     sessionId: computed(() => sessionId.value),
     taskyonSessionStatus,
     setTaskyonAuthLoading,
     setTaskyonSessionSwitching,
+    registerTaskyonSessionTransition,
+    transitionTaskyonSession,
     activeProfileName: computed(() => activeProfileNameRef.value),
     profileMode: computed(() => profileMode),
     setActiveProfile,

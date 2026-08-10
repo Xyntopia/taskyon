@@ -292,6 +292,7 @@ function toggleStage(stage: (typeof stages)[number]['title']) {
 async function startExample(workspace: { projectId: string }) {
   startingProjectId.value = workspace.projectId
   try {
+    await tystate.taskyon
     const store = tystate.designProjectStore(workspace.projectId)
     const revision = await prepareBundledDesignRevision({
       projectId: workspace.projectId,

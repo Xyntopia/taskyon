@@ -100,6 +100,7 @@ import { guiTools } from '../modules/taskyon/GuiTools'
 import {
   taskyonProfileSections,
   useAppStateStore,
+  type EffectiveTaskyonCredential,
   type TaskyonProfileSettingsInput,
 } from './appState'
 import { waitForIframeDuplexChannel } from './iframeClient'
@@ -706,21 +707,21 @@ const authorizeBrowserPopup = ({
 }) => getBrowserCapabilityPolicy().authorize({ tool, capability: { action: 'popup', target } })
 
 function resolveTaskyonKey(args: {
-  authToken?: KeyString | undefined
   iframeToken?: KeyString | undefined
+  credential?: EffectiveTaskyonCredential | undefined
   storedKeyStr?: KeyString | undefined
 }) {
-  const { authToken, iframeToken, storedKeyStr } = args
+  const { credential, iframeToken, storedKeyStr } = args
   console.log('found stored key:', storedKeyStr?.slice(-5))
 
   return (iframeToken ??
+    credential?.value ??
     // only use stored key if it isn't a free key and if it is a taskyon key
     (storedKeyStr === freeKey
       ? undefined
       : isTaskyonKey(storedKeyStr, true)
         ? storedKeyStr
         : undefined) ??
-    authToken ??
     freeKey) as KeyString
 }
 
@@ -747,22 +748,27 @@ const useApiManagement = (
   const selectedProviderId = computed(() => selectedProviderProfile.value?.provider)
   const getSelectedModel = () => selectedProviderProfile.value?.model
 
-  const updateModelList = latestOnly(async () => {
+  const loadLatestModelList = latestOnly(async () => {
     console.log('Update model list!')
     const provider = selectedProviderProfile.value
-    llmModelsInternal.value = provider
+    return provider
       ? await updateLlmModels(provider, (name) =>
           Promise.resolve((availableKeys.value[name] as KeyString | undefined) ?? null),
         )
       : {}
   })
 
+  const updateModelList = async () => {
+    const models = await loadLatestModelList()
+    if (models) llmModelsInternal.value = models
+  }
+
   // TODO: add apis to model history as well!
   const addModelToHistory = (model: string) => {
-    if (stateRefs.modelHistory.length >= 5) {
-      stateRefs.modelHistory.shift() // remove oldest element
-    }
-    stateRefs.modelHistory.push(model)
+    stateRefs.modelHistory = [
+      ...stateRefs.modelHistory.filter((entry) => entry !== model),
+      model,
+    ].slice(-5)
   }
 
   const updateModelAndApi = ({
@@ -832,21 +838,25 @@ const useApiManagement = (
     return getKeyModels(key)
   })
 
-  const setProviderApiKey = exclusive(async (name: string, value: KeyString | undefined) => {
-    console.log('set new provider key:', name, value?.slice(-5))
-    const ty = await taskyon()
-    if (value) await ty.setSecret(AiProvideKeyStoreName, name, value)
-    else await ty.deleteSecret(AiProvideKeyStoreName, name)
-    await ty.updateChatCompletionApiKey(name, value)
-    // and keep track of it internally
-    if (value) {
-      availableKeys.value = { ...availableKeys.value, [name]: value }
-    } else {
-      availableKeys.value = Object.fromEntries(
-        Object.entries(availableKeys.value).filter(([provider]) => provider !== name),
-      )
-    }
-  })
+  const setProviderApiKey = exclusive(
+    async (name: string, value: KeyString | undefined, mode: 'persist' | 'runtime') => {
+      console.log('set new provider key:', name, value?.slice(-5))
+      const ty = await taskyon()
+      if (mode === 'persist') {
+        if (value) await ty.setSecret(AiProvideKeyStoreName, name, value)
+        else await ty.deleteSecret(AiProvideKeyStoreName, name)
+      }
+      await ty.updateChatCompletionApiKey(name, value)
+      // and keep track of it internally
+      if (value) {
+        availableKeys.value = { ...availableKeys.value, [name]: value }
+      } else {
+        availableKeys.value = Object.fromEntries(
+          Object.entries(availableKeys.value).filter(([provider]) => provider !== name),
+        )
+      }
+    },
+  )
 
   ///////////   computed properties
   const providerDefs = computed(() => Object.keys(providerProfiles.value))
@@ -906,7 +916,7 @@ const useApiManagement = (
     const ty = await taskyon()
     const sessionId = await ty.getCryptoSession().getSessionId()
     console.log(`Sync secretstore with taskyon keys!, ${sessionId}`, {
-      authToken: stateRefs.authToken,
+      effectiveTaskyonCredential: stateRefs.effectiveTaskyonCredential?.value.slice(-5),
       iframeApiKey: stateRefs.iframeApiKey,
     })
 
@@ -914,13 +924,13 @@ const useApiManagement = (
     let storedKeyStr = storedKeys.taskyon as KeyString | undefined
     if (shouldUpdateFreeKey(storedKeyStr)) storedKeyStr = freeKey as KeyString
     const selectedKey = resolveTaskyonKey({
-      authToken: stateRefs.authToken,
       iframeToken: stateRefs.iframeApiKey,
+      credential: stateRefs.effectiveTaskyonCredential,
       storedKeyStr,
     })
     console.log('setting selected key:', selectedKey?.slice(-5))
     if (selectedKey !== storedKeyStr) {
-      await setProviderApiKey('taskyon', selectedKey)
+      await setProviderApiKey('taskyon', selectedKey, 'runtime')
     }
     availableKeys.value = { ...storedKeys, ...availableKeys.value, taskyon: selectedKey }
     ensureValidModel(selectedKey)
@@ -930,22 +940,31 @@ const useApiManagement = (
   // endpoints...
   // Keep model discovery aligned with explicit provider-profile and secret changes.
   watch(
-    [() => stateRefs.selectedToolchainProfile, providerProfiles, availableKeys],
-    async ([newSelectedProfile, newProfiles, availableKeys]) => {
+    [
+      () => stateRefs.selectedToolchainProfile,
+      () => stateRefs.effectiveTaskyonCredential,
+      providerProfiles,
+      availableKeys,
+    ],
+    async ([newSelectedProfile, taskyonCredential, newProfiles, availableKeys]) => {
       console.log('update models... due to api/key change', {
         newSelectedProfile,
+        taskyonCredential: taskyonCredential?.value.slice(-5),
         newProfiles,
         availableKeys,
       })
       if (selectedProviderProfile.value?.provider === 'taskyon') {
         const storedKeyStr = availableKeys.taskyon as KeyString | undefined
-        if (storedKeyStr || stateRefs.authToken || stateRefs.iframeApiKey) {
+        if (storedKeyStr || stateRefs.effectiveTaskyonCredential || stateRefs.iframeApiKey) {
           console.log('ensure, we have a valid model for taskyon key...')
           const selectedKey = resolveTaskyonKey({
-            authToken: stateRefs.authToken,
             iframeToken: stateRefs.iframeApiKey,
+            credential: stateRefs.effectiveTaskyonCredential,
             storedKeyStr,
           })
+          if (selectedKey !== availableKeys.taskyon) {
+            await setProviderApiKey('taskyon', selectedKey, 'runtime')
+          }
           ensureValidModel(selectedKey)
         }
       }
@@ -1487,6 +1506,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       stateRefs.setTaskyonSessionSwitching(false)
     }
   }
+  const unregisterTaskyonSessionTransition = stateRefs.registerTaskyonSessionTransition(
+    switchTaskyonSessionForBindingKey,
+  )
+  onScopeDispose(unregisterTaskyonSessionTransition)
 
   const {
     conversationHistory,

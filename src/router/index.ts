@@ -4,8 +4,16 @@ import {
   createRouter,
   createWebHashHistory,
   createWebHistory,
+  type Router,
 } from 'vue-router'
 import { routes, tyServerRoutes } from './routes_taskyon'
+
+let taskyonRouter: Router | undefined
+
+export const getTaskyonRouter = (): Router => {
+  if (!taskyonRouter) throw new Error('Taskyon router has not been initialized')
+  return taskyonRouter
+}
 
 /*
  * If not building with SSR mode, you can
@@ -35,6 +43,8 @@ export default defineRouter(function (/* { store, ssrContext } */) {
     // quasar.conf.js -> build -> publicPath
     history: createHistory(process.env.VUE_ROUTER_BASE),
   })
+
+  taskyonRouter = Router
 
   return Router
 })

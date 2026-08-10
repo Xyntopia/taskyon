@@ -1562,19 +1562,16 @@ testChatCompletionTaskyonProxyMint.modelBased = true
 testChatCompletionTaskyonProxyMint.description =
   'test chatCompletion via delegated taskyon SSR proxy backend'
 
-export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
+export const testChatCompletionTaskyonProxyMintCosts = async () => {
   const ty = await tystate.taskyon
   const prevSelectedProfile = state.selectedToolchainProfile
-  const prevTaskyonKey = tystate.getTaskyonKeyString()
-  const userAuthToken = state.authToken
-  if (!(typeof userAuthToken === 'string' && userAuthToken.length > 0)) {
+  const taskyonCredential = state.effectiveTaskyonCredential
+  if (!taskyonCredential?.value) {
     return {
       skipped: true,
-      warning:
-        'Skipped: this test requires a logged-in user with a valid taskyon auth token and credits.',
+      warning: 'Skipped: this test requires an active Taskyon credential with credits.',
     }
   }
-  await tystate.setProviderApiKey('taskyon', userAuthToken)
   state.setSelectedToolchainProfile('taskyon')
 
   const streamStats = new Map<
@@ -1644,7 +1641,7 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
     })
     assert(
       result.content.type === 'message',
-      `Delegated proxy supabase-cost run returned non-message task content: ${result.content.type}`,
+      `Delegated proxy cost run returned non-message task content: ${result.content.type}`,
     )
 
     const streamedTasks = [...streamStats.entries()].filter(([, stats]) => stats.textDeltaCount > 0)
@@ -1702,13 +1699,12 @@ export const testChatCompletionTaskyonProxyMintSupabaseCosts = async () => {
     }
   } finally {
     stopStreamProbe()
-    await tystate.setProviderApiKey('taskyon', prevTaskyonKey as KeyString | undefined)
     state.setSelectedToolchainProfile(prevSelectedProfile ?? 'taskyon')
   }
 }
-testChatCompletionTaskyonProxyMintSupabaseCosts.description =
+testChatCompletionTaskyonProxyMintCosts.description =
   'test delegated proxy chatCompletion and verify completion costs are attached as task metadata'
-testChatCompletionTaskyonProxyMintSupabaseCosts.modelBased = true
+testChatCompletionTaskyonProxyMintCosts.modelBased = true
 
 export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: string }) => {
   const ty = await tystate.taskyon
@@ -1721,7 +1717,7 @@ export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: st
     'Missing tyauth. This test must be called with the normal test context: { tyauth }',
   )
 
-  await tystate.setProviderApiKey('taskyon', tyauth as KeyString)
+  await tystate.setProviderApiKey('taskyon', tyauth as KeyString, 'runtime')
   state.setSelectedToolchainProfile('taskyon')
 
   try {
@@ -1786,7 +1782,7 @@ export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: st
       },
     }
   } finally {
-    await tystate.setProviderApiKey('taskyon', prevTaskyonKey as KeyString | undefined)
+    await tystate.setProviderApiKey('taskyon', prevTaskyonKey as KeyString | undefined, 'runtime')
     state.setSelectedToolchainProfile(prevSelectedProfile ?? 'taskyon')
   }
 }

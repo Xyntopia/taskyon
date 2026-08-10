@@ -60,7 +60,7 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
           :only-this-key="chatCompletionToolName"
           @delete="
             (group, name) => {
-              tystate.setProviderApiKey(name, undefined)
+              tystate.setProviderApiKey(name, undefined, 'persist')
             }
           "
         />
@@ -290,7 +290,7 @@ const expertModeOn = defineModel<boolean>('expertModeOn', { default: false })
 
 async function initFreeMode() {
   state.setSelectedToolchainProfile('taskyon')
-  await tystate.setProviderApiKey('taskyon', freeKey as KeyString)
+  await tystate.setProviderApiKey('taskyon', freeKey as KeyString, 'persist')
 }
 
 const currentNewPassword = ref<string>()
@@ -313,7 +313,7 @@ const activateProvider = (profileName: string) => state.setSelectedToolchainProf
 const providerOauthIcon = () => matKey
 
 const addNewPw = async (name: string, newPw: string | undefined, close: () => void) => {
-  await tystate.setProviderApiKey(name, newPw as KeyString)
+  await tystate.setProviderApiKey(name, newPw as KeyString, 'persist')
   currentNewPassword.value = ''
   close()
   await passwords.value?.reloadSecrets()
@@ -337,7 +337,7 @@ const loginProviderWithOauth = async (
     })
     const creds = await loginWithProviderOauth(providerName, provider, getToken)
     const providerAccessToken = await resolveProviderAccessToken(creds, provider)
-    await tystate.setProviderApiKey(providerName, providerAccessToken as KeyString)
+    await tystate.setProviderApiKey(providerName, providerAccessToken as KeyString, 'persist')
     if (selectProvider) activateProvider(profileName)
     await passwords.value?.reloadSecrets()
     close?.()
