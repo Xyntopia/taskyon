@@ -17,6 +17,7 @@ import {
   connectTaskManagerStorageFromProtocol,
   createArtifactStore,
   configureStaticEmbeddingAssetReader,
+  createCapabilityPolicy,
   createClientTool,
   createExternalToolContext,
   findContinuationLeafTaskIds,
@@ -2913,6 +2914,41 @@ async function main(host: InteractiveCliHost) {
     restoreConsoleLogging?.()
     restoreConsoleLogging = installRuntimeConsoleLogging(runtimeLog)
   }
+  const interactiveReadlineRef: { current?: ReturnType<typeof createInterface> } = {}
+  const sandboxCapabilityPolicy = createCapabilityPolicy({
+    storage: {
+      get: () => Promise.resolve(null),
+      set: () => Promise.resolve(),
+      delete: () => Promise.resolve(),
+      clear: () => Promise.resolve(),
+    },
+    prompt: async ({ tool, capability }) => {
+      const readline = interactiveReadlineRef.current
+      if (!readline) return { decision: 'deny', scope: 'once' }
+      taskInterruptKeysCleanup?.()
+      taskInterruptKeysCleanup = undefined
+      clearThinkingPanel()
+      stopWorkerStatusLine()
+      try {
+        const capabilityDescription =
+          capability.action === 'fetch'
+            ? `${capability.access} ${capability.origin}`
+            : `open ${capability.target}`
+        const answer = await askQuestion(
+          readline,
+          `Allow ${tool.name} to ${capabilityDescription} for this session? [y/N] `,
+        )
+        const allowed = ['y', 'yes'].includes(answer?.trim().toLowerCase() ?? '')
+        return { decision: allowed ? 'allow' : 'deny', scope: 'session' }
+      } finally {
+        if (waitingForTask) {
+          taskInterruptKeysCleanup = startTaskInterruptKeys()
+          renderThinkingPanel()
+          setWorkerStatusLine('task: processing')
+        }
+      }
+    },
+  })
   const taskyon = await tyCore(
     () => llmState.settings,
     () => cliEntryTask,
@@ -2935,6 +2971,7 @@ async function main(host: InteractiveCliHost) {
         createArtifactStore(
           createProtocolStorageBlobBackend(taskStorageClientPort, `${sessionId}/artifacts`),
         ),
+      authorizeSandboxFetch: sandboxCapabilityPolicy.authorize,
     },
   )
   taskyonRef.current = taskyon
@@ -3034,7 +3071,6 @@ async function main(host: InteractiveCliHost) {
   if (documentationBases && documentation) {
     await documentationBases.register(documentation.manifest, documentation.baseId)
   }
-  const interactiveReadlineRef: { current?: ReturnType<typeof createInterface> } = {}
   const cliTools: InternalTool[] = [
     cliEntryNodeTool,
     createCliClarificationTool(() => interactiveReadlineRef.current),
