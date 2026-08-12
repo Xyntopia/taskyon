@@ -20,7 +20,7 @@ The CLI registers host capabilities alongside Taskyon's shared model and workflo
 - workspace exploration and file reads;
 - structured file updates;
 - verified URL downloads;
-- shell commands through `bash -lc`;
+- shell commands through a non-login `bash -c` process with the inherited environment;
 - `mapSearchTool` and `overpassMapTool` for OpenStreetMap and Overpass results;
 - the active Taskyon documentation corpus;
 - interactive clarification requests.
@@ -59,6 +59,7 @@ yarn tycli
 yarn tycli:diagnostics
 yarn tycli:diagnostics:list
 yarn tycli:diagnostics:modelica
+yarn tycli:diagnostics:release
 yarn tycli:discovery-fixture
 ```
 

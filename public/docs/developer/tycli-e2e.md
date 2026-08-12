@@ -29,12 +29,23 @@ For every experiment:
    that as an agent-runtime bug before scoring the project result.
 
    ```bash
+   RUN_DIR=/workspace/tycli-e2e-runs/\
+   <task-id>/<run-id>
    COREPACK_HOME=/tmp/corepack \
-   TYCLI_CWD=/workspace/tycli-e2e-runs/<task-id>/<run-id>/project \
-   TYCLI_CHAT_COMPLETION_TRACE_DIR=/workspace/tycli-e2e-runs/<task-id>/<run-id>/llm-trace \
-   TYCLI_CHAT_COMPLETION_TRACE_LABEL=<task-id> \
-   yarn --cwd /workspace tycli
+   TYCLI_CWD="$RUN_DIR/project" \
+   TYCLI_DATA_DIR="$RUN_DIR/taskyon-data" \
+   TYCLI_LOG_DIR="$RUN_DIR/runtime-log" \
+   TYCLI_CHAT_COMPLETION_TRACE_DIR=\
+   "$RUN_DIR/llm-trace" \
+   TYCLI_CHAT_COMPLETION_TRACE_LABEL=\
+   <task-id> \
+   yarn --cwd /workspace/frontend tycli
    ```
+
+   `TYCLI_DATA_DIR` isolates every record and blob served through Taskyon's `StorageClient`,
+   including generated tools, task state, artifacts, and transcripts. It intentionally keeps the
+   normal tycli configuration, selected provider and model, OAuth login, and encrypted secret store
+   outside the run directory so the evaluator does not create a profile or log in again.
 
 5. Give `tycli` one realistic prompt. The prompt should describe the desired outcome and
    acceptance criteria, but it should not tell the agent which tools, files, or shell commands to
@@ -109,10 +120,11 @@ When entryNode tracing is enabled, every LLM request gets one redacted record li
 
 - `0001_task-08_<task-id>_record.json`
 
-Each record contains the provider, model, redacted request body, attempt metadata, HTTP response
-status and safe headers, or the transport error. It does not duplicate the streamed assistant
-response body. The trace directory can be audited later to measure request volume and compare task
-costs; token totals are reported only when the trace format contains provider usage.
+Each record contains the provider, model, timestamp, redacted request body, attempt metadata, HTTP
+response status and safe headers, or the transport error. Successful records also contain
+normalized provider usage when it is available: normal input, cache-read, cache-write, output, and
+total tokens. Missing usage stays explicitly unavailable. The trace does not duplicate the streamed
+assistant response body.
 
 ## Post-Experiment Trace Audit
 
@@ -124,23 +136,28 @@ After every finished experiment, audit the trace directory before calling the ru
   paired `*_input.json` and `*_output.json` traces.
 - Report total request characters, response-metadata characters, file bytes, and provider token
   usage when the trace includes it.
-- Report cached input tokens when the provider exposes them. If cached tokens are zero or missing,
-  inspect whether the first messages are stable enough for prompt caching.
-- Check whether the first one or two messages are identical across requests. Stable leading
-  messages improve provider-side prompt-cache reuse.
+- Report normal input, cache-read, cache-write, and output tokens when the provider exposes them.
+  Distinguish a real zero from unavailable telemetry.
+- Check first-message and provider-instruction stability within each request family. A family is
+  defined by provider, model, task-tree root cache key, and tool declaration shape; do not compare
+  a router request to an executor request as if they had identical wire prefixes. Instruction
+  hashes are measurements, not family boundaries, so real instruction drift remains visible.
+- Keep one provider cache key for the task-tree root, including parallel branches. The recorded
+  wire requests are enough to measure each branch's longest common prefix; sibling branch requests
+  do not need separate keys to protect one another's earlier cached prefix.
 - Check the common task-tree message prefix between consecutive requests. Early task nodes should
   remain byte-stable as the task tree grows, and cache reads should generally appear once the
   common prefix is large enough.
 - For `chatgpt-codex`, also check that `providerOptions.openai.instructions` is stable across
   requests. The provider instruction prefix must not include timestamps, recent tool-result text,
   loaded file context, or unrelated parent workspace instructions.
-- For `chatgpt-codex`, also check that the request `promptCacheKey` stays stable across calls in
-  the same user task. The key should be derived from stable task identity, not from timestamps,
-  tool results, or changing runtime context.
-- Do not send provider cache-retention override fields to the ChatGPT Codex backend unless a live
-  compatibility check proves the endpoint accepts them. In the observed July 2026 run,
-  `prompt_cache_retention` was rejected even though prompt caching itself and `promptCacheKey`
-  were supported.
+- When auditing `chatgpt-codex` conversation stability, exclude trailing runtime `developer`
+  messages from the first-message and first-two-message comparison. They are appended volatile
+  context, not early conversation-prefix messages; audit their size and repetition separately.
+- For OpenAI and `chatgpt-codex`, check that `promptCacheKey` stays stable across the same task-tree
+  root. Public OpenAI GPT-5.6 uses explicit breakpoints and `prompt_cache_options` with the
+  supported 30-minute TTL. The ChatGPT Codex backend currently rejects that field and must use its
+  implicit cache behavior. Do not send the older `prompt_cache_retention` field to GPT-5.6.
 - Treat `prependSystemPrompts` as the stable provider-instruction prefix. Use
   `appendSystemPrompts` for volatile context such as ISO/local time, recent tool results, current
   editor state, loaded file context, or retry guidance, so those details appear after the
@@ -177,6 +194,17 @@ After every finished experiment, audit the trace directory before calling the ru
   project command a human should run to show the result, plus any local URLs or files needed to
   inspect whether the project task was successful and the specific behavior to try manually.
 
+Before releases that change OpenAI request construction or trace usage accounting, run the bounded
+live diagnostic with the saved tycli login:
+
+```bash
+yarn tycli:diagnostics:release
+```
+
+This uses `gpt-5.6-luna` and two small repeated requests. Normal CI keeps the deterministic cache
+key, breakpoint, trace, and audit tests; the live check verifies provider telemetry and actual
+reuse without turning a transient provider miss into a deterministic unit-test failure.
+
 ## Selection Criteria
 
 - No account login, private API key, or paid service is required beyond the configured LLM
@@ -199,6 +227,12 @@ agent has a useful behavior, translate it into Taskyon's task-tree and tool mode
 copying hidden loop state or one-off orchestration.
 
 ## Tasks
+
+Tool-building tasks additionally declare an execution profile, target model-discretion band,
+allowed model-call conditions, deterministic evidence, replay expectation, data boundary, created
+tool artifact, and reuse check. Their trace report separates model calls used to create the tool
+from calls made after installation. A missing post-installation model call counts as zero only when
+provider traces prove that no call occurred; unavailable usage telemetry never counts as zero.
 
 ### 1. Add a CLI Smoke-Test Section
 
@@ -688,20 +722,275 @@ documentation.
 - The report cites public no-login sources.
 - One top-level command opens, renders, or verifies the visual artifact.
 
+### 21. Research an OpenAPI and Create a Trivia Tool
+
+**Complexity:** Medium.
+
+**Seed mode:** Blank project.
+
+**Seed source:** Empty directory; public documentation at `https://the-trivia-api.com/docs/`.
+
+**Primary language or medium:** JavaScript, JSON, and Markdown.
+
+**Expected artifact:** Installed Taskyon tool, exported tool definition, usage example, and
+verification report.
+
+**Execution profile:** Deterministic API adapter after model-assisted creation.
+
+**Target model-discretion band:** 0–2 after installation.
+
+**Allowed model-call conditions:** API research and initial tool authoring only; an optional themed
+introduction may use a model when explicitly requested.
+
+**Realistic prompt:** "Please research The Trivia API's public documentation and create a reusable
+Taskyon tool that returns a normalized quiz filtered by category, difficulty, and question count.
+Install it, verify it with representative inputs, invoke the installed tool a second time without
+repeating the research, and leave an export plus a concise usage report in this project."
+
+**Expected capabilities:** web research, OpenAPI discovery, schema design, tool self-authoring,
+mediated fetch, installation, verification, and reuse.
+
+**Deterministic evidence:** Validated arguments, normalized question records, HTTP status and
+source URL, and a repeatable local verification command.
+
+**Replay expectation:** The same saved response fixture produces semantically identical normalized
+output without a model call.
+
+**Data boundary:** Filters reach the public API; quiz content reaches a model only for an explicitly
+requested introduction.
+
+**Created tool artifact:** Active tool revision in the run-local registry and a project export of
+its definition.
+
+**Reuse check:** A second invocation resolves the installed revision and does not repeat API or tool
+research.
+
+**Final autonomous acceptance checks:**
+
+- The tool has a narrow JSON Schema rather than mirroring the complete upstream API.
+- The result contains normalized questions, choices, answers, category, and difficulty.
+- The exported definition matches the installed active revision.
+- The trace distinguishes creation calls from the second tool invocation.
+
+### 22. Create a Targeted UK Legislation Retriever
+
+**Complexity:** Long-running.
+
+**Seed mode:** Blank project.
+
+**Seed source:** Empty directory; official public sources at `https://www.legislation.gov.uk/`.
+
+**Primary language or medium:** JavaScript, XML or JSON, and Markdown.
+
+**Expected artifact:** Installed targeted-retrieval tool, exported definition, cited example
+result, and verification report.
+
+**Execution profile:** Deterministic official-source retrieval with structured clarification and
+optional semantic interpretation.
+
+**Target model-discretion band:** 1–3.
+
+**Allowed model-call conditions:** Mapping an ambiguous topic to candidate legislation or producing
+an explicitly requested summary; exact identified retrieval must not require a model.
+
+**Realistic prompt:** "Please research the official UK legislation service and create a reusable
+Taskyon tool for retrieving a specific provision. When a request lacks necessary details, the tool
+should ask two or three concise structured questions before retrieving anything. Verify exact
+retrieval and an underspecified request, preserve authoritative citations and currentness details,
+and export the tool with a usage report."
+
+**Expected capabilities:** authoritative-source research, structured clarification, XML or JSON
+parsing, citation preservation, self-authored tools, and selective model use.
+
+**Deterministic evidence:** Document identifier, provision identifier, exact retrieved text, source
+URL, retrieval date, and available version or currentness metadata.
+
+**Replay expectation:** An identified provision and saved source response produce the same cited
+record without a model call.
+
+**Data boundary:** The official service receives identifiers and queries; exact text remains outside
+the model unless interpretation is requested.
+
+**Created tool artifact:** Active run-local tool revision and exported definition.
+
+**Reuse check:** A second exact lookup uses the installed tool and performs no authoring research.
+
+**Final autonomous acceptance checks:**
+
+- Blocking ambiguity triggers two or three structured questions rather than a guessed lookup.
+- Exact source text is distinguishable from generated summary text.
+- Results include direct official links, retrieval date, and a currentness warning where needed.
+- The tool states that generated interpretation is not legal advice.
+
+### 23. Create an OpenAPI Contract-Drift Tool
+
+**Complexity:** Medium.
+
+**Seed mode:** Blank project.
+
+**Seed source:** Empty directory; the OpenAPI specification at
+`https://spec.openapis.org/oas/latest.html` and a compact before/after fixture pair created and
+retained during the run.
+
+**Primary language or medium:** JavaScript, JSON or YAML, and Markdown.
+
+**Expected artifact:** Installed comparison tool, exported definition, fixture pair, structured
+comparison, and verification report.
+
+**Execution profile:** Deterministic engineering analysis after model-assisted research and
+creation.
+
+**Target model-discretion band:** 0–1 after installation.
+
+**Allowed model-call conditions:** Research and initial authoring only; deterministic fixture
+comparison may not invoke a model.
+
+**Realistic prompt:** "Please research established OpenAPI compatibility rules and create a
+reusable Taskyon tool that normalizes two OpenAPI documents and reports known breaking changes.
+Create and retain a compact fixture pair that exercises several change types, install and verify
+the tool, repeat the comparison to prove stable reuse, and export the definition with a report."
+
+**Expected capabilities:** standards research, schema parsing, deterministic comparison, tool
+self-authoring, structured output, and replay verification.
+
+**Deterministic evidence:** Normalized inputs and categorized findings that identify paths,
+operations, parameters, schemas, and the rule responsible for each classification.
+
+**Replay expectation:** Repeated fixture comparisons are byte-stable after volatile timestamps and
+paths are excluded from the result contract.
+
+**Data boundary:** Fixture files remain local; only standards research reaches external sources.
+
+**Created tool artifact:** Active run-local tool revision and exported definition.
+
+**Reuse check:** The repeated comparison uses the installed revision with zero post-installation
+model calls.
+
+**Final autonomous acceptance checks:**
+
+- The fixture pair includes removed operations, tightened inputs, and incompatible schema changes.
+- Findings distinguish breaking, non-breaking, and unknown changes.
+- Unknown semantic implications are not silently promoted to proven breaking changes.
+- Repeated results and traces prove deterministic reuse.
+
+### 24. Adapt an Electronics Workflow into a PCB Preflight Tool
+
+**Complexity:** Long-running.
+
+**Seed mode:** Existing public engineering project.
+
+**Seed source:** Clone `https://github.com/aklofas/kicad-happy` and use its repository validation
+corpus as the fixture source.
+
+**Primary language or medium:** Python, KiCad S-expressions, JSON, and Markdown.
+
+**Expected artifact:** Installed narrow PCB preflight tool, exported definition, structured
+findings, and engineering evidence report.
+
+**Execution profile:** Deterministic electronics analysis adapted from an agent skill workflow.
+
+**Target model-discretion band:** 1–3.
+
+**Allowed model-call conditions:** Initial workflow research and explanation of explicitly marked
+uncertain findings; parsing, calculations, and pass/warn/fail classifications remain deterministic.
+
+**Realistic prompt:** "Please study this project's documented KiCad analysis workflow and adapt one
+coherent part of it into a reusable Taskyon tool, such as schematic/PCB consistency, BOM quality,
+or SPICE preflight. Use a maintained included fixture, install and run the tool twice, export its
+definition, and write a concise evidence report that separates calculated findings from optional
+AI interpretation."
+
+**Expected capabilities:** skill analysis, engineering-format parsing, command orchestration,
+deterministic validation, tool self-authoring, and evidence reporting.
+
+**Deterministic evidence:** Parsed project identifiers, rule or calculation identifiers, measured
+values where applicable, severity, and reproducible command output.
+
+**Replay expectation:** The same fixture and configuration yield the same structured findings.
+
+**Data boundary:** Project files remain local; distributor lookup or model interpretation stays
+disabled unless explicitly needed and reported.
+
+**Created tool artifact:** Active run-local tool revision and exported definition.
+
+**Reuse check:** A second fixture analysis uses the installed tool without rereading the skill as
+model context.
+
+**Final autonomous acceptance checks:**
+
+- The tool implements one clear engineering capability rather than copying the entire skill suite.
+- Findings have structured evidence and do not present model opinion as an electrical-rule check.
+- The report records the upstream workflow and license used as inspiration.
+- The fixture can be checked with one documented top-level command.
+
+### 25. Create a Power-Grid Contingency Tool
+
+**Complexity:** Long-running.
+
+**Seed mode:** Blank project.
+
+**Seed source:** Empty directory; public PyPSA documentation and its built-in
+`ac_dc_meshed` example network.
+
+**Primary language or medium:** Python, JSON or CSV, and Markdown.
+
+**Expected artifact:** Installed N-1 contingency tool, exported definition, structured result,
+human-readable report, and reproducible local example.
+
+**Execution profile:** Deterministic power-system simulation with optional explanation.
+
+**Target model-discretion band:** 0–2 after installation.
+
+**Allowed model-call conditions:** Initial PyPSA research, tool authoring, and an explicitly
+requested narrative explanation; network construction, contingency execution, and threshold
+classification may not use a model.
+
+**Realistic prompt:** "Please research the current PyPSA workflow and create a reusable Taskyon tool
+that runs a base power flow and bounded N-1 branch contingencies on a small network, returning
+structured convergence and loading findings. Verify it with PyPSA's built-in AC/DC meshed example,
+repeat the analysis, export the tool, and provide one command plus a report for human review."
+
+**Expected capabilities:** scientific-library research, dependency setup, power-flow execution,
+parameter validation, tool self-authoring, structured analysis, and reporting.
+
+**Deterministic evidence:** Library version, network inputs, contingency identifiers, solver
+status, loading metrics, thresholds, and failed or non-convergent cases.
+
+**Replay expectation:** Repeated analysis with the same library, solver, network, and thresholds
+produces semantically identical findings.
+
+**Data boundary:** Network and results remain local; optional explanation receives only selected
+structured findings.
+
+**Created tool artifact:** Active run-local tool revision and exported definition.
+
+**Reuse check:** A second analysis uses the installed tool with no repeated research or authoring
+calls.
+
+**Final autonomous acceptance checks:**
+
+- The tool reports the base case and every attempted branch contingency.
+- Non-convergence is preserved as evidence rather than omitted or reported as success.
+- Units, thresholds, PyPSA version, and solver are present in the report.
+- One top-level command reproduces the example analysis.
+
 ## Coverage Matrix
 
-| Area                                 | Representative tasks |
-| ------------------------------------ | -------------------- |
-| Blank-project scaffolding            | 2, 7, 8, 9, 10, 11   |
-| Existing small-project modification  | 1, 3, 5, 6, 17, 19   |
-| Existing large/popular project work  | 4, 15, 18            |
-| CLI/project onboarding               | 1, 4, 5, 7, 14, 17   |
-| Third-party code editing             | 3, 5, 6, 15, 18      |
-| Local app, webpage, or visual build  | 8, 10, 16, 20        |
-| Research, writing, and presentations | 12, 13, 16, 19, 20   |
-| Data, shell, and public APIs         | 2, 9, 11, 14         |
-| Non-code visual artifacts            | 10, 16, 20           |
-| Long-running workflows               | 15, 18, 20           |
+| Area                                 | Representative tasks                   |
+| ------------------------------------ | -------------------------------------- |
+| Blank-project scaffolding            | 2, 7, 8, 9, 10, 11, 21, 22, 23, 25     |
+| Existing small-project modification  | 1, 3, 5, 6, 17, 19, 24                 |
+| Existing large/popular project work  | 4, 15, 18                              |
+| CLI/project onboarding               | 1, 4, 5, 7, 14, 17, 21, 23, 24, 25     |
+| Third-party code editing             | 3, 5, 6, 15, 18                        |
+| Local app, webpage, or visual build  | 8, 10, 16, 20                          |
+| Research, writing, and presentations | 12, 13, 16, 19, 20, 21, 22, 23, 24, 25 |
+| Data, shell, and public APIs         | 2, 9, 11, 14, 21, 22, 23, 25           |
+| Non-code visual artifacts            | 10, 16, 20                             |
+| Long-running workflows               | 15, 18, 20, 22, 24, 25                 |
+| Self-authored reusable tools         | 21, 22, 23, 24, 25                     |
+| Deterministic post-creation replay   | 21, 22, 23, 24, 25                     |
+| Non-software engineering workflows   | 24, 25                                 |
 
 ## Suggested Scoring Rubric
 
@@ -713,3 +1002,8 @@ documentation.
 - **Root cause:** Debugging tasks explain upstream causes instead of patching symptoms.
 - **Traceability:** The tycli transcript, runtime log, and chatCompletion trace files can be tied
   back to the task id.
+- **Model discretion:** Model calls occur only under the task's declared conditions, and traces
+  distinguish creation from post-installation execution.
+- **Replayability:** The installed tool can repeat its deterministic path with stable evidence.
+- **Data boundary:** The report distinguishes local, model-visible, and external-service-visible
+  inputs.
