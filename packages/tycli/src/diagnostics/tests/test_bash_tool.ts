@@ -37,6 +37,27 @@ export const testCliBashStreamsOutputBeforeCompletion = async () => {
 testCliBashStreamsOutputBeforeCompletion.description =
   'Streams Bash stdout through generic tool progress before returning the final result.'
 
+export const testCliBashUsesNonLoginShell = async () => {
+  const result = await runBashCommand(
+    {
+      command:
+        'if [ -n "$BASH_VERSION" ] && shopt -q login_shell; then exit 42; fi; printf non-login',
+      cwd: process.cwd(),
+      timeoutMs: 2_000,
+    },
+    {
+      stopSignal: new AbortController().signal,
+      reportProgress: () => Promise.resolve(),
+    },
+  )
+
+  assert(result.ok, `Expected a non-login shell, got exit code ${String(result.exitCode)}`)
+  assert(result.stdout === 'non-login', `Unexpected stdout: ${result.stdout}`)
+}
+
+testCliBashUsesNonLoginShell.description =
+  'Runs Bash commands without loading login profiles while preserving the inherited environment.'
+
 export const testCliBashCancellationIncludesOutputContext = async () => {
   const controller = new AbortController()
   const promise = runBashCommand(

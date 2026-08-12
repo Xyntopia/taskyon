@@ -19,8 +19,9 @@ const isMissingFileError = (error: unknown) =>
 
 export const updateFilesTool = createTool({
   name: 'updateFiles',
-  description:
-    'Create or edit workspace files. Each update must use exactly one mode: newContent, patches, or regexReplacements. Use newContent by itself when creating or fully replacing a file. If a patch or regex update fails, re-read the file before retrying; for small generated files prefer one complete newContent replacement over repeated approximate patches.',
+  description: 'Create or edit one or more workspace text files with explicit replacement modes.',
+  longDescription:
+    'Every requested path is confined to the workspace and each update uses exactly one mode: complete content, exact-context patches, or regular-expression replacements. The tool validates all updates before writing and reports mismatches instead of silently applying approximate edits.',
   parameters: {
     type: 'object',
     additionalProperties: false,

@@ -9,9 +9,9 @@ import type { TyPGDB } from '../utils/pglite.api'
 export const localVectorStore = (db: TyPGDB) =>
   createTool({
     name: 'localVectorStore',
-    description: `This tool can store Information and perform semantic search in a vector database, ideal
-  for retrieving documents or data segments with high relevance to natural language queries. You can use labels to
-  make sure that the search is only performed in a specific segment of the database.`,
+    description: 'Store text in the local vector index or retrieve semantically similar text.',
+    longDescription:
+      'Saved text is content-addressed and embedded in Taskyon’s local database. Labels can partition retrieval without changing the stored text. This is persistent semantic memory, not a source of external facts.',
     parameters: {
       type: 'object',
       properties: {

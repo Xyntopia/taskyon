@@ -102,13 +102,12 @@ export const clarificationToolParameters = {
 } as const satisfies JSONSchema7
 
 export const clarificationToolDescription =
-  'Ask the user structured clarifying questions before starting ambiguous work.'
+  'Ask structured multiple-choice questions only when blocking ambiguity makes immediate work likely to be wrong.'
 
 export const clarificationToolLongDescription = [
-  'Use this as an early first step only when the user request leaves important choices unclear.',
-  'Ask 4-5 compact multiple-choice questions for ambiguous project work, with practical defaults.',
-  'Do not use it when the request is already executable, when reasonable defaults are obvious, or during autonomous benchmark proof runs unless the ambiguity would make success impossible.',
-  'Each question must include options; the UI also allows a custom typed answer.',
+  'Use this as an early step only when an unresolved choice materially changes the result.',
+  'Do not interrupt executable work merely to collect preferences when practical defaults are available.',
+  'The host presents the questions interactively and returns the answers as visible task context so work can continue.',
 ].join(' ')
 
 export function formatClarificationAnswersAsUserMessage(result: ClarificationResult): string {

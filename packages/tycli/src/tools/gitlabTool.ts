@@ -265,7 +265,9 @@ const validateBeforeAuth = (args: GitlabToolArgs) => {
 export const gitlabTool = createTool({
   name: 'gitlab',
   description:
-    'Use GitLab from tycli with OAuth. List projects/issues, inspect issues, comment on issues, and close issues with comments.',
+    'Check GitLab authentication; list projects or issues; inspect, comment on, or close issues.',
+  longDescription:
+    'This CLI capability uses locally persisted GitLab OAuth credentials and supports both gitlab.com and an explicit GitLab instance. Commenting and closing are external writes; bulk close reports each issue outcome independently rather than treating partial success as complete success.',
   parameters: {
     type: 'object',
     additionalProperties: false,

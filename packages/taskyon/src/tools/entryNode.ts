@@ -318,55 +318,57 @@ type EntryNodeRuntimeState = {
   previousTask: TaskNode | undefined
   prompt: string
   promptContext: EntryNodePromptContext
+  retryToolSelection: boolean
   routingContext: EntryNodeRoutingContext
   toolResultSection?: string
   toolSearch?: { query: string; limit?: number }
   taskChain: TaskNode[]
 }
 
+const isToolSelectionRequest = (task: TaskNode | undefined, entryNodeName: string) => {
+  if (task?.content.type !== 'functioncall' || task.content.data.name !== 'chatCompletion') {
+    return false
+  }
+  const args = task.content.data.arguments as {
+    allowedTools?: unknown
+    toolChoice?: { type?: unknown; toolName?: unknown }
+  }
+  return (
+    isStringArray(args.allowedTools) &&
+    args.allowedTools.length === 1 &&
+    args.allowedTools[0] === entryNodeName &&
+    args.toolChoice?.type === 'tool' &&
+    args.toolChoice.toolName === entryNodeName
+  )
+}
+
+const normalizeEntryNodeSelectionArgs = (
+  args: EntryNodeArgs,
+  isToolSelection: boolean,
+): { args: EntryNodeArgs; retry: boolean } => {
+  if (!isToolSelection) return { args, retry: false }
+  const hasAllowedTools = Array.isArray(args.allowedTools)
+  const hasToolSearch = args.toolSearch !== undefined
+  return {
+    args: {
+      ...(hasAllowedTools ? { allowedTools: args.allowedTools } : {}),
+      ...(hasToolSearch ? { toolSearch: args.toolSearch } : {}),
+    },
+    retry: hasAllowedTools === hasToolSearch,
+  }
+}
+
 const buildToolShortlistPrompt = (
   toolCatalog: ReadonlyArray<{ name: string; description: string }>,
   entryNodeName: string,
   toolNum = 3,
-) => {
-  const taskPlannerGuidance = toolCatalog.some((tool) => tool.name === 'taskPlanner')
-    ? [
-        '',
-        'Important: choose taskPlanner only when the request is genuinely multi-phase, has',
-        'independent branches, or needs adaptive checkpoints. For simple answers or small',
-        'single-artifact edits, choose the ordinary execution tools directly. The planner can',
-        'emit one task, a short sequential packet, or independent parallel branches before',
-        'replanning. When the request contains multiple distinct tasks, choose taskPlanner by',
-        'itself and let each delegated entry node choose its own execution tools. This rule',
-        'takes precedence over guidance for any execution tool mentioned by one subtask.',
-      ].join('\n')
-    : ''
-  const clarificationGuidance = toolCatalog.some((tool) => tool.name === 'askClarifyingQuestions')
-    ? [
-        '',
-        'Important: choose askClarifyingQuestions as the first step only when important',
-        'requirements are unclear enough that starting work would likely be wrong. Ask',
-        '4-5 compact multiple-choice questions for ambiguous project work. Do not ask',
-        'questions just to collect preferences when practical defaults are obvious.',
-      ].join('\n')
-    : ''
-  const toolSearcherGuidance = toolCatalog.some((tool) => tool.name === 'toolSearcher')
-    ? [
-        '',
-        'Important: for a standalone or delegated task that asks to list or inspect the',
-        'available tools, select toolSearcher. When tool inventory is only one objective in a',
-        'request with multiple distinct tasks, select taskPlanner first instead. The catalog',
-        'below is routing metadata, not the tool-inventory result; never copy, summarize, or',
-        'answer from the catalog itself.',
-      ].join('\n')
-    : ''
-
-  return `Here is list of all the tools which are available to you:
+) => `Here is the catalog of available tools:
 
 ${safeYamlDump(toolCatalog)}
 
-Choose up to ${toolNum} tools which might be relevant for this task. Include a tool only
-when it would help solve the task. Do not select a tool merely because it is available.
+Choose up to ${toolNum} tools which might be relevant for this task, ordered by execution
+priority with the tool that must run next first. Include a tool only when it would help solve
+the task. Do not select a tool merely because it is available.
 Route the current leaf task only. When the conversation contains a recent message beginning
 with "Task objective:", treat that message as the current delegated objective. Earlier parent
 requests remain useful context, but do not classify or plan them again. Decide whether planning
@@ -376,23 +378,11 @@ requested result; select and execute the relevant tool when the task asks for to
 Do not repeat successful tool work. If the available evidence already satisfies the task,
 call ${entryNodeName} with an empty allowedTools list so the task can produce its result.
 
-Examples are:
-- something that you can't answer with pure text
-- a math problem
-- something that requires an API call
-- a multi-step task that should be planned, verified, or split into packets
-- a task with blocking ambiguity that should start with structured clarification questions
-- ... and more! make sure to think about it!
-${taskPlannerGuidance}
-${clarificationGuidance}
-${toolSearcherGuidance}
-
 If the needed capability is missing, call ${entryNodeName} with only toolSearch and a concise
 catalog query. Otherwise call it with only allowedTools. Never provide both arguments.
 If no tool is needed, call ${entryNodeName} with an empty allowedTools list.
 
 Do not answer the user yet.`
-}
 
 const createEntryNodeSelectionTask = (
   entryNodeName: string,
@@ -414,20 +404,6 @@ const createEntryNodeSelectionTask = (
     ...(options.trace ? { trace: options.trace } : {}),
     use_multimodal: options.use_multimodal,
   })
-
-const emphasizePlanningTool = (
-  toolCatalog: ReadonlyArray<{ name: string; description: string }>,
-) => {
-  const planner = toolCatalog.find((tool) => tool.name === 'taskPlanner')
-  if (!planner) return [...toolCatalog]
-  return [
-    {
-      ...planner,
-      description: `${planner.description} Entry-node hint: use this for complex multi-step work, independent branches, or adaptive checkpoints; skip it for simple direct tasks.`,
-    },
-    ...toolCatalog.filter((tool) => tool.name !== 'taskPlanner'),
-  ]
-}
 
 const createFallbackToolCatalog = (toolNames: readonly string[]) =>
   toolNames.map((name) => ({ name, description: name }))
@@ -494,8 +470,8 @@ const resolveAvailableToolsForMessage = async (
       ? configuredToolCatalog
       : createFallbackToolCatalog(allowedTools ?? [])
   const allowedToolNames = allowedTools ? new Set(allowedTools) : undefined
-  const toolCatalog = emphasizePlanningTool(
-    availableToolCatalog.filter((tool) => allowedToolNames?.has(tool.name) ?? true),
+  const toolCatalog = availableToolCatalog.filter(
+    (tool) => allowedToolNames?.has(tool.name) ?? true,
   )
 
   return {
@@ -527,9 +503,13 @@ const inheritEntryNodeArguments = (
     if (task.content.type !== 'functioncall' || task.content.data.name !== entryNodeName) {
       return inherited
     }
-    const { toolSearch: transientSearch, ...persistentArgs } = task.content.data
-      .arguments as EntryNodeArgs
+    const {
+      toolSearch: transientSearch,
+      websearch: transientWebSearch,
+      ...persistentArgs
+    } = task.content.data.arguments as EntryNodeArgs
     void transientSearch
+    void transientWebSearch
     return mergeEntryNodeArguments(inherited, persistentArgs)
   }, {})
   return mergeEntryNodeArguments(inherited, args)
@@ -542,7 +522,11 @@ const createEntryNodeRuntimeState = async (
 ): Promise<EntryNodeRuntimeState> => {
   const taskChain = await context.getExecutionTaskChain()
   const entryNodeName = config.name ?? 'entryNode'
-  const inheritedArgs = inheritEntryNodeArguments(taskChain, entryNodeName, args)
+  const selection = normalizeEntryNodeSelectionArgs(
+    args,
+    isToolSelectionRequest(taskChain.at(-2), entryNodeName),
+  )
+  const inheritedArgs = inheritEntryNodeArguments(taskChain, entryNodeName, selection.args)
   const {
     toolResultSection,
     allowedTools: allowedToolsOverride,
@@ -556,6 +540,7 @@ const createEntryNodeRuntimeState = async (
     taskChain,
     previousTask,
   }
+  const normalizedSettings = normalizeEntryNodeSettings(settings)
   const prompt = config.buildPrompt(
     toolResultSection === undefined ? promptArgsBase : { ...promptArgsBase, toolResultSection },
   )
@@ -565,7 +550,6 @@ const createEntryNodeRuntimeState = async (
     resolveAllowedToolsFromFailedTask(taskChain, previousTask, config.defaultAllowedTools)
   const toolRestriction = resolveAllowedToolsForMode(mode, rawAllowedTools)
   const allowedTools = toolRestriction ?? []
-  const normalizedSettings = normalizeEntryNodeSettings(settings)
   const promptContext = {
     mode,
     prompt,
@@ -584,6 +568,7 @@ const createEntryNodeRuntimeState = async (
     previousTask,
     prompt,
     promptContext,
+    retryToolSelection: selection.retry,
     routingContext: {
       mode,
       webSearchEnabled: normalizedSettings.websearch.enabled,
@@ -861,6 +846,27 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
       const runtime = await createEntryNodeRuntimeState(config, args, context)
       const promptAugmentations = resolveEntryNodePromptAugmentations(runtime.promptContext)
 
+      if (runtime.retryToolSelection) {
+        const { toolCatalog } = await resolveAvailableToolsForMessage(
+          config,
+          runtime.toolRestriction,
+          runtime.taskChain,
+        )
+        return context.createSubtasksResult([
+          createEntryNodeSelectionTask(
+            runtime.entryNodeName,
+            `${buildToolShortlistPrompt(toolCatalog, runtime.entryNodeName)}\n\nYour previous routing call was invalid: provide exactly one of allowedTools or toolSearch, and do not provide execution settings or a taskContract.`,
+            {
+              appendSystemPrompts: promptAugmentations.appendSystemPrompts,
+              prependSystemPrompts: promptAugmentations.prependSystemPrompts,
+              reasoning_effort: 'low',
+              trace: runtime.normalizedSettings.trace,
+              use_multimodal: runtime.normalizedSettings.use_multimodal,
+            },
+          ),
+        ])
+      }
+
       if (runtime.toolSearch) {
         if (!config.searchToolCatalog) {
           throw new Error('Entry-node tool search is unavailable in this runtime.')
@@ -1008,6 +1014,8 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
                 runtime.entryNodeName,
                 buildToolShortlistPrompt(toolCatalog, runtime.entryNodeName),
                 {
+                  appendSystemPrompts: messagePromptAugmentations.appendSystemPrompts,
+                  prependSystemPrompts: messagePromptAugmentations.prependSystemPrompts,
                   reasoning_effort: 'low',
                   trace: runtime.normalizedSettings.trace,
                   use_multimodal: runtime.normalizedSettings.use_multimodal,

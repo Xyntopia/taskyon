@@ -316,7 +316,10 @@ export const testTaskPlannerReturnsOnlyDelegatedBranches = async () => {
     stopSignal: new AbortController().signal,
     toolId: 'test-task-planner',
   }
-  const result = await taskPlanner.function({ tasks: [['Inspect project']] }, context)
+  const result = await taskPlanner.function(
+    { tasks: ['Inspect project', 'Report the findings'] },
+    context,
+  )
   assert(
     result.taskChainList.length === 1,
     `Expected only one delegated branch, got ${result.taskChainList.length}`,
@@ -337,28 +340,23 @@ export const testTaskPlannerReturnsOnlyDelegatedBranches = async () => {
   const tasksDescription = taskPlanner.parameters.properties.tasks.description
   assert(
     tasksDescription?.includes('Every delegated task must surface') &&
-      tasksDescription.includes('outer workflow sequential') &&
+      tasksDescription.includes('For map/reduce work') &&
       tasksDescription.includes('Stop recursive planning') &&
       tasksDescription.includes('one concrete task per requested objective') &&
-      tasksDescription.includes('Preserve explicit requested actions'),
-    'Expected map/reduce and result-handoff policy in the provider-visible task schema',
+      tasksDescription.includes('final exports and usage reports only') &&
+      tasksDescription.includes('product identities, domains, and URLs verbatim'),
+    'Expected delegation, artifact-ownership, and result-handoff policy in the provider-visible task schema',
   )
   assert(
-    !('default' in taskPlanner.parameters.properties.parallel),
-    'Expected the optional parallel flag not to advertise a redundant false default',
-  )
-  assert(
-    taskPlanner.longDescription.includes('only a top-level taskPlanner argument') &&
-      taskPlanner.longDescription.includes(
-        'map of field names to JSON Schema property definitions is also accepted',
-      ) &&
-      taskPlanner.parameters.properties.parallel.description.includes(
-        'Never put parallel inside a task item',
-      ),
-    'Expected provider guidance to keep parallel at the planner top level',
+    !('parallel' in taskPlanner.parameters.properties) &&
+      taskPlanner.parameters.properties.tasks.examples?.length === 2 &&
+      taskPlanner.longDescription.includes('Flat task arrays execute sequentially') &&
+      taskPlanner.longDescription.includes('nested arrays create independent parallel branches') &&
+      !taskPlanner.longDescription.includes('JSON Schema property definitions'),
+    'Expected execution semantics in tool-wide guidance and argument examples in the parameter schema',
   )
   const providerTaskProperties =
-    taskPlanner.parameters.properties.tasks.items.items.anyOf[1].properties
+    taskPlanner.parameters.properties.tasks.anyOf[0].items.anyOf[1].properties
   assert(
     !('allowedTools' in providerTaskProperties),
     'Expected delegated entry nodes, not taskPlanner, to choose execution tools',
@@ -367,7 +365,7 @@ export const testTaskPlannerReturnsOnlyDelegatedBranches = async () => {
   return { success: true }
 }
 
-export const testTaskPlannerDefaultsToSequentialGroups = async () => {
+export const testTaskPlannerShapeSelectsSequentialOrParallelExecution = async () => {
   if (!taskPlanner.function) throw new Error('Expected taskPlanner to have a function')
 
   const context: toolContext = {
@@ -378,21 +376,28 @@ export const testTaskPlannerDefaultsToSequentialGroups = async () => {
     stopSignal: new AbortController().signal,
     toolId: 'test-task-planner',
   }
-  const result = await taskPlanner.function(
+  const sequential = await taskPlanner.function(
+    { tasks: ['Implement artifact', 'Write README', 'Run verification'] },
+    context,
+  )
+  const parallel = await taskPlanner.function(
     {
-      tasks: [['Implement artifact'], ['Write README'], ['Run verification']],
+      tasks: [
+        ['Research API', 'Summarize API'],
+        ['Research UI', 'Summarize UI'],
+      ],
     },
     context,
   )
-  const delegatedBranches = result.taskChainList
 
   assert(
-    delegatedBranches.length === 1,
-    `Expected default planner mode to create one sequential branch, got ${delegatedBranches.length}`,
+    sequential.taskChainList.length === 1 && sequential.taskChainList[0]?.length === 6,
+    'Expected a flat tasks array to create one sequential branch',
   )
   assert(
-    delegatedBranches[0]?.length === 6,
-    `Expected one branch with three sequential planner tasks, got ${delegatedBranches[0]?.length}`,
+    parallel.taskChainList.length === 2 &&
+      parallel.taskChainList.every((branch) => branch.length === 4),
+    'Expected nested task arrays to create independent parallel branches with sequential steps',
   )
 
   return { success: true }
@@ -479,7 +484,7 @@ testTaskPlannerNormalizesTaskInputs.description =
   'Normalizes planner task inputs and rejects invalid task planner objects at the boundary.'
 testTaskPlannerReturnsOnlyDelegatedBranches.description =
   'Ensures taskPlanner returns only delegated work and hides orchestration-only calls from later LLM context.'
-testTaskPlannerDefaultsToSequentialGroups.description =
-  'Ensures taskPlanner flattens dependent groups into one sequential branch unless parallel execution is explicit.'
+testTaskPlannerShapeSelectsSequentialOrParallelExecution.description =
+  'Uses a flat tasks array for one sequential branch and nested arrays for independent parallel branches.'
 testTaskQueueSelectionGroupsPendingParallelBranches.description =
   'Groups active and pending tasks across first-level parallel branches while keeping selected lineage traversal at one hierarchy.'

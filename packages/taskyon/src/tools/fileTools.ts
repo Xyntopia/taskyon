@@ -40,7 +40,7 @@ const assertArtifactNamespace = (namespace: string, artifactRoot?: string) => {
 export const createStorageTool = (storageClient: TaskyonStorageClient) =>
   createTool({
     name: 'storage',
-    description: 'Save and load persistent objects through Taskyon storage',
+    description: 'Save, download, read, list, delete, or check persistent binary Taskyon objects.',
     longDescription: `Store persistent binary objects through Taskyon's location-transparent storage service.
 Objects are addressed by a namespace and an opaque object ID. The same tool works with local,
 worker, remote, object-store, and future peer-backed storage providers.`,

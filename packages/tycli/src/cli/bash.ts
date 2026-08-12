@@ -60,7 +60,7 @@ const runWithShell = async (
 ) =>
   await new Promise<BashCommandResult>((resolve, reject) => {
     const startedAt = Date.now()
-    const child = spawn(shell, ['-lc', input.command], {
+    const child = spawn(shell, ['-c', input.command], {
       cwd: input.cwd,
       env: process.env,
       detached: process.platform !== 'win32',

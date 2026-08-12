@@ -137,17 +137,39 @@ export const createChatCompletionRetryDelayTool = (dependencies?: {
     name: CHAT_COMPLETION_RETRY_DELAY_TOOL_NAME,
     description:
       'Wait visibly before Taskyon retries a transiently failed chat completion. This tool is scheduled automatically.',
+    longDescription:
+      'This hidden workflow capability preserves retry state in visible tasks, reports a countdown through progress events, respects cancellation, and then replays the most recent failed chat-completion arguments. Agents should not select it directly.',
     renderOptions: { hideChat: false, hideLlm: true, hideVector: true },
     parameters: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        retryNumber: { type: 'integer', minimum: 1 },
-        scheduledAt: { type: 'number' },
-        retryAt: { type: 'number' },
-        retryStartedAt: { type: 'number' },
-        retryDeadlineAt: { type: 'number' },
-        timeoutMs: { type: 'number', minimum: 1 },
+        retryNumber: {
+          type: 'integer',
+          minimum: 1,
+          description: 'One-based explicit retry number.',
+        },
+        scheduledAt: {
+          type: 'number',
+          description: 'Unix epoch milliseconds when this retry was scheduled.',
+        },
+        retryAt: {
+          type: 'number',
+          description: 'Unix epoch milliseconds when the next attempt may begin.',
+        },
+        retryStartedAt: {
+          type: 'number',
+          description: 'Unix epoch milliseconds when explicit retry handling began.',
+        },
+        retryDeadlineAt: {
+          type: 'number',
+          description: 'Unix epoch milliseconds after which retrying must stop.',
+        },
+        timeoutMs: {
+          type: 'number',
+          minimum: 1,
+          description: 'Timeout assigned to the replayed chat-completion call.',
+        },
       },
       required: [
         'retryNumber',

@@ -36,6 +36,69 @@ should return reducer or continuation tasks instead of running a hidden loop ins
 Use `toolCall({ name, arguments })` to add a tool invocation to a task chain. Keep state in visible
 task nodes, explicit arguments, or persisted artifacts.
 
+## Choose the lowest necessary model discretion
+
+A tool is an executable capability, not necessarily an AI call. Put known parsing, validation,
+calculation, and transformation rules directly in code:
+
+```ts
+export const textStatistics = createTool({
+  name: 'textStatistics',
+  description: 'Count words and non-whitespace characters in text.',
+  parameters: {
+    type: 'object',
+    properties: { text: { type: 'string' } },
+    required: ['text'],
+    additionalProperties: false,
+  } as const,
+  function: ({ text }) => ({
+    words: text.trim() ? text.trim().split(/\s+/u).length : 0,
+    nonWhitespaceCharacters: text.replace(/\s/gu, '').length,
+  }),
+})
+```
+
+When semantic judgment is genuinely required, make the model call an explicit step rather than
+hiding it in otherwise deterministic code:
+
+```ts
+export const explainValidationFindings = createTool({
+  name: 'explainValidationFindings',
+  description: 'Explain supplied deterministic validation findings.',
+  parameters: {
+    type: 'object',
+    properties: { findings: { type: 'string' } },
+    required: ['findings'],
+    additionalProperties: false,
+  } as const,
+  function: ({ findings }, context) =>
+    context.createSubtasksResult([
+      [
+        {
+          role: 'system',
+          content: {
+            type: 'message',
+            data: `Explain these findings without changing their factual status:\n${findings}`,
+          },
+        },
+        toolCall({
+          name: 'chatCompletion',
+          arguments: { allowedTools: [] },
+        }),
+      ],
+    ]),
+})
+```
+
+Operational autonomy and model discretion are separate. A deterministic tool can complete a
+workflow autonomously, while a highly model-directed tool may still pause for approval. State which
+inputs remain local, reach a model, or reach another external service.
+
+Skills and MCP occupy different boundaries. A skill supplies reusable instructions and resources;
+an agent can compile its stable procedure into a tool. MCP transports tool discovery and calls
+across a process or network boundary. See [Tools, Skills, and MCP](../user/tools-and-mcp.md) and
+[Agent-Authored Tools](agent-authored-tools.md).
+
 ## Internal and client tools
 
 Use `createTool(...)` for tools executed by Taskyon core. Use `createClientTool(...)` for a
@@ -101,11 +164,22 @@ The `parameters` JSON Schema is the source of truth for arguments and defaults. 
 read the runtime tool schema rather than importing a parallel settings schema. Keep local option
 types near the tool unless they carry reusable domain meaning.
 
+Each tool owns its model-facing guidance. Use `description` for a concise catalog summary that says
+what the tool does and when to select it. Add an optional `longDescription` only for tool-wide
+operational details that improve correct use: workflow, visible side effects, execution boundaries,
+result semantics, or important limitations. Do not repeat the short description or copy individual
+argument documentation into it. It must still stand alone because callable declarations use it in
+place of the short text. Put argument meanings, constraints, defaults, interactions, and
+examples in the owning parameter schema; complex values should include schema examples.
+
+Catalog search and shortlisting use the short description. Once a tool is callable, Taskyon sends
+its long description when present and otherwise falls back to the short description. Entry nodes
+and global prompts must not maintain parallel named-tool guidance or rewrite descriptions.
+
 Use `allowedTools` when a workflow intentionally restricts the next model decision. An empty or
 omitted list can mean that the entry-node configuration supplies its normal tool set, so do not
 treat it as a universal denial list without checking the active mode.
 
-Tool descriptions should state observable behavior, required inputs, and important side effects.
 Return clear errors with enough context for an entry node or reducer to decide whether to retry,
 request clarification, choose another tool, or stop.
 
@@ -130,6 +204,6 @@ complex domain behavior, but keep Taskyon workflow semantics in visible task nod
 inside library callbacks.
 
 The current peer advertises its FRP services, streams, and registered tools at
-[`/resources/peers/local/api`](/docs/taskyon/openapi/taskyon-peer-api). This runtime OpenAPI document is the
+[`/resources/peers/local/api`](/resources/peers/local/api). This runtime OpenAPI document is the
 tool and protocol reference; it changes when the registered capabilities change. TypeScript SDK
 interfaces remain owned by the exported package source.

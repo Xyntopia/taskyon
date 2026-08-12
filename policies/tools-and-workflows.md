@@ -19,6 +19,19 @@ or tool-visible capabilities.
 
 ## Source Of Truth
 
+- Each tool owns its selection and usage guidance. Entry nodes, catalog routers, and global runtime
+  prompts must not maintain named-tool instructions or rewrite tool descriptions.
+- Keep `description` concise and discriminative: state what the tool does and when an agent should
+  select it. Catalog search and shortlist stages use this short description.
+- Add `longDescription` only when tool-wide operational guidance materially improves correct use.
+  Describe workflow, observable side effects, execution boundaries, result semantics, or
+  limitations that apply to the tool as a whole. Do not repeat the short description or document
+  individual arguments there, and do not expose implementation details that cannot affect use.
+  Because the callable declaration uses it in place of the short text, it must still stand alone.
+- The parameter schema owns each argument's meaning, constraints, defaults, interactions, and
+  examples. Add schema examples for complex or non-obvious values.
+- Callable tool declarations use `longDescription` when present and otherwise fall back to
+  `description`; catalog projection always remains concise.
 - The tool parameter schema owns tool arguments, defaults, and tool-specific settings.
 - Settings interfaces must read runtime tool schemas rather than import a parallel settings
   schema.
@@ -26,6 +39,23 @@ or tool-visible capabilities.
   together.
 - Use the executor's materialized tool arguments as the runtime source of truth instead of
   manually threading parallel configuration into tools.
+
+## Skills, Tools, And Model Discretion
+
+- Treat a skill as reusable instructions, references, templates, and optional scripts that teach
+  an agent a procedure. Treat a Taskyon tool as a typed executable capability. Do not present an
+  instruction-only skill as if it provides deterministic execution.
+- Treat MCP as a protocol for discovering and calling capabilities across a boundary, not as the
+  implementation semantics of the imported or exported tool. Local tools do not need an MCP
+  server; remote tools retain the cost, trust, and data boundary of their service.
+- Implement stable parsing, validation, calculations, commands, and known decisions in ordinary
+  code. Add `chatCompletion` only for a specific semantic decision that cannot be represented
+  correctly and maintainably as deterministic behavior.
+- Keep model calls visible in task chains and distinguish tool-creation model use from later tool
+  execution when measuring cost, privacy, or reproducibility.
+- Record which inputs remain local, reach a model provider, or reach another external service.
+- Apply the same schema, sandbox, capability, replacement, and verification rules to agent-authored
+  tools as to human-authored tools. Installation alone is not successful verification.
 
 ## Explicit Workflow State
 

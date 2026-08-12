@@ -289,6 +289,8 @@ export const makePageIOTool = (options: PageIOToolOptions = {}) =>
     name: 'pageIO',
     description:
       'Inspect the current browser page, navigate with browser APIs, list controls, click selectors, fill fields, and optionally capture screenshots.',
+    longDescription:
+      'This host capability acts on the current Taskyon browser page rather than an arbitrary remote browser. Navigation and DOM actions use browser APIs directly; screenshots require explicit host consent and are retained only in the current in-memory page session.',
     renderOptions: { hideChat: false, hideLlm: false },
     parameters: createParameters(options.screenshot !== undefined),
     async function(rawArgs) {

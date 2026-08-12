@@ -2,7 +2,7 @@ import type { JSONSchema7 } from 'json-schema'
 import type { JSONSchema } from 'json-schema-to-ts'
 import type { ToolManager } from '../core/toolManager'
 import { craeteToolJsonSchema } from '../core/tools'
-import { createTool, toolCall } from '../types/toolApi'
+import { createTool } from '../types/toolApi'
 import { ToolBase } from '../types/tools'
 import type { TaskNode } from '../types/taskNode'
 import { createChatCompletionTask } from '../api'
@@ -106,18 +106,9 @@ export const createToolSearcher = (
 ) =>
   createTool({
     name: 'toolSearcher',
-    description: `You can use this tool to do the following:
-- Search tool names and concise descriptions.
-- Get a list of all tool names.
-- Get the definition of a single tool including source code, if available. (not case sensitive)`,
-    longDescription: `You can use this tool to do the following:
-- Search tool names and concise descriptions, including projected DAG nodes.
-- Get a list of all tool names.
-- Get the definition of a single tool including source code, if available. (not case sensitive)
-
-We can not provide the code from 'internal tools' as the code has been minified with webpack and
-is now unreadable.
-`,
+    description:
+      'Search the available tool catalog, list tool names, or retrieve one complete tool definition.',
+    longDescription: `Catalog searches return concise metadata, including projected DAG-node tools. Exact-name lookup returns the stored definition and source code when code is available; trusted internal implementations may not expose useful source. Results normally re-enter the conversation for interpretation, while authoring workflows can request a raw handoff.`,
     parameters: {
       type: 'object',
       properties: {
@@ -135,8 +126,9 @@ is now unreadable.
         toolName: {
           type: 'string',
           default: undefined,
-          description: `- If toolname is provided: return complete tool definition for tool with the same name.
-- If undefined: return a list of all tools only with descriptions`,
+          description:
+            'Case-insensitive exact tool name whose complete definition should be returned. Omit to search or list concise catalog entries.',
+          examples: ['webResearchPlanner'],
         },
         withCode: {
           type: 'boolean',
@@ -205,28 +197,73 @@ is now unreadable.
 export const createAddNewTool = (toolManager: ToolManager) =>
   createTool({
     name: 'addNewTool',
-    description: 'Validates and registers a new tool with taskyon.',
-    longDescription: `This tool takes a tool definition, validates it and registers it with taskyon.
-If you need examples of how to create tools, you can use the toolSearcher to retrieve
-existing tool definitions, including their source code when available. Additionally, you can use the toolCreationWizard
-to get some more general information how to create tools.`,
-    parameters: craeteToolJsonSchema() as JSONSchema7 &
-      Record<string, unknown> &
-      Readonly<JSONSchema>,
+    description:
+      'Validate and register a complete Taskyon tool definition already present in context; use toolCreationWizard when authoring or examples are still needed.',
+    longDescription: `Registration validates the complete definition, stores an immutable revision, and updates the active name binding. Existing active names are protected from accidental replacement and require explicit approval. This tool does not author, research, or test the definition it receives.`,
+    parameters: (() => {
+      const schema = craeteToolJsonSchema()
+      return {
+        ...schema,
+        properties: {
+          ...schema.properties,
+          approveReplacement: {
+            type: 'boolean',
+            description:
+              'Explicitly approve replacing an existing active tool with the same name. Use only when intentionally repairing or updating that exact tool.',
+          },
+        },
+      }
+    })() as JSONSchema7 & Record<string, unknown> & Readonly<JSONSchema>,
     function: async (toolDef: unknown) => {
-      const toolDefinition = ToolBase.parse(toolDef)
-      return await toolManager.installTool(toolDefinition)
+      const { approveReplacement, ...manifest } = toolDef as {
+        approveReplacement?: boolean
+      } & Record<string, unknown>
+      const toolDefinition = ToolBase.parse(manifest)
+      return await toolManager.installTool(
+        toolDefinition,
+        approveReplacement === undefined ? {} : { approveReplacement },
+      )
     },
   })
+
+const findInheritedChatCompletionTrace = (taskChain: readonly TaskNode[]) =>
+  [...taskChain].reverse().flatMap((task) => {
+    if (task.content.type !== 'functioncall') return []
+    const trace = task.content.data.arguments.trace
+    if (!trace || typeof trace !== 'object' || Array.isArray(trace)) return []
+    const candidate = trace as { enabled?: unknown; label?: unknown }
+    if (candidate.enabled !== true) return []
+    return [
+      {
+        enabled: true as const,
+        ...(typeof candidate.label === 'string' ? { label: candidate.label } : {}),
+      },
+    ]
+  })[0]
+
+const findInheritedSystemPrompts = (taskChain: readonly TaskNode[]) =>
+  taskChain.reduce<string[] | undefined>((fullest, task) => {
+    if (task.content.type !== 'functioncall') return fullest
+    const prompts = task.content.data.arguments.prependSystemPrompts
+    if (!Array.isArray(prompts) || !prompts.every((prompt) => typeof prompt === 'string')) {
+      return fullest
+    }
+    const promptLength = prompts.reduce((total, prompt) => total + prompt.length, 0)
+    const fullestLength = fullest?.reduce((total, prompt) => total + prompt.length, 0) ?? -1
+    return promptLength > fullestLength ? prompts : fullest
+  }, undefined)
 
 export const toolCreationWizard = createTool({
   parameters: {
     type: 'object',
     properties: {},
   } as const,
-  function: (_args, ctx) => {
+  function: async (_args, ctx) => {
     // "undefined" is the first step and how we start :)
     console.log('starting function creation wizard')
+    const taskChain = await ctx.getExecutionTaskChain()
+    const trace = findInheritedChatCompletionTrace(taskChain)
+    const prependSystemPrompts = findInheritedSystemPrompts(taskChain)
 
     return ctx.createSubtasksResult([
       [
@@ -237,27 +274,30 @@ export const toolCreationWizard = createTool({
             data: 'I am gathering examples from tools with code for the tool requested by the user...',
           },
         },
-        toolCall({
-          name: 'toolSearcher',
-          arguments: { withCode: true, analyze: false },
-        }),
         createChatCompletionTask({
+          ...(trace ? { trace } : {}),
+          ...(prependSystemPrompts ? { prependSystemPrompts } : {}),
           appendSystemPrompts: [
-            `You need to retrieve an example of an existing tool in order to help you to create the new tool.
-If there are none that are similar just make a guess which tool code might be helpful to you!
-From the list of tools you just extracted with the toolSearcher, you have to choose one!
-Explain in one sentence, why you are choosing this tool.
-`,
-          ],
-        }),
-        createChatCompletionTask({
-          appendSystemPrompts: [
-            `- Use the toolSearcher function again. You are required to use it.
-- Use the name you selected for the "toolName" argument in the "toolSearcher" tool`,
+            `Inspect a small set of relevant existing Taskyon tools before authoring the requested tool.
+Call toolSearcher with a concise semantic query derived from the current objective, limit 5,
+withCode true, and analyze false. Do not request the full tool catalog.`,
           ],
           allowedTools: ['toolSearcher'],
         }),
         createChatCompletionTask({
+          ...(trace ? { trace } : {}),
+          ...(prependSystemPrompts ? { prependSystemPrompts } : {}),
+          appendSystemPrompts: [
+            `- Choose one or two relevant code-bearing examples from the preceding matches.
+- Call toolSearcher for each chosen exact "toolName"; two independent calls may run in parallel.
+- Set "withCode" to true and "analyze" to false so the wizard continues directly
+  from the retrieved examples without starting a separate implementation branch.`,
+          ],
+          allowedTools: ['toolSearcher'],
+        }),
+        createChatCompletionTask({
+          ...(trace ? { trace } : {}),
+          ...(prependSystemPrompts ? { prependSystemPrompts } : {}),
           appendSystemPrompts: [
             `
 You can return different types of tasks by calling createSubtasksResult.
@@ -284,6 +324,14 @@ return ctx.createSubtasksResult([[
 It is important to remove indentation from the HTML code so that markdown doesn't recognize it as a code block.
 
 Now, with the examples given to you, can you create a new tool using the "addNewTool" function?.
+The installed tool code runs in Taskyon's worker sandbox. It may use standard JavaScript,
+fetch, URL, URLSearchParams, TextEncoder, and TextDecoder. It must not use browser-only globals
+such as document, window, DOMParser, navigator, localStorage, or sessionStorage. Keep data
+normalization algorithmic and dependency-free. When the tool uses fetch, await the response and
+return a fully serializable value. Treat external response shapes and server-side filtering as
+untrusted: validate the documented live shape, normalize fields explicitly, and enforce the
+constraints promised by the generated tool's own schema. Keep failures descriptive enough for a
+later workflow step to repair and re-register the same tool.
 Please make sure to give your response in {format} format.
 
 Here is the schema:  {schema}
@@ -294,22 +342,38 @@ were given for this.`,
           ],
           allowedTools: ['addNewTool'],
         }),
+        createChatCompletionTask({
+          ...(trace ? { trace } : {}),
+          ...(prependSystemPrompts ? { prependSystemPrompts } : {}),
+          appendSystemPrompts: [
+            `The preceding addNewTool call installed the tool. Inspect the current objective.
+If it requests a project-local export, usage report, or verification instructions, use
+updateFiles now to persist those exact artifacts. Export the installed Taskyon definition and
+registration metadata from the preceding calls rather than substituting a separate script.
+The export must be reinstallable: include the complete addNewTool definition exactly as
+registered (name, description, longDescription, parameters, code, and any other definition
+fields), plus publisherId and revision. A metadata summary without parameters and code is not
+an export. When a verification command is requested, make it validate or exercise the exported
+definition or installed tool rather than merely print its name.
+Use project-relative filePath values and omit artifactRoot, especially when writing top-level
+README, export, or usage-report files.
+If no project-local artifacts were requested, answer concisely without calling a tool.`,
+          ],
+          allowedTools: ['updateFiles'],
+        }),
         {
           role: 'assistant',
           content: {
             type: 'message',
-            data: "Nice! It looks like we're done, now please start testing the tool!",
+            data: 'The Taskyon tool is registered and its requested project artifacts are handled.',
           },
         },
       ],
     ])
   },
-  description: 'Wizard for guiding LLMs in creating new tool definitions step-by-step.',
-  longDescription: `A multi-step wizard that assists an LLM in creating new tool definitions.
-It leverages examples from existing tools—including their source code when available—to
- guide the LLM through generating a new tool. Starting with schema creation and example
- retrieval, the wizard then prompts for a complete YAML-formatted tool definition.
- Use this tool to streamline and standardize the creation of new tools.`,
+  description:
+    'Author and install a reusable Taskyon tool by inspecting relevant coded examples, generating a typed definition, and registering it with addNewTool.',
+  longDescription: `Use this when the objective requires a real reusable Taskyon capability and no complete definition is ready to register. The visible workflow searches for relevant code-bearing examples, retrieves a small selected set, authors and registers the definition, then writes any explicitly requested project artifacts. A workspace script or module is not a registered Taskyon tool.`,
   name: 'toolCreationWizard',
 })
 
@@ -353,9 +417,6 @@ function mapImportedMcpToolToTaskyonTool(input: McpInputTool, sourceName?: strin
     description:
       input.description ||
       `Imported MCP tool ${input.name}${sourceName ? ` from ${sourceName}` : ''}`,
-    longDescription: sourceName
-      ? `Imported from MCP server: ${sourceName}. Original tool name: ${input.name}.`
-      : `Imported MCP tool. Original tool name: ${input.name}.`,
     parameters: toJsonSchema(input.inputSchema),
   })
 }
@@ -392,9 +453,7 @@ export const createMcpToolImporter = (toolManager: ToolManager) =>
     name: 'importMcpTools',
     description:
       'Fetch tools from an MCP server and register them as Taskyon tools so they can be used in chat.',
-    longDescription: `Use this tool when the user asks to add or install tools from an MCP server.
-It calls initialize + tools/list on the provided MCP endpoint, maps MCP tool schemas
-to Taskyon tool definitions, and installs immutable revisions in the tool registry.`,
+    longDescription: `The importer performs the MCP initialize and tools/list handshake through Taskyon's mediated network capability, maps each selected MCP schema into a Taskyon definition, and installs immutable local registry revisions. Imported calls still depend on the external MCP service boundary.`,
     parameters: {
       type: 'object',
       properties: {

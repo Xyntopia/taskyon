@@ -43,6 +43,8 @@ const plannerTaskObjectSchema = {
       description: 'Optional semantic criteria that define when the task is complete.',
     },
     result: {
+      description:
+        'Optional result contract. Use message for prose or structured with a JSON Schema for a typed handoff.',
       anyOf: [taskContractResultSchema, { type: 'null' }, { const: 'message' }],
     },
   },
@@ -231,6 +233,13 @@ const resolvePlannerEntryNodeName = (taskChain: readonly partialTaskDraft[]) => 
     : 'entryNode'
 }
 
+const removeModelSelectedTools = (task: PlannedTaskInput): PlannedTaskInput => {
+  if (typeof task === 'string') return task
+  const { allowedTools, ...taskWithoutTools } = task
+  void allowedTools
+  return taskWithoutTools
+}
+
 const taskManagerSearchUrl = (args: {
   searchString?: string | undefined
   k: number
@@ -246,8 +255,9 @@ const taskManagerSearchUrl = (args: {
 export const taskSearcher = (taskManager: TyTaskManager) =>
   createTool({
     name: 'taskSearcher',
-    description: 'Search through available tasks using a search string',
-    longDescription: `This tool allows you to search for tasks based on a search string. You can specify the number of tasks to return and filter by task type.`,
+    description: 'Semantically search persisted Taskyon tasks, optionally filtered by task type.',
+    longDescription:
+      'Search uses the task index and returns matching task records plus a task-manager URL for inspecting the same query. It reads existing task history and does not modify task state.',
     parameters: {
       type: 'object',
       properties: {
@@ -295,67 +305,50 @@ export const taskSearcher = (taskManager: TyTaskManager) =>
 export const taskPlanner = createTool({
   name: 'taskPlanner',
   description:
-    'Plans and launches bounded packets of delegated work. Defaults to one sequential workflow; opt into parallel branches only for truly independent work.',
-  longDescription: `Use this tool only when a task is complex enough to benefit from delegated subtasks. Do not use it for simple one-step answers or small single-artifact edits where ordinary tools can finish the work directly.
+    'Split genuinely multi-phase work into bounded sequential tasks or independent parallel branches; each delegated task chooses its own tools.',
+  longDescription: `Use this only when decomposition adds value; direct one-step work should use its execution capability without an extra planning layer.
 
-The "tasks" parameter is a list of groups. By default, Taskyon flattens all groups into one sequential workflow because most project work has dependencies between exploration, implementation, documentation, and verification. Set "parallel" to true only when the outer groups are genuinely independent and can safely edit or gather results without racing each other.
+The planner materializes each delegated objective as a visible task contract and launches a fresh entry node that chooses its own tools. Flat task arrays execute sequentially; nested arrays create independent parallel branches whose inner steps remain sequential. Results stay available through task lineage, so plans and handoffs remain inspectable rather than hidden in model state.
 
-"parallel" is only a top-level taskPlanner argument beside "tasks". Never place it inside a task item or an inner task group; omit it for sequential work.
-
-For artifact-building tasks, use the default sequential mode. Do not split implementation, README writing, and verification into parallel groups; verification must run after implementation exists, and documentation should match the final artifact.
-
-Choose the packet size dynamically:
-- Use one task when the next step depends on unknown exploration or a risky result.
-- Use a short sequential packet when several steps are obvious and low-risk.
-- Use parallel groups with "parallel": true only when branches are independent and can be merged later.
-- Re-enter taskPlanner after uncertainty boundaries such as exploration, edits, tests, external calls, or errors only when the next plan genuinely needs to adapt.
-
-Do not keep hidden planner state. Any plan, checklist, status, acceptance criteria, or evidence should be represented in visible task messages, structured results, or delegated task outputs so the task tree remains the source of truth.
-
-Preserve the requested work when constructing delegated objectives:
-- Emit one concrete task per requested objective when the request explicitly identifies separate tasks.
-- Do not add a meta-task that merely says to plan, coordinate, or execute the remaining tasks; taskPlanner already performs that orchestration.
-- Preserve explicit requested actions and named capabilities. Do not rewrite an executable action as an explanation of capability limitations.
-- Do not combine several distinct requested objectives into one delegated task.
-
-Each task item may be a short plain string when a normal message result is sufficient.
-
-Optionally, a task item may instead be:
-{ task: string, agentInstructions?: string, doneWhen?: string[], result?: { mode: "message" } | { mode: "structured", schema: JSONSchema } }
-
-Prefer full structured-result JSON Schema objects with top-level { type: "object", properties: {...}, required: [...] }. A map of field names to JSON Schema property definitions is also accepted and normalized to a required object schema. Scalar shorthand such as { summary: "string" } is invalid.
-
-Each delegated entryNode runs the normal dynamic tool chooser for its own objective. Do not select execution tools on behalf of delegated tasks.
-
-Use "agentInstructions" for task-specific behavior such as acting as a security reviewer or system architect. Keep it distinct from the task objective. For dependent sequential work, provide explicit "doneWhen" criteria and a structured result schema when the next task needs a reliable handoff.
-
-Taskyon renders each contract once as task-chain messages and launches entryNode directly. Previous task results remain available through task lineage; do not copy them into later task descriptions.`,
+Plan through the requested deliverable, preserve exact user-supplied identities, and keep dependent research, implementation, artifact generation, and verification phases ordered. Parallelize only work that cannot race or depend on sibling results.`,
   parameters: {
     type: 'object',
     additionalProperties: false,
     properties: {
       tasks: {
-        type: 'array',
-        items: {
-          type: 'array',
-          items: plannerTaskItemSchema,
-        },
+        anyOf: [
+          { type: 'array', minItems: 2, items: plannerTaskItemSchema },
+          {
+            type: 'array',
+            minItems: 2,
+            items: { type: 'array', minItems: 1, items: plannerTaskItemSchema },
+          },
+        ],
         description:
-          'A bounded execution packet. By default all outer groups are flattened into one sequential workflow. Each inner array item is a sequential step. Use multiple outer groups only with parallel=true and only for independent work. Every delegated task must surface a useful final message or structured result. Use structured fields when a later task needs a reliable handoff. Emit one concrete task per requested objective when the request explicitly identifies separate tasks. Preserve explicit requested actions and named capabilities; do not add a meta-task that plans the plan, combine distinct objectives, or rewrite executable work as a capability explanation. Each delegated entryNode chooses its execution tools dynamically. For map/reduce work, keep the outer workflow sequential: first delegate one collection task that may call taskPlanner recursively with parallel=true, then add an explicit synthesis task after it. The worker waits for the nested branches and surfaces their terminal results through lineage. Omit synthesis when independent branch results are already the requested deliverables. Stop recursive planning once tasks are concrete enough to execute; do not recursively restate the same work. Emit only the next useful packet before replanning: one task for uncertain steps or a short sequential list for obvious low-risk steps.',
-      },
-      parallel: {
-        type: 'boolean',
-        description:
-          'Top-level taskPlanner option beside tasks. Set true only when each outer tasks group is independent and safe to run in parallel. Never put parallel inside a task item; omit it for normal sequential work.',
+          'Provide at least two tasks. Use [a, b, c] for one sequential branch. Use [[a, b], [c, d]] only for at least two independent parallel branches; each inner array is sequential. Never use taskPlanner merely to wrap one task. Every delegated task must surface a useful final message or structured result. Emit one concrete task per requested objective and include all explicit downstream phases. A packet containing only research, discovery, inspection, recommendations, or other preparation is invalid: it must also contain the requested output-producing work and its verification/reporting task. When external research determines an implementation contract, use three distinct sequential phases: research handoff, author/install, then verify/reuse/report; never combine research and authoring in one task. Put final exports and usage reports only in the verification/reporting task, not the author/install task, because repairs can change the registered revision. Fold repository inspection into the task that uses its findings unless inspection itself is a requested deliverable. Preserve requested actions, named capabilities, product identities, domains, and URLs verbatim. For map/reduce work, keep the outer workflow sequential: its collection task may recursively launch nested independent branches, followed by synthesis. Stop recursive planning once tasks are concrete enough to execute.',
+        examples: [
+          ['Inspect the API contract', 'Implement the client', 'Verify the client'],
+          [
+            ['Research option A', 'Summarize option A'],
+            ['Research option B', 'Summarize option B'],
+          ],
+        ],
       },
     },
     required: ['tasks'],
   } as const satisfies JSONSchema7,
-  function: async ({ tasks, parallel = false }, context) => {
-    const taskGroups = parallel ? tasks : [tasks.flat()]
+  function: async ({ tasks }, context) => {
+    const taskGroups: readonly (readonly PlannedTaskInput[])[] = Array.isArray(tasks[0])
+      ? (tasks as unknown as readonly (readonly PlannedTaskInput[])[])
+      : [tasks as unknown as readonly PlannedTaskInput[]]
     const taskChain = await context.getExecutionTaskChain()
     const entryNodeName = resolvePlannerEntryNodeName(taskChain)
-    return context.createSubtasksResult(buildTaskPlannerTaskChains(taskGroups, entryNodeName))
+    return context.createSubtasksResult(
+      buildTaskPlannerTaskChains(
+        taskGroups.map((group) => group.map(removeModelSelectedTools)),
+        entryNodeName,
+      ),
+    )
   },
   renderOptions: { hideLlm: true, hideVector: true },
 })

@@ -27,6 +27,8 @@ export const overpassMapTool = createClientTool({
   name: 'overpassMapTool',
   description:
     'Execute raw Overpass QL, or derive it from a natural-language request, and return both structured result data and an interactive map view.',
+  longDescription:
+    'Raw Overpass QL executes directly; natural-language requests first create a visible query-generation task. The completed workflow normalizes OpenStreetMap elements and exposes the same result as structured data and an interactive map.',
   parameters: overpassMapToolSchema,
   async function(args, context) {
     if (typeof args.overpassQuery === 'string' && args.overpassQuery.trim()) {

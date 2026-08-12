@@ -17,7 +17,7 @@ import type { ToolBase } from '../types/tools'
 import { humanizeError } from '../utils/error'
 import { resolveInitialAgentToolCatalog, searchAgentToolCatalog } from '../tools/toolTools'
 
-const assert = (condition: unknown, message: string) => {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
@@ -405,6 +405,7 @@ export const testEntryNodeHonorsExplicitAllowedToolRestrictions = async () => {
       'taskPlanner',
       'askClarifyingQuestions',
     ],
+    stableContext: () => 'Stable project instructions for router and executor.',
     getToolCatalog: () =>
       Promise.resolve([
         { name: 'bash', description: 'Run a shell command.' },
@@ -460,8 +461,11 @@ export const testEntryNodeHonorsExplicitAllowedToolRestrictions = async () => {
       !Array.isArray(shortlistArguments.toolChoice) &&
       shortlistArguments.toolChoice.toolName === 'entryNode' &&
       !('schema' in shortlistArguments) &&
-      !('resultMode' in shortlistArguments),
-    'Expected shortlist chatCompletion to expose and force only the entryNode tool',
+      !('resultMode' in shortlistArguments) &&
+      Array.isArray(shortlistArguments.prependSystemPrompts) &&
+      shortlistArguments.prependSystemPrompts[0] ===
+        'Stable project instructions for router and executor.',
+    'Expected shortlist chatCompletion to expose only entryNode and retain stable shared instructions',
   )
 
   const noToolsResult = await entryNodeTool.function?.({ allowedTools: [] }, context)

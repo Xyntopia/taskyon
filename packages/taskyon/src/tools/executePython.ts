@@ -58,9 +58,6 @@ export const executePythonScript = createTool({
     additionalProperties: false,
   } as const satisfies JSONSchema7,
   description: 'Executes Python through Pyodide inside a reusable isolated browser sandbox.',
-  longDescription: `Executes Python scripts for data processing, calculations, or library interactions,
-ideal for data analysis, machine learning tasks, or custom algorithm execution.
-It's important to structure the Python code such that the desired result
-is the outcome of the last expression in the script. Outcomes should be of the types String, Number, List, Dict, Set.`,
+  longDescription: `Pyodide and required packages are loaded into a reusable isolated browser runtime. Standard output is captured separately and the final Python expression is converted into serializable JavaScript data. Direct browser and host access remain unavailable.`,
   name: 'executePythonScript',
 })

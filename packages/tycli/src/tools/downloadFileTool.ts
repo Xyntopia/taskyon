@@ -34,6 +34,8 @@ export const downloadFileTool = createTool({
   name: 'downloadFile',
   description:
     'Download an accessible URL to a workspace file and verify the saved bytes match the expected file type.',
+  longDescription:
+    'Downloads stream to a temporary file inside the workspace and are renamed into place only after size and optional file-signature validation succeed. Recoverable network and validation failures return structured error context without leaving a partial destination file.',
   parameters: {
     type: 'object',
     additionalProperties: false,

@@ -4,9 +4,9 @@ import { parsePoliteHttpPolicy, politeFetch, politeHttpPolicySchema } from '../u
 import { canUseTauriHttpPlugin, tauriHttpGetText } from '../utils/tauriHttpPlugin'
 
 const jinaMarkdownReader = createTool({
-  description: 'A tool that reads websites as markdown using the jina ai reader.',
+  description: 'Read a public web page as normalized Markdown through Jina Reader.',
   longDescription:
-    'This tool uses the jina ai reader to fetch webpages via https://r.jina.ai/ and converts them to markdown format.',
+    'The page is fetched through the external r.jina.ai reader service rather than directly from the browser, which can simplify article content but sends the target URL to Jina.',
   name: 'jinaMarkdownReader',
   renderOptions: {
     hideChat: false,
@@ -35,9 +35,9 @@ const jinaMarkdownReader = createTool({
 })
 
 const tauriHttpWebReader = createTool({
-  description: 'A tool that downloads webpages using Tauri HTTP plugin (desktop-only).',
+  description: 'Read an HTTP or HTTPS page directly through the Tauri desktop network runtime.',
   longDescription:
-    'This tool uses Tauri HTTP plugin to download webpage content directly from HTTPS endpoints. It is available only in Tauri desktop runtime and is intended for environments where browser CORS restrictions should be bypassed.',
+    'This desktop-only capability uses the Tauri HTTP plugin rather than browser fetch, so ordinary browser CORS restrictions do not apply. Requests still follow Taskyon’s polite HTTP policy and return the remote response body without article normalization.',
   name: 'tauriHttpWebReader',
   renderOptions: {
     hideChat: false,
@@ -78,9 +78,9 @@ const tauriHttpWebReader = createTool({
 // TODO: add more functionality from here:   https://r.jina.ai/docs
 // TODO: add a state how many tokesn we have left over :)
 export const jinaSearch = createTool({
-  description: 'A tool that searches using the Jina AI search API.',
+  description: 'Search the web through the authenticated Jina Search API.',
   longDescription:
-    'This tool uses the Jina AI search API to perform searches and retrieve results.',
+    'The API key is requested through Taskyon’s secret boundary and sent to the external Jina service. Results are normalized to titles, descriptions, and URLs rather than returning the raw provider payload.',
   name: 'jinaSearch',
   renderOptions: {
     hideChat: false,
@@ -160,9 +160,7 @@ export const jinaSearch = createTool({
 })
 
 const clock = createTool({
-  description: 'A tool that provides the current time, date, and weekday.',
-  longDescription:
-    'This tool returns the current time, date, and weekday when no arguments are provided. If a Unix timestamp is provided as an argument, it returns the corresponding time, date, and weekday.',
+  description: 'Return the local time, date, weekday, and seconds for now or a Unix timestamp.',
   name: 'clock',
   renderOptions: {
     hideChat: false,
@@ -190,9 +188,10 @@ const clock = createTool({
 })
 
 const location = createTool({
-  description: 'A tool that provides the current browser location and IP address.',
+  description:
+    'Request browser geolocation and return coordinates, public IP, and an IP-based location estimate.',
   longDescription:
-    'This tool retrieves the current browser location using the Geolocation API and the IP address using an external service. It also estimates the location based on the IP address.',
+    'This browser-only tool prompts for precise geolocation permission, then sends the public IP to external IP and geolocation services. It fails when geolocation is unavailable or denied.',
   name: 'location',
   renderOptions: {
     hideChat: false,
@@ -240,12 +239,9 @@ const location = createTool({
 })
 
 const notification = createTool({
-  description:
-    'Schedule OS-level browser notifications (appearing in the system tray/notification center if supported). Accepts a single notification or a list. Supports delay (ms), exact date/time, or time-only (e.g. "1pm", local today; rolls to tomorrow if passed).',
+  description: 'Schedule one or more browser notifications for immediate or future display.',
   longDescription:
-    'Schedules browser-native notifications that appear in the operating system’s notification area (if the browser supports it and permission is granted). ' +
-    'Input can be either a single notification `{ message, time?, delay? }` or `{ list: [...] }`. ' +
-    'Each item supports: delay in ms, a specific date/time (ISO or epoch ms/s), or a time-only string like "1pm"/"13:00" interpreted in LOCAL time for today (rolled to tomorrow if already passed).',
+    'Notifications use the browser permission boundary and the operating system notification area when supported. Scheduling is local to the running browser session; time-only values use local time and roll to tomorrow when already past.',
   name: 'notification',
   renderOptions: { hideChat: false, hideLlm: false },
   parameters: {

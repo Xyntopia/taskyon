@@ -6,9 +6,7 @@ import { createTool } from '../types/toolApi'
 export const wfcGenerator = createTool({
   name: 'wfcGenerator',
   description: 'Generates abstract line-art via Wave Function Collapse in a new browser window.',
-  longDescription: `This tool uses a small set of character‑based tile patterns (default 4×4) and a color map
- to produce an output grid of collapsed wave patterns. It opens a new window and
- renders the final image on a canvas.`,
+  longDescription: `The tool collapses the supplied tile patterns into a character grid, maps characters to colors, and delegates a canvas visualization to the popup capability. Generation is stochastic and can produce different valid images from the same inputs.`,
   renderOptions: {
     hideChat: false,
     hideLlm: false,

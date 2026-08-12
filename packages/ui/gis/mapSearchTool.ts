@@ -25,6 +25,8 @@ export const mapSearchTool = createClientTool({
   name: 'mapSearchTool',
   description:
     'Search OpenStreetMap data from a natural-language request and return both structured result data and an interactive map view.',
+  longDescription:
+    'The first phase converts the request into a structured Overpass search task. A continuation executes the query, normalizes matching OpenStreetMap elements, and returns both reusable structured data and a rendered map.',
   parameters: mapSearchToolSchema,
   async function(args, context) {
     if (typeof args.query === 'string' && args.query.trim()) {

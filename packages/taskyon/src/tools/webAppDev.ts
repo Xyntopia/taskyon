@@ -18,9 +18,10 @@ function createPopupShell(html: string) {
 
 export const createNewWindowTool = createTool({
   name: 'newWindowOpener',
-  description: 'Opens a new window with the provided HTML code.',
-  longDescription: `Opens a new browser window with the provided HTML content.
-Windows can be given IDs for later reference with the windowManager tool.`,
+  description: 'Open approved custom HTML or an HTTPS URL in a separate browser window.',
+  longDescription: `Popup creation requires host authorization. Custom HTML is wrapped in a restricted
+sandbox, external navigation is limited to HTTPS, and an optional ID lets later window-management
+calls reference the opened window.`,
   parameters: {
     type: 'object',
     properties: {
@@ -127,8 +128,9 @@ Windows can be given IDs for later reference with the windowManager tool.`,
 // Window manager tool for handling previously opened windows
 export const windowManagerTool = createTool({
   name: 'windowManager',
-  description: 'Manages previously opened windows.',
-  longDescription: 'Lists, focuses, and closes windows created by the newWindowOpener tool.',
+  description: 'List, focus, or close windows previously opened with a Taskyon window ID.',
+  longDescription:
+    'This tool only manages windows tracked by the current Taskyon browser session; it cannot enumerate or control arbitrary browser windows.',
   parameters: {
     type: 'object',
     properties: {
@@ -291,7 +293,9 @@ export const windowManagerTool = createTool({
 export const createWaitForMessageTool = createTool({
   name: 'waitForPostMessage',
   description:
-    'Waits for and converts a specific window.postMessage event into structured data before continuing.',
+    'Wait for a matching message from a Taskyon-managed popup and return its structured payload.',
+  longDescription:
+    'The listener accepts only the tracked source window and matching message ID, remains cancellable through the task stop signal, and exposes the received event data as a visible structured result.',
   parameters: {
     type: 'object',
     properties: {

@@ -266,7 +266,9 @@ export function createExplorationTool(contextFiles: ExplorationContext) {
   return createTool({
     name: 'exploration',
     description:
-      'Codex-style workspace exploration. Use list/search for file discovery, grep for text search, view for focused file chunks, and add/context to manage loaded file context.',
+      'Discover, search, and read workspace files without executing shell commands or editing files.',
+    longDescription:
+      'This read-only workspace capability keeps path traversal inside the current project. It supports bounded file discovery, text search, focused line-range reads, and an explicit in-memory context set that later calls can inspect or clear.',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -275,12 +277,22 @@ export function createExplorationTool(contextFiles: ExplorationContext) {
         action: {
           type: 'string',
           enum: ['list', 'search', 'grep', 'view', 'add', 'context', 'clear_context'],
+          description: 'Workspace exploration operation to perform.',
         },
-        query: { type: 'string' },
-        path: { type: 'string' },
-        limit: { type: 'integer', default: 50 },
-        startLine: { type: 'integer' },
-        endLine: { type: 'integer' },
+        query: {
+          type: 'string',
+          description:
+            'Search text, glob-like filename query, or regular expression for the selected action.',
+          examples: ['createTool', '*.ts'],
+        },
+        path: {
+          type: 'string',
+          description: 'Optional workspace-relative file or directory to scope the action.',
+          examples: ['packages/taskyon/src/tools'],
+        },
+        limit: { type: 'integer', default: 50, description: 'Maximum results to return.' },
+        startLine: { type: 'integer', description: 'One-based first line for a focused read.' },
+        endLine: { type: 'integer', description: 'One-based final line for a focused read.' },
       },
     } as const,
     function: async ({ action, query, path, limit = 50, startLine, endLine }: ExplorationArgs) => {

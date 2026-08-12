@@ -1073,6 +1073,8 @@ async function invokeTaskyonClient(
 const cliBashTool: ClientTool = createClientTool({
   name: 'bash',
   description: 'Run a bash command on the host system and return stdout, stderr, and exit code.',
+  longDescription:
+    'Commands execute in a non-login shell with the inherited tycli environment and working directory. Output streams through progress events, cancellation terminates the process group, and the result records timing and exit status. This capability has normal host-shell access and should be used only when a command is required.',
   parameters: {
     type: 'object',
     additionalProperties: false,
@@ -1080,7 +1082,7 @@ const cliBashTool: ClientTool = createClientTool({
     properties: {
       command: {
         type: 'string',
-        description: 'The command string to run with bash -lc.',
+        description: 'The command string to run with a non-login bash -c invocation.',
       },
       cwd: {
         type: 'string',
@@ -1206,19 +1208,18 @@ export function buildDeveloperCliStableContext(
       '## Stable Runtime Context',
       `Current Working Directory: ${process.cwd()}`,
       `Shell: ${shell}`,
-      'Use dagGraphProject for reproducible design and optimization workflows: create TypeScript DAG nodes, patch roots, run studies over variants, and report the best root/hash-backed result.',
       '',
-      '## Stable Tool Usage Rules',
+      '## Stable Workflow Rules',
       '1. Prefer answering directly when no tool action is needed.',
-      '2. For repository exploration, use the exploration tool first: list/search for files, grep for text, view for focused file chunks, add/context for persistent file context.',
-      '3. Use bash only when command execution is required beyond file discovery, text search, or file viewing.',
-      '4. Keep destructive or risky shell commands clearly justified and minimal.',
-      '5. After a tool result, continue the task: call one next tool when more work is needed, otherwise answer concisely.',
-      "6. If verification fails because a local dependency command is missing, inspect the project's package metadata and try the normal install/setup command once before treating it as blocked.",
-      '7. For project tasks that create, change, or document a runnable result, leave a project-local README or documentation note with one simple command a human can run from the project root to verify the result.',
-      '8. Match verification scope to the change: for documentation-only or task-discovery changes, prefer the smallest command that validates the documented workflow over a full dependency-installing test suite.',
-      '9. In Ruby/Rake projects, when `ruby -S rake` is available, use it for focused task-discovery verification before trying `bundle exec` or dependency setup.',
-      '10. After editing source files, inspect the resulting diff for accidental formatting noise; when the project exposes a focused formatter or tidy command, run it before final verification.',
+      '2. Select the narrowest available capability that performs the required action.',
+      '3. Keep destructive or risky commands clearly justified and minimal.',
+      '4. After a tool result, continue the task: call one next tool when more work is needed, otherwise answer concisely.',
+      "5. If verification fails because a local dependency command is missing, inspect the project's package metadata and try the normal install/setup command once before treating it as blocked.",
+      '6. For project tasks that create, change, or document a runnable result, leave a project-local README or documentation note with one simple command a human can run from the project root to verify the result.',
+      '7. Match verification scope to the change: for documentation-only or task-discovery changes, prefer the smallest command that validates the documented workflow over a full dependency-installing test suite.',
+      '8. In Ruby/Rake projects, when `ruby -S rake` is available, use it for focused task-discovery verification before trying `bundle exec` or dependency setup.',
+      '9. After editing source files, inspect the resulting diff for accidental formatting noise; when the project exposes a focused formatter or tidy command, run it before final verification.',
+      '10. Treat exact product names, provider names, domains, and URLs supplied by the user as constraints. Preserve them verbatim through planning and execution; never silently substitute a similar service.',
     ].join('\n'),
   ]
     .filter(Boolean)

@@ -217,22 +217,53 @@ export const testWebResearchBuildsParallelQueryGroups = () => {
 }
 
 export const testWebResearchArtifactRootSlugIsStable = () => {
-  const groups = buildWebResearchTaskGroups({
+  const args = {
     objective: "Find 10 home battery spec sheets that don't require a permit in California!",
     searchQueries: ['California no permit home battery datasheet pdf'],
-  })
+  }
+  const groups = buildWebResearchTaskGroups(args)
+  const repeatedGroups = buildWebResearchTaskGroups(args)
+  const discovery = groups[0]?.[0]?.task ?? ''
+  const validation = groups[0]?.[1]?.task ?? ''
+  const repeatedDiscovery = repeatedGroups[0]?.[0]?.task ?? ''
+  const artifactRoot = discovery.match(
+    /Use exactly this artifact root for the whole request: ([^ ]+)\./,
+  )?.[1]
 
   assert(
-    groups[0]?.[0]?.task.includes(
-      'research/find-10-home-battery-spec-sheets-that-dont-require-a-permit-in-california/',
-    ),
-    `Expected stable research artifact root in discovery task, got ${groups[0]?.[0]?.task ?? '(none)'}`,
+    artifactRoot?.startsWith('research/find-10-home-battery-spec-sheets') &&
+      artifactRoot.endsWith('/'),
+    `Expected a readable bounded research artifact root, got ${artifactRoot ?? '(none)'}`,
+  )
+  if (!artifactRoot) throw new Error('Expected the discovery task to expose its artifact root')
+  assert(
+    validation.includes(artifactRoot) && repeatedDiscovery.includes(artifactRoot),
+    'Expected discovery, validation, and repeated planning to reuse the identical artifact root',
+  )
+
+  return { success: true }
+}
+
+export const testWebResearchPreservesExactSourceIdentity = () => {
+  const groups = buildWebResearchTaskGroups({
+    objective: 'Build a client for The Trivia API using its official documentation.',
+    searchQueries: ['The Trivia API official documentation'],
+  })
+  const discovery = groups[0]?.[0]?.task ?? ''
+  const validation = groups[0]?.[1]?.task ?? ''
+
+  assert(
+    discovery.includes('hard identity constraint') && discovery.includes('exact product names'),
+    'Expected discovery to preserve named products and providers as exact constraints',
   )
   assert(
-    groups[0]?.[1]?.task.includes(
-      'research/find-10-home-battery-spec-sheets-that-dont-require-a-permit-in-california/',
-    ),
-    `Expected stable research artifact root in validation task, got ${groups[0]?.[1]?.task ?? '(none)'}`,
+    validation.includes('branding, provider, and domain') &&
+      validation.includes('different service in the same category is not a match'),
+    'Expected validation to reject same-category API substitutions',
+  )
+  assert(
+    validation.includes('quoted exact name') && validation.includes('never describe'),
+    'Expected source mismatch recovery to search the exact name without relabeling a substitute',
   )
 
   return { success: true }
@@ -685,6 +716,8 @@ testWebResearchBuildsParallelQueryGroups.description =
   'Builds parallel web-research branches where each query expands into sequential discovery and validation tasks with explicit browser-capable tool restrictions.'
 testWebResearchArtifactRootSlugIsStable.description =
   'Chooses one deterministic research artifact root from the objective and forwards it into every delegated branch.'
+testWebResearchPreservesExactSourceIdentity.description =
+  'Keeps exact product and provider identity in discovery and rejects same-category source substitutions during validation.'
 testBrowserMcpImportChainBuildsImportCall.description =
   'Builds the browser MCP import bootstrap chain and forwards the selected MCP tool names into importMcpTools.'
 testEnsureBrowserMcpImportRetryChainBuildsImportCall.description =

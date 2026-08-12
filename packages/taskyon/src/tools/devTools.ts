@@ -37,19 +37,8 @@ function parseIssueSelectionInteraction(payload: unknown): IssueSelectionInterac
 export const getGitlabInfo = createTool({
   name: 'getGitlabInfo',
   description: 'Read GitLab profile, projects, groups, or recent issues from a specific project.',
-  longDescription: `Use boolean flags to choose which pieces to retrieve. If none are set, only your profile is returned.
-
-  Flags:
-  - includeProfile (default: true)
-  - includeProjects (default: false)
-  - includeGroups (default: false)
-  - includeIssues (default: false; requires projectPath)
-
-  For recent project issues, set includeProfile to false, includeIssues to true, and pass a
-  namespace/project path such as "xyntopia/taskyon". issueLimit defaults to 10 and issueState
-  defaults to "all".
-
-  You can still pass { forceLogin: true } to drop the old token and re-authenticate.`,
+  longDescription:
+    'This read-only GitLab workflow obtains OAuth credentials through Taskyon, calls the GitLab API through mediated fetch, and returns only the requested account or project sections. Authentication can be deliberately refreshed without changing GitLab data.',
   parameters: {
     type: 'object',
     properties: {
@@ -220,19 +209,7 @@ export const issueListGenerator = createTool({
     'Generate a checklist UI from candidate issue titles, let the user pick the target GitLab project, then create the issues on GitLab.',
 
   // ── LONG DESCRIPTION ──────────────────────────────────────────
-  longDescription: `Workflow
-1. Ensures the user is logged in with “api” scope (read + write).
-2. Retrieves all projects the user is a member of and embeds an iframe UI
-    (dropdown for project, checkbox list for issues, “Submit” button).
-3. Waits for a postMessage containing { selectedProjectId, selectedProjectName, selectedIssues }.
-4. Creates each selected issue via POST /v4/projects/:id/issues, recording success
-    or the exact HTTP / network error for every title.
-5. Responds with a markdown summary that:
-   - shows ✓ or ❌ per issue together with any error text
-   - links to the project's complete issue list
-   - links directly to the newly created issues.
-
-The tool never stores content server-side; everything runs client-side in the Taskyon iframe.`,
+  longDescription: `This is an interactive, write-capable GitLab workflow. It authenticates with API scope, loads the user's projects, presents an embedded project-and-issue checklist, waits for the user's selection, and creates only the selected issues. Each write is reported independently with its resulting link or error; selection state remains client-side.`,
 
   // ── PARAMETERS ────────────────────────────────────────────────
   parameters: {
@@ -445,10 +422,9 @@ The tool never stores content server-side; everything runs client-side in the Ta
 
 const gitReader = createTool({
   name: 'gitReader',
-  description:
-    'Extracts files from a Git repository using isomorphic-git with memfs and a dynamically imported HTTP client.',
+  description: 'Read a file or directory from a remote Git repository at a chosen revision.',
   longDescription:
-    "This tool clones or fetches a Git repository and extracts the contents of a specified file or directory using isomorphic-git. It dynamically imports memfs from jspm.dev to simulate a virtual filesystem in the browser and loads the HTTP client from isomorphic-git's web module (from unpkg) if none is provided. This setup enables browser-based Git operations without additional bundling.",
+    'The repository is fetched into an in-memory browser filesystem using isomorphic-git, so it does not modify the local workspace. Browser execution may require the configured CORS proxy and dynamically loaded Git runtime assets.',
   renderOptions: {
     hideChat: false,
     hideLlm: false,

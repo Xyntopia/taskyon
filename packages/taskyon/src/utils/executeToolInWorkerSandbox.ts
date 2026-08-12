@@ -61,6 +61,92 @@ function buildToolSandboxCode(userCode: string): string {
         [Symbol.iterator]() { return this.entries(); }
       }
 
+      class SandboxURLSearchParams {
+        constructor(init = []) {
+          this.values = [];
+          if (typeof init === 'string') {
+            for (const entry of init.replace(/^\\?/, '').split('&').filter(Boolean)) {
+              const [key, value = ''] = entry.split('=');
+              this.append(decodeURIComponent(key), decodeURIComponent(value));
+            }
+          } else {
+            const entries = Array.isArray(init) || typeof init[Symbol.iterator] === 'function'
+              ? init
+              : Object.entries(init);
+            for (const [key, value] of entries) this.append(key, value);
+          }
+        }
+        append(key, value) { this.values.push([String(key), String(value)]); }
+        set(key, value) {
+          this.delete(key);
+          this.append(key, value);
+        }
+        get(key) { return this.values.find(([name]) => name === String(key))?.[1] ?? null; }
+        delete(key) { this.values = this.values.filter(([name]) => name !== String(key)); }
+        entries() { return this.values.values(); }
+        toString() {
+          return this.values
+            .map(([key, value]) => encodeURIComponent(key) + '=' + encodeURIComponent(value))
+            .join('&');
+        }
+        [Symbol.iterator]() { return this.entries(); }
+      }
+
+      if (typeof globalThis.URLSearchParams !== 'function') {
+        Object.defineProperty(globalThis, 'URLSearchParams', {
+          configurable: false,
+          enumerable: true,
+          writable: false,
+          value: SandboxURLSearchParams,
+        });
+      }
+
+      class SandboxURL {
+        constructor(input, base) {
+          let source = String(input);
+          if (!source.includes('://')) {
+            if (base === undefined) throw new TypeError('Invalid URL');
+            const baseUrl = new SandboxURL(base);
+            source = source.startsWith('/')
+              ? baseUrl.origin + source
+              : baseUrl.origin + baseUrl.pathname.slice(0, baseUrl.pathname.lastIndexOf('/') + 1) + source;
+          }
+          const schemeEnd = source.indexOf('://');
+          if (schemeEnd <= 0) throw new TypeError('Invalid URL');
+          this.protocol = source.slice(0, schemeEnd + 1);
+          const remainder = source.slice(schemeEnd + 3);
+          const pathStartCandidates = [remainder.indexOf('/'), remainder.indexOf('?'), remainder.indexOf('#')]
+            .filter(index => index >= 0);
+          const pathStart = pathStartCandidates.length > 0 ? Math.min(...pathStartCandidates) : remainder.length;
+          this.host = remainder.slice(0, pathStart);
+          if (!this.host) throw new TypeError('Invalid URL');
+          const pathAndQuery = remainder.slice(pathStart);
+          const hashStart = pathAndQuery.indexOf('#');
+          this.hash = hashStart >= 0 ? pathAndQuery.slice(hashStart) : '';
+          const withoutHash = hashStart >= 0 ? pathAndQuery.slice(0, hashStart) : pathAndQuery;
+          const queryStart = withoutHash.indexOf('?');
+          this.pathname = (queryStart >= 0 ? withoutHash.slice(0, queryStart) : withoutHash) || '/';
+          this.searchParams = new SandboxURLSearchParams(queryStart >= 0 ? withoutHash.slice(queryStart + 1) : '');
+        }
+        get hostname() { return this.host.split(':')[0]; }
+        get origin() { return this.protocol + '//' + this.host; }
+        get search() {
+          const query = this.searchParams.toString();
+          return query ? '?' + query : '';
+        }
+        get href() { return this.toString(); }
+        toString() { return this.origin + this.pathname + this.search + this.hash; }
+      }
+
+      if (typeof globalThis.URL !== 'function') {
+        Object.defineProperty(globalThis, 'URL', {
+          configurable: false,
+          enumerable: true,
+          writable: false,
+          value: SandboxURL,
+        });
+      }
+
       class SandboxResponse {
         constructor(response) {
           this.status = response.status;
@@ -279,6 +365,10 @@ export async function executeToolInWorkerSandbox(
       signal: stopSignal,
       sourceURL,
       channel: capability.channel,
+      // A mediated capability can pause here while its host asks the user for approval.
+      // Keep the CPU/runaway guard, but do not make the ordinary one-minute limit double
+      // as an accidental deadline for a human permission decision.
+      maxExecutionMs: 5 * 60_000,
     })
   } finally {
     capability.destroy()

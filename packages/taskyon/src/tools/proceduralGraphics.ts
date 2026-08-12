@@ -2,10 +2,9 @@ import type { JSONSchema7 } from 'json-schema'
 import { createTool } from '../types/toolApi'
 
 const proceduralTreeGenerator = createTool({
-  description:
-    'Generates an abstract procedural tree graphic in a new browser window using Canvas and JavaScript.',
+  description: 'Open a randomized abstract procedural tree graphic in a browser window.',
   longDescription:
-    'This tool opens a new browser window and injects an HTML page with a canvas that draws an abstract procedural tree. The tree branches at 45-degree angles, features white trunk and branches, and orange lines representing leaves. It uses randomized segment lengths for organic variation.',
+    'The tool generates a self-contained canvas visualization and delegates its display to the popup capability. Randomized branch lengths make repeated renders non-deterministic.',
   name: 'proceduralTreeGenerator',
   renderOptions: {
     hideChat: false,
@@ -17,15 +16,19 @@ const proceduralTreeGenerator = createTool({
     properties: {
       width: {
         type: 'integer',
+        description: 'Requested canvas width in pixels.',
       },
       height: {
         type: 'integer',
+        description: 'Requested canvas height in pixels.',
       },
       trunkLength: {
         type: 'integer',
+        description: 'Initial trunk length used by the procedural drawing.',
       },
       maxDepth: {
         type: 'integer',
+        description: 'Maximum recursive branch depth.',
       },
     },
   } as const satisfies JSONSchema7,

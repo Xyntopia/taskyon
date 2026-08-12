@@ -530,15 +530,7 @@ export const createDagGraphProjectTool = (options: { workspaceRoot?: string } = 
     name: 'dagGraphProject',
     description:
       'Create, revise, evaluate, and inspect file-backed immutable design-graph projects.',
-    longDescription: `Use this for design and optimization workflows that should persist their reasoning as immutable DAG graph nodes.
-Create stored nodes without selecting them, create immutable revisions with named roots, advance named refs explicitly, patch a revision into a candidate revision, and evaluate exact revisions.
-
-Node source format:
-- Export one standalone default object; stored node files do not import application types.
-- Include formatVersion: 2, id: '__TASKYON_SELF_HASH__', localName, label, version: 1, localParamsSchema, outputSchema, optional inputs, and run.
-- Use inputs like { requirements: { nodeId: '<hash from a previous result>', role: 'internal' } }.
-- Stored run functions receive { params, use }. Call await use.requirements({}) only when that dependency is needed; exposed inputs may be called without explicit params.
-- The tool normalizes source, computes the real hash, writes a .ts node file, and returns the new rootHash.`,
+    longDescription: `Use this for reproducible design and optimization work whose alternatives, dependencies, and evaluations should remain inspectable. Nodes and revisions are content-addressed and immutable; named refs advance explicitly with conflict checks. Evaluation is demand-driven, studies compare parameter variants against an exact root, and every write returns the hashes needed for later calls.`,
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -557,6 +549,7 @@ Node source format:
             'migrateLegacyProject',
             'inspectProject',
           ],
+          description: 'Design-graph project operation to perform.',
         },
         projectId: {
           type: 'string',
@@ -564,7 +557,11 @@ Node source format:
         },
         nodeSource: {
           type: 'string',
-          description: 'Full TypeScript stored DAG node source for createNode or patchNode.',
+          description:
+            "Full standalone TypeScript source for createNode or patchNode. Export one default formatVersion 2 object with id '__TASKYON_SELF_HASH__', localName, label, version, localParamsSchema, outputSchema, optional hashed inputs, and an async run({ params, use }) function. Do not import application types.",
+          examples: [
+            "export default { formatVersion: 2, id: '__TASKYON_SELF_HASH__', localName: 'score', label: 'Score', version: 1, localParamsSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] }, outputSchema: { type: 'number' }, inputs: {}, async run({ params }) { return params.value } }",
+          ],
         },
         localName: {
           type: 'string',

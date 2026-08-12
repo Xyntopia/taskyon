@@ -54,10 +54,12 @@ export type FunctionCall = z.infer<typeof FunctionCall>
 
 export const ToolBase = z.object({
   description: z.string().meta({
-    description: 'A short description about the tool so that an LLM knows when to use it.',
+    description:
+      'Concise catalog guidance describing what the tool does and when an LLM should select it.',
   }),
   longDescription: z.string().optional().meta({
-    description: 'An optional longer description for more complicated operations with this tool.',
+    description:
+      'Optional tool-wide operational guidance used when the tool is callable. Describe workflow, effects, boundaries, or result semantics without repeating individual parameter documentation.',
   }),
   name: FunctionName.meta({
     description: 'Name of the tool. Has to fulfill: /^[a-zA-Z0-9_-]+$/',

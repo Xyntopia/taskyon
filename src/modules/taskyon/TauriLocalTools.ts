@@ -98,7 +98,9 @@ const waitForBashDecision = async (
 
 const tauriExplorationTool = createClientTool({
   name: 'tauriExploreWorkspace',
-  description: 'Explore local workspace files in Tauri mode: list, read, and regex-search.',
+  description: 'List, read, and regex-search local workspace files in the Tauri desktop runtime.',
+  longDescription:
+    'This read-only desktop capability operates through the Tauri workspace boundary, returns bounded results, and never executes commands or edits files.',
   parameters: {
     type: 'object',
     additionalProperties: false,
@@ -106,11 +108,20 @@ const tauriExplorationTool = createClientTool({
       action: {
         type: 'string',
         enum: ['list', 'read', 'searchPath', 'searchContent'],
+        description: 'Read-only workspace exploration operation.',
       },
-      paths: { type: 'array', items: { type: 'string' } },
-      query: { type: 'string' },
-      maxResults: { type: 'number', default: 50 },
-      searchLimit: { type: 'number', default: 5000 },
+      paths: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Workspace-relative files to read.',
+      },
+      query: { type: 'string', description: 'Regular expression for path or content search.' },
+      maxResults: { type: 'number', default: 50, description: 'Maximum matches to return.' },
+      searchLimit: {
+        type: 'number',
+        default: 5000,
+        description: 'Maximum workspace files to inspect during search.',
+      },
     },
     required: ['action'],
   } as const satisfies JSONSchema7,
@@ -147,20 +158,32 @@ const tauriExplorationTool = createClientTool({
 
 const tauriPatchTool = createClientTool({
   name: 'tauriPatchWorkspace',
-  description: 'Apply context/regex/new-content file updates in local Tauri workspace files.',
+  description:
+    'Create or edit Tauri workspace files with complete-content, context, or regex updates.',
+  longDescription:
+    'The tool reads each current file, computes the requested update locally, and writes only through the Tauri workspace capability. Failed context matching stops that file update instead of applying an approximate edit.',
   parameters: {
     type: 'object',
     additionalProperties: false,
     properties: {
       updates: {
         type: 'array',
+        description: 'Workspace file updates to apply.',
         items: {
           type: 'object',
           properties: {
-            filePath: { type: 'string' },
-            newContent: { type: 'string' },
-            patches: { type: 'array', items: { type: 'object' } },
-            regexReplacements: { type: 'array', items: { type: 'object' } },
+            filePath: { type: 'string', description: 'Workspace-relative file path.' },
+            newContent: { type: 'string', description: 'Complete replacement file content.' },
+            patches: {
+              type: 'array',
+              items: { type: 'object' },
+              description: 'Exact-context patch operations for the current file content.',
+            },
+            regexReplacements: {
+              type: 'array',
+              items: { type: 'object' },
+              description: 'Regular-expression replacement operations.',
+            },
           },
           required: ['filePath'],
         },
@@ -191,12 +214,17 @@ const tauriPatchTool = createClientTool({
 const tauriBashTool = createClientTool({
   name: 'tauriBashTool',
   description: 'Run a local bash command in Tauri mode after explicit yes/no user approval.',
+  longDescription:
+    'Every command is represented by a visible approval step bound to the exact command. Execution proceeds only after the user confirms that step; changed or unapproved commands are rejected.',
   parameters: {
     type: 'object',
     additionalProperties: false,
     properties: {
-      command: { type: 'string' },
-      approvalToken: { type: 'string' },
+      command: { type: 'string', description: 'Exact bash command to approve and execute.' },
+      approvalToken: {
+        type: 'string',
+        description: 'Internal token binding a resumed call to the prior approval step.',
+      },
     },
     required: ['command'],
   } as const satisfies JSONSchema7,

@@ -499,7 +499,7 @@ function defineTyGuiTools(
       },
       description: 'Read, patch, or reset the active Taskyon profile settings.',
       longDescription:
-        'This tool can inspect the current Taskyon profile, patch appConfiguration, llmSettings, toolchainProfiles, or selectedToolchainProfile, reset those sections to the bundled defaults, and read the current execution task chain. It never exposes or mutates secrets or signatureOrKey.',
+        'Profile changes apply through the same validated browser store used by the settings UI and may optionally be persisted. Resets restore bundled defaults. The capability can also expose the current execution task chain, but never reads or mutates secrets or signature material.',
       name: 'manageTaskyonProfile',
       parameters: {
         type: 'object',

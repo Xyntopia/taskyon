@@ -2,10 +2,9 @@ import type { JSONSchema7 } from 'json-schema'
 import { createTool } from '../types/toolApi'
 
 const openMeteoWeatherTool = createTool({
-  description:
-    "A tool that fetches weather data using the Open-Meteo API. If no latitude/longitude is provided, it uses the browser's current location.",
+  description: 'Fetch current Open-Meteo weather for coordinates or the browser location.',
   longDescription:
-    "This tool uses the Open-Meteo API to retrieve current weather data for a specified location. You can optionally provide latitude and longitude. If they are omitted, the tool will attempt to use the browser's geolocation (navigator.geolocation) to determine the current location. If geolocation is unavailable or denied and no coordinates are provided, the tool will reject with an error.",
+    'This browser tool calls the external Open-Meteo service. When coordinates are omitted it requests browser geolocation permission; it fails if neither coordinates nor geolocation are available.',
   name: 'openMeteoWeatherTool',
   renderOptions: {
     hideChat: false,
@@ -69,9 +68,9 @@ const openMeteoWeatherTool = createTool({
 })
 
 const animatedClockTool = createTool({
-  description: 'A tool that generates an animated clock with the current time and date.',
+  description: 'Open an animated local-time clock and date display in a browser window.',
   longDescription:
-    'This tool creates an animated clock displayed in a new browser window. The clock shows the current time, seconds, and date with a visually appealing design.',
+    'This is a visible UI workflow: it generates self-contained HTML and delegates popup creation to the window-opening capability.',
   name: 'animatedClock',
   renderOptions: {
     hideChat: false,

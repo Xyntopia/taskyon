@@ -102,8 +102,9 @@ export const simpleDialogSchema = {
 type DialogResult = { action: 'ok'; data: unknown } | { action: 'cancel' } | { action: 'dismiss' }
 export const quasarDialogTool = createClientTool({
   name: 'userdialog',
-  description: 'Display a Dialog to collect user input/confirmation.',
-  longDescription: 'Builds alert, confirm, prompt or option dialogs and returns { action, data }.',
+  description: 'Display an interactive alert, confirmation, prompt, or option dialog to the user.',
+  longDescription:
+    'This browser-host capability pauses the workflow for explicit user interaction and returns a structured ok, cancel, or dismiss outcome. It should be used only when the task genuinely requires a user decision or input.',
 
   parameters: simpleDialogSchema,
   renderOptions: { hideChat: false, hideLlm: false },

@@ -157,6 +157,27 @@ const trimNonEmptyStrings = (values: readonly string[] | undefined) =>
 
 const uniqueStrings = (values: readonly string[]) => Array.from(new Set(values))
 
+const isSingleOfficialDocumentationObjective = (objective: string) => {
+  const normalized = objective.toLowerCase()
+  const targetsOfficialDocumentation =
+    /\b(?:official|public)\s+(?:api\s+)?(?:documentation|docs)\b/.test(normalized)
+  const asksForComparison =
+    /\b(?:compare|comparison|alternatives?|multiple|several|different)\b/.test(normalized)
+  return targetsOfficialDocumentation && !asksForComparison
+}
+
+const constrainResearchScope = (args: WebResearchPlannerArgs): WebResearchPlannerArgs => {
+  if (!isSingleOfficialDocumentationObjective(args.objective)) return args
+
+  const [firstQuery] = trimNonEmptyStrings(args.searchQueries)
+  return {
+    ...args,
+    searchQueries: firstQuery ? [firstQuery] : [],
+    maxSourcesPerQuery: 1,
+    webSearchMaxResults: 1,
+  }
+}
+
 const joinHints = (label: string, hints: readonly string[]) =>
   hints.length > 0 ? `${label}: ${hints.join(', ')}.` : ''
 
@@ -167,7 +188,16 @@ const slugifyResearchObjective = (value: string) => {
     .replace(/[''`]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-  return slug || 'research-artifacts'
+  if (!slug) return 'research-artifacts'
+  if (slug.length <= 72) return slug
+  const suffix = [...slug]
+    .reduce(
+      (hash, character) => Math.imul(hash ^ character.charCodeAt(0), 16_777_619),
+      2_166_136_261,
+    )
+    .toString(36)
+    .slice(0, 8)
+  return `${slug.slice(0, 63).replace(/-+$/g, '')}-${suffix}`
 }
 
 const normalizeArtifactRoot = (value: string) => {
@@ -241,6 +271,7 @@ const buildDiscoveryTask = (
     `Use exactly this artifact root for the whole request: ${artifactRoot}.`,
     `Find up to ${maxSourcesPerQuery} strong candidate sources.`,
     'Use chatCompletion web search first for discovery when it is enabled.',
+    'Treat every exact product, provider, service, domain, and URL named in the objective as a hard identity constraint. Quote exact product names in searches. Do not substitute or relabel a different provider merely because it offers the same kind of API.',
     'Prioritize official manufacturer pages, product pages, and direct specification documents.',
     'For each candidate, capture manufacturer, product or model name, source page URL, direct document URL when available, and a short evidence note.',
     'Avoid duplicate products and prefer current official documents over reposted PDFs.',
@@ -263,6 +294,7 @@ const buildValidationTask = (
     `Validate the best candidates for "${objective}" found via "${query}".`,
     `The only output directory for this research request is ${artifactRoot}. Save every downloaded file, generated text file, manifest, index, and note under this directory. Do not create sibling directories such as task_artifacts, task_battery_specs, taskyon, or alternate spellings of the task name.`,
     'Open the pages with browser tooling when available, confirm the source is relevant, and extract the strongest direct source URLs.',
+    'Verify source identity before accepting a candidate: the page branding, provider, and domain must actually belong to every exact named product or service in the objective. A different service in the same category is not a match. If the discovered candidate fails this check, reject it and use web search with the quoted exact name to find the correct source; never describe the mismatched source as official documentation for the requested product.',
     'Deduplicate products before returning results; do not count the same product or document twice.',
     'Keep raw source downloads budgeted. For HTML, article pages, or documentation pages, save extracted notes, citations, and a manifest instead of a full raw page unless the user explicitly requested a raw archive. If downloadFile is used for raw text or HTML, set a reasonable maxBytes limit.',
     mustDownload
@@ -284,18 +316,19 @@ const buildValidationTask = (
     .join(' ')
 
 export const buildWebResearchTaskGroups = (args: WebResearchPlannerArgs) => {
-  const objective = ensureNonEmptyString(args.objective, 'objective')
-  const searchQueries = trimNonEmptyStrings(args.searchQueries)
+  const scopedArgs = constrainResearchScope(args)
+  const objective = ensureNonEmptyString(scopedArgs.objective, 'objective')
+  const searchQueries = trimNonEmptyStrings(scopedArgs.searchQueries)
   if (searchQueries.length === 0) {
     throw new Error('webResearchPlanner requires at least one non-empty search query.')
   }
 
-  const { allowedTools } = buildResearchTaskToolset(args)
-  const maxSourcesPerQuery = Math.max(1, Math.trunc(args.maxSourcesPerQuery ?? 5))
-  const fileTypeHints = trimNonEmptyStrings(args.fileTypeHints)
-  const siteHints = trimNonEmptyStrings(args.siteHints)
-  const mustDownload = args.mustDownload ?? true
-  const artifactRoot = resolveResearchArtifactRoot(args, objective)
+  const { allowedTools } = buildResearchTaskToolset(scopedArgs)
+  const maxSourcesPerQuery = Math.max(1, Math.trunc(scopedArgs.maxSourcesPerQuery ?? 5))
+  const fileTypeHints = trimNonEmptyStrings(scopedArgs.fileTypeHints)
+  const siteHints = trimNonEmptyStrings(scopedArgs.siteHints)
+  const mustDownload = scopedArgs.mustDownload ?? true
+  const artifactRoot = resolveResearchArtifactRoot(scopedArgs, objective)
 
   return searchQueries.map((query) => [
     {
@@ -306,7 +339,7 @@ export const buildWebResearchTaskGroups = (args: WebResearchPlannerArgs) => {
         maxSourcesPerQuery,
         fileTypeHints,
         siteHints,
-        args.deliverable,
+        scopedArgs.deliverable,
       ),
       allowedTools,
     },
@@ -317,7 +350,7 @@ export const buildWebResearchTaskGroups = (args: WebResearchPlannerArgs) => {
         artifactRoot,
         mustDownload,
         fileTypeHints,
-        args.deliverable,
+        scopedArgs.deliverable,
       ),
       allowedTools,
     },
@@ -330,7 +363,6 @@ const buildResearchSynthesisTaskChain = (args: WebResearchPlannerArgs): partialT
   const entryNodeArguments = buildResearchEntryNodeArguments({
     ...args,
     supportTools: ['updateFiles', 'bash'],
-    enableWebSearch: false,
   })
 
   return [
@@ -346,6 +378,7 @@ const buildResearchSynthesisTaskChain = (args: WebResearchPlannerArgs): partialT
           args.deliverable ? `Requested deliverable: ${args.deliverable}.` : '',
           '',
           'Review the completed research notes and saved artifacts in the task tree and local artifact root.',
+          'Before synthesizing, verify that source branding, provider, and domain match every exact product, service, domain, or URL named in the objective. Reject and replace same-category substitutes; use web search with the quoted exact name when the saved candidates have the wrong identity.',
           'Create the final user-facing deliverable requested by the original objective instead of leaving only branch-local notes.',
           'If the task asks for a memo, report, comparison, summary, or recommendation, write one clear final Markdown file under the shared artifact root and update or create an index that points to it.',
           'Also create a top-level README.md with one simple command a human can run from the project root to inspect the result.',
@@ -516,11 +549,7 @@ export const importBrowserMcpTools = createTool({
   name: 'importBrowserMcpTools',
   description:
     'Import tools from a browser MCP server that is already running on a local or reachable HTTP endpoint.',
-  longDescription: `Use this after you have already started a browser MCP server outside Taskyon.
-
-This tool does not spawn a local process itself. That boundary belongs to Tauri/local-shell automation or an external companion service, because the Taskyon core package also runs in browser and headless environments where OS process spawning is not available.
-
-After import, you can delegate browser-based research through webResearchPlanner.`,
+  longDescription: `This workflow delegates the MCP handshake and registry installation to Taskyon's general MCP importer. It connects only to an existing HTTP endpoint; browser-neutral Taskyon core never spawns the MCP server process.`,
   parameters: {
     type: 'object',
     additionalProperties: false,
@@ -548,9 +577,7 @@ export const ensureBrowserMcpTools = createTool({
   name: 'ensureBrowserMcpTools',
   description:
     'Ensure that a configured browser MCP endpoint is reachable, guide manual startup if needed, and then import its tools.',
-  longDescription: `Use this before browser-backed research.
-
-This tool checks whether the configured browser MCP server is reachable. If it is not, Taskyon shows manual startup instructions in chat and waits for the user to continue. After continue, it retries the MCP connection and imports the browser tools.`,
+  longDescription: `This visible onboarding workflow probes the endpoint first. When unavailable, it presents startup instructions, pauses for user continuation, retries the same endpoint, and imports the selected MCP tools after connectivity succeeds. It does not spawn local processes.`,
   parameters: {
     type: 'object',
     additionalProperties: false,
@@ -646,14 +673,10 @@ This tool checks whether the configured browser MCP server is reachable. If it i
 export const webResearchPlanner = createTool({
   name: 'webResearchPlanner',
   description:
-    'Launch parallel research branches that search, crawl, validate, and save task-specific artifacts.',
-  longDescription: `Use this for structured research where the work should branch by query.
+    'For a research-only leaf that needs multiple queries, source validation, downloads, saved artifacts, or synthesis; skip it for one narrow lookup.',
+  longDescription: `This tool creates a visible map/reduce research workflow. Each query becomes an independent branch whose discovery step is followed by source validation or downloading; a final reducer synthesizes the branch evidence and saved artifacts.
 
-Each search query becomes its own parallel research branch. Inside each branch, Taskyon first searches for likely sources and then validates or downloads the strongest candidates.
-
-This tool is useful for research tasks that need saved outputs such as reports, spec sheets, datasets, images, PDFs, JSON, CSV, Markdown, or other task-specific files.
-
-Taskyon first uses chatCompletion web search for discovery when enabled. In browser-mcp-first mode it ensures browser MCP tools before branching; websearch-first can opt into browser MCP by setting ensureBrowserMcp; websearch-only avoids browser MCP entirely. updateFiles supports local text artifacts in tycli, downloadFile supports verified local URL downloads in tycli, bash is a local fallback for unusual downloads, jinaMarkdownReader supports page validation, storage supports browser storage artifacts when explicitly enabled, and proxy/browser readers stay opt-in for blocked pages or direct fetches.`,
+Use it when research itself is the current objective and needs durable evidence or multiple source families. Keep later building, installation, or verification work in separate planned tasks. Exact named products, providers, domains, and URLs remain identity constraints throughout discovery and validation.`,
   parameters: {
     type: 'object',
     additionalProperties: false,
@@ -667,7 +690,7 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
         maxItems: 4,
         items: { type: 'string' },
         description:
-          'One query per research packet. Use 1-3 queries for normal reports or memos; use 4 only when the requested output truly needs distinct source families.',
+          'One query per distinct research packet. Use exactly one query when the user supplied one official documentation URL or one named source. Use 2-3 only for genuinely distinct source families, and 4 only when the deliverable explicitly needs that breadth.',
       },
       artifactRoot: {
         type: 'string',
@@ -742,8 +765,9 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
     required: ['objective', 'searchQueries'],
   } as const satisfies JSONSchema7,
   function: (args, context) => {
-    const browserTools = trimNonEmptyStrings(args.browserTools)
-    if (shouldEnsureBrowserMcp(args)) {
+    const scopedArgs = constrainResearchScope(args)
+    const browserTools = trimNonEmptyStrings(scopedArgs.browserTools)
+    if (shouldEnsureBrowserMcp(scopedArgs)) {
       return Promise.resolve(
         context.createSubtasksResult([
           [
@@ -761,7 +785,7 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
             toolCall({
               name: 'webResearchPlanner',
               arguments: {
-                ...args,
+                ...scopedArgs,
                 ensureBrowserMcp: false,
               },
             }),
@@ -770,9 +794,9 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
       )
     }
 
-    const taskGroups = buildWebResearchTaskGroups(args)
+    const taskGroups = buildWebResearchTaskGroups(scopedArgs)
     const delegatedChains = buildTaskPlannerTaskChains(taskGroups).map((chain) => {
-      const entryNodeArguments = buildResearchEntryNodeArguments(args)
+      const entryNodeArguments = buildResearchEntryNodeArguments(scopedArgs)
       if (!entryNodeArguments) return chain
       return chain.map((task) => {
         if (task.content.type !== 'functioncall' || task.content.data.name !== 'entryNode') {
@@ -787,7 +811,10 @@ Taskyon first uses chatCompletion web search for discovery when enabled. In brow
         })
       })
     })
-    const researchWorkflow = [...delegatedChains.flat(), ...buildResearchSynthesisTaskChain(args)]
+    const researchWorkflow = [
+      ...delegatedChains.flat(),
+      ...buildResearchSynthesisTaskChain(scopedArgs),
+    ]
 
     return Promise.resolve(context.createSubtasksResult([researchWorkflow]))
   },
@@ -797,15 +824,7 @@ export const proxyWebReader = createTool({
   name: 'proxyWebReader',
   description:
     'Fetch a target page through a configurable proxy or unblocker HTTP service using a secret API key.',
-  longDescription: `Use this when direct browser fetches are blocked and you have a proxy or unblocker service available.
-
-The tool expects a simple HTTP API pattern:
-- serviceUrl: base service endpoint
-- targetUrlParam: query parameter name that carries the target URL
-- apiKeyHeader or apiKeyQueryParam: where the secret is sent
-- apiKeyScheme: optional prefix like "Bearer"
-
-This tool includes a built-in provider catalog with 40 public vendors so a user can choose a preset and then override the exact endpoint/auth details when needed.`,
+  longDescription: `Use this only when direct retrieval is blocked and the user has chosen a proxy provider. The API key is requested through Taskyon's secret boundary and sent only using the configured provider authentication method. Built-in provider presets supply known endpoint conventions while still allowing an explicit custom service.`,
   parameters: {
     type: 'object',
     additionalProperties: false,

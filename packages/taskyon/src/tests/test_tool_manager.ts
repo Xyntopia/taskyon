@@ -2,6 +2,7 @@ import { createTaskNode, forgeTaskChain } from '../core/createTasks'
 import { findCallingToolReference, generateSecretId } from '../core/taskFunctionExecutor'
 import { createToolManager, toolRevisionHash, type ToolStorageRecord } from '../core/toolManager'
 import { createMapCrudWrapper } from '../utils/crudWrapper'
+import { createAddNewTool } from '../tools/toolTools'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -62,6 +63,48 @@ export async function tool_managerPinsImmutableRevisions() {
 
 tool_managerPinsImmutableRevisions.description =
   'The CrudWrapper-backed ToolManager retains immutable revisions while updating the active name binding.'
+
+export async function testAddNewToolRequiresExplicitReplacementApproval() {
+  const toolManager = createToolManager(createMapCrudWrapper<ToolStorageRecord>(new Map()))
+  const addNewTool = createAddNewTool(toolManager)
+  const definition = {
+    name: 'repairableTool',
+    description: 'Initial implementation',
+    parameters: { type: 'object' as const, properties: {} },
+    code: 'async () => ({ version: 1 })',
+  }
+  await addNewTool.function?.(definition)
+  let unapprovedError = ''
+  try {
+    await addNewTool.function?.({
+      ...definition,
+      description: 'Repaired implementation',
+      code: 'async () => ({ version: 2 })',
+    })
+  } catch (error) {
+    unapprovedError = error instanceof Error ? error.message : String(error)
+  }
+  assert(
+    unapprovedError.includes('replacement approval is required'),
+    `Expected an explicit replacement-approval error, got ${unapprovedError}`,
+  )
+
+  await addNewTool.function?.({
+    ...definition,
+    description: 'Repaired implementation',
+    code: 'async () => ({ version: 2 })',
+    approveReplacement: true,
+  })
+  const active = await toolManager.resolveTool(definition.name)
+  assert(active.tool?.name === definition.name, 'Expected the repair to preserve the exact name')
+  assert(
+    active.tool?.description === 'Repaired implementation',
+    'Expected approved replacement to become the active definition',
+  )
+}
+
+testAddNewToolRequiresExplicitReplacementApproval.description =
+  'Requires explicit approval at the addNewTool boundary and replaces the exact active tool name.'
 
 export async function tool_managerExecutionUsesPinnedRevision() {
   const toolManager = createToolManager(createMapCrudWrapper<ToolStorageRecord>(new Map()))

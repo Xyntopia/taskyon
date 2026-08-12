@@ -51,7 +51,7 @@ export const augmentToolSchemaForTaskyonVariables = (schema: JSONSchema7) => {
 const convertToChatCompletionTool = (definition: ToolBase): Tool =>
   tool({
     title: definition.name,
-    description: `${definition.description}\n\nTaskyon note: whole arguments may use the reserved $use mapping to reference previous task results.`,
+    description: `${definition.longDescription ?? definition.description}\n\nTaskyon note: whole arguments may use the reserved $use mapping to reference previous task results.`,
     inputSchema: jsonSchema(augmentToolSchemaForTaskyonVariables(definition.parameters)),
   })
 

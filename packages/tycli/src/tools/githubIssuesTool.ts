@@ -147,7 +147,9 @@ const createIssues = async (auth: GithubAuthState, repository: string, args: Git
 export const githubIssuesTool = createTool({
   name: 'githubIssues',
   description:
-    'Manage GitHub issue lists from tycli using local GitHub OAuth. List repositories, list issues, and create issues.',
+    'Check GitHub authentication, list repositories or issues, and preview or create issues from tycli.',
+  longDescription:
+    'This CLI capability uses locally persisted GitHub OAuth credentials. Read actions query the GitHub API; issue creation is the only write action and supports a dry-run preview before any external mutation. Results identify the repository and created issue URLs.',
   parameters: {
     type: 'object',
     additionalProperties: false,
@@ -180,9 +182,13 @@ export const githubIssuesTool = createTool({
           additionalProperties: false,
           required: ['title'],
           properties: {
-            title: { type: 'string' },
-            body: { type: 'string' },
-            labels: { type: 'array', items: { type: 'string' } },
+            title: { type: 'string', description: 'Concise GitHub issue title.' },
+            body: { type: 'string', description: 'Optional Markdown issue body.' },
+            labels: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional existing repository label names.',
+            },
           },
         },
       },

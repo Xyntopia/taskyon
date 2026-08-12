@@ -47,16 +47,9 @@ export const createOAuthTool = (
 ) => {
   return createClientTool({
     name: 'ensureOauthLogin',
-    description: `Ensure, that we have an oauth token for the calling tool.`,
-    longDescription: `Checks if we have an OAuth token available for specified service. Otherwise
-display a login button in order to get an access token. Currently tested services are:
-
-working:
-- gitlab
-
-not working:
-- github
-`,
+    description: 'Reuse or obtain an OAuth access token for the calling tool.',
+    longDescription:
+      'This hidden browser workflow checks the calling tool’s secret namespace first. When no token is available it renders an explicit login action, opens the provider authorization page, validates the resumed flow, exchanges the authorization response, and stores the token for the caller.',
     renderOptions: { hideChat: true, hideInput: true },
     parameters: {
       type: 'object',

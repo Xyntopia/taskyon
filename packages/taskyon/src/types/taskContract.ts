@@ -20,7 +20,10 @@ export const taskContractResultSchema = {
       type: 'object',
       additionalProperties: false,
       properties: {
-        mode: { const: 'message' },
+        mode: {
+          const: 'message',
+          description: 'Return a normal assistant message for this task.',
+        },
       },
       required: ['mode'],
     },
@@ -30,6 +33,7 @@ export const taskContractResultSchema = {
       properties: {
         mode: {
           const: 'structured',
+          description: 'Return data validated against the supplied JSON Schema.',
         },
         schema: {
           type: 'object',
@@ -60,7 +64,10 @@ export const taskContractSchema = {
       items: { type: 'string' },
       description: 'Semantic criteria that define when the task is complete.',
     },
-    result: taskContractResultSchema,
+    result: {
+      ...taskContractResultSchema,
+      description: 'Required result presentation contract for the task.',
+    },
   },
   required: ['objective', 'result'],
 } as const satisfies JSONSchema7
