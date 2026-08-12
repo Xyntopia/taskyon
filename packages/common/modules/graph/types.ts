@@ -133,6 +133,7 @@ export type InteractionOptions<N = unknown, E = unknown> = {
   zoomStep?: number
   onNodeClick?: (node: LayoutNode<N>) => void
   onNodeDoubleClick?: (node: LayoutNode<N>) => void
+  onNodeContextMenu?: (node: LayoutNode<N>, location: { clientX: number; clientY: number }) => void
   edgeTooltipHtml?: (edge: LayoutEdge<E>) => string | null | undefined
   nodeTooltipHtml?: (node: LayoutNode<N>) => string | null | undefined
 }

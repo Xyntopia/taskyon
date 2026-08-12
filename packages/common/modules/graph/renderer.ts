@@ -104,23 +104,28 @@ const createTooltip = (container: HTMLElement) => {
   return tooltip
 }
 
+export type GraphPngExportOptions = {
+  scale?: number
+  cropToContent?: boolean
+  cropPadding?: number
+  backgroundColor?: string
+}
+
+export type GraphSvgExportOptions = {
+  includeHtmlLayer?: boolean
+  cropToContent?: boolean
+  cropPadding?: number
+  backgroundColor?: string
+}
+
 type GraphController<N = unknown, E = unknown> = {
   setGraph: (graph: GraphData<N, E>) => void
   setOptions: (options: RenderOptions<N, E>) => void
   resize: () => void
   fit: () => void
-  copyAsPng: (options?: {
-    scale?: number
-    cropToContent?: boolean
-    cropPadding?: number
-    backgroundColor?: string
-  }) => Promise<boolean>
-  exportSvgString: (options?: {
-    includeHtmlLayer?: boolean
-    cropToContent?: boolean
-    cropPadding?: number
-    backgroundColor?: string
-  }) => string
+  focusNode: (nodeId: string) => boolean
+  copyAsPng: (options?: GraphPngExportOptions) => Promise<boolean>
+  exportSvgString: (options?: GraphSvgExportOptions) => string
   downloadSvg: (fileName?: string) => void
   destroy: () => void
 }
@@ -206,6 +211,19 @@ export const createGraphController = <N = unknown, E = unknown>(
     updateTransforms()
   }
 
+  const focusNode = (nodeId: string): boolean => {
+    const node = layout.nodes.find((candidate) => candidate.id === nodeId)
+    if (!node) return false
+    const { width, height } = getSize()
+    viewport = {
+      ...viewport,
+      tx: width / 2 - (node.x + node.width / 2) * viewport.scale,
+      ty: height / 2 - (node.y + node.height / 2) * viewport.scale,
+    }
+    updateTransforms()
+    return true
+  }
+
   const renderEdges = () => {
     clearChildren(edgeLayer)
     clearChildren(defs)
@@ -244,6 +262,7 @@ export const createGraphController = <N = unknown, E = unknown>(
         defs.appendChild(marker)
       }
       setAttrs(pathEl, {
+        'data-graph-edge-id': edge.id,
         d: edge.path,
         fill: 'none',
         stroke: style.stroke,
@@ -280,6 +299,17 @@ export const createGraphController = <N = unknown, E = unknown>(
     host.style.width = `${node.width}px`
     host.style.height = `${node.height}px`
     host.style.pointerEvents = options.nodeHtmlPointerEvents ?? 'auto'
+    host.dataset.graphNodeId = node.id
+    if (options.onNodeContextMenu) {
+      host.addEventListener('contextmenu', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        options.onNodeContextMenu?.(node, {
+          clientX: event.clientX,
+          clientY: event.clientY,
+        })
+      })
+    }
     if (typeof html === 'string') {
       host.innerHTML = html
     } else {
@@ -329,6 +359,9 @@ export const createGraphController = <N = unknown, E = unknown>(
 
       const group = createSvgEl('g')
       group.setAttribute('data-graph-node', '1')
+      group.setAttribute('data-graph-node-id', node.id)
+      group.setAttribute('data-rendered-x', String(node.x))
+      group.setAttribute('data-rendered-y', String(node.y))
       const rect = createSvgEl('rect')
       const hitRect = createSvgEl('rect')
       const text = createSvgEl('text')
@@ -430,6 +463,10 @@ export const createGraphController = <N = unknown, E = unknown>(
             stroke: applied.stroke,
             'stroke-width': applied.strokeWidth,
           })
+          rect.style.filter =
+            applied.glowColor && applied.glowBlur > 0
+              ? `drop-shadow(0 0 ${applied.glowBlur}px ${applied.glowColor})`
+              : ''
         })
         group.addEventListener('mouseleave', () => {
           setAttrs(rect, {
@@ -437,6 +474,10 @@ export const createGraphController = <N = unknown, E = unknown>(
             stroke: style.stroke,
             'stroke-width': style.strokeWidth,
           })
+          rect.style.filter =
+            style.glowColor && style.glowBlur > 0
+              ? `drop-shadow(0 0 ${style.glowBlur}px ${style.glowColor})`
+              : ''
           if (options.enableNodeDrag !== false) group.style.cursor = 'grab'
         })
       }
@@ -473,6 +514,13 @@ export const createGraphController = <N = unknown, E = unknown>(
           dispatchNodeDoubleClick(node, 'native-dblclick', evt),
         )
       }
+      if (options.onNodeContextMenu) {
+        group.addEventListener('contextmenu', (evt) => {
+          evt.preventDefault()
+          evt.stopPropagation()
+          options.onNodeContextMenu?.(node, { clientX: evt.clientX, clientY: evt.clientY })
+        })
+      }
       const tip = options.nodeTooltipHtml?.(node)
       if (tip) {
         group.addEventListener('mousemove', (evt) => showTooltip(tip, evt.clientX, evt.clientY))
@@ -492,6 +540,31 @@ export const createGraphController = <N = unknown, E = unknown>(
     renderEdges()
     renderNodes()
     updateTransforms()
+  }
+
+  const syncRenderedOrganicLayout = () => {
+    const nodeById = new Map(layout.nodes.map((node) => [node.id, node]))
+    for (const element of nodeLayer.children) {
+      if (!(element instanceof SVGGElement)) continue
+      const node = nodeById.get(element.dataset.graphNodeId ?? '')
+      if (!node) continue
+      const renderedX = Number(element.dataset.renderedX ?? node.x)
+      const renderedY = Number(element.dataset.renderedY ?? node.y)
+      setAttrs(element, { transform: `translate(${node.x - renderedX} ${node.y - renderedY})` })
+    }
+    const edgeById = new Map(layout.edges.map((edge) => [edge.id, edge]))
+    for (const element of edgeLayer.children) {
+      if (!(element instanceof SVGPathElement)) continue
+      const edge = edgeById.get(element.dataset.graphEdgeId ?? '')
+      if (edge) setAttrs(element, { d: edge.path })
+    }
+    for (const element of htmlLayer.children) {
+      if (!(element instanceof HTMLElement)) continue
+      const node = nodeById.get(element.dataset.graphNodeId ?? '')
+      if (!node) continue
+      element.style.left = `${node.x}px`
+      element.style.top = `${node.y}px`
+    }
   }
 
   const exportFrame = (config?: {
@@ -641,7 +714,7 @@ export const createGraphController = <N = unknown, E = unknown>(
       if (!organicState) return
       const speed = stepOrganicLayout(organicState, 2)
       syncOrganicLayout()
-      render()
+      syncRenderedOrganicLayout()
       organicIdleFrames = speed < 0.08 && !draggedNodeId ? organicIdleFrames + 1 : 0
       if (organicIdleFrames < 12 || draggedNodeId) scheduleOrganicLayout()
     })
@@ -722,7 +795,7 @@ export const createGraphController = <N = unknown, E = unknown>(
         })
         stepOrganicLayout(organicState, 3)
         syncOrganicLayout()
-        render()
+        syncRenderedOrganicLayout()
         organicIdleFrames = 0
         scheduleOrganicLayout()
         return
@@ -794,6 +867,7 @@ export const createGraphController = <N = unknown, E = unknown>(
     setOptions,
     resize,
     fit,
+    focusNode,
     copyAsPng,
     exportSvgString,
     downloadSvg,

@@ -74,31 +74,6 @@
         :label="showBlockHints ? 'Block Hints On' : 'Block Hints Off'"
         @click="showBlockHints = !showBlockHints"
       />
-      <q-btn
-        dense
-        flat
-        color="grey-7"
-        label="Zoom to Fit"
-        :disable="!hasGraph"
-        @click="onZoomToFit"
-      />
-      <q-space />
-      <q-btn
-        dense
-        flat
-        color="grey-7"
-        label="Copy PNG"
-        :disable="!hasGraph || exportingPng"
-        @click="onCopyPng"
-      />
-      <q-btn
-        dense
-        flat
-        color="grey-7"
-        label="Export SVG"
-        :disable="!hasGraph"
-        @click="onExportSvg"
-      />
     </div>
 
     <div v-if="errorText" class="q-px-sm q-pb-xs text-negative text-caption">{{ errorText }}</div>
@@ -106,7 +81,17 @@
       {{ diagram ? 'Refining diagram…' : 'Loading diagram…' }}
     </div>
 
-    <div v-if="viewMode === 'diagram'" ref="containerRef" class="diagram-canvas"></div>
+    <GraphCanvas
+      v-if="viewMode === 'diagram'"
+      class="diagram-canvas"
+      :graph="mapped.graph"
+      :options="runtimeOptions"
+      :show-layout-controls="false"
+      :png-export-options="pngExportOptions"
+      svg-file-name="modelica-diagram.svg"
+      v-bind="selectedNodeId ? { selectedNodeId } : {}"
+      @select-node="selectedNodeId = $event"
+    />
     <div v-else class="q-pa-sm fit">
       <SanitizedMarkup
         v-if="classIconMarkup"
@@ -121,18 +106,18 @@
 
 <script setup lang="ts">
 import { watchDebounced } from '@vueuse/core'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import SanitizedMarkup from '@taskyon/ui/components/SanitizedMarkup.vue'
 import { sanitizeSvgMarkup } from '@taskyon/common/modules/sanitizeMarkup'
 import ToggleButton from '@taskyon/ui/components/ToggleButton.vue'
 import {
-  createGraphController,
   type GraphData,
   type LayoutEdge,
   type LayoutNode,
   type NodeStyle,
   type RenderOptions,
 } from '@taskyon/common/modules/graph'
+import GraphCanvas from '@taskyon/ui/components/GraphCanvas.vue'
 import {
   mapDiagramToGraph,
   type DiagramEdgeData,
@@ -166,7 +151,6 @@ const emit = defineEmits<{
 const emptyGraph: GraphData<DiagramNodeData, DiagramEdgeData> = { nodes: [], edges: [] }
 const emptyOptions: RenderOptions<DiagramNodeData, DiagramEdgeData> = {}
 
-const containerRef = ref<HTMLElement | null>(null)
 const diagram = ref<ModelicaDiagramDto | null>(null)
 const layoutMode = ref<DiagramLayoutMode>('authored')
 const viewMode = computed<'diagram' | 'icon'>(() => props.viewMode ?? 'diagram')
@@ -177,40 +161,19 @@ const showLibraryPaths = ref(false)
 const showBlockHints = ref(false)
 const loading = ref(false)
 const errorText = ref('')
-const exportingPng = ref(false)
-
-const hasGraph = computed(() => Boolean(diagram.value && diagram.value.components.length > 0))
+const selectedNodeId = ref<string>()
+const pngExportOptions = {
+  scale: 4,
+  cropToContent: true,
+  cropPadding: 18,
+  backgroundColor: 'rgb(229, 231, 235)',
+}
 
 const mapped = computed(() =>
   diagram.value
     ? mapDiagramToGraph(diagram.value, layoutMode.value)
     : { graph: emptyGraph, options: emptyOptions },
 )
-
-const stableStringify = (value: unknown): string => {
-  if (value == null) return 'null'
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  if (typeof value === 'string') return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(',')}]`
-  if (typeof value === 'object') {
-    const record = value as Record<string, unknown>
-    const keys = Object.keys(record).sort()
-    const entries = keys.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
-    return `{${entries.join(',')}}`
-  }
-  return JSON.stringify(typeof value)
-}
-
-const hashString = (value: string): string => {
-  let hash = 0x811c9dc5
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0')
-}
-
-const diagramIrHash = computed(() => hashString(stableStringify(mapped.value.graph)))
 
 const colorToCss = (color: DiagramColor | undefined, fallback: string): string =>
   color ? `rgb(${color[0]}, ${color[1]}, ${color[2]})` : fallback
@@ -306,10 +269,6 @@ const classIconMarkup = computed(() => {
   ).markup
 })
 
-let controller: ReturnType<typeof createGraphController<DiagramNodeData, DiagramEdgeData>> | null =
-  null
-let resizeObserver: ResizeObserver | null = null
-let lastAppliedGraphHash = ''
 let loadToken = 0
 
 const derivedFileName = (qualifiedName: string | null | undefined): string => {
@@ -753,64 +712,6 @@ watchDebounced(
   },
   { debounce: 350, maxWait: 900, immediate: true },
 )
-
-watch([diagramIrHash, runtimeOptions], () => {
-  if (!controller) return
-  if (diagramIrHash.value !== lastAppliedGraphHash) {
-    controller.setGraph(mapped.value.graph)
-    lastAppliedGraphHash = diagramIrHash.value
-    void nextTick(() => {
-      if (hasGraph.value) controller?.fit()
-    })
-  }
-  controller.setOptions(runtimeOptions.value)
-})
-
-const onCopyPng = async () => {
-  if (!controller || exportingPng.value || !hasGraph.value) return
-  exportingPng.value = true
-  try {
-    await controller.copyAsPng({
-      scale: 4,
-      cropToContent: true,
-      cropPadding: 18,
-      backgroundColor: 'rgb(229, 231, 235)',
-    })
-  } catch (error) {
-    console.error('Failed to export Modelica diagram as PNG', error)
-  } finally {
-    exportingPng.value = false
-  }
-}
-
-const onExportSvg = () => {
-  if (!controller || !hasGraph.value) return
-  controller.downloadSvg('modelica-diagram.svg')
-}
-
-const onZoomToFit = () => {
-  if (!controller || !hasGraph.value) return
-  controller.fit()
-}
-
-onMounted(() => {
-  const container = containerRef.value
-  if (!container) return
-  controller = createGraphController(container, mapped.value.graph, runtimeOptions.value)
-  lastAppliedGraphHash = diagramIrHash.value
-  void nextTick(() => {
-    if (hasGraph.value) controller?.fit()
-  })
-  resizeObserver = new ResizeObserver(() => controller?.resize())
-  resizeObserver.observe(container)
-})
-
-onBeforeUnmount(() => {
-  resizeObserver?.disconnect()
-  resizeObserver = null
-  controller?.destroy()
-  controller = null
-})
 </script>
 
 <style scoped>

@@ -1,17 +1,56 @@
 <template>
   <section class="dag-node-viewer column no-wrap">
     <header class="dag-node-viewer__header row items-center no-wrap">
-      <div class="ellipsis">
-        <div class="dag-node-viewer__title ellipsis">{{ label }}</div>
-        <div v-if="path" class="dag-node-viewer__path ellipsis">{{ path }}</div>
+      <div class="dag-node-viewer__heading row items-center no-wrap">
+        <div class="ellipsis">
+          <div class="dag-node-viewer__title ellipsis">{{ label }}</div>
+          <div v-if="path" class="dag-node-viewer__path ellipsis">{{ path }}</div>
+        </div>
+        <q-btn
+          v-if="allowRename"
+          flat
+          round
+          dense
+          size="sm"
+          :icon="matEdit"
+          aria-label="Rename node"
+          @click="emit('rename')"
+        >
+          <q-tooltip>Rename node</q-tooltip>
+        </q-btn>
       </div>
       <q-space />
+      <q-chip v-if="activeOutput" dense square color="positive" text-color="white">
+        Study output
+      </q-chip>
       <q-chip v-if="localName" dense square outline color="secondary">
         {{ localName }}
       </q-chip>
       <q-chip v-if="hash" dense square outline :title="hash">
         {{ compactHash }}
       </q-chip>
+      <q-btn
+        v-if="allowSave"
+        flat
+        round
+        dense
+        :icon="matSave"
+        aria-label="Save node"
+        @click="emit('save')"
+      >
+        <q-tooltip>Save node</q-tooltip>
+      </q-btn>
+      <q-btn
+        v-if="allowCreateNode"
+        flat
+        round
+        dense
+        :icon="matAdd"
+        aria-label="Create node"
+        @click="emit('createNode')"
+      >
+        <q-tooltip>Create node</q-tooltip>
+      </q-btn>
       <q-btn
         v-if="standaloneTo"
         flat
@@ -30,7 +69,33 @@
       <nav v-if="hasNavigation" class="dag-node-viewer__navigation">
         <q-scroll-area class="fit">
           <q-list dense padding>
-            <q-item-label header>Upstream</q-item-label>
+            <q-item-label header class="row items-center no-wrap">
+              <span>Inputs</span>
+              <q-space />
+              <q-btn
+                v-if="allowEditRelationships"
+                flat
+                round
+                dense
+                :icon="matLink"
+                aria-label="Connect existing input node"
+                @click="emit('addInput')"
+              >
+                <q-tooltip>Connect existing upstream node</q-tooltip>
+              </q-btn>
+              <q-btn
+                v-if="allowEditRelationships"
+                flat
+                dense
+                no-caps
+                :icon="matAdd"
+                label="New"
+                aria-label="Create upstream input node"
+                @click="emit('createInput')"
+              >
+                <q-tooltip>Create and connect upstream node</q-tooltip>
+              </q-btn>
+            </q-item-label>
             <q-item
               v-for="item in upstreamNodes"
               :key="item.id"
@@ -49,7 +114,33 @@
             </q-item>
 
             <q-separator spaced />
-            <q-item-label header>Downstream</q-item-label>
+            <q-item-label header class="row items-center no-wrap">
+              <span>Outputs</span>
+              <q-space />
+              <q-btn
+                v-if="allowEditRelationships"
+                flat
+                round
+                dense
+                :icon="matLink"
+                aria-label="Connect existing output node"
+                @click="emit('addOutput')"
+              >
+                <q-tooltip>Connect existing downstream node</q-tooltip>
+              </q-btn>
+              <q-btn
+                v-if="allowEditRelationships"
+                flat
+                dense
+                no-caps
+                :icon="matAdd"
+                label="New"
+                aria-label="Create downstream output node"
+                @click="emit('createOutput')"
+              >
+                <q-tooltip>Create and connect downstream node</q-tooltip>
+              </q-btn>
+            </q-item-label>
             <q-item
               v-for="item in downstreamNodes"
               :key="item.id"
@@ -79,7 +170,20 @@
         <q-separator />
         <q-tab-panels v-model="activeView" animated class="col">
           <q-tab-panel name="source" class="q-pa-none">
-            <CodeEditor v-model="source" language="typescript" :read-only="readOnly" class="fit" />
+            <div v-if="sourceNotice" class="dag-node-viewer__source-notice q-pa-md">
+              <q-icon :name="matInfo" size="sm" />
+              <div>
+                <strong>{{ sourceNotice.title }}</strong>
+                <div class="text-caption">{{ sourceNotice.message }}</div>
+              </div>
+            </div>
+            <CodeEditor
+              v-else
+              v-model="source"
+              language="typescript"
+              :read-only="readOnly"
+              class="fit"
+            />
           </q-tab-panel>
           <q-tab-panel name="inputs" class="q-pa-none">
             <q-scroll-area class="fit">
@@ -130,7 +234,17 @@ export type DagNodeNavigationItem = {
 </script>
 
 <script setup lang="ts">
-import { matCode, matInput, matOpenInNew, matOutput } from '@quasar/extras/material-icons'
+import {
+  matAdd,
+  matCode,
+  matEdit,
+  matInfo,
+  matInput,
+  matLink,
+  matOpenInNew,
+  matOutput,
+  matSave,
+} from '@quasar/extras/material-icons'
 import type { DagJsonSchema } from '@taskyon/comp-dag/dagSchema'
 import type { JSONSchema7 } from 'json-schema'
 import { computed } from 'vue'
@@ -152,6 +266,12 @@ const props = withDefaults(
     outputSchema?: DagJsonSchema | undefined
     upstreamNodes?: DagNodeNavigationItem[]
     downstreamNodes?: DagNodeNavigationItem[]
+    activeOutput?: boolean
+    allowCreateNode?: boolean
+    allowRename?: boolean
+    allowEditRelationships?: boolean
+    allowSave?: boolean
+    sourceNotice?: { title: string; message: string } | undefined
   }>(),
   {
     path: '',
@@ -164,9 +284,24 @@ const props = withDefaults(
     outputSchema: undefined,
     upstreamNodes: () => [],
     downstreamNodes: () => [],
+    activeOutput: false,
+    allowCreateNode: false,
+    allowRename: false,
+    allowEditRelationships: false,
+    allowSave: false,
+    sourceNotice: undefined,
   },
 )
-const emit = defineEmits<{ selectNode: [id: string] }>()
+const emit = defineEmits<{
+  selectNode: [id: string]
+  createNode: []
+  rename: []
+  addInput: []
+  createInput: []
+  addOutput: []
+  createOutput: []
+  save: []
+}>()
 
 const compactHash = computed(() =>
   props.hash.length > 21 ? `${props.hash.slice(0, 13)}…${props.hash.slice(-5)}` : props.hash,
@@ -206,6 +341,11 @@ const selectNode = (item: DagNodeNavigationItem) => {
 .dag-node-viewer__title {
   font-size: 0.76rem;
   font-weight: 600;
+}
+
+.dag-node-viewer__heading {
+  min-width: 0;
+  gap: 0.15rem;
 }
 
 .dag-node-viewer__path {
@@ -252,6 +392,12 @@ const selectNode = (item: DagNodeNavigationItem) => {
   padding: 1rem;
   color: var(--q-grey-6);
   font-size: 0.75rem;
+}
+
+.dag-node-viewer__source-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
 }
 
 @media (max-width: 700px) {

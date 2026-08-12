@@ -13,7 +13,12 @@
           <q-icon :name="statusIcon(node.status)" :color="statusColor(node.status)" />
         </q-item-section>
         <q-item-section>
-          <q-item-label>{{ node.label }}</q-item-label>
+          <q-item-label>
+            {{ node.label }}
+            <q-badge v-if="node.id === activeOutputNodeId" color="positive" class="q-ml-xs">
+              Study output
+            </q-badge>
+          </q-item-label>
           <q-item-label caption>{{ node.effect }} · {{ node.status }}</q-item-label>
         </q-item-section>
       </q-item>
@@ -74,6 +79,7 @@ const props = defineProps<{
     nodeId?: string
   }>
   selectedNodeId?: string
+  activeOutputNodeId?: string
 }>()
 
 const emit = defineEmits<{ 'update:selectedNodeId': [nodeId: string] }>()

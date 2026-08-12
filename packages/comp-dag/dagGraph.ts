@@ -4,6 +4,8 @@ import { describeExploreInputs, type DagExposedInputDef, type DagNode } from './
 export type DagNodeGraphNodeData = {
   isOutput: boolean
   isExploded: boolean
+  isSource: boolean
+  isBuiltIn?: boolean
   outputDescription: string
 }
 
@@ -22,6 +24,8 @@ const isOneOf = (
   typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'oneOf'
 
 const isExplodedNode = (node: DagNode): boolean => node.name.includes('__explode__')
+
+const graphNodeId = (node: DagNode): string => node.contentHash ?? node.name
 
 const toTitleCaseToken = (token: string): string => {
   if (!token) return token
@@ -151,16 +155,18 @@ export const buildDagNodeGraphFromOutputNodes = (
   const visited = new Set<string>()
 
   const addNode = (node: DagNode) => {
-    const existing = nodes.get(node.name)
+    const id = graphNodeId(node)
+    const existing = nodes.get(id)
     if (existing) return
     const exploded = isExplodedNode(node)
-    nodes.set(node.name, {
-      id: node.name,
-      label: formatNodeLabel(node.name),
+    nodes.set(id, {
+      id,
+      label: formatNodeLabel(node.localName ?? node.name),
       type: exploded ? 'exploded' : 'default',
       data: {
         isOutput: false,
         isExploded: exploded,
+        isSource: node.effect === 'source',
         outputDescription: schemaTopDescription(node.outputSchema),
       },
     })
@@ -175,12 +181,14 @@ export const buildDagNodeGraphFromOutputNodes = (
   ) => {
     const isExplodedOutput = isExplodedNode(source)
     const type = edgeType(visibility, isExplodedOutput)
-    const id = `${source.name}->${target.name}::${visibility}:${alias}`
+    const sourceId = graphNodeId(source)
+    const targetId = graphNodeId(target)
+    const id = `${sourceId}->${targetId}::${visibility}:${alias}`
     if (edges.has(id)) return
     edges.set(id, {
       id,
-      source: source.name,
-      target: target.name,
+      source: sourceId,
+      target: targetId,
       type,
       label: alias,
       data: {
@@ -194,8 +202,9 @@ export const buildDagNodeGraphFromOutputNodes = (
 
   const walk = (node: DagNode) => {
     addNode(node)
-    if (visited.has(node.name)) return
-    visited.add(node.name)
+    const id = graphNodeId(node)
+    if (visited.has(id)) return
+    visited.add(id)
 
     const explodedByAlias = new Map(
       describeExploreInputs(node)
