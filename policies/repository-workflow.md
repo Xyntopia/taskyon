@@ -29,3 +29,24 @@ inside the workspace.
 - Report unresolved conflicts, skipped checks, and external blockers explicitly.
 - Use current repository documentation and configuration for branch names, commands, and commit
   conventions rather than duplicating those changing facts into this policy.
+
+## Design Graph Git Synchronization
+
+- Produce Git commits from the shared deterministic design-graph snapshot projector. Full-graph,
+  project, revision, and node-closure snapshots must use the same path and validation contracts.
+- Export a project ref with its complete reachable project-revision ancestry, invocation
+  definitions, computational closure, source manifests, and explicitly saved project extensions.
+  Never emit dangling revision-parent hashes.
+- Exclude execution attempts, invocation runs, result artifacts, caches, local drafts, undo history,
+  personal widget state, and engine settings from Git. Git synchronizes reproducible definitions,
+  not execution products.
+- Treat Git working trees in LightningFS or the Node filesystem as non-authoritative staging and
+  history caches. Import validated checkout projections into StorageClient before normal use.
+- Obtain HTTPS credentials through the owning secret boundary and pass them only to the Git
+  transport. Do not persist credentials in graph files, remotes containing embedded tokens, logs,
+  or ordinary settings.
+- Fast-forward when only one side changed. When local and remote graph refs diverge, return an
+  explicit conflict and leave both the StorageClient refs and Git refs unchanged; do not
+  automatically merge semantic graph refs.
+- Do not project compatibility aliases, legacy repository directories, or old schema versions.
+  Development-time schema breaks regenerate the projection from the current StorageClient model.

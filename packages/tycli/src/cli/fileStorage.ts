@@ -291,7 +291,7 @@ export const createCliFileBlobStorageBackend = (
         }
       }),
     writeStatus: async (_id, writeId) => ({ size: (await stat(stagingPath(writeId))).size }),
-    commitWrite: async (id, writeId, expectedSize, expectedSha256) =>
+    commitWrite: async (id, writeId, expectedSize, expectedSha256, targetId) =>
       await locked(async () => {
         const staged = stagingPath(writeId)
         const info = await stat(staged)
@@ -304,13 +304,14 @@ export const createCliFileBlobStorageBackend = (
         if (expectedSha256 && sha256 !== expectedSha256) {
           throw new Error(`Blob checksum mismatch for "${id}".`)
         }
-        const target = targetPath(id)
+        const publishedId = targetId ?? id
+        const target = targetPath(publishedId)
         const details = { ...(await readDetails(stagingDetailsPath(writeId))), sha256 }
         await mkdir(dirname(target), { recursive: true })
         await rename(staged, target)
-        await writeDetails(detailsPath(id), details)
+        await writeDetails(detailsPath(publishedId), details)
         await rm(stagingDetailsPath(writeId), { force: true })
-        return await fileMetadata(target, id, details)
+        return await fileMetadata(target, publishedId, details)
       }),
     abortWrite: async (_id, writeId) => {
       await Promise.all([

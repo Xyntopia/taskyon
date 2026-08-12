@@ -4,8 +4,9 @@ Taskyon treats documentation as manifest-backed bases. The built-in Taskyon base
 `/docs/taskyon`; registering another manifest creates another route under `/docs/<base>`.
 
 The documentation page can import and export manifest JSON. Manifests are persisted through the
-generic `StorageClient`: browser hosts route documentation records to OPFS, while `tycli` uses its
-configured filesystem storage backend.
+generic `StorageClient`: browser hosts use their selected record provider, while `tycli` uses its
+configured file, SQLite, or PGlite record provider. Documentation code sees the same logical
+namespace in every runtime.
 
 ## Manifest contract
 

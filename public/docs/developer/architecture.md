@@ -34,7 +34,27 @@ flowchart LR
 ```
 
 The supported integration boundary is `@taskyon/taskyon/api`, not the broad internal root export.
-Architectural design proposals are maintained outside the frontend repository.
+Forward-looking design-graph architecture is maintained in an external proposal repository. Its
+location is deployment-specific and is not part of the Taskyon source contract; ask the maintainer
+where proposals should be stored before creating or editing one. This document describes current
+Taskyon behavior and implementation boundaries.
+
+## Design Graphs And Projects
+
+Taskyon and hosts such as Joulios use one StorageClient-backed immutable object pool. The global
+computational graph is a shared knowledge base; projects do not copy it. A stable project ref points
+to an immutable project revision containing parent revision hashes, a display name, named invocation
+hashes, and optional namespaced project-extension hashes.
+
+An invocation definition selects an exact computational root, parameter constants and domains,
+objectives, and result-affecting planner policy. Design, exploration, and optimization are derived
+descriptions rather than separate persisted config types. Execution attempts own mutable progress
+and checkpoints; terminal invocation runs own resolved provenance and named artifact hashes.
+
+Invocation domains execute lazily row by row. Reducers use bounded streaming state, and the planner
+may flatten nested optimization only when a deterministic equivalence rule preserves its meaning.
+Plots, node queries, and objectives share structurally hashed runtime-derived operations and their
+artifact cache without generating stored graph nodes.
 
 ## Protocol services
 
@@ -57,10 +77,23 @@ Secret, profile, session-key, destructive storage, and index-reset operations do
 ordinary public protocol merely because direct core methods still exist.
 
 `taskyonStorageProtocol` keeps small queryable records and potentially large byte blobs as separate
-capabilities. It transports namespaces, keys, and values without interpreting their identity or
-prescribing physical paths. Domain owners provide canonical hashes when identity comes from
-immutable content or a computation. Filesystem record backends store records under fixed-length,
-Git-style hash paths while databases, object stores, and peers preserve the same protocol contract.
+capabilities. Protocol version 3 transports scoped physical namespaces, keys, stored record values,
+stored-content hashes, and blob bytes without interpreting their domain identity or prescribing
+physical paths. Filesystem record backends store records under fixed-length, Git-style hash paths
+while databases and other providers preserve the same protocol contract.
+
+Domain code does not call that physical protocol directly. A host constructs a `StorageClient` with
+an explicit scope, distribution policy, and optional record codec, then injects that client as a
+capability. Consumers use logical namespaces such as `tasks`, `projects`, or `dag/cache`; the client
+validates those namespaces and applies the configured scope before sending a request. A runtime
+session may remain part of a domain namespace, but it is not the client scope and must not be used
+as a substitute for a user, device, or Space identity.
+
+The client reports hashes of decoded logical records to domain callers. For conditional writes it
+reads the current stored representation, verifies the caller's logical expected hash, and asks the
+provider to atomically compare the stored-content hash. This distinction allows a future randomized
+encrypted envelope to have a different physical hash without changing domain APIs or adding a
+separate revision-token record.
 
 Hosts compose record and blob providers independently. Browser providers are OPFS, IndexedDB, and
 PGlite; Node/CLI providers are files, SQLite, and PGlite. Each provider implements the complete
@@ -69,8 +102,11 @@ selection is remembered separately for records and blobs and never silently chan
 has been written.
 
 Every storage service explicitly runs as trusted-local or delegates each normalized access request
-to an authorizer before resolving a backend. This is the storage boundary for future peer and
-subnetwork policy; physical backends do not interpret identities or ACLs.
+to an authorizer before resolving a backend. Distribution is bound when the client is constructed,
+not selected independently by each domain operation. The current default codec is explicitly
+trusted-local plaintext and rejects `remote-allowed`; encrypted record and blob codecs, opaque
+provider identifiers, Space manifests, replication, and P2P storage are not implemented by this
+local foundation. Physical backends do not interpret domain identities or ACLs.
 
 A DAG cache record maps a computation hash to an artifact content hash. The computation hash is
 derived from the node identity and parameters and answers whether work was already performed. The

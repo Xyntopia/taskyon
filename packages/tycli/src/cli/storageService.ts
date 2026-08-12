@@ -7,7 +7,6 @@ import {
 } from '@taskyon/taskyon'
 import {
   createStorageProtocolServer,
-  scopeStorageBackendProvider,
   type StorageBackendProvider,
   type TaskyonStorageMessage,
 } from '@taskyon/taskyon/api'
@@ -34,7 +33,6 @@ export const persistCliStorageSelection = async (
 export const createCliSelectedStorageService = async (options: {
   port: Port<TaskyonStorageMessage, TaskyonStorageMessage>
   dataDirectory: string
-  namespacePrefix?: string
   selection: { records: CliStorageBackendKind; blobs: CliStorageBackendKind }
 }) => {
   const fileRoot = join(options.dataDirectory, 'storage')
@@ -68,10 +66,9 @@ export const createCliSelectedStorageService = async (options: {
     }
   }
   const selectedProvider: StorageBackendProvider = { records, blobs }
-  const provider = options.namespacePrefix
-    ? scopeStorageBackendProvider(selectedProvider, options.namespacePrefix)
-    : selectedProvider
-  const stop = createStorageProtocolServer(options.port, provider, { mode: 'trusted-local' })
+  const stop = createStorageProtocolServer(options.port, selectedProvider, {
+    mode: 'trusted-local',
+  })
   return () => {
     stop()
     sqlite?.close()

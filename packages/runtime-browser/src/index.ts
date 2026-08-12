@@ -32,6 +32,7 @@ export type TaskyonBrowserRuntimeOptions = {
   initialProviderKeys?: Readonly<Record<string, string | undefined>>
   readinessTimeoutMs?: number
   storage?: BrowserRuntimeStorageService
+  storageNamespacePrefix?: string
   storageSessionId?: string
   createWorker?: () => Worker
 }
@@ -60,7 +61,10 @@ export const createTaskyonBrowserRuntime = async (
   const runtimePort = createProtocolPort(taskyonProtocol)
   const taskyonClient = createTaskyonClient(runtimePort.x)
   const storagePort = createProtocolPort(taskyonStorageProtocol)
-  const storageClient = createStorageClient(storagePort.x)
+  const storageClient = createStorageClient(storagePort.x, {
+    namespacePrefix: options.storageNamespacePrefix ?? 'taskyon',
+    distribution: 'local-only',
+  })
   const storageStop = await startBrowserStorageService(
     storagePort.y,
     options.storage ?? { kind: 'browser' },
@@ -101,6 +105,7 @@ export const createTaskyonBrowserRuntime = async (
     ...(options.entryNode ? { entryNode: options.entryNode } : {}),
     toolchainConfig: options.toolchainConfig ?? {},
     initialProviderKeys: options.initialProviderKeys ?? {},
+    storageNamespacePrefix: options.storageNamespacePrefix ?? 'taskyon',
     ...(options.storageSessionId ? { storageSessionId: options.storageSessionId } : {}),
   }
   worker.postMessage(initMessage, [coreChannel.port2, storageChannel.port2])

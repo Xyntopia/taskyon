@@ -5,7 +5,11 @@ import type {
   StorageBlobMetadata,
   StorageRecordBackend,
 } from './storageProtocol'
-import { mergeStorageRecord, storageQueryMatches } from './storageRecordOperations'
+import {
+  mergeStorageRecord,
+  storageQueryMatches,
+  storageValueContentHash,
+} from './storageRecordOperations'
 
 type RecordRow = { id_type: 'string' | 'number'; id_text: string; data: unknown }
 type BlobRow = {
@@ -124,6 +128,45 @@ export const createPgLiteStorageRecordBackend = async (
          ON CONFLICT (namespace, id_type, id_text) DO UPDATE SET data = EXCLUDED.data;`,
         [namespace, idType, idText, data],
       )
+    },
+    setIfUnchanged: async (id, expectedStoredContentHash, data) => {
+      const { idType, idText } = idParts(id)
+      if (expectedStoredContentHash === null) {
+        const result = await database.query<{ data: unknown }>(
+          `INSERT INTO taskyon_storage_records (namespace, id_type, id_text, data)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (namespace, id_type, id_text) DO NOTHING
+             RETURNING data;`,
+          [namespace, idType, idText, data],
+        )
+        if (result.rows.length > 0) {
+          return { written: true, currentStoredContentHash: storageValueContentHash(data) }
+        }
+        const current = await get(id)
+        return {
+          written: false,
+          currentStoredContentHash: current === null ? null : storageValueContentHash(current),
+        }
+      }
+      return await database.transaction(async (transaction) => {
+        const currentResult = await transaction.query<{ data: unknown }>(
+          `SELECT data FROM taskyon_storage_records
+           WHERE namespace = $1 AND id_type = $2 AND id_text = $3
+           FOR UPDATE;`,
+          [namespace, idType, idText],
+        )
+        const current = currentResult.rows[0]?.data ?? null
+        const currentStoredContentHash = current === null ? null : storageValueContentHash(current)
+        if (currentStoredContentHash !== expectedStoredContentHash) {
+          return { written: false, currentStoredContentHash }
+        }
+        await transaction.query(
+          `UPDATE taskyon_storage_records SET data = $4
+           WHERE namespace = $1 AND id_type = $2 AND id_text = $3;`,
+          [namespace, idType, idText, data],
+        )
+        return { written: true, currentStoredContentHash: storageValueContentHash(data) }
+      })
     },
     setMany: async (rows) => {
       await database.transaction(async (transaction) => {
@@ -290,7 +333,7 @@ export const createPgLiteStorageBlobBackend = async (
       if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
       return { size: row.data.byteLength }
     },
-    commitWrite: async (id, writeId, expectedSize, expectedSha256) =>
+    commitWrite: async (id, writeId, expectedSize, expectedSha256, targetId) =>
       await database.transaction(async (transaction) => {
         const row = await getWrite(writeId, transaction)
         if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
@@ -298,7 +341,13 @@ export const createPgLiteStorageBlobBackend = async (
         const hash = sha256(row.data)
         if (expectedSha256 && hash !== expectedSha256)
           throw new Error(`Blob checksum mismatch for "${id}".`)
-        const metadata = await put(id, row.data, row.content_type ?? undefined, hash, transaction)
+        const metadata = await put(
+          targetId ?? id,
+          row.data,
+          row.content_type ?? undefined,
+          hash,
+          transaction,
+        )
         await transaction.query('DELETE FROM taskyon_storage_blob_writes WHERE write_id = $1;', [
           writeId,
         ])

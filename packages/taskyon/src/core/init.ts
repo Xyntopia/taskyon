@@ -610,7 +610,9 @@ export async function tyCore(
   },
 ) {
   configureNodePgLiteDataDir(
-    options?.nodePgLiteDataDir ? (name) => `${options.nodePgLiteDataDir}/${name}` : undefined,
+    options?.nodePgLiteDataDir
+      ? (name) => `${options.nodePgLiteDataDir}/${encodeURIComponent(name)}`
+      : undefined,
   )
 
   const { outsidePort, insidePort, hostPort, insideHostPort, iframeMultiPlexer } = staticContext(

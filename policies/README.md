@@ -26,3 +26,9 @@ General programming guidelines that apply to every change live directly in `AGEN
 specialized policy and current software documentation disagree about behavior or commands, inspect
 the code and configuration for current facts while continuing to follow the policy's decision
 guardrails.
+
+Forward-looking architecture proposals are maintained outside this repository. Taskyon does not
+prescribe a parent project, deployment repository, or proposal path. Before creating or editing a
+proposal, agents must ask the maintainer which external repository and path should own it. Proposals
+do not document implemented behavior; keep implementation-status and user-facing claims in
+`public/docs` grounded in current source and diagnostics.

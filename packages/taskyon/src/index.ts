@@ -38,6 +38,7 @@ export {
   type StorageAccessMode,
   type StorageAccessRequest,
   type StorageBackendProvider,
+  type StorageDistribution,
   type StorageRecordBackend,
   type StorageRecordCrud,
   type TaskyonStorageMessage,

@@ -60,3 +60,28 @@ host page.
 
 Use exports from `@taskyon/taskyon/api` and `@taskyon/tyclient`. Internal relative imports are not a
 supported integration contract.
+
+## Storage client
+
+Hosts create a scoped storage capability with `createStorageClient`:
+
+```ts
+const storage = createStorageClient(port, {
+  namespacePrefix: 'taskyon',
+  distribution: 'local-only',
+})
+
+await storage.set({
+  namespace: 'projects',
+  id: 'active',
+  value: project,
+})
+```
+
+Consumers provide logical namespaces and keys only. They must not prepend host or application
+prefixes or choose a physical backend. Create a separate client when code needs a different
+namespace prefix or distribution policy.
+
+The built-in codec is trusted-local plaintext. It cannot create a `remote-allowed` client. Record
+codecs that support protected remote storage must be injected by the trusted host; encrypted Space
+storage and key lifecycle are not part of the current implementation.

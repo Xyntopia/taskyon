@@ -28,7 +28,12 @@ const assert = (condition: unknown, message: string) => {
 }
 
 const storagePort = createProtocolPort(taskyonStorageProtocol)
-const storageTool = createStorageTool(createStorageClient(storagePort.x))
+const storageTool = createStorageTool(
+  createStorageClient(storagePort.x, {
+    namespacePrefix: 'taskyon-test',
+    distribution: 'local-only',
+  }),
+)
 
 const getFunctionCall = (task: unknown): FunctionCall | undefined => {
   if (!task || typeof task !== 'object' || !('content' in task)) return undefined

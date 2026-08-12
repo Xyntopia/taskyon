@@ -9,6 +9,7 @@ export type TaskyonBrowserWorkerInitMessage = {
   entryNode?: partialTaskDraft
   toolchainConfig?: Record<string, FunctionArguments>
   initialProviderKeys?: Record<string, string | undefined>
+  storageNamespacePrefix: string
   storageSessionId?: string
 }
 

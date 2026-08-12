@@ -82,19 +82,25 @@ export {
   createStorageClient,
   createStorageProtocolServer,
   createStorageRecordBackend,
-  scopeStorageBackendProvider,
   taskyonStorageProtocol,
   type StorageBlobBackend,
   type StorageBlobMetadata,
   type StorageAccessMode,
   type StorageAccessRequest,
   type StorageBackendProvider,
+  type StorageClientOptions,
+  type StorageDistribution,
   type StorageRecordBackend,
+  type StorageRecordCodec,
   type StorageRecordCrud,
   type TaskyonStorageMessage,
   type TaskyonStorageClient,
 } from './storageProtocol'
-export { mergeStorageRecord, storageQueryMatches } from './storageRecordOperations'
+export {
+  mergeStorageRecord,
+  storageQueryMatches,
+  storageValueContentHash,
+} from './storageRecordOperations'
 export {
   createPgLiteStorageBlobBackend,
   createPgLiteStorageRecordBackend,

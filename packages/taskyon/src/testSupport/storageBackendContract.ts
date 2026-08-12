@@ -1,4 +1,4 @@
-import { createSha256Hasher } from '@taskyon/common/modules/canonicalHash'
+import { canonicalHash, createSha256Hasher } from '@taskyon/common/modules/canonicalHash'
 import { createProtocolPort } from '@taskyon/common/modules/frpBus'
 import {
   createStorageClient,
@@ -14,7 +14,10 @@ const assert: (condition: unknown, message: string) => asserts condition = (cond
 export const runStorageBackendContract = async (provider: StorageBackendProvider) => {
   const { x: clientPort, y: servicePort } = createProtocolPort(taskyonStorageProtocol)
   const stop = createStorageProtocolServer(servicePort, provider, { mode: 'trusted-local' })
-  const storage = createStorageClient(clientPort)
+  const storage = createStorageClient(clientPort, {
+    namespacePrefix: 'storage-contract',
+    distribution: 'local-only',
+  })
   const namespace = `contract-${crypto.randomUUID()}`
   const encoder = new TextEncoder()
   const decoder = new TextDecoder()
@@ -22,6 +25,25 @@ export const runStorageBackendContract = async (provider: StorageBackendProvider
   try {
     assert((await storage.get({ namespace, id: 'missing' })).value === null, 'Missing record')
     await storage.set({ namespace, id: 'one', value: { nested: { left: true } } })
+    const firstRecord = await storage.get({ namespace, id: 'one' })
+    assert(
+      firstRecord.contentHash === canonicalHash(firstRecord.value),
+      'Derive record content hash',
+    )
+    const conditionalWrite = await storage.setIfUnchanged({
+      namespace,
+      id: 'one',
+      expectedContentHash: firstRecord.contentHash,
+      value: { nested: { left: false } },
+    })
+    assert(conditionalWrite.written, 'Write record matching its expected content hash')
+    const staleWrite = await storage.setIfUnchanged({
+      namespace,
+      id: 'one',
+      expectedContentHash: firstRecord.contentHash,
+      value: { stale: true },
+    })
+    assert(!staleWrite.written, 'Reject stale record content hash')
     await storage.setMany({ namespace, rows: [{ id: 2, data: { batch: true } }] })
     const merged = await storage.upsert({
       namespace,

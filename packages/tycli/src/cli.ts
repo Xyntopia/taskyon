@@ -2896,10 +2896,12 @@ async function main(host: InteractiveCliHost) {
   const stopTaskStorageService = await createCliSelectedStorageService({
     port: taskStorageServicePort,
     dataDirectory: dataDir,
-    ...(host.storageNamespace ? { namespacePrefix: host.storageNamespace } : {}),
     selection: storageSelection,
   })
-  const storageClient = createStorageClient(taskStorageClientPort)
+  const storageClient = createStorageClient(taskStorageClientPort, {
+    namespacePrefix: host.storageNamespace ?? 'taskyon',
+    distribution: 'local-only',
+  })
   const { x: loggingClientPort, y: loggingServicePort } = createProtocolPort(taskyonLoggingProtocol)
   const directRuntimeLog = runtimeLog
   const stopLoggingService = directRuntimeLog
@@ -2971,10 +2973,10 @@ async function main(host: InteractiveCliHost) {
       nodePgLiteDataDir: pgliteNodeDir,
       secretStore: cliSecretStore,
       taskManagerStorageFactory: ({ sessionId }) =>
-        connectTaskManagerStorageFromProtocol(taskStorageClientPort, sessionId),
+        connectTaskManagerStorageFromProtocol(storageClient, sessionId),
       artifactStoreFactory: ({ sessionId }) =>
         createArtifactStore(
-          createProtocolStorageBlobBackend(taskStorageClientPort, `${sessionId}/artifacts`),
+          createProtocolStorageBlobBackend(storageClient, `${sessionId}/artifacts`),
         ),
       authorizeSandboxFetch: sandboxCapabilityPolicy.authorize,
     },

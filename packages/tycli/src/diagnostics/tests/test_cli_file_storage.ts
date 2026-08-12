@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
 import { createProtocolPort } from '@taskyon/common/modules/frpBus'
+import { runStorageBackendContract } from '@taskyon/taskyon/test-support'
 import {
   createProtocolStorageBlobBackend,
   createStorageClient,
@@ -12,9 +13,16 @@ import { storageRecordFilePath } from '../../../../taskyon/src/api/storageRecord
 import { createArtifactStore } from '../../../../taskyon/src/core/artifactStore'
 import { connectTaskManagerStorageFromProtocol } from '../../../../taskyon/src/core/taskManager'
 import type { TaskNode } from '../../../../taskyon/src/types/taskNode'
-import { createCliFileStorageService } from '../../cli/fileStorage'
-import { runStorageBackendContract } from '@taskyon/taskyon/test-support'
-import { createCliFileBlobStorageBackend, createCliFileStorageBackend } from '../../cli/fileStorage'
+import {
+  createCliFileBlobStorageBackend,
+  createCliFileStorageBackend,
+  createCliFileStorageService,
+} from '../../cli/fileStorage'
+
+const localStorageOptions = {
+  namespacePrefix: 'taskyon-test',
+  distribution: 'local-only',
+} as const
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -37,7 +45,10 @@ export const testCliFileStoragePersistsTaskRecordsAndFindsRelations = async () =
 
   const firstPort = createProtocolPort(taskyonStorageProtocol)
   const stopFirstService = createCliFileStorageService(firstPort.y, storageRoot)
-  const firstStorage = connectTaskManagerStorageFromProtocol(firstPort.x, sessionId)
+  const firstStorage = connectTaskManagerStorageFromProtocol(
+    createStorageClient(firstPort.x, localStorageOptions),
+    sessionId,
+  )
 
   const parentTask: TaskNode = {
     id: 'parent-task',
@@ -88,7 +99,10 @@ export const testCliFileStoragePersistsTaskRecordsAndFindsRelations = async () =
 
   const secondPort = createProtocolPort(taskyonStorageProtocol)
   const stopSecondService = createCliFileStorageService(secondPort.y, storageRoot)
-  const secondStorage = connectTaskManagerStorageFromProtocol(secondPort.x, sessionId)
+  const secondStorage = connectTaskManagerStorageFromProtocol(
+    createStorageClient(secondPort.x, localStorageOptions),
+    sessionId,
+  )
 
   try {
     const loadedChild = await secondStorage.tasks.get('child-task')
@@ -150,7 +164,10 @@ export const testCliFileStorageReclaimsAnInterruptedProcessLock = async () => {
 
   const port = createProtocolPort(taskyonStorageProtocol)
   const stopService = createCliFileStorageService(port.y, storageRoot)
-  const storage = connectTaskManagerStorageFromProtocol(port.x, 'stale-session')
+  const storage = connectTaskManagerStorageFromProtocol(
+    createStorageClient(port.x, localStorageOptions),
+    'stale-session',
+  )
   try {
     await storage.tasks.set('recovered-task', {
       id: 'recovered-task',
@@ -171,7 +188,10 @@ export const testCliFileStorageSerializesConcurrentNamespaceWrites = async () =>
   const storageRoot = await mkdtemp(join(tmpdir(), 'tycli-concurrent-storage-diagnostic-'))
   const port = createProtocolPort(taskyonStorageProtocol)
   const stopService = createCliFileStorageService(port.y, storageRoot)
-  const storage = connectTaskManagerStorageFromProtocol(port.x, 'concurrent-session')
+  const storage = connectTaskManagerStorageFromProtocol(
+    createStorageClient(port.x, localStorageOptions),
+    'concurrent-session',
+  )
 
   try {
     await Promise.all(
@@ -197,7 +217,7 @@ export const testCliFileStorageUsesHashOnlyRecordPaths = async () => {
   const storageRoot = await mkdtemp(join(tmpdir(), 'tycli-hashed-record-path-diagnostic-'))
   const port = createProtocolPort(taskyonStorageProtocol)
   const stopService = createCliFileStorageService(port.y, storageRoot)
-  const storage = createStorageClient(port.x)
+  const storage = createStorageClient(port.x, localStorageOptions)
   const id = canonicalHash({
     node: `sha256:${'a'.repeat(64)}`,
     params: `sha256:${'b'.repeat(64)}`,
@@ -233,7 +253,7 @@ export const testCliBlobStorageAppendsAndCommitsStagedWrites = async () => {
   const storageRoot = await mkdtemp(join(tmpdir(), 'tycli-blob-storage-diagnostic-'))
   const port = createProtocolPort(taskyonStorageProtocol)
   const stopService = createCliFileStorageService(port.y, storageRoot)
-  const storage = createStorageClient(port.x)
+  const storage = createStorageClient(port.x, localStorageOptions)
   const encoder = new TextEncoder()
   const decoder = new TextDecoder()
 
@@ -279,13 +299,21 @@ export const testCliBlobStorageAppendsAndCommitsStagedWrites = async () => {
     await storage.commitBlobWrite({
       namespace: 'attachments',
       id: 'large.bin',
+      targetId: 'sha256_content-addressed',
       writeId,
       expectedSize: chunk.byteLength,
     })
-    const committed = await storage.getBlob({ namespace: 'attachments', id: 'large.bin' })
+    const committed = await storage.getBlob({
+      namespace: 'attachments',
+      id: 'sha256_content-addressed',
+    })
     assert(
       committed !== null && decoder.decode(committed.data) === 'chunked-content',
-      'Expected committed staged blob to become readable',
+      'Expected committed staged blob to publish under its content-addressed target',
+    )
+    assert(
+      (await storage.statBlob({ namespace: 'attachments', id: 'large.bin' })) === null,
+      'Expected the staging id to remain unpublished',
     )
   } finally {
     stopService()
@@ -299,8 +327,9 @@ export const testArtifactStoreDeduplicatesSessionScopedContent = async () => {
   const storageRoot = await mkdtemp(join(tmpdir(), 'tycli-task-file-blob-diagnostic-'))
   const port = createProtocolPort(taskyonStorageProtocol)
   const stopService = createCliFileStorageService(port.y, storageRoot)
+  const storage = createStorageClient(port.x, localStorageOptions)
   const artifacts = createArtifactStore(
-    createProtocolStorageBlobBackend(port.x, 'file-session/artifacts'),
+    createProtocolStorageBlobBackend(storage, 'file-session/artifacts'),
   )
 
   try {
@@ -332,8 +361,9 @@ export const testArtifactStoreStreamsLargeFilesThroughBlobStorage = async () => 
   const storageRoot = await mkdtemp(join(tmpdir(), 'tycli-task-attachment-diagnostic-'))
   const port = createProtocolPort(taskyonStorageProtocol)
   const stopService = createCliFileStorageService(port.y, storageRoot)
+  const storage = createStorageClient(port.x, localStorageOptions)
   const artifacts = createArtifactStore(
-    createProtocolStorageBlobBackend(port.x, 'attachment-session/artifacts'),
+    createProtocolStorageBlobBackend(storage, 'attachment-session/artifacts'),
   )
   const bytes = new Uint8Array(1024 * 1024 + 17)
   bytes.fill(42)

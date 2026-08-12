@@ -15,6 +15,14 @@ When project principles compete, use the order in the core policy document. Corr
 user's requested scope take precedence over implementation preferences. State any material
 tradeoff.
 
+## External Proposal Ownership
+
+Taskyon is an independent repository. Architectural proposals are maintained outside this source
+repository, and this project does not assume a particular parent project, deployment repository, or
+proposal path. Before creating or editing a proposal, ask the maintainer which external repository
+and path should own it. Keep Taskyon policies and documentation focused on implementation
+invariants and current behavior; do not add deployment-specific proposal paths or links here.
+
 ## Protocol Discipline
 
 - Treat every protocol command as a capability that could be exposed across a future P2P boundary.

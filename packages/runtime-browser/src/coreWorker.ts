@@ -27,6 +27,7 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
     entryNode,
     toolchainConfig = {},
     initialProviderKeys = {},
+    storageNamespacePrefix,
     storageSessionId,
   } = event.data
 
@@ -39,6 +40,7 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
       entryNode: () => entryNode ?? defaultEntryNode(llmSettings),
       toolchainConfig,
       initialProviderKeys,
+      storageNamespacePrefix,
       ...(storageSessionId ? { storageSessionId } : {}),
       databaseFactory: getInMemoryDatabase,
       onStage: (stage) => {

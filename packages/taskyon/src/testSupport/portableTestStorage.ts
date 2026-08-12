@@ -1,5 +1,5 @@
 import { createProtocolPort } from '@taskyon/common/modules/frpBus'
-import { taskyonStorageProtocol } from '../api/storageProtocol'
+import { createStorageClient, taskyonStorageProtocol } from '../api/storageProtocol'
 import {
   connectTaskManagerStorageFromProtocol,
   createPgLiteTaskManagerStorageService,
@@ -9,10 +9,14 @@ import { getDatabase } from '../utils/pglite.api'
 export const createPortableTestStorage = () => {
   const { x: clientPort, y: servicePort } = createProtocolPort(taskyonStorageProtocol)
   const destroy = createPgLiteTaskManagerStorageService(servicePort, getDatabase)
+  const storage = createStorageClient(clientPort, {
+    namespacePrefix: 'taskyon-test',
+    distribution: 'local-only',
+  })
 
   return {
     taskManagerStorageFactory: ({ sessionId }: { sessionId: string }) =>
-      connectTaskManagerStorageFromProtocol(clientPort, sessionId),
+      connectTaskManagerStorageFromProtocol(storage, sessionId),
     destroy,
   }
 }

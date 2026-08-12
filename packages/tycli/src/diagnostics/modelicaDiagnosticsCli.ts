@@ -108,7 +108,10 @@ const main = async (): Promise<void> => {
     storagePort.y,
     join(await resolveDataDirectoryPath(), 'storage'),
   )
-  const storageClient = createStorageClient(storagePort.x)
+  const storageClient = createStorageClient(storagePort.x, {
+    namespacePrefix: 'taskyon',
+    distribution: 'local-only',
+  })
   try {
     await installNodeFetchWasmFallback(storageClient)
     if (!process.env.MODELICA_DIAG_RUNTIME_TIMEOUT_MS) {

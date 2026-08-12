@@ -150,10 +150,12 @@ export async function bootstrapCliTaskyon(args?: {
   await createCliSelectedStorageService({
     port: taskStorageServicePort,
     dataDirectory: dataDir,
-    ...(args?.storageNamespace ? { namespacePrefix: args.storageNamespace } : {}),
     selection: resolveCliStorageSelection(stored),
   })
-  const storageClient = createStorageClient(taskStorageClientPort)
+  const storageClient = createStorageClient(taskStorageClientPort, {
+    namespacePrefix: args?.storageNamespace ?? 'taskyon',
+    distribution: 'local-only',
+  })
   const taskyon = await tyCore(
     () => llmState.settings,
     () =>
@@ -170,10 +172,10 @@ export async function bootstrapCliTaskyon(args?: {
       nodePgLiteDataDir: pgliteNodeDir,
       secretStore: cliSecretStore,
       taskManagerStorageFactory: ({ sessionId }) =>
-        connectTaskManagerStorageFromProtocol(taskStorageClientPort, sessionId),
+        connectTaskManagerStorageFromProtocol(storageClient, sessionId),
       artifactStoreFactory: ({ sessionId }) =>
         createArtifactStore(
-          createProtocolStorageBlobBackend(taskStorageClientPort, `${sessionId}/artifacts`),
+          createProtocolStorageBlobBackend(storageClient, `${sessionId}/artifacts`),
         ),
     },
   )

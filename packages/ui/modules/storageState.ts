@@ -44,7 +44,12 @@ export const syncStateWithStorageClient = async (
       const snapshot = snapshotStorageValue(value)
       write = write
         .catch((error) => console.error('Failed to persist state through StorageClient', error))
-        .then(async () => storageClient.set({ ...location, value: snapshot }))
+        .then(async () =>
+          storageClient.set({
+            ...location,
+            value: snapshot,
+          }),
+        )
         .then(() => undefined)
     },
     { deep: true, flush: 'sync' },

@@ -352,7 +352,7 @@ export const createOpfsBlobStorageBackend = async (
     writeStatus: async (_id, writeId) => ({
       size: (await (await getFile(root, staged(writeId))).getFile()).size,
     }),
-    commitWrite: async (id, writeId, expectedSize, expectedSha256) =>
+    commitWrite: async (id, writeId, expectedSize, expectedSha256, targetId) =>
       await locked(async () => {
         const stagedHandle = await getFile(root, staged(writeId))
         const file = await stagedHandle.getFile()
@@ -365,7 +365,8 @@ export const createOpfsBlobStorageBackend = async (
         if (expectedSha256 && sha256 !== expectedSha256) {
           throw new Error(`Blob checksum mismatch for "${id}".`)
         }
-        const targetHandle = await getFile(root, target(id), true)
+        const publishedId = targetId ?? id
+        const targetHandle = await getFile(root, target(publishedId), true)
         const writable = await targetHandle.createWritable()
         await writable.write(file)
         await writable.close()
@@ -373,10 +374,10 @@ export const createOpfsBlobStorageBackend = async (
           ...((await readBlobDetails(root, stagedDetails(writeId))) ?? {}),
           sha256,
         }
-        await writeBlobDetails(root, details(id), metadataDetails)
+        await writeBlobDetails(root, details(publishedId), metadataDetails)
         await removeFile(root, staged(writeId))
         await removeFile(root, stagedDetails(writeId))
-        return await blobMetadata(targetHandle, id, metadataDetails)
+        return await blobMetadata(targetHandle, publishedId, metadataDetails)
       }),
     abortWrite: async (_id, writeId) => {
       await Promise.all([

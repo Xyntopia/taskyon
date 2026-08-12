@@ -12,6 +12,7 @@ import {
   type StorageBlobBackend,
   type StorageRecordBackend,
   type StorageRecordCrud,
+  type TaskyonStorageClient,
   type TaskyonStorageMessage,
 } from '../api/storageProtocol'
 import type { Port } from '@taskyon/common/modules/frpBus'
@@ -95,22 +96,22 @@ export const createPgLiteTaskManagerStorage = async (
 }
 
 export const connectTaskManagerStorageFromProtocol = (
-  port: Port<TaskyonStorageMessage, TaskyonStorageMessage>,
+  storage: TaskyonStorageClient,
   sessionId: string,
 ): TaskManagerStorage => {
   return {
     tasks: createProtocolStorageCrudWrapper(
-      port,
+      storage,
       taskManagerStorageNamespace(sessionId, 'taskyonNodes'),
       TaskNode,
     ),
     meta: createProtocolStorageCrudWrapper(
-      port,
+      storage,
       taskManagerStorageNamespace(sessionId, 'metaDb'),
       TaskNodeMeta,
     ),
     tools: createProtocolStorageCrudWrapper(
-      port,
+      storage,
       taskManagerStorageNamespace(sessionId, 'toolRegistry'),
       ToolStorageRecordSchema,
     ),

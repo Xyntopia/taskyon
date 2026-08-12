@@ -2,6 +2,7 @@ import { createSha256Hasher } from '@taskyon/common/modules/canonicalHash'
 import {
   mergeStorageRecord,
   storageQueryMatches,
+  storageValueContentHash,
   type StorageBlobBackend,
   type StorageBlobMetadata,
   type StorageRecordBackend,
@@ -65,7 +66,11 @@ export const openTaskyonIndexedDb = (databaseName = 'taskyon-storage') =>
         database.createObjectStore(WRITES, { keyPath: 'key' })
       }
     }
-    request.onsuccess = () => resolve(request.result)
+    request.onsuccess = () => {
+      const database = request.result
+      database.onversionchange = () => database.close()
+      resolve(database)
+    }
     request.onerror = () => reject(request.error ?? new Error('Could not open Taskyon IndexedDB.'))
   })
 
@@ -135,6 +140,20 @@ export const createIndexedDbRecordBackend = async (
         transaction.objectStore(RECORDS).put({ key: key(id), namespace, id, data }),
       )
       await transactionDone(transaction)
+    },
+    setIfUnchanged: async (id, expectedStoredContentHash, data) => {
+      const transaction = database.transaction(RECORDS, 'readwrite')
+      const store = transaction.objectStore(RECORDS)
+      const row = await requestResult(store.get(key(id)) as IDBRequest<RecordRow | undefined>)
+      const current = row?.data ?? null
+      const currentStoredContentHash = current === null ? null : storageValueContentHash(current)
+      if (currentStoredContentHash !== expectedStoredContentHash) {
+        await transactionDone(transaction)
+        return { written: false, currentStoredContentHash }
+      }
+      await requestResult(store.put({ key: key(id), namespace, id, data }))
+      await transactionDone(transaction)
+      return { written: true, currentStoredContentHash: storageValueContentHash(data) }
     },
     setMany: async (rows) => {
       const transaction = database.transaction(RECORDS, 'readwrite')
@@ -294,7 +313,7 @@ export const createIndexedDbBlobBackend = async (
       if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
       return { size: row.data.size }
     },
-    commitWrite: async (id, writeId, expectedSize, expectedSha256) => {
+    commitWrite: async (id, writeId, expectedSize, expectedSha256, targetId) => {
       const transaction = database.transaction(WRITES, 'readonly')
       const row = await requestResult(
         transaction.objectStore(WRITES).get(writeKey(namespace, writeId)) as IDBRequest<
@@ -307,7 +326,7 @@ export const createIndexedDbBlobBackend = async (
       const sha256 = await hashBlob(row.data)
       if (expectedSha256 && sha256 !== expectedSha256)
         throw new Error(`Blob checksum mismatch for "${id}".`)
-      const metadata = await putBlob(id, row.data, row.contentType, sha256)
+      const metadata = await putBlob(targetId ?? id, row.data, row.contentType, sha256)
       const cleanup = database.transaction(WRITES, 'readwrite')
       await requestResult(cleanup.objectStore(WRITES).delete(writeKey(namespace, writeId)))
       await transactionDone(cleanup)

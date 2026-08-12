@@ -29,7 +29,10 @@ export const testCliComposesRecordAndBlobBackendsIndependently = async () => {
     dataDirectory: directory,
     selection: { records: 'sqlite', blobs: 'files' },
   })
-  const storage = createStorageClient(clientPort)
+  const storage = createStorageClient(clientPort, {
+    namespacePrefix: 'taskyon',
+    distribution: 'local-only',
+  })
   try {
     await storage.set({ namespace: 'mixed', id: 'record', value: { backend: 'sqlite' } })
     await storage.setBlob({
@@ -55,10 +58,12 @@ export const testCliScopesSelectedStorageForHost = async () => {
   const stop = await createCliSelectedStorageService({
     port: servicePort,
     dataDirectory: directory,
-    namespacePrefix: 'joulios',
     selection: { records: 'files', blobs: 'files' },
   })
-  const storage = createStorageClient(clientPort)
+  const storage = createStorageClient(clientPort, {
+    namespacePrefix: 'joulios',
+    distribution: 'local-only',
+  })
 
   try {
     await storage.set({ namespace: 'tasks', id: 'record', value: { host: 'joulios' } })

@@ -1,7 +1,11 @@
 import { z } from 'zod'
 import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
 import type { StorageRecordBackend } from './storageProtocol'
-import { mergeStorageRecord, storageQueryMatches } from './storageRecordOperations'
+import {
+  mergeStorageRecord,
+  storageQueryMatches,
+  storageValueContentHash,
+} from './storageRecordOperations'
 
 const storageIdSchema = z.union([z.string(), z.number()])
 const storageRecordFileSchema = z.object({
@@ -73,6 +77,16 @@ export const createStorageRecordFileBackend = (
     set: async (id, value) =>
       await withLock(async () => {
         await adapter.write(storageRecordFilePath(namespace, id), { id, data: value })
+      }),
+    setIfUnchanged: async (id, expectedStoredContentHash, value) =>
+      await withLock(async () => {
+        const current = (await readRecord(id))?.data ?? null
+        const currentStoredContentHash = current === null ? null : storageValueContentHash(current)
+        if (currentStoredContentHash !== expectedStoredContentHash) {
+          return { written: false, currentStoredContentHash }
+        }
+        await adapter.write(storageRecordFilePath(namespace, id), { id, data: value })
+        return { written: true, currentStoredContentHash: storageValueContentHash(value) }
       }),
     setMany: async (rows) =>
       await withLock(async () => {

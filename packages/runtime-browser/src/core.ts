@@ -39,6 +39,7 @@ export type TaskyonBrowserCoreRuntimeOptions = {
   authorizePopup?: NonNullable<Parameters<typeof tyCore>[4]>['authorizePopup']
   initialProviderKeys?: Readonly<Record<string, string | undefined>>
   onStage?: (stage: TaskyonCoreRuntimeStage) => void
+  storageNamespacePrefix?: string
   storageSessionId?: string
   storage: TaskyonCoreStorage
   toolSetup?:
@@ -76,7 +77,10 @@ export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRunti
   const { x: clientPort, y: corePort } = createProtocolPort(taskyonProtocol)
   const client = createTaskyonClient(clientPort, { taskCacheSize: 0 })
   const storage = createStorageConnection(options.storage)
-  const storageClient = createStorageClient(storage.port)
+  const storageClient = createStorageClient(storage.port, {
+    namespacePrefix: options.storageNamespacePrefix ?? 'taskyon',
+    distribution: 'local-only',
+  })
   let disconnectCore: (() => void) | undefined
   let stopStorage: (() => void) | undefined
   let stopReason: string | undefined
@@ -130,13 +134,13 @@ export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRunti
           ...(options.authorizePopup ? { authorizePopup: options.authorizePopup } : {}),
           taskManagerStorageFactory: ({ sessionId }) =>
             connectTaskManagerStorageFromProtocol(
-              storage.port,
+              storageClient,
               options.storageSessionId ?? sessionId,
             ),
           artifactStoreFactory: ({ sessionId }) =>
             createArtifactStore(
               createProtocolStorageBlobBackend(
-                storage.port,
+                storageClient,
                 `${options.storageSessionId ?? sessionId}/artifacts`,
               ),
             ),

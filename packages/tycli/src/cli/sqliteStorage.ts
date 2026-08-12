@@ -8,6 +8,7 @@ import {
   createStorageProtocolServer,
   mergeStorageRecord,
   storageQueryMatches,
+  storageValueContentHash,
   type StorageBackendProvider,
   type StorageBlobBackend,
   type StorageBlobMetadata,
@@ -131,6 +132,19 @@ export const createSqliteStorageRecordBackend = (
         }),
       ),
     set: (id, data) => runAsync(() => set(id, data)),
+    setIfUnchanged: (id, expectedStoredContentHash, data) =>
+      runAsync(() =>
+        transaction(database, () => {
+          const current = get(id)
+          const currentStoredContentHash =
+            current === null ? null : storageValueContentHash(current)
+          if (currentStoredContentHash !== expectedStoredContentHash) {
+            return { written: false, currentStoredContentHash }
+          }
+          set(id, data)
+          return { written: true, currentStoredContentHash: storageValueContentHash(data) }
+        }),
+      ),
     setMany: (rows) =>
       runAsync(() => transaction(database, () => rows.forEach(({ id, data }) => set(id, data)))),
     upsert: (id, data, strategy) =>
@@ -294,7 +308,7 @@ export const createSqliteStorageBlobBackend = (
         if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
         return { size: row.data.byteLength }
       }),
-    commitWrite: (id, writeId, expectedSize, expectedSha256) =>
+    commitWrite: (id, writeId, expectedSize, expectedSha256, targetId) =>
       runAsync(() =>
         transaction(database, () => {
           const row = getWrite(writeId)
@@ -304,7 +318,7 @@ export const createSqliteStorageBlobBackend = (
           const sha256 = hash(data)
           if (expectedSha256 && sha256 !== expectedSha256)
             throw new Error(`Blob checksum mismatch for "${id}".`)
-          const result = put(id, data, row.content_type ?? undefined, sha256)
+          const result = put(targetId ?? id, data, row.content_type ?? undefined, sha256)
           database
             .prepare('DELETE FROM taskyon_storage_blob_writes WHERE write_id = ?')
             .run(writeId)

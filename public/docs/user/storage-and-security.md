@@ -5,9 +5,11 @@ or application tool receives the data explicitly passed to it.
 
 ## Browser application
 
-Task records and indexes are stored in browser-managed databases. Attached files use browser file
-storage exposed through Taskyon's storage boundary. Clearing site data, changing profiles, or
-using private browsing can remove locally stored information, so export important work.
+Task records, indexes, settings, and attached files are stored through one scoped StorageClient.
+The browser host selects record and blob providers independently from OPFS, IndexedDB, or PGlite
+where supported, remembers that selection, and exposes only logical storage operations to Taskyon.
+Clearing site data, changing profiles, or using private browsing can remove locally stored
+information, so export important work.
 
 ## `tycli`
 
@@ -21,6 +23,18 @@ Set `TYCLI_DATA_DIR` for an isolated debugging or evaluation run. It relocates T
 blobs—including generated tools, task state, artifacts, transcripts, and indexes—without replacing
 the normal configuration, selected provider/model, OAuth login, or encrypted secret store. Do not
 copy credentials into the run directory.
+
+## Current storage protection
+
+The current general StorageClient path is local-only and uses a trusted-local plaintext record
+codec. Its namespace prefix separates Taskyon data from other host data, but that prefix is
+organization rather than encryption or an operating-system security boundary. The client rejects
+remotely eligible storage until an authenticated encrypted codec is configured.
+
+Encrypted Space storage, cross-device replication, shared Spaces, opaque provider identifiers, and
+P2P storage recovery are planned architecture rather than current user-facing storage features.
+The separate secret-storage mechanisms described below already encrypt supported secrets; that
+does not imply that ordinary StorageClient records and blobs are encrypted.
 
 ## Secrets
 

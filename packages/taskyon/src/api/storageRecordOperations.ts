@@ -1,4 +1,7 @@
 import { deepMerge } from '../utils/objHelpers'
+import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
+
+export const storageValueContentHash = (value: unknown): string => canonicalHash(value)
 
 const objectEntries = (value: unknown): [string, unknown][] | null => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
