@@ -1,6 +1,6 @@
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import type { streamText as streamTextType } from 'ai'
-import { smoothStream } from 'ai'
+import { APICallError, RetryError, smoothStream } from 'ai'
 import type { ChatCompletionStreamChunk } from '../../types/chatCompletion'
 import { humanizeError } from '../../utils/error'
 
@@ -60,7 +60,10 @@ export const classifyStreamingFailure = (error: unknown, aborted: boolean) => {
         'Chat completion timed out before finishing. Partial assistant output was preserved.',
     }
   }
+  const providerError = RetryError.isInstance(error) ? error.lastError : error
+  const sdkRetryable = APICallError.isInstance(providerError) && providerError.isRetryable
   if (
+    sdkRetryable ||
     /(overloaded|temporarily unavailable|rate limit|rate-limited|429|503|server busy)/.test(message)
   ) {
     return {

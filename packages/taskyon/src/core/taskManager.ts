@@ -29,7 +29,7 @@ import { createTaskNode } from './createTasks'
 import { addMarkdownTaskChain } from './markdownTaskIO'
 import {
   findContinuationLeafTaskIds,
-  selectTaskChainIds,
+  selectTaskChainIdSelection,
   type TaskChainSelection,
 } from './taskChainSelection'
 import type { ToolStorageRecord } from './toolManager'
@@ -506,6 +506,9 @@ export async function useTyTaskManager(
     return new Set(Object.keys(tasks))
   })
 
+  const findSiblingLeafTasks = async (taskId: string) =>
+    await findContinuationLeafTaskIds(taskId, taskDb.get, searchNextSibling)
+
   // direct children: parentID match AND (no priorID key OR priorID is null)
   const searchAllDirectChildren = createCachedIdSearch(
     immediateChildrenMap,
@@ -681,18 +684,40 @@ export async function useTyTaskManager(
     }
   }
 
-  const getTaskIdChain = (
+  const taskChainSelectionAccess = {
+    getTask: taskDb.get,
+    getFlattenedChain: (
+      rootTaskId: string,
+      limit: number,
+      stopTaskId: string | undefined,
+      useOnlyFirstChild: boolean,
+    ) => getFlattenedChain(rootTaskId, limit, stopTaskId, useOnlyFirstChild, true),
+    searchAllDirectChildren,
+    findSiblingLeafTasks,
+  }
+
+  const getTaskIdSelection = (
     taskId: string,
     maxFollow = 1e9, // by default we can follow 1mio. tasks...
     selection: TaskChainSelection = { method: 'flattened' },
+  ) => selectTaskChainIdSelection(taskId, maxFollow, selection, taskChainSelectionAccess)
+
+  const getTaskIdChain = (
+    taskId: string,
+    maxFollow = 1e9,
+    selection: TaskChainSelection = { method: 'flattened' },
+  ) => getTaskIdSelection(taskId, maxFollow, selection).then(({ taskIds }) => taskIds)
+
+  const getTaskChainSelection = async (
+    taskId: string,
+    maxFollow = 1e9,
+    selection: TaskChainSelection = { method: 'flattened' },
   ) => {
-    return selectTaskChainIds(taskId, maxFollow, selection, {
-      getTask: taskDb.get,
-      getFlattenedChain: (rootTaskId, limit, stopTaskId, useOnlyFirstChild) =>
-        getFlattenedChain(rootTaskId, limit, stopTaskId, useOnlyFirstChild, true),
-      searchAllDirectChildren,
-      findSiblingLeafTasks,
-    })
+    const selected = await getTaskIdSelection(taskId, maxFollow, selection)
+    return {
+      tasks: await convertTaskIDs(selected.taskIds),
+      includedSubtaskTaskIds: selected.includedSubtaskTaskIds,
+    }
   }
 
   async function deleteAllTasks() {
@@ -740,9 +765,6 @@ export async function useTyTaskManager(
 
   const searchTasks: (where: PartialDeep<TaskNode>) => Promise<Record<string, TaskNode>> =
     storage.tasks.find
-
-  const findSiblingLeafTasks = async (taskId: string) =>
-    await findContinuationLeafTaskIds(taskId, taskDb.get, searchNextSibling)
 
   async function getJsonTaskBackup() {
     // TODO: give this a callback so that we can save it in "chunks"
@@ -883,6 +905,7 @@ export async function useTyTaskManager(
     ...(taskVectors ?? {}),
     getTaskIdChain,
     getTaskChain,
+    getTaskChainSelection,
     convertTaskIDs,
     buildSiblingChain,
     buildTaskTreeNode,

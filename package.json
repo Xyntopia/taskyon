@@ -76,6 +76,7 @@
     "tycli:diagnostics:model-based": "yarn tycli:diagnostics --large-tokens --online --category model-based",
     "tycli:diagnostics:modelica": "yarn workspace @taskyon/tycli cli-diagnostics:modelica",
     "tycli:diagnostics:network": "yarn tycli:diagnostics --online --category network",
+    "tycli:diagnostics:release": "yarn tycli:diagnostics --online --category release --provider chatgpt-codex --model gpt-5.6-luna",
     "tycli:diagnostics:standard": "yarn tycli:diagnostics --category standard",
     "tycli:discovery-fixture": "yarn workspace @taskyon/tycli discovery-fixture",
     "tycli:lint": "yarn workspace @taskyon/tycli lint",
@@ -90,7 +91,7 @@
     "test:e2e:ui": "yarn test:e2e:discover && playwright test --ui"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^3.0.13",
+    "@ai-sdk/openai": "^3.0.88",
     "@ai-sdk/openai-compatible": "^2.0.16",
     "@electric-sql/pglite": "0.4.5",
     "@huggingface/transformers": "^4.0.1",

@@ -6,13 +6,39 @@ import {
   registerToolRpcBroker,
   registerToolRpcExecutor,
   registerToolRpcTools,
+  resolveRemoteFunctionTimeoutMs,
 } from '../core/toolRpc'
+import {
+  MAX_EXPLICIT_REMOTE_FUNCTION_TIMEOUT_MS,
+  MAX_REMOTE_FUNCTION_TIMEOUT_MS,
+} from '../api/taskyonProtocol'
 import type { ToolRpcCallMessage, ToolRpcResponderMessage } from '../core/toolRpc'
 import { createTool, type ToolProgress } from '../types/toolApi'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
 }
+
+export const testRemoteFunctionTimeoutKeepsDefaultAndAllowsExplicitLongWait = () => {
+  assert(
+    resolveRemoteFunctionTimeoutMs({}, MAX_REMOTE_FUNCTION_TIMEOUT_MS) ===
+      MAX_REMOTE_FUNCTION_TIMEOUT_MS,
+    'Expected ordinary tools to keep the ten-minute default',
+  )
+  assert(
+    resolveRemoteFunctionTimeoutMs({ timeoutMs: 60 * 60_000 }, MAX_REMOTE_FUNCTION_TIMEOUT_MS) >
+      MAX_REMOTE_FUNCTION_TIMEOUT_MS,
+    'Expected an explicit one-hour wait to exceed the ordinary default',
+  )
+  assert(
+    resolveRemoteFunctionTimeoutMs({ timeoutMs: Number.MAX_SAFE_INTEGER }) ===
+      MAX_EXPLICIT_REMOTE_FUNCTION_TIMEOUT_MS,
+    'Expected explicit waits to remain bounded',
+  )
+}
+
+testRemoteFunctionTimeoutKeepsDefaultAndAllowsExplicitLongWait.description =
+  'Keeps ordinary tool RPC waits at ten minutes while permitting bounded explicit long waits.'
 
 export const testRemoteFunctionBridgeStreamsCorrelatedProgress = async () => {
   const { x: workerPort, y: remotePort } = createDuplexChannel<

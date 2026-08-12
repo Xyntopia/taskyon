@@ -13,6 +13,7 @@ import { TyToolchainConfig } from '../types/profiles'
 
 export const REMOTE_FUNCTION_TIMEOUT_MS = 30_000
 export const MAX_REMOTE_FUNCTION_TIMEOUT_MS = 10 * 60 * 1000
+export const MAX_EXPLICIT_REMOTE_FUNCTION_TIMEOUT_MS = 65 * 60 * 1000
 
 const baseMessage = z.object({
   origin: z.string().optional(),

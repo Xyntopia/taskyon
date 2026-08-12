@@ -4,6 +4,7 @@ export type DiagnosticsTestMetadata = {
   requiresLargeTokens?: boolean
   requiresLongRun?: boolean
   modelBased?: boolean
+  release?: boolean
 }
 
 export type UnsupportedModuleFallback = {
@@ -96,6 +97,11 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
     requiresNetwork: true,
     requiresLargeTokens: true,
     modelBased: true,
+  },
+  testGpt56PromptCacheReusesIncreasingTreeBranches: {
+    requiresNetwork: true,
+    modelBased: true,
+    release: true,
   },
 }
 

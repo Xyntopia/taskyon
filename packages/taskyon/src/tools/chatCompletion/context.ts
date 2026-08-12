@@ -28,7 +28,7 @@ import { humanizeError } from '../../utils/error'
 import { convertFileToText } from '../../utils/loadFiles'
 import { isEmpty } from '../../utils/objHelpers'
 
-const augmentToolSchemaForTaskyonVariables = (schema: JSONSchema7) => {
+export const augmentToolSchemaForTaskyonVariables = (schema: JSONSchema7) => {
   if (schema.type !== 'object') return schema
 
   return {
@@ -76,6 +76,7 @@ export const prepareChatCompletionContext = async (input: {
   useVisionModels: boolean
   getArtifact?: (attachment: FileAttachment | string) => Promise<File | undefined>
   getTaskById: TaskGetter
+  subtaskHandoffTaskIds?: ReadonlySet<string>
 }) => {
   const variableService = createTaskVariablePresentationService()
   const taskMessages = await convertTaskNodesToOpenAIChat(
@@ -87,6 +88,9 @@ export const prepareChatCompletionContext = async (input: {
     {
       getTaskById: input.getTaskById,
       variableService,
+      ...(input.subtaskHandoffTaskIds
+        ? { subtaskHandoffTaskIds: input.subtaskHandoffTaskIds }
+        : {}),
     },
   )
   const promptMessages = toPromptMessages(input.appendSystemPrompts, input.prependSystemPrompts)
@@ -157,6 +161,7 @@ export async function convertTaskNodesToOpenAIChat(
   options?: {
     getTaskById?: TaskGetter
     variableService?: ReturnType<typeof createTaskVariablePresentationService>
+    subtaskHandoffTaskIds?: ReadonlySet<string>
   },
 ) {
   const tasksById = new Map<string, TaskNode>(taskChain.map((task) => [task.id, task]))
@@ -166,8 +171,21 @@ export async function convertTaskNodesToOpenAIChat(
   const renderedTaskIds = new Set<string>()
   const injectedTaskIds = new Set<string>()
   const messages: ModelMessage[] = []
+  const handoffGroups = buildSubtaskHandoffGroups(
+    taskChain,
+    options?.subtaskHandoffTaskIds ?? new Set(),
+  )
+  const handoffByFirstTaskId = new Map(handoffGroups.map((group) => [group[0]?.id, group]))
+  const handoffTaskIds = new Set(handoffGroups.flatMap((group) => group.map((task) => task.id)))
 
   for (const task of taskChain) {
+    const handoffGroup = handoffByFirstTaskId.get(task.id)
+    if (handoffGroup) {
+      messages.push(renderSubtaskHandoff(handoffGroup))
+      handoffGroup.forEach((handoffTask) => renderedTaskIds.add(handoffTask.id))
+      continue
+    }
+    if (handoffTaskIds.has(task.id)) continue
     messages.push(
       ...(await renderMissingReferencedTasksForLlm(
         task,
@@ -194,6 +212,61 @@ export async function convertTaskNodesToOpenAIChat(
   }
 
   return ensureToolResponses(messages)
+}
+
+const buildSubtaskHandoffGroups = (
+  taskChain: readonly TaskNode[],
+  handoffTaskIds: ReadonlySet<string>,
+) => {
+  const groups: TaskNode[][] = []
+  for (const task of taskChain) {
+    if (!handoffTaskIds.has(task.id)) continue
+    const current = groups.at(-1)
+    const currentHasResult = current?.some(
+      (candidate) => candidate.role !== 'user' || candidate.content.type !== 'message',
+    )
+    if (
+      !current ||
+      current[0]?.parentID !== task.parentID ||
+      (task.role === 'user' && task.content.type === 'message' && currentHasResult)
+    ) {
+      groups.push([task])
+    } else {
+      current.push(task)
+    }
+  }
+  return groups
+}
+
+const renderSubtaskHandoff = (tasks: readonly TaskNode[]): SystemModelMessage => {
+  const objectives = tasks.flatMap((task) =>
+    task.role === 'user' && task.content.type === 'message' ? [task.content.data] : [],
+  )
+  const results = tasks.filter((task) => task.role !== 'user' || task.content.type !== 'message')
+  const failed = results.some((task) => task.content.type === 'error')
+  return {
+    role: 'system',
+    content: [
+      'Subtask handoff',
+      ...objectives.map((objective) => `Objective: ${objective}`),
+      `Status: ${failed ? 'failed' : 'completed'}`,
+      'Result:',
+      ...(results.length > 0
+        ? results.map((task) =>
+            typeof task.content.data === 'string'
+              ? task.content.data
+              : serializeObject(task.content.data, {
+                  format: 'yaml',
+                  maxDepth: 6,
+                  maxArrayLength: 50,
+                  maxObjectKeys: 50,
+                  maxStringLength: 16_000,
+                  includeTruncationNotice: true,
+                }),
+          )
+        : ['No terminal result was surfaced.']),
+    ].join('\n'),
+  }
 }
 
 const renderTaskContentForLlm = (

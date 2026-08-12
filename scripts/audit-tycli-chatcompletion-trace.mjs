@@ -22,6 +22,7 @@ const sha = (value) => createHash('sha256').update(String(value)).digest('hex').
 const unique = (values) => [...new Set(values)]
 const sum = (values) => values.reduce((total, value) => total + value, 0)
 const numberOrZero = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
+const numberOrNull = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null)
 
 const traceFileNames = readdirSync(traceDir).sort()
 const fileEntries = traceFileNames
@@ -67,6 +68,7 @@ const extractRequestPromptCacheKey = (request) =>
       : ''
 const extractRequestItems = (request) =>
   Array.isArray(request.input) ? request.input : extractMessages(request)
+const extractToolsHash = (request) => sha(JSON.stringify(request.tools ?? []))
 const extractUsage = (entry) => entry?.data?.output?.usage ?? {}
 const extractRawOutput = (entry) =>
   typeof entry?.data?.output?.rawOutput === 'string' ? entry.data.output.rawOutput : ''
@@ -95,11 +97,18 @@ const commonPrefixLength = (previous, current) => {
   }
   return index
 }
+const stableConversationMessages = (messages, provider) => {
+  if (provider !== 'chatgpt-codex') return messages
+  let end = messages.length
+  while (end > 0 && messages[end - 1]?.role === 'developer') end -= 1
+  return messages.slice(0, end)
+}
 
 const legacyRequests = inputEntries.map((inputEntry) => {
   const outputEntry = outputsBySequence.get(inputEntry.sequence)
   const request = extractRequest(inputEntry)
   const messages = extractRequestItems(request)
+  const conversationMessages = messages
   const instructions = extractInstructions(request)
   const requestPromptCacheKey = extractRequestPromptCacheKey(request)
   const usage = extractUsage(outputEntry)
@@ -108,6 +117,8 @@ const legacyRequests = inputEntries.map((inputEntry) => {
   const cacheReadTokens =
     numberOrZero(usage.inputTokenDetails?.cacheReadTokens) || numberOrZero(usage.cachedInputTokens)
   const noCacheTokens = numberOrZero(usage.inputTokenDetails?.noCacheTokens)
+  const cacheWriteTokens = numberOrZero(usage.inputTokenDetails?.cacheWriteTokens)
+  const usageAvailable = Object.keys(usage).length > 0
 
   return {
     sequence: inputEntry.sequence,
@@ -125,8 +136,11 @@ const legacyRequests = inputEntries.map((inputEntry) => {
     outputFileBytes: outputEntry?.bytes ?? 0,
     messageCount: messages.length,
     lastMessageRole: messages.at(-1)?.role ?? '',
-    firstMessageHash: sha(JSON.stringify(messages[0] ?? null)),
-    firstTwoMessagesHash: sha(JSON.stringify(messages.slice(0, 2))),
+    firstMessageHash: sha(JSON.stringify(conversationMessages[0] ?? null)),
+    firstTwoMessagesHash:
+      conversationMessages.length >= 2
+        ? sha(JSON.stringify(conversationMessages.slice(0, 2)))
+        : null,
     instructionsChars: instructions.length,
     instructionsHash: sha(instructions),
     requestPromptCacheKey,
@@ -143,18 +157,25 @@ const legacyRequests = inputEntries.map((inputEntry) => {
     totalTokens: numberOrZero(usage.totalTokens),
     cacheReadTokens,
     noCacheTokens,
-    _messages: messages,
+    cacheWriteTokens,
+    usageAvailable,
+    toolsHash: extractToolsHash(request),
+    _messages: conversationMessages,
   }
 })
 
 const recordRequests = recordEntries.map((entry) => {
   const providerRequest = entry.data?.providerRequest ?? {}
+  const provider = typeof providerRequest.provider === 'string' ? providerRequest.provider : ''
   const attempts = Array.isArray(providerRequest.attempts) ? providerRequest.attempts : []
   const attempt = attempts.at(-1) ?? {}
   const request = attempt.requestBody ?? {}
   const messages = extractRequestItems(request)
+  const conversationMessages = stableConversationMessages(messages, provider)
   const instructions = extractInstructions(request)
   const responseMetadata = attempt.response ?? attempt.error
+  const usage = providerRequest.usage
+  const usageAvailable = usage !== undefined && usage !== null
 
   return {
     sequence: entry.sequence,
@@ -163,7 +184,7 @@ const recordRequests = recordEntries.map((entry) => {
     paired: Boolean(responseMetadata),
     completed: Boolean(responseMetadata),
     attemptCount: attempts.length,
-    provider: typeof providerRequest.provider === 'string' ? providerRequest.provider : '',
+    provider,
     model: typeof providerRequest.model === 'string' ? providerRequest.model : '',
     responseStatus: numberOrZero(attempt.response?.status) || undefined,
     inputPayloadChars: jsonChars(request),
@@ -172,8 +193,11 @@ const recordRequests = recordEntries.map((entry) => {
     outputFileBytes: 0,
     messageCount: messages.length,
     lastMessageRole: messages.at(-1)?.role ?? messages.at(-1)?.type ?? '',
-    firstMessageHash: sha(JSON.stringify(messages[0] ?? null)),
-    firstTwoMessagesHash: sha(JSON.stringify(messages.slice(0, 2))),
+    firstMessageHash: sha(JSON.stringify(conversationMessages[0] ?? null)),
+    firstTwoMessagesHash:
+      conversationMessages.length >= 2
+        ? sha(JSON.stringify(conversationMessages.slice(0, 2)))
+        : null,
     instructionsChars: instructions.length,
     instructionsHash: sha(instructions),
     requestPromptCacheKey: extractRequestPromptCacheKey(request),
@@ -182,26 +206,37 @@ const recordRequests = recordEntries.map((entry) => {
     rawOutputShare: 0,
     promptCacheKeys: [],
     promptCacheRetention: [],
-    inputTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
-    cacheReadTokens: 0,
-    noCacheTokens: 0,
-    _messages: messages,
+    inputTokens: numberOrNull(usage?.inputTokens?.total),
+    outputTokens: numberOrNull(usage?.outputTokens?.total),
+    totalTokens: numberOrNull(usage?.totalTokens),
+    cacheReadTokens: numberOrNull(usage?.inputTokens?.cacheRead),
+    cacheWriteTokens: numberOrNull(usage?.inputTokens?.cacheWrite),
+    noCacheTokens: numberOrNull(usage?.inputTokens?.noCache),
+    usageAvailable,
+    toolsHash: extractToolsHash(request),
+    recordedAt: typeof providerRequest.recordedAt === 'string' ? providerRequest.recordedAt : null,
+    _messages: conversationMessages,
   }
 })
 
 const requests = useRecordFormat ? recordRequests : legacyRequests
 
-const requestsWithPrefixStats = requests.map((request, index) => {
-  const previousMessages = index > 0 ? requests[index - 1]._messages : []
+const requestFamilyKey = (request) =>
+  [request.provider, request.model, request.requestPromptCacheKey, request.toolsHash].join('|')
+
+const previousMessagesByFamily = new Map()
+const requestsWithPrefixStats = requests.map((request) => {
+  const familyKey = requestFamilyKey(request)
+  const previousMessages = previousMessagesByFamily.get(familyKey) ?? []
   const currentMessages = request._messages
   const commonMessagesWithPrevious =
-    index > 0 ? commonPrefixLength(previousMessages, currentMessages) : 0
+    previousMessages.length > 0 ? commonPrefixLength(previousMessages, currentMessages) : 0
+  previousMessagesByFamily.set(familyKey, currentMessages)
 
   const { _messages, ...publicRequest } = request
   return {
     ...publicRequest,
+    requestFamily: sha(familyKey),
     commonMessagesWithPrevious,
     commonMessagePrefixChars:
       commonMessagesWithPrevious > 0
@@ -218,11 +253,21 @@ const totals = {
   outputPayloadChars: sum(requestsWithPrefixStats.map((request) => request.outputPayloadChars)),
   inputFileBytes: sum(requestsWithPrefixStats.map((request) => request.inputFileBytes)),
   outputFileBytes: sum(requestsWithPrefixStats.map((request) => request.outputFileBytes)),
-  inputTokens: sum(requestsWithPrefixStats.map((request) => request.inputTokens)),
-  outputTokens: sum(requestsWithPrefixStats.map((request) => request.outputTokens)),
-  totalTokens: sum(requestsWithPrefixStats.map((request) => request.totalTokens)),
-  cacheReadTokens: sum(requestsWithPrefixStats.map((request) => request.cacheReadTokens)),
-  noCacheTokens: sum(requestsWithPrefixStats.map((request) => request.noCacheTokens)),
+  usageAvailableChatCompletions: requestsWithPrefixStats.filter((request) => request.usageAvailable)
+    .length,
+  usageUnavailableChatCompletions: requestsWithPrefixStats.filter(
+    (request) => !request.usageAvailable,
+  ).length,
+  inputTokens: sum(requestsWithPrefixStats.map((request) => numberOrZero(request.inputTokens))),
+  outputTokens: sum(requestsWithPrefixStats.map((request) => numberOrZero(request.outputTokens))),
+  totalTokens: sum(requestsWithPrefixStats.map((request) => numberOrZero(request.totalTokens))),
+  cacheReadTokens: sum(
+    requestsWithPrefixStats.map((request) => numberOrZero(request.cacheReadTokens)),
+  ),
+  cacheWriteTokens: sum(
+    requestsWithPrefixStats.map((request) => numberOrZero(request.cacheWriteTokens)),
+  ),
+  noCacheTokens: sum(requestsWithPrefixStats.map((request) => numberOrZero(request.noCacheTokens))),
   rawOutputChars: sum(requestsWithPrefixStats.map((request) => request.rawOutputChars)),
 }
 
@@ -230,7 +275,7 @@ const firstMessageHashes = unique(
   requestsWithPrefixStats.map((request) => request.firstMessageHash),
 )
 const firstTwoMessagesHashes = unique(
-  requestsWithPrefixStats.map((request) => request.firstTwoMessagesHash),
+  requestsWithPrefixStats.map((request) => request.firstTwoMessagesHash).filter(Boolean),
 )
 const instructionHashes = unique(requestsWithPrefixStats.map((request) => request.instructionsHash))
 const promptCacheKeys = unique(
@@ -248,20 +293,48 @@ const instructionChars = requestsWithPrefixStats.map((request) => request.instru
 const commonMessagePrefixChars = requestsWithPrefixStats.map(
   (request) => request.commonMessagePrefixChars,
 )
+const requestsByFamily = Map.groupBy(requestsWithPrefixStats, (request) => request.requestFamily)
+const requestFamilies = [...requestsByFamily.entries()].map(([id, familyRequests]) => ({
+  id,
+  requests: familyRequests.map((request) => request.sequence),
+  requestPromptCacheKey: familyRequests[0]?.requestPromptCacheKey ?? '',
+  instructionsHash: familyRequests[0]?.instructionsHash ?? '',
+  toolsHash: familyRequests[0]?.toolsHash ?? '',
+  firstMessageStable: unique(familyRequests.map((request) => request.firstMessageHash)).length <= 1,
+  firstTwoMessagesStable:
+    unique(familyRequests.map((request) => request.firstTwoMessagesHash).filter(Boolean)).length <=
+    1,
+  providerInstructionsStable:
+    unique(familyRequests.map((request) => request.instructionsHash)).length <= 1,
+}))
+const cacheKeyToolShapes = Map.groupBy(
+  requestsWithPrefixStats.filter((request) => request.requestPromptCacheKey),
+  (request) => request.requestPromptCacheKey,
+)
+const cacheKeysWithMultipleToolShapes = [...cacheKeyToolShapes.entries()]
+  .filter(
+    ([, keyedRequests]) => unique(keyedRequests.map((request) => request.toolsHash)).length > 1,
+  )
+  .map(([key]) => key)
 
 const warnings = [
   requestsWithPrefixStats.length === 0 ? 'No supported trace files were found.' : undefined,
   requestsWithPrefixStats.some((request) => !request.completed)
     ? 'Some traced requests have no recorded response or transport error.'
     : undefined,
-  firstMessageHashes.length > 1 ? 'The first message is not stable across requests.' : undefined,
-  firstTwoMessagesHashes.length > 1
-    ? 'The first two messages are not stable across requests.'
+  requestFamilies.some((family) => !family.firstMessageStable)
+    ? 'The first message is not stable within at least one request family.'
     : undefined,
-  instructionHashes.length > 1
-    ? 'Provider instructions are not stable across requests; this can prevent prompt-cache hits.'
+  requestFamilies.some((family) => !family.firstTwoMessagesStable)
+    ? 'The first two messages are not stable within at least one request family.'
     : undefined,
-  totals.cacheReadTokens === 0 && totals.inputTokens > 0
+  requestFamilies.some((family) => !family.providerInstructionsStable)
+    ? 'Provider instructions are not stable within at least one request family.'
+    : undefined,
+  totals.usageUnavailableChatCompletions > 0
+    ? 'Provider token usage is unavailable for some requests; missing usage is not counted as zero.'
+    : undefined,
+  totals.cacheReadTokens === 0 && totals.inputTokens > 0 && totals.usageAvailableChatCompletions > 0
     ? 'Provider usage reports zero cached input tokens.'
     : undefined,
   promptCacheKeys.length > Math.max(1, requests.length / 2)
@@ -280,9 +353,11 @@ const report = {
   traceFormat: useRecordFormat ? 'provider-request-record' : 'legacy-input-output',
   totals,
   stability: {
-    firstMessageStable: firstMessageHashes.length <= 1,
-    firstTwoMessagesStable: firstTwoMessagesHashes.length <= 1,
-    providerInstructionsStable: instructionHashes.length <= 1,
+    firstMessageStable: requestFamilies.every((family) => family.firstMessageStable),
+    firstTwoMessagesStable: requestFamilies.every((family) => family.firstTwoMessagesStable),
+    providerInstructionsStable: requestFamilies.every(
+      (family) => family.providerInstructionsStable,
+    ),
     firstMessageHashes,
     firstTwoMessagesHashes,
     instructionHashes,
@@ -292,6 +367,8 @@ const report = {
     messageCounts,
     lastMessageRoles,
     instructionChars,
+    requestFamilies,
+    cacheKeysWithMultipleToolShapes,
   },
   warnings,
   requests: requestsWithPrefixStats,
@@ -317,7 +394,10 @@ const renderMarkdown = () => {
     `- provider input tokens: ${formatNumber(totals.inputTokens)}`,
     `- provider output tokens: ${formatNumber(totals.outputTokens)}`,
     `- provider total tokens: ${formatNumber(totals.totalTokens)}`,
+    `- requests with provider usage: ${formatNumber(totals.usageAvailableChatCompletions)}`,
+    `- requests without provider usage: ${formatNumber(totals.usageUnavailableChatCompletions)}`,
     `- cached input tokens: ${formatNumber(totals.cacheReadTokens)}`,
+    `- cache-write input tokens: ${formatNumber(totals.cacheWriteTokens)}`,
     `- non-cached input tokens: ${formatNumber(totals.noCacheTokens)}`,
     `- raw provider output chars: ${formatNumber(totals.rawOutputChars)}`,
     '',
@@ -350,9 +430,9 @@ const renderMarkdown = () => {
           request.messageCount,
           formatNumber(request.commonMessagePrefixChars),
           formatNumber(request.instructionsChars),
-          formatNumber(request.inputTokens),
-          formatNumber(request.cacheReadTokens),
-          formatNumber(request.outputTokens),
+          request.inputTokens === null ? 'unavailable' : formatNumber(request.inputTokens),
+          request.cacheReadTokens === null ? 'unavailable' : formatNumber(request.cacheReadTokens),
+          request.outputTokens === null ? 'unavailable' : formatNumber(request.outputTokens),
           formatNumber(request.inputPayloadChars),
           formatNumber(request.outputPayloadChars),
           formatNumber(request.rawOutputChars),

@@ -3,6 +3,7 @@ import { createPortClient, createStreamRpcRequest } from '@taskyon/common/module
 import type { ReadonlyDeep } from 'type-fest'
 import {
   MAX_REMOTE_FUNCTION_TIMEOUT_MS,
+  MAX_EXPLICIT_REMOTE_FUNCTION_TIMEOUT_MS,
   REMOTE_FUNCTION_TIMEOUT_MS,
   taskyonProtocol,
 } from '../api/taskyonProtocol'
@@ -60,7 +61,7 @@ const REMOTE_FUNCTION_TIMEOUT_GRACE_MS = 5_000
 const createRemoteFunctionRequestId = (name: string) =>
   `${name}-${Date.now()}-${remoteFunctionRequestCounter++}`
 
-const resolveRemoteFunctionTimeoutMs = (
+export const resolveRemoteFunctionTimeoutMs = (
   args: ReadonlyDeep<FunctionArguments>,
   defaultTimeoutMs = REMOTE_FUNCTION_TIMEOUT_MS,
 ) => {
@@ -70,7 +71,7 @@ const resolveRemoteFunctionTimeoutMs = (
   }
   return Math.min(
     Math.max(Math.trunc(timeoutMs) + REMOTE_FUNCTION_TIMEOUT_GRACE_MS, REMOTE_FUNCTION_TIMEOUT_MS),
-    MAX_REMOTE_FUNCTION_TIMEOUT_MS,
+    MAX_EXPLICIT_REMOTE_FUNCTION_TIMEOUT_MS,
   )
 }
 

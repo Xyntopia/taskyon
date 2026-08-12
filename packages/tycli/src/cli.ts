@@ -115,6 +115,7 @@ import {
   type CliProviderIdentity,
 } from './cli/models'
 import { hasInterruptibleWorkerActivity } from './cli/interruptState'
+import { TYCLI_ACTIVE_TASK_WAIT_TIMEOUT_MS, isInteractiveTaskResult } from './cli/taskWait'
 import { createNativePythonTool, findNativePythonExecutable } from './cli/nativePythonTool'
 import { applyCliRuntimeConfig, syncProviderRuntimeConfig } from './cli/runtime'
 import { runBashCommand } from './cli/bash'
@@ -4098,10 +4099,11 @@ async function main(host: InteractiveCliHost) {
           clientPort as Parameters<typeof waitForTaskResult>[0],
           taskChain.map((task) => task.id),
           ['message', 'error', 'return'],
-          10 * 60 * 1000,
+          TYCLI_ACTIVE_TASK_WAIT_TIMEOUT_MS,
           activeTaskWaitController.signal,
-          (task) => task.content.type === 'message',
+          isInteractiveTaskResult,
           () => activeTaskCount() <= 0,
+          isInteractiveTaskResult,
         )
         currentLeafId = result.id
         writeDebug(`received result task: ${result.id} (${result.content.type})`)

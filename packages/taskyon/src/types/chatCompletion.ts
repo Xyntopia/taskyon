@@ -133,6 +133,23 @@ export const ProviderRequestTrace = z.object({
   provider: z.string(),
   model: z.string(),
   taskId: z.string(),
+  recordedAt: z.string().optional(),
+  usage: z
+    .object({
+      inputTokens: z.object({
+        total: z.number().optional(),
+        noCache: z.number().optional(),
+        cacheRead: z.number().optional(),
+        cacheWrite: z.number().optional(),
+      }),
+      outputTokens: z.object({
+        total: z.number().optional(),
+        text: z.number().optional(),
+        reasoning: z.number().optional(),
+      }),
+      totalTokens: z.number().optional(),
+    })
+    .optional(),
   attempts: z.array(ProviderRequestAttempt),
 })
 export type ProviderRequestTrace = z.infer<typeof ProviderRequestTrace>

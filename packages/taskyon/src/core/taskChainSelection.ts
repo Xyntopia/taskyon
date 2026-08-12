@@ -68,6 +68,20 @@ const limitTaskIds = (taskIds: string[], maxFollow: number) => {
   return taskIds.slice(-limit)
 }
 
+const limitTaskIdSelection = (
+  selection: { taskIds: string[]; includedSubtaskTaskIds: string[] },
+  maxFollow: number,
+) => {
+  const taskIds = limitTaskIds(selection.taskIds, maxFollow)
+  const retainedTaskIds = new Set(taskIds)
+  return {
+    taskIds,
+    includedSubtaskTaskIds: selection.includedSubtaskTaskIds.filter((id) =>
+      retainedTaskIds.has(id),
+    ),
+  }
+}
+
 const getRequiredTask = async (taskId: string, getTask: TaskGetter) => {
   const task = await getTask(taskId)
   if (!task) throw new Error(`Task ${taskId} not found while building task chain.`)
@@ -115,18 +129,41 @@ const resolveVisibleTerminalResults = async (
   return Array.from(new Set(nestedResultIds.flat(2)))
 }
 
-const collectDirectSubtaskResults = async (taskId: string, access: TaskChainSelectionAccess) => {
+const collectBranchInputIds = async (
+  parentTaskId: string,
+  leafIds: readonly string[],
+  access: TaskChainSelectionAccess,
+) => {
+  const inputIds: string[] = []
+  for (const leafId of leafIds) {
+    let currentId: string | undefined = leafId
+    const newestFirst: string[] = []
+    const visited = new Set<string>()
+    while (currentId && !visited.has(currentId)) {
+      visited.add(currentId)
+      const task = await getRequiredTask(currentId, access.getTask)
+      if (task.parentID !== parentTaskId) break
+      if (task.role === 'user' && task.content.type === 'message') newestFirst.push(task.id)
+      currentId = task.priorID
+    }
+    inputIds.push(...newestFirst.reverse())
+  }
+  return Array.from(new Set(inputIds))
+}
+
+const collectDirectSubtaskTasks = async (taskId: string, access: TaskChainSelectionAccess) => {
   const childIds = Array.from(await access.searchAllDirectChildren(taskId))
-  const leafResultIds = await Promise.all(
+  const branchHandoffs = await Promise.all(
     childIds.map(async (childId) => {
       const leafIds = await access.findSiblingLeafTasks(childId)
-      return await Promise.all(
+      const resultIds = await Promise.all(
         leafIds.map((leafId) => resolveVisibleTerminalResults(leafId, access)),
       )
+      return [...(await collectBranchInputIds(taskId, leafIds, access)), ...resultIds.flat()]
     }),
   )
 
-  return Array.from(new Set(leafResultIds.flat(2)))
+  return Array.from(new Set(branchHandoffs.flat()))
 }
 
 const addIdOnce = (ids: string[], seen: Set<string>, id: string) => {
@@ -141,21 +178,31 @@ const selectLineageIds = async (
   includeSubtaskResults: 'terminal-visible' | 'none',
 ) => {
   const selectedIds: string[] = []
+  const includedSubtaskTaskIds: string[] = []
   const seen = new Set<string>()
+  const includedSubtaskSeen = new Set<string>()
 
-  for (const lineageId of await collectLineageIds(taskId, access.getTask)) {
+  const lineageIds = await collectLineageIds(taskId, access.getTask)
+  for (const [index, lineageId] of lineageIds.entries()) {
     addIdOnce(selectedIds, seen, lineageId)
     if (includeSubtaskResults === 'none') continue
 
-    for (const resultId of await collectDirectSubtaskResults(lineageId, access)) {
-      addIdOnce(selectedIds, seen, resultId)
+    const nextLineageTaskId = lineageIds[index + 1]
+    const nextLineageTask = nextLineageTaskId
+      ? await getRequiredTask(nextLineageTaskId, access.getTask)
+      : undefined
+    if (nextLineageTask?.parentID === lineageId) continue
+
+    for (const subtaskTaskId of await collectDirectSubtaskTasks(lineageId, access)) {
+      addIdOnce(selectedIds, seen, subtaskTaskId)
+      addIdOnce(includedSubtaskTaskIds, includedSubtaskSeen, subtaskTaskId)
     }
   }
 
-  return selectedIds
+  return { taskIds: selectedIds, includedSubtaskTaskIds }
 }
 
-export const selectTaskChainIds = async (
+export const selectTaskChainIdSelection = async (
   taskId: string,
   maxFollow: number,
   selection: TaskChainSelection,
@@ -165,17 +212,20 @@ export const selectTaskChainIds = async (
 
   switch (selection.method) {
     case 'flattened':
-      return limitTaskIds(
-        await access.getFlattenedChain(
-          taskId,
-          traversalLimit,
-          selection.untilTaskID,
-          selection.onlyFirstChild ?? true,
-        ),
+      return limitTaskIdSelection(
+        {
+          taskIds: await access.getFlattenedChain(
+            taskId,
+            traversalLimit,
+            selection.untilTaskID,
+            selection.onlyFirstChild ?? true,
+          ),
+          includedSubtaskTaskIds: [],
+        },
         maxFollow,
       )
     case 'lineage':
-      return limitTaskIds(
+      return limitTaskIdSelection(
         await selectLineageIds(
           taskId,
           access,
@@ -185,3 +235,10 @@ export const selectTaskChainIds = async (
       )
   }
 }
+
+export const selectTaskChainIds = async (
+  taskId: string,
+  maxFollow: number,
+  selection: TaskChainSelection,
+  access: TaskChainSelectionAccess,
+) => (await selectTaskChainIdSelection(taskId, maxFollow, selection, access)).taskIds

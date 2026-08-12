@@ -12,6 +12,7 @@ import type { Annotation } from '../../types/taskNode'
 import type { ToolBase } from '../../types/tools'
 import { FunctionArguments, FunctionCall } from '../../types/tools'
 import { createDeepTransformer, normalizeFalsyValues, pickProperties } from '../../utils/objHelpers'
+import { augmentToolSchemaForTaskyonVariables } from './context'
 
 export const parseStructuredResponse = (message: string) => {
   let yamlContent = message.trim()
@@ -133,7 +134,7 @@ export const convertFunctionCall = (
   }
 
   const ajv = new Ajv()
-  const validate = ajv.compile(tool.parameters as object)
+  const validate = ajv.compile(augmentToolSchemaForTaskyonVariables(tool.parameters) as object)
   if (!validate(parsedArguments.data)) {
     throw new Error(
       `Invalid arguments for tool "${content.toolName}": ${ajv.errorsText(validate.errors)}`,

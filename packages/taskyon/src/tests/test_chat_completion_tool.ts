@@ -16,6 +16,7 @@ import { interpretAssistantMessage } from '../tools/chatCompletion/response'
 import { classifyStreamingFailure } from '../tools/chatCompletion/streamResult'
 import { resolveChatCompletionConnection, type ProviderRequestTrace } from '../types/chatCompletion'
 import { getTaskyonCosts } from '../taskyon.space/taskyon.space_api'
+import { taskPlanner } from '../tools/TaskPlannerTool'
 import { streamText } from 'ai'
 import type { JSONSchema7 } from 'json-schema'
 import type { TaskNode } from '../types/taskNode'
@@ -125,6 +126,7 @@ export const testChatCompletionConnectionIsAnImmutableCreationSnapshot = () => {
   }
   const { chatCompletion } = createChatCompletionTool(connection, {
     getTaskChain: unavailable,
+    getTaskChainSelection: unavailable,
     getTask: unavailable,
     listToolDefinitions: unavailable,
     metaUpsert: unavailable,
@@ -302,7 +304,9 @@ export const testChatCompletionContextUsesLineageAndTerminalSubtaskResults = asy
       JSON.stringify([
         'root-user',
         'planner-call',
+        'branch-a-start',
         'branch-a-result',
+        'branch-b-start',
         'branch-b-result',
         'branch-c-structured-result',
         'continue-user',
@@ -311,8 +315,8 @@ export const testChatCompletionContextUsesLineageAndTerminalSubtaskResults = asy
   )
 
   assert(
-    !selectedIds.includes('branch-a-start') && !selectedIds.includes('branch-a-internal-tool'),
-    'Expected noisy direct subtask internals to stay hidden',
+    selectedIds.includes('branch-a-start') && !selectedIds.includes('branch-a-internal-tool'),
+    'Expected the delegated objective but not intermediate branch internals',
   )
   assert(
     !selectedIds.includes('nested-noise-result'),
@@ -323,6 +327,35 @@ export const testChatCompletionContextUsesLineageAndTerminalSubtaskResults = asy
       !selectedIds.includes('branch-c-completion') &&
       !selectedIds.includes('branch-c-message'),
     'Expected only the terminal visible result from a nested task chain',
+  )
+
+  const selectedTasks = selectedIds.flatMap((id) => {
+    const selected = tasks.find((candidate) => candidate.id === id)
+    return selected ? [selected] : []
+  })
+  const messages = await convertTaskNodesToOpenAIChat(
+    selectedTasks,
+    undefined,
+    false,
+    true,
+    {},
+    {
+      subtaskHandoffTaskIds: new Set([
+        'branch-a-start',
+        'branch-a-result',
+        'branch-b-start',
+        'branch-b-result',
+        'branch-c-structured-result',
+      ]),
+    },
+  )
+  const rendered = JSON.stringify(messages)
+  assert(
+    rendered.includes('Subtask handoff') &&
+      rendered.includes('Objective: Noisy branch A prompt.') &&
+      rendered.includes('Status: completed') &&
+      rendered.includes('Branch A final summary.'),
+    'Expected delegated objectives and terminal results to render as completed handoffs',
   )
 
   return { success: true }
@@ -594,25 +627,6 @@ export const testChatCompletionMixedTextAndNativeToolCallContinuesWithTool = () 
 }
 
 export const testChatCompletionRejectsToolArgumentsOutsideDeclaredSchema = () => {
-  const plannerDefinition: ToolBase = {
-    name: 'taskPlanner',
-    description: 'Delegate grouped tasks.',
-    parameters: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        tasks: {
-          type: 'array',
-          items: {
-            type: 'array',
-            items: { type: 'string' },
-          },
-        },
-        parallel: { type: 'boolean' },
-      },
-      required: ['tasks'],
-    },
-  }
   let errorMessage = ''
 
   try {
@@ -632,7 +646,7 @@ export const testChatCompletionRejectsToolArgumentsOutsideDeclaredSchema = () =>
         ],
       },
       true,
-      { taskPlanner: plannerDefinition },
+      { taskPlanner },
       createTaskVariablePresentationService(),
     )
   } catch (error) {
@@ -648,6 +662,41 @@ export const testChatCompletionRejectsToolArgumentsOutsideDeclaredSchema = () =>
   return { success: true }
 }
 
+export const testChatCompletionAcceptsDeclaredTaskyonUseMapping = () => {
+  const outcome = interpretAssistantMessage(
+    [],
+    {
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: 'taskyon-use-call',
+          toolName: 'clock',
+          input: { $use: {} },
+        },
+      ],
+    },
+    true,
+    {
+      clock: {
+        name: 'clock',
+        description: 'Read the clock.',
+        parameters: {
+          type: 'object',
+          properties: {},
+          additionalProperties: false,
+        },
+      },
+    },
+    createTaskVariablePresentationService(),
+  )
+
+  assert(outcome.kind === 'tool-calls', 'Expected the declared Taskyon $use mapping to be valid')
+  assert(outcome.calls[0]?.name === 'clock', 'Expected the clock tool call')
+
+  return { success: true }
+}
+
 export const testChatCompletionCodexRequestMovesLeadingSystemPromptToInstructions = async () => {
   const request = await buildChatProviderRequest({
     messages: [
@@ -655,11 +704,11 @@ export const testChatCompletionCodexRequestMovesLeadingSystemPromptToInstruction
       { role: 'user', content: 'Hello.' },
     ],
     tools: {},
-    selectedModel: 'gpt-5',
+    selectedModel: 'gpt-5.6-luna',
     api: {
       provider: 'chatgpt-codex',
       name: 'chatgpt-codex',
-      model: 'gpt-5',
+      model: 'gpt-5.6-luna',
       baseURL: 'https://example.test/v1',
       streamSupport: true,
       routes: {
@@ -668,6 +717,7 @@ export const testChatCompletionCodexRequestMovesLeadingSystemPromptToInstruction
       },
     },
     apiKey: 'diagnostic-key',
+    promptCacheRootId: 'root-task',
   })
 
   assert(request.messages?.length === 1, 'Expected leading system prompt outside request messages')
@@ -675,6 +725,70 @@ export const testChatCompletionCodexRequestMovesLeadingSystemPromptToInstruction
   assert(
     request.providerOptions?.openai?.instructions === 'Follow the system instructions.',
     'Expected Codex provider instructions to contain the leading system prompt',
+  )
+  assert(
+    request.providerOptions?.openai?.promptCacheKey ===
+      'taskyon-chatgpt-codex-gpt-5.6-luna-root-task',
+    'Expected the cache namespace to follow the provider, model, and task-tree root',
+  )
+  const promptCacheOptions = request.providerOptions?.openai?.promptCacheOptions
+  assert(
+    promptCacheOptions === undefined,
+    'Expected the ChatGPT Codex backend not to receive unsupported explicit cache options',
+  )
+  return { success: true }
+}
+
+export const testChatCompletionCacheKeyAndBreakpointsFollowTaskTree = async () => {
+  const build = (root: string, finalPrompt: string) =>
+    buildChatProviderRequest({
+      messages: [
+        { role: 'system' as const, content: 'Stable project instructions.' },
+        { role: 'user' as const, content: 'Root objective.' },
+        { role: 'assistant' as const, content: 'First result.' },
+        { role: 'user' as const, content: 'Branch objective.' },
+        { role: 'assistant' as const, content: 'Branch result.' },
+        { role: 'user' as const, content: finalPrompt },
+      ],
+      tools: {},
+      selectedModel: 'gpt-5.6-luna',
+      api: {
+        provider: 'openai' as const,
+        name: 'openai',
+        model: 'gpt-5.6-luna',
+        baseURL: 'https://example.test/v1',
+        streamSupport: true,
+        routes: { chatCompletion: '/responses', models: '/models' },
+      },
+      apiKey: 'diagnostic-key',
+      promptCacheRootId: root,
+    })
+
+  const first = await build('root-task', 'First branch continuation.')
+  const sibling = await build('root-task', 'Sibling branch continuation.')
+  const otherTree = await build('other-root', 'First branch continuation.')
+
+  assert(
+    first.providerOptions?.openai?.promptCacheKey ===
+      sibling.providerOptions?.openai?.promptCacheKey,
+    'Expected sibling branches to share the task-tree cache namespace',
+  )
+  assert(
+    first.providerOptions?.openai?.promptCacheKey !==
+      otherTree.providerOptions?.openai?.promptCacheKey,
+    'Expected independent task trees to use independent cache namespaces',
+  )
+  const breakpoints = (first.messages ?? []).filter(
+    (message) => message.providerOptions?.openai?.promptCacheBreakpoint === true,
+  )
+  assert(breakpoints.length === 4, 'Expected the root and three recent lineage breakpoints')
+  assert(
+    breakpoints[0]?.role === 'user' && breakpoints[0]?.content === 'Root objective.',
+    'Expected the first user boundary to anchor the shared root prefix',
+  )
+  assert(
+    breakpoints.at(-1)?.content === 'First branch continuation.',
+    'Expected the newest lineage boundary to receive the final breakpoint',
   )
 
   return { success: true }
@@ -999,8 +1113,12 @@ testChatCompletionMixedTextAndNativeToolCallContinuesWithTool.description =
   'A provider response containing both text and a native tool call continues with the tool instead of returning prematurely.'
 testChatCompletionRejectsToolArgumentsOutsideDeclaredSchema.description =
   'Provider-native tool calls are rejected before execution when their arguments violate the declared tool schema.'
+testChatCompletionAcceptsDeclaredTaskyonUseMapping.description =
+  'Provider-native tool calls accept the Taskyon $use extension declared in their LLM-facing schema.'
 testChatCompletionCodexRequestMovesLeadingSystemPromptToInstructions.description =
   'Codex provider requests move the leading system prompt into provider instructions without making a network request.'
+testChatCompletionCacheKeyAndBreakpointsFollowTaskTree.description =
+  'Keeps one cache namespace per provider/model/task tree and marks root plus recent lineage boundaries.'
 testChatCompletionStreamingFailureClassification.description =
   'Chat completion stream failures distinguish interruption and transient provider failures.'
 testChatCompletionRendersUploadedTextFile.description =

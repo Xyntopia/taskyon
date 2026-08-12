@@ -3,6 +3,7 @@ import { resolveChatCompletionConnection } from '../types/chatCompletion'
 import { createDagGraphPatchTool } from '@taskyon/comp-dag/dagGraphTool'
 import { createTool, type InternalTool } from '../types/toolApi'
 import { chatCompletionToolName, createChatCompletionTool } from './chatCompletionTool'
+import { chatCompletionRetryDelayTool } from './chatCompletionRetryTool'
 import { devTools } from './devTools'
 import { executeJavaScript } from './executeJavaScript'
 import { executePythonScript } from './executePython'
@@ -51,12 +52,14 @@ export const createDefaultTaskyonToolSetup = (options?: {
     executeJavaScript,
     createDagGraphPatchTool(createTool),
     toolCreationWizard,
+    chatCompletionRetryDelayTool,
   ],
   chatCompletionToolName,
   createSessionTools: ({ db, taskManager, toolManager, artifactStore, toolchainConfig }) => {
     const createChatCompletion = (config: typeof toolchainConfig) =>
       createChatCompletionTool(resolveChatCompletionConnection(config.chatCompletion), {
         getTaskChain: taskManager.getTaskChain,
+        getTaskChainSelection: taskManager.getTaskChainSelection,
         getTask: taskManager.getTask,
         ...(artifactStore ? { getArtifact: artifactStore.get } : {}),
         listToolDefinitions: () => toolManager.listToolDefinitions(true),

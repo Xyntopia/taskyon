@@ -7,7 +7,12 @@ import { ToolBase } from '../types/tools'
 import type { TaskNode } from '../types/taskNode'
 import { createChatCompletionTask } from '../api'
 
-const INTERNAL_AGENT_TOOL_NAMES = new Set(['chatCompletion', 'entryNode', 'taskyonFlow'])
+const INTERNAL_AGENT_TOOL_NAMES = new Set([
+  'chatCompletion',
+  'chatCompletionRetryDelay',
+  'entryNode',
+  'taskyonFlow',
+])
 
 export type AgentToolCatalogEntry = {
   name: string

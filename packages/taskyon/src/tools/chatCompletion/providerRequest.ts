@@ -48,20 +48,37 @@ const hashStringForPromptCacheKey = (value: string) => {
   return (hash >>> 0).toString(36)
 }
 
-const messageContentForPromptCacheKey = (message: ModelMessage | undefined) => {
-  if (!message) return ''
-  if (typeof message.content === 'string') return message.content
-  try {
-    return JSON.stringify(message.content)
-  } catch {
-    return ''
-  }
-}
+const promptCacheNamespacePart = (value: string) =>
+  /^[a-zA-Z0-9._-]+$/.test(value) && value.length <= 80 ? value : hashStringForPromptCacheKey(value)
 
-const buildPromptCacheKey = (messages: ModelMessage[], selectedModel: string) => {
-  const firstUserMessage = messages.find((message) => message.role === 'user')
-  const seed = `${selectedModel}\n${messageContentForPromptCacheKey(firstUserMessage).slice(0, 8_000)}`
-  return `taskyon-${hashStringForPromptCacheKey(seed)}`
+const buildPromptCacheKey = (provider: string, selectedModel: string, rootTaskId: string) =>
+  ['taskyon', provider, selectedModel, rootTaskId].map(promptCacheNamespacePart).join('-')
+
+const withOpenAIPromptCacheBreakpoints = (messages: ModelMessage[]) => {
+  const eligibleIndexes = messages.flatMap((message, index) =>
+    message.role === 'user' || message.role === 'assistant' ? [index] : [],
+  )
+  const rootIndex = eligibleIndexes[0]
+  const recentIndexes = eligibleIndexes.filter((index) => index !== rootIndex).slice(-3)
+  const breakpointIndexes = new Set([
+    ...(rootIndex === undefined ? [] : [rootIndex]),
+    ...recentIndexes,
+  ])
+
+  return messages.map((message, index) =>
+    breakpointIndexes.has(index)
+      ? {
+          ...message,
+          providerOptions: {
+            ...message.providerOptions,
+            openai: {
+              ...message.providerOptions?.openai,
+              promptCacheBreakpoint: true,
+            },
+          },
+        }
+      : message,
+  )
 }
 
 const hasNonSystemMessages = (messages: ModelMessage[]) =>
@@ -155,6 +172,7 @@ export const buildChatProviderRequest = async (input: {
   verbosity?: OpenAI.ChatCompletionCreateParams['verbosity']
   toolChoice?: ToolChoice<ToolSet>
   providerRequest?: ProviderRequestTrace
+  promptCacheRootId?: string
 }) => {
   console.log('Creating chat completion request', {
     webSearch: input.webSearch,
@@ -181,6 +199,11 @@ export const buildChatProviderRequest = async (input: {
         ...(input.api.provider === 'chatgpt-codex' ? { baseURL: input.api.baseURL } : {}),
       })
       model = openai(input.selectedModel)
+      const usesExplicitPromptCaching =
+        input.api.provider === 'openai' && input.selectedModel.includes('gpt-5.6')
+      if (usesExplicitPromptCaching) {
+        requestMessages = withOpenAIPromptCacheBreakpoints(requestMessages)
+      }
 
       const reasoningEffort = input.selectedModel.includes('gpt-5')
         ? ({ none: 'none', low: 'low', medium: 'medium', high: 'high' }[
@@ -193,17 +216,28 @@ export const buildChatProviderRequest = async (input: {
           reasoningSummary: 'auto',
           ...(input.api.provider === 'chatgpt-codex'
             ? (() => {
-                const split = extractLeadingSystemMessagesForProviderInstructions(input.messages)
+                const split = extractLeadingSystemMessagesForProviderInstructions(requestMessages)
                 requestMessages = split.messages
                 return {
                   instructions: split.instructions,
-                  promptCacheKey: buildPromptCacheKey(requestMessages, input.selectedModel),
                   ...(hasNonSystemMessages(requestMessages)
                     ? { systemMessageMode: 'developer' as const }
                     : {}),
                   store: false,
                 }
               })()
+            : {}),
+          ...(input.promptCacheRootId
+            ? {
+                promptCacheKey: buildPromptCacheKey(
+                  input.api.provider,
+                  input.selectedModel,
+                  input.promptCacheRootId,
+                ),
+              }
+            : {}),
+          ...(usesExplicitPromptCaching
+            ? { promptCacheOptions: { mode: 'explicit' as const, ttl: '30m' as const } }
             : {}),
           parallelToolCalls: false,
         },

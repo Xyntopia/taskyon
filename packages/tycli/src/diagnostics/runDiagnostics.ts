@@ -23,6 +23,7 @@ const diagnosticsCategories = [
   'large-tokens',
   'long-running',
   'model-based',
+  'release',
 ] as const
 
 type DiagnosticsCategory = (typeof diagnosticsCategories)[number]
@@ -353,6 +354,7 @@ function filterTestsByCategory(
       if (category === 'authenticated') return metadata?.requiresAuth === true
       if (category === 'large-tokens') return metadata?.requiresLargeTokens === true
       if (category === 'long-running') return metadata?.requiresLongRun === true
+      if (category === 'release') return metadata?.release === true
       return fn.modelBased === true || metadata?.modelBased === true
     }),
   )

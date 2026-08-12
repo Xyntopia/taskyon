@@ -40,6 +40,11 @@ import {
 } from './chatCompletion/response'
 import { cleanupRawStreamOutput, runChatCompletionStream } from './chatCompletion/streamResult'
 import { writeChatCompletionTrace } from './chatCompletionTrace'
+import {
+  buildChatCompletionRetryDelayTask,
+  buildNextChatCompletionRetry,
+  findLatestChatCompletionRetry,
+} from './chatCompletionRetryTool'
 
 export {
   convertTaskNodesToOpenAIChat,
@@ -52,6 +57,33 @@ const getChatCompletionContextOptions = (maxFollow: number | undefined) =>
 
 const normalizePromptInjections = (value: unknown): PromptInjection[] =>
   Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
+
+const normalizeProviderUsage = (
+  usage: Awaited<ReturnType<typeof streamText>['totalUsage']>,
+): NonNullable<ProviderRequestTrace['usage']> => ({
+  inputTokens: {
+    ...(usage.inputTokens === undefined ? {} : { total: usage.inputTokens }),
+    ...(usage.inputTokenDetails.noCacheTokens === undefined
+      ? {}
+      : { noCache: usage.inputTokenDetails.noCacheTokens }),
+    ...(usage.inputTokenDetails.cacheReadTokens === undefined
+      ? {}
+      : { cacheRead: usage.inputTokenDetails.cacheReadTokens }),
+    ...(usage.inputTokenDetails.cacheWriteTokens === undefined
+      ? {}
+      : { cacheWrite: usage.inputTokenDetails.cacheWriteTokens }),
+  },
+  outputTokens: {
+    ...(usage.outputTokens === undefined ? {} : { total: usage.outputTokens }),
+    ...(usage.outputTokenDetails.textTokens === undefined
+      ? {}
+      : { text: usage.outputTokenDetails.textTokens }),
+    ...(usage.outputTokenDetails.reasoningTokens === undefined
+      ? {}
+      : { reasoning: usage.outputTokenDetails.reasoningTokens }),
+  },
+  ...(usage.totalTokens === undefined ? {} : { totalTokens: usage.totalTokens }),
+})
 
 export const chatCompletionToolName = 'chatCompletion'
 
@@ -69,6 +101,7 @@ export function createChatCompletionTool(
   }>,
   capabilities: {
     getTaskChain: TyTaskManager['getTaskChain']
+    getTaskChainSelection: TyTaskManager['getTaskChainSelection']
     getTask: TyTaskManager['getTask']
     getArtifact?: ArtifactStore['get']
     listToolDefinitions: () => Promise<Record<string, ToolBase>>
@@ -321,15 +354,16 @@ export function createChatCompletionTool(
 
       const lastTaskBeforeChatCompletion = executionTaskChain.at(-2)
       const contextOptions = getChatCompletionContextOptions(context_size)
-      const taskChain = lastTaskBeforeChatCompletion
-        ? await capabilities.getTaskChain(
+      const selectedTaskChain = lastTaskBeforeChatCompletion
+        ? await capabilities.getTaskChainSelection(
             lastTaskBeforeChatCompletion.id,
             contextOptions?.maxFollow,
             {
               method: 'lineage',
             },
           )
-        : []
+        : { tasks: [], includedSubtaskTaskIds: [] }
+      const taskChain = selectedTaskChain.tasks
       const chatInfo = await prepareChatCompletionContext({
         taskChain,
         allowedTools: tools,
@@ -339,6 +373,7 @@ export function createChatCompletionTool(
         useVisionModels: use_multimodal,
         ...(capabilities.getArtifact ? { getArtifact: capabilities.getArtifact } : {}),
         getTaskById: capabilities.getTask,
+        subtaskHandoffTaskIds: new Set(selectedTaskChain.includedSubtaskTaskIds),
       })
 
       const traceTaskId = currentTask?.id ?? 'N/A'
@@ -347,6 +382,7 @@ export function createChatCompletionTool(
         provider: selectedApi,
         model: selectedModel,
         taskId: traceTaskId,
+        recordedAt: new Date().toISOString(),
         attempts: [],
       }
       const streamOpts = await buildChatProviderRequest({
@@ -367,6 +403,7 @@ export function createChatCompletionTool(
         ...(reasoningEffort ? { reasoningEffort } : {}),
         ...(verbosity ? { verbosity } : {}),
         ...(normalizedToolChoice ? { toolChoice: normalizedToolChoice } : {}),
+        ...(taskChain[0]?.id ? { promptCacheRootId: taskChain[0].id } : {}),
         providerRequest,
       })
       const traceEnabled = trace?.enabled === true
@@ -389,6 +426,10 @@ export function createChatCompletionTool(
         const failure = streamResult.failure
         const humanized = humanizeError(effectiveErr)
         const lower = humanized.toLowerCase()
+        const retryState =
+          failure.shortReason === 'transient provider failure'
+            ? buildNextChatCompletionRetry(findLatestChatCompletionRetry(taskChain), Date.now())
+            : undefined
         const failureDetails = lower.includes('no endpoints found that support tool use')
           ? [
               'Provider routing failed: no endpoint supports tool use for this request.',
@@ -399,7 +440,9 @@ export function createChatCompletionTool(
           : failure.shortReason === 'transient provider failure'
             ? [
                 humanized,
-                'Suggested autonomous recovery: retry the same immediate objective once after the task tree records this error. If it repeats, reduce context or pause with the exact provider error instead of looping indefinitely.',
+                retryState
+                  ? `Taskyon will retry this chat completion in ${Math.ceil((retryState.retryAt - retryState.scheduledAt) / 1000)} seconds (visible retry ${retryState.retryNumber}); retries stop after ${new Date(retryState.retryDeadlineAt).toISOString()}.`
+                  : 'Taskyon stopped retrying because the 24-hour transient-provider recovery window expired.',
               ].join('\n')
             : humanized
         const partialContent = partialTextOutput.trim() || cleanupRawStreamOutput(rawOutput)
@@ -486,18 +529,30 @@ export function createChatCompletionTool(
             : []),
           {
             role: 'system',
+            ...(failure.shortReason === 'transient provider failure'
+              ? { label: ['chatCompletion:transient-provider-failure'] }
+              : {}),
             content: {
               type: 'error',
               data: `${failure.systemNote}${partialContent ? '' : ' No partial output was available.'}\n\n${failureDetails}`,
             },
           },
-          {
-            role: 'system',
-            content: { type: 'return', data: `chat completion ${failure.shortReason}` },
-          },
+          ...(retryState
+            ? [buildChatCompletionRetryDelayTask(retryState)]
+            : [
+                {
+                  role: 'system' as const,
+                  content: {
+                    type: 'return' as const,
+                    data: `chat completion ${failure.shortReason}`,
+                  },
+                },
+              ]),
         ])
       }
       const res = streamResult.response
+      const totalUsage = await chatCompletion.totalUsage
+      providerRequest.usage = normalizeProviderUsage(totalUsage)
 
       if (currentTask && lastTaskBeforeChatCompletion) {
         const metaInfo: TaskNodeMeta = await getMetaInfos(
@@ -511,6 +566,7 @@ export function createChatCompletionTool(
           providerConnection.defaultHeaders?.apiKey ?? '',
           delegatedTokenJti,
           capabilities.metaUpsert,
+          totalUsage,
         )
         metaInfo.providerRequest = providerRequest
         console.log('saving task metadata', {
@@ -675,6 +731,7 @@ async function getMetaInfos(
   taskyonKey: string,
   delegatedTokenJti: string | undefined,
   upsertMeta: TyTaskManager['metaUpsert'],
+  totalUsage: Awaited<ReturnType<typeof streamText>['totalUsage']>,
 ) {
   // need to make sure, that we remove audio, image and file data here!
   // TODO: make sure the following works..  e.g. with adding a file..
@@ -688,16 +745,14 @@ async function getMetaInfos(
   const content = await chatCompletion.content
   // const b = await chatCompletion.providerMetadata
   // const t = await chatCompletion.usage
-  const f = await chatCompletion.totalUsage
-
   const metaInfo: TaskNodeMeta = {
     streamContent: rawOutput,
     taskPrompt: truncatedMsgs,
     tools: Object.values(chatInfo.tools),
     rawOutput: chatCompletion,
-    promptTokens: f.inputTokens,
-    resultTokens: f.outputTokens,
-    taskTokens: f.totalTokens,
+    promptTokens: totalUsage.inputTokens,
+    resultTokens: totalUsage.outputTokens,
+    taskTokens: totalUsage.totalTokens,
     // this doesn't work correctly for taskyon.space service right now...
     //taskCosts: (b?.openrouter?.usage as Record<string, unknown>)?.cost as number,
   }
