@@ -1,6 +1,6 @@
 import { load } from 'js-yaml'
 import z from 'zod'
-import { createTaskNode } from './createTasks'
+import { createTaskNode, taskNodeToRecord } from './createTasks'
 import { createTaskVariablePresentationService, TASK_REF_PREFIX } from './taskVariables'
 import type { TaskNode } from '../types/taskNode'
 import { partialTaskDraft } from '../types/taskNode'
@@ -281,7 +281,14 @@ export const createMarkdownTaskChain = async (markdown?: string): Promise<TaskNo
   })
 }
 
-export const chatToYaml = (taskList: TaskNode[]) => safeYamlDump(taskList)
+export const chatToYaml = (taskList: TaskNode[]) =>
+  safeYamlDump({
+    version: 1,
+    contents: Object.fromEntries(
+      taskList.map((task) => [taskNodeToRecord(task).contentRef, task.content]),
+    ),
+    tasks: taskList.map(taskNodeToRecord),
+  })
 
 export const task2Md = (task: TaskNode, fullMeta = false) => {
   const taskIdToAlias = createPortableTaskRefMap([task])

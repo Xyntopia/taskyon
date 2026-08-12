@@ -1009,7 +1009,7 @@ export const testChatCompletionRendersUploadedTextFile = async () => {
       type: 'files',
       data: [
         {
-          hash: `sha256:${'a'.repeat(64)}`,
+          hash: `sha256:${'a'.repeat(43)}`,
           name: 'notes.txt',
           mediaType: 'text/plain',
           size: 19,

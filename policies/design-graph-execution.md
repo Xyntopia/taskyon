@@ -70,6 +70,8 @@ exists.
 - Keep DAG indexing, closure traversal, visualization records, immutable input rewrites, dependent
   deletion checks, and default-record merging in `@taskyon/comp-dag`. Host applications may select
   roots and supply capabilities or labels, but must not duplicate these graph algorithms.
+- Encode canonical SHA-256 node, computation, revision, and artifact identities as unpadded
+  base64url after the `sha256:` prefix.
 - Keep creation task IDs, timestamps, and conversational provenance outside computation identity
   unless they affect behavior.
 - Represent a cache lookup as one canonical computation hash derived from the node content hash and

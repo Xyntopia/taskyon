@@ -2,6 +2,10 @@
 
 Taskyon records work as immutable task nodes rather than a flat chat transcript.
 
+Repeated node content is stored once under a content hash. Each occurrence keeps its own links and
+references that shared content, so repeated entry-node and chat-completion calls do not require
+duplicating the same stored payload.
+
 - `priorID` links a task to the previous task in the same sequential chain.
 - `parentID` links a child chain to the function call that created it.
 - Chains sharing a parent can run in parallel.

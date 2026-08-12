@@ -1,6 +1,6 @@
 import { constants } from 'node:fs'
 import { createReadStream } from 'node:fs'
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import {
   access,
   appendFile,
@@ -14,6 +14,7 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { createSha256Hasher, sha256HashBytes } from '@taskyon/common/modules/canonicalHash'
 import type { Port } from '@taskyon/common/modules/frpBus'
 import {
   createStorageProtocolServer,
@@ -110,9 +111,9 @@ const stagedBlobMetadataPath = (namespace: string, writeId: string) =>
   `${blobDirectory(namespace)}/.staging/${safePathPart(writeId)}.json`
 
 const fileSha256 = async (path: string) => {
-  const hash = createHash('sha256')
+  const hash = createSha256Hasher()
   for await (const chunk of createReadStream(path)) hash.update(chunk)
-  return `sha256:${hash.digest('hex')}`
+  return hash.digest()
 }
 
 const fileMetadata = async (
@@ -206,7 +207,7 @@ export const createCliFileBlobStorageBackend = (
         await rename(temporary, path)
         const details = {
           ...(contentType ? { contentType } : {}),
-          sha256: `sha256:${createHash('sha256').update(data).digest('hex')}`,
+          sha256: sha256HashBytes(data),
         }
         await writeDetails(detailsPath(id), details)
         return await fileMetadata(path, id, details)
@@ -381,7 +382,7 @@ const writeJsonFile = async (filePath: string, value: unknown) => {
   }
 }
 
-const storageRecordFileName = /^[a-f0-9]{62}$/
+const storageRecordFileName = /^[A-Za-z0-9_-]{41}$/
 
 const listRecordFileNames = async (dir: string, root = dir): Promise<string[]> => {
   try {

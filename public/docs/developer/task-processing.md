@@ -2,7 +2,15 @@
 
 ## Task nodes
 
-Taskyon appends immutable `TaskNode` records. The core content types are:
+Taskyon appends immutable task occurrences. Each stored task contains a `contentRef` to one
+session-local, content-addressed `TaskContent` record; repeated instructions and values therefore
+share storage while retaining separate call-stack positions.
+
+`getTask(id)` returns this compact record by default. Call
+`getTask(id, { contentMode: 'hydrated' })` only when the caller needs the referenced `content`.
+Canonical content hashes use `sha256:` plus unpadded base64url. Task occurrence IDs hash both the
+call-stack activation data and the content reference, so equal content can appear at distinct
+positions without being stored repeatedly.
 
 | Type             | Purpose                                                   |
 | ---------------- | --------------------------------------------------------- |

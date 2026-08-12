@@ -49,8 +49,15 @@ export const FunctionCall = z.object({
   name: FunctionName,
   arguments: FunctionArguments,
   toolRevision: ContentHash.optional(),
+  settingsRevision: ContentHash.optional(),
 })
 export type FunctionCall = z.infer<typeof FunctionCall>
+
+export const ToolInvocationRevisions = z.strictObject({
+  toolRevision: ContentHash,
+  settingsRevision: ContentHash.optional(),
+})
+export type ToolInvocationRevisions = z.infer<typeof ToolInvocationRevisions>
 
 export const ToolBase = z.object({
   description: z.string().meta({

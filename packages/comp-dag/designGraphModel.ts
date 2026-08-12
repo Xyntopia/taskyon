@@ -125,7 +125,7 @@ export type DagEngineSettings = {
   artifactRetentionBytes?: number
 }
 
-const hashPattern = /^sha256:(?:[a-f0-9]{64}|[A-Za-z0-9_-]{43})$/
+const hashPattern = /^sha256:[A-Za-z0-9_-]{43}$/
 
 const objectAtBoundary = (value: unknown, label: string): Record<string, unknown> => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {

@@ -3,7 +3,12 @@ import type { PartialDeep } from 'type-fest'
 import z from 'zod'
 import { TaskNodeMeta } from '../types/chatCompletion'
 import type { TaskTreeNode } from '../types/taskNode'
-import { TaskNode, partialTaskDraft } from '../types/taskNode'
+import {
+  TaskContentRecord,
+  TaskNode,
+  TaskNodeRecord,
+  type partialTaskDraft,
+} from '../types/taskNode'
 import type { InternalTool } from '../types/toolApi'
 import {
   createProtocolStorageCrudWrapper,
@@ -15,7 +20,7 @@ import {
   type TaskyonStorageClient,
   type TaskyonStorageMessage,
 } from '../api/storageProtocol'
-import type { Port } from '@taskyon/common/modules/frpBus'
+import { createStream, type Port } from '@taskyon/common/modules/frpBus'
 import { lockMap, sleep } from '../utils/asyncUtils'
 import {
   createCombinedCrudWrapper,
@@ -26,7 +31,7 @@ import {
   withKeyLockings,
 } from '../utils/crudWrapper'
 import type { TyPGDB } from '../utils/pglite.api'
-import { createTaskNode } from './createTasks'
+import { createTaskNode, ensureValidTaskId, taskContentHash, taskNodeToRecord } from './createTasks'
 import { addMarkdownTaskChain } from './markdownTaskIO'
 import {
   findContinuationLeafTaskIds,
@@ -36,14 +41,23 @@ import {
 import type { ToolStorageRecord } from './toolManager'
 import { ToolStorageRecord as ToolStorageRecordSchema } from './toolManager'
 import type { ToolManager } from './toolManager'
+import { ToolSettingsRecord } from './toolSettings'
 
 export type TaskManagerStorage = {
-  tasks: StorageRecordCrud<TaskNode>
+  tasks: StorageRecordCrud<TaskNodeRecord>
+  contents: StorageRecordCrud<TaskContentRecord>
   meta: StorageRecordCrud<TaskNodeMeta>
   tools: StorageRecordCrud<ToolStorageRecord>
+  toolSettings: StorageRecordCrud<ToolSettingsRecord>
 }
 
-const taskStorageTables = ['taskyonNodes', 'metaDb', 'toolRegistry'] as const
+const taskStorageTables = [
+  'taskyonNodes',
+  'taskyonContents',
+  'metaDb',
+  'toolRegistry',
+  'toolSettings',
+] as const
 type TaskStorageTable = (typeof taskStorageTables)[number]
 
 const isTaskStorageTable = (value: string): value is TaskStorageTable =>
@@ -84,13 +98,19 @@ export const createPgLiteTaskManagerStorage = async (
   })
   return {
     tasks: withBatches(
-      await createPgLiteCrudWrapper<TaskNode>(taskyonDb, { tableName: 'taskyonNodes' }),
+      await createPgLiteCrudWrapper<TaskNodeRecord>(taskyonDb, { tableName: 'taskyonNodes' }),
+    ),
+    contents: withBatches(
+      await createPgLiteCrudWrapper<TaskContentRecord>(taskyonDb, { tableName: 'taskyonContents' }),
     ),
     meta: withBatches(
       await createPgLiteCrudWrapper<TaskNodeMeta>(taskyonDb, { tableName: 'metaDb' }),
     ),
     tools: withBatches(
       await createPgLiteCrudWrapper<ToolStorageRecord>(taskyonDb, { tableName: 'toolRegistry' }),
+    ),
+    toolSettings: withBatches(
+      await createPgLiteCrudWrapper<ToolSettingsRecord>(taskyonDb, { tableName: 'toolSettings' }),
     ),
   }
 }
@@ -103,7 +123,12 @@ export const connectTaskManagerStorageFromProtocol = (
     tasks: createProtocolStorageCrudWrapper(
       storage,
       taskManagerStorageNamespace(sessionId, 'taskyonNodes'),
-      TaskNode,
+      TaskNodeRecord,
+    ),
+    contents: createProtocolStorageCrudWrapper(
+      storage,
+      taskManagerStorageNamespace(sessionId, 'taskyonContents'),
+      TaskContentRecord,
     ),
     meta: createProtocolStorageCrudWrapper(
       storage,
@@ -114,6 +139,11 @@ export const connectTaskManagerStorageFromProtocol = (
       storage,
       taskManagerStorageNamespace(sessionId, 'toolRegistry'),
       ToolStorageRecordSchema,
+    ),
+    toolSettings: createProtocolStorageCrudWrapper(
+      storage,
+      taskManagerStorageNamespace(sessionId, 'toolSettings'),
+      ToolSettingsRecord,
     ),
   }
 }
@@ -150,11 +180,15 @@ export const createPgLiteTaskManagerStorageService = (
         const { table } = parseTaskManagerStorageNamespace(namespace)
         switch (table) {
           case 'taskyonNodes':
-            return createStorageRecordBackend(storage.tasks, TaskNode)
+            return createStorageRecordBackend(storage.tasks, TaskNodeRecord)
+          case 'taskyonContents':
+            return createStorageRecordBackend(storage.contents, TaskContentRecord)
           case 'metaDb':
             return createStorageRecordBackend(storage.meta, TaskNodeMeta)
           case 'toolRegistry':
             return createStorageRecordBackend(storage.tools, ToolStorageRecordSchema)
+          case 'toolSettings':
+            return createStorageRecordBackend(storage.toolSettings, ToolSettingsRecord)
         }
       },
     )
@@ -400,13 +434,29 @@ export async function useTyTaskManager(
   // make sure that we remove the "upsert" function for tyCrud in order
   // to make sure the data inside stays immutable...
   const mod = createCombinedCrudWrapper([
-    createMapCrudWrapper(new Map<string, TaskNode>()),
+    createMapCrudWrapper(new Map<string, TaskNodeRecord>()),
     storage.tasks,
   ])
   const tyCrud = withImmutable(mod, {
-    hash: (data: TaskNode) => {
+    hash: (data: TaskNodeRecord) => {
       return data.id
     },
+  })
+
+  const hydrateTaskRecord = async (record: TaskNodeRecord): Promise<TaskNode> => {
+    const stored = await storage.contents.get(record.contentRef)
+    if (!stored) throw new Error(`Task content not found: ${record.contentRef}`)
+    if (stored.id !== record.contentRef) {
+      throw new Error(`Task content id mismatch: ${record.contentRef}`)
+    }
+    if (taskContentHash(stored.content) !== record.contentRef) {
+      throw new Error(`Task content hash mismatch: ${record.contentRef}`)
+    }
+    return TaskNode.parse({ ...record, contentRef: undefined, content: stored.content })
+  }
+  const hydratedTaskEvents = createStream<{ id: string | number; data: TaskNode | null }>()
+  tyCrud.liveStream(async ({ id, data }) => {
+    hydratedTaskEvents.emit({ id, data: data ? await hydrateTaskRecord(data) : null })
   })
 
   const getAllTaskIds = tyCrud.listIds
@@ -416,7 +466,10 @@ export async function useTyTaskManager(
   const taskVectors = await useTaskVectors(
     taskyonDb,
     getAllTaskIds,
-    tyCrud.get,
+    async (id) => {
+      const record = await tyCrud.get(id)
+      return record ? await hydrateTaskRecord(record) : null
+    },
     resolveTool,
     options.taskSearchVectorizer ?? 'static-multilingual',
   )
@@ -427,10 +480,12 @@ export async function useTyTaskManager(
   // add more enhanced, ty-specific functionality to our CRUD
   const taskDb = {
     ...tyCrud,
+    getRecord: (id: string | number) => tyCrud.get(id),
     get: async (id: string | number) =>
       await execWLock(async () => {
-        //console.log('get task from db', taskyonDb.name)
-        const task = await tyCrud.get(id)
+        const record = await tyCrud.get(id)
+        if (!record) return null
+        const task = await hydrateTaskRecord(record)
         if (task) updateChildAndSiblingMap(task)
         return task
       }, id),
@@ -442,10 +497,16 @@ export async function useTyTaskManager(
       } = { createMeta: 'missing', vectors: false },
     ) => {
       const completeTask = await createTaskNode(task, { createMeta: options.createMeta })
+      const record = taskNodeToRecord(completeTask)
+      const contentRecord: TaskContentRecord = {
+        id: record.contentRef,
+        content: completeTask.content,
+      }
 
       console.log('create new Task:', completeTask)
       await execWLock(async () => {
-        await tyCrud.add(completeTask)
+        await storage.contents.set(contentRecord.id, contentRecord)
+        await tyCrud.add(record)
         if (options.vectors) {
           void taskVectors.addtoVectorDB(completeTask).catch((error: unknown) => {
             console.warn('vector indexing failed', {
@@ -462,7 +523,8 @@ export async function useTyTaskManager(
     delete: async (id: string | number) =>
       await execWLock(async () => {
         // Delete from local record/memorydb
-        const task = await tyCrud.get(id)
+        const record = await tyCrud.get(id)
+        const task = record ? await hydrateTaskRecord(record) : null
         if (task) void deleteFromChildAndSiblings(task)
         void tyCrud.delete(id)
         void taskVectors.deleteTaskFromVectorStore(id.toString())
@@ -470,6 +532,7 @@ export async function useTyTaskManager(
     clear: async () => {
       clearLocks()
       await tyCrud.clear()
+      await storage.contents.clear()
       clearLocks()
     },
   }
@@ -764,41 +827,82 @@ export async function useTyTaskManager(
     }
   }
 
-  const searchTasks: (where: PartialDeep<TaskNode>) => Promise<Record<string, TaskNode>> =
-    storage.tasks.find
+  const searchTasks = async (where: PartialDeep<TaskNode>): Promise<Record<string, TaskNode>> => {
+    const records = await storage.tasks.find(where as PartialDeep<TaskNodeRecord>)
+    return Object.fromEntries(
+      await Promise.all(
+        Object.entries(records).map(async ([id, record]) => [id, await hydrateTaskRecord(record)]),
+      ),
+    )
+  }
 
   async function getJsonTaskBackup() {
     // TODO: give this a callback so that we can save it in "chunks"
     console.log('exporting json backup db!')
-    const allNodes = await taskDb.listAll()
-    return JSON.stringify(allNodes.map((r) => r.data))
+    const taskRows = await tyCrud.listAll()
+    const contentRows = await storage.contents.listAll()
+    return JSON.stringify({
+      version: 1,
+      tasks: taskRows.map((row) => row.data),
+      contents: Object.fromEntries(contentRows.map((row) => [row.id, row.data.content])),
+    })
   }
 
   // import tasks from json! :)
   // TODO: remove this function and replace this with a list of tasknode json functions!!
   //       we want to get rid of our rxdb dependency here... we could even backup tass as markdown!  that might be even better :)
   async function addTaskBackup(jsonObjString: string) {
-    const jsonObj = JSON.parse(jsonObjString)
-    if (Array.isArray(jsonObj)) {
-      await Promise.all(
-        jsonObj.map(async (obj) => {
-          const res = TaskNode.safeParse(obj)
-          if (res.success) {
-            await taskDb.add(res.data)
-          } else {
-            console.warn('Could not add data:', res.data, res.error)
-          }
-        }),
-      )
-    }
+    const archive = z
+      .object({
+        version: z.literal(1),
+        tasks: z.array(TaskNodeRecord),
+        contents: z.record(z.string(), TaskContentRecord.shape.content),
+      })
+      .parse(JSON.parse(jsonObjString))
+    await storage.contents.setMany(
+      Object.entries(archive.contents).map(([id, content]) => {
+        if (taskContentHash(content) !== id) throw new Error(`Task content hash mismatch: ${id}`)
+        return { id, data: TaskContentRecord.parse({ id, content }) }
+      }),
+    )
+    await storage.tasks.setMany(archive.tasks.map((record) => ({ id: record.id, data: record })))
   }
 
   // add a task to the db. Adding some default information such as timestamps etc...
   // whats important here is that the TaskNode can only have one type of content
   // so when calling the function, we need to pre-select which type of task
   // we want to have.
-  const addPartialTask2Tree = (task: partialTaskDraft) =>
-    taskDb.add(task, { createMeta: 'missing', vectors: options.indexTaskVectors !== false })
+  const addPartialTask2Tree = async (task: partialTaskDraft) => {
+    return await taskDb.add(task, {
+      createMeta: 'missing',
+      vectors: options.indexTaskVectors !== false,
+    })
+  }
+
+  async function addTaskNodes(taskList: readonly TaskNode[], expectedParentID?: string) {
+    const verifiedTasks = await Promise.all(taskList.map(ensureValidTaskId))
+    const addedTaskList: TaskNode[] = []
+    const parentID = expectedParentID ?? verifiedTasks[0]?.parentID
+    let priorID: string | undefined
+    for (const [index, task] of verifiedTasks.entries()) {
+      if (task.parentID !== parentID) {
+        throw new Error(`Compiled task parent mismatch for ${task.id}.`)
+      }
+      if (index > 0 && task.priorID !== priorID) {
+        throw new Error(`Compiled task chain linkage mismatch for ${task.id}.`)
+      }
+      priorID = task.id
+    }
+    for (const task of verifiedTasks) {
+      const addedTask = await taskDb.add(task, {
+        createMeta: 'missing',
+        vectors: options.indexTaskVectors !== false,
+      })
+      invalidateTaskRelationCaches(addedTask)
+      addedTaskList.push(addedTask)
+    }
+    return addedTaskList
+  }
 
   async function addTaskChain(
     taskList: partialTaskDraft[],
@@ -808,6 +912,9 @@ export async function useTyTaskManager(
     let lastTaskId = priorID
     const addedTaskList: TaskNode[] = []
     for (const task of taskList) {
+      if (task.id) {
+        throw new Error('addTaskChain accepts drafts without ids. Use addTaskNodes instead.')
+      }
       const addedTask = await addPartialTask2Tree({ ...task, priorID: lastTaskId, parentID })
       invalidateTaskRelationCaches(addedTask)
       lastTaskId = addedTask.id
@@ -828,9 +935,23 @@ export async function useTyTaskManager(
       taskListRaw = load(fileStr)
     }
 
-    const taskList = await z.array(partialTaskDraft).parseAsync(taskListRaw)
-    const newTaskList = await addTaskChain(taskList)
-    return newTaskList.at(-1)?.id
+    const archive = z
+      .object({
+        version: z.literal(1),
+        contents: z.record(z.string(), TaskContentRecord.shape.content),
+        tasks: z.array(TaskNodeRecord),
+      })
+      .parse(taskListRaw)
+    const added = await Promise.all(
+      archive.tasks.map((record) => {
+        const content = archive.contents[record.contentRef]
+        if (!content) throw new Error(`Task content not found in archive: ${record.contentRef}`)
+        const { contentRef: _contentRef, ...task } = record
+        void _contentRef
+        return taskDb.add({ ...task, content })
+      }),
+    )
+    return added.at(-1)?.id
   }
 
   // TODO: move outside taskmanager as a separate function which returns partialTaskNodes
@@ -848,11 +969,27 @@ export async function useTyTaskManager(
     return undefined
   }
 
+  function getTask(id: string | number): Promise<TaskNodeRecord | null>
+  function getTask(
+    id: string | number,
+    options: { contentMode: 'reference' },
+  ): Promise<TaskNodeRecord | null>
+  function getTask(
+    id: string | number,
+    options: { contentMode: 'hydrated' },
+  ): Promise<TaskNode | null>
+  function getTask(
+    id: string | number,
+    options?: { contentMode?: 'hydrated' | 'reference' },
+  ): Promise<TaskNode | TaskNodeRecord | null> {
+    return options?.contentMode === 'hydrated' ? taskDb.get(id) : taskDb.getRecord(id)
+  }
+
   const defaultMode = {
-    getTask: taskDb.get,
+    getTask,
     deleteTask: taskDb.delete,
     searchTasks,
-    taskStream: taskDb.liveStream,
+    taskStream: hydratedTaskEvents.stream,
     getJsonTaskBackup,
     addTaskBackup,
     deleteAllTasks,
@@ -913,6 +1050,7 @@ export async function useTyTaskManager(
     getChildChains,
     addPartialTask2Tree,
     addTaskChain,
+    addTaskNodes,
     addMdTaskChain,
     getMeta: metaDb.get,
     metaLiveRead: metaDb.readLive,

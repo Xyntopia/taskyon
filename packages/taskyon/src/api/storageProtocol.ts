@@ -8,7 +8,7 @@ import {
 } from '@taskyon/common/modules/frpBus'
 import { z } from 'zod'
 import type { PartialDeep } from 'type-fest'
-import type { CrudWrapper } from '../utils/crudWrapper'
+import { createMapCrudWrapper, type CrudWrapper } from '../utils/crudWrapper'
 import {
   mergeStorageRecord,
   storageQueryMatches,
@@ -767,6 +767,47 @@ export const createStorageRecordBackend = <T>(
     find: async (query) => crud.find(query as PartialDeep<T>),
     clear: crud.clear,
   }
+}
+
+const containsPartialValue = (value: unknown, expected: unknown): boolean => {
+  if (Array.isArray(expected)) {
+    return (
+      Array.isArray(value) &&
+      expected.every((item) => value.some((candidate) => containsPartialValue(candidate, item)))
+    )
+  }
+  if (expected && typeof expected === 'object') {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+    return Object.entries(expected).every(([key, item]) =>
+      containsPartialValue((value as Record<string, unknown>)[key], item),
+    )
+  }
+  return Object.is(value, expected)
+}
+
+export const createMemoryStorageRecordBackend = (): StorageRecordBackend => {
+  const crud = createMapCrudWrapper(new Map<string | number, unknown>())
+  return createStorageRecordBackend(
+    {
+      ...crud,
+      getMany: async (ids) => {
+        const rows = await Promise.all(ids.map(async (id) => ({ id, data: await crud.get(id) })))
+        return rows.filter(
+          (row): row is { id: string | number; data: unknown } => row.data !== null,
+        )
+      },
+      setMany: async (rows) => {
+        await Promise.all(rows.map(({ id, data }) => crud.set(id, data)))
+      },
+      find: async (where) =>
+        Object.fromEntries(
+          (await crud.list())
+            .filter(({ data }) => containsPartialValue(data, where))
+            .map(({ id, data }) => [id.toString(), data]),
+        ),
+    },
+    z.unknown(),
+  )
 }
 
 export const createStorageProtocolServer = (

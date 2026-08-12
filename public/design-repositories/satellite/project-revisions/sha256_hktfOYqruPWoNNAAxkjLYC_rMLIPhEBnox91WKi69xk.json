@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 2,
+  "parents": [],
+  "displayName": "Satellite",
+  "invocations": {
+    "main": "sha256:o1xf9FP3Ks4nw_aoll-Ipy_GvPuSyVQQUskJILFQfq8"
+  },
+  "extensions": {},
+  "id": "sha256:hktfOYqruPWoNNAAxkjLYC_rMLIPhEBnox91WKi69xk"
+}

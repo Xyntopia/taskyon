@@ -21,7 +21,7 @@ export type SourceManifestStorage = {
   set: (namespace: string, id: string, value: unknown) => Promise<void>
 }
 
-const hashPattern = /^sha256:[A-Za-z0-9_-]+$/
+const hashPattern = /^sha256:[A-Za-z0-9_-]{43}$/
 
 const requireHash = (value: unknown, label: string): Hash => {
   if (typeof value !== 'string' || !hashPattern.test(value)) {

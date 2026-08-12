@@ -6,7 +6,7 @@ export type DagStorageRecords = {
 }
 
 const parseArtifactHash = (value: unknown): Hash => {
-  if (typeof value !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(value)) {
+  if (typeof value !== 'string' || !/^sha256:[A-Za-z0-9_-]{43}$/.test(value)) {
     throw new Error('Invalid DAG artifact hash in storage cache entry.')
   }
   return value as Hash

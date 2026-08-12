@@ -180,7 +180,7 @@ function createTaskTracker(tm: TyTaskManager) {
 
   // this function recursively checks if a task is finished
   async function isTaskFinished(taskId: string): Promise<boolean> {
-    const task = await tm.getTask(taskId)
+    const task = await tm.getTask(taskId, { contentMode: 'hydrated' })
     if (!task) throw new Error('Task not found!')
     if (task.content.type === 'functioncall') {
       return await areAllSubtasksFinished(task.id)
@@ -399,7 +399,7 @@ const createTaskProcessor = (
     defaultTask: partialTaskDraft,
     errorHandlerTask: partialTaskDraft,
   ) => {
-    const task = await taskManager.getTask(taskId)
+    const task = await taskManager.getTask(taskId, { contentMode: 'hydrated' })
     if (task && !currentTaskCtrl.signal.aborted) {
       // make sure we know from outside that the worker is active...
       taskisInLoop(taskId)
@@ -598,7 +598,7 @@ const setupRun = (
     const routingTask = (async () => {
       let wasRouted = false
       try {
-        const task = await taskManager.getTask(id)
+        const task = await taskManager.getTask(id, { contentMode: 'hydrated' })
         if (!task || currentTaskCtrl.signal.aborted) return
         if (task.priorID && !(await taskTracker.isTaskFinished(task.priorID))) {
           waitForPriorTask(task)
@@ -656,7 +656,9 @@ const setupRun = (
       streamEmit({ stage: 'finished', taskId: currentTaskId })
       releaseTasksWaitingFor(currentTaskId)
 
-      const currentTask = await taskManager.getTask(currentTaskId)
+      const currentTask: TaskNode | null = await taskManager.getTask(currentTaskId, {
+        contentMode: 'hydrated',
+      })
       currentTaskId = currentTask?.parentID
     }
   }

@@ -84,6 +84,11 @@ sharing, and persistence.
   representation's content hash before issuing an atomic provider write. Providers compare only
   stored-content hashes and must not calculate domain hashes or require a parallel revision-token
   record.
+- Encode canonical SHA-256 identities as unpadded base64url with the `sha256:` prefix across Taskyon
+  records, artifacts, tool revisions, and design-graph records. Do not introduce a second hex form.
+- Store a task occurrence separately from its immutable content: the occurrence retains call-stack
+  links and a `contentRef`, while the content store deduplicates identical `TaskContent` values.
+  Hydrate only at boundaries that need the full content.
 - Store filesystem records under fixed-length hash-only paths. Backends may shard hashes into
   prefix directories but must not expose serialized keys or domain names as final filenames.
 - Present large immutable artifacts to consumers as whole content-addressed blobs. Streaming pieces

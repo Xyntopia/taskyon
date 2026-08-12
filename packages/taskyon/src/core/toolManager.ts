@@ -2,7 +2,7 @@ import type { InternalTool } from '../types/toolApi'
 import { ContentHash as ContentHashSchema, ToolBase } from '../types/tools'
 import { ToolIdentity, type ContentHash } from '../types/tools'
 import type { CrudWrapper } from '../utils/crudWrapper'
-import { sha256UrlSafeHash, uint8ArrayToBase64UrlSafe } from '../utils/encoding'
+import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
 import { JSONSchema7 } from '../utils/jsonSchema'
 import { z } from 'zod'
 
@@ -44,22 +44,8 @@ export type ToolStorageRecord = z.infer<typeof ToolStorageRecord>
 const DEFINITION_PREFIX = 'd/'
 const ACTIVE_PREFIX = 'a/'
 
-function canonicalJson(value: unknown): string {
-  if (value === undefined) return 'null'
-  if (value === null || typeof value !== 'object') return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
-
-  return `{${Object.entries(value)
-    .filter(([, item]) => item !== undefined)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
-    .join(',')}}`
-}
-
-export async function toolRevisionHash(manifest: ToolManifest): Promise<ContentHash> {
-  const data = new TextEncoder().encode(`taskyon.tool-manifest.v1\0${canonicalJson(manifest)}`)
-  const digest = await crypto.subtle.digest('SHA-256', data)
-  return `sha256:${uint8ArrayToBase64UrlSafe(digest)}`
+export function toolRevisionHash(manifest: ToolManifest): ContentHash {
+  return canonicalHash({ kind: 'taskyon.tool-manifest.v1', manifest })
 }
 
 function definitionKey(revision: ContentHash) {
@@ -70,7 +56,7 @@ function activeKey(name: string) {
   return `${ACTIVE_PREFIX}${name}`
 }
 
-async function createManifest(tool: InternalTool): Promise<ToolManifest> {
+function createManifest(tool: InternalTool): ToolManifest {
   const toolBase = ToolBase.parse(tool)
   const renderOptions = toolBase.renderOptions
     ? {
@@ -90,12 +76,18 @@ async function createManifest(tool: InternalTool): Promise<ToolManifest> {
     : tool.function
       ? ({
           kind: 'trusted-native',
-          implementationRevision: `sha256:${await sha256UrlSafeHash(tool.function.toString())}`,
+          implementationRevision: canonicalHash({
+            kind: 'taskyon.trusted-function.v1',
+            source: tool.function.toString(),
+          }),
         } as const)
       : ({
           kind: 'external-service',
           serviceId: 'unbound',
-          implementationRevision: `sha256:${await sha256UrlSafeHash(toolBase)}`,
+          implementationRevision: canonicalHash({
+            kind: 'taskyon.external-tool.v1',
+            tool: toolBase,
+          }),
         } as const)
   return {
     publisherId: 'local',
@@ -123,7 +115,7 @@ export function createToolManager(
   const getManifest = async (revision: ContentHash): Promise<ToolManifest | null> => {
     const record = await storage.get(definitionKey(revision))
     if (record?.type !== 'manifest') return null
-    return (await toolRevisionHash(record.manifest)) === revision ? record.manifest : null
+    return toolRevisionHash(record.manifest) === revision ? record.manifest : null
   }
 
   const resolveActiveRevision = async (name: string): Promise<ContentHash | null> => {
@@ -150,7 +142,7 @@ export function createToolManager(
     manifest: ToolManifest,
     options: { approveReplacement?: boolean } = {},
   ): Promise<ToolIdentity> => {
-    const revision = await toolRevisionHash(manifest)
+    const revision = toolRevisionHash(manifest)
     const currentRevision = await resolveActiveRevision(manifest.name)
     if (currentRevision === revision) return manifestIdentity(manifest, revision)
     if (currentRevision && currentRevision !== revision && !options.approveReplacement) {
@@ -168,7 +160,7 @@ export function createToolManager(
     tool: InternalTool,
     options: { approveReplacement?: boolean } = {},
   ): Promise<ToolIdentity> => {
-    const identity = await installManifest(await createManifest(tool), options)
+    const identity = await installManifest(createManifest(tool), options)
     if (tool.function) runtimeTools.set(identity.revision, tool)
     return identity
   }
@@ -184,8 +176,8 @@ export function createToolManager(
           console.warn(`Tool ${tool.name} is not a valid ToolBase!`, toolDef.error)
           return
         }
-        const manifest = await createManifest(tool)
-        const revision = await toolRevisionHash(manifest)
+        const manifest = createManifest(tool)
+        const revision = toolRevisionHash(manifest)
         if (activeRevisions.get(tool.name) === revision) {
           if (tool.function) runtimeTools.set(revision, tool)
           return
@@ -252,9 +244,9 @@ export function createToolManager(
     }
 
     const entries = await Promise.all(
-      activeRevisions.map(async ({ name, revision }) => {
+      activeRevisions.map(({ name, revision }) => {
         const manifest = manifests.get(definitionKey(revision))
-        if (!manifest || (await toolRevisionHash(manifest)) !== revision) return null
+        if (!manifest || toolRevisionHash(manifest) !== revision) return null
         const { tool } = materializeTool(manifest, revision)
         return tool?.name === name ? ([name, tool] as const) : null
       }),

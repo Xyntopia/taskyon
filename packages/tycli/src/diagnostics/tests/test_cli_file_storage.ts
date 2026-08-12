@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
+import { canonicalHash, sha256HashBytes } from '@taskyon/common/modules/canonicalHash'
 import { createProtocolPort } from '@taskyon/common/modules/frpBus'
 import { runStorageBackendContract } from '@taskyon/taskyon/test-support'
 import {
@@ -12,7 +12,7 @@ import {
 import { storageRecordFilePath } from '../../../../taskyon/src/api/storageRecordFileBackend'
 import { createArtifactStore } from '../../../../taskyon/src/core/artifactStore'
 import { connectTaskManagerStorageFromProtocol } from '../../../../taskyon/src/core/taskManager'
-import type { TaskNode } from '../../../../taskyon/src/types/taskNode'
+import type { TaskNodeRecord } from '../../../../taskyon/src/types/taskNode'
 import {
   createCliFileBlobStorageBackend,
   createCliFileStorageBackend,
@@ -50,23 +50,24 @@ export const testCliFileStoragePersistsTaskRecordsAndFindsRelations = async () =
     sessionId,
   )
 
-  const parentTask: TaskNode = {
+  const contentRef = `sha256:${'a'.repeat(43)}` as const
+  const parentTask: TaskNodeRecord = {
     id: 'parent-task',
     role: 'user',
-    content: { type: 'message', data: 'parent' },
+    contentRef,
   }
-  const childTask: TaskNode = {
+  const childTask: TaskNodeRecord = {
     id: 'child-task',
     parentID: 'parent-task',
     role: 'assistant',
-    content: { type: 'message', data: 'child' },
+    contentRef,
   }
-  const siblingTask: TaskNode = {
+  const siblingTask: TaskNodeRecord = {
     id: 'sibling-task',
     parentID: 'parent-task',
     priorID: 'child-task',
     role: 'assistant',
-    content: { type: 'message', data: 'sibling' },
+    contentRef,
   }
   await firstStorage.tasks.set('parent-task', parentTask)
   await firstStorage.tasks.setMany([
@@ -172,7 +173,7 @@ export const testCliFileStorageReclaimsAnInterruptedProcessLock = async () => {
     await storage.tasks.set('recovered-task', {
       id: 'recovered-task',
       role: 'user',
-      content: { type: 'message', data: 'storage recovered' },
+      contentRef: `sha256:${'a'.repeat(43)}`,
     })
     const recovered = await storage.tasks.get('recovered-task')
     assert(recovered?.id === 'recovered-task', 'Expected storage to reclaim the dead owner lock')
@@ -199,7 +200,7 @@ export const testCliFileStorageSerializesConcurrentNamespaceWrites = async () =>
         storage.tasks.set(`task-${index}`, {
           id: `task-${index}`,
           role: 'assistant',
-          content: { type: 'message', data: `result-${index}` },
+          contentRef: `sha256:${'a'.repeat(43)}`,
         }),
       ),
     )
@@ -296,13 +297,18 @@ export const testCliBlobStorageAppendsAndCommitsStagedWrites = async () => {
       (await storage.statBlob({ namespace: 'attachments', id: 'large.bin' })) === null,
       'Expected staged blobs to remain hidden before commit',
     )
-    await storage.commitBlobWrite({
+    const committedMetadata = await storage.commitBlobWrite({
       namespace: 'attachments',
       id: 'large.bin',
       targetId: 'sha256_content-addressed',
       writeId,
       expectedSize: chunk.byteLength,
+      expectedSha256: sha256HashBytes(chunk),
     })
+    assert(
+      committedMetadata.sha256 === sha256HashBytes(chunk),
+      'Expected committed blob metadata to use the canonical checksum',
+    )
     const committed = await storage.getBlob({
       namespace: 'attachments',
       id: 'sha256_content-addressed',

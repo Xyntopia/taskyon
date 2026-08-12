@@ -6,7 +6,8 @@ Taskyon separates execution from the environments that host it.
 - **Protocols** expose task, tool, file, archive, peer, GUI, and storage operations over typed
   ports.
 - **Hosts** provide browser UI, CLI, iframe, desktop, storage, secrets, and external tools.
-- **Task trees** record execution using immutable nodes connected by `priorID` and `parentID`.
+- **Task trees** record execution using immutable occurrences connected by `priorID` and
+  `parentID`; each occurrence references deduplicated immutable task content.
 - **Storage services** keep persistence behind explicit record and blob interfaces.
 - **Logging services** route structured application events to host-selected sinks; task updates
   remain a separate domain stream.
@@ -96,6 +97,7 @@ reads the current stored representation, verifies the caller's logical expected 
 provider to atomically compare the stored-content hash. This distinction allows a future randomized
 encrypted envelope to have a different physical hash without changing domain APIs or adding a
 separate revision-token record.
+Canonical SHA-256 strings use the `sha256:` prefix followed by unpadded base64url.
 
 Hosts compose record and blob providers independently. Browser providers are OPFS, IndexedDB, and
 PGlite; Node/CLI providers are files, SQLite, and PGlite. Each provider implements the complete

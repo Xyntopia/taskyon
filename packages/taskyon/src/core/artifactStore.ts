@@ -7,7 +7,7 @@ const CHUNK_SIZE = 1024 * 1024
 const artifactBlobId = (hash: string) =>
   hash.startsWith('sha256:') ? `sha256-${hash.slice('sha256:'.length)}` : hash
 const artifactHash = (id: string) =>
-  /^sha256-[a-f0-9]{64}$/.test(id) ? `sha256:${id.slice('sha256-'.length)}` : id
+  /^sha256-[A-Za-z0-9_-]{43}$/.test(id) ? `sha256:${id.slice('sha256-'.length)}` : id
 
 const writeFile = async (storage: StorageBlobBackend, attachment: FileAttachment, file: File) => {
   const id = artifactBlobId(attachment.hash)

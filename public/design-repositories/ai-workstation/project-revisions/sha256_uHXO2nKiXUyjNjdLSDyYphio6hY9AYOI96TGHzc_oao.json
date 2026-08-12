@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 2,
+  "parents": [],
+  "displayName": "Ai Workstation",
+  "invocations": {
+    "main": "sha256:u7yBR307xl_w5KpKhdmkaRNRm_5qnnjUTbuap8zBh3s"
+  },
+  "extensions": {},
+  "id": "sha256:uHXO2nKiXUyjNjdLSDyYphio6hY9AYOI96TGHzc_oao"
+}

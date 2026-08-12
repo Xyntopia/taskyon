@@ -1,7 +1,8 @@
 import type z from 'zod'
 import type { partialTaskDraft } from '../types/taskNode'
 import { TaskNode } from '../types/taskNode'
-import { sha256UrlSafeHash } from '../utils/encoding'
+import type { TaskContent, TaskNodeRecord } from '../types/taskNode'
+import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
 
 const TaskWithoutId = TaskNode.omit({ id: true }).strip()
 export type TaskWithoutId = z.infer<typeof TaskWithoutId>
@@ -21,34 +22,40 @@ function normalizeObj<T extends Record<string, unknown>>(task: T): T {
   return sorted
 }
 
-async function taskContentHash(
+export const taskContentHash = (content: TaskContent) =>
+  canonicalHash({ kind: 'taskyon.task-content.v1', content })
+
+async function taskNodeHash(
   task: partialTaskDraft,
 ): Promise<{ hash: string; normalized: TaskWithoutId }> {
-  if (typeof crypto === 'undefined' || !crypto.subtle) {
-    throw new Error(
-      'crypto.subtle is not available in this environment, We can currently not generate task IDs!!',
-    )
-  }
-
-  console.log('generating new hash ID for task')
   // we need to verify that our task is of type TaskNode without ID and we do this using Zod :)
   // we also want to make sure, that we only strip away anything which isn't official
   // part of our tasknode..
-  const taskWithoutId = TaskWithoutId.parse(task)
+  const taskWithoutId = await TaskWithoutId.parseAsync(task)
   const normalized = normalizeObj(taskWithoutId)
   // generate this hash ID to check of there are any duplicate tasks or anything like that...
-  const hash = await sha256UrlSafeHash(normalized)
+  const { content, ...activation } = normalized
+  const hash = canonicalHash({
+    kind: 'taskyon.task-node.v1',
+    ...activation,
+    contentRef: taskContentHash(content),
+  }).slice('sha256:'.length)
   return { hash, normalized }
 }
 
 export async function ensureValidTaskId(task: partialTaskDraft): Promise<TaskNode> {
-  const { hash, normalized } = await taskContentHash(task)
+  const { hash, normalized } = await taskNodeHash(task)
   if (task.id && hash !== task.id) {
     throw new Error(
       `Not able to create new task as id doesn't match content. Expected: ${hash} got: ${task.id}.`,
     )
   }
   return { ...normalized, id: hash } as TaskNode
+}
+
+export const taskNodeToRecord = (task: TaskNode): TaskNodeRecord => {
+  const { content, ...activation } = task
+  return { ...activation, contentRef: taskContentHash(content) }
 }
 
 // the following function can be used to calculate Ids for an entire

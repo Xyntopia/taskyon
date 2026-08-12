@@ -87,7 +87,7 @@ export async function testTaskIdHashing() {
 
 export const testFileTasksStoreSelfDescribingAttachmentReferences = () => {
   const attachment = {
-    hash: `sha256:${'a'.repeat(64)}`,
+    hash: `sha256:${'a'.repeat(43)}`,
     name: 'results.csv',
     mediaType: 'text/csv',
     size: 42,

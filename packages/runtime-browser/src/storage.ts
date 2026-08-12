@@ -127,7 +127,7 @@ const removeFile = async (root: FileSystemDirectoryHandle, path: string) => {
   }
 }
 
-const storageRecordFileName = /^[a-f0-9]{62}$/
+const storageRecordFileName = /^[A-Za-z0-9_-]{41}$/
 
 const listRecordFiles = async (
   root: FileSystemDirectoryHandle,

@@ -1,6 +1,7 @@
 import z from 'zod'
 import type { Expand } from '../utils/tsHelpers'
-import { FunctionCall, ToolBase } from './tools'
+import { ContentHash, FunctionArguments, FunctionCall, ToolBase } from './tools'
+import { JSONSchema7 } from '../utils/jsonSchema'
 
 export const Annotation = z.union([
   z
@@ -43,7 +44,7 @@ const ToolCallContent = z.object({
 export const FileAttachment = z.object({
   hash: z
     .string()
-    .regex(/^sha256:[a-f0-9]{64}$/)
+    .regex(/^sha256:[A-Za-z0-9_-]{43}$/)
     .describe('SHA-256 content hash identifying the stored bytes.'),
   name: z.string().describe('File name used for this attachment.'),
   mediaType: z.string().describe('Media type used for this attachment.'),
@@ -61,9 +62,28 @@ const ToolResultContent = z.object({
   type: z.literal('toolresult').describe('Identifies the result of a tool call.'),
   data: z.unknown().describe('Result value returned by the tool.'),
 })
+export const BindingImplementation = z.strictObject({
+  type: z.literal('binding'),
+  target: FunctionCall.shape.name,
+  targetRevision: FunctionCall.shape.toolRevision.optional(),
+  fixedArguments: FunctionArguments.default({}),
+  publicArguments: z.record(z.string(), JSONSchema7),
+})
+export type BindingImplementation = z.infer<typeof BindingImplementation>
+
+const ScopedCodeToolDefinition = ToolBase.required({ code: true }).strict()
+const ScopedBindingToolDefinition = ToolBase.omit({ code: true, parameters: true })
+  .extend({ implementation: BindingImplementation })
+  .strict()
+
+export const ScopedToolDefinition = z
+  .union([ScopedCodeToolDefinition, ScopedBindingToolDefinition])
+  .describe('A sandboxed or declarative tool definition scoped to following lineage tasks.')
+export type ScopedToolDefinition = z.infer<typeof ScopedToolDefinition>
+
 const ToolDefinition = z.object({
   type: z.literal('tooldefinition').describe('Identifies a Taskyon tool definition.'),
-  data: ToolBase.describe('Tool definition made available by this task.'),
+  data: ScopedToolDefinition.describe('Sandboxed tool definition made available by this task.'),
 })
 const ErrorContent = z
   .object({
@@ -152,6 +172,17 @@ TODO: define onwership types..`),
   }),
 })
 export type TaskNode = z.infer<typeof TaskNode>
+
+export const TaskContentRecord = z.strictObject({
+  id: ContentHash,
+  content: TaskContent,
+})
+export type TaskContentRecord = z.infer<typeof TaskContentRecord>
+
+export const TaskNodeRecord = TaskNode.omit({ content: true }).extend({
+  contentRef: ContentHash,
+})
+export type TaskNodeRecord = z.infer<typeof TaskNodeRecord>
 
 export const partialTaskDraft = TaskNode.partial().required({ role: true, content: true }).meta({
   description:

@@ -1,7 +1,12 @@
 import { sha256 } from '@noble/hashes/sha2.js'
-import { bytesToHex } from '@noble/hashes/utils.js'
 
 export type Sha256Hash = `sha256:${string}`
+
+const bytesToBase64Url = (value: Uint8Array) => {
+  let binary = ''
+  for (const byte of value) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
 
 const stableValue = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(stableValue)
@@ -21,10 +26,10 @@ export const canonicalJson = (value: unknown): string => {
 }
 
 export const canonicalHash = (value: unknown): Sha256Hash =>
-  `sha256:${bytesToHex(sha256(new TextEncoder().encode(canonicalJson(value))))}`
+  `sha256:${bytesToBase64Url(sha256(new TextEncoder().encode(canonicalJson(value))))}`
 
 export const sha256HashBytes = (value: Uint8Array): Sha256Hash =>
-  `sha256:${bytesToHex(sha256(value))}`
+  `sha256:${bytesToBase64Url(sha256(value))}`
 
 export const createSha256Hasher = () => {
   const hash = sha256.create()
@@ -39,6 +44,6 @@ export const createSha256Hasher = () => {
       hash.update(value)
     },
     digestBytes: () => new Uint8Array(finish()),
-    digest: (): Sha256Hash => `sha256:${bytesToHex(finish())}`,
+    digest: (): Sha256Hash => `sha256:${bytesToBase64Url(finish())}`,
   }
 }

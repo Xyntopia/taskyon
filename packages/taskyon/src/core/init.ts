@@ -138,7 +138,8 @@ function createApi(
           if (msg.execute) ts.forEach((t) => queueTask(t.id))
           return { ids: ts.map((task) => task.id) }
         },
-        get: async ({ id }) => (await taskManagerInstance.getTask(id)) ?? null,
+        get: async ({ id }) =>
+          (await taskManagerInstance.getTask(id, { contentMode: 'hydrated' })) ?? null,
         getIdChain: async ({ id, maxFollow, selection }) =>
           await taskManagerInstance.getTaskIdChain(id, maxFollow, selection),
         getChain: async ({ id, maxFollow, selection }) =>
@@ -463,7 +464,7 @@ const dynamicContext =
       const funcSettings = runtimeConfiguration.toolchainConfig[call.functionName]
       const materializedArguments = await materializeTaskyonFunctionArguments(rawArguments, {
         surface: 'execution',
-        getTaskById: taskManagerInstance.getTask,
+        getTaskById: (id) => taskManagerInstance.getTask(id, { contentMode: 'hydrated' }),
       })
       return {
         name: call.functionName,

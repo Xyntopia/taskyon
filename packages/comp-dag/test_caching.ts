@@ -13,7 +13,7 @@ export const testCanonicalHashUsesStableSha256 = () => {
 
   assert(left === right, 'Expected object key ordering not to affect canonical hashes.')
   assert(
-    left === 'sha256:955c071f4fbee40a01b9bc6e8fb3627e81bda84811ae9c29fcc5812ba3a45162',
+    left === 'sha256:lVwHH0--5AoBubxuj7NifoG9qEgRrpwp_MWBK6OkUWI',
     `Expected the SHA-256 digest of the canonical JSON value, got ${left}.`,
   )
 
@@ -155,7 +155,7 @@ export const testDagCacheUsesHashedComputationKeys = async () => {
   const keys = [...records('dag/cache').keys()]
   assert(keys.length === 2, 'Expected different parameters to produce different cache keys.')
   assert(
-    keys.every((key) => /^sha256:[a-f0-9]{64}$/.test(key)),
+    keys.every((key) => /^sha256:[A-Za-z0-9_-]{43}$/.test(key)),
     'Expected every DAG cache key to be a fixed SHA-256 computation hash.',
   )
   return { success: true, keys }

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 2,
+  "parents": [],
+  "displayName": "Mission Drone",
+  "invocations": {
+    "main": "sha256:i-x8GbPlLa0pLQhBdL94rp1HDKcLUpSaqpV2h2PKZDc"
+  },
+  "extensions": {},
+  "id": "sha256:fr0moRzO5cKYs45miiVXJ8jU6EGW5o8rNToPI2GmQHI"
+}

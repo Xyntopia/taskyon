@@ -210,7 +210,7 @@ const objectEntries = (value: unknown, fieldName: string): [string, unknown][] =
 }
 
 const parseHash = (value: unknown, fieldName: string): Hash => {
-  if (typeof value !== 'string' || !/^sha256:[A-Za-z0-9_-]+$/.test(value)) {
+  if (typeof value !== 'string' || !/^sha256:[A-Za-z0-9_-]{43}$/.test(value)) {
     throw new Error(`Stored graph node ${fieldName} must be a sha256 hash`)
   }
   return value as Hash

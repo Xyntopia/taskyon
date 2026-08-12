@@ -1,14 +1,27 @@
 import { createProtocolPort } from '@taskyon/common/modules/frpBus'
-import { createStorageClient, taskyonStorageProtocol } from '../api/storageProtocol'
 import {
-  connectTaskManagerStorageFromProtocol,
-  createPgLiteTaskManagerStorageService,
-} from '../core/taskManager'
-import { getDatabase } from '../utils/pglite.api'
+  createMemoryStorageRecordBackend,
+  createStorageClient,
+  createStorageProtocolServer,
+  taskyonStorageProtocol,
+  type StorageRecordBackend,
+} from '../api/storageProtocol'
+import { connectTaskManagerStorageFromProtocol } from '../core/taskManager'
 
 export const createPortableTestStorage = () => {
   const { x: clientPort, y: servicePort } = createProtocolPort(taskyonStorageProtocol)
-  const destroy = createPgLiteTaskManagerStorageService(servicePort, getDatabase)
+  const backends = new Map<string, StorageRecordBackend>()
+  const destroy = createStorageProtocolServer(
+    servicePort,
+    {
+      records: (namespace) => {
+        const backend = backends.get(namespace) ?? createMemoryStorageRecordBackend()
+        backends.set(namespace, backend)
+        return backend
+      },
+    },
+    { mode: 'trusted-local' },
+  )
   const storage = createStorageClient(clientPort, {
     namespacePrefix: 'taskyon-test',
     distribution: 'local-only',

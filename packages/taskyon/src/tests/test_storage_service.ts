@@ -50,13 +50,48 @@ export const testTaskManagerCanUseProtocolBackedStorage = async () => {
         data: 'stored through protocol-backed task storage',
       },
     })
-    const loadedTask = await reader.getTask(task.id)
+    const compactTask = await reader.getTask(task.id)
+    const loadedTask = await reader.getTask(task.id, { contentMode: 'hydrated' })
+    const repeatedTask = await writer.addPartialTask2Tree({
+      role: 'user',
+      content: task.content,
+      priorID: task.id,
+    })
+    const storedContents = await writer.getJsonTaskBackup()
 
     assert(loadedTask?.id === task.id, 'Expected second task manager to load the stored task')
     assert(
       loadedTask.content.type === 'message' &&
         loadedTask.content.data === 'stored through protocol-backed task storage',
       'Expected loaded task content to roundtrip through storage service',
+    )
+    assert(compactTask?.contentRef !== undefined, 'Expected default getTask to expose contentRef')
+    assert(task.id !== repeatedTask.id, 'Expected repeated content to remain separate task calls')
+    const archive = JSON.parse(storedContents) as { contents: Record<string, unknown> }
+    assert(
+      Object.keys(archive.contents).length === 1,
+      'Expected repeated TaskContent to be stored once',
+    )
+    const scopedDefinition = {
+      role: 'system' as const,
+      content: {
+        type: 'tooldefinition' as const,
+        data: {
+          name: 'scopedEcho',
+          description: 'Scoped echo.',
+          parameters: { type: 'object' as const, properties: {} },
+          code: 'async () => undefined',
+        },
+      },
+    }
+    const declarationChain = await writer.addTaskChain([
+      scopedDefinition,
+      { role: 'assistant', content: { type: 'message', data: 'between declarations' } },
+      scopedDefinition,
+    ])
+    assert(
+      declarationChain.length === 3,
+      'Expected persistence to preserve the submitted task-chain topology',
     )
   } finally {
     unsubscribeStorageService()

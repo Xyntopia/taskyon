@@ -8,15 +8,15 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
-export async function tool_managerRevisionIdentityIsCanonical() {
-  const left = await toolRevisionHash({
+export function tool_managerRevisionIdentityIsCanonical() {
+  const left = toolRevisionHash({
     publisherId: 'taskyon',
     name: 'example',
     description: 'Example',
     parameters: { type: 'object', properties: { b: { type: 'string' }, a: { type: 'number' } } },
     execution: { kind: 'sandboxed-code', runtime: 'javascript', source: '() => 1' },
   })
-  const right = await toolRevisionHash({
+  const right = toolRevisionHash({
     execution: { source: '() => 1', runtime: 'javascript', kind: 'sandboxed-code' },
     parameters: { properties: { a: { type: 'number' }, b: { type: 'string' } }, type: 'object' },
     description: 'Example',

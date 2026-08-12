@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 2,
+  "parents": [],
+  "displayName": "Mars Rover",
+  "invocations": {
+    "main": "sha256:QQLAzJKxxzN4Qq2JJwy7EgMM-zSHzlM1ia9Steyzy-c"
+  },
+  "extensions": {},
+  "id": "sha256:_TbnmhCnLx5j5gAKNvvtjEUQhnrH-csh4UJr_t85FAA"
+}

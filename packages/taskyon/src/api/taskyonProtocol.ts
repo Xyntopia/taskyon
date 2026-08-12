@@ -216,7 +216,7 @@ export const taskyonDiscoveryProtocol = defineFrpServiceProtocol({
           document: TaskyonOpenApiDocumentSchema,
           revision: z
             .custom<Sha256Hash>(
-              (value) => typeof value === 'string' && /^sha256:[a-f0-9]{64}$/.test(value),
+              (value) => typeof value === 'string' && /^sha256:[A-Za-z0-9_-]{43}$/.test(value),
               'Invalid SHA-256 revision.',
             )
             .describe('Canonical SHA-256 revision of the OpenAPI document.'),

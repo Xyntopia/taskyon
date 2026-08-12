@@ -25,11 +25,19 @@
     },
     "requirements.model": {
       "kind": "grid",
-      "values": ["llama-3.1-8b", "qwen2.5-32b", "llama-3.3-70b"]
+      "values": [
+        "llama-3.1-8b",
+        "qwen2.5-32b",
+        "llama-3.3-70b"
+      ]
     },
     "requirements.quantization": {
       "kind": "grid",
-      "values": ["q4", "q8", "fp16"]
+      "values": [
+        "q4",
+        "q8",
+        "fp16"
+      ]
     },
     "requirements.contextTokens": {
       "kind": "sweep",
@@ -47,11 +55,18 @@
     },
     "requirements.runtime": {
       "kind": "grid",
-      "values": ["any", "cuda", "metal"]
+      "values": [
+        "any",
+        "cuda",
+        "metal"
+      ]
     },
     "requirements.noisePreference": {
       "kind": "grid",
-      "values": ["any", "quiet"]
+      "values": [
+        "any",
+        "quiet"
+      ]
     },
     "requirements.region": {
       "kind": "constant"
@@ -95,5 +110,5 @@
     "accuracy": "auto"
   },
   "reducerOverrides": {},
-  "id": "sha256:bbbc81477d3bc65ff0e4aa4a85d9a46913519bfe6a9e78d44dbb9aa7ccc1877b"
+  "id": "sha256:u7yBR307xl_w5KpKhdmkaRNRm_5qnnjUTbuap8zBh3s"
 }

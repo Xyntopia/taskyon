@@ -22,7 +22,7 @@ import {
   type ProviderRequestTrace,
   type TaskNodeMeta,
 } from '../types/chatCompletion'
-import type { Annotation, partialTaskDraft, TaskNode } from '../types/taskNode'
+import type { Annotation, partialTaskDraft, TaskGetter, TaskNode } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
 import { createTool } from '../types/toolApi'
 import type { ToolBase } from '../types/tools'
@@ -102,7 +102,7 @@ export function createChatCompletionTool(
   capabilities: {
     getTaskChain: TyTaskManager['getTaskChain']
     getTaskChainSelection: TyTaskManager['getTaskChainSelection']
-    getTask: TyTaskManager['getTask']
+    getTask: TaskGetter
     getArtifact?: ArtifactStore['get']
     listToolDefinitions: () => Promise<Record<string, ToolBase>>
     metaUpsert: TyTaskManager['metaUpsert']

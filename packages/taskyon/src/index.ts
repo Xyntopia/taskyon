@@ -88,7 +88,14 @@ export * from './types/chatCompletion'
 export * from './types/chatCompletionService'
 export * from './types/taskContract'
 export type * from './types/taskNode'
-export { FileAttachment, partialTaskDraft, TaskContent, TaskNode } from './types/taskNode'
+export {
+  FileAttachment,
+  partialTaskDraft,
+  TaskContent,
+  TaskContentRecord,
+  TaskNode,
+  TaskNodeRecord,
+} from './types/taskNode'
 export * from './utils/oauth'
 export type {
   ClientToolContext,

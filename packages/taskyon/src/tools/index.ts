@@ -60,7 +60,7 @@ export const createDefaultTaskyonToolSetup = (options?: {
       createChatCompletionTool(resolveChatCompletionConnection(config.chatCompletion), {
         getTaskChain: taskManager.getTaskChain,
         getTaskChainSelection: taskManager.getTaskChainSelection,
-        getTask: taskManager.getTask,
+        getTask: (id) => taskManager.getTask(id, { contentMode: 'hydrated' }),
         ...(artifactStore ? { getArtifact: artifactStore.get } : {}),
         listToolDefinitions: () => toolManager.listToolDefinitions(true),
         metaUpsert: taskManager.metaUpsert,

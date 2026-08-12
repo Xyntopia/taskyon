@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 2,
+  "parents": [],
+  "displayName": "Home Battery",
+  "invocations": {
+    "main": "sha256:wbffhuSksPlg14DJdBjtOpyKH21uW63t2RAKoq8J0IA"
+  },
+  "extensions": {},
+  "id": "sha256:7F8t_5pe8W7YYZoq1mgjccEfRiFHGoCxkPb9LVkTvcU"
+}

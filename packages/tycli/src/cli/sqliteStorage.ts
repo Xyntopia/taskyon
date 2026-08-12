@@ -1,8 +1,9 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { dirname } from 'node:path'
 import { mkdir } from 'node:fs/promises'
 import { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
+import { sha256HashBytes } from '@taskyon/common/modules/canonicalHash'
 import type { Port } from '@taskyon/common/modules/frpBus'
 import {
   createStorageProtocolServer,
@@ -76,8 +77,6 @@ const runAsync = <T>(operation: () => T): Promise<T> => Promise.resolve().then(o
 const idParts = (id: string | number) => ({ idType: typeof id, idText: String(id) })
 const rowId = (row: RecordRow) => (row.id_type === 'number' ? Number(row.id_text) : row.id_text)
 const bytes = (value: Uint8Array) => new Uint8Array(value)
-const hash = (data: Uint8Array) => `sha256:${createHash('sha256').update(data).digest('hex')}`
-
 const concatenate = (left: Uint8Array, right: Uint8Array, offset = left.byteLength) => {
   const result = new Uint8Array(Math.max(left.byteLength, offset + right.byteLength))
   result.set(left)
@@ -231,7 +230,8 @@ export const createSqliteStorageBlobBackend = (
         const row = getRow(id)
         return row ? { data: bytes(row.data), metadata: metadata(row) } : null
       }),
-    set: (id, data, contentType) => runAsync(() => put(id, data, contentType, hash(data))),
+    set: (id, data, contentType) =>
+      runAsync(() => put(id, data, contentType, sha256HashBytes(data))),
     stat: (id) =>
       runAsync(() => {
         const row = getRow(id)
@@ -315,7 +315,7 @@ export const createSqliteStorageBlobBackend = (
           if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
           const data = bytes(row.data)
           if (data.byteLength !== expectedSize) throw new Error(`Blob size mismatch for "${id}".`)
-          const sha256 = hash(data)
+          const sha256 = sha256HashBytes(data)
           if (expectedSha256 && sha256 !== expectedSha256)
             throw new Error(`Blob checksum mismatch for "${id}".`)
           const result = put(targetId ?? id, data, row.content_type ?? undefined, sha256)
