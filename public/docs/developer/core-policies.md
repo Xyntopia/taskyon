@@ -6,6 +6,9 @@ descending order of importance. When principles conflict, the earlier principle 
 - **Local first.** Normal workflows work locally; remote services extend them.
 - **Everything meaningful is a tool.** Agent-facing capabilities are composable tools; internal
   implementation details remain typed functions.
+- **Deterministic when known.** Put stable parsing, validation, calculation, and workflow rules in
+  executable code. Use models for judgment that cannot be expressed correctly as deterministic
+  behavior, and keep those calls explicit.
 - **Ports are power.** Runtime, service, and ownership boundaries use typed, capability-scoped
   protocols even when both sides are local; clients remain independent of where a service runs.
 - **Protocols are scarce.** Every protocol capability may cross a future peer boundary. Keep wire

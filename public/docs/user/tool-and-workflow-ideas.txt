@@ -1,0 +1,200 @@
+Receipt and expense categorizer
+Calendar conflict and travel-time resolver
+Local file duplicate detector
+Batch document format converter
+Meeting transcript action-item extractor
+Email attachment filing assistant
+Backup integrity and restore verifier
+Photo metadata privacy cleaner
+Personal data anonymization pipeline
+Multilingual terminology consistency checker
+Public API research and tool generator
+Targeted legislation provision finder
+US eCFR regulation extractor
+Federal Register deadline finder
+SEC filing section extractor
+EU law document retriever
+Clinical-trial registry matcher
+Patent prior-art search organizer
+Technical standards update tracker
+Academic evidence review pipeline
+Citation and source-link verifier
+Public dataset provenance recorder
+Freedom-of-information docket tracker
+Public procurement opportunity monitor
+Environmental permit record finder
+PDF form completion workflow
+OCR and table extraction verifier
+DOCX redline and revision reviewer
+Spreadsheet formula and consistency auditor
+Presentation deck generator and layout checker
+Accessible document remediation assistant
+Contract clause comparison tool
+Policy-to-evidence compliance mapper
+Invoice and purchase-order reconciler
+Structured resume and portfolio parser
+OpenAPI contract drift auditor
+Release-readiness gate
+Dependency license and SBOM auditor
+CI/CD configuration preflight
+Codebase dependency and ownership mapper
+Changed-code test coverage finder
+Property-based testing workflow
+Differential security review pipeline
+Repository secret exposure investigator
+Performance regression bisector
+Database migration rehearsal tool
+Deployment rollback-readiness checker
+Service-level-objective burn-rate evaluator
+Incident timeline builder
+Distributed log correlation tool
+Git history release-note generator
+Localization completeness auditor
+Database schema drift detector
+Container image provenance verifier
+Infrastructure permission drift auditor
+MCP server security reviewer
+Prompt-cache efficiency auditor
+Model token-usage accounting tool
+Task-tree planning efficiency reviewer
+Documentation link and example checker
+Data contract validation gate
+Backfill and replay-safety checker
+Cross-system data reconciler
+Dataset lineage and ownership builder
+Kafka consumer reliability auditor
+Spark job performance diagnostician
+SQL query-plan regression analyzer
+Data warehouse cost attribution tool
+Time-series anomaly investigation workflow
+Sensitive-data inventory builder
+Machine-learning experiment provenance recorder
+Model promotion decision gate
+Dataset and model drift monitor
+Model artifact signature verifier
+Model fairness metric calculator
+Synthetic dataset generation pipeline
+Feature leakage detector
+Reproducible benchmark runner
+Training-label quality auditor
+Vector-index recall benchmarker
+Parametric CAD model generator
+Mechanical assembly interference checker
+Dimensional tolerance-stack calculator
+Fastener selection and compatibility checker
+Engineering material selection matrix
+Finite-element mesh convergence runner
+Fatigue-life calculation workflow
+Modal vibration analysis pipeline
+Thermal design parameter sweep
+Computational-fluid-dynamics convergence checker
+Pressure-vessel preliminary constraint checker
+Gear-train ratio and load analyzer
+Bearing-life estimation tool
+Shaft sizing and critical-speed calculator
+Building HVAC load estimator
+Acoustic mode and noise analysis workflow
+Lubrication maintenance planner
+Machine condition trend analyzer
+Digital-twin parameter calibration tool
+Additive-manufacturing G-code preflight
+Electronic schematic consistency auditor
+PCB fabrication preflight reviewer
+Automated SPICE circuit characterizer
+EMC pre-compliance analysis workflow
+PCB thermal hotspot analyzer
+Electronic component derating checker
+Electronic BOM sourcing and lifecycle monitor
+Power-distribution-network integrity analyzer
+High-speed signal integrity precheck
+Cable harness connectivity validator
+Battery-pack sizing and safety-margin calculator
+Electric motor and drive sizing tool
+Control-loop stability analyzer
+FPGA timing-closure regression runner
+Autonomous RTL-to-GDS chip-design flow
+Solar inverter operating-point analyzer
+Electrical protection coordination checker
+Grounding and bonding audit workflow
+Sensor calibration curve generator
+Oscilloscope trace measurement extractor
+Aircraft mission trade-study runner
+Flight trajectory optimization workflow
+Multidisciplinary aircraft design optimizer
+Aircraft engine-cycle analyzer
+Aerodynamic polar comparison tool
+Aircraft mass-budget reconciler
+Aircraft center-of-gravity envelope checker
+Aeroelastic flutter screening workflow
+Flight-control response verifier
+Flight-envelope Monte Carlo dispersion study
+Spacecraft telemetry and limit-checking harness
+Orbital conjunction screening workflow
+Satellite communication link-budget calculator
+Spacecraft thermal-balance analyzer
+Spacecraft propellant budget tracker
+BIM and IFC model compliance auditor
+Automated building quantity takeoff
+Structural load-case benchmark runner
+Earthquake response scenario sweep
+Structural wind-load combination checker
+Foundation settlement estimation workflow
+Traffic signal timing analyzer
+Stormwater drainage capacity checker
+Water distribution network simulator
+Construction schedule risk analyzer
+Building-code provision retriever
+Building embodied-carbon calculator
+Bridge inspection finding organizer
+Geotechnical borehole data interpreter
+Survey coordinate transformation verifier
+Chemical mass-and-energy balance reconciler
+Process flowsheet diagnostics tool
+Industrial heat-integration analyzer
+Process operating-point optimizer
+HAZOP preparation assistant
+Pressure-relief sizing preliminary checker
+Chemical reactor kinetics fitter
+Separation-train comparison workflow
+Industrial emissions inventory calculator
+Water-treatment process monitor
+Power-grid N-1 contingency analyzer
+Energy-system capacity expansion planner
+Renewable generation yield estimator
+Energy-storage dispatch optimizer
+Demand-response schedule generator
+Robot URDF consistency validator
+Robot motion-planning regression runner
+Robot kinematic calibration workflow
+Robotic grasp benchmarker
+Robot simulation-to-reality comparison tool
+Autonomous vehicle fleet route optimizer
+Industrial robot safety-zone checker
+Musculoskeletal simulation parameter sweep
+Prosthetic alignment comparison workflow
+Human gait analysis pipeline
+Medical-device requirements traceability checker
+Laboratory experiment automation workflow
+Microscopy image quality assessor
+Optical-system tolerance analyzer
+Telescope observation scheduler
+Agricultural irrigation schedule optimizer
+Crop sensor calibration workflow
+Geospatial facility site selector
+Wildfire exposure scenario analyzer
+Climate scenario comparison pipeline
+Product life-cycle assessment calculator
+Cold-chain temperature excursion analyzer
+Warehouse slotting optimizer
+Manufacturing statistical-process-control monitor
+CNC toolpath safety preflight
+Weld procedure evidence organizer
+Nondestructive-test result classifier
+Metrology uncertainty calculator
+Design-of-experiments generator
+Engineering unit consistency checker
+Physical dimensional-analysis validator
+Uncertainty propagation workflow
+Monte Carlo sensitivity analyzer
+Calibration certificate verifier
+System requirements traceability matrix builder

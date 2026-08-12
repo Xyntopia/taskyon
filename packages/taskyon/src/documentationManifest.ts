@@ -17,6 +17,8 @@ export const taskyonDocumentationManifest: DocumentationManifest = {
           'Tools and integrations': [
             '/docs/user/providers-and-models.md',
             '/docs/user/tools-and-mcp.md',
+            '/docs/user/tool-examples.md',
+            '/docs/user/tool-and-workflow-ideas.txt',
             '/docs/user/browser-research.md',
             '/docs/user/integrations.md',
           ],
@@ -38,6 +40,7 @@ export const taskyonDocumentationManifest: DocumentationManifest = {
             '/docs/developer/core-policies.md',
             '/docs/developer/architecture.md',
             '/docs/developer/security-model.md',
+            '/docs/tool_sandbox_security.md',
           ],
         },
         {
@@ -52,6 +55,7 @@ export const taskyonDocumentationManifest: DocumentationManifest = {
           Runtime: [
             '/docs/developer/task-processing.md',
             '/docs/developer/tools-and-workflows.md',
+            '/docs/developer/agent-authored-tools.md',
             '/docs/developer/client-api.md',
             '/docs/developer/p2p.md',
           ],

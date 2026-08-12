@@ -5,11 +5,7 @@ import {
   createDocumentationDocument,
   resolveDocumentationDocumentId,
 } from '../packages/common/modules/documentation.ts'
-import {
-  documentationSourceAliases,
-  documentationSourceUrl,
-  flattenDocumentationManifestSources,
-} from '../packages/common/modules/resourceFiles.ts'
+import { flattenDocumentationManifestSources } from '../packages/common/modules/resourceFiles.ts'
 import { taskyonDocumentationManifest } from '../packages/taskyon/src/documentationManifest.ts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -29,26 +25,23 @@ const listFiles = async (directory) => {
 
 const documentedEntries = flattenDocumentationManifestSources(taskyonDocumentationManifest)
   .map(({ source: entry, chapters }) => ({
-    source: documentationSourceUrl(entry),
-    aliases: documentationSourceAliases(entry),
+    source: entry,
     chapters,
   }))
   .filter(({ source }) => source.startsWith('/docs/'))
-  .map(({ source, aliases, chapters }) => ({
+  .map(({ source, chapters }) => ({
     source,
-    aliases,
     chapters,
     file: resolve(docsRoot, source.slice('/docs/'.length)),
   }))
 
 const activeEntries = (
   await Promise.all(
-    documentedEntries.map(async ({ file, aliases, chapters }) => {
+    documentedEntries.map(async ({ file, chapters }) => {
       const entries = await readdir(file, { withFileTypes: true }).catch(() => undefined)
       const files = entries ? await listFiles(file) : [file]
       return files.map((activeFile) => ({
         file: activeFile,
-        aliases: files.length === 1 ? aliases : [],
         chapters,
       }))
     }),
@@ -60,7 +53,7 @@ const activeEntries = (
 
 const activeFiles = activeEntries.map(({ file }) => file)
 const documents = []
-for (const { file, aliases, chapters } of activeEntries) {
+for (const { file, chapters } of activeEntries) {
   const path = relative(docsRoot, file).replaceAll('\\', '/')
   try {
     documents.push(
@@ -68,7 +61,6 @@ for (const { file, aliases, chapters } of activeEntries) {
         path,
         url: `/docs/${path}`,
         content: await readFile(file, 'utf8'),
-        aliases,
         chapters,
       }),
     )
@@ -79,14 +71,12 @@ for (const { file, aliases, chapters } of activeEntries) {
 
 const aliases = new Map()
 for (const document of documents) {
-  for (const alias of [document.id, ...document.aliases]) {
-    const normalized = alias.replace(/^\/?(docs\/)?/, '').replace(/\.md$/, '')
-    const owner = aliases.get(normalized)
-    if (owner && owner !== document.id) {
-      failures.push(`${document.path}: alias "${alias}" is already owned by ${owner}.`)
-    }
-    aliases.set(normalized, document.id)
+  const normalized = document.id.replace(/^\/?(docs\/)?/, '').replace(/\.md$/, '')
+  const owner = aliases.get(normalized)
+  if (owner && owner !== document.id) {
+    failures.push(`${document.path}: document id is already owned by ${owner}.`)
   }
+  aliases.set(normalized, document.id)
 }
 
 const markdownLinkPattern = /\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g

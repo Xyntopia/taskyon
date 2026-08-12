@@ -8,7 +8,7 @@ questions, tools, evidence, decisions, and outputs of a workflow remain inspecta
 1. [Run Taskyon and configure a provider](getting-started.md).
 2. [Understand task trees](task-trees.md).
 3. [Review current capabilities and limits](capabilities-and-limits.md).
-4. [Learn how tools and MCP integrations work](tools-and-mcp.md).
+4. [Learn how tools, skills, and MCP integrations work](tools-and-mcp.md).
 5. [Configure browser research](browser-research.md).
 
 ## Workflows
@@ -20,7 +20,9 @@ questions, tools, evidence, decisions, and outputs of a workflow remain inspecta
 ## Tools and integrations
 
 - [Providers and models](providers-and-models.md)
-- [Tools and MCP](tools-and-mcp.md)
+- [Tools, skills, and MCP](tools-and-mcp.md)
+- [Tool examples](tool-examples.md)
+- [Tool and workflow idea inventory](tool-and-workflow-ideas.txt)
 - [Browser research](browser-research.md)
 - [Embedding Taskyon in another application](integrations.md)
 

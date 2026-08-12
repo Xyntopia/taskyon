@@ -16,6 +16,7 @@
 
 - [Task Processing](task-processing.md)
 - [Tool and Workflow Authoring](tools-and-workflows.md)
+- [Agent-Authored Tools](agent-authored-tools.md)
 - [Client and Protocol API](client-api.md)
 - [P2P and Relay](p2p.md)
 
@@ -30,4 +31,4 @@
 - [`tycli` General Agent E2E](tycli-e2e.md)
 
 The running peer's FRP services, streams, and tools are available through the
-[runtime API documentation](/docs/taskyon/openapi/taskyon-peer-api).
+[runtime API documentation](/resources/peers/local/api).

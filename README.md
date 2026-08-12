@@ -66,6 +66,13 @@ Examples are meant to be guided design investigations rather than magic one-clic
 
 These examples are starting points for forkable, inspectable workflows.
 
+Taskyon tools can also turn a successful process into a reusable executable capability. A tool can
+run entirely through local algorithms and commands, combine deterministic work with selected model
+decisions, or orchestrate a fully agentic workflow. Agents can research and author new tools
+themselves, then reuse the installed capability without repeating the original model work. See
+[Tools, Skills, and MCP](public/docs/user/tools-and-mcp.md) and
+[Tool Examples](public/docs/user/tool-examples.md).
+
 ## What Exists Today
 
 Taskyon already provides the foundations for open-source design automation:
@@ -113,6 +120,7 @@ Taskyon follows local-first principles wherever possible:
 
 ## Try Taskyon
 
+- Try the hosted app: [taskyon.space](https://taskyon.space)
 - Run locally with the development commands below.
 - Documentation: [public/docs/user/index.md](public/docs/user/index.md)
 - Getting started: [public/docs/user/getting-started.md](public/docs/user/getting-started.md)
