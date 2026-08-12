@@ -44,6 +44,9 @@ client APIs, P2P services, and remote tool execution.
 - A derived operation belongs on a protocol only when remote execution is the intended service,
   not merely an implementation shortcut. Document its trust, authorization, and data-exposure
   boundary.
+- Treat IDs returned by task creation responses as authoritative. Persistence may resolve tool
+  revisions, apply settings, deduplicate definitions, or otherwise normalize drafts before hashing;
+  clients must not navigate to or publish locally predicted draft IDs.
 
 ## Service Ownership
 

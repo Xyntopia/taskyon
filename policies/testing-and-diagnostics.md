@@ -34,6 +34,9 @@ are added.
   streams when a stable user-visible signal exists.
 - Do not assert generated task IDs, selected-task URLs, or other implementation details unless they
   are themselves part of the product contract.
+- Creation-response IDs are a protocol contract. A navigation regression may use distinct draft
+  and stored IDs to prove that the UI consumes the persisted response, without asserting a real
+  hash value or URL shape.
 - Mock optional external services at the network boundary. Deterministic tests must not require
   optional local environment files.
 

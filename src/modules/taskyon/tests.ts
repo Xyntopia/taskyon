@@ -50,6 +50,7 @@ import { initCryptoSessionFromBrowser } from './browserCryptoSession'
 import { extractBrowserAccessActivity } from './browserAccess'
 import { runLibp2pBrowserMessageExchangeTest } from './libp2pBrowserDiagnostics'
 import { gDriveSyncPort } from './sync'
+import { resolveShownTaskChainResponse, trackShownTaskChainRequest } from './taskChainNavigation'
 
 // Assuming hasMarkdownElements and containsHtmlTags are in scope
 // import { hasMarkdownElements, containsHtmlTags } from './your-module'
@@ -62,6 +63,42 @@ function assert(condition: boolean, msg?: string): asserts condition {
     throw new Error(msg ?? 'Assertion failed')
   }
 }
+
+export function testTaskChainNavigationUsesStoredIds() {
+  const shownRequestIds = new Set<string>()
+  const predictedTaskId = 'predicted-before-persistence'
+  const storedTaskId = 'stored-after-persistence'
+
+  trackShownTaskChainRequest(shownRequestIds, 'shown-request', true)
+  trackShownTaskChainRequest(shownRequestIds, 'background-request', false)
+
+  assert(
+    resolveShownTaskChainResponse(shownRequestIds, {
+      type: 'task.createChainResponse',
+      requestId: 'background-request',
+      result: { ids: [predictedTaskId] },
+    }) === undefined,
+    'Expected a background response not to select a task',
+  )
+  assert(
+    resolveShownTaskChainResponse(shownRequestIds, {
+      type: 'task.createChainResponse',
+      requestId: 'shown-request',
+      result: { ids: ['stored-root', storedTaskId] },
+    }) === storedTaskId,
+    'Expected navigation to use the stored leaf id returned by persistence',
+  )
+  assert(
+    resolveShownTaskChainResponse(shownRequestIds, {
+      type: 'task.createChainResponse',
+      requestId: 'shown-request',
+      result: { ids: [predictedTaskId] },
+    }) === undefined,
+    'Expected a create-chain response to be consumed only once',
+  )
+}
+testTaskChainNavigationUsesStoredIds.description =
+  'Uses the persisted create-chain response id for UI navigation instead of a locally predicted task id.'
 
 const getCurrentProfileSettingsForDiagnostics = (): TaskyonProfileSettings => {
   const snapshot = state.getProfileSnapshot().sections

@@ -15,7 +15,6 @@
     :use-enter-to-send="state.appConfiguration.useEnterToSend"
     :show-web-search="state.appConfiguration.webSearchButton"
     :navigate-to-task="navigateToTask"
-    :mark-tasks-pending-creation="tystate.markTasksPendingCreation"
   >
     <template #settings>
       <SimpleSettingsDialog />

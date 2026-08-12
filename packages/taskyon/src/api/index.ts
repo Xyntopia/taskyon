@@ -443,13 +443,13 @@ export const createTaskyonClient = <Tx extends { type: string }, Rx extends { ty
     const tasks = await forgeTaskChain(taskList)
     const show = opts.show ?? opts.display !== 'background'
 
-    await protocolClient.task.createChain({
+    const created = await protocolClient.task.createChain({
       tasks,
       execute: true,
       show,
     })
 
-    const initialIds = tasks.map((t) => t.id)
+    const initialIds = created.ids
     const subTaskStream = createSubTaskStream(tyPort.receive, initialIds)
 
     return { initialIds, subTaskStream }
@@ -511,12 +511,12 @@ export const createTaskChainFromMarkdown = async (
   const tasks = await createMarkdownTaskChain(markdown)
   const leafId = tasks.at(-1)?.id
   if (!leafId) return undefined
-  await client.task.createChain({
+  const created = await client.task.createChain({
     tasks,
     execute: options.execute ?? false,
     show: options.show ?? true,
   })
-  return leafId
+  return created.ids.at(-1) ?? leafId
 }
 
 const createRunTasksSender = <T extends { type: string }>(
@@ -527,13 +527,13 @@ const createRunTasksSender = <T extends { type: string }>(
     const tasks = await forgeTaskChain(taskList)
     const show = opts.show ?? opts.display !== 'background'
 
-    await protocolClient.task.createChain({
+    const created = await protocolClient.task.createChain({
       tasks,
       execute: true,
       show,
     })
 
-    const initialIds = tasks.map((t) => t.id)
+    const initialIds = created.ids
     const subTaskStream = createSubTaskStream(tyPort.receive, initialIds)
 
     return { initialIds, subTaskStream }

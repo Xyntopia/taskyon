@@ -32,6 +32,11 @@ The client also exposes:
 - `sendFiles(files)` for file registration;
 - `waitUntilReady(options)` for explicit startup coordination.
 
+Task creation responses contain the authoritative persisted IDs. A submitted draft may receive
+resolved settings, a pinned tool revision, or deduplication before its final hash is known. UI and
+protocol clients must therefore select the last returned `task.createChain` ID instead of
+calculating a draft ID locally.
+
 `createTaskChainFromMarkdown(client, markdown, options)` imports portable Taskyon Markdown and
 returns the new leaf ID. Import does not execute by default.
 

@@ -366,6 +366,7 @@ export const taskyonTaskProtocol = defineFrpServiceProtocol({
     },
     createChain: {
       request: tasks,
+      response: z.object({ ids: z.array(z.string()) }),
     },
   },
   streams: {

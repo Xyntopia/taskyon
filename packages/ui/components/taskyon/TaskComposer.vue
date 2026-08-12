@@ -245,7 +245,6 @@ const props = withDefaults(
     showWebSearch?: boolean
     placeholder?: string
     navigateToTask?: ((taskId: string | undefined) => void) | undefined
-    markTasksPendingCreation?: ((taskIds: readonly string[]) => void) | undefined
   }>(),
   {
     currentTask: null,
@@ -259,7 +258,6 @@ const props = withDefaults(
     showWebSearch: false,
     placeholder: 'Type your message...',
     navigateToTask: undefined,
-    markTasksPendingCreation: undefined,
   },
 )
 
@@ -379,21 +377,15 @@ const submitTask = async (
     mode,
     priorTaskId: previousTaskId,
   })
-  const newTaskId = createdTasks.at(-1)?.id
-
-  props.markTasksPendingCreation?.(createdTasks.map((task) => task.id))
-  await props.client.task.createChain({
+  const { ids: storedTaskIds } = await props.client.task.createChain({
     tasks: createdTasks,
     execute: true,
     show: true,
   })
+  const newTaskId = storedTaskIds.at(-1)
 
   if (!previousTaskId) props.navigateToTask?.(newTaskId)
-  emit(
-    'created',
-    newTaskId,
-    createdTasks.map((task) => task.id),
-  )
+  emit('created', newTaskId, storedTaskIds)
 }
 
 const attachFileToDraft = (newFiles: File[]) => {

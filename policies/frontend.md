@@ -29,6 +29,8 @@ Apply this policy to Vue components, stores, routes, styling, and user interacti
 - Do not bounce one reactive source into another with a watcher.
 - Route-driven UI state follows the route; host configuration follows its owning configuration
   boundary.
+- Navigate to newly created task chains only from the authoritative IDs in the core creation
+  response. Do not retain or select IDs predicted from pre-persistence drafts.
 - Keep Taskyon-owned interfaces in Taskyon-owned UI modules instead of duplicating them in a host
   application.
 - Keep generic DAG canvas, tree, list, search, filtering, selection, context-menu, and editor

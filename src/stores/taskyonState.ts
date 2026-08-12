@@ -95,6 +95,10 @@ import {
   persistSession,
 } from 'src/modules/taskyon/browserCryptoSession'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
+import {
+  resolveShownTaskChainResponse,
+  trackShownTaskChainRequest,
+} from 'src/modules/taskyon/taskChainNavigation'
 import { type TyProfile } from 'src/modules/taskyon/types'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { match, P } from 'ts-pattern'
@@ -1008,7 +1012,6 @@ function taskUiUpdates(
   // we are using refs here for selectedThread and currentTask isntead of a computed reference, because
   // we want to oad them gradually into our UI
   const currentTask = ref<TaskNode | null>(null)
-  const pendingCreatedTaskIds = ref(new Set<string>())
   const taskSelectionRevision = ref(0)
   const taskTreeRevision = ref(0)
   const followedTaskId = ref<string>()
@@ -1025,27 +1028,12 @@ function taskUiUpdates(
     onError: (error) => console.warn('Could not update conversation history.', error),
   })
 
-  function markTasksPendingCreation(taskIds: readonly string[]) {
-    const nextPending = new Set(pendingCreatedTaskIds.value)
-    for (const taskId of taskIds) {
-      nextPending.add(taskId)
-    }
-    pendingCreatedTaskIds.value = nextPending
-    taskSelectionRevision.value += 1
-  }
-
   void taskyon.then((ty) => {
     ty.taskStream(({ id, data: task }) => {
       taskTreeRevision.value += 1
       if (!task) {
         void conversationHistory.remove(id.toString())
         return
-      }
-      if (pendingCreatedTaskIds.value.has(id.toString())) {
-        const nextPending = new Set(pendingCreatedTaskIds.value)
-        nextPending.delete(id.toString())
-        pendingCreatedTaskIds.value = nextPending
-        taskSelectionRevision.value += 1
       }
       const selectedTaskId = stateRefs.selectedTaskId
       const selectedOrPendingTaskId = followedTaskId.value ?? selectedTaskId
@@ -1100,11 +1088,7 @@ function taskUiUpdates(
           }
           if (cancelled) return
           currentTask.value = task
-          currentTaskResolutionStatus.value = task
-            ? 'resolved'
-            : pendingCreatedTaskIds.value.has(newSelectedTask)
-              ? 'loading'
-              : 'missing'
+          currentTaskResolutionStatus.value = task ? 'resolved' : 'missing'
         } else {
           currentTask.value = null
           currentTaskResolutionStatus.value = 'idle'
@@ -1173,7 +1157,6 @@ function taskUiUpdates(
     taskTreeRevision: readonly(taskTreeRevision),
     currentTask: computed(() => currentTask),
     currentTaskResolutionStatus: computed(() => currentTaskResolutionStatus.value),
-    markTasksPendingCreation,
     conversationHistory,
   }
 }
@@ -1526,7 +1509,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     conversationHistory,
     currentTask,
     currentTaskResolutionStatus,
-    markTasksPendingCreation,
     selectedThread,
     taskTreeRevision,
   } = taskUiUpdates(taskyon, taskyonClient, stateRefs)
@@ -1547,6 +1529,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // taskyon engine!
     // TODO: red-define this as a middleware where we can intercept certain messages
     //       and also change the types of inside/outside ports...
+    const shownCreateChainRequests = new Set<string>()
     uiApiInside.receive((msg) => console.log('received message on UI port!', msg))
     createPortServer(
       uiApiInside,
@@ -1658,12 +1641,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       if (msg.type === 'task.createChainRequest') {
         void Promise.all(msg.tasks.map((task) => ensureValidTaskId(task)))
           .then((tasks) => {
-            const taskIds = tasks.map((task) => task.id)
-            markTasksPendingCreation(taskIds)
-            if (msg.show) stateRefs.navigateToTask(taskIds.at(-1), { replace: true })
+            trackShownTaskChainRequest(shownCreateChainRequests, msg.requestId, msg.show)
             ty.port.send({ ...msg, tasks })
           })
           .catch((error) => {
+            shownCreateChainRequests.delete(msg.requestId)
             console.error('an error occured during handling of the createTaskChain command', error)
           })
         return
@@ -1675,7 +1657,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // we manually connect our send port to the api here, because
     // we are already intercepting incoming messages with the API above
     // TODO: we have to change this! we would like to
-    ty.port.receive(uiApiInside.send)
+    ty.port.receive((msg) => {
+      if (msg.type === 'task.createChainResponse') {
+        const storedTaskId = resolveShownTaskChainResponse(shownCreateChainRequests, msg)
+        if (storedTaskId) stateRefs.navigateToTask(storedTaskId, { replace: true })
+      }
+      uiApiInside.send(msg)
+    })
     uiApiInside.send({ type: 'taskyonReady' })
 
     console.log('checking if we are in an iframe!')
@@ -1926,7 +1914,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     taskTreeRevision,
     currentTask,
     currentTaskResolutionStatus,
-    markTasksPendingCreation,
     conversationHistory,
     resetCapabilityDecisions: () => getBrowserCapabilityPolicy().reset(),
     ...apiKeyManagement,

@@ -133,17 +133,10 @@ function createApi(
         },
         createChain: async (msg) => {
           console.log('received tasks:', msg)
-          const ts = await Promise.all(
-            msg.tasks.map(
-              async (t) =>
-                await taskManagerInstance.addPartialTask2Tree({
-                  ...t,
-                  //label: msg.origin ? [msg.origin] : undefined,
-                }),
-            ),
-          )
+          const ts = await taskManagerInstance.addTaskChain(msg.tasks)
           console.log('executing tasks', ts)
           if (msg.execute) ts.forEach((t) => queueTask(t.id))
+          return { ids: ts.map((task) => task.id) }
         },
         get: async ({ id }) => (await taskManagerInstance.getTask(id)) ?? null,
         getIdChain: async ({ id, maxFollow, selection }) =>
