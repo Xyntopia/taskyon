@@ -1,14 +1,14 @@
 import type { StoredGraphNodeFile } from './dagNodeLoader.ts'
 import {
-  createStoredDagGraph,
-  patchStoredDagGraphNodeSource,
+  createStoredDagSourceGraph,
+  patchStoredDagSourceGraphNode,
   type DagGraphRoots,
-  type StoredDagGraphPatch,
-} from './storedDagGraph.ts'
+  type StoredDagSourceGraphPatch,
+} from './storedDagSourceGraph.ts'
 
 export const dagGraphToolResultType = 'graphPatchResult' as const
 
-export type DagGraphPatchToolResult = StoredDagGraphPatch & {
+export type DagGraphPatchToolResult = StoredDagSourceGraphPatch & {
   type: typeof dagGraphToolResultType
   projectId: string
   createdFiles: StoredGraphNodeFile[]
@@ -83,8 +83,8 @@ const dagGraphPatchToolParameters = {
 } as const
 
 const changedNodeFiles = (
-  filesByHash: Awaited<ReturnType<typeof createStoredDagGraph>>['nodesByHash'],
-  patch: StoredDagGraphPatch,
+  filesByHash: Awaited<ReturnType<typeof createStoredDagSourceGraph>>['nodesByHash'],
+  patch: StoredDagSourceGraphPatch,
 ): StoredGraphNodeFile[] =>
   Object.values(patch.changedNodes).map((change) => {
     const saved = filesByHash[change.newHash]
@@ -100,11 +100,11 @@ export const createDagGraphPatchTool = (createTool: DagGraphCreateTool) =>
 propagate hash changes through downstream nodes, and return the new immutable root pointer plus the created files.`,
     parameters: dagGraphPatchToolParameters,
     function: async (params) => {
-      const storedGraph = await createStoredDagGraph({
+      const storedGraph = await createStoredDagSourceGraph({
         files: params.files,
         roots: params.roots,
       })
-      const patched = await patchStoredDagGraphNodeSource({
+      const patched = await patchStoredDagSourceGraphNode({
         storedGraph,
         rootName: params.rootName,
         targetLocalName: params.targetLocalName,

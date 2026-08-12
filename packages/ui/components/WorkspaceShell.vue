@@ -23,31 +23,46 @@
       </div>
 
       <div class="taskyon-workspace-rail__items" role="tablist" aria-orientation="vertical">
-        <button
-          v-for="item in items"
-          :key="item.id"
-          type="button"
-          role="tab"
-          class="dock-tab"
-          :class="{ active: item.id === activeId }"
-          :aria-selected="item.id === activeId"
-          :aria-label="item.label"
-          @click="emit('select', item.id)"
+        <div
+          v-for="(group, groupIndex) in itemGroups"
+          :key="`${group.section || 'unsectioned'}-${groupIndex}`"
+          class="taskyon-workspace-rail__section"
+          role="group"
+          :aria-label="group.section || undefined"
         >
-          <q-icon v-if="item.icon" :name="item.icon" class="dock-tab-icon" />
-          <span class="dock-tab-title ellipsis">{{ item.label }}</span>
-          <q-tooltip
-            v-if="collapsed"
-            anchor="center right"
-            self="center left"
-            :offset="[0, 0]"
-            :delay="0"
-            :transition-duration="0"
-            class="taskyon-workspace-tab-flyout"
+          <div
+            v-if="group.section"
+            class="taskyon-workspace-rail__section-label"
+            :class="{ 'taskyon-workspace-rail__section-label--compact': collapsed }"
           >
-            {{ item.label }}
-          </q-tooltip>
-        </button>
+            <span v-if="!collapsed">{{ group.section }}</span>
+          </div>
+          <button
+            v-for="item in group.items"
+            :key="item.id"
+            type="button"
+            role="tab"
+            class="dock-tab"
+            :class="{ active: item.id === activeId }"
+            :aria-selected="item.id === activeId"
+            :aria-label="item.label"
+            @click="emit('select', item.id)"
+          >
+            <q-icon v-if="item.icon" :name="item.icon" class="dock-tab-icon" />
+            <span class="dock-tab-title ellipsis">{{ item.label }}</span>
+            <q-tooltip
+              v-if="collapsed"
+              anchor="center right"
+              self="center left"
+              :offset="[0, 0]"
+              :delay="0"
+              :transition-duration="0"
+              class="taskyon-workspace-tab-flyout"
+            >
+              {{ item.label }}
+            </q-tooltip>
+          </button>
+        </div>
       </div>
 
       <div class="taskyon-workspace-rail__footer">
@@ -62,17 +77,33 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+
 const {
   items,
   activeId = undefined,
   label = 'Workspaces',
   collapsed = false,
 } = defineProps<{
-  items: readonly { id: string; label: string; icon?: string }[]
+  items: readonly { id: string; label: string; icon?: string; section?: string }[]
   activeId?: string
   label?: string
   collapsed?: boolean
 }>()
+
+const itemGroups = computed(() => {
+  const groups: Array<{
+    section: string
+    items: Array<{ id: string; label: string; icon?: string; section?: string }>
+  }> = []
+  for (const item of items) {
+    const section = item.section ?? ''
+    const current = groups.at(-1)
+    if (current?.section === section) current.items.push(item)
+    else groups.push({ section, items: [item] })
+  }
+  return groups
+})
 
 const emit = defineEmits<{
   (event: 'select', id: string): void
@@ -124,6 +155,26 @@ const emit = defineEmits<{
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+.taskyon-workspace-rail__section + .taskyon-workspace-rail__section {
+  margin-top: 0.5rem;
+}
+
+.taskyon-workspace-rail__section-label {
+  min-height: 24px;
+  padding: 0.35rem 0.75rem 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.taskyon-workspace-rail__section-label--compact {
+  min-height: 1px;
+  margin: 0.5rem 0.65rem;
+  padding: 0;
+  border-top: 1px solid currentColor;
 }
 
 .taskyon-workspace-rail .dock-tab {

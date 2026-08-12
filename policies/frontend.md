@@ -31,6 +31,10 @@ Apply this policy to Vue components, stores, routes, styling, and user interacti
   boundary.
 - Keep Taskyon-owned interfaces in Taskyon-owned UI modules instead of duplicating them in a host
   application.
+- Keep generic DAG canvas, tree, list, search, filtering, selection, context-menu, and editor
+  behavior in Taskyon UI components. Hosts may inject filter definitions, commands, labels,
+  markers, and theme values, but must not fork the interaction model into host-local components or
+  utility modules.
 
 ## Components And Styling
 

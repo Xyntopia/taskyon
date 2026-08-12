@@ -1,5 +1,5 @@
 import { createNode, type DagQuerySelection } from './dagCore.ts'
-import { compileDagNodeRecordGraph } from './dagNodeGraph.ts'
+import { compileDagNodeRecordGraph } from './dagNodeRecordGraph.ts'
 import { defineDagNodeRecord } from './dagNodeRecord.ts'
 import { objectSchema, parseSchema } from './dagSchema.ts'
 

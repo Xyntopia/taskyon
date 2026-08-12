@@ -14,6 +14,7 @@
       'dock-dragging': isDocking,
     }"
     :data-dock-node-id="node.id"
+    :data-dock-region="node.region"
     :style="nodeStyle"
   >
     <button
@@ -103,8 +104,22 @@
             </q-item-section>
           </q-item>
           <q-separator />
+          <q-item>
+            <q-item-section>
+              <q-input
+                v-model="addViewQuery"
+                dense
+                outlined
+                clearable
+                placeholder="Search panes"
+                aria-label="Search panes"
+              >
+                <template #prepend><q-icon :name="matSearch" /></template>
+              </q-input>
+            </q-item-section>
+          </q-item>
           <q-item
-            v-for="option in resolvedAddViewOptions"
+            v-for="option in filteredAddViewOptions"
             :key="option.id"
             v-close-popup
             clickable
@@ -143,6 +158,9 @@
                 </q-menu>
               </q-btn>
             </q-item-section>
+          </q-item>
+          <q-item v-if="filteredAddViewOptions.length === 0">
+            <q-item-section class="text-caption">No matching panes.</q-item-section>
           </q-item>
         </q-list>
       </q-menu>
@@ -391,7 +409,7 @@
 </template>
 
 <script setup lang="ts">
-import { matCloseFullscreen, matOpenInFull } from '@quasar/extras/material-icons'
+import { matCloseFullscreen, matOpenInFull, matSearch } from '@quasar/extras/material-icons'
 import { mdiChevronDoubleLeft, mdiChevronDoubleRight } from '@quasar/extras/mdi-v6'
 import { computed, onUnmounted, ref, shallowRef, useId, useSlots, type Ref } from 'vue'
 import {
@@ -906,6 +924,14 @@ const resolvedAddViewOptions = computed(() => {
 })
 
 const showAddViewMenu = ref(false)
+const addViewQuery = ref('')
+const filteredAddViewOptions = computed(() => {
+  const query = addViewQuery.value.trim().toLocaleLowerCase()
+  if (!query) return resolvedAddViewOptions.value
+  return resolvedAddViewOptions.value.filter(({ id, label }) =>
+    [id, label].some((value) => value.toLocaleLowerCase().includes(query)),
+  )
+})
 const splitterSides = ['left', 'right'] as const
 const splitPlacements = [
   { position: 'left', label: 'Split left', icon: 'west' },
@@ -1407,6 +1433,7 @@ const onAddTabClick = () => {
   if (node.value.type !== 'leaf') return
 
   if (addViewOptions !== undefined) {
+    addViewQuery.value = ''
     showAddViewMenu.value = true
     return
   }
@@ -1967,7 +1994,7 @@ const onChildViewActivated = (ctx: ViewActivatedContext) => {
 }
 
 .dock-add-menu {
-  min-width: 160px;
+  min-width: 260px;
 }
 
 .dock-tabs-header--vertical .dock-tab-add,

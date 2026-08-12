@@ -66,7 +66,10 @@ import {
 } from '@taskyon/taskyon/tools/documentationProviderTool'
 import { taskyonDocumentationTool } from '@taskyon/taskyon/tools/documentationTool'
 import { taskyonDocumentationManifest } from '@taskyon/taskyon/documentationManifest'
-import { createTaskyonBrowserCoreRuntime } from '@taskyon/runtime-browser'
+import {
+  clearBrowserDesignGraphGitRepositories,
+  createTaskyonBrowserCoreRuntime,
+} from '@taskyon/runtime-browser'
 import {
   createOpfsBlobStorageBackend,
   createOpfsStorageBackendResolver,
@@ -1414,13 +1417,21 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       },
     }),
   })
+  const resetTaskyonLocalStorageState = async () => {
+    await Promise.all([
+      ...['taskyon/ui-state/v1', 'ui/split-layouts/v1', 'documentation/manifests'].map(
+        async (namespace) => await storageClient.clear({ namespace }),
+      ),
+      clearBrowserDesignGraphGitRepositories(),
+    ])
+  }
   const dagStorageBackend = createStorageDagBackend({
     get: async (namespace, id) => (await storageClient.get({ namespace, id })).value,
     set: async (namespace, id, value) => {
       await storageClient.set({ namespace, id, value })
     },
   })
-  const { dagObjects, designProjectStore, registerDesignProject, listDesignProjects } =
+  const { designProjectStore, registerDesignProject, listDesignProjects } =
     createDesignProjectStorage(storageClient)
   const resourceFilesLoader = createTaskyonResourceFilesLoader(
     () => taskyonClient.discovery.describe({}),
@@ -1901,9 +1912,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     documentationBases,
     documentationReady,
     storageClient,
+    resetTaskyonLocalStorageState,
     dagStorageBackend,
     designProjectStore,
-    dagObjects,
     registerDesignProject,
     listDesignProjects,
     setNewContentDraft,

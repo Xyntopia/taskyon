@@ -55,8 +55,21 @@ exists.
   changes invalidate old local data and regenerate bundled hashes; do not retain compatibility
   readers, legacy types, aliases, or parallel persistence paths.
 - Distinguish only how a node is provided: hard-coded by a trusted runtime, or loaded from a stored
-  TypeScript file. Both compile to the same `DagNode` execution type; do not create a separate
-  dynamic-node category, registry, execution path, or persistence format.
+  TypeScript file in the writable design-graph repository. Both compile to the same `DagNode`
+  execution type; do not create a separate dynamic-node category, registry, execution path, or
+  persistence format.
+- Stored nodes are always editable through immutable replacement revisions. Treat bundled,
+  directory, Git, peer, and other external node files as import sources: validate and persist them
+  through StorageClient before exposing them as stored nodes. Do not mount read-only stored nodes
+  or add a separate editability capability.
+- Supply the definition origin (`hard-coded` or `stored`) explicitly when composing a runtime
+  graph. Absence from a host lookup is not itself authoritative origin information.
+- Use content hashes as graph identity whenever available. Local names and labels are presentation
+  and lookup conveniences; do not use them to decide immutable graph membership, provenance, or
+  replacement relationships.
+- Keep DAG indexing, closure traversal, visualization records, immutable input rewrites, dependent
+  deletion checks, and default-record merging in `@taskyon/comp-dag`. Host applications may select
+  roots and supply capabilities or labels, but must not duplicate these graph algorithms.
 - Keep creation task IDs, timestamps, and conversational provenance outside computation identity
   unless they affect behavior.
 - Represent a cache lookup as one canonical computation hash derived from the node content hash and

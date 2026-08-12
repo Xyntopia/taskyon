@@ -1,7 +1,7 @@
 import {
   compileDagNodeRecordGraph,
   savedStoredNodesToRecordGraph,
-} from '@taskyon/comp-dag/dagNodeGraph'
+} from '@taskyon/comp-dag/dagNodeRecordGraph'
 import { createAiWorkstationExample } from '../examples/aiWorkstationExample'
 
 type WorkstationResult = {

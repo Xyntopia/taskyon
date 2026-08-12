@@ -1,5 +1,5 @@
 import { createNode, oneOf } from './dagCore.ts'
-import { describeDagEnvironment } from './dagEnvironment.ts'
+import { createDagNodeIndex, dagNodeId, describeDagEnvironment } from './dagEnvironment.ts'
 
 const emptyObjectSchema = { type: 'object', additionalProperties: false } as const
 
@@ -59,3 +59,45 @@ export const testDagEnvironmentSeparatesSourcesFromPotentialLeaves = () => {
 
 testDagEnvironmentSeparatesSourcesFromPotentialLeaves.description =
   'Finds declared sources anywhere in a selected DAG closure and pure leaves as potential origins.'
+
+export const testDagEnvironmentIndexesMultipleRuntimeRoots = () => {
+  const input = createNode({
+    name: 'runtime-input',
+    contentHash: 'sha256:input',
+    version: 1,
+    localParams: emptyObjectSchema,
+    outputSchema: emptyObjectSchema,
+    run: () => ({}),
+  })
+  const firstOutput = createNode({
+    name: 'first-output',
+    contentHash: 'sha256:first',
+    version: 1,
+    hiddenInputs: { input },
+    localParams: emptyObjectSchema,
+    outputSchema: emptyObjectSchema,
+    run: () => ({}),
+  })
+  const secondOutput = createNode({
+    name: 'second-output',
+    contentHash: 'sha256:second',
+    version: 1,
+    hiddenInputs: { input },
+    localParams: emptyObjectSchema,
+    outputSchema: emptyObjectSchema,
+    run: () => ({}),
+  })
+
+  const index = createDagNodeIndex({ firstOutput, secondOutput })
+  if (
+    index[dagNodeId(input)]?.node !== input ||
+    index[dagNodeId(firstOutput)]?.node !== firstOutput ||
+    index[dagNodeId(secondOutput)]?.node !== secondOutput ||
+    Object.keys(index).length !== 3
+  ) {
+    throw new Error('Expected the runtime index to deduplicate every node across output closures.')
+  }
+}
+
+testDagEnvironmentIndexesMultipleRuntimeRoots.description =
+  'Indexes executable nodes by immutable identity across multiple DAG roots.'

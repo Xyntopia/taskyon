@@ -1,7 +1,7 @@
 import { createNode } from './dagCore.ts'
-import { buildDagNodeGraphFromOutputNodes } from './dagGraph.ts'
+import { buildDagGraphView } from './dagGraphView.ts'
 
-export const testDagGraphUsesImmutableNodeIds = () => {
+export const testDagGraphViewUsesImmutableNodeIds = () => {
   const schema = { type: 'object', additionalProperties: false } as const
   const input = createNode({
     name: 'runtime-input-name',
@@ -22,7 +22,10 @@ export const testDagGraphUsesImmutableNodeIds = () => {
     outputSchema: schema,
     run: () => ({}),
   })
-  const graph = buildDagNodeGraphFromOutputNodes({ output })
+  const graph = buildDagGraphView({ output }, (node) => ({
+    definitionOrigin: node === input ? 'stored' : 'hard-coded',
+    ...(node === input ? { label: 'Stored input' } : {}),
+  }))
   if (!graph.nodes.some(({ id }) => id === 'sha256:input')) {
     throw new Error('Expected graph nodes to use immutable content hashes.')
   }
@@ -33,7 +36,18 @@ export const testDagGraphUsesImmutableNodeIds = () => {
   ) {
     throw new Error('Expected graph edges to use the same immutable node IDs.')
   }
+  const inputGraphNode = graph.nodes.find(({ id }) => id === 'sha256:input')
+  const outputGraphNode = graph.nodes.find(({ id }) => id === 'sha256:output')
+  if (
+    inputGraphNode?.data?.definitionOrigin !== 'stored' ||
+    inputGraphNode.label !== 'Stored input'
+  ) {
+    throw new Error('Expected supplied stored-node metadata to reach the rendered graph.')
+  }
+  if (outputGraphNode?.data?.definitionOrigin !== 'hard-coded') {
+    throw new Error('Expected hard-coded origin to reach the rendered graph.')
+  }
 }
 
-testDagGraphUsesImmutableNodeIds.description =
-  'Uses immutable content hashes consistently for rendered DAG nodes and edges.'
+testDagGraphViewUsesImmutableNodeIds.description =
+  'Uses immutable IDs and stored versus hard-coded metadata across DAG graph views.'

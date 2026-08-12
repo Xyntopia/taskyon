@@ -1,3 +1,5 @@
+export type DockRegion = 'navigation' | 'document' | 'tools'
+
 export interface DockNode {
   id: string
   type: 'container' | 'leaf'
@@ -18,6 +20,7 @@ export interface DockNode {
   lastSize?: number
   keepAliveViews?: string[]
   retainWhenEmpty?: boolean
+  region?: DockRegion
 }
 
 export type DockPosition = 'tab' | 'left' | 'right' | 'top' | 'bottom'
@@ -36,6 +39,7 @@ export interface DockViewSplitContext {
   targetLeafId: string
   position: Exclude<DockPosition, 'tab'>
   keepAlive?: boolean
+  region?: DockRegion
 }
 
 export const MIN_RESTORE_WEIGHT = 20
@@ -64,6 +68,11 @@ export const findLeafByViewId = (root: DockNode, viewId: string): DockNode | und
     if (match) return match
   }
   return undefined
+}
+
+export const findLeavesByRegion = (root: DockNode, region: DockRegion): DockNode[] => {
+  if (root.type === 'leaf') return root.region === region ? [root] : []
+  return (root.children ?? []).flatMap((child) => findLeavesByRegion(child, region))
 }
 
 export const updateLeaf = (
@@ -186,24 +195,33 @@ const createDockNodeId = (kind: 'leaf' | 'container'): string => {
   return `dock-${kind}-${id}`
 }
 
-const createSplitLeaf = (target: DockNode, viewId: string, keepAlive: boolean): DockNode => ({
-  id: createDockNodeId('leaf'),
-  type: 'leaf',
-  views: [viewId],
-  activeViewIndex: 0,
-  ...(target.showTabs ? { showTabs: target.showTabs } : {}),
-  ...(target.tabLayout ? { tabLayout: target.tabLayout } : {}),
-  ...(target.tabPosition ? { tabPosition: target.tabPosition } : {}),
-  ...(target.tabRailMode ? { tabRailMode: target.tabRailMode } : {}),
-  ...(target.tabRailCollapsible === undefined
-    ? {}
-    : { tabRailCollapsible: target.tabRailCollapsible }),
-  ...(target.tabRailAutoCompact === undefined
-    ? {}
-    : { tabRailAutoCompact: target.tabRailAutoCompact }),
-  ...(keepAlive ? { keepAliveViews: [viewId] } : {}),
-  size: 1,
-})
+const createSplitLeaf = (
+  target: DockNode,
+  viewId: string,
+  keepAlive: boolean,
+  region: DockRegion | undefined,
+): DockNode => {
+  const resolvedRegion = region ?? target.region
+  return {
+    id: createDockNodeId('leaf'),
+    type: 'leaf',
+    views: [viewId],
+    activeViewIndex: 0,
+    ...(target.showTabs ? { showTabs: target.showTabs } : {}),
+    ...(target.tabLayout ? { tabLayout: target.tabLayout } : {}),
+    ...(target.tabPosition ? { tabPosition: target.tabPosition } : {}),
+    ...(target.tabRailMode ? { tabRailMode: target.tabRailMode } : {}),
+    ...(target.tabRailCollapsible === undefined
+      ? {}
+      : { tabRailCollapsible: target.tabRailCollapsible }),
+    ...(target.tabRailAutoCompact === undefined
+      ? {}
+      : { tabRailAutoCompact: target.tabRailAutoCompact }),
+    ...(keepAlive ? { keepAliveViews: [viewId] } : {}),
+    ...(resolvedRegion ? { region: resolvedRegion } : {}),
+    size: 1,
+  }
+}
 
 const insertEdgeSplit = (
   root: DockNode,
@@ -211,11 +229,12 @@ const insertEdgeSplit = (
   viewId: string,
   position: Exclude<DockPosition, 'tab'>,
   keepAlive: boolean,
+  region: DockRegion | undefined,
 ): DockNode => {
   if (root.type === 'leaf') {
     if (root.id !== targetLeafId) return root
     const direction = position === 'left' || position === 'right' ? 'row' : 'column'
-    const newLeaf = createSplitLeaf(root, viewId, keepAlive)
+    const newLeaf = createSplitLeaf(root, viewId, keepAlive, region)
     const target = { ...root, collapsed: false, size: 1 }
     const before = position === 'left' || position === 'top'
     return {
@@ -233,7 +252,10 @@ const insertEdgeSplit = (
   if (root.direction === direction && targetIndex >= 0) {
     const target = children[targetIndex]!
     const targetSize = target.size ?? 1
-    const newLeaf = { ...createSplitLeaf(target, viewId, keepAlive), size: targetSize / 2 }
+    const newLeaf = {
+      ...createSplitLeaf(target, viewId, keepAlive, region),
+      size: targetSize / 2,
+    }
     const resizedTarget = { ...target, collapsed: false, size: targetSize / 2 }
     const next = [...children]
     const before = position === 'left' || position === 'top'
@@ -242,7 +264,7 @@ const insertEdgeSplit = (
   }
 
   const next = children.map((child) =>
-    insertEdgeSplit(child, targetLeafId, viewId, position, keepAlive),
+    insertEdgeSplit(child, targetLeafId, viewId, position, keepAlive, region),
   )
   return next.every((child, index) => child === children[index])
     ? root
@@ -256,6 +278,7 @@ export const splitDockView = (root: DockNode, context: DockViewSplitContext): Do
     context.viewId,
     context.position,
     context.keepAlive ?? false,
+    context.region,
   )
 
 export const applyDockDrop = (root: DockNode, context: DockViewDropContext): DockNode => {

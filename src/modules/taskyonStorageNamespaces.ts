@@ -1,5 +1,6 @@
 export const browserRecordNamespacePrefixes = [
   'dag/',
+  'design-graph/',
   'design-graphs/',
   'design-projects/',
   'documentation/',

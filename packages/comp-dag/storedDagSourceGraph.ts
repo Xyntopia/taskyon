@@ -3,7 +3,7 @@ import {
   getDagNodeRecordClosure,
   savedStoredNodesToRecordGraph,
   type DagNodeRecordGraph,
-} from './dagNodeGraph.ts'
+} from './dagNodeRecordGraph.ts'
 import { getDagNodeRecordInputHashes } from './dagNodeRecord.ts'
 import {
   loadStoredGraphNodeFiles,
@@ -14,25 +14,25 @@ import {
 
 export type DagGraphRoots = Record<string, Hash>
 
-export type StoredDagGraph = {
+export type StoredDagSourceGraph = {
   files: readonly StoredGraphNodeFile[]
   nodesByHash: Record<Hash, SavedStoredGraphNode>
   graph: DagNodeRecordGraph
   roots: DagGraphRoots
 }
 
-export type DagGraphPatchChangedNode = {
+export type StoredDagSourceGraphChangedNode = {
   localName: string
   oldHash: Hash
   newHash: Hash
 }
 
-export type StoredDagGraphPatch = {
+export type StoredDagSourceGraphPatch = {
   targetLocalName: string
   resolvedOldHash: Hash
   previousRoots: DagGraphRoots
   nextRoots: DagGraphRoots
-  changedNodes: Record<string, DagGraphPatchChangedNode>
+  changedNodes: Record<string, StoredDagSourceGraphChangedNode>
 }
 
 const replaceHashRefs = (source: string, replacements: Record<Hash, Hash>): string => {
@@ -61,10 +61,10 @@ const createLocalNameIndex = (graph: DagNodeRecordGraph, rootHash: Hash): Record
   return index
 }
 
-export const createStoredDagGraph = async (args: {
+export const createStoredDagSourceGraph = async (args: {
   files: readonly StoredGraphNodeFile[]
   roots: DagGraphRoots
-}): Promise<StoredDagGraph> => {
+}): Promise<StoredDagSourceGraph> => {
   const nodesByHash = await loadStoredGraphNodeFiles(args.files)
   const graph = savedStoredNodesToRecordGraph(nodesByHash)
   for (const [rootName, rootHash] of Object.entries(args.roots)) {
@@ -79,8 +79,8 @@ export const createStoredDagGraph = async (args: {
   }
 }
 
-export const getStoredDagGraphLocalNameIndex = (args: {
-  storedGraph: StoredDagGraph
+export const getStoredDagSourceGraphLocalNameIndex = (args: {
+  storedGraph: StoredDagSourceGraph
   rootName: string
 }): Record<string, Hash> => {
   const rootHash = args.storedGraph.roots[args.rootName]
@@ -88,12 +88,12 @@ export const getStoredDagGraphLocalNameIndex = (args: {
   return createLocalNameIndex(args.storedGraph.graph, rootHash)
 }
 
-export const patchStoredDagGraphNodeSource = async (args: {
-  storedGraph: StoredDagGraph
+export const patchStoredDagSourceGraphNode = async (args: {
+  storedGraph: StoredDagSourceGraph
   rootName: string
   targetLocalName: string
   updateSource: (source: string) => string
-}): Promise<{ storedGraph: StoredDagGraph; patch: StoredDagGraphPatch }> => {
+}): Promise<{ storedGraph: StoredDagSourceGraph; patch: StoredDagSourceGraphPatch }> => {
   const rootHash = args.storedGraph.roots[args.rootName]
   if (!rootHash) throw new Error(`Graph root not found: ${args.rootName}`)
 
@@ -102,7 +102,7 @@ export const patchStoredDagGraphNodeSource = async (args: {
   if (!targetHash) throw new Error(`Local graph node not found: ${args.targetLocalName}`)
 
   const replacements: Record<Hash, Hash> = {}
-  const changedNodes: Record<string, DagGraphPatchChangedNode> = {}
+  const changedNodes: Record<string, StoredDagSourceGraphChangedNode> = {}
   const newFiles: StoredGraphNodeFile[] = []
 
   for (const hash of getDagNodeRecordClosure(args.storedGraph.graph, rootHash)) {
@@ -138,7 +138,7 @@ export const patchStoredDagGraphNodeSource = async (args: {
     ...previousRoots,
     [args.rootName]: replacements[rootHash] ?? rootHash,
   }
-  const storedGraph = await createStoredDagGraph({
+  const storedGraph = await createStoredDagSourceGraph({
     files: [...args.storedGraph.files, ...newFiles],
     roots: nextRoots,
   })

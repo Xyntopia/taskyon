@@ -15,6 +15,17 @@ export const dagNodeInputs = (node: DagNode): readonly DagNode[] => [
 
 const nodeLabel = (node: DagNode) => node.localName ?? node.name
 
+export const dagNodeId = (node: DagNode): string => node.contentHash ?? node.name
+
+export type DagNodeIndexEntry = {
+  id: string
+  name: string
+  label: string
+  node: DagNode
+}
+
+export type DagNodeIndex = Record<string, DagNodeIndexEntry>
+
 export const describeDagEnvironment = (
   root: DagNode,
 ): {
@@ -45,4 +56,20 @@ export const describeDagEnvironment = (
     ),
     downstreamByNode,
   }
+}
+
+export const createDagNodeIndex = (outputNodes: Record<string, DagNode>): DagNodeIndex => {
+  const index: DagNodeIndex = {}
+  for (const root of Object.values(outputNodes)) {
+    for (const node of describeDagEnvironment(root).nodes) {
+      const id = dagNodeId(node)
+      index[id] ??= {
+        id,
+        name: node.name,
+        label: nodeLabel(node),
+        node,
+      }
+    }
+  }
+  return index
 }

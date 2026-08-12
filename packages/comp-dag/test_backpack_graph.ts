@@ -6,10 +6,13 @@ import {
   compileDagNodeRecordGraph,
   loadDagNodeRecordGraph,
   savedStoredNodesToRecordGraph,
-} from './dagNodeGraph.ts'
+} from './dagNodeRecordGraph.ts'
 import { createDagGraphPatchTool } from './dagGraphTool.ts'
 import { loadStoredGraphNodeFiles, type StoredGraphNodeFile } from './dagNodeLoader.ts'
-import { createStoredDagGraph, getStoredDagGraphLocalNameIndex } from './storedDagGraph.ts'
+import {
+  createStoredDagSourceGraph,
+  getStoredDagSourceGraphLocalNameIndex,
+} from './storedDagSourceGraph.ts'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -94,8 +97,11 @@ const patchBackpackMaxWeight = async (
   rootHash: Hash,
   maxWeightKg: number,
 ) => {
-  const storedGraph = await createStoredDagGraph({ files, roots: { main: rootHash } })
-  const localNameIndex = getStoredDagGraphLocalNameIndex({ storedGraph, rootName: 'main' })
+  const storedGraph = await createStoredDagSourceGraph({ files, roots: { main: rootHash } })
+  const localNameIndex = getStoredDagSourceGraphLocalNameIndex({
+    storedGraph,
+    rootName: 'main',
+  })
   const requirementsHash = localNameIndex.trip_requirements
   assert(requirementsHash, 'Expected selected graph to contain trip requirements')
   const requirements = storedGraph.nodesByHash[requirementsHash]
@@ -385,11 +391,14 @@ export const testBackpackProjectGraphPatchUpdatesSelectedRoot = async () => {
   }
 
   const { files, rootHash: initialRootHash } = await loadBackpackRepository()
-  const storedGraph = await createStoredDagGraph({
+  const storedGraph = await createStoredDagSourceGraph({
     files,
     roots: { main: initialRootHash },
   })
-  const localNameIndex = getStoredDagGraphLocalNameIndex({ storedGraph, rootName: 'main' })
+  const localNameIndex = getStoredDagSourceGraphLocalNameIndex({
+    storedGraph,
+    rootName: 'main',
+  })
   const initial = await runBackpackRoot(storedGraph.files, storedGraph.roots.main!)
   const targetHash = localNameIndex.trip_requirements
   assert(targetHash, 'Expected selected graph to contain trip requirements')
@@ -407,7 +416,7 @@ export const testBackpackProjectGraphPatchUpdatesSelectedRoot = async () => {
   const patchedFiles = [...files, ...graphPatchResult.createdFiles]
   const patchedRootHash = graphPatchResult.nextRoots.main
   assert(patchedRootHash, 'Expected patched project to keep main root')
-  const patchedGraph = await createStoredDagGraph({
+  const patchedGraph = await createStoredDagSourceGraph({
     files: patchedFiles,
     roots: graphPatchResult.nextRoots,
   })

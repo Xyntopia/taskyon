@@ -9,7 +9,7 @@
       <q-tooltip :delay="500">
         {{
           mode === 'all'
-            ? 'Reset chat history & settings & cache. (Only appears in local development mode)'
+            ? 'Reset chat history, settings, Taskyon UI state, and caches. Shared design graph data is preserved.'
             : mode === 'settings'
               ? 'Reset settings & cache, but keep tasks'
               : 'Delete all tasks, but keep settings'
@@ -22,7 +22,7 @@
           <q-icon :name="matWarning" size="md" />
           <p v-if="mode === 'settings'">Warning: Reset all Taskyon Settings</p>
           <p v-else-if="mode === 'tasks'">Warning: Delete Taskyon Chat Data</p>
-          <p v-else>Warning: Completely Wipe out all Taskyon Data</p>
+          <p v-else>Warning: Reset Taskyon Local App Data</p>
         </div>
       </q-card-section>
       <q-card-section class="q-pt-none">
@@ -36,7 +36,8 @@
         </p>
         <p v-else>
           <strong>Warning:</strong> This operation will permanently delete all taskyon settings
-          including chat data & app settings.
+          including chat data and app settings. The shared design graph and project records are
+          preserved.
         </p>
         <p>
           Before proceeding, please make sure you have a backup of the settings. You can backup your
@@ -85,6 +86,7 @@ async function onResetTaskyon() {
     await tystate.conversationHistory.clear()
   }
   if (props.mode !== 'tasks') state.$reset()
+  if (props.mode === 'all') await tystate.resetTaskyonLocalStorageState()
 
   // 2) Clear browser caches & storage
   // — Cache Storage (used by service workers / Cache API)

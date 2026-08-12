@@ -11,7 +11,7 @@
       />
       <div class="text-subtitle1">Design graph node</div>
       <q-space />
-      <code>{{ rootName }}</code>
+      <code>{{ invocationName }}</code>
     </header>
 
     <div v-if="loading" class="col flex flex-center">
@@ -64,7 +64,7 @@ const refName = computed(() => String(route.params.refName || 'main'))
 const revisionId = computed(() =>
   route.params.revisionId ? (String(route.params.revisionId) as Hash) : null,
 )
-const rootName = computed(() => String(route.params.rootName))
+const invocationName = computed(() => String(route.params.invocationName))
 const nodeHash = computed(() => String(route.params.nodeHash))
 const viewer = ref<DesignNodeViewerData | null>(null)
 const loading = ref(true)
@@ -85,7 +85,7 @@ const nodeRoute = (hash: Hash) => ({
   params: {
     projectId: projectId.value,
     ...(revisionId.value ? { revisionId: revisionId.value } : { refName: refName.value }),
-    rootName: rootName.value,
+    invocationName: invocationName.value,
     nodeHash: hash,
   },
 })
@@ -117,7 +117,7 @@ async function loadNode() {
       checkout: revisionId.value
         ? { kind: 'revision', id: revisionId.value }
         : { kind: 'ref', name: refName.value },
-      rootName: rootName.value,
+      invocationName: invocationName.value,
     })
     const selectedHash = nodeHash.value as Hash
     if (!project.graph[selectedHash]) {
@@ -133,7 +133,7 @@ async function loadNode() {
 }
 
 watch(
-  [projectId, refName, revisionId, rootName, nodeHash],
+  [projectId, refName, revisionId, invocationName, nodeHash],
   () => {
     void loadNode()
   },

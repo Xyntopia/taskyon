@@ -198,7 +198,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         redirect: '/design/ai-workstation/main',
       },
       {
-        path: '/design/:projectId/revision/:revisionId/:rootName/node/:nodeHash',
+        path: '/design/:projectId/revision/:revisionId/:invocationName/node/:nodeHash',
         name: 'design-node-revision',
         component: () => import('pages/taskyon/DesignNodePage.vue'),
         meta: {
@@ -207,7 +207,7 @@ export const taskyonRoutes: RouteRecordRaw[] = [
         },
       },
       {
-        path: '/design/:projectId/:refName/:rootName/node/:nodeHash',
+        path: '/design/:projectId/:refName/:invocationName/node/:nodeHash',
         name: 'design-node',
         component: () => import('pages/taskyon/DesignNodePage.vue'),
         meta: {

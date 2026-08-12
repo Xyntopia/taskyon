@@ -1,37 +1,41 @@
 import type { GraphData } from '@taskyon/common/modules/graph'
-import type { DagStorageBackend, Hash } from '@taskyon/comp-dag/caching'
+import type { Hash } from '@taskyon/comp-dag/caching'
 import {
-  compileDagNodeRecordGraph,
-  getDagNodeRecordInputSchema,
-  getDagNodeRecordClosure,
-  getDagNodeRecordRelations,
-  savedStoredNodesToRecordGraph,
-  type DagNodeRecordGraph,
-} from '@taskyon/comp-dag/dagNodeGraph'
-import { loadStoredGraphNodeFiles, type StoredGraphNodeFile } from '@taskyon/comp-dag/dagNodeLoader'
+  createGraphRevision,
+  createInvocationDefinition,
+  type GraphRevision,
+  type InvocationDefinition,
+  type InvocationRun,
+  type ProjectRevision,
+} from '@taskyon/comp-dag/designGraphModel'
+import type {
+  DesignGraphObjectStore,
+  DesignGraphRepository,
+} from '@taskyon/comp-dag/designGraphRepository'
 import {
   createUrlDesignRepositoryReader,
   loadDesignRepositorySnapshot,
+  loadProjectRepositorySnapshot,
 } from '@taskyon/comp-dag/designRepositorySnapshot'
 import {
-  createDesignEvaluationRecord,
-  createDesignExecutionConfig,
-  type DesignRevisionId,
-  type DesignEvaluationRecordV1,
-  type DesignRevisionV1,
-  type DesignSpaceRecord,
-} from '@taskyon/comp-dag/designRevision'
-import type {
-  DesignProjectObjectStore,
-  DesignProjectRepository,
-} from '@taskyon/comp-dag/designProjectRepository'
-import { canonicalHash } from '@taskyon/comp-dag/caching'
-import type { DesignStudyConfig } from '@taskyon/comp-dag/designRevision'
+  compileDagNodeRecordGraph,
+  getDagNodeRecordClosure,
+  getDagNodeRecordInputSchema,
+  getDagNodeRecordRelations,
+  savedStoredNodesToRecordGraph,
+  type DagNodeRecordGraph,
+} from '@taskyon/comp-dag/dagNodeRecordGraph'
+import { loadStoredGraphNodeFiles, type StoredGraphNodeFile } from '@taskyon/comp-dag/dagNodeLoader'
 import { recordInputsToRuntimeInputs } from '@taskyon/comp-dag/dagNodeRecord'
 import type { DagJsonSchema } from '@taskyon/comp-dag/dagSchema'
+import {
+  executeInvocation,
+  type InvocationArtifactStore,
+  type InvocationRow,
+} from '@taskyon/comp-dag/invocationExecution'
 import { createWithDefaults } from '@taskyon/taskyon'
+import { toDagExploreInputs } from '@taskyon/comp-dag/runtime/runPlanner'
 import type { JSONSchema7 } from 'json-schema'
-import { bundledDesignExamples } from 'src/modules/bundledDesignExamples'
 
 export type DesignGraphPort = {
   name: string
@@ -45,26 +49,23 @@ export type DesignGraphNodeData = {
   localName: string
   inputs: DesignGraphPort[]
   outputType: string
-  rootNames: string[]
   selectedRoot: boolean
 }
 
 export type DesignGraphRecordData =
   | DesignGraphNodeData
-  | { kind: 'revision'; hash: DesignRevisionId }
-  | { kind: 'parent-revision'; hash: DesignRevisionId }
-  | { kind: 'design-space'; hash: Hash; schemaVersion: number }
-  | { kind: 'ref'; name: string; revisionId: DesignRevisionId }
+  | { kind: 'project-revision'; hash: Hash }
+  | { kind: 'parent-project-revision'; hash: Hash }
+  | { kind: 'invocation'; hash: Hash; name: string; rootNodeId: Hash; selected: boolean }
+  | { kind: 'ref'; name: string; revisionId: Hash }
 
-export type DesignCheckout =
-  | { kind: 'ref'; name: string }
-  | { kind: 'revision'; id: DesignRevisionId }
+export type DesignCheckout = { kind: 'ref'; name: string } | { kind: 'revision'; id: Hash }
 
 export type DesignWorkspaceProject = {
   checkout: DesignCheckout
-  revision: DesignRevisionV1
-  designSpace: DesignSpaceRecord
-  rootName: string
+  revision: ProjectRevision
+  invocationName: string
+  invocation: InvocationDefinition
   files: StoredGraphNodeFile[]
   graph: Awaited<ReturnType<typeof loadStoredGraphNodeFiles>>
   records: DagNodeRecordGraph
@@ -88,21 +89,20 @@ const schemaTypeSummary = (schema: DagJsonSchema, depth = 0): string => {
   if (schema === true) return 'unknown'
   if (schema === false) return 'never'
   if (schema.const !== undefined) return JSON.stringify(schema.const)
-  const enumValues = schema.enum
-  if (Array.isArray(enumValues) && enumValues.length) {
-    return enumValues.slice(0, 3).map(String).join(' | ')
+  if (Array.isArray(schema.enum) && schema.enum.length > 0) {
+    return schema.enum.slice(0, 3).map(String).join(' | ')
   }
   const variants = schema.oneOf ?? schema.anyOf
   if (variants?.length) {
-    const labels = variants.slice(0, 3).map((variant) => schemaTypeSummary(variant, depth + 1))
-    return [...new Set(labels)].join(' | ')
+    return [
+      ...new Set(variants.slice(0, 3).map((variant) => schemaTypeSummary(variant, depth + 1))),
+    ].join(' | ')
   }
-  const type = schema.type
-  if (type === 'array') {
+  if (schema.type === 'array') {
     const item = Array.isArray(schema.items) ? schema.items[0] : schema.items
     return `${item ? schemaTypeSummary(item, depth + 1) : 'unknown'}[]`
   }
-  if (type === 'object') {
+  if (schema.type === 'object') {
     const properties = Object.entries(schema.properties ?? {})
     if (depth > 0 || properties.length === 0) return 'object'
     const fields = properties
@@ -110,17 +110,14 @@ const schemaTypeSummary = (schema: DagJsonSchema, depth = 0): string => {
       .map(([name, field]) => `${name}: ${schemaTypeSummary(field, depth + 1)}`)
     return `{ ${fields.join('; ')}${properties.length > 3 ? '; …' : ''} }`
   }
-  if (!type) return 'unknown'
-  return typeof type === 'string' ? type : [...type].join(' | ')
+  if (!schema.type) return 'unknown'
+  return typeof schema.type === 'string' ? schema.type : [...schema.type].join(' | ')
 }
 
-const nodeInputPorts = (
-  records: ReturnType<typeof savedStoredNodesToRecordGraph>,
-  hash: Hash,
-): DesignGraphPort[] => {
+const nodeInputPorts = (records: DagNodeRecordGraph, hash: Hash): DesignGraphPort[] => {
   const record = records[hash]!
   const runtimeInputs = recordInputsToRuntimeInputs(record)
-  const dependencyPorts = [
+  const dependencies = [
     ...Object.entries(runtimeInputs.hiddenInputs).map(([name, input]) => ({
       name,
       type: schemaTypeSummary(records[input.nodeId]!.outputSchema),
@@ -128,146 +125,136 @@ const nodeInputPorts = (
     })),
     ...Object.entries(runtimeInputs.exposedInputs).map(([name, input]) => {
       const nodeIds = 'kind' in input ? input.nodeIds : [input.nodeId]
-      const types = nodeIds.map((nodeId) => schemaTypeSummary(records[nodeId]!.outputSchema))
-      return { name, type: [...new Set(types)].join(' | '), role: 'exposed' as const }
+      return {
+        name,
+        type: [
+          ...new Set(nodeIds.map((nodeId) => schemaTypeSummary(records[nodeId]!.outputSchema))),
+        ].join(' | '),
+        role: 'exposed' as const,
+      }
     }),
   ]
   const parameterType = schemaTypeSummary(record.localParamsSchema)
-  const parameterPorts =
-    parameterType === 'object'
-      ? []
-      : [{ name: 'params', type: parameterType, role: 'parameter' as const }]
-  return [...parameterPorts, ...dependencyPorts]
+  return parameterType === 'object'
+    ? dependencies
+    : [{ name: 'params', type: parameterType, role: 'parameter' }, ...dependencies]
 }
 
-const nodeFiles = async (store: DesignProjectObjectStore): Promise<StoredGraphNodeFile[]> => {
-  const names = await store.list('nodes')
-  return await Promise.all(
-    names
+const nodeFiles = async (store: DesignGraphObjectStore): Promise<StoredGraphNodeFile[]> =>
+  await Promise.all(
+    (await store.list('nodes'))
       .filter((name) => name.endsWith('.ts'))
-      .map(async (name) => {
-        const source = await store.read(`nodes/${name}`)
-        if (typeof source !== 'string') throw new Error(`Invalid stored node source: ${name}`)
-        return { path: `nodes/${name}`, source }
-      }),
+      .map(async (name) => ({
+        path: `nodes/${name}`,
+        source: await store.readText(`nodes/${name}`),
+      })),
   )
-}
 
-const LEGACY_WORKSTATION_ROOT = 'sha256:Ho1QE-8_1GkNuFXapRSnR3mR-XV4ppe-J2KMdN1gDks' as Hash
+const projectBaseUrl = (projectId: string) =>
+  new URL(`/design-repositories/${projectId}/`, location.origin)
 
-export const prepareBundledDesignRevision = async (args: {
+export const prepareBundledDesignProject = async (args: {
   projectId: string
-  store: DesignProjectObjectStore
-  repository: DesignProjectRepository
-}): Promise<DesignRevisionV1> => {
-  const catalogExample = bundledDesignExamples[args.projectId]
-  if (args.projectId !== 'ai-workstation' && !catalogExample) {
-    throw new Error(`No bundled design example exists for ${args.projectId}.`)
-  }
-  const snapshot = await loadDesignRepositorySnapshot({
-    readText: createUrlDesignRepositoryReader({
-      baseUrl: new URL(`/design-repositories/${args.projectId}/`, location.origin),
-      fetch,
-    }),
-    checkout: { kind: 'ref', name: 'main' },
+  store: DesignGraphObjectStore
+  repository: DesignGraphRepository
+}): Promise<{ graph: GraphRevision; project: ProjectRevision }> => {
+  const readText = createUrlDesignRepositoryReader({
+    baseUrl: projectBaseUrl(args.projectId),
+    fetch,
   })
-  for (const file of snapshot.files) {
-    await args.store.write(file.path, file.source)
+  const [graphSnapshot, projectSnapshot] = await Promise.all([
+    loadDesignRepositorySnapshot({ readText, checkout: { kind: 'ref', name: 'graph/main' } }),
+    loadProjectRepositorySnapshot({ readText, projectRef: 'projects/template' }),
+  ])
+  for (const file of graphSnapshot.files) await args.store.writeText(file.path, file.source)
+  await args.repository.putGraphRevision(graphSnapshot.revision)
+  for (const invocation of Object.values(projectSnapshot.invocations)) {
+    await args.repository.putInvocation(invocation)
   }
-  const files = await nodeFiles(args.store)
-  await loadStoredGraphNodeFiles(files)
-  await args.repository.putDesignSpace(snapshot.designSpace)
-  await args.repository.putRevision(snapshot.revision, {
-    schemaVersion: 1,
-    revisionId: snapshot.revision.id,
-    message: catalogExample?.message ?? 'Evidence-backed AI workstation design space',
-    createdAtMs: Date.now(),
+  for (const extension of Object.values(projectSnapshot.extensions)) {
+    await args.repository.putExtension(extension)
+  }
+  await args.repository.putProjectRevision(projectSnapshot.revision)
+
+  const currentGraphRef = await args.repository.getGraphRef('graph/main')
+  const currentGraph = currentGraphRef
+    ? await args.repository.getGraphRevision(currentGraphRef.revisionId)
+    : null
+  const mergedGraph = currentGraph
+    ? createGraphRevision({
+        parents: [currentGraph.id, graphSnapshot.revision.id],
+        nodes: { ...currentGraph.nodes, ...graphSnapshot.revision.nodes },
+      })
+    : graphSnapshot.revision
+  await args.repository.putGraphRevision(mergedGraph)
+  await args.repository.advanceGraphRef({
+    name: 'graph/main',
+    revisionId: mergedGraph.id,
+    expected: currentGraphRef?.revisionId ?? null,
   })
-  return snapshot.revision
+  return { graph: mergedGraph, project: projectSnapshot.revision }
 }
 
 export const ensureBundledDesignProject = async (args: {
   projectId: string
-  store: DesignProjectObjectStore
-  repository: DesignProjectRepository
+  store: DesignGraphObjectStore
+  repository: DesignGraphRepository
   refName?: string
-}): Promise<DesignRevisionV1> => {
-  const refName = args.refName ?? 'main'
-  const current = await args.repository.getRef(refName)
-  const prepared = await prepareBundledDesignRevision(args)
-  if (current) {
-    const revision = await args.repository.getRevision(current.revisionId)
-    const currentRoot = revision.roots.main?.nodeId
-    if (args.projectId !== 'ai-workstation' || currentRoot !== LEGACY_WORKSTATION_ROOT) {
-      return revision
-    }
-  }
-  await args.repository.advanceRef({
+}): Promise<ProjectRevision> => {
+  const refName = args.refName ?? `projects/${encodeURIComponent(args.projectId)}`
+  const current = await args.repository.getProjectRef(refName)
+  if (current) return await args.repository.getProjectRevision(current.revisionId)
+  const prepared = await prepareBundledDesignProject(args)
+  await args.repository.advanceProjectRef({
     name: refName,
-    revisionId: prepared.id,
-    expectedRevisionId: current?.revisionId ?? null,
+    revisionId: prepared.project.id,
+    expected: null,
   })
-  return prepared
+  return prepared.project
 }
 
 export const loadDesignWorkspaceProject = async (args: {
-  store: DesignProjectObjectStore
-  repository: DesignProjectRepository
+  store: DesignGraphObjectStore
+  repository: DesignGraphRepository
   checkout: DesignCheckout
-  rootName?: string
+  invocationName?: string
 }): Promise<DesignWorkspaceProject> => {
-  const checkout = args.checkout
-  const revisionId =
-    checkout.kind === 'revision'
-      ? checkout.id
-      : await args.repository.getRef(checkout.name).then((ref) => {
-          if (!ref) throw new Error(`Design ref not found: ${checkout.name}`)
-          return ref.revisionId
-        })
-  const revision = await args.repository.getRevision(revisionId)
-  const designSpace = await args.repository.getDesignSpace(revision.designSpaceId)
-  const rootName = args.rootName ?? Object.keys(revision.roots)[0]
-  if (!rootName) throw new Error(`Design revision ${revision.id} has no roots.`)
-  const rootRef = revision.roots[rootName]
-  if (!rootRef) throw new Error(`Design root not found: ${rootName}`)
+  let revisionId: Hash
+  if (args.checkout.kind === 'revision') {
+    revisionId = args.checkout.id
+  } else {
+    const ref = await args.repository.getProjectRef(args.checkout.name)
+    if (!ref) throw new Error(`Project ref not found: ${args.checkout.name}`)
+    revisionId = ref.revisionId
+  }
+  const revision = await args.repository.getProjectRevision(revisionId)
+  const invocationName = args.invocationName ?? Object.keys(revision.invocations)[0]
+  if (!invocationName) throw new Error(`Project revision ${revision.id} has no invocations.`)
+  const invocationId = revision.invocations[invocationName]
+  if (!invocationId) throw new Error(`Project invocation not found: ${invocationName}`)
+  const invocation = await args.repository.getInvocation(invocationId)
   const files = await nodeFiles(args.store)
   const graph = await loadStoredGraphNodeFiles(files)
   const records = savedStoredNodesToRecordGraph(graph)
-  const compiled = compileDagNodeRecordGraph({ graph: records, rootHash: rootRef.nodeId })
-  const compiledRoot = compiled[rootRef.nodeId]
-  if (!compiledRoot) throw new Error(`Compiled design root not found: ${rootRef.nodeId}`)
-  const rootNamesByHash = Object.entries(revision.roots).reduce<Record<Hash, string[]>>(
-    (byHash, [name, root]) => ({
-      ...byHash,
-      [root.nodeId]: [...(byHash[root.nodeId] ?? []), name],
-    }),
-    {},
-  )
-  const closure = [
-    ...new Set(
-      Object.values(revision.roots).flatMap((root) =>
-        getDagNodeRecordClosure(records, root.nodeId),
-      ),
-    ),
-  ]
-  const nodes = closure.map((hash) => ({
+  const compiled = compileDagNodeRecordGraph({ graph: records, rootHash: invocation.rootNodeId })
+  const compiledRoot = compiled[invocation.rootNodeId]
+  if (!compiledRoot) throw new Error(`Compiled project root not found: ${invocation.rootNodeId}`)
+  const closure = getDagNodeRecordClosure(records, invocation.rootNodeId)
+  const computationNodes = closure.map((hash) => ({
     id: hash,
     label: records[hash]!.label,
-    type: rootNamesByHash[hash]?.length ? 'root' : 'node',
+    type: hash === invocation.rootNodeId ? 'root' : 'node',
     data: {
       kind: 'computation' as const,
       localName: records[hash]!.localName,
       hash,
       inputs: nodeInputPorts(records, hash),
       outputType: schemaTypeSummary(records[hash]!.outputSchema),
-      rootNames: rootNamesByHash[hash] ?? [],
-      selectedRoot: hash === rootRef.nodeId,
+      selectedRoot: hash === invocation.rootNodeId,
     },
   }))
-  const computationEdges = closure.flatMap((hash) => {
-    const record = records[hash]!
-    const inputs = record.inputs ?? {}
-    return Object.entries(inputs).flatMap(([alias, input]) => {
+  const computationEdges = closure.flatMap((hash) =>
+    Object.entries(records[hash]!.inputs ?? {}).flatMap(([alias, input]) => {
       const nodeIds = 'kind' in input ? input.nodeIds : [input.nodeId]
       return nodeIds.map((source) => ({
         id: `${source}:${hash}:${alias}`,
@@ -277,80 +264,85 @@ export const loadDesignWorkspaceProject = async (args: {
         type: 'kind' in input ? 'choice' : 'dependency',
         data: { alias },
       }))
-    })
-  })
-  const revisionNodeId = `revision:${revision.id}`
-  const designSpaceNodeId = `design-space:${designSpace.id}`
-  const recordNodes: GraphData<DesignGraphRecordData, { alias: string }>['nodes'] = [
-    {
-      id: designSpaceNodeId,
-      label: 'Design space',
-      type: 'design-space',
-      data: {
-        kind: 'design-space',
-        hash: designSpace.id,
-        schemaVersion: designSpace.schemaVersion,
-      },
-    },
+    }),
+  )
+  const revisionNodeId = `project-revision:${revision.id}`
+  const invocationNodes = await Promise.all(
+    Object.entries(revision.invocations).map(async ([name, id]) => {
+      const definition = id === invocation.id ? invocation : await args.repository.getInvocation(id)
+      return {
+        id: `invocation:${id}`,
+        label: name,
+        type: 'invocation',
+        data: {
+          kind: 'invocation' as const,
+          hash: id,
+          name,
+          rootNodeId: definition.rootNodeId,
+          selected: id === invocation.id,
+        },
+      }
+    }),
+  )
+  const recordNodes: DesignWorkspaceProject['graphData']['nodes'] = [
     ...revision.parents.map((parent) => ({
-      id: `revision:${parent}`,
-      label: 'Parent revision',
-      type: 'parent-revision',
-      data: { kind: 'parent-revision' as const, hash: parent },
+      id: `project-revision:${parent}`,
+      label: 'Parent project revision',
+      type: 'parent-project-revision',
+      data: { kind: 'parent-project-revision' as const, hash: parent },
     })),
     {
       id: revisionNodeId,
-      label: 'Design revision',
-      type: 'revision',
-      data: { kind: 'revision', hash: revision.id },
+      label: revision.displayName,
+      type: 'project-revision',
+      data: { kind: 'project-revision', hash: revision.id },
     },
+    ...invocationNodes,
     ...(args.checkout.kind === 'ref'
       ? [
           {
             id: `ref:${args.checkout.name}`,
             label: args.checkout.name,
             type: 'ref',
-            data: {
-              kind: 'ref' as const,
-              name: args.checkout.name,
-              revisionId: revision.id,
-            },
+            data: { kind: 'ref' as const, name: args.checkout.name, revisionId: revision.id },
           },
         ]
       : []),
   ]
-  const recordEdges: GraphData<DesignGraphRecordData, { alias: string }>['edges'] = [
-    {
-      id: `${designSpaceNodeId}:${revisionNodeId}`,
-      source: designSpaceNodeId,
-      target: revisionNodeId,
-      type: 'design-space',
-      label: 'design space',
-      data: { alias: 'designSpaceId' },
-    },
+  const recordEdges: DesignWorkspaceProject['graphData']['edges'] = [
     ...revision.parents.map((parent) => ({
-      id: `revision:${parent}:${revisionNodeId}`,
-      source: `revision:${parent}`,
+      id: `project-revision:${parent}:${revisionNodeId}`,
+      source: `project-revision:${parent}`,
       target: revisionNodeId,
       type: 'revision-parent',
       label: 'parent',
       data: { alias: 'parent' },
     })),
-    ...Object.entries(revision.roots).map(([name, root]) => ({
-      id: `${root.nodeId}:${revisionNodeId}:${name}`,
-      source: root.nodeId,
-      target: revisionNodeId,
-      type: 'revision-root',
-      label: `root · ${name}`,
-      data: { alias: name },
-    })),
+    ...invocationNodes.flatMap((node) => [
+      {
+        id: `${node.id}:${revisionNodeId}`,
+        source: node.id,
+        target: revisionNodeId,
+        type: 'project-invocation',
+        label: node.data.name,
+        data: { alias: node.data.name },
+      },
+      {
+        id: `${node.data.rootNodeId}:${node.id}`,
+        source: node.data.rootNodeId,
+        target: node.id,
+        type: 'invocation-root',
+        label: 'root',
+        data: { alias: 'root' },
+      },
+    ]),
     ...(args.checkout.kind === 'ref'
       ? [
           {
             id: `${revisionNodeId}:ref:${args.checkout.name}`,
             source: revisionNodeId,
             target: `ref:${args.checkout.name}`,
-            type: 'design-ref',
+            type: 'project-ref',
             label: 'points to',
             data: { alias: args.checkout.name },
           },
@@ -360,14 +352,14 @@ export const loadDesignWorkspaceProject = async (args: {
   return {
     checkout: args.checkout,
     revision,
-    designSpace,
-    rootName,
+    invocationName,
+    invocation,
     files,
     graph,
     records,
     compiledRoot,
     graphData: {
-      nodes: [...nodes, ...recordNodes],
+      nodes: [...computationNodes, ...recordNodes],
       edges: [...computationEdges, ...recordEdges],
     },
   }
@@ -401,59 +393,127 @@ export const designNodeViewerData = (
 export const defaultDesignParams = (project: DesignWorkspaceProject): Record<string, unknown> =>
   createWithDefaults(project.compiledRoot.paramsSchema as JSONSchema7)
 
+const flattenParams = (
+  value: Record<string, unknown>,
+  prefix = '',
+): Record<string, { kind: 'constant'; value: unknown }> =>
+  Object.fromEntries(
+    Object.entries(value).flatMap(([name, child]) => {
+      const path = prefix ? `${prefix}.${name}` : name
+      return child && typeof child === 'object' && !Array.isArray(child)
+        ? Object.entries(flattenParams(child as Record<string, unknown>, path))
+        : [[path, { kind: 'constant' as const, value: child }]]
+    }),
+  )
+
+const invocationRowEvaluator = (
+  project: DesignWorkspaceProject,
+  invocation: InvocationDefinition,
+) =>
+  async function evaluateRows(args: {
+    params: Record<string, unknown>
+    maxRows?: number
+    signal?: AbortSignal
+    onRow: (row: {
+      outputs: unknown
+      captured?: Record<string, unknown>
+      inputSelection?: {
+        rowKey: Record<string, string | number>
+        sourceIndexByAlias: Record<string, number>
+      }
+    }) => Promise<void>
+  }) {
+    if (args.signal?.aborted) throw new Error('Invocation cancelled.')
+    const inputs = toDagExploreInputs(invocation.inputs)
+    const studyParams = Object.fromEntries(
+      Object.keys(invocation.inputs).map((alias) => [alias, args.params[alias] ?? {}]),
+    )
+    await project.compiledRoot.call({ ...args.params, ...studyParams }).study({
+      ...(invocation.objectives[0]?.target.op === 'identity'
+        ? {
+            mode: 'optimize' as const,
+            objective: {
+              path: invocation.objectives[0].target.path,
+              direction: invocation.objectives[0].direction,
+            },
+          }
+        : {}),
+      ...(inputs ? { inputs } : {}),
+      capture: invocation.capture.map((capture) => ({
+        path: capture.path,
+        ...(capture.as === undefined ? {} : { as: capture.as }),
+      })),
+      ...(args.maxRows === undefined ? {} : { budget: { maxRows: args.maxRows } }),
+      collectRows: false,
+      collectHistory: Object.values(invocation.inputs).some(
+        (input) => input.strategy?.id !== undefined && input.strategy.id !== 'sequential',
+      ),
+      onRow: async (row) =>
+        await args.onRow({
+          outputs: row.row,
+          ...(row.captured ? { captured: row.captured } : {}),
+          inputSelection: {
+            rowKey: row.rowKey,
+            sourceIndexByAlias: row.sourceIndexByAlias,
+          },
+        }),
+    })
+  }
+
 export const evaluateDesign = async (args: {
   project: DesignWorkspaceProject
-  repository: DesignProjectRepository
-  storageBackend: DagStorageBackend
+  repository: DesignGraphRepository
+  artifacts: InvocationArtifactStore
   params: Record<string, unknown>
-}): Promise<{ value: unknown; evaluation: DesignEvaluationRecordV1 }> => {
-  const run = await args.project.compiledRoot.call(args.params).run(undefined, {
-    execution: { mode: 'local' },
-    storageBackend: args.storageBackend,
+  makeAttemptId: () => string
+}): Promise<{ value: unknown; run: InvocationRun }> => {
+  const invocation = createInvocationDefinition({
+    ...args.project.invocation,
+    variables: flattenParams(args.params),
+    objectives: [],
   })
-  const execution = createDesignExecutionConfig({ kind: 'design', params: args.params })
-  await args.repository.putExecutionConfig(args.project.rootName, execution.id, execution.value)
-  const evaluation = createDesignEvaluationRecord({
-    revisionId: args.project.revision.id,
-    rootName: args.project.rootName,
-    executionConfigId: execution.id,
-    resultArtifactId: run.artifactHash,
+  await args.repository.putInvocation(invocation)
+  let value: unknown
+  const completed = await executeInvocation({
+    invocation,
+    dependencies: {
+      repository: args.repository,
+      artifacts: args.artifacts,
+      makeAttemptId: args.makeAttemptId,
+      evaluate: async ({ params }) => {
+        const result = await args.project.compiledRoot.call(params).run()
+        return { outputs: result.value }
+      },
+      evaluateRows: invocationRowEvaluator(args.project, invocation),
+    },
+    onRow: (row) => {
+      value = row.outputs
+    },
   })
-  await args.repository.putEvaluation(evaluation)
-  return { value: run.value, evaluation }
+  return { value, run: completed.run }
 }
 
-export const evaluateDesignStudy = async (args: {
+export const evaluateDesignInvocation = async (args: {
   project: DesignWorkspaceProject
-  repository: DesignProjectRepository
-  storageBackend: DagStorageBackend
-  params: Record<string, unknown>
-  config: DesignStudyConfig
+  repository: DesignGraphRepository
+  artifacts: InvocationArtifactStore
+  invocation: InvocationDefinition
+  makeAttemptId: () => string
+  onRow?: (row: InvocationRow) => void | Promise<void>
 }) => {
-  const study = await args.project.compiledRoot.call(args.params).study(args.config, undefined, {
-    execution: { mode: 'local' },
-    storageBackend: args.storageBackend,
+  await args.repository.putInvocation(args.invocation)
+  return await executeInvocation({
+    invocation: args.invocation,
+    dependencies: {
+      repository: args.repository,
+      artifacts: args.artifacts,
+      makeAttemptId: args.makeAttemptId,
+      evaluate: async ({ params }) => {
+        const result = await args.project.compiledRoot.call(params).run()
+        return { outputs: result.value }
+      },
+      evaluateRows: invocationRowEvaluator(args.project, args.invocation),
+    },
+    ...(args.onRow ? { onRow: args.onRow } : {}),
   })
-  const execution =
-    args.config.mode === 'optimize'
-      ? createDesignExecutionConfig({
-          kind: 'optimization',
-          config: { ...args.config, mode: 'optimize' },
-        })
-      : createDesignExecutionConfig({
-          kind: 'study',
-          config: { ...args.config, mode: 'explore' },
-        })
-  await args.repository.putExecutionConfig(args.project.rootName, execution.id, execution.value)
-  const evaluation = createDesignEvaluationRecord({
-    revisionId: args.project.revision.id,
-    rootName: args.project.rootName,
-    executionConfigId: execution.id,
-    resultArtifactId: await args.storageBackend.writeArtifact(study),
-  })
-  await args.repository.putEvaluation(evaluation)
-  return { value: study, evaluation }
 }
-
-export const designOutputSchemaId = (project: DesignWorkspaceProject): Hash =>
-  canonicalHash(project.compiledRoot.outputSchema)

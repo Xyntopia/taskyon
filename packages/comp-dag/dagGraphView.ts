@@ -1,22 +1,30 @@
 import type { GraphData } from '@taskyon/common/modules/graph/types'
 import { describeExploreInputs, type DagExposedInputDef, type DagNode } from './dagCore.ts'
+import { dagNodeId } from './dagEnvironment.ts'
 
-export type DagNodeGraphNodeData = {
+export type DagNodeDefinitionOrigin = 'hard-coded' | 'stored'
+
+export type DagNodeDefinitionMetadata = {
+  definitionOrigin: DagNodeDefinitionOrigin
+  label?: string
+}
+
+export type DagGraphViewNodeData = {
   isOutput: boolean
   isExploded: boolean
   isSource: boolean
-  isBuiltIn?: boolean
+  definitionOrigin: DagNodeDefinitionOrigin
   outputDescription: string
 }
 
-export type DagNodeGraphEdgeData = {
+export type DagGraphViewEdgeData = {
   alias: string
   visibility: 'hidden' | 'exposed'
   isExplodedOutput: boolean
   sourcePath?: string
 }
 
-export type DagNodeGraph = GraphData<DagNodeGraphNodeData, DagNodeGraphEdgeData>
+export type DagGraphView = GraphData<DagGraphViewNodeData, DagGraphViewEdgeData>
 
 const isOneOf = (
   value: DagExposedInputDef,
@@ -24,8 +32,6 @@ const isOneOf = (
   typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'oneOf'
 
 const isExplodedNode = (node: DagNode): boolean => node.name.includes('__explode__')
-
-const graphNodeId = (node: DagNode): string => node.contentHash ?? node.name
 
 const toTitleCaseToken = (token: string): string => {
   if (!token) return token
@@ -130,12 +136,13 @@ const edgeType = (
   return isExplodedOutput ? 'exposed-exploded-output' : 'exposed-normal'
 }
 
-export const buildDagNodeGraphFromOutputNodes = (
+export const buildDagGraphView = (
   outputNodes: Record<string, DagNode>,
-): DagNodeGraph => {
+  definitionMetadata: (node: DagNode) => DagNodeDefinitionMetadata,
+): DagGraphView => {
   const nodes = new Map<
     string,
-    { id: string; label: string; type: string; data: DagNodeGraphNodeData }
+    { id: string; label: string; type: string; data: DagGraphViewNodeData }
   >()
   const edges = new Map<
     string,
@@ -149,24 +156,26 @@ export const buildDagNodeGraphFromOutputNodes = (
         | 'exposed-normal'
         | 'exposed-exploded-output'
       label: string
-      data: DagNodeGraphEdgeData
+      data: DagGraphViewEdgeData
     }
   >()
   const visited = new Set<string>()
 
   const addNode = (node: DagNode) => {
-    const id = graphNodeId(node)
+    const id = dagNodeId(node)
     const existing = nodes.get(id)
     if (existing) return
     const exploded = isExplodedNode(node)
+    const metadata = definitionMetadata(node)
     nodes.set(id, {
       id,
-      label: formatNodeLabel(node.localName ?? node.name),
+      label: metadata.label ?? formatNodeLabel(node.localName ?? node.name),
       type: exploded ? 'exploded' : 'default',
       data: {
         isOutput: false,
         isExploded: exploded,
         isSource: node.effect === 'source',
+        definitionOrigin: metadata.definitionOrigin,
         outputDescription: schemaTopDescription(node.outputSchema),
       },
     })
@@ -181,8 +190,8 @@ export const buildDagNodeGraphFromOutputNodes = (
   ) => {
     const isExplodedOutput = isExplodedNode(source)
     const type = edgeType(visibility, isExplodedOutput)
-    const sourceId = graphNodeId(source)
-    const targetId = graphNodeId(target)
+    const sourceId = dagNodeId(source)
+    const targetId = dagNodeId(target)
     const id = `${sourceId}->${targetId}::${visibility}:${alias}`
     if (edges.has(id)) return
     edges.set(id, {
@@ -202,7 +211,7 @@ export const buildDagNodeGraphFromOutputNodes = (
 
   const walk = (node: DagNode) => {
     addNode(node)
-    const id = graphNodeId(node)
+    const id = dagNodeId(node)
     if (visited.has(id)) return
     visited.add(id)
 

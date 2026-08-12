@@ -1,6 +1,7 @@
 import type { Hash } from './caching.ts'
 import type { DagNode } from './dagCore.ts'
 import {
+  defineDagNodeRecord,
   getDagNodeRecordInputHashes,
   recordInputsToRuntimeInputs,
   type DagNodeRecord,
@@ -101,6 +102,126 @@ export const getDagNodeRecordRelations = (
     .filter(([, candidate]) => getDagNodeRecordInputHashes(candidate).includes(nodeHash))
     .map(([hash]) => hash)
   return { upstream, downstream }
+}
+
+export const planDagNodeRecordDeletion = (
+  definitions: readonly DagNodeRecord[],
+  deletingHashes: ReadonlySet<Hash>,
+) => {
+  const deleting = definitions.filter(({ id }) => deletingHashes.has(id))
+  const remaining = definitions.filter(({ id }) => !deletingHashes.has(id))
+  const blockers = remaining.filter((definition) =>
+    getDagNodeRecordInputHashes(definition).some((hash) => deletingHashes.has(hash)),
+  )
+  return { deleting, remaining, blockers }
+}
+
+export const replaceDagNodeRecordInputHashes = (
+  definition: DagNodeRecord,
+  replacements: ReadonlyMap<Hash, Hash>,
+): Pick<DagNodeRecord, 'inputs' | 'hiddenInputs' | 'exposedInputs'> | null => {
+  if (!getDagNodeRecordInputHashes(definition).some((hash) => replacements.has(hash))) return null
+  const replaceHash = (hash: Hash) => replacements.get(hash) ?? hash
+  return {
+    ...(definition.inputs
+      ? {
+          inputs: Object.fromEntries(
+            Object.entries(definition.inputs).map(([alias, ref]) => [
+              alias,
+              'kind' in ref
+                ? { ...ref, nodeIds: ref.nodeIds.map(replaceHash) }
+                : { ...ref, nodeId: replaceHash(ref.nodeId) },
+            ]),
+          ),
+        }
+      : {}),
+    ...(definition.hiddenInputs
+      ? {
+          hiddenInputs: Object.fromEntries(
+            Object.entries(definition.hiddenInputs).map(([alias, ref]) => [
+              alias,
+              { nodeId: replaceHash(ref.nodeId) },
+            ]),
+          ),
+        }
+      : {}),
+    ...(definition.exposedInputs
+      ? {
+          exposedInputs: Object.fromEntries(
+            Object.entries(definition.exposedInputs).map(([alias, ref]) => [
+              alias,
+              'kind' in ref
+                ? { kind: 'oneOf' as const, nodeIds: ref.nodeIds.map(replaceHash) }
+                : { nodeId: replaceHash(ref.nodeId) },
+            ]),
+          ),
+        }
+      : {}),
+  }
+}
+
+export const rewriteDagNodeRecordGraphInputHashes = async (
+  definitions: readonly DagNodeRecord[],
+  replacements: ReadonlyMap<Hash, Hash>,
+  redefine: (definition: DagNodeRecord) => Promise<DagNodeRecord> = defineDagNodeRecord,
+): Promise<DagNodeRecord[]> => {
+  let definitionsByName = Object.fromEntries(
+    definitions.map((definition) => [definition.localName, definition]),
+  )
+  let pendingReplacements = new Map(replacements)
+  const rewrittenHashes = new Set<Hash>()
+
+  while (pendingReplacements.size > 0) {
+    for (const hash of pendingReplacements.keys()) {
+      if (rewrittenHashes.has(hash)) throw new Error('DAG node rewrite would create a cycle.')
+      rewrittenHashes.add(hash)
+    }
+    const nextReplacements = new Map<Hash, Hash>()
+    const nextDefinitions = { ...definitionsByName }
+    for (const [localName, definition] of Object.entries(definitionsByName)) {
+      const inputs = replaceDagNodeRecordInputHashes(definition, pendingReplacements)
+      if (!inputs) continue
+      const updated = await redefine({ ...definition, ...inputs })
+      nextDefinitions[localName] = updated
+      nextReplacements.set(definition.id, updated.id)
+    }
+    definitionsByName = nextDefinitions
+    pendingReplacements = nextReplacements
+  }
+
+  return Object.values(definitionsByName)
+}
+
+export const mergeDagNodeRecordDefaults = async (args: {
+  local: readonly DagNodeRecord[]
+  defaults: readonly DagNodeRecord[]
+}) => {
+  const localByName = Object.fromEntries(args.local.map((node) => [node.localName, node]))
+  const defaultsByName = Object.fromEntries(args.defaults.map((node) => [node.localName, node]))
+  const replacements = new Map<Hash, Hash>(
+    args.defaults.flatMap((node) => {
+      const previous = localByName[node.localName]
+      return previous && previous.id !== node.id ? [[previous.id, node.id]] : []
+    }),
+  )
+  const definitions = await rewriteDagNodeRecordGraphInputHashes(
+    Object.values({ ...localByName, ...defaultsByName }),
+    replacements,
+  )
+
+  const defaultNames = new Set(Object.keys(defaultsByName))
+  return {
+    definitions: definitions.toSorted((left, right) =>
+      left.localName.localeCompare(right.localName),
+    ),
+    addedDefaultCount: args.defaults.filter((node) => !localByName[node.localName]).length,
+    updatedDefaultCount: args.defaults.filter(
+      (node) =>
+        localByName[node.localName]?.id !== undefined &&
+        localByName[node.localName]?.id !== node.id,
+    ).length,
+    preservedCustomCount: args.local.filter((node) => !defaultNames.has(node.localName)).length,
+  }
 }
 
 export const getDagNodeRecordInputSchema = (

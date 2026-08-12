@@ -217,7 +217,7 @@ import {
 } from '@quasar/extras/material-icons'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { prepareBundledDesignRevision } from 'src/modules/designWorkspaceRuntime'
+import { ensureBundledDesignProject } from 'src/modules/designWorkspaceRuntime'
 import CreateTaskButton from './CreateTaskButton.vue'
 import logoSvg from 'src/assets/taskyon_logo_complex_animated.svg?raw'
 import logoSvgStatic from 'src/assets/taskyon_logo_complex_static.svg?raw'
@@ -294,14 +294,15 @@ async function startExample(workspace: { projectId: string }) {
   try {
     await tystate.taskyon
     const store = tystate.designProjectStore(workspace.projectId)
-    const revision = await prepareBundledDesignRevision({
+    await ensureBundledDesignProject({
       projectId: workspace.projectId,
       store: store.objects,
       repository: store.repository,
+      refName: store.refName('main'),
     })
     await router.push({
-      name: 'design-workspace-revision',
-      params: { projectId: workspace.projectId, revisionId: revision.id },
+      name: 'design-workspace',
+      params: { projectId: workspace.projectId, refName: 'main' },
     })
   } finally {
     startingProjectId.value = null
