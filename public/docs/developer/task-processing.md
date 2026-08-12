@@ -72,6 +72,24 @@ all of its child chains finish.
 Use `return` as a control signal, not as the primary data channel. Put output in the preceding
 `message`, `structured`, or `toolresult` task so reducers and context selection can find it.
 
+`taskPlanner` uses the shape of `tasks` as its complete scheduling contract. There is no separate
+`parallel` flag:
+
+```ts
+{
+  tasks: ['inspect', 'implement', 'verify']
+} // one sequential branch
+{
+  tasks: [
+    ['research API', 'summarize API'],
+    ['research UI', 'summarize UI'],
+  ]
+} // two parallel branches
+```
+
+Each inner array is sequential. Use nested arrays only for independent branches; implementation,
+documentation, and verification for one artifact normally belong in one flat array.
+
 ## Tasks as reducers
 
 An executable task should be treated as a reducer:
@@ -107,9 +125,11 @@ supports two traversal strategies:
 - `lineage` follows the current lineage and can add visible terminal results from direct child
   branches.
 
-`lineage` with `includeSubtaskResults: 'terminal-visible'` includes terminal `message`,
-`structured`, `toolresult`, and `error` values, or the visible value immediately before a `return`.
-Tool render options can hide tasks from chat, the LLM, or vector indexing.
+`lineage` with `includeSubtaskResults: 'terminal-visible'` includes delegated objectives plus
+terminal `message`, `structured`, `toolresult`, and `error` values, or the visible value immediately
+before a `return`. Intermediate branch tool chains remain hidden. `chatCompletion` renders these as
+bounded handoffs containing objective, terminal status, and result. Tool render options can hide
+tasks from chat, the LLM, or vector indexing.
 
 Context is part of the workflow contract. Select the evidence required by the next reducer instead
 of flattening every nested task into every model request.
@@ -129,6 +149,11 @@ result, or error. The standard entry node decides whether to:
 Entry-node settings own prompt templates, default tools, tool-choice behavior, reasoning,
 multimodal input, and web-search flags. `chatCompletion` remains the model gateway.
 
+The shortlist router and the selected executor receive the same stable leading base/project
+instructions and tree-selected lineage. Role-specific routing text stays after that shared prefix.
+Their tool declarations intentionally differ, so provider cache reuse must be measured rather than
+assumed.
+
 When tool choosing is enabled and the available tool count exceeds `tool_chooser_min_tools`, the
 shortlist phase runs a `chatCompletion` that exposes and forces only the current entry node. The
 model calls that entry node with a narrowed `allowedTools` list. The new entry node inherits the
@@ -138,6 +163,20 @@ intermediate structured routing result is added to the task chain.
 Use a custom entry node when a page needs domain context, deterministic routing, or a deliberately
 narrow tool set. Keep its top-level branch visible in the tool function rather than hiding the
 workflow shape behind wrappers.
+
+## Prompt-cache ownership
+
+`chatCompletion` owns prompt-cache controls. OpenAI and ChatGPT Codex requests use one stable cache
+key per provider, model, and task-tree root. Parallel branches use that same key: the provider
+combines it with the exact prompt prefix, so divergent branch prefixes can coexist without copying
+or overwriting a local cache. Public OpenAI GPT-5.6 requests mark the root user boundary and up to
+three recent lineage boundaries as explicit breakpoints. The ChatGPT Codex backend uses its
+supported implicit behavior because it rejects `prompt_cache_options`; other providers retain
+stable prompt ordering without OpenAI-specific cache claims.
+
+Provider usage is normalized into each successful request trace, including normal input,
+cache-read, cache-write, output, and total token counts when supplied. Missing fields remain
+unavailable rather than becoming zero.
 
 ```mermaid
 flowchart TD
