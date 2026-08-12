@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 2,
+  "rootNodeId": "sha256:ZS47WA2w3T-O_r1dwR4NvuSvNLcLlPcZozHNQRxfxgM",
+  "variables": {
+    "requirements.budgetUsd": {
+      "kind": "sweep",
+      "method": "linear",
+      "start": 500,
+      "end": 20000,
+      "step": 100
+    },
+    "requirements.minimumSystemRamGb": {
+      "kind": "sweep",
+      "method": "linear",
+      "start": 16,
+      "end": 512,
+      "step": 16
+    },
+    "requirements.powerLimitW": {
+      "kind": "sweep",
+      "method": "linear",
+      "start": 250,
+      "end": 2500,
+      "step": 50
+    },
+    "requirements.model": {
+      "kind": "grid",
+      "values": ["llama-3.1-8b", "qwen2.5-32b", "llama-3.3-70b"]
+    },
+    "requirements.quantization": {
+      "kind": "grid",
+      "values": ["q4", "q8", "fp16"]
+    },
+    "requirements.contextTokens": {
+      "kind": "sweep",
+      "method": "linear",
+      "start": 2048,
+      "end": 262144,
+      "step": 2048
+    },
+    "requirements.concurrency": {
+      "kind": "sweep",
+      "method": "linear",
+      "start": 1,
+      "end": 16,
+      "step": 1
+    },
+    "requirements.runtime": {
+      "kind": "grid",
+      "values": ["any", "cuda", "metal"]
+    },
+    "requirements.noisePreference": {
+      "kind": "grid",
+      "values": ["any", "quiet"]
+    },
+    "requirements.region": {
+      "kind": "constant"
+    }
+  },
+  "inputs": {
+    "candidate": {
+      "strategy": {
+        "id": "sequential"
+      }
+    }
+  },
+  "objectives": [
+    {
+      "direction": "max",
+      "target": {
+        "path": "recommendation.score",
+        "op": "identity"
+      }
+    }
+  ],
+  "constraints": [
+    {
+      "path": "recommendation.estimatedPriceUsd",
+      "operator": "<=",
+      "limit": 5500
+    },
+    {
+      "path": "recommendation.estimatedSystemPowerW",
+      "operator": "<=",
+      "limit": 1200
+    },
+    {
+      "path": "recommendation.usableVramGb",
+      "operator": ">=",
+      "limit": 0
+    }
+  ],
+  "capture": [],
+  "policy": {
+    "accuracy": "auto"
+  },
+  "reducerOverrides": {},
+  "id": "sha256:bbbc81477d3bc65ff0e4aa4a85d9a46913519bfe6a9e78d44dbb9aa7ccc1877b"
+}

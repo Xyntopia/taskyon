@@ -142,7 +142,7 @@ import { updateFilesTool } from './tools/patchTool'
 import { downloadFileTool } from './tools/downloadFileTool'
 import { githubIssuesTool } from './tools/githubIssuesTool'
 import { gitlabTool } from './tools/gitlabTool'
-import { dagGraphProjectTool } from './tools/dagGraphProjectTool'
+import { createDagGraphProjectTool } from './tools/dagGraphProjectTool'
 import type { CliOauthStorage } from './oauthLogin'
 
 type BashToolArgs = {
@@ -3088,7 +3088,7 @@ async function main(host: InteractiveCliHost) {
     overpassMapTool,
     githubIssuesTool,
     gitlabTool,
-    dagGraphProjectTool,
+    createDagGraphProjectTool(storageClient),
     cliBashTool,
     ...(nativePythonExecutable
       ? [

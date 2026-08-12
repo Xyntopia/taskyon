@@ -61,12 +61,11 @@ type PrettierStandaloneModule = {
   ) => string | Promise<string>
 }
 
-export const storedGraphNodeFileName = (node: { localName: string; id: Hash }): string =>
-  `${node.localName}.${hashFilePart(node.id)}.ts`
+export const storedGraphNodeFileName = (node: { id: Hash }): string => `${hashFilePart(node.id)}.ts`
 
 export const parseStoredGraphNodeHashFromPath = (path: string): Hash | null => {
   const filename = path.split('/').at(-1) ?? path
-  const match = /(?:^|\.)(sha256_[A-Za-z0-9_-]+)\.ts$/.exec(filename)
+  const match = /^(sha256_[A-Za-z0-9_-]+)\.ts$/.exec(filename)
   return match?.[1] ? hashFromFilePart(match[1]) : null
 }
 
@@ -113,6 +112,13 @@ const parseLiteralValue = (tsModule: typeof ts, node: ts.Expression): unknown =>
     return expression.text
   }
   if (tsModule.isNumericLiteral(expression)) return Number(expression.text)
+  if (
+    tsModule.isPrefixUnaryExpression(expression) &&
+    expression.operator === tsModule.SyntaxKind.MinusToken &&
+    tsModule.isNumericLiteral(expression.operand)
+  ) {
+    return -Number(expression.operand.text)
+  }
   if (expression.kind === tsModule.SyntaxKind.TrueKeyword) return true
   if (expression.kind === tsModule.SyntaxKind.FalseKeyword) return false
   if (expression.kind === tsModule.SyntaxKind.NullKeyword) return null
@@ -354,10 +360,12 @@ const findDefaultExportObject = (
   tsModule: typeof ts,
   sourceFile: ts.SourceFile,
 ): ts.ObjectLiteralExpression => {
-  for (const statement of sourceFile.statements) {
-    if (!tsModule.isExportAssignment(statement)) continue
-    const expression = stripExpression(tsModule, statement.expression)
-    if (tsModule.isObjectLiteralExpression(expression)) return expression
+  if (sourceFile.statements.length !== 1) {
+    throw new Error('Stored graph node source must contain only one default export object.')
+  }
+  const statement = sourceFile.statements[0]
+  if (statement && tsModule.isExportAssignment(statement)) {
+    if (tsModule.isObjectLiteralExpression(statement.expression)) return statement.expression
   }
   throw new Error('Stored graph node must use "export default { ... }"')
 }
@@ -508,10 +516,12 @@ export const normalizeStoredGraphNodeSource = async (
   source: string
 }> => {
   const parsed = toStoredGraphNodeDefinition(await parseSourceFields(source))
-  const node = { ...parsed, id: opts?.id ?? parsed.id }
+  const requestedNode = { ...parsed, id: opts?.id ?? parsed.id }
+  const normalizedSource = await formatTypeScript(emitStoredGraphNodeSource(requestedNode))
+  const node = toStoredGraphNodeDefinition(await parseSourceFields(normalizedSource))
   return {
     node,
-    source: await formatTypeScript(emitStoredGraphNodeSource(node)),
+    source: normalizedSource,
   }
 }
 
@@ -545,6 +555,20 @@ export const saveStoredGraphNodeSource = async (
     normalizedSource: placeholder.source,
   }
 }
+
+export const saveStoredGraphNodeRecord = async (
+  node: DagNodeRecord,
+  opts?: { directory?: string },
+): Promise<SavedStoredGraphNode> =>
+  await saveStoredGraphNodeSource(
+    emitStoredGraphNodeSource({
+      ...node,
+      id: SELF_HASH_PLACEHOLDER,
+      runSource: node.runSource,
+      runCode: node.runCode ?? node.runSource,
+    }),
+    opts,
+  )
 
 export const loadStoredGraphNodeFile = async (
   file: StoredGraphNodeFile,

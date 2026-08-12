@@ -2,7 +2,7 @@
 
 Private computational DAG, study, optimization, query, and run-persistence infrastructure.
 
-The root export provides `dagCore.ts`. Subpath imports expose schema helpers, dynamic node records,
+The root export provides `dagCore.ts`. Subpath imports expose schema helpers, stored node records,
 optimization, query compilation, worker execution, and result persistence.
 
 This package is experimental and is not a stable external API. Callers should use its package

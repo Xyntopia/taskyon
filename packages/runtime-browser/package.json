@@ -9,6 +9,9 @@
     },
     "./storage": {
       "import": "./src/storage.ts"
+    },
+    "./dag-git-repository": {
+      "import": "./src/dagGitRepository.ts"
     }
   },
   "dependencies": {

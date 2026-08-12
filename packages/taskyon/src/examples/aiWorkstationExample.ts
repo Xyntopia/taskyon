@@ -1,15 +1,15 @@
 import type { Hash } from '@taskyon/comp-dag/caching'
 import {
   createUrlDesignRepositoryReader,
-  loadDesignRepositorySnapshot,
+  loadProjectRepositorySnapshot,
   type DesignRepositoryTextReader,
-  type LoadedDesignRepositorySnapshot,
+  type LoadedProjectRepositorySnapshot,
 } from '@taskyon/comp-dag/designRepositorySnapshot'
 
 export const AI_WORKSTATION_REPOSITORY_PATH = '/design-repositories/ai-workstation/'
 
-export type AiWorkstationExample = LoadedDesignRepositorySnapshot & {
-  nodes: LoadedDesignRepositorySnapshot['nodesByHash'][Hash][]
+export type AiWorkstationExample = LoadedProjectRepositorySnapshot & {
+  nodes: LoadedProjectRepositorySnapshot['nodesByHash'][Hash][]
   rootHash: Hash
 }
 
@@ -26,15 +26,16 @@ const browserRepositoryReader = (): DesignRepositoryTextReader => {
 export const createAiWorkstationExample = async (options?: {
   readText?: DesignRepositoryTextReader
 }): Promise<AiWorkstationExample> => {
-  const snapshot = await loadDesignRepositorySnapshot({
+  const snapshot = await loadProjectRepositorySnapshot({
     readText: options?.readText ?? browserRepositoryReader(),
-    checkout: { kind: 'ref', name: 'main' },
+    projectRef: 'projects/template',
   })
-  const root = snapshot.revision.roots.main
-  if (!root) throw new Error('AI workstation repository revision has no main root.')
+  const invocationId = snapshot.revision.invocations.main
+  const invocation = invocationId ? snapshot.invocations[invocationId] : undefined
+  if (!invocation) throw new Error('AI workstation project has no main invocation.')
   return {
     ...snapshot,
     nodes: Object.values(snapshot.nodesByHash),
-    rootHash: root.nodeId,
+    rootHash: invocation.rootNodeId,
   }
 }

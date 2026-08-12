@@ -29,9 +29,7 @@ export type PlannedRunSetup = {
 
 export const DEFAULT_IMPLICIT_MAX_ROWS = 100
 
-export const toDagExploreInputs = (
-  raw: unknown,
-): Record<string, StudyInputOption> | undefined => {
+export const toDagExploreInputs = (raw: unknown): Record<string, StudyInputOption> | undefined => {
   if (!raw || typeof raw !== 'object') return undefined
   const entries = Object.entries(raw as Record<string, unknown>)
   if (entries.length === 0) return undefined
@@ -114,7 +112,10 @@ export const buildCombinations = (dims: SearchDimension[]): Record<string, unkno
   return out
 }
 
-export const dimensionValuesFromSpec = (path: string, spec: VariableSpec): SearchDimension | null => {
+export const dimensionValuesFromSpec = (
+  path: string,
+  spec: VariableSpec,
+): SearchDimension | null => {
   if (spec.kind === 'grid' || spec.kind === 'list') {
     const values = spec.values
     if (!Array.isArray(values) || values.length === 0)
@@ -199,9 +200,8 @@ export const buildRunPlan = (input: {
     const dim = dimensionValuesFromSpec(path, spec)
     if (!dim) throw new Error(`Unsupported variable kind: ${(spec as VariableSpec).kind} (${path})`)
     dims.push(dim)
-    const legacyValue = (spec as unknown as { value?: unknown }).value
-    const seed = dim.values[0] !== undefined ? dim.values[0] : legacyValue
-    setPathValue(baseParamsRaw, path, seed)
+    const seed = dim.values[0]
+    if (seed !== undefined) setPathValue(baseParamsRaw, path, seed)
   }
 
   const baseParams = parseSchema<Record<string, unknown>>(paramsSchema, baseParamsRaw)

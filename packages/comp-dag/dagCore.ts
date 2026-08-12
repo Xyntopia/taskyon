@@ -180,6 +180,8 @@ export type StudyOptions = {
   dryRun?: boolean
   plan?: StudyPlan
   rngSeed?: number
+  collectRows?: boolean
+  collectHistory?: boolean
   onRow?: (event: StudyRowEvent) => void | Promise<void>
 }
 
@@ -906,11 +908,9 @@ const buildStudyPlanFromResolved = (
   }
 }
 
-const buildExplodedCombinations = (
+const iterateExplodedCombinations = function* (
   resolved: ResolvedExplodedInput[],
-): Array<Record<string, { sourceIndex: number; runOrderIndex: number }>> => {
-  if (resolved.length === 0) return [{}]
-
+): Iterable<Record<string, { sourceIndex: number; runOrderIndex: number }>> {
   const crossEntries = resolved.filter((e) => (e.inputOpts?.mode ?? 'cross') !== 'zip')
   const zipGroups = new Map<string, ResolvedExplodedInput[]>()
   for (const entry of resolved) {
@@ -921,43 +921,40 @@ const buildExplodedCombinations = (
     zipGroups.set(group, prev)
   }
 
-  let combinations: Array<Record<string, { sourceIndex: number; runOrderIndex: number }>> = [{}]
-
-  for (const entry of crossEntries) {
-    const next: Array<Record<string, { sourceIndex: number; runOrderIndex: number }>> = []
-    for (const base of combinations) {
-      for (let runOrderIndex = 0; runOrderIndex < entry.sourceIndices.length; runOrderIndex++) {
-        const sourceIndex = entry.sourceIndices[runOrderIndex]!
-        next.push({
-          ...base,
-          [entry.alias]: { sourceIndex, runOrderIndex },
-        })
-      }
+  const dimensions: Array<Array<Record<string, { sourceIndex: number; runOrderIndex: number }>>> = [
+    ...crossEntries.map((entry) =>
+      entry.sourceIndices.map((sourceIndex, runOrderIndex) => ({
+        [entry.alias]: { sourceIndex, runOrderIndex },
+      })),
+    ),
+    ...[...zipGroups.values()].map((entries) => {
+      const zipLength = entries.reduce(
+        (length, entry) => Math.min(length, entry.sourceIndices.length),
+        Number.POSITIVE_INFINITY,
+      )
+      return Array.from(
+        { length: Number.isFinite(zipLength) ? zipLength : 0 },
+        (_, runOrderIndex) =>
+          Object.fromEntries(
+            entries.map((entry) => [
+              entry.alias,
+              { sourceIndex: entry.sourceIndices[runOrderIndex]!, runOrderIndex },
+            ]),
+          ),
+      )
+    }),
+  ]
+  const visit = function* (
+    index: number,
+    current: Record<string, { sourceIndex: number; runOrderIndex: number }>,
+  ): Iterable<Record<string, { sourceIndex: number; runOrderIndex: number }>> {
+    if (index === dimensions.length) {
+      yield current
+      return
     }
-    combinations = next
+    for (const patch of dimensions[index]!) yield* visit(index + 1, { ...current, ...patch })
   }
-
-  for (const entries of zipGroups.values()) {
-    const zipLength = entries.reduce(
-      (acc, e) => Math.min(acc, e.sourceIndices.length),
-      Number.POSITIVE_INFINITY,
-    )
-    const boundedZipLength = Number.isFinite(zipLength) ? zipLength : 0
-    const next: Array<Record<string, { sourceIndex: number; runOrderIndex: number }>> = []
-    for (const base of combinations) {
-      for (let runOrderIndex = 0; runOrderIndex < boundedZipLength; runOrderIndex++) {
-        const zipped = { ...base }
-        for (const entry of entries) {
-          const sourceIndex = entry.sourceIndices[runOrderIndex]!
-          zipped[entry.alias] = { sourceIndex, runOrderIndex }
-        }
-        next.push(zipped)
-      }
-    }
-    combinations = next
-  }
-
-  return combinations
+  yield* visit(0, {})
 }
 
 const buildVariableDimensions = (variables?: Record<string, StudyVariableSpec>) => {
@@ -1015,19 +1012,19 @@ const buildVariableDimensions = (variables?: Record<string, StudyVariableSpec>) 
   return dims
 }
 
-const buildCombinations = (
+const iterateCombinations = function* (
   dims: Array<{ path: string; values: unknown[] }>,
-): Record<string, unknown>[] => {
-  if (dims.length === 0) return [{}]
-  const [head, ...tail] = dims
-  const tailCombos = buildCombinations(tail)
-  const out: Record<string, unknown>[] = []
-  for (const v of head!.values) {
-    for (const combo of tailCombos) {
-      out.push({ ...combo, [head!.path]: v })
-    }
+  index = 0,
+  current: Record<string, unknown> = {},
+): Iterable<Record<string, unknown>> {
+  if (index === dims.length) {
+    yield current
+    return
   }
-  return out
+  const dimension = dims[index]!
+  for (const value of dimension.values) {
+    yield* iterateCombinations(dims, index + 1, { ...current, [dimension.path]: value })
+  }
 }
 
 const setPathValue = (target: Record<string, unknown>, path: string, value: unknown) => {
@@ -1627,7 +1624,10 @@ export function createNode<
         }
 
         const variableDims = buildVariableDimensions(opts?.variables)
-        const variableRuns = buildCombinations(variableDims)
+        const variableRunCount = variableDims.reduce(
+          (count, dimension) => count * dimension.values.length,
+          1,
+        )
         const resolved = await getResolvedExplodedInputs(
           node,
           paramsValue as Record<string, unknown>,
@@ -1660,7 +1660,7 @@ export function createNode<
           entry.sourceIndices = merged
         }
 
-        const plan = opts?.plan ?? buildStudyPlanFromResolved(resolved, opts, variableRuns.length)
+        const plan = opts?.plan ?? buildStudyPlanFromResolved(resolved, opts, variableRunCount)
         if (opts?.dryRun) {
           return {
             rows: [],
@@ -1676,6 +1676,8 @@ export function createNode<
         const rows: O[] = []
         const rowKeys: Record<string, string | number>[] = []
         const history: StudyHistoryEntry<O>[] = []
+        const collectRows = opts?.collectRows !== false
+        const collectHistory = opts?.collectHistory !== false
         const byAlias = new Map(resolved.map((e) => [e.alias, e]))
         const startMs = Date.now()
         const maxRows = opts?.budget?.maxRows
@@ -1683,6 +1685,7 @@ export function createNode<
         const timeMs = opts?.budget?.timeMs
 
         let bestIndex: number | null = null
+        let best: O | null = null
         let bestObjectiveValue: number | null = null
         let completedEvals = 0
         let stoppedReason: 'maxRows' | 'maxEvals' | 'timeMs' | null = null
@@ -1697,7 +1700,7 @@ export function createNode<
         }
 
         const shouldStop = () => {
-          if (maxRows !== undefined && rows.length >= maxRows) return 'maxRows' as const
+          if (maxRows !== undefined && completedEvals >= maxRows) return 'maxRows' as const
           if (maxEvals !== undefined && completedEvals >= maxEvals) return 'maxEvals' as const
           if (timeMs !== undefined && Date.now() - startMs >= timeMs) return 'timeMs' as const
           return null
@@ -1740,9 +1743,12 @@ export function createNode<
           }
 
           const result = await node.call(runParams as P).run(actualCtx, actualEngineConfig)
+          const rowIndex = completedEvals
           completedEvals += 1
-          rows.push(result.value)
-          rowKeys.push(keyRow)
+          if (collectRows) {
+            rows.push(result.value)
+            rowKeys.push(keyRow)
+          }
           const capturedEntries = await Promise.all(
             (opts?.capture ?? []).map(async (spec: StudyCaptureSpec) => [
               spec.as ?? spec.path,
@@ -1768,7 +1774,8 @@ export function createNode<
 
           if (objective && objectiveValue !== null) {
             if (bestIndex === null) {
-              bestIndex = rows.length - 1
+              bestIndex = rowIndex
+              best = result.value
               bestObjectiveValue = objectiveValue
             } else {
               const better =
@@ -1776,23 +1783,26 @@ export function createNode<
                   ? objectiveValue > (bestObjectiveValue as number)
                   : objectiveValue < (bestObjectiveValue as number)
               if (better) {
-                bestIndex = rows.length - 1
+                bestIndex = rowIndex
+                best = result.value
                 bestObjectiveValue = objectiveValue
               }
             }
           }
 
-          history.push({
-            rowIndex: rows.length - 1,
-            row: result.value,
-            rowKey: keyRow,
-            sourceIndexByAlias,
-            objectiveValue,
-            ...(captured ? { captured } : {}),
-          })
+          if (collectHistory) {
+            history.push({
+              rowIndex,
+              row: result.value,
+              rowKey: keyRow,
+              sourceIndexByAlias,
+              objectiveValue,
+              ...(captured ? { captured } : {}),
+            })
+          }
 
           await opts?.onRow?.({
-            rowIndex: rows.length - 1,
+            rowIndex,
             row: result.value,
             rowKey: keyRow,
             sourceIndexByAlias,
@@ -1802,7 +1812,7 @@ export function createNode<
           await maybeYieldToUi()
         }
 
-        for (const patch of variableRuns) {
+        for (const patch of iterateCombinations(variableDims)) {
           if (stoppedReason) break
           const baseParams = cloneValue(paramsValue) as Record<string, unknown>
           for (const [path, value] of Object.entries(patch)) {
@@ -1862,8 +1872,7 @@ export function createNode<
             continue
           }
 
-          const combinations = buildExplodedCombinations(resolved)
-          for (const combo of combinations) {
+          for (const combo of iterateExplodedCombinations(resolved)) {
             const stop = shouldStop()
             if (stop) {
               stoppedReason = stop
@@ -1878,7 +1887,7 @@ export function createNode<
           rowKeys,
           plan,
           bestIndex,
-          best: bestIndex === null ? null : rows[bestIndex]!,
+          best,
           completedEvals,
           stoppedReason,
         }

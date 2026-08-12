@@ -145,11 +145,11 @@ const loadBackpackRepository = async (): Promise<{
   const repositoryUrl = new URL('../../public/design-repositories/backpack/', import.meta.url)
   const snapshot = await loadDesignRepositorySnapshot({
     readText: async (path) => await readFile(new URL(path, repositoryUrl), 'utf8'),
-    checkout: { kind: 'ref', name: 'main' },
+    checkout: { kind: 'ref', name: 'graph/main' },
   })
-  const root = snapshot.revision.roots.main
+  const root = snapshot.revision.nodes.main
   assert(root, 'Expected Backpack repository main ref to select a root')
-  return { files: snapshot.files, rootHash: root.nodeId }
+  return { files: snapshot.files, rootHash: root }
 }
 
 const createIdentityTool = <T>(tool: T): T => tool

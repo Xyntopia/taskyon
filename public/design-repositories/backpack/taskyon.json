@@ -1,7 +1,8 @@
 {
-  "schemaVersion": 1,
-  "kind": "taskyon-design-repository",
+  "schemaVersion": 2,
+  "kind": "taskyon-design-graph-repository",
   "projectId": "backpack",
   "title": "Backpack Packing",
-  "defaultRef": "main"
+  "graphRef": "graph/main",
+  "projectRef": "projects/template"
 }

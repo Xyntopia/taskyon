@@ -36,9 +36,9 @@ export const testPublicDesignRepositoriesLoadImmutableRootClosures = async () =>
     Object.entries(repositories).map(async ([projectId, expectedNodes]) => {
       const snapshot = await loadDesignRepositorySnapshot({
         readText: repositoryReader(projectId),
-        checkout: { kind: 'ref', name: 'main' },
+        checkout: { kind: 'ref', name: 'graph/main' },
       })
-      assert(snapshot.revision.roots.main, `${projectId} must define a main root`)
+      assert(snapshot.revision.nodes.main, `${projectId} must define a main root`)
       assert(
         snapshot.files.length === expectedNodes,
         `${projectId} should load ${expectedNodes} reachable nodes, got ${snapshot.files.length}`,
@@ -46,7 +46,7 @@ export const testPublicDesignRepositoriesLoadImmutableRootClosures = async () =>
       return {
         projectId,
         revisionId: snapshot.revision.id,
-        rootHash: snapshot.revision.roots.main.nodeId,
+        rootHash: snapshot.revision.nodes.main,
         nodes: snapshot.files.length,
       }
     }),

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 2,
+  "rootNodeId": "sha256:Pl7tqYQn8fKwmktzWFb9fXfR5QU0657MBEnG55L3lOE",
+  "variables": {},
+  "inputs": {},
+  "objectives": [],
+  "constraints": [],
+  "capture": [],
+  "policy": {
+    "accuracy": "auto"
+  },
+  "reducerOverrides": {},
+  "id": "sha256:45fc61a9e75e85e581176ac840519a3089f2ef9b37ff7e3633c7501438387fcd"
+}

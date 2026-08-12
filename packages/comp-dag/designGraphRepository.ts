@@ -1,0 +1,319 @@
+import { canonicalHash, canonicalJson } from '@taskyon/common/modules/canonicalHash'
+import type { Hash } from './caching.ts'
+import {
+  parseDesignGraphRef,
+  parseExecutionAttempt,
+  parseGraphRevision,
+  parseInvocationDefinition,
+  parseInvocationRun,
+  parseProjectExtension,
+  parseProjectRevision,
+  type DesignGraphRef,
+  type ExecutionAttempt,
+  type GraphRevision,
+  type InvocationDefinition,
+  type InvocationRun,
+  type ProjectExtension,
+  type ProjectRevision,
+} from './designGraphModel.ts'
+
+export type DesignGraphObjectStore = {
+  readText: (path: string) => Promise<string>
+  writeText: (path: string, content: string) => Promise<void>
+  writeTextIfUnchanged: (
+    path: string,
+    expectedContentHash: string | null,
+    content: string,
+  ) => Promise<{ written: boolean; currentContentHash: string | null }>
+  list: (directory: string) => Promise<string[]>
+}
+
+export type DesignGraphStorageClient = {
+  get: (request: {
+    namespace: string
+    id: string
+  }) => Promise<{ value: unknown; contentHash: string | null }>
+  set: (request: { namespace: string; id: string; value: unknown }) => Promise<unknown>
+  setIfUnchanged: (request: {
+    namespace: string
+    id: string
+    expectedContentHash: string | null
+    value: unknown
+  }) => Promise<{ written: boolean; currentContentHash: string | null }>
+  list: (request: { namespace: string }) => Promise<{
+    rows: Array<{ id: string | number; data: unknown }>
+  }>
+}
+
+export type DesignGraphRepository = ReturnType<typeof createDesignGraphRepository>
+
+const safePath = (value: string, label: string): string => {
+  const normalized = value.trim().replace(/^\/+|\/+$/g, '')
+  if (
+    !normalized ||
+    normalized.includes('\\') ||
+    normalized
+      .split('/')
+      .some((segment) => !/^[a-zA-Z0-9._-]+$/.test(segment) || segment === '.' || segment === '..')
+  ) {
+    throw new Error(`${label} must contain safe path segments.`)
+  }
+  return normalized
+}
+
+const missingObject = (path: string) => new Error(`Design graph object not found: ${path}`)
+
+export const createStorageDesignGraphObjectStore = (
+  storage: DesignGraphStorageClient,
+  namespace = 'design-graph/v2',
+): DesignGraphObjectStore => ({
+  readText: async (path) => {
+    const id = safePath(path, 'Repository path')
+    const value = (await storage.get({ namespace, id })).value
+    if (value === null || value === undefined) throw missingObject(id)
+    if (typeof value !== 'string') throw new Error(`Design graph object is not text: ${id}`)
+    return value
+  },
+  writeText: async (path, content) => {
+    await storage.set({
+      namespace,
+      id: safePath(path, 'Repository path'),
+      value: content,
+    })
+  },
+  writeTextIfUnchanged: async (path, expectedContentHash, content) => {
+    const id = safePath(path, 'Repository path')
+    const result = await storage.setIfUnchanged({
+      namespace,
+      id,
+      expectedContentHash,
+      value: content,
+    })
+    return result
+  },
+  list: async (directory) => {
+    const prefix = `${safePath(directory, 'Repository directory')}/`
+    return (await storage.list({ namespace })).rows
+      .map((row) => String(row.id))
+      .filter((id) => id.startsWith(prefix))
+      .map((id) => id.slice(prefix.length))
+      .sort()
+  },
+})
+
+const hashFilePart = (id: Hash) => id.replace(':', '_')
+const objectPath = (kind: string, id: Hash) => `${kind}/${hashFilePart(id)}.json`
+const jsonText = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`
+
+const readJson = async (store: DesignGraphObjectStore, path: string): Promise<unknown> => {
+  try {
+    return JSON.parse(await store.readText(path)) as unknown
+  } catch (error) {
+    if (error instanceof SyntaxError)
+      throw new Error(`Invalid repository JSON: ${path}`, { cause: error })
+    throw error
+  }
+}
+
+const readOptionalJson = async (
+  store: DesignGraphObjectStore,
+  path: string,
+): Promise<unknown | null> => {
+  try {
+    return await readJson(store, path)
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Design graph object not found:')) {
+      return null
+    }
+    throw error
+  }
+}
+
+const putImmutable = async (
+  store: DesignGraphObjectStore,
+  path: string,
+  value: unknown,
+): Promise<void> => {
+  const content = jsonText(value)
+  const result = await store.writeTextIfUnchanged(path, null, content)
+  if (result.written) return
+  if (result.currentContentHash === null) {
+    throw new Error(`Immutable design graph object disappeared while writing: ${path}`)
+  }
+  const currentText = await store.readText(path)
+  let existing: unknown
+  try {
+    existing = JSON.parse(currentText) as unknown
+  } catch (error) {
+    throw new Error(`Invalid repository JSON: ${path}`, { cause: error })
+  }
+  if (canonicalJson(existing) !== canonicalJson(value)) {
+    throw new Error(`Immutable design graph object collision: ${path}`)
+  }
+}
+
+const normalizeRefName = (name: string, prefix: 'graph/' | 'projects/') => {
+  const normalized = safePath(name, 'Ref name')
+  if (!normalized.startsWith(prefix)) {
+    throw new Error(`Ref ${normalized} must start with ${prefix}.`)
+  }
+  return normalized
+}
+
+export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
+  const putGraphRevision = async (record: GraphRevision) => {
+    const parsed = parseGraphRevision(record)
+    await putImmutable(store, objectPath('graph-revisions', parsed.id), parsed)
+    return parsed.id
+  }
+  const getGraphRevision = async (id: Hash) =>
+    parseGraphRevision(await readJson(store, objectPath('graph-revisions', id)))
+
+  const putInvocation = async (record: InvocationDefinition) => {
+    const parsed = parseInvocationDefinition(record)
+    await putImmutable(store, objectPath('invocations', parsed.id), parsed)
+    return parsed.id
+  }
+  const getInvocation = async (id: Hash) =>
+    parseInvocationDefinition(await readJson(store, objectPath('invocations', id)))
+
+  const putProjectRevision = async (record: ProjectRevision) => {
+    const parsed = parseProjectRevision(record)
+    await Promise.all(parsed.parents.map(getProjectRevision))
+    await Promise.all(Object.values(parsed.invocations).map(getInvocation))
+    await Promise.all(Object.values(parsed.extensions).map(getExtension))
+    await putImmutable(store, objectPath('project-revisions', parsed.id), parsed)
+    return parsed.id
+  }
+  const getProjectRevision = async (id: Hash): Promise<ProjectRevision> =>
+    parseProjectRevision(await readJson(store, objectPath('project-revisions', id)))
+
+  const putExtension = async (record: ProjectExtension) => {
+    const parsed = parseProjectExtension(record)
+    await putImmutable(store, objectPath('extensions', parsed.id), parsed)
+    return parsed.id
+  }
+  const getExtension = async (id: Hash) =>
+    parseProjectExtension(await readJson(store, objectPath('extensions', id)))
+
+  const putRun = async (record: InvocationRun) => {
+    const parsed = parseInvocationRun(record)
+    await getInvocation(parsed.invocationId)
+    await putImmutable(
+      store,
+      `runs/${hashFilePart(parsed.invocationId)}/${hashFilePart(parsed.id)}.json`,
+      parsed,
+    )
+    return parsed.id
+  }
+  const getRun = async (invocationId: Hash, runId: Hash) =>
+    parseInvocationRun(
+      await readJson(store, `runs/${hashFilePart(invocationId)}/${hashFilePart(runId)}.json`),
+    )
+  const listRuns = async (invocationId: Hash) => {
+    const directory = `runs/${hashFilePart(invocationId)}`
+    const names = await store.list(directory)
+    return await Promise.all(
+      names
+        .filter((name) => name.endsWith('.json'))
+        .map(async (name) => parseInvocationRun(await readJson(store, `${directory}/${name}`))),
+    )
+  }
+
+  const putAttempt = async (record: ExecutionAttempt) => {
+    const parsed = parseExecutionAttempt(record)
+    await getInvocation(parsed.invocationId)
+    await store.writeText(
+      `attempts/${safePath(parsed.attemptId, 'Attempt id')}.json`,
+      jsonText(parsed),
+    )
+  }
+  const getAttempt = async (attemptId: string) => {
+    const value = await readOptionalJson(
+      store,
+      `attempts/${safePath(attemptId, 'Attempt id')}.json`,
+    )
+    return value === null ? null : parseExecutionAttempt(value)
+  }
+
+  const getRef = async (name: string): Promise<DesignGraphRef | null> => {
+    const value = await readOptionalJson(store, `refs/${safePath(name, 'Ref name')}.json`)
+    return value === null ? null : parseDesignGraphRef(value)
+  }
+  const advanceRef = async (args: {
+    name: string
+    revisionId: Hash
+    expected: Hash | null
+    validate: (id: Hash) => Promise<unknown>
+  }) => {
+    await args.validate(args.revisionId)
+    const next: DesignGraphRef = { schemaVersion: 2, revisionId: args.revisionId }
+    const path = `refs/${safePath(args.name, 'Ref name')}.json`
+    const expectedContentHash = args.expected
+      ? canonicalHash(
+          jsonText({ schemaVersion: 2, revisionId: args.expected } satisfies DesignGraphRef),
+        )
+      : null
+    const result = await store.writeTextIfUnchanged(path, expectedContentHash, jsonText(next))
+    if (!result.written) {
+      const current = result.currentContentHash === null ? null : await getRef(args.name)
+      throw new Error(
+        `Design graph ref conflict for ${args.name}: expected ${String(args.expected)}, found ${String(current?.revisionId ?? null)}.`,
+      )
+    }
+    return next
+  }
+  const advanceGraphRef = async (args: { name: string; revisionId: Hash; expected: Hash | null }) =>
+    await advanceRef({
+      ...args,
+      name: normalizeRefName(args.name, 'graph/'),
+      validate: getGraphRevision,
+    })
+  const advanceProjectRef = async (args: {
+    name: string
+    revisionId: Hash
+    expected: Hash | null
+  }) =>
+    await advanceRef({
+      ...args,
+      name: normalizeRefName(args.name, 'projects/'),
+      validate: getProjectRevision,
+    })
+  const getGraphRef = async (name: string) => await getRef(normalizeRefName(name, 'graph/'))
+  const getProjectRef = async (name: string) => await getRef(normalizeRefName(name, 'projects/'))
+  const listRefs = async (prefix: 'graph' | 'projects') => {
+    const names = await store.list(`refs/${prefix}`)
+    const entries = await Promise.all(
+      names
+        .filter((name) => name.endsWith('.json'))
+        .map(async (name) => {
+          const refName = `${prefix}/${name.slice(0, -5)}`
+          const ref = await getRef(refName)
+          return ref ? ([refName, ref.revisionId] as const) : null
+        }),
+    )
+    return Object.fromEntries(entries.filter((entry) => entry !== null))
+  }
+
+  return {
+    store,
+    putGraphRevision,
+    getGraphRevision,
+    putInvocation,
+    getInvocation,
+    putProjectRevision,
+    getProjectRevision,
+    putExtension,
+    getExtension,
+    putRun,
+    getRun,
+    listRuns,
+    putAttempt,
+    getAttempt,
+    advanceGraphRef,
+    advanceProjectRef,
+    getGraphRef,
+    getProjectRef,
+    listRefs,
+  }
+}

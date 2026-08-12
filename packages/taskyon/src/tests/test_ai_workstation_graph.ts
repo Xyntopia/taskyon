@@ -62,16 +62,16 @@ export const testAiWorkstationGraphEvaluatesStructuralConfigurations = async () 
     best.recommendation.viable,
     `Expected a feasible workstation, received ${JSON.stringify(best.recommendation)}`,
   )
-  assert(example.designSpace.schemaVersion === 2, 'Expected the typed workstation design space')
+  const mainInvocationId = example.revision.invocations.main
+  const mainInvocation = mainInvocationId ? example.invocations[mainInvocationId] : undefined
+  assert(mainInvocation, 'Expected the project revision to select its main invocation')
   assert(
-    example.designSpace.schemaVersion === 2 &&
-      example.designSpace.inputs['requirements.budgetUsd']?.role === 'requirement',
-    'Expected budget to remain a requirement rather than an optimization variable',
+    mainInvocation.variables['requirements.budgetUsd']?.kind === 'sweep',
+    'Expected budget to be represented by the canonical invocation domain',
   )
   assert(
-    example.designSpace.schemaVersion === 2 &&
-      example.designSpace.inputs.candidate?.domain.kind === 'structural',
-    'Expected the candidate to own the structural design dimension',
+    mainInvocation.inputs.candidate?.strategy?.id === 'sequential',
+    'Expected structural candidate planning to be part of the invocation',
   )
 
   return {

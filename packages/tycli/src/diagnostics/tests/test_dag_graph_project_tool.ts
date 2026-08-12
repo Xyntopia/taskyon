@@ -1,147 +1,186 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
-import { join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { readFile } from 'node:fs/promises'
+import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
 import { createAiWorkstationExample } from '@taskyon/taskyon'
 import { createDagGraphProjectTool } from '../../tools/dagGraphProjectTool'
-
-type WorkstationResult = {
-  recommendation: { id: string; viable: boolean; score: number }
-  requirements: { budgetUsd: number; model: string }
-}
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
-const parseResult = (value: unknown): WorkstationResult => {
-  assert(value !== null && typeof value === 'object', 'Expected workstation result object')
-  const result = value as {
-    recommendation?: unknown
-    requirements?: unknown
+const createMemoryStorage = () => {
+  const rowsByNamespace = new Map<string, Map<string, unknown>>()
+  const blobsByNamespace = new Map<string, Map<string, Uint8Array<ArrayBuffer>>>()
+  const writes = new Map<string, Uint8Array<ArrayBuffer>>()
+  const rows = (namespace: string) => {
+    const existing = rowsByNamespace.get(namespace) ?? new Map<string, unknown>()
+    rowsByNamespace.set(namespace, existing)
+    return existing
   }
+  const blobs = (namespace: string) => {
+    const existing = blobsByNamespace.get(namespace) ?? new Map<string, Uint8Array<ArrayBuffer>>()
+    blobsByNamespace.set(namespace, existing)
+    return existing
+  }
+  return {
+    rowsByNamespace,
+    client: {
+      get: ({ namespace, id }: { namespace: string; id: string | number }) =>
+        Promise.resolve({
+          value: rows(namespace).get(String(id)) ?? null,
+          contentHash: rows(namespace).has(String(id))
+            ? canonicalHash(rows(namespace).get(String(id)))
+            : null,
+        }),
+      set: ({
+        namespace,
+        id,
+        value,
+      }: {
+        namespace: string
+        id: string | number
+        value: unknown
+      }) => {
+        rows(namespace).set(String(id), value)
+        return Promise.resolve()
+      },
+      setIfUnchanged: ({
+        namespace,
+        id,
+        expectedContentHash,
+        value,
+      }: {
+        namespace: string
+        id: string | number
+        expectedContentHash: string | null
+        value: unknown
+      }) => {
+        const records = rows(namespace)
+        const current = records.get(String(id)) ?? null
+        const currentContentHash = current === null ? null : canonicalHash(current)
+        if (currentContentHash !== expectedContentHash) {
+          return Promise.resolve({ written: false, currentContentHash })
+        }
+        records.set(String(id), value)
+        return Promise.resolve({ written: true, currentContentHash: canonicalHash(value) })
+      },
+      list: ({ namespace }: { namespace: string }) =>
+        Promise.resolve({
+          rows: [...rows(namespace)].map(([id, data]) => ({ id, data })),
+        }),
+      statBlob: ({ namespace, id }: { namespace: string; id: string }) => {
+        const data = blobs(namespace).get(id)
+        return Promise.resolve(data ? { id, size: data.byteLength } : null)
+      },
+      beginBlobWrite: ({ id }: { id: string }) => {
+        const writeId = `write-${id}`
+        writes.set(writeId, new Uint8Array())
+        return Promise.resolve({ writeId })
+      },
+      writeBlobChunk: ({
+        writeId,
+        offset,
+        data,
+      }: {
+        writeId: string
+        offset: number
+        data: Uint8Array<ArrayBuffer>
+      }) => {
+        const previous = writes.get(writeId)
+        if (!previous || previous.byteLength !== offset)
+          throw new Error('Invalid staged write offset.')
+        const next = new Uint8Array(previous.byteLength + data.byteLength)
+        next.set(previous)
+        next.set(data, previous.byteLength)
+        writes.set(writeId, next)
+        return Promise.resolve({ nextOffset: next.byteLength })
+      },
+      commitBlobWrite: ({
+        namespace,
+        targetId,
+        writeId,
+        expectedSha256,
+      }: {
+        namespace: string
+        targetId: string
+        writeId: string
+        expectedSha256: string
+      }) => {
+        const data = writes.get(writeId)
+        if (!data) throw new Error('Missing staged write.')
+        blobs(namespace).set(targetId, data)
+        writes.delete(writeId)
+        return Promise.resolve({ id: targetId, size: data.byteLength, sha256: expectedSha256 })
+      },
+      abortBlobWrite: ({ writeId }: { writeId: string }) => {
+        writes.delete(writeId)
+        return Promise.resolve()
+      },
+    },
+  }
+}
+
+export const testDagGraphProjectToolUsesUnifiedProjectAndInvocationModel = async () => {
+  const storage = createMemoryStorage()
+  const repositoryUrl = new URL(
+    '../../../../../public/design-repositories/ai-workstation/',
+    import.meta.url,
+  )
+  const example = await createAiWorkstationExample({
+    readText: async (path) => await readFile(new URL(path, repositoryUrl), 'utf8'),
+  })
+  const exampleInvocationId = example.revision.invocations.main
+  const exampleInvocation = exampleInvocationId
+    ? example.invocations[exampleInvocationId]
+    : undefined
+  assert(exampleInvocation, 'Expected the example main invocation.')
+  const tool = createDagGraphProjectTool(storage.client)
+  for (const node of example.nodes) {
+    const created = await tool.function({
+      action: 'createNode',
+      projectId: 'ai-workstation',
+      nodeSource: node.file.source,
+    })
+    assert(created.type === 'dagGraphNodeCreated', 'Expected node creation result.')
+    assert(created.nodeId === node.hash, 'Expected content-addressed node identity.')
+  }
+
+  const created = await tool.function({
+    action: 'createProject',
+    projectId: 'ai-workstation',
+    displayName: 'AI workstation',
+    rootNodeId: example.rootHash,
+    variables: {
+      'requirements.budgetUsd': { kind: 'constant', value: 5500 },
+      'requirements.model': { kind: 'constant', value: 'llama-3.1-8b' },
+    },
+    inputs: exampleInvocation.inputs,
+    policy: { accuracy: 'exact', budget: { maxRows: 2 } },
+  })
+  assert(created.type === 'designProjectCreated', 'Expected project creation result.')
+
+  const inspected = await tool.function({
+    action: 'inspectProject',
+    projectId: 'ai-workstation',
+  })
+  assert(inspected.type === 'designProjectInspected', 'Expected project inspection result.')
+  assert(inspected.project.displayName === 'AI workstation', 'Expected project display name.')
+  assert(inspected.invocations.main, 'Expected the named main invocation.')
+  const run = await tool.function({ action: 'runInvocation', projectId: 'ai-workstation' })
+  assert(run.type === 'designInvocationRun', 'Expected invocation run result.')
   assert(
-    result.recommendation !== null &&
-      typeof result.recommendation === 'object' &&
-      'id' in result.recommendation &&
-      typeof result.recommendation.id === 'string' &&
-      'viable' in result.recommendation &&
-      typeof result.recommendation.viable === 'boolean' &&
-      'score' in result.recommendation &&
-      typeof result.recommendation.score === 'number',
-    'Expected typed recommendation',
+    run.run.status === 'completed',
+    `Expected the invocation to complete: ${run.run.error ?? run.run.status}`,
   )
   assert(
-    result.requirements !== null &&
-      typeof result.requirements === 'object' &&
-      'budgetUsd' in result.requirements &&
-      typeof result.requirements.budgetUsd === 'number' &&
-      'model' in result.requirements &&
-      typeof result.requirements.model === 'string',
-    'Expected typed requirements',
+    storage.rowsByNamespace.get('design-graph/v2')?.has('refs/projects/ai-workstation.json'),
+    'Expected the stable project ref in the unified repository.',
   )
   return {
-    recommendation: {
-      id: result.recommendation.id,
-      viable: result.recommendation.viable,
-      score: result.recommendation.score,
-    },
-    requirements: {
-      budgetUsd: result.requirements.budgetUsd,
-      model: result.requirements.model,
-    },
+    projectRevisionId: inspected.project.id,
+    invocationId: inspected.invocations.main.id,
+    nodeCount: example.nodes.length,
   }
 }
 
-export const testDagGraphProjectToolRunsDeterministicWorkstationWorkflow = async () => {
-  const workspaceRoot = await mkdtemp(join(tmpdir(), 'taskyon-dag-project-diagnostic-'))
-  const projectId = 'ai-workstation'
-  const artifactRoot = 'taskyon-artifacts'
-  try {
-    const repositoryUrl = new URL(
-      '../../../../../public/design-repositories/ai-workstation/',
-      import.meta.url,
-    )
-    const example = await createAiWorkstationExample({
-      readText: async (path) => await readFile(new URL(path, repositoryUrl), 'utf8'),
-    })
-    const tool = createDagGraphProjectTool({ workspaceRoot })
-    for (const node of example.nodes) {
-      const created = await tool.function({
-        action: 'createNode',
-        projectId,
-        nodeSource: node.file.source,
-        artifactRoot,
-      })
-      assert(created.type === 'dagGraphNodeCreated', 'Expected node creation result')
-      assert(created.rootHash === node.hash, 'Expected content-addressed node hash')
-    }
-
-    const createdRevision = await tool.function({
-      action: 'createRevision',
-      projectId,
-      roots: { main: example.rootHash },
-      designSpace: example.designSpace,
-      message: 'Evidence-backed workstation design',
-      artifactRoot,
-    })
-    assert(createdRevision.type === 'designRevisionCreated', 'Expected initial design revision')
-    await tool.function({
-      action: 'advanceRef',
-      projectId,
-      refName: 'main',
-      revisionId: createdRevision.revision.id,
-      artifactRoot,
-    })
-
-    const run = await tool.function({
-      action: 'runRoot',
-      projectId,
-      rootName: 'main',
-      revisionId: createdRevision.revision.id,
-      params: { requirements: {}, candidate: { itemIndex: 0 } },
-      artifactRoot,
-    })
-    assert(run.type === 'dagGraphRunResult', 'Expected a persisted root run')
-    const initial = parseResult(run.value)
-    assert(initial.recommendation.id === 'rtx-3090-value', 'Expected selected structural design')
-
-    const study = await tool.function({
-      action: 'studyRoot',
-      projectId,
-      rootName: 'main',
-      revisionId: createdRevision.revision.id,
-      params: { requirements: {}, candidate: {} },
-      study: {
-        mode: 'optimize',
-        objective: { path: 'recommendation.score', direction: 'max' },
-        rngSeed: 1,
-      },
-      artifactRoot,
-    })
-    assert(study.type === 'dagGraphStudyResult', 'Expected persisted workstation study')
-    assert(study.rows.length === 6, 'Expected six structural workstation designs')
-    const ids = study.rows.map((row) => parseResult(row).recommendation.id)
-    assert(new Set(ids).size === 6, 'Expected each catalog design exactly once')
-    assert(study.plan.variableRuns === 1, 'Expected requirements to remain fixed during the study')
-    assert(study.best, 'Expected a best feasible design')
-    const best = parseResult(study.best)
-    assert(best.recommendation.viable, 'Expected optimization to select a feasible design')
-
-    const persistedNodes = await readdir(
-      join(workspaceRoot, artifactRoot, 'dag-graphs', projectId, 'nodes'),
-    )
-    assert(persistedNodes.length === 5, 'Expected the five-node workstation closure')
-    return {
-      revisionId: createdRevision.revision.id,
-      rootHash: example.rootHash,
-      studyRows: study.rows.length,
-      candidateIds: ids,
-      best: best.recommendation,
-    }
-  } finally {
-    await rm(workspaceRoot, { recursive: true, force: true })
-  }
-}
-
-testDagGraphProjectToolRunsDeterministicWorkstationWorkflow.description =
-  'Creates, revisions, runs, and studies the persisted structural AI workstation graph.'
+testDagGraphProjectToolUsesUnifiedProjectAndInvocationModel.description =
+  'Creates and inspects an immutable project revision with one named invocation.'
