@@ -44,6 +44,9 @@ modified Taskyon runtime, or a tool that deliberately sends a secret after recei
 - Client tools receive only the context registered by their host.
 - Sandboxed code should receive narrow storage, network, and UI capabilities rather than a generic
   filesystem or parent-window API.
+- Interactive `tycli` mediates external fetches from sandboxed code tools and remembers the user's
+  decision for the current session. This policy does not reduce the process permissions of
+  privileged host tools.
 - `tycli` and desktop shell/file tools operate with the process permissions of their host and need
   an external sandbox when that access is too broad.
 - Remote MCP and model services must be treated as data recipients.

@@ -49,11 +49,23 @@ number of model/tool turns. Taskyon selects context from the task tree rather th
 sending the entire stored history. Keep instructions and evidence focused, and start a branch or
 summary when unrelated history grows.
 
+Taskyon keeps one prompt-cache key for a task-tree root and keeps stable instructions at the front
+of router and executor requests. Parallel branches share that key; actual reuse still depends on
+the provider, model, minimum cacheable prefix, and exact request prefix. Router and executor tool
+schemas differ, so their reuse must be measured as separate request families; a shared key does not
+make their request bodies identical. A cache miss is not by itself evidence of a Taskyon error.
+
+When a provider reports usage, Taskyon distinguishes ordinary input, cache reads, cache writes,
+and output tokens in request traces. Missing telemetry means unavailable, not zero. Cached-token
+pricing and retention are provider-specific, so consult the provider's current terms rather than
+assuming a fixed discount.
+
 Pricing pages and model catalogs change frequently. Use the active provider's current model list
 and pricing rather than a copied table in Taskyon documentation.
 
 ## Advanced settings
 
 **Settings > Agent Configuration** exposes entry-node and tool settings. Prompt templates,
-provider tool calling, tool selection, and optional web search belong to the configured entry node.
-The `chatCompletion` tool remains the model execution gateway.
+provider tool calling, shortlist mechanics, and optional web search belong to the configured entry
+node. Selection guidance for an individual tool belongs to that tool's descriptions and parameter
+schema. The `chatCompletion` tool remains the model execution gateway.

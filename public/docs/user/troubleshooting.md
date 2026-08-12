@@ -3,7 +3,22 @@
 ## The model responds but does not call tools
 
 Confirm that the selected model supports tool calling, the tool is visible to the LLM, and the
-entry-node configuration allows it. Try the same request without a restricted provider route.
+entry-node configuration allows it. Inspect `/tools` in `tycli` or the runtime tool catalog and
+check that the tool's short description clearly distinguishes when it should be selected. Try the
+same request without a restricted provider route.
+
+## A sandboxed tool cannot reach an external service
+
+Approve the requested origin when interactive `tycli` prompts. A denial is remembered for the
+current session; restart the session to make a fresh decision. This approval applies to sandboxed
+tool fetches, not to privileged host tools such as the shell.
+
+## A trace reports few or no cached tokens
+
+Confirm the provider exposes cache telemetry and that the repeated requests use the same provider,
+model, task-tree root, tool declaration shape, and stable leading content. Short prefixes may be
+below the provider's cache threshold, and router/executor requests intentionally have different
+tool declarations. Missing telemetry is unavailable rather than zero.
 
 ## Browser research cannot open pages
 

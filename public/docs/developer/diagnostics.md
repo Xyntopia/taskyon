@@ -68,6 +68,22 @@ enabling all live runtime output.
 Online diagnostics are opt-in. They reuse the selected CLI provider/model unless the command
 explicitly overrides them.
 
+For request-shape, usage, or prompt-cache debugging, start interactive `yarn tycli` with
+`TYCLI_CHAT_COMPLETION_TRACE_DIR` and a stable `TYCLI_CHAT_COMPLETION_TRACE_LABEL`, then enable
+`/debug` before submitting the task. Inspect the runtime log, persisted conversation, final tree,
+and redacted request records together. Run:
+
+```bash
+node \
+  scripts/audit-tycli-chatcompletion-trace.mjs \
+  <trace-dir>
+```
+
+The audit reports ordinary input, cache-read, cache-write, and output tokens when available;
+missing provider telemetry must remain unavailable rather than being reported as zero. Before a
+release that changes OpenAI request construction or usage accounting, run the bounded live check
+with `yarn tycli:diagnostics:release`.
+
 The [`tycli` General Agent E2E](tycli-e2e.md) catalog defines the separate interactive
 proof-run protocol, intervention policy, task-tree export, and trace audit used to evaluate
 long-running agent behavior.

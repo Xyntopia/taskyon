@@ -17,6 +17,11 @@ home directory is unavailable. After the first submitted conversation message, t
 a readable Markdown transcript in its blob storage. Tasks remain authoritative; the transcript is
 an optional CLI-owned projection used for inspection and recovery.
 
+Set `TYCLI_DATA_DIR` for an isolated debugging or evaluation run. It relocates Taskyon records and
+blobs—including generated tools, task state, artifacts, transcripts, and indexes—without replacing
+the normal configuration, selected provider/model, OAuth login, or encrypted secret store. Do not
+copy credentials into the run directory.
+
 ## Secrets
 
 Provider keys and tool secrets are stored locally in encrypted form. A tool must request a secret
@@ -34,6 +39,11 @@ tool; it does not prove what an approved tool will do with a secret.
 Review tool code, remote endpoints, and requested data before approval. Taskyon's security design
 reduces ambient access; it does not replace endpoint trust, backups, host isolation, or a formal
 security audit.
+
+In interactive `tycli`, a sandboxed code tool that requests an external network origin pauses for
+approval. An allow or deny decision is remembered for the current session. Privileged host tools
+such as the shell still have the permissions of the process and require an external sandbox when
+that access is too broad.
 
 Backup phrases, passkeys, automatic cross-device recovery, and account-bound session restoration
 are not part of the confirmed browser storage flow. Do not rely on them without a separately

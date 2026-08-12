@@ -70,6 +70,10 @@ profiles.
 Use `prependSystemPrompts` for stable instructions and `appendSystemPrompts` for volatile context
 that should not invalidate a reusable prompt prefix.
 
+Entry-node configuration owns generic routing mechanics, not named-tool playbooks. Each tool's
+short description, optional callable long description, and parameter schema own the guidance for
+when and how that tool should be selected.
+
 ## Research settings
 
 `toolchainProfiles.base.webResearchPlanner` owns the default structured research behavior:

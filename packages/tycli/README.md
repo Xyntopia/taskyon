@@ -91,6 +91,10 @@ Optional environment variables:
 - `TYAUTH`
 - `TASKYON_DENO_PATH` (optional Deno executable for explicitly selected Deno sandboxes)
 - `TASKYON_PYTHON_PATH` (optional native Python executable)
+- `TYCLI_DATA_DIR` (isolated task records, generated tools, artifacts, transcripts, and indexes)
+- `TYCLI_LOG_DIR` (runtime and diagnostic logs)
+- `TYCLI_CHAT_COMPLETION_TRACE_DIR` and `TYCLI_CHAT_COMPLETION_TRACE_LABEL` (redacted provider
+  request records for debugging and cache audits)
 
 Sandboxed CLI JavaScript uses the retained Node VM by default. Hosts may explicitly select Deno for
 tools that need it; Deno is available in the repository's Nix development shell. Native Python is
@@ -176,8 +180,6 @@ node scripts/build-static-embedding-model.mjs \
 ```yaml
 task: Inspect authentication boundaries
 agentInstructions: Act as a cybersecurity reviewer.
-allowedTools:
-  - bash
 doneWhen:
   - Every trust boundary has an evidence note.
 result:
@@ -194,7 +196,7 @@ flowchart LR
   S --> U[Task objective and doneWhen]
   P --> E[Hidden entryNode arguments]
   U --> E
-  E --> T[Enforce allowedTools]
+  E --> T[Choose tools from their definitions]
   T --> C[chatCompletion and tools]
   C --> R[Message or structured result]
 ```
@@ -207,11 +209,6 @@ persisted artifacts and put only summaries and artifact references in task resul
 Sequential tasks receive terminal message and structured results even when those values are nested
 inside entry-node execution chains. Internal prompts, function calls, and return nodes stay hidden.
 Taskyon validates structured results against the contract schema.
-
-`allowedTools` is an exact restriction, not a preference. Use an empty array for a handoff-only
-synthesis or review task that should consume prior task results without making new tool calls.
-When an objective names exact tools to call, include those tools in `allowedTools` so the delegated
-task cannot select a broader workflow tool and duplicate the plan.
 
 Planner groups are sequential by default. Use parallel groups only for independent work whose
 results do not depend on each other. When parallel findings need one combined result, delegate an
@@ -240,3 +237,8 @@ The shell and workspace tools can read and modify files visible to the process. 
 in an appropriately scoped sandbox whenever possible. Running it directly on a host can cause
 unintended filesystem changes, dependency conflicts, or other effects from model-generated
 commands.
+
+Sandboxed code tools do not receive unrestricted network access. When one requests an external
+origin, interactive `tycli` asks for approval and remembers the decision only for the current
+session. This does not narrow privileged host tools such as `bash`; their process-level permissions
+still define their boundary.

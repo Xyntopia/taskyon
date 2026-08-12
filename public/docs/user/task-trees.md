@@ -33,7 +33,9 @@ flowchart TD
 
 The model does not automatically receive the entire tree. The active context strategy selects a
 projection, such as the current lineage plus visible terminal results from direct child branches.
-Render options can also hide internal tasks from chat or model context.
+For delegated branches, `chatCompletion` receives a bounded handoff containing the objective,
+terminal status, and visible result; intermediate tool chains stay out of that handoff. Render
+options can also hide internal tasks from chat or model context.
 
 Task nodes include optional author, ACL, and signature fields, but their presence in the schema does
 not by itself guarantee that a runtime enforces distributed authorization. Treat P2P verification
