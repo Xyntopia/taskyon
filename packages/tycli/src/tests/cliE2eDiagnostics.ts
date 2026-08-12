@@ -1189,6 +1189,23 @@ export async function testTaskInterruptReportsStatusAndPersistsConversation() {
   assertContains(markdown, 'hello')
 }
 
+export async function testStopCommandInterruptsActiveTask() {
+  const result = await runCliE2eSession({
+    testName: 'testStopCommandInterruptsActiveTask',
+    steps: [
+      { waitFor: 'Slash commands:', input: 'hello\n' },
+      { waitFor: 'task: processing', input: '/stop\n' },
+      { waitFor: 'Task interrupted.', input: '/exit\n' },
+      { waitFor: 'Conversation saved:', input: '', signal: 'SIGTERM' },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    timeoutMs: 45_000,
+  })
+  assertContains(result.output, '/stop received.')
+  assertContains(result.output, 'Stopping current worker task...')
+  assertContains(result.output, 'Task interrupted.')
+}
+
 export async function testBracketedPastePreservesMultilinePrompt() {
   const firstLine = 'Complete these as two separate sequential delegated tasks.'
   const secondLine = 'First, list every available tool.'
@@ -1255,6 +1272,9 @@ testResumeConversationReportsStorageAndLogs.description =
 testTaskInterruptReportsStatusAndPersistsConversation.description =
   'Ctrl+C during a task reports interrupt phases and persists the interrupted conversation'
 testTaskInterruptReportsStatusAndPersistsConversation.timeoutMs = 45_000
+testStopCommandInterruptsActiveTask.description =
+  'Typing /stop during an active task follows the normal interrupt and cleanup path'
+testStopCommandInterruptsActiveTask.timeoutMs = 45_000
 testAtFileCommandAddsContextForDirectPath.experimental = true
 testTerminalKitFooterOptInStartsAndExits.experimental = true
 testIdleCtrlCShowsQuitPromptAndCanBeCancelled.experimental = true
@@ -1265,3 +1285,4 @@ testCtrlCCancelsModelMenuAndKeepsPromptUsable.experimental = true
 testPromptHistoryCyclesPreviousInputWithArrowKeys.experimental = true
 testResumeConversationReportsStorageAndLogs.experimental = true
 testTaskInterruptReportsStatusAndPersistsConversation.experimental = true
+testStopCommandInterruptsActiveTask.experimental = true

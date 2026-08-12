@@ -2676,12 +2676,17 @@ async function handleSlashCommand(
     return true
   }
 
+  if (parsed.name === 'stop') {
+    writeLine('No active task.')
+    return true
+  }
+
   if (parsed.name === 'exit' || parsed.name === 'quit') {
     return false
   }
 
   writeError(
-    `Unknown command '/${parsed.name}'. Supported: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /search, /tree, /exit, /quit`,
+    `Unknown command '/${parsed.name}'. Supported: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /search, /tree, /stop, /exit, /quit`,
   )
   return true
 }
@@ -3708,7 +3713,7 @@ async function main(host: InteractiveCliHost) {
     if (!isReadlineClosed(rl)) rl.close()
   }
 
-  const interruptCurrentTask = (source: 'Ctrl-C' | 'Ctrl-D') => {
+  const interruptCurrentTask = (source: 'Ctrl-C' | 'Ctrl-D' | '/stop') => {
     interruptedCurrentTask = true
     noteInterruptPhase(`${source} received.`)
     noteInterruptPhase('Stopping current worker task...')
@@ -3784,14 +3789,33 @@ async function main(host: InteractiveCliHost) {
     if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') return undefined
     emitKeypressEvents(stdin)
     let cleanedUp = false
+    let activeCommandBuffer = ''
     const preserveReadlineOnSigint = () => undefined
-    const onKeypress = (_str: string, key: { ctrl?: boolean; name?: string }) => {
+    const onKeypress = (str: string, key: { ctrl?: boolean; name?: string }) => {
       if (key.ctrl && key.name === 'c') {
         onSigint()
         return
       }
       if (key.ctrl && key.name === 'd') {
         onCtrld()
+        return
+      }
+      if (key.name === 'backspace') {
+        activeCommandBuffer = activeCommandBuffer.slice(0, -1)
+        return
+      }
+      if (key.name === 'return' || key.name === 'enter') {
+        const command = activeCommandBuffer.trim()
+        activeCommandBuffer = ''
+        if (command === '/stop') {
+          interruptCurrentTask('/stop')
+        } else if (command.length > 0) {
+          writeLine('Only /stop is accepted while a task is active.')
+        }
+        return
+      }
+      if (!key.ctrl && /^[\x20-\x7e]$/.test(str) && activeCommandBuffer.length < 32) {
+        activeCommandBuffer += str
       }
     }
     try {
