@@ -76,12 +76,36 @@ await storage.set({
   id: 'active',
   value: project,
 })
+
+const current = await storage.get({
+  namespace: 'projects',
+  id: 'active',
+})
+
+const result = await storage.setIfUnchanged({
+  namespace: 'projects',
+  id: 'active',
+  expectedContentHash: current.contentHash,
+  value: nextProject,
+})
 ```
 
 Consumers provide logical namespaces and keys only. They must not prepend host or application
-prefixes or choose a physical backend. Create a separate client when code needs a different
+prefixes or choose a physical backend. `namespacePrefix` is a client-side namespace boundary, not
+a user, device, session, or Space identity. Create a separate client when code needs a different
 namespace prefix or distribution policy.
 
+`get` returns the decoded logical value and its logical `contentHash`. Pass that hash to
+`setIfUnchanged` to update a mutable record only if it has not changed since the read; pass `null`
+when the record must not exist. The result reports `written` and the current logical content hash.
+This is compare-and-set behavior for refs and other mutable heads, not a comparison of collections.
+
+The provider performs the final atomic comparison with the stored representation's content hash.
+The client translates between logical and stored hashes, so callers do not send a potentially
+large expected value and a future encrypted codec can randomize stored bytes without changing the
+domain API or requiring a separate revision-token record.
+
 The built-in codec is trusted-local plaintext. It cannot create a `remote-allowed` client. Record
-codecs that support protected remote storage must be injected by the trusted host; encrypted Space
-storage and key lifecycle are not part of the current implementation.
+codecs encode and decode records on the trusted client side and may also support client-side
+indexes over decoded data. A codec that supports protected remote storage must be injected by the
+trusted host; encrypted Space storage and key lifecycle are not part of the current implementation.

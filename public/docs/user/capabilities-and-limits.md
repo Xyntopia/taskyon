@@ -14,6 +14,7 @@ workflows rather than unbounded autonomous operation.
 - Perform structured browser research using provider search, Browser MCP, and configured readers.
 - Embed Taskyon in another webpage and expose narrowly scoped host tools.
 - Run shared workflows from the browser, `tycli`, or supported desktop surfaces.
+- Import, inspect, evaluate, and Git-synchronize immutable design-graph projects.
 - Work with Modelica compilation and simulation through the experimental engineering tools.
 
 ## Runtime boundaries

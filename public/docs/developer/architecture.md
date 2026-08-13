@@ -37,7 +37,9 @@ The supported integration boundary is `@taskyon/taskyon/api`, not the broad inte
 Forward-looking design-graph architecture is maintained in an external proposal repository. Its
 location is deployment-specific and is not part of the Taskyon source contract; ask the maintainer
 where proposals should be stored before creating or editing one. This document describes current
-Taskyon behavior and implementation boundaries.
+Taskyon behavior and implementation boundaries. See
+[Design Graphs and Workspaces](design-graphs.md) for the current object model, Git projection, and
+reusable UI contracts.
 
 ## Design Graphs And Projects
 
@@ -83,11 +85,11 @@ physical paths. Filesystem record backends store records under fixed-length, Git
 while databases and other providers preserve the same protocol contract.
 
 Domain code does not call that physical protocol directly. A host constructs a `StorageClient` with
-an explicit scope, distribution policy, and optional record codec, then injects that client as a
-capability. Consumers use logical namespaces such as `tasks`, `projects`, or `dag/cache`; the client
-validates those namespaces and applies the configured scope before sending a request. A runtime
-session may remain part of a domain namespace, but it is not the client scope and must not be used
-as a substitute for a user, device, or Space identity.
+an explicit namespace prefix, distribution policy, and optional record codec, then injects that
+client as a capability. Consumers use logical namespaces such as `tasks`, `projects`, or
+`dag/cache`; the client validates those namespaces and applies the configured prefix before sending
+a request. The prefix organizes one capability's data but is not a user, device, execution session,
+or Space identity.
 
 The client reports hashes of decoded logical records to domain callers. For conditional writes it
 reads the current stored representation, verifies the caller's logical expected hash, and asks the

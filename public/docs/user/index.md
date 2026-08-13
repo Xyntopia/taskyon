@@ -10,10 +10,12 @@ questions, tools, evidence, decisions, and outputs of a workflow remain inspecta
 3. [Review current capabilities and limits](capabilities-and-limits.md).
 4. [Learn how tools, skills, and MCP integrations work](tools-and-mcp.md).
 5. [Configure browser research](browser-research.md).
+6. [Explore reproducible design projects](design-workspaces.md).
 
 ## Workflows
 
 - [Task trees](task-trees.md)
+- [Design workspaces](design-workspaces.md)
 - [Prompting and structured output](prompting.md)
 - [Chat output and task variables](chat-output-and-variables.md)
 

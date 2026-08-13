@@ -9,6 +9,7 @@ export const taskyonDocumentationManifest: DocumentationManifest = {
         {
           Workflows: [
             '/docs/user/task-trees.md',
+            '/docs/user/design-workspaces.md',
             '/docs/user/prompting.md',
             '/docs/user/chat-output-and-variables.md',
           ],
@@ -57,6 +58,7 @@ export const taskyonDocumentationManifest: DocumentationManifest = {
             '/docs/developer/tools-and-workflows.md',
             '/docs/developer/agent-authored-tools.md',
             '/docs/developer/client-api.md',
+            '/docs/developer/design-graphs.md',
             '/docs/developer/p2p.md',
           ],
         },

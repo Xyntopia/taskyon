@@ -18,6 +18,7 @@
 - [Tool and Workflow Authoring](tools-and-workflows.md)
 - [Agent-Authored Tools](agent-authored-tools.md)
 - [Client and Protocol API](client-api.md)
+- [Design Graphs and Workspaces](design-graphs.md)
 - [P2P and Relay](p2p.md)
 
 ## Integrations
